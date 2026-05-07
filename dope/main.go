@@ -1,0 +1,603 @@
+package main
+
+import (
+	"embed"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"time"
+)
+
+//go:embed static/*
+var staticFiles embed.FS
+
+const (
+	stateFile  = "match_state.json"
+	themeCount = 12
+)
+
+var questionValues = [5]int{10, 20, 30, 40, 50}
+
+type ThemeEntry struct {
+	Player  string    `json:"player"`
+	Answers [5]string `json:"answers"`
+}
+
+type TeamState struct {
+	Name     string       `json:"name"`
+	Roster   []string     `json:"roster"`
+	Themes   []ThemeEntry `json:"themes"`
+	Tiebreak int          `json:"tiebreak"`
+	Place    int          `json:"place"`
+}
+
+type MatchState struct {
+	Title     string      `json:"title"`
+	Revision  int64       `json:"revision"`
+	UpdatedAt time.Time   `json:"updatedAt"`
+	Teams     []TeamState `json:"teams"`
+}
+
+type ThemeView struct {
+	Player  string    `json:"player"`
+	Answers [5]string `json:"answers"`
+	Score   int       `json:"score"`
+}
+
+type TeamView struct {
+	Name          string      `json:"name"`
+	Roster        []string    `json:"roster"`
+	Themes        []ThemeView `json:"themes"`
+	Total         int         `json:"total"`
+	Place         int         `json:"place"`
+	Plus          int         `json:"plus"`
+	Tiebreak      int         `json:"tiebreak"`
+	CorrectCounts [5]int      `json:"correctCounts"`
+	WrongCounts   [5]int      `json:"wrongCounts"`
+}
+
+type StandingView struct {
+	Name     string `json:"name"`
+	Place    int    `json:"place"`
+	Total    int    `json:"total"`
+	Plus     int    `json:"plus"`
+	Tiebreak int    `json:"tiebreak"`
+}
+
+type MatchView struct {
+	Title          string         `json:"title"`
+	Revision       int64          `json:"revision"`
+	UpdatedAt      string         `json:"updatedAt"`
+	QuestionValues [5]int         `json:"questionValues"`
+	Teams          []TeamView     `json:"teams"`
+	Standings      []StandingView `json:"standings"`
+}
+
+type event struct {
+	revision int64
+	data     []byte
+}
+
+type server struct {
+	mu          sync.RWMutex
+	state       MatchState
+	subscribers map[chan event]struct{}
+}
+
+type updateRequest struct {
+	Team     int     `json:"team"`
+	Theme    *int    `json:"theme,omitempty"`
+	Answer   *int    `json:"answer,omitempty"`
+	Mark     *string `json:"mark,omitempty"`
+	Player   *string `json:"player,omitempty"`
+	Tiebreak *int    `json:"tiebreak,omitempty"`
+	Place    *int    `json:"place,omitempty"`
+}
+
+func main() {
+	srv, err := newServer()
+	if err != nil {
+		log.Fatal(err)
+	}
+	assets, assetMode := staticSource()
+	noCacheAssets := assetMode == "disk"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", srv.handleIndex)
+	mux.HandleFunc("/host", srv.serveStaticPage(assets, "static/host.html", noCacheAssets))
+	mux.HandleFunc("/viewer", srv.serveStaticPage(assets, "static/viewer.html", noCacheAssets))
+	mux.HandleFunc("/api/state", srv.handleState)
+	mux.HandleFunc("/api/update", srv.handleUpdate)
+	mux.HandleFunc("/events", srv.handleEvents)
+	mux.Handle("/static/", staticFileServer(assets, noCacheAssets))
+
+	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
+	if port == "" {
+		port = "8080"
+	}
+	addr := ":" + port
+	log.Printf("serving static from %s", assetMode)
+	log.Printf("listening on http://localhost%s/host and http://localhost%s/viewer", addr, addr)
+	log.Fatal(http.ListenAndServe(addr, mux))
+}
+
+func staticSource() (fs.FS, string) {
+	if info, err := os.Stat("static"); err == nil && info.IsDir() {
+		return os.DirFS("."), "disk"
+	}
+	return staticFiles, "embed"
+}
+
+func staticFileServer(source fs.FS, noCache bool) http.Handler {
+	handler := http.FileServer(http.FS(source))
+	if !noCache {
+		return handler
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func newServer() (*server, error) {
+	state, err := loadState(stateFile)
+	if err != nil {
+		return nil, err
+	}
+	return &server{
+		state:       state,
+		subscribers: make(map[chan event]struct{}),
+	}, nil
+}
+
+func loadState(path string) (MatchState, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		state := defaultMatch()
+		normalizeState(&state)
+		return state, nil
+	}
+	if err != nil {
+		return MatchState{}, err
+	}
+	var state MatchState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return MatchState{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	normalizeState(&state)
+	return state, nil
+}
+
+func saveState(path string, state MatchState) error {
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+func normalizeState(state *MatchState) {
+	if state.Title == "" {
+		state.Title = "Бой A"
+	}
+	if state.Revision == 0 {
+		state.Revision = 1
+	}
+	if state.UpdatedAt.IsZero() {
+		state.UpdatedAt = time.Now()
+	}
+	for i := range state.Teams {
+		if len(state.Teams[i].Themes) < themeCount {
+			missing := themeCount - len(state.Teams[i].Themes)
+			state.Teams[i].Themes = append(state.Teams[i].Themes, make([]ThemeEntry, missing)...)
+		}
+		if len(state.Teams[i].Themes) > themeCount {
+			state.Teams[i].Themes = state.Teams[i].Themes[:themeCount]
+		}
+		for t := range state.Teams[i].Themes {
+			for a := range state.Teams[i].Themes[t].Answers {
+				state.Teams[i].Themes[t].Answers[a] = normalizeMark(state.Teams[i].Themes[t].Answers[a])
+			}
+		}
+	}
+}
+
+func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	http.Redirect(w, r, "/host", http.StatusFound)
+}
+
+func (s *server) serveStaticPage(source fs.FS, path string, noCache bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if noCache {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		http.ServeFileFS(w, r, source, path)
+	}
+}
+
+func (s *server) handleState(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	data, _ := s.snapshot()
+	writeJSON(w, data)
+}
+
+func (s *server) handleUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var req updateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+
+	view, data, err := s.applyUpdate(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.broadcast(event{revision: view.Revision, data: data})
+	writeJSON(w, data)
+}
+
+func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	ch := make(chan event, 8)
+	s.addSubscriber(ch)
+	defer s.removeSubscriber(ch)
+
+	initialData, initialRev := s.snapshot()
+	writeSSE(w, "state", initialRev, initialData)
+	flusher.Flush()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case ev := <-ch:
+			writeSSE(w, "state", ev.revision, ev.data)
+			flusher.Flush()
+		case <-ticker.C:
+			fmt.Fprint(w, ": keepalive\n\n")
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+func (s *server) addSubscriber(ch chan event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.subscribers[ch] = struct{}{}
+}
+
+func (s *server) removeSubscriber(ch chan event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.subscribers, ch)
+	close(ch)
+}
+
+func (s *server) broadcast(ev event) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for ch := range s.subscribers {
+		select {
+		case ch <- ev:
+		default:
+			select {
+			case <-ch:
+			default:
+			}
+			select {
+			case ch <- ev:
+			default:
+			}
+		}
+	}
+}
+
+func (s *server) snapshot() ([]byte, int64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	view := buildView(s.state)
+	data, _ := json.Marshal(view)
+	return data, view.Revision
+}
+
+func (s *server) applyUpdate(req updateRequest) (MatchView, []byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if req.Team < 0 || req.Team >= len(s.state.Teams) {
+		return MatchView{}, nil, errors.New("bad team index")
+	}
+	team := &s.state.Teams[req.Team]
+
+	if req.Tiebreak != nil {
+		team.Tiebreak = *req.Tiebreak
+	}
+	if req.Place != nil {
+		if *req.Place < 0 {
+			return MatchView{}, nil, errors.New("bad place")
+		}
+		team.Place = *req.Place
+	}
+
+	if req.Theme != nil || req.Player != nil || req.Answer != nil || req.Mark != nil {
+		if req.Theme == nil || *req.Theme < 0 || *req.Theme >= len(team.Themes) {
+			return MatchView{}, nil, errors.New("bad theme index")
+		}
+		theme := &team.Themes[*req.Theme]
+
+		if req.Player != nil {
+			player := strings.TrimSpace(*req.Player)
+			if player != "" && !contains(team.Roster, player) {
+				return MatchView{}, nil, errors.New("player is not in roster")
+			}
+			theme.Player = player
+		}
+
+		if req.Answer != nil || req.Mark != nil {
+			if req.Answer == nil || *req.Answer < 0 || *req.Answer >= len(theme.Answers) {
+				return MatchView{}, nil, errors.New("bad answer index")
+			}
+			if req.Mark == nil {
+				return MatchView{}, nil, errors.New("missing mark")
+			}
+			theme.Answers[*req.Answer] = normalizeMark(*req.Mark)
+		}
+	}
+
+	s.state.Revision++
+	s.state.UpdatedAt = time.Now()
+	if err := saveState(stateFile, s.state); err != nil {
+		return MatchView{}, nil, err
+	}
+
+	view := buildView(s.state)
+	data, err := json.Marshal(view)
+	return view, data, err
+}
+
+func buildView(state MatchState) MatchView {
+	teams := make([]TeamView, len(state.Teams))
+	for i, team := range state.Teams {
+		teams[i] = scoreTeam(team)
+	}
+
+	standings := manualStandings(teams)
+	for i := range standings {
+		standing := standings[i]
+		for teamIndex := range teams {
+			if teams[teamIndex].Name == standing.Name {
+				teams[teamIndex].Place = standing.Place
+				break
+			}
+		}
+	}
+
+	return MatchView{
+		Title:          state.Title,
+		Revision:       state.Revision,
+		UpdatedAt:      state.UpdatedAt.Format(time.RFC3339),
+		QuestionValues: questionValues,
+		Teams:          teams,
+		Standings:      standings,
+	}
+}
+
+func scoreTeam(team TeamState) TeamView {
+	view := TeamView{
+		Name:     team.Name,
+		Roster:   append([]string(nil), team.Roster...),
+		Themes:   make([]ThemeView, len(team.Themes)),
+		Tiebreak: team.Tiebreak,
+		Place:    team.Place,
+	}
+
+	for i, theme := range team.Themes {
+		tv := ThemeView{
+			Player:  theme.Player,
+			Answers: theme.Answers,
+		}
+		for answerIndex, mark := range theme.Answers {
+			value := questionValues[answerIndex]
+			switch normalizeMark(mark) {
+			case "right":
+				tv.Score += value
+				view.Total += value
+				view.Plus += value
+				view.CorrectCounts[answerIndex]++
+			case "wrong":
+				tv.Score -= value
+				view.Total -= value
+				view.WrongCounts[answerIndex]++
+			}
+		}
+		view.Themes[i] = tv
+	}
+	return view
+}
+
+func manualStandings(teams []TeamView) []StandingView {
+	placed := make([]TeamView, 0, len(teams))
+	unplaced := make([]TeamView, 0)
+	for _, team := range teams {
+		if team.Place > 0 {
+			placed = append(placed, team)
+		} else {
+			unplaced = append(unplaced, team)
+		}
+	}
+	for i := 1; i < len(placed); i++ {
+		for j := i; j > 0 && placed[j-1].Place > placed[j].Place; j-- {
+			placed[j-1], placed[j] = placed[j], placed[j-1]
+		}
+	}
+
+	result := make([]StandingView, 0, len(teams))
+	for _, team := range append(placed, unplaced...) {
+		result = append(result, StandingView{
+			Name:     team.Name,
+			Place:    team.Place,
+			Total:    team.Total,
+			Plus:     team.Plus,
+			Tiebreak: team.Tiebreak,
+		})
+	}
+	return result
+}
+
+func normalizeMark(mark string) string {
+	switch strings.ToLower(strings.TrimSpace(mark)) {
+	case "right", "q", "й", "1", "+":
+		return "right"
+	case "wrong", "w", "ц", "-1", "-":
+		return "wrong"
+	default:
+		return ""
+	}
+}
+
+func contains(list []string, value string) bool {
+	for _, item := range list {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+func writeJSON(w http.ResponseWriter, data []byte) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(data)
+}
+
+func writeSSE(w http.ResponseWriter, name string, revision int64, data []byte) {
+	fmt.Fprintf(w, "event: %s\nid: %d\ndata: %s\n\n", name, revision, data)
+}
+
+func defaultMatch() MatchState {
+	return MatchState{
+		Title:     "Бой A",
+		Revision:  1,
+		UpdatedAt: time.Now(),
+		Teams: []TeamState{
+			{
+				Name:   "ВШЭстером",
+				Roster: []string{"Юлия Лапшина", "Савелий Кардашин", "Мария Крамкова", "Дамир Хамидуллин", "Андрей Акимов", "Максим Бобровицкий", "Захар Куренков"},
+				Place:  3,
+				Themes: []ThemeEntry{
+					{Player: "Андрей Акимов", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Дамир Хамидуллин", Answers: [5]string{"", "", "", "right", ""}},
+					{Player: "Юлия Лапшина", Answers: [5]string{"right", "right", "", "", "wrong"}},
+					{Player: "Савелий Кардашин", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Андрей Акимов", Answers: [5]string{"wrong", "right", "", "", ""}},
+					{Player: "Юлия Лапшина", Answers: [5]string{"right", "right", "", "", ""}},
+					{Player: "Захар Куренков", Answers: [5]string{"", "", "right", "", ""}},
+					{Player: "Дамир Хамидуллин", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Савелий Кардашин", Answers: [5]string{"", "right", "", "", ""}},
+					{Player: "Дамир Хамидуллин", Answers: [5]string{"", "right", "", "", ""}},
+					{Player: "Андрей Акимов", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Юлия Лапшина", Answers: [5]string{"wrong", "", "", "", ""}},
+				},
+			},
+			{
+				Name:   "Тина Терияки",
+				Roster: []string{"Анна Гордеева", "Егор Абрамов", "Олег Шукаев", "Алексей Сазонов", "Кирилл Тищенко", "Андрей Кислуха"},
+				Place:  2,
+				Themes: []ThemeEntry{
+					{Player: "Олег Шукаев", Answers: [5]string{"", "right", "", "right", ""}},
+					{Player: "Алексей Сазонов", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Егор Абрамов", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Кирилл Тищенко", Answers: [5]string{"wrong", "", "", "", ""}},
+					{Player: "Олег Шукаев", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Алексей Сазонов", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Кирилл Тищенко", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Егор Абрамов", Answers: [5]string{"", "", "", "right", ""}},
+					{Player: "Кирилл Тищенко", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Алексей Сазонов", Answers: [5]string{"right", "", "right", "", ""}},
+					{Player: "Олег Шукаев", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Егор Абрамов", Answers: [5]string{"", "", "", "", ""}},
+				},
+			},
+			{
+				Name:   "Вина России",
+				Roster: []string{"Илья Пикалов", "Павел Соколов", "Дмитрий Федоров", "Никита Мирошин", "Евгения Королева", "Елена Трифонова", "Ольга Антропова"},
+				Place:  4,
+				Themes: []ThemeEntry{
+					{Player: "Илья Пикалов", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Павел Соколов", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Евгения Королева", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Никита Мирошин", Answers: [5]string{"wrong", "", "", "", ""}},
+					{Player: "Павел Соколов", Answers: [5]string{"right", "", "", "", ""}},
+					{Player: "Никита Мирошин", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Илья Пикалов", Answers: [5]string{"", "right", "", "", ""}},
+					{Player: "Дмитрий Федоров", Answers: [5]string{"", "", "", "wrong", ""}},
+					{Player: "Павел Соколов", Answers: [5]string{"wrong", "", "", "", ""}},
+					{Player: "Никита Мирошин", Answers: [5]string{"", "", "", "right", ""}},
+					{Player: "Илья Пикалов", Answers: [5]string{"", "wrong", "", "", ""}},
+					{Player: "Евгения Королева", Answers: [5]string{"right", "", "", "", ""}},
+				},
+			},
+			{
+				Name:     "Злая щитоспинка",
+				Roster:   []string{"Егор Дементьев", "Таисия Кирпикова", "Денис Красюк", "Михаил Московченко", "Амгалан Цыбенов", "Анна Рябикина"},
+				Tiebreak: 20,
+				Place:    1,
+				Themes: []ThemeEntry{
+					{Player: "Егор Дементьев", Answers: [5]string{"right", "", "right", "", ""}},
+					{Player: "Амгалан Цыбенов", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Михаил Московченко", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Анна Рябикина", Answers: [5]string{"", "right", "", "", ""}},
+					{Player: "Денис Красюк", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Амгалан Цыбенов", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Анна Рябикина", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Егор Дементьев", Answers: [5]string{"", "right", "right", "", ""}},
+					{Player: "Денис Красюк", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Анна Рябикина", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Амгалан Цыбенов", Answers: [5]string{"", "", "", "", ""}},
+					{Player: "Егор Дементьев", Answers: [5]string{"", "wrong", "", "right", ""}},
+				},
+			},
+		},
+	}
+}
