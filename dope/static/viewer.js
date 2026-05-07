@@ -37,13 +37,14 @@ function buildReadonlyTable() {
   const table = document.createElement("table");
   table.className = "match-table readonly-table";
   const columnsPerTheme = state.questionValues.length + 2;
-  const totalColumnSpan = 3 + state.teams[0].themes.length * columnsPerTheme + 7;
+  const totalColumnSpan = 4 + state.teams[0].themes.length * columnsPerTheme + 7;
 
   const thead = document.createElement("thead");
   const header = document.createElement("tr");
   header.appendChild(th(state.title, "sticky sticky-name battle"));
   header.appendChild(th("Σ", "sticky sticky-total number"));
   header.appendChild(th("М", "sticky sticky-place number"));
+  header.appendChild(th("", "sticky sticky-after-place-gap"));
 
   for (let theme = 0; theme < state.teams[0].themes.length; theme++) {
     for (const value of state.questionValues) {
@@ -69,6 +70,7 @@ function buildReadonlyTable() {
     playerRow.appendChild(td(team.name, "sticky sticky-name team-name", {rowSpan: 2}));
     playerRow.appendChild(td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2}));
     playerRow.appendChild(td(formatPlace(team.place), "sticky sticky-place number place-cell", {rowSpan: 2}));
+    playerRow.appendChild(td("", "sticky sticky-after-place-gap", {rowSpan: 2}));
 
     team.themes.forEach((theme) => {
       const playerCell = document.createElement("td");
