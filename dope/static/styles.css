@@ -14,12 +14,13 @@
   --structure: #eef1f4;
   --cell-gap: 1.5px;
   --cell-radius: 4px;
-  --theme-radius: 8px;
+  --theme-radius: var(--cell-radius);
   --team-col: 180px;
   --total-col: 38px;
   --place-col: 34px;
+  --sticky-theme-gap: 14px;
   --question-size: 28px;
-  --question-col: 36px;
+  --question-col: 40px;
   --theme-score-col: 34px;
   --theme-gap-col: 20px;
   --narrow-col: 30px;
@@ -328,10 +329,12 @@ select {
 }
 
 .match-table thead th {
+  --cell-fill: var(--structure);
   position: sticky;
   top: 0;
   z-index: 4;
   height: var(--question-size);
+  border-color: var(--structure);
   font-weight: 400;
   text-align: center;
 }
@@ -381,6 +384,20 @@ select {
 
 .fight-frame .sticky-place {
   left: calc(var(--team-col) + var(--total-col));
+}
+
+.match-table .sticky-after-place-gap {
+  --cell-fill: var(--structure);
+  left: calc(56px + var(--team-col) + var(--total-col) + var(--place-col));
+  width: var(--sticky-theme-gap);
+  min-width: var(--sticky-theme-gap);
+  max-width: var(--sticky-theme-gap);
+  border-color: var(--structure);
+  border-radius: 0;
+}
+
+.fight-frame .match-table .sticky-after-place-gap {
+  left: calc(var(--team-col) + var(--total-col) + var(--place-col));
 }
 
 .match-table .team-name {
@@ -438,15 +455,33 @@ select {
   border-color: var(--structure);
 }
 
-.player-cell {
+.match-table .player-cell {
+  position: relative;
   width: calc(var(--question-col) * 5);
   min-width: calc(var(--question-col) * 5);
   padding: 0;
 }
 
+.player-cell::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--text);
+  border-bottom: 1.5px solid var(--text);
+  pointer-events: none;
+  transform: translateY(-65%) rotate(45deg);
+}
+
 .player-cell select {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   height: calc(var(--question-size) - 2 * var(--cell-gap));
+  padding-left: 8px;
+  padding-right: 26px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -458,9 +493,10 @@ select {
   box-shadow: inset 0 0 0 2px var(--blue);
 }
 
-.readonly-player {
+.match-table .readonly-player {
   width: calc(var(--question-col) * 5);
   min-width: calc(var(--question-col) * 5);
+  padding-left: 8px;
   color: var(--text);
   font-size: 14px;
 }
@@ -820,6 +856,17 @@ select {
 
   .fight-frame .sticky-place {
     left: 118px;
+  }
+
+  .match-table .sticky-after-place-gap {
+    left: 140px;
+    width: 6px;
+    min-width: 6px;
+    max-width: 6px;
+  }
+
+  .fight-frame .sticky-after-place-gap {
+    left: 140px;
   }
 
   .match-table .team-name {
