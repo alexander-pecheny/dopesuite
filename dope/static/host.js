@@ -1,26 +1,121 @@
 const hostRoot = document.getElementById("hostTable");
 const statusNode = document.getElementById("status");
+const pageHeading = document.querySelector(".host-top h1");
+const viewerLink = document.querySelector(".viewer-link");
 
+const route = currentRoute();
+const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 let state = null;
-let activeCell = {team: 0, shootout: false, theme: 0, answer: 0};
+let tournament = null;
+let venues = [];
+let stageStates = [];
+let renderMatchCode = null;
+let activeCell = {matchCode: "", team: 0, shootout: false, theme: 0, answer: 0};
+let reloadTimer = null;
 
+document.body.classList.toggle("embedded-match", embedded);
 document.addEventListener("keydown", handleGlobalKeydown);
 
-async function loadState() {
-  const response = await fetch("/api/state");
+async function loadCurrent() {
+  if (route.mode === "match") {
+    await loadMatch();
+  } else if (route.mode === "stage") {
+    await loadStage();
+  } else if (route.mode === "venues") {
+    await loadVenuesPage();
+  } else {
+    await loadTournament();
+  }
+}
+
+async function loadTournament() {
+  const response = await fetch("/api/tournament");
   if (!response.ok) throw new Error(await response.text());
-  state = await response.json();
+  tournament = await response.json();
+  renderTournament();
+}
+
+async function loadStage() {
+  const [tournamentResponse, venuesResponse] = await Promise.all([
+    fetch("/api/tournament"),
+    fetch("/api/venues"),
+  ]);
+  if (!tournamentResponse.ok) throw new Error(await tournamentResponse.text());
+  if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
+  tournament = await tournamentResponse.json();
+  venues = await venuesResponse.json();
+  const stage = findStage(tournament, route.stageCode);
+  const matches = stage?.matches || [];
+  stageStates = await Promise.all(matches.map(async (match) => {
+    const response = await fetch(`/api/matches/${encodeURIComponent(match.code)}`);
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  }));
+  renderStage();
+}
+
+async function loadMatch() {
+  const [matchResponse, venuesResponse] = await Promise.all([
+    fetch(`/api/matches/${encodeURIComponent(route.matchCode)}`),
+    fetch("/api/venues"),
+  ]);
+  if (!matchResponse.ok) throw new Error(await matchResponse.text());
+  if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
+  state = await matchResponse.json();
+  venues = await venuesResponse.json();
   render();
+}
+
+async function loadVenuesPage() {
+  const response = await fetch("/api/venues");
+  if (!response.ok) throw new Error(await response.text());
+  venues = await response.json();
+  renderVenues();
 }
 
 function connectEvents() {
   const events = new EventSource("/events");
   events.addEventListener("state", (event) => {
-    state = JSON.parse(event.data);
-    render();
-    setStatus("saved");
+    const message = parseEventData(event.data);
+    if (route.mode === "match" && message.scope === `match:${route.matchCode}`) {
+      state = message.data;
+      render();
+      setStatus("saved");
+      return;
+    }
+    if (route.mode === "venues" && message.scope === "venues") {
+      venues = message.data;
+      renderVenues();
+      setStatus("saved");
+      return;
+    }
+    if (route.mode === "stage" && message.scope.startsWith("match:")) {
+      scheduleReload();
+      return;
+    }
+    scheduleReload();
   });
   events.onerror = () => setStatus("reconnecting");
+}
+
+function scheduleReload() {
+  window.clearTimeout(reloadTimer);
+  reloadTimer = window.setTimeout(() => {
+    loadCurrent()
+      .then(() => setStatus("saved"))
+      .catch((error) => {
+        setStatus("error");
+        console.error(error);
+      });
+  }, 120);
+}
+
+function parseEventData(raw) {
+  const parsed = JSON.parse(raw);
+  if (parsed && typeof parsed.scope === "string" && Object.prototype.hasOwnProperty.call(parsed, "data")) {
+    return parsed;
+  }
+  return {scope: route.mode === "match" ? `match:${route.matchCode}` : "tournament", data: parsed};
 }
 
 function setStatus(state) {
@@ -35,17 +130,23 @@ function setStatus(state) {
   statusNode.title = labels[state] || labels.saving;
 }
 
-async function sendUpdate(payload) {
+async function sendUpdate(payload, matchCode = currentMatchCode()) {
   setStatus("saving");
   try {
-    const response = await fetch("/api/update", {
+    const response = await fetch(`/api/matches/${encodeURIComponent(matchCode)}/update`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error(await response.text());
-    state = await response.json();
-    render();
+    const updated = await response.json();
+    if (route.mode === "stage") {
+      replaceStageState(updated);
+      renderStage({preserveScroll: true});
+    } else {
+      state = updated;
+      render();
+    }
     setStatus("saved");
   } catch (error) {
     setStatus("error");
@@ -53,12 +154,110 @@ async function sendUpdate(payload) {
   }
 }
 
+async function sendVenueChange(number, matchCode = currentMatchCode()) {
+  setStatus("saving");
+  try {
+    const response = await fetch(`/api/matches/${encodeURIComponent(matchCode)}/venue`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({number}),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const updated = await response.json();
+    if (route.mode === "stage") {
+      replaceStageState(updated);
+      renderStage({preserveScroll: true});
+    } else {
+      state = updated;
+      render();
+    }
+    setStatus("saved");
+  } catch (error) {
+    setStatus("error");
+    console.error(error);
+  }
+}
+
+async function updateVenueTitle(number, title) {
+  setStatus("saving");
+  try {
+    const response = await fetch(`/api/venues/${encodeURIComponent(number)}`, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({title}),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    venues = await response.json();
+    renderVenues();
+    setStatus("saved");
+  } catch (error) {
+    setStatus("error");
+    console.error(error);
+  }
+}
+
+function renderTournament() {
+  if (!tournament) return;
+  setHostMode("grid");
+  setHeading(tournament.title);
+  setViewerLink("/viewer", "Открыть зрительскую сетку");
+  document.title = `Ведущий · ${tournament.title}`;
+  hostRoot.replaceChildren(buildTournamentGrid(tournament, {basePath: "/host"}));
+}
+
+function renderStage(options = {}) {
+  if (!tournament) return;
+  const scrollFrame = hostRoot.closest(".sheet-frame");
+  const scrollTop = scrollFrame?.scrollTop || 0;
+  const scrollLeft = scrollFrame?.scrollLeft || 0;
+  const stage = findStage(tournament, route.stageCode);
+  setHostMode("match");
+  setHeading(stage?.title || tournament.title);
+  setViewerLink(`/viewer/stages/${encodeURIComponent(route.stageCode)}`, "Открыть этап для зрителя");
+  document.title = `Ведущий · ${stage?.title || tournament.title}`;
+  hostRoot.replaceChildren(buildStageTables());
+  if (options.preserveScroll && scrollFrame) {
+    scrollFrame.scrollTop = scrollTop;
+    scrollFrame.scrollLeft = scrollLeft;
+  }
+}
+
+function renderVenues() {
+  setHostMode("grid");
+  setHeading("Площадки");
+  setViewerLink("/viewer/venues", "Открыть площадки для зрителя");
+  document.title = "Ведущий · Площадки";
+  hostRoot.replaceChildren(buildSubnav([{href: "/host", label: "Сетка"}]), buildVenuesTable(true));
+}
+
 function render() {
   if (!state) return;
+  setHostMode("match");
   normalizeActiveCell();
+  setHeading(state.stageTitle || state.title);
+  setViewerLink(`/viewer/matches/${encodeURIComponent(state.code || route.matchCode)}`, "Открыть зрительский бой");
+  document.title = `Ведущий · ${state.title}`;
+
   const focusedPlaceTeam = focusedPlaceTeamIndex();
   const finishToggleFocused = isFinishToggleFocused();
-  hostRoot.replaceChildren(buildTable());
+  const venueFocused = isVenueSelectFocused();
+  const table = buildTable();
+  if (embedded) {
+    hostRoot.replaceChildren(table);
+    notifyEmbeddedResize();
+  } else {
+    hostRoot.replaceChildren(
+      buildSubnav([
+        {href: "/host", label: "Сетка"},
+        {href: "/host/venues", label: "Площадки"},
+      ]),
+      table,
+    );
+  }
+  if (venueFocused) {
+    focusVenueSelect({preventScroll: true});
+    return;
+  }
   if (finishToggleFocused) {
     focusFinishToggle({preventScroll: true});
     return;
@@ -71,9 +270,158 @@ function render() {
   focusActiveCell({preventScroll: true});
 }
 
+function buildTournamentTable(data) {
+  const table = document.createElement("table");
+  table.className = "tournament-table";
+  const thead = document.createElement("thead");
+  const header = document.createElement("tr");
+  ["Этап", "Бой", "Площадка", "Команды", "Σ", "М", "Статус"].forEach((label) => {
+    header.appendChild(th(label, ""));
+  });
+  thead.appendChild(header);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  data.stages.forEach((stage) => {
+    if (!stage.matches || stage.matches.length === 0) {
+      const row = document.createElement("tr");
+      row.appendChild(td(stage.title, "stage-name"));
+      row.appendChild(td(stage.code, "code-cell"));
+      row.appendChild(td("", ""));
+      row.appendChild(td(stage.stage_type || stage.type || "reseed", "muted-cell", {colSpan: 4}));
+      tbody.appendChild(row);
+      return;
+    }
+    stage.matches.forEach((match, matchIndex) => {
+      const row = document.createElement("tr");
+      row.appendChild(td(matchIndex === 0 ? stage.title : "", "stage-name"));
+
+      const linkCell = document.createElement("td");
+      const link = document.createElement("a");
+      link.href = `/host/matches/${encodeURIComponent(match.code)}`;
+      link.className = "match-link";
+      link.textContent = match.code;
+      linkCell.appendChild(link);
+      row.appendChild(linkCell);
+
+      row.appendChild(td(formatVenue(match.venue), "venue-cell"));
+      row.appendChild(teamListCell(match.teams));
+      row.appendChild(td(match.teams.map((team) => formatNumber(team.total)).join(" · "), "number-list"));
+      row.appendChild(td(match.teams.map((team) => formatPlace(team.place) || "—").join(" · "), "number-list"));
+      row.appendChild(td(statusLabel(match.status), `status-cell ${match.status}`));
+      tbody.appendChild(row);
+    });
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
+function buildVenuesTable(editable) {
+  const table = document.createElement("table");
+  table.className = "tournament-table venues-table";
+  const thead = document.createElement("thead");
+  const header = document.createElement("tr");
+  header.appendChild(th("№", "number"));
+  header.appendChild(th("Название", ""));
+  thead.appendChild(header);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  venues.forEach((venue) => {
+    const row = document.createElement("tr");
+    row.appendChild(td(venue.number, "number venue-number"));
+    const titleCell = document.createElement("td");
+    if (editable) {
+      const input = document.createElement("input");
+      input.className = "venue-input";
+      input.value = venue.title;
+      input.dataset.committedTitle = venue.title;
+      input.addEventListener("change", () => {
+        const title = input.value.trim();
+        if (!title) {
+          input.value = input.dataset.committedTitle;
+          return;
+        }
+        if (title === input.dataset.committedTitle) return;
+        input.dataset.committedTitle = title;
+        updateVenueTitle(venue.number, title);
+      });
+      titleCell.appendChild(input);
+    } else {
+      titleCell.textContent = venue.title;
+    }
+    row.appendChild(titleCell);
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
+function teamListCell(teams) {
+  const cell = document.createElement("td");
+  cell.className = "teams-cell";
+  teams.forEach((team) => {
+    const row = document.createElement("span");
+    row.textContent = team.name;
+    cell.appendChild(row);
+  });
+  return cell;
+}
+
+function buildSubnav(items) {
+  const nav = document.createElement("nav");
+  nav.className = "subnav";
+  items.forEach((item) => {
+    const link = document.createElement("a");
+    link.href = item.href;
+    link.textContent = item.label;
+    nav.appendChild(link);
+  });
+  return nav;
+}
+
+function buildStageTables() {
+  const wrapper = document.createElement("div");
+  wrapper.className = "stage-table-stack";
+  stageStates.forEach((matchState) => {
+    wrapper.appendChild(withMatchState(matchState, () => buildTable()));
+  });
+  return wrapper;
+}
+
+function withMatchState(matchState, callback) {
+  const previousState = state;
+  const previousCode = renderMatchCode;
+  state = matchState;
+  renderMatchCode = matchState.code || route.matchCode;
+  try {
+    return callback();
+  } finally {
+    state = previousState;
+    renderMatchCode = previousCode;
+  }
+}
+
+function currentMatchCode() {
+  return renderMatchCode || activeCell.matchCode || route.matchCode;
+}
+
+function activeMatchState() {
+  if (route.mode === "stage") {
+    return stageStates.find((matchState) => matchState.code === activeCell.matchCode) || stageStates[0] || null;
+  }
+  return state;
+}
+
+function replaceStageState(updated) {
+  stageStates = stageStates.map((matchState) => matchState.code === updated.code ? updated : matchState);
+}
+
 function buildTable() {
+  const matchCode = currentMatchCode();
   const table = document.createElement("table");
   table.className = "match-table";
+  table.dataset.matchCode = matchCode;
   table.classList.toggle("match-finished", state.finished);
   const columnsPerTheme = state.questionValues.length + 2;
   const hasShootout = shootoutThemeCount() > 0;
@@ -128,6 +476,7 @@ function buildTable() {
     placeInput.value = formatPlace(team.place);
     placeInput.className = "place-input";
     placeInput.disabled = state.finished;
+    placeInput.dataset.matchCode = matchCode;
     placeInput.dataset.team = String(teamIndex);
     placeInput.dataset.committedPlace = String(team.place || 0);
     const commitPlace = () => {
@@ -141,7 +490,7 @@ function buildTable() {
         return true;
       }
       placeInput.dataset.committedPlace = String(place);
-      sendUpdate({team: teamIndex, place});
+      sendUpdate({team: teamIndex, place}, matchCode);
       return true;
     };
     placeInput.addEventListener("change", commitPlace);
@@ -155,7 +504,7 @@ function buildTable() {
       if (isForward || isBackward) {
         const direction = isForward ? 1 : -1;
         const nextTeam = clamp(teamIndex + direction, 0, state.teams.length - 1);
-        focusPlaceInput(nextTeam, {select: true});
+        focusPlaceInput(nextTeam, {select: true, matchCode});
       }
     });
     const placeCell = document.createElement("td");
@@ -197,6 +546,7 @@ function buildTable() {
 }
 
 function appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeIndex, isShootout) {
+  const matchCode = currentMatchCode();
   const playerCell = document.createElement("td");
   playerCell.colSpan = 5;
   playerCell.className = "player-cell theme-block theme-block-top-left";
@@ -211,8 +561,9 @@ function appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeInd
   selectWrap.className = "player-select-wrap";
   const select = document.createElement("select");
   select.appendChild(option("", ""));
-  team.roster.forEach((player) => select.appendChild(option(player, player)));
-  if (theme.player && !team.roster.includes(theme.player)) {
+  const roster = team.roster || [];
+  roster.forEach((player) => select.appendChild(option(player, player)));
+  if (theme.player && !roster.includes(theme.player)) {
     select.appendChild(option(theme.player, theme.player));
   }
   select.value = theme.player;
@@ -220,7 +571,7 @@ function appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeInd
   select.addEventListener("change", () => {
     const payload = {team: teamIndex, theme: themeIndex, player: select.value};
     if (isShootout) payload.shootout = true;
-    sendUpdate(payload);
+    sendUpdate(payload, matchCode);
   });
   selectWrap.appendChild(select);
   editor.appendChild(selectWrap);
@@ -245,16 +596,17 @@ function appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeInd
     }
     cell.tabIndex = state.finished ? -1 : 0;
     cell.dataset.team = String(teamIndex);
+    cell.dataset.matchCode = matchCode;
     cell.dataset.shootout = isShootout ? "1" : "0";
     cell.dataset.theme = String(themeIndex);
     cell.dataset.answer = String(answerIndex);
     cell.title = `${team.name}, ${isShootout ? "П" : "Т"}${themeIndex + 1}, ${state.questionValues[answerIndex]}`;
     if (!state.finished) {
       cell.addEventListener("click", () => {
-        selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex);
+        selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {matchCode});
       });
       cell.addEventListener("focus", () => {
-        selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {focus: false});
+        selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {focus: false, matchCode});
       });
     }
     answerRow.appendChild(cell);
@@ -263,6 +615,7 @@ function appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeInd
 }
 
 function battleHeader() {
+  const matchCode = currentMatchCode();
   const node = document.createElement("th");
   node.className = "sticky sticky-name battle";
 
@@ -271,8 +624,21 @@ function battleHeader() {
 
   const title = document.createElement("span");
   title.className = "battle-title";
-  title.textContent = state.title;
+  title.textContent = matchTitle();
   layout.appendChild(title);
+
+  if (venues.length > 0) {
+    const venueSelect = document.createElement("select");
+    venueSelect.className = "venue-select";
+    venues.forEach((venue) => {
+      venueSelect.appendChild(option(String(venue.number), `${venue.number}: ${venue.title}`));
+    });
+    venueSelect.value = state.venue ? String(state.venue.number) : "";
+    venueSelect.addEventListener("change", () => {
+      sendVenueChange(Number(venueSelect.value), matchCode);
+    });
+    layout.appendChild(venueSelect);
+  }
 
   const label = document.createElement("label");
   label.className = "finish-control";
@@ -282,7 +648,7 @@ function battleHeader() {
   checkbox.className = "finish-toggle";
   checkbox.checked = Boolean(state.finished);
   checkbox.addEventListener("change", () => {
-    sendUpdate({finished: checkbox.checked});
+    sendUpdate({finished: checkbox.checked}, matchCode);
   });
 
   const text = document.createElement("span");
@@ -295,6 +661,7 @@ function battleHeader() {
 }
 
 function shootoutControlsHeader() {
+  const matchCode = currentMatchCode();
   const node = document.createElement("th");
   node.className = "shootout-controls-head";
 
@@ -306,8 +673,8 @@ function shootoutControlsHeader() {
   addShootout.setAttribute("aria-label", "Добавить тему перестрелки");
   addShootout.disabled = state.finished;
   addShootout.addEventListener("click", () => {
-    activeCell = {team: 0, shootout: true, theme: shootoutThemeCount(), answer: 0};
-    sendUpdate({action: "addShootoutTheme"});
+    activeCell = {matchCode, team: 0, shootout: true, theme: shootoutThemeCount(), answer: 0};
+    sendUpdate({action: "addShootoutTheme"}, matchCode);
   });
   node.appendChild(addShootout);
 
@@ -323,7 +690,7 @@ function shootoutControlsHeader() {
       event.preventDefault();
       event.stopPropagation();
       if (!window.confirm("Удалить тему перестрелки?")) return;
-      removeLastShootoutTheme();
+      removeLastShootoutTheme(matchCode);
     });
     node.appendChild(deleteButton);
   }
@@ -332,31 +699,35 @@ function shootoutControlsHeader() {
 }
 
 function handleGlobalKeydown(event) {
-  if (!state || isFormControl(event.target)) return;
+  if ((route.mode !== "match" && route.mode !== "stage") || isFormControl(event.target)) return;
+  const matchState = activeMatchState();
+  if (!matchState) return;
 
-  const key = event.key.toLowerCase();
-  if (event.key === "ArrowLeft") {
-    event.preventDefault();
-    moveActiveCell(0, -1);
-  } else if (event.key === "ArrowRight") {
-    event.preventDefault();
-    moveActiveCell(0, 1);
-  } else if (event.key === "ArrowUp") {
-    event.preventDefault();
-    moveActiveCell(-1, 0);
-  } else if (event.key === "ArrowDown") {
-    event.preventDefault();
-    moveActiveCell(1, 0);
-  } else if (key === "q" || key === "й" || key === "1") {
-    event.preventDefault();
-    setActiveMark("right");
-  } else if (key === "w" || key === "ц" || key === "-") {
-    event.preventDefault();
-    setActiveMark("wrong");
-  } else if (key === "backspace" || key === "delete") {
-    event.preventDefault();
-    setActiveMark("");
-  }
+  withMatchState(matchState, () => {
+    const key = event.key.toLowerCase();
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      moveActiveCell(0, -1);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      moveActiveCell(0, 1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveActiveCell(-1, 0);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveActiveCell(1, 0);
+    } else if (key === "q" || key === "й" || key === "1") {
+      event.preventDefault();
+      setActiveMark("right");
+    } else if (key === "w" || key === "ц" || key === "-") {
+      event.preventDefault();
+      setActiveMark("wrong");
+    } else if (key === "backspace" || key === "delete") {
+      event.preventDefault();
+      setActiveMark("");
+    }
+  });
 }
 
 function isFormControl(target) {
@@ -367,7 +738,7 @@ function isFormControl(target) {
 }
 
 function selectAnswerCell(team, shootout, theme, answer, options = {}) {
-  activeCell = {team, shootout, theme, answer};
+  activeCell = {matchCode: options.matchCode || currentMatchCode(), team, shootout, theme, answer};
   markActiveCell();
   if (options.focus !== false) {
     focusActiveCell();
@@ -394,7 +765,7 @@ function setActiveMark(mark) {
     mark,
   };
   if (activeCell.shootout) payload.shootout = true;
-  sendUpdate(payload);
+  sendUpdate(payload, currentMatchCode());
 }
 
 function markActiveCell() {
@@ -409,7 +780,8 @@ function focusActiveCell(options = {}) {
 }
 
 function focusPlaceInput(team, options = {}) {
-  const input = document.querySelector(`.place-input[data-team="${team}"]`);
+  const matchCode = options.matchCode || currentMatchCode();
+  const input = document.querySelector(`.place-input[data-match-code="${cssEscape(matchCode)}"][data-team="${team}"]`);
   if (!input) return;
   input.focus({preventScroll: options.preventScroll});
   if (options.select) input.select();
@@ -417,6 +789,11 @@ function focusPlaceInput(team, options = {}) {
 
 function focusFinishToggle(options = {}) {
   const input = document.querySelector(".finish-toggle");
+  if (input) input.focus({preventScroll: options.preventScroll});
+}
+
+function focusVenueSelect(options = {}) {
+  const input = document.querySelector(".venue-select");
   if (input) input.focus({preventScroll: options.preventScroll});
 }
 
@@ -434,14 +811,21 @@ function isFinishToggleFocused() {
   return element instanceof HTMLInputElement && element.classList.contains("finish-toggle");
 }
 
+function isVenueSelectFocused() {
+  const element = document.activeElement;
+  return element instanceof HTMLSelectElement && element.classList.contains("venue-select");
+}
+
 function findActiveCell() {
+  const matchCode = currentMatchCode();
   return document.querySelector(
-    `.answer-cell[data-team="${activeCell.team}"][data-shootout="${activeCell.shootout ? "1" : "0"}"][data-theme="${activeCell.theme}"][data-answer="${activeCell.answer}"]`,
+    `.answer-cell[data-match-code="${cssEscape(matchCode)}"][data-team="${activeCell.team}"][data-shootout="${activeCell.shootout ? "1" : "0"}"][data-theme="${activeCell.theme}"][data-answer="${activeCell.answer}"]`,
   );
 }
 
 function isActiveCell(team, shootout, theme, answer) {
-  return activeCell.team === team &&
+  return activeCell.matchCode === currentMatchCode() &&
+    activeCell.team === team &&
     activeCell.shootout === shootout &&
     activeCell.theme === theme &&
     activeCell.answer === answer;
@@ -465,22 +849,23 @@ function cellFromColumn(team, column) {
   const themeOffset = Math.floor(column / state.questionValues.length);
   const answer = column % state.questionValues.length;
   if (themeOffset < regularThemeCount()) {
-    return {team, shootout: false, theme: themeOffset, answer};
+    return {matchCode: currentMatchCode(), team, shootout: false, theme: themeOffset, answer};
   }
-  return {team, shootout: true, theme: themeOffset - regularThemeCount(), answer};
+  return {matchCode: currentMatchCode(), team, shootout: true, theme: themeOffset - regularThemeCount(), answer};
 }
 
-function removeLastShootoutTheme() {
+function removeLastShootoutTheme(matchCode = currentMatchCode()) {
   const lastTheme = shootoutThemeCount() - 1;
   if (lastTheme < 0) return;
+  activeCell = {...activeCell, matchCode};
   if (activeCell.shootout && activeCell.theme >= lastTheme) {
     if (lastTheme > 0) {
       activeCell = {...activeCell, theme: lastTheme - 1};
     } else {
-      activeCell = {team: activeCell.team, shootout: false, theme: regularThemeCount() - 1, answer: 0};
+      activeCell = {matchCode: currentMatchCode(), team: activeCell.team, shootout: false, theme: regularThemeCount() - 1, answer: 0};
     }
   }
-  sendUpdate({action: "removeShootoutTheme"});
+  sendUpdate({action: "removeShootoutTheme"}, matchCode);
 }
 
 function regularThemeCount() {
@@ -506,8 +891,73 @@ function isLastRenderedTheme(isShootout, themeIndex) {
   return shootoutThemeCount() === 0 && themeIndex === regularThemeCount() - 1;
 }
 
+function currentRoute() {
+  const path = window.location.pathname;
+  if (path === "/host/venues") return {mode: "venues"};
+  const match = path.match(/^\/host\/matches\/([^/]+)$/);
+  if (match) return {mode: "match", matchCode: decodeURIComponent(match[1])};
+  const stage = path.match(/^\/host\/stages\/([^/]+)$/);
+  if (stage) return {mode: "stage", stageCode: decodeURIComponent(stage[1])};
+  return {mode: "grid"};
+}
+
+function findStage(data, code) {
+  const scheme = parseScheme(data.schemaJson);
+  const stages = scheme?.stages?.length ? scheme.stages : data.stages || [];
+  return stages.find((stage) => stage.code === code);
+}
+
+function setHeading(text) {
+  if (pageHeading) pageHeading.textContent = text;
+}
+
+function setViewerLink(href, title) {
+  if (!viewerLink) return;
+  viewerLink.href = href;
+  viewerLink.title = title;
+  viewerLink.setAttribute("aria-label", title);
+}
+
+function setHostMode(mode) {
+  hostRoot.classList.toggle("grid-host", mode === "grid");
+  hostRoot.classList.toggle("fight-host", mode === "match");
+}
+
+function notifyEmbeddedResize() {
+  if (!embedded || window.parent === window) return;
+  window.requestAnimationFrame(() => {
+    window.parent.postMessage({
+      type: "dope:resize",
+      height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+    }, window.location.origin);
+  });
+}
+
+function matchTitle() {
+  const venue = state.venue ? ` · пл. ${state.venue.number}: ${state.venue.title}` : "";
+  return `${state.title}${venue}`;
+}
+
+function formatVenue(venue) {
+  return venue ? `${venue.number}: ${venue.title}` : "";
+}
+
+function statusLabel(status) {
+  if (status === "finished") return "закончен";
+  if (status === "pending") return "ожидает";
+  return "активен";
+}
+
+function formatNumber(value) {
+  return Number.isFinite(Number(value)) ? String(value) : "";
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function cssEscape(value) {
+  return window.CSS?.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&");
 }
 
 function parsePlace(value) {
@@ -544,7 +994,7 @@ function option(value, label) {
   return node;
 }
 
-loadState()
+loadCurrent()
   .then(() => {
     setStatus("saved");
     connectEvents();

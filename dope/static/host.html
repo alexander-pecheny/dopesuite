@@ -3,14 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ведущий · Бой A</title>
+  <title>Ведущий · Чемпионат</title>
   <link rel="stylesheet" href="/static/styles.css">
+  <script defer src="/static/tournament-grid.js"></script>
   <script defer src="/static/host.js"></script>
 </head>
 <body class="host">
   <header class="host-top">
-    <h1>1/16 финала</h1>
+    <h1>Чемпионат</h1>
     <div class="host-actions">
+      <a class="host-action-link" href="/import" aria-label="Импорт турнира" title="Импорт турнира">⬇️</a>
       <span class="sync-status" id="status" data-state="syncing" aria-label="Синхронизация" title="Синхронизация"></span>
       <a class="viewer-link" href="/viewer" target="_blank" rel="noreferrer" aria-label="Открыть зрительскую страницу" title="Открыть зрительскую страницу">👀</a>
     </div>

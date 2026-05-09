@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"database/sql"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestDefaultMatchScores(t *testing.T) {
 	state := defaultMatch()
@@ -170,5 +176,160 @@ func TestNormalizeMark(t *testing.T) {
 		if got != want {
 			t.Fatalf("normalizeMark(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
+	t.Chdir(t.TempDir())
+	db, tournamentID, err := openTournamentDB("test.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	srv := &server{
+		db:              db,
+		tournamentID:    tournamentID,
+		activeMatchCode: defaultMatchCode,
+		subscribers:     make(map[chan event]struct{}),
+	}
+
+	view, err := srv.loadMatchViewLocked(defaultMatchCode)
+	if err != nil {
+		t.Fatalf("load match: %v", err)
+	}
+	if view.Code != defaultMatchCode {
+		t.Fatalf("code = %q, want %q", view.Code, defaultMatchCode)
+	}
+	if view.Venue == nil || view.Venue.Number != 1 {
+		t.Fatalf("venue = %#v, want number 1", view.Venue)
+	}
+
+	theme := 0
+	answer := 0
+	mark := "right"
+	view, _, err = srv.applyMatchUpdate(defaultMatchCode, updateRequest{
+		Team:   2,
+		Theme:  &theme,
+		Answer: &answer,
+		Mark:   &mark,
+	})
+	if err != nil {
+		t.Fatalf("update answer: %v", err)
+	}
+	if view.Teams[2].Total != 10 {
+		t.Fatalf("updated total = %d, want 10", view.Teams[2].Total)
+	}
+
+	reloaded, err := srv.loadMatchViewLocked(defaultMatchCode)
+	if err != nil {
+		t.Fatalf("reload match: %v", err)
+	}
+	if reloaded.Teams[2].Themes[0].Answers[0] != "right" {
+		t.Fatalf("persisted mark = %q, want right", reloaded.Teams[2].Themes[0].Answers[0])
+	}
+}
+
+func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
+	t.Chdir(t.TempDir())
+	db, tournamentID, err := openTournamentDB("test.db")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	srv := &server{
+		db:              db,
+		tournamentID:    tournamentID,
+		activeMatchCode: defaultMatchCode,
+		subscribers:     make(map[chan event]struct{}),
+	}
+
+	venues, _, err := srv.updateVenue(1, "Рим")
+	if err != nil {
+		t.Fatalf("update venue: %v", err)
+	}
+	if len(venues) != 1 || venues[0].Title != "Рим" {
+		t.Fatalf("venues = %#v, want renamed venue", venues)
+	}
+	view, err := srv.loadMatchViewLocked(defaultMatchCode)
+	if err != nil {
+		t.Fatalf("load match: %v", err)
+	}
+	if view.Venue == nil || view.Venue.Title != "Рим" {
+		t.Fatalf("match venue = %#v, want Рим", view.Venue)
+	}
+
+	var teamID int64
+	if err := db.QueryRow(`select id from teams where tournament_id = ? order by id limit 1`, tournamentID).Scan(&teamID); err != nil {
+		t.Fatalf("team id: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		playerID, err := insertTestPlayer(db, tournamentID)
+		if err != nil {
+			t.Fatalf("insert player %d: %v", i, err)
+		}
+		_, err = db.Exec(`insert into team_players(team_id, player_id, roster_order) values(?, ?, ?)`, teamID, playerID, 90+i)
+		if i < 2 && err != nil {
+			t.Fatalf("insert extra roster player %d: %v", i, err)
+		}
+		if i == 2 && err == nil {
+			t.Fatal("insert 10th roster player succeeded, want trigger error")
+		}
+	}
+}
+
+func insertTestPlayer(db *sql.DB, tournamentID int64) (int64, error) {
+	result, err := db.Exec(`insert into players(tournament_id, first_name, last_name) values(?, 'Тест', 'Игрок')`, tournamentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+func TestImportStudchrScheme(t *testing.T) {
+	db, tournamentID, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	data, err := os.ReadFile("static/schemes/studchr-ek-2026.json")
+	if err != nil {
+		t.Fatalf("read scheme: %v", err)
+	}
+	var scheme tournamentScheme
+	if err := json.Unmarshal(data, &scheme); err != nil {
+		t.Fatalf("decode scheme: %v", err)
+	}
+
+	srv := &server{
+		db:              db,
+		tournamentID:    tournamentID,
+		activeMatchCode: defaultMatchCode,
+		subscribers:     make(map[chan event]struct{}),
+	}
+	view, err := srv.importScheme(scheme)
+	if err != nil {
+		t.Fatalf("import scheme: %v", err)
+	}
+	if view.Slug != "studchr-ek-2026" {
+		t.Fatalf("slug = %q, want studchr-ek-2026", view.Slug)
+	}
+	if len(view.Stages) != 6 {
+		t.Fatalf("stages = %d, want 6", len(view.Stages))
+	}
+	if len(view.Stages[0].Matches) != 6 || len(view.Stages[1].Matches) != 6 {
+		t.Fatalf("1/16 runs = %d/%d, want 6/6", len(view.Stages[0].Matches), len(view.Stages[1].Matches))
+	}
+	if view.Stages[0].Matches[0].Teams[0].Name != "ВШЭстером" {
+		t.Fatalf("first team = %q, want ВШЭстером", view.Stages[0].Matches[0].Teams[0].Name)
+	}
+	if view.Stages[1].Matches[0].Code != "G" || view.Stages[1].Matches[0].Teams[0].Name != "Дахусим" {
+		t.Fatalf("second run starts with %#v, want G / Дахусим", view.Stages[1].Matches[0])
+	}
+	final := view.Stages[len(view.Stages)-1]
+	if len(final.Matches) != 1 || final.Matches[0].Code != "Y" {
+		t.Fatalf("final = %#v, want match Y", final.Matches)
 	}
 }

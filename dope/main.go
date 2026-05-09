@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -78,6 +79,10 @@ type StandingView struct {
 
 type MatchView struct {
 	Title          string         `json:"title"`
+	Code           string         `json:"code,omitempty"`
+	StageCode      string         `json:"stageCode,omitempty"`
+	StageTitle     string         `json:"stageTitle,omitempty"`
+	Venue          *VenueView     `json:"venue,omitempty"`
 	Finished       bool           `json:"finished"`
 	Revision       int64          `json:"revision"`
 	UpdatedAt      string         `json:"updatedAt"`
@@ -92,9 +97,12 @@ type event struct {
 }
 
 type server struct {
-	mu          sync.RWMutex
-	state       MatchState
-	subscribers map[chan event]struct{}
+	mu              sync.RWMutex
+	db              *sql.DB
+	tournamentID    int64
+	activeMatchCode string
+	state           MatchState
+	subscribers     map[chan event]struct{}
 }
 
 type updateRequest struct {
@@ -120,8 +128,16 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", srv.handleIndex)
-	mux.HandleFunc("/host", srv.serveStaticPage(assets, "static/host.html", noCacheAssets))
-	mux.HandleFunc("/viewer", srv.serveStaticPage(assets, "static/viewer.html", noCacheAssets))
+	mux.HandleFunc("/import", srv.serveStaticPage(assets, "static/import.html", noCacheAssets))
+	mux.HandleFunc("/api/import", srv.handleImport)
+	mux.HandleFunc("/host", srv.serveHostPage(assets, noCacheAssets))
+	mux.HandleFunc("/host/", srv.serveHostPage(assets, noCacheAssets))
+	mux.HandleFunc("/viewer", srv.serveViewerPage(assets, noCacheAssets))
+	mux.HandleFunc("/viewer/", srv.serveViewerPage(assets, noCacheAssets))
+	mux.HandleFunc("/api/tournament", srv.handleTournament)
+	mux.HandleFunc("/api/matches/", srv.handleMatchAPI)
+	mux.HandleFunc("/api/venues", srv.handleVenuesAPI)
+	mux.HandleFunc("/api/venues/", srv.handleVenuesAPI)
 	mux.HandleFunc("/api/state", srv.handleState)
 	mux.HandleFunc("/api/update", srv.handleUpdate)
 	mux.HandleFunc("/events", srv.handleEvents)
@@ -156,13 +172,19 @@ func staticFileServer(source fs.FS, noCache bool) http.Handler {
 }
 
 func newServer() (*server, error) {
-	state, err := loadState(stateFile)
+	dbPath := os.Getenv("DOPE_DB")
+	if dbPath == "" {
+		dbPath = dbFile
+	}
+	db, tournamentID, err := openTournamentDB(dbPath)
 	if err != nil {
 		return nil, err
 	}
 	return &server{
-		state:       state,
-		subscribers: make(map[chan event]struct{}),
+		db:              db,
+		tournamentID:    tournamentID,
+		activeMatchCode: defaultMatchCode,
+		subscribers:     make(map[chan event]struct{}),
 	}, nil
 }
 
@@ -282,7 +304,7 @@ func (s *server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.broadcast(event{revision: view.Revision, data: data})
+	s.broadcastState("match:"+s.activeMatchCode, view.Revision, data)
 	writeJSON(w, data)
 }
 
@@ -308,6 +330,10 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	defer s.removeSubscriber(ch)
 
 	initialData, initialRev := s.snapshot()
+	if s.db != nil {
+		initialData, initialRev = s.snapshotTournament()
+		initialData = eventEnvelopeJSON("tournament", initialRev, initialData)
+	}
 	writeSSE(w, "state", initialRev, initialData)
 	flusher.Flush()
 
@@ -363,12 +389,40 @@ func (s *server) broadcast(ev event) {
 func (s *server) snapshot() ([]byte, int64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if s.db != nil {
+		view, err := s.loadMatchViewLocked(s.activeMatchCode)
+		if err != nil {
+			data, _ := json.Marshal(map[string]string{"error": err.Error()})
+			return data, 0
+		}
+		data, _ := json.Marshal(view)
+		return data, view.Revision
+	}
 	view := buildView(s.state)
 	data, _ := json.Marshal(view)
 	return data, view.Revision
 }
 
+func (s *server) snapshotTournament() ([]byte, int64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	view, err := s.loadTournamentViewLocked()
+	if err != nil {
+		data, _ := json.Marshal(map[string]string{"error": err.Error()})
+		return data, 0
+	}
+	data, _ := json.Marshal(view)
+	return data, view.Revision
+}
+
 func (s *server) applyUpdate(req updateRequest) (MatchView, []byte, error) {
+	if s.db != nil {
+		return s.applyMatchUpdate(s.activeMatchCode, req)
+	}
+	return s.applyLegacyUpdate(req)
+}
+
+func (s *server) applyLegacyUpdate(req updateRequest) (MatchView, []byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

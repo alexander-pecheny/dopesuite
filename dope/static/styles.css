@@ -74,6 +74,7 @@ select {
   gap: 8px;
 }
 
+.host-action-link,
 .viewer-link {
   display: inline-flex;
   align-items: center;
@@ -82,7 +83,7 @@ select {
   height: 34px;
   padding: 0;
   border: 1px solid #cfd7e3;
-  border-radius: 6px;
+  border-radius: 5px;
   background: #f8fafc;
   color: #174ea6;
   font-size: 17px;
@@ -316,6 +317,11 @@ select {
   background: var(--structure);
 }
 
+.table-host.grid-host {
+  width: 100%;
+  min-width: 0;
+}
+
 .match-table {
   border-collapse: separate;
   border-spacing: 0;
@@ -376,6 +382,17 @@ select {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.venue-select {
+  flex: 0 1 132px;
+  min-width: 72px;
+  height: 22px;
+  border: 1px solid #cfd7e3;
+  border-radius: 5px;
+  background: #f8fafc;
+  color: var(--text);
+  font-size: 12px;
 }
 
 .finish-control {
@@ -762,6 +779,403 @@ select {
   min-width: var(--narrow-col);
 }
 
+.subnav {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  margin-bottom: 8px;
+}
+
+.subnav a,
+.match-link {
+  color: #174ea6;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.subnav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #cfd7e3;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-size: 13px;
+}
+
+.tournament-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--paper);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.tournament-table th,
+.tournament-table td {
+  padding: 9px 10px;
+  border-right: 1px solid var(--grid);
+  border-bottom: 1px solid var(--grid);
+  background: var(--paper);
+  vertical-align: top;
+}
+
+.tournament-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--header);
+  color: #3c4043;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.tournament-table .stage-name {
+  width: 150px;
+  color: #3c4043;
+  font-weight: 700;
+}
+
+.tournament-table .code-cell,
+.tournament-table .venue-number {
+  width: 58px;
+}
+
+.tournament-table .venue-cell {
+  width: 150px;
+  color: #3c4043;
+}
+
+.teams-cell span {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.number-list {
+  min-width: 120px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.status-cell {
+  width: 92px;
+  color: #3c4043;
+  white-space: nowrap;
+}
+
+.status-cell.finished {
+  color: var(--green-dark);
+  font-weight: 700;
+}
+
+.status-cell.pending,
+.muted-cell {
+  color: var(--muted);
+}
+
+.venues-table {
+  max-width: 760px;
+  min-width: 420px;
+}
+
+.venue-input {
+  width: 100%;
+  min-height: 28px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  outline: 0;
+}
+
+.venue-input:focus {
+  border-color: var(--blue);
+  background: #fff;
+}
+
+.tournament-grid {
+  width: 100%;
+  min-width: 1140px;
+  padding-bottom: 24px;
+}
+
+.grid-toolbar {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+  min-height: 34px;
+  margin-bottom: 8px;
+}
+
+.grid-toolbar a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #cfd7e3;
+  border-radius: 5px;
+  background: #f8fafc;
+  color: #174ea6;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.tournament-columns {
+  display: grid;
+  grid-template-columns:
+    minmax(190px, 1fr)
+    minmax(190px, 1fr)
+    minmax(190px, 1fr)
+    minmax(190px, 1fr)
+    minmax(190px, 1fr)
+    minmax(190px, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.grid-stage {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.grid-stage-head {
+  display: block;
+  min-height: 42px;
+  margin-bottom: 4px;
+  padding: 6px 8px;
+  border: var(--cell-gap) solid transparent;
+  border-radius: var(--cell-radius);
+  background:
+    linear-gradient(var(--structure), var(--structure)) padding-box,
+    linear-gradient(var(--structure), var(--structure)) border-box;
+}
+
+.grid-stage-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.grid-stage-link:hover,
+.grid-stage-link:focus {
+  outline: 2px solid rgba(26, 115, 232, 0.28);
+  outline-offset: -2px;
+}
+
+.grid-stage h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.stage-note {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.grid-matches {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.grid-match {
+  border: var(--cell-gap) solid transparent;
+  border-radius: var(--cell-radius);
+  background:
+    linear-gradient(var(--paper), var(--paper)) padding-box,
+    linear-gradient(var(--structure), var(--structure)) border-box;
+  overflow: hidden;
+}
+
+.grid-match.finished {
+  background:
+    linear-gradient(var(--paper), var(--paper)) padding-box,
+    linear-gradient(rgba(47, 125, 87, 0.55), rgba(47, 125, 87, 0.55)) border-box;
+}
+
+.grid-match-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px 6px;
+  padding: 6px 8px;
+  border-bottom: var(--cell-gap) solid var(--structure);
+  background: var(--paper);
+}
+
+.grid-match-title,
+.grid-match-venue {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-match-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.grid-match-venue {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.grid-slot-table,
+.grid-reseed-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.grid-slot-table td,
+.grid-reseed-table td {
+  height: 24px;
+  padding: 3px 6px;
+  border-bottom: var(--cell-gap) solid var(--structure);
+  background: var(--paper);
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.grid-slot-table tr:last-child td,
+.grid-reseed-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.slot-position {
+  width: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.slot-source {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-total,
+.slot-place {
+  width: 32px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.grid-reseed-table {
+  width: 100%;
+  border: var(--cell-gap) solid transparent;
+  border-radius: var(--cell-radius);
+  background:
+    linear-gradient(var(--paper), var(--paper)) padding-box,
+    linear-gradient(var(--structure), var(--structure)) border-box;
+  overflow: hidden;
+}
+
+.stage-table-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: max-content;
+}
+
+.embedded-match {
+  min-height: 0;
+  overflow: visible;
+}
+
+.embedded-match .host-top {
+  display: none;
+}
+
+.embedded-match .match-main,
+.embedded-match .sheet-frame {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.embedded-match .fight-frame {
+  background: var(--structure);
+}
+
+.import-frame {
+  padding: 14px;
+}
+
+.import-form {
+  display: grid;
+  grid-template-rows: auto minmax(360px, 1fr) auto;
+  gap: 10px;
+  min-width: min(980px, 100%);
+  height: 100%;
+}
+
+.import-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.import-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #cfd7e3;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #174ea6;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#schemeInput {
+  width: 100%;
+  min-height: 360px;
+  resize: none;
+  padding: 12px;
+  border: 1px solid var(--grid-dark);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  outline: 0;
+}
+
+#schemeInput:focus {
+  border-color: var(--blue);
+}
+
+.import-message {
+  min-height: 24px;
+  margin: 0;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
 .tabs {
   display: flex;
   align-items: center;
@@ -1013,6 +1427,12 @@ select {
     gap: 5px;
   }
 
+  .venue-select {
+    max-width: 82px;
+    height: 20px;
+    font-size: 11px;
+  }
+
   .finish-control {
     gap: 0;
   }
@@ -1134,6 +1554,85 @@ select {
   .match-table .narrow {
     width: 20px;
     min-width: 20px;
+  }
+
+  .subnav {
+    min-height: 30px;
+    margin-bottom: 5px;
+  }
+
+  .subnav a {
+    min-height: 26px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .tournament-table {
+    min-width: 680px;
+    font-size: 12px;
+  }
+
+  .tournament-table th,
+  .tournament-table td {
+    padding: 7px 8px;
+  }
+
+  .tournament-table .stage-name {
+    width: 110px;
+  }
+
+  .tournament-table .venue-cell {
+    width: 120px;
+  }
+
+  .teams-cell span {
+    max-width: 220px;
+  }
+
+  .venues-table {
+    min-width: 360px;
+  }
+
+  .tournament-grid {
+    min-width: 1020px;
+  }
+
+  .tournament-columns {
+    grid-template-columns:
+      minmax(170px, 1fr)
+      minmax(170px, 1fr)
+      minmax(170px, 1fr)
+      minmax(170px, 1fr)
+      minmax(170px, 1fr)
+      minmax(170px, 1fr);
+  }
+
+  .grid-matches {
+    gap: 5px;
+  }
+
+  .grid-stage h2 {
+    font-size: 15px;
+  }
+
+  .grid-match-head {
+    padding: 6px;
+  }
+
+  .grid-slot-table td,
+  .grid-reseed-table td {
+    height: 24px;
+    padding: 3px 4px;
+    font-size: 11px;
+  }
+
+  .slot-total,
+  .slot-place {
+    width: 30px;
+  }
+
+  .import-frame {
+    padding: 6px;
   }
 
   .answer-cell:hover:not(.active),
