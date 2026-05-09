@@ -18,8 +18,10 @@ import (
 var staticFiles embed.FS
 
 const (
-	stateFile  = "match_state.json"
-	themeCount = 12
+	stateFile                 = "match_state.json"
+	themeCount                = 12
+	actionAddShootoutTheme    = "addShootoutTheme"
+	actionRemoveShootoutTheme = "removeShootoutTheme"
 )
 
 var questionValues = [5]int{10, 20, 30, 40, 50}
@@ -30,15 +32,17 @@ type ThemeEntry struct {
 }
 
 type TeamState struct {
-	Name     string       `json:"name"`
-	Roster   []string     `json:"roster"`
-	Themes   []ThemeEntry `json:"themes"`
-	Tiebreak int          `json:"tiebreak"`
-	Place    int          `json:"place"`
+	Name           string       `json:"name"`
+	Roster         []string     `json:"roster"`
+	Themes         []ThemeEntry `json:"themes"`
+	ShootoutThemes []ThemeEntry `json:"shootoutThemes,omitempty"`
+	Tiebreak       int          `json:"tiebreak"`
+	Place          float64      `json:"place"`
 }
 
 type MatchState struct {
 	Title     string      `json:"title"`
+	Finished  bool        `json:"finished"`
 	Revision  int64       `json:"revision"`
 	UpdatedAt time.Time   `json:"updatedAt"`
 	Teams     []TeamState `json:"teams"`
@@ -51,27 +55,30 @@ type ThemeView struct {
 }
 
 type TeamView struct {
-	Name          string      `json:"name"`
-	Roster        []string    `json:"roster"`
-	Themes        []ThemeView `json:"themes"`
-	Total         int         `json:"total"`
-	Place         int         `json:"place"`
-	Plus          int         `json:"plus"`
-	Tiebreak      int         `json:"tiebreak"`
-	CorrectCounts [5]int      `json:"correctCounts"`
-	WrongCounts   [5]int      `json:"wrongCounts"`
+	Name           string      `json:"name"`
+	Roster         []string    `json:"roster"`
+	Themes         []ThemeView `json:"themes"`
+	ShootoutThemes []ThemeView `json:"shootoutThemes"`
+	Total          int         `json:"total"`
+	Place          float64     `json:"place"`
+	Plus           int         `json:"plus"`
+	ShootoutTotal  int         `json:"shootoutTotal"`
+	Tiebreak       int         `json:"tiebreak"`
+	CorrectCounts  [5]int      `json:"correctCounts"`
+	WrongCounts    [5]int      `json:"wrongCounts"`
 }
 
 type StandingView struct {
-	Name     string `json:"name"`
-	Place    int    `json:"place"`
-	Total    int    `json:"total"`
-	Plus     int    `json:"plus"`
-	Tiebreak int    `json:"tiebreak"`
+	Name     string  `json:"name"`
+	Place    float64 `json:"place"`
+	Total    int     `json:"total"`
+	Plus     int     `json:"plus"`
+	Tiebreak int     `json:"tiebreak"`
 }
 
 type MatchView struct {
 	Title          string         `json:"title"`
+	Finished       bool           `json:"finished"`
 	Revision       int64          `json:"revision"`
 	UpdatedAt      string         `json:"updatedAt"`
 	QuestionValues [5]int         `json:"questionValues"`
@@ -91,13 +98,16 @@ type server struct {
 }
 
 type updateRequest struct {
-	Team     int     `json:"team"`
-	Theme    *int    `json:"theme,omitempty"`
-	Answer   *int    `json:"answer,omitempty"`
-	Mark     *string `json:"mark,omitempty"`
-	Player   *string `json:"player,omitempty"`
-	Tiebreak *int    `json:"tiebreak,omitempty"`
-	Place    *int    `json:"place,omitempty"`
+	Team     int      `json:"team"`
+	Action   string   `json:"action,omitempty"`
+	Finished *bool    `json:"finished,omitempty"`
+	Theme    *int     `json:"theme,omitempty"`
+	Shootout *bool    `json:"shootout,omitempty"`
+	Answer   *int     `json:"answer,omitempty"`
+	Mark     *string  `json:"mark,omitempty"`
+	Player   *string  `json:"player,omitempty"`
+	Tiebreak *int     `json:"tiebreak,omitempty"`
+	Place    *float64 `json:"place,omitempty"`
 }
 
 func main() {
@@ -192,7 +202,14 @@ func normalizeState(state *MatchState) {
 	if state.UpdatedAt.IsZero() {
 		state.UpdatedAt = time.Now()
 	}
+	shootoutThemeCount := 0
 	for i := range state.Teams {
+		if len(state.Teams[i].ShootoutThemes) > shootoutThemeCount {
+			shootoutThemeCount = len(state.Teams[i].ShootoutThemes)
+		}
+	}
+	for i := range state.Teams {
+		state.Teams[i].Tiebreak = 0
 		if len(state.Teams[i].Themes) < themeCount {
 			missing := themeCount - len(state.Teams[i].Themes)
 			state.Teams[i].Themes = append(state.Teams[i].Themes, make([]ThemeEntry, missing)...)
@@ -203,6 +220,15 @@ func normalizeState(state *MatchState) {
 		for t := range state.Teams[i].Themes {
 			for a := range state.Teams[i].Themes[t].Answers {
 				state.Teams[i].Themes[t].Answers[a] = normalizeMark(state.Teams[i].Themes[t].Answers[a])
+			}
+		}
+		if len(state.Teams[i].ShootoutThemes) < shootoutThemeCount {
+			missing := shootoutThemeCount - len(state.Teams[i].ShootoutThemes)
+			state.Teams[i].ShootoutThemes = append(state.Teams[i].ShootoutThemes, make([]ThemeEntry, missing)...)
+		}
+		for t := range state.Teams[i].ShootoutThemes {
+			for a := range state.Teams[i].ShootoutThemes[t].Answers {
+				state.Teams[i].ShootoutThemes[t].Answers[a] = normalizeMark(state.Teams[i].ShootoutThemes[t].Answers[a])
 			}
 		}
 	}
@@ -346,13 +372,50 @@ func (s *server) applyUpdate(req updateRequest) (MatchView, []byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if req.Finished != nil {
+		if hasMatchEdit(req) {
+			return MatchView{}, nil, errors.New("finished update must be standalone")
+		}
+		s.state.Finished = *req.Finished
+		return s.commitLocked()
+	}
+	if s.state.Finished {
+		return MatchView{}, nil, errors.New("match is finished")
+	}
+
+	if req.Action != "" {
+		if hasTeamEdit(req) {
+			return MatchView{}, nil, errors.New("action update must be standalone")
+		}
+		switch req.Action {
+		case actionAddShootoutTheme:
+			for i := range s.state.Teams {
+				s.state.Teams[i].ShootoutThemes = append(s.state.Teams[i].ShootoutThemes, ThemeEntry{})
+			}
+			return s.commitLocked()
+		case actionRemoveShootoutTheme:
+			if len(s.state.Teams) == 0 || len(s.state.Teams[0].ShootoutThemes) == 0 {
+				return MatchView{}, nil, errors.New("no shootout themes to remove")
+			}
+			for i := range s.state.Teams {
+				if len(s.state.Teams[i].ShootoutThemes) > 0 {
+					last := len(s.state.Teams[i].ShootoutThemes) - 1
+					s.state.Teams[i].ShootoutThemes = s.state.Teams[i].ShootoutThemes[:last]
+				}
+			}
+			return s.commitLocked()
+		default:
+			return MatchView{}, nil, errors.New("bad action")
+		}
+	}
+
 	if req.Team < 0 || req.Team >= len(s.state.Teams) {
 		return MatchView{}, nil, errors.New("bad team index")
 	}
 	team := &s.state.Teams[req.Team]
 
 	if req.Tiebreak != nil {
-		team.Tiebreak = *req.Tiebreak
+		return MatchView{}, nil, errors.New("shootout total is calculated")
 	}
 	if req.Place != nil {
 		if *req.Place < 0 {
@@ -361,11 +424,19 @@ func (s *server) applyUpdate(req updateRequest) (MatchView, []byte, error) {
 		team.Place = *req.Place
 	}
 
-	if req.Theme != nil || req.Player != nil || req.Answer != nil || req.Mark != nil {
-		if req.Theme == nil || *req.Theme < 0 || *req.Theme >= len(team.Themes) {
+	if req.Theme != nil || req.Player != nil || req.Answer != nil || req.Mark != nil || req.Shootout != nil {
+		isShootout := req.Shootout != nil && *req.Shootout
+		themeCount := len(team.Themes)
+		if isShootout {
+			themeCount = len(team.ShootoutThemes)
+		}
+		if req.Theme == nil || *req.Theme < 0 || *req.Theme >= themeCount {
 			return MatchView{}, nil, errors.New("bad theme index")
 		}
 		theme := &team.Themes[*req.Theme]
+		if isShootout {
+			theme = &team.ShootoutThemes[*req.Theme]
+		}
 
 		if req.Player != nil {
 			player := strings.TrimSpace(*req.Player)
@@ -386,6 +457,11 @@ func (s *server) applyUpdate(req updateRequest) (MatchView, []byte, error) {
 		}
 	}
 
+	return s.commitLocked()
+}
+
+func (s *server) commitLocked() (MatchView, []byte, error) {
+	normalizeState(&s.state)
 	s.state.Revision++
 	s.state.UpdatedAt = time.Now()
 	if err := saveState(stateFile, s.state); err != nil {
@@ -395,6 +471,27 @@ func (s *server) applyUpdate(req updateRequest) (MatchView, []byte, error) {
 	view := buildView(s.state)
 	data, err := json.Marshal(view)
 	return view, data, err
+}
+
+func hasMatchEdit(req updateRequest) bool {
+	return req.Action != "" ||
+		req.Theme != nil ||
+		req.Shootout != nil ||
+		req.Answer != nil ||
+		req.Mark != nil ||
+		req.Player != nil ||
+		req.Tiebreak != nil ||
+		req.Place != nil
+}
+
+func hasTeamEdit(req updateRequest) bool {
+	return req.Theme != nil ||
+		req.Shootout != nil ||
+		req.Answer != nil ||
+		req.Mark != nil ||
+		req.Player != nil ||
+		req.Tiebreak != nil ||
+		req.Place != nil
 }
 
 func buildView(state MatchState) MatchView {
@@ -416,6 +513,7 @@ func buildView(state MatchState) MatchView {
 
 	return MatchView{
 		Title:          state.Title,
+		Finished:       state.Finished,
 		Revision:       state.Revision,
 		UpdatedAt:      state.UpdatedAt.Format(time.RFC3339),
 		QuestionValues: questionValues,
@@ -426,11 +524,11 @@ func buildView(state MatchState) MatchView {
 
 func scoreTeam(team TeamState) TeamView {
 	view := TeamView{
-		Name:     team.Name,
-		Roster:   append([]string(nil), team.Roster...),
-		Themes:   make([]ThemeView, len(team.Themes)),
-		Tiebreak: team.Tiebreak,
-		Place:    team.Place,
+		Name:           team.Name,
+		Roster:         append([]string(nil), team.Roster...),
+		Themes:         make([]ThemeView, len(team.Themes)),
+		ShootoutThemes: make([]ThemeView, len(team.ShootoutThemes)),
+		Place:          team.Place,
 	}
 
 	for i, theme := range team.Themes {
@@ -453,6 +551,29 @@ func scoreTeam(team TeamState) TeamView {
 			}
 		}
 		view.Themes[i] = tv
+	}
+	for i, theme := range team.ShootoutThemes {
+		tv := scoreTheme(theme)
+		view.ShootoutThemes[i] = tv
+		view.ShootoutTotal += tv.Score
+	}
+	view.Tiebreak = view.ShootoutTotal
+	return view
+}
+
+func scoreTheme(theme ThemeEntry) ThemeView {
+	view := ThemeView{
+		Player:  theme.Player,
+		Answers: theme.Answers,
+	}
+	for answerIndex, mark := range theme.Answers {
+		value := questionValues[answerIndex]
+		switch normalizeMark(mark) {
+		case "right":
+			view.Score += value
+		case "wrong":
+			view.Score -= value
+		}
 	}
 	return view
 }
@@ -490,7 +611,7 @@ func normalizeMark(mark string) string {
 	switch strings.ToLower(strings.TrimSpace(mark)) {
 	case "right", "q", "й", "1", "+":
 		return "right"
-	case "wrong", "w", "ц", "-1", "-":
+	case "wrong", "w", "ц", "-1", "-", "−1", "−":
 		return "wrong"
 	default:
 		return ""
@@ -579,10 +700,9 @@ func defaultMatch() MatchState {
 				},
 			},
 			{
-				Name:     "Злая щитоспинка",
-				Roster:   []string{"Егор Дементьев", "Таисия Кирпикова", "Денис Красюк", "Михаил Московченко", "Амгалан Цыбенов", "Анна Рябикина"},
-				Tiebreak: 20,
-				Place:    1,
+				Name:   "Злая щитоспинка",
+				Roster: []string{"Егор Дементьев", "Таисия Кирпикова", "Денис Красюк", "Михаил Московченко", "Амгалан Цыбенов", "Анна Рябикина"},
+				Place:  1,
 				Themes: []ThemeEntry{
 					{Player: "Егор Дементьев", Answers: [5]string{"right", "", "right", "", ""}},
 					{Player: "Амгалан Цыбенов", Answers: [5]string{"", "", "", "", ""}},

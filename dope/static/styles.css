@@ -17,12 +17,13 @@
   --theme-radius: var(--cell-radius);
   --team-col: 180px;
   --total-col: 38px;
-  --place-col: 34px;
-  --sticky-theme-gap: 14px;
+  --place-col: 42px;
+  --place-gap: 14px;
   --question-size: 28px;
   --question-col: 40px;
   --theme-score-col: 34px;
   --theme-gap-col: 20px;
+  --shootout-control-col: 44px;
   --narrow-col: 30px;
 }
 
@@ -54,24 +55,15 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  height: 84px;
-  padding: 14px 22px;
+  height: 64px;
+  padding: 10px 22px;
   border-bottom: 0;
   background: var(--structure);
 }
 
-.host-kicker {
-  margin-bottom: 4px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .host h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 30px;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -79,18 +71,21 @@ select {
 .host-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
 }
 
 .viewer-link {
   display: inline-flex;
   align-items: center;
-  min-height: 38px;
-  padding: 0 16px;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   border: 1px solid #cfd7e3;
   border-radius: 6px;
   background: #f8fafc;
   color: #174ea6;
+  font-size: 17px;
   font-weight: 700;
   text-decoration: none;
 }
@@ -205,22 +200,45 @@ select {
   background: #c7ccd4;
 }
 
-.toolbar-status {
-  min-width: 96px;
-  color: var(--muted);
-  text-align: right;
+.sync-status {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--blue);
 }
 
-.toolbar-status[data-state="saving"] {
-  color: #b06000;
+.sync-status::before {
+  content: "";
+  display: block;
+  box-sizing: border-box;
 }
 
-.toolbar-status[data-state="saved"] {
-  color: var(--green-dark);
+.sync-status:not([data-state="saved"])::before {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cfd7e3;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: sync-spin 700ms linear infinite;
 }
 
-.toolbar-status[data-state="error"] {
+.sync-status[data-state="error"] {
   color: var(--red-dark);
+}
+
+.sync-status[data-state="saved"]::before {
+  width: 14px;
+  height: 8px;
+  border-left: 2.5px solid var(--green-dark);
+  border-bottom: 2.5px solid var(--green-dark);
+  transform: translateY(-2px) rotate(-45deg);
+}
+
+@keyframes sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .formula-bar {
@@ -260,7 +278,7 @@ select {
 }
 
 .match-main {
-  height: calc(100vh - 84px);
+  height: calc(100vh - 64px);
   min-height: 360px;
   padding: 14px;
   overflow: hidden;
@@ -340,8 +358,68 @@ select {
 }
 
 .match-table .battle {
+  overflow: hidden;
   padding-left: 8px;
   text-align: left;
+}
+
+.battle-layout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.battle-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.finish-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  color: #3c4043;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.finish-toggle {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--blue);
+}
+
+.shootout-add-button,
+.theme-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid #cfd7e3;
+  border-radius: 5px;
+  background: #f8fafc;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.shootout-add-button:disabled,
+.theme-delete-button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 .sticky {
@@ -386,18 +464,23 @@ select {
   left: calc(var(--team-col) + var(--total-col));
 }
 
-.match-table .sticky-after-place-gap {
-  --cell-fill: var(--structure);
+.sticky-place-gap {
   left: calc(56px + var(--team-col) + var(--total-col) + var(--place-col));
-  width: var(--sticky-theme-gap);
-  min-width: var(--sticky-theme-gap);
-  max-width: var(--sticky-theme-gap);
-  border-color: var(--structure);
-  border-radius: 0;
 }
 
-.fight-frame .match-table .sticky-after-place-gap {
+.fight-frame .sticky-place-gap {
   left: calc(var(--team-col) + var(--total-col) + var(--place-col));
+}
+
+.match-table .place-gap,
+.match-table .place-gap-head {
+  --cell-fill: var(--structure);
+  width: var(--place-gap);
+  min-width: var(--place-gap);
+  max-width: var(--place-gap);
+  padding: 0;
+  border-color: var(--structure);
+  border-radius: 0;
 }
 
 .match-table .team-name {
@@ -420,6 +503,50 @@ select {
   width: var(--theme-score-col);
   min-width: var(--theme-score-col);
   text-align: center;
+}
+
+.shootout-controls-head,
+.shootout-controls-cell {
+  width: var(--shootout-control-col);
+  min-width: var(--shootout-control-col);
+  max-width: var(--shootout-control-col);
+  text-align: center;
+}
+
+.match-table .shootout-controls-head {
+  overflow: visible;
+  padding: 2px;
+  vertical-align: middle;
+}
+
+.match-table .shootout-controls-cell {
+  --cell-fill: var(--structure);
+  border-color: var(--structure);
+  border-radius: 0;
+}
+
+.match-table .shootout-adjacent-gap,
+.match-table .shootout-adjacent-gap-head {
+  width: 2px;
+  min-width: 2px;
+  max-width: 2px;
+  padding: 0;
+  border: 0;
+}
+
+.shootout-controls-head .shootout-add-button,
+.shootout-controls-head .theme-delete-button {
+  display: flex;
+  margin: 0 auto;
+}
+
+.shootout-controls-head .theme-delete-button {
+  position: absolute;
+  top: calc(50% + 12px);
+  left: 50%;
+  z-index: 8;
+  margin: 0;
+  transform: translateX(-50%);
 }
 
 .match-table .theme-block {
@@ -462,7 +589,23 @@ select {
   padding: 0;
 }
 
-.player-cell::after {
+.player-editor {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+
+.player-select-wrap {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.player-select-wrap::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -493,6 +636,14 @@ select {
   box-shadow: inset 0 0 0 2px var(--blue);
 }
 
+.shootout-add-button:hover,
+.shootout-add-button:focus,
+.theme-delete-button:hover,
+.theme-delete-button:focus {
+  outline: 2px solid rgba(95, 99, 104, 0.2);
+  outline-offset: -2px;
+}
+
 .match-table .readonly-player {
   width: calc(var(--question-col) * 5);
   min-width: calc(var(--question-col) * 5);
@@ -507,8 +658,21 @@ select {
   cursor: pointer;
 }
 
-.answer-cell:hover,
-.answer-cell:focus,
+.match-finished .answer-cell {
+  cursor: default;
+}
+
+.answer-cell:hover:not(.active),
+.answer-cell:focus:not(.active) {
+  outline: 2px solid rgba(26, 115, 232, 0.4);
+  outline-offset: -3px;
+}
+
+.match-finished .answer-cell:hover:not(.active),
+.match-finished .answer-cell:focus:not(.active) {
+  outline: 0;
+}
+
 .answer-cell.active {
   outline: 2px solid var(--blue);
   outline-offset: -3px;
@@ -569,6 +733,19 @@ select {
   outline: 0;
   background: transparent;
   text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-finished input:not(.finish-toggle),
+.match-finished select {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.place-cell:focus-within {
+  outline: 2px solid var(--blue);
+  outline-offset: -3px;
 }
 
 .viewer-readonly .answer-cell {
@@ -648,24 +825,23 @@ select {
 .viewer-meta {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-width: 104px;
+  min-width: 28px;
   justify-content: flex-end;
   color: #334155;
   font-weight: 700;
 }
 
 .live-dot {
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #16a34a;
-  box-shadow: 0 0 0 6px rgba(22, 163, 74, 0.12);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
 }
 
 .live-dot.offline {
   background: #dc2626;
-  box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.12);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
 }
 
 .viewer-layout {
@@ -782,26 +958,18 @@ select {
     padding: 7px 10px;
   }
 
-  .host-kicker {
-    margin-bottom: 2px;
-    font-size: 9px;
-    line-height: 1.1;
-  }
-
   .host h1 {
     font-size: 21px;
   }
 
   .viewer-meta {
-    min-width: 62px;
-    gap: 6px;
-    font-size: 13px;
+    min-width: 20px;
   }
 
   .live-dot {
-    width: 9px;
-    height: 9px;
-    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
+    width: 7px;
+    height: 7px;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
   }
 
   .match-main {
@@ -811,6 +979,10 @@ select {
   }
 
   .match-table {
+    --team-col: 90px;
+    --total-col: 28px;
+    --place-col: 32px;
+    --place-gap: 6px;
     font-size: 13px;
     line-height: 1.1;
   }
@@ -832,41 +1004,59 @@ select {
     max-width: 90px;
   }
 
+  .match-table .battle {
+    padding-left: 6px;
+  }
+
+  .battle-layout {
+    justify-content: flex-start;
+    gap: 5px;
+  }
+
+  .finish-control {
+    gap: 0;
+  }
+
+  .finish-control span {
+    display: none;
+  }
+
+  .shootout-add-button,
+  .theme-delete-button {
+    min-width: 30px;
+    height: 18px;
+    padding: 0 4px;
+    font-size: 11px;
+  }
+
   .fight-frame .sticky-name {
     left: 0;
   }
 
   .match-table .sticky-total {
-    left: 90px;
-    width: 28px;
-    min-width: 28px;
-    max-width: 28px;
+    left: var(--team-col);
+    width: var(--total-col);
+    min-width: var(--total-col);
+    max-width: var(--total-col);
   }
 
   .fight-frame .sticky-total {
-    left: 90px;
+    left: var(--team-col);
   }
 
   .match-table .sticky-place {
-    left: 118px;
-    width: 22px;
-    min-width: 22px;
-    max-width: 22px;
+    left: calc(var(--team-col) + var(--total-col));
+    width: var(--place-col);
+    min-width: var(--place-col);
+    max-width: var(--place-col);
   }
 
   .fight-frame .sticky-place {
-    left: 118px;
+    left: calc(var(--team-col) + var(--total-col));
   }
 
-  .match-table .sticky-after-place-gap {
-    left: 140px;
-    width: 6px;
-    min-width: 6px;
-    max-width: 6px;
-  }
-
-  .fight-frame .sticky-after-place-gap {
-    left: 140px;
+  .match-table .sticky-place-gap {
+    left: calc(var(--team-col) + var(--total-col) + var(--place-col));
   }
 
   .match-table .team-name {
@@ -888,10 +1078,20 @@ select {
     min-width: 24px;
   }
 
+  .match-table .shootout-controls-head,
+  .match-table .shootout-controls-cell {
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+  }
+
   .match-table .gap,
   .match-table .gap-head {
-    width: 6px;
-    min-width: 6px;
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    padding: 0;
+    border: 0;
   }
 
   .match-table .player-cell,
@@ -901,8 +1101,14 @@ select {
     font-size: 11px;
   }
 
+  .player-select-wrap::after {
+    right: 6px;
+  }
+
   .player-cell select {
     height: 22px;
+    padding-left: 5px;
+    padding-right: 18px;
     font-size: 12px;
   }
 
@@ -915,9 +1121,13 @@ select {
     min-width: 24px;
   }
 
-  .tiebreak-input,
+  .tiebreak-input {
+    width: 28px;
+    font-size: 12px;
+  }
+
   .place-input {
-    width: 20px;
+    width: 100%;
     font-size: 12px;
   }
 
@@ -926,8 +1136,8 @@ select {
     min-width: 20px;
   }
 
-  .answer-cell:hover,
-  .answer-cell:focus,
+  .answer-cell:hover:not(.active),
+  .answer-cell:focus:not(.active),
   .answer-cell.active {
     outline-width: 1px;
   }

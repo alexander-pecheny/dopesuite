@@ -1,6 +1,4 @@
 const viewerRoot = document.getElementById("viewerTable");
-const titleNode = document.getElementById("viewerTitle");
-const statusNode = document.getElementById("viewerStatus");
 const liveDot = document.getElementById("liveDot");
 
 let state = null;
@@ -24,12 +22,13 @@ function connectEvents() {
 
 function setLive(ok) {
   liveDot.classList.toggle("offline", !ok);
-  statusNode.textContent = ok ? "live" : "reconnect";
+  const label = ok ? "Трансляция активна" : "Нет соединения";
+  liveDot.setAttribute("aria-label", label);
+  liveDot.title = label;
 }
 
 function render() {
   if (!state) return;
-  titleNode.textContent = state.title;
   viewerRoot.replaceChildren(buildReadonlyTable());
 }
 
@@ -37,23 +36,33 @@ function buildReadonlyTable() {
   const table = document.createElement("table");
   table.className = "match-table readonly-table";
   const columnsPerTheme = state.questionValues.length + 2;
-  const totalColumnSpan = 4 + state.teams[0].themes.length * columnsPerTheme + 7;
+  const hasShootout = shootoutThemeCount() > 0;
+  const totalColumnSpan = 4 + totalThemeCount() * columnsPerTheme + (hasShootout ? 7 : 6);
 
   const thead = document.createElement("thead");
   const header = document.createElement("tr");
   header.appendChild(th(state.title, "sticky sticky-name battle"));
   header.appendChild(th("Σ", "sticky sticky-total number"));
   header.appendChild(th("М", "sticky sticky-place number"));
-  header.appendChild(th("", "sticky sticky-after-place-gap"));
+  header.appendChild(th("", "sticky sticky-place-gap place-gap-head"));
 
-  for (let theme = 0; theme < state.teams[0].themes.length; theme++) {
+  for (let theme = 0; theme < regularThemeCount(); theme++) {
     for (const value of state.questionValues) {
       header.appendChild(th(value, "question-head"));
     }
-    header.appendChild(th(`T${theme + 1}`, "theme-head"));
+    header.appendChild(th(`Т${theme + 1}`, "theme-head"));
     header.appendChild(th("", "gap-head"));
   }
-  header.appendChild(th("П", "number"));
+  for (let theme = 0; theme < shootoutThemeCount(); theme++) {
+    for (const value of state.questionValues) {
+      header.appendChild(th(value, "question-head shootout-head"));
+    }
+    header.appendChild(th(`П${theme + 1}`, "theme-head shootout-head"));
+    header.appendChild(th("", "gap-head"));
+  }
+  if (hasShootout) {
+    header.appendChild(th("П", "number"));
+  }
   header.appendChild(th("Σ+", "number"));
   for (const value of [50, 40, 30, 20, 10]) {
     header.appendChild(th(value, "number narrow"));
@@ -70,27 +79,19 @@ function buildReadonlyTable() {
     playerRow.appendChild(td(team.name, "sticky sticky-name team-name", {rowSpan: 2}));
     playerRow.appendChild(td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2}));
     playerRow.appendChild(td(formatPlace(team.place), "sticky sticky-place number place-cell", {rowSpan: 2}));
-    playerRow.appendChild(td("", "sticky sticky-after-place-gap", {rowSpan: 2}));
+    playerRow.appendChild(td("", "sticky sticky-place-gap place-gap", {rowSpan: 2}));
 
     team.themes.forEach((theme) => {
-      const playerCell = document.createElement("td");
-      playerCell.colSpan = 5;
-      playerCell.className = "readonly-player theme-block theme-block-top-left";
-      playerCell.textContent = theme.player || "";
-      playerRow.appendChild(playerCell);
-      playerRow.appendChild(td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: 2}));
-      playerRow.appendChild(td("", "gap"));
-
-      theme.answers.forEach((mark, answerIndex) => {
-        const className = answerIndex === 0
-          ? `answer-cell theme-block theme-block-bottom-left ${mark}`
-          : `answer-cell theme-block ${mark}`;
-        answerRow.appendChild(td("", className));
-      });
-      answerRow.appendChild(td("", "gap"));
+      appendReadonlyThemeCells(playerRow, answerRow, theme, false);
+    });
+    shootoutThemesFor(team).forEach((theme) => {
+      appendReadonlyThemeCells(playerRow, answerRow, theme, true);
     });
 
-    playerRow.appendChild(td(team.tiebreak || "", "number tiebreak-cell", {rowSpan: 2}));
+    if (hasShootout) {
+      const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
+      playerRow.appendChild(td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2}));
+    }
     playerRow.appendChild(td(team.plus, "number plus-cell", {rowSpan: 2}));
     [0, 1, 2, 3, 4].forEach((idx) => {
       playerRow.appendChild(td(team.correctCounts[4 - idx], "number narrow", {rowSpan: 2}));
@@ -107,6 +108,47 @@ function buildReadonlyTable() {
   });
   table.appendChild(tbody);
   return table;
+}
+
+function appendReadonlyThemeCells(playerRow, answerRow, theme, isShootout) {
+  const playerCell = document.createElement("td");
+  playerCell.colSpan = 5;
+  playerCell.className = "readonly-player theme-block theme-block-top-left";
+  if (isShootout) {
+    playerCell.classList.add("shootout-block");
+  }
+  playerCell.textContent = theme.player || "";
+  playerRow.appendChild(playerCell);
+  playerRow.appendChild(td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: 2}));
+  playerRow.appendChild(td("", "gap"));
+
+  theme.answers.forEach((mark, answerIndex) => {
+    const className = answerIndex === 0
+      ? `answer-cell theme-block theme-block-bottom-left ${mark}`
+      : `answer-cell theme-block ${mark}`;
+    const cell = td("", className);
+    if (isShootout) {
+      cell.classList.add("shootout-block");
+    }
+    answerRow.appendChild(cell);
+  });
+  answerRow.appendChild(td("", "gap"));
+}
+
+function regularThemeCount() {
+  return state.teams[0].themes.length;
+}
+
+function shootoutThemeCount() {
+  return shootoutThemesFor(state.teams[0]).length;
+}
+
+function totalThemeCount() {
+  return regularThemeCount() + shootoutThemeCount();
+}
+
+function shootoutThemesFor(team) {
+  return team.shootoutThemes || [];
 }
 
 function formatPlace(place) {
