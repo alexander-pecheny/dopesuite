@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Импорт · Чемпионат</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script defer src="/static/import.js"></script>
+</head>
+<body class="host import-page">
+  <header class="host-top">
+    <h1>Импорт</h1>
+    <div class="host-actions">
+      <span class="sync-status" id="status" data-state="saved" aria-label="Готово" title="Готово"></span>
+      <a class="viewer-link" href="/host" aria-label="Открыть сетку" title="Открыть сетку">↩</a>
+    </div>
+  </header>
+
+  <main class="match-main">
+    <div class="sheet-frame import-frame">
+      <form id="importForm" class="import-form">
+        <div class="import-actions">
+          <button type="button" id="loadSample">СтудЧР JSON</button>
+          <button type="submit">Импорт</button>
+        </div>
+        <textarea id="schemeInput" spellcheck="false" autocomplete="off"></textarea>
+        <pre id="importMessage" class="import-message"></pre>
+      </form>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,28 @@
+set dotenv-load := true
+
+default: dev
+
+web:
+    go run .
+
+bot:
+    go run ./cmd/telegram-bot
+
+dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill 0' EXIT INT TERM
+    go run . &
+    go run ./cmd/telegram-bot &
+    wait
+
+# Mint a one-shot invite code and print it. Reads DOPE_DB from .env.
+# Usage: just invite [days]
+invite days='7':
+    uv run python scripts/mint_invite.py {{days}}
+
+# Seed the local DB with the bundled studchr scheme so / shows real data.
+seed:
+    curl -s -X POST -H "Content-Type: application/json" \
+      --data-binary @static/schemes/studchr-ek-2026.json \
+      http://localhost:8080/api/import > /dev/null && echo seeded
