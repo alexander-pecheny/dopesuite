@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -181,20 +182,30 @@ func TestNormalizeMark(t *testing.T) {
 
 func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 	t.Chdir(t.TempDir())
-	db, tournamentID, err := openTournamentDB("test.db")
+	db, err := openTournamentDB("test.db")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 
+	tournamentID, err := bootstrapDefaultTournament(db, defaultMatch())
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	gameID, err := defaultGameID(t.Context(), db, tournamentID)
+	if err != nil {
+		t.Fatalf("default game: %v", err)
+	}
+
 	srv := &server{
 		db:              db,
 		tournamentID:    tournamentID,
+		activeGameID:    gameID,
 		activeMatchCode: defaultMatchCode,
 		subscribers:     make(map[chan event]struct{}),
 	}
 
-	view, err := srv.loadMatchViewLocked(defaultMatchCode)
+	view, err := srv.loadMatchViewLocked(tournamentID, defaultMatchCode)
 	if err != nil {
 		t.Fatalf("load match: %v", err)
 	}
@@ -208,7 +219,7 @@ func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 	theme := 0
 	answer := 0
 	mark := "right"
-	view, _, err = srv.applyMatchUpdate(defaultMatchCode, updateRequest{
+	view, _, err = srv.applyMatchUpdate(tournamentID, defaultMatchCode, updateRequest{
 		Team:   2,
 		Theme:  &theme,
 		Answer: &answer,
@@ -221,7 +232,7 @@ func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 		t.Fatalf("updated total = %d, want 10", view.Teams[2].Total)
 	}
 
-	reloaded, err := srv.loadMatchViewLocked(defaultMatchCode)
+	reloaded, err := srv.loadMatchViewLocked(tournamentID, defaultMatchCode)
 	if err != nil {
 		t.Fatalf("reload match: %v", err)
 	}
@@ -232,27 +243,37 @@ func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 
 func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 	t.Chdir(t.TempDir())
-	db, tournamentID, err := openTournamentDB("test.db")
+	db, err := openTournamentDB("test.db")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 
+	tournamentID, err := bootstrapDefaultTournament(db, defaultMatch())
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	gameID, err := defaultGameID(t.Context(), db, tournamentID)
+	if err != nil {
+		t.Fatalf("default game: %v", err)
+	}
+
 	srv := &server{
 		db:              db,
 		tournamentID:    tournamentID,
+		activeGameID:    gameID,
 		activeMatchCode: defaultMatchCode,
 		subscribers:     make(map[chan event]struct{}),
 	}
 
-	venues, _, err := srv.updateVenue(1, "Рим")
+	venues, _, err := srv.updateVenue(tournamentID, 1, "Рим")
 	if err != nil {
 		t.Fatalf("update venue: %v", err)
 	}
 	if len(venues) != 1 || venues[0].Title != "Рим" {
 		t.Fatalf("venues = %#v, want renamed venue", venues)
 	}
-	view, err := srv.loadMatchViewLocked(defaultMatchCode)
+	view, err := srv.loadMatchViewLocked(tournamentID, defaultMatchCode)
 	if err != nil {
 		t.Fatalf("load match: %v", err)
 	}
@@ -288,7 +309,7 @@ func insertTestPlayer(db *sql.DB, tournamentID int64) (int64, error) {
 }
 
 func TestImportStudchrScheme(t *testing.T) {
-	db, tournamentID, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -305,7 +326,6 @@ func TestImportStudchrScheme(t *testing.T) {
 
 	srv := &server{
 		db:              db,
-		tournamentID:    tournamentID,
 		activeMatchCode: defaultMatchCode,
 		subscribers:     make(map[chan event]struct{}),
 	}
@@ -331,5 +351,196 @@ func TestImportStudchrScheme(t *testing.T) {
 	final := view.Stages[len(view.Stages)-1]
 	if len(final.Matches) != 1 || final.Matches[0].Code != "Y" {
 		t.Fatalf("final = %#v, want match Y", final.Matches)
+	}
+}
+
+func TestEmptyDatabaseHasNoTournament(t *testing.T) {
+	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	tournamentID, gameID, matchCode, err := loadActiveContext(db)
+	if err != nil {
+		t.Fatalf("loadActiveContext: %v", err)
+	}
+	if tournamentID != 0 || gameID != 0 || matchCode != "" {
+		t.Fatalf("empty db produced (%d, %d, %q), want zero values", tournamentID, gameID, matchCode)
+	}
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	view, err := srv.loadTournamentViewLocked(0, 0)
+	if err != nil {
+		t.Fatalf("loadTournamentViewLocked: %v", err)
+	}
+	if view.Slug != "" || len(view.Stages) != 0 {
+		t.Fatalf("empty view = %#v, want zero", view)
+	}
+}
+
+func TestImportRejectsTeamSlot(t *testing.T) {
+	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	scheme := tournamentScheme{
+		SchemaVersion: 2,
+		Slug:          "with-team-slot",
+		Title:         "with team slot",
+		Stages: []schemeStage{{
+			Code:      "stage1",
+			Title:     "stage 1",
+			StageType: "matches",
+			Position:  1,
+			Matches: []schemeMatch{{
+				Code:             "A",
+				Title:            "A",
+				ParticipantCount: 1,
+				Slots: []schemeSlot{{
+					Team: &schemeTeamRef{Name: "Inline"},
+				}},
+			}},
+		}},
+	}
+	if _, err := srv.importScheme(scheme); err == nil {
+		t.Fatal("expected error for slot.team, got nil")
+	} else if !strings.Contains(err.Error(), "removed source") {
+		t.Fatalf("error = %v, want mention of removed source", err)
+	}
+}
+
+func TestImportSeedSlotsResolveViaAssignments(t *testing.T) {
+	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	scheme := tournamentScheme{
+		SchemaVersion: 2,
+		Slug:          "symbolic",
+		Title:         "symbolic",
+		GameType:      "ek",
+		Stages: []schemeStage{{
+			Code:      "r1",
+			Title:     "r1",
+			StageType: "matches",
+			Position:  1,
+			Matches: []schemeMatch{{
+				Code:             "A",
+				Title:            "A",
+				ParticipantCount: 2,
+				Slots: []schemeSlot{
+					{Seed: &schemeSeedRef{Basket: 1, Number: 1}},
+					{Seed: &schemeSeedRef{Basket: 1, Number: 2}},
+				},
+			}},
+		}},
+		Teams: []schemeTeam{
+			{Name: "Alpha", Basket: 1, Number: 1},
+			{Name: "Beta", Basket: 1, Number: 2},
+		},
+	}
+	view, err := srv.importScheme(scheme)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	match := view.Stages[0].Matches[0]
+	if match.Teams[0].Name != "Alpha" || match.Teams[1].Name != "Beta" {
+		t.Fatalf("slot teams = %q/%q, want Alpha/Beta", match.Teams[0].Name, match.Teams[1].Name)
+	}
+	for _, team := range match.Teams {
+		if team.SourceType != "seed" {
+			t.Fatalf("source type = %q, want seed", team.SourceType)
+		}
+	}
+
+	var assignments int
+	if err := db.QueryRow(`select count(*) from game_assignments`).Scan(&assignments); err != nil {
+		t.Fatalf("count assignments: %v", err)
+	}
+	if assignments != 2 {
+		t.Fatalf("game_assignments rows = %d, want 2", assignments)
+	}
+
+	var sourceTeamRows int
+	if err := db.QueryRow(`select count(*) from match_slots where source_type = 'team'`).Scan(&sourceTeamRows); err != nil {
+		t.Fatalf("count team-source slots: %v", err)
+	}
+	if sourceTeamRows != 0 {
+		t.Fatalf("legacy team-source slots = %d, want 0", sourceTeamRows)
+	}
+}
+
+func TestSystemUserIsCreatedOnImport(t *testing.T) {
+	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	scheme := tournamentScheme{
+		SchemaVersion: 2,
+		Slug:          "minimal",
+		Title:         "minimal",
+		Stages: []schemeStage{{
+			Code:      "r1",
+			Title:     "r1",
+			StageType: "matches",
+			Position:  1,
+			Matches: []schemeMatch{{
+				Code: "A", Title: "A", ParticipantCount: 0,
+				Slots: []schemeSlot{{Placeholder: "TBD"}},
+			}},
+		}},
+	}
+	if _, err := srv.importScheme(scheme); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	var systemUsers int
+	if err := db.QueryRow(`select count(*) from users where is_system = 1`).Scan(&systemUsers); err != nil {
+		t.Fatalf("count system users: %v", err)
+	}
+	if systemUsers != 1 {
+		t.Fatalf("system users = %d, want 1", systemUsers)
+	}
+	var organizers int
+	if err := db.QueryRow(`select count(*) from tournament_organizers`).Scan(&organizers); err != nil {
+		t.Fatalf("count organizers: %v", err)
+	}
+	if organizers != 1 {
+		t.Fatalf("tournament_organizers = %d, want 1", organizers)
+	}
+	var games int
+	if err := db.QueryRow(`select count(*) from games`).Scan(&games); err != nil {
+		t.Fatalf("count games: %v", err)
+	}
+	if games != 1 {
+		t.Fatalf("games = %d, want 1", games)
+	}
+}
+
+func TestAuthCodeHelpers(t *testing.T) {
+	a, err := newInviteCode()
+	if err != nil {
+		t.Fatalf("invite code: %v", err)
+	}
+	b, err := newInviteCode()
+	if err != nil {
+		t.Fatalf("invite code: %v", err)
+	}
+	if a == b || a == "" {
+		t.Fatalf("invite codes collide or empty: %q vs %q", a, b)
+	}
+	tok, err := newSessionToken()
+	if err != nil {
+		t.Fatalf("session token: %v", err)
+	}
+	if hashSessionToken(tok) == tok {
+		t.Fatal("session hash should differ from token")
+	}
+	if hashSessionToken(tok) != hashSessionToken(tok) {
+		t.Fatal("session hash should be deterministic")
 	}
 }

@@ -5,10 +5,14 @@
 - `slot_index` — 0-based позиция команды в протоколе боя. Для боя на 4 команды это `0..3`, для `1/4` это `0..2`.
 - `slot_index` не является местом команды. Место хранится в `match_results.place`.
 - `slot_index` не меняется, если источник слота разрешился в другую команду после пересева.
-- `source_type` — `seed`, `from_match`, `reseed`, `team`, `placeholder`.
-- `source_ref_json` — параметры источника: `{"match":"A","place":1}` или `{"stage":"reseed_after_r8","rank":8}`.
-- `team_id` — фактически назначенная команда; `null`, пока источник не разрешен.
-- `locked=1` — ручная замена команды ведущим; автоматический resolver больше не перезаписывает `team_id`.
+- `source_type` — `seed`, `from_match`, `reseed`, `placeholder`. Старое значение `team` после v2 не допускается.
+- `source_ref_json` — параметры источника:
+  - `seed`: `{"basket": 1, "number": 3, "label"?: "К1-3"}`.
+  - `from_match`: `{"match": "A", "place": 1, "label"?: "A1"}`.
+  - `reseed`: `{"stage": "reseed_after_r8", "rank": 8, "label"?: "Пересев-8"}`.
+  - `placeholder`: `{"placeholder": "TBD", "label"?: ""}`.
+- `team_id` / `player_id` — кеш разрешения; ровно один из них может быть не NULL после успешного разрешения. До разрешения оба NULL.
+- `locked=1` — ручная замена команды/игрока ведущим; автоматический resolver больше не перезаписывает кеш.
 
 ## `themes` и `answers`
 
@@ -29,7 +33,7 @@
 
 ## Пересевы и события
 
-- Пересев описывается строкой в `stages` с `stage_type='reseed'`.
+- Пересев описывается строкой в `stages` с `stage_type='reseed'` и принадлежит конкретной игре через `stages.game_id`.
 - Настройки пересева лежат в `stages.config_json`: кто участвует и по каким метрикам сортировать.
 - `reseed_entries.rank` — 1-based номер пересева.
 - `reseed_entries.stage_id` ссылается на этап-пересев, а не на бой.

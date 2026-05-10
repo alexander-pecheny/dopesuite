@@ -100,9 +100,12 @@ type server struct {
 	mu              sync.RWMutex
 	db              *sql.DB
 	tournamentID    int64
+	activeGameID    int64
 	activeMatchCode string
 	state           MatchState
 	subscribers     map[chan event]struct{}
+	assets          fs.FS
+	assetNoCache    bool
 }
 
 type updateRequest struct {
@@ -125,21 +128,27 @@ func main() {
 	}
 	assets, assetMode := staticSource()
 	noCacheAssets := assetMode == "disk"
+	srv.assets = assets
+	srv.assetNoCache = noCacheAssets
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", srv.handleIndex)
+	mux.HandleFunc("/", srv.handlePublicIndex)
+	mux.HandleFunc("/tournaments/", srv.handleTournamentRouter)
 	mux.HandleFunc("/import", srv.serveStaticPage(assets, "static/import.html", noCacheAssets))
+	mux.HandleFunc("/register", srv.handleRegisterPage)
+	mux.HandleFunc("/register/invite", srv.handleRegisterInviteSubmit)
+	mux.HandleFunc("/register/username", srv.handleRegisterUsernameSubmit)
+	mux.HandleFunc("/login", srv.serveStaticPage(assets, "static/login.html", noCacheAssets))
 	mux.HandleFunc("/api/import", srv.handleImport)
-	mux.HandleFunc("/host", srv.serveHostPage(assets, noCacheAssets))
-	mux.HandleFunc("/host/", srv.serveHostPage(assets, noCacheAssets))
-	mux.HandleFunc("/viewer", srv.serveViewerPage(assets, noCacheAssets))
-	mux.HandleFunc("/viewer/", srv.serveViewerPage(assets, noCacheAssets))
-	mux.HandleFunc("/api/tournament", srv.handleTournament)
-	mux.HandleFunc("/api/matches/", srv.handleMatchAPI)
-	mux.HandleFunc("/api/venues", srv.handleVenuesAPI)
-	mux.HandleFunc("/api/venues/", srv.handleVenuesAPI)
-	mux.HandleFunc("/api/state", srv.handleState)
-	mux.HandleFunc("/api/update", srv.handleUpdate)
+	mux.HandleFunc("/host", srv.handleHostLanding)
+	mux.HandleFunc("/host/", srv.handleHostRouter)
+	mux.HandleFunc("/api/tournaments/", srv.handleScopedAPI)
+	mux.HandleFunc("/api/auth/register/start", srv.handleAuthRegisterStart)
+	mux.HandleFunc("/api/auth/register/status", srv.handleAuthRegisterStatus)
+	mux.HandleFunc("/api/auth/login", srv.handleAuthLogin)
+	mux.HandleFunc("/api/auth/logout", srv.handleAuthLogout)
+	mux.HandleFunc("/api/auth/me", srv.handleAuthMe)
+	mux.HandleFunc("/api/auth/username", srv.handleAuthUsername)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.Handle("/static/", staticFileServer(assets, noCacheAssets))
 
@@ -176,14 +185,23 @@ func newServer() (*server, error) {
 	if dbPath == "" {
 		dbPath = dbFile
 	}
-	db, tournamentID, err := openTournamentDB(dbPath)
+	db, err := openTournamentDB(dbPath)
 	if err != nil {
 		return nil, err
+	}
+	tournamentID, gameID, matchCode, err := loadActiveContext(db)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if matchCode == "" {
+		matchCode = defaultMatchCode
 	}
 	return &server{
 		db:              db,
 		tournamentID:    tournamentID,
-		activeMatchCode: defaultMatchCode,
+		activeGameID:    gameID,
+		activeMatchCode: matchCode,
 		subscribers:     make(map[chan event]struct{}),
 	}, nil
 }
@@ -256,14 +274,6 @@ func normalizeState(state *MatchState) {
 	}
 }
 
-func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	http.Redirect(w, r, "/host", http.StatusFound)
-}
-
 func (s *server) serveStaticPage(source fs.FS, path string, noCache bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -275,37 +285,6 @@ func (s *server) serveStaticPage(source fs.FS, path string, noCache bool) http.H
 		}
 		http.ServeFileFS(w, r, source, path)
 	}
-}
-
-func (s *server) handleState(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	data, _ := s.snapshot()
-	writeJSON(w, data)
-}
-
-func (s *server) handleUpdate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	defer r.Body.Close()
-
-	var req updateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
-	}
-
-	view, data, err := s.applyUpdate(req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	s.broadcastState("match:"+s.activeMatchCode, view.Revision, data)
-	writeJSON(w, data)
 }
 
 func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
@@ -329,12 +308,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	s.addSubscriber(ch)
 	defer s.removeSubscriber(ch)
 
-	initialData, initialRev := s.snapshot()
-	if s.db != nil {
-		initialData, initialRev = s.snapshotTournament()
-		initialData = eventEnvelopeJSON("tournament", initialRev, initialData)
-	}
-	writeSSE(w, "state", initialRev, initialData)
+	fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
 
 	ticker := time.NewTicker(15 * time.Second)
@@ -386,38 +360,9 @@ func (s *server) broadcast(ev event) {
 	}
 }
 
-func (s *server) snapshot() ([]byte, int64) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.db != nil {
-		view, err := s.loadMatchViewLocked(s.activeMatchCode)
-		if err != nil {
-			data, _ := json.Marshal(map[string]string{"error": err.Error()})
-			return data, 0
-		}
-		data, _ := json.Marshal(view)
-		return data, view.Revision
-	}
-	view := buildView(s.state)
-	data, _ := json.Marshal(view)
-	return data, view.Revision
-}
-
-func (s *server) snapshotTournament() ([]byte, int64) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	view, err := s.loadTournamentViewLocked()
-	if err != nil {
-		data, _ := json.Marshal(map[string]string{"error": err.Error()})
-		return data, 0
-	}
-	data, _ := json.Marshal(view)
-	return data, view.Revision
-}
-
 func (s *server) applyUpdate(req updateRequest) (MatchView, []byte, error) {
 	if s.db != nil {
-		return s.applyMatchUpdate(s.activeMatchCode, req)
+		return s.applyMatchUpdate(s.tournamentID, s.activeMatchCode, req)
 	}
 	return s.applyLegacyUpdate(req)
 }

@@ -7,13 +7,22 @@ import (
 )
 
 type scheme struct {
-	SchemaVersion     int     `json:"schemaVersion"`
-	Slug              string  `json:"slug"`
-	Title             string  `json:"title"`
-	QuestionValues    []int   `json:"questionValues"`
-	RegularThemeCount int     `json:"regularThemeCount"`
-	Venues            []venue `json:"venues"`
-	Stages            []stage `json:"stages"`
+	SchemaVersion     int          `json:"schemaVersion"`
+	Slug              string       `json:"slug"`
+	Title             string       `json:"title"`
+	GameType          string       `json:"gameType"`
+	QuestionValues    []int        `json:"questionValues"`
+	RegularThemeCount int          `json:"regularThemeCount"`
+	Venues            []venue      `json:"venues"`
+	Stages            []stage      `json:"stages"`
+	Teams             []schemeTeam `json:"teams"`
+}
+
+type schemeTeam struct {
+	Name    string   `json:"name"`
+	Basket  int      `json:"basket"`
+	Number  int      `json:"number"`
+	Players []string `json:"players"`
 }
 
 type venue struct {
@@ -49,14 +58,13 @@ type slot struct {
 	Seed        *seedRef      `json:"seed,omitempty"`
 	FromMatch   *fromMatchRef `json:"fromMatch,omitempty"`
 	Reseed      *reseedRef    `json:"reseed,omitempty"`
-	Team        *teamRef      `json:"team,omitempty"`
 	Placeholder string        `json:"placeholder,omitempty"`
 	Label       string        `json:"label,omitempty"`
 }
 
 type seedRef struct {
-	Basket   int `json:"basket"`
-	Position int `json:"position"`
+	Basket int `json:"basket"`
+	Number int `json:"number"`
 }
 
 type fromMatchRef struct {
@@ -67,12 +75,6 @@ type fromMatchRef struct {
 type reseedRef struct {
 	Stage string `json:"stage"`
 	Rank  int    `json:"rank"`
-}
-
-type teamRef struct {
-	ID      string   `json:"id,omitempty"`
-	Name    string   `json:"name,omitempty"`
-	Players []string `json:"players,omitempty"`
 }
 
 type sortRule struct {
@@ -91,9 +93,10 @@ func main() {
 
 func buildScheme() scheme {
 	return scheme{
-		SchemaVersion:     1,
+		SchemaVersion:     2,
 		Slug:              "studchr-ek-2026",
 		Title:             "СтудЧР-2026, ЭК",
+		GameType:          "ek",
 		QuestionValues:    []int{10, 20, 30, 40, 50},
 		RegularThemeCount: 12,
 		Venues: []venue{
@@ -112,7 +115,24 @@ func buildScheme() scheme {
 			r2Stage(),
 			finalStage(),
 		},
+		Teams: buildTeams(),
 	}
+}
+
+func buildTeams() []schemeTeam {
+	teams := make([]schemeTeam, 0, 48)
+	for basketIndex, basketTeams := range drawTeams {
+		basket := basketIndex + 1
+		for numberIndex, name := range basketTeams {
+			teams = append(teams, schemeTeam{
+				Name:    name,
+				Basket:  basket,
+				Number:  numberIndex + 1,
+				Players: teamPlayers[name],
+			})
+		}
+	}
+	return teams
 }
 
 func r16FirstRunStage() stage {
@@ -123,20 +143,20 @@ func r16SecondRunStage() stage {
 	return r16RunStage("r16_run2", "1/16 финала, заход 2", 2, []string{"G", "H", "I", "J", "K", "L"}, 7)
 }
 
-func r16RunStage(code, title string, position int, codes []string, firstSeedPosition int) stage {
+func r16RunStage(code, title string, position int, codes []string, firstSeedNumber int) stage {
 	matches := make([]match, 0, len(codes))
 	for index, code := range codes {
-		seedPosition := firstSeedPosition + index
+		seedNumber := firstSeedNumber + index
 		matches = append(matches, match{
 			Code:             code,
 			Title:            "Бой " + code,
 			Venue:            index%6 + 1,
 			ParticipantCount: 4,
 			Slots: []slot{
-				team(1, seedPosition),
-				team(2, seedPosition),
-				team(3, seedPosition),
-				team(4, seedPosition),
+				seed(1, seedNumber),
+				seed(2, seedNumber),
+				seed(3, seedNumber),
+				seed(4, seedNumber),
 			},
 		})
 	}
@@ -222,13 +242,8 @@ func nextMatch(code string, venue int, slots ...slot) match {
 	}
 }
 
-func seed(basket, position int) slot {
-	return slot{Seed: &seedRef{Basket: basket, Position: position}}
-}
-
-func team(basket, position int) slot {
-	name := drawTeams[basket-1][position-1]
-	return slot{Team: &teamRef{Name: name, Players: teamPlayers[name]}}
+func seed(basket, number int) slot {
+	return slot{Seed: &seedRef{Basket: basket, Number: number}}
 }
 
 func from(code string, place int) slot {

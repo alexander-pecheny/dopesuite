@@ -88,7 +88,7 @@ function preferredColumns(count) {
 }
 
 function stageHref(stage, options = {}) {
-  return `${basePath(options)}/stages/${encodeURIComponent(stage.code)}`;
+  return `${basePath(options)}/stage/${encodeURIComponent(stage.code)}`;
 }
 
 function matchHref(match, options = {}) {
@@ -96,7 +96,7 @@ function matchHref(match, options = {}) {
 }
 
 function basePath(options = {}) {
-  return options.basePath || (options.viewer ? "/viewer" : "/host");
+  return options.basePath || "";
 }
 
 function matchLabel(match) {

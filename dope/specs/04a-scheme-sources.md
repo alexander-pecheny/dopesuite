@@ -9,12 +9,15 @@
 ## Источники слота
 
 ```json
-{"seed": {"basket": 1, "position": 1}}
+{"seed": {"basket": 1, "number": 1}}
 {"fromMatch": {"match": "A", "place": 1}}
 {"reseed": {"stage": "reseed_after_r8", "rank": 8}}
-{"team": {"id": "external-team-id"}}
 {"placeholder": "Пересев-8"}
 ```
+
+После v2 источник `team` (с явной командой внутри слота) удален. Если бракет нужно «привязать» к конкретным командам — это делается через `game_assignments` на уровне игры, а не внутри JSON-сетки.
+
+В источнике `seed` поле называется `number` (1-based номер команды в корзине), чтобы не путать со `slot_index` и `match_results.place`.
 
 ## Пересев
 

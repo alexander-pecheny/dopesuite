@@ -29,7 +29,7 @@ async function loadCurrent() {
 }
 
 async function loadTournament() {
-  const response = await fetch("/api/tournament");
+  const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
   tournament = await response.json();
   renderTournament();
@@ -37,8 +37,8 @@ async function loadTournament() {
 
 async function loadStage() {
   const [tournamentResponse, venuesResponse] = await Promise.all([
-    fetch("/api/tournament"),
-    fetch("/api/venues"),
+    fetch(route.apiBase),
+    fetch(`${route.tournamentApi}/venues`),
   ]);
   if (!tournamentResponse.ok) throw new Error(await tournamentResponse.text());
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
@@ -47,7 +47,7 @@ async function loadStage() {
   const stage = findStage(tournament, route.stageCode);
   const matches = stage?.matches || [];
   stageStates = await Promise.all(matches.map(async (match) => {
-    const response = await fetch(`/api/matches/${encodeURIComponent(match.code)}`);
+    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(match.code)}`);
     if (!response.ok) throw new Error(await response.text());
     return response.json();
   }));
@@ -56,8 +56,8 @@ async function loadStage() {
 
 async function loadMatch() {
   const [matchResponse, venuesResponse] = await Promise.all([
-    fetch(`/api/matches/${encodeURIComponent(route.matchCode)}`),
-    fetch("/api/venues"),
+    fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode)}`),
+    fetch(`${route.tournamentApi}/venues`),
   ]);
   if (!matchResponse.ok) throw new Error(await matchResponse.text());
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
@@ -67,7 +67,7 @@ async function loadMatch() {
 }
 
 async function loadVenuesPage() {
-  const response = await fetch("/api/venues");
+  const response = await fetch(`${route.tournamentApi}/venues`);
   if (!response.ok) throw new Error(await response.text());
   venues = await response.json();
   renderVenues();
@@ -75,15 +75,17 @@ async function loadVenuesPage() {
 
 function connectEvents() {
   const events = new EventSource("/events");
+  const matchScope = `match:${route.gameID}:${route.matchCode}`;
+  const venuesScope = `venues:${route.tournamentID}`;
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
-    if (route.mode === "match" && message.scope === `match:${route.matchCode}`) {
+    if (route.mode === "match" && message.scope === matchScope) {
       state = message.data;
       render();
       setStatus("saved");
       return;
     }
-    if (route.mode === "venues" && message.scope === "venues") {
+    if (route.mode === "venues" && message.scope === venuesScope) {
       venues = message.data;
       renderVenues();
       setStatus("saved");
@@ -115,7 +117,7 @@ function parseEventData(raw) {
   if (parsed && typeof parsed.scope === "string" && Object.prototype.hasOwnProperty.call(parsed, "data")) {
     return parsed;
   }
-  return {scope: route.mode === "match" ? `match:${route.matchCode}` : "tournament", data: parsed};
+  return {scope: "unknown", data: parsed};
 }
 
 function setStatus(state) {
@@ -133,7 +135,7 @@ function setStatus(state) {
 async function sendUpdate(payload, matchCode = currentMatchCode()) {
   setStatus("saving");
   try {
-    const response = await fetch(`/api/matches/${encodeURIComponent(matchCode)}/update`, {
+    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}/update`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(payload),
@@ -157,7 +159,7 @@ async function sendUpdate(payload, matchCode = currentMatchCode()) {
 async function sendVenueChange(number, matchCode = currentMatchCode()) {
   setStatus("saving");
   try {
-    const response = await fetch(`/api/matches/${encodeURIComponent(matchCode)}/venue`, {
+    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}/venue`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({number}),
@@ -181,7 +183,7 @@ async function sendVenueChange(number, matchCode = currentMatchCode()) {
 async function updateVenueTitle(number, title) {
   setStatus("saving");
   try {
-    const response = await fetch(`/api/venues/${encodeURIComponent(number)}`, {
+    const response = await fetch(`${route.tournamentApi}/venues/${encodeURIComponent(number)}`, {
       method: "PUT",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({title}),
@@ -200,9 +202,9 @@ function renderTournament() {
   if (!tournament) return;
   setHostMode("grid");
   setHeading(tournament.title);
-  setViewerLink("/viewer", "Открыть зрительскую сетку");
+  setViewerLink(route.viewerBase + "/", "Открыть зрительскую сетку");
   document.title = `Ведущий · ${tournament.title}`;
-  hostRoot.replaceChildren(buildTournamentGrid(tournament, {basePath: "/host"}));
+  hostRoot.replaceChildren(buildTournamentGrid(tournament, {basePath: route.base}));
 }
 
 function renderStage(options = {}) {
@@ -213,7 +215,7 @@ function renderStage(options = {}) {
   const stage = findStage(tournament, route.stageCode);
   setHostMode("match");
   setHeading(stage?.title || tournament.title);
-  setViewerLink(`/viewer/stages/${encodeURIComponent(route.stageCode)}`, "Открыть этап для зрителя");
+  setViewerLink(`${route.viewerBase}/stage/${encodeURIComponent(route.stageCode)}`, "Открыть этап для зрителя");
   document.title = `Ведущий · ${stage?.title || tournament.title}`;
   hostRoot.replaceChildren(buildStageTables());
   if (options.preserveScroll && scrollFrame) {
@@ -225,9 +227,9 @@ function renderStage(options = {}) {
 function renderVenues() {
   setHostMode("grid");
   setHeading("Площадки");
-  setViewerLink("/viewer/venues", "Открыть площадки для зрителя");
+  setViewerLink(`${route.viewerBase}/venues`, "Открыть площадки для зрителя");
   document.title = "Ведущий · Площадки";
-  hostRoot.replaceChildren(buildSubnav([{href: "/host", label: "Сетка"}]), buildVenuesTable(true));
+  hostRoot.replaceChildren(buildSubnav([{href: route.base + "/", label: "Сетка"}]), buildVenuesTable(true));
 }
 
 function render() {
@@ -235,7 +237,7 @@ function render() {
   setHostMode("match");
   normalizeActiveCell();
   setHeading(state.stageTitle || state.title);
-  setViewerLink(`/viewer/matches/${encodeURIComponent(state.code || route.matchCode)}`, "Открыть зрительский бой");
+  setViewerLink(`${route.viewerBase}/matches/${encodeURIComponent(state.code || route.matchCode)}`, "Открыть зрительский бой");
   document.title = `Ведущий · ${state.title}`;
 
   const focusedPlaceTeam = focusedPlaceTeamIndex();
@@ -248,8 +250,8 @@ function render() {
   } else {
     hostRoot.replaceChildren(
       buildSubnav([
-        {href: "/host", label: "Сетка"},
-        {href: "/host/venues", label: "Площадки"},
+        {href: route.base + "/", label: "Сетка"},
+        {href: route.base + "/venues", label: "Площадки"},
       ]),
       table,
     );
@@ -298,7 +300,7 @@ function buildTournamentTable(data) {
 
       const linkCell = document.createElement("td");
       const link = document.createElement("a");
-      link.href = `/host/matches/${encodeURIComponent(match.code)}`;
+      link.href = `${route.base}/matches/${encodeURIComponent(match.code)}`;
       link.className = "match-link";
       link.textContent = match.code;
       linkCell.appendChild(link);
@@ -893,12 +895,26 @@ function isLastRenderedTheme(isShootout, themeIndex) {
 
 function currentRoute() {
   const path = window.location.pathname;
-  if (path === "/host/venues") return {mode: "venues"};
-  const match = path.match(/^\/host\/matches\/([^/]+)$/);
-  if (match) return {mode: "match", matchCode: decodeURIComponent(match[1])};
-  const stage = path.match(/^\/host\/stages\/([^/]+)$/);
-  if (stage) return {mode: "stage", stageCode: decodeURIComponent(stage[1])};
-  return {mode: "grid"};
+  const prefix = path.match(/^\/host\/tournament\/(\d+)\/game\/(\d+)/);
+  if (!prefix) {
+    return {mode: "missing"};
+  }
+  const tournamentID = prefix[1];
+  const gameID = prefix[2];
+  const base = `/host/tournament/${tournamentID}/game/${gameID}`;
+  const viewerBase = `/tournaments/${tournamentID}/game/${gameID}`;
+  const apiBase = `/api/tournaments/${tournamentID}/games/${gameID}`;
+  const tournamentApi = `/api/tournaments/${tournamentID}`;
+  const rest = path.slice(prefix[0].length).replace(/\/$/, "");
+  if (rest === "" || rest === "/") {
+    return {mode: "grid", tournamentID, gameID, base, viewerBase, apiBase, tournamentApi};
+  }
+  if (rest === "/venues") return {mode: "venues", tournamentID, gameID, base, viewerBase, apiBase, tournamentApi};
+  const match = rest.match(/^\/matches\/([^/]+)$/);
+  if (match) return {mode: "match", matchCode: decodeURIComponent(match[1]), tournamentID, gameID, base, viewerBase, apiBase, tournamentApi};
+  const stage = rest.match(/^\/stage\/([^/]+)$/);
+  if (stage) return {mode: "stage", stageCode: decodeURIComponent(stage[1]), tournamentID, gameID, base, viewerBase, apiBase, tournamentApi};
+  return {mode: "missing"};
 }
 
 function findStage(data, code) {

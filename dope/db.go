@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base32"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,9 +18,12 @@ import (
 )
 
 const (
-	dbFile            = "tournament.db"
-	defaultMatchCode  = "A"
-	defaultVenueTitle = "Москва-1"
+	dbFile             = "tournament.db"
+	defaultMatchCode   = "A"
+	defaultVenueTitle  = "Москва-1"
+	defaultGameCode    = "default"
+	defaultGameType    = "ek"
+	systemUserUsername = "system"
 )
 
 type VenueView struct {
@@ -87,10 +92,20 @@ type tournamentScheme struct {
 	SchemaVersion     int           `json:"schemaVersion"`
 	Slug              string        `json:"slug"`
 	Title             string        `json:"title"`
+	GameType          string        `json:"gameType"`
 	QuestionValues    []int         `json:"questionValues"`
 	RegularThemeCount int           `json:"regularThemeCount"`
 	Venues            []schemeVenue `json:"venues"`
 	Stages            []schemeStage `json:"stages"`
+	Teams             []schemeTeam  `json:"teams"`
+}
+
+type schemeTeam struct {
+	Name    string   `json:"name"`
+	City    string   `json:"city"`
+	Basket  int      `json:"basket"`
+	Number  int      `json:"number"`
+	Players []string `json:"players"`
 }
 
 type schemeVenue struct {
@@ -129,6 +144,7 @@ type schemeSlot struct {
 
 type schemeSeedRef struct {
 	Basket   int `json:"basket"`
+	Number   int `json:"number"`
 	Position int `json:"position"`
 }
 
@@ -170,26 +186,40 @@ type dbMatchState struct {
 	TeamIDs            []int64
 }
 
-func openTournamentDB(path string) (*sql.DB, int64, error) {
+func openTournamentDB(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;`); err != nil {
 		_ = db.Close()
-		return nil, 0, err
+		return nil, err
 	}
 	if err := migrateDB(db); err != nil {
 		_ = db.Close()
-		return nil, 0, err
+		return nil, err
 	}
-	tournamentID, err := ensureDefaultTournament(db)
-	if err != nil {
-		_ = db.Close()
-		return nil, 0, err
+	return db, nil
+}
+
+// loadActiveContext picks an arbitrary tournament/game/first-match to drive the
+// transitional single-context handlers. Returns zero values (no error) when the
+// DB has no tournament yet — that's the default empty state.
+func loadActiveContext(db *sql.DB) (tournamentID, gameID int64, matchCode string, err error) {
+	row := db.QueryRow(`
+select t.id, g.id, coalesce((select m.code from matches m where m.game_id = g.id order by m.position, m.id limit 1), '')
+from tournaments t
+join games g on g.tournament_id = t.id
+order by t.id, g.position, g.id
+limit 1`)
+	if err = row.Scan(&tournamentID, &gameID, &matchCode); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, "", nil
+		}
+		return 0, 0, "", err
 	}
-	return db, tournamentID, nil
+	return tournamentID, gameID, matchCode, nil
 }
 
 func migrateDB(db *sql.DB) error {
@@ -197,6 +227,48 @@ func migrateDB(db *sql.DB) error {
 create table if not exists schema_versions(
   version integer primary key,
   applied_at text not null
+);
+
+create table if not exists users(
+  id integer primary key,
+  telegram_user_id integer unique,
+  telegram_username text,
+  username text unique,
+  is_system integer not null default 0,
+  created_at text not null,
+  updated_at text not null
+);
+
+create table if not exists invites(
+  id integer primary key,
+  code text not null unique,
+  created_by integer not null references users(id),
+  used_by integer references users(id),
+  used_at text,
+  created_at text not null,
+  expires_at text not null
+);
+
+create table if not exists telegram_login_codes(
+  id integer primary key,
+  code text not null unique,
+  kind text not null check (kind in ('register','login')),
+  invite_id integer references invites(id),
+  user_id integer references users(id),
+  telegram_user_id integer,
+  telegram_username text,
+  created_at text not null,
+  expires_at text not null,
+  consumed_at text
+);
+
+create table if not exists sessions(
+  id integer primary key,
+  user_id integer not null references users(id) on delete cascade,
+  token_hash text not null unique,
+  created_at text not null,
+  expires_at text not null,
+  last_seen_at text not null
 );
 
 create table if not exists schemes(
@@ -210,21 +282,28 @@ create table if not exists schemes(
 
 create table if not exists tournaments(
   id integer primary key,
-  scheme_id integer not null references schemes(id),
   slug text not null unique,
   title text not null,
+  description text not null default '',
+  rating_id integer,
+  created_by integer references users(id),
   revision integer not null default 1,
   created_at text not null,
   updated_at text not null
+);
+
+create table if not exists tournament_organizers(
+  tournament_id integer not null references tournaments(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  added_at text not null,
+  primary key(tournament_id, user_id)
 );
 
 create table if not exists teams(
   id integer primary key,
   tournament_id integer not null references tournaments(id) on delete cascade,
   name text not null,
-  city text not null default '',
-  seed_group integer not null default 0,
-  seed_position integer not null default 0
+  city text not null default ''
 );
 
 create table if not exists players(
@@ -241,6 +320,56 @@ create table if not exists team_players(
   primary key(team_id, player_id)
 );
 
+create table if not exists games(
+  id integer primary key,
+  tournament_id integer not null references tournaments(id) on delete cascade,
+  code text not null,
+  title text not null,
+  game_type text not null,
+  position integer not null,
+  scheme_id integer references schemes(id),
+  scheme_json text not null default '{}',
+  status text not null default 'pending',
+  team_list_source text not null default 'tournament' check (team_list_source in ('tournament','game')),
+  roster_source text not null default 'tournament' check (roster_source in ('tournament','game')),
+  revision integer not null default 1,
+  created_at text not null,
+  updated_at text not null,
+  unique(tournament_id, code)
+);
+
+create table if not exists game_teams(
+  game_id integer not null references games(id) on delete cascade,
+  team_id integer not null references teams(id) on delete cascade,
+  position integer not null,
+  primary key(game_id, team_id)
+);
+
+create table if not exists game_players(
+  game_id integer not null references games(id) on delete cascade,
+  player_id integer not null references players(id) on delete cascade,
+  position integer not null,
+  primary key(game_id, player_id)
+);
+
+create table if not exists game_team_players(
+  game_id integer not null references games(id) on delete cascade,
+  team_id integer not null references teams(id) on delete cascade,
+  player_id integer not null references players(id) on delete cascade,
+  roster_order integer not null,
+  primary key(game_id, team_id, player_id)
+);
+
+create table if not exists game_assignments(
+  game_id integer not null references games(id) on delete cascade,
+  basket integer not null,
+  number integer not null,
+  team_id integer references teams(id),
+  player_id integer references players(id),
+  primary key(game_id, basket, number),
+  check ((team_id is not null) <> (player_id is not null))
+);
+
 create table if not exists venues(
   id integer primary key,
   tournament_id integer not null references tournaments(id) on delete cascade,
@@ -254,18 +383,20 @@ create table if not exists venues(
 create table if not exists stages(
   id integer primary key,
   tournament_id integer not null references tournaments(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
   code text not null,
   title text not null,
   stage_type text not null,
   position integer not null,
   status text not null default 'active',
   config_json text not null default '{}',
-  unique(tournament_id, code)
+  unique(game_id, code)
 );
 
 create table if not exists matches(
   id integer primary key,
   tournament_id integer not null references tournaments(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
   stage_id integer not null references stages(id) on delete cascade,
   code text not null,
   title text not null,
@@ -274,16 +405,17 @@ create table if not exists matches(
   venue_id integer references venues(id),
   status text not null default 'active',
   revision integer not null default 1,
-  unique(tournament_id, code)
+  unique(game_id, code)
 );
 
 create table if not exists match_slots(
   id integer primary key,
   match_id integer not null references matches(id) on delete cascade,
   slot_index integer not null,
-  source_type text not null,
+  source_type text not null check (source_type in ('seed','from_match','reseed','placeholder')),
   source_ref_json text not null default '{}',
   team_id integer references teams(id),
+  player_id integer references players(id),
   locked integer not null default 0,
   unique(match_id, slot_index)
 );
@@ -341,27 +473,85 @@ begin
   select raise(abort, 'team roster is limited to 9 players');
 end;
 
-insert or ignore into schema_versions(version, applied_at) values(1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+create trigger if not exists game_team_players_max_9
+before insert on game_team_players
+when (select count(*) from game_team_players where game_id = new.game_id and team_id = new.team_id) >= 9
+begin
+  select raise(abort, 'team roster is limited to 9 players');
+end;
+
+insert or ignore into schema_versions(version, applied_at) values(2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 `)
-	return err
+	if err != nil {
+		return err
+	}
+	if err := addColumnsIfMissing(db, "tournaments", []columnSpec{
+		{Name: "start_date", Type: "TEXT"},
+		{Name: "end_date", Type: "TEXT"},
+		{Name: "is_public", Type: "INTEGER NOT NULL DEFAULT 0"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	return nil
 }
 
-func ensureDefaultTournament(db *sql.DB) (int64, error) {
-	var existing int64
-	err := db.QueryRow(`select id from tournaments order by id limit 1`).Scan(&existing)
+type columnSpec struct {
+	Name string
+	Type string
+}
+
+func addColumnsIfMissing(db *sql.DB, table string, columns []columnSpec) error {
+	rows, err := db.Query(`select name from pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	existing := make(map[string]bool)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			return err
+		}
+		existing[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, col := range columns {
+		if existing[col.Name] {
+			continue
+		}
+		if _, err := db.Exec(fmt.Sprintf("alter table %s add column %s %s", table, col.Name, col.Type)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureSystemUser(ctx context.Context, tx *sql.Tx) (int64, error) {
+	var id int64
+	err := tx.QueryRowContext(ctx, `select id from users where is_system = 1 limit 1`).Scan(&id)
 	if err == nil {
-		return existing, nil
+		return id, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
 	}
+	now := utcNow()
+	return insertReturningID(ctx, tx, `
+insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
+values(null, null, ?, 1, ?, ?)`, systemUserUsername, now, now)
+}
 
-	state, err := loadState(stateFile)
-	if err != nil {
-		return 0, err
-	}
-	normalizeState(&state)
-	return bootstrapDefaultTournament(db, state)
+func defaultGameID(ctx context.Context, q dbQueryer, tournamentID int64) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx, `select id from games where tournament_id = ? order by position, id limit 1`, tournamentID).Scan(&id)
+	return id, err
 }
 
 func bootstrapDefaultTournament(db *sql.DB, state MatchState) (int64, error) {
@@ -373,10 +563,16 @@ func bootstrapDefaultTournament(db *sql.DB, state MatchState) (int64, error) {
 	defer tx.Rollback()
 
 	now := utcNow()
+	systemID, err := ensureSystemUser(ctx, tx)
+	if err != nil {
+		return 0, err
+	}
+
 	schemaJSON, err := json.Marshal(map[string]any{
-		"schemaVersion":     1,
+		"schemaVersion":     2,
 		"slug":              "local-ek",
 		"title":             "Локальный чемпионат ЭК",
+		"gameType":          defaultGameType,
 		"questionValues":    questionValues,
 		"regularThemeCount": themeCount,
 		"venues":            []VenueView{{Number: 1, Title: defaultVenueTitle}},
@@ -398,13 +594,25 @@ func bootstrapDefaultTournament(db *sql.DB, state MatchState) (int64, error) {
 
 	schemeID, err := insertReturningID(ctx, tx, `
 insert into schemes(slug, title, version, schema_json, created_at)
-values(?, ?, 1, ?, ?)`, "local-ek", "Локальный чемпионат ЭК", string(schemaJSON), now)
+values(?, ?, 2, ?, ?)`, "local-ek", "Локальный чемпионат ЭК", string(schemaJSON), now)
 	if err != nil {
 		return 0, err
 	}
 	tournamentID, err := insertReturningID(ctx, tx, `
-insert into tournaments(scheme_id, slug, title, revision, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?)`, schemeID, "local-ek", "Локальный чемпионат ЭК", maxInt64(state.Revision, 1), now, now)
+insert into tournaments(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
+values(?, ?, ?, null, ?, ?, ?, ?, 1)`, "local-ek", "Локальный чемпионат ЭК", "", systemID, maxInt64(state.Revision, 1), now, now)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+insert into tournament_organizers(tournament_id, user_id, added_at)
+values(?, ?, ?)`, tournamentID, systemID, now); err != nil {
+		return 0, err
+	}
+	gameID, err := insertReturningID(ctx, tx, `
+insert into games(tournament_id, code, title, game_type, position, scheme_id, scheme_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, ?, ?, ?, 1, ?, ?, 'active', 'tournament', 'tournament', 1, ?, ?)`,
+		tournamentID, defaultGameCode, "Локальный ЭК", defaultGameType, schemeID, string(schemaJSON), now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -415,8 +623,8 @@ values(?, 1, ?, ?, ?)`, tournamentID, defaultVenueTitle, now, now)
 		return 0, err
 	}
 	stageID, err := insertReturningID(ctx, tx, `
-insert into stages(tournament_id, code, title, stage_type, position, status, config_json)
-values(?, 'r16', '1/16 финала', 'matches', 1, 'active', '{}')`, tournamentID)
+insert into stages(tournament_id, game_id, code, title, stage_type, position, status, config_json)
+values(?, ?, 'r16', '1/16 финала', 'matches', 1, 'active', '{}')`, tournamentID, gameID)
 	if err != nil {
 		return 0, err
 	}
@@ -425,22 +633,29 @@ values(?, 'r16', '1/16 финала', 'matches', 1, 'active', '{}')`, tournament
 		status = "finished"
 	}
 	matchID, err := insertReturningID(ctx, tx, `
-insert into matches(tournament_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, 1, ?, ?, ?, ?)`, tournamentID, stageID, defaultMatchCode, state.Title, len(state.Teams), venueID, status, maxInt64(state.Revision, 1))
+insert into matches(tournament_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, tournamentID, gameID, stageID, defaultMatchCode, state.Title, len(state.Teams), venueID, status, maxInt64(state.Revision, 1))
 	if err != nil {
 		return 0, err
 	}
 
 	for teamIndex, team := range state.Teams {
 		teamID, err := insertReturningID(ctx, tx, `
-insert into teams(tournament_id, name, city, seed_group, seed_position)
-values(?, ?, '', 1, ?)`, tournamentID, team.Name, teamIndex+1)
+insert into teams(tournament_id, name, city)
+values(?, ?, '')`, tournamentID, team.Name)
 		if err != nil {
+			return 0, err
+		}
+		basket := 1
+		number := teamIndex + 1
+		if _, err := tx.ExecContext(ctx, `
+insert into game_assignments(game_id, basket, number, team_id, player_id)
+values(?, ?, ?, ?, null)`, gameID, basket, number, teamID); err != nil {
 			return 0, err
 		}
 		if _, err := tx.ExecContext(ctx, `
 insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
-values(?, ?, 'team', ?, ?, 1)`, matchID, teamIndex, mustJSON(map[string]string{"name": team.Name}), teamID); err != nil {
+values(?, ?, 'seed', ?, ?, 0)`, matchID, teamIndex, mustJSON(map[string]any{"basket": basket, "number": number}), teamID); err != nil {
 			return 0, err
 		}
 
@@ -516,63 +731,23 @@ func insertReturningID(ctx context.Context, tx *sql.Tx, query string, args ...an
 	return result.LastInsertId()
 }
 
-func (s *server) serveHostPage(source fs.FS, noCache bool) http.HandlerFunc {
-	return s.serveAppPage(source, "static/host.html", noCache)
+func (s *server) serveViewerHTML(w http.ResponseWriter, r *http.Request) {
+	s.serveAppHTML(w, r, "static/viewer.html")
 }
 
-func (s *server) serveViewerPage(source fs.FS, noCache bool) http.HandlerFunc {
-	return s.serveAppPage(source, "static/viewer.html", noCache)
+func (s *server) serveHostHTML(w http.ResponseWriter, r *http.Request) {
+	s.serveAppHTML(w, r, "static/host.html")
 }
 
-func (s *server) serveAppPage(source fs.FS, path string, noCache bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if !isKnownAppPath(r.URL.Path) {
-			http.NotFound(w, r)
-			return
-		}
-		if noCache {
-			w.Header().Set("Cache-Control", "no-cache")
-		}
-		http.ServeFileFS(w, r, source, path)
-	}
-}
-
-func isKnownAppPath(path string) bool {
-	return path == "/host" ||
-		path == "/viewer" ||
-		path == "/host/venues" ||
-		path == "/viewer/venues" ||
-		isSingleSegmentPath(path, "/host/matches/") ||
-		isSingleSegmentPath(path, "/viewer/matches/") ||
-		isSingleSegmentPath(path, "/host/stages/") ||
-		isSingleSegmentPath(path, "/viewer/stages/")
-}
-
-func isSingleSegmentPath(path, prefix string) bool {
-	if !strings.HasPrefix(path, prefix) {
-		return false
-	}
-	rest := strings.TrimPrefix(path, prefix)
-	return rest != "" && !strings.Contains(rest, "/")
-}
-
-func (s *server) handleTournament(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+func (s *server) serveAppHTML(w http.ResponseWriter, r *http.Request, path string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	view, err := s.loadTournamentViewLocked()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if s.assetNoCache {
+		w.Header().Set("Cache-Control", "no-cache")
 	}
-	writeJSONValue(w, view)
+	http.ServeFileFS(w, r, s.assets, path)
 }
 
 func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
@@ -598,149 +773,6 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, data)
 }
 
-func (s *server) handleMatchAPI(w http.ResponseWriter, r *http.Request) {
-	code, suffix, ok := parseMatchAPIPath(r.URL.Path)
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	switch suffix {
-	case "":
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		s.mu.RLock()
-		view, err := s.loadMatchViewLocked(code)
-		s.mu.RUnlock()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		writeJSONValue(w, view)
-	case "update":
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		defer r.Body.Close()
-		var req updateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "bad json", http.StatusBadRequest)
-			return
-		}
-		view, data, err := s.applyMatchUpdate(code, req)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		s.broadcastState("match:"+code, view.Revision, data)
-		writeJSON(w, data)
-	case "finish":
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		defer r.Body.Close()
-		var req updateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "bad json", http.StatusBadRequest)
-			return
-		}
-		if req.Finished == nil {
-			http.Error(w, "missing finished", http.StatusBadRequest)
-			return
-		}
-		view, data, err := s.applyMatchUpdate(code, updateRequest{Finished: req.Finished})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		s.broadcastState("match:"+code, view.Revision, data)
-		writeJSON(w, data)
-	case "venue":
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		defer r.Body.Close()
-		var req matchVenueRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "bad json", http.StatusBadRequest)
-			return
-		}
-		number := req.Number
-		if number == 0 {
-			number = req.VenueNumber
-		}
-		view, data, err := s.updateMatchVenue(code, number)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		s.broadcastState("match:"+code, view.Revision, data)
-		writeJSON(w, data)
-	default:
-		http.NotFound(w, r)
-	}
-}
-
-func parseMatchAPIPath(path string) (string, string, bool) {
-	rest := strings.TrimPrefix(path, "/api/matches/")
-	if rest == path || rest == "" {
-		return "", "", false
-	}
-	parts := strings.Split(rest, "/")
-	if len(parts) == 1 {
-		return parts[0], "", parts[0] != ""
-	}
-	if len(parts) == 2 {
-		return parts[0], parts[1], parts[0] != "" && parts[1] != ""
-	}
-	return "", "", false
-}
-
-func (s *server) handleVenuesAPI(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/api/venues" {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		s.mu.RLock()
-		venues, err := s.loadVenuesLocked()
-		s.mu.RUnlock()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSONValue(w, venues)
-		return
-	}
-	if r.Method != http.MethodPut {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	numberText := strings.TrimPrefix(r.URL.Path, "/api/venues/")
-	number, err := strconv.Atoi(numberText)
-	if err != nil || number <= 0 {
-		http.Error(w, "bad venue number", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-	var req venueUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
-	}
-	venues, revision, err := s.updateVenue(number, req.Title)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	data, _ := json.Marshal(venues)
-	s.broadcastState("venues", revision, data)
-	writeJSON(w, data)
-}
 
 func (s *server) importScheme(scheme tournamentScheme) (TournamentView, error) {
 	if s.db == nil {
@@ -769,15 +801,35 @@ func (s *server) importScheme(scheme tournamentScheme) (TournamentView, error) {
 	}
 
 	now := utcNow()
+	systemID, err := ensureSystemUser(ctx, tx)
+	if err != nil {
+		return TournamentView{}, err
+	}
 	schemeID, err := insertReturningID(ctx, tx, `
 insert into schemes(slug, title, version, schema_json, created_at)
-values(?, ?, ?, ?, ?)`, scheme.Slug, scheme.Title, maxInt(scheme.SchemaVersion, 1), string(schemaJSON), now)
+values(?, ?, ?, ?, ?)`, scheme.Slug, scheme.Title, maxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
 	if err != nil {
 		return TournamentView{}, err
 	}
 	tournamentID, err := insertReturningID(ctx, tx, `
-insert into tournaments(scheme_id, slug, title, revision, created_at, updated_at)
-values(?, ?, ?, 1, ?, ?)`, schemeID, scheme.Slug, scheme.Title, now, now)
+insert into tournaments(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
+values(?, ?, '', null, ?, 1, ?, ?, 1)`, scheme.Slug, scheme.Title, systemID, now, now)
+	if err != nil {
+		return TournamentView{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+insert into tournament_organizers(tournament_id, user_id, added_at)
+values(?, ?, ?)`, tournamentID, systemID, now); err != nil {
+		return TournamentView{}, err
+	}
+	gameType := scheme.GameType
+	if gameType == "" {
+		gameType = defaultGameType
+	}
+	gameID, err := insertReturningID(ctx, tx, `
+insert into games(tournament_id, code, title, game_type, position, scheme_id, scheme_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, ?, ?, ?, 1, ?, ?, 'pending', 'tournament', 'tournament', 1, ?, ?)`,
+		tournamentID, defaultGameCode, scheme.Title, gameType, schemeID, string(schemaJSON), now, now)
 	if err != nil {
 		return TournamentView{}, err
 	}
@@ -793,6 +845,40 @@ values(?, ?, ?, ?, ?)`, tournamentID, venue.Number, venue.Title, now, now)
 		venueIDs[venue.Number] = venueID
 	}
 
+	assignmentTeams := make(map[[2]int]int64, len(scheme.Teams))
+	for _, team := range scheme.Teams {
+		teamID, err := insertReturningID(ctx, tx, `
+insert into teams(tournament_id, name, city)
+values(?, ?, ?)`, tournamentID, team.Name, team.City)
+		if err != nil {
+			return TournamentView{}, err
+		}
+		for rosterOrder, fullName := range team.Players {
+			fullName = strings.TrimSpace(fullName)
+			if fullName == "" {
+				continue
+			}
+			firstName, lastName := splitPlayerName(fullName)
+			playerID, err := insertReturningID(ctx, tx, `
+insert into players(tournament_id, first_name, last_name)
+values(?, ?, ?)`, tournamentID, firstName, lastName)
+			if err != nil {
+				return TournamentView{}, err
+			}
+			if _, err := tx.ExecContext(ctx, `
+insert into team_players(team_id, player_id, roster_order)
+values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
+				return TournamentView{}, err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `
+insert into game_assignments(game_id, basket, number, team_id, player_id)
+values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil {
+			return TournamentView{}, err
+		}
+		assignmentTeams[[2]int{team.Basket, team.Number}] = teamID
+	}
+
 	firstMatchCode := ""
 	for stageIndex, stage := range scheme.Stages {
 		position := stage.Position
@@ -805,8 +891,8 @@ values(?, ?, ?, ?, ?)`, tournamentID, venue.Number, venue.Title, now, now)
 			stageType = "matches"
 		}
 		stageID, err := insertReturningID(ctx, tx, `
-insert into stages(tournament_id, code, title, stage_type, position, status, config_json)
-values(?, ?, ?, ?, ?, 'pending', ?)`, tournamentID, stage.Code, stage.Title, stageType, position, configJSON)
+insert into stages(tournament_id, game_id, code, title, stage_type, position, status, config_json)
+values(?, ?, ?, ?, ?, ?, 'pending', ?)`, tournamentID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
 		if err != nil {
 			return TournamentView{}, err
 		}
@@ -826,25 +912,29 @@ values(?, ?, ?, ?, ?, 'pending', ?)`, tournamentID, stage.Code, stage.Title, sta
 				venueID = id
 			}
 			matchID, err := insertReturningID(ctx, tx, `
-insert into matches(tournament_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, tournamentID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
+insert into matches(tournament_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, tournamentID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
 			if err != nil {
 				return TournamentView{}, err
 			}
 			for slotIndex, slot := range match.Slots {
 				sourceType, sourceRef := slotSource(slot)
-				teamID, err := importSlotTeam(ctx, tx, tournamentID, slot)
-				if err != nil {
-					return TournamentView{}, err
+				var resolvedTeamID int64
+				if sourceType == "seed" && slot.Seed != nil {
+					number := slot.Seed.Number
+					if number == 0 {
+						number = slot.Seed.Position
+					}
+					resolvedTeamID = assignmentTeams[[2]int{slot.Seed.Basket, number}]
 				}
 				if _, err := tx.ExecContext(ctx, `
 insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
-values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableInt64(teamID)); err != nil {
+values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableInt64(resolvedTeamID)); err != nil {
 					return TournamentView{}, err
 				}
-				if teamID > 0 {
+				if resolvedTeamID > 0 {
 					for themeIndex := 0; themeIndex < themeCount; themeIndex++ {
-						if err := insertTheme(ctx, tx, matchID, teamID, "regular", themeIndex, 0, [5]string{}); err != nil {
+						if err := insertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
 							return TournamentView{}, err
 						}
 					}
@@ -863,10 +953,11 @@ values(?, 1, 'import', ?, ?)`, tournamentID, string(schemaJSON), now); err != ni
 	}
 
 	s.tournamentID = tournamentID
+	s.activeGameID = gameID
 	if firstMatchCode != "" {
 		s.activeMatchCode = firstMatchCode
 	}
-	return s.loadTournamentViewLocked()
+	return s.loadTournamentViewLocked(s.tournamentID, s.activeGameID)
 }
 
 func validateScheme(scheme tournamentScheme) error {
@@ -910,11 +1001,33 @@ func validateScheme(scheme tournamentScheme) error {
 			if match.ParticipantCount > 0 && len(match.Slots) != match.ParticipantCount {
 				return fmt.Errorf("match %q participantCount does not match slots", match.Code)
 			}
+			for slotIndex, slot := range match.Slots {
+				if slot.Team != nil {
+					return fmt.Errorf("match %q slot %d uses removed source %q; use seed{basket,number} + top-level teams[]", match.Code, slotIndex, "team")
+				}
+			}
 		}
+	}
+	assignmentKeys := make(map[[2]int]string, len(scheme.Teams))
+	for index, team := range scheme.Teams {
+		if strings.TrimSpace(team.Name) == "" {
+			return fmt.Errorf("teams[%d].name is required", index)
+		}
+		if team.Basket <= 0 || team.Number <= 0 {
+			return fmt.Errorf("teams[%d] (%q) must have basket>=1 and number>=1", index, team.Name)
+		}
+		key := [2]int{team.Basket, team.Number}
+		if existing, ok := assignmentKeys[key]; ok {
+			return fmt.Errorf("teams[%d] (%q) collides with %q on basket %d / number %d", index, team.Name, existing, team.Basket, team.Number)
+		}
+		assignmentKeys[key] = team.Name
 	}
 	return nil
 }
 
+// clearImportedData wipes tournament-scoped data so importScheme can recreate
+// the world. Auth tables (users, invites, telegram_login_codes, sessions) and
+// schema_versions are intentionally untouched.
 func clearImportedData(ctx context.Context, tx *sql.Tx) error {
 	tables := []string{
 		"events",
@@ -925,10 +1038,16 @@ func clearImportedData(ctx context.Context, tx *sql.Tx) error {
 		"match_slots",
 		"matches",
 		"stages",
+		"game_assignments",
+		"game_team_players",
+		"game_players",
+		"game_teams",
+		"games",
 		"team_players",
 		"players",
 		"teams",
 		"venues",
+		"tournament_organizers",
 		"tournaments",
 		"schemes",
 	}
@@ -958,53 +1077,16 @@ func stageConfigJSON(stage schemeStage) string {
 	return mustJSON(config)
 }
 
-func importSlotTeam(ctx context.Context, tx *sql.Tx, tournamentID int64, slot schemeSlot) (int64, error) {
-	if slot.Team == nil {
-		return 0, nil
-	}
-	name := strings.TrimSpace(slot.Team.Name)
-	if name == "" {
-		name = strings.TrimSpace(slot.Team.Label)
-	}
-	if name == "" {
-		name = strings.TrimSpace(slot.Team.ID)
-	}
-	if name == "" {
-		return 0, nil
-	}
-	teamID, err := insertReturningID(ctx, tx, `
-insert into teams(tournament_id, name, city, seed_group, seed_position)
-values(?, ?, ?, 0, 0)`, tournamentID, name, slot.Team.City)
-	if err != nil {
-		return 0, err
-	}
-	for rosterOrder, fullName := range slot.Team.Players {
-		fullName = strings.TrimSpace(fullName)
-		if fullName == "" {
-			continue
-		}
-		firstName, lastName := splitPlayerName(fullName)
-		playerID, err := insertReturningID(ctx, tx, `
-insert into players(tournament_id, first_name, last_name)
-values(?, ?, ?)`, tournamentID, firstName, lastName)
-		if err != nil {
-			return 0, err
-		}
-		if _, err := tx.ExecContext(ctx, `
-insert into team_players(team_id, player_id, roster_order)
-values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
-			return 0, err
-		}
-	}
-	return teamID, nil
-}
-
 func slotSource(slot schemeSlot) (string, string) {
 	if slot.Seed != nil {
+		number := slot.Seed.Number
+		if number == 0 {
+			number = slot.Seed.Position
+		}
 		return "seed", mustJSON(map[string]any{
-			"basket":   slot.Seed.Basket,
-			"position": slot.Seed.Position,
-			"label":    slot.Label,
+			"basket": slot.Seed.Basket,
+			"number": number,
+			"label":  slot.Label,
 		})
 	}
 	if slot.FromMatch != nil {
@@ -1021,9 +1103,6 @@ func slotSource(slot schemeSlot) (string, string) {
 			"label": slot.Label,
 		})
 	}
-	if slot.Team != nil {
-		return "team", mustJSON(slot.Team)
-	}
 	if slot.Placeholder != "" {
 		return "placeholder", mustJSON(map[string]string{
 			"placeholder": slot.Placeholder,
@@ -1036,7 +1115,7 @@ func slotSource(slot schemeSlot) (string, string) {
 	return "placeholder", "{}"
 }
 
-func (s *server) loadTournamentViewLocked() (TournamentView, error) {
+func (s *server) loadTournamentViewLocked(tournamentID, gameID int64) (TournamentView, error) {
 	if s.db == nil {
 		match := buildView(s.state)
 		return TournamentView{
@@ -1051,20 +1130,26 @@ func (s *server) loadTournamentViewLocked() (TournamentView, error) {
 
 	ctx := context.Background()
 	var view TournamentView
+	view.QuestionValues = questionValues
+	view.RegularThemeCount = themeCount
+	if tournamentID == 0 {
+		view.Slug = ""
+		view.Title = ""
+		view.UpdatedAt = ""
+		return view, nil
+	}
 	var updatedAt string
 	if err := s.db.QueryRowContext(ctx, `
-select t.slug, t.title, t.revision, t.updated_at, coalesce(s.schema_json, '')
+select t.slug, t.title, t.revision, t.updated_at, coalesce(g.scheme_json, '')
 from tournaments t
-left join schemes s on s.id = t.scheme_id
-where t.id = ?`, s.tournamentID).
+left join games g on g.tournament_id = t.id and g.id = ?
+where t.id = ?`, gameID, tournamentID).
 		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON); err != nil {
 		return TournamentView{}, err
 	}
 	view.UpdatedAt = updatedAt
-	view.QuestionValues = questionValues
-	view.RegularThemeCount = themeCount
 
-	venues, err := loadVenues(ctx, s.db, s.tournamentID)
+	venues, err := loadVenues(ctx, s.db, tournamentID)
 	if err != nil {
 		return TournamentView{}, err
 	}
@@ -1074,7 +1159,7 @@ where t.id = ?`, s.tournamentID).
 select id, code, title, stage_type, position, status
 from stages
 where tournament_id = ?
-order by position, id`, s.tournamentID)
+order by position, id`, tournamentID)
 	if err != nil {
 		return TournamentView{}, err
 	}
@@ -1193,8 +1278,8 @@ order by ms.slot_index`, matchID)
 	return teams, rows.Err()
 }
 
-func (s *server) loadVenuesLocked() ([]VenueView, error) {
-	return loadVenues(context.Background(), s.db, s.tournamentID)
+func (s *server) loadVenuesLocked(tournamentID int64) ([]VenueView, error) {
+	return loadVenues(context.Background(), s.db, tournamentID)
 }
 
 func loadVenues(ctx context.Context, q dbQueryer, tournamentID int64) ([]VenueView, error) {
@@ -1217,11 +1302,11 @@ order by number`, tournamentID)
 	return venues, rows.Err()
 }
 
-func (s *server) loadMatchViewLocked(code string) (MatchView, error) {
+func (s *server) loadMatchViewLocked(tournamentID int64, code string) (MatchView, error) {
 	if s.db == nil {
 		return buildView(s.state), nil
 	}
-	match, err := loadDBMatchState(context.Background(), s.db, s.tournamentID, code)
+	match, err := loadDBMatchState(context.Background(), s.db, tournamentID, code)
 	if err != nil {
 		return MatchView{}, err
 	}
@@ -1459,7 +1544,7 @@ func matchViewFromDBState(match dbMatchState) MatchView {
 	return view
 }
 
-func (s *server) applyMatchUpdate(code string, req updateRequest) (MatchView, []byte, error) {
+func (s *server) applyMatchUpdate(tournamentID int64, code string, req updateRequest) (MatchView, []byte, error) {
 	if s.db == nil {
 		return s.applyLegacyUpdate(req)
 	}
@@ -1474,7 +1559,7 @@ func (s *server) applyMatchUpdate(code string, req updateRequest) (MatchView, []
 	}
 	defer tx.Rollback()
 
-	match, err := loadDBMatchState(ctx, tx, s.tournamentID, code)
+	match, err := loadDBMatchState(ctx, tx, tournamentID, code)
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -1499,10 +1584,10 @@ func (s *server) applyMatchUpdate(code string, req updateRequest) (MatchView, []
 		}
 	}
 
-	if err := recalculateMatchResultsTx(ctx, tx, s.tournamentID, code); err != nil {
+	if err := recalculateMatchResultsTx(ctx, tx, tournamentID, code); err != nil {
 		return MatchView{}, nil, err
 	}
-	revision, err := bumpMatchRevisionTx(ctx, tx, s.tournamentID, match.MatchID, "match:update", mustJSON(req))
+	revision, err := bumpMatchRevisionTx(ctx, tx, tournamentID, match.MatchID, "match:update", mustJSON(req))
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -1510,7 +1595,7 @@ func (s *server) applyMatchUpdate(code string, req updateRequest) (MatchView, []
 		return MatchView{}, nil, err
 	}
 
-	view, err := s.loadMatchViewLocked(code)
+	view, err := s.loadMatchViewLocked(tournamentID, code)
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -1730,7 +1815,7 @@ values(?, ?, ?, ?, ?)`, tournamentID, revision, eventType, payload, now)
 	return revision, err
 }
 
-func (s *server) updateMatchVenue(code string, number int) (MatchView, []byte, error) {
+func (s *server) updateMatchVenue(tournamentID int64, code string, number int) (MatchView, []byte, error) {
 	if number <= 0 {
 		return MatchView{}, nil, errors.New("bad venue number")
 	}
@@ -1744,13 +1829,13 @@ func (s *server) updateMatchVenue(code string, number int) (MatchView, []byte, e
 	}
 	defer tx.Rollback()
 
-	match, err := loadDBMatchState(ctx, tx, s.tournamentID, code)
+	match, err := loadDBMatchState(ctx, tx, tournamentID, code)
 	if err != nil {
 		return MatchView{}, nil, err
 	}
 	var venueID int64
 	if err := tx.QueryRowContext(ctx, `
-select id from venues where tournament_id = ? and number = ?`, s.tournamentID, number).Scan(&venueID); err != nil {
+select id from venues where tournament_id = ? and number = ?`, tournamentID, number).Scan(&venueID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return MatchView{}, nil, errors.New("unknown venue")
 		}
@@ -1759,14 +1844,14 @@ select id from venues where tournament_id = ? and number = ?`, s.tournamentID, n
 	if _, err := tx.ExecContext(ctx, `update matches set venue_id = ? where id = ?`, venueID, match.MatchID); err != nil {
 		return MatchView{}, nil, err
 	}
-	revision, err := bumpMatchRevisionTx(ctx, tx, s.tournamentID, match.MatchID, "match:venue", mustJSON(map[string]any{"code": code, "venue": number}))
+	revision, err := bumpMatchRevisionTx(ctx, tx, tournamentID, match.MatchID, "match:venue", mustJSON(map[string]any{"code": code, "venue": number}))
 	if err != nil {
 		return MatchView{}, nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return MatchView{}, nil, err
 	}
-	view, err := s.loadMatchViewLocked(code)
+	view, err := s.loadMatchViewLocked(tournamentID, code)
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -1775,7 +1860,7 @@ select id from venues where tournament_id = ? and number = ?`, s.tournamentID, n
 	return view, data, err
 }
 
-func (s *server) updateVenue(number int, title string) ([]VenueView, int64, error) {
+func (s *server) updateVenue(tournamentID int64, number int, title string) ([]VenueView, int64, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return nil, 0, errors.New("empty venue title")
@@ -1793,7 +1878,7 @@ func (s *server) updateVenue(number int, title string) ([]VenueView, int64, erro
 
 	result, err := tx.ExecContext(ctx, `
 update venues set title = ?, updated_at = ?
-where tournament_id = ? and number = ?`, title, utcNow(), s.tournamentID, number)
+where tournament_id = ? and number = ?`, title, utcNow(), tournamentID, number)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1804,11 +1889,11 @@ where tournament_id = ? and number = ?`, title, utcNow(), s.tournamentID, number
 	if affected == 0 {
 		return nil, 0, errors.New("unknown venue")
 	}
-	revision, err := bumpTournamentRevisionTx(ctx, tx, s.tournamentID, "venues:update", mustJSON(map[string]any{"number": number, "title": title}))
+	revision, err := bumpTournamentRevisionTx(ctx, tx, tournamentID, "venues:update", mustJSON(map[string]any{"number": number, "title": title}))
 	if err != nil {
 		return nil, 0, err
 	}
-	venues, err := loadVenues(ctx, tx, s.tournamentID)
+	venues, err := loadVenues(ctx, tx, tournamentID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1919,16 +2004,15 @@ func slotSourceLabel(sourceType, sourceRef string) string {
 	}
 	switch sourceType {
 	case "seed":
-		return fmt.Sprintf("К%d-%d", intFromMap(ref, "basket"), intFromMap(ref, "position"))
+		number := intFromMap(ref, "number")
+		if number == 0 {
+			number = intFromMap(ref, "position")
+		}
+		return fmt.Sprintf("К%d-%d", intFromMap(ref, "basket"), number)
 	case "from_match":
 		return fmt.Sprintf("%s%d", stringFromMap(ref, "match"), intFromMap(ref, "place"))
 	case "reseed":
 		return fmt.Sprintf("Пересев-%d", intFromMap(ref, "rank"))
-	case "team":
-		if name := stringFromMap(ref, "name"); name != "" {
-			return name
-		}
-		return stringFromMap(ref, "id")
 	case "placeholder":
 		if placeholder := stringFromMap(ref, "placeholder"); placeholder != "" {
 			return placeholder
@@ -1989,4 +2073,45 @@ func nullableInt64(value int64) any {
 		return nil
 	}
 	return value
+}
+
+// Auth helpers. Codes must be unique enough not to collide between concurrent
+// users; we get that from crypto/rand.
+
+const (
+	inviteCodeBytes      = 12
+	telegramAuthBytes    = 12
+	sessionTokenBytes    = 32
+	telegramAuthLifetime = time.Minute
+	inviteLifetime       = 7 * 24 * time.Hour
+	sessionLifetime      = 30 * 24 * time.Hour
+)
+
+func randomBase32(bytesLen int) (string, error) {
+	buf := make([]byte, bytesLen)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return strings.ToUpper(strings.TrimRight(base32.StdEncoding.EncodeToString(buf), "=")), nil
+}
+
+func newInviteCode() (string, error) {
+	return randomBase32(inviteCodeBytes)
+}
+
+func newTelegramAuthCode() (string, error) {
+	return randomBase32(telegramAuthBytes)
+}
+
+func newSessionToken() (string, error) {
+	buf := make([]byte, sessionTokenBytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
+
+func hashSessionToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
