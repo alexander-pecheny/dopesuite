@@ -903,9 +903,9 @@ function currentRoute() {
   const tournamentID = prefix[1];
   const gameID = prefix[2];
   const base = `/host/tournament/${tournamentID}/game/${gameID}`;
-  const viewerBase = `/tournaments/${tournamentID}/game/${gameID}`;
-  const apiBase = `/api/tournaments/${tournamentID}/games/${gameID}`;
-  const tournamentApi = `/api/tournaments/${tournamentID}`;
+  const viewerBase = `/tournament/${tournamentID}/game/${gameID}`;
+  const apiBase = `/api/tournament/${tournamentID}/games/${gameID}`;
+  const tournamentApi = `/api/tournament/${tournamentID}`;
   const rest = path.slice(prefix[0].length).replace(/\/$/, "");
   if (rest === "" || rest === "/") {
     return {mode: "grid", tournamentID, gameID, base, viewerBase, apiBase, tournamentApi};

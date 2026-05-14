@@ -53,7 +53,7 @@ async function loadMatch() {
 }
 
 async function loadVenuesPage() {
-  const response = await fetch(`/api/tournaments/${route.tournamentID}/venues`);
+  const response = await fetch(`/api/tournament/${route.tournamentID}/venues`);
   if (!response.ok) throw new Error(await response.text());
   venues = await response.json();
   renderVenues();
@@ -388,14 +388,14 @@ function shootoutThemesFor(team) {
 
 function currentRoute() {
   const path = window.location.pathname;
-  const prefix = path.match(/^\/tournaments\/(\d+)\/game\/(\d+)/);
+  const prefix = path.match(/^\/tournament\/(\d+)\/game\/(\d+)/);
   if (!prefix) {
     return {mode: "missing"};
   }
   const tournamentID = prefix[1];
   const gameID = prefix[2];
-  const base = `/tournaments/${tournamentID}/game/${gameID}`;
-  const apiBase = `/api/tournaments/${tournamentID}/games/${gameID}`;
+  const base = `/tournament/${tournamentID}/game/${gameID}`;
+  const apiBase = `/api/tournament/${tournamentID}/games/${gameID}`;
   const rest = path.slice(prefix[0].length);
   const stripped = rest.replace(/\/$/, "");
   if (stripped === "" || stripped === "/") {
