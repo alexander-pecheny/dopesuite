@@ -90,9 +90,11 @@ var publicTournamentTemplate = template.Must(template.New("publicTournament").Pa
       <h2>Игры</h2>
       <ul class="list">
         {{range .Games}}
-        <li class="list-row">
-          <a class="text-link" href="{{.URL}}">{{.Title}}</a>
-          <span class="muted">{{.Type}}</span>
+        <li>
+          <a class="list-row" href="{{.URL}}">
+            <span class="list-row-title">{{.Title}}</span>
+            <span class="muted">{{.Type}}</span>
+          </a>
         </li>
         {{end}}
       </ul>

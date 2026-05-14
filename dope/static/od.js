@@ -630,16 +630,16 @@ function currentRoute() {
       viewer: false,
       tournamentID: host[1],
       gameID: host[2],
-      apiBase: `/api/tournaments/${host[1]}/games/${host[2]}`,
+      apiBase: `/api/tournament/${host[1]}/games/${host[2]}`,
     };
   }
-  const pub = path.match(/^\/tournaments\/(\d+)\/game\/(\d+)/);
+  const pub = path.match(/^\/tournament\/(\d+)\/game\/(\d+)/);
   if (pub) {
     return {
       viewer: true,
       tournamentID: pub[1],
       gameID: pub[2],
-      apiBase: `/api/tournaments/${pub[1]}/games/${pub[2]}`,
+      apiBase: `/api/tournament/${pub[1]}/games/${pub[2]}`,
     };
   }
   return {};

@@ -177,9 +177,11 @@ var hostTournamentDashTemplate = template.Must(template.New("hostDash").Parse(`<
       {{if .Games}}
       <ul class="list">
         {{range .Games}}
-        <li class="list-row">
-          <a class="text-link" href="/host/tournament/{{$.Tournament.ID}}/game/{{.ID}}/">{{.Title}}</a>
-          <span class="muted">{{.Type}}</span>
+        <li>
+          <a class="list-row" href="/host/tournament/{{$.Tournament.ID}}/game/{{.ID}}/">
+            <span class="list-row-title">{{.Title}}</span>
+            <span class="muted">{{.Type}}</span>
+          </a>
         </li>
         {{end}}
       </ul>

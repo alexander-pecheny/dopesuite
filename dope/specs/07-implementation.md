@@ -11,8 +11,8 @@
 7. Реализовать разрешение слотов `seed`, `fromMatch`, `reseed`.
 8. Добавить пересев после этапа и регрессионные тесты для схемы СтудЧР.
 9. **Миграция v2 (текущая итерация)**: разделение турнира и игры, символьный бракет, пользователи и сессии, sidecar Telegram-бот за интерфейсом, шаги бэкфилла существующих данных.
-10. Переключить хендлеры на работу с явным `(tournament_id, game_id)` через `/api/tournaments/{tid}/games/{gid}/...`. Старые плоские маршруты `/api/tournament`, `/api/matches/...`, `/api/venues/...` удалены. Готово.
-11. Реализовать UI создания турниров и игр (`/`, `/tournaments/{id}`, `/host`, `/host/tournament/{id}`). Готово; UI создания игры с импортом сетки — отложен.
+10. Переключить хендлеры на работу с явным `(tournament_id, game_id)` через `/api/tournament/{tid}/games/{gid}/...`. Старые плоские маршруты `/api/tournament`, `/api/matches/...`, `/api/venues/...` удалены. Готово.
+11. Реализовать UI создания турниров и игр (`/`, `/tournament/{id}`, `/host`, `/host/tournament/{id}`). Готово; UI создания игры с импортом сетки — отложен.
 12. Реализовать настоящий цикл long-poll к Telegram Bot API. Готово: `cmd/telegram-bot` обрабатывает `/start`, `/login` и потребление register-кодов.
 13. Реализовать страницы `/register` и `/login`, серверные хендлеры `/api/auth/*`, выдачу сессионной куки и установку `username`. Готово.
 
@@ -30,8 +30,8 @@
 Публичные (без авторизации, без ссылок на вход/регистрацию):
 
 - `GET /` — список публичных турниров (`is_public = 1`), сортировка по `start_date`.
-- `GET /tournaments/{id}` — заголовок, markdown-описание (goldmark, безопасный режим — raw HTML экранируется), список игр.
-- `GET /tournaments/{id}/game/{gid}/[matches/{code}|stage/{code}|venues]` — зрительская сетка/этап/бой/площадки. Тот же `static/viewer.html`, IDs читаются из URL.
+- `GET /tournament/{id}` — заголовок, markdown-описание (goldmark, безопасный режим — raw HTML экранируется), список игр.
+- `GET /tournament/{id}/game/{gid}/[matches/{code}|stage/{code}|venues]` — зрительская сетка/этап/бой/площадки. Тот же `static/viewer.html`, IDs читаются из URL.
 
 Хост:
 
@@ -43,10 +43,10 @@
 
 API:
 
-- `GET /api/tournaments/{tid}` — метаданные турнира (snapshot, как раньше отдавал `/api/tournament`).
-- `GET /api/tournaments/{tid}/games/{gid}` — то же самое, привязанное к конкретной игре.
-- `GET /api/tournaments/{tid}/venues`, `PUT /api/tournaments/{tid}/venues/{n}`.
-- `GET /api/tournaments/{tid}/games/{gid}/matches/{code}`, `POST .../update`, `POST .../finish`, `POST .../venue`.
+- `GET /api/tournament/{tid}` — метаданные турнира (snapshot, как раньше отдавал `/api/tournament`).
+- `GET /api/tournament/{tid}/games/{gid}` — то же самое, привязанное к конкретной игре.
+- `GET /api/tournament/{tid}/venues`, `PUT /api/tournament/{tid}/venues/{n}`.
+- `GET /api/tournament/{tid}/games/{gid}/matches/{code}`, `POST .../update`, `POST .../finish`, `POST .../venue`.
 
 SSE `/events` остается одним каналом. Каждое событие приходит в конверте `{scope, revision, data}`. Скоупы теперь содержат идентификаторы: `match:{game_id}:{code}`, `venues:{tournament_id}`. Клиенты фильтруют по своему скоупу.
 

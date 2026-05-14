@@ -74,16 +74,16 @@ func matchScopeKey(scope matchScope) string {
 
 var errMatchNotFound = errors.New("match not found in this game")
 
-// /api/tournaments/{tid}
-// /api/tournaments/{tid}/venues
-// /api/tournaments/{tid}/venues/{n}
-// /api/tournaments/{tid}/games/{gid}
-// /api/tournaments/{tid}/games/{gid}/matches/{code}
-// /api/tournaments/{tid}/games/{gid}/matches/{code}/update
-// /api/tournaments/{tid}/games/{gid}/matches/{code}/finish
-// /api/tournaments/{tid}/games/{gid}/matches/{code}/venue
+// /api/tournament/{tid}
+// /api/tournament/{tid}/venues
+// /api/tournament/{tid}/venues/{n}
+// /api/tournament/{tid}/games/{gid}
+// /api/tournament/{tid}/games/{gid}/matches/{code}
+// /api/tournament/{tid}/games/{gid}/matches/{code}/update
+// /api/tournament/{tid}/games/{gid}/matches/{code}/finish
+// /api/tournament/{tid}/games/{gid}/matches/{code}/venue
 func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
-	rest := strings.TrimPrefix(r.URL.Path, "/api/tournaments/")
+	rest := strings.TrimPrefix(r.URL.Path, "/api/tournament/")
 	if rest == r.URL.Path {
 		http.NotFound(w, r)
 		return

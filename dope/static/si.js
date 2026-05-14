@@ -343,7 +343,7 @@ function currentRoute() {
   return {
     tournamentID,
     gameID,
-    apiBase: `/api/tournaments/${tournamentID}/games/${gameID}`,
+    apiBase: `/api/tournament/${tournamentID}/games/${gameID}`,
   };
 }
 

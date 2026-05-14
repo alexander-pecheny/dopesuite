@@ -157,6 +157,7 @@ a.list-row:hover { background: #eef1f5; }
   font-size: var(--text-sm);
 }
 
+.input,
 .field > input,
 .field > textarea,
 .field > select {
@@ -170,6 +171,7 @@ a.list-row:hover { background: #eef1f5; }
   outline: 0;
 }
 
+.input:focus,
 .field > input:focus,
 .field > textarea:focus,
 .field > select:focus {
@@ -220,6 +222,36 @@ a.list-row:hover { background: #eef1f5; }
 .btn:hover { border-color: var(--text); }
 
 .btn-block { width: 100%; }
+
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--action-border);
+  border-radius: var(--radius-md);
+  background: var(--action-bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--action-border);
+  border-radius: var(--radius-md);
+  background: var(--action-bg);
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  text-decoration: none;
+}
 
 .text-link {
   color: var(--text);
@@ -280,47 +312,6 @@ a.list-row:hover { background: #eef1f5; }
   height: auto;
 }
 
-/* legacy aliases — keep templates using .public-list/.public-empty working */
-.public-list,
-.public-games {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.public-list-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  text-decoration: none;
-  color: inherit;
-}
-
-.public-list-item:hover { background: #eef1f5; }
-.public-list-title { font-weight: 600; }
-.public-list-meta { color: var(--muted); font-size: var(--text-sm); }
-
-.public-games li {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-.public-games a {
-  color: var(--text);
-  text-decoration: underline;
-  font-weight: 600;
-}
-
-.public-empty { color: var(--muted); }
-
 .host {
   overflow: hidden;
   background: var(--structure);
@@ -348,23 +339,6 @@ a.list-row:hover { background: #eef1f5; }
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.host-action-link,
-.viewer-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 1px solid #cfd7e3;
-  border-radius: 5px;
-  background: #f8fafc;
-  color: var(--text);
-  font-size: 17px;
-  font-weight: 700;
-  text-decoration: none;
 }
 
 .sheet-shell {
@@ -1066,22 +1040,10 @@ a.list-row:hover { background: #eef1f5; }
   margin-bottom: 8px;
 }
 
-.subnav a,
 .match-link {
   color: var(--text);
   font-weight: 700;
   text-decoration: none;
-}
-
-.subnav a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid #cfd7e3;
-  border-radius: 6px;
-  background: #f8fafc;
-  font-size: 13px;
 }
 
 .tournament-table {
@@ -1186,30 +1148,6 @@ a.list-row:hover { background: #eef1f5; }
   width: 100%;
   min-width: 1140px;
   padding-bottom: 24px;
-}
-
-.grid-toolbar {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  display: flex;
-  gap: 8px;
-  min-height: 34px;
-  margin-bottom: 8px;
-}
-
-.grid-toolbar a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid #cfd7e3;
-  border-radius: 5px;
-  background: #f8fafc;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
-  text-decoration: none;
 }
 
 .tournament-columns {
@@ -1415,17 +1353,6 @@ a.list-row:hover { background: #eef1f5; }
   gap: var(--space-2);
 }
 
-.import-actions button {
-  min-height: 34px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--action-border);
-  border-radius: var(--radius-md);
-  background: var(--action-bg);
-  color: var(--text);
-  font-weight: 700;
-  cursor: pointer;
-}
-
 #schemeInput {
   width: 100%;
   min-height: 360px;
@@ -1452,8 +1379,8 @@ a.list-row:hover { background: #eef1f5; }
   white-space: pre-wrap;
 }
 
-/* legacy auth-* aliases (used by login.html and /register stages) — single
-   input + submit button. New code should use .stack + .field + .btn. */
+/* auth + register layout (used by login.html and /register stages).
+   Inputs use .input, submit buttons use .btn — see design system above. */
 
 .auth-step {
   display: flex;
@@ -1482,41 +1409,6 @@ a.list-row:hover { background: #eef1f5; }
   padding-top: var(--space-3);
   border-top: 1px solid var(--border);
   color: var(--muted);
-}
-
-.auth-form input {
-  min-height: 36px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--text);
-  font-size: var(--text-sm);
-  outline: 0;
-}
-
-.auth-form input:focus { border-color: var(--blue); }
-
-.auth-form button {
-  min-height: 36px;
-  padding: 0 var(--space-4);
-  border: 1px solid var(--action-border);
-  border-radius: var(--radius-md);
-  background: var(--action-bg);
-  color: var(--text);
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.auth-code {
-  margin: 0;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  font-family: var(--font-mono);
-  font-size: var(--text-xl);
-  letter-spacing: 2px;
-  text-align: center;
 }
 
 .tabs {

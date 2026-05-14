@@ -12,7 +12,7 @@
     <h1>Вход</h1>
     <div class="host-actions">
       <span class="sync-status" id="status" data-state="saved" aria-label="Готово" title="Готово"></span>
-      <a class="viewer-link" href="/register" aria-label="Регистрация" title="Регистрация">→</a>
+      <a class="action-icon" href="/register" aria-label="Регистрация" title="Регистрация">→</a>
     </div>
   </header>
 
@@ -21,16 +21,16 @@
       <section id="step-form" class="auth-step">
         <p class="auth-hint">Отправьте боту <a id="botLink" target="_blank" rel="noopener">@dope_pecheny_bot</a> команду <code>/login</code> и введите код, который он пришлет.</p>
         <form id="loginForm" class="auth-form" autocomplete="off">
-          <input id="loginCode" name="code" type="text" placeholder="Код из Telegram" spellcheck="false" autocapitalize="characters" required>
-          <button type="submit">Войти</button>
+          <input class="input" id="loginCode" name="code" type="text" placeholder="Код из Telegram" spellcheck="false" autocapitalize="characters" required>
+          <button class="btn" type="submit">Войти</button>
         </form>
         <pre id="loginMessage" class="import-message"></pre>
 
         <p class="auth-hint auth-hint-divider">Войти по паролю</p>
         <form id="passwordForm" class="auth-form auth-form-stack" autocomplete="off">
-          <input id="passwordUsername" name="username" type="text" placeholder="Имя пользователя" spellcheck="false" autocapitalize="none" required>
-          <input id="passwordValue" name="password" type="password" placeholder="Пароль" required>
-          <button type="submit">Войти по паролю</button>
+          <input class="input" id="passwordUsername" name="username" type="text" placeholder="Имя пользователя" spellcheck="false" autocapitalize="none" required>
+          <input class="input" id="passwordValue" name="password" type="password" placeholder="Пароль" required>
+          <button class="btn" type="submit">Войти по паролю</button>
         </form>
         <pre id="passwordMessage" class="import-message"></pre>
       </section>
