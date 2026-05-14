@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,15 +90,19 @@ type eventEnvelope struct {
 }
 
 type tournamentScheme struct {
-	SchemaVersion     int           `json:"schemaVersion"`
-	Slug              string        `json:"slug"`
-	Title             string        `json:"title"`
-	GameType          string        `json:"gameType"`
-	QuestionValues    []int         `json:"questionValues"`
-	RegularThemeCount int           `json:"regularThemeCount"`
-	Venues            []schemeVenue `json:"venues"`
-	Stages            []schemeStage `json:"stages"`
-	Teams             []schemeTeam  `json:"teams"`
+	SchemaVersion     int             `json:"schemaVersion"`
+	Slug              string          `json:"slug"`
+	Title             string          `json:"title"`
+	GameType          string          `json:"gameType"`
+	QuestionValues    []int           `json:"questionValues"`
+	RegularThemeCount int             `json:"regularThemeCount"`
+	Venues            []schemeVenue   `json:"venues"`
+	Stages            []schemeStage   `json:"stages"`
+	Teams             []schemeTeam    `json:"teams"`
+	TourComp          json.RawMessage `json:"tourComp,omitempty"`
+	NTeams            int             `json:"nTeams,omitempty"`
+	Themes            int             `json:"themes,omitempty"`
+	Participants      []string        `json:"participants,omitempty"`
 }
 
 type schemeTeam struct {
@@ -493,6 +498,23 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 		return err
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := addColumnsIfMissing(db, "games", []columnSpec{
+		{Name: "state_json", Type: "TEXT NOT NULL DEFAULT '{}'"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := addColumnsIfMissing(db, "users", []columnSpec{
+		{Name: "password_hash", Type: "TEXT"},
+		{Name: "password_salt", Type: "TEXT"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(5, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
 	}
 	return nil
@@ -960,6 +982,192 @@ values(?, 1, 'import', ?, ?)`, tournamentID, string(schemaJSON), now); err != ni
 	return s.loadTournamentViewLocked(s.tournamentID, s.activeGameID)
 }
 
+// importSchemeIntoTournament wipes the tournament's existing games (and
+// dependent rows) and creates a single new game from the supplied scheme.
+// The tournament row itself stays intact.
+func (s *server) importSchemeIntoTournament(ctx context.Context, tournamentID int64, scheme tournamentScheme) error {
+	if s.db == nil {
+		return errors.New("sqlite is not enabled")
+	}
+	if err := validateScheme(scheme); err != nil {
+		return err
+	}
+	schemaJSON, err := json.Marshal(scheme)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := clearTournamentImportData(ctx, tx, tournamentID); err != nil {
+		return err
+	}
+
+	now := utcNow()
+	schemeSlug := scheme.Slug + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	schemeID, err := insertReturningID(ctx, tx, `
+insert into schemes(slug, title, version, schema_json, created_at)
+values(?, ?, ?, ?, ?)`, schemeSlug, scheme.Title, maxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
+	if err != nil {
+		return err
+	}
+	gameType := scheme.GameType
+	if gameType == "" {
+		gameType = defaultGameType
+	}
+	gameTitle := scheme.Title
+	if strings.TrimSpace(gameTitle) == "" {
+		gameTitle = "Игра"
+	}
+	gameID, err := insertReturningID(ctx, tx, `
+insert into games(tournament_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, ?, ?, ?, 1, ?, ?, '{}', 'pending', 'tournament', 'tournament', 1, ?, ?)`,
+		tournamentID, defaultGameCode, gameTitle, gameType, schemeID, string(schemaJSON), now, now)
+	if err != nil {
+		return err
+	}
+
+	venueIDs := make(map[int]int64, len(scheme.Venues))
+	for _, venue := range scheme.Venues {
+		venueID, err := insertReturningID(ctx, tx, `
+insert into venues(tournament_id, number, title, created_at, updated_at)
+values(?, ?, ?, ?, ?)`, tournamentID, venue.Number, venue.Title, now, now)
+		if err != nil {
+			return err
+		}
+		venueIDs[venue.Number] = venueID
+	}
+
+	assignmentTeams := make(map[[2]int]int64, len(scheme.Teams))
+	for _, team := range scheme.Teams {
+		teamID, err := insertReturningID(ctx, tx, `
+insert into teams(tournament_id, name, city)
+values(?, ?, ?)`, tournamentID, team.Name, team.City)
+		if err != nil {
+			return err
+		}
+		for rosterOrder, fullName := range team.Players {
+			fullName = strings.TrimSpace(fullName)
+			if fullName == "" {
+				continue
+			}
+			firstName, lastName := splitPlayerName(fullName)
+			playerID, err := insertReturningID(ctx, tx, `
+insert into players(tournament_id, first_name, last_name)
+values(?, ?, ?)`, tournamentID, firstName, lastName)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `
+insert into team_players(team_id, player_id, roster_order)
+values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `
+insert into game_assignments(game_id, basket, number, team_id, player_id)
+values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil {
+			return err
+		}
+		assignmentTeams[[2]int{team.Basket, team.Number}] = teamID
+	}
+
+	for stageIndex, stage := range scheme.Stages {
+		position := stage.Position
+		if position == 0 {
+			position = stageIndex + 1
+		}
+		configJSON := stageConfigJSON(stage)
+		stageType := stage.StageType
+		if stageType == "" {
+			stageType = "matches"
+		}
+		stageID, err := insertReturningID(ctx, tx, `
+insert into stages(tournament_id, game_id, code, title, stage_type, position, status, config_json)
+values(?, ?, ?, ?, ?, ?, 'pending', ?)`, tournamentID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
+		if err != nil {
+			return err
+		}
+		if stageType != "matches" {
+			continue
+		}
+		for matchIndex, match := range stage.Matches {
+			participantCount := match.ParticipantCount
+			if participantCount == 0 {
+				participantCount = len(match.Slots)
+			}
+			var venueID any
+			if id, ok := venueIDs[match.Venue]; ok {
+				venueID = id
+			}
+			matchID, err := insertReturningID(ctx, tx, `
+insert into matches(tournament_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, tournamentID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
+			if err != nil {
+				return err
+			}
+			for slotIndex, slot := range match.Slots {
+				sourceType, sourceRef := slotSource(slot)
+				var resolvedTeamID int64
+				if sourceType == "seed" && slot.Seed != nil {
+					number := slot.Seed.Number
+					if number == 0 {
+						number = slot.Seed.Position
+					}
+					resolvedTeamID = assignmentTeams[[2]int{slot.Seed.Basket, number}]
+				}
+				if _, err := tx.ExecContext(ctx, `
+insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
+values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableInt64(resolvedTeamID)); err != nil {
+					return err
+				}
+				if resolvedTeamID > 0 && gameType == "ek" {
+					for themeIndex := 0; themeIndex < themeCount; themeIndex++ {
+						if err := insertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if _, err := bumpTournamentRevisionTx(ctx, tx, tournamentID, "import", string(schemaJSON)); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// clearTournamentImportData drops all per-tournament rows that an import would
+// recreate (games, stages, matches, venues, teams, players, events). The
+// tournament row and its organizers stay.
+func clearTournamentImportData(ctx context.Context, tx *sql.Tx, tournamentID int64) error {
+	statements := []string{
+		`delete from events where tournament_id = ?`,
+		`delete from games where tournament_id = ?`,
+		`delete from team_players where team_id in (select id from teams where tournament_id = ?)`,
+		`delete from teams where tournament_id = ?`,
+		`delete from players where tournament_id = ?`,
+		`delete from venues where tournament_id = ?`,
+	}
+	for _, sqlText := range statements {
+		if _, err := tx.ExecContext(ctx, sqlText, tournamentID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validateScheme(scheme tournamentScheme) error {
 	if strings.TrimSpace(scheme.Slug) == "" {
 		return errors.New("schema slug is required")
@@ -967,7 +1175,11 @@ func validateScheme(scheme tournamentScheme) error {
 	if strings.TrimSpace(scheme.Title) == "" {
 		return errors.New("schema title is required")
 	}
-	if len(scheme.Stages) == 0 {
+	gameType := scheme.GameType
+	if gameType == "" {
+		gameType = defaultGameType
+	}
+	if gameType == "ek" && len(scheme.Stages) == 0 {
 		return errors.New("schema stages are required")
 	}
 	stageCodes := make(map[string]struct{}, len(scheme.Stages))
@@ -1901,6 +2113,22 @@ where tournament_id = ? and number = ?`, title, utcNow(), tournamentID, number)
 		return nil, 0, err
 	}
 	return venues, revision, nil
+}
+
+func (s *server) bumpTournamentRevisionStandalone(ctx context.Context, tournamentID int64, eventType, payload string) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	revision, err := bumpTournamentRevisionTx(ctx, tx, tournamentID, eventType, payload)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return revision, nil
 }
 
 func bumpTournamentRevisionTx(ctx context.Context, tx *sql.Tx, tournamentID int64, eventType, payload string) (int64, error) {

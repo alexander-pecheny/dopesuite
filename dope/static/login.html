@@ -25,6 +25,14 @@
           <button type="submit">Войти</button>
         </form>
         <pre id="loginMessage" class="import-message"></pre>
+
+        <p class="auth-hint auth-hint-divider">Войти по паролю</p>
+        <form id="passwordForm" class="auth-form auth-form-stack" autocomplete="off">
+          <input id="passwordUsername" name="username" type="text" placeholder="Имя пользователя" spellcheck="false" autocapitalize="none" required>
+          <input id="passwordValue" name="password" type="password" placeholder="Пароль" required>
+          <button type="submit">Войти по паролю</button>
+        </form>
+        <pre id="passwordMessage" class="import-message"></pre>
       </section>
 
       <section id="step-done" class="auth-step" hidden>

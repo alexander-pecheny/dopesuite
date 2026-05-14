@@ -5,6 +5,10 @@ const form = document.getElementById("loginForm");
 const codeInput = document.getElementById("loginCode");
 const message = document.getElementById("loginMessage");
 const botLink = document.getElementById("botLink");
+const passwordForm = document.getElementById("passwordForm");
+const passwordUsername = document.getElementById("passwordUsername");
+const passwordValue = document.getElementById("passwordValue");
+const passwordMessage = document.getElementById("passwordMessage");
 
 const botName = "dope_pecheny_bot";
 botLink.href = `https://t.me/${botName}`;
@@ -40,6 +44,26 @@ form.addEventListener("submit", async (event) => {
     showStep(stepDone);
   } catch (error) {
     setText(message, error.message);
+    setStatus("error");
+  }
+});
+
+passwordForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setStatus("saving");
+  setText(passwordMessage, "");
+  try {
+    const username = passwordUsername.value.trim();
+    const password = passwordValue.value;
+    await fetchJSON("/api/auth/login-password", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username, password}),
+    });
+    setStatus("saved");
+    showStep(stepDone);
+  } catch (error) {
+    setText(passwordMessage, error.message);
     setStatus("error");
   }
 });
