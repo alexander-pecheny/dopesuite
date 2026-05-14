@@ -2032,3 +2032,283 @@ a.list-row:hover { background: #eef1f5; }
     padding: 0 16px;
   }
 }
+
+/* ОД: tabs + entry grid + results */
+.match-main:has(.od-tabs) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.match-main:has(.od-tabs) .sheet-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.od-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+}
+
+.od-tab {
+  padding: 6px 14px;
+  border: 1px solid var(--action-border);
+  border-radius: 6px;
+  background: var(--action-bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.od-tab:hover {
+  background: #eef3fa;
+}
+
+.od-tab.active {
+  background: #fff;
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.entry-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  background: var(--structure);
+  font-size: 13px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.col-entry-q { width: 38px; }
+.col-entry-tour-end { width: calc(38px + 14px - var(--cell-gap)); }
+
+.entry-table th,
+.entry-table td {
+  height: 26px;
+  padding: 0;
+  border-top: 0;
+  border-bottom: 0;
+  border-left: var(--cell-gap) solid transparent;
+  border-right: var(--cell-gap) solid transparent;
+  background-clip: padding-box;
+  background-color: var(--paper);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.entry-table thead th {
+  position: sticky;
+  z-index: 4;
+  background-color: var(--structure);
+  font-weight: 400;
+  color: #3c4043;
+}
+
+.entry-table thead tr:first-child th { top: 0; height: 28px; }
+.entry-table thead tr:nth-child(2) th { top: 28px; height: 22px; }
+
+.entry-q-head { font-size: 12px; }
+
+.entry-table .entry-tour-end {
+  border-right-width: 14px;
+}
+
+.entry-lock-cell { padding: 0; }
+
+.entry-lock-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.entry-lock-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+
+.entry-cell { padding: 0; }
+
+.entry-input {
+  display: block;
+  width: 100%;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  text-align: center;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.entry-input:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  background: #fff;
+}
+
+.entry-input-bad,
+.entry-input-dup {
+  background: #fde8ea;
+  color: var(--red-dark);
+}
+
+.entry-readonly .entry-input,
+.entry-readonly .entry-lock-checkbox {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.match-table .answer-cell.readonly { cursor: default; }
+.match-table .answer-cell.readonly:hover,
+.match-table .answer-cell.readonly:focus { outline: 0; }
+
+/* Итог */
+.results-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.results-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.results-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.results-table th,
+.results-table td {
+  padding: 8px 10px;
+  background: var(--paper);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.results-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--structure);
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: center;
+}
+
+.results-place-head,
+.results-num-head,
+.results-tour-head { width: 60px; }
+
+.results-table thead th.results-team-head {
+  text-align: left;
+  min-width: 220px;
+  padding-left: 14px;
+}
+
+.results-place {
+  text-align: center;
+  font-weight: 400;
+}
+
+.results-team {
+  text-align: left;
+  padding-left: 14px;
+}
+
+.results-team-name { display: block; }
+.results-team-city { display: block; color: var(--muted); font-size: 12px; }
+
+.results-num,
+.results-tour { text-align: center; }
+
+.results-group-gap td {
+  height: 8px;
+  padding: 0;
+  background: var(--structure);
+  border: 0;
+  line-height: 0;
+}
+
+.results-row:not(.results-group-first) td {
+  border-top: 1px solid var(--structure);
+}
+
+.results-row.results-group-first td:first-child { border-top-left-radius: var(--radius-md); }
+.results-row.results-group-first td:last-child { border-top-right-radius: var(--radius-md); }
+.results-row.results-group-last td:first-child { border-bottom-left-radius: var(--radius-md); }
+.results-row.results-group-last td:last-child { border-bottom-right-radius: var(--radius-md); }
+
+
+/* Подробно: compact square cells everywhere, taken-question number inside the green cell */
+.match-table.od-detailed,
+.match-table.od-detailed th,
+.match-table.od-detailed td {
+  height: 24px;
+  line-height: 1;
+}
+.match-table.od-detailed .team-gap { height: 4px; }
+.match-table.od-detailed .team-name {
+  padding: 0 4px 0 6px;
+  font-size: 13px;
+}
+.match-table.od-detailed .team-name .venue-input {
+  min-height: 0;
+  height: 21px;
+  padding: 0 4px;
+  line-height: 19px;
+  font-size: 13px;
+  color: var(--text);
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.match-table.od-detailed .answer-cell,
+.match-table.od-detailed .question-head {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+}
+.match-table.od-detailed .answer-cell {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--green-dark);
+  text-align: center;
+  vertical-align: middle;
+}
+
+@media (max-width: 760px) {
+  .od-tabs { padding: 2px 0; }
+  .od-tab { padding: 4px 10px; font-size: 12px; }
+
+  .results-table th,
+  .results-table td { padding: 4px 6px; font-size: 12px; }
+  .results-table .results-team-head,
+  .results-table .results-team { padding-left: 8px; min-width: 0; }
+  .results-team-city { font-size: 11px; }
+  .results-place-head,
+  .results-num-head,
+  .results-tour-head { width: 40px; }
+}
