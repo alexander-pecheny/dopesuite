@@ -240,6 +240,7 @@ function buildSubnav(items) {
   nav.className = "subnav";
   items.forEach((item) => {
     const link = document.createElement("a");
+    link.className = "action-link";
     link.href = item.href;
     link.textContent = item.label;
     nav.appendChild(link);

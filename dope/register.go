@@ -211,7 +211,7 @@ const registerLayout = `{{define "page"}}<!doctype html>
   <header class="host-top">
     <h1>Регистрация</h1>
     <div class="host-actions">
-      <a class="viewer-link" href="/login" aria-label="Вход" title="Вход">→</a>
+      <a class="action-icon" href="/login" aria-label="Вход" title="Вход">→</a>
     </div>
   </header>
 
@@ -228,8 +228,8 @@ const registerInviteBody = `{{define "body"}}
 <section class="auth-step">
   <p class="auth-hint">Введите код приглашения, который вам прислали.</p>
   <form class="auth-form" method="post" action="/register/invite" autocomplete="off">
-    <input name="invite_code" type="text" placeholder="Код приглашения" spellcheck="false" autocapitalize="characters" value="{{.InviteCode}}" required autofocus>
-    <button type="submit">Получить код для бота</button>
+    <input class="input" name="invite_code" type="text" placeholder="Код приглашения" spellcheck="false" autocapitalize="characters" value="{{.InviteCode}}" required autofocus>
+    <button class="btn" type="submit">Получить код для бота</button>
   </form>
   {{if .Error}}<p class="import-message">{{.Error}}</p>{{end}}
 </section>
@@ -239,7 +239,7 @@ const registerCodeBody = `{{define "head"}}<meta http-equiv="refresh" content="2
 {{define "body"}}
 <section class="auth-step">
   <p class="auth-hint">Отправьте этот код боту <a href="https://t.me/{{.BotName}}" target="_blank" rel="noopener">@{{.BotName}}</a>:</p>
-  <p class="auth-code">{{.Code}}</p>
+  <p class="code-display">{{.Code}}</p>
   <p class="auth-hint">Код действует одну минуту. Жду подтверждения от бота…</p>
 </section>
 {{end}}`
@@ -248,8 +248,8 @@ const registerUsernameBody = `{{define "body"}}
 <section class="auth-step">
   <p class="auth-hint">Готово! Выберите никнейм. Изменить его потом нельзя.</p>
   <form class="auth-form" method="post" action="/register/username" autocomplete="off">
-    <input name="username" type="text" placeholder="username" spellcheck="false" autocapitalize="none" value="{{.Username}}" required autofocus>
-    <button type="submit">Сохранить</button>
+    <input class="input" name="username" type="text" placeholder="username" spellcheck="false" autocapitalize="none" value="{{.Username}}" required autofocus>
+    <button class="btn" type="submit">Сохранить</button>
   </form>
   {{if .Error}}<p class="import-message">{{.Error}}</p>{{end}}
 </section>
