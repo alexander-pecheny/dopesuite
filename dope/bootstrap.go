@@ -143,14 +143,15 @@ func seedTestChGKGame(ctx context.Context, tx *sql.Tx, tournamentID int64, posit
 		"nTeams":   len(teams),
 		"teams":    teams,
 	}
-	answers := make([][]bool, len(teams))
-	for i := range answers {
-		answers[i] = make([]bool, totalQ)
+	entries := make([][]int, totalQ)
+	for i := range entries {
+		entries[i] = []int{}
 	}
+	completed := make([]bool, totalQ)
 	state := map[string]any{
-		"teams":    teams,
-		"answers":  answers,
-		"finished": false,
+		"teams":     teams,
+		"entries":   entries,
+		"completed": completed,
 	}
 	return insertGameRow(ctx, tx, tournamentID, "chgk", "ЧГК (тестовый)", "od", position, scheme, state)
 }
