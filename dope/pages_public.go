@@ -160,6 +160,23 @@ func (s *server) handleTournamentRouter(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Public viewer pages mirror host pages: OD/SI get their own viewer.
+	if len(parts) >= 3 {
+		gameID, err := strconv.ParseInt(parts[2], 10, 64)
+		if err == nil && gameID > 0 {
+			var gameType string
+			if err := s.db.QueryRowContext(r.Context(), `select game_type from games where id = ? and tournament_id = ?`, gameID, id).Scan(&gameType); err == nil {
+				switch gameType {
+				case "od":
+					s.serveAppHTML(w, r, "static/od.html")
+					return
+				case "si":
+					s.serveAppHTML(w, r, "static/si.html")
+					return
+				}
+			}
+		}
+	}
 	s.serveViewerHTML(w, r)
 }
 

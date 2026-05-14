@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +37,11 @@ type registerStatusResponse struct {
 
 type loginRequest struct {
 	Code string `json:"code"`
+}
+
+type loginPasswordRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type usernameRequest struct {
@@ -345,6 +353,87 @@ update telegram_login_codes set consumed_at = ? where id = ?`, now.Format(time.R
 		return "", sessionUser{}, err
 	}
 	return token, user, nil
+}
+
+func (s *server) handleAuthLoginPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+	var req loginPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	username := strings.TrimSpace(req.Username)
+	password := req.Password
+	if username == "" || password == "" {
+		http.Error(w, "missing username or password", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	var (
+		userID   int64
+		hash     sql.NullString
+		salt     sql.NullString
+		isSystem int
+	)
+	err = tx.QueryRowContext(ctx, `
+select id, password_hash, password_salt, is_system from users where username = ?`, username).Scan(
+		&userID, &hash, &salt, &isSystem)
+	if errors.Is(err, sql.ErrNoRows) || !hash.Valid || !salt.Valid {
+		http.Error(w, "invalid username or password", http.StatusUnauthorized)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if isSystem == 1 {
+		http.Error(w, "system user cannot log in", http.StatusForbidden)
+		return
+	}
+	expected := hashPassword(password, salt.String)
+	if subtle.ConstantTimeCompare([]byte(hash.String), []byte(expected)) != 1 {
+		http.Error(w, "invalid username or password", http.StatusUnauthorized)
+		return
+	}
+
+	now := time.Now().UTC()
+	token, err := createSessionTx(ctx, tx, userID, now)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	user, err := loadUserTx(ctx, tx, userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	setSessionCookie(w, token)
+	writeJSONValue(w, meResponseFor(user))
+}
+
+func hashPassword(password, salt string) string {
+	sum := sha256.Sum256([]byte(salt + ":" + password))
+	return hex.EncodeToString(sum[:])
+}
+
+func newPasswordSalt() (string, error) {
+	return randomBase32(16)
 }
 
 func (s *server) handleAuthMe(w http.ResponseWriter, r *http.Request) {

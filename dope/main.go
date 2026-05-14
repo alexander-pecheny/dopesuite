@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"encoding/json"
@@ -146,6 +147,7 @@ func main() {
 	mux.HandleFunc("/api/auth/register/start", srv.handleAuthRegisterStart)
 	mux.HandleFunc("/api/auth/register/status", srv.handleAuthRegisterStatus)
 	mux.HandleFunc("/api/auth/login", srv.handleAuthLogin)
+	mux.HandleFunc("/api/auth/login-password", srv.handleAuthLoginPassword)
 	mux.HandleFunc("/api/auth/logout", srv.handleAuthLogout)
 	mux.HandleFunc("/api/auth/me", srv.handleAuthMe)
 	mux.HandleFunc("/api/auth/username", srv.handleAuthUsername)
@@ -188,6 +190,17 @@ func newServer() (*server, error) {
 	db, err := openTournamentDB(dbPath)
 	if err != nil {
 		return nil, err
+	}
+	if !isProdEnv() {
+		ownerID, err := ensureDevUser(context.Background(), db)
+		if err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+		if err := ensureTestTournament(context.Background(), db, ownerID); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
 	}
 	tournamentID, gameID, matchCode, err := loadActiveContext(db)
 	if err != nil {

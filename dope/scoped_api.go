@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -122,12 +123,105 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 			s.handleScopedGame(w, r, scope)
 			return
 		}
-		if parts[3] == "matches" {
+		switch parts[3] {
+		case "matches":
 			s.handleScopedMatches(w, r, scope, parts[4:])
+			return
+		case "state":
+			if len(parts) != 4 {
+				http.NotFound(w, r)
+				return
+			}
+			s.handleScopedGameState(w, r, scope)
+			return
+		case "scheme":
+			if len(parts) != 4 {
+				http.NotFound(w, r)
+				return
+			}
+			s.handleScopedGameScheme(w, r, scope)
 			return
 		}
 	}
 	http.NotFound(w, r)
+}
+
+func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, scope tournamentScope) {
+	switch r.Method {
+	case http.MethodGet:
+		var stateJSON string
+		err := s.db.QueryRowContext(r.Context(), `
+select state_json from games where tournament_id = ? and id = ?`, scope.TournamentID, scope.GameID).Scan(&stateJSON)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if stateJSON == "" {
+			stateJSON = "{}"
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write([]byte(stateJSON))
+	case http.MethodPut:
+		defer r.Body.Close()
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if !json.Valid(raw) {
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		result, err := s.db.ExecContext(r.Context(), `
+update games set state_json = ?, updated_at = ? where tournament_id = ? and id = ?`,
+			string(raw), utcNow(), scope.TournamentID, scope.GameID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		n, _ := result.RowsAffected()
+		if n == 0 {
+			http.NotFound(w, r)
+			return
+		}
+		revision, err := s.bumpTournamentRevisionStandalone(r.Context(), scope.TournamentID, "game:state", string(raw))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		s.broadcastState(fmt.Sprintf("game-state:%d", scope.GameID), revision, raw)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write(raw)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *server) handleScopedGameScheme(w http.ResponseWriter, r *http.Request, scope tournamentScope) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var schemeJSON string
+	err := s.db.QueryRowContext(r.Context(), `
+select scheme_json from games where tournament_id = ? and id = ?`, scope.TournamentID, scope.GameID).Scan(&schemeJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if schemeJSON == "" {
+		schemeJSON = "{}"
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write([]byte(schemeJSON))
 }
 
 func (s *server) handleScopedTournament(w http.ResponseWriter, r *http.Request, tournamentID int64) {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -29,11 +30,13 @@ type hostLandingData struct {
 }
 
 type hostTournamentDashData struct {
-	Tournament  hostMyTournament
-	Description string
-	RatingID    int64
-	Games       []publicTournamentGame
-	Error       string
+	Tournament   hostMyTournament
+	Description  string
+	RatingID     int64
+	Games        []publicTournamentGame
+	Error        string
+	ImportError  string
+	ImportNotice string
 }
 
 var hostLoggedOutTemplate = template.Must(template.New("hostLogin").Parse(`<!doctype html>
@@ -183,7 +186,22 @@ var hostTournamentDashTemplate = template.Must(template.New("hostDash").Parse(`<
       {{else}}
       <p class="empty">Игр пока нет.</p>
       {{end}}
-      <p class="muted">Создание игры с импортом сетки появится позже. Пока новую игру можно завести через POST /api/import.</p>
+    </section>
+
+    <section class="section">
+      <h2>Импорт схемы из JSON</h2>
+      {{if .ImportError}}<p class="empty">{{.ImportError}}</p>{{end}}
+      {{if .ImportNotice}}<p class="muted">{{.ImportNotice}}</p>{{end}}
+      <form method="post" action="/host/tournament/{{.Tournament.ID}}/import" class="card stack" autocomplete="off">
+        <p class="muted">Импорт пересоздаёт игру турнира из JSON-схемы. Существующие игры этого турнира будут заменены.</p>
+        <label class="field">
+          <span>JSON-схема</span>
+          <textarea name="scheme" rows="14" placeholder='{"slug":"...","title":"...","gameType":"ek","stages":[...]}'></textarea>
+        </label>
+        <div class="cluster">
+          <button class="btn" type="submit">Импортировать</button>
+        </div>
+      </form>
     </section>
   </main>
 </body>
@@ -278,7 +296,7 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 2 {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
-			s.renderHostTournamentDashboard(w, r, id, "")
+			s.renderHostTournamentDashboard(w, r, id, hostDashMessages{})
 		case http.MethodPost:
 			s.handleHostUpdateTournament(w, r, id)
 		default:
@@ -286,12 +304,45 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	// /host/tournament/{id}/game/{gid}[/...] → serve host.html (EK grid).
+	if len(parts) == 3 && parts[2] == "import" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleHostImportScheme(w, r, id)
+		return
+	}
+	// /host/tournament/{id}/game/{gid}[/...] → serve host.html / od.html / si.html.
 	if !isHostGameSubPath(parts[2:]) {
 		http.NotFound(w, r)
 		return
 	}
-	s.serveHostHTML(w, r)
+	s.serveHostGamePage(w, r, id, parts[2:])
+}
+
+func (s *server) serveHostGamePage(w http.ResponseWriter, r *http.Request, tournamentID int64, parts []string) {
+	gameID, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || gameID <= 0 {
+		http.NotFound(w, r)
+		return
+	}
+	var gameType string
+	if err := s.db.QueryRowContext(r.Context(), `select game_type from games where id = ? and tournament_id = ?`, gameID, tournamentID).Scan(&gameType); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	switch gameType {
+	case "od":
+		s.serveAppHTML(w, r, "static/od.html")
+	case "si":
+		s.serveAppHTML(w, r, "static/si.html")
+	default:
+		s.serveHostHTML(w, r)
+	}
 }
 
 func isHostGameSubPath(parts []string) bool {
@@ -362,6 +413,12 @@ values(?, ?, ?)`, tournamentID, user.UserID, now); err != nil {
 	http.Redirect(w, r, fmt.Sprintf("/host/tournament/%d", tournamentID), http.StatusSeeOther)
 }
 
+type hostDashMessages struct {
+	FormError    string
+	ImportError  string
+	ImportNotice string
+}
+
 func (s *server) handleHostUpdateTournament(w http.ResponseWriter, r *http.Request, tournamentID int64) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
@@ -369,7 +426,7 @@ func (s *server) handleHostUpdateTournament(w http.ResponseWriter, r *http.Reque
 	}
 	title := strings.TrimSpace(r.Form.Get("title"))
 	if title == "" {
-		s.renderHostTournamentDashboard(w, r, tournamentID, "Название обязательно.")
+		s.renderHostTournamentDashboard(w, r, tournamentID, hostDashMessages{FormError: "Название обязательно."})
 		return
 	}
 	description := r.Form.Get("description")
@@ -391,7 +448,29 @@ where id = ?`,
 	http.Redirect(w, r, fmt.Sprintf("/host/tournament/%d", tournamentID), http.StatusSeeOther)
 }
 
-func (s *server) renderHostTournamentDashboard(w http.ResponseWriter, r *http.Request, tournamentID int64, errMsg string) {
+func (s *server) handleHostImportScheme(w http.ResponseWriter, r *http.Request, tournamentID int64) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	raw := strings.TrimSpace(r.Form.Get("scheme"))
+	if raw == "" {
+		s.renderHostTournamentDashboard(w, r, tournamentID, hostDashMessages{ImportError: "Вставьте JSON схемы."})
+		return
+	}
+	var scheme tournamentScheme
+	if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
+		s.renderHostTournamentDashboard(w, r, tournamentID, hostDashMessages{ImportError: "Не удалось разобрать JSON: " + err.Error()})
+		return
+	}
+	if err := s.importSchemeIntoTournament(r.Context(), tournamentID, scheme); err != nil {
+		s.renderHostTournamentDashboard(w, r, tournamentID, hostDashMessages{ImportError: err.Error()})
+		return
+	}
+	s.renderHostTournamentDashboard(w, r, tournamentID, hostDashMessages{ImportNotice: "Импорт выполнен."})
+}
+
+func (s *server) renderHostTournamentDashboard(w http.ResponseWriter, r *http.Request, tournamentID int64, msgs hostDashMessages) {
 	var (
 		title       string
 		description string
@@ -434,9 +513,11 @@ from tournaments where id = ?`, tournamentID).Scan(&title, &description, &startD
 			Dates:     formatTournamentDates(startDate.String, endDate.String),
 			IsPublic:  isPublic == 1,
 		},
-		Description: description,
-		Games:       hostGames,
-		Error:       errMsg,
+		Description:  description,
+		Games:        hostGames,
+		Error:        msgs.FormError,
+		ImportError:  msgs.ImportError,
+		ImportNotice: msgs.ImportNotice,
 	}
 	if ratingID.Valid {
 		data.RatingID = ratingID.Int64
