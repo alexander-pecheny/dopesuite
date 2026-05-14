@@ -54,7 +54,7 @@ var publicListTemplate = template.Must(template.New("publicList").Parse(`<!docty
     <ul class="list">
       {{range .}}
       <li>
-        <a class="list-row" href="/tournaments/{{.ID}}">
+        <a class="list-row" href="/tournament/{{.ID}}">
           <span class="list-row-title">{{.Title}}</span>
           {{if .Dates}}<span class="muted">{{.Dates}}</span>{{end}}
         </a>
@@ -131,7 +131,7 @@ func (s *server) handleTournamentRouter(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	rest := strings.TrimPrefix(r.URL.Path, "/tournaments/")
+	rest := strings.TrimPrefix(r.URL.Path, "/tournament/")
 	if rest == r.URL.Path {
 		http.NotFound(w, r)
 		return
@@ -209,7 +209,7 @@ func (s *server) assertTournamentPublic(ctx context.Context, tournamentID int64)
 	return nil
 }
 
-// isViewerSubPath validates that a tournament-scoped path under /tournaments/{id}/
+// isViewerSubPath validates that a tournament-scoped path under /tournament/{id}/
 // is one of the recognised viewer routes (/game/{gid}/...). Only known shapes
 // pass; anything else 404s.
 func isViewerSubPath(parts []string) bool {
@@ -292,7 +292,7 @@ from tournaments where id = ?`, id).Scan(&title, &description, &startDate, &endD
 			Code:  g.Code,
 			Title: g.Title,
 			Type:  g.Type,
-			URL:   fmt.Sprintf("/tournaments/%d/game/%d/", id, g.ID),
+			URL:   fmt.Sprintf("/tournament/%d/game/%d/", id, g.ID),
 		}
 	}
 	detail := publicTournamentDetail{
