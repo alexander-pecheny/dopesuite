@@ -11,16 +11,11 @@ let state = null;
 let tourLengths = [];
 let totalQuestions = 0;
 
-const TABS = viewer
-  ? [
-      {key: "results", label: "Итог"},
-      {key: "detailed", label: "Подробно"},
-    ]
-  : [
-      {key: "results", label: "Итог"},
-      {key: "detailed", label: "Подробно"},
-      {key: "input", label: "Ввод"},
-    ];
+const TABS = [
+  {key: "results", label: "Итог"},
+  {key: "detailed", label: "Подробно"},
+  {key: "input", label: "Ввод"},
+];
 
 function tabFromHash() {
   const key = (window.location.hash || "").replace(/^#/, "");

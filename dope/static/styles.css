@@ -1837,8 +1837,8 @@ a.list-row:hover { background: #eef1f5; }
 
   .match-table .theme-head,
   .match-table .theme-score {
-    width: 24px;
-    min-width: 24px;
+    width: 30px;
+    min-width: 30px;
   }
 
   .match-table .shootout-controls-head,
@@ -1850,9 +1850,9 @@ a.list-row:hover { background: #eef1f5; }
 
   .match-table .gap,
   .match-table .gap-head {
-    width: 0;
-    min-width: 0;
-    max-width: 0;
+    width: 10px;
+    min-width: 10px;
+    max-width: 10px;
     padding: 0;
     border: 0;
   }
@@ -2227,6 +2227,28 @@ a.list-row:hover { background: #eef1f5; }
   padding-left: 14px;
 }
 
+.results-table .results-place,
+.results-table .results-team {
+  position: sticky;
+  z-index: 1;
+  background: var(--paper);
+}
+
+.results-table .results-place,
+.results-table thead .results-place-head {
+  left: 0;
+}
+
+.results-table .results-team,
+.results-table thead .results-team-head {
+  left: 60px;
+}
+
+.results-table thead .results-place-head,
+.results-table thead .results-team-head {
+  z-index: 3;
+}
+
 .results-place {
   text-align: center;
   font-weight: 400;
@@ -2311,4 +2333,6 @@ a.list-row:hover { background: #eef1f5; }
   .results-place-head,
   .results-num-head,
   .results-tour-head { width: 40px; }
+  .results-table .results-team,
+  .results-table thead .results-team-head { left: 40px; }
 }
