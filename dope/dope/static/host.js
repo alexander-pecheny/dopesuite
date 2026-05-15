@@ -4,6 +4,7 @@ const pageHeading = document.querySelector(".host-top h1");
 const viewerLink = document.querySelector(".viewer-link");
 const importLink = document.querySelector(".import-link");
 
+const gameTable = window.DopeTable;
 const route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 let state = null;
@@ -521,149 +522,133 @@ function setText(selector, value) {
 
 function buildTable() {
   const matchCode = currentMatchCode();
-  const table = document.createElement("table");
-  table.className = "match-table";
-  table.dataset.matchCode = matchCode;
-  table.classList.toggle("match-finished", state.finished);
-  const columnsPerTheme = state.questionValues.length + 2;
   const hasShootout = shootoutThemeCount() > 0;
-  const totalColumnSpan = 5 + totalThemeCount() * columnsPerTheme + (hasShootout ? 7 : 6);
-
-  const thead = document.createElement("thead");
-  const header = document.createElement("tr");
-  header.appendChild(battleHeader());
-  header.appendChild(th("Σ", "sticky sticky-total number"));
-  header.appendChild(th("М", "sticky sticky-place number"));
-  header.appendChild(th("", "sticky sticky-place-gap place-gap-head"));
-
-  for (let theme = 0; theme < regularThemeCount(); theme++) {
-    for (const value of state.questionValues) {
-      header.appendChild(th(value, "question-head"));
-    }
-    header.appendChild(th(`Т${theme + 1}`, "theme-head"));
-    const gapClass = isLastRenderedTheme(false, theme) ? "gap-head shootout-adjacent-gap-head" : "gap-head";
-    header.appendChild(th("", gapClass));
-  }
-  for (let theme = 0; theme < shootoutThemeCount(); theme++) {
-    for (const value of state.questionValues) {
-      header.appendChild(th(value, "question-head shootout-head"));
-    }
-    header.appendChild(th(`П${theme + 1}`, "theme-head shootout-head"));
-    const gapClass = isLastRenderedTheme(true, theme) ? "gap-head shootout-adjacent-gap-head" : "gap-head";
-    header.appendChild(th("", gapClass));
-  }
-  header.appendChild(shootoutControlsHeader());
-  if (hasShootout) {
-    header.appendChild(th("П", "number"));
-  }
-  header.appendChild(th("Σ+", "number"));
-  for (const value of [50, 40, 30, 20, 10]) {
-    header.appendChild(th(value, "number narrow"));
-  }
-  thead.appendChild(header);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  state.teams.forEach((team, teamIndex) => {
-    const playerRow = document.createElement("tr");
-    const answerRow = document.createElement("tr");
-    answerRow.className = "answer-row";
-
-    const teamNameCell = td(team.name, "sticky sticky-name team-name", {rowSpan: 2});
-    teamNameCell.dataset.team = String(teamIndex);
-    playerRow.appendChild(teamNameCell);
-
-    const totalCell = td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2});
-    totalCell.dataset.team = String(teamIndex);
-    playerRow.appendChild(totalCell);
-
-    const placeInput = document.createElement("input");
-    placeInput.type = "text";
-    placeInput.inputMode = "decimal";
-    placeInput.value = formatPlace(team.place);
-    placeInput.className = "place-input";
-    placeInput.disabled = state.finished;
-    placeInput.dataset.matchCode = matchCode;
-    placeInput.dataset.team = String(teamIndex);
-    placeInput.dataset.committedPlace = String(team.place || 0);
-    const commitPlace = () => {
-      const place = parsePlace(placeInput.value);
-      if (place === null) {
-        placeInput.value = formatPlace(team.place);
-        return;
-      }
-      placeInput.value = formatPlace(place);
-      if (place === Number(placeInput.dataset.committedPlace)) {
-        return true;
-      }
-      placeInput.dataset.committedPlace = String(place);
-      sendUpdate({team: teamIndex, place}, matchCode);
-      return true;
-    };
-    placeInput.addEventListener("change", commitPlace);
-    placeInput.addEventListener("keydown", (event) => {
-      const isForward = event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey);
-      const isBackward = event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey);
-      if (event.key !== "Enter" && !isForward && !isBackward) return;
-
-      event.preventDefault();
-      if (!commitPlace()) return;
-      if (isForward || isBackward) {
-        const direction = isForward ? 1 : -1;
-        const nextTeam = clamp(teamIndex + direction, 0, state.teams.length - 1);
-        focusPlaceInput(nextTeam, {select: true, matchCode});
-      }
-    });
-    const placeCell = document.createElement("td");
-    placeCell.className = "sticky sticky-place number place-cell";
-    placeCell.rowSpan = 2;
-    placeCell.dataset.team = String(teamIndex);
-    placeCell.appendChild(placeInput);
-    playerRow.appendChild(placeCell);
-    playerRow.appendChild(td("", "sticky sticky-place-gap place-gap", {rowSpan: 2}));
-
+  const themes = renderedThemeHeaders();
+  const rows = state.teams.map((team, teamIndex) => {
+    const themeCellsList = [];
     team.themes.forEach((theme, themeIndex) => {
-      appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeIndex, false);
+      themeCellsList.push(themeCells(team, teamIndex, theme, themeIndex, false));
     });
     shootoutThemesFor(team).forEach((theme, themeIndex) => {
-      appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeIndex, true);
+      themeCellsList.push(themeCells(team, teamIndex, theme, themeIndex, true));
     });
-    playerRow.appendChild(td("", "shootout-controls-cell", {rowSpan: 2}));
-
-    if (hasShootout) {
-      const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
-      const tiebreakCell = td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2});
-      tiebreakCell.dataset.team = String(teamIndex);
-      playerRow.appendChild(tiebreakCell);
-    }
-
-    const plusCell = td(team.plus, "number plus-cell", {rowSpan: 2});
-    plusCell.dataset.team = String(teamIndex);
-    playerRow.appendChild(plusCell);
-    [0, 1, 2, 3, 4].forEach((idx) => {
-      const correctCell = td(team.correctCounts[4 - idx], "number narrow correct-count-cell", {rowSpan: 2});
-      correctCell.dataset.team = String(teamIndex);
-      correctCell.dataset.valueIndex = String(idx);
-      playerRow.appendChild(correctCell);
-    });
-
-    tbody.appendChild(playerRow);
-    tbody.appendChild(answerRow);
-    if (teamIndex < state.teams.length - 1) {
-      const gapRow = document.createElement("tr");
-      gapRow.className = "team-gap-row";
-      gapRow.appendChild(td("", "team-gap", {colSpan: totalColumnSpan}));
-      tbody.appendChild(gapRow);
-    }
+    return {
+      nameCell: teamNameCell(team, teamIndex),
+      totalCell: totalCell(team, teamIndex),
+      placeCell: placeCell(team, teamIndex, matchCode),
+      themes: themeCellsList,
+      afterThemeCells: trailingCells(team, teamIndex, hasShootout),
+    };
   });
-  table.appendChild(tbody);
+
+  const table = gameTable.buildTwoRowScoreTable({
+    className: "match-table",
+    attrs: {dataset: {matchCode}},
+    nameHeader: battleHeader(),
+    themes,
+    afterThemeHeaders: trailingHeaders(hasShootout),
+    rows,
+    gapRowClassName: "team-gap-row",
+  });
+  table.classList.toggle("match-finished", state.finished);
   return table;
 }
 
-function appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeIndex, isShootout) {
+function renderedThemeHeaders() {
+  const themes = [];
+  for (let theme = 0; theme < regularThemeCount(); theme++) {
+    themes.push({
+      label: `Т${theme + 1}`,
+      questionLabels: state.questionValues,
+      gapHeaderClassName: isLastRenderedTheme(false, theme) ? "gap-head shootout-adjacent-gap-head" : "gap-head",
+      gapClassName: isLastRenderedTheme(false, theme) ? "gap shootout-adjacent-gap" : "gap",
+    });
+  }
+  for (let theme = 0; theme < shootoutThemeCount(); theme++) {
+    themes.push({
+      label: `П${theme + 1}`,
+      questionLabels: state.questionValues,
+      questionClassName: "question-head shootout-head",
+      labelClassName: "theme-head shootout-head",
+      gapHeaderClassName: isLastRenderedTheme(true, theme) ? "gap-head shootout-adjacent-gap-head" : "gap-head",
+      gapClassName: isLastRenderedTheme(true, theme) ? "gap shootout-adjacent-gap" : "gap",
+    });
+  }
+  return themes;
+}
+
+function trailingHeaders(hasShootout) {
+  const headers = [shootoutControlsHeader()];
+  if (hasShootout) headers.push({content: "П", className: "number"});
+  headers.push({content: "Σ+", className: "number"});
+  for (const value of [50, 40, 30, 20, 10]) {
+    headers.push({content: value, className: "number narrow"});
+  }
+  return headers;
+}
+
+function teamNameCell(team, teamIndex) {
+  const cell = td(team.name, "sticky sticky-name team-name", {rowSpan: 2});
+  cell.dataset.team = String(teamIndex);
+  return cell;
+}
+
+function totalCell(team, teamIndex) {
+  const cell = td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2});
+  cell.dataset.team = String(teamIndex);
+  return cell;
+}
+
+function placeCell(team, teamIndex, matchCode) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.inputMode = "decimal";
+  input.value = formatPlace(team.place);
+  input.className = "place-input";
+  input.disabled = state.finished;
+  input.dataset.matchCode = matchCode;
+  input.dataset.team = String(teamIndex);
+  input.dataset.committedPlace = String(team.place || 0);
+  const commitPlace = () => {
+    const place = parsePlace(input.value);
+    if (place === null) {
+      input.value = formatPlace(team.place);
+      return;
+    }
+    input.value = formatPlace(place);
+    if (place === Number(input.dataset.committedPlace)) {
+      return true;
+    }
+    input.dataset.committedPlace = String(place);
+    sendUpdate({team: teamIndex, place}, matchCode);
+    return true;
+  };
+  input.addEventListener("change", commitPlace);
+  input.addEventListener("keydown", (event) => {
+    const isForward = event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey);
+    const isBackward = event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey);
+    if (event.key !== "Enter" && !isForward && !isBackward) return;
+
+    event.preventDefault();
+    if (!commitPlace()) return;
+    if (isForward || isBackward) {
+      const direction = isForward ? 1 : -1;
+      const nextTeam = clamp(teamIndex + direction, 0, state.teams.length - 1);
+      focusPlaceInput(nextTeam, {select: true, matchCode});
+    }
+  });
+  const cell = document.createElement("td");
+  cell.className = "sticky sticky-place number place-cell";
+  cell.rowSpan = 2;
+  cell.dataset.team = String(teamIndex);
+  cell.appendChild(input);
+  return cell;
+}
+
+function themeCells(team, teamIndex, theme, themeIndex, isShootout) {
   const matchCode = currentMatchCode();
   const playerCell = document.createElement("td");
-  playerCell.colSpan = 5;
+  playerCell.colSpan = state.questionValues.length;
   playerCell.className = "player-cell theme-block theme-block-top-left";
   if (isShootout) {
     playerCell.classList.add("shootout-block");
@@ -697,16 +682,13 @@ function appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeInd
   editor.appendChild(selectWrap);
 
   playerCell.appendChild(editor);
-  playerRow.appendChild(playerCell);
   const scoreCell = td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: 2});
   scoreCell.dataset.team = String(teamIndex);
   scoreCell.dataset.shootout = isShootout ? "1" : "0";
   scoreCell.dataset.theme = String(themeIndex);
-  playerRow.appendChild(scoreCell);
   const gapClass = isLastRenderedTheme(isShootout, themeIndex) ? "gap shootout-adjacent-gap" : "gap";
-  playerRow.appendChild(td("", gapClass));
 
-  theme.answers.forEach((mark, answerIndex) => {
+  const answers = theme.answers.map((mark, answerIndex) => {
     const cell = document.createElement("td");
     cell.className = `answer-cell theme-block ${mark}`;
     if (isShootout) {
@@ -733,9 +715,30 @@ function appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeInd
         selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {focus: false, matchCode});
       });
     }
-    answerRow.appendChild(cell);
+    return cell;
   });
-  answerRow.appendChild(td("", gapClass));
+
+  return {playerCell, scoreCell, gapClassName: gapClass, answers};
+}
+
+function trailingCells(team, teamIndex, hasShootout) {
+  const cells = [td("", "shootout-controls-cell", {rowSpan: 2})];
+  if (hasShootout) {
+    const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
+    const tiebreakCell = td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2});
+    tiebreakCell.dataset.team = String(teamIndex);
+    cells.push(tiebreakCell);
+  }
+  const plusCell = td(team.plus, "number plus-cell", {rowSpan: 2});
+  plusCell.dataset.team = String(teamIndex);
+  cells.push(plusCell);
+  [0, 1, 2, 3, 4].forEach((idx) => {
+    const correctCell = td(team.correctCounts[4 - idx], "number narrow correct-count-cell", {rowSpan: 2});
+    correctCell.dataset.team = String(teamIndex);
+    correctCell.dataset.valueIndex = String(idx);
+    cells.push(correctCell);
+  });
+  return cells;
 }
 
 function battleHeader() {
@@ -855,10 +858,7 @@ function handleGlobalKeydown(event) {
 }
 
 function isFormControl(target) {
-  return target instanceof HTMLInputElement ||
-    target instanceof HTMLSelectElement ||
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLButtonElement;
+  return gameTable.isFormControl(target);
 }
 
 function selectAnswerCell(team, shootout, theme, answer, options = {}) {
@@ -1091,19 +1091,15 @@ function formatNumber(value) {
 }
 
 function sameArray(a, b) {
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
+  return gameTable.sameArray(a, b);
 }
 
 function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+  return gameTable.clamp(value, min, max);
 }
 
 function cssEscape(value) {
-  return window.CSS?.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&");
+  return gameTable.cssEscape(value);
 }
 
 function parsePlace(value) {
@@ -1119,25 +1115,15 @@ function formatPlace(place) {
 }
 
 function th(content, className) {
-  const node = document.createElement("th");
-  node.className = className;
-  node.textContent = content;
-  return node;
+  return gameTable.th(content, className);
 }
 
 function td(content, className, attrs = {}) {
-  const node = document.createElement("td");
-  node.className = className;
-  node.textContent = content;
-  Object.assign(node, attrs);
-  return node;
+  return gameTable.td(content, className, attrs);
 }
 
 function option(value, label) {
-  const node = document.createElement("option");
-  node.value = value;
-  node.textContent = label;
-  return node;
+  return gameTable.option(value, label);
 }
 
 loadCurrent()

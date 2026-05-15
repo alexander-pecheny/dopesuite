@@ -2,6 +2,7 @@ const viewerRoot = document.getElementById("viewerTable");
 const liveDot = document.getElementById("liveDot");
 const pageHeading = document.querySelector(".host-top h1");
 
+const gameTable = window.DopeTable;
 const route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 let state = null;
@@ -268,96 +269,70 @@ function withMatchState(matchState, callback) {
 }
 
 function buildReadonlyTable() {
-  const table = document.createElement("table");
-  table.className = "match-table readonly-table";
-  const columnsPerTheme = state.questionValues.length + 2;
   const hasShootout = shootoutThemeCount() > 0;
-  const totalColumnSpan = 4 + totalThemeCount() * columnsPerTheme + (hasShootout ? 7 : 6);
-
-  const thead = document.createElement("thead");
-  const header = document.createElement("tr");
-  header.appendChild(th(matchTitle(), "sticky sticky-name battle"));
-  header.appendChild(th("Σ", "sticky sticky-total number"));
-  header.appendChild(th("М", "sticky sticky-place number"));
-  header.appendChild(th("", "sticky sticky-place-gap place-gap-head"));
-
-  for (let theme = 0; theme < regularThemeCount(); theme++) {
-    for (const value of state.questionValues) {
-      header.appendChild(th(value, "question-head"));
-    }
-    header.appendChild(th(`Т${theme + 1}`, "theme-head"));
-    header.appendChild(th("", "gap-head"));
-  }
-  for (let theme = 0; theme < shootoutThemeCount(); theme++) {
-    for (const value of state.questionValues) {
-      header.appendChild(th(value, "question-head shootout-head"));
-    }
-    header.appendChild(th(`П${theme + 1}`, "theme-head shootout-head"));
-    header.appendChild(th("", "gap-head"));
-  }
-  if (hasShootout) {
-    header.appendChild(th("П", "number"));
-  }
-  header.appendChild(th("Σ+", "number"));
-  for (const value of [50, 40, 30, 20, 10]) {
-    header.appendChild(th(value, "number narrow"));
-  }
-  thead.appendChild(header);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  state.teams.forEach((team, teamIndex) => {
-    const playerRow = document.createElement("tr");
-    const answerRow = document.createElement("tr");
-    answerRow.className = "answer-row";
-
-    playerRow.appendChild(td(team.name, "sticky sticky-name team-name", {rowSpan: 2}));
-    playerRow.appendChild(td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2}));
-    playerRow.appendChild(td(formatPlace(team.place), "sticky sticky-place number place-cell", {rowSpan: 2}));
-    playerRow.appendChild(td("", "sticky sticky-place-gap place-gap", {rowSpan: 2}));
-
+  const themes = readonlyThemeHeaders();
+  const rows = state.teams.map((team) => {
+    const themeCells = [];
     team.themes.forEach((theme) => {
-      appendReadonlyThemeCells(playerRow, answerRow, theme, false);
+      themeCells.push(readonlyThemeCells(theme, false));
     });
     shootoutThemesFor(team).forEach((theme) => {
-      appendReadonlyThemeCells(playerRow, answerRow, theme, true);
+      themeCells.push(readonlyThemeCells(theme, true));
     });
-
-    if (hasShootout) {
-      const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
-      playerRow.appendChild(td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2}));
-    }
-    playerRow.appendChild(td(team.plus, "number plus-cell", {rowSpan: 2}));
-    [0, 1, 2, 3, 4].forEach((idx) => {
-      playerRow.appendChild(td(team.correctCounts[4 - idx], "number narrow", {rowSpan: 2}));
-    });
-
-    tbody.appendChild(playerRow);
-    tbody.appendChild(answerRow);
-    if (teamIndex < state.teams.length - 1) {
-      const gapRow = document.createElement("tr");
-      gapRow.className = "team-gap-row";
-      gapRow.appendChild(td("", "team-gap", {colSpan: totalColumnSpan}));
-      tbody.appendChild(gapRow);
-    }
+    return {
+      nameCell: td(team.name, "sticky sticky-name team-name", {rowSpan: 2}),
+      totalCell: td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2}),
+      placeCell: td(formatPlace(team.place), "sticky sticky-place number place-cell", {rowSpan: 2}),
+      themes: themeCells,
+      afterThemeCells: readonlyTrailingCells(team, hasShootout),
+    };
   });
-  table.appendChild(tbody);
-  return table;
+
+  return gameTable.buildTwoRowScoreTable({
+    className: "match-table readonly-table",
+    nameHeader: {content: matchTitle(), className: "sticky sticky-name battle"},
+    themes,
+    afterThemeHeaders: readonlyTrailingHeaders(hasShootout),
+    rows,
+    gapRowClassName: "team-gap-row",
+  });
 }
 
-function appendReadonlyThemeCells(playerRow, answerRow, theme, isShootout) {
+function readonlyThemeHeaders() {
+  const themes = [];
+  for (let theme = 0; theme < regularThemeCount(); theme++) {
+    themes.push({label: `Т${theme + 1}`, questionLabels: state.questionValues});
+  }
+  for (let theme = 0; theme < shootoutThemeCount(); theme++) {
+    themes.push({
+      label: `П${theme + 1}`,
+      questionLabels: state.questionValues,
+      questionClassName: "question-head shootout-head",
+      labelClassName: "theme-head shootout-head",
+    });
+  }
+  return themes;
+}
+
+function readonlyTrailingHeaders(hasShootout) {
+  const headers = [];
+  if (hasShootout) headers.push({content: "П", className: "number"});
+  headers.push({content: "Σ+", className: "number"});
+  for (const value of [50, 40, 30, 20, 10]) {
+    headers.push({content: value, className: "number narrow"});
+  }
+  return headers;
+}
+
+function readonlyThemeCells(theme, isShootout) {
   const playerCell = document.createElement("td");
-  playerCell.colSpan = 5;
+  playerCell.colSpan = state.questionValues.length;
   playerCell.className = "readonly-player theme-block theme-block-top-left";
   if (isShootout) {
     playerCell.classList.add("shootout-block");
   }
   playerCell.textContent = theme.player || "";
-  playerRow.appendChild(playerCell);
-  playerRow.appendChild(td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: 2}));
-  playerRow.appendChild(td("", "gap"));
-
-  theme.answers.forEach((mark, answerIndex) => {
+  const answers = theme.answers.map((mark, answerIndex) => {
     const className = answerIndex === 0
       ? `answer-cell theme-block theme-block-bottom-left ${mark}`
       : `answer-cell theme-block ${mark}`;
@@ -365,9 +340,26 @@ function appendReadonlyThemeCells(playerRow, answerRow, theme, isShootout) {
     if (isShootout) {
       cell.classList.add("shootout-block");
     }
-    answerRow.appendChild(cell);
+    return cell;
   });
-  answerRow.appendChild(td("", "gap"));
+  return {
+    playerCell,
+    scoreCell: td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: 2}),
+    answers,
+  };
+}
+
+function readonlyTrailingCells(team, hasShootout) {
+  const cells = [];
+  if (hasShootout) {
+    const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
+    cells.push(td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2}));
+  }
+  cells.push(td(team.plus, "number plus-cell", {rowSpan: 2}));
+  [0, 1, 2, 3, 4].forEach((idx) => {
+    cells.push(td(team.correctCounts[4 - idx], "number narrow", {rowSpan: 2}));
+  });
+  return cells;
 }
 
 function regularThemeCount() {
@@ -458,18 +450,11 @@ function formatPlace(place) {
 }
 
 function th(content, className) {
-  const node = document.createElement("th");
-  node.className = className;
-  node.textContent = content;
-  return node;
+  return gameTable.th(content, className);
 }
 
 function td(content, className, attrs = {}) {
-  const node = document.createElement("td");
-  node.className = className;
-  node.textContent = content;
-  Object.assign(node, attrs);
-  return node;
+  return gameTable.td(content, className, attrs);
 }
 
 loadCurrent()

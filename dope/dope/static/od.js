@@ -3,6 +3,7 @@ const odTabsRoot = document.getElementById("odTabs");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 
+const gameTable = window.DopeTable;
 const route = currentRoute();
 const viewer = Boolean(route.viewer);
 document.body.classList.toggle("viewer-readonly", viewer);
@@ -493,69 +494,65 @@ function focusInput(qIndex, rowIndex) {
 // === Подробно ===
 
 function buildDetailedTable() {
-  const table = document.createElement("table");
-  table.className = "match-table od-detailed";
-  table.addEventListener("change", handleDetailedChange);
-
-  const thead = document.createElement("thead");
-  const header = document.createElement("tr");
-  header.appendChild(th("Команда", "sticky sticky-name battle"));
-  header.appendChild(th("Σ", "sticky sticky-total number"));
-  header.appendChild(th("М", "sticky sticky-place number"));
-  header.appendChild(th("", "sticky sticky-place-gap place-gap-head"));
-
+  const themes = [];
   let qNum = 1;
   tourLengths.forEach((tourSize, tourIndex) => {
+    const questionLabels = [];
     for (let i = 0; i < tourSize; i++) {
-      header.appendChild(th(qNum, "question-head"));
+      questionLabels.push(qNum);
       qNum++;
     }
-    header.appendChild(th(`Т${tourIndex + 1}`, "theme-head"));
-    header.appendChild(th("", "gap-head"));
+    themes.push({label: `Т${tourIndex + 1}`, questionLabels});
   });
-  thead.appendChild(header);
-  table.appendChild(thead);
 
-  const tbody = document.createElement("tbody");
   const stats = questionStats();
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const placeMap = computePlaces(totals);
-
-  state.teams.forEach((team, teamIndex) => {
-    const tr = document.createElement("tr");
-    tr.appendChild(nameCell(team, teamIndex));
-
-    tr.appendChild(td(totals[teamIndex], "sticky sticky-total number total-cell"));
-    tr.appendChild(td(placeMap[teamIndex] || "", "sticky sticky-place number place-cell"));
-    tr.appendChild(td("", "sticky sticky-place-gap place-gap"));
-
+  const rows = state.teams.map((team, teamIndex) => {
     let qIndex = 0;
-    tourLengths.forEach((tourSize) => {
-      let tourSum = 0;
-      for (let i = 0; i < tourSize; i++) {
-        const answered = teamTookQuestion(teamIndex, qIndex, stats);
-        if (answered) tourSum += 1;
-        const cell = document.createElement("td");
-        const classes = ["answer-cell", "theme-block", "readonly"];
-        if (answered) classes.push("right");
-        if (i === 0) classes.push("theme-block-top-left", "theme-block-bottom-left");
-        cell.className = classes.join(" ");
-        if (answered) cell.textContent = String(qIndex + 1);
-        tr.appendChild(cell);
-        qIndex++;
-      }
-      tr.appendChild(td(tourSum, "number theme-score theme-block theme-block-score"));
-      tr.appendChild(td("", "gap"));
-    });
-    tbody.appendChild(tr);
-    if (teamIndex < state.teams.length - 1) {
-      const gapRow = document.createElement("tr");
-      gapRow.appendChild(td("", "team-gap", {colSpan: 4 + totalQuestions + tourLengths.length * 2}));
-      tbody.appendChild(gapRow);
-    }
+    return {
+      nameCell: nameCell(team, teamIndex),
+      totalCell: {
+        content: totals[teamIndex],
+        className: "sticky sticky-total number total-cell",
+      },
+      placeCell: {
+        content: placeMap[teamIndex] || "",
+        className: "sticky sticky-place number place-cell",
+      },
+      themes: tourLengths.map((tourSize) => {
+        let tourSum = 0;
+        const answers = [];
+        for (let i = 0; i < tourSize; i++) {
+          const answered = teamTookQuestion(teamIndex, qIndex, stats);
+          if (answered) tourSum += 1;
+          const classes = ["answer-cell", "theme-block", "readonly"];
+          if (answered) classes.push("right");
+          if (i === 0) classes.push("theme-block-top-left", "theme-block-bottom-left");
+          answers.push({
+            content: answered ? String(qIndex + 1) : "",
+            className: classes.join(" "),
+          });
+          qIndex++;
+        }
+        return {
+          answers,
+          scoreCell: {
+            content: tourSum,
+            className: "number theme-score theme-block theme-block-score",
+          },
+        };
+      }),
+    };
   });
-  table.appendChild(tbody);
-  return table;
+
+  return gameTable.buildFlatScoreTable({
+    className: "match-table compact-score-table od-detailed",
+    events: {change: handleDetailedChange},
+    nameHeader: "Команда",
+    themes,
+    rows,
+  });
 }
 
 function nameCell(team, teamIndex) {
@@ -833,18 +830,11 @@ function currentRoute() {
 }
 
 function th(content, className) {
-  const node = document.createElement("th");
-  node.className = className;
-  node.textContent = content;
-  return node;
+  return gameTable.th(content, className);
 }
 
 function td(content, className, attrs = {}) {
-  const node = document.createElement("td");
-  node.className = className;
-  node.textContent = content;
-  Object.assign(node, attrs);
-  return node;
+  return gameTable.td(content, className, attrs);
 }
 
 loadAll()
