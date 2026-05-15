@@ -4,6 +4,7 @@ const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 
 const gameTable = window.DopeTable;
+const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 const route = currentRoute();
 const viewer = Boolean(route.viewer);
 document.body.classList.toggle("viewer-readonly", viewer);
@@ -508,7 +509,8 @@ function buildDetailedTable() {
   const stats = questionStats();
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const placeMap = computePlaces(totals);
-  const rows = state.teams.map((team, teamIndex) => {
+  const rows = detailedTeamOrder().map((teamIndex) => {
+    const team = state.teams[teamIndex];
     let qIndex = 0;
     return {
       nameCell: nameCell(team, teamIndex),
@@ -555,6 +557,20 @@ function buildDetailedTable() {
   });
 }
 
+function detailedTeamOrder() {
+  return state.teams
+    .map((_, index) => index)
+    .sort((a, b) => {
+      const byName = teamNameCollator.compare(teamLabel(a), teamLabel(b));
+      return byName || a - b;
+    });
+}
+
+function teamLabel(index) {
+  const name = String(state.teams[index]?.name || "").trim();
+  return name || `Команда ${index + 1}`;
+}
+
 function nameCell(team, teamIndex) {
   const cell = document.createElement("td");
   cell.className = "sticky sticky-name team-name";
@@ -574,9 +590,12 @@ function handleDetailedChange(event) {
   if (!(input instanceof HTMLInputElement) || !input.classList.contains("venue-input")) return;
   const teamIndex = Number(input.dataset.team);
   if (!Number.isInteger(teamIndex) || !state.teams[teamIndex]) return;
+  rememberTabScroll(activeTab);
   state.teams[teamIndex].name = input.value.trim();
-  invalidateTabCache("results");
+  invalidateTabCache("detailed", "results");
+  renderedTab = null;
   saveState();
+  render();
 }
 
 // === Итог ===

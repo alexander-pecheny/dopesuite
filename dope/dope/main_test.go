@@ -717,11 +717,12 @@ func TestImportTournamentRosterPropagatesToChGKAndKSI(t *testing.T) {
 	var ksiScheme struct {
 		GameType     string   `json:"gameType"`
 		Participants []string `json:"participants"`
+		Themes       int      `json:"themes"`
 	}
 	if err := json.Unmarshal([]byte(schemeJSON), &ksiScheme); err != nil {
 		t.Fatalf("decode ksi scheme: %v", err)
 	}
-	if ksiScheme.GameType != "ksi" || len(ksiScheme.Participants) != 2 || ksiScheme.Participants[0] != "Первая" {
+	if ksiScheme.GameType != "ksi" || len(ksiScheme.Participants) != 2 || ksiScheme.Participants[0] != "Первая" || ksiScheme.Themes != ksiThemeCount {
 		t.Fatalf("ksi scheme = %#v, want imported participants", ksiScheme)
 	}
 	var ksiState struct {
@@ -736,8 +737,8 @@ func TestImportTournamentRosterPropagatesToChGKAndKSI(t *testing.T) {
 	if len(ksiState.Participants) != 2 || ksiState.Participants[1] != "Вторая" {
 		t.Fatalf("ksi state participants = %#v, want imported teams", ksiState.Participants)
 	}
-	if len(ksiState.Themes) == 0 || len(ksiState.Themes[0].Answers) != 2 || len(ksiState.Themes[0].Answers[0]) != 5 {
-		t.Fatalf("ksi answers shape = %#v, want 2x5 rows in first theme", ksiState.Themes)
+	if len(ksiState.Themes) != ksiThemeCount || len(ksiState.Themes[0].Answers) != 2 || len(ksiState.Themes[0].Answers[0]) != 5 {
+		t.Fatalf("ksi answers shape = %#v, want %dx2x5", ksiState.Themes, ksiThemeCount)
 	}
 }
 

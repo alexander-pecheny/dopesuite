@@ -441,8 +441,13 @@ func applyRosterToKSIScheme(raw string, teams []tournamentRosterImportTeam) ([]b
 	if err != nil {
 		return nil, err
 	}
+	themesJSON, err := json.Marshal(ksiThemeCount)
+	if err != nil {
+		return nil, err
+	}
 	obj["gameType"] = gameTypeJSON
 	obj["participants"] = participantsJSON
+	obj["themes"] = themesJSON
 	return json.Marshal(obj)
 }
 
@@ -458,31 +463,36 @@ func applyRosterToKSIState(raw string, teams []tournamentRosterImportTeam) ([]by
 	}
 	obj["participants"] = participantsJSON
 
+	var themes []map[string]json.RawMessage
 	if rawThemes, ok := obj["themes"]; ok && len(rawThemes) > 0 {
-		var themes []map[string]json.RawMessage
-		if err := json.Unmarshal(rawThemes, &themes); err == nil {
-			for i := range themes {
-				if themes[i] == nil {
-					themes[i] = map[string]json.RawMessage{}
-				}
-				var answers [][]string
-				if rawAnswers, ok := themes[i]["answers"]; ok && len(rawAnswers) > 0 {
-					_ = json.Unmarshal(rawAnswers, &answers)
-				}
-				answers = resizeStringMatrix(answers, len(participants), len(questionValues))
-				answersJSON, err := json.Marshal(answers)
-				if err != nil {
-					return nil, err
-				}
-				themes[i]["answers"] = answersJSON
-			}
-			themesJSON, err := json.Marshal(themes)
-			if err != nil {
-				return nil, err
-			}
-			obj["themes"] = themesJSON
-		}
+		_ = json.Unmarshal(rawThemes, &themes)
 	}
+	if len(themes) > ksiThemeCount {
+		themes = themes[:ksiThemeCount]
+	}
+	for len(themes) < ksiThemeCount {
+		themes = append(themes, map[string]json.RawMessage{})
+	}
+	for i := range themes {
+		if themes[i] == nil {
+			themes[i] = map[string]json.RawMessage{}
+		}
+		var answers [][]string
+		if rawAnswers, ok := themes[i]["answers"]; ok && len(rawAnswers) > 0 {
+			_ = json.Unmarshal(rawAnswers, &answers)
+		}
+		answers = resizeStringMatrix(answers, len(participants), len(questionValues))
+		answersJSON, err := json.Marshal(answers)
+		if err != nil {
+			return nil, err
+		}
+		themes[i]["answers"] = answersJSON
+	}
+	themesJSON, err := json.Marshal(themes)
+	if err != nil {
+		return nil, err
+	}
+	obj["themes"] = themesJSON
 	return json.Marshal(obj)
 }
 

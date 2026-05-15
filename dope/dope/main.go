@@ -23,6 +23,7 @@ var staticFiles embed.FS
 const (
 	stateFile                 = "match_state.json"
 	themeCount                = 12
+	ksiThemeCount             = 20
 	actionAddShootoutTheme    = "addShootoutTheme"
 	actionRemoveShootoutTheme = "removeShootoutTheme"
 )
