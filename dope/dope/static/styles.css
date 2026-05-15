@@ -2222,37 +2222,41 @@ a.list-row:hover { background: #eef1f5; }
 .results-row.results-group-last td:last-child { border-bottom-right-radius: var(--radius-md); }
 
 
-/* Подробно: compact square cells everywhere, taken-question number inside the green cell */
+/* Compact score tables for large OD/KSI grids. */
+.match-table.compact-score-table {
+  contain: paint;
+}
+
 .match-table.od-detailed {
   --place-col: 58px;
 }
 
-.match-table.od-detailed,
-.match-table.od-detailed th,
-.match-table.od-detailed td {
+.match-table.compact-score-table,
+.match-table.compact-score-table th,
+.match-table.compact-score-table td {
   height: 24px;
   line-height: 1;
 }
-.match-table.od-detailed th,
-.match-table.od-detailed td {
+.match-table.compact-score-table th,
+.match-table.compact-score-table td {
   border-color: var(--structure);
   background: var(--cell-fill);
   background-clip: border-box;
 }
-.match-table.od-detailed .gap,
-.match-table.od-detailed .gap-head,
-.match-table.od-detailed .place-gap,
-.match-table.od-detailed .place-gap-head,
-.match-table.od-detailed .team-gap {
+.match-table.compact-score-table .gap,
+.match-table.compact-score-table .gap-head,
+.match-table.compact-score-table .place-gap,
+.match-table.compact-score-table .place-gap-head,
+.match-table.compact-score-table .team-gap {
   background: var(--structure);
   border-color: var(--structure);
 }
-.match-table.od-detailed .team-gap { height: 4px; }
-.match-table.od-detailed .team-name {
+.match-table.compact-score-table .team-gap { height: 4px; }
+.match-table.compact-score-table .team-name {
   padding: 0 4px 0 6px;
   font-size: 13px;
 }
-.match-table.od-detailed .team-name .venue-input {
+.match-table.compact-score-table .team-name .venue-input {
   min-height: 0;
   height: 21px;
   padding: 0 4px;
@@ -2263,8 +2267,8 @@ a.list-row:hover { background: #eef1f5; }
   -webkit-appearance: none;
   appearance: none;
 }
-.match-table.od-detailed .answer-cell,
-.match-table.od-detailed .question-head {
+.match-table.compact-score-table .answer-cell,
+.match-table.compact-score-table .question-head {
   width: 24px;
   min-width: 24px;
   height: 24px;

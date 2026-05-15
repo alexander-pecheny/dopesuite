@@ -2,6 +2,7 @@ const siRoot = document.getElementById("siTable");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 
+const gameTable = window.DopeTable;
 const QUESTION_VALUES = [10, 20, 30, 40, 50];
 
 const route = currentRoute();
@@ -13,6 +14,7 @@ let participants = [];
 let themesCount = 8;
 let activeCell = {player: 0, theme: 0, answer: 0};
 let localEchoJSON = "";
+let renderedTable = null;
 
 async function loadAll() {
   const [schemeResp, stateResp] = await Promise.all([
@@ -63,71 +65,71 @@ function ensureState() {
   if (typeof state.finished !== "boolean") state.finished = false;
 }
 
-function render() {
+function render(options = {}) {
   const defaultTitle = gameTitleFallback();
+  normalizeActiveCell();
   setHeading(scheme.title || defaultTitle);
   document.title = `${viewer ? "Зритель" : "Ведущий"} · ${scheme.title || defaultTitle}`;
-  siRoot.replaceChildren(buildTable());
+  const frame = scrollFrame();
+  const scrollTop = frame?.scrollTop || 0;
+  const scrollLeft = frame?.scrollLeft || 0;
+  renderedTable = buildTable();
+  siRoot.replaceChildren(renderedTable);
+  if (options.preserveScroll && frame) {
+    frame.scrollTop = scrollTop;
+    frame.scrollLeft = scrollLeft;
+  }
 }
 
 function buildTable() {
-  const table = document.createElement("table");
-  table.className = "match-table";
-  table.classList.toggle("match-finished", state.finished);
-
-  const thead = document.createElement("thead");
-  const header = document.createElement("tr");
-  header.appendChild(battleHeader());
-  header.appendChild(th("Σ", "sticky sticky-total number"));
-  header.appendChild(th("М", "sticky sticky-place number"));
-  header.appendChild(th("", "sticky sticky-place-gap place-gap-head"));
-
-  for (let t = 0; t < themesCount; t++) {
-    for (const value of QUESTION_VALUES) {
-      header.appendChild(th(value, "question-head"));
-    }
-    header.appendChild(th(`Т${t + 1}`, "theme-head"));
-    header.appendChild(th("", "gap-head"));
-  }
-  thead.appendChild(header);
-  table.appendChild(thead);
-
   const totals = state.participants.map((_, p) => playerTotal(p));
-  const places = computePlaces(totals);
+  const places = gameTable.computePlaces(totals);
+  const themes = Array.from({length: themesCount}, (_, index) => ({
+    label: `Т${index + 1}`,
+    questionLabels: QUESTION_VALUES,
+  }));
+  const rows = state.participants.map((participant, playerIndex) => ({
+    nameCell: nameCell(participant, playerIndex),
+    totalCell: {
+      content: totals[playerIndex],
+      className: "sticky sticky-total number total-cell",
+      dataset: {player: playerIndex},
+    },
+    placeCell: {
+      content: places[playerIndex] || "",
+      className: "sticky sticky-place number place-cell",
+      dataset: {player: playerIndex},
+    },
+    themes: themes.map((_, themeIndex) => ({
+      answers: QUESTION_VALUES.map((__, answerIndex) => {
+        const mark = state.themes[themeIndex].answers[playerIndex][answerIndex];
+        return answerCell(playerIndex, themeIndex, answerIndex, mark);
+      }),
+      scoreCell: {
+        content: themeScore(playerIndex, themeIndex),
+        className: "number theme-score theme-block theme-block-score",
+        dataset: {player: playerIndex, theme: themeIndex},
+      },
+    })),
+  }));
 
-  const tbody = document.createElement("tbody");
-  state.participants.forEach((participant, playerIndex) => {
-    const tr = document.createElement("tr");
-    tr.appendChild(nameCell(participant, playerIndex));
-    const totalCell = td(totals[playerIndex], "sticky sticky-total number total-cell");
-    totalCell.dataset.player = String(playerIndex);
-    tr.appendChild(totalCell);
-
-    const placeCell = td(places[playerIndex] || "", "sticky sticky-place number place-cell");
-    placeCell.dataset.player = String(playerIndex);
-    tr.appendChild(placeCell);
-    tr.appendChild(td("", "sticky sticky-place-gap place-gap"));
-
-    for (let t = 0; t < themesCount; t++) {
-      for (let aIndex = 0; aIndex < QUESTION_VALUES.length; aIndex++) {
-        const mark = state.themes[t].answers[playerIndex][aIndex];
-        tr.appendChild(answerCell(playerIndex, t, aIndex, mark));
-      }
-      const scoreCell = td(themeScore(playerIndex, t), "number theme-score theme-block theme-block-score");
-      scoreCell.dataset.player = String(playerIndex);
-      scoreCell.dataset.theme = String(t);
-      tr.appendChild(scoreCell);
-      tr.appendChild(td("", "gap"));
-    }
-    tbody.appendChild(tr);
-    if (playerIndex < state.participants.length - 1) {
-      const gapRow = document.createElement("tr");
-      gapRow.appendChild(td("", "team-gap", {colSpan: 4 + themesCount * (QUESTION_VALUES.length + 2)}));
-      tbody.appendChild(gapRow);
-    }
+  const table = gameTable.buildFlatScoreTable({
+    className: "match-table compact-score-table si-table",
+    nameHeader: battleHeader(),
+    themes,
+    rows,
+    events: {
+      click: handleTableClick,
+      focusin: handleTableFocusIn,
+      change: handleTableChange,
+    },
   });
-  table.appendChild(tbody);
+  table.classList.toggle("match-finished", state.finished);
   return table;
+}
+
+function scrollFrame() {
+  return siRoot.closest(".sheet-frame");
 }
 
 function nameCell(name, playerIndex) {
@@ -136,14 +138,10 @@ function nameCell(name, playerIndex) {
   const input = document.createElement("input");
   input.type = "text";
   input.className = "venue-input";
+  input.dataset.player = String(playerIndex);
   input.value = name;
   input.placeholder = participantFallback(playerIndex);
   input.disabled = state.finished || viewer;
-  input.addEventListener("change", () => {
-    if (viewer) return;
-    state.participants[playerIndex] = input.value.trim();
-    saveState();
-  });
   cell.appendChild(input);
   return cell;
 }
@@ -155,17 +153,9 @@ function answerCell(playerIndex, themeIndex, answerIndex, mark) {
   cell.dataset.player = String(playerIndex);
   cell.dataset.theme = String(themeIndex);
   cell.dataset.answer = String(answerIndex);
-  cell.title = `${state.participants[playerIndex] || participantFallback(playerIndex)}, Т${themeIndex + 1}, ${QUESTION_VALUES[answerIndex]}`;
+  cell.title = answerTitle(playerIndex, themeIndex, answerIndex);
   if (isActive(playerIndex, themeIndex, answerIndex) && !state.finished && !viewer) {
     cell.classList.add("active");
-  }
-  if (!state.finished && !viewer) {
-    cell.addEventListener("click", () => {
-      selectCell(playerIndex, themeIndex, answerIndex);
-    });
-    cell.addEventListener("focus", () => {
-      selectCell(playerIndex, themeIndex, answerIndex, {focus: false});
-    });
   }
   return cell;
 }
@@ -187,18 +177,50 @@ function battleHeader() {
   checkbox.className = "finish-toggle";
   checkbox.checked = Boolean(state.finished);
   checkbox.disabled = viewer;
-  checkbox.addEventListener("change", () => {
-    if (viewer) return;
-    state.finished = checkbox.checked;
-    saveState();
-    render();
-  });
   const text = document.createElement("span");
   text.textContent = "Закончен";
   label.append(checkbox, text);
   layout.appendChild(label);
   node.appendChild(layout);
   return node;
+}
+
+function handleTableClick(event) {
+  const cell = event.target.closest?.(".answer-cell");
+  if (!cell || state.finished || viewer) return;
+  selectCellFromNode(cell);
+}
+
+function handleTableFocusIn(event) {
+  const cell = event.target.closest?.(".answer-cell");
+  if (!cell || state.finished || viewer) return;
+  selectCellFromNode(cell, {focus: false});
+}
+
+function handleTableChange(event) {
+  const target = event.target;
+  if (target instanceof HTMLInputElement && target.classList.contains("finish-toggle")) {
+    if (viewer) return;
+    state.finished = target.checked;
+    saveState();
+    render({preserveScroll: true});
+    return;
+  }
+  if (target instanceof HTMLInputElement && target.classList.contains("venue-input")) {
+    if (viewer) return;
+    const playerIndex = Number(target.dataset.player);
+    if (!Number.isInteger(playerIndex) || !state.participants[playerIndex]) return;
+    state.participants[playerIndex] = target.value.trim();
+    saveState();
+  }
+}
+
+function selectCellFromNode(cell, options = {}) {
+  const player = Number(cell.dataset.player);
+  const theme = Number(cell.dataset.theme);
+  const answer = Number(cell.dataset.answer);
+  if (!Number.isInteger(player) || !Number.isInteger(theme) || !Number.isInteger(answer)) return;
+  selectCell(player, theme, answer, options);
 }
 
 function playerTotal(playerIndex) {
@@ -220,20 +242,6 @@ function themeScore(playerIndex, themeIndex) {
   return total;
 }
 
-function computePlaces(totals) {
-  const sorted = totals.map((total, index) => ({total, index})).sort((a, b) => b.total - a.total);
-  const places = new Array(totals.length).fill("");
-  let i = 0;
-  while (i < sorted.length) {
-    let j = i;
-    while (j + 1 < sorted.length && sorted[j + 1].total === sorted[i].total) j++;
-    const label = i === j ? String(i + 1) : `${i + 1}–${j + 1}`;
-    for (let k = i; k <= j; k++) places[sorted[k].index] = label;
-    i = j + 1;
-  }
-  return places;
-}
-
 function selectCell(player, theme, answer, options = {}) {
   activeCell = {player, theme, answer};
   markActive();
@@ -243,13 +251,14 @@ function selectCell(player, theme, answer, options = {}) {
 }
 
 function markActive() {
-  document.querySelectorAll(".answer-cell.active").forEach((cell) => cell.classList.remove("active"));
+  siRoot.querySelectorAll(".answer-cell.active").forEach((cell) => cell.classList.remove("active"));
+  if (state.finished || viewer) return;
   findActive()?.classList.add("active");
 }
 
 function findActive() {
-  return document.querySelector(
-    `.answer-cell[data-player="${activeCell.player}"][data-theme="${activeCell.theme}"][data-answer="${activeCell.answer}"]`,
+  return siRoot.querySelector(
+    `.answer-cell[data-player="${gameTable.cssEscape(activeCell.player)}"][data-theme="${gameTable.cssEscape(activeCell.theme)}"][data-answer="${gameTable.cssEscape(activeCell.answer)}"]`,
   );
 }
 
@@ -268,26 +277,68 @@ function setMark(mark) {
 }
 
 function updateAnswerCell(player, theme, answer, mark) {
-  const cell = siRoot.querySelector(`.answer-cell[data-player="${player}"][data-theme="${theme}"][data-answer="${answer}"]`);
+  const cell = siRoot.querySelector(`.answer-cell[data-player="${gameTable.cssEscape(player)}"][data-theme="${gameTable.cssEscape(theme)}"][data-answer="${gameTable.cssEscape(answer)}"]`);
   if (!cell) return;
   cell.classList.remove("right", "wrong");
   if (mark) cell.classList.add(mark);
+  cell.title = answerTitle(player, theme, answer);
 }
 
 function refreshScores() {
   if (!state?.participants) return;
   const totals = state.participants.map((_, p) => playerTotal(p));
-  const places = computePlaces(totals);
+  const places = gameTable.computePlaces(totals);
   state.participants.forEach((_, playerIndex) => {
-    const totalCell = siRoot.querySelector(`.total-cell[data-player="${playerIndex}"]`);
+    const totalCell = siRoot.querySelector(`.total-cell[data-player="${gameTable.cssEscape(playerIndex)}"]`);
     if (totalCell) totalCell.textContent = String(totals[playerIndex]);
-    const placeCell = siRoot.querySelector(`.place-cell[data-player="${playerIndex}"]`);
+    const placeCell = siRoot.querySelector(`.place-cell[data-player="${gameTable.cssEscape(playerIndex)}"]`);
     if (placeCell) placeCell.textContent = places[playerIndex] || "";
     for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
-      const scoreCell = siRoot.querySelector(`.theme-score[data-player="${playerIndex}"][data-theme="${themeIndex}"]`);
+      const scoreCell = siRoot.querySelector(`.theme-score[data-player="${gameTable.cssEscape(playerIndex)}"][data-theme="${gameTable.cssEscape(themeIndex)}"]`);
       if (scoreCell) scoreCell.textContent = String(themeScore(playerIndex, themeIndex));
     }
   });
+}
+
+function patchTable() {
+  if (!renderedTable) return false;
+  state.participants.forEach((participant, playerIndex) => {
+    const input = siRoot.querySelector(`.venue-input[data-player="${gameTable.cssEscape(playerIndex)}"]`);
+    if (input) {
+      if (document.activeElement !== input) input.value = participant || "";
+      input.placeholder = participantFallback(playerIndex);
+    }
+    for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
+      for (let answerIndex = 0; answerIndex < QUESTION_VALUES.length; answerIndex++) {
+        updateAnswerCell(playerIndex, themeIndex, answerIndex, state.themes[themeIndex].answers[playerIndex][answerIndex]);
+      }
+    }
+  });
+  refreshScores();
+  markActive();
+  return true;
+}
+
+function canPatchState(previous, next) {
+  if (!renderedTable || !previous || !next) return false;
+  if (previous.finished !== next.finished) return false;
+  if (!Array.isArray(previous.participants) || !Array.isArray(next.participants)) return false;
+  if (previous.participants.length !== next.participants.length) return false;
+  if (!Array.isArray(previous.themes) || !Array.isArray(next.themes)) return false;
+  if (previous.themes.length !== next.themes.length) return false;
+  for (let themeIndex = 0; themeIndex < next.themes.length; themeIndex++) {
+    const prevAnswers = previous.themes[themeIndex]?.answers || [];
+    const nextAnswers = next.themes[themeIndex]?.answers || [];
+    if (prevAnswers.length !== nextAnswers.length) return false;
+    for (let playerIndex = 0; playerIndex < nextAnswers.length; playerIndex++) {
+      if ((prevAnswers[playerIndex] || []).length !== (nextAnswers[playerIndex] || []).length) return false;
+    }
+  }
+  return true;
+}
+
+function answerTitle(playerIndex, themeIndex, answerIndex) {
+  return `${state.participants[playerIndex] || participantFallback(playerIndex)}, Т${themeIndex + 1}, ${QUESTION_VALUES[answerIndex]}`;
 }
 
 function isTeamMode() {
@@ -304,7 +355,7 @@ function participantFallback(index) {
 
 function handleKeydown(event) {
   if (viewer) return;
-  if (isFormControl(event.target)) return;
+  if (gameTable.isFormControl(event.target)) return;
   const key = event.key.toLowerCase();
   if (event.key === "ArrowLeft") {
     event.preventDefault();
@@ -334,17 +385,20 @@ function moveCell(dPlayer, dAnswer) {
   const players = state.participants.length;
   const totalCols = themesCount * QUESTION_VALUES.length;
   let column = activeCell.theme * QUESTION_VALUES.length + activeCell.answer;
-  column = clamp(column + dAnswer, 0, totalCols - 1);
-  const player = clamp(activeCell.player + dPlayer, 0, players - 1);
+  column = gameTable.clamp(column + dAnswer, 0, totalCols - 1);
+  const player = gameTable.clamp(activeCell.player + dPlayer, 0, players - 1);
   selectCell(player, Math.floor(column / QUESTION_VALUES.length), column % QUESTION_VALUES.length);
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function isFormControl(target) {
-  return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement || target instanceof HTMLButtonElement;
+function normalizeActiveCell() {
+  if (!state?.participants?.length || themesCount <= 0) return;
+  const maxColumn = themesCount * QUESTION_VALUES.length - 1;
+  const column = gameTable.clamp(activeCell.theme * QUESTION_VALUES.length + activeCell.answer, 0, maxColumn);
+  activeCell = {
+    player: gameTable.clamp(activeCell.player, 0, state.participants.length - 1),
+    theme: Math.floor(column / QUESTION_VALUES.length),
+    answer: column % QUESTION_VALUES.length,
+  };
 }
 
 let saveTimer = null;
@@ -393,15 +447,20 @@ function connectEvents() {
     }
     if (parsed && parsed.scope === scopeName) {
       const raw = JSON.stringify(parsed.data);
+      const previous = state;
       state = parsed.data;
       ensureState();
       if (localEchoJSON && raw === localEchoJSON) {
         localEchoJSON = "";
-        refreshScores();
+        patchTable();
         setStatus("saved");
         return;
       }
-      render();
+      if (canPatchState(previous, state) && patchTable()) {
+        setStatus("saved");
+        return;
+      }
+      render({preserveScroll: true});
       setStatus("saved");
     }
   });
@@ -429,21 +488,6 @@ function currentRoute() {
     };
   }
   return {};
-}
-
-function th(content, className) {
-  const node = document.createElement("th");
-  node.className = className;
-  node.textContent = content;
-  return node;
-}
-
-function td(content, className, attrs = {}) {
-  const node = document.createElement("td");
-  node.className = className;
-  node.textContent = content;
-  Object.assign(node, attrs);
-  return node;
 }
 
 document.addEventListener("keydown", handleKeydown);
