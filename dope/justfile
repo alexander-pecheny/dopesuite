@@ -21,13 +21,13 @@ dev:
 invite days='7':
     uv run python scripts/mint_invite.py {{days}}
 
-# Seed an existing tournament with the bundled studchr scheme.
+# Generate and seed an existing tournament with the StudChR scheme.
 # Usage: DOPE_SESSION=<session-cookie-value> just seed <tournament_id>
 seed tournament_id:
     #!/usr/bin/env bash
     set -euo pipefail
     : "${DOPE_SESSION:?set DOPE_SESSION to an organizer session cookie value}"
-    curl -s -X POST -H "Content-Type: application/json" \
+    python3 scripts/generate_studchr_grid.py | curl -s -X POST -H "Content-Type: application/json" \
       --cookie "session=${DOPE_SESSION}" \
-      --data-binary @static/schemes/studchr-ek-2026.json \
+      --data-binary @- \
       "http://localhost:8080/api/import?tournament_id={{tournament_id}}" > /dev/null && echo seeded

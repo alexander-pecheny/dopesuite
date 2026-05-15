@@ -15,7 +15,7 @@ const (
 	devPasswordEnv      = "DOPE_DEV_PASSWORD"
 	testTournamentSlug  = "test"
 	testTournamentTitle = "Тестовый турнир"
-	testTournamentDesc  = "Тестовый турнир со всеми четырьмя играми (ЧГК, СИ, КСИ, ЭК) для локальных проверок."
+	testTournamentDesc  = "Тестовый турнир с играми ЧГК, КСИ и ЭК для локальных проверок."
 )
 
 type testBasicTeam struct {
@@ -83,7 +83,7 @@ update users set password_hash = ?, password_salt = ?, updated_at = ? where id =
 }
 
 // ensureTestTournament creates a tournament with slug "test" containing three
-// games (ChGK / СИ / ЭК) for local testing. If the tournament already exists,
+// games (ChGK / КСИ / ЭК) for local testing. If the tournament already exists,
 // it is left as-is.
 func ensureTestTournament(ctx context.Context, db *sql.DB, ownerID int64) error {
 	var existing int64
@@ -119,13 +119,10 @@ values(?, ?, ?)`, tournamentID, ownerID, now); err != nil {
 	if err := seedTestChGKGame(ctx, tx, tournamentID, 1, chgkTeams); err != nil {
 		return fmt.Errorf("seed chgk: %w", err)
 	}
-	if err := seedTestSIGame(ctx, tx, tournamentID, 2); err != nil {
-		return fmt.Errorf("seed si: %w", err)
-	}
-	if err := seedTestKSIGame(ctx, tx, tournamentID, 3, chgkTeams); err != nil {
+	if err := seedTestKSIGame(ctx, tx, tournamentID, 2, chgkTeams); err != nil {
 		return fmt.Errorf("seed ksi: %w", err)
 	}
-	if err := seedTestEKGame(ctx, tx, tournamentID, 4); err != nil {
+	if err := seedTestEKGame(ctx, tx, tournamentID, 3); err != nil {
 		return fmt.Errorf("seed ek: %w", err)
 	}
 
@@ -173,31 +170,6 @@ func seedTestChGKGame(ctx context.Context, tx *sql.Tx, tournamentID int64, posit
 		"completed": completed,
 	}
 	return insertGameRow(ctx, tx, tournamentID, "chgk", "ЧГК (тестовый)", "od", position, scheme, state)
-}
-
-func seedTestSIGame(ctx context.Context, tx *sql.Tx, tournamentID int64, position int) error {
-	participants := []string{"Иван Иванов", "Пётр Петров", "Сидор Сидоров", "Анна Аннова"}
-	themesCount := 8
-	scheme := map[string]any{
-		"title":        "Своя игра (тестовый бой)",
-		"gameType":     "si",
-		"participants": participants,
-		"themes":       themesCount,
-	}
-	themes := make([]map[string]any, themesCount)
-	for t := 0; t < themesCount; t++ {
-		rows := make([][]string, len(participants))
-		for p := range rows {
-			rows[p] = []string{"", "", "", "", ""}
-		}
-		themes[t] = map[string]any{"answers": rows}
-	}
-	state := map[string]any{
-		"participants": participants,
-		"themes":       themes,
-		"finished":     false,
-	}
-	return insertGameRow(ctx, tx, tournamentID, "si", "СИ (тестовый бой)", "si", position, scheme, state)
 }
 
 func seedTestKSIGame(ctx context.Context, tx *sql.Tx, tournamentID int64, position int, teams []testBasicTeam) error {

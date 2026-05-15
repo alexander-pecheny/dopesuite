@@ -34,7 +34,6 @@ type publicTournamentDetail struct {
 	Dates       string
 	Description template.HTML
 	Games       []publicTournamentGame
-	RatingURL   string
 }
 
 var publicListTemplate = template.Must(template.New("publicList").Parse(`<!doctype html>
@@ -83,7 +82,6 @@ var publicTournamentTemplate = template.Must(template.New("publicTournament").Pa
   </header>
   <main class="public-main">
     {{if .Dates}}<p class="muted">{{.Dates}}</p>{{end}}
-    {{if .RatingURL}}<p class="muted"><a class="text-link" href="{{.RatingURL}}" target="_blank" rel="noreferrer">рейтинг ЧГК</a></p>{{end}}
     {{if .Description}}<section class="public-description">{{.Description}}</section>{{end}}
     {{if .Games}}
     <section class="section">
@@ -270,12 +268,11 @@ func (s *server) loadPublicTournamentDetail(ctx context.Context, id int64) (publ
 		description string
 		startDate   sql.NullString
 		endDate     sql.NullString
-		ratingID    sql.NullInt64
 		isPublic    int
 	)
 	if err := s.db.QueryRowContext(ctx, `
-select title, description, start_date, end_date, rating_id, is_public
-from tournaments where id = ?`, id).Scan(&title, &description, &startDate, &endDate, &ratingID, &isPublic); err != nil {
+select title, description, start_date, end_date, is_public
+from tournaments where id = ?`, id).Scan(&title, &description, &startDate, &endDate, &isPublic); err != nil {
 		return publicTournamentDetail{}, err
 	}
 	if isPublic != 1 {
@@ -301,9 +298,6 @@ from tournaments where id = ?`, id).Scan(&title, &description, &startDate, &endD
 		Dates:       formatTournamentDates(startDate.String, endDate.String),
 		Description: renderMarkdown(description),
 		Games:       publicGames,
-	}
-	if ratingID.Valid && ratingID.Int64 > 0 {
-		detail.RatingURL = fmt.Sprintf("https://rating.chgk.info/tournament/%d", ratingID.Int64)
 	}
 	return detail, nil
 }

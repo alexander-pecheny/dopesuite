@@ -25,10 +25,10 @@
 Сетка генерируется командой:
 
 ```bash
-go run ./cmd/generate-studchr-grid > static/schemes/studchr-ek-2026.json
+python3 scripts/generate_studchr_grid.py > /tmp/studchr-ek-2026.json
 ```
 
-Полученный JSON вставляется на `/import` и создает текущий турнир в SQLite. UI сетки не должен зависеть от hardcoded СтудЧР: он строит HTML по импортированной JSON-схеме.
+Полученный JSON вставляется на `/host/tournament/{id}/import` и пересоздает игру выбранного турнира в SQLite. UI сетки не должен зависеть от hardcoded СтудЧР: он строит HTML по импортированной JSON-схеме.
 
 ## Переходы
 

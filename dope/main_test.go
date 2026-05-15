@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -308,20 +307,72 @@ func insertTestPlayer(db *sql.DB, tournamentID int64) (int64, error) {
 	return result.LastInsertId()
 }
 
-func TestImportStudchrScheme(t *testing.T) {
+func TestImportMultiStageScheme(t *testing.T) {
 	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 
-	data, err := os.ReadFile("static/schemes/studchr-ek-2026.json")
-	if err != nil {
-		t.Fatalf("read scheme: %v", err)
-	}
-	var scheme tournamentScheme
-	if err := json.Unmarshal(data, &scheme); err != nil {
-		t.Fatalf("decode scheme: %v", err)
+	scheme := tournamentScheme{
+		SchemaVersion:     2,
+		Slug:              "multi-stage",
+		Title:             "multi-stage",
+		GameType:          "ek",
+		RegularThemeCount: themeCount,
+		Venues:            []schemeVenue{{Number: 1, Title: "Main"}},
+		Teams: []schemeTeam{
+			{Name: "Alpha", Basket: 1, Number: 1},
+			{Name: "Beta", Basket: 1, Number: 2},
+			{Name: "Gamma", Basket: 1, Number: 3},
+			{Name: "Delta", Basket: 1, Number: 4},
+		},
+		Stages: []schemeStage{
+			{
+				Code:      "r1",
+				Title:     "Round 1",
+				StageType: "matches",
+				Position:  1,
+				Matches: []schemeMatch{
+					{
+						Code:             "A",
+						Title:            "A",
+						Venue:            1,
+						ParticipantCount: 2,
+						Slots: []schemeSlot{
+							{Seed: &schemeSeedRef{Basket: 1, Number: 1}},
+							{Seed: &schemeSeedRef{Basket: 1, Number: 2}},
+						},
+					},
+					{
+						Code:             "B",
+						Title:            "B",
+						Venue:            1,
+						ParticipantCount: 2,
+						Slots: []schemeSlot{
+							{Seed: &schemeSeedRef{Basket: 1, Number: 3}},
+							{Seed: &schemeSeedRef{Basket: 1, Number: 4}},
+						},
+					},
+				},
+			},
+			{
+				Code:      "final",
+				Title:     "Final",
+				StageType: "matches",
+				Position:  2,
+				Matches: []schemeMatch{{
+					Code:             "C",
+					Title:            "C",
+					Venue:            1,
+					ParticipantCount: 2,
+					Slots: []schemeSlot{
+						{FromMatch: &schemeFromMatchRef{Match: "A", Place: 1}},
+						{FromMatch: &schemeFromMatchRef{Match: "B", Place: 1}},
+					},
+				}},
+			},
+		},
 	}
 
 	srv := &server{
@@ -333,24 +384,21 @@ func TestImportStudchrScheme(t *testing.T) {
 	if err != nil {
 		t.Fatalf("import scheme: %v", err)
 	}
-	if view.Slug != "studchr-ek-2026" {
-		t.Fatalf("slug = %q, want studchr-ek-2026", view.Slug)
+	if view.Slug != "multi-stage" {
+		t.Fatalf("slug = %q, want multi-stage", view.Slug)
 	}
-	if len(view.Stages) != 6 {
-		t.Fatalf("stages = %d, want 6", len(view.Stages))
+	if len(view.Stages) != 2 {
+		t.Fatalf("stages = %d, want 2", len(view.Stages))
 	}
-	if len(view.Stages[0].Matches) != 6 || len(view.Stages[1].Matches) != 6 {
-		t.Fatalf("1/16 runs = %d/%d, want 6/6", len(view.Stages[0].Matches), len(view.Stages[1].Matches))
+	if len(view.Stages[0].Matches) != 2 || len(view.Stages[1].Matches) != 1 {
+		t.Fatalf("matches = %d/%d, want 2/1", len(view.Stages[0].Matches), len(view.Stages[1].Matches))
 	}
-	if view.Stages[0].Matches[0].Teams[0].Name != "ВШЭстером" {
-		t.Fatalf("first team = %q, want ВШЭстером", view.Stages[0].Matches[0].Teams[0].Name)
+	if view.Stages[0].Matches[0].Teams[0].Name != "Alpha" {
+		t.Fatalf("first team = %q, want Alpha", view.Stages[0].Matches[0].Teams[0].Name)
 	}
-	if view.Stages[1].Matches[0].Code != "G" || view.Stages[1].Matches[0].Teams[0].Name != "Дахусим" {
-		t.Fatalf("second run starts with %#v, want G / Дахусим", view.Stages[1].Matches[0])
-	}
-	final := view.Stages[len(view.Stages)-1]
-	if len(final.Matches) != 1 || final.Matches[0].Code != "Y" {
-		t.Fatalf("final = %#v, want match Y", final.Matches)
+	final := view.Stages[1].Matches[0]
+	if final.Code != "C" || final.Teams[0].SourceType != "from_match" || final.Teams[1].SourceType != "from_match" {
+		t.Fatalf("final = %#v, want match C with fromMatch slots", final)
 	}
 }
 
