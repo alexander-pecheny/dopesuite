@@ -811,6 +811,37 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !requireSameOriginUnsafe(w, r) {
+		return
+	}
+	user, ok := s.lookupSession(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tournamentID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("tournament_id")), 10, 64)
+	if err != nil || tournamentID <= 0 {
+		http.Error(w, "missing tournament_id", http.StatusBadRequest)
+		return
+	}
+	allowed, err := s.isOrganizer(r.Context(), tournamentID, user.UserID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !allowed {
+		exists, _, err := s.tournamentVisibility(r.Context(), tournamentID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !exists {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	defer r.Body.Close()
 
 	var scheme tournamentScheme
@@ -819,13 +850,24 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	view, err := s.importScheme(scheme)
-	if err != nil {
+	if err := s.importSchemeIntoTournament(r.Context(), tournamentID, scheme); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	gameID, err := defaultGameID(r.Context(), s.db, tournamentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.mu.RLock()
+	view, err := s.loadTournamentViewLocked(tournamentID, gameID)
+	s.mu.RUnlock()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	data, _ := json.Marshal(view)
-	s.broadcastState("tournament", view.Revision, data)
+	s.broadcastState(tournamentID, "tournament", view.Revision, data)
 	writeJSON(w, data)
 }
 
@@ -1558,7 +1600,26 @@ func (s *server) loadMatchViewLocked(tournamentID int64, code string) (MatchView
 	return matchViewFromDBState(match), nil
 }
 
+func (s *server) loadScopedMatchViewLocked(scope matchScope) (MatchView, error) {
+	if s.db == nil {
+		return buildView(s.state), nil
+	}
+	match, err := loadDBMatchStateByScope(context.Background(), s.db, scope)
+	if err != nil {
+		return MatchView{}, err
+	}
+	return matchViewFromDBState(match), nil
+}
+
 func loadDBMatchState(ctx context.Context, q dbQueryer, tournamentID int64, code string) (dbMatchState, error) {
+	return loadDBMatchStateWhere(ctx, q, `m.tournament_id = ? and m.code = ?`, tournamentID, code)
+}
+
+func loadDBMatchStateByScope(ctx context.Context, q dbQueryer, scope matchScope) (dbMatchState, error) {
+	return loadDBMatchStateWhere(ctx, q, `m.id = ? and m.tournament_id = ? and m.game_id = ?`, scope.MatchID, scope.TournamentID, scope.GameID)
+}
+
+func loadDBMatchStateWhere(ctx context.Context, q dbQueryer, where string, args ...any) (dbMatchState, error) {
 	var match dbMatchState
 	var updatedAt string
 	var venueNumber sql.NullInt64
@@ -1570,7 +1631,7 @@ from matches m
 join tournaments t on t.id = m.tournament_id
 join stages s on s.id = m.stage_id
 left join venues v on v.id = m.venue_id
-where m.tournament_id = ? and m.code = ?`, tournamentID, code).
+where `+where, args...).
 		Scan(&match.MatchID, &match.Code, &match.Title, &match.Status, &match.Revision,
 			&match.TournamentRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle); err != nil {
 		return dbMatchState{}, err
@@ -1793,7 +1854,34 @@ func (s *server) applyMatchUpdate(tournamentID int64, code string, req updateReq
 	if s.db == nil {
 		return s.applyLegacyUpdate(req)
 	}
+	return s.applyMatchUpdateUsing(tournamentID, req,
+		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
+			return loadDBMatchState(ctx, q, tournamentID, code)
+		},
+		func() (MatchView, error) {
+			return s.loadMatchViewLocked(tournamentID, code)
+		})
+}
 
+func (s *server) applyScopedMatchUpdate(scope matchScope, req updateRequest) (MatchView, []byte, error) {
+	if s.db == nil {
+		return s.applyLegacyUpdate(req)
+	}
+	return s.applyMatchUpdateUsing(scope.TournamentID, req,
+		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
+			return loadDBMatchStateByScope(ctx, q, scope)
+		},
+		func() (MatchView, error) {
+			return s.loadScopedMatchViewLocked(scope)
+		})
+}
+
+func (s *server) applyMatchUpdateUsing(
+	tournamentID int64,
+	req updateRequest,
+	loadMatch func(context.Context, dbQueryer) (dbMatchState, error),
+	loadView func() (MatchView, error),
+) (MatchView, []byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1804,7 +1892,7 @@ func (s *server) applyMatchUpdate(tournamentID int64, code string, req updateReq
 	}
 	defer tx.Rollback()
 
-	match, err := loadDBMatchState(ctx, tx, tournamentID, code)
+	match, err := loadMatch(ctx, tx)
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -1829,7 +1917,7 @@ func (s *server) applyMatchUpdate(tournamentID int64, code string, req updateReq
 		}
 	}
 
-	if err := recalculateMatchResultsTx(ctx, tx, tournamentID, code); err != nil {
+	if err := recalculateMatchResultsForStateTx(ctx, tx, match); err != nil {
 		return MatchView{}, nil, err
 	}
 	revision, err := bumpMatchRevisionTx(ctx, tx, tournamentID, match.MatchID, "match:update", mustJSON(req))
@@ -1840,7 +1928,7 @@ func (s *server) applyMatchUpdate(tournamentID int64, code string, req updateReq
 		return MatchView{}, nil, err
 	}
 
-	view, err := s.loadMatchViewLocked(tournamentID, code)
+	view, err := loadView()
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -2021,6 +2109,10 @@ func recalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, tournamentID int
 	if err != nil {
 		return err
 	}
+	return recalculateMatchResultsForStateTx(ctx, tx, match)
+}
+
+func recalculateMatchResultsForStateTx(ctx context.Context, tx *sql.Tx, match dbMatchState) error {
 	view := buildView(match.State)
 	for index, team := range view.Teams {
 		if index >= len(match.TeamIDs) || match.TeamIDs[index] == 0 {
@@ -2061,6 +2153,31 @@ values(?, ?, ?, ?, ?)`, tournamentID, revision, eventType, payload, now)
 }
 
 func (s *server) updateMatchVenue(tournamentID int64, code string, number int) (MatchView, []byte, error) {
+	return s.updateMatchVenueUsing(tournamentID, number,
+		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
+			return loadDBMatchState(ctx, q, tournamentID, code)
+		},
+		func() (MatchView, error) {
+			return s.loadMatchViewLocked(tournamentID, code)
+		})
+}
+
+func (s *server) updateScopedMatchVenue(scope matchScope, number int) (MatchView, []byte, error) {
+	return s.updateMatchVenueUsing(scope.TournamentID, number,
+		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
+			return loadDBMatchStateByScope(ctx, q, scope)
+		},
+		func() (MatchView, error) {
+			return s.loadScopedMatchViewLocked(scope)
+		})
+}
+
+func (s *server) updateMatchVenueUsing(
+	tournamentID int64,
+	number int,
+	loadMatch func(context.Context, dbQueryer) (dbMatchState, error),
+	loadView func() (MatchView, error),
+) (MatchView, []byte, error) {
 	if number <= 0 {
 		return MatchView{}, nil, errors.New("bad venue number")
 	}
@@ -2074,7 +2191,7 @@ func (s *server) updateMatchVenue(tournamentID int64, code string, number int) (
 	}
 	defer tx.Rollback()
 
-	match, err := loadDBMatchState(ctx, tx, tournamentID, code)
+	match, err := loadMatch(ctx, tx)
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -2089,14 +2206,14 @@ select id from venues where tournament_id = ? and number = ?`, tournamentID, num
 	if _, err := tx.ExecContext(ctx, `update matches set venue_id = ? where id = ?`, venueID, match.MatchID); err != nil {
 		return MatchView{}, nil, err
 	}
-	revision, err := bumpMatchRevisionTx(ctx, tx, tournamentID, match.MatchID, "match:venue", mustJSON(map[string]any{"code": code, "venue": number}))
+	revision, err := bumpMatchRevisionTx(ctx, tx, tournamentID, match.MatchID, "match:venue", mustJSON(map[string]any{"code": match.Code, "venue": number}))
 	if err != nil {
 		return MatchView{}, nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return MatchView{}, nil, err
 	}
-	view, err := s.loadMatchViewLocked(tournamentID, code)
+	view, err := loadView()
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -2179,11 +2296,11 @@ values(?, ?, ?, ?, ?)`, tournamentID, revision, eventType, payload, now)
 	return revision, err
 }
 
-func (s *server) broadcastState(scope string, revision int64, payload []byte) {
+func (s *server) broadcastState(tournamentID int64, scope string, revision int64, payload []byte) {
 	if s.db != nil {
 		payload = eventEnvelopeJSON(scope, revision, payload)
 	}
-	s.broadcast(event{revision: revision, data: payload})
+	s.broadcast(event{tournamentID: tournamentID, revision: revision, data: payload})
 }
 
 func eventEnvelopeJSON(scope string, revision int64, payload []byte) []byte {

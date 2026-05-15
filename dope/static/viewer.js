@@ -60,7 +60,7 @@ async function loadVenuesPage() {
 }
 
 function connectEvents() {
-  const events = new EventSource("/events");
+  const events = new EventSource(`/events?tournament_id=${encodeURIComponent(route.tournamentID)}`);
   const matchScope = `match:${route.gameID}:${route.matchCode}`;
   const venuesScope = `venues:${route.tournamentID}`;
   events.addEventListener("state", (event) => {

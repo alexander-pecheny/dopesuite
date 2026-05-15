@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -93,8 +94,9 @@ type MatchView struct {
 }
 
 type event struct {
-	revision int64
-	data     []byte
+	tournamentID int64
+	revision     int64
+	data         []byte
 }
 
 type server struct {
@@ -305,6 +307,14 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	tournamentID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("tournament_id")), 10, 64)
+	if err != nil || tournamentID <= 0 {
+		http.Error(w, "missing tournament_id", http.StatusBadRequest)
+		return
+	}
+	if !s.authorizeTournamentRead(w, r, tournamentID) {
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -330,6 +340,9 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case ev := <-ch:
+			if ev.tournamentID != tournamentID {
+				continue
+			}
 			writeSSE(w, "state", ev.revision, ev.data)
 			flusher.Flush()
 		case <-ticker.C:

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -168,14 +169,14 @@ func (s *server) finalizeRegister(ctx context.Context, code string) (registerSta
 
 	now := time.Now().UTC()
 	var (
-		codeID         int64
-		kind           string
-		inviteID       sql.NullInt64
-		userID         sql.NullInt64
-		tgUserID       sql.NullInt64
-		tgUsername     sql.NullString
-		expiresAt      string
-		consumedAt     sql.NullString
+		codeID     int64
+		kind       string
+		inviteID   sql.NullInt64
+		userID     sql.NullInt64
+		tgUserID   sql.NullInt64
+		tgUsername sql.NullString
+		expiresAt  string
+		consumedAt sql.NullString
 	)
 	err = tx.QueryRowContext(ctx, `
 select id, kind, invite_id, user_id, telegram_user_id, telegram_username, expires_at, consumed_at
@@ -454,6 +455,9 @@ func (s *server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !requireSameOriginUnsafe(w, r) {
+		return
+	}
 	if cookie, err := r.Cookie(sessionCookieName); err == nil {
 		hash := hashSessionToken(cookie.Value)
 		_, _ = s.db.ExecContext(r.Context(), `delete from sessions where token_hash = ?`, hash)
@@ -465,6 +469,9 @@ func (s *server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleAuthUsername(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireSameOriginUnsafe(w, r) {
 		return
 	}
 	defer r.Body.Close()
@@ -682,6 +689,23 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		return
 	}
 	http.Error(w, err.Error(), http.StatusInternalServerError)
+}
+
+func requireSameOriginUnsafe(w http.ResponseWriter, r *http.Request) bool {
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	}
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil || !strings.EqualFold(u.Host, r.Host) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return false
+	}
+	return true
 }
 
 // createInvite is a small helper used by tests / future admin tooling. Not

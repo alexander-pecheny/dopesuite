@@ -259,7 +259,7 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 	}
 
 	for _, update := range updates {
-		s.broadcastState(fmt.Sprintf("game-state:%d", update.GameID), revision, update.StateJSON)
+		s.broadcastState(tournamentID, fmt.Sprintf("game-state:%d", update.GameID), revision, update.StateJSON)
 	}
 	return result, nil
 }

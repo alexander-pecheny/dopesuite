@@ -3,6 +3,7 @@ const input = document.getElementById("schemeInput");
 const message = document.getElementById("importMessage");
 const loadSample = document.getElementById("loadSample");
 const statusNode = document.getElementById("status");
+const tournamentID = new URLSearchParams(window.location.search).get("tournament_id");
 
 loadSample.addEventListener("click", async () => {
   setStatus("saving");
@@ -20,10 +21,15 @@ loadSample.addEventListener("click", async () => {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!tournamentID) {
+    setMessage("missing tournament_id");
+    setStatus("error");
+    return;
+  }
   setStatus("saving");
   try {
     const parsed = JSON.parse(input.value);
-    const response = await fetch("/api/import", {
+    const response = await fetch(`/api/import?tournament_id=${encodeURIComponent(tournamentID)}`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(parsed),
@@ -31,7 +37,7 @@ form.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(await response.text());
     await response.json();
     setStatus("saved");
-    window.location.href = "/host";
+    window.location.href = `/host/tournament/${encodeURIComponent(tournamentID)}`;
   } catch (error) {
     setMessage(error.message);
     setStatus("error");

@@ -22,14 +22,21 @@
 
 ## API
 
-- `POST /api/import` — принять JSON-схему и пересоздать текущий турнир.
+- `POST /api/import?tournament_id={id}` — принять JSON-схему и пересоздать игру выбранного турнира.
 - `GET /api/tournament` — схема, этапы, бои, площадки, текущие результаты.
 - `GET /api/matches/{code}` — полное состояние одного боя.
 - `POST /api/matches/{code}/update` — отметки ответов, игроки, места, перестрелка.
 - `POST /api/matches/{code}/finish` — закончить или открыть бой.
 - `POST /api/matches/{code}/venue` — заменить площадку боя.
 - `GET /api/venues`, `PUT /api/venues/{number}` — список и редактирование площадок.
-- `GET /events` — SSE, как сейчас, но события имеют `scope`: `tournament`, `match:{code}`, `venues`.
+- `GET /events?tournament_id={id}` — SSE для одного турнира. События имеют `scope`: `tournament`, `match:{game_id}:{code}`, `venues:{tournament_id}`, `game-state:{game_id}`.
+
+Права доступа:
+
+- Публичные турниры (`is_public=1`) доступны на чтение без сессии.
+- Приватные турниры доступны на чтение только организаторам.
+- Любые изменения через API требуют сессию пользователя из `tournament_organizers`.
+- Импорт через API должен быть привязан к турниру: `POST /api/import?tournament_id={id}`. Глобальный импорт без турнира не используется как публичный API.
 
 ## Совместимость
 
