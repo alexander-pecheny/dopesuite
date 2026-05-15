@@ -160,7 +160,7 @@ func main() {
 	}
 	addr := ":" + port
 	log.Printf("serving static from %s", assetMode)
-	log.Printf("listening on http://localhost%s/host and http://localhost%s/viewer", addr, addr)
+	log.Printf("listening on http://localhost%s/host and http://localhost%s/", addr, addr)
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 

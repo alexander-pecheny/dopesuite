@@ -76,7 +76,7 @@ function ensureState() {
   if (!Array.isArray(state.teams)) {
     state.teams = (scheme.teams || []).map((team) => ({name: team.name || "", city: team.city || ""}));
   }
-  const targetCount = scheme.nTeams || state.teams.length || 0;
+  const targetCount = state.teams.length || scheme.nTeams || 0;
   while (state.teams.length < targetCount) {
     state.teams.push({name: "", city: ""});
   }
