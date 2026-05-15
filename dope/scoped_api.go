@@ -74,6 +74,81 @@ func matchScopeKey(scope matchScope) string {
 
 var errMatchNotFound = errors.New("match not found in this game")
 
+func (s *server) tournamentVisibility(ctx context.Context, tournamentID int64) (bool, bool, error) {
+	if s.db == nil {
+		return false, false, nil
+	}
+	var isPublic int
+	err := s.db.QueryRowContext(ctx, `select is_public from tournaments where id = ?`, tournamentID).Scan(&isPublic)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	return true, isPublic == 1, nil
+}
+
+func (s *server) authorizeTournamentRead(w http.ResponseWriter, r *http.Request, tournamentID int64) bool {
+	exists, public, err := s.tournamentVisibility(r.Context(), tournamentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return false
+	}
+	if !exists {
+		http.NotFound(w, r)
+		return false
+	}
+	if public {
+		return true
+	}
+	user, ok := s.lookupSession(r)
+	if !ok {
+		http.NotFound(w, r)
+		return false
+	}
+	allowed, err := s.isOrganizer(r.Context(), tournamentID, user.UserID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return false
+	}
+	if !allowed {
+		http.NotFound(w, r)
+		return false
+	}
+	return true
+}
+
+func (s *server) requireTournamentOrganizer(w http.ResponseWriter, r *http.Request, tournamentID int64) (sessionUser, bool) {
+	if !requireSameOriginUnsafe(w, r) {
+		return sessionUser{}, false
+	}
+	user, ok := s.lookupSession(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return sessionUser{}, false
+	}
+	allowed, err := s.isOrganizer(r.Context(), tournamentID, user.UserID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return sessionUser{}, false
+	}
+	if allowed {
+		return user, true
+	}
+	exists, _, err := s.tournamentVisibility(r.Context(), tournamentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return sessionUser{}, false
+	}
+	if !exists {
+		http.NotFound(w, r)
+		return sessionUser{}, false
+	}
+	http.Error(w, "forbidden", http.StatusForbidden)
+	return sessionUser{}, false
+}
+
 // /api/tournament/{tid}
 // /api/tournament/{tid}/venues
 // /api/tournament/{tid}/venues/{n}
@@ -149,9 +224,12 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, scope tournamentScope) {
 	switch r.Method {
 	case http.MethodGet:
+		if !s.authorizeTournamentRead(w, r, scope.TournamentID) {
+			return
+		}
 		var stateJSON string
 		err := s.db.QueryRowContext(r.Context(), `
-select state_json from games where tournament_id = ? and id = ?`, scope.TournamentID, scope.GameID).Scan(&stateJSON)
+	select state_json from games where tournament_id = ? and id = ?`, scope.TournamentID, scope.GameID).Scan(&stateJSON)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -166,6 +244,9 @@ select state_json from games where tournament_id = ? and id = ?`, scope.Tourname
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write([]byte(stateJSON))
 	case http.MethodPut:
+		if _, ok := s.requireTournamentOrganizer(w, r, scope.TournamentID); !ok {
+			return
+		}
 		defer r.Body.Close()
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -193,7 +274,7 @@ update games set state_json = ?, updated_at = ? where tournament_id = ? and id =
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		s.broadcastState(fmt.Sprintf("game-state:%d", scope.GameID), revision, raw)
+		s.broadcastState(scope.TournamentID, fmt.Sprintf("game-state:%d", scope.GameID), revision, raw)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write(raw)
 	default:
@@ -206,9 +287,12 @@ func (s *server) handleScopedGameScheme(w http.ResponseWriter, r *http.Request, 
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !s.authorizeTournamentRead(w, r, scope.TournamentID) {
+		return
+	}
 	var schemeJSON string
 	err := s.db.QueryRowContext(r.Context(), `
-select scheme_json from games where tournament_id = ? and id = ?`, scope.TournamentID, scope.GameID).Scan(&schemeJSON)
+	select scheme_json from games where tournament_id = ? and id = ?`, scope.TournamentID, scope.GameID).Scan(&schemeJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
 		return
@@ -227,6 +311,9 @@ select scheme_json from games where tournament_id = ? and id = ?`, scope.Tournam
 func (s *server) handleScopedTournament(w http.ResponseWriter, r *http.Request, tournamentID int64) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.authorizeTournamentRead(w, r, tournamentID) {
 		return
 	}
 	gameID, err := defaultGameID(r.Context(), s.db, tournamentID)
@@ -249,6 +336,9 @@ func (s *server) handleScopedGame(w http.ResponseWriter, r *http.Request, scope 
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !s.authorizeTournamentRead(w, r, scope.TournamentID) {
+		return
+	}
 	s.mu.RLock()
 	view, err := s.loadTournamentViewLocked(scope.TournamentID, scope.GameID)
 	s.mu.RUnlock()
@@ -263,6 +353,9 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, tour
 	if len(sub) == 0 {
 		switch r.Method {
 		case http.MethodGet:
+			if !s.authorizeTournamentRead(w, r, tournamentID) {
+				return
+			}
 			s.mu.RLock()
 			venues, err := s.loadVenuesLocked(tournamentID)
 			s.mu.RUnlock()
@@ -284,6 +377,9 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, tour
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if _, ok := s.requireTournamentOrganizer(w, r, tournamentID); !ok {
+		return
+	}
 	number, err := strconv.Atoi(sub[0])
 	if err != nil || number <= 0 {
 		http.Error(w, "bad venue number", http.StatusBadRequest)
@@ -301,12 +397,12 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, tour
 		return
 	}
 	data, _ := json.Marshal(venues)
-	s.broadcastState(fmt.Sprintf("venues:%d", tournamentID), revision, data)
+	s.broadcastState(tournamentID, fmt.Sprintf("venues:%d", tournamentID), revision, data)
 	writeJSON(w, data)
 }
 
 func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, scope tournamentScope, sub []string) {
-	if len(sub) == 0 {
+	if len(sub) == 0 || len(sub) > 2 {
 		http.NotFound(w, r)
 		return
 	}
@@ -315,16 +411,6 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 		http.NotFound(w, r)
 		return
 	}
-	mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
-	if err != nil {
-		if errors.Is(err, errMatchNotFound) {
-			http.NotFound(w, r)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	suffix := ""
 	if len(sub) > 1 {
 		suffix = sub[1]
@@ -335,8 +421,20 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		if !s.authorizeTournamentRead(w, r, scope.TournamentID) {
+			return
+		}
+		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
+		if err != nil {
+			if errors.Is(err, errMatchNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		s.mu.RLock()
-		view, err := s.loadMatchViewLocked(scope.TournamentID, code)
+		view, err := s.loadScopedMatchViewLocked(mscope)
 		s.mu.RUnlock()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -348,22 +446,46 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		if _, ok := s.requireTournamentOrganizer(w, r, scope.TournamentID); !ok {
+			return
+		}
+		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
+		if err != nil {
+			if errors.Is(err, errMatchNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		defer r.Body.Close()
 		var req updateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "bad json", http.StatusBadRequest)
 			return
 		}
-		view, data, err := s.applyMatchUpdate(scope.TournamentID, code, req)
+		view, data, err := s.applyScopedMatchUpdate(mscope, req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s.broadcastState(matchScopeKey(mscope), view.Revision, data)
+		s.broadcastState(scope.TournamentID, matchScopeKey(mscope), view.Revision, data)
 		writeJSON(w, data)
 	case "finish":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if _, ok := s.requireTournamentOrganizer(w, r, scope.TournamentID); !ok {
+			return
+		}
+		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
+		if err != nil {
+			if errors.Is(err, errMatchNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		defer r.Body.Close()
@@ -376,16 +498,28 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "missing finished", http.StatusBadRequest)
 			return
 		}
-		view, data, err := s.applyMatchUpdate(scope.TournamentID, code, updateRequest{Finished: req.Finished})
+		view, data, err := s.applyScopedMatchUpdate(mscope, updateRequest{Finished: req.Finished})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s.broadcastState(matchScopeKey(mscope), view.Revision, data)
+		s.broadcastState(scope.TournamentID, matchScopeKey(mscope), view.Revision, data)
 		writeJSON(w, data)
 	case "venue":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if _, ok := s.requireTournamentOrganizer(w, r, scope.TournamentID); !ok {
+			return
+		}
+		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
+		if err != nil {
+			if errors.Is(err, errMatchNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		defer r.Body.Close()
@@ -398,12 +532,12 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 		if number == 0 {
 			number = req.VenueNumber
 		}
-		view, data, err := s.updateMatchVenue(scope.TournamentID, code, number)
+		view, data, err := s.updateScopedMatchVenue(mscope, number)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s.broadcastState(matchScopeKey(mscope), view.Revision, data)
+		s.broadcastState(scope.TournamentID, matchScopeKey(mscope), view.Revision, data)
 		writeJSON(w, data)
 	default:
 		http.NotFound(w, r)

@@ -782,7 +782,7 @@ function setHeading(text) {
 }
 
 function connectEvents() {
-  const events = new EventSource("/events");
+  const events = new EventSource(`/events?tournament_id=${encodeURIComponent(route.tournamentID)}`);
   const scopeName = `game-state:${route.gameID}`;
   events.addEventListener("state", (event) => {
     let parsed;

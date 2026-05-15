@@ -47,8 +47,9 @@ API:
 - `GET /api/tournament/{tid}/games/{gid}` — то же самое, привязанное к конкретной игре.
 - `GET /api/tournament/{tid}/venues`, `PUT /api/tournament/{tid}/venues/{n}`.
 - `GET /api/tournament/{tid}/games/{gid}/matches/{code}`, `POST .../update`, `POST .../finish`, `POST .../venue`.
+- API-права проверяются на сервере: публичные турниры читаются без сессии, приватные читаются только организаторами, любые `POST`/`PUT` требуют сессию организатора.
 
-SSE `/events` остается одним каналом. Каждое событие приходит в конверте `{scope, revision, data}`. Скоупы теперь содержат идентификаторы: `match:{game_id}:{code}`, `venues:{tournament_id}`. Клиенты фильтруют по своему скоупу.
+SSE `/events?tournament_id={tid}` отдает события только для авторизованного турнира. Каждое событие приходит в конверте `{scope, revision, data}`. Скоупы теперь содержат идентификаторы: `match:{game_id}:{code}`, `venues:{tournament_id}`, `game-state:{game_id}`. Клиенты фильтруют по своему скоупу.
 
 ## Миграция текущего состояния
 
