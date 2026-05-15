@@ -24,7 +24,7 @@ JSON описывает спортивную схему игры: этапы, б
 Референсный JSON для СтудЧР генерируется отдельно:
 
 ```bash
-go run ./cmd/generate-studchr-grid > static/schemes/studchr-ek-2026.json
+python3 scripts/generate_studchr_grid.py > /tmp/studchr-ek-2026.json
 ```
 
 Пересев задается в `stages` как отдельный этап с `stage_type: "reseed"`.

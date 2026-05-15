@@ -137,7 +137,6 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", srv.handlePublicIndex)
 	mux.HandleFunc("/tournament/", srv.handleTournamentRouter)
-	mux.HandleFunc("/import", srv.serveStaticPage(assets, "static/import.html", noCacheAssets))
 	mux.HandleFunc("/register", srv.handleRegisterPage)
 	mux.HandleFunc("/register/invite", srv.handleRegisterInviteSubmit)
 	mux.HandleFunc("/register/username", srv.handleRegisterUsernameSubmit)
