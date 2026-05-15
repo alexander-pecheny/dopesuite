@@ -10,6 +10,7 @@ let tournament = null;
 let venues = [];
 let stageStates = [];
 let reloadTimer = null;
+let readonlyTableIndex = null;
 
 document.body.classList.toggle("embedded-match", embedded);
 
@@ -67,8 +68,7 @@ function connectEvents() {
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
     if (route.mode === "match" && message.scope === matchScope) {
-      state = message.data;
-      render();
+      applyUpdatedMatch(message.data);
       setLive(true);
       return;
     }
@@ -100,11 +100,7 @@ function scheduleReload() {
 }
 
 function parseEventData(raw) {
-  const parsed = JSON.parse(raw);
-  if (parsed && typeof parsed.scope === "string" && Object.prototype.hasOwnProperty.call(parsed, "data")) {
-    return parsed;
-  }
-  return {scope: "unknown", data: parsed};
+  return gameTable.parseScopedEvent(raw);
 }
 
 function setLive(ok) {
@@ -116,6 +112,7 @@ function setLive(ok) {
 
 function renderTournament() {
   if (!tournament) return;
+  resetReadonlyTableIndex();
   setViewerMode("grid");
   setHeading(tournament.title);
   document.title = `Зритель · ${tournament.title}`;
@@ -124,6 +121,7 @@ function renderTournament() {
 
 function renderStage() {
   if (!tournament) return;
+  resetReadonlyTableIndex();
   const stage = findStage(tournament, route.stageCode);
   setViewerMode("match");
   setHeading(stage?.title || tournament.title);
@@ -132,6 +130,7 @@ function renderStage() {
 }
 
 function renderVenues() {
+  resetReadonlyTableIndex();
   setViewerMode("grid");
   setHeading("Площадки");
   document.title = "Зритель · Площадки";
@@ -144,6 +143,7 @@ function render() {
   setHeading(state.stageTitle || state.title);
   document.title = `Зритель · ${state.title}`;
   const table = buildReadonlyTable();
+  readonlyTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
   if (embedded) {
     viewerRoot.replaceChildren(table);
     notifyEmbeddedResize();
@@ -156,6 +156,67 @@ function render() {
       table,
     );
   }
+}
+
+function applyUpdatedMatch(updated) {
+  const previous = state;
+  state = updated;
+  if (canPatchReadonlyMatchTable(previous, updated)) {
+    patchReadonlyMatchTable();
+    return;
+  }
+  render();
+}
+
+function canPatchReadonlyMatchTable(previous, next) {
+  if (route.mode !== "match" || !readonlyTableIndex || !previous || !next) return false;
+  if (previous.code !== next.code || previous.title !== next.title || previous.finished !== next.finished) return false;
+  if (matchTitleFor(previous) !== matchTitleFor(next)) return false;
+  if (!gameTable.sameArray(previous.questionValues, next.questionValues)) return false;
+  if ((previous.teams || []).length !== (next.teams || []).length) return false;
+  for (let i = 0; i < next.teams.length; i++) {
+    const prevTeam = previous.teams[i];
+    const nextTeam = next.teams[i];
+    if (prevTeam.name !== nextTeam.name || formatPlace(prevTeam.place) !== formatPlace(nextTeam.place)) return false;
+    if ((prevTeam.themes || []).length !== (nextTeam.themes || []).length) return false;
+    if (shootoutThemesFor(prevTeam).length !== shootoutThemesFor(nextTeam).length) return false;
+  }
+  return true;
+}
+
+function patchReadonlyMatchTable() {
+  state.teams.forEach((team, teamIndex) => {
+    setIndexedText("total", {team: teamIndex}, team.total);
+    setIndexedText("plus", {team: teamIndex}, team.plus);
+    setIndexedText("tiebreak", {team: teamIndex}, team.shootoutTotal ?? team.tiebreak);
+    [0, 1, 2, 3, 4].forEach((idx) => {
+      setIndexedText("correctCount", {team: teamIndex, valueIndex: idx}, team.correctCounts[4 - idx]);
+    });
+    team.themes.forEach((theme, themeIndex) => {
+      patchReadonlyTheme(teamIndex, themeIndex, false, theme);
+    });
+    shootoutThemesFor(team).forEach((theme, themeIndex) => {
+      patchReadonlyTheme(teamIndex, themeIndex, true, theme);
+    });
+  });
+}
+
+function patchReadonlyTheme(teamIndex, themeIndex, isShootout, theme) {
+  const shootout = isShootout ? "1" : "0";
+  setIndexedText("themeScore", {team: teamIndex, shootout, theme: themeIndex}, theme.score);
+  theme.answers.forEach((mark, answerIndex) => {
+    const cell = readonlyTableIndex?.get("answer", {team: teamIndex, shootout, theme: themeIndex, answer: answerIndex});
+    gameTable.setMarkClass(cell, mark);
+  });
+}
+
+function setIndexedText(name, values, value) {
+  const node = readonlyTableIndex?.get(name, values);
+  if (node) gameTable.setNodeText(node, value, formatNumber);
+}
+
+function resetReadonlyTableIndex() {
+  readonlyTableIndex = null;
 }
 
 function buildTournamentTable(data) {
@@ -271,20 +332,20 @@ function withMatchState(matchState, callback) {
 function buildReadonlyTable() {
   const hasShootout = shootoutThemeCount() > 0;
   const themes = readonlyThemeHeaders();
-  const rows = state.teams.map((team) => {
+  const rows = state.teams.map((team, teamIndex) => {
     const themeCells = [];
-    team.themes.forEach((theme) => {
-      themeCells.push(readonlyThemeCells(theme, false));
+    team.themes.forEach((theme, themeIndex) => {
+      themeCells.push(readonlyThemeCells(teamIndex, theme, themeIndex, false));
     });
-    shootoutThemesFor(team).forEach((theme) => {
-      themeCells.push(readonlyThemeCells(theme, true));
+    shootoutThemesFor(team).forEach((theme, themeIndex) => {
+      themeCells.push(readonlyThemeCells(teamIndex, theme, themeIndex, true));
     });
     return {
-      nameCell: td(team.name, "sticky sticky-name team-name", {rowSpan: 2}),
-      totalCell: td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2}),
-      placeCell: td(formatPlace(team.place), "sticky sticky-place number place-cell", {rowSpan: 2}),
+      nameCell: td(team.name, "sticky sticky-name team-name", {rowSpan: 2, dataset: {team: teamIndex}}),
+      totalCell: td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2, dataset: {team: teamIndex}}),
+      placeCell: td(formatPlace(team.place), "sticky sticky-place number place-cell", {rowSpan: 2, dataset: {team: teamIndex}}),
       themes: themeCells,
-      afterThemeCells: readonlyTrailingCells(team, hasShootout),
+      afterThemeCells: readonlyTrailingCells(team, teamIndex, hasShootout),
     };
   });
 
@@ -324,7 +385,7 @@ function readonlyTrailingHeaders(hasShootout) {
   return headers;
 }
 
-function readonlyThemeCells(theme, isShootout) {
+function readonlyThemeCells(teamIndex, theme, themeIndex, isShootout) {
   const playerCell = document.createElement("td");
   playerCell.colSpan = state.questionValues.length;
   playerCell.className = "readonly-player theme-block theme-block-top-left";
@@ -337,6 +398,10 @@ function readonlyThemeCells(theme, isShootout) {
       ? `answer-cell theme-block theme-block-bottom-left ${mark}`
       : `answer-cell theme-block ${mark}`;
     const cell = td("", className);
+    cell.dataset.team = String(teamIndex);
+    cell.dataset.shootout = isShootout ? "1" : "0";
+    cell.dataset.theme = String(themeIndex);
+    cell.dataset.answer = String(answerIndex);
     if (isShootout) {
       cell.classList.add("shootout-block");
     }
@@ -344,20 +409,26 @@ function readonlyThemeCells(theme, isShootout) {
   });
   return {
     playerCell,
-    scoreCell: td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: 2}),
+    scoreCell: td(theme.score, "number theme-score theme-block theme-block-score", {
+      rowSpan: 2,
+      dataset: {team: teamIndex, shootout: isShootout ? "1" : "0", theme: themeIndex},
+    }),
     answers,
   };
 }
 
-function readonlyTrailingCells(team, hasShootout) {
+function readonlyTrailingCells(team, teamIndex, hasShootout) {
   const cells = [];
   if (hasShootout) {
     const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
-    cells.push(td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2}));
+    cells.push(td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2, dataset: {team: teamIndex}}));
   }
-  cells.push(td(team.plus, "number plus-cell", {rowSpan: 2}));
+  cells.push(td(team.plus, "number plus-cell", {rowSpan: 2, dataset: {team: teamIndex}}));
   [0, 1, 2, 3, 4].forEach((idx) => {
-    cells.push(td(team.correctCounts[4 - idx], "number narrow", {rowSpan: 2}));
+    cells.push(td(team.correctCounts[4 - idx], "number narrow correct-count-cell", {
+      rowSpan: 2,
+      dataset: {team: teamIndex, valueIndex: idx},
+    }));
   });
   return cells;
 }
@@ -427,8 +498,12 @@ function notifyEmbeddedResize() {
 }
 
 function matchTitle() {
-  const venue = state.venue ? ` · пл. ${state.venue.number}: ${state.venue.title}` : "";
-  return `${state.title}${venue}`;
+  return matchTitleFor(state);
+}
+
+function matchTitleFor(matchState) {
+  const venue = matchState?.venue ? ` · пл. ${matchState.venue.number}: ${matchState.venue.title}` : "";
+  return `${matchState?.title || ""}${venue}`;
 }
 
 function formatVenue(venue) {

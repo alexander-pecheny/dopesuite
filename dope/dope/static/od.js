@@ -15,6 +15,7 @@ let totalQuestions = 0;
 let renderedTab = null;
 let questionStatsCache = null;
 let activeEntryEditor = null;
+let stateSync = null;
 const tabCache = new Map();
 const tabScroll = new Map();
 
@@ -765,29 +766,12 @@ function computePlaces(totals) {
 
 // === persistence ===
 
-let saveTimer = null;
 function saveState() {
-  if (viewer) return;
-  setStatus("saving");
-  window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(async () => {
-    try {
-      const response = await fetch(`${route.apiBase}/state`, {
-        method: "PUT",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(state),
-      });
-      if (!response.ok) throw new Error(await response.text());
-      setStatus("saved");
-    } catch (error) {
-      console.error(error);
-      setStatus("error");
-    }
-  }, 200);
+  syncState().save();
 }
 
 function setStatus(s) {
-  const labels = {saved: "Синхронизировано", saving: "Синхронизация", error: "Ошибка"};
+  const labels = {saved: "Синхронизировано", saving: "Синхронизация", reconnecting: "Переподключение", error: "Ошибка"};
   statusNode.dataset.state = s;
   statusNode.setAttribute("aria-label", labels[s] || labels.saving);
   statusNode.title = labels[s] || labels.saving;
@@ -798,31 +782,34 @@ function setHeading(text) {
 }
 
 function connectEvents() {
-  const events = new EventSource(`/events?tournament_id=${encodeURIComponent(route.tournamentID)}`);
-  const scopeName = `game-state:${route.gameID}`;
-  events.addEventListener("state", (event) => {
-    let parsed;
-    try {
-      parsed = JSON.parse(event.data);
-    } catch (_e) {
-      return;
-    }
-    if (parsed && parsed.scope === scopeName) {
-      const typing = document.activeElement && document.activeElement.classList.contains("entry-input");
-      state = parsed.data;
-      ensureState();
-      if (typing) {
-        questionStatsCache = null;
-        invalidateTabCache("detailed", "results");
-        setStatus("saved");
-        return;
-      }
-      invalidateAllCaches();
-      render();
-      setStatus("saved");
-    }
+  syncState().connect();
+}
+
+function syncState() {
+  if (stateSync) return stateSync;
+  stateSync = gameTable.createStateSync({
+    readonly: viewer,
+    stateURL: `${route.apiBase}/state`,
+    eventsURL: `/events?tournament_id=${encodeURIComponent(route.tournamentID)}`,
+    scope: `game-state:${route.gameID}`,
+    getState: () => state,
+    setStatus,
+    onRemoteState: applyRemoteState,
   });
-  events.onerror = () => setStatus("reconnecting");
+  return stateSync;
+}
+
+function applyRemoteState(nextState) {
+  const typing = document.activeElement && document.activeElement.classList.contains("entry-input");
+  state = nextState;
+  ensureState();
+  if (typing) {
+    questionStatsCache = null;
+    invalidateTabCache("detailed", "results");
+    return;
+  }
+  invalidateAllCaches();
+  render();
 }
 
 function currentRoute() {
