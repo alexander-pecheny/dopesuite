@@ -2022,11 +2022,20 @@ a.list-row:hover { background: #eef1f5; }
   color: var(--blue);
 }
 
+.od-pane {
+  display: contents;
+}
+
+.od-pane[hidden] {
+  display: none;
+}
+
 .entry-table {
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
   background: var(--structure);
+  contain: paint;
   font-size: 13px;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
@@ -2085,7 +2094,22 @@ a.list-row:hover { background: #eef1f5; }
   cursor: pointer;
 }
 
-.entry-cell { padding: 0; }
+.entry-cell {
+  padding: 0;
+  color: var(--text);
+  cursor: text;
+  user-select: none;
+}
+
+.entry-cell:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+  background-color: #fff;
+}
+
+.entry-cell.entry-editing:focus {
+  outline: 0;
+}
 
 .entry-input {
   display: block;
@@ -2107,13 +2131,13 @@ a.list-row:hover { background: #eef1f5; }
   background: #fff;
 }
 
-.entry-input-bad,
-.entry-input-dup {
-  background: #fde8ea;
+.entry-table .entry-input-bad,
+.entry-table .entry-input-dup {
+  background-color: #fde8ea;
   color: var(--red-dark);
 }
 
-.entry-readonly .entry-input,
+.entry-readonly .entry-cell,
 .entry-readonly .entry-lock-checkbox {
   color: var(--muted);
   cursor: not-allowed;
@@ -2231,11 +2255,29 @@ a.list-row:hover { background: #eef1f5; }
 
 
 /* Подробно: compact square cells everywhere, taken-question number inside the green cell */
+.match-table.od-detailed {
+  --place-col: 58px;
+}
+
 .match-table.od-detailed,
 .match-table.od-detailed th,
 .match-table.od-detailed td {
   height: 24px;
   line-height: 1;
+}
+.match-table.od-detailed th,
+.match-table.od-detailed td {
+  border-color: var(--structure);
+  background: var(--cell-fill);
+  background-clip: border-box;
+}
+.match-table.od-detailed .gap,
+.match-table.od-detailed .gap-head,
+.match-table.od-detailed .place-gap,
+.match-table.od-detailed .place-gap-head,
+.match-table.od-detailed .team-gap {
+  background: var(--structure);
+  border-color: var(--structure);
 }
 .match-table.od-detailed .team-gap { height: 4px; }
 .match-table.od-detailed .team-name {
