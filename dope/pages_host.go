@@ -253,7 +253,9 @@ var hostTournamentDashTemplate = template.Must(template.New("hostDash").Parse(`<
       <h2>Импорт схемы из JSON</h2>
       {{if .ImportError}}<p class="empty">{{.ImportError}}</p>{{end}}
       {{if .ImportNotice}}<p class="muted">{{.ImportNotice}}</p>{{end}}
-      <a class="action-link" href="/host/tournament/{{.Tournament.ID}}/import">Открыть импорт схемы</a>
+      <div class="cluster">
+        <a class="btn" href="/host/tournament/{{.Tournament.ID}}/import">Открыть импорт схемы</a>
+      </div>
     </section>
 
     {{if .IsCreator}}
@@ -355,7 +357,7 @@ var hostTournamentRatingImportTemplate = template.Must(template.New("hostRatingI
       {{if .RatingID}}
       <p class="muted">Источник: rating.chgk.info ID {{.RatingID}}</p>
       <form method="post" action="/host/tournament/{{.Tournament.ID}}/rating/import" class="card stack" autocomplete="off">
-        <p class="muted">Импорт заменит турнирные списки команд и игроков и обновит список команд в играх ЧГК.</p>
+        <p class="muted">Импорт заменит турнирные списки команд и игроков и обновит список команд в играх ЧГК и КСИ.</p>
         <div class="cluster">
           <button class="btn" type="submit">Загрузить команды и игроков</button>
         </div>
@@ -567,7 +569,7 @@ func (s *server) serveHostGamePage(w http.ResponseWriter, r *http.Request, tourn
 	switch gameType {
 	case "od":
 		s.serveAppHTML(w, r, "static/od.html")
-	case "si":
+	case "si", "ksi":
 		s.serveAppHTML(w, r, "static/si.html")
 	default:
 		s.serveHostHTML(w, r)
@@ -724,7 +726,7 @@ func (s *server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 		s.renderHostRatingImportPage(w, r, tournamentID, err.Error(), "")
 		return
 	}
-	msg := fmt.Sprintf("Загружено команд: %d, игроков: %d. Обновлено игр ЧГК: %d.", result.TeamCount, result.PlayerCount, result.ODGameCount)
+	msg := fmt.Sprintf("Загружено команд: %d, игроков: %d. Обновлено игр ЧГК: %d, КСИ: %d.", result.TeamCount, result.PlayerCount, result.ODGameCount, result.KSIGameCount)
 	s.renderHostRatingImportPage(w, r, tournamentID, "", msg)
 }
 
@@ -872,7 +874,7 @@ from tournaments where id = ?`, tournamentID).Scan(&title, &description, &startD
 			ID:    g.ID,
 			Code:  g.Code,
 			Title: g.Title,
-			Type:  g.Type,
+			Type:  gameTypeLabel(g.Type),
 			URL:   fmt.Sprintf("/host/tournament/%d/game/%d/", tournamentID, g.ID),
 		}
 	}

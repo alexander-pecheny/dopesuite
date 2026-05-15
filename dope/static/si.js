@@ -5,11 +5,14 @@ const pageHeading = document.querySelector(".host-top h1");
 const QUESTION_VALUES = [10, 20, 30, 40, 50];
 
 const route = currentRoute();
+const viewer = Boolean(route.viewer);
+document.body.classList.toggle("viewer-readonly", viewer);
 let scheme = null;
 let state = null;
 let participants = [];
 let themesCount = 8;
 let activeCell = {player: 0, theme: 0, answer: 0};
+let localEchoJSON = "";
 
 async function loadAll() {
   const [schemeResp, stateResp] = await Promise.all([
@@ -26,10 +29,18 @@ async function loadAll() {
 }
 
 function initFromScheme() {
-  participants = Array.isArray(scheme.participants) && scheme.participants.length > 0
-    ? scheme.participants
-    : ["Игрок 1", "Игрок 2", "Игрок 3", "Игрок 4"];
+  participants = schemeParticipants();
   themesCount = Number(scheme.themes) > 0 ? Number(scheme.themes) : 8;
+}
+
+function schemeParticipants() {
+  if (Array.isArray(scheme.participants) && scheme.participants.length > 0) {
+    return scheme.participants.slice();
+  }
+  if (isTeamMode() && Array.isArray(scheme.teams) && scheme.teams.length > 0) {
+    return scheme.teams.map((team) => team.name || "");
+  }
+  return ["Игрок 1", "Игрок 2", "Игрок 3", "Игрок 4"];
 }
 
 function ensureState() {
@@ -53,8 +64,9 @@ function ensureState() {
 }
 
 function render() {
-  setHeading(scheme.title || "СИ");
-  document.title = `Ведущий · ${scheme.title || "СИ"}`;
+  const defaultTitle = gameTitleFallback();
+  setHeading(scheme.title || defaultTitle);
+  document.title = `${viewer ? "Зритель" : "Ведущий"} · ${scheme.title || defaultTitle}`;
   siRoot.replaceChildren(buildTable());
 }
 
@@ -87,20 +99,24 @@ function buildTable() {
   state.participants.forEach((participant, playerIndex) => {
     const tr = document.createElement("tr");
     tr.appendChild(nameCell(participant, playerIndex));
-    tr.appendChild(td(totals[playerIndex], "sticky sticky-total number total-cell"));
-    tr.appendChild(td(places[playerIndex] || "", "sticky sticky-place number place-cell"));
+    const totalCell = td(totals[playerIndex], "sticky sticky-total number total-cell");
+    totalCell.dataset.player = String(playerIndex);
+    tr.appendChild(totalCell);
+
+    const placeCell = td(places[playerIndex] || "", "sticky sticky-place number place-cell");
+    placeCell.dataset.player = String(playerIndex);
+    tr.appendChild(placeCell);
     tr.appendChild(td("", "sticky sticky-place-gap place-gap"));
 
     for (let t = 0; t < themesCount; t++) {
-      let themeSum = 0;
       for (let aIndex = 0; aIndex < QUESTION_VALUES.length; aIndex++) {
         const mark = state.themes[t].answers[playerIndex][aIndex];
-        const value = QUESTION_VALUES[aIndex];
-        if (mark === "right") themeSum += value;
-        else if (mark === "wrong") themeSum -= value;
         tr.appendChild(answerCell(playerIndex, t, aIndex, mark));
       }
-      tr.appendChild(td(themeSum, "number theme-score theme-block theme-block-score"));
+      const scoreCell = td(themeScore(playerIndex, t), "number theme-score theme-block theme-block-score");
+      scoreCell.dataset.player = String(playerIndex);
+      scoreCell.dataset.theme = String(t);
+      tr.appendChild(scoreCell);
       tr.appendChild(td("", "gap"));
     }
     tbody.appendChild(tr);
@@ -121,9 +137,10 @@ function nameCell(name, playerIndex) {
   input.type = "text";
   input.className = "venue-input";
   input.value = name;
-  input.placeholder = `Игрок ${playerIndex + 1}`;
-  input.disabled = state.finished;
+  input.placeholder = participantFallback(playerIndex);
+  input.disabled = state.finished || viewer;
   input.addEventListener("change", () => {
+    if (viewer) return;
     state.participants[playerIndex] = input.value.trim();
     saveState();
   });
@@ -134,15 +151,15 @@ function nameCell(name, playerIndex) {
 function answerCell(playerIndex, themeIndex, answerIndex, mark) {
   const cell = document.createElement("td");
   cell.className = `answer-cell theme-block ${mark}`;
-  cell.tabIndex = state.finished ? -1 : 0;
+  cell.tabIndex = state.finished || viewer ? -1 : 0;
   cell.dataset.player = String(playerIndex);
   cell.dataset.theme = String(themeIndex);
   cell.dataset.answer = String(answerIndex);
-  cell.title = `${state.participants[playerIndex] || `Игрок ${playerIndex + 1}`}, Т${themeIndex + 1}, ${QUESTION_VALUES[answerIndex]}`;
-  if (isActive(playerIndex, themeIndex, answerIndex) && !state.finished) {
+  cell.title = `${state.participants[playerIndex] || participantFallback(playerIndex)}, Т${themeIndex + 1}, ${QUESTION_VALUES[answerIndex]}`;
+  if (isActive(playerIndex, themeIndex, answerIndex) && !state.finished && !viewer) {
     cell.classList.add("active");
   }
-  if (!state.finished) {
+  if (!state.finished && !viewer) {
     cell.addEventListener("click", () => {
       selectCell(playerIndex, themeIndex, answerIndex);
     });
@@ -169,7 +186,9 @@ function battleHeader() {
   checkbox.type = "checkbox";
   checkbox.className = "finish-toggle";
   checkbox.checked = Boolean(state.finished);
+  checkbox.disabled = viewer;
   checkbox.addEventListener("change", () => {
+    if (viewer) return;
     state.finished = checkbox.checked;
     saveState();
     render();
@@ -185,12 +204,18 @@ function battleHeader() {
 function playerTotal(playerIndex) {
   let total = 0;
   for (let t = 0; t < themesCount; t++) {
-    for (let i = 0; i < QUESTION_VALUES.length; i++) {
-      const mark = state.themes[t].answers[playerIndex][i];
-      const value = QUESTION_VALUES[i];
-      if (mark === "right") total += value;
-      else if (mark === "wrong") total -= value;
-    }
+    total += themeScore(playerIndex, t);
+  }
+  return total;
+}
+
+function themeScore(playerIndex, themeIndex) {
+  let total = 0;
+  for (let i = 0; i < QUESTION_VALUES.length; i++) {
+    const mark = state.themes[themeIndex].answers[playerIndex][i];
+    const value = QUESTION_VALUES[i];
+    if (mark === "right") total += value;
+    else if (mark === "wrong") total -= value;
   }
   return total;
 }
@@ -233,13 +258,52 @@ function isActive(p, t, a) {
 }
 
 function setMark(mark) {
-  if (state.finished) return;
-  state.themes[activeCell.theme].answers[activeCell.player][activeCell.answer] = mark;
+  if (state.finished || viewer) return;
+  const row = state.themes[activeCell.theme].answers[activeCell.player];
+  if (row[activeCell.answer] === mark) return;
+  row[activeCell.answer] = mark;
+  updateAnswerCell(activeCell.player, activeCell.theme, activeCell.answer, mark);
+  refreshScores();
   saveState();
-  render();
+}
+
+function updateAnswerCell(player, theme, answer, mark) {
+  const cell = siRoot.querySelector(`.answer-cell[data-player="${player}"][data-theme="${theme}"][data-answer="${answer}"]`);
+  if (!cell) return;
+  cell.classList.remove("right", "wrong");
+  if (mark) cell.classList.add(mark);
+}
+
+function refreshScores() {
+  if (!state?.participants) return;
+  const totals = state.participants.map((_, p) => playerTotal(p));
+  const places = computePlaces(totals);
+  state.participants.forEach((_, playerIndex) => {
+    const totalCell = siRoot.querySelector(`.total-cell[data-player="${playerIndex}"]`);
+    if (totalCell) totalCell.textContent = String(totals[playerIndex]);
+    const placeCell = siRoot.querySelector(`.place-cell[data-player="${playerIndex}"]`);
+    if (placeCell) placeCell.textContent = places[playerIndex] || "";
+    for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
+      const scoreCell = siRoot.querySelector(`.theme-score[data-player="${playerIndex}"][data-theme="${themeIndex}"]`);
+      if (scoreCell) scoreCell.textContent = String(themeScore(playerIndex, themeIndex));
+    }
+  });
+}
+
+function isTeamMode() {
+  return scheme?.gameType === "ksi";
+}
+
+function gameTitleFallback() {
+  return isTeamMode() ? "КСИ" : "СИ";
+}
+
+function participantFallback(index) {
+  return `${isTeamMode() ? "Команда" : "Игрок"} ${index + 1}`;
 }
 
 function handleKeydown(event) {
+  if (viewer) return;
   if (isFormControl(event.target)) return;
   const key = event.key.toLowerCase();
   if (event.key === "ArrowLeft") {
@@ -285,14 +349,17 @@ function isFormControl(target) {
 
 let saveTimer = null;
 function saveState() {
+  if (viewer) return;
   setStatus("saving");
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(async () => {
     try {
+      const raw = JSON.stringify(state);
+      localEchoJSON = raw;
       const response = await fetch(`${route.apiBase}/state`, {
         method: "PUT",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(state),
+        body: raw,
       });
       if (!response.ok) throw new Error(await response.text());
       setStatus("saved");
@@ -304,7 +371,7 @@ function saveState() {
 }
 
 function setStatus(s) {
-  const labels = {saved: "Синхронизировано", saving: "Синхронизация", error: "Ошибка"};
+  const labels = {saved: "Синхронизировано", saving: "Синхронизация", reconnecting: "Переподключение", error: "Ошибка"};
   statusNode.dataset.state = s;
   statusNode.setAttribute("aria-label", labels[s] || labels.saving);
   statusNode.title = labels[s] || labels.saving;
@@ -325,8 +392,15 @@ function connectEvents() {
       return;
     }
     if (parsed && parsed.scope === scopeName) {
+      const raw = JSON.stringify(parsed.data);
       state = parsed.data;
       ensureState();
+      if (localEchoJSON && raw === localEchoJSON) {
+        localEchoJSON = "";
+        refreshScores();
+        setStatus("saved");
+        return;
+      }
       render();
       setStatus("saved");
     }
@@ -336,15 +410,25 @@ function connectEvents() {
 
 function currentRoute() {
   const path = window.location.pathname;
-  const m = path.match(/^\/host\/tournament\/(\d+)\/game\/(\d+)/);
-  if (!m) return {};
-  const tournamentID = m[1];
-  const gameID = m[2];
-  return {
-    tournamentID,
-    gameID,
-    apiBase: `/api/tournament/${tournamentID}/games/${gameID}`,
-  };
+  const host = path.match(/^\/host\/tournament\/(\d+)\/game\/(\d+)/);
+  if (host) {
+    return {
+      viewer: false,
+      tournamentID: host[1],
+      gameID: host[2],
+      apiBase: `/api/tournament/${host[1]}/games/${host[2]}`,
+    };
+  }
+  const pub = path.match(/^\/tournament\/(\d+)\/game\/(\d+)/);
+  if (pub) {
+    return {
+      viewer: true,
+      tournamentID: pub[1],
+      gameID: pub[2],
+      apiBase: `/api/tournament/${pub[1]}/games/${pub[2]}`,
+    };
+  }
+  return {};
 }
 
 function th(content, className) {

@@ -2,6 +2,7 @@ const hostRoot = document.getElementById("hostTable");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 const viewerLink = document.querySelector(".viewer-link");
+const importLink = document.querySelector(".import-link");
 
 const route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
@@ -12,9 +13,13 @@ let stageStates = [];
 let renderMatchCode = null;
 let activeCell = {matchCode: "", team: 0, shootout: false, theme: 0, answer: 0};
 let reloadTimer = null;
+const localMatchEchoes = new Set();
 
 document.body.classList.toggle("embedded-match", embedded);
 document.addEventListener("keydown", handleGlobalKeydown);
+if (importLink && route.tournamentID) {
+  importLink.href = `/host/tournament/${route.tournamentID}/import`;
+}
 
 async function loadCurrent() {
   if (route.mode === "match") {
@@ -79,9 +84,12 @@ function connectEvents() {
   const venuesScope = `venues:${route.tournamentID}`;
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
+    if (consumeLocalMatchEcho(message)) {
+      setStatus("saved");
+      return;
+    }
     if (route.mode === "match" && message.scope === matchScope) {
-      state = message.data;
-      render();
+      applyUpdatedMatch(message.data, route.matchCode);
       setStatus("saved");
       return;
     }
@@ -120,6 +128,27 @@ function parseEventData(raw) {
   return {scope: "unknown", data: parsed};
 }
 
+function matchScopeFor(matchCode) {
+  return `match:${route.gameID}:${matchCode}`;
+}
+
+function matchEchoKey(scope, revision) {
+  return `${scope}:${revision || 0}`;
+}
+
+function rememberLocalMatchEcho(matchCode, updated) {
+  if (!updated?.revision) return;
+  localMatchEchoes.add(matchEchoKey(matchScopeFor(matchCode), updated.revision));
+}
+
+function consumeLocalMatchEcho(message) {
+  if (!message?.scope?.startsWith("match:")) return false;
+  const key = matchEchoKey(message.scope, message.revision);
+  if (!localMatchEchoes.has(key)) return false;
+  localMatchEchoes.delete(key);
+  return true;
+}
+
 function setStatus(state) {
   const labels = {
     saved: "Синхронизировано",
@@ -142,13 +171,8 @@ async function sendUpdate(payload, matchCode = currentMatchCode()) {
     });
     if (!response.ok) throw new Error(await response.text());
     const updated = await response.json();
-    if (route.mode === "stage") {
-      replaceStageState(updated);
-      renderStage({preserveScroll: true});
-    } else {
-      state = updated;
-      render();
-    }
+    rememberLocalMatchEcho(matchCode, updated);
+    applyUpdatedMatch(updated, matchCode);
     setStatus("saved");
   } catch (error) {
     setStatus("error");
@@ -166,13 +190,8 @@ async function sendVenueChange(number, matchCode = currentMatchCode()) {
     });
     if (!response.ok) throw new Error(await response.text());
     const updated = await response.json();
-    if (route.mode === "stage") {
-      replaceStageState(updated);
-      renderStage({preserveScroll: true});
-    } else {
-      state = updated;
-      render();
-    }
+    rememberLocalMatchEcho(matchCode, updated);
+    applyUpdatedMatch(updated, matchCode);
     setStatus("saved");
   } catch (error) {
     setStatus("error");
@@ -420,6 +439,86 @@ function replaceStageState(updated) {
   stageStates = stageStates.map((matchState) => matchState.code === updated.code ? updated : matchState);
 }
 
+function applyUpdatedMatch(updated, matchCode) {
+  if (route.mode === "stage") {
+    replaceStageState(updated);
+    renderStage({preserveScroll: true});
+    return;
+  }
+  const previous = state;
+  state = updated;
+  if (canPatchMatchTable(previous, updated)) {
+    normalizeActiveCell();
+    patchMatchTable(matchCode);
+    return;
+  }
+  render();
+}
+
+function canPatchMatchTable(previous, next) {
+  if (route.mode !== "match" || !previous || !next) return false;
+  if (previous.code !== next.code || previous.title !== next.title || previous.finished !== next.finished) return false;
+  if (formatVenue(previous.venue) !== formatVenue(next.venue)) return false;
+  if (!sameArray(previous.questionValues, next.questionValues)) return false;
+  if ((previous.teams || []).length !== (next.teams || []).length) return false;
+  for (let i = 0; i < next.teams.length; i++) {
+    const prevTeam = previous.teams[i];
+    const nextTeam = next.teams[i];
+    if (prevTeam.name !== nextTeam.name) return false;
+    if ((prevTeam.themes || []).length !== (nextTeam.themes || []).length) return false;
+    if (shootoutThemesFor(prevTeam).length !== shootoutThemesFor(nextTeam).length) return false;
+  }
+  return true;
+}
+
+function patchMatchTable(matchCode) {
+  state.teams.forEach((team, teamIndex) => {
+    setText(`.total-cell[data-team="${teamIndex}"]`, team.total);
+    setText(`.plus-cell[data-team="${teamIndex}"]`, team.plus);
+    setText(`.tiebreak-cell[data-team="${teamIndex}"]`, team.shootoutTotal ?? team.tiebreak);
+    const placeInput = document.querySelector(`.place-input[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"]`);
+    if (placeInput && document.activeElement !== placeInput) {
+      placeInput.value = formatPlace(team.place);
+    }
+    if (placeInput) {
+      placeInput.dataset.committedPlace = String(team.place || 0);
+    }
+    [0, 1, 2, 3, 4].forEach((idx) => {
+      setText(`.correct-count-cell[data-team="${teamIndex}"][data-value-index="${idx}"]`, team.correctCounts[4 - idx]);
+    });
+    team.themes.forEach((theme, themeIndex) => {
+      patchTheme(teamIndex, themeIndex, false, theme, matchCode);
+    });
+    shootoutThemesFor(team).forEach((theme, themeIndex) => {
+      patchTheme(teamIndex, themeIndex, true, theme, matchCode);
+    });
+  });
+  markActiveCell();
+}
+
+function patchTheme(teamIndex, themeIndex, isShootout, theme, matchCode) {
+  const shootoutValue = isShootout ? "1" : "0";
+  const select = document.querySelector(`.player-select[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"][data-shootout="${shootoutValue}"][data-theme="${themeIndex}"]`);
+  if (select && document.activeElement !== select) {
+    if (theme.player && !Array.from(select.options).some((item) => item.value === theme.player)) {
+      select.appendChild(option(theme.player, theme.player));
+    }
+    select.value = theme.player || "";
+  }
+  setText(`.theme-score[data-team="${teamIndex}"][data-shootout="${shootoutValue}"][data-theme="${themeIndex}"]`, theme.score);
+  theme.answers.forEach((mark, answerIndex) => {
+    const cell = document.querySelector(`.answer-cell[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"][data-shootout="${shootoutValue}"][data-theme="${themeIndex}"][data-answer="${answerIndex}"]`);
+    if (!cell) return;
+    cell.classList.remove("right", "wrong");
+    if (mark) cell.classList.add(mark);
+  });
+}
+
+function setText(selector, value) {
+  const node = document.querySelector(selector);
+  if (node) node.textContent = formatNumber(value);
+}
+
 function buildTable() {
   const matchCode = currentMatchCode();
   const table = document.createElement("table");
@@ -470,8 +569,13 @@ function buildTable() {
     const answerRow = document.createElement("tr");
     answerRow.className = "answer-row";
 
-    playerRow.appendChild(td(team.name, "sticky sticky-name team-name", {rowSpan: 2}));
-    playerRow.appendChild(td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2}));
+    const teamNameCell = td(team.name, "sticky sticky-name team-name", {rowSpan: 2});
+    teamNameCell.dataset.team = String(teamIndex);
+    playerRow.appendChild(teamNameCell);
+
+    const totalCell = td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2});
+    totalCell.dataset.team = String(teamIndex);
+    playerRow.appendChild(totalCell);
 
     const placeInput = document.createElement("input");
     placeInput.type = "text";
@@ -513,6 +617,7 @@ function buildTable() {
     const placeCell = document.createElement("td");
     placeCell.className = "sticky sticky-place number place-cell";
     placeCell.rowSpan = 2;
+    placeCell.dataset.team = String(teamIndex);
     placeCell.appendChild(placeInput);
     playerRow.appendChild(placeCell);
     playerRow.appendChild(td("", "sticky sticky-place-gap place-gap", {rowSpan: 2}));
@@ -527,12 +632,19 @@ function buildTable() {
 
     if (hasShootout) {
       const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
-      playerRow.appendChild(td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2}));
+      const tiebreakCell = td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2});
+      tiebreakCell.dataset.team = String(teamIndex);
+      playerRow.appendChild(tiebreakCell);
     }
 
-    playerRow.appendChild(td(team.plus, "number plus-cell", {rowSpan: 2}));
+    const plusCell = td(team.plus, "number plus-cell", {rowSpan: 2});
+    plusCell.dataset.team = String(teamIndex);
+    playerRow.appendChild(plusCell);
     [0, 1, 2, 3, 4].forEach((idx) => {
-      playerRow.appendChild(td(team.correctCounts[4 - idx], "number narrow", {rowSpan: 2}));
+      const correctCell = td(team.correctCounts[4 - idx], "number narrow correct-count-cell", {rowSpan: 2});
+      correctCell.dataset.team = String(teamIndex);
+      correctCell.dataset.valueIndex = String(idx);
+      playerRow.appendChild(correctCell);
     });
 
     tbody.appendChild(playerRow);
@@ -563,6 +675,11 @@ function appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeInd
   const selectWrap = document.createElement("span");
   selectWrap.className = "player-select-wrap";
   const select = document.createElement("select");
+  select.className = "player-select";
+  select.dataset.matchCode = matchCode;
+  select.dataset.team = String(teamIndex);
+  select.dataset.shootout = isShootout ? "1" : "0";
+  select.dataset.theme = String(themeIndex);
   select.appendChild(option("", ""));
   const roster = team.roster || [];
   roster.forEach((player) => select.appendChild(option(player, player)));
@@ -581,7 +698,11 @@ function appendThemeCells(playerRow, answerRow, team, teamIndex, theme, themeInd
 
   playerCell.appendChild(editor);
   playerRow.appendChild(playerCell);
-  playerRow.appendChild(td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: 2}));
+  const scoreCell = td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: 2});
+  scoreCell.dataset.team = String(teamIndex);
+  scoreCell.dataset.shootout = isShootout ? "1" : "0";
+  scoreCell.dataset.theme = String(themeIndex);
+  playerRow.appendChild(scoreCell);
   const gapClass = isLastRenderedTheme(isShootout, themeIndex) ? "gap shootout-adjacent-gap" : "gap";
   playerRow.appendChild(td("", gapClass));
 
@@ -967,6 +1088,14 @@ function statusLabel(status) {
 
 function formatNumber(value) {
   return Number.isFinite(Number(value)) ? String(value) : "";
+}
+
+function sameArray(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
 
 function clamp(value, min, max) {

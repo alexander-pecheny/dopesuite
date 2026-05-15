@@ -558,7 +558,7 @@ func TestRatingResultsToTournamentRoster(t *testing.T) {
 	}
 }
 
-func TestImportTournamentRosterPropagatesToChGK(t *testing.T) {
+func TestImportTournamentRosterPropagatesToChGKAndKSI(t *testing.T) {
 	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -580,12 +580,15 @@ func TestImportTournamentRosterPropagatesToChGK(t *testing.T) {
 		t.Fatalf("seed test tournament: %v", err)
 	}
 
-	var tournamentID, chgkGameID int64
+	var tournamentID, chgkGameID, ksiGameID int64
 	if err := db.QueryRow(`select id from tournaments where slug = ?`, testTournamentSlug).Scan(&tournamentID); err != nil {
 		t.Fatalf("test tournament id: %v", err)
 	}
 	if err := db.QueryRow(`select id from games where tournament_id = ? and code = 'chgk'`, tournamentID).Scan(&chgkGameID); err != nil {
 		t.Fatalf("chgk game id: %v", err)
+	}
+	if err := db.QueryRow(`select id from games where tournament_id = ? and code = 'ksi'`, tournamentID).Scan(&ksiGameID); err != nil {
+		t.Fatalf("ksi game id: %v", err)
 	}
 
 	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
@@ -611,8 +614,8 @@ func TestImportTournamentRosterPropagatesToChGK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("import roster: %v", err)
 	}
-	if result.TeamCount != 2 || result.PlayerCount != 3 || result.ODGameCount != 1 {
-		t.Fatalf("result = %#v, want 2 teams / 3 players / 1 od game", result)
+	if result.TeamCount != 2 || result.PlayerCount != 3 || result.ODGameCount != 1 || result.KSIGameCount != 1 {
+		t.Fatalf("result = %#v, want 2 teams / 3 players / 1 od game / 1 ksi game", result)
 	}
 
 	var teamsCount, playersCount, ekTeamsCount int
@@ -658,6 +661,35 @@ func TestImportTournamentRosterPropagatesToChGK(t *testing.T) {
 	}
 	if len(state.Entries) == 0 || len(state.Entries[0]) != 2 {
 		t.Fatalf("state entries first row len = %d, want 2", len(state.Entries[0]))
+	}
+
+	if err := db.QueryRow(`select scheme_json, state_json from games where id = ?`, ksiGameID).Scan(&schemeJSON, &stateJSON); err != nil {
+		t.Fatalf("load ksi json: %v", err)
+	}
+	var ksiScheme struct {
+		GameType     string   `json:"gameType"`
+		Participants []string `json:"participants"`
+	}
+	if err := json.Unmarshal([]byte(schemeJSON), &ksiScheme); err != nil {
+		t.Fatalf("decode ksi scheme: %v", err)
+	}
+	if ksiScheme.GameType != "ksi" || len(ksiScheme.Participants) != 2 || ksiScheme.Participants[0] != "Первая" {
+		t.Fatalf("ksi scheme = %#v, want imported participants", ksiScheme)
+	}
+	var ksiState struct {
+		Participants []string `json:"participants"`
+		Themes       []struct {
+			Answers [][]string `json:"answers"`
+		} `json:"themes"`
+	}
+	if err := json.Unmarshal([]byte(stateJSON), &ksiState); err != nil {
+		t.Fatalf("decode ksi state: %v", err)
+	}
+	if len(ksiState.Participants) != 2 || ksiState.Participants[1] != "Вторая" {
+		t.Fatalf("ksi state participants = %#v, want imported teams", ksiState.Participants)
+	}
+	if len(ksiState.Themes) == 0 || len(ksiState.Themes[0].Answers) != 2 || len(ksiState.Themes[0].Answers[0]) != 5 {
+		t.Fatalf("ksi answers shape = %#v, want 2x5 rows in first theme", ksiState.Themes)
 	}
 }
 

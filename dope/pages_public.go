@@ -172,7 +172,7 @@ func (s *server) handleTournamentRouter(w http.ResponseWriter, r *http.Request) 
 				case "od":
 					s.serveAppHTML(w, r, "static/od.html")
 					return
-				case "si":
+				case "si", "ksi":
 					s.serveAppHTML(w, r, "static/si.html")
 					return
 				}
@@ -291,7 +291,7 @@ from tournaments where id = ?`, id).Scan(&title, &description, &startDate, &endD
 			ID:    g.ID,
 			Code:  g.Code,
 			Title: g.Title,
-			Type:  g.Type,
+			Type:  gameTypeLabel(g.Type),
 			URL:   fmt.Sprintf("/tournament/%d/game/%d/", id, g.ID),
 		}
 	}
@@ -306,6 +306,21 @@ from tournaments where id = ?`, id).Scan(&title, &description, &startDate, &endD
 		detail.RatingURL = fmt.Sprintf("https://rating.chgk.info/tournament/%d", ratingID.Int64)
 	}
 	return detail, nil
+}
+
+func gameTypeLabel(gameType string) string {
+	switch gameType {
+	case "od":
+		return "ЧГК"
+	case "si":
+		return "СИ"
+	case "ksi":
+		return "КСИ"
+	case "ek":
+		return "ЭК"
+	default:
+		return gameType
+	}
 }
 
 func formatTournamentDates(start, end string) string {

@@ -16,9 +16,10 @@ import (
 const ratingResultsURL = "https://api.rating.chgk.net/tournaments/%d/results.json?includeTeamMembers=1"
 
 type ratingRosterImportResult struct {
-	TeamCount   int
-	PlayerCount int
-	ODGameCount int
+	TeamCount    int
+	PlayerCount  int
+	ODGameCount  int
+	KSIGameCount int
 }
 
 type tournamentRosterImportTeam struct {
@@ -66,7 +67,7 @@ type chgkTeamJSON struct {
 	City string `json:"city,omitempty"`
 }
 
-type odGameStateBroadcast struct {
+type gameStateBroadcast struct {
 	GameID    int64
 	StateJSON []byte
 }
@@ -170,7 +171,7 @@ func (s *server) importTournamentRoster(ctx context.Context, tournamentID, ratin
 		return ratingRosterImportResult{}, errors.New("рейтинг не вернул команды")
 	}
 
-	var updates []odGameStateBroadcast
+	var updates []gameStateBroadcast
 	var revision int64
 	result, err := func() (ratingRosterImportResult, error) {
 		s.mu.Lock()
@@ -228,10 +229,15 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 			}
 		}
 
-		updates, err = propagateRosterToChGKTx(ctx, tx, tournamentID, teams)
+		chgkUpdates, err := propagateRosterToChGKTx(ctx, tx, tournamentID, teams)
 		if err != nil {
 			return ratingRosterImportResult{}, err
 		}
+		ksiUpdates, err := propagateRosterToKSITx(ctx, tx, tournamentID, teams)
+		if err != nil {
+			return ratingRosterImportResult{}, err
+		}
+		updates = append(chgkUpdates, ksiUpdates...)
 		if _, err := tx.ExecContext(ctx, `update tournaments set rating_id = ?, updated_at = ? where id = ?`, ratingID, utcNow(), tournamentID); err != nil {
 			return ratingRosterImportResult{}, err
 		}
@@ -239,7 +245,8 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 			"ratingID": ratingID,
 			"teams":    len(teams),
 			"players":  playerCount,
-			"odGames":  len(updates),
+			"odGames":  len(chgkUpdates),
+			"ksiGames": len(ksiUpdates),
 		}))
 		if err != nil {
 			return ratingRosterImportResult{}, err
@@ -249,9 +256,10 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 		}
 
 		return ratingRosterImportResult{
-			TeamCount:   len(teams),
-			PlayerCount: playerCount,
-			ODGameCount: len(updates),
+			TeamCount:    len(teams),
+			PlayerCount:  playerCount,
+			ODGameCount:  len(chgkUpdates),
+			KSIGameCount: len(ksiUpdates),
 		}, nil
 	}()
 	if err != nil {
@@ -271,7 +279,7 @@ func rosterPlayerKey(player tournamentRosterImportPlayer) string {
 	return "name:" + strings.ToLower(joinPlayerName(player.FirstName, player.LastName))
 }
 
-func propagateRosterToChGKTx(ctx context.Context, tx *sql.Tx, tournamentID int64, teams []tournamentRosterImportTeam) ([]odGameStateBroadcast, error) {
+func propagateRosterToChGKTx(ctx context.Context, tx *sql.Tx, tournamentID int64, teams []tournamentRosterImportTeam) ([]gameStateBroadcast, error) {
 	rows, err := tx.QueryContext(ctx, `
 select id, coalesce(scheme_json, '{}'), coalesce(state_json, '{}')
 from games
@@ -302,7 +310,7 @@ order by position, id`, tournamentID)
 		return nil, err
 	}
 
-	updates := make([]odGameStateBroadcast, 0, len(games))
+	updates := make([]gameStateBroadcast, 0, len(games))
 	for _, game := range games {
 		schemeJSON, err := applyRosterToChGKScheme(game.Scheme, teams)
 		if err != nil {
@@ -317,7 +325,58 @@ update games set scheme_json = ?, state_json = ?, updated_at = ?
 where id = ? and tournament_id = ?`, string(schemeJSON), string(stateJSON), utcNow(), game.ID, tournamentID); err != nil {
 			return nil, err
 		}
-		updates = append(updates, odGameStateBroadcast{GameID: game.ID, StateJSON: stateJSON})
+		updates = append(updates, gameStateBroadcast{GameID: game.ID, StateJSON: stateJSON})
+	}
+	return updates, nil
+}
+
+func propagateRosterToKSITx(ctx context.Context, tx *sql.Tx, tournamentID int64, teams []tournamentRosterImportTeam) ([]gameStateBroadcast, error) {
+	rows, err := tx.QueryContext(ctx, `
+select id, coalesce(scheme_json, '{}'), coalesce(state_json, '{}')
+from games
+where tournament_id = ? and game_type = 'ksi'
+order by position, id`, tournamentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type ksiGameRecord struct {
+		ID     int64
+		Scheme string
+		State  string
+	}
+	var games []ksiGameRecord
+	for rows.Next() {
+		var game ksiGameRecord
+		if err := rows.Scan(&game.ID, &game.Scheme, &game.State); err != nil {
+			return nil, err
+		}
+		games = append(games, game)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	updates := make([]gameStateBroadcast, 0, len(games))
+	for _, game := range games {
+		schemeJSON, err := applyRosterToKSIScheme(game.Scheme, teams)
+		if err != nil {
+			return nil, fmt.Errorf("game %d scheme: %w", game.ID, err)
+		}
+		stateJSON, err := applyRosterToKSIState(game.State, teams)
+		if err != nil {
+			return nil, fmt.Errorf("game %d state: %w", game.ID, err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+update games set scheme_json = ?, state_json = ?, updated_at = ?
+where id = ? and tournament_id = ?`, string(schemeJSON), string(stateJSON), utcNow(), game.ID, tournamentID); err != nil {
+			return nil, err
+		}
+		updates = append(updates, gameStateBroadcast{GameID: game.ID, StateJSON: stateJSON})
 	}
 	return updates, nil
 }
@@ -369,6 +428,64 @@ func applyRosterToChGKState(raw string, teams []tournamentRosterImportTeam) ([]b
 	return json.Marshal(obj)
 }
 
+func applyRosterToKSIScheme(raw string, teams []tournamentRosterImportTeam) ([]byte, error) {
+	obj, err := rawJSONObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	participantsJSON, err := json.Marshal(teamNamesFromRoster(teams))
+	if err != nil {
+		return nil, err
+	}
+	gameTypeJSON, err := json.Marshal("ksi")
+	if err != nil {
+		return nil, err
+	}
+	obj["gameType"] = gameTypeJSON
+	obj["participants"] = participantsJSON
+	return json.Marshal(obj)
+}
+
+func applyRosterToKSIState(raw string, teams []tournamentRosterImportTeam) ([]byte, error) {
+	obj, err := rawJSONObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	participants := teamNamesFromRoster(teams)
+	participantsJSON, err := json.Marshal(participants)
+	if err != nil {
+		return nil, err
+	}
+	obj["participants"] = participantsJSON
+
+	if rawThemes, ok := obj["themes"]; ok && len(rawThemes) > 0 {
+		var themes []map[string]json.RawMessage
+		if err := json.Unmarshal(rawThemes, &themes); err == nil {
+			for i := range themes {
+				if themes[i] == nil {
+					themes[i] = map[string]json.RawMessage{}
+				}
+				var answers [][]string
+				if rawAnswers, ok := themes[i]["answers"]; ok && len(rawAnswers) > 0 {
+					_ = json.Unmarshal(rawAnswers, &answers)
+				}
+				answers = resizeStringMatrix(answers, len(participants), len(questionValues))
+				answersJSON, err := json.Marshal(answers)
+				if err != nil {
+					return nil, err
+				}
+				themes[i]["answers"] = answersJSON
+			}
+			themesJSON, err := json.Marshal(themes)
+			if err != nil {
+				return nil, err
+			}
+			obj["themes"] = themesJSON
+		}
+	}
+	return json.Marshal(obj)
+}
+
 func rawJSONObject(raw string) (map[string]json.RawMessage, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "null" {
@@ -392,6 +509,14 @@ func chgkTeamsFromRoster(teams []tournamentRosterImportTeam) []chgkTeamJSON {
 	return out
 }
 
+func teamNamesFromRoster(teams []tournamentRosterImportTeam) []string {
+	out := make([]string, 0, len(teams))
+	for _, team := range teams {
+		out = append(out, team.Name)
+	}
+	return out
+}
+
 func resizeIntSlice(values []int, size int) []int {
 	if len(values) > size {
 		return values[:size]
@@ -399,6 +524,32 @@ func resizeIntSlice(values []int, size int) []int {
 	out := append([]int(nil), values...)
 	for len(out) < size {
 		out = append(out, 0)
+	}
+	return out
+}
+
+func resizeStringMatrix(values [][]string, rows, cols int) [][]string {
+	if len(values) > rows {
+		values = values[:rows]
+	}
+	out := make([][]string, rows)
+	for row := 0; row < rows; row++ {
+		if row < len(values) {
+			out[row] = resizeStringSlice(values[row], cols)
+		} else {
+			out[row] = make([]string, cols)
+		}
+	}
+	return out
+}
+
+func resizeStringSlice(values []string, size int) []string {
+	if len(values) > size {
+		return values[:size]
+	}
+	out := append([]string(nil), values...)
+	for len(out) < size {
+		out = append(out, "")
 	}
 	return out
 }
