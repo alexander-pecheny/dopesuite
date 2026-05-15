@@ -1,5 +1,5 @@
-match_state.json
-tournament.db*
-dope-server
-telegram-bot
-.env
+/match_state.json
+/tournament.db*
+/dope-server
+/telegram-bot
+/.env

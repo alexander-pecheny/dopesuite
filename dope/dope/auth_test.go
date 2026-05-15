@@ -296,13 +296,13 @@ values(?, ?, ?, 0, ?, ?)`, 777, "tg_bob", "bob", now, now)
 
 func TestUsernameValidation(t *testing.T) {
 	cases := map[string]bool{
-		"alice":    true,
-		"a":        false,
-		"":         false,
-		"with space": false,
-		"со_spaces":  false,
-		"привет":     false,
-		"alice.bob":  true,
+		"alice":                 true,
+		"a":                     false,
+		"":                      false,
+		"with space":            false,
+		"со_spaces":             false,
+		"привет":                false,
+		"alice.bob":             true,
 		strings.Repeat("a", 33): false,
 	}
 	for input, want := range cases {
