@@ -521,6 +521,146 @@ func TestSystemUserIsCreatedOnImport(t *testing.T) {
 	}
 }
 
+func TestRatingResultsToTournamentRoster(t *testing.T) {
+	raw := `[
+		{
+			"team":{"id":20,"name":"Beta","town":{"name":"Town B"}},
+			"current":{"name":"Beta Current"},
+			"position":18.5,
+			"teamMembers":[{"player":{"id":200,"name":"Иван","patronymic":"Иванович","surname":"Петров"}}]
+		},
+		{
+			"team":{"id":10,"town":{"name":"Town A"}},
+			"current":{"name":"Alpha"},
+			"teamMembers":[{"player":{"id":100,"name":"Анна","surname":"Сидорова"}}]
+		}
+	]`
+	var results []ratingTournamentResult
+	if err := json.Unmarshal([]byte(raw), &results); err != nil {
+		t.Fatalf("decode rating json: %v", err)
+	}
+
+	teams, err := ratingResultsToTournamentRoster(results)
+	if err != nil {
+		t.Fatalf("normalize rating results: %v", err)
+	}
+	if len(teams) != 2 {
+		t.Fatalf("teams = %d, want 2", len(teams))
+	}
+	if teams[0].Name != "Beta Current" || teams[0].City != "Town B" {
+		t.Fatalf("first team = %#v, want Beta Current/Town B", teams[0])
+	}
+	if teams[1].Name != "Alpha" {
+		t.Fatalf("second team name = %q, want Alpha", teams[1].Name)
+	}
+	if got := joinPlayerName(teams[0].Players[0].FirstName, teams[0].Players[0].LastName); got != "Иван Петров" {
+		t.Fatalf("player name = %q, want name and surname only", got)
+	}
+}
+
+func TestImportTournamentRosterPropagatesToChGK(t *testing.T) {
+	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	tx, err := db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	ownerID, err := ensureSystemUser(t.Context(), tx)
+	if err != nil {
+		t.Fatalf("system user: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit system user: %v", err)
+	}
+	if err := ensureTestTournament(t.Context(), db, ownerID); err != nil {
+		t.Fatalf("seed test tournament: %v", err)
+	}
+
+	var tournamentID, chgkGameID int64
+	if err := db.QueryRow(`select id from tournaments where slug = ?`, testTournamentSlug).Scan(&tournamentID); err != nil {
+		t.Fatalf("test tournament id: %v", err)
+	}
+	if err := db.QueryRow(`select id from games where tournament_id = ? and code = 'chgk'`, tournamentID).Scan(&chgkGameID); err != nil {
+		t.Fatalf("chgk game id: %v", err)
+	}
+
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	result, err := srv.importTournamentRoster(t.Context(), tournamentID, 13533, []tournamentRosterImportTeam{
+		{
+			RatingID: 101,
+			Name:     "Первая",
+			City:     "Москва",
+			Players: []tournamentRosterImportPlayer{
+				{RatingID: 1001, FirstName: "Анна", LastName: "Первая"},
+				{RatingID: 1002, FirstName: "Борис", LastName: "Второй"},
+			},
+		},
+		{
+			RatingID: 102,
+			Name:     "Вторая",
+			City:     "Казань",
+			Players: []tournamentRosterImportPlayer{
+				{RatingID: 1003, FirstName: "Вера", LastName: "Третья"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("import roster: %v", err)
+	}
+	if result.TeamCount != 2 || result.PlayerCount != 3 || result.ODGameCount != 1 {
+		t.Fatalf("result = %#v, want 2 teams / 3 players / 1 od game", result)
+	}
+
+	var teamsCount, playersCount, ekTeamsCount int
+	if err := db.QueryRow(`select count(*) from tournament_teams where tournament_id = ?`, tournamentID).Scan(&teamsCount); err != nil {
+		t.Fatalf("count tournament teams: %v", err)
+	}
+	if err := db.QueryRow(`select count(*) from tournament_players where tournament_id = ?`, tournamentID).Scan(&playersCount); err != nil {
+		t.Fatalf("count tournament players: %v", err)
+	}
+	if err := db.QueryRow(`select count(*) from teams where tournament_id = ?`, tournamentID).Scan(&ekTeamsCount); err != nil {
+		t.Fatalf("count existing game teams: %v", err)
+	}
+	if teamsCount != 2 || playersCount != 3 {
+		t.Fatalf("roster counts = %d/%d, want 2/3", teamsCount, playersCount)
+	}
+	if ekTeamsCount != 4 {
+		t.Fatalf("game teams count = %d, want existing EK teams preserved", ekTeamsCount)
+	}
+
+	var schemeJSON, stateJSON string
+	if err := db.QueryRow(`select scheme_json, state_json from games where id = ?`, chgkGameID).Scan(&schemeJSON, &stateJSON); err != nil {
+		t.Fatalf("load chgk json: %v", err)
+	}
+	var scheme struct {
+		NTeams int            `json:"nTeams"`
+		Teams  []chgkTeamJSON `json:"teams"`
+	}
+	if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
+		t.Fatalf("decode scheme: %v", err)
+	}
+	if scheme.NTeams != 2 || len(scheme.Teams) != 2 || scheme.Teams[0].Name != "Первая" {
+		t.Fatalf("scheme teams = %#v, want imported teams", scheme)
+	}
+	var state struct {
+		Teams   []chgkTeamJSON `json:"teams"`
+		Entries [][]int        `json:"entries"`
+	}
+	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+		t.Fatalf("decode state: %v", err)
+	}
+	if len(state.Teams) != 2 || state.Teams[1].Name != "Вторая" {
+		t.Fatalf("state teams = %#v, want imported teams", state.Teams)
+	}
+	if len(state.Entries) == 0 || len(state.Entries[0]) != 2 {
+		t.Fatalf("state entries first row len = %d, want 2", len(state.Entries[0]))
+	}
+}
+
 func TestAuthCodeHelpers(t *testing.T) {
 	a, err := newInviteCode()
 	if err != nil {

@@ -148,6 +148,42 @@ a.list-row:hover { background: #eef1f5; }
   margin: 0;
 }
 
+.data-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.data-grid h3 {
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.table-scroll {
+  overflow: auto;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+  background: var(--surface);
+  font-size: var(--text-sm);
+}
+
+.data-table th,
+.data-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--grid);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 /* ── design system: form controls ────────────────────────── */
 
 .field {
@@ -221,6 +257,12 @@ a.list-row:hover { background: #eef1f5; }
 
 .btn:hover { border-color: var(--text); }
 
+.btn.danger {
+  border-color: var(--red-dark);
+  color: var(--red-dark);
+  background: #fff7f7;
+}
+
 .btn-block { width: 100%; }
 
 .action-link {
@@ -257,6 +299,19 @@ a.list-row:hover { background: #eef1f5; }
   color: var(--text);
   text-decoration: underline;
   font-weight: 600;
+}
+
+.disclosure > summary {
+  width: max-content;
+  list-style: none;
+}
+
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure > form {
+  margin-top: var(--space-3);
 }
 
 /* ── public + host common page chrome ────────────────────── */

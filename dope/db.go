@@ -304,6 +304,30 @@ create table if not exists tournament_organizers(
   primary key(tournament_id, user_id)
 );
 
+create table if not exists tournament_teams(
+  id integer primary key,
+  tournament_id integer not null references tournaments(id) on delete cascade,
+  rating_id integer,
+  name text not null,
+  city text not null default '',
+  position real not null
+);
+
+create table if not exists tournament_players(
+  id integer primary key,
+  tournament_id integer not null references tournaments(id) on delete cascade,
+  rating_id integer,
+  first_name text not null,
+  last_name text not null default ''
+);
+
+create table if not exists tournament_team_players(
+  team_id integer not null references tournament_teams(id) on delete cascade,
+  player_id integer not null references tournament_players(id) on delete cascade,
+  roster_order integer not null,
+  primary key(team_id, player_id)
+);
+
 create table if not exists teams(
   id integer primary key,
   tournament_id integer not null references tournaments(id) on delete cascade,
@@ -485,6 +509,13 @@ begin
   select raise(abort, 'team roster is limited to 9 players');
 end;
 
+create trigger if not exists tournament_team_players_max_9
+before insert on tournament_team_players
+when (select count(*) from tournament_team_players where team_id = new.team_id) >= 9
+begin
+  select raise(abort, 'team roster is limited to 9 players');
+end;
+
 insert or ignore into schema_versions(version, applied_at) values(2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 `)
 	if err != nil {
@@ -515,6 +546,9 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 		return err
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(5, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(6, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
 	}
 	return nil
@@ -794,7 +828,6 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 	s.broadcastState("tournament", view.Revision, data)
 	writeJSON(w, data)
 }
-
 
 func (s *server) importScheme(scheme tournamentScheme) (TournamentView, error) {
 	if s.db == nil {
