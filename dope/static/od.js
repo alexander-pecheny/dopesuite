@@ -10,6 +10,11 @@ let scheme = null;
 let state = null;
 let tourLengths = [];
 let totalQuestions = 0;
+let renderedTab = null;
+let questionStatsCache = null;
+let activeEntryEditor = null;
+const tabCache = new Map();
+const tabScroll = new Map();
 
 const TABS = [
   {key: "results", label: "Итог"},
@@ -41,6 +46,7 @@ async function loadAll() {
   state = await stateResp.json();
   initFromScheme();
   ensureState();
+  invalidateAllCaches();
   render();
 }
 
@@ -98,27 +104,99 @@ function ensureState() {
   delete state.finished;
 }
 
-function teamTookQuestion(teamIndex, qIndex) {
-  if (!state.completed[qIndex]) return false;
-  const entries = state.entries[qIndex];
-  if (!entries) return false;
-  const target = teamIndex + 1;
-  const teamCount = state.teams.length;
-  for (const v of entries) {
-    if (v === target && v >= 1 && v <= teamCount) return true;
+function invalidateAllCaches() {
+  activeEntryEditor = null;
+  questionStatsCache = null;
+  for (const pane of tabCache.values()) pane.remove();
+  tabCache.clear();
+}
+
+function invalidateScoreCaches() {
+  questionStatsCache = null;
+  invalidateTabCache("detailed", "results");
+}
+
+function invalidateTabCache(...tabs) {
+  for (const tab of tabs) {
+    const pane = tabCache.get(tab);
+    if (pane) pane.remove();
+    tabCache.delete(tab);
   }
-  return false;
+}
+
+function questionStats() {
+  if (questionStatsCache) return questionStatsCache;
+  const teamCount = state.teams.length;
+  questionStatsCache = [];
+  for (let q = 0; q < totalQuestions; q++) {
+    const counts = new Map();
+    if (state.completed[q]) {
+      const entries = state.entries[q] || [];
+      for (const value of entries) {
+        if (!Number.isInteger(value) || value < 1 || value > teamCount) continue;
+        const teamIndex = value - 1;
+        counts.set(teamIndex, (counts.get(teamIndex) || 0) + 1);
+      }
+    }
+    questionStatsCache.push({
+      completed: Boolean(state.completed[q]),
+      counts,
+      validCount: counts.size,
+    });
+  }
+  return questionStatsCache;
+}
+
+function teamTookQuestion(teamIndex, qIndex, stats = questionStats()) {
+  return Boolean(stats[qIndex]?.counts.has(teamIndex));
 }
 
 function render() {
   if (!state || !scheme) return;
+  if (renderedTab === "input" && activeTab !== "input") closeEntryEditor();
+  rememberTabScroll(renderedTab);
   setHeading(scheme.title || "ОД");
   document.title = `${viewer ? "Зритель" : "Ведущий"} · ${scheme.title || "ОД"}`;
   if (!TABS.some((t) => t.key === activeTab)) activeTab = TABS[0].key;
   renderTabs();
-  if (activeTab === "input") odRoot.replaceChildren(buildInputTable());
-  else if (activeTab === "detailed") odRoot.replaceChildren(buildDetailedTable());
-  else odRoot.replaceChildren(buildResultsTable());
+  const activePane = getTabPane(activeTab);
+  for (const pane of tabCache.values()) pane.hidden = pane !== activePane;
+  if (!activePane.isConnected) odRoot.appendChild(activePane);
+  renderedTab = activeTab;
+  restoreTabScroll(activeTab);
+}
+
+function getTabPane(tab) {
+  const cached = tabCache.get(tab);
+  if (cached) return cached;
+  let node;
+  if (tab === "input") node = buildInputTable();
+  else if (tab === "detailed") node = buildDetailedTable();
+  else node = buildResultsTable();
+  const pane = document.createElement("div");
+  pane.className = "od-pane";
+  pane.dataset.tab = tab;
+  pane.appendChild(node);
+  tabCache.set(tab, pane);
+  return pane;
+}
+
+function scrollFrame() {
+  return document.querySelector(".sheet-frame");
+}
+
+function rememberTabScroll(tab) {
+  const frame = scrollFrame();
+  if (!tab || !frame) return;
+  tabScroll.set(tab, {top: frame.scrollTop, left: frame.scrollLeft});
+}
+
+function restoreTabScroll(tab) {
+  const frame = scrollFrame();
+  if (!frame) return;
+  const pos = tabScroll.get(tab) || {top: 0, left: 0};
+  frame.scrollTop = pos.top;
+  frame.scrollLeft = pos.left;
 }
 
 function renderTabs() {
@@ -144,18 +222,8 @@ function renderTabs() {
 
 // === Ввод ===
 
-function countValidEntries(qIndex) {
-  const list = state.entries[qIndex] || [];
-  const teamCount = state.teams.length;
-  const seen = new Set();
-  let count = 0;
-  for (const v of list) {
-    if (!Number.isInteger(v) || v < 1 || v > teamCount) continue;
-    if (seen.has(v)) continue;
-    seen.add(v);
-    count++;
-  }
-  return count;
+function countValidEntries(qIndex, stats = questionStats()) {
+  return stats[qIndex]?.validCount || 0;
 }
 
 function questionCounts(qIndex) {
@@ -166,6 +234,13 @@ function buildInputTable() {
   const n = state.teams.length;
   const table = document.createElement("table");
   table.className = "entry-table" + (viewer ? " entry-readonly" : "");
+  table.addEventListener("click", handleEntryClick);
+  table.addEventListener("input", handleEntryInput);
+  table.addEventListener("keydown", handleEntryKeydown);
+  table.addEventListener("focusin", handleEntryFocus);
+  table.addEventListener("focusout", handleEntryFocusOut);
+  table.addEventListener("change", handleEntryChange);
+  const validationCounts = buildInputValidationCounts();
 
   const colgroup = document.createElement("colgroup");
   tourLengths.forEach((tourSize, tourIndex) => {
@@ -208,7 +283,7 @@ function buildInputTable() {
     tourLengths.forEach((tourSize, tourIndex) => {
       for (let i = 0; i < tourSize; i++) {
         const tourEnd = i === tourSize - 1 && tourIndex < tourLengths.length - 1;
-        tr.appendChild(entryCell(qi, row, tourEnd));
+        tr.appendChild(entryCell(qi, row, tourEnd, validationCounts[qi]));
         qi++;
       }
     });
@@ -226,20 +301,144 @@ function lockCell(qIndex, className) {
   const cb = document.createElement("input");
   cb.type = "checkbox";
   cb.className = "entry-lock-checkbox";
+  cb.dataset.q = String(qIndex);
   cb.checked = Boolean(state.completed[qIndex]);
   cb.disabled = viewer;
-  cb.addEventListener("change", () => {
-    state.completed[qIndex] = cb.checked;
-    saveState();
-  });
   label.appendChild(cb);
   cell.appendChild(label);
   return cell;
 }
 
-function entryCell(qIndex, rowIndex, tourEnd) {
+function entryCell(qIndex, rowIndex, tourEnd, validationCounts) {
   const td = document.createElement("td");
   td.className = "entry-cell" + (tourEnd ? " entry-tour-end" : "");
+  td.dataset.q = String(qIndex);
+  td.dataset.row = String(rowIndex);
+  if (!viewer) td.tabIndex = 0;
+  td.setAttribute("role", "gridcell");
+  const value = state.entries[qIndex][rowIndex];
+  td.textContent = value ? String(value) : "";
+  markEntryCellValidity(td, qIndex, validationCounts);
+  return td;
+}
+
+function buildInputValidationCounts() {
+  const counts = [];
+  for (let q = 0; q < totalQuestions; q++) counts.push(inputValidationCounts(q));
+  return counts;
+}
+
+function inputValidationCounts(qIndex) {
+  const counts = new Map();
+  const list = state.entries[qIndex] || [];
+  for (const value of list) {
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return counts;
+}
+
+function markEntryCellValidity(cell, qIndex, counts = inputValidationCounts(qIndex)) {
+  const rowIndex = Number(cell.dataset.row);
+  const value = state.entries[qIndex]?.[rowIndex] || 0;
+  const raw = value ? String(value) : "";
+  if (!raw) {
+    cell.classList.remove("entry-input-bad", "entry-input-dup");
+    syncActiveEditorValidity(cell);
+    return;
+  }
+  const n = Number(raw);
+  const inRange = Number.isInteger(n) && n >= 1 && n <= state.teams.length;
+  const dup = (counts.get(n) || 0) > 1;
+  cell.classList.toggle("entry-input-bad", !inRange);
+  cell.classList.toggle("entry-input-dup", inRange && dup);
+  syncActiveEditorValidity(cell);
+}
+
+function syncActiveEditorValidity(cell) {
+  if (!activeEntryEditor || activeEntryEditor.cell !== cell) return;
+  activeEntryEditor.input.classList.toggle("entry-input-bad", cell.classList.contains("entry-input-bad"));
+  activeEntryEditor.input.classList.toggle("entry-input-dup", cell.classList.contains("entry-input-dup"));
+}
+
+function updateInputValidity(qIndex = null) {
+  const selector = qIndex === null ? ".entry-cell" : `.entry-cell[data-q="${qIndex}"]`;
+  const cells = odRoot.querySelectorAll(selector);
+  const counts = qIndex === null ? buildInputValidationCounts() : inputValidationCounts(qIndex);
+  for (const cell of cells) {
+    const qi = Number(cell.dataset.q);
+    markEntryCellValidity(cell, qi, qIndex === null ? counts[qi] : counts);
+  }
+}
+
+function handleEntryClick(event) {
+  if (event.target instanceof HTMLInputElement && event.target.classList.contains("entry-input")) return;
+  const cell = event.target.closest?.(".entry-cell");
+  if (!cell || viewer) return;
+  openEntryEditor(cell);
+}
+
+function handleEntryInput(event) {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement) || !input.classList.contains("entry-input")) return;
+  const qIndex = Number(input.dataset.q);
+  const rowIndex = Number(input.dataset.row);
+  if (!Number.isInteger(qIndex) || !Number.isInteger(rowIndex)) return;
+  input.value = input.value.replace(/[^0-9]/g, "");
+  state.entries[qIndex][rowIndex] = input.value === "" ? 0 : Number(input.value);
+  invalidateScoreCaches();
+  updateInputValidity(qIndex);
+  saveState();
+}
+
+function handleEntryKeydown(event) {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement) || !input.classList.contains("entry-input")) return;
+  const qIndex = Number(input.dataset.q);
+  const rowIndex = Number(input.dataset.row);
+  if (event.key === "Enter" || event.key === "ArrowDown") {
+    event.preventDefault();
+    focusInput(qIndex, rowIndex + 1);
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    focusInput(qIndex, rowIndex - 1);
+  } else if (event.key === "ArrowLeft" && input.selectionStart === 0 && input.selectionEnd === 0) {
+    event.preventDefault();
+    focusInput(qIndex - 1, rowIndex);
+  } else if (event.key === "ArrowRight" && input.selectionStart === input.value.length && input.selectionEnd === input.value.length) {
+    event.preventDefault();
+    focusInput(qIndex + 1, rowIndex);
+  }
+}
+
+function handleEntryFocus(event) {
+  const target = event.target;
+  if (target instanceof HTMLInputElement && target.classList.contains("entry-input")) {
+    target.select();
+    return;
+  }
+  const cell = target.closest?.(".entry-cell");
+  if (cell && !viewer) {
+    openEntryEditor(cell);
+  }
+}
+
+function handleEntryFocusOut(event) {
+  if (!activeEntryEditor || event.target !== activeEntryEditor.input) return;
+  if (activeEntryEditor.cell.contains(event.relatedTarget)) return;
+  closeEntryEditor();
+}
+
+function openEntryEditor(cell) {
+  if (viewer) return;
+  if (activeEntryEditor?.cell === cell) {
+    activeEntryEditor.input.focus();
+    activeEntryEditor.input.select();
+    return;
+  }
+  closeEntryEditor();
+  const qIndex = Number(cell.dataset.q);
+  const rowIndex = Number(cell.dataset.row);
+  if (!Number.isInteger(qIndex) || !Number.isInteger(rowIndex)) return;
   const input = document.createElement("input");
   input.type = "text";
   input.inputMode = "numeric";
@@ -249,71 +448,46 @@ function entryCell(qIndex, rowIndex, tourEnd) {
   input.maxLength = 4;
   input.autocomplete = "off";
   input.spellcheck = false;
-  input.disabled = viewer;
   const value = state.entries[qIndex][rowIndex];
   input.value = value ? String(value) : "";
-  input.addEventListener("input", () => {
-    input.value = input.value.replace(/[^0-9]/g, "");
-    state.entries[qIndex][rowIndex] = input.value === "" ? 0 : Number(input.value);
-    updateInputValidity();
-    saveState();
-  });
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === "ArrowDown") {
-      event.preventDefault();
-      focusInput(qIndex, rowIndex + 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      focusInput(qIndex, rowIndex - 1);
-    } else if (event.key === "ArrowLeft" && input.selectionStart === 0 && input.selectionEnd === 0) {
-      event.preventDefault();
-      focusInput(qIndex - 1, rowIndex);
-    } else if (event.key === "ArrowRight" && input.selectionStart === input.value.length && input.selectionEnd === input.value.length) {
-      event.preventDefault();
-      focusInput(qIndex + 1, rowIndex);
-    }
-  });
-  input.addEventListener("focus", () => {
-    input.select();
-  });
-  td.appendChild(input);
-  markInputValidity(input, qIndex);
-  return td;
+  cell.textContent = "";
+  cell.classList.add("entry-editing");
+  cell.appendChild(input);
+  activeEntryEditor = {cell, input};
+  syncActiveEditorValidity(cell);
+  input.focus();
+  input.select();
 }
 
-function markInputValidity(input, qIndex) {
-  const raw = input.value;
-  if (!raw) {
-    input.classList.remove("entry-input-bad", "entry-input-dup");
-    return;
-  }
-  const n = Number(raw);
-  const inRange = Number.isInteger(n) && n >= 1 && n <= state.teams.length;
-  const list = state.entries[qIndex] || [];
-  let count = 0;
-  for (const v of list) if (v === n) count++;
-  const dup = count > 1;
-  input.classList.toggle("entry-input-bad", !inRange);
-  input.classList.toggle("entry-input-dup", inRange && dup);
+function closeEntryEditor() {
+  if (!activeEntryEditor) return;
+  const {cell, input} = activeEntryEditor;
+  const qIndex = Number(cell.dataset.q);
+  const rowIndex = Number(cell.dataset.row);
+  activeEntryEditor = null;
+  input.remove();
+  cell.classList.remove("entry-editing");
+  const value = state.entries[qIndex]?.[rowIndex] || 0;
+  cell.textContent = value ? String(value) : "";
+  markEntryCellValidity(cell, qIndex);
 }
 
-function updateInputValidity() {
-  const inputs = odRoot.querySelectorAll(".entry-input");
-  for (const inp of inputs) {
-    const qi = Number(inp.dataset.q);
-    markInputValidity(inp, qi);
-  }
+function handleEntryChange(event) {
+  const cb = event.target;
+  if (!(cb instanceof HTMLInputElement) || !cb.classList.contains("entry-lock-checkbox")) return;
+  const qIndex = Number(cb.dataset.q);
+  if (!Number.isInteger(qIndex)) return;
+  state.completed[qIndex] = cb.checked;
+  invalidateScoreCaches();
+  saveState();
 }
 
 function focusInput(qIndex, rowIndex) {
   if (qIndex < 0 || qIndex >= totalQuestions) return;
   if (rowIndex < 0 || rowIndex >= state.teams.length) return;
-  const sel = `.entry-input[data-q="${qIndex}"][data-row="${rowIndex}"]`;
-  const node = odRoot.querySelector(sel);
-  if (node) {
-    node.focus();
-    node.select();
-  }
+  const sel = `.entry-cell[data-q="${qIndex}"][data-row="${rowIndex}"]`;
+  const cell = odRoot.querySelector(sel);
+  if (cell) openEntryEditor(cell);
 }
 
 // === Подробно ===
@@ -321,6 +495,7 @@ function focusInput(qIndex, rowIndex) {
 function buildDetailedTable() {
   const table = document.createElement("table");
   table.className = "match-table od-detailed";
+  table.addEventListener("change", handleDetailedChange);
 
   const thead = document.createElement("thead");
   const header = document.createElement("tr");
@@ -342,7 +517,8 @@ function buildDetailedTable() {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  const totals = state.teams.map((_, i) => sumRow(i));
+  const stats = questionStats();
+  const totals = state.teams.map((_, i) => sumRow(i, stats));
   const placeMap = computePlaces(totals);
 
   state.teams.forEach((team, teamIndex) => {
@@ -357,7 +533,7 @@ function buildDetailedTable() {
     tourLengths.forEach((tourSize) => {
       let tourSum = 0;
       for (let i = 0; i < tourSize; i++) {
-        const answered = teamTookQuestion(teamIndex, qIndex);
+        const answered = teamTookQuestion(teamIndex, qIndex, stats);
         if (answered) tourSum += 1;
         const cell = document.createElement("td");
         const classes = ["answer-cell", "theme-block", "readonly"];
@@ -388,15 +564,22 @@ function nameCell(team, teamIndex) {
   const input = document.createElement("input");
   input.type = "text";
   input.className = "venue-input";
+  input.dataset.team = String(teamIndex);
   input.value = team.name || "";
   input.placeholder = `Команда ${teamIndex + 1}`;
   input.disabled = viewer;
-  input.addEventListener("change", () => {
-    state.teams[teamIndex].name = input.value.trim();
-    saveState();
-  });
   cell.appendChild(input);
   return cell;
+}
+
+function handleDetailedChange(event) {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement) || !input.classList.contains("venue-input")) return;
+  const teamIndex = Number(input.dataset.team);
+  if (!Number.isInteger(teamIndex) || !state.teams[teamIndex]) return;
+  state.teams[teamIndex].name = input.value.trim();
+  invalidateTabCache("results");
+  saveState();
 }
 
 // === Итог ===
@@ -422,9 +605,10 @@ function buildResultsTable() {
 
 function buildResultsTableInner() {
   const n = state.teams.length;
-  const totals = state.teams.map((_, i) => sumRow(i));
-  const ratings = state.teams.map((_, i) => ratingForTeam(i));
-  const tourTotals = state.teams.map((_, i) => tourSumsForTeam(i));
+  const stats = questionStats();
+  const totals = state.teams.map((_, i) => sumRow(i, stats));
+  const ratings = state.teams.map((_, i) => ratingForTeam(i, stats));
+  const tourTotals = state.teams.map((_, i) => tourSumsForTeam(i, stats));
 
   const sortKeys = state.teams.map((_, i) => ({
     index: i,
@@ -506,21 +690,21 @@ function buildResultsTableInner() {
 
 // === scoring helpers ===
 
-function sumRow(teamIndex) {
+function sumRow(teamIndex, stats = questionStats()) {
   let s = 0;
   for (let q = 0; q < totalQuestions; q++) {
-    if (teamTookQuestion(teamIndex, q)) s++;
+    if (teamTookQuestion(teamIndex, q, stats)) s++;
   }
   return s;
 }
 
-function tourSumsForTeam(teamIndex) {
+function tourSumsForTeam(teamIndex, stats = questionStats()) {
   const out = [];
   let qi = 0;
   for (const size of tourLengths) {
     let s = 0;
     for (let i = 0; i < size; i++) {
-      if (teamTookQuestion(teamIndex, qi)) s++;
+      if (teamTookQuestion(teamIndex, qi, stats)) s++;
       qi++;
     }
     out.push(s);
@@ -528,19 +712,19 @@ function tourSumsForTeam(teamIndex) {
   return out;
 }
 
-function ratingForTeam(teamIndex) {
+function ratingForTeam(teamIndex, stats = questionStats()) {
   const teamCount = state.teams.length;
   let r = 0;
   for (let q = 0; q < totalQuestions; q++) {
-    if (!teamTookQuestion(teamIndex, q)) continue;
-    const took = countValidEntries(q);
+    if (!teamTookQuestion(teamIndex, q, stats)) continue;
+    const took = countValidEntries(q, stats);
     r += teamCount - took;
   }
   return r;
 }
 
-function anyQuestionCompleted() {
-  for (const c of state.completed) if (c) return true;
+function anyQuestionCompleted(stats = questionStats()) {
+  for (const stat of stats) if (stat.completed) return true;
   return false;
 }
 
@@ -612,9 +796,12 @@ function connectEvents() {
       state = parsed.data;
       ensureState();
       if (typing) {
+        questionStatsCache = null;
+        invalidateTabCache("detailed", "results");
         setStatus("saved");
         return;
       }
+      invalidateAllCaches();
       render();
       setStatus("saved");
     }
