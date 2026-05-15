@@ -169,6 +169,9 @@ func staticSource() (fs.FS, string) {
 	if info, err := os.Stat("static"); err == nil && info.IsDir() {
 		return os.DirFS("."), "disk"
 	}
+	if info, err := os.Stat("dope/static"); err == nil && info.IsDir() {
+		return os.DirFS("dope"), "disk"
+	}
 	return staticFiles, "embed"
 }
 

@@ -13,7 +13,7 @@
 9. **Миграция v2 (текущая итерация)**: разделение турнира и игры, символьный бракет, пользователи и сессии, sidecar Telegram-бот за интерфейсом, шаги бэкфилла существующих данных.
 10. Переключить хендлеры на работу с явным `(tournament_id, game_id)` через `/api/tournament/{tid}/games/{gid}/...`. Старые плоские маршруты `/api/tournament`, `/api/matches/...`, `/api/venues/...` удалены. Готово.
 11. Реализовать UI создания турниров и игр (`/`, `/tournament/{id}`, `/host`, `/host/tournament/{id}`). Готово; UI создания игры с импортом сетки — отложен.
-12. Реализовать настоящий цикл long-poll к Telegram Bot API. Готово: `cmd/telegram-bot` обрабатывает `/start`, `/login` и потребление register-кодов.
+12. Реализовать настоящий цикл long-poll к Telegram Bot API. Готово: `dope/cmd/telegram-bot` обрабатывает `/start`, `/login` и потребление register-кодов.
 13. Реализовать страницы `/register` и `/login`, серверные хендлеры `/api/auth/*`, выдачу сессионной куки и установку `username`. Готово.
 
 ## Тесты
@@ -31,7 +31,7 @@
 
 - `GET /` — список публичных турниров (`is_public = 1`), сортировка по `start_date`.
 - `GET /tournament/{id}` — заголовок, markdown-описание (goldmark, безопасный режим — raw HTML экранируется), список игр.
-- `GET /tournament/{id}/game/{gid}/[matches/{code}|stage/{code}|venues]` — зрительская сетка/этап/бой/площадки. Тот же `static/viewer.html`, IDs читаются из URL.
+- `GET /tournament/{id}/game/{gid}/[matches/{code}|stage/{code}|venues]` — зрительская сетка/этап/бой/площадки. Тот же `dope/static/viewer.html`, IDs читаются из URL.
 
 Хост:
 
@@ -39,7 +39,7 @@
 - `POST /host/tournament` — создать турнир, организатором становится текущий пользователь.
 - `GET /host/tournament/{id}` — дашборд турнира: форма редактирования и список игр. Не-организатор → 303 на `/host`.
 - `POST /host/tournament/{id}` — обновить поля турнира.
-- `GET /host/tournament/{id}/game/{gid}/[matches/{code}|stage/{code}|venues]` — ведущий, тот же `static/host.html`, IDs из URL.
+- `GET /host/tournament/{id}/game/{gid}/[matches/{code}|stage/{code}|venues]` — ведущий, тот же `dope/static/host.html`, IDs из URL.
 
 API:
 

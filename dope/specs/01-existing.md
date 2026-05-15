@@ -4,7 +4,7 @@
 
 ## Backend
 
-- Go-сервер в [main.go](/Users/pecheny/dope/main.go) хранит один `MatchState`.
+- Go-сервер в [dope/main.go](/Users/pecheny/dope/dope/main.go) хранит один `MatchState`.
 - Состояние читается и пишется в `match_state.json`; если файла нет, создается `defaultMatch()`.
 - Роуты: `/host`, `/viewer`, `/api/state`, `/api/update`, `/events`.
 - `/events` отдает Server-Sent Events с полной проекцией состояния после каждого изменения.
@@ -22,9 +22,9 @@
 
 ## Frontend
 
-- `static/host.js` строит редактируемую таблицу: ответы, игроки, места, финиш боя, добавление/удаление перестрелки.
-- `static/viewer.js` строит read-only таблицу зрителя.
-- `static/styles.css` уже содержит основной табличный язык: sticky-колонки, компактные ячейки, состояния ответов, шапку host/viewer.
+- `dope/static/host.js` строит редактируемую таблицу: ответы, игроки, места, финиш боя, добавление/удаление перестрелки.
+- `dope/static/viewer.js` строит read-only таблицу зрителя.
+- `dope/static/styles.css` уже содержит основной табличный язык: sticky-колонки, компактные ячейки, состояния ответов, шапку host/viewer.
 
 ## Покрытие
 

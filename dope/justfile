@@ -3,17 +3,38 @@ set dotenv-load := true
 default: dev
 
 web:
-    go run .
+    go run ./dope
 
 bot:
-    go run ./cmd/telegram-bot
+    go run ./dope/cmd/telegram-bot
+
+fmt:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(find dope -type f -name '*.go')
+    ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
+
+test:
+    go test ./...
+
+vet:
+    go vet ./...
+
+tidy-check:
+    go mod tidy -diff
+
+pre-commit:
+    just fmt
+    just vet
+    just tidy-check
+    just test
 
 dev:
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'kill 0' EXIT INT TERM
-    go run . &
-    go run ./cmd/telegram-bot &
+    go run ./dope &
+    go run ./dope/cmd/telegram-bot &
     wait
 
 # Mint a one-shot invite code and print it. Reads DOPE_DB from .env.

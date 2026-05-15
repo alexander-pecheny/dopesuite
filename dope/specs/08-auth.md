@@ -53,7 +53,7 @@ type TelegramBot interface {
 }
 ```
 
-Реализация в `cmd/telegram-bot` делает long-poll к Telegram Bot API и работает с тем же файлом БД, что и сервер. Без `TELEGRAM_BOT_TOKEN` бот стартует в idle-режиме (no-op), чтобы локальный `just dev` не требовал токена.
+Реализация в `dope/cmd/telegram-bot` делает long-poll к Telegram Bot API и работает с тем же файлом БД, что и сервер. Без `TELEGRAM_BOT_TOKEN` бот стартует в idle-режиме (no-op), чтобы локальный `just dev` не требовал токена.
 
 ## Безопасность и инварианты
 
