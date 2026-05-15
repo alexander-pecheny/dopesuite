@@ -177,15 +177,14 @@ func seedTestKSIGame(ctx context.Context, tx *sql.Tx, tournamentID int64, positi
 	for _, team := range teams {
 		participants = append(participants, team.Name)
 	}
-	themesCount := 8
 	scheme := map[string]any{
 		"title":        "КСИ (тестовый бой)",
 		"gameType":     "ksi",
 		"participants": participants,
-		"themes":       themesCount,
+		"themes":       ksiThemeCount,
 	}
-	themes := make([]map[string]any, themesCount)
-	for t := 0; t < themesCount; t++ {
+	themes := make([]map[string]any, ksiThemeCount)
+	for t := 0; t < ksiThemeCount; t++ {
 		rows := make([][]string, len(participants))
 		for p := range rows {
 			rows[p] = []string{"", "", "", "", ""}

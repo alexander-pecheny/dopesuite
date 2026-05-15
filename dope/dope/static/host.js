@@ -15,6 +15,8 @@ let renderMatchCode = null;
 let activeCell = {matchCode: "", team: 0, shootout: false, theme: 0, answer: 0};
 let reloadTimer = null;
 const localMatchEchoes = new Set();
+let matchTableIndex = null;
+let activeAnswerNode = null;
 
 document.body.classList.toggle("embedded-match", embedded);
 document.addEventListener("keydown", handleGlobalKeydown);
@@ -122,11 +124,7 @@ function scheduleReload() {
 }
 
 function parseEventData(raw) {
-  const parsed = JSON.parse(raw);
-  if (parsed && typeof parsed.scope === "string" && Object.prototype.hasOwnProperty.call(parsed, "data")) {
-    return parsed;
-  }
-  return {scope: "unknown", data: parsed};
+  return gameTable.parseScopedEvent(raw);
 }
 
 function matchScopeFor(matchCode) {
@@ -220,6 +218,7 @@ async function updateVenueTitle(number, title) {
 
 function renderTournament() {
   if (!tournament) return;
+  resetMatchTableIndex();
   setHostMode("grid");
   setHeading(tournament.title);
   setViewerLink(route.viewerBase + "/", "Открыть зрительскую сетку");
@@ -229,6 +228,7 @@ function renderTournament() {
 
 function renderStage(options = {}) {
   if (!tournament) return;
+  resetMatchTableIndex();
   const scrollFrame = hostRoot.closest(".sheet-frame");
   const scrollTop = scrollFrame?.scrollTop || 0;
   const scrollLeft = scrollFrame?.scrollLeft || 0;
@@ -245,6 +245,7 @@ function renderStage(options = {}) {
 }
 
 function renderVenues() {
+  resetMatchTableIndex();
   setHostMode("grid");
   setHeading("Площадки");
   setViewerLink(`${route.viewerBase}/venues`, "Открыть площадки для зрителя");
@@ -264,6 +265,8 @@ function render() {
   const finishToggleFocused = isFinishToggleFocused();
   const venueFocused = isVenueSelectFocused();
   const table = buildTable();
+  matchTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
+  activeAnswerNode = state.finished ? null : matchTableIndex.get("answer", activeCell);
   if (embedded) {
     hostRoot.replaceChildren(table);
     notifyEmbeddedResize();
@@ -457,7 +460,7 @@ function applyUpdatedMatch(updated, matchCode) {
 }
 
 function canPatchMatchTable(previous, next) {
-  if (route.mode !== "match" || !previous || !next) return false;
+  if (route.mode !== "match" || !matchTableIndex || !previous || !next) return false;
   if (previous.code !== next.code || previous.title !== next.title || previous.finished !== next.finished) return false;
   if (formatVenue(previous.venue) !== formatVenue(next.venue)) return false;
   if (!sameArray(previous.questionValues, next.questionValues)) return false;
@@ -474,10 +477,11 @@ function canPatchMatchTable(previous, next) {
 
 function patchMatchTable(matchCode) {
   state.teams.forEach((team, teamIndex) => {
-    setText(`.total-cell[data-team="${teamIndex}"]`, team.total);
-    setText(`.plus-cell[data-team="${teamIndex}"]`, team.plus);
-    setText(`.tiebreak-cell[data-team="${teamIndex}"]`, team.shootoutTotal ?? team.tiebreak);
-    const placeInput = document.querySelector(`.place-input[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"]`);
+    setIndexedText("total", {team: teamIndex}, team.total);
+    setIndexedText("plus", {team: teamIndex}, team.plus);
+    setIndexedText("tiebreak", {team: teamIndex}, team.shootoutTotal ?? team.tiebreak);
+    const placeInput = indexedNode("placeInput", {team: teamIndex}) ||
+      document.querySelector(`.place-input[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"]`);
     if (placeInput && document.activeElement !== placeInput) {
       placeInput.value = formatPlace(team.place);
     }
@@ -485,7 +489,7 @@ function patchMatchTable(matchCode) {
       placeInput.dataset.committedPlace = String(team.place || 0);
     }
     [0, 1, 2, 3, 4].forEach((idx) => {
-      setText(`.correct-count-cell[data-team="${teamIndex}"][data-value-index="${idx}"]`, team.correctCounts[4 - idx]);
+      setIndexedText("correctCount", {team: teamIndex, valueIndex: idx}, team.correctCounts[4 - idx]);
     });
     team.themes.forEach((theme, themeIndex) => {
       patchTheme(teamIndex, themeIndex, false, theme, matchCode);
@@ -499,25 +503,35 @@ function patchMatchTable(matchCode) {
 
 function patchTheme(teamIndex, themeIndex, isShootout, theme, matchCode) {
   const shootoutValue = isShootout ? "1" : "0";
-  const select = document.querySelector(`.player-select[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"][data-shootout="${shootoutValue}"][data-theme="${themeIndex}"]`);
+  const select = indexedNode("playerSelect", {team: teamIndex, shootout: shootoutValue, theme: themeIndex}) ||
+    document.querySelector(`.player-select[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"][data-shootout="${shootoutValue}"][data-theme="${themeIndex}"]`);
   if (select && document.activeElement !== select) {
     if (theme.player && !Array.from(select.options).some((item) => item.value === theme.player)) {
       select.appendChild(option(theme.player, theme.player));
     }
     select.value = theme.player || "";
   }
-  setText(`.theme-score[data-team="${teamIndex}"][data-shootout="${shootoutValue}"][data-theme="${themeIndex}"]`, theme.score);
+  setIndexedText("themeScore", {team: teamIndex, shootout: shootoutValue, theme: themeIndex}, theme.score);
   theme.answers.forEach((mark, answerIndex) => {
-    const cell = document.querySelector(`.answer-cell[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"][data-shootout="${shootoutValue}"][data-theme="${themeIndex}"][data-answer="${answerIndex}"]`);
-    if (!cell) return;
-    cell.classList.remove("right", "wrong");
-    if (mark) cell.classList.add(mark);
+    const cell = indexedNode("answer", {team: teamIndex, shootout: shootoutValue, theme: themeIndex, answer: answerIndex}) ||
+      document.querySelector(`.answer-cell[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"][data-shootout="${shootoutValue}"][data-theme="${themeIndex}"][data-answer="${answerIndex}"]`);
+    gameTable.setMarkClass(cell, mark);
   });
 }
 
-function setText(selector, value) {
-  const node = document.querySelector(selector);
-  if (node) node.textContent = formatNumber(value);
+function setIndexedText(name, values, value) {
+  const node = indexedNode(name, values);
+  if (node) gameTable.setNodeText(node, value, formatNumber);
+}
+
+function indexedNode(name, values) {
+  if (route.mode !== "match") return null;
+  return matchTableIndex?.get(name, values) || null;
+}
+
+function resetMatchTableIndex() {
+  matchTableIndex = null;
+  activeAnswerNode = null;
 }
 
 function buildTable() {
@@ -893,9 +907,17 @@ function setActiveMark(mark) {
 }
 
 function markActiveCell() {
-  document.querySelectorAll(".answer-cell.active").forEach((cell) => cell.classList.remove("active"));
+  if (route.mode === "match" && activeAnswerNode) {
+    activeAnswerNode.classList.remove("active");
+    activeAnswerNode = null;
+  } else {
+    document.querySelectorAll(".answer-cell.active").forEach((cell) => cell.classList.remove("active"));
+  }
   const cell = findActiveCell();
-  if (cell) cell.classList.add("active");
+  if (cell) {
+    cell.classList.add("active");
+    if (route.mode === "match") activeAnswerNode = cell;
+  }
 }
 
 function focusActiveCell(options = {}) {
@@ -905,7 +927,8 @@ function focusActiveCell(options = {}) {
 
 function focusPlaceInput(team, options = {}) {
   const matchCode = options.matchCode || currentMatchCode();
-  const input = document.querySelector(`.place-input[data-match-code="${cssEscape(matchCode)}"][data-team="${team}"]`);
+  const input = indexedNode("placeInput", {team}) ||
+    document.querySelector(`.place-input[data-match-code="${cssEscape(matchCode)}"][data-team="${team}"]`);
   if (!input) return;
   input.focus({preventScroll: options.preventScroll});
   if (options.select) input.select();
@@ -942,6 +965,13 @@ function isVenueSelectFocused() {
 
 function findActiveCell() {
   const matchCode = currentMatchCode();
+  const indexed = indexedNode("answer", {
+    team: activeCell.team,
+    shootout: activeCell.shootout ? "1" : "0",
+    theme: activeCell.theme,
+    answer: activeCell.answer,
+  });
+  if (indexed) return indexed;
   return document.querySelector(
     `.answer-cell[data-match-code="${cssEscape(matchCode)}"][data-team="${activeCell.team}"][data-shootout="${activeCell.shootout ? "1" : "0"}"][data-theme="${activeCell.theme}"][data-answer="${activeCell.answer}"]`,
   );

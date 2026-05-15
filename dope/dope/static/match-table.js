@@ -256,6 +256,171 @@
     return window.CSS?.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&");
   }
 
+  function createNodeIndex(root, specs) {
+    const maps = new Map();
+    for (const spec of specs || []) {
+      const map = new Map();
+      root.querySelectorAll(spec.selector).forEach((node) => {
+        map.set(indexKeyFromDataset(node.dataset, spec.keys), node);
+      });
+      maps.set(spec.name, {keys: spec.keys, map});
+    }
+    return {
+      get(name, values = {}) {
+        const entry = maps.get(name);
+        if (!entry) return null;
+        return entry.map.get(indexKeyFromValues(values, entry.keys)) || null;
+      },
+    };
+  }
+
+  function createScoreTableIndex(root, options = {}) {
+    const entity = options.entity || "team";
+    const prefix = options.matchScoped ? ["matchCode"] : [];
+    const themeKeys = prefix.concat([entity], options.shootout ? ["shootout"] : [], ["theme"]);
+    const specs = [
+      {name: "answer", selector: ".answer-cell", keys: themeKeys.concat(["answer"])},
+      {name: "themeScore", selector: ".theme-score", keys: themeKeys},
+      {name: "total", selector: ".total-cell", keys: prefix.concat([entity])},
+      {name: "place", selector: ".place-cell", keys: prefix.concat([entity])},
+      {name: "input", selector: ".venue-input", keys: prefix.concat([entity])},
+      {name: "placeInput", selector: ".place-input", keys: prefix.concat([entity])},
+      {name: "plus", selector: ".plus-cell", keys: prefix.concat([entity])},
+      {name: "tiebreak", selector: ".tiebreak-cell", keys: prefix.concat([entity])},
+      {name: "correctCount", selector: ".correct-count-cell", keys: prefix.concat([entity], ["valueIndex"])},
+      {name: "playerSelect", selector: ".player-select", keys: themeKeys},
+    ];
+    return createNodeIndex(root, specs.concat(options.extraSpecs || []));
+  }
+
+  function indexKeyFromDataset(dataset, keys) {
+    const values = {};
+    for (const key of keys) values[key] = dataset[key];
+    return indexKeyFromValues(values, keys);
+  }
+
+  function indexKeyFromValues(values, keys) {
+    return keys.map((key) => String(values[key] ?? "")).join("\u001f");
+  }
+
+  function setNodeText(node, value, formatter = String) {
+    if (!node) return;
+    const text = formatter(value);
+    if (node.textContent !== text) node.textContent = text;
+  }
+
+  function setMarkClass(node, mark) {
+    if (!node) return;
+    node.classList.remove("right", "wrong");
+    if (mark) node.classList.add(mark);
+  }
+
+  function parseScopedEvent(raw) {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.scope === "string" && Object.prototype.hasOwnProperty.call(parsed, "data")) {
+      return parsed;
+    }
+    return {scope: "unknown", revision: 0, data: parsed};
+  }
+
+  function createStateSync(options) {
+    const debounceMs = Number.isFinite(options.debounceMs) ? options.debounceMs : 250;
+    const maxEchoes = Number.isFinite(options.maxEchoes) ? options.maxEchoes : 12;
+    const setSyncStatus = options.setStatus || (() => {});
+    const echoSet = new Set();
+    const echoOrder = [];
+    let saveTimer = null;
+    let saveQueued = false;
+    let saveInFlight = false;
+
+    function save() {
+      if (options.readonly) return;
+      saveQueued = true;
+      setSyncStatus("saving");
+      scheduleSave(debounceMs);
+    }
+
+    function scheduleSave(delay) {
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => {
+        saveTimer = null;
+        void flushSave();
+      }, delay);
+    }
+
+    async function flushSave() {
+      if (options.readonly || saveInFlight || !saveQueued) return;
+      saveQueued = false;
+      saveInFlight = true;
+      let saved = false;
+      try {
+        const raw = JSON.stringify(options.getState());
+        rememberLocalEcho(raw);
+        const response = await fetch(options.stateURL, {
+          method: "PUT",
+          headers: {"Content-Type": "application/json"},
+          body: raw,
+        });
+        if (!response.ok) throw new Error(await response.text());
+        saved = true;
+      } catch (error) {
+        console.error(error);
+        setSyncStatus("error");
+      } finally {
+        saveInFlight = false;
+        if (saveQueued) {
+          if (!saveTimer) scheduleSave(0);
+        } else if (saved) {
+          setSyncStatus("saved");
+        }
+      }
+    }
+
+    function rememberLocalEcho(raw) {
+      echoSet.add(raw);
+      echoOrder.push(raw);
+      while (echoOrder.length > maxEchoes) {
+        echoSet.delete(echoOrder.shift());
+      }
+    }
+
+    function consumeLocalEcho(raw) {
+      if (!echoSet.has(raw)) return false;
+      echoSet.delete(raw);
+      const index = echoOrder.indexOf(raw);
+      if (index >= 0) echoOrder.splice(index, 1);
+      return true;
+    }
+
+    function hasPendingSave() {
+      return saveQueued || saveInFlight || saveTimer !== null;
+    }
+
+    function connect() {
+      const events = new EventSource(options.eventsURL);
+      events.addEventListener("state", (event) => {
+        let message;
+        try {
+          message = parseScopedEvent(event.data);
+        } catch (_error) {
+          return;
+        }
+        if (message.scope !== options.scope) return;
+        const raw = JSON.stringify(message.data);
+        if (consumeLocalEcho(raw)) {
+          if (!hasPendingSave()) setSyncStatus("saved");
+          return;
+        }
+        options.onRemoteState?.(message.data, message);
+        if (!hasPendingSave()) setSyncStatus("saved");
+      });
+      events.onerror = () => setSyncStatus("reconnecting");
+      return events;
+    }
+
+    return {connect, flushSave, hasPendingSave, save};
+  }
+
   window.DopeTable = {
     th,
     td,
@@ -268,5 +433,11 @@
     clamp,
     sameArray,
     cssEscape,
+    createNodeIndex,
+    createScoreTableIndex,
+    setNodeText,
+    setMarkClass,
+    parseScopedEvent,
+    createStateSync,
   };
 })();

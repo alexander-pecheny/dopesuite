@@ -4,6 +4,7 @@ const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 
 const gameTable = window.DopeTable;
+const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 const route = currentRoute();
 const viewer = Boolean(route.viewer);
 document.body.classList.toggle("viewer-readonly", viewer);
@@ -14,6 +15,7 @@ let totalQuestions = 0;
 let renderedTab = null;
 let questionStatsCache = null;
 let activeEntryEditor = null;
+let stateSync = null;
 const tabCache = new Map();
 const tabScroll = new Map();
 
@@ -508,7 +510,8 @@ function buildDetailedTable() {
   const stats = questionStats();
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const placeMap = computePlaces(totals);
-  const rows = state.teams.map((team, teamIndex) => {
+  const rows = detailedTeamOrder().map((teamIndex) => {
+    const team = state.teams[teamIndex];
     let qIndex = 0;
     return {
       nameCell: nameCell(team, teamIndex),
@@ -555,6 +558,20 @@ function buildDetailedTable() {
   });
 }
 
+function detailedTeamOrder() {
+  return state.teams
+    .map((_, index) => index)
+    .sort((a, b) => {
+      const byName = teamNameCollator.compare(teamLabel(a), teamLabel(b));
+      return byName || a - b;
+    });
+}
+
+function teamLabel(index) {
+  const name = String(state.teams[index]?.name || "").trim();
+  return name || `Команда ${index + 1}`;
+}
+
 function nameCell(team, teamIndex) {
   const cell = document.createElement("td");
   cell.className = "sticky sticky-name team-name";
@@ -574,9 +591,12 @@ function handleDetailedChange(event) {
   if (!(input instanceof HTMLInputElement) || !input.classList.contains("venue-input")) return;
   const teamIndex = Number(input.dataset.team);
   if (!Number.isInteger(teamIndex) || !state.teams[teamIndex]) return;
+  rememberTabScroll(activeTab);
   state.teams[teamIndex].name = input.value.trim();
-  invalidateTabCache("results");
+  invalidateTabCache("detailed", "results");
+  renderedTab = null;
   saveState();
+  render();
 }
 
 // === Итог ===
@@ -746,29 +766,12 @@ function computePlaces(totals) {
 
 // === persistence ===
 
-let saveTimer = null;
 function saveState() {
-  if (viewer) return;
-  setStatus("saving");
-  window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(async () => {
-    try {
-      const response = await fetch(`${route.apiBase}/state`, {
-        method: "PUT",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(state),
-      });
-      if (!response.ok) throw new Error(await response.text());
-      setStatus("saved");
-    } catch (error) {
-      console.error(error);
-      setStatus("error");
-    }
-  }, 200);
+  syncState().save();
 }
 
 function setStatus(s) {
-  const labels = {saved: "Синхронизировано", saving: "Синхронизация", error: "Ошибка"};
+  const labels = {saved: "Синхронизировано", saving: "Синхронизация", reconnecting: "Переподключение", error: "Ошибка"};
   statusNode.dataset.state = s;
   statusNode.setAttribute("aria-label", labels[s] || labels.saving);
   statusNode.title = labels[s] || labels.saving;
@@ -779,31 +782,34 @@ function setHeading(text) {
 }
 
 function connectEvents() {
-  const events = new EventSource(`/events?tournament_id=${encodeURIComponent(route.tournamentID)}`);
-  const scopeName = `game-state:${route.gameID}`;
-  events.addEventListener("state", (event) => {
-    let parsed;
-    try {
-      parsed = JSON.parse(event.data);
-    } catch (_e) {
-      return;
-    }
-    if (parsed && parsed.scope === scopeName) {
-      const typing = document.activeElement && document.activeElement.classList.contains("entry-input");
-      state = parsed.data;
-      ensureState();
-      if (typing) {
-        questionStatsCache = null;
-        invalidateTabCache("detailed", "results");
-        setStatus("saved");
-        return;
-      }
-      invalidateAllCaches();
-      render();
-      setStatus("saved");
-    }
+  syncState().connect();
+}
+
+function syncState() {
+  if (stateSync) return stateSync;
+  stateSync = gameTable.createStateSync({
+    readonly: viewer,
+    stateURL: `${route.apiBase}/state`,
+    eventsURL: `/events?tournament_id=${encodeURIComponent(route.tournamentID)}`,
+    scope: `game-state:${route.gameID}`,
+    getState: () => state,
+    setStatus,
+    onRemoteState: applyRemoteState,
   });
-  events.onerror = () => setStatus("reconnecting");
+  return stateSync;
+}
+
+function applyRemoteState(nextState) {
+  const typing = document.activeElement && document.activeElement.classList.contains("entry-input");
+  state = nextState;
+  ensureState();
+  if (typing) {
+    questionStatsCache = null;
+    invalidateTabCache("detailed", "results");
+    return;
+  }
+  invalidateAllCaches();
+  render();
 }
 
 function currentRoute() {
