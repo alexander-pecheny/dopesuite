@@ -1146,6 +1146,9 @@ func (s *server) importSchemeIntoFest(ctx context.Context, festID int64, scheme 
 	if err := validateScheme(scheme); err != nil {
 		return err
 	}
+	if len(scheme.Teams) > 0 {
+		return errors.New("команды загружаются только из rating.chgk.info; уберите teams из JSON-схемы и переимпортируйте участников")
+	}
 	schemaJSON, err := json.Marshal(scheme)
 	if err != nil {
 		return err
@@ -1369,7 +1372,7 @@ func validateScheme(scheme festScheme) error {
 			}
 			for slotIndex, slot := range match.Slots {
 				if slot.Team != nil {
-					return fmt.Errorf("match %q slot %d uses removed source %q; use seed{basket,number} + top-level teams[]", match.Code, slotIndex, "team")
+					return fmt.Errorf("match %q slot %d uses removed source %q; use seed{basket,number}; teams come from rating.chgk.info import", match.Code, slotIndex, "team")
 				}
 			}
 		}

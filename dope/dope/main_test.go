@@ -663,13 +663,13 @@ func TestRatingResultsToFestRoster(t *testing.T) {
 	if len(teams) != 2 {
 		t.Fatalf("teams = %d, want 2", len(teams))
 	}
-	if teams[0].Name != "Beta Current" || teams[0].City != "Town B" {
-		t.Fatalf("first team = %#v, want Beta Current/Town B", teams[0])
+	if teams[0].Name != "Alpha" || teams[0].City != "Town A" {
+		t.Fatalf("first team = %#v, want Alpha/Town A", teams[0])
 	}
-	if teams[1].Name != "Alpha" {
-		t.Fatalf("second team name = %q, want Alpha", teams[1].Name)
+	if teams[1].Name != "Beta Current" {
+		t.Fatalf("second team name = %q, want Beta Current", teams[1].Name)
 	}
-	if got := joinPlayerName(teams[0].Players[0].FirstName, teams[0].Players[0].LastName); got != "Иван Петров" {
+	if got := joinPlayerName(teams[1].Players[0].FirstName, teams[1].Players[0].LastName); got != "Иван Петров" {
 		t.Fatalf("player name = %q, want name and surname only", got)
 	}
 }
@@ -690,8 +690,8 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 			Name:     "Первая",
 			City:     "Москва",
 			Players: []festRosterImportPlayer{
-				{RatingID: 1001, FirstName: "Анна", LastName: "Первая"},
 				{RatingID: 1002, FirstName: "Борис", LastName: "Второй"},
+				{RatingID: 1001, FirstName: "Анна", LastName: "Первая"},
 			},
 		},
 		{
@@ -726,6 +726,20 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 	if ekTeamsCount != 4 {
 		t.Fatalf("game teams count = %d, want existing EK teams preserved", ekTeamsCount)
 	}
+	var firstTeam, firstPlayer string
+	if err := db.QueryRow(`
+select tt.name, p.first_name || ' ' || p.last_name
+from fest_team_players ttp
+join fest_teams tt on tt.id = ttp.team_id
+join fest_players p on p.id = ttp.player_id
+where tt.fest_id = ?
+order by tt.position, ttp.roster_order
+limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
+		t.Fatalf("load first imported roster row: %v", err)
+	}
+	if firstTeam != "Вторая" || firstPlayer != "Вера Третья" {
+		t.Fatalf("first imported roster row = %q / %q, want alphabetically first team/player", firstTeam, firstPlayer)
+	}
 
 	var schemeJSON, stateJSON string
 	if err := db.QueryRow(`select scheme_json, state_json from games where id = ?`, chgkGameID).Scan(&schemeJSON, &stateJSON); err != nil {
@@ -738,8 +752,8 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 	if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
 		t.Fatalf("decode scheme: %v", err)
 	}
-	if scheme.NTeams != 2 || len(scheme.Teams) != 2 || scheme.Teams[0].Name != "Первая" {
-		t.Fatalf("scheme teams = %#v, want imported teams", scheme)
+	if scheme.NTeams != 2 || len(scheme.Teams) != 2 || scheme.Teams[0].Name != "Вторая" || scheme.Teams[1].Name != "Первая" {
+		t.Fatalf("scheme teams = %#v, want alphabetically sorted imported teams", scheme)
 	}
 	var state struct {
 		Teams   []chgkTeamJSON `json:"teams"`
@@ -748,8 +762,8 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
 		t.Fatalf("decode state: %v", err)
 	}
-	if len(state.Teams) != 2 || state.Teams[1].Name != "Вторая" {
-		t.Fatalf("state teams = %#v, want imported teams", state.Teams)
+	if len(state.Teams) != 2 || state.Teams[0].Name != "Вторая" || state.Teams[1].Name != "Первая" {
+		t.Fatalf("state teams = %#v, want alphabetically sorted imported teams", state.Teams)
 	}
 	if len(state.Entries) == 0 || len(state.Entries[0]) != 2 {
 		t.Fatalf("state entries first row len = %d, want 2", len(state.Entries[0]))
@@ -766,8 +780,8 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 	if err := json.Unmarshal([]byte(schemeJSON), &ksiScheme); err != nil {
 		t.Fatalf("decode ksi scheme: %v", err)
 	}
-	if ksiScheme.GameType != "ksi" || len(ksiScheme.Participants) != 2 || ksiScheme.Participants[0] != "Первая" || ksiScheme.Themes != ksiThemeCount {
-		t.Fatalf("ksi scheme = %#v, want imported participants", ksiScheme)
+	if ksiScheme.GameType != "ksi" || len(ksiScheme.Participants) != 2 || ksiScheme.Participants[0] != "Вторая" || ksiScheme.Participants[1] != "Первая" || ksiScheme.Themes != ksiThemeCount {
+		t.Fatalf("ksi scheme = %#v, want alphabetically sorted imported participants", ksiScheme)
 	}
 	var ksiState struct {
 		Participants []string `json:"participants"`
@@ -778,8 +792,8 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 	if err := json.Unmarshal([]byte(stateJSON), &ksiState); err != nil {
 		t.Fatalf("decode ksi state: %v", err)
 	}
-	if len(ksiState.Participants) != 2 || ksiState.Participants[1] != "Вторая" {
-		t.Fatalf("ksi state participants = %#v, want imported teams", ksiState.Participants)
+	if len(ksiState.Participants) != 2 || ksiState.Participants[0] != "Вторая" || ksiState.Participants[1] != "Первая" {
+		t.Fatalf("ksi state participants = %#v, want alphabetically sorted imported teams", ksiState.Participants)
 	}
 	if len(ksiState.Themes) != ksiThemeCount || len(ksiState.Themes[0].Answers) != 2 || len(ksiState.Themes[0].Answers[0]) != 5 {
 		t.Fatalf("ksi answers shape = %#v, want %dx2x5", ksiState.Themes, ksiThemeCount)

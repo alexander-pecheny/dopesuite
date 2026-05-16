@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -153,7 +154,6 @@ func TestScopedAPIImportRequiresFestOrganizer(t *testing.T) {
 				}},
 			}},
 		}},
-		Teams: []schemeTeam{{Name: "Alpha", Basket: 1, Number: 1}},
 	}
 
 	path := fmt.Sprintf("/api/import?fest_id=%d", festID)
@@ -186,6 +186,17 @@ func TestScopedAPIImportRequiresFestOrganizer(t *testing.T) {
 	srv.handleImport(organizerResp, organizerReq)
 	if organizerResp.Code != http.StatusOK {
 		t.Fatalf("organizer import status = %d, body %s", organizerResp.Code, organizerResp.Body.String())
+	}
+
+	scheme.Teams = []schemeTeam{{Name: "Manual", Basket: 1, Number: 1}}
+	body, _ = json.Marshal(scheme)
+	manualTeamsReq := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
+	manualTeamsReq.Header.Set("Content-Type", "application/json")
+	manualTeamsReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: organizerToken})
+	manualTeamsResp := httptest.NewRecorder()
+	srv.handleImport(manualTeamsResp, manualTeamsReq)
+	if manualTeamsResp.Code != http.StatusBadRequest {
+		t.Fatalf("manual teams import status = %d, want 400", manualTeamsResp.Code)
 	}
 }
 
@@ -226,6 +237,54 @@ func TestScopedGameStatePatchMergesIndependentEdits(t *testing.T) {
 	}
 	if state.Entries[0][0] != 1 || state.Entries[0][1] != 2 {
 		t.Fatalf("entries = %#v, want both independent patches", state.Entries)
+	}
+}
+
+func TestScopedGameStateRejectsRatingRosterEdits(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	festID, chgkGameID, ksiGameID := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	organizerID, token := createAPITestSession(t, srv, "roster-editor")
+	addAPITestOrganizer(t, srv, festID, organizerID)
+
+	patch := func(path []any, value any) map[string]any {
+		return map[string]any{
+			"ops": []map[string]any{{
+				"op":    "set",
+				"path":  path,
+				"value": value,
+			}},
+		}
+	}
+
+	chgkPath := fmt.Sprintf("/api/fest/%d/games/%d/state", festID, chgkGameID)
+	chgkPatch := scopedAPIRequest(t, srv, http.MethodPatch, chgkPath, patch([]any{"teams", 0, "name"}, "Manual"), token)
+	if chgkPatch.Code != http.StatusBadRequest {
+		t.Fatalf("chgk team patch status = %d, want 400", chgkPatch.Code)
+	}
+	chgkEntriesPatch := scopedAPIRequest(t, srv, http.MethodPatch, chgkPath, patch([]any{"entries", 0, 0}, 1), token)
+	if chgkEntriesPatch.Code != http.StatusOK {
+		t.Fatalf("chgk entries patch status = %d, body %s", chgkEntriesPatch.Code, chgkEntriesPatch.Body.String())
+	}
+	chgkPut := scopedAPIRequest(t, srv, http.MethodPut, chgkPath, map[string]any{
+		"teams": []map[string]string{{"name": "Manual"}},
+	}, token)
+	if chgkPut.Code != http.StatusBadRequest {
+		t.Fatalf("chgk state replace status = %d, want 400", chgkPut.Code)
+	}
+
+	ksiPath := fmt.Sprintf("/api/fest/%d/games/%d/state", festID, ksiGameID)
+	ksiPatch := scopedAPIRequest(t, srv, http.MethodPatch, ksiPath, patch([]any{"participants", 0}, "Manual"), token)
+	if ksiPatch.Code != http.StatusBadRequest {
+		t.Fatalf("ksi participant patch status = %d, want 400", ksiPatch.Code)
+	}
+	ksiAnswerPatch := scopedAPIRequest(t, srv, http.MethodPatch, ksiPath, patch([]any{"themes", 0, "answers", 0, 0}, "right"), token)
+	if ksiAnswerPatch.Code != http.StatusOK {
+		t.Fatalf("ksi answer patch status = %d, body %s", ksiAnswerPatch.Code, ksiAnswerPatch.Body.String())
 	}
 }
 

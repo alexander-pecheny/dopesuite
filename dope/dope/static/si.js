@@ -62,7 +62,7 @@ async function loadAll() {
 
 function initFromScheme() {
   participants = schemeParticipants();
-  themesCount = isTeamMode() ? KSI_THEMES : (Number(scheme.themes) > 0 ? Number(scheme.themes) : 8);
+  themesCount = Number(scheme.themes) > 0 ? Number(scheme.themes) : (isTeamMode() ? KSI_THEMES : 8);
 }
 
 function schemeParticipants() {
@@ -72,6 +72,7 @@ function schemeParticipants() {
   if (isTeamMode() && Array.isArray(scheme.teams) && scheme.teams.length > 0) {
     return scheme.teams.map((team) => team.name || "");
   }
+  if (isTeamMode()) return [];
   return ["Игрок 1", "Игрок 2", "Игрок 3", "Игрок 4"];
 }
 
@@ -348,6 +349,13 @@ function participantLabel(index) {
 function nameCell(name, playerIndex) {
   const cell = document.createElement("td");
   cell.className = "sticky sticky-name team-name";
+  if (isTeamMode()) {
+    const label = document.createElement("span");
+    label.className = "readonly-team-name";
+    label.textContent = name || participantFallback(playerIndex);
+    cell.appendChild(label);
+    return cell;
+  }
   const input = document.createElement("input");
   input.type = "text";
   input.className = "venue-input";
@@ -430,7 +438,7 @@ function handleTableChange(event) {
     return;
   }
   if (target instanceof HTMLInputElement && target.classList.contains("venue-input")) {
-    if (viewer) return;
+    if (viewer || isTeamMode()) return;
     const playerIndex = Number(target.dataset.player);
     if (!Number.isInteger(playerIndex) || playerIndex < 0 || playerIndex >= state.participants.length) return;
     const name = target.value.trim();

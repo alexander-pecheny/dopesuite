@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -73,6 +74,7 @@ func matchScopeKey(scope matchScope) string {
 }
 
 var errMatchNotFound = errors.New("match not found in this game")
+var errRatingRosterImmutable = errors.New("команды загружаются из rating.chgk.info; чтобы изменить список, переимпортируйте участников")
 
 type gameStatePatchRequest struct {
 	Ops []gameStatePatchOp `json:"ops"`
@@ -391,6 +393,10 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 			http.NotFound(w, r)
 			return
 		}
+		if errors.Is(err, errRatingRosterImmutable) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -440,6 +446,16 @@ func (s *server) replaceGameState(ctx context.Context, scope festScope, raw []by
 	}
 	defer tx.Rollback()
 
+	var gameType, stateJSON string
+	if err := tx.QueryRowContext(ctx, `
+select game_type, state_json from games where fest_id = ? and id = ?`,
+		scope.FestID, scope.GameID).Scan(&gameType, &stateJSON); err != nil {
+		return 0, err
+	}
+	if err := validateImmutableRatingRosterState(gameType, []byte(stateJSON), raw); err != nil {
+		return 0, err
+	}
+
 	result, err := tx.ExecContext(ctx, `
 update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
 		string(raw), utcNow(), scope.FestID, scope.GameID)
@@ -477,10 +493,10 @@ func (s *server) patchGameState(ctx context.Context, scope festScope, req gameSt
 	}
 	defer tx.Rollback()
 
-	var stateJSON string
+	var gameType, stateJSON string
 	if err := tx.QueryRowContext(ctx, `
-select state_json from games where fest_id = ? and id = ?`,
-		scope.FestID, scope.GameID).Scan(&stateJSON); err != nil {
+select game_type, state_json from games where fest_id = ? and id = ?`,
+		scope.FestID, scope.GameID).Scan(&gameType, &stateJSON); err != nil {
 		return nil, 0, err
 	}
 	if stateJSON == "" {
@@ -502,6 +518,9 @@ select state_json from games where fest_id = ? and id = ?`,
 		path, err := parseJSONPatchPath(op.Path)
 		if err != nil {
 			return nil, 0, err
+		}
+		if patchPathTouchesRatingRoster(gameType, path) {
+			return nil, 0, errRatingRosterImmutable
 		}
 		value, err := decodePatchValue(op.Value)
 		if err != nil {
@@ -538,6 +557,64 @@ update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
 		return nil, 0, err
 	}
 	return next, revision, nil
+}
+
+func patchPathTouchesRatingRoster(gameType string, path []jsonPathSegment) bool {
+	key, ok := immutableRatingRosterStateKey(gameType)
+	return ok && len(path) > 0 && !path[0].isIndex && path[0].key == key
+}
+
+func validateImmutableRatingRosterState(gameType string, previousRaw, nextRaw []byte) error {
+	key, ok := immutableRatingRosterStateKey(gameType)
+	if !ok {
+		return nil
+	}
+	previous, previousOK, err := topLevelCanonicalJSON(previousRaw, key)
+	if err != nil {
+		return err
+	}
+	next, nextOK, err := topLevelCanonicalJSON(nextRaw, key)
+	if err != nil {
+		return err
+	}
+	if previousOK != nextOK || !bytes.Equal(previous, next) {
+		return errRatingRosterImmutable
+	}
+	return nil
+}
+
+func immutableRatingRosterStateKey(gameType string) (string, bool) {
+	switch gameType {
+	case "od":
+		return "teams", true
+	case "ksi":
+		return "participants", true
+	default:
+		return "", false
+	}
+}
+
+func topLevelCanonicalJSON(raw []byte, key string) ([]byte, bool, error) {
+	if strings.TrimSpace(string(raw)) == "" {
+		raw = []byte("{}")
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, false, err
+	}
+	value, ok := obj[key]
+	if !ok {
+		return nil, false, nil
+	}
+	var decoded any
+	if err := json.Unmarshal(value, &decoded); err != nil {
+		return nil, false, err
+	}
+	canonical, err := json.Marshal(decoded)
+	if err != nil {
+		return nil, false, err
+	}
+	return canonical, true, nil
 }
 
 func parseJSONPatchPath(parts []json.RawMessage) ([]jsonPathSegment, error) {
