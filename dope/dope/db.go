@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -2459,11 +2460,14 @@ func nullableInt64(value int64) any {
 const (
 	inviteCodeBytes      = 12
 	telegramAuthBytes    = 12
+	telegramLoginCodeLen = 5
 	sessionTokenBytes    = 32
 	telegramAuthLifetime = time.Minute
 	inviteLifetime       = 7 * 24 * time.Hour
 	sessionLifetime      = 30 * 24 * time.Hour
 )
+
+const telegramLoginCodeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 func randomBase32(bytesLen int) (string, error) {
 	buf := make([]byte, bytesLen)
@@ -2479,6 +2483,19 @@ func newInviteCode() (string, error) {
 
 func newTelegramAuthCode() (string, error) {
 	return randomBase32(telegramAuthBytes)
+}
+
+func newTelegramLoginCode() (string, error) {
+	buf := make([]byte, telegramLoginCodeLen)
+	max := big.NewInt(int64(len(telegramLoginCodeAlphabet)))
+	for i := range buf {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", err
+		}
+		buf[i] = telegramLoginCodeAlphabet[n.Int64()]
+	}
+	return string(buf), nil
 }
 
 func newSessionToken() (string, error) {

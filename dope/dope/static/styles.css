@@ -357,6 +357,18 @@ a.list-row:hover { background: #eef1f5; }
   font-size: var(--text-sm);
 }
 
+.public-user {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.public-user:hover {
+  text-decoration: underline;
+}
+
 .public-description {
   margin: 0;
   line-height: 1.55;
@@ -1462,6 +1474,10 @@ a.list-row:hover { background: #eef1f5; }
   max-width: 420px;
 }
 
+.auth-step[hidden] {
+  display: none;
+}
+
 .auth-hint {
   margin: 0;
   color: var(--text);
@@ -1475,6 +1491,12 @@ a.list-row:hover { background: #eef1f5; }
 
 .auth-form.auth-form-stack {
   grid-template-columns: 1fr;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .auth-hint-divider {

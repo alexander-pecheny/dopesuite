@@ -103,7 +103,7 @@ var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!docty
 <body class="public">
   <header class="public-top">
     <h1>Мои чемпионаты</h1>
-    <span class="muted">{{.Username}}</span>
+    <a class="public-user" href="/profile">{{.Username}}</a>
   </header>
   <main class="public-main">
     {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
@@ -156,6 +156,26 @@ var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!docty
         </form>
       </details>
     </section>
+  </main>
+</body>
+</html>`))
+
+var profileTemplate = template.Must(template.New("profile").Parse(`<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Профиль</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="public">
+  <header class="public-top">
+    <h1>Профиль</h1>
+  </header>
+  <main class="public-main">
+    <form method="post" action="/profile/logout">
+      <button class="btn" type="submit">Разлогиниться</button>
+    </form>
   </main>
 </body>
 </html>`))
@@ -430,6 +450,9 @@ func (s *server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMs
 	if user.Username.Valid {
 		username = user.Username.String
 	}
+	if username == "" {
+		username = "Профиль"
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = hostLoggedInTemplate.Execute(w, hostLandingData{
 		LoggedIn:    true,
@@ -437,6 +460,41 @@ func (s *server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMs
 		Tournaments: tournaments,
 		Error:       errMsg,
 	})
+}
+
+func (s *server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/profile" {
+		http.NotFound(w, r)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead:
+		if _, ok := s.lookupSession(r); !ok {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = profileTemplate.Execute(w, nil)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *server) handleProfileLogout(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/profile/logout" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireSameOriginUnsafe(w, r) {
+		return
+	}
+	s.logoutSession(r)
+	clearSessionCookie(w)
+	http.Redirect(w, r, "/host", http.StatusSeeOther)
 }
 
 // /host/<...> — auth-gated subpaths.

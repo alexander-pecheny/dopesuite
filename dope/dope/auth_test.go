@@ -53,7 +53,7 @@ where code = ? and kind = 'register' and consumed_at is null`,
 
 func botIssueLoginCode(t *testing.T, db *sql.DB, userID, tgUserID int64, tgUsername string) string {
 	t.Helper()
-	code, err := newTelegramAuthCode()
+	code, err := newTelegramLoginCode()
 	if err != nil {
 		t.Fatalf("new code: %v", err)
 	}
@@ -68,6 +68,18 @@ values(?, 'login', ?, ?, ?, ?, ?)`,
 	return code
 }
 
+func isShortLoginCode(s string) bool {
+	if len(s) != telegramLoginCodeLen {
+		return false
+	}
+	for _, r := range s {
+		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
+}
+
 func sessionCookieFromHeader(t *testing.T, w *httptest.ResponseRecorder) string {
 	t.Helper()
 	for _, raw := range w.Result().Header.Values("Set-Cookie") {
@@ -80,6 +92,23 @@ func sessionCookieFromHeader(t *testing.T, w *httptest.ResponseRecorder) string 
 	return ""
 }
 
+func createTestSession(t *testing.T, srv *server, userID int64) string {
+	t.Helper()
+	tx, err := srv.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("begin session tx: %v", err)
+	}
+	defer tx.Rollback()
+	token, err := createSessionTx(context.Background(), tx, userID, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit session: %v", err)
+	}
+	return token
+}
+
 func decodeJSON[T any](t *testing.T, w *httptest.ResponseRecorder) T {
 	t.Helper()
 	var out T
@@ -87,6 +116,84 @@ func decodeJSON[T any](t *testing.T, w *httptest.ResponseRecorder) T {
 		t.Fatalf("decode: %v (body=%s)", err, w.Body.String())
 	}
 	return out
+}
+
+func TestProfilePageAndLogout(t *testing.T) {
+	srv := newAuthTestServer(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := srv.db.Exec(`
+insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
+values(null, null, ?, 0, ?, ?)`, "profile_user", now, now)
+	if err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	userID, _ := res.LastInsertId()
+	cookie := createTestSession(t, srv, userID)
+
+	hostReq := httptest.NewRequest(http.MethodGet, "/host", nil)
+	hostReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: cookie})
+	hostResp := httptest.NewRecorder()
+	srv.handleHostLanding(hostResp, hostReq)
+	if hostResp.Code != http.StatusOK {
+		t.Fatalf("host: status %d, body %s", hostResp.Code, hostResp.Body.String())
+	}
+	if body := hostResp.Body.String(); !strings.Contains(body, `href="/profile"`) || !strings.Contains(body, "profile_user") {
+		t.Fatalf("host page missing profile link/user: %s", body)
+	}
+
+	profileReq := httptest.NewRequest(http.MethodGet, "/profile", nil)
+	profileReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: cookie})
+	profileResp := httptest.NewRecorder()
+	srv.handleProfilePage(profileResp, profileReq)
+	if profileResp.Code != http.StatusOK {
+		t.Fatalf("profile: status %d, body %s", profileResp.Code, profileResp.Body.String())
+	}
+	if body := profileResp.Body.String(); !strings.Contains(body, `action="/profile/logout"`) || !strings.Contains(body, "Разлогиниться") {
+		t.Fatalf("profile page missing logout form: %s", body)
+	}
+
+	logoutReq := httptest.NewRequest(http.MethodPost, "/profile/logout", nil)
+	logoutReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: cookie})
+	logoutResp := httptest.NewRecorder()
+	srv.handleProfileLogout(logoutResp, logoutReq)
+	if logoutResp.Code != http.StatusSeeOther {
+		t.Fatalf("profile logout status = %d, want 303", logoutResp.Code)
+	}
+	if got := logoutResp.Header().Get("Location"); got != "/host" {
+		t.Fatalf("profile logout location = %q, want /host", got)
+	}
+
+	meReq := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	meReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: cookie})
+	meResp := httptest.NewRecorder()
+	srv.handleAuthMe(meResp, meReq)
+	if meResp.Code != http.StatusUnauthorized {
+		t.Fatalf("me after profile logout = %d, want 401", meResp.Code)
+	}
+}
+
+func TestRegisterRedirectsCompletedUserToHost(t *testing.T) {
+	srv := newAuthTestServer(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := srv.db.Exec(`
+insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
+values(null, null, ?, 0, ?, ?)`, "done_user", now, now)
+	if err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	userID, _ := res.LastInsertId()
+	cookie := createTestSession(t, srv, userID)
+
+	req := httptest.NewRequest(http.MethodGet, "/register", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: cookie})
+	resp := httptest.NewRecorder()
+	srv.handleRegisterPage(resp, req)
+	if resp.Code != http.StatusSeeOther {
+		t.Fatalf("register status = %d, want 303", resp.Code)
+	}
+	if got := resp.Header().Get("Location"); got != "/host" {
+		t.Fatalf("register redirect = %q, want /host", got)
+	}
 }
 
 func TestRegisterFlowHappyPath(t *testing.T) {
@@ -291,6 +398,121 @@ values(?, ?, ?, 0, ?, ?)`, 777, "tg_bob", "bob", now, now)
 	srv.handleAuthMe(meResp, meReq)
 	if meResp.Code != http.StatusUnauthorized {
 		t.Fatalf("me after logout = %d, want 401", meResp.Code)
+	}
+}
+
+func TestLoginStartSendsCodeWhenPasswordIsMissing(t *testing.T) {
+	srv := newAuthTestServer(t)
+	var sentChatID int64
+	var sentText string
+	srv.sendTelegram = func(ctx context.Context, chatID int64, text string) error {
+		sentChatID = chatID
+		sentText = text
+		return nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := srv.db.Exec(`
+insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
+values(?, ?, ?, 0, ?, ?)`, 888, "tg_code", "code_only", now, now)
+	if err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	userID, _ := res.LastInsertId()
+
+	body, _ := json.Marshal(loginStartRequest{Username: "code_only"})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login/start", bytes.NewReader(body))
+	resp := httptest.NewRecorder()
+	srv.handleAuthLoginStart(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("login start: status %d, body %s", resp.Code, resp.Body.String())
+	}
+	start := decodeJSON[loginStartResponse](t, resp)
+	if start.HasPassword {
+		t.Fatalf("has_password = true, want false")
+	}
+	if !start.CodeSent {
+		t.Fatalf("code_sent = false, want true")
+	}
+	if sentChatID != 888 {
+		t.Fatalf("sent chat = %d, want 888", sentChatID)
+	}
+
+	var code string
+	if err := srv.db.QueryRow(`
+select code from telegram_login_codes where user_id = ? and kind = 'login'`, userID).Scan(&code); err != nil {
+		t.Fatalf("read code: %v", err)
+	}
+	if code == "" || !strings.Contains(sentText, code) {
+		t.Fatalf("telegram text %q does not contain issued code %q", sentText, code)
+	}
+	if !isShortLoginCode(code) {
+		t.Fatalf("login code = %q, want [A-Z0-9]{5}", code)
+	}
+	if !strings.Contains(sentText, "<code>"+code+"</code>") {
+		t.Fatalf("telegram text %q does not render code as monospace", sentText)
+	}
+
+	loginBody, _ := json.Marshal(loginRequest{Code: code})
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginBody))
+	loginResp := httptest.NewRecorder()
+	srv.handleAuthLogin(loginResp, loginReq)
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("login with issued code: status %d, body %s", loginResp.Code, loginResp.Body.String())
+	}
+	_ = sessionCookieFromHeader(t, loginResp)
+}
+
+func TestLoginStartPasswordUserRequestsCodeExplicitly(t *testing.T) {
+	srv := newAuthTestServer(t)
+	var sent int
+	srv.sendTelegram = func(ctx context.Context, chatID int64, text string) error {
+		sent++
+		if chatID != 999 {
+			t.Fatalf("sent chat = %d, want 999", chatID)
+		}
+		return nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	salt := "salt"
+	if _, err := srv.db.Exec(`
+insert into users(telegram_user_id, telegram_username, username, password_hash, password_salt, is_system, created_at, updated_at)
+values(?, ?, ?, ?, ?, 0, ?, ?)`, 999, "tg_pass", "passy", hashPassword("secret", salt), salt, now, now); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	body, _ := json.Marshal(loginStartRequest{Username: "passy"})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login/start", bytes.NewReader(body))
+	resp := httptest.NewRecorder()
+	srv.handleAuthLoginStart(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("login start: status %d, body %s", resp.Code, resp.Body.String())
+	}
+	start := decodeJSON[loginStartResponse](t, resp)
+	if !start.HasPassword {
+		t.Fatalf("has_password = false, want true")
+	}
+	if start.CodeSent {
+		t.Fatalf("code_sent = true, want false")
+	}
+	if sent != 0 {
+		t.Fatalf("sent codes = %d, want 0", sent)
+	}
+
+	codeBody, _ := json.Marshal(loginStartRequest{Username: "passy", SendCode: true})
+	codeReq := httptest.NewRequest(http.MethodPost, "/api/auth/login/start", bytes.NewReader(codeBody))
+	codeResp := httptest.NewRecorder()
+	srv.handleAuthLoginStart(codeResp, codeReq)
+	if codeResp.Code != http.StatusOK {
+		t.Fatalf("login code start: status %d, body %s", codeResp.Code, codeResp.Body.String())
+	}
+	codeStart := decodeJSON[loginStartResponse](t, codeResp)
+	if !codeStart.HasPassword || !codeStart.CodeSent {
+		t.Fatalf("response = %+v, want password user with sent code", codeStart)
+	}
+	if sent != 1 {
+		t.Fatalf("sent codes = %d, want 1", sent)
 	}
 }
 
