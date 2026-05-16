@@ -36,4 +36,4 @@
 
 ## Положение после v2
 
-После v2 БД заводится пустой: ни турниров, ни игр, ни матчей. Турниры создаются явно — в проде через UI авторизованного пользователя, в локальной разработке через `ensureTestTournament`. Источник `slot.team` из старых JSON-файлов больше не принимается: схема использует `seed{basket, number}`, а конкретные составы импортируются отдельно. Скрипт СтудЧР лежит вне Go-кода: `scripts/generate_studchr_grid.py`. Подробности — в [02-domain.md](02-domain.md), [03-sqlite.md](03-sqlite.md), [08-auth.md](08-auth.md), [09-tournaments-and-games.md](09-tournaments-and-games.md).
+После v2 БД заводится пустой: ни фестов, ни игр, ни матчей. Фесты создаются явно через UI авторизованного пользователя. Источник `slot.team` из старых JSON-файлов больше не принимается: схема использует `seed{basket, number}`, а конкретные составы импортируются отдельно. Скрипт СтудЧР лежит вне Go-кода: `scripts/generate_studchr_grid.py`. Подробности — в [02-domain.md](02-domain.md), [03-sqlite.md](03-sqlite.md), [08-auth.md](08-auth.md), [09-fests-and-games.md](09-fests-and-games.md).

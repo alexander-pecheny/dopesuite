@@ -1163,7 +1163,7 @@ a.list-row:hover { background: #eef1f5; }
   text-decoration: none;
 }
 
-.tournament-table {
+.fest-table {
   width: 100%;
   min-width: 820px;
   border-collapse: separate;
@@ -1173,8 +1173,8 @@ a.list-row:hover { background: #eef1f5; }
   line-height: 1.25;
 }
 
-.tournament-table th,
-.tournament-table td {
+.fest-table th,
+.fest-table td {
   padding: 9px 10px;
   border-right: 1px solid var(--grid);
   border-bottom: 1px solid var(--grid);
@@ -1182,7 +1182,7 @@ a.list-row:hover { background: #eef1f5; }
   vertical-align: top;
 }
 
-.tournament-table th {
+.fest-table th {
   position: sticky;
   top: 0;
   z-index: 2;
@@ -1194,18 +1194,18 @@ a.list-row:hover { background: #eef1f5; }
   text-transform: uppercase;
 }
 
-.tournament-table .stage-name {
+.fest-table .stage-name {
   width: 150px;
   color: #3c4043;
   font-weight: 700;
 }
 
-.tournament-table .code-cell,
-.tournament-table .venue-number {
+.fest-table .code-cell,
+.fest-table .venue-number {
   width: 58px;
 }
 
-.tournament-table .venue-cell {
+.fest-table .venue-cell {
   width: 150px;
   color: #3c4043;
 }
@@ -1261,13 +1261,13 @@ a.list-row:hover { background: #eef1f5; }
   background: #fff;
 }
 
-.tournament-grid {
+.fest-grid {
   width: 100%;
   min-width: 1140px;
   padding-bottom: 24px;
 }
 
-.tournament-columns {
+.fest-columns {
   display: grid;
   grid-template-columns:
     minmax(190px, 1fr)
@@ -1897,21 +1897,21 @@ a.list-row:hover { background: #eef1f5; }
     font-size: 12px;
   }
 
-  .tournament-table {
+  .fest-table {
     min-width: 680px;
     font-size: 12px;
   }
 
-  .tournament-table th,
-  .tournament-table td {
+  .fest-table th,
+  .fest-table td {
     padding: 7px 8px;
   }
 
-  .tournament-table .stage-name {
+  .fest-table .stage-name {
     width: 110px;
   }
 
-  .tournament-table .venue-cell {
+  .fest-table .venue-cell {
     width: 120px;
   }
 
@@ -1923,11 +1923,11 @@ a.list-row:hover { background: #eef1f5; }
     min-width: 360px;
   }
 
-  .tournament-grid {
+  .fest-grid {
     min-width: 1020px;
   }
 
-  .tournament-columns {
+  .fest-columns {
     grid-template-columns:
       minmax(170px, 1fr)
       minmax(170px, 1fr)

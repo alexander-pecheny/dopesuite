@@ -22,20 +22,20 @@ type ratingRosterImportResult struct {
 	KSIGameCount int
 }
 
-type tournamentRosterImportTeam struct {
+type festRosterImportTeam struct {
 	RatingID int64
 	Name     string
 	City     string
-	Players  []tournamentRosterImportPlayer
+	Players  []festRosterImportPlayer
 }
 
-type tournamentRosterImportPlayer struct {
+type festRosterImportPlayer struct {
 	RatingID  int64
 	FirstName string
 	LastName  string
 }
 
-type ratingTournamentResult struct {
+type ratingFestResult struct {
 	Team        ratingTeam         `json:"team"`
 	Current     ratingTeam         `json:"current"`
 	TeamMembers []ratingTeamMember `json:"teamMembers"`
@@ -72,17 +72,17 @@ type gameStateBroadcast struct {
 	StateJSON []byte
 }
 
-func (s *server) fetchAndImportRatingRoster(ctx context.Context, tournamentID, ratingID int64) (ratingRosterImportResult, error) {
-	teams, err := fetchRatingTournamentRoster(ctx, ratingID)
+func (s *server) fetchAndImportRatingRoster(ctx context.Context, festID, ratingID int64) (ratingRosterImportResult, error) {
+	teams, err := fetchRatingFestRoster(ctx, ratingID)
 	if err != nil {
 		return ratingRosterImportResult{}, err
 	}
-	return s.importTournamentRoster(ctx, tournamentID, ratingID, teams)
+	return s.importFestRoster(ctx, festID, ratingID, teams)
 }
 
-func fetchRatingTournamentRoster(ctx context.Context, ratingID int64) ([]tournamentRosterImportTeam, error) {
+func fetchRatingFestRoster(ctx context.Context, ratingID int64) ([]festRosterImportTeam, error) {
 	if ratingID <= 0 {
-		return nil, errors.New("rating tournament id must be positive")
+		return nil, errors.New("rating fest id must be positive")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf(ratingResultsURL, ratingID), nil)
 	if err != nil {
@@ -106,15 +106,15 @@ func fetchRatingTournamentRoster(ctx context.Context, ratingID int64) ([]tournam
 		return nil, fmt.Errorf("рейтинг вернул ошибку: %s", detail)
 	}
 
-	var results []ratingTournamentResult
+	var results []ratingFestResult
 	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
 		return nil, fmt.Errorf("не удалось разобрать ответ рейтинга: %w", err)
 	}
-	return ratingResultsToTournamentRoster(results)
+	return ratingResultsToFestRoster(results)
 }
 
-func ratingResultsToTournamentRoster(results []ratingTournamentResult) ([]tournamentRosterImportTeam, error) {
-	teams := make([]tournamentRosterImportTeam, 0, len(results))
+func ratingResultsToFestRoster(results []ratingFestResult) ([]festRosterImportTeam, error) {
+	teams := make([]festRosterImportTeam, 0, len(results))
 	for index, result := range results {
 		name := strings.TrimSpace(result.Current.Name)
 		if name == "" {
@@ -127,11 +127,11 @@ func ratingResultsToTournamentRoster(results []ratingTournamentResult) ([]tourna
 		if city == "" {
 			city = ratingTownName(result.Team.Town)
 		}
-		team := tournamentRosterImportTeam{
+		team := festRosterImportTeam{
 			RatingID: result.Team.ID,
 			Name:     name,
 			City:     city,
-			Players:  make([]tournamentRosterImportPlayer, 0, len(result.TeamMembers)),
+			Players:  make([]festRosterImportPlayer, 0, len(result.TeamMembers)),
 		}
 		for memberIndex, member := range result.TeamMembers {
 			firstName := strings.TrimSpace(member.Player.Name)
@@ -139,7 +139,7 @@ func ratingResultsToTournamentRoster(results []ratingTournamentResult) ([]tourna
 			if firstName == "" && lastName == "" {
 				return nil, fmt.Errorf("team %q player %d has no name", name, memberIndex+1)
 			}
-			team.Players = append(team.Players, tournamentRosterImportPlayer{
+			team.Players = append(team.Players, festRosterImportPlayer{
 				RatingID:  member.Player.ID,
 				FirstName: firstName,
 				LastName:  lastName,
@@ -160,12 +160,12 @@ func ratingTownName(town *ratingTown) string {
 	return strings.TrimSpace(town.Name)
 }
 
-func (s *server) importTournamentRoster(ctx context.Context, tournamentID, ratingID int64, teams []tournamentRosterImportTeam) (ratingRosterImportResult, error) {
+func (s *server) importFestRoster(ctx context.Context, festID, ratingID int64, teams []festRosterImportTeam) (ratingRosterImportResult, error) {
 	if s.db == nil {
 		return ratingRosterImportResult{}, errors.New("sqlite is not enabled")
 	}
-	if tournamentID <= 0 {
-		return ratingRosterImportResult{}, errors.New("bad tournament id")
+	if festID <= 0 {
+		return ratingRosterImportResult{}, errors.New("bad fest id")
 	}
 	if len(teams) == 0 {
 		return ratingRosterImportResult{}, errors.New("рейтинг не вернул команды")
@@ -184,17 +184,17 @@ func (s *server) importTournamentRoster(ctx context.Context, tournamentID, ratin
 		defer tx.Rollback()
 
 		var exists int
-		if err := tx.QueryRowContext(ctx, `select count(*) from tournaments where id = ?`, tournamentID).Scan(&exists); err != nil {
+		if err := tx.QueryRowContext(ctx, `select count(*) from fests where id = ?`, festID).Scan(&exists); err != nil {
 			return ratingRosterImportResult{}, err
 		}
 		if exists == 0 {
 			return ratingRosterImportResult{}, sql.ErrNoRows
 		}
 
-		if _, err := tx.ExecContext(ctx, `delete from tournament_teams where tournament_id = ?`, tournamentID); err != nil {
+		if _, err := tx.ExecContext(ctx, `delete from fest_teams where fest_id = ?`, festID); err != nil {
 			return ratingRosterImportResult{}, err
 		}
-		if _, err := tx.ExecContext(ctx, `delete from tournament_players where tournament_id = ?`, tournamentID); err != nil {
+		if _, err := tx.ExecContext(ctx, `delete from fest_players where fest_id = ?`, festID); err != nil {
 			return ratingRosterImportResult{}, err
 		}
 
@@ -203,8 +203,8 @@ func (s *server) importTournamentRoster(ctx context.Context, tournamentID, ratin
 		for fallbackPosition, team := range teams {
 			importOrder := fallbackPosition + 1
 			teamID, err := insertReturningID(ctx, tx, `
-insert into tournament_teams(tournament_id, rating_id, name, city, position)
-values(?, ?, ?, ?, ?)`, tournamentID, nullableInt64(team.RatingID), team.Name, team.City, importOrder)
+insert into fest_teams(fest_id, rating_id, name, city, position)
+values(?, ?, ?, ?, ?)`, festID, nullableInt64(team.RatingID), team.Name, team.City, importOrder)
 			if err != nil {
 				return ratingRosterImportResult{}, err
 			}
@@ -213,8 +213,8 @@ values(?, ?, ?, ?, ?)`, tournamentID, nullableInt64(team.RatingID), team.Name, t
 				playerID := playerIDs[key]
 				if playerID == 0 {
 					playerID, err = insertReturningID(ctx, tx, `
-insert into tournament_players(tournament_id, rating_id, first_name, last_name)
-values(?, ?, ?, ?)`, tournamentID, nullableInt64(player.RatingID), player.FirstName, player.LastName)
+insert into fest_players(fest_id, rating_id, first_name, last_name)
+values(?, ?, ?, ?)`, festID, nullableInt64(player.RatingID), player.FirstName, player.LastName)
 					if err != nil {
 						return ratingRosterImportResult{}, err
 					}
@@ -222,26 +222,26 @@ values(?, ?, ?, ?)`, tournamentID, nullableInt64(player.RatingID), player.FirstN
 					playerCount++
 				}
 				if _, err := tx.ExecContext(ctx, `
-insert into tournament_team_players(team_id, player_id, roster_order)
+insert into fest_team_players(team_id, player_id, roster_order)
 values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 					return ratingRosterImportResult{}, err
 				}
 			}
 		}
 
-		chgkUpdates, err := propagateRosterToChGKTx(ctx, tx, tournamentID, teams)
+		chgkUpdates, err := propagateRosterToChGKTx(ctx, tx, festID, teams)
 		if err != nil {
 			return ratingRosterImportResult{}, err
 		}
-		ksiUpdates, err := propagateRosterToKSITx(ctx, tx, tournamentID, teams)
+		ksiUpdates, err := propagateRosterToKSITx(ctx, tx, festID, teams)
 		if err != nil {
 			return ratingRosterImportResult{}, err
 		}
 		updates = append(chgkUpdates, ksiUpdates...)
-		if _, err := tx.ExecContext(ctx, `update tournaments set rating_id = ?, updated_at = ? where id = ?`, ratingID, utcNow(), tournamentID); err != nil {
+		if _, err := tx.ExecContext(ctx, `update fests set rating_id = ?, updated_at = ? where id = ?`, ratingID, utcNow(), festID); err != nil {
 			return ratingRosterImportResult{}, err
 		}
-		revision, err = bumpTournamentRevisionTx(ctx, tx, tournamentID, "rating:roster-import", mustJSON(map[string]any{
+		revision, err = bumpFestRevisionTx(ctx, tx, festID, "rating:roster-import", mustJSON(map[string]any{
 			"ratingID": ratingID,
 			"teams":    len(teams),
 			"players":  playerCount,
@@ -267,24 +267,24 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 	}
 
 	for _, update := range updates {
-		s.broadcastState(tournamentID, fmt.Sprintf("game-state:%d", update.GameID), revision, update.StateJSON)
+		s.broadcastState(festID, fmt.Sprintf("game-state:%d", update.GameID), revision, update.StateJSON)
 	}
 	return result, nil
 }
 
-func rosterPlayerKey(player tournamentRosterImportPlayer) string {
+func rosterPlayerKey(player festRosterImportPlayer) string {
 	if player.RatingID > 0 {
 		return "rating:" + strconv.FormatInt(player.RatingID, 10)
 	}
 	return "name:" + strings.ToLower(joinPlayerName(player.FirstName, player.LastName))
 }
 
-func propagateRosterToChGKTx(ctx context.Context, tx *sql.Tx, tournamentID int64, teams []tournamentRosterImportTeam) ([]gameStateBroadcast, error) {
+func propagateRosterToChGKTx(ctx context.Context, tx *sql.Tx, festID int64, teams []festRosterImportTeam) ([]gameStateBroadcast, error) {
 	rows, err := tx.QueryContext(ctx, `
 select id, coalesce(scheme_json, '{}'), coalesce(state_json, '{}')
 from games
-where tournament_id = ? and game_type = 'od'
-order by position, id`, tournamentID)
+where fest_id = ? and game_type = 'od'
+order by position, id`, festID)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +322,7 @@ order by position, id`, tournamentID)
 		}
 		if _, err := tx.ExecContext(ctx, `
 update games set scheme_json = ?, state_json = ?, updated_at = ?
-where id = ? and tournament_id = ?`, string(schemeJSON), string(stateJSON), utcNow(), game.ID, tournamentID); err != nil {
+where id = ? and fest_id = ?`, string(schemeJSON), string(stateJSON), utcNow(), game.ID, festID); err != nil {
 			return nil, err
 		}
 		updates = append(updates, gameStateBroadcast{GameID: game.ID, StateJSON: stateJSON})
@@ -330,12 +330,12 @@ where id = ? and tournament_id = ?`, string(schemeJSON), string(stateJSON), utcN
 	return updates, nil
 }
 
-func propagateRosterToKSITx(ctx context.Context, tx *sql.Tx, tournamentID int64, teams []tournamentRosterImportTeam) ([]gameStateBroadcast, error) {
+func propagateRosterToKSITx(ctx context.Context, tx *sql.Tx, festID int64, teams []festRosterImportTeam) ([]gameStateBroadcast, error) {
 	rows, err := tx.QueryContext(ctx, `
 select id, coalesce(scheme_json, '{}'), coalesce(state_json, '{}')
 from games
-where tournament_id = ? and game_type = 'ksi'
-order by position, id`, tournamentID)
+where fest_id = ? and game_type = 'ksi'
+order by position, id`, festID)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +373,7 @@ order by position, id`, tournamentID)
 		}
 		if _, err := tx.ExecContext(ctx, `
 update games set scheme_json = ?, state_json = ?, updated_at = ?
-where id = ? and tournament_id = ?`, string(schemeJSON), string(stateJSON), utcNow(), game.ID, tournamentID); err != nil {
+where id = ? and fest_id = ?`, string(schemeJSON), string(stateJSON), utcNow(), game.ID, festID); err != nil {
 			return nil, err
 		}
 		updates = append(updates, gameStateBroadcast{GameID: game.ID, StateJSON: stateJSON})
@@ -381,7 +381,7 @@ where id = ? and tournament_id = ?`, string(schemeJSON), string(stateJSON), utcN
 	return updates, nil
 }
 
-func applyRosterToChGKScheme(raw string, teams []tournamentRosterImportTeam) ([]byte, error) {
+func applyRosterToChGKScheme(raw string, teams []festRosterImportTeam) ([]byte, error) {
 	obj, err := rawJSONObject(raw)
 	if err != nil {
 		return nil, err
@@ -399,7 +399,7 @@ func applyRosterToChGKScheme(raw string, teams []tournamentRosterImportTeam) ([]
 	return json.Marshal(obj)
 }
 
-func applyRosterToChGKState(raw string, teams []tournamentRosterImportTeam) ([]byte, error) {
+func applyRosterToChGKState(raw string, teams []festRosterImportTeam) ([]byte, error) {
 	obj, err := rawJSONObject(raw)
 	if err != nil {
 		return nil, err
@@ -428,7 +428,7 @@ func applyRosterToChGKState(raw string, teams []tournamentRosterImportTeam) ([]b
 	return json.Marshal(obj)
 }
 
-func applyRosterToKSIScheme(raw string, teams []tournamentRosterImportTeam) ([]byte, error) {
+func applyRosterToKSIScheme(raw string, teams []festRosterImportTeam) ([]byte, error) {
 	obj, err := rawJSONObject(raw)
 	if err != nil {
 		return nil, err
@@ -451,7 +451,7 @@ func applyRosterToKSIScheme(raw string, teams []tournamentRosterImportTeam) ([]b
 	return json.Marshal(obj)
 }
 
-func applyRosterToKSIState(raw string, teams []tournamentRosterImportTeam) ([]byte, error) {
+func applyRosterToKSIState(raw string, teams []festRosterImportTeam) ([]byte, error) {
 	obj, err := rawJSONObject(raw)
 	if err != nil {
 		return nil, err
@@ -511,7 +511,7 @@ func rawJSONObject(raw string) (map[string]json.RawMessage, error) {
 	return obj, nil
 }
 
-func chgkTeamsFromRoster(teams []tournamentRosterImportTeam) []chgkTeamJSON {
+func chgkTeamsFromRoster(teams []festRosterImportTeam) []chgkTeamJSON {
 	out := make([]chgkTeamJSON, 0, len(teams))
 	for _, team := range teams {
 		out = append(out, chgkTeamJSON{Name: team.Name, City: team.City})
@@ -519,7 +519,7 @@ func chgkTeamsFromRoster(teams []tournamentRosterImportTeam) []chgkTeamJSON {
 	return out
 }
 
-func teamNamesFromRoster(teams []tournamentRosterImportTeam) []string {
+func teamNamesFromRoster(teams []festRosterImportTeam) []string {
 	out := make([]string, 0, len(teams))
 	for _, team := range teams {
 		out = append(out, team.Name)

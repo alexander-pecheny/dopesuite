@@ -17,7 +17,7 @@
 - [06-ui-api.md](06-ui-api.md) — страницы, API и поведение интерфейса.
 - [07-implementation.md](07-implementation.md) — порядок внедрения.
 - [08-auth.md](08-auth.md) — учетные записи, инвайты и логин через Telegram-бот.
-- [09-tournaments-and-games.md](09-tournaments-and-games.md) — турниры, игры и наследование состава.
+- [09-fests-and-games.md](09-fests-and-games.md) — турниры, игры и наследование состава.
 - `python3 scripts/generate_studchr_grid.py` — генерирует JSON-сетку СтудЧР для импорта.
 
 ## Цель

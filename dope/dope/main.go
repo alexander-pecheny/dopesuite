@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"embed"
 	"encoding/json"
@@ -95,20 +94,20 @@ type MatchView struct {
 }
 
 type event struct {
-	tournamentID int64
-	revision     int64
-	data         []byte
+	festID   int64
+	revision int64
+	data     []byte
 }
 
 type hostPresenceEvent struct {
-	tournamentID int64
-	data         []byte
+	festID int64
+	data   []byte
 }
 
 type server struct {
 	mu              sync.RWMutex
 	db              *sql.DB
-	tournamentID    int64
+	festID          int64
 	activeGameID    int64
 	activeMatchCode string
 	state           MatchState
@@ -144,7 +143,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", srv.handlePublicIndex)
-	mux.HandleFunc("/tournament/", srv.handleTournamentRouter)
+	mux.HandleFunc("/fest/", srv.handleFestRouter)
 	mux.HandleFunc("/register", srv.handleRegisterPage)
 	mux.HandleFunc("/register/invite", srv.handleRegisterInviteSubmit)
 	mux.HandleFunc("/register/username", srv.handleRegisterUsernameSubmit)
@@ -154,7 +153,7 @@ func main() {
 	mux.HandleFunc("/api/import", srv.handleImport)
 	mux.HandleFunc("/host", srv.handleHostLanding)
 	mux.HandleFunc("/host/", srv.handleHostRouter)
-	mux.HandleFunc("/api/tournament/", srv.handleScopedAPI)
+	mux.HandleFunc("/api/fest/", srv.handleScopedAPI)
 	mux.HandleFunc("/api/auth/register/start", srv.handleAuthRegisterStart)
 	mux.HandleFunc("/api/auth/register/status", srv.handleAuthRegisterStatus)
 	mux.HandleFunc("/api/auth/login/start", srv.handleAuthLoginStart)
@@ -203,22 +202,11 @@ func newServer() (*server, error) {
 	if dbPath == "" {
 		dbPath = dbFile
 	}
-	db, err := openTournamentDB(dbPath)
+	db, err := openFestDB(dbPath)
 	if err != nil {
 		return nil, err
 	}
-	if !isProdEnv() {
-		ownerID, err := ensureDevUser(context.Background(), db)
-		if err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-		if err := ensureTestTournament(context.Background(), db, ownerID); err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-	}
-	tournamentID, gameID, matchCode, err := loadActiveContext(db)
+	festID, gameID, matchCode, err := loadActiveContext(db)
 	if err != nil {
 		_ = db.Close()
 		return nil, err
@@ -228,7 +216,7 @@ func newServer() (*server, error) {
 	}
 	return &server{
 		db:              db,
-		tournamentID:    tournamentID,
+		festID:          festID,
 		activeGameID:    gameID,
 		activeMatchCode: matchCode,
 		subscribers:     make(map[chan event]struct{}),
@@ -322,12 +310,12 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	tournamentID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("tournament_id")), 10, 64)
-	if err != nil || tournamentID <= 0 {
-		http.Error(w, "missing tournament_id", http.StatusBadRequest)
+	festID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("fest_id")), 10, 64)
+	if err != nil || festID <= 0 {
+		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
 	}
-	if !s.authorizeTournamentRead(w, r, tournamentID) {
+	if !s.authorizeFestRead(w, r, festID) {
 		return
 	}
 
@@ -355,7 +343,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case ev := <-ch:
-			if ev.tournamentID != tournamentID {
+			if ev.festID != festID {
 				continue
 			}
 			writeSSE(w, "state", ev.revision, ev.data)
@@ -374,12 +362,12 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	tournamentID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("tournament_id")), 10, 64)
-	if err != nil || tournamentID <= 0 {
-		http.Error(w, "missing tournament_id", http.StatusBadRequest)
+	festID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("fest_id")), 10, 64)
+	if err != nil || festID <= 0 {
+		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
 	}
-	if !s.authorizeHostPresence(w, r, tournamentID) {
+	if !s.authorizeHostPresence(w, r, festID) {
 		return
 	}
 
@@ -407,7 +395,7 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case ev := <-ch:
-			if ev.tournamentID != tournamentID {
+			if ev.festID != festID {
 				continue
 			}
 			writeSSE(w, "presence", 0, ev.data)
@@ -490,7 +478,7 @@ func (s *server) broadcastHostPresence(ev hostPresenceEvent) {
 
 func (s *server) applyUpdate(req updateRequest) (MatchView, []byte, error) {
 	if s.db != nil {
-		return s.applyMatchUpdate(s.tournamentID, s.activeMatchCode, req)
+		return s.applyMatchUpdate(s.festID, s.activeMatchCode, req)
 	}
 	return s.applyLegacyUpdate(req)
 }

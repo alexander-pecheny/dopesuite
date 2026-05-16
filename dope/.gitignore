@@ -1,4 +1,5 @@
 /match_state.json
+/fest.db*
 /tournament.db*
 /dope-server
 /telegram-bot

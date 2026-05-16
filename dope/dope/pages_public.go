@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-type publicTournamentSummary struct {
+type publicFestSummary struct {
 	ID          int64
 	Title       string
 	StartDate   string
@@ -20,7 +20,7 @@ type publicTournamentSummary struct {
 	Description string
 }
 
-type publicTournamentGame struct {
+type publicFestGame struct {
 	ID    int64
 	Code  string
 	Title string
@@ -28,12 +28,12 @@ type publicTournamentGame struct {
 	URL   string
 }
 
-type publicTournamentDetail struct {
+type publicFestDetail struct {
 	ID          int64
 	Title       string
 	Dates       string
 	Description template.HTML
-	Games       []publicTournamentGame
+	Games       []publicFestGame
 }
 
 var publicListTemplate = template.Must(template.New("publicList").Parse(`<!doctype html>
@@ -41,19 +41,19 @@ var publicListTemplate = template.Must(template.New("publicList").Parse(`<!docty
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Чемпионаты</title>
+  <title>Фесты</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">
   <header class="public-top">
-    <h1>Чемпионаты</h1>
+    <h1>Фесты</h1>
   </header>
   <main class="public-main">
     {{if .}}
     <ul class="list">
       {{range .}}
       <li>
-        <a class="list-row" href="/tournament/{{.ID}}">
+        <a class="list-row" href="/fest/{{.ID}}">
           <span class="list-row-title">{{.Title}}</span>
           {{if .Dates}}<span class="muted">{{.Dates}}</span>{{end}}
         </a>
@@ -61,13 +61,13 @@ var publicListTemplate = template.Must(template.New("publicList").Parse(`<!docty
       {{end}}
     </ul>
     {{else}}
-    <p class="empty">Нет публичных чемпионатов.</p>
+    <p class="empty">Нет публичных фестов.</p>
     {{end}}
   </main>
 </body>
 </html>`))
 
-var publicTournamentTemplate = template.Must(template.New("publicTournament").Parse(`<!doctype html>
+var publicFestTemplate = template.Must(template.New("publicFest").Parse(`<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
@@ -98,7 +98,7 @@ var publicTournamentTemplate = template.Must(template.New("publicTournament").Pa
       </ul>
     </section>
     {{else}}
-    <p class="empty">В этом чемпионате пока нет игр.</p>
+    <p class="empty">В этом фесте пока нет игр.</p>
     {{end}}
   </main>
 </body>
@@ -113,7 +113,7 @@ func (s *server) handlePublicIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	summaries, err := s.loadPublicTournamentSummaries(r.Context())
+	summaries, err := s.loadPublicFestSummaries(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -124,12 +124,12 @@ func (s *server) handlePublicIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) handleTournamentRouter(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	rest := strings.TrimPrefix(r.URL.Path, "/tournament/")
+	rest := strings.TrimPrefix(r.URL.Path, "/fest/")
 	if rest == r.URL.Path {
 		http.NotFound(w, r)
 		return
@@ -145,14 +145,14 @@ func (s *server) handleTournamentRouter(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if len(parts) == 1 {
-		s.renderPublicTournamentPage(w, r, id)
+		s.renderPublicFestPage(w, r, id)
 		return
 	}
 	if !isViewerSubPath(parts[1:]) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := s.assertTournamentPublic(r.Context(), id); err != nil {
+	if err := s.assertFestPublic(r.Context(), id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -165,7 +165,7 @@ func (s *server) handleTournamentRouter(w http.ResponseWriter, r *http.Request) 
 		gameID, err := strconv.ParseInt(parts[2], 10, 64)
 		if err == nil && gameID > 0 {
 			var gameType string
-			if err := s.db.QueryRowContext(r.Context(), `select game_type from games where id = ? and tournament_id = ?`, gameID, id).Scan(&gameType); err == nil {
+			if err := s.db.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, id).Scan(&gameType); err == nil {
 				switch gameType {
 				case "od":
 					s.serveAppHTML(w, r, "static/od.html")
@@ -180,8 +180,8 @@ func (s *server) handleTournamentRouter(w http.ResponseWriter, r *http.Request) 
 	s.serveViewerHTML(w, r)
 }
 
-func (s *server) renderPublicTournamentPage(w http.ResponseWriter, r *http.Request, id int64) {
-	detail, err := s.loadPublicTournamentDetail(r.Context(), id)
+func (s *server) renderPublicFestPage(w http.ResponseWriter, r *http.Request, id int64) {
+	detail, err := s.loadPublicFestDetail(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
 		return
@@ -191,14 +191,14 @@ func (s *server) renderPublicTournamentPage(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := publicTournamentTemplate.Execute(w, detail); err != nil {
+	if err := publicFestTemplate.Execute(w, detail); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func (s *server) assertTournamentPublic(ctx context.Context, tournamentID int64) error {
+func (s *server) assertFestPublic(ctx context.Context, festID int64) error {
 	var isPublic int
-	if err := s.db.QueryRowContext(ctx, `select is_public from tournaments where id = ?`, tournamentID).Scan(&isPublic); err != nil {
+	if err := s.db.QueryRowContext(ctx, `select is_public from fests where id = ?`, festID).Scan(&isPublic); err != nil {
 		return err
 	}
 	if isPublic != 1 {
@@ -207,7 +207,7 @@ func (s *server) assertTournamentPublic(ctx context.Context, tournamentID int64)
 	return nil
 }
 
-// isViewerSubPath validates that a tournament-scoped path under /tournament/{id}/
+// isViewerSubPath validates that a fest-scoped path under /fest/{id}/
 // is one of the recognised viewer routes (/game/{gid}/...). Only known shapes
 // pass; anything else 404s.
 func isViewerSubPath(parts []string) bool {
@@ -232,13 +232,13 @@ func isViewerSubPath(parts []string) bool {
 	return false
 }
 
-func (s *server) loadPublicTournamentSummaries(ctx context.Context) ([]publicTournamentSummary, error) {
+func (s *server) loadPublicFestSummaries(ctx context.Context) ([]publicFestSummary, error) {
 	if s.db == nil {
 		return nil, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
 select id, title, coalesce(start_date, ''), coalesce(end_date, '')
-from tournaments
+from fests
 where is_public = 1
 order by case when start_date is null or start_date = '' then 1 else 0 end,
          start_date,
@@ -247,21 +247,21 @@ order by case when start_date is null or start_date = '' then 1 else 0 end,
 		return nil, err
 	}
 	defer rows.Close()
-	var out []publicTournamentSummary
+	var out []publicFestSummary
 	for rows.Next() {
-		var s publicTournamentSummary
+		var s publicFestSummary
 		if err := rows.Scan(&s.ID, &s.Title, &s.StartDate, &s.EndDate); err != nil {
 			return nil, err
 		}
-		s.Dates = formatTournamentDates(s.StartDate, s.EndDate)
+		s.Dates = formatFestDates(s.StartDate, s.EndDate)
 		out = append(out, s)
 	}
 	return out, rows.Err()
 }
 
-func (s *server) loadPublicTournamentDetail(ctx context.Context, id int64) (publicTournamentDetail, error) {
+func (s *server) loadPublicFestDetail(ctx context.Context, id int64) (publicFestDetail, error) {
 	if s.db == nil {
-		return publicTournamentDetail{}, sql.ErrNoRows
+		return publicFestDetail{}, sql.ErrNoRows
 	}
 	var (
 		title       string
@@ -272,30 +272,30 @@ func (s *server) loadPublicTournamentDetail(ctx context.Context, id int64) (publ
 	)
 	if err := s.db.QueryRowContext(ctx, `
 select title, description, start_date, end_date, is_public
-from tournaments where id = ?`, id).Scan(&title, &description, &startDate, &endDate, &isPublic); err != nil {
-		return publicTournamentDetail{}, err
+from fests where id = ?`, id).Scan(&title, &description, &startDate, &endDate, &isPublic); err != nil {
+		return publicFestDetail{}, err
 	}
 	if isPublic != 1 {
-		return publicTournamentDetail{}, sql.ErrNoRows
+		return publicFestDetail{}, sql.ErrNoRows
 	}
-	games, err := loadTournamentGames(ctx, s.db, id)
+	games, err := loadFestGames(ctx, s.db, id)
 	if err != nil {
-		return publicTournamentDetail{}, err
+		return publicFestDetail{}, err
 	}
-	publicGames := make([]publicTournamentGame, len(games))
+	publicGames := make([]publicFestGame, len(games))
 	for i, g := range games {
-		publicGames[i] = publicTournamentGame{
+		publicGames[i] = publicFestGame{
 			ID:    g.ID,
 			Code:  g.Code,
 			Title: g.Title,
 			Type:  gameTypeLabel(g.Type),
-			URL:   fmt.Sprintf("/tournament/%d/game/%d/", id, g.ID),
+			URL:   fmt.Sprintf("/fest/%d/game/%d/", id, g.ID),
 		}
 	}
-	detail := publicTournamentDetail{
+	detail := publicFestDetail{
 		ID:          id,
 		Title:       title,
-		Dates:       formatTournamentDates(startDate.String, endDate.String),
+		Dates:       formatFestDates(startDate.String, endDate.String),
 		Description: renderMarkdown(description),
 		Games:       publicGames,
 	}
@@ -317,7 +317,7 @@ func gameTypeLabel(gameType string) string {
 	}
 }
 
-func formatTournamentDates(start, end string) string {
+func formatFestDates(start, end string) string {
 	start = strings.TrimSpace(start)
 	end = strings.TrimSpace(end)
 	switch {
@@ -332,25 +332,25 @@ func formatTournamentDates(start, end string) string {
 	}
 }
 
-type tournamentGameRow struct {
+type festGameRow struct {
 	ID    int64
 	Code  string
 	Title string
 	Type  string
 }
 
-func loadTournamentGames(ctx context.Context, q dbQueryer, tournamentID int64) ([]tournamentGameRow, error) {
+func loadFestGames(ctx context.Context, q dbQueryer, festID int64) ([]festGameRow, error) {
 	rows, err := q.QueryContext(ctx, `
 select id, code, title, game_type
-from games where tournament_id = ?
-order by position, id`, tournamentID)
+from games where fest_id = ?
+order by position, id`, festID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []tournamentGameRow
+	var out []festGameRow
 	for rows.Next() {
-		var g tournamentGameRow
+		var g festGameRow
 		if err := rows.Scan(&g.ID, &g.Code, &g.Title, &g.Type); err != nil {
 			return nil, err
 		}

@@ -12,15 +12,15 @@ import (
 
 func scopedAPITestIDs(t *testing.T, srv *server) (int64, int64) {
 	t.Helper()
-	var tournamentID int64
-	if err := srv.db.QueryRow(`select id from tournaments order by id limit 1`).Scan(&tournamentID); err != nil {
-		t.Fatalf("tournament id: %v", err)
+	var festID int64
+	if err := srv.db.QueryRow(`select id from fests order by id limit 1`).Scan(&festID); err != nil {
+		t.Fatalf("fest id: %v", err)
 	}
-	gameID, err := defaultGameID(t.Context(), srv.db, tournamentID)
+	gameID, err := defaultGameID(t.Context(), srv.db, festID)
 	if err != nil {
 		t.Fatalf("game id: %v", err)
 	}
-	return tournamentID, gameID
+	return festID, gameID
 }
 
 func createAPITestSession(t *testing.T, srv *server, username string) (int64, string) {
@@ -47,11 +47,11 @@ values(null, null, ?, 0, ?, ?)`, username, now, now)
 	return userID, token
 }
 
-func addAPITestOrganizer(t *testing.T, srv *server, tournamentID, userID int64) {
+func addAPITestOrganizer(t *testing.T, srv *server, festID, userID int64) {
 	t.Helper()
 	if _, err := srv.db.Exec(`
-insert into tournament_organizers(tournament_id, user_id, added_at)
-values(?, ?, ?)`, tournamentID, userID, utcNow()); err != nil {
+insert into fest_organizers(fest_id, user_id, added_at)
+values(?, ?, ?)`, festID, userID, utcNow()); err != nil {
 		t.Fatalf("add organizer: %v", err)
 	}
 }
@@ -82,15 +82,15 @@ func scopedAPIRequest(t *testing.T, srv *server, method, path string, body any, 
 
 func TestScopedAPIRequiresOrganizerForPrivateReadsAndWrites(t *testing.T) {
 	srv := newAuthTestServer(t)
-	tournamentID, gameID := scopedAPITestIDs(t, srv)
-	gamePath := fmt.Sprintf("/api/tournament/%d/games/%d", tournamentID, gameID)
+	festID, gameID := scopedAPITestIDs(t, srv)
+	gamePath := fmt.Sprintf("/api/fest/%d/games/%d", festID, gameID)
 
 	publicRead := scopedAPIRequest(t, srv, http.MethodGet, gamePath, nil, "")
 	if publicRead.Code != http.StatusOK {
 		t.Fatalf("public read status = %d, body %s", publicRead.Code, publicRead.Body.String())
 	}
 
-	if _, err := srv.db.Exec(`update tournaments set is_public = 0 where id = ?`, tournamentID); err != nil {
+	if _, err := srv.db.Exec(`update fests set is_public = 0 where id = ?`, festID); err != nil {
 		t.Fatalf("make private: %v", err)
 	}
 	privateAnonRead := scopedAPIRequest(t, srv, http.MethodGet, gamePath, nil, "")
@@ -105,7 +105,7 @@ func TestScopedAPIRequiresOrganizerForPrivateReadsAndWrites(t *testing.T) {
 	}
 
 	organizerID, organizerToken := createAPITestSession(t, srv, "organizer")
-	addAPITestOrganizer(t, srv, tournamentID, organizerID)
+	addAPITestOrganizer(t, srv, festID, organizerID)
 	privateOrganizerRead := scopedAPIRequest(t, srv, http.MethodGet, gamePath, nil, organizerToken)
 	if privateOrganizerRead.Code != http.StatusOK {
 		t.Fatalf("private organizer read status = %d, body %s", privateOrganizerRead.Code, privateOrganizerRead.Body.String())
@@ -114,7 +114,7 @@ func TestScopedAPIRequiresOrganizerForPrivateReadsAndWrites(t *testing.T) {
 	theme := 0
 	answer := 0
 	mark := "right"
-	updatePath := fmt.Sprintf("/api/tournament/%d/games/%d/matches/%s/update", tournamentID, gameID, defaultMatchCode)
+	updatePath := fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/update", festID, gameID, defaultMatchCode)
 	payload := updateRequest{Team: 0, Theme: &theme, Answer: &answer, Mark: &mark}
 
 	anonymousWrite := scopedAPIRequest(t, srv, http.MethodPost, updatePath, payload, "")
@@ -131,10 +131,10 @@ func TestScopedAPIRequiresOrganizerForPrivateReadsAndWrites(t *testing.T) {
 	}
 }
 
-func TestScopedAPIImportRequiresTournamentOrganizer(t *testing.T) {
+func TestScopedAPIImportRequiresFestOrganizer(t *testing.T) {
 	srv := newAuthTestServer(t)
-	tournamentID, _ := scopedAPITestIDs(t, srv)
-	scheme := tournamentScheme{
+	festID, _ := scopedAPITestIDs(t, srv)
+	scheme := festScheme{
 		SchemaVersion: 2,
 		Slug:          "authz-import",
 		Title:         "authz import",
@@ -156,7 +156,7 @@ func TestScopedAPIImportRequiresTournamentOrganizer(t *testing.T) {
 		Teams: []schemeTeam{{Name: "Alpha", Basket: 1, Number: 1}},
 	}
 
-	path := fmt.Sprintf("/api/import?tournament_id=%d", tournamentID)
+	path := fmt.Sprintf("/api/import?fest_id=%d", festID)
 	body, _ := json.Marshal(scheme)
 
 	anonReq := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
@@ -178,7 +178,7 @@ func TestScopedAPIImportRequiresTournamentOrganizer(t *testing.T) {
 	}
 
 	organizerID, organizerToken := createAPITestSession(t, srv, "import-organizer")
-	addAPITestOrganizer(t, srv, tournamentID, organizerID)
+	addAPITestOrganizer(t, srv, festID, organizerID)
 	organizerReq := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
 	organizerReq.Header.Set("Content-Type", "application/json")
 	organizerReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: organizerToken})
@@ -191,11 +191,11 @@ func TestScopedAPIImportRequiresTournamentOrganizer(t *testing.T) {
 
 func TestScopedGameStatePatchMergesIndependentEdits(t *testing.T) {
 	srv := newAuthTestServer(t)
-	tournamentID, gameID := scopedAPITestIDs(t, srv)
+	festID, gameID := scopedAPITestIDs(t, srv)
 	organizerID, token := createAPITestSession(t, srv, "state-patcher")
-	addAPITestOrganizer(t, srv, tournamentID, organizerID)
+	addAPITestOrganizer(t, srv, festID, organizerID)
 
-	path := fmt.Sprintf("/api/tournament/%d/games/%d/state", tournamentID, gameID)
+	path := fmt.Sprintf("/api/fest/%d/games/%d/state", festID, gameID)
 	patch := func(path []any, value any) map[string]any {
 		return map[string]any{
 			"ops": []map[string]any{{
@@ -229,10 +229,10 @@ func TestScopedGameStatePatchMergesIndependentEdits(t *testing.T) {
 	}
 }
 
-func TestHostPresenceRequiresTournamentOrganizer(t *testing.T) {
+func TestHostPresenceRequiresFestOrganizer(t *testing.T) {
 	srv := newAuthTestServer(t)
-	tournamentID, _ := scopedAPITestIDs(t, srv)
-	path := fmt.Sprintf("/api/tournament/%d/presence", tournamentID)
+	festID, _ := scopedAPITestIDs(t, srv)
+	path := fmt.Sprintf("/api/fest/%d/presence", festID)
 	payload := map[string]any{
 		"active": true,
 		"cursor": map[string]any{
@@ -255,28 +255,28 @@ func TestHostPresenceRequiresTournamentOrganizer(t *testing.T) {
 	}
 
 	organizerID, organizerToken := createAPITestSession(t, srv, "presence-organizer")
-	addAPITestOrganizer(t, srv, tournamentID, organizerID)
+	addAPITestOrganizer(t, srv, festID, organizerID)
 	organizer := scopedAPIRequest(t, srv, http.MethodPost, path, payload, organizerToken)
 	if organizer.Code != http.StatusOK {
 		t.Fatalf("organizer presence status = %d, body %s", organizer.Code, organizer.Body.String())
 	}
 }
 
-func TestEventsRequireAuthorizedTournamentScope(t *testing.T) {
+func TestEventsRequireAuthorizedFestScope(t *testing.T) {
 	srv := newAuthTestServer(t)
-	tournamentID, _ := scopedAPITestIDs(t, srv)
+	festID, _ := scopedAPITestIDs(t, srv)
 
 	missingReq := httptest.NewRequest(http.MethodGet, "/events", nil)
 	missingResp := httptest.NewRecorder()
 	srv.handleEvents(missingResp, missingReq)
 	if missingResp.Code != http.StatusBadRequest {
-		t.Fatalf("missing tournament_id status = %d, want 400", missingResp.Code)
+		t.Fatalf("missing fest_id status = %d, want 400", missingResp.Code)
 	}
 
-	if _, err := srv.db.Exec(`update tournaments set is_public = 0 where id = ?`, tournamentID); err != nil {
+	if _, err := srv.db.Exec(`update fests set is_public = 0 where id = ?`, festID); err != nil {
 		t.Fatalf("make private: %v", err)
 	}
-	privateReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/events?tournament_id=%d", tournamentID), nil)
+	privateReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/events?fest_id=%d", festID), nil)
 	privateResp := httptest.NewRecorder()
 	srv.handleEvents(privateResp, privateReq)
 	if privateResp.Code != http.StatusNotFound {

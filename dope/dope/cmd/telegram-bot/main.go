@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	defaultDBFile = "tournament.db"
+	defaultDBFile = "fest.db"
 	apiBase       = "https://api.telegram.org"
 	pollTimeout   = 30
 	codeLifetime  = time.Minute

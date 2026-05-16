@@ -836,7 +836,7 @@ function syncState() {
   stateSync = gameTable.createStateSync({
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
-    eventsURL: `/events?tournament_id=${encodeURIComponent(route.tournamentID)}`,
+    eventsURL: `/events?fest_id=${encodeURIComponent(route.festID)}`,
     scope: `game-state:${route.gameID}`,
     getState: () => state,
     setStatus,
@@ -846,11 +846,11 @@ function syncState() {
 }
 
 function connectPresence() {
-  if (viewer || presence || !route.tournamentID) return;
+  if (viewer || presence || !route.festID) return;
   presence = gameTable.createHostPresence({
     root: odRoot,
-    eventsURL: `/host-events?tournament_id=${encodeURIComponent(route.tournamentID)}`,
-    presenceURL: `/api/tournament/${route.tournamentID}/presence`,
+    eventsURL: `/host-events?fest_id=${encodeURIComponent(route.festID)}`,
+    presenceURL: `/api/fest/${route.festID}/presence`,
     cursorFromElement: odPresenceCursorFromElement,
     getCursor: currentODPresenceCursor,
     findTarget: findODPresenceTarget,
@@ -910,22 +910,22 @@ function applyRemoteState(nextState) {
 
 function currentRoute() {
   const path = window.location.pathname;
-  const host = path.match(/^\/host\/tournament\/(\d+)\/game\/(\d+)/);
+  const host = path.match(/^\/host\/fest\/(\d+)\/game\/(\d+)/);
   if (host) {
     return {
       viewer: false,
-      tournamentID: host[1],
+      festID: host[1],
       gameID: host[2],
-      apiBase: `/api/tournament/${host[1]}/games/${host[2]}`,
+      apiBase: `/api/fest/${host[1]}/games/${host[2]}`,
     };
   }
-  const pub = path.match(/^\/tournament\/(\d+)\/game\/(\d+)/);
+  const pub = path.match(/^\/fest\/(\d+)\/game\/(\d+)/);
   if (pub) {
     return {
       viewer: true,
-      tournamentID: pub[1],
+      festID: pub[1],
       gameID: pub[2],
-      apiBase: `/api/tournament/${pub[1]}/games/${pub[2]}`,
+      apiBase: `/api/fest/${pub[1]}/games/${pub[2]}`,
     };
   }
   return {};

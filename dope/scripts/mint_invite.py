@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mint a one-shot invite code for /register testing.
 
-Usage: DOPE_DB=tournament.db uv run python scripts/mint_invite.py [days]
+Usage: DOPE_DB=fest.db uv run python scripts/mint_invite.py [days]
 
 Inserts an invites row created by the system user, expiring `days` days from
 now (default 7). Prints the code to stdout — paste it into the /register form.
@@ -29,7 +29,7 @@ def new_code() -> str:
 
 
 def main() -> int:
-    db_path = os.environ.get("DOPE_DB", "tournament.db")
+    db_path = os.environ.get("DOPE_DB", "fest.db")
     if not os.path.exists(db_path):
         sys.stderr.write(f"db not found: {db_path}\n")
         return 1

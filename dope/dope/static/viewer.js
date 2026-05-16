@@ -6,7 +6,7 @@ const gameTable = window.DopeTable;
 const route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 let state = null;
-let tournament = null;
+let fest = null;
 let venues = [];
 let stageStates = [];
 let reloadTimer = null;
@@ -22,22 +22,22 @@ async function loadCurrent() {
   } else if (route.mode === "venues") {
     await loadVenuesPage();
   } else {
-    await loadTournament();
+    await loadFest();
   }
 }
 
-async function loadTournament() {
+async function loadFest() {
   const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
-  tournament = await response.json();
-  renderTournament();
+  fest = await response.json();
+  renderFest();
 }
 
 async function loadStage() {
   const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
-  tournament = await response.json();
-  const stage = findStage(tournament, route.stageCode);
+  fest = await response.json();
+  const stage = findStage(fest, route.stageCode);
   const matches = stage?.matches || [];
   stageStates = await Promise.all(matches.map(async (match) => {
     const matchResponse = await fetch(`${route.apiBase}/matches/${encodeURIComponent(match.code)}`);
@@ -55,16 +55,16 @@ async function loadMatch() {
 }
 
 async function loadVenuesPage() {
-  const response = await fetch(`/api/tournament/${route.tournamentID}/venues`);
+  const response = await fetch(`/api/fest/${route.festID}/venues`);
   if (!response.ok) throw new Error(await response.text());
   venues = await response.json();
   renderVenues();
 }
 
 function connectEvents() {
-  const events = new EventSource(`/events?tournament_id=${encodeURIComponent(route.tournamentID)}`);
+  const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
   const matchScope = `match:${route.gameID}:${route.matchCode}`;
-  const venuesScope = `venues:${route.tournamentID}`;
+  const venuesScope = `venues:${route.festID}`;
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
     if (route.mode === "match" && message.scope === matchScope) {
@@ -110,22 +110,22 @@ function setLive(ok) {
   liveDot.title = label;
 }
 
-function renderTournament() {
-  if (!tournament) return;
+function renderFest() {
+  if (!fest) return;
   resetReadonlyTableIndex();
   setViewerMode("grid");
-  setHeading(tournament.title);
-  document.title = `Зритель · ${tournament.title}`;
-  viewerRoot.replaceChildren(buildTournamentGrid(tournament, {viewer: true, basePath: route.base}));
+  setHeading(fest.title);
+  document.title = `Зритель · ${fest.title}`;
+  viewerRoot.replaceChildren(buildFestGrid(fest, {viewer: true, basePath: route.base}));
 }
 
 function renderStage() {
-  if (!tournament) return;
+  if (!fest) return;
   resetReadonlyTableIndex();
-  const stage = findStage(tournament, route.stageCode);
+  const stage = findStage(fest, route.stageCode);
   setViewerMode("match");
-  setHeading(stage?.title || tournament.title);
-  document.title = `Зритель · ${stage?.title || tournament.title}`;
+  setHeading(stage?.title || fest.title);
+  document.title = `Зритель · ${stage?.title || fest.title}`;
   viewerRoot.replaceChildren(buildReadonlyStageTables());
 }
 
@@ -219,9 +219,9 @@ function resetReadonlyTableIndex() {
   readonlyTableIndex = null;
 }
 
-function buildTournamentTable(data) {
+function buildFestTable(data) {
   const table = document.createElement("table");
-  table.className = "tournament-table";
+  table.className = "fest-table";
   const thead = document.createElement("thead");
   const header = document.createElement("tr");
   ["Этап", "Бой", "Площадка", "Команды", "Σ", "М", "Статус"].forEach((label) => {
@@ -267,7 +267,7 @@ function buildTournamentTable(data) {
 
 function buildVenuesTable() {
   const table = document.createElement("table");
-  table.className = "tournament-table venues-table";
+  table.className = "fest-table venues-table";
   const thead = document.createElement("thead");
   const header = document.createElement("tr");
   header.appendChild(th("№", "number"));
@@ -451,24 +451,24 @@ function shootoutThemesFor(team) {
 
 function currentRoute() {
   const path = window.location.pathname;
-  const prefix = path.match(/^\/tournament\/(\d+)\/game\/(\d+)/);
+  const prefix = path.match(/^\/fest\/(\d+)\/game\/(\d+)/);
   if (!prefix) {
     return {mode: "missing"};
   }
-  const tournamentID = prefix[1];
+  const festID = prefix[1];
   const gameID = prefix[2];
-  const base = `/tournament/${tournamentID}/game/${gameID}`;
-  const apiBase = `/api/tournament/${tournamentID}/games/${gameID}`;
+  const base = `/fest/${festID}/game/${gameID}`;
+  const apiBase = `/api/fest/${festID}/games/${gameID}`;
   const rest = path.slice(prefix[0].length);
   const stripped = rest.replace(/\/$/, "");
   if (stripped === "" || stripped === "/") {
-    return {mode: "grid", tournamentID, gameID, base, apiBase};
+    return {mode: "grid", festID, gameID, base, apiBase};
   }
-  if (stripped === "/venues") return {mode: "venues", tournamentID, gameID, base, apiBase};
+  if (stripped === "/venues") return {mode: "venues", festID, gameID, base, apiBase};
   const match = stripped.match(/^\/matches\/([^/]+)$/);
-  if (match) return {mode: "match", matchCode: decodeURIComponent(match[1]), tournamentID, gameID, base, apiBase};
+  if (match) return {mode: "match", matchCode: decodeURIComponent(match[1]), festID, gameID, base, apiBase};
   const stage = stripped.match(/^\/stage\/([^/]+)$/);
-  if (stage) return {mode: "stage", stageCode: decodeURIComponent(stage[1]), tournamentID, gameID, base, apiBase};
+  if (stage) return {mode: "stage", stageCode: decodeURIComponent(stage[1]), festID, gameID, base, apiBase};
   return {mode: "missing"};
 }
 

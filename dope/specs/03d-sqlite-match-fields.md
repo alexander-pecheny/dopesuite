@@ -38,4 +38,4 @@
 - `reseed_entries.rank` — 1-based номер пересева.
 - `reseed_entries.stage_id` ссылается на этап-пересев, а не на бой.
 - `reseed_entries.metrics_json` фиксирует показатели, по которым команда получила этот ранг.
-- `events.revision` совпадает с `tournaments.revision` после операции и используется для SSE replay/debug.
+- `events.revision` совпадает с `fests.revision` после операции и используется для SSE replay/debug.
