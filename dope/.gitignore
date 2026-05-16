@@ -3,4 +3,5 @@
 /dope-server
 /telegram-bot
 /.env
+__pycache__/
 dist/
