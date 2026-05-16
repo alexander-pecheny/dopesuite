@@ -46,6 +46,6 @@ reseed_entries(stage_id integer references stages(id),
                rank integer not null, team_id integer references teams(id),
                metrics_json text not null, primary key(stage_id, rank));
 
-events(id integer primary key, tournament_id integer references tournaments(id),
+events(id integer primary key, fest_id integer references fests(id),
        revision integer not null, type text not null, payload_json text not null, created_at text not null);
 ```

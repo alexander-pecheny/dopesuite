@@ -1,9 +1,9 @@
-function buildTournamentGrid(data, options = {}) {
+function buildFestGrid(data, options = {}) {
   const root = document.createElement("div");
-  root.className = "tournament-grid";
+  root.className = "fest-grid";
 
   const columns = document.createElement("div");
-  columns.className = "tournament-columns";
+  columns.className = "fest-columns";
 
   const scheme = parseScheme(data.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : data.stages || [];

@@ -15,14 +15,12 @@ import (
 
 func newAuthTestServer(t *testing.T) *server {
 	t.Helper()
-	db, err := openTournamentDB(filepath.Join(t.TempDir(), "auth.db"))
+	db, err := openFestDB(filepath.Join(t.TempDir(), "auth.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if _, err := bootstrapDefaultTournament(db, defaultMatch()); err != nil {
-		t.Fatalf("bootstrap: %v", err)
-	}
+	createDefaultFestFixture(t, db, defaultMatch())
 	return &server{db: db, subscribers: make(map[chan event]struct{})}
 }
 

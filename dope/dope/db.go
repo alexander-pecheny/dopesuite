@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	dbFile             = "tournament.db"
+	dbFile             = "fest.db"
 	defaultMatchCode   = "A"
 	defaultVenueTitle  = "Москва-1"
 	defaultGameCode    = "default"
@@ -33,7 +33,7 @@ type VenueView struct {
 	Title  string `json:"title"`
 }
 
-type TournamentView struct {
+type FestView struct {
 	Slug              string      `json:"slug"`
 	Title             string      `json:"title"`
 	Revision          int64       `json:"revision"`
@@ -46,15 +46,15 @@ type TournamentView struct {
 }
 
 type StageView struct {
-	Code     string                `json:"code"`
-	Title    string                `json:"title"`
-	Type     string                `json:"stage_type"`
-	Position int                   `json:"position"`
-	Status   string                `json:"status"`
-	Matches  []TournamentMatchView `json:"matches,omitempty"`
+	Code     string          `json:"code"`
+	Title    string          `json:"title"`
+	Type     string          `json:"stage_type"`
+	Position int             `json:"position"`
+	Status   string          `json:"status"`
+	Matches  []FestMatchView `json:"matches,omitempty"`
 }
 
-type TournamentMatchView struct {
+type FestMatchView struct {
 	Code             string             `json:"code"`
 	Title            string             `json:"title"`
 	Position         int                `json:"position"`
@@ -90,7 +90,7 @@ type eventEnvelope struct {
 	Data     json.RawMessage `json:"data"`
 }
 
-type tournamentScheme struct {
+type festScheme struct {
 	SchemaVersion     int             `json:"schemaVersion"`
 	Slug              string          `json:"slug"`
 	Title             string          `json:"title"`
@@ -178,21 +178,21 @@ type dbQueryer interface {
 }
 
 type dbMatchState struct {
-	MatchID            int64
-	Code               string
-	Title              string
-	Status             string
-	Revision           int64
-	TournamentRevision int64
-	UpdatedAt          time.Time
-	StageCode          string
-	StageTitle         string
-	Venue              *VenueView
-	State              MatchState
-	TeamIDs            []int64
+	MatchID      int64
+	Code         string
+	Title        string
+	Status       string
+	Revision     int64
+	FestRevision int64
+	UpdatedAt    time.Time
+	StageCode    string
+	StageTitle   string
+	Venue        *VenueView
+	State        MatchState
+	TeamIDs      []int64
 }
 
-func openTournamentDB(path string) (*sql.DB, error) {
+func openFestDB(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
@@ -209,26 +209,29 @@ func openTournamentDB(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// loadActiveContext picks an arbitrary tournament/game/first-match to drive the
+// loadActiveContext picks an arbitrary fest/game/first-match to drive the
 // transitional single-context handlers. Returns zero values (no error) when the
-// DB has no tournament yet — that's the default empty state.
-func loadActiveContext(db *sql.DB) (tournamentID, gameID int64, matchCode string, err error) {
+// DB has no fest yet — that's the default empty state.
+func loadActiveContext(db *sql.DB) (festID, gameID int64, matchCode string, err error) {
 	row := db.QueryRow(`
 select t.id, g.id, coalesce((select m.code from matches m where m.game_id = g.id order by m.position, m.id limit 1), '')
-from tournaments t
-join games g on g.tournament_id = t.id
+from fests t
+join games g on g.fest_id = t.id
 order by t.id, g.position, g.id
 limit 1`)
-	if err = row.Scan(&tournamentID, &gameID, &matchCode); err != nil {
+	if err = row.Scan(&festID, &gameID, &matchCode); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, 0, "", nil
 		}
 		return 0, 0, "", err
 	}
-	return tournamentID, gameID, matchCode, nil
+	return festID, gameID, matchCode, nil
 }
 
 func migrateDB(db *sql.DB) error {
+	if err := migrateLegacyFestSchema(db); err != nil {
+		return err
+	}
 	_, err := db.Exec(`
 create table if not exists schema_versions(
   version integer primary key,
@@ -286,7 +289,7 @@ create table if not exists schemes(
   created_at text not null
 );
 
-create table if not exists tournaments(
+create table if not exists fests(
   id integer primary key,
   slug text not null unique,
   title text not null,
@@ -298,47 +301,47 @@ create table if not exists tournaments(
   updated_at text not null
 );
 
-create table if not exists tournament_organizers(
-  tournament_id integer not null references tournaments(id) on delete cascade,
+create table if not exists fest_organizers(
+  fest_id integer not null references fests(id) on delete cascade,
   user_id integer not null references users(id) on delete cascade,
   added_at text not null,
-  primary key(tournament_id, user_id)
+  primary key(fest_id, user_id)
 );
 
-create table if not exists tournament_teams(
+create table if not exists fest_teams(
   id integer primary key,
-  tournament_id integer not null references tournaments(id) on delete cascade,
+  fest_id integer not null references fests(id) on delete cascade,
   rating_id integer,
   name text not null,
   city text not null default '',
   position real not null
 );
 
-create table if not exists tournament_players(
+create table if not exists fest_players(
   id integer primary key,
-  tournament_id integer not null references tournaments(id) on delete cascade,
+  fest_id integer not null references fests(id) on delete cascade,
   rating_id integer,
   first_name text not null,
   last_name text not null default ''
 );
 
-create table if not exists tournament_team_players(
-  team_id integer not null references tournament_teams(id) on delete cascade,
-  player_id integer not null references tournament_players(id) on delete cascade,
+create table if not exists fest_team_players(
+  team_id integer not null references fest_teams(id) on delete cascade,
+  player_id integer not null references fest_players(id) on delete cascade,
   roster_order integer not null,
   primary key(team_id, player_id)
 );
 
 create table if not exists teams(
   id integer primary key,
-  tournament_id integer not null references tournaments(id) on delete cascade,
+  fest_id integer not null references fests(id) on delete cascade,
   name text not null,
   city text not null default ''
 );
 
 create table if not exists players(
   id integer primary key,
-  tournament_id integer not null references tournaments(id) on delete cascade,
+  fest_id integer not null references fests(id) on delete cascade,
   first_name text not null,
   last_name text not null default ''
 );
@@ -352,7 +355,7 @@ create table if not exists team_players(
 
 create table if not exists games(
   id integer primary key,
-  tournament_id integer not null references tournaments(id) on delete cascade,
+  fest_id integer not null references fests(id) on delete cascade,
   code text not null,
   title text not null,
   game_type text not null,
@@ -360,12 +363,12 @@ create table if not exists games(
   scheme_id integer references schemes(id),
   scheme_json text not null default '{}',
   status text not null default 'pending',
-  team_list_source text not null default 'tournament' check (team_list_source in ('tournament','game')),
-  roster_source text not null default 'tournament' check (roster_source in ('tournament','game')),
+  team_list_source text not null default 'fest' check (team_list_source in ('fest','game')),
+  roster_source text not null default 'fest' check (roster_source in ('fest','game')),
   revision integer not null default 1,
   created_at text not null,
   updated_at text not null,
-  unique(tournament_id, code)
+  unique(fest_id, code)
 );
 
 create table if not exists game_teams(
@@ -402,17 +405,17 @@ create table if not exists game_assignments(
 
 create table if not exists venues(
   id integer primary key,
-  tournament_id integer not null references tournaments(id) on delete cascade,
+  fest_id integer not null references fests(id) on delete cascade,
   number integer not null,
   title text not null,
   created_at text not null,
   updated_at text not null,
-  unique(tournament_id, number)
+  unique(fest_id, number)
 );
 
 create table if not exists stages(
   id integer primary key,
-  tournament_id integer not null references tournaments(id) on delete cascade,
+  fest_id integer not null references fests(id) on delete cascade,
   game_id integer not null references games(id) on delete cascade,
   code text not null,
   title text not null,
@@ -425,7 +428,7 @@ create table if not exists stages(
 
 create table if not exists matches(
   id integer primary key,
-  tournament_id integer not null references tournaments(id) on delete cascade,
+  fest_id integer not null references fests(id) on delete cascade,
   game_id integer not null references games(id) on delete cascade,
   stage_id integer not null references stages(id) on delete cascade,
   code text not null,
@@ -489,7 +492,7 @@ create table if not exists reseed_entries(
 
 create table if not exists events(
   id integer primary key,
-  tournament_id integer not null references tournaments(id) on delete cascade,
+  fest_id integer not null references fests(id) on delete cascade,
   revision integer not null,
   type text not null,
   payload_json text not null,
@@ -510,9 +513,9 @@ begin
   select raise(abort, 'team roster is limited to 9 players');
 end;
 
-create trigger if not exists tournament_team_players_max_9
-before insert on tournament_team_players
-when (select count(*) from tournament_team_players where team_id = new.team_id) >= 9
+create trigger if not exists fest_team_players_max_9
+before insert on fest_team_players
+when (select count(*) from fest_team_players where team_id = new.team_id) >= 9
 begin
   select raise(abort, 'team roster is limited to 9 players');
 end;
@@ -522,7 +525,7 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 	if err != nil {
 		return err
 	}
-	if err := addColumnsIfMissing(db, "tournaments", []columnSpec{
+	if err := addColumnsIfMissing(db, "fests", []columnSpec{
 		{Name: "start_date", Type: "TEXT"},
 		{Name: "end_date", Type: "TEXT"},
 		{Name: "is_public", Type: "INTEGER NOT NULL DEFAULT 0"},
@@ -552,7 +555,230 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(6, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
 	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(7, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
 	return nil
+}
+
+func migrateLegacyFestSchema(db *sql.DB) error {
+	ctx := context.Background()
+	hasLegacy, err := sqliteTableExists(ctx, db, "tournaments")
+	if err != nil || !hasLegacy {
+		return err
+	}
+	hasFests, err := sqliteTableExists(ctx, db, "fests")
+	if err != nil {
+		return err
+	}
+	if hasFests {
+		return errors.New("cannot migrate legacy fest schema: both tournaments and fests tables exist")
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	foreignKeysOff := true
+	defer func() {
+		if foreignKeysOff {
+			_, _ = db.Exec(`PRAGMA foreign_keys = ON`)
+		}
+	}()
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `drop trigger if exists tournament_team_players_max_9`); err != nil {
+		return err
+	}
+	tableRenames := []struct {
+		Old string
+		New string
+	}{
+		{"tournaments", "fests"},
+		{"tournament_organizers", "fest_organizers"},
+		{"tournament_teams", "fest_teams"},
+		{"tournament_players", "fest_players"},
+		{"tournament_team_players", "fest_team_players"},
+	}
+	for _, rename := range tableRenames {
+		if err := renameTableIfExists(ctx, tx, rename.Old, rename.New); err != nil {
+			return err
+		}
+	}
+	for _, table := range []string{
+		"fest_organizers",
+		"fest_teams",
+		"fest_players",
+		"teams",
+		"players",
+		"games",
+		"venues",
+		"stages",
+		"matches",
+		"events",
+	} {
+		if err := renameColumnIfExists(ctx, tx, table, "tournament_id", "fest_id"); err != nil {
+			return err
+		}
+	}
+	if err := rebuildLegacyGamesTable(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		return err
+	}
+	foreignKeysOff = false
+	return verifyForeignKeys(db)
+}
+
+func renameTableIfExists(ctx context.Context, tx *sql.Tx, oldName, newName string) error {
+	oldExists, err := sqliteTableExists(ctx, tx, oldName)
+	if err != nil || !oldExists {
+		return err
+	}
+	newExists, err := sqliteTableExists(ctx, tx, newName)
+	if err != nil {
+		return err
+	}
+	if newExists {
+		return fmt.Errorf("cannot rename %s to %s: target table exists", oldName, newName)
+	}
+	_, err = tx.ExecContext(ctx, fmt.Sprintf("alter table %s rename to %s", oldName, newName))
+	return err
+}
+
+func renameColumnIfExists(ctx context.Context, tx *sql.Tx, table, oldName, newName string) error {
+	tableExists, err := sqliteTableExists(ctx, tx, table)
+	if err != nil || !tableExists {
+		return err
+	}
+	oldExists, err := sqliteColumnExists(ctx, tx, table, oldName)
+	if err != nil || !oldExists {
+		return err
+	}
+	newExists, err := sqliteColumnExists(ctx, tx, table, newName)
+	if err != nil {
+		return err
+	}
+	if newExists {
+		return fmt.Errorf("cannot rename %s.%s to %s: target column exists", table, oldName, newName)
+	}
+	_, err = tx.ExecContext(ctx, fmt.Sprintf("alter table %s rename column %s to %s", table, oldName, newName))
+	return err
+}
+
+func rebuildLegacyGamesTable(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "games")
+	if err != nil || !exists {
+		return err
+	}
+	hasStateJSON, err := sqliteColumnExists(ctx, tx, "games", "state_json")
+	if err != nil {
+		return err
+	}
+	stateJSONExpr := "'{}'"
+	if hasStateJSON {
+		stateJSONExpr = "coalesce(state_json, '{}')"
+	}
+	if _, err := tx.ExecContext(ctx, `PRAGMA legacy_alter_table = ON`); err != nil {
+		return err
+	}
+	legacyAlterTableOn := true
+	defer func() {
+		if legacyAlterTableOn {
+			_, _ = tx.ExecContext(ctx, `PRAGMA legacy_alter_table = OFF`)
+		}
+	}()
+	if _, err := tx.ExecContext(ctx, `alter table games rename to games_fest_migration_old`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+create table games(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  code text not null,
+  title text not null,
+  game_type text not null,
+  position integer not null,
+  scheme_id integer references schemes(id),
+  scheme_json text not null default '{}',
+  state_json text not null default '{}',
+  status text not null default 'pending',
+  team_list_source text not null default 'fest' check (team_list_source in ('fest','game')),
+  roster_source text not null default 'fest' check (roster_source in ('fest','game')),
+  revision integer not null default 1,
+  created_at text not null,
+  updated_at text not null,
+  unique(fest_id, code)
+)`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
+insert into games(id, fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+select id, fest_id, code, title, game_type, position, scheme_id, scheme_json, %s, status,
+       case team_list_source when 'tournament' then 'fest' else team_list_source end,
+       case roster_source when 'tournament' then 'fest' else roster_source end,
+       revision, created_at, updated_at
+from games_fest_migration_old`, stateJSONExpr)); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `drop table games_fest_migration_old`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `PRAGMA legacy_alter_table = OFF`); err != nil {
+		return err
+	}
+	legacyAlterTableOn = false
+	return nil
+}
+
+func sqliteTableExists(ctx context.Context, q dbQueryer, name string) (bool, error) {
+	var count int
+	if err := q.QueryRowContext(ctx, `select count(*) from sqlite_master where type = 'table' and name = ?`, name).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func sqliteColumnExists(ctx context.Context, q dbQueryer, table, column string) (bool, error) {
+	rows, err := q.QueryContext(ctx, `select name from pragma_table_info(?)`, table)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func verifyForeignKeys(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA foreign_key_check`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var table string
+		var rowID, parent, fkID any
+		if err := rows.Scan(&table, &rowID, &parent, &fkID); err != nil {
+			return err
+		}
+		return fmt.Errorf("foreign key check failed after legacy fest migration: table=%s rowid=%v parent=%v fkid=%v", table, rowID, parent, fkID)
+	}
+	return rows.Err()
 }
 
 type columnSpec struct {
@@ -605,158 +831,10 @@ insert into users(telegram_user_id, telegram_username, username, is_system, crea
 values(null, null, ?, 1, ?, ?)`, systemUserUsername, now, now)
 }
 
-func defaultGameID(ctx context.Context, q dbQueryer, tournamentID int64) (int64, error) {
+func defaultGameID(ctx context.Context, q dbQueryer, festID int64) (int64, error) {
 	var id int64
-	err := q.QueryRowContext(ctx, `select id from games where tournament_id = ? order by position, id limit 1`, tournamentID).Scan(&id)
+	err := q.QueryRowContext(ctx, `select id from games where fest_id = ? order by position, id limit 1`, festID).Scan(&id)
 	return id, err
-}
-
-func bootstrapDefaultTournament(db *sql.DB, state MatchState) (int64, error) {
-	ctx := context.Background()
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	now := utcNow()
-	systemID, err := ensureSystemUser(ctx, tx)
-	if err != nil {
-		return 0, err
-	}
-
-	schemaJSON, err := json.Marshal(map[string]any{
-		"schemaVersion":     2,
-		"slug":              "local-ek",
-		"title":             "Локальный чемпионат ЭК",
-		"gameType":          defaultGameType,
-		"questionValues":    questionValues,
-		"regularThemeCount": themeCount,
-		"venues":            []VenueView{{Number: 1, Title: defaultVenueTitle}},
-		"stages": []map[string]any{
-			{
-				"code":       "r16",
-				"title":      "1/16 финала",
-				"stage_type": "matches",
-				"position":   1,
-				"matches": []map[string]any{
-					{"code": defaultMatchCode, "title": state.Title, "venue": 1, "participantCount": len(state.Teams)},
-				},
-			},
-		},
-	})
-	if err != nil {
-		return 0, err
-	}
-
-	schemeID, err := insertReturningID(ctx, tx, `
-insert into schemes(slug, title, version, schema_json, created_at)
-values(?, ?, 2, ?, ?)`, "local-ek", "Локальный чемпионат ЭК", string(schemaJSON), now)
-	if err != nil {
-		return 0, err
-	}
-	tournamentID, err := insertReturningID(ctx, tx, `
-insert into tournaments(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
-values(?, ?, ?, null, ?, ?, ?, ?, 1)`, "local-ek", "Локальный чемпионат ЭК", "", systemID, maxInt64(state.Revision, 1), now, now)
-	if err != nil {
-		return 0, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-insert into tournament_organizers(tournament_id, user_id, added_at)
-values(?, ?, ?)`, tournamentID, systemID, now); err != nil {
-		return 0, err
-	}
-	gameID, err := insertReturningID(ctx, tx, `
-insert into games(tournament_id, code, title, game_type, position, scheme_id, scheme_json, status, team_list_source, roster_source, revision, created_at, updated_at)
-values(?, ?, ?, ?, 1, ?, ?, 'active', 'tournament', 'tournament', 1, ?, ?)`,
-		tournamentID, defaultGameCode, "Локальный ЭК", defaultGameType, schemeID, string(schemaJSON), now, now)
-	if err != nil {
-		return 0, err
-	}
-	venueID, err := insertReturningID(ctx, tx, `
-insert into venues(tournament_id, number, title, created_at, updated_at)
-values(?, 1, ?, ?, ?)`, tournamentID, defaultVenueTitle, now, now)
-	if err != nil {
-		return 0, err
-	}
-	stageID, err := insertReturningID(ctx, tx, `
-insert into stages(tournament_id, game_id, code, title, stage_type, position, status, config_json)
-values(?, ?, 'r16', '1/16 финала', 'matches', 1, 'active', '{}')`, tournamentID, gameID)
-	if err != nil {
-		return 0, err
-	}
-	status := "active"
-	if state.Finished {
-		status = "finished"
-	}
-	matchID, err := insertReturningID(ctx, tx, `
-insert into matches(tournament_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, tournamentID, gameID, stageID, defaultMatchCode, state.Title, len(state.Teams), venueID, status, maxInt64(state.Revision, 1))
-	if err != nil {
-		return 0, err
-	}
-
-	for teamIndex, team := range state.Teams {
-		teamID, err := insertReturningID(ctx, tx, `
-insert into teams(tournament_id, name, city)
-values(?, ?, '')`, tournamentID, team.Name)
-		if err != nil {
-			return 0, err
-		}
-		basket := 1
-		number := teamIndex + 1
-		if _, err := tx.ExecContext(ctx, `
-insert into game_assignments(game_id, basket, number, team_id, player_id)
-values(?, ?, ?, ?, null)`, gameID, basket, number, teamID); err != nil {
-			return 0, err
-		}
-		if _, err := tx.ExecContext(ctx, `
-insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
-values(?, ?, 'seed', ?, ?, 0)`, matchID, teamIndex, mustJSON(map[string]any{"basket": basket, "number": number}), teamID); err != nil {
-			return 0, err
-		}
-
-		playerIDs := make(map[string]int64, len(team.Roster))
-		for rosterOrder, fullName := range team.Roster {
-			firstName, lastName := splitPlayerName(fullName)
-			playerID, err := insertReturningID(ctx, tx, `
-insert into players(tournament_id, first_name, last_name)
-values(?, ?, ?)`, tournamentID, firstName, lastName)
-			if err != nil {
-				return 0, err
-			}
-			if _, err := tx.ExecContext(ctx, `
-insert into team_players(team_id, player_id, roster_order)
-values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
-				return 0, err
-			}
-			playerIDs[fullName] = playerID
-		}
-
-		for themeIndex, theme := range team.Themes {
-			if err := insertTheme(ctx, tx, matchID, teamID, "regular", themeIndex, playerIDs[theme.Player], theme.Answers); err != nil {
-				return 0, err
-			}
-		}
-		for themeIndex, theme := range team.ShootoutThemes {
-			if err := insertTheme(ctx, tx, matchID, teamID, "shootout", themeIndex, playerIDs[theme.Player], theme.Answers); err != nil {
-				return 0, err
-			}
-		}
-		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, team_id, place)
-values(?, ?, ?)`, matchID, teamID, team.Place); err != nil {
-			return 0, err
-		}
-	}
-
-	if err := recalculateMatchResultsTx(ctx, tx, tournamentID, defaultMatchCode); err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return tournamentID, nil
 }
 
 func insertTheme(ctx context.Context, tx *sql.Tx, matchID, teamID int64, kind string, themeIndex int, playerID int64, answers [5]string) error {
@@ -820,18 +898,18 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	tournamentID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("tournament_id")), 10, 64)
-	if err != nil || tournamentID <= 0 {
-		http.Error(w, "missing tournament_id", http.StatusBadRequest)
+	festID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("fest_id")), 10, 64)
+	if err != nil || festID <= 0 {
+		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
 	}
-	allowed, err := s.isOrganizer(r.Context(), tournamentID, user.UserID)
+	allowed, err := s.isOrganizer(r.Context(), festID, user.UserID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if !allowed {
-		exists, _, err := s.tournamentVisibility(r.Context(), tournamentID)
+		exists, _, err := s.festVisibility(r.Context(), festID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -845,43 +923,43 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	var scheme tournamentScheme
+	var scheme festScheme
 	if err := json.NewDecoder(r.Body).Decode(&scheme); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
 	}
 
-	if err := s.importSchemeIntoTournament(r.Context(), tournamentID, scheme); err != nil {
+	if err := s.importSchemeIntoFest(r.Context(), festID, scheme); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	gameID, err := defaultGameID(r.Context(), s.db, tournamentID)
+	gameID, err := defaultGameID(r.Context(), s.db, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	s.mu.RLock()
-	view, err := s.loadTournamentViewLocked(tournamentID, gameID)
+	view, err := s.loadFestViewLocked(festID, gameID)
 	s.mu.RUnlock()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	data, _ := json.Marshal(view)
-	s.broadcastState(tournamentID, "tournament", view.Revision, data)
+	s.broadcastState(festID, "fest", view.Revision, data)
 	writeJSON(w, data)
 }
 
-func (s *server) importScheme(scheme tournamentScheme) (TournamentView, error) {
+func (s *server) importScheme(scheme festScheme) (FestView, error) {
 	if s.db == nil {
-		return TournamentView{}, errors.New("sqlite is not enabled")
+		return FestView{}, errors.New("sqlite is not enabled")
 	}
 	if err := validateScheme(scheme); err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 	schemaJSON, err := json.Marshal(scheme)
 	if err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 
 	s.mu.Lock()
@@ -890,55 +968,55 @@ func (s *server) importScheme(scheme tournamentScheme) (TournamentView, error) {
 	ctx := context.Background()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 	defer tx.Rollback()
 
 	if err := clearImportedData(ctx, tx); err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 
 	now := utcNow()
 	systemID, err := ensureSystemUser(ctx, tx)
 	if err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 	schemeID, err := insertReturningID(ctx, tx, `
 insert into schemes(slug, title, version, schema_json, created_at)
 values(?, ?, ?, ?, ?)`, scheme.Slug, scheme.Title, maxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
 	if err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
-	tournamentID, err := insertReturningID(ctx, tx, `
-insert into tournaments(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
+	festID, err := insertReturningID(ctx, tx, `
+insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
 values(?, ?, '', null, ?, 1, ?, ?, 1)`, scheme.Slug, scheme.Title, systemID, now, now)
 	if err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `
-insert into tournament_organizers(tournament_id, user_id, added_at)
-values(?, ?, ?)`, tournamentID, systemID, now); err != nil {
-		return TournamentView{}, err
+insert into fest_organizers(fest_id, user_id, added_at)
+values(?, ?, ?)`, festID, systemID, now); err != nil {
+		return FestView{}, err
 	}
 	gameType := scheme.GameType
 	if gameType == "" {
 		gameType = defaultGameType
 	}
 	gameID, err := insertReturningID(ctx, tx, `
-insert into games(tournament_id, code, title, game_type, position, scheme_id, scheme_json, status, team_list_source, roster_source, revision, created_at, updated_at)
-values(?, ?, ?, ?, 1, ?, ?, 'pending', 'tournament', 'tournament', 1, ?, ?)`,
-		tournamentID, defaultGameCode, scheme.Title, gameType, schemeID, string(schemaJSON), now, now)
+insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, ?, ?, ?, 1, ?, ?, 'pending', 'fest', 'fest', 1, ?, ?)`,
+		festID, defaultGameCode, scheme.Title, gameType, schemeID, string(schemaJSON), now, now)
 	if err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 
 	venueIDs := make(map[int]int64, len(scheme.Venues))
 	for _, venue := range scheme.Venues {
 		venueID, err := insertReturningID(ctx, tx, `
-insert into venues(tournament_id, number, title, created_at, updated_at)
-values(?, ?, ?, ?, ?)`, tournamentID, venue.Number, venue.Title, now, now)
+insert into venues(fest_id, number, title, created_at, updated_at)
+values(?, ?, ?, ?, ?)`, festID, venue.Number, venue.Title, now, now)
 		if err != nil {
-			return TournamentView{}, err
+			return FestView{}, err
 		}
 		venueIDs[venue.Number] = venueID
 	}
@@ -946,10 +1024,10 @@ values(?, ?, ?, ?, ?)`, tournamentID, venue.Number, venue.Title, now, now)
 	assignmentTeams := make(map[[2]int]int64, len(scheme.Teams))
 	for _, team := range scheme.Teams {
 		teamID, err := insertReturningID(ctx, tx, `
-insert into teams(tournament_id, name, city)
-values(?, ?, ?)`, tournamentID, team.Name, team.City)
+insert into teams(fest_id, name, city)
+values(?, ?, ?)`, festID, team.Name, team.City)
 		if err != nil {
-			return TournamentView{}, err
+			return FestView{}, err
 		}
 		for rosterOrder, fullName := range team.Players {
 			fullName = strings.TrimSpace(fullName)
@@ -958,21 +1036,21 @@ values(?, ?, ?)`, tournamentID, team.Name, team.City)
 			}
 			firstName, lastName := splitPlayerName(fullName)
 			playerID, err := insertReturningID(ctx, tx, `
-insert into players(tournament_id, first_name, last_name)
-values(?, ?, ?)`, tournamentID, firstName, lastName)
+insert into players(fest_id, first_name, last_name)
+values(?, ?, ?)`, festID, firstName, lastName)
 			if err != nil {
-				return TournamentView{}, err
+				return FestView{}, err
 			}
 			if _, err := tx.ExecContext(ctx, `
 insert into team_players(team_id, player_id, roster_order)
 values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
-				return TournamentView{}, err
+				return FestView{}, err
 			}
 		}
 		if _, err := tx.ExecContext(ctx, `
 insert into game_assignments(game_id, basket, number, team_id, player_id)
 values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil {
-			return TournamentView{}, err
+			return FestView{}, err
 		}
 		assignmentTeams[[2]int{team.Basket, team.Number}] = teamID
 	}
@@ -989,10 +1067,10 @@ values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil
 			stageType = "matches"
 		}
 		stageID, err := insertReturningID(ctx, tx, `
-insert into stages(tournament_id, game_id, code, title, stage_type, position, status, config_json)
-values(?, ?, ?, ?, ?, ?, 'pending', ?)`, tournamentID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
+insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
+values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
 		if err != nil {
-			return TournamentView{}, err
+			return FestView{}, err
 		}
 		if stageType != "matches" {
 			continue
@@ -1010,10 +1088,10 @@ values(?, ?, ?, ?, ?, ?, 'pending', ?)`, tournamentID, gameID, stage.Code, stage
 				venueID = id
 			}
 			matchID, err := insertReturningID(ctx, tx, `
-insert into matches(tournament_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, tournamentID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
+insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
 			if err != nil {
-				return TournamentView{}, err
+				return FestView{}, err
 			}
 			for slotIndex, slot := range match.Slots {
 				sourceType, sourceRef := slotSource(slot)
@@ -1028,12 +1106,12 @@ values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, tournamentID, gameID, stageID, ma
 				if _, err := tx.ExecContext(ctx, `
 insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
 values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableInt64(resolvedTeamID)); err != nil {
-					return TournamentView{}, err
+					return FestView{}, err
 				}
 				if resolvedTeamID > 0 {
 					for themeIndex := 0; themeIndex < themeCount; themeIndex++ {
 						if err := insertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
-							return TournamentView{}, err
+							return FestView{}, err
 						}
 					}
 				}
@@ -1042,26 +1120,26 @@ values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableIn
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-insert into events(tournament_id, revision, type, payload_json, created_at)
-values(?, 1, 'import', ?, ?)`, tournamentID, string(schemaJSON), now); err != nil {
-		return TournamentView{}, err
+insert into events(fest_id, revision, type, payload_json, created_at)
+values(?, 1, 'import', ?, ?)`, festID, string(schemaJSON), now); err != nil {
+		return FestView{}, err
 	}
 	if err := tx.Commit(); err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 
-	s.tournamentID = tournamentID
+	s.festID = festID
 	s.activeGameID = gameID
 	if firstMatchCode != "" {
 		s.activeMatchCode = firstMatchCode
 	}
-	return s.loadTournamentViewLocked(s.tournamentID, s.activeGameID)
+	return s.loadFestViewLocked(s.festID, s.activeGameID)
 }
 
-// importSchemeIntoTournament wipes the tournament's existing games (and
+// importSchemeIntoFest wipes the fest's existing games (and
 // dependent rows) and creates a single new game from the supplied scheme.
-// The tournament row itself stays intact.
-func (s *server) importSchemeIntoTournament(ctx context.Context, tournamentID int64, scheme tournamentScheme) error {
+// The fest row itself stays intact.
+func (s *server) importSchemeIntoFest(ctx context.Context, festID int64, scheme festScheme) error {
 	if s.db == nil {
 		return errors.New("sqlite is not enabled")
 	}
@@ -1082,7 +1160,7 @@ func (s *server) importSchemeIntoTournament(ctx context.Context, tournamentID in
 	}
 	defer tx.Rollback()
 
-	if err := clearTournamentImportData(ctx, tx, tournamentID); err != nil {
+	if err := clearFestImportData(ctx, tx, festID); err != nil {
 		return err
 	}
 
@@ -1103,9 +1181,9 @@ values(?, ?, ?, ?, ?)`, schemeSlug, scheme.Title, maxInt(scheme.SchemaVersion, 2
 		gameTitle = "Игра"
 	}
 	gameID, err := insertReturningID(ctx, tx, `
-insert into games(tournament_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
-values(?, ?, ?, ?, 1, ?, ?, '{}', 'pending', 'tournament', 'tournament', 1, ?, ?)`,
-		tournamentID, defaultGameCode, gameTitle, gameType, schemeID, string(schemaJSON), now, now)
+insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, ?, ?, ?, 1, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
+		festID, defaultGameCode, gameTitle, gameType, schemeID, string(schemaJSON), now, now)
 	if err != nil {
 		return err
 	}
@@ -1113,8 +1191,8 @@ values(?, ?, ?, ?, 1, ?, ?, '{}', 'pending', 'tournament', 'tournament', 1, ?, ?
 	venueIDs := make(map[int]int64, len(scheme.Venues))
 	for _, venue := range scheme.Venues {
 		venueID, err := insertReturningID(ctx, tx, `
-insert into venues(tournament_id, number, title, created_at, updated_at)
-values(?, ?, ?, ?, ?)`, tournamentID, venue.Number, venue.Title, now, now)
+insert into venues(fest_id, number, title, created_at, updated_at)
+values(?, ?, ?, ?, ?)`, festID, venue.Number, venue.Title, now, now)
 		if err != nil {
 			return err
 		}
@@ -1124,8 +1202,8 @@ values(?, ?, ?, ?, ?)`, tournamentID, venue.Number, venue.Title, now, now)
 	assignmentTeams := make(map[[2]int]int64, len(scheme.Teams))
 	for _, team := range scheme.Teams {
 		teamID, err := insertReturningID(ctx, tx, `
-insert into teams(tournament_id, name, city)
-values(?, ?, ?)`, tournamentID, team.Name, team.City)
+insert into teams(fest_id, name, city)
+values(?, ?, ?)`, festID, team.Name, team.City)
 		if err != nil {
 			return err
 		}
@@ -1136,8 +1214,8 @@ values(?, ?, ?)`, tournamentID, team.Name, team.City)
 			}
 			firstName, lastName := splitPlayerName(fullName)
 			playerID, err := insertReturningID(ctx, tx, `
-insert into players(tournament_id, first_name, last_name)
-values(?, ?, ?)`, tournamentID, firstName, lastName)
+insert into players(fest_id, first_name, last_name)
+values(?, ?, ?)`, festID, firstName, lastName)
 			if err != nil {
 				return err
 			}
@@ -1166,8 +1244,8 @@ values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil
 			stageType = "matches"
 		}
 		stageID, err := insertReturningID(ctx, tx, `
-insert into stages(tournament_id, game_id, code, title, stage_type, position, status, config_json)
-values(?, ?, ?, ?, ?, ?, 'pending', ?)`, tournamentID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
+insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
+values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
 		if err != nil {
 			return err
 		}
@@ -1184,8 +1262,8 @@ values(?, ?, ?, ?, ?, ?, 'pending', ?)`, tournamentID, gameID, stage.Code, stage
 				venueID = id
 			}
 			matchID, err := insertReturningID(ctx, tx, `
-insert into matches(tournament_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, tournamentID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
+insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
 			if err != nil {
 				return err
 			}
@@ -1215,7 +1293,7 @@ values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableIn
 		}
 	}
 
-	if _, err := bumpTournamentRevisionTx(ctx, tx, tournamentID, "import", string(schemaJSON)); err != nil {
+	if _, err := bumpFestRevisionTx(ctx, tx, festID, "import", string(schemaJSON)); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1224,27 +1302,27 @@ values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableIn
 	return nil
 }
 
-// clearTournamentImportData drops all per-tournament rows that an import would
+// clearFestImportData drops all per-fest rows that an import would
 // recreate (games, stages, matches, venues, teams, players, events). The
-// tournament row and its organizers stay.
-func clearTournamentImportData(ctx context.Context, tx *sql.Tx, tournamentID int64) error {
+// fest row and its organizers stay.
+func clearFestImportData(ctx context.Context, tx *sql.Tx, festID int64) error {
 	statements := []string{
-		`delete from events where tournament_id = ?`,
-		`delete from games where tournament_id = ?`,
-		`delete from team_players where team_id in (select id from teams where tournament_id = ?)`,
-		`delete from teams where tournament_id = ?`,
-		`delete from players where tournament_id = ?`,
-		`delete from venues where tournament_id = ?`,
+		`delete from events where fest_id = ?`,
+		`delete from games where fest_id = ?`,
+		`delete from team_players where team_id in (select id from teams where fest_id = ?)`,
+		`delete from teams where fest_id = ?`,
+		`delete from players where fest_id = ?`,
+		`delete from venues where fest_id = ?`,
 	}
 	for _, sqlText := range statements {
-		if _, err := tx.ExecContext(ctx, sqlText, tournamentID); err != nil {
+		if _, err := tx.ExecContext(ctx, sqlText, festID); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateScheme(scheme tournamentScheme) error {
+func validateScheme(scheme festScheme) error {
 	if strings.TrimSpace(scheme.Slug) == "" {
 		return errors.New("schema slug is required")
 	}
@@ -1313,7 +1391,7 @@ func validateScheme(scheme tournamentScheme) error {
 	return nil
 }
 
-// clearImportedData wipes tournament-scoped data so importScheme can recreate
+// clearImportedData wipes fest-scoped data so importScheme can recreate
 // the world. Auth tables (users, invites, telegram_login_codes, sessions) and
 // schema_versions are intentionally untouched.
 func clearImportedData(ctx context.Context, tx *sql.Tx) error {
@@ -1335,8 +1413,8 @@ func clearImportedData(ctx context.Context, tx *sql.Tx) error {
 		"players",
 		"teams",
 		"venues",
-		"tournament_organizers",
-		"tournaments",
+		"fest_organizers",
+		"fests",
 		"schemes",
 	}
 	for _, table := range tables {
@@ -1403,10 +1481,10 @@ func slotSource(slot schemeSlot) (string, string) {
 	return "placeholder", "{}"
 }
 
-func (s *server) loadTournamentViewLocked(tournamentID, gameID int64) (TournamentView, error) {
+func (s *server) loadFestViewLocked(festID, gameID int64) (FestView, error) {
 	if s.db == nil {
 		match := buildView(s.state)
-		return TournamentView{
+		return FestView{
 			Slug:              "legacy",
 			Title:             match.Title,
 			Revision:          match.Revision,
@@ -1417,10 +1495,10 @@ func (s *server) loadTournamentViewLocked(tournamentID, gameID int64) (Tournamen
 	}
 
 	ctx := context.Background()
-	var view TournamentView
+	var view FestView
 	view.QuestionValues = questionValues
 	view.RegularThemeCount = themeCount
-	if tournamentID == 0 {
+	if festID == 0 {
 		view.Slug = ""
 		view.Title = ""
 		view.UpdatedAt = ""
@@ -1429,27 +1507,27 @@ func (s *server) loadTournamentViewLocked(tournamentID, gameID int64) (Tournamen
 	var updatedAt string
 	if err := s.db.QueryRowContext(ctx, `
 select t.slug, t.title, t.revision, t.updated_at, coalesce(g.scheme_json, '')
-from tournaments t
-left join games g on g.tournament_id = t.id and g.id = ?
-where t.id = ?`, gameID, tournamentID).
+from fests t
+left join games g on g.fest_id = t.id and g.id = ?
+where t.id = ?`, gameID, festID).
 		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON); err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 	view.UpdatedAt = updatedAt
 
-	venues, err := loadVenues(ctx, s.db, tournamentID)
+	venues, err := loadVenues(ctx, s.db, festID)
 	if err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 	view.Venues = venues
 
 	stageRows, err := s.db.QueryContext(ctx, `
 select id, code, title, stage_type, position, status
 from stages
-where tournament_id = ?
-order by position, id`, tournamentID)
+where fest_id = ?
+order by position, id`, festID)
 	if err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 	defer stageRows.Close()
 
@@ -1462,20 +1540,20 @@ order by position, id`, tournamentID)
 		var stageID int64
 		var stage StageView
 		if err := stageRows.Scan(&stageID, &stage.Code, &stage.Title, &stage.Type, &stage.Position, &stage.Status); err != nil {
-			return TournamentView{}, err
+			return FestView{}, err
 		}
 		stageRecords = append(stageRecords, stageRecord{ID: stageID, Stage: stage})
 	}
 	if err := stageRows.Err(); err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 	if err := stageRows.Close(); err != nil {
-		return TournamentView{}, err
+		return FestView{}, err
 	}
 	for _, record := range stageRecords {
-		matches, err := loadTournamentMatches(ctx, s.db, record.ID)
+		matches, err := loadFestMatches(ctx, s.db, record.ID)
 		if err != nil {
-			return TournamentView{}, err
+			return FestView{}, err
 		}
 		record.Stage.Matches = matches
 		view.Stages = append(view.Stages, record.Stage)
@@ -1483,7 +1561,7 @@ order by position, id`, tournamentID)
 	return view, nil
 }
 
-func loadTournamentMatches(ctx context.Context, q dbQueryer, stageID int64) ([]TournamentMatchView, error) {
+func loadFestMatches(ctx context.Context, q dbQueryer, stageID int64) ([]FestMatchView, error) {
 	rows, err := q.QueryContext(ctx, `
 select m.id, m.code, m.title, m.position, m.participant_count, m.status, m.revision,
        v.number, v.title
@@ -1498,12 +1576,12 @@ order by m.position, m.id`, stageID)
 
 	type matchRecord struct {
 		ID    int64
-		Match TournamentMatchView
+		Match FestMatchView
 	}
 	var records []matchRecord
 	for rows.Next() {
 		var matchID int64
-		var match TournamentMatchView
+		var match FestMatchView
 		var venueNumber sql.NullInt64
 		var venueTitle sql.NullString
 		if err := rows.Scan(&matchID, &match.Code, &match.Title, &match.Position, &match.ParticipantCount, &match.Status, &match.Revision, &venueNumber, &venueTitle); err != nil {
@@ -1521,7 +1599,7 @@ order by m.position, m.id`, stageID)
 		return nil, err
 	}
 
-	var matches []TournamentMatchView
+	var matches []FestMatchView
 	for _, record := range records {
 		teams, err := loadMatchSummaries(ctx, q, record.ID)
 		if err != nil {
@@ -1566,15 +1644,15 @@ order by ms.slot_index`, matchID)
 	return teams, rows.Err()
 }
 
-func (s *server) loadVenuesLocked(tournamentID int64) ([]VenueView, error) {
-	return loadVenues(context.Background(), s.db, tournamentID)
+func (s *server) loadVenuesLocked(festID int64) ([]VenueView, error) {
+	return loadVenues(context.Background(), s.db, festID)
 }
 
-func loadVenues(ctx context.Context, q dbQueryer, tournamentID int64) ([]VenueView, error) {
+func loadVenues(ctx context.Context, q dbQueryer, festID int64) ([]VenueView, error) {
 	rows, err := q.QueryContext(ctx, `
 select number, title from venues
-where tournament_id = ?
-order by number`, tournamentID)
+where fest_id = ?
+order by number`, festID)
 	if err != nil {
 		return nil, err
 	}
@@ -1590,11 +1668,11 @@ order by number`, tournamentID)
 	return venues, rows.Err()
 }
 
-func (s *server) loadMatchViewLocked(tournamentID int64, code string) (MatchView, error) {
+func (s *server) loadMatchViewLocked(festID int64, code string) (MatchView, error) {
 	if s.db == nil {
 		return buildView(s.state), nil
 	}
-	match, err := loadDBMatchState(context.Background(), s.db, tournamentID, code)
+	match, err := loadDBMatchState(context.Background(), s.db, festID, code)
 	if err != nil {
 		return MatchView{}, err
 	}
@@ -1612,12 +1690,12 @@ func (s *server) loadScopedMatchViewLocked(scope matchScope) (MatchView, error) 
 	return matchViewFromDBState(match), nil
 }
 
-func loadDBMatchState(ctx context.Context, q dbQueryer, tournamentID int64, code string) (dbMatchState, error) {
-	return loadDBMatchStateWhere(ctx, q, `m.tournament_id = ? and m.code = ?`, tournamentID, code)
+func loadDBMatchState(ctx context.Context, q dbQueryer, festID int64, code string) (dbMatchState, error) {
+	return loadDBMatchStateWhere(ctx, q, `m.fest_id = ? and m.code = ?`, festID, code)
 }
 
 func loadDBMatchStateByScope(ctx context.Context, q dbQueryer, scope matchScope) (dbMatchState, error) {
-	return loadDBMatchStateWhere(ctx, q, `m.id = ? and m.tournament_id = ? and m.game_id = ?`, scope.MatchID, scope.TournamentID, scope.GameID)
+	return loadDBMatchStateWhere(ctx, q, `m.id = ? and m.fest_id = ? and m.game_id = ?`, scope.MatchID, scope.FestID, scope.GameID)
 }
 
 func loadDBMatchStateWhere(ctx context.Context, q dbQueryer, where string, args ...any) (dbMatchState, error) {
@@ -1629,12 +1707,12 @@ func loadDBMatchStateWhere(ctx context.Context, q dbQueryer, where string, args 
 select m.id, m.code, m.title, m.status, m.revision,
        t.revision, t.updated_at, s.code, s.title, v.number, v.title
 from matches m
-join tournaments t on t.id = m.tournament_id
+join fests t on t.id = m.fest_id
 join stages s on s.id = m.stage_id
 left join venues v on v.id = m.venue_id
 where `+where, args...).
 		Scan(&match.MatchID, &match.Code, &match.Title, &match.Status, &match.Revision,
-			&match.TournamentRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle); err != nil {
+			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle); err != nil {
 		return dbMatchState{}, err
 	}
 	match.UpdatedAt = parseDBTime(updatedAt)
@@ -1851,16 +1929,16 @@ func matchViewFromDBState(match dbMatchState) MatchView {
 	return view
 }
 
-func (s *server) applyMatchUpdate(tournamentID int64, code string, req updateRequest) (MatchView, []byte, error) {
+func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) (MatchView, []byte, error) {
 	if s.db == nil {
 		return s.applyLegacyUpdate(req)
 	}
-	return s.applyMatchUpdateUsing(tournamentID, req,
+	return s.applyMatchUpdateUsing(festID, req,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
-			return loadDBMatchState(ctx, q, tournamentID, code)
+			return loadDBMatchState(ctx, q, festID, code)
 		},
 		func() (MatchView, error) {
-			return s.loadMatchViewLocked(tournamentID, code)
+			return s.loadMatchViewLocked(festID, code)
 		})
 }
 
@@ -1868,7 +1946,7 @@ func (s *server) applyScopedMatchUpdate(scope matchScope, req updateRequest) (Ma
 	if s.db == nil {
 		return s.applyLegacyUpdate(req)
 	}
-	return s.applyMatchUpdateUsing(scope.TournamentID, req,
+	return s.applyMatchUpdateUsing(scope.FestID, req,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchStateByScope(ctx, q, scope)
 		},
@@ -1878,7 +1956,7 @@ func (s *server) applyScopedMatchUpdate(scope matchScope, req updateRequest) (Ma
 }
 
 func (s *server) applyMatchUpdateUsing(
-	tournamentID int64,
+	festID int64,
 	req updateRequest,
 	loadMatch func(context.Context, dbQueryer) (dbMatchState, error),
 	loadView func() (MatchView, error),
@@ -1921,7 +1999,7 @@ func (s *server) applyMatchUpdateUsing(
 	if err := recalculateMatchResultsForStateTx(ctx, tx, match); err != nil {
 		return MatchView{}, nil, err
 	}
-	revision, err := bumpMatchRevisionTx(ctx, tx, tournamentID, match.MatchID, "match:update", mustJSON(req))
+	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:update", mustJSON(req))
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -2105,8 +2183,8 @@ where tp.team_id = ?`, teamID)
 	return 0, errors.New("player is not in roster")
 }
 
-func recalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, tournamentID int64, code string) error {
-	match, err := loadDBMatchState(ctx, tx, tournamentID, code)
+func recalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, festID int64, code string) error {
+	match, err := loadDBMatchState(ctx, tx, festID, code)
 	if err != nil {
 		return err
 	}
@@ -2135,36 +2213,36 @@ on conflict(match_id, team_id) do update set
 	return nil
 }
 
-func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, tournamentID, matchID int64, eventType, payload string) (int64, error) {
+func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, festID, matchID int64, eventType, payload string) (int64, error) {
 	now := utcNow()
 	if _, err := tx.ExecContext(ctx, `update matches set revision = revision + 1 where id = ?`, matchID); err != nil {
 		return 0, err
 	}
-	if _, err := tx.ExecContext(ctx, `update tournaments set revision = revision + 1, updated_at = ? where id = ?`, now, tournamentID); err != nil {
+	if _, err := tx.ExecContext(ctx, `update fests set revision = revision + 1, updated_at = ? where id = ?`, now, festID); err != nil {
 		return 0, err
 	}
 	var revision int64
-	if err := tx.QueryRowContext(ctx, `select revision from tournaments where id = ?`, tournamentID).Scan(&revision); err != nil {
+	if err := tx.QueryRowContext(ctx, `select revision from fests where id = ?`, festID).Scan(&revision); err != nil {
 		return 0, err
 	}
 	_, err := tx.ExecContext(ctx, `
-insert into events(tournament_id, revision, type, payload_json, created_at)
-values(?, ?, ?, ?, ?)`, tournamentID, revision, eventType, payload, now)
+insert into events(fest_id, revision, type, payload_json, created_at)
+values(?, ?, ?, ?, ?)`, festID, revision, eventType, payload, now)
 	return revision, err
 }
 
-func (s *server) updateMatchVenue(tournamentID int64, code string, number int) (MatchView, []byte, error) {
-	return s.updateMatchVenueUsing(tournamentID, number,
+func (s *server) updateMatchVenue(festID int64, code string, number int) (MatchView, []byte, error) {
+	return s.updateMatchVenueUsing(festID, number,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
-			return loadDBMatchState(ctx, q, tournamentID, code)
+			return loadDBMatchState(ctx, q, festID, code)
 		},
 		func() (MatchView, error) {
-			return s.loadMatchViewLocked(tournamentID, code)
+			return s.loadMatchViewLocked(festID, code)
 		})
 }
 
 func (s *server) updateScopedMatchVenue(scope matchScope, number int) (MatchView, []byte, error) {
-	return s.updateMatchVenueUsing(scope.TournamentID, number,
+	return s.updateMatchVenueUsing(scope.FestID, number,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchStateByScope(ctx, q, scope)
 		},
@@ -2174,7 +2252,7 @@ func (s *server) updateScopedMatchVenue(scope matchScope, number int) (MatchView
 }
 
 func (s *server) updateMatchVenueUsing(
-	tournamentID int64,
+	festID int64,
 	number int,
 	loadMatch func(context.Context, dbQueryer) (dbMatchState, error),
 	loadView func() (MatchView, error),
@@ -2198,7 +2276,7 @@ func (s *server) updateMatchVenueUsing(
 	}
 	var venueID int64
 	if err := tx.QueryRowContext(ctx, `
-select id from venues where tournament_id = ? and number = ?`, tournamentID, number).Scan(&venueID); err != nil {
+select id from venues where fest_id = ? and number = ?`, festID, number).Scan(&venueID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return MatchView{}, nil, errors.New("unknown venue")
 		}
@@ -2207,7 +2285,7 @@ select id from venues where tournament_id = ? and number = ?`, tournamentID, num
 	if _, err := tx.ExecContext(ctx, `update matches set venue_id = ? where id = ?`, venueID, match.MatchID); err != nil {
 		return MatchView{}, nil, err
 	}
-	revision, err := bumpMatchRevisionTx(ctx, tx, tournamentID, match.MatchID, "match:venue", mustJSON(map[string]any{"code": match.Code, "venue": number}))
+	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:venue", mustJSON(map[string]any{"code": match.Code, "venue": number}))
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -2223,7 +2301,7 @@ select id from venues where tournament_id = ? and number = ?`, tournamentID, num
 	return view, data, err
 }
 
-func (s *server) updateVenue(tournamentID int64, number int, title string) ([]VenueView, int64, error) {
+func (s *server) updateVenue(festID int64, number int, title string) ([]VenueView, int64, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return nil, 0, errors.New("empty venue title")
@@ -2241,7 +2319,7 @@ func (s *server) updateVenue(tournamentID int64, number int, title string) ([]Ve
 
 	result, err := tx.ExecContext(ctx, `
 update venues set title = ?, updated_at = ?
-where tournament_id = ? and number = ?`, title, utcNow(), tournamentID, number)
+where fest_id = ? and number = ?`, title, utcNow(), festID, number)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -2252,11 +2330,11 @@ where tournament_id = ? and number = ?`, title, utcNow(), tournamentID, number)
 	if affected == 0 {
 		return nil, 0, errors.New("unknown venue")
 	}
-	revision, err := bumpTournamentRevisionTx(ctx, tx, tournamentID, "venues:update", mustJSON(map[string]any{"number": number, "title": title}))
+	revision, err := bumpFestRevisionTx(ctx, tx, festID, "venues:update", mustJSON(map[string]any{"number": number, "title": title}))
 	if err != nil {
 		return nil, 0, err
 	}
-	venues, err := loadVenues(ctx, tx, tournamentID)
+	venues, err := loadVenues(ctx, tx, festID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -2266,13 +2344,13 @@ where tournament_id = ? and number = ?`, title, utcNow(), tournamentID, number)
 	return venues, revision, nil
 }
 
-func (s *server) bumpTournamentRevisionStandalone(ctx context.Context, tournamentID int64, eventType, payload string) (int64, error) {
+func (s *server) bumpFestRevisionStandalone(ctx context.Context, festID int64, eventType, payload string) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
-	revision, err := bumpTournamentRevisionTx(ctx, tx, tournamentID, eventType, payload)
+	revision, err := bumpFestRevisionTx(ctx, tx, festID, eventType, payload)
 	if err != nil {
 		return 0, err
 	}
@@ -2282,26 +2360,26 @@ func (s *server) bumpTournamentRevisionStandalone(ctx context.Context, tournamen
 	return revision, nil
 }
 
-func bumpTournamentRevisionTx(ctx context.Context, tx *sql.Tx, tournamentID int64, eventType, payload string) (int64, error) {
+func bumpFestRevisionTx(ctx context.Context, tx *sql.Tx, festID int64, eventType, payload string) (int64, error) {
 	now := utcNow()
-	if _, err := tx.ExecContext(ctx, `update tournaments set revision = revision + 1, updated_at = ? where id = ?`, now, tournamentID); err != nil {
+	if _, err := tx.ExecContext(ctx, `update fests set revision = revision + 1, updated_at = ? where id = ?`, now, festID); err != nil {
 		return 0, err
 	}
 	var revision int64
-	if err := tx.QueryRowContext(ctx, `select revision from tournaments where id = ?`, tournamentID).Scan(&revision); err != nil {
+	if err := tx.QueryRowContext(ctx, `select revision from fests where id = ?`, festID).Scan(&revision); err != nil {
 		return 0, err
 	}
 	_, err := tx.ExecContext(ctx, `
-insert into events(tournament_id, revision, type, payload_json, created_at)
-values(?, ?, ?, ?, ?)`, tournamentID, revision, eventType, payload, now)
+insert into events(fest_id, revision, type, payload_json, created_at)
+values(?, ?, ?, ?, ?)`, festID, revision, eventType, payload, now)
 	return revision, err
 }
 
-func (s *server) broadcastState(tournamentID int64, scope string, revision int64, payload []byte) {
+func (s *server) broadcastState(festID int64, scope string, revision int64, payload []byte) {
 	if s.db != nil {
 		payload = eventEnvelopeJSON(scope, revision, payload)
 	}
-	s.broadcast(event{tournamentID: tournamentID, revision: revision, data: payload})
+	s.broadcast(event{festID: festID, revision: revision, data: payload})
 }
 
 func eventEnvelopeJSON(scope string, revision int64, payload []byte) []byte {

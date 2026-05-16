@@ -181,30 +181,27 @@ func TestNormalizeMark(t *testing.T) {
 
 func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 	t.Chdir(t.TempDir())
-	db, err := openTournamentDB("test.db")
+	db, err := openFestDB("test.db")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 
-	tournamentID, err := bootstrapDefaultTournament(db, defaultMatch())
-	if err != nil {
-		t.Fatalf("bootstrap: %v", err)
-	}
-	gameID, err := defaultGameID(t.Context(), db, tournamentID)
+	festID := createDefaultFestFixture(t, db, defaultMatch())
+	gameID, err := defaultGameID(t.Context(), db, festID)
 	if err != nil {
 		t.Fatalf("default game: %v", err)
 	}
 
 	srv := &server{
 		db:              db,
-		tournamentID:    tournamentID,
+		festID:          festID,
 		activeGameID:    gameID,
 		activeMatchCode: defaultMatchCode,
 		subscribers:     make(map[chan event]struct{}),
 	}
 
-	view, err := srv.loadMatchViewLocked(tournamentID, defaultMatchCode)
+	view, err := srv.loadMatchViewLocked(festID, defaultMatchCode)
 	if err != nil {
 		t.Fatalf("load match: %v", err)
 	}
@@ -218,7 +215,7 @@ func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 	theme := 0
 	answer := 0
 	mark := "right"
-	view, _, err = srv.applyMatchUpdate(tournamentID, defaultMatchCode, updateRequest{
+	view, _, err = srv.applyMatchUpdate(festID, defaultMatchCode, updateRequest{
 		Team:   2,
 		Theme:  &theme,
 		Answer: &answer,
@@ -231,7 +228,7 @@ func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 		t.Fatalf("updated total = %d, want 10", view.Teams[2].Total)
 	}
 
-	reloaded, err := srv.loadMatchViewLocked(tournamentID, defaultMatchCode)
+	reloaded, err := srv.loadMatchViewLocked(festID, defaultMatchCode)
 	if err != nil {
 		t.Fatalf("reload match: %v", err)
 	}
@@ -242,37 +239,34 @@ func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 
 func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 	t.Chdir(t.TempDir())
-	db, err := openTournamentDB("test.db")
+	db, err := openFestDB("test.db")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 
-	tournamentID, err := bootstrapDefaultTournament(db, defaultMatch())
-	if err != nil {
-		t.Fatalf("bootstrap: %v", err)
-	}
-	gameID, err := defaultGameID(t.Context(), db, tournamentID)
+	festID := createDefaultFestFixture(t, db, defaultMatch())
+	gameID, err := defaultGameID(t.Context(), db, festID)
 	if err != nil {
 		t.Fatalf("default game: %v", err)
 	}
 
 	srv := &server{
 		db:              db,
-		tournamentID:    tournamentID,
+		festID:          festID,
 		activeGameID:    gameID,
 		activeMatchCode: defaultMatchCode,
 		subscribers:     make(map[chan event]struct{}),
 	}
 
-	venues, _, err := srv.updateVenue(tournamentID, 1, "Рим")
+	venues, _, err := srv.updateVenue(festID, 1, "Рим")
 	if err != nil {
 		t.Fatalf("update venue: %v", err)
 	}
 	if len(venues) != 1 || venues[0].Title != "Рим" {
 		t.Fatalf("venues = %#v, want renamed venue", venues)
 	}
-	view, err := srv.loadMatchViewLocked(tournamentID, defaultMatchCode)
+	view, err := srv.loadMatchViewLocked(festID, defaultMatchCode)
 	if err != nil {
 		t.Fatalf("load match: %v", err)
 	}
@@ -281,11 +275,11 @@ func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 	}
 
 	var teamID int64
-	if err := db.QueryRow(`select id from teams where tournament_id = ? order by id limit 1`, tournamentID).Scan(&teamID); err != nil {
+	if err := db.QueryRow(`select id from teams where fest_id = ? order by id limit 1`, festID).Scan(&teamID); err != nil {
 		t.Fatalf("team id: %v", err)
 	}
 	for i := 0; i < 3; i++ {
-		playerID, err := insertTestPlayer(db, tournamentID)
+		playerID, err := insertTestPlayer(db, festID)
 		if err != nil {
 			t.Fatalf("insert player %d: %v", i, err)
 		}
@@ -299,8 +293,8 @@ func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 	}
 }
 
-func insertTestPlayer(db *sql.DB, tournamentID int64) (int64, error) {
-	result, err := db.Exec(`insert into players(tournament_id, first_name, last_name) values(?, 'Тест', 'Игрок')`, tournamentID)
+func insertTestPlayer(db *sql.DB, festID int64) (int64, error) {
+	result, err := db.Exec(`insert into players(fest_id, first_name, last_name) values(?, 'Тест', 'Игрок')`, festID)
 	if err != nil {
 		return 0, err
 	}
@@ -308,13 +302,13 @@ func insertTestPlayer(db *sql.DB, tournamentID int64) (int64, error) {
 }
 
 func TestImportMultiStageScheme(t *testing.T) {
-	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 
-	scheme := tournamentScheme{
+	scheme := festScheme{
 		SchemaVersion:     2,
 		Slug:              "multi-stage",
 		Title:             "multi-stage",
@@ -402,37 +396,111 @@ func TestImportMultiStageScheme(t *testing.T) {
 	}
 }
 
-func TestEmptyDatabaseHasNoTournament(t *testing.T) {
-	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+func TestEmptyDatabaseHasNoFest(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
-	tournamentID, gameID, matchCode, err := loadActiveContext(db)
+	festID, gameID, matchCode, err := loadActiveContext(db)
 	if err != nil {
 		t.Fatalf("loadActiveContext: %v", err)
 	}
-	if tournamentID != 0 || gameID != 0 || matchCode != "" {
-		t.Fatalf("empty db produced (%d, %d, %q), want zero values", tournamentID, gameID, matchCode)
+	if festID != 0 || gameID != 0 || matchCode != "" {
+		t.Fatalf("empty db produced (%d, %d, %q), want zero values", festID, gameID, matchCode)
 	}
 	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
-	view, err := srv.loadTournamentViewLocked(0, 0)
+	view, err := srv.loadFestViewLocked(0, 0)
 	if err != nil {
-		t.Fatalf("loadTournamentViewLocked: %v", err)
+		t.Fatalf("loadFestViewLocked: %v", err)
 	}
 	if view.Slug != "" || len(view.Stages) != 0 {
 		t.Fatalf("empty view = %#v, want zero", view)
 	}
 }
 
+func TestLegacyFestSchemaMigration(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "legacy.db"))
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`
+create table schemes(
+  id integer primary key,
+  slug text not null unique,
+  title text not null,
+  version integer not null,
+  schema_json text not null,
+  created_at text not null
+);
+create table tournaments(
+  id integer primary key,
+  slug text not null unique,
+  title text not null,
+  description text not null default '',
+  rating_id integer,
+  created_by integer,
+  revision integer not null default 1,
+  created_at text not null,
+  updated_at text not null
+);
+create table games(
+  id integer primary key,
+  tournament_id integer not null references tournaments(id) on delete cascade,
+  code text not null,
+  title text not null,
+  game_type text not null,
+  position integer not null,
+  scheme_id integer references schemes(id),
+  scheme_json text not null default '{}',
+  state_json text not null default '{}',
+  status text not null default 'pending',
+  team_list_source text not null default 'tournament' check (team_list_source in ('tournament','game')),
+  roster_source text not null default 'tournament' check (roster_source in ('tournament','game')),
+  revision integer not null default 1,
+  created_at text not null,
+  updated_at text not null,
+  unique(tournament_id, code)
+);
+insert into tournaments(id, slug, title, created_at, updated_at) values(7, 'legacy', 'Legacy', 'now', 'now');
+insert into games(id, tournament_id, code, title, game_type, position, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(11, 7, 'main', 'Main', 'ek', 1, '{}', '{"ok":true}', 'active', 'tournament', 'tournament', 3, 'now', 'now');
+`); err != nil {
+		t.Fatalf("seed legacy schema: %v", err)
+	}
+	if err := migrateDB(db); err != nil {
+		t.Fatalf("migrate legacy schema: %v", err)
+	}
+	legacyExists, err := sqliteTableExists(t.Context(), db, "tournaments")
+	if err != nil {
+		t.Fatalf("check legacy table: %v", err)
+	}
+	if legacyExists {
+		t.Fatal("legacy tournaments table still exists")
+	}
+	var teamListSource, rosterSource, stateJSON string
+	if err := db.QueryRow(`select team_list_source, roster_source, state_json from games where fest_id = 7 and id = 11`).Scan(&teamListSource, &rosterSource, &stateJSON); err != nil {
+		t.Fatalf("query migrated game: %v", err)
+	}
+	if teamListSource != "fest" || rosterSource != "fest" || stateJSON != `{"ok":true}` {
+		t.Fatalf("migrated game = (%q, %q, %q), want fest/fest with preserved state", teamListSource, rosterSource, stateJSON)
+	}
+	if _, err := db.Exec(`
+insert into games(fest_id, code, title, game_type, position, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(7, 'next', 'Next', 'ek', 2, '{}', '{}', 'pending', 'fest', 'fest', 1, 'now', 'now')`); err != nil {
+		t.Fatalf("insert with fest source after migration: %v", err)
+	}
+}
+
 func TestImportRejectsTeamSlot(t *testing.T) {
-	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
-	scheme := tournamentScheme{
+	scheme := festScheme{
 		SchemaVersion: 2,
 		Slug:          "with-team-slot",
 		Title:         "with team slot",
@@ -459,13 +527,13 @@ func TestImportRejectsTeamSlot(t *testing.T) {
 }
 
 func TestImportSeedSlotsResolveViaAssignments(t *testing.T) {
-	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
-	scheme := tournamentScheme{
+	scheme := festScheme{
 		SchemaVersion: 2,
 		Slug:          "symbolic",
 		Title:         "symbolic",
@@ -522,13 +590,13 @@ func TestImportSeedSlotsResolveViaAssignments(t *testing.T) {
 }
 
 func TestSystemUserIsCreatedOnImport(t *testing.T) {
-	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
-	scheme := tournamentScheme{
+	scheme := festScheme{
 		SchemaVersion: 2,
 		Slug:          "minimal",
 		Title:         "minimal",
@@ -554,11 +622,11 @@ func TestSystemUserIsCreatedOnImport(t *testing.T) {
 		t.Fatalf("system users = %d, want 1", systemUsers)
 	}
 	var organizers int
-	if err := db.QueryRow(`select count(*) from tournament_organizers`).Scan(&organizers); err != nil {
+	if err := db.QueryRow(`select count(*) from fest_organizers`).Scan(&organizers); err != nil {
 		t.Fatalf("count organizers: %v", err)
 	}
 	if organizers != 1 {
-		t.Fatalf("tournament_organizers = %d, want 1", organizers)
+		t.Fatalf("fest_organizers = %d, want 1", organizers)
 	}
 	var games int
 	if err := db.QueryRow(`select count(*) from games`).Scan(&games); err != nil {
@@ -569,7 +637,7 @@ func TestSystemUserIsCreatedOnImport(t *testing.T) {
 	}
 }
 
-func TestRatingResultsToTournamentRoster(t *testing.T) {
+func TestRatingResultsToFestRoster(t *testing.T) {
 	raw := `[
 		{
 			"team":{"id":20,"name":"Beta","town":{"name":"Town B"}},
@@ -583,12 +651,12 @@ func TestRatingResultsToTournamentRoster(t *testing.T) {
 			"teamMembers":[{"player":{"id":100,"name":"Анна","surname":"Сидорова"}}]
 		}
 	]`
-	var results []ratingTournamentResult
+	var results []ratingFestResult
 	if err := json.Unmarshal([]byte(raw), &results); err != nil {
 		t.Fatalf("decode rating json: %v", err)
 	}
 
-	teams, err := ratingResultsToTournamentRoster(results)
+	teams, err := ratingResultsToFestRoster(results)
 	if err != nil {
 		t.Fatalf("normalize rating results: %v", err)
 	}
@@ -606,46 +674,22 @@ func TestRatingResultsToTournamentRoster(t *testing.T) {
 	}
 }
 
-func TestImportTournamentRosterPropagatesToChGKAndKSI(t *testing.T) {
-	db, err := openTournamentDB(filepath.Join(t.TempDir(), "test.db"))
+func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
 
-	tx, err := db.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	ownerID, err := ensureSystemUser(t.Context(), tx)
-	if err != nil {
-		t.Fatalf("system user: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit system user: %v", err)
-	}
-	if err := ensureTestTournament(t.Context(), db, ownerID); err != nil {
-		t.Fatalf("seed test tournament: %v", err)
-	}
-
-	var tournamentID, chgkGameID, ksiGameID int64
-	if err := db.QueryRow(`select id from tournaments where slug = ?`, testTournamentSlug).Scan(&tournamentID); err != nil {
-		t.Fatalf("test tournament id: %v", err)
-	}
-	if err := db.QueryRow(`select id from games where tournament_id = ? and code = 'chgk'`, tournamentID).Scan(&chgkGameID); err != nil {
-		t.Fatalf("chgk game id: %v", err)
-	}
-	if err := db.QueryRow(`select id from games where tournament_id = ? and code = 'ksi'`, tournamentID).Scan(&ksiGameID); err != nil {
-		t.Fatalf("ksi game id: %v", err)
-	}
+	festID, chgkGameID, ksiGameID := createRosterPropagationFixture(t, db)
 
 	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
-	result, err := srv.importTournamentRoster(t.Context(), tournamentID, 13533, []tournamentRosterImportTeam{
+	result, err := srv.importFestRoster(t.Context(), festID, 13533, []festRosterImportTeam{
 		{
 			RatingID: 101,
 			Name:     "Первая",
 			City:     "Москва",
-			Players: []tournamentRosterImportPlayer{
+			Players: []festRosterImportPlayer{
 				{RatingID: 1001, FirstName: "Анна", LastName: "Первая"},
 				{RatingID: 1002, FirstName: "Борис", LastName: "Второй"},
 			},
@@ -654,7 +698,7 @@ func TestImportTournamentRosterPropagatesToChGKAndKSI(t *testing.T) {
 			RatingID: 102,
 			Name:     "Вторая",
 			City:     "Казань",
-			Players: []tournamentRosterImportPlayer{
+			Players: []festRosterImportPlayer{
 				{RatingID: 1003, FirstName: "Вера", LastName: "Третья"},
 			},
 		},
@@ -667,13 +711,13 @@ func TestImportTournamentRosterPropagatesToChGKAndKSI(t *testing.T) {
 	}
 
 	var teamsCount, playersCount, ekTeamsCount int
-	if err := db.QueryRow(`select count(*) from tournament_teams where tournament_id = ?`, tournamentID).Scan(&teamsCount); err != nil {
-		t.Fatalf("count tournament teams: %v", err)
+	if err := db.QueryRow(`select count(*) from fest_teams where fest_id = ?`, festID).Scan(&teamsCount); err != nil {
+		t.Fatalf("count fest teams: %v", err)
 	}
-	if err := db.QueryRow(`select count(*) from tournament_players where tournament_id = ?`, tournamentID).Scan(&playersCount); err != nil {
-		t.Fatalf("count tournament players: %v", err)
+	if err := db.QueryRow(`select count(*) from fest_players where fest_id = ?`, festID).Scan(&playersCount); err != nil {
+		t.Fatalf("count fest players: %v", err)
 	}
-	if err := db.QueryRow(`select count(*) from teams where tournament_id = ?`, tournamentID).Scan(&ekTeamsCount); err != nil {
+	if err := db.QueryRow(`select count(*) from teams where fest_id = ?`, festID).Scan(&ekTeamsCount); err != nil {
 		t.Fatalf("count existing game teams: %v", err)
 	}
 	if teamsCount != 2 || playersCount != 3 {

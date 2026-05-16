@@ -203,7 +203,7 @@ const registerLayout = `{{define "page"}}<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Регистрация · Чемпионат</title>
+  <title>Регистрация · Фест</title>
   <link rel="stylesheet" href="/static/styles.css">
   {{block "head" .}}{{end}}
 </head>
@@ -257,6 +257,6 @@ const registerUsernameBody = `{{define "body"}}
 
 const registerDoneBody = `{{define "body"}}
 <section class="auth-step">
-  <p class="auth-hint">Вы вошли. <a href="/host">Перейти к турниру →</a></p>
+  <p class="auth-hint">Вы вошли. <a href="/host">Перейти к фесту →</a></p>
 </section>
 {{end}}`

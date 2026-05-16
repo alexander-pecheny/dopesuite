@@ -1,6 +1,6 @@
 # JSON-схема бракета
 
-JSON описывает спортивную схему игры: этапы, бои и переходы между ними. Конкретные команды/игроки в JSON не лежат — они хранятся в БД и привязываются к корзинам/номерам через `game_assignments` (см. [03a-sqlite-core.md](03a-sqlite-core.md) и [09-tournaments-and-games.md](09-tournaments-and-games.md)).
+JSON описывает спортивную схему игры: этапы, бои и переходы между ними. Конкретные команды/игроки в JSON не лежат — они хранятся в БД и привязываются к корзинам/номерам через `game_assignments` (см. [03a-sqlite-core.md](03a-sqlite-core.md) и [09-fests-and-games.md](09-fests-and-games.md)).
 
 См. также: [04a-scheme-sources.md](04a-scheme-sources.md).
 
@@ -65,8 +65,8 @@ python3 scripts/generate_studchr_grid.py > /tmp/studchr-ek-2026.json
 
 ## Импорт
 
-- `/host/tournament/{id}/import` принимает JSON целиком и пересоздает игру выбранного турнира.
-- `POST /api/import?tournament_id={id}` — API-вариант того же импорта; требует сессию организатора турнира.
+- `/host/fest/{id}/import` принимает JSON целиком и пересоздает игру выбранного турнира.
+- `POST /api/import?fest_id={id}` — API-вариант того же импорта; требует сессию организатора турнира.
 - Все слоты импортируются как символьные источники без `player_id`. Если для слота `seed` в момент импорта известно соответствие в `game_assignments` (см. ниже), `match_slots.team_id` сразу заполняется как кеш.
 - Если в JSON встречается источник `team` — импорт возвращает 400 c понятным сообщением и не создает турнир.
 - Для удобства импорт может содержать опциональный массив `teams` верхнего уровня: `[{"name", "city"?, "basket", "number", "players": ["..."]}]`. По нему создаются записи `teams`, `players`, `team_players` и `game_assignments(basket, number)`. Сами слоты бракета остаются символьными — `seed{basket, number}` находит свою команду через `game_assignments`. Это просто конвенция импорта; в БД соответствие живет отдельно.

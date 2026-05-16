@@ -28,7 +28,7 @@
 python3 scripts/generate_studchr_grid.py > /tmp/studchr-ek-2026.json
 ```
 
-Полученный JSON вставляется на `/host/tournament/{id}/import` и пересоздает игру выбранного турнира в SQLite. UI сетки не должен зависеть от hardcoded СтудЧР: он строит HTML по импортированной JSON-схеме.
+Полученный JSON вставляется на `/host/fest/{id}/import` и пересоздает игру выбранного турнира в SQLite. UI сетки не должен зависеть от hardcoded СтудЧР: он строит HTML по импортированной JSON-схеме.
 
 ## Переходы
 
