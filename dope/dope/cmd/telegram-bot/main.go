@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,16 +26,18 @@ const (
 	apiBase       = "https://api.telegram.org"
 	pollTimeout   = 30
 	codeLifetime  = time.Minute
-	codeBytes     = 12
+	loginCodeLen  = 5
 
 	registerURL = "https://dope.pecheny.me/register"
 	loginURL    = "https://dope.pecheny.me/login"
 )
 
+const loginCodeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
 const startMessage = "Этот бот выдает одноразовые коды для входа на dope.pecheny.me.\n\n" +
 	"• Зарегистрироваться по инвайту: " + registerURL + "\n" +
 	"• Войти в существующий аккаунт: " + loginURL + "\n\n" +
-	"После регистрации на сайте пришли мне код, который он покажет. Чтобы войти — отправь /login и я пришлю код для ввода на сайте."
+	"После регистрации на сайте пришли мне код, который он покажет. Чтобы войти — введи логин на сайте; если выберешь код, я пришлю его сюда."
 
 type tgUpdate struct {
 	UpdateID int64 `json:"update_id"`
@@ -168,9 +170,20 @@ func getUpdates(ctx context.Context, c *http.Client, token string, offset int64,
 }
 
 func sendMessage(ctx context.Context, c *http.Client, token string, chatID int64, text string) {
+	sendMessageWithParseMode(ctx, c, token, chatID, text, "")
+}
+
+func sendHTMLMessage(ctx context.Context, c *http.Client, token string, chatID int64, text string) {
+	sendMessageWithParseMode(ctx, c, token, chatID, text, "HTML")
+}
+
+func sendMessageWithParseMode(ctx context.Context, c *http.Client, token string, chatID int64, text string, parseMode string) {
 	values := url.Values{}
 	values.Set("chat_id", fmt.Sprintf("%d", chatID))
 	values.Set("text", text)
+	if parseMode != "" {
+		values.Set("parse_mode", parseMode)
+	}
 	endpoint := fmt.Sprintf("%s/bot%s/sendMessage", apiBase, token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(values.Encode()))
 	if err != nil {
@@ -204,7 +217,7 @@ func handleMessage(ctx context.Context, db *sql.DB, c *http.Client, token string
 		case "/start", "/help":
 			sendMessage(ctx, c, token, chatID, startMessage)
 		case "/login":
-			sendMessage(ctx, c, token, chatID, issueLoginCode(ctx, db, from.ID, from.Username))
+			sendHTMLMessage(ctx, c, token, chatID, issueLoginCode(ctx, db, from.ID, from.Username))
 		default:
 			sendMessage(ctx, c, token, chatID, startMessage)
 		}
@@ -286,7 +299,7 @@ func issueLoginCode(ctx context.Context, db *sql.DB, tgUserID int64, tgUsername 
 	createdAt := now.Format(time.RFC3339)
 
 	for attempt := 0; attempt < 3; attempt++ {
-		code, err := newCode()
+		code, err := newLoginCode()
 		if err != nil {
 			log.Printf("generate code: %v", err)
 			return "Произошла ошибка. Попробуй еще раз через минуту."
@@ -295,7 +308,7 @@ func issueLoginCode(ctx context.Context, db *sql.DB, tgUserID int64, tgUsername 
 insert into telegram_login_codes(code, kind, user_id, telegram_user_id, telegram_username, created_at, expires_at)
 values(?, 'login', ?, ?, ?, ?, ?)`, code, userID, tgUserID, tgUsername, createdAt, expires)
 		if err == nil {
-			return "Твой код для входа: " + code + "\nВведи его на " + loginURL + " в течение минуты."
+			return "Твой код для входа:\n<code>" + code + "</code>\nВведи его на странице входа после логина в течение минуты."
 		}
 		if !strings.Contains(strings.ToLower(err.Error()), "unique") {
 			log.Printf("issue login code: %v", err)
@@ -305,12 +318,17 @@ values(?, 'login', ?, ?, ?, ?, ?)`, code, userID, tgUserID, tgUsername, createdA
 	return "Не получилось выдать код, попробуй еще раз."
 }
 
-func newCode() (string, error) {
-	buf := make([]byte, codeBytes)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
+func newLoginCode() (string, error) {
+	buf := make([]byte, loginCodeLen)
+	max := big.NewInt(int64(len(loginCodeAlphabet)))
+	for i := range buf {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", err
+		}
+		buf[i] = loginCodeAlphabet[n.Int64()]
 	}
-	return strings.ToUpper(strings.TrimRight(base32.StdEncoding.EncodeToString(buf), "=")), nil
+	return string(buf), nil
 }
 
 func looksLikeCode(s string) bool {

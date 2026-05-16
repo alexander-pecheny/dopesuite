@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -40,6 +41,18 @@ type loginRequest struct {
 	Code string `json:"code"`
 }
 
+type loginStartRequest struct {
+	Username string `json:"username"`
+	SendCode bool   `json:"send_code,omitempty"`
+}
+
+type loginStartResponse struct {
+	Username    string `json:"username"`
+	HasPassword bool   `json:"has_password"`
+	CodeSent    bool   `json:"code_sent"`
+	ExpiresAt   string `json:"expires_at,omitempty"`
+}
+
 type loginPasswordRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -62,6 +75,8 @@ type sessionUser struct {
 	Telegram  sql.NullString
 	IsSystem  bool
 }
+
+type telegramSender func(ctx context.Context, chatID int64, text string) error
 
 func (s *server) handleAuthRegisterStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -296,6 +311,110 @@ func (s *server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSONValue(w, meResponseFor(user))
 }
 
+func (s *server) handleAuthLoginStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+	var req loginStartRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	username := strings.TrimSpace(req.Username)
+	if username == "" {
+		http.Error(w, "missing username", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.startLogin(r.Context(), username, req.SendCode)
+	if err != nil {
+		writeAuthError(w, err)
+		return
+	}
+	writeJSONValue(w, resp)
+}
+
+func (s *server) startLogin(ctx context.Context, username string, sendCode bool) (loginStartResponse, error) {
+	var (
+		userID     int64
+		tgUserID   sql.NullInt64
+		tgUsername sql.NullString
+		hash       sql.NullString
+		salt       sql.NullString
+		isSystem   int
+	)
+	err := s.db.QueryRowContext(ctx, `
+select id, telegram_user_id, telegram_username, password_hash, password_salt, is_system
+from users where username = ?`, username).Scan(&userID, &tgUserID, &tgUsername, &hash, &salt, &isSystem)
+	if errors.Is(err, sql.ErrNoRows) {
+		return loginStartResponse{}, authError{code: http.StatusNotFound, msg: "user not found"}
+	}
+	if err != nil {
+		return loginStartResponse{}, err
+	}
+	if isSystem == 1 {
+		return loginStartResponse{}, authError{code: http.StatusForbidden, msg: "system user cannot log in"}
+	}
+
+	hasPassword := hash.Valid && salt.Valid
+	resp := loginStartResponse{Username: username, HasPassword: hasPassword}
+	if hasPassword && !sendCode {
+		return resp, nil
+	}
+	if !tgUserID.Valid {
+		return loginStartResponse{}, authError{code: http.StatusConflict, msg: "telegram account is not linked"}
+	}
+
+	code, expiresAt, err := s.issueLoginCode(ctx, userID, tgUserID.Int64, tgUsername)
+	if err != nil {
+		return loginStartResponse{}, err
+	}
+	if err := s.sendLoginCode(ctx, tgUserID.Int64, code); err != nil {
+		_, _ = s.db.ExecContext(ctx, `
+delete from telegram_login_codes where code = ? and consumed_at is null`, code)
+		return loginStartResponse{}, authError{code: http.StatusServiceUnavailable, msg: "could not send telegram code"}
+	}
+	resp.CodeSent = true
+	resp.ExpiresAt = expiresAt
+	return resp, nil
+}
+
+func (s *server) issueLoginCode(ctx context.Context, userID int64, tgUserID int64, tgUsername sql.NullString) (string, string, error) {
+	now := time.Now().UTC()
+	expires := now.Add(telegramAuthLifetime).Format(time.RFC3339)
+	createdAt := now.Format(time.RFC3339)
+	for attempt := 0; attempt < 3; attempt++ {
+		code, err := newTelegramLoginCode()
+		if err != nil {
+			return "", "", err
+		}
+		_, err = s.db.ExecContext(ctx, `
+insert into telegram_login_codes(code, kind, user_id, telegram_user_id, telegram_username, created_at, expires_at)
+values(?, 'login', ?, ?, ?, ?, ?)`, code, userID, tgUserID, tgUsername, createdAt, expires)
+		if err == nil {
+			return code, expires, nil
+		}
+		if !isUniqueViolation(err) {
+			return "", "", err
+		}
+	}
+	return "", "", errors.New("could not allocate login code")
+}
+
+func (s *server) sendLoginCode(ctx context.Context, chatID int64, code string) error {
+	sender := s.sendTelegram
+	if sender == nil {
+		sender = sendTelegramMessageFromEnv
+	}
+	return sender(ctx, chatID, loginCodeTelegramMessage(code))
+}
+
+func loginCodeTelegramMessage(code string) string {
+	return "Твой код для входа:\n<code>" + code + "</code>\nВведи его на странице входа в течение минуты."
+}
+
 func (s *server) consumeLoginCode(ctx context.Context, code string) (string, sessionUser, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -458,12 +577,16 @@ func (s *server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 	if !requireSameOriginUnsafe(w, r) {
 		return
 	}
+	s.logoutSession(r)
+	clearSessionCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) logoutSession(r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookieName); err == nil {
 		hash := hashSessionToken(cookie.Value)
 		_, _ = s.db.ExecContext(r.Context(), `delete from sessions where token_hash = ?`, hash)
 	}
-	clearSessionCookie(w)
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) handleAuthUsername(w http.ResponseWriter, r *http.Request) {
@@ -689,6 +812,39 @@ func writeAuthError(w http.ResponseWriter, err error) {
 		return
 	}
 	http.Error(w, err.Error(), http.StatusInternalServerError)
+}
+
+const telegramAPIBase = "https://api.telegram.org"
+
+func sendTelegramMessageFromEnv(ctx context.Context, chatID int64, text string) error {
+	token := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
+	if token == "" {
+		return errors.New("telegram bot token is not configured")
+	}
+	values := url.Values{}
+	values.Set("chat_id", fmt.Sprintf("%d", chatID))
+	values.Set("text", text)
+	values.Set("parse_mode", "HTML")
+	endpoint := fmt.Sprintf("%s/bot%s/sendMessage", telegramAPIBase, token)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(values.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("telegram sendMessage status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
 }
 
 func requireSameOriginUnsafe(w http.ResponseWriter, r *http.Request) bool {

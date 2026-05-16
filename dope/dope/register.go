@@ -45,7 +45,7 @@ func (s *server) handleRegisterPage(w http.ResponseWriter, r *http.Request) {
 	if user, ok := s.lookupSession(r); ok {
 		clearPendingRegisterCookie(w)
 		if user.Username.Valid {
-			renderRegisterStage(w, "done", registerStageData{})
+			http.Redirect(w, r, "/host", http.StatusSeeOther)
 			return
 		}
 		renderRegisterStage(w, "username", registerStageData{})

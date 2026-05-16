@@ -18,25 +18,34 @@
 
   <main class="match-main">
     <div class="sheet-frame import-frame">
-      <section id="step-form" class="auth-step">
-        <p class="auth-hint">Отправьте боту <a id="botLink" target="_blank" rel="noopener">@dope_pecheny_bot</a> команду <code>/login</code> и введите код, который он пришлет.</p>
-        <form id="loginForm" class="auth-form" autocomplete="off">
-          <input class="input" id="loginCode" name="code" type="text" placeholder="Код из Telegram" spellcheck="false" autocapitalize="characters" required>
-          <button class="btn" type="submit">Войти</button>
+      <section id="step-username" class="auth-step">
+        <p class="auth-hint">Введите логин.</p>
+        <form id="usernameForm" class="auth-form" autocomplete="on">
+          <input class="input" id="loginUsername" name="username" type="text" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required autofocus>
+          <button class="btn" type="submit">Дальше</button>
         </form>
-        <pre id="loginMessage" class="import-message"></pre>
+        <pre id="usernameMessage" class="import-message"></pre>
+      </section>
 
-        <p class="auth-hint auth-hint-divider">Войти по паролю</p>
-        <form id="passwordForm" class="auth-form auth-form-stack" autocomplete="off">
-          <input class="input" id="passwordUsername" name="username" type="text" placeholder="Имя пользователя" spellcheck="false" autocapitalize="none" required>
-          <input class="input" id="passwordValue" name="password" type="password" placeholder="Пароль" required>
-          <button class="btn" type="submit">Войти по паролю</button>
+      <section id="step-password" class="auth-step" hidden>
+        <p class="auth-hint">Вход для <strong id="passwordLogin"></strong>.</p>
+        <form id="passwordForm" class="auth-form auth-form-stack" autocomplete="on">
+          <input class="input" id="passwordValue" name="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+          <div class="auth-actions">
+            <button class="btn" type="submit">Войти по паролю</button>
+            <button class="btn" id="requestCodeButton" type="button">Получить код в телеграм</button>
+          </div>
         </form>
         <pre id="passwordMessage" class="import-message"></pre>
       </section>
 
-      <section id="step-done" class="auth-step" hidden>
-        <p class="auth-hint">Вы вошли. <a href="/host">Перейти к турниру →</a></p>
+      <section id="step-code" class="auth-step" hidden>
+        <p class="auth-hint">Код отправлен в Telegram для <strong id="codeLogin"></strong>.</p>
+        <form id="codeForm" class="auth-form" autocomplete="on">
+          <input class="input" id="loginCode" name="code" type="text" placeholder="Код из Telegram" autocomplete="one-time-code" spellcheck="false" autocapitalize="characters" required>
+          <button class="btn" type="submit">Войти</button>
+        </form>
+        <pre id="loginMessage" class="import-message"></pre>
       </section>
     </div>
   </main>

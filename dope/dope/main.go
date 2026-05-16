@@ -116,6 +116,7 @@ type server struct {
 	hostSubscribers map[chan hostPresenceEvent]struct{}
 	assets          fs.FS
 	assetNoCache    bool
+	sendTelegram    telegramSender
 }
 
 type updateRequest struct {
@@ -148,12 +149,15 @@ func main() {
 	mux.HandleFunc("/register/invite", srv.handleRegisterInviteSubmit)
 	mux.HandleFunc("/register/username", srv.handleRegisterUsernameSubmit)
 	mux.HandleFunc("/login", srv.serveStaticPage(assets, "static/login.html", noCacheAssets))
+	mux.HandleFunc("/profile", srv.handleProfilePage)
+	mux.HandleFunc("/profile/logout", srv.handleProfileLogout)
 	mux.HandleFunc("/api/import", srv.handleImport)
 	mux.HandleFunc("/host", srv.handleHostLanding)
 	mux.HandleFunc("/host/", srv.handleHostRouter)
 	mux.HandleFunc("/api/tournament/", srv.handleScopedAPI)
 	mux.HandleFunc("/api/auth/register/start", srv.handleAuthRegisterStart)
 	mux.HandleFunc("/api/auth/register/status", srv.handleAuthRegisterStatus)
+	mux.HandleFunc("/api/auth/login/start", srv.handleAuthLoginStart)
 	mux.HandleFunc("/api/auth/login", srv.handleAuthLogin)
 	mux.HandleFunc("/api/auth/login-password", srv.handleAuthLoginPassword)
 	mux.HandleFunc("/api/auth/logout", srv.handleAuthLogout)
