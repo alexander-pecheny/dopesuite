@@ -568,6 +568,9 @@ function buildTable() {
   const table = gameTable.buildTwoRowScoreTable({
     className: "match-table",
     attrs: {dataset: {matchCode}},
+    rowMarkerColumn: true,
+    rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
+    rowMarkerCellClassName: "sticky row-marker active-row-marker",
     nameHeader: battleHeader(),
     placeColumn: showPlaceColumn,
     themes,

@@ -15,6 +15,7 @@ let totalQuestions = 0;
 let renderedTab = null;
 let questionStatsCache = null;
 let activeEntryEditor = null;
+let activeEntryRows = [];
 let stateSync = null;
 let presence = null;
 const tabCache = new Map();
@@ -248,6 +249,9 @@ function buildInputTable() {
   const validationCounts = buildInputValidationCounts();
 
   const colgroup = document.createElement("colgroup");
+  const markerCol = document.createElement("col");
+  markerCol.className = "col-entry-marker";
+  colgroup.appendChild(markerCol);
   tourLengths.forEach((tourSize, tourIndex) => {
     for (let i = 0; i < tourSize; i++) {
       const c = document.createElement("col");
@@ -259,6 +263,7 @@ function buildInputTable() {
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
+  head.appendChild(th("", "entry-row-marker entry-row-marker-head active-row-marker"));
   let q = 1;
   tourLengths.forEach((tourSize, tourIndex) => {
     for (let i = 0; i < tourSize; i++) {
@@ -270,6 +275,7 @@ function buildInputTable() {
   thead.appendChild(head);
 
   const lockRow = document.createElement("tr");
+  lockRow.appendChild(th("", "entry-row-marker entry-row-marker-head active-row-marker"));
   let qIdx = 0;
   tourLengths.forEach((tourSize, tourIndex) => {
     for (let i = 0; i < tourSize; i++) {
@@ -284,6 +290,7 @@ function buildInputTable() {
   const tbody = document.createElement("tbody");
   for (let row = 0; row < n; row++) {
     const tr = document.createElement("tr");
+    tr.appendChild(entryRowMarkerCell(row));
     let qi = 0;
     tourLengths.forEach((tourSize, tourIndex) => {
       for (let i = 0; i < tourSize; i++) {
@@ -296,6 +303,13 @@ function buildInputTable() {
   }
   table.appendChild(tbody);
   return table;
+}
+
+function entryRowMarkerCell(rowIndex) {
+  const cell = document.createElement("td");
+  cell.className = "entry-row-marker active-row-marker";
+  cell.dataset.row = String(rowIndex);
+  return cell;
 }
 
 function lockCell(qIndex, className) {
@@ -419,11 +433,13 @@ function handleEntryKeydown(event) {
 function handleEntryFocus(event) {
   const target = event.target;
   if (target instanceof HTMLInputElement && target.classList.contains("entry-input")) {
+    markActiveEntryRow(Number(target.dataset.row));
     target.select();
     return;
   }
   const cell = target.closest?.(".entry-cell");
   if (cell && !viewer) {
+    markActiveEntryRow(Number(cell.dataset.row));
     openEntryEditor(cell);
   }
 }
@@ -445,6 +461,7 @@ function openEntryEditor(cell) {
   const qIndex = Number(cell.dataset.q);
   const rowIndex = Number(cell.dataset.row);
   if (!Number.isInteger(qIndex) || !Number.isInteger(rowIndex)) return;
+  markActiveEntryRow(rowIndex);
   const input = document.createElement("input");
   input.type = "text";
   input.inputMode = "numeric";
@@ -494,6 +511,24 @@ function focusInput(qIndex, rowIndex) {
   const sel = `.entry-cell[data-q="${qIndex}"][data-row="${rowIndex}"]`;
   const cell = odRoot.querySelector(sel);
   if (cell) openEntryEditor(cell);
+}
+
+function clearActiveEntryRows() {
+  if (activeEntryRows.length > 0) {
+    activeEntryRows.forEach((row) => row.classList.remove("active-entry-row"));
+    activeEntryRows = [];
+    return;
+  }
+  odRoot.querySelectorAll(".active-entry-row").forEach((row) => row.classList.remove("active-entry-row"));
+}
+
+function markActiveEntryRow(rowIndex) {
+  if (!Number.isInteger(rowIndex) || viewer) return;
+  clearActiveEntryRows();
+  const row = odRoot.querySelector(`.entry-cell[data-row="${gameTable.cssEscape(rowIndex)}"]`)?.closest("tr");
+  if (!row) return;
+  row.classList.add("active-entry-row");
+  activeEntryRows = [row];
 }
 
 // === Подробно ===
@@ -554,6 +589,9 @@ function buildDetailedTable() {
 
   return gameTable.buildFlatScoreTable({
     className: "match-table compact-score-table od-detailed",
+    rowMarkerColumn: true,
+    rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
+    rowMarkerCellClassName: "sticky row-marker active-row-marker",
     events: {change: handleDetailedChange},
     nameHeader: "Команда",
     themes,
