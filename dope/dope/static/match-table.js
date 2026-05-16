@@ -332,6 +332,10 @@
     let saveTimer = null;
     let saveQueued = false;
     let saveInFlight = false;
+    let patchTimer = null;
+    let patchInFlight = false;
+    let patchQueue = new Map();
+    let inFlightPatchOps = [];
 
     function save() {
       if (options.readonly) return;
@@ -340,11 +344,34 @@
       scheduleSave(debounceMs);
     }
 
+    function patch(path, value) {
+      if (options.readonly) return;
+      let op;
+      try {
+        op = {op: "set", path: normalizePatchPath(path), value: cloneJSON(value)};
+      } catch (error) {
+        console.error(error);
+        setSyncStatus("error");
+        return;
+      }
+      patchQueue.set(patchKey(op), op);
+      setSyncStatus("saving");
+      schedulePatch(debounceMs);
+    }
+
     function scheduleSave(delay) {
       window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
         saveTimer = null;
         void flushSave();
+      }, delay);
+    }
+
+    function schedulePatch(delay) {
+      window.clearTimeout(patchTimer);
+      patchTimer = window.setTimeout(() => {
+        patchTimer = null;
+        void flushPatch();
       }, delay);
     }
 
@@ -376,6 +403,44 @@
       }
     }
 
+    async function flushPatch() {
+      if (options.readonly || patchInFlight || patchQueue.size === 0) return;
+      const ops = Array.from(patchQueue.values());
+      patchQueue.clear();
+      patchInFlight = true;
+      inFlightPatchOps = inFlightPatchOps.concat(ops);
+      let saved = false;
+      let retry = true;
+      try {
+        const response = await fetch(options.stateURL, {
+          method: "PATCH",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ops}),
+        });
+        if (!response.ok) {
+          retry = response.status >= 500;
+          throw new Error(await response.text());
+        }
+        const updated = await response.json();
+        removeInFlightPatchOps(ops);
+        rememberLocalEcho(JSON.stringify(updated));
+        options.onRemoteState?.(withPendingLocalPatches(updated), {local: true});
+        saved = true;
+      } catch (error) {
+        removeInFlightPatchOps(ops);
+        if (retry) requeuePatchOps(ops);
+        console.error(error);
+        setSyncStatus("error");
+      } finally {
+        patchInFlight = false;
+        if (patchQueue.size > 0) {
+          if (!patchTimer) schedulePatch(saved ? 0 : 2000);
+        } else if (saved && !hasPendingSave()) {
+          setSyncStatus("saved");
+        }
+      }
+    }
+
     function rememberLocalEcho(raw) {
       echoSet.add(raw);
       echoOrder.push(raw);
@@ -393,7 +458,13 @@
     }
 
     function hasPendingSave() {
-      return saveQueued || saveInFlight || saveTimer !== null;
+      return saveQueued ||
+        saveInFlight ||
+        saveTimer !== null ||
+        patchQueue.size > 0 ||
+        patchInFlight ||
+        patchTimer !== null ||
+        inFlightPatchOps.length > 0;
     }
 
     function connect() {
@@ -411,14 +482,338 @@
           if (!hasPendingSave()) setSyncStatus("saved");
           return;
         }
-        options.onRemoteState?.(message.data, message);
+        options.onRemoteState?.(withPendingLocalPatches(message.data), message);
         if (!hasPendingSave()) setSyncStatus("saved");
       });
       events.onerror = () => setSyncStatus("reconnecting");
       return events;
     }
 
-    return {connect, flushSave, hasPendingSave, save};
+    function normalizePatchPath(path) {
+      if (!Array.isArray(path) || path.length === 0) {
+        throw new Error("state patch path must be a non-empty array");
+      }
+      return path.map((segment) => {
+        if (typeof segment === "string" && segment !== "") return segment;
+        if (Number.isInteger(segment) && segment >= 0) return segment;
+        throw new Error("state patch path segments must be strings or non-negative integers");
+      });
+    }
+
+    function patchKey(op) {
+      return JSON.stringify(op.path);
+    }
+
+    function cloneJSON(value) {
+      if (value === undefined) return null;
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function removeInFlightPatchOps(ops) {
+      const sent = new Set(ops);
+      inFlightPatchOps = inFlightPatchOps.filter((op) => !sent.has(op));
+    }
+
+    function requeuePatchOps(ops) {
+      for (const op of ops) {
+        const key = patchKey(op);
+        if (!patchQueue.has(key)) patchQueue.set(key, op);
+      }
+    }
+
+    function pendingPatchOps() {
+      return inFlightPatchOps.concat(Array.from(patchQueue.values()));
+    }
+
+    function withPendingLocalPatches(remoteState) {
+      let next = cloneJSON(remoteState);
+      for (const op of pendingPatchOps()) {
+        next = applySetPatch(next, op.path, op.value);
+      }
+      return next;
+    }
+
+    function applySetPatch(root, path, value) {
+      if (path.length === 0) return cloneJSON(value);
+      const [segment, ...rest] = path;
+      if (typeof segment === "number") {
+        const arr = Array.isArray(root) ? root : [];
+        while (arr.length <= segment) arr.push(null);
+        arr[segment] = applySetPatch(arr[segment], rest, value);
+        return arr;
+      }
+      const obj = root && typeof root === "object" && !Array.isArray(root) ? root : {};
+      obj[segment] = applySetPatch(obj[segment], rest, value);
+      return obj;
+    }
+
+    return {connect, flushSave, flushPatch, hasPendingSave, save, patch};
+  }
+
+  function createHostPresence(options) {
+    const root = options.root || document.body;
+    const postDelayMs = Number.isFinite(options.postDelayMs) ? options.postDelayMs : 80;
+    const heartbeatMs = Number.isFinite(options.heartbeatMs) ? options.heartbeatMs : 5000;
+    const staleMs = Number.isFinite(options.staleMs) ? options.staleMs : 16000;
+    const remotes = new Map();
+    let selfUserID = null;
+    let source = null;
+    let layer = null;
+    let publishTimer = null;
+    let heartbeatTimer = null;
+    let staleTimer = null;
+    let lastCursor = null;
+    let connected = false;
+
+    function connect() {
+      if (connected || !options.eventsURL || !options.presenceURL) return;
+      connected = true;
+      ensureLayer();
+      void loadSelf();
+      source = new EventSource(options.eventsURL);
+      source.addEventListener("presence", (event) => {
+        try {
+          applyPresence(JSON.parse(event.data));
+        } catch (error) {
+          console.error(error);
+        }
+      });
+      root.addEventListener("focusin", handleFocusOrClick, true);
+      root.addEventListener("click", handleFocusOrClick, true);
+      document.addEventListener("keydown", handleKeydown, true);
+      document.addEventListener("scroll", refresh, true);
+      window.addEventListener("scroll", refresh, {passive: true});
+      window.addEventListener("resize", refresh);
+      window.addEventListener("beforeunload", sendInactive);
+      heartbeatTimer = window.setInterval(() => {
+        if (lastCursor) void postPresence(true, lastCursor);
+      }, heartbeatMs);
+      staleTimer = window.setInterval(pruneStale, 1000);
+      publishCurrentSoon();
+    }
+
+    async function loadSelf() {
+      try {
+        const response = await fetch("/api/auth/me", {headers: {"Accept": "application/json"}});
+        if (!response.ok) return;
+        const me = await response.json();
+        selfUserID = me.user_id || me.userID || null;
+        if (selfUserID && remotes.has(selfUserID)) {
+          removeRemote(selfUserID);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    function handleFocusOrClick(event) {
+      publishFromElement(event.target);
+    }
+
+    function handleKeydown() {
+      window.requestAnimationFrame(publishCurrent);
+    }
+
+    function publishFromElement(element) {
+      const cursor = options.cursorFromElement?.(element);
+      if (cursor) publish(cursor);
+    }
+
+    function publishCurrentSoon() {
+      window.requestAnimationFrame(publishCurrent);
+    }
+
+    function publishCurrent() {
+      const cursor = options.getCursor?.() || options.cursorFromElement?.(document.activeElement);
+      if (cursor) publish(cursor);
+    }
+
+    function publish(cursor) {
+      if (!cursor) return;
+      lastCursor = cursor;
+      window.clearTimeout(publishTimer);
+      publishTimer = window.setTimeout(() => {
+        publishTimer = null;
+        void postPresence(true, cursor);
+      }, postDelayMs);
+    }
+
+    async function postPresence(active, cursor) {
+      const body = active ? {active: true, cursor} : {active: false};
+      try {
+        await fetch(options.presenceURL, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(body),
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    function sendInactive() {
+      if (!options.presenceURL) return;
+      const payload = JSON.stringify({active: false});
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(options.presenceURL, new Blob([payload], {type: "application/json"}));
+        return;
+      }
+      void fetch(options.presenceURL, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: payload,
+        keepalive: true,
+      });
+    }
+
+    function applyPresence(message) {
+      if (!message || !message.userID) return;
+      if (selfUserID && message.userID === selfUserID) return;
+      if (!message.active || !message.cursor) {
+        removeRemote(message.userID);
+        return;
+      }
+      const remote = remotes.get(message.userID) || {};
+      remote.userID = message.userID;
+      remote.username = message.username || `user-${message.userID}`;
+      remote.color = message.color || "#1a73e8";
+      remote.cursor = message.cursor;
+      remote.seenAt = Date.now();
+      remotes.set(message.userID, remote);
+      renderRemote(remote);
+    }
+
+    function ensureLayer() {
+      if (layer) return layer;
+      layer = document.createElement("div");
+      layer.className = "collab-cursor-layer";
+      document.body.appendChild(layer);
+      return layer;
+    }
+
+    function renderRemote(remote) {
+      ensureLayer();
+      const target = options.findTarget?.(remote.cursor);
+      const node = ensureRemoteNode(remote);
+      if (!target || !document.documentElement.contains(target)) {
+        node.hidden = true;
+        return;
+      }
+      const rect = target.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0 || rect.bottom < 0 || rect.right < 0 || rect.top > window.innerHeight || rect.left > window.innerWidth) {
+        node.hidden = true;
+        return;
+      }
+      if (isHiddenByScrollFrame(target, rect) || isHiddenByStickyLayer(target, rect)) {
+        node.hidden = true;
+        return;
+      }
+      node.hidden = false;
+      node.style.left = `${Math.round(rect.left)}px`;
+      node.style.top = `${Math.round(rect.top)}px`;
+      node.style.width = `${Math.round(rect.width)}px`;
+      node.style.height = `${Math.round(rect.height)}px`;
+      node.style.setProperty("--cursor-color", remote.color);
+      const marker = node.querySelector(".collab-cursor-marker");
+      const label = node.querySelector(".collab-cursor-label");
+      marker.title = remote.username;
+      label.textContent = remote.username;
+    }
+
+    function ensureRemoteNode(remote) {
+      if (remote.node) return remote.node;
+      const node = document.createElement("div");
+      node.className = "collab-cursor";
+      const marker = document.createElement("span");
+      marker.className = "collab-cursor-marker";
+      const label = document.createElement("span");
+      label.className = "collab-cursor-label";
+      marker.appendChild(label);
+      node.appendChild(marker);
+      layer.appendChild(node);
+      remote.node = node;
+      return node;
+    }
+
+    function isHiddenByScrollFrame(target, rect) {
+      const frame = target.closest?.(".sheet-frame");
+      if (!frame) return false;
+      const frameRect = frame.getBoundingClientRect();
+      return rect.left < frameRect.left - 1 ||
+        rect.right > frameRect.right + 1 ||
+        rect.top < frameRect.top - 1 ||
+        rect.bottom > frameRect.bottom + 1;
+    }
+
+    function isHiddenByStickyLayer(target, rect) {
+      const frame = target.closest?.(".sheet-frame");
+      if (!frame || target.closest?.(".sticky")) return false;
+      const frameRect = frame.getBoundingClientRect();
+      let stickyRight = frameRect.left;
+      let stickyBottom = frameRect.top;
+      for (const sticky of frame.querySelectorAll(".sticky, thead th")) {
+        if (sticky === target || sticky.contains(target) || target.contains(sticky)) continue;
+        const style = window.getComputedStyle(sticky);
+        if (style.position !== "sticky") continue;
+        const stickyRect = sticky.getBoundingClientRect();
+        if (stickyRect.width <= 0 || stickyRect.height <= 0) continue;
+        if (stickyRect.right <= frameRect.left || stickyRect.left >= frameRect.right || stickyRect.bottom <= frameRect.top || stickyRect.top >= frameRect.bottom) continue;
+
+        const overlapsY = stickyRect.top < rect.bottom && stickyRect.bottom > rect.top;
+        const isLeftSticky = style.left !== "auto" && stickyRect.left >= frameRect.left - 2 && stickyRect.left < frameRect.right;
+        if (overlapsY && isLeftSticky) {
+          stickyRight = Math.max(stickyRight, stickyRect.right);
+        }
+
+        const overlapsX = stickyRect.left < rect.right && stickyRect.right > rect.left;
+        const isTopSticky = style.top !== "auto" && stickyRect.top >= frameRect.top - 2 && stickyRect.top < frameRect.bottom;
+        if (overlapsX && isTopSticky) {
+          stickyBottom = Math.max(stickyBottom, stickyRect.bottom);
+        }
+      }
+      return rect.left < stickyRight - 1 || rect.top < stickyBottom - 1;
+    }
+
+    function refresh() {
+      for (const remote of remotes.values()) {
+        renderRemote(remote);
+      }
+    }
+
+    function pruneStale() {
+      const cutoff = Date.now() - staleMs;
+      for (const [userID, remote] of remotes.entries()) {
+        if (remote.seenAt < cutoff) {
+          removeRemote(userID);
+        }
+      }
+    }
+
+    function removeRemote(userID) {
+      const remote = remotes.get(userID);
+      if (remote?.node) remote.node.remove();
+      remotes.delete(userID);
+    }
+
+    function disconnect() {
+      if (!connected) return;
+      connected = false;
+      window.clearTimeout(publishTimer);
+      window.clearInterval(heartbeatTimer);
+      window.clearInterval(staleTimer);
+      source?.close();
+      source = null;
+      sendInactive();
+      root.removeEventListener("focusin", handleFocusOrClick, true);
+      root.removeEventListener("click", handleFocusOrClick, true);
+      document.removeEventListener("keydown", handleKeydown, true);
+      document.removeEventListener("scroll", refresh, true);
+      window.removeEventListener("scroll", refresh);
+      window.removeEventListener("resize", refresh);
+      for (const userID of Array.from(remotes.keys())) removeRemote(userID);
+    }
+
+    return {connect, disconnect, publish, publishCurrent, publishFromElement, refresh};
   }
 
   window.DopeTable = {
@@ -439,5 +834,6 @@
     setMarkClass,
     parseScopedEvent,
     createStateSync,
+    createHostPresence,
   };
 })();

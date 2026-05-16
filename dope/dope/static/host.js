@@ -17,6 +17,7 @@ let reloadTimer = null;
 const localMatchEchoes = new Set();
 let matchTableIndex = null;
 let activeAnswerNode = null;
+let presence = null;
 
 document.body.classList.toggle("embedded-match", embedded);
 document.addEventListener("keydown", handleGlobalKeydown);
@@ -224,6 +225,7 @@ function renderTournament() {
   setViewerLink(route.viewerBase + "/", "Открыть зрительскую сетку");
   document.title = `Ведущий · ${tournament.title}`;
   hostRoot.replaceChildren(buildTournamentGrid(tournament, {basePath: route.base}));
+  refreshPresence();
 }
 
 function renderStage(options = {}) {
@@ -242,6 +244,7 @@ function renderStage(options = {}) {
     scrollFrame.scrollTop = scrollTop;
     scrollFrame.scrollLeft = scrollLeft;
   }
+  refreshPresence();
 }
 
 function renderVenues() {
@@ -251,6 +254,7 @@ function renderVenues() {
   setViewerLink(`${route.viewerBase}/venues`, "Открыть площадки для зрителя");
   document.title = "Ведущий · Площадки";
   hostRoot.replaceChildren(buildSubnav([{href: route.base + "/", label: "Сетка"}]), buildVenuesTable(true));
+  refreshPresence();
 }
 
 function render() {
@@ -279,6 +283,7 @@ function render() {
       table,
     );
   }
+  refreshPresence();
   if (venueFocused) {
     focusVenueSelect({preventScroll: true});
     return;
@@ -771,6 +776,7 @@ function battleHeader() {
   if (venues.length > 0) {
     const venueSelect = document.createElement("select");
     venueSelect.className = "venue-select";
+    venueSelect.dataset.matchCode = matchCode;
     venues.forEach((venue) => {
       venueSelect.appendChild(option(String(venue.number), `${venue.number}: ${venue.title}`));
     });
@@ -787,6 +793,7 @@ function battleHeader() {
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
   checkbox.className = "finish-toggle";
+  checkbox.dataset.matchCode = matchCode;
   checkbox.checked = Boolean(state.finished);
   checkbox.addEventListener("change", () => {
     sendUpdate({finished: checkbox.checked}, matchCode);
@@ -878,6 +885,7 @@ function isFormControl(target) {
 function selectAnswerCell(team, shootout, theme, answer, options = {}) {
   activeCell = {matchCode: options.matchCode || currentMatchCode(), team, shootout, theme, answer};
   markActiveCell();
+  publishPresence();
   if (options.focus !== false) {
     focusActiveCell();
   }
@@ -1152,6 +1160,105 @@ function td(content, className, attrs = {}) {
   return gameTable.td(content, className, attrs);
 }
 
+function connectPresence() {
+  if (presence || embedded || !route.tournamentID) return;
+  presence = gameTable.createHostPresence({
+    root: hostRoot,
+    eventsURL: `/host-events?tournament_id=${encodeURIComponent(route.tournamentID)}`,
+    presenceURL: `${route.tournamentApi}/presence`,
+    cursorFromElement: hostPresenceCursorFromElement,
+    getCursor: currentHostPresenceCursor,
+    findTarget: findHostPresenceTarget,
+  });
+  presence.connect();
+}
+
+function refreshPresence() {
+  presence?.refresh();
+}
+
+function publishPresence() {
+  presence?.publishCurrent();
+}
+
+function currentHostPresenceCursor() {
+  const focused = hostPresenceCursorFromElement(document.activeElement);
+  if (focused) return focused;
+  if (route.mode !== "match" && route.mode !== "stage") return null;
+  return {
+    app: "ek",
+    kind: "answer",
+    gameID: route.gameID,
+    matchCode: activeCell.matchCode || currentMatchCode(),
+    team: activeCell.team,
+    shootout: Boolean(activeCell.shootout),
+    theme: activeCell.theme,
+    answer: activeCell.answer,
+  };
+}
+
+function hostPresenceCursorFromElement(element) {
+  const target = element?.closest?.(".answer-cell,.player-select,.place-input,.finish-toggle,.venue-select");
+  if (!target || !hostRoot.contains(target)) return null;
+  const matchCode = target.dataset.matchCode || currentMatchCode();
+  if (target.classList.contains("answer-cell")) {
+    return {
+      app: "ek",
+      kind: "answer",
+      gameID: route.gameID,
+      matchCode,
+      team: Number(target.dataset.team),
+      shootout: target.dataset.shootout === "1",
+      theme: Number(target.dataset.theme),
+      answer: Number(target.dataset.answer),
+    };
+  }
+  if (target.classList.contains("player-select")) {
+    return {
+      app: "ek",
+      kind: "player",
+      gameID: route.gameID,
+      matchCode,
+      team: Number(target.dataset.team),
+      shootout: target.dataset.shootout === "1",
+      theme: Number(target.dataset.theme),
+    };
+  }
+  if (target.classList.contains("place-input")) {
+    return {app: "ek", kind: "place", gameID: route.gameID, matchCode, team: Number(target.dataset.team)};
+  }
+  if (target.classList.contains("finish-toggle")) {
+    return {app: "ek", kind: "finish", gameID: route.gameID, matchCode};
+  }
+  if (target.classList.contains("venue-select")) {
+    return {app: "ek", kind: "venue", gameID: route.gameID, matchCode};
+  }
+  return null;
+}
+
+function findHostPresenceTarget(cursor) {
+  if (!cursor || cursor.app !== "ek" || String(cursor.gameID) !== String(route.gameID)) return null;
+  const matchCode = cssEscape(cursor.matchCode || route.matchCode || "");
+  switch (cursor.kind) {
+  case "answer":
+    return hostRoot.querySelector(
+      `.answer-cell[data-match-code="${matchCode}"][data-team="${cssEscape(cursor.team)}"][data-shootout="${cursor.shootout ? "1" : "0"}"][data-theme="${cssEscape(cursor.theme)}"][data-answer="${cssEscape(cursor.answer)}"]`,
+    );
+  case "player":
+    return hostRoot.querySelector(
+      `.player-select[data-match-code="${matchCode}"][data-team="${cssEscape(cursor.team)}"][data-shootout="${cursor.shootout ? "1" : "0"}"][data-theme="${cssEscape(cursor.theme)}"]`,
+    );
+  case "place":
+    return hostRoot.querySelector(`.place-input[data-match-code="${matchCode}"][data-team="${cssEscape(cursor.team)}"]`);
+  case "finish":
+    return hostRoot.querySelector(`.finish-toggle[data-match-code="${matchCode}"]`);
+  case "venue":
+    return hostRoot.querySelector(`.venue-select[data-match-code="${matchCode}"]`);
+  default:
+    return null;
+  }
+}
+
 function option(value, label) {
   return gameTable.option(value, label);
 }
@@ -1160,6 +1267,7 @@ loadCurrent()
   .then(() => {
     setStatus("saved");
     connectEvents();
+    connectPresence();
   })
   .catch((error) => {
     setStatus("error");

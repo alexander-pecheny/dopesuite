@@ -100,6 +100,11 @@ type event struct {
 	data         []byte
 }
 
+type hostPresenceEvent struct {
+	tournamentID int64
+	data         []byte
+}
+
 type server struct {
 	mu              sync.RWMutex
 	db              *sql.DB
@@ -108,6 +113,7 @@ type server struct {
 	activeMatchCode string
 	state           MatchState
 	subscribers     map[chan event]struct{}
+	hostSubscribers map[chan hostPresenceEvent]struct{}
 	assets          fs.FS
 	assetNoCache    bool
 }
@@ -154,6 +160,7 @@ func main() {
 	mux.HandleFunc("/api/auth/me", srv.handleAuthMe)
 	mux.HandleFunc("/api/auth/username", srv.handleAuthUsername)
 	mux.HandleFunc("/events", srv.handleEvents)
+	mux.HandleFunc("/host-events", srv.handleHostEvents)
 	mux.Handle("/static/", staticFileServer(assets, noCacheAssets))
 
 	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
@@ -221,6 +228,7 @@ func newServer() (*server, error) {
 		activeGameID:    gameID,
 		activeMatchCode: matchCode,
 		subscribers:     make(map[chan event]struct{}),
+		hostSubscribers: make(map[chan hostPresenceEvent]struct{}),
 	}, nil
 }
 
@@ -357,6 +365,58 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	tournamentID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("tournament_id")), 10, 64)
+	if err != nil || tournamentID <= 0 {
+		http.Error(w, "missing tournament_id", http.StatusBadRequest)
+		return
+	}
+	if !s.authorizeHostPresence(w, r, tournamentID) {
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	ch := make(chan hostPresenceEvent, 16)
+	s.addHostSubscriber(ch)
+	defer s.removeHostSubscriber(ch)
+
+	fmt.Fprint(w, ": connected\n\n")
+	flusher.Flush()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case ev := <-ch:
+			if ev.tournamentID != tournamentID {
+				continue
+			}
+			writeSSE(w, "presence", 0, ev.data)
+			flusher.Flush()
+		case <-ticker.C:
+			fmt.Fprint(w, ": keepalive\n\n")
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
 func (s *server) addSubscriber(ch chan event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -374,6 +434,41 @@ func (s *server) broadcast(ev event) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for ch := range s.subscribers {
+		select {
+		case ch <- ev:
+		default:
+			select {
+			case <-ch:
+			default:
+			}
+			select {
+			case ch <- ev:
+			default:
+			}
+		}
+	}
+}
+
+func (s *server) addHostSubscriber(ch chan hostPresenceEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.hostSubscribers == nil {
+		s.hostSubscribers = make(map[chan hostPresenceEvent]struct{})
+	}
+	s.hostSubscribers[ch] = struct{}{}
+}
+
+func (s *server) removeHostSubscriber(ch chan hostPresenceEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.hostSubscribers, ch)
+	close(ch)
+}
+
+func (s *server) broadcastHostPresence(ev hostPresenceEvent) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for ch := range s.hostSubscribers {
 		select {
 		case ch <- ev:
 		default:

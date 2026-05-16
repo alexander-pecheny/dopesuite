@@ -16,6 +16,7 @@ let renderedTab = null;
 let questionStatsCache = null;
 let activeEntryEditor = null;
 let stateSync = null;
+let presence = null;
 const tabCache = new Map();
 const tabScroll = new Map();
 
@@ -167,6 +168,7 @@ function render() {
   if (!activePane.isConnected) odRoot.appendChild(activePane);
   renderedTab = activeTab;
   restoreTabScroll(activeTab);
+  refreshPresence();
 }
 
 function getTabPane(tab) {
@@ -387,10 +389,11 @@ function handleEntryInput(event) {
   const rowIndex = Number(input.dataset.row);
   if (!Number.isInteger(qIndex) || !Number.isInteger(rowIndex)) return;
   input.value = input.value.replace(/[^0-9]/g, "");
-  state.entries[qIndex][rowIndex] = input.value === "" ? 0 : Number(input.value);
+  const value = input.value === "" ? 0 : Number(input.value);
+  state.entries[qIndex][rowIndex] = value;
   invalidateScoreCaches();
   updateInputValidity(qIndex);
-  saveState();
+  saveState(["entries", qIndex, rowIndex], value);
 }
 
 function handleEntryKeydown(event) {
@@ -482,7 +485,7 @@ function handleEntryChange(event) {
   if (!Number.isInteger(qIndex)) return;
   state.completed[qIndex] = cb.checked;
   invalidateScoreCaches();
-  saveState();
+  saveState(["completed", qIndex], cb.checked);
 }
 
 function focusInput(qIndex, rowIndex) {
@@ -592,10 +595,11 @@ function handleDetailedChange(event) {
   const teamIndex = Number(input.dataset.team);
   if (!Number.isInteger(teamIndex) || !state.teams[teamIndex]) return;
   rememberTabScroll(activeTab);
-  state.teams[teamIndex].name = input.value.trim();
+  const name = input.value.trim();
+  state.teams[teamIndex].name = name;
   invalidateTabCache("detailed", "results");
   renderedTab = null;
-  saveState();
+  saveState(["teams", teamIndex, "name"], name);
   render();
 }
 
@@ -766,7 +770,11 @@ function computePlaces(totals) {
 
 // === persistence ===
 
-function saveState() {
+function saveState(path, value) {
+  if (Array.isArray(path)) {
+    syncState().patch(path, value);
+    return;
+  }
   syncState().save();
 }
 
@@ -797,6 +805,56 @@ function syncState() {
     onRemoteState: applyRemoteState,
   });
   return stateSync;
+}
+
+function connectPresence() {
+  if (viewer || presence || !route.tournamentID) return;
+  presence = gameTable.createHostPresence({
+    root: odRoot,
+    eventsURL: `/host-events?tournament_id=${encodeURIComponent(route.tournamentID)}`,
+    presenceURL: `/api/tournament/${route.tournamentID}/presence`,
+    cursorFromElement: odPresenceCursorFromElement,
+    getCursor: currentODPresenceCursor,
+    findTarget: findODPresenceTarget,
+  });
+  presence.connect();
+}
+
+function refreshPresence() {
+  presence?.refresh();
+}
+
+function currentODPresenceCursor() {
+  return odPresenceCursorFromElement(document.activeElement);
+}
+
+function odPresenceCursorFromElement(element) {
+  const entry = element?.closest?.(".entry-input,.entry-cell");
+  if (entry && odRoot.contains(entry)) {
+    return {
+      app: "od",
+      kind: "entry",
+      gameID: route.gameID,
+      q: Number(entry.dataset.q),
+      row: Number(entry.dataset.row),
+    };
+  }
+  const teamName = element?.closest?.(".venue-input");
+  if (teamName && odRoot.contains(teamName)) {
+    return {app: "od", kind: "team-name", gameID: route.gameID, team: Number(teamName.dataset.team)};
+  }
+  return null;
+}
+
+function findODPresenceTarget(cursor) {
+  if (!cursor || cursor.app !== "od" || String(cursor.gameID) !== String(route.gameID)) return null;
+  if (cursor.kind === "entry") {
+    return odRoot.querySelector(`.entry-cell[data-q="${gameTable.cssEscape(cursor.q)}"][data-row="${gameTable.cssEscape(cursor.row)}"]`);
+  }
+  if (cursor.kind === "team-name") {
+    return odRoot.querySelector(`.venue-input[data-team="${gameTable.cssEscape(cursor.team)}"]`);
+  }
+  return null;
 }
 
 function applyRemoteState(nextState) {
@@ -847,6 +905,7 @@ loadAll()
   .then(() => {
     setStatus("saved");
     connectEvents();
+    connectPresence();
   })
   .catch((error) => {
     setStatus("error");
