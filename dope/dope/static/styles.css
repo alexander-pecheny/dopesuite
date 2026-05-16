@@ -1071,14 +1071,11 @@ a.list-row:hover { background: #eef1f5; }
 }
 
 .host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr:hover > td,
-.host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr:focus-within > td,
-.host:not(.viewer-readonly) .fight-frame .match-table.si-table tbody tr:hover > td,
-.host:not(.viewer-readonly) .fight-frame .match-table.si-table tbody tr:focus-within > td {
+.host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr:focus-within > td {
   --row-highlight: rgba(250, 204, 21, 0.18);
 }
 
-.host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr.active-team-row > td,
-.host:not(.viewer-readonly) .fight-frame .match-table.si-table tbody tr.active-team-row > td {
+.host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr.active-team-row > td {
   --row-highlight: rgba(250, 204, 21, 0.28);
 }
 
@@ -2326,6 +2323,34 @@ a.list-row:hover { background: #eef1f5; }
   border-color: var(--structure);
 }
 .match-table.compact-score-table .team-gap { height: 4px; }
+.match-table.compact-score-table .row-marker {
+  --cell-fill: var(--structure);
+  left: 0;
+  width: 12px;
+  min-width: 12px;
+  max-width: 12px;
+  padding: 0;
+  border-color: var(--structure);
+  border-radius: 0;
+  background: var(--structure);
+}
+.fight-frame .match-table.compact-score-table .row-marker + .sticky-name {
+  left: 12px;
+}
+.fight-frame .match-table.compact-score-table .row-marker ~ .sticky-total {
+  left: calc(12px + var(--team-col));
+}
+.fight-frame .match-table.compact-score-table .row-marker ~ .sticky-place {
+  left: calc(12px + var(--team-col) + var(--total-col));
+}
+.fight-frame .match-table.compact-score-table .row-marker ~ .sticky-place-gap {
+  left: calc(12px + var(--team-col) + var(--total-col) + var(--place-col));
+}
+.host:not(.viewer-readonly) .fight-frame .match-table.si-table tbody tr.active-team-row > .ksi-row-marker {
+  background:
+    radial-gradient(circle at 50% 50%, var(--blue) 0 3px, transparent 3.5px),
+    var(--structure);
+}
 .match-table.compact-score-table .team-name {
   padding: 0 4px 0 6px;
   font-size: 13px;
