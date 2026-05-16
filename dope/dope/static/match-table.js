@@ -75,12 +75,15 @@
     }
 
     const themes = options.themes || [];
+    const showPlaceColumn = options.placeColumn !== false;
     const thead = document.createElement("thead");
     const header = document.createElement("tr");
     header.appendChild(cellFromSpec("th", options.nameHeader, {className: "sticky sticky-name battle"}));
     header.appendChild(cellFromSpec("th", options.totalHeader ?? "Σ", {className: "sticky sticky-total number"}));
-    header.appendChild(cellFromSpec("th", options.placeHeader ?? "М", {className: "sticky sticky-place number"}));
-    header.appendChild(cellFromSpec("th", options.placeGapHeader ?? "", {className: "sticky sticky-place-gap place-gap-head"}));
+    if (showPlaceColumn) {
+      header.appendChild(cellFromSpec("th", options.placeHeader ?? "М", {className: "sticky sticky-place number"}));
+      header.appendChild(cellFromSpec("th", options.placeGapHeader ?? "", {className: "sticky sticky-place-gap place-gap-head"}));
+    }
 
     for (const theme of themes) {
       const questionClass = theme.questionClassName || options.questionClassName || "question-head";
@@ -95,13 +98,18 @@
 
     const tbody = document.createElement("tbody");
     const rows = options.rows || [];
-    const colSpan = options.gapColSpan || 4 + themes.reduce((sum, theme) => sum + (theme.questionLabels?.length || 0) + 2, 0);
+    const leadingColumnCount = showPlaceColumn ? 4 : 2;
+    const colSpan = options.gapColSpan || leadingColumnCount +
+      themes.reduce((sum, theme) => sum + (theme.questionLabels?.length || 0) + 2, 0);
     rows.forEach((rowSpec, rowIndex) => {
       const row = document.createElement("tr");
+      if (rowSpec.rowClassName) row.className = rowSpec.rowClassName;
       row.appendChild(cellFromSpec("td", rowSpec.nameCell, {className: "sticky sticky-name team-name"}));
       row.appendChild(cellFromSpec("td", rowSpec.totalCell ?? rowSpec.total, {className: "sticky sticky-total number total-cell"}));
-      row.appendChild(cellFromSpec("td", rowSpec.placeCell ?? rowSpec.place, {className: "sticky sticky-place number place-cell"}));
-      row.appendChild(cellFromSpec("td", rowSpec.placeGapCell ?? "", {className: "sticky sticky-place-gap place-gap"}));
+      if (showPlaceColumn) {
+        row.appendChild(cellFromSpec("td", rowSpec.placeCell ?? rowSpec.place, {className: "sticky sticky-place number place-cell"}));
+        row.appendChild(cellFromSpec("td", rowSpec.placeGapCell ?? "", {className: "sticky sticky-place-gap place-gap"}));
+      }
 
       (rowSpec.themes || []).forEach((themeSpec, themeIndex) => {
         for (const answerCell of themeSpec.answers || []) {
@@ -138,12 +146,15 @@
 
     const themes = options.themes || [];
     const afterThemeHeaders = options.afterThemeHeaders || [];
+    const showPlaceColumn = options.placeColumn !== false;
     const thead = document.createElement("thead");
     const header = document.createElement("tr");
     header.appendChild(cellFromSpec("th", options.nameHeader, {className: "sticky sticky-name battle"}));
     header.appendChild(cellFromSpec("th", options.totalHeader ?? "Σ", {className: "sticky sticky-total number"}));
-    header.appendChild(cellFromSpec("th", options.placeHeader ?? "М", {className: "sticky sticky-place number"}));
-    header.appendChild(cellFromSpec("th", options.placeGapHeader ?? "", {className: "sticky sticky-place-gap place-gap-head"}));
+    if (showPlaceColumn) {
+      header.appendChild(cellFromSpec("th", options.placeHeader ?? "М", {className: "sticky sticky-place number"}));
+      header.appendChild(cellFromSpec("th", options.placeGapHeader ?? "", {className: "sticky sticky-place-gap place-gap-head"}));
+    }
 
     for (const theme of themes) {
       const questionClass = theme.questionClassName || options.questionClassName || "question-head";
@@ -160,19 +171,27 @@
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
-    const colSpan = options.gapColSpan || 4 +
+    const leadingColumnCount = showPlaceColumn ? 4 : 2;
+    const colSpan = options.gapColSpan || leadingColumnCount +
       themes.reduce((sum, theme) => sum + (theme.questionLabels?.length || 0) + 2, 0) +
       afterThemeHeaders.length;
     const rows = options.rows || [];
     rows.forEach((rowSpec, rowIndex) => {
       const topRow = document.createElement("tr");
       const answerRow = document.createElement("tr");
-      answerRow.className = rowSpec.answerRowClassName || options.answerRowClassName || "answer-row";
+      const rowClassName = rowSpec.rowClassName || "";
+      if (rowClassName) topRow.className = rowClassName;
+      answerRow.className = [
+        rowSpec.answerRowClassName || options.answerRowClassName || "answer-row",
+        rowClassName,
+      ].filter(Boolean).join(" ");
 
       topRow.appendChild(cellFromSpec("td", rowSpec.nameCell, {className: "sticky sticky-name team-name", attrs: {rowSpan: 2}}));
       topRow.appendChild(cellFromSpec("td", rowSpec.totalCell ?? rowSpec.total, {className: "sticky sticky-total number total-cell", attrs: {rowSpan: 2}}));
-      topRow.appendChild(cellFromSpec("td", rowSpec.placeCell ?? rowSpec.place, {className: "sticky sticky-place number place-cell", attrs: {rowSpan: 2}}));
-      topRow.appendChild(cellFromSpec("td", rowSpec.placeGapCell ?? "", {className: "sticky sticky-place-gap place-gap", attrs: {rowSpan: 2}}));
+      if (showPlaceColumn) {
+        topRow.appendChild(cellFromSpec("td", rowSpec.placeCell ?? rowSpec.place, {className: "sticky sticky-place number place-cell", attrs: {rowSpan: 2}}));
+        topRow.appendChild(cellFromSpec("td", rowSpec.placeGapCell ?? "", {className: "sticky sticky-place-gap place-gap", attrs: {rowSpan: 2}}));
+      }
 
       (rowSpec.themes || []).forEach((themeSpec, themeIndex) => {
         const theme = themes[themeIndex] || {};

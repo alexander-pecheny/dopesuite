@@ -645,12 +645,14 @@ a.list-row:hover { background: #eef1f5; }
 .match-table th,
 .match-table td {
   --cell-fill: var(--paper);
+  --row-highlight: transparent;
   height: var(--question-size);
   min-width: var(--question-size);
   padding: 2px 4px;
   border: var(--cell-gap) solid transparent;
   border-radius: var(--cell-radius);
   background:
+    linear-gradient(var(--row-highlight), var(--row-highlight)) padding-box,
     linear-gradient(var(--cell-fill), var(--cell-fill)) padding-box,
     linear-gradient(var(--structure), var(--structure)) border-box;
   white-space: nowrap;
@@ -1066,6 +1068,18 @@ a.list-row:hover { background: #eef1f5; }
 
 .answer-row td {
   height: var(--question-size);
+}
+
+.host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr:hover > td,
+.host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr:focus-within > td,
+.host:not(.viewer-readonly) .fight-frame .match-table.si-table tbody tr:hover > td,
+.host:not(.viewer-readonly) .fight-frame .match-table.si-table tbody tr:focus-within > td {
+  --row-highlight: rgba(250, 204, 21, 0.18);
+}
+
+.host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr.active-team-row > td,
+.host:not(.viewer-readonly) .fight-frame .match-table.si-table tbody tr.active-team-row > td {
+  --row-highlight: rgba(250, 204, 21, 0.28);
 }
 
 .match-table .team-gap {
