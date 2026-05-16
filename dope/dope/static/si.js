@@ -28,6 +28,7 @@ let tableIndex = null;
 let scoreCache = null;
 let detailedOrderCache = null;
 let activeAnswerNode = null;
+let activePlayerRows = [];
 let stateSync = null;
 let presence = null;
 const tabScroll = new Map();
@@ -130,14 +131,18 @@ function render(options = {}) {
 
 function buildTable() {
   const scores = getScoreCache();
+  const showPlaceColumn = false;
   const themes = Array.from({length: themesCount}, (_, index) => ({
     label: `Т${index + 1}`,
     questionLabels: QUESTION_VALUES,
   }));
   const rows = detailedPlayerOrder().map((playerIndex) => ({
+    rowClassName: isActivePlayerRow(playerIndex) ? "active-team-row" : "",
     nameCell: nameCell(state.participants[playerIndex], playerIndex),
     totalCell: indexedCell(scores.totals[playerIndex], "sticky sticky-total number total-cell", {player: playerIndex}),
-    placeCell: indexedCell(scores.places[playerIndex] || "", "sticky sticky-place number place-cell", {player: playerIndex}),
+    placeCell: showPlaceColumn
+      ? indexedCell(scores.places[playerIndex] || "", "sticky sticky-place number place-cell", {player: playerIndex})
+      : null,
     themes: themes.map((_, themeIndex) => ({
       answers: QUESTION_VALUES.map((__, answerIndex) => {
         const mark = state.themes[themeIndex].answers[playerIndex][answerIndex];
@@ -154,6 +159,7 @@ function buildTable() {
   const table = gameTable.buildFlatScoreTable({
     className: "match-table compact-score-table si-table",
     nameHeader: battleHeader(),
+    placeColumn: showPlaceColumn,
     themes,
     rows,
     events: {
@@ -470,6 +476,7 @@ function invalidateDetailedOrder() {
 function resetTableIndex() {
   tableIndex = null;
   activeAnswerNode = null;
+  clearActivePlayerRows();
 }
 
 function scoreContribution(mark, answerIndex) {
@@ -497,13 +504,40 @@ function selectCell(player, theme, answer, options = {}) {
 }
 
 function markActive() {
+  clearActivePlayerRows();
   if (activeAnswerNode) {
     activeAnswerNode.classList.remove("active");
     activeAnswerNode = null;
   }
   if (state.finished || viewer || !isDetailedTabActive()) return;
   activeAnswerNode = findActive();
-  activeAnswerNode?.classList.add("active");
+  if (activeAnswerNode) {
+    activeAnswerNode.classList.add("active");
+    markActivePlayerRows(activeAnswerNode);
+  }
+}
+
+function isActivePlayerRow(playerIndex) {
+  return !state.finished &&
+    !viewer &&
+    isDetailedTabActive() &&
+    activeCell.player === playerIndex;
+}
+
+function clearActivePlayerRows() {
+  if (activePlayerRows.length > 0) {
+    activePlayerRows.forEach((row) => row.classList.remove("active-team-row"));
+    activePlayerRows = [];
+    return;
+  }
+  siRoot.querySelectorAll(".active-team-row").forEach((row) => row.classList.remove("active-team-row"));
+}
+
+function markActivePlayerRows(cell) {
+  const row = cell?.closest?.("tr");
+  if (!row) return;
+  row.classList.add("active-team-row");
+  activePlayerRows = [row];
 }
 
 function findActive() {

@@ -17,6 +17,7 @@ let reloadTimer = null;
 const localMatchEchoes = new Set();
 let matchTableIndex = null;
 let activeAnswerNode = null;
+let activeTeamRows = [];
 let presence = null;
 
 document.body.classList.toggle("embedded-match", embedded);
@@ -271,6 +272,7 @@ function render() {
   const table = buildTable();
   matchTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
   activeAnswerNode = state.finished ? null : matchTableIndex.get("answer", activeCell);
+  markActiveTeamRows(activeAnswerNode);
   if (embedded) {
     hostRoot.replaceChildren(table);
     notifyEmbeddedResize();
@@ -537,11 +539,13 @@ function indexedNode(name, values) {
 function resetMatchTableIndex() {
   matchTableIndex = null;
   activeAnswerNode = null;
+  clearActiveTeamRows();
 }
 
 function buildTable() {
   const matchCode = currentMatchCode();
   const hasShootout = shootoutThemeCount() > 0;
+  const showPlaceColumn = false;
   const themes = renderedThemeHeaders();
   const rows = state.teams.map((team, teamIndex) => {
     const themeCellsList = [];
@@ -552,9 +556,10 @@ function buildTable() {
       themeCellsList.push(themeCells(team, teamIndex, theme, themeIndex, true));
     });
     return {
+      rowClassName: isActiveMatchRow(matchCode, teamIndex) ? "active-team-row" : "",
       nameCell: teamNameCell(team, teamIndex),
       totalCell: totalCell(team, teamIndex),
-      placeCell: placeCell(team, teamIndex, matchCode),
+      placeCell: showPlaceColumn ? placeCell(team, teamIndex, matchCode) : null,
       themes: themeCellsList,
       afterThemeCells: trailingCells(team, teamIndex, hasShootout),
     };
@@ -564,6 +569,7 @@ function buildTable() {
     className: "match-table",
     attrs: {dataset: {matchCode}},
     nameHeader: battleHeader(),
+    placeColumn: showPlaceColumn,
     themes,
     afterThemeHeaders: trailingHeaders(hasShootout),
     rows,
@@ -915,6 +921,7 @@ function setActiveMark(mark) {
 }
 
 function markActiveCell() {
+  clearActiveTeamRows();
   if (route.mode === "match" && activeAnswerNode) {
     activeAnswerNode.classList.remove("active");
     activeAnswerNode = null;
@@ -924,8 +931,39 @@ function markActiveCell() {
   const cell = findActiveCell();
   if (cell) {
     cell.classList.add("active");
+    markActiveTeamRows(cell);
     if (route.mode === "match") activeAnswerNode = cell;
   }
+}
+
+function isActiveMatchRow(matchCode, teamIndex) {
+  return !state.finished &&
+    activeCell.matchCode === matchCode &&
+    activeCell.team === teamIndex;
+}
+
+function clearActiveTeamRows() {
+  if (activeTeamRows.length > 0) {
+    activeTeamRows.forEach((row) => row.classList.remove("active-team-row"));
+    activeTeamRows = [];
+    return;
+  }
+  hostRoot.querySelectorAll(".active-team-row").forEach((row) => row.classList.remove("active-team-row"));
+}
+
+function markActiveTeamRows(cell) {
+  clearActiveTeamRows();
+  if (!cell) return;
+  const table = cell.closest(".match-table");
+  const team = cell.dataset.team;
+  if (!table || team == null) return;
+  const rows = new Set();
+  table.querySelectorAll(`[data-team="${cssEscape(team)}"]`).forEach((node) => {
+    const row = node.closest("tr");
+    if (row?.parentElement?.tagName === "TBODY") rows.add(row);
+  });
+  activeTeamRows = Array.from(rows);
+  activeTeamRows.forEach((row) => row.classList.add("active-team-row"));
 }
 
 function focusActiveCell(options = {}) {
