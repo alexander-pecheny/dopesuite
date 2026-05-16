@@ -158,9 +158,9 @@ function buildTable() {
 
   const table = gameTable.buildFlatScoreTable({
     className: "match-table compact-score-table si-table",
-    rowMarkerColumn: isTeamMode(),
-    rowMarkerHeaderClassName: "sticky row-marker row-marker-head ksi-row-marker",
-    rowMarkerCellClassName: "sticky row-marker ksi-row-marker",
+    rowMarkerColumn: true,
+    rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
+    rowMarkerCellClassName: "sticky row-marker active-row-marker",
     nameHeader: battleHeader(),
     placeColumn: showPlaceColumn,
     themes,

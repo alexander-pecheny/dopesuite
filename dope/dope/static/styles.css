@@ -645,14 +645,12 @@ a.list-row:hover { background: #eef1f5; }
 .match-table th,
 .match-table td {
   --cell-fill: var(--paper);
-  --row-highlight: transparent;
   height: var(--question-size);
   min-width: var(--question-size);
   padding: 2px 4px;
   border: var(--cell-gap) solid transparent;
   border-radius: var(--cell-radius);
   background:
-    linear-gradient(var(--row-highlight), var(--row-highlight)) padding-box,
     linear-gradient(var(--cell-fill), var(--cell-fill)) padding-box,
     linear-gradient(var(--structure), var(--structure)) border-box;
   white-space: nowrap;
@@ -1068,15 +1066,6 @@ a.list-row:hover { background: #eef1f5; }
 
 .answer-row td {
   height: var(--question-size);
-}
-
-.host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr:hover > td,
-.host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr:focus-within > td {
-  --row-highlight: rgba(250, 204, 21, 0.18);
-}
-
-.host:not(.viewer-readonly) .table-host.fight-host .match-table tbody tr.active-team-row > td {
-  --row-highlight: rgba(250, 204, 21, 0.28);
 }
 
 .match-table .team-gap {
@@ -2076,6 +2065,7 @@ a.list-row:hover { background: #eef1f5; }
   font-variant-numeric: tabular-nums;
 }
 
+.col-entry-marker { width: 12px; }
 .col-entry-q { width: 38px; }
 .col-entry-tour-end { width: calc(38px + 14px - var(--cell-gap)); }
 
@@ -2105,6 +2095,28 @@ a.list-row:hover { background: #eef1f5; }
 .entry-table thead tr:nth-child(2) th { top: 28px; height: 22px; }
 
 .entry-q-head { font-size: 12px; }
+
+.entry-table .entry-row-marker {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  width: 12px;
+  min-width: 12px;
+  max-width: 12px;
+  padding: 0;
+  border: 0;
+  background: var(--structure);
+}
+
+.entry-table thead .entry-row-marker {
+  z-index: 5;
+}
+
+.host:not(.viewer-readonly) .fight-frame .entry-table tbody tr.active-entry-row > .active-row-marker {
+  background:
+    radial-gradient(circle at 50% 50%, var(--blue) 0 3px, transparent 3.5px),
+    var(--structure);
+}
 
 .entry-table .entry-tour-end {
   border-right-width: 14px;
@@ -2323,7 +2335,7 @@ a.list-row:hover { background: #eef1f5; }
   border-color: var(--structure);
 }
 .match-table.compact-score-table .team-gap { height: 4px; }
-.match-table.compact-score-table .row-marker {
+.match-table .row-marker {
   --cell-fill: var(--structure);
   left: 0;
   width: 12px;
@@ -2334,19 +2346,19 @@ a.list-row:hover { background: #eef1f5; }
   border-radius: 0;
   background: var(--structure);
 }
-.fight-frame .match-table.compact-score-table .row-marker + .sticky-name {
+.fight-frame .match-table .row-marker + .sticky-name {
   left: 12px;
 }
-.fight-frame .match-table.compact-score-table .row-marker ~ .sticky-total {
+.fight-frame .match-table .row-marker ~ .sticky-total {
   left: calc(12px + var(--team-col));
 }
-.fight-frame .match-table.compact-score-table .row-marker ~ .sticky-place {
+.fight-frame .match-table .row-marker ~ .sticky-place {
   left: calc(12px + var(--team-col) + var(--total-col));
 }
-.fight-frame .match-table.compact-score-table .row-marker ~ .sticky-place-gap {
+.fight-frame .match-table .row-marker ~ .sticky-place-gap {
   left: calc(12px + var(--team-col) + var(--total-col) + var(--place-col));
 }
-.host:not(.viewer-readonly) .fight-frame .match-table.si-table tbody tr.active-team-row > .ksi-row-marker {
+.host:not(.viewer-readonly) .fight-frame .match-table tbody tr.active-team-row > .active-row-marker {
   background:
     radial-gradient(circle at 50% 50%, var(--blue) 0 3px, transparent 3.5px),
     var(--structure);

@@ -158,8 +158,14 @@
     const themes = options.themes || [];
     const afterThemeHeaders = options.afterThemeHeaders || [];
     const showPlaceColumn = options.placeColumn !== false;
+    const showRowMarker = Boolean(options.rowMarkerColumn);
     const thead = document.createElement("thead");
     const header = document.createElement("tr");
+    if (showRowMarker) {
+      header.appendChild(cellFromSpec("th", options.rowMarkerHeader ?? "", {
+        className: options.rowMarkerHeaderClassName || "sticky row-marker row-marker-head",
+      }));
+    }
     header.appendChild(cellFromSpec("th", options.nameHeader, {className: "sticky sticky-name battle"}));
     header.appendChild(cellFromSpec("th", options.totalHeader ?? "Σ", {className: "sticky sticky-total number"}));
     if (showPlaceColumn) {
@@ -182,7 +188,7 @@
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
-    const leadingColumnCount = showPlaceColumn ? 4 : 2;
+    const leadingColumnCount = (showRowMarker ? 1 : 0) + (showPlaceColumn ? 4 : 2);
     const colSpan = options.gapColSpan || leadingColumnCount +
       themes.reduce((sum, theme) => sum + (theme.questionLabels?.length || 0) + 2, 0) +
       afterThemeHeaders.length;
@@ -197,6 +203,12 @@
         rowClassName,
       ].filter(Boolean).join(" ");
 
+      if (showRowMarker) {
+        topRow.appendChild(cellFromSpec("td", rowSpec.rowMarkerCell ?? "", {
+          className: rowSpec.rowMarkerClassName || options.rowMarkerCellClassName || "sticky row-marker",
+          attrs: {rowSpan: 2},
+        }));
+      }
       topRow.appendChild(cellFromSpec("td", rowSpec.nameCell, {className: "sticky sticky-name team-name", attrs: {rowSpan: 2}}));
       topRow.appendChild(cellFromSpec("td", rowSpec.totalCell ?? rowSpec.total, {className: "sticky sticky-total number total-cell", attrs: {rowSpan: 2}}));
       if (showPlaceColumn) {
