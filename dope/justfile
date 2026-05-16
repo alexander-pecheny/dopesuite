@@ -23,6 +23,9 @@ vet:
 tidy-check:
     go mod tidy -diff
 
+deploy *args:
+    python3 deploy.py {{args}}
+
 pre-commit:
     just fmt
     just vet
