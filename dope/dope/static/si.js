@@ -29,6 +29,7 @@ let scoreCache = null;
 let detailedOrderCache = null;
 let activeAnswerNode = null;
 let stateSync = null;
+let presence = null;
 const tabScroll = new Map();
 
 function tabFromHash() {
@@ -124,6 +125,7 @@ function render(options = {}) {
       frame.scrollLeft = scrollLeft;
     }
   }
+  refreshPresence();
 }
 
 function buildTable() {
@@ -414,7 +416,7 @@ function handleTableChange(event) {
   if (target instanceof HTMLInputElement && target.classList.contains("finish-toggle")) {
     if (viewer) return;
     state.finished = target.checked;
-    saveState();
+    saveState(["finished"], target.checked);
     render({preserveScroll: true});
     return;
   }
@@ -422,9 +424,10 @@ function handleTableChange(event) {
     if (viewer) return;
     const playerIndex = Number(target.dataset.player);
     if (!Number.isInteger(playerIndex) || playerIndex < 0 || playerIndex >= state.participants.length) return;
-    state.participants[playerIndex] = target.value.trim();
+    const name = target.value.trim();
+    state.participants[playerIndex] = name;
     invalidateDetailedOrder();
-    saveState();
+    saveState(["participants", playerIndex], name);
     if (isTeamMode()) render({preserveScroll: true});
   }
 }
@@ -525,7 +528,7 @@ function setMark(mark) {
   applyScoreDelta(activeCell.player, activeCell.theme, activeCell.answer, previousMark, mark);
   updateAnswerCell(activeCell.player, activeCell.theme, activeCell.answer, mark);
   refreshChangedScores(activeCell.player, activeCell.theme);
-  saveState();
+  saveState(["themes", activeCell.theme, "answers", activeCell.player, activeCell.answer], mark);
 }
 
 function updateAnswerCell(player, theme, answer, mark) {
@@ -709,7 +712,11 @@ function normalizeActiveCell() {
   };
 }
 
-function saveState() {
+function saveState(path, value) {
+  if (Array.isArray(path)) {
+    syncState().patch(path, value);
+    return;
+  }
   syncState().save();
 }
 
@@ -740,6 +747,75 @@ function syncState() {
     onRemoteState: applyRemoteState,
   });
   return stateSync;
+}
+
+function connectPresence() {
+  if (viewer || presence || !route.tournamentID) return;
+  presence = gameTable.createHostPresence({
+    root: siRoot,
+    eventsURL: `/host-events?tournament_id=${encodeURIComponent(route.tournamentID)}`,
+    presenceURL: `/api/tournament/${route.tournamentID}/presence`,
+    cursorFromElement: siPresenceCursorFromElement,
+    getCursor: currentSIPresenceCursor,
+    findTarget: findSIPresenceTarget,
+  });
+  presence.connect();
+}
+
+function refreshPresence() {
+  presence?.refresh();
+}
+
+function currentSIPresenceCursor() {
+  const focused = siPresenceCursorFromElement(document.activeElement);
+  if (focused) return focused;
+  if (!isDetailedTabActive()) return null;
+  return {
+    app: "si",
+    kind: "answer",
+    gameID: route.gameID,
+    player: activeCell.player,
+    theme: activeCell.theme,
+    answer: activeCell.answer,
+  };
+}
+
+function siPresenceCursorFromElement(element) {
+  const target = element?.closest?.(".answer-cell,.venue-input,.finish-toggle");
+  if (!target || !siRoot.contains(target)) return null;
+  if (target.classList.contains("answer-cell")) {
+    return {
+      app: "si",
+      kind: "answer",
+      gameID: route.gameID,
+      player: Number(target.dataset.player),
+      theme: Number(target.dataset.theme),
+      answer: Number(target.dataset.answer),
+    };
+  }
+  if (target.classList.contains("venue-input")) {
+    return {app: "si", kind: "participant", gameID: route.gameID, player: Number(target.dataset.player)};
+  }
+  if (target.classList.contains("finish-toggle")) {
+    return {app: "si", kind: "finish", gameID: route.gameID};
+  }
+  return null;
+}
+
+function findSIPresenceTarget(cursor) {
+  if (!cursor || cursor.app !== "si" || String(cursor.gameID) !== String(route.gameID)) return null;
+  if (cursor.kind === "answer") {
+    return siRoot.querySelector(
+      `.answer-cell[data-player="${gameTable.cssEscape(cursor.player)}"][data-theme="${gameTable.cssEscape(cursor.theme)}"][data-answer="${gameTable.cssEscape(cursor.answer)}"]`,
+    );
+  }
+  if (cursor.kind === "participant") {
+    return siRoot.querySelector(`.venue-input[data-player="${gameTable.cssEscape(cursor.player)}"]`);
+  }
+  if (cursor.kind === "finish") {
+    return siRoot.querySelector(".finish-toggle");
+  }
+  return null;
 }
 
 function applyRemoteState(nextState) {
@@ -779,6 +855,7 @@ loadAll()
   .then(() => {
     setStatus("saved");
     connectEvents();
+    connectPresence();
   })
   .catch((error) => {
     setStatus("error");

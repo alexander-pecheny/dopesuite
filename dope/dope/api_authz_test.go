@@ -189,6 +189,79 @@ func TestScopedAPIImportRequiresTournamentOrganizer(t *testing.T) {
 	}
 }
 
+func TestScopedGameStatePatchMergesIndependentEdits(t *testing.T) {
+	srv := newAuthTestServer(t)
+	tournamentID, gameID := scopedAPITestIDs(t, srv)
+	organizerID, token := createAPITestSession(t, srv, "state-patcher")
+	addAPITestOrganizer(t, srv, tournamentID, organizerID)
+
+	path := fmt.Sprintf("/api/tournament/%d/games/%d/state", tournamentID, gameID)
+	patch := func(path []any, value any) map[string]any {
+		return map[string]any{
+			"ops": []map[string]any{{
+				"op":    "set",
+				"path":  path,
+				"value": value,
+			}},
+		}
+	}
+
+	first := scopedAPIRequest(t, srv, http.MethodPatch, path, patch([]any{"entries", 0, 0}, 1), token)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first patch status = %d, body %s", first.Code, first.Body.String())
+	}
+	second := scopedAPIRequest(t, srv, http.MethodPatch, path, patch([]any{"entries", 0, 1}, 2), token)
+	if second.Code != http.StatusOK {
+		t.Fatalf("second patch status = %d, body %s", second.Code, second.Body.String())
+	}
+
+	var state struct {
+		Entries [][]int `json:"entries"`
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &state); err != nil {
+		t.Fatalf("decode patched state: %v", err)
+	}
+	if len(state.Entries) != 1 || len(state.Entries[0]) != 2 {
+		t.Fatalf("entries shape = %#v, want one row with two values", state.Entries)
+	}
+	if state.Entries[0][0] != 1 || state.Entries[0][1] != 2 {
+		t.Fatalf("entries = %#v, want both independent patches", state.Entries)
+	}
+}
+
+func TestHostPresenceRequiresTournamentOrganizer(t *testing.T) {
+	srv := newAuthTestServer(t)
+	tournamentID, _ := scopedAPITestIDs(t, srv)
+	path := fmt.Sprintf("/api/tournament/%d/presence", tournamentID)
+	payload := map[string]any{
+		"active": true,
+		"cursor": map[string]any{
+			"app":  "od",
+			"kind": "entry",
+			"q":    0,
+			"row":  0,
+		},
+	}
+
+	anonymous := scopedAPIRequest(t, srv, http.MethodPost, path, payload, "")
+	if anonymous.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous presence status = %d, want 401", anonymous.Code)
+	}
+
+	_, nonOrganizerToken := createAPITestSession(t, srv, "presence-reader")
+	nonOrganizer := scopedAPIRequest(t, srv, http.MethodPost, path, payload, nonOrganizerToken)
+	if nonOrganizer.Code != http.StatusForbidden {
+		t.Fatalf("non-organizer presence status = %d, want 403", nonOrganizer.Code)
+	}
+
+	organizerID, organizerToken := createAPITestSession(t, srv, "presence-organizer")
+	addAPITestOrganizer(t, srv, tournamentID, organizerID)
+	organizer := scopedAPIRequest(t, srv, http.MethodPost, path, payload, organizerToken)
+	if organizer.Code != http.StatusOK {
+		t.Fatalf("organizer presence status = %d, body %s", organizer.Code, organizer.Body.String())
+	}
+}
+
 func TestEventsRequireAuthorizedTournamentScope(t *testing.T) {
 	srv := newAuthTestServer(t)
 	tournamentID, _ := scopedAPITestIDs(t, srv)
