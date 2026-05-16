@@ -592,7 +592,6 @@ function buildDetailedTable() {
     rowMarkerColumn: true,
     rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
     rowMarkerCellClassName: "sticky row-marker active-row-marker",
-    events: {change: handleDetailedChange},
     nameHeader: "Команда",
     themes,
     rows,
@@ -616,29 +615,11 @@ function teamLabel(index) {
 function nameCell(team, teamIndex) {
   const cell = document.createElement("td");
   cell.className = "sticky sticky-name team-name";
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "venue-input";
-  input.dataset.team = String(teamIndex);
-  input.value = team.name || "";
-  input.placeholder = `Команда ${teamIndex + 1}`;
-  input.disabled = viewer;
-  cell.appendChild(input);
+  const name = document.createElement("span");
+  name.className = "readonly-team-name";
+  name.textContent = team.name || `Команда ${teamIndex + 1}`;
+  cell.appendChild(name);
   return cell;
-}
-
-function handleDetailedChange(event) {
-  const input = event.target;
-  if (!(input instanceof HTMLInputElement) || !input.classList.contains("venue-input")) return;
-  const teamIndex = Number(input.dataset.team);
-  if (!Number.isInteger(teamIndex) || !state.teams[teamIndex]) return;
-  rememberTabScroll(activeTab);
-  const name = input.value.trim();
-  state.teams[teamIndex].name = name;
-  invalidateTabCache("detailed", "results");
-  renderedTab = null;
-  saveState(["teams", teamIndex, "name"], name);
-  render();
 }
 
 // === Итог ===

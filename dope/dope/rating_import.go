@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -150,7 +151,7 @@ func ratingResultsToFestRoster(results []ratingFestResult) ([]festRosterImportTe
 		}
 		teams = append(teams, team)
 	}
-	return teams, nil
+	return sortedFestRosterImportTeams(teams), nil
 }
 
 func ratingTownName(town *ratingTown) string {
@@ -170,6 +171,7 @@ func (s *server) importFestRoster(ctx context.Context, festID, ratingID int64, t
 	if len(teams) == 0 {
 		return ratingRosterImportResult{}, errors.New("рейтинг не вернул команды")
 	}
+	teams = sortedFestRosterImportTeams(teams)
 
 	var updates []gameStateBroadcast
 	var revision int64
@@ -272,6 +274,55 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 	return result, nil
 }
 
+func sortedFestRosterImportTeams(teams []festRosterImportTeam) []festRosterImportTeam {
+	out := make([]festRosterImportTeam, len(teams))
+	for i, team := range teams {
+		out[i] = team
+		out[i].Players = append([]festRosterImportPlayer(nil), team.Players...)
+		sort.SliceStable(out[i].Players, func(a, b int) bool {
+			return compareAlpha(importPlayerName(out[i].Players[a]), importPlayerName(out[i].Players[b])) < 0
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if cmp := compareAlpha(out[i].Name, out[j].Name); cmp != 0 {
+			return cmp < 0
+		}
+		if cmp := compareAlpha(out[i].City, out[j].City); cmp != 0 {
+			return cmp < 0
+		}
+		return out[i].RatingID < out[j].RatingID
+	})
+	return out
+}
+
+func importPlayerName(player festRosterImportPlayer) string {
+	return joinPlayerName(player.FirstName, player.LastName)
+}
+
+func compareAlpha(a, b string) int {
+	ak := alphaKey(a)
+	bk := alphaKey(b)
+	if ak < bk {
+		return -1
+	}
+	if ak > bk {
+		return 1
+	}
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
+	return 0
+}
+
+func alphaKey(value string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(value)), "ё", "е")
+}
+
 func rosterPlayerKey(player festRosterImportPlayer) string {
 	if player.RatingID > 0 {
 		return "rating:" + strconv.FormatInt(player.RatingID, 10)
@@ -367,7 +418,7 @@ order by position, id`, festID)
 		if err != nil {
 			return nil, fmt.Errorf("game %d scheme: %w", game.ID, err)
 		}
-		stateJSON, err := applyRosterToKSIState(game.State, teams)
+		stateJSON, err := applyRosterToKSIState(game.State, teams, ksiThemeCountFromSchemeJSON(game.Scheme))
 		if err != nil {
 			return nil, fmt.Errorf("game %d state: %w", game.ID, err)
 		}
@@ -433,6 +484,13 @@ func applyRosterToKSIScheme(raw string, teams []festRosterImportTeam) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
+	themesCount := ksiThemeCount
+	if rawThemes, ok := obj["themes"]; ok && len(rawThemes) > 0 {
+		var configured int
+		if err := json.Unmarshal(rawThemes, &configured); err == nil && configured > 0 {
+			themesCount = configured
+		}
+	}
 	participantsJSON, err := json.Marshal(teamNamesFromRoster(teams))
 	if err != nil {
 		return nil, err
@@ -441,7 +499,7 @@ func applyRosterToKSIScheme(raw string, teams []festRosterImportTeam) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	themesJSON, err := json.Marshal(ksiThemeCount)
+	themesJSON, err := json.Marshal(themesCount)
 	if err != nil {
 		return nil, err
 	}
@@ -451,7 +509,7 @@ func applyRosterToKSIScheme(raw string, teams []festRosterImportTeam) ([]byte, e
 	return json.Marshal(obj)
 }
 
-func applyRosterToKSIState(raw string, teams []festRosterImportTeam) ([]byte, error) {
+func applyRosterToKSIState(raw string, teams []festRosterImportTeam, targetThemeCount int) ([]byte, error) {
 	obj, err := rawJSONObject(raw)
 	if err != nil {
 		return nil, err
@@ -467,10 +525,16 @@ func applyRosterToKSIState(raw string, teams []festRosterImportTeam) ([]byte, er
 	if rawThemes, ok := obj["themes"]; ok && len(rawThemes) > 0 {
 		_ = json.Unmarshal(rawThemes, &themes)
 	}
-	if len(themes) > ksiThemeCount {
-		themes = themes[:ksiThemeCount]
+	if targetThemeCount <= 0 {
+		targetThemeCount = len(themes)
 	}
-	for len(themes) < ksiThemeCount {
+	if targetThemeCount <= 0 {
+		targetThemeCount = ksiThemeCount
+	}
+	if len(themes) > targetThemeCount {
+		themes = themes[:targetThemeCount]
+	}
+	for len(themes) < targetThemeCount {
 		themes = append(themes, map[string]json.RawMessage{})
 	}
 	for i := range themes {
@@ -494,6 +558,20 @@ func applyRosterToKSIState(raw string, teams []festRosterImportTeam) ([]byte, er
 	}
 	obj["themes"] = themesJSON
 	return json.Marshal(obj)
+}
+
+func ksiThemeCountFromSchemeJSON(raw string) int {
+	obj, err := rawJSONObject(raw)
+	if err != nil {
+		return 0
+	}
+	if rawThemes, ok := obj["themes"]; ok && len(rawThemes) > 0 {
+		var themesCount int
+		if err := json.Unmarshal(rawThemes, &themesCount); err == nil && themesCount > 0 {
+			return themesCount
+		}
+	}
+	return 0
 }
 
 func rawJSONObject(raw string) (map[string]json.RawMessage, error) {

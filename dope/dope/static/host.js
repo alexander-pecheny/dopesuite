@@ -2,7 +2,6 @@ const hostRoot = document.getElementById("hostTable");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 const viewerLink = document.querySelector(".viewer-link");
-const importLink = document.querySelector(".import-link");
 
 const gameTable = window.DopeTable;
 const route = currentRoute();
@@ -22,9 +21,6 @@ let presence = null;
 
 document.body.classList.toggle("embedded-match", embedded);
 document.addEventListener("keydown", handleGlobalKeydown);
-if (importLink && route.festID) {
-  importLink.href = `/host/fest/${route.festID}/import`;
-}
 
 async function loadCurrent() {
   if (route.mode === "match") {

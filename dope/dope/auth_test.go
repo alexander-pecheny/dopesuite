@@ -5,8 +5,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -167,6 +170,175 @@ values(null, null, ?, 0, ?, ?)`, "profile_user", now, now)
 	srv.handleAuthMe(meResp, meReq)
 	if meResp.Code != http.StatusUnauthorized {
 		t.Fatalf("me after profile logout = %d, want 401", meResp.Code)
+	}
+}
+
+func TestHostDashboardDeleteButtonsAndGameDelete(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, gameID := scopedAPITestIDs(t, srv)
+	token := createTestSession(t, srv, systemUserID(t, srv.db))
+
+	dashboardReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d", festID), nil)
+	dashboardReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	dashboardResp := httptest.NewRecorder()
+	srv.handleHostRouter(dashboardResp, dashboardReq)
+	if dashboardResp.Code != http.StatusOK {
+		t.Fatalf("dashboard status = %d, body %s", dashboardResp.Code, dashboardResp.Body.String())
+	}
+	body := dashboardResp.Body.String()
+	if !strings.Contains(body, fmt.Sprintf(`/host/fest/%d/game/%d/delete`, festID, gameID)) {
+		t.Fatalf("dashboard missing game delete form: %s", body)
+	}
+	if !strings.Contains(body, "Удалить игру?") {
+		t.Fatalf("dashboard missing game delete confirmation: %s", body)
+	}
+	if !strings.Contains(body, "Удалить турнир?") {
+		t.Fatalf("dashboard missing fest delete confirmation: %s", body)
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/game/%d/delete", festID, gameID), nil)
+	deleteReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	deleteResp := httptest.NewRecorder()
+	srv.handleHostRouter(deleteResp, deleteReq)
+	if deleteResp.Code != http.StatusSeeOther {
+		t.Fatalf("delete game status = %d, body %s", deleteResp.Code, deleteResp.Body.String())
+	}
+	var games int
+	if err := srv.db.QueryRow(`select count(*) from games where fest_id = ?`, festID).Scan(&games); err != nil {
+		t.Fatalf("count games: %v", err)
+	}
+	if games != 0 {
+		t.Fatalf("games after delete = %d, want 0", games)
+	}
+}
+
+func TestHostCreateGameFlow(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	token := createTestSession(t, srv, systemUserID(t, srv.db))
+
+	newReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d/game/new", festID), nil)
+	newReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	newResp := httptest.NewRecorder()
+	srv.handleHostRouter(newResp, newReq)
+	if newResp.Code != http.StatusOK {
+		t.Fatalf("new game page status = %d, body %s", newResp.Code, newResp.Body.String())
+	}
+	if body := newResp.Body.String(); !strings.Contains(body, "ОД") || !strings.Contains(body, "КСИ") || !strings.Contains(body, "ЭК") {
+		t.Fatalf("new game page missing game type radios: %s", body)
+	} else if strings.Contains(body, `name="game_type" value="od" checked`) ||
+		strings.Contains(body, `name="game_type" value="ksi" checked`) ||
+		strings.Contains(body, `name="game_type" value="ek" checked`) {
+		t.Fatalf("new game page must not preselect game type: %s", body)
+	} else if !strings.Contains(body, `data-game-settings="od" hidden`) ||
+		!strings.Contains(body, `data-game-settings="ksi" hidden`) ||
+		!strings.Contains(body, `data-game-settings="ek" hidden`) ||
+		!strings.Contains(body, `data-game-submit hidden`) {
+		t.Fatalf("new game page must hide settings and submit until game type is selected: %s", body)
+	}
+
+	postGameForm := func(values url.Values) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/game/new", festID), strings.NewReader(values.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+		resp := httptest.NewRecorder()
+		srv.handleHostRouter(resp, req)
+		return resp
+	}
+
+	odResp := postGameForm(url.Values{
+		"game_type":    {"od"},
+		"od_tours":     {"2"},
+		"od_questions": {"3"},
+	})
+	if odResp.Code != http.StatusSeeOther {
+		t.Fatalf("create od status = %d, body %s", odResp.Code, odResp.Body.String())
+	}
+	var odSchemeJSON, odStateJSON string
+	if err := srv.db.QueryRow(`
+select scheme_json, state_json from games where fest_id = ? and game_type = 'od' order by id desc limit 1`, festID).Scan(&odSchemeJSON, &odStateJSON); err != nil {
+		t.Fatalf("load od game: %v", err)
+	}
+	var odScheme struct {
+		TourComp []int `json:"tourComp"`
+	}
+	if err := json.Unmarshal([]byte(odSchemeJSON), &odScheme); err != nil {
+		t.Fatalf("decode od scheme: %v", err)
+	}
+	if len(odScheme.TourComp) != 2 || odScheme.TourComp[0] != 3 || odScheme.TourComp[1] != 3 {
+		t.Fatalf("od tourComp = %#v, want [3 3]", odScheme.TourComp)
+	}
+	var odState struct {
+		Entries   [][]int `json:"entries"`
+		Completed []bool  `json:"completed"`
+	}
+	if err := json.Unmarshal([]byte(odStateJSON), &odState); err != nil {
+		t.Fatalf("decode od state: %v", err)
+	}
+	if len(odState.Entries) != 6 || len(odState.Completed) != 6 {
+		t.Fatalf("od state shape = entries %d completed %d, want 6/6", len(odState.Entries), len(odState.Completed))
+	}
+
+	ksiResp := postGameForm(url.Values{
+		"game_type":  {"ksi"},
+		"ksi_themes": {"7"},
+	})
+	if ksiResp.Code != http.StatusSeeOther {
+		t.Fatalf("create ksi status = %d, body %s", ksiResp.Code, ksiResp.Body.String())
+	}
+	var ksiSchemeJSON, ksiStateJSON string
+	if err := srv.db.QueryRow(`
+select scheme_json, state_json from games where fest_id = ? and game_type = 'ksi' order by id desc limit 1`, festID).Scan(&ksiSchemeJSON, &ksiStateJSON); err != nil {
+		t.Fatalf("load ksi game: %v", err)
+	}
+	var ksiScheme struct {
+		Themes int `json:"themes"`
+	}
+	if err := json.Unmarshal([]byte(ksiSchemeJSON), &ksiScheme); err != nil {
+		t.Fatalf("decode ksi scheme: %v", err)
+	}
+	var ksiState struct {
+		Themes []struct {
+			Answers [][]string `json:"answers"`
+		} `json:"themes"`
+	}
+	if err := json.Unmarshal([]byte(ksiStateJSON), &ksiState); err != nil {
+		t.Fatalf("decode ksi state: %v", err)
+	}
+	if ksiScheme.Themes != 7 || len(ksiState.Themes) != 7 {
+		t.Fatalf("ksi themes = scheme %d state %d, want 7/7", ksiScheme.Themes, len(ksiState.Themes))
+	}
+
+	ekScheme := `{"schemaVersion":2,"slug":"ek-added","title":"Добавленная ЭК","gameType":"ek","stages":[{"code":"r1","title":"Раунд","stage_type":"matches","matches":[{"code":"A","title":"Бой A","participantCount":1,"slots":[{"placeholder":"TBD"}]}]}]}`
+	ekResp := postGameForm(url.Values{
+		"game_type": {"ek"},
+		"ek_scheme": {ekScheme},
+	})
+	if ekResp.Code != http.StatusSeeOther {
+		t.Fatalf("create ek status = %d, body %s", ekResp.Code, ekResp.Body.String())
+	}
+	var ekGameID int64
+	if err := srv.db.QueryRow(`
+select id from games where fest_id = ? and game_type = 'ek' and title = 'Добавленная ЭК'`, festID).Scan(&ekGameID); err != nil {
+		t.Fatalf("load ek game: %v", err)
+	}
+	var ekMatches int
+	if err := srv.db.QueryRow(`select count(*) from matches where game_id = ?`, ekGameID).Scan(&ekMatches); err != nil {
+		t.Fatalf("count ek matches: %v", err)
+	}
+	if ekMatches != 1 {
+		t.Fatalf("ek matches = %d, want 1", ekMatches)
+	}
+}
+
+func TestHiddenAttributeCSSOverridesLayoutClasses(t *testing.T) {
+	css, err := os.ReadFile("static/styles.css")
+	if err != nil {
+		t.Fatalf("read styles: %v", err)
+	}
+	body := string(css)
+	if !strings.Contains(body, "[hidden]") || !strings.Contains(body, "display: none !important") {
+		t.Fatalf("styles.css must force [hidden] to display none so layout classes do not reveal hidden sections")
 	}
 }
 
