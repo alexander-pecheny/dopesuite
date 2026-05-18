@@ -314,7 +314,8 @@ create table if not exists fest_teams(
   rating_id integer,
   name text not null,
   city text not null default '',
-  position real not null
+  position real not null,
+  number integer
 );
 
 create table if not exists fest_players(
@@ -556,6 +557,17 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 		return err
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(7, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := addColumnsIfMissing(db, "fest_teams", []columnSpec{
+		{Name: "number", Type: "INTEGER"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`create unique index if not exists fest_teams_fest_number_idx on fest_teams(fest_id, number) where number is not null`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
 	}
 	return nil

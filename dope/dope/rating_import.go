@@ -27,6 +27,7 @@ type festRosterImportTeam struct {
 	RatingID int64
 	Name     string
 	City     string
+	Number   int64
 	Players  []festRosterImportPlayer
 }
 
@@ -64,8 +65,9 @@ type ratingPlayer struct {
 }
 
 type chgkTeamJSON struct {
-	Name string `json:"name"`
-	City string `json:"city,omitempty"`
+	Name   string `json:"name"`
+	City   string `json:"city,omitempty"`
+	Number int64  `json:"number,omitempty"`
 }
 
 type gameStateBroadcast struct {
@@ -231,7 +233,7 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 			}
 		}
 
-		chgkUpdates, err := propagateRosterToChGKTx(ctx, tx, festID, teams)
+		chgkUpdates, err := propagateRosterToChGKTx(ctx, tx, festID, teams, nil)
 		if err != nil {
 			return ratingRosterImportResult{}, err
 		}
@@ -330,7 +332,7 @@ func rosterPlayerKey(player festRosterImportPlayer) string {
 	return "name:" + strings.ToLower(joinPlayerName(player.FirstName, player.LastName))
 }
 
-func propagateRosterToChGKTx(ctx context.Context, tx *sql.Tx, festID int64, teams []festRosterImportTeam) ([]gameStateBroadcast, error) {
+func propagateRosterToChGKTx(ctx context.Context, tx *sql.Tx, festID int64, teams []festRosterImportTeam, entryRemap map[int]int) ([]gameStateBroadcast, error) {
 	rows, err := tx.QueryContext(ctx, `
 select id, coalesce(scheme_json, '{}'), coalesce(state_json, '{}')
 from games
@@ -367,7 +369,7 @@ order by position, id`, festID)
 		if err != nil {
 			return nil, fmt.Errorf("game %d scheme: %w", game.ID, err)
 		}
-		stateJSON, err := applyRosterToChGKState(game.State, teams)
+		stateJSON, err := applyRosterToChGKState(game.State, teams, entryRemap)
 		if err != nil {
 			return nil, fmt.Errorf("game %d state: %w", game.ID, err)
 		}
@@ -450,7 +452,7 @@ func applyRosterToChGKScheme(raw string, teams []festRosterImportTeam) ([]byte, 
 	return json.Marshal(obj)
 }
 
-func applyRosterToChGKState(raw string, teams []festRosterImportTeam) ([]byte, error) {
+func applyRosterToChGKState(raw string, teams []festRosterImportTeam, entryRemap map[int]int) ([]byte, error) {
 	obj, err := rawJSONObject(raw)
 	if err != nil {
 		return nil, err
@@ -466,6 +468,13 @@ func applyRosterToChGKState(raw string, teams []festRosterImportTeam) ([]byte, e
 		if err := json.Unmarshal(rawEntries, &entries); err == nil {
 			for i := range entries {
 				entries[i] = resizeIntSlice(entries[i], len(teams))
+				if len(entryRemap) > 0 {
+					for j, value := range entries[i] {
+						if mapped, ok := entryRemap[value]; ok {
+							entries[i][j] = mapped
+						}
+					}
+				}
 			}
 			entriesJSON, err := json.Marshal(entries)
 			if err != nil {
@@ -592,7 +601,7 @@ func rawJSONObject(raw string) (map[string]json.RawMessage, error) {
 func chgkTeamsFromRoster(teams []festRosterImportTeam) []chgkTeamJSON {
 	out := make([]chgkTeamJSON, 0, len(teams))
 	for _, team := range teams {
-		out = append(out, chgkTeamJSON{Name: team.Name, City: team.City})
+		out = append(out, chgkTeamJSON{Name: team.Name, City: team.City, Number: team.Number})
 	}
 	return out
 }
