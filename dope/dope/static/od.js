@@ -20,6 +20,7 @@ let stateSync = null;
 let presence = null;
 const tabCache = new Map();
 const tabScroll = new Map();
+let numberToIndexCache = null;
 
 const TABS = [
   {key: "results", label: "Итог"},
@@ -112,6 +113,7 @@ function ensureState() {
 function invalidateAllCaches() {
   activeEntryEditor = null;
   questionStatsCache = null;
+  numberToIndexCache = null;
   for (const pane of tabCache.values()) pane.remove();
   tabCache.clear();
 }
@@ -119,6 +121,37 @@ function invalidateAllCaches() {
 function invalidateScoreCaches() {
   questionStatsCache = null;
   invalidateTabCache("detailed", "results");
+}
+
+function teamNumber(teamIndex) {
+  const value = Number(state.teams[teamIndex]?.number);
+  return Number.isInteger(value) && value > 0 ? value : 0;
+}
+
+function allTeamsNumbered() {
+  if (!state.teams.length) return false;
+  for (let i = 0; i < state.teams.length; i++) {
+    if (!teamNumber(i)) return false;
+  }
+  return true;
+}
+
+function teamIndexByNumber(number) {
+  if (!Number.isInteger(number) || number < 1) return -1;
+  if (!numberToIndexCache) {
+    numberToIndexCache = new Map();
+    for (let i = 0; i < state.teams.length; i++) {
+      const n = teamNumber(i);
+      if (n) numberToIndexCache.set(n, i);
+    }
+  }
+  const found = numberToIndexCache.get(number);
+  return found === undefined ? -1 : found;
+}
+
+function numbersPageURL() {
+  if (!route.festID) return "#";
+  return `/host/fest/${route.festID}/numbers`;
 }
 
 function invalidateTabCache(...tabs) {
@@ -131,15 +164,14 @@ function invalidateTabCache(...tabs) {
 
 function questionStats() {
   if (questionStatsCache) return questionStatsCache;
-  const teamCount = state.teams.length;
   questionStatsCache = [];
   for (let q = 0; q < totalQuestions; q++) {
     const counts = new Map();
     if (state.completed[q]) {
       const entries = state.entries[q] || [];
       for (const value of entries) {
-        if (!Number.isInteger(value) || value < 1 || value > teamCount) continue;
-        const teamIndex = value - 1;
+        const teamIndex = teamIndexByNumber(value);
+        if (teamIndex < 0) continue;
         counts.set(teamIndex, (counts.get(teamIndex) || 0) + 1);
       }
     }
@@ -237,6 +269,7 @@ function questionCounts(qIndex) {
 }
 
 function buildInputTable() {
+  if (!allTeamsNumbered()) return buildInputGate();
   const n = state.teams.length;
   const table = document.createElement("table");
   table.className = "entry-table" + (viewer ? " entry-readonly" : "");
@@ -305,6 +338,24 @@ function buildInputTable() {
   return table;
 }
 
+function buildInputGate() {
+  const wrap = document.createElement("div");
+  wrap.className = "od-input-gate";
+  const msg = document.createElement("p");
+  msg.appendChild(document.createTextNode("Чтобы ввод работал, надо заполнить "));
+  if (viewer || !route.festID) {
+    msg.appendChild(document.createTextNode("номера команд"));
+  } else {
+    const link = document.createElement("a");
+    link.href = numbersPageURL();
+    link.textContent = "номера команд";
+    msg.appendChild(link);
+  }
+  msg.appendChild(document.createTextNode("."));
+  wrap.appendChild(msg);
+  return wrap;
+}
+
 function entryRowMarkerCell(rowIndex) {
   const cell = document.createElement("td");
   cell.className = "entry-row-marker active-row-marker";
@@ -366,10 +417,10 @@ function markEntryCellValidity(cell, qIndex, counts = inputValidationCounts(qInd
     return;
   }
   const n = Number(raw);
-  const inRange = Number.isInteger(n) && n >= 1 && n <= state.teams.length;
+  const known = teamIndexByNumber(n) >= 0;
   const dup = (counts.get(n) || 0) > 1;
-  cell.classList.toggle("entry-input-bad", !inRange);
-  cell.classList.toggle("entry-input-dup", inRange && dup);
+  cell.classList.toggle("entry-input-bad", !known);
+  cell.classList.toggle("entry-input-dup", known && dup);
   syncActiveEditorValidity(cell);
 }
 
@@ -615,6 +666,13 @@ function teamLabel(index) {
 function nameCell(team, teamIndex) {
   const cell = document.createElement("td");
   cell.className = "sticky sticky-name team-name";
+  const num = teamNumber(teamIndex);
+  if (num) {
+    const numSpan = document.createElement("span");
+    numSpan.className = "team-number-badge";
+    numSpan.textContent = String(num);
+    cell.appendChild(numSpan);
+  }
   const name = document.createElement("span");
   name.className = "readonly-team-name";
   name.textContent = team.name || `Команда ${teamIndex + 1}`;
@@ -882,6 +940,7 @@ function applyRemoteState(nextState) {
   ensureState();
   if (typing) {
     questionStatsCache = null;
+    numberToIndexCache = null;
     invalidateTabCache("detailed", "results");
     return;
   }

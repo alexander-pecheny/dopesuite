@@ -3,7 +3,12 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -799,6 +804,323 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 		t.Fatalf("ksi answers shape = %#v, want %dx2x5", ksiState.Themes, ksiThemeCount)
 	}
 }
+
+func TestFestNumbersFlow(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, chgkGameID, _ := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	if _, err := srv.importFestRoster(t.Context(), festID, 999, []festRosterImportTeam{
+		{RatingID: 11, Name: "Алёша", City: "А"},
+		{RatingID: 12, Name: "Боря", City: "Б"},
+		{RatingID: 13, Name: "Витя", City: "В"},
+	}); err != nil {
+		t.Fatalf("import roster: %v", err)
+	}
+
+	// After roster import, no numbers are assigned.
+	allSet, total, err := festTeamsAllNumbered(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("allNumbered: %v", err)
+	}
+	if total != 3 || allSet {
+		t.Fatalf("after import: total=%d allSet=%v, want 3/false", total, allSet)
+	}
+
+	// Auto-assign numbers by alphabet.
+	teams, err := loadFestTeamsForNumbering(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("load teams: %v", err)
+	}
+	if len(teams) != 3 {
+		t.Fatalf("loaded teams = %d, want 3", len(teams))
+	}
+	assignments := make(map[int64]int, len(teams))
+	for i, team := range teams {
+		assignments[team.ID] = i + 1
+	}
+	if err := srv.saveFestNumbers(t.Context(), festID, assignments); err != nil {
+		t.Fatalf("save numbers: %v", err)
+	}
+
+	allSet, _, err = festTeamsAllNumbered(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("allNumbered post-save: %v", err)
+	}
+	if !allSet {
+		t.Fatalf("after save: allSet should be true")
+	}
+
+	// Verify OD state.teams now carries the assigned numbers.
+	var stateJSON string
+	if err := db.QueryRow(`select state_json from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
+		t.Fatalf("load od state: %v", err)
+	}
+	var state struct {
+		Teams []chgkTeamJSON `json:"teams"`
+	}
+	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+		t.Fatalf("decode state: %v", err)
+	}
+	if len(state.Teams) != 3 {
+		t.Fatalf("state teams = %d, want 3", len(state.Teams))
+	}
+	numbers := make([]int64, len(state.Teams))
+	for i, team := range state.Teams {
+		numbers[i] = team.Number
+	}
+	seen := map[int64]bool{}
+	for _, n := range numbers {
+		if n < 1 || n > 3 || seen[n] {
+			t.Fatalf("numbers in state = %v, want unique 1..3", numbers)
+		}
+		seen[n] = true
+	}
+
+	// Rejecting duplicate number is the responsibility of the handler; saveFestNumbers
+	// dedupes by map key, so we just verify clearing wipes numbers.
+	if err := srv.saveFestNumbers(t.Context(), festID, nil); err != nil {
+		t.Fatalf("clear numbers: %v", err)
+	}
+	allSet, _, err = festTeamsAllNumbered(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("allNumbered post-clear: %v", err)
+	}
+	if allSet {
+		t.Fatalf("after clear: allSet should be false")
+	}
+	if err := db.QueryRow(`select state_json from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
+		t.Fatalf("load od state after clear: %v", err)
+	}
+	state = struct {
+		Teams []chgkTeamJSON `json:"teams"`
+	}{}
+	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+		t.Fatalf("decode state after clear: %v", err)
+	}
+	for _, team := range state.Teams {
+		if team.Number != 0 {
+			t.Fatalf("after clear team %q has number %d, want 0", team.Name, team.Number)
+		}
+	}
+}
+
+func TestHostFestNumbersPage(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, chgkGameID, _ := createRosterPropagationFixture(t, srv.db)
+	organizerID, token := createAPITestSession(t, srv, "numbers-host")
+	addAPITestOrganizer(t, srv, festID, organizerID)
+
+	if _, err := srv.importFestRoster(t.Context(), festID, 1, []festRosterImportTeam{
+		{RatingID: 11, Name: "Алёша"},
+		{RatingID: 12, Name: "Боря"},
+	}); err != nil {
+		t.Fatalf("import roster: %v", err)
+	}
+
+	get := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+		resp := httptest.NewRecorder()
+		srv.handleHostRouter(resp, req)
+		return resp
+	}
+	post := func(path string, form url.Values) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+		resp := httptest.NewRecorder()
+		srv.handleHostRouter(resp, req)
+		return resp
+	}
+
+	page := get("/host/fest/" + itoa(festID) + "/numbers")
+	if page.Code != http.StatusOK {
+		t.Fatalf("GET numbers status = %d body=%s", page.Code, page.Body.String())
+	}
+	body := page.Body.String()
+	if !strings.Contains(body, "Номера команд") || !strings.Contains(body, "Проставить автоматически") {
+		t.Fatalf("numbers page missing expected text: %s", body)
+	}
+
+	auto := post("/host/fest/"+itoa(festID)+"/numbers/auto", url.Values{})
+	if auto.Code != http.StatusOK {
+		t.Fatalf("auto status = %d body=%s", auto.Code, auto.Body.String())
+	}
+
+	teams, err := loadFestTeamsForNumbering(t.Context(), srv.db, festID)
+	if err != nil {
+		t.Fatalf("load teams: %v", err)
+	}
+	if len(teams) != 2 {
+		t.Fatalf("teams = %d, want 2", len(teams))
+	}
+	for _, team := range teams {
+		if team.Number == 0 {
+			t.Fatalf("team %q has no number after auto", team.Name)
+		}
+	}
+
+	// Sort to know which team currently has number 1 / 2.
+	byNum := func() (lo, hi festNumberingTeam) {
+		teams, err := loadFestTeamsForNumbering(t.Context(), srv.db, festID)
+		if err != nil {
+			t.Fatalf("load teams: %v", err)
+		}
+		for _, team := range teams {
+			if team.Number == 1 {
+				lo = team
+			}
+			if team.Number == 2 {
+				hi = team
+			}
+		}
+		return
+	}
+	low, high := byNum()
+
+	// Manual reassignment via N-row form: swap numbers.
+	swap := url.Values{}
+	swap.Set("num_1", "2")
+	swap.Set(fmt.Sprintf("team_id_%d", 1), itoa(low.ID))
+	swap.Set("num_2", "1")
+	swap.Set(fmt.Sprintf("team_id_%d", 2), itoa(high.ID))
+	manual := post("/host/fest/"+itoa(festID)+"/numbers", swap)
+	if manual.Code != http.StatusOK {
+		t.Fatalf("manual save status = %d body=%s", manual.Code, manual.Body.String())
+	}
+	var num1, num2 int
+	if err := srv.db.QueryRow(`select number from fest_teams where id = ?`, low.ID).Scan(&num1); err != nil {
+		t.Fatalf("load num1: %v", err)
+	}
+	if err := srv.db.QueryRow(`select number from fest_teams where id = ?`, high.ID).Scan(&num2); err != nil {
+		t.Fatalf("load num2: %v", err)
+	}
+	if num1 != 2 || num2 != 1 {
+		t.Fatalf("after swap: low=%d high=%d, want 2/1", num1, num2)
+	}
+
+	// Duplicate number should produce an error page rather than overwriting state.
+	dup := url.Values{}
+	dup.Set("num_1", "5")
+	dup.Set("team_id_1", itoa(low.ID))
+	dup.Set("num_2", "5")
+	dup.Set("team_id_2", itoa(high.ID))
+	dupResp := post("/host/fest/"+itoa(festID)+"/numbers", dup)
+	if dupResp.Code != http.StatusOK {
+		t.Fatalf("dup save status = %d body=%s", dupResp.Code, dupResp.Body.String())
+	}
+	if !strings.Contains(dupResp.Body.String(), "указан сразу") {
+		t.Fatalf("dup response missing conflict message: %s", dupResp.Body.String())
+	}
+
+	// Reserve number > N is allowed by renaming a row's number.
+	reserve := url.Values{}
+	reserve.Set("num_1", "101")
+	reserve.Set("team_id_1", itoa(low.ID))
+	reserve.Set("num_2", "1")
+	reserve.Set("team_id_2", itoa(high.ID))
+	if resp := post("/host/fest/"+itoa(festID)+"/numbers", reserve); resp.Code != http.StatusOK {
+		t.Fatalf("reserve save status = %d body=%s", resp.Code, resp.Body.String())
+	}
+	if err := srv.db.QueryRow(`select number from fest_teams where id = ?`, low.ID).Scan(&num1); err != nil {
+		t.Fatalf("load num after reserve: %v", err)
+	}
+	if num1 != 101 {
+		t.Fatalf("after reserve: low.number=%d, want 101", num1)
+	}
+
+	// Verify state.teams in the chgk game contains the reassigned numbers.
+	var stateJSON string
+	if err := srv.db.QueryRow(`select state_json from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
+		t.Fatalf("load chgk state: %v", err)
+	}
+	var state struct {
+		Teams []chgkTeamJSON `json:"teams"`
+	}
+	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+		t.Fatalf("decode chgk state: %v", err)
+	}
+	if len(state.Teams) != 2 {
+		t.Fatalf("state teams = %d, want 2", len(state.Teams))
+	}
+	got := map[string]int64{}
+	for _, team := range state.Teams {
+		got[team.Name] = team.Number
+	}
+	if got["Алёша"] != 101 || got["Боря"] != 1 {
+		t.Fatalf("state numbers = %#v, want Алёша→101, Боря→1", got)
+	}
+}
+
+func TestFestNumbersRemapEntries(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, chgkGameID, _ := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	if _, err := srv.importFestRoster(t.Context(), festID, 1, []festRosterImportTeam{
+		{RatingID: 11, Name: "Алёша"},
+		{RatingID: 12, Name: "Боря"},
+		{RatingID: 13, Name: "Витя"},
+	}); err != nil {
+		t.Fatalf("import roster: %v", err)
+	}
+	teams, err := loadFestTeamsForNumbering(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("load teams: %v", err)
+	}
+	if len(teams) != 3 {
+		t.Fatalf("teams=%d, want 3", len(teams))
+	}
+	// Initial 1..3 alphabetical numbering.
+	initial := map[int64]int{teams[0].ID: 1, teams[1].ID: 2, teams[2].ID: 3}
+	if err := srv.saveFestNumbers(t.Context(), festID, initial); err != nil {
+		t.Fatalf("initial numbers: %v", err)
+	}
+
+	// Pre-fill some entries by number.
+	entries := [][]int{{1, 2, 0}, {3, 1, 0}, {2, 0, 0}}
+	entriesJSON, _ := json.Marshal(entries)
+	if _, err := db.Exec(`update games set state_json = json_set(state_json, '$.entries', json(?)) where id = ?`, string(entriesJSON), chgkGameID); err != nil {
+		t.Fatalf("seed entries: %v", err)
+	}
+
+	// Reassign: team[0] gets reserve 101 (was 1), team[1] gets 1 (was 2), team[2] keeps 3.
+	reassign := map[int64]int{teams[0].ID: 101, teams[1].ID: 1, teams[2].ID: 3}
+	if err := srv.saveFestNumbers(t.Context(), festID, reassign); err != nil {
+		t.Fatalf("reassign: %v", err)
+	}
+
+	var stateJSON string
+	if err := db.QueryRow(`select state_json from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
+		t.Fatalf("load state: %v", err)
+	}
+	var got struct {
+		Entries [][]int `json:"entries"`
+	}
+	if err := json.Unmarshal([]byte(stateJSON), &got); err != nil {
+		t.Fatalf("decode state: %v", err)
+	}
+	// Expected mapping: 1 -> 101, 2 -> 1, 3 stays.
+	want := [][]int{{101, 1, 0}, {3, 101, 0}, {1, 0, 0}}
+	for q := range want {
+		for slot, value := range want[q] {
+			if got.Entries[q][slot] != value {
+				t.Fatalf("entries[%d][%d]=%d, want %d (entries=%v)", q, slot, got.Entries[q][slot], value, got.Entries)
+			}
+		}
+	}
+}
+
+func itoa(v int64) string { return strconv.FormatInt(v, 10) }
 
 func TestAuthCodeHelpers(t *testing.T) {
 	a, err := newInviteCode()

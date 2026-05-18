@@ -32,18 +32,20 @@ type hostLandingData struct {
 }
 
 type hostFestDashData struct {
-	Fest         hostMyFest
-	Description  string
-	RatingID     int64
-	Games        []publicFestGame
-	TeamCount    int
-	PlayerCount  int
-	IsCreator    bool
-	Error        string
-	ImportError  string
-	ImportNotice string
-	RosterError  string
-	RosterNotice string
+	Fest            hostMyFest
+	Description     string
+	RatingID        int64
+	Games           []publicFestGame
+	TeamCount       int
+	PlayerCount     int
+	NumbersAssigned int
+	NumbersAllSet   bool
+	IsCreator       bool
+	Error           string
+	ImportError     string
+	ImportNotice    string
+	RosterError     string
+	RosterNotice    string
 }
 
 type hostFestTeam struct {
@@ -274,6 +276,14 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
             <span class="muted">{{.PlayerCount}}</span>
           </a>
         </li>
+        {{if .TeamCount}}
+        <li>
+          <a class="list-row" href="/host/fest/{{.Fest.ID}}/numbers">
+            <span class="list-row-title">Номера команд</span>
+            <span class="muted">{{if .NumbersAllSet}}готово{{else if .NumbersAssigned}}{{.NumbersAssigned}} из {{.TeamCount}}{{else}}не выставлены{{end}}</span>
+          </a>
+        </li>
+        {{end}}
         <li>
           <a class="list-row" href="/host/fest/{{.Fest.ID}}/rating/import">
             <span class="list-row-title">Загрузить команды и игроков</span>
@@ -698,6 +708,33 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleHostDeleteGame(w, r, id, gameID)
+		return
+	}
+	if len(parts) == 3 && parts[2] == "numbers" {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead:
+			s.renderHostFestNumbers(w, r, id, "", "", nil)
+		case http.MethodPost:
+			s.handleHostSaveFestNumbers(w, r, id)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+	if len(parts) == 4 && parts[2] == "numbers" && parts[3] == "auto" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleHostAutoFestNumbers(w, r, id)
+		return
+	}
+	if len(parts) == 4 && parts[2] == "numbers" && parts[3] == "clear" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleHostClearFestNumbers(w, r, id)
 		return
 	}
 	if len(parts) == 4 && parts[2] == "rating" && parts[3] == "import" {
@@ -1171,7 +1208,7 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 		if err != nil {
 			return 0, err
 		}
-		stateJSON, err = applyRosterToChGKState(string(stateJSON), teams)
+		stateJSON, err = applyRosterToChGKState(string(stateJSON), teams, nil)
 		if err != nil {
 			return 0, err
 		}
@@ -1353,7 +1390,7 @@ func uniqueSchemeSlug(base string) string {
 
 func loadFestRosterImportTeamsTx(ctx context.Context, q dbQueryer, festID int64) ([]festRosterImportTeam, error) {
 	rows, err := q.QueryContext(ctx, `
-select coalesce(rating_id, 0), name, city
+select coalesce(rating_id, 0), name, city, coalesce(number, 0)
 from fest_teams
 where fest_id = ?
 order by position, id`, festID)
@@ -1364,7 +1401,7 @@ order by position, id`, festID)
 	var teams []festRosterImportTeam
 	for rows.Next() {
 		var team festRosterImportTeam
-		if err := rows.Scan(&team.RatingID, &team.Name, &team.City); err != nil {
+		if err := rows.Scan(&team.RatingID, &team.Name, &team.City, &team.Number); err != nil {
 			return nil, err
 		}
 		teams = append(teams, team)
@@ -1498,6 +1535,13 @@ from fests where id = ?`, festID).Scan(&title, &description, &startDate, &endDat
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	var numbersAssigned int
+	if err := s.db.QueryRowContext(r.Context(), `
+select coalesce(sum(case when number is not null then 1 else 0 end), 0)
+from fest_teams where fest_id = ?`, festID).Scan(&numbersAssigned); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	isCreator := false
 	if user, ok := s.lookupSession(r); ok {
 		isCreator, err = s.isFestCreator(r.Context(), festID, user.UserID)
@@ -1515,16 +1559,18 @@ from fests where id = ?`, festID).Scan(&title, &description, &startDate, &endDat
 			Dates:     formatFestDates(startDate.String, endDate.String),
 			IsPublic:  isPublic == 1,
 		},
-		Description:  description,
-		Games:        hostGames,
-		TeamCount:    teamCount,
-		PlayerCount:  playerCount,
-		IsCreator:    isCreator,
-		Error:        msgs.FormError,
-		ImportError:  msgs.ImportError,
-		ImportNotice: msgs.ImportNotice,
-		RosterError:  msgs.RosterError,
-		RosterNotice: msgs.RosterNotice,
+		Description:     description,
+		Games:           hostGames,
+		TeamCount:       teamCount,
+		PlayerCount:     playerCount,
+		NumbersAssigned: numbersAssigned,
+		NumbersAllSet:   teamCount > 0 && numbersAssigned == teamCount,
+		IsCreator:       isCreator,
+		Error:           msgs.FormError,
+		ImportError:     msgs.ImportError,
+		ImportNotice:    msgs.ImportNotice,
+		RosterError:     msgs.RosterError,
+		RosterNotice:    msgs.RosterNotice,
 	}
 	if ratingID.Valid {
 		data.RatingID = ratingID.Int64
