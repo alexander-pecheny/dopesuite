@@ -54,4 +54,4 @@ seed fest_id:
     python3 scripts/generate_studchr_grid.py | curl -s -X POST -H "Content-Type: application/json" \
       --cookie "session=${DOPE_SESSION}" \
       --data-binary @- \
-      "http://localhost:8080/api/import?fest_id={{fest_id}}" > /dev/null && echo seeded
+      "http://localhost:9672/api/import?fest_id={{fest_id}}" > /dev/null && echo seeded

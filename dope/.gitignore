@@ -2,6 +2,7 @@
 /fest.db*
 /tournament.db*
 /dope-server
+/dope/dope
 /telegram-bot
 /.env
 __pycache__/

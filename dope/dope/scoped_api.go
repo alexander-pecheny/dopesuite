@@ -227,8 +227,16 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	tid, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil || tid <= 0 {
+	tid, err := resolveFestID(r.Context(), s.db, parts[0])
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tid <= 0 {
 		http.NotFound(w, r)
 		return
 	}
@@ -254,8 +262,16 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		gid, err := strconv.ParseInt(parts[2], 10, 64)
-		if err != nil || gid <= 0 {
+		gid, err := resolveGameID(r.Context(), s.db, tid, parts[2])
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if gid <= 0 {
 			http.NotFound(w, r)
 			return
 		}

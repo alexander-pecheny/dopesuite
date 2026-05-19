@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
 type publicFestSummary struct {
 	ID          int64
+	Slug        string
 	Title       string
 	StartDate   string
 	EndDate     string
@@ -20,20 +20,43 @@ type publicFestSummary struct {
 	Description string
 }
 
+func (s publicFestSummary) Ref() string {
+	if s.Slug != "" {
+		return s.Slug
+	}
+	return fmt.Sprintf("%d", s.ID)
+}
+
 type publicFestGame struct {
 	ID    int64
+	Slug  string
 	Code  string
 	Title string
 	Type  string
 	URL   string
 }
 
+func (g publicFestGame) Ref() string {
+	if g.Slug != "" {
+		return g.Slug
+	}
+	return fmt.Sprintf("%d", g.ID)
+}
+
 type publicFestDetail struct {
 	ID          int64
+	Slug        string
 	Title       string
 	Dates       string
 	Description template.HTML
 	Games       []publicFestGame
+}
+
+func (d publicFestDetail) Ref() string {
+	if d.Slug != "" {
+		return d.Slug
+	}
+	return fmt.Sprintf("%d", d.ID)
 }
 
 var publicListTemplate = template.Must(template.New("publicList").Parse(`<!doctype html>
@@ -53,7 +76,7 @@ var publicListTemplate = template.Must(template.New("publicList").Parse(`<!docty
     <ul class="list">
       {{range .}}
       <li>
-        <a class="list-row" href="/fest/{{.ID}}">
+        <a class="list-row" href="/fest/{{.Ref}}">
           <span class="list-row-title">{{.Title}}</span>
           {{if .Dates}}<span class="muted">{{.Dates}}</span>{{end}}
         </a>
@@ -139,8 +162,16 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	id, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil || id <= 0 {
+	id, err := resolveFestID(r.Context(), s.db, parts[0])
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if id <= 0 {
 		http.NotFound(w, r)
 		return
 	}
@@ -162,7 +193,7 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 	}
 	// Public viewer pages mirror host pages: OD/SI get their own viewer.
 	if len(parts) >= 3 {
-		gameID, err := strconv.ParseInt(parts[2], 10, 64)
+		gameID, err := resolveGameID(r.Context(), s.db, id, parts[2])
 		if err == nil && gameID > 0 {
 			var gameType string
 			if err := s.db.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, id).Scan(&gameType); err == nil {
@@ -208,16 +239,13 @@ func (s *server) assertFestPublic(ctx context.Context, festID int64) error {
 }
 
 // isViewerSubPath validates that a fest-scoped path under /fest/{id}/
-// is one of the recognised viewer routes (/game/{gid}/...). Only known shapes
-// pass; anything else 404s.
+// is one of the recognised viewer routes (/game/{gid}/...). The game segment
+// can be a numeric id or a slug.
 func isViewerSubPath(parts []string) bool {
 	if len(parts) < 2 {
 		return false
 	}
-	if parts[0] != "game" {
-		return false
-	}
-	if _, err := strconv.ParseInt(parts[1], 10, 64); err != nil {
+	if parts[0] != "game" || parts[1] == "" {
 		return false
 	}
 	if len(parts) == 2 {
@@ -237,7 +265,7 @@ func (s *server) loadPublicFestSummaries(ctx context.Context) ([]publicFestSumma
 		return nil, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
-select id, title, coalesce(start_date, ''), coalesce(end_date, '')
+select id, coalesce(slug, ''), title, coalesce(start_date, ''), coalesce(end_date, '')
 from fests
 where is_public = 1
 order by case when start_date is null or start_date = '' then 1 else 0 end,
@@ -250,7 +278,7 @@ order by case when start_date is null or start_date = '' then 1 else 0 end,
 	var out []publicFestSummary
 	for rows.Next() {
 		var s publicFestSummary
-		if err := rows.Scan(&s.ID, &s.Title, &s.StartDate, &s.EndDate); err != nil {
+		if err := rows.Scan(&s.ID, &s.Slug, &s.Title, &s.StartDate, &s.EndDate); err != nil {
 			return nil, err
 		}
 		s.Dates = formatFestDates(s.StartDate, s.EndDate)
@@ -264,6 +292,7 @@ func (s *server) loadPublicFestDetail(ctx context.Context, id int64) (publicFest
 		return publicFestDetail{}, sql.ErrNoRows
 	}
 	var (
+		slug        string
 		title       string
 		description string
 		startDate   sql.NullString
@@ -271,8 +300,8 @@ func (s *server) loadPublicFestDetail(ctx context.Context, id int64) (publicFest
 		isPublic    int
 	)
 	if err := s.db.QueryRowContext(ctx, `
-select title, description, start_date, end_date, is_public
-from fests where id = ?`, id).Scan(&title, &description, &startDate, &endDate, &isPublic); err != nil {
+select coalesce(slug, ''), title, description, start_date, end_date, is_public
+from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &endDate, &isPublic); err != nil {
 		return publicFestDetail{}, err
 	}
 	if isPublic != 1 {
@@ -282,18 +311,24 @@ from fests where id = ?`, id).Scan(&title, &description, &startDate, &endDate, &
 	if err != nil {
 		return publicFestDetail{}, err
 	}
+	festRef := slug
+	if festRef == "" {
+		festRef = fmt.Sprintf("%d", id)
+	}
 	publicGames := make([]publicFestGame, len(games))
 	for i, g := range games {
 		publicGames[i] = publicFestGame{
 			ID:    g.ID,
+			Slug:  g.Slug,
 			Code:  g.Code,
 			Title: g.Title,
 			Type:  gameTypeLabel(g.Type),
-			URL:   fmt.Sprintf("/fest/%d/game/%d/", id, g.ID),
+			URL:   fmt.Sprintf("/fest/%s/game/%s/", festRef, g.Ref()),
 		}
 	}
 	detail := publicFestDetail{
 		ID:          id,
+		Slug:        slug,
 		Title:       title,
 		Dates:       formatFestDates(startDate.String, endDate.String),
 		Description: renderMarkdown(description),
@@ -337,11 +372,21 @@ type festGameRow struct {
 	Code  string
 	Title string
 	Type  string
+	Slug  string
+}
+
+// Ref returns the game's slug if set, otherwise the stringified id. Use for
+// building public URLs.
+func (g festGameRow) Ref() string {
+	if g.Slug != "" {
+		return g.Slug
+	}
+	return fmt.Sprintf("%d", g.ID)
 }
 
 func loadFestGames(ctx context.Context, q dbQueryer, festID int64) ([]festGameRow, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, code, title, game_type
+select id, code, title, game_type, coalesce(slug, '')
 from games where fest_id = ?
 order by position, id`, festID)
 	if err != nil {
@@ -351,7 +396,7 @@ order by position, id`, festID)
 	var out []festGameRow
 	for rows.Next() {
 		var g festGameRow
-		if err := rows.Scan(&g.ID, &g.Code, &g.Title, &g.Type); err != nil {
+		if err := rows.Scan(&g.ID, &g.Code, &g.Title, &g.Type, &g.Slug); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

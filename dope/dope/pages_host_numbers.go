@@ -47,7 +47,7 @@ var hostFestNumbersTemplate = template.Must(template.New("hostNumbers").Parse(`<
 </head>
 <body class="public">
   <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.ID}}">←</a>
+    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
     <h1>Номера команд</h1>
   </header>
   <main class="public-main">
@@ -57,13 +57,13 @@ var hostFestNumbersTemplate = template.Must(template.New("hostNumbers").Parse(`<
     <p class="empty">Сначала загрузите команды на странице феста.</p>
     {{else}}
     <p class="muted">Назначьте команду каждому номеру. Номер можно переименовать в любую сторону — например, заменить на резервный (101 и т. п.). При изменении номера все его упоминания в ОД заменятся на новый.</p>
-    <form method="post" action="/host/fest/{{.Fest.ID}}/numbers/auto" class="cluster" autocomplete="off">
+    <form method="post" action="/host/fest/{{.Fest.Ref}}/numbers/auto" class="cluster" autocomplete="off">
       <button class="btn" type="submit">Проставить автоматически</button>
       {{if .HasAny}}
-      <button class="btn" type="submit" formaction="/host/fest/{{.Fest.ID}}/numbers/clear">Очистить</button>
+      <button class="btn" type="submit" formaction="/host/fest/{{.Fest.Ref}}/numbers/clear">Очистить</button>
       {{end}}
     </form>
-    <form method="post" action="/host/fest/{{.Fest.ID}}/numbers" class="card stack number-form" autocomplete="off">
+    <form method="post" action="/host/fest/{{.Fest.Ref}}/numbers" class="card stack number-form" autocomplete="off">
       <datalist id="number-team-options">
         {{range .Options}}<option data-id="{{.ID}}" value="{{.Label}}"></option>{{end}}
       </datalist>

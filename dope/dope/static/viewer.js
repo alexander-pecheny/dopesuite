@@ -451,7 +451,7 @@ function shootoutThemesFor(team) {
 
 function currentRoute() {
   const path = window.location.pathname;
-  const prefix = path.match(/^\/fest\/(\d+)\/game\/(\d+)/);
+  const prefix = path.match(/^\/fest\/([^/]+)\/game\/([^/]+)/);
   if (!prefix) {
     return {mode: "missing"};
   }

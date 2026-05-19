@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -168,12 +168,16 @@ func main() {
 
 	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
 	if port == "" {
-		port = "8080"
+		port = "9672"
 	}
 	addr := ":" + port
 	log.Printf("serving static from %s", assetMode)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("bind %s: %v", addr, err)
+	}
 	log.Printf("listening on http://localhost%s/host and http://localhost%s/", addr, addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(http.Serve(listener, mux))
 }
 
 func staticSource() (fs.FS, string) {
@@ -310,7 +314,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	festID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("fest_id")), 10, 64)
+	festID, err := resolveFestID(r.Context(), s.db, strings.TrimSpace(r.URL.Query().Get("fest_id")))
 	if err != nil || festID <= 0 {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
@@ -362,7 +366,7 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	festID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("fest_id")), 10, 64)
+	festID, err := resolveFestID(r.Context(), s.db, strings.TrimSpace(r.URL.Query().Get("fest_id")))
 	if err != nil || festID <= 0 {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
