@@ -17,11 +17,22 @@ import (
 
 type hostMyFest struct {
 	ID        int64
+	Slug      string
 	Title     string
 	StartDate string
 	EndDate   string
 	Dates     string
 	IsPublic  bool
+}
+
+// Ref returns the fest slug if set, otherwise the stringified id. Use this
+// when building URLs so users see /host/fest/my-fest in preference to
+// /host/fest/123.
+func (h hostMyFest) Ref() string {
+	if h.Slug != "" {
+		return h.Slug
+	}
+	return fmt.Sprintf("%d", h.ID)
 }
 
 type hostLandingData struct {
@@ -34,6 +45,7 @@ type hostLandingData struct {
 type hostFestDashData struct {
 	Fest            hostMyFest
 	Description     string
+	Slug            string
 	RatingID        int64
 	Games           []publicFestGame
 	TeamCount       int
@@ -46,6 +58,13 @@ type hostFestDashData struct {
 	ImportNotice    string
 	RosterError     string
 	RosterNotice    string
+}
+
+type hostGameSettingsData struct {
+	Fest  hostMyFest
+	Game  publicFestGame
+	Slug  string
+	Error string
 }
 
 type hostFestTeam struct {
@@ -121,8 +140,8 @@ var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!docty
     <ul class="list">
       {{range .Fests}}
       <li>
-        <a class="list-row" href="/host/fest/{{.ID}}">
-          <span class="list-row-title">{{.Title}}{{if not .IsPublic}} · черновик{{end}}</span>
+        <a class="list-row" href="/host/fest/{{.Ref}}">
+          <span class="list-row-title">{{.Title}}{{if not .IsPublic}} · непубличный{{end}}</span>
           {{if .Dates}}<span class="muted">{{.Dates}}</span>{{end}}
         </a>
       </li>
@@ -205,7 +224,7 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
   </header>
   <main class="public-main">
     {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    <form method="post" action="/host/fest/{{.Fest.ID}}" class="card stack" autocomplete="off">
+    <form method="post" action="/host/fest/{{.Fest.Ref}}" class="card stack" autocomplete="off">
       <label class="field">
         <span>Название</span>
         <input name="title" value="{{.Fest.Title}}" required>
@@ -213,6 +232,10 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
       <label class="field">
         <span>Описание (markdown)</span>
         <textarea name="description" rows="6">{{.Description}}</textarea>
+      </label>
+      <label class="field">
+        <span>Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})</span>
+        <input name="slug" value="{{.Slug}}" pattern="[a-z0-9-]+" placeholder="my-fest">
       </label>
       <label class="field">
         <span>Дата начала</span>
@@ -241,11 +264,12 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
       <ul class="list">
         {{range .Games}}
         <li class="list-action-row">
-          <a class="list-row" href="/host/fest/{{$.Fest.ID}}/game/{{.ID}}/">
+          <a class="list-row" href="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/">
             <span class="list-row-title">{{.Title}}</span>
             <span class="muted">{{.Type}}</span>
           </a>
-          <form method="post" action="/host/fest/{{$.Fest.ID}}/game/{{.ID}}/delete" onsubmit="return confirm('Удалить игру? Все результаты этой игры будут потеряны.');">
+          <a class="btn" href="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/settings">Свойства</a>
+          <form method="post" action="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/delete" onsubmit="return confirm('Удалить игру? Все результаты этой игры будут потеряны.');">
             <button class="btn danger" type="submit">Удалить</button>
           </form>
         </li>
@@ -255,7 +279,7 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
       <p class="empty">Игр пока нет.</p>
       {{end}}
       <div class="cluster">
-        <a class="btn" href="/host/fest/{{.Fest.ID}}/game/new">Добавить игру</a>
+        <a class="btn" href="/host/fest/{{.Fest.Ref}}/game/new">Добавить игру</a>
       </div>
     </section>
 
@@ -265,27 +289,27 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
       {{if .RosterNotice}}<p class="muted">{{.RosterNotice}}</p>{{end}}
       <ul class="list">
         <li>
-          <a class="list-row" href="/host/fest/{{.Fest.ID}}/teams">
+          <a class="list-row" href="/host/fest/{{.Fest.Ref}}/teams">
             <span class="list-row-title">Команды</span>
             <span class="muted">{{.TeamCount}}</span>
           </a>
         </li>
         <li>
-          <a class="list-row" href="/host/fest/{{.Fest.ID}}/players">
+          <a class="list-row" href="/host/fest/{{.Fest.Ref}}/players">
             <span class="list-row-title">Игроки</span>
             <span class="muted">{{.PlayerCount}}</span>
           </a>
         </li>
         {{if .TeamCount}}
         <li>
-          <a class="list-row" href="/host/fest/{{.Fest.ID}}/numbers">
+          <a class="list-row" href="/host/fest/{{.Fest.Ref}}/numbers">
             <span class="list-row-title">Номера команд</span>
             <span class="muted">{{if .NumbersAllSet}}готово{{else if .NumbersAssigned}}{{.NumbersAssigned}} из {{.TeamCount}}{{else}}не выставлены{{end}}</span>
           </a>
         </li>
         {{end}}
         <li>
-          <a class="list-row" href="/host/fest/{{.Fest.ID}}/rating/import">
+          <a class="list-row" href="/host/fest/{{.Fest.Ref}}/rating/import">
             <span class="list-row-title">Загрузить команды и игроков</span>
             <span class="muted">{{if .RatingID}}rating {{.RatingID}}{{else}}нет rating ID{{end}}</span>
           </a>
@@ -296,7 +320,7 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
     {{if .IsCreator}}
     <section class="section">
       <h2>Удаление</h2>
-      <form method="post" action="/host/fest/{{.Fest.ID}}/delete" class="card stack" autocomplete="off" onsubmit="return confirm('Удалить турнир? Все игры, команды и результаты будут удалены.');">
+      <form method="post" action="/host/fest/{{.Fest.Ref}}/delete" class="card stack" autocomplete="off" onsubmit="return confirm('Удалить турнир? Все игры, команды и результаты будут удалены.');">
         <p class="muted">Удаление убирает фест со всеми играми, командами и результатами.</p>
         <div class="cluster">
           <button class="btn danger" type="submit">Удалить фест</button>
@@ -318,12 +342,12 @@ var hostGameCreateTemplate = template.Must(template.New("hostGameCreate").Parse(
 </head>
 <body class="public">
   <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.ID}}">←</a>
+    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
     <h1>Добавить игру</h1>
   </header>
   <main class="public-main">
     {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    <form method="post" action="/host/fest/{{.Fest.ID}}/game/new" class="card stack" autocomplete="off" data-game-create-form>
+    <form method="post" action="/host/fest/{{.Fest.Ref}}/game/new" class="card stack" autocomplete="off" data-game-create-form>
       <fieldset class="field game-type-fieldset">
         <span>Тип игры</span>
         <label class="checkbox">
@@ -399,7 +423,7 @@ var hostFestTeamsTemplate = template.Must(template.New("hostTeams").Parse(`<!doc
 </head>
 <body class="public">
   <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.ID}}">←</a>
+    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
     <h1>Команды</h1>
   </header>
   <main class="public-main">
@@ -431,7 +455,7 @@ var hostFestPlayersTemplate = template.Must(template.New("hostPlayers").Parse(`<
 </head>
 <body class="public">
   <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.ID}}">←</a>
+    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
     <h1>Игроки</h1>
   </header>
   <main class="public-main">
@@ -463,7 +487,7 @@ var hostFestRatingImportTemplate = template.Must(template.New("hostRatingImport"
 </head>
 <body class="public">
   <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.ID}}">←</a>
+    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
     <h1>Импорт участников</h1>
   </header>
   <main class="public-main">
@@ -472,7 +496,7 @@ var hostFestRatingImportTemplate = template.Must(template.New("hostRatingImport"
     <section class="section">
       {{if .RatingID}}
       <p class="muted">Источник: rating.chgk.info ID {{.RatingID}}</p>
-      <form method="post" action="/host/fest/{{.Fest.ID}}/rating/import" class="card stack" autocomplete="off">
+      <form method="post" action="/host/fest/{{.Fest.Ref}}/rating/import" class="card stack" autocomplete="off">
         <p class="muted">Импорт заменит списки команд и игроков феста и обновит список команд в играх ЧГК и КСИ.</p>
         <div class="cluster">
           <button class="btn" type="submit">Загрузить команды и игроков</button>
@@ -482,6 +506,34 @@ var hostFestRatingImportTemplate = template.Must(template.New("hostRatingImport"
       <p class="empty">Сначала сохраните rating.chgk.info ID в свойствах феста.</p>
       {{end}}
     </section>
+  </main>
+</body>
+</html>`))
+
+var hostGameSettingsTemplate = template.Must(template.New("hostGameSettings").Parse(`<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Game.Title}} · свойства</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="public">
+  <header class="public-top">
+    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
+    <h1>{{.Game.Title}}</h1>
+  </header>
+  <main class="public-main">
+    {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
+    <form method="post" action="/host/fest/{{.Fest.Ref}}/game/{{.Game.Ref}}/settings" class="card stack" autocomplete="off">
+      <label class="field">
+        <span>Slug (необязательно, a-z, 0-9, дефис)</span>
+        <input name="slug" value="{{.Slug}}" pattern="[a-z0-9-]+">
+      </label>
+      <div class="cluster">
+        <button class="btn" type="submit">Сохранить</button>
+      </div>
+    </form>
   </main>
 </body>
 </html>`))
@@ -496,13 +548,13 @@ var hostFestSchemeImportTemplate = template.Must(template.New("hostSchemeImport"
 </head>
 <body class="public">
   <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.ID}}">←</a>
+    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
     <h1>Импорт схемы</h1>
   </header>
   <main class="public-main">
     {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
     {{if .Notice}}<p class="muted">{{.Notice}}</p>{{end}}
-    <form method="post" action="/host/fest/{{.Fest.ID}}/import" class="card stack" autocomplete="off">
+    <form method="post" action="/host/fest/{{.Fest.Ref}}/import" class="card stack" autocomplete="off">
       <p class="muted">Импорт пересоздаёт игру феста из JSON-схемы. Существующие игры этого феста будут заменены.</p>
       <label class="field">
         <span>JSON-схема</span>
@@ -626,8 +678,16 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		s.handleHostCreateFest(w, r, user)
 		return
 	}
-	id, err := strconv.ParseInt(parts[1], 10, 64)
-	if err != nil || id <= 0 {
+	id, err := resolveFestID(r.Context(), s.db, parts[1])
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if id <= 0 {
 		http.NotFound(w, r)
 		return
 	}
@@ -702,12 +762,44 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		gameID, err := strconv.ParseInt(parts[3], 10, 64)
-		if err != nil || gameID <= 0 {
+		gameID, err := resolveGameID(r.Context(), s.db, id, parts[3])
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if gameID <= 0 {
 			http.NotFound(w, r)
 			return
 		}
 		s.handleHostDeleteGame(w, r, id, gameID)
+		return
+	}
+	if len(parts) == 5 && parts[2] == "game" && parts[4] == "settings" {
+		gameID, err := resolveGameID(r.Context(), s.db, id, parts[3])
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if gameID <= 0 {
+			http.NotFound(w, r)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet, http.MethodHead:
+			s.renderHostGameSettings(w, r, id, gameID, "")
+		case http.MethodPost:
+			s.handleHostUpdateGameSettings(w, r, id, gameID)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 		return
 	}
 	if len(parts) == 3 && parts[2] == "numbers" {
@@ -757,8 +849,16 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) serveHostGamePage(w http.ResponseWriter, r *http.Request, festID int64, parts []string) {
-	gameID, err := strconv.ParseInt(parts[1], 10, 64)
-	if err != nil || gameID <= 0 {
+	gameID, err := resolveGameID(r.Context(), s.db, festID, parts[1])
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if gameID <= 0 {
 		http.NotFound(w, r)
 		return
 	}
@@ -785,10 +885,7 @@ func isHostGameSubPath(parts []string) bool {
 	if len(parts) < 2 {
 		return false
 	}
-	if parts[0] != "game" {
-		return false
-	}
-	if _, err := strconv.ParseInt(parts[1], 10, 64); err != nil {
+	if parts[0] != "game" || parts[1] == "" {
 		return false
 	}
 	if len(parts) == 2 {
@@ -820,7 +917,6 @@ func (s *server) handleHostCreateFest(w http.ResponseWriter, r *http.Request, us
 	isPublic := r.Form.Get("is_public") == "1"
 
 	now := utcNow()
-	slug := generateSlug(title, time.Now())
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -830,7 +926,7 @@ func (s *server) handleHostCreateFest(w http.ResponseWriter, r *http.Request, us
 	festID, err := insertReturningID(r.Context(), tx, `
 insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public)
 values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
-		slug, title, description, ratingID, user.UserID, now, now,
+		nil, title, description, ratingID, user.UserID, now, now,
 		nullableString(startDate), nullableString(endDate), boolToInt(isPublic))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -872,18 +968,139 @@ func (s *server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, fe
 	endDate := strings.TrimSpace(r.Form.Get("end_date"))
 	ratingID := parseOptionalInt64(r.Form.Get("rating_id"))
 	isPublic := r.Form.Get("is_public") == "1"
+	slug := strings.TrimSpace(r.Form.Get("slug"))
+	var slugValue any
+	if slug != "" {
+		if err := validateSlug(slug); err != nil {
+			s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: "Slug: " + err.Error()})
+			return
+		}
+		if taken, err := s.slugTakenByOtherFest(r.Context(), slug, festID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else if taken {
+			s.renderHostFestDashboard(w, r, festID, hostDashMessages{FormError: "Slug уже занят."})
+			return
+		}
+		slugValue = slug
+	}
 
 	if _, err := s.db.ExecContext(r.Context(), `
 update fests
-set title = ?, description = ?, rating_id = ?, start_date = ?, end_date = ?, is_public = ?, updated_at = ?
+set title = ?, slug = ?, description = ?, rating_id = ?, start_date = ?, end_date = ?, is_public = ?, updated_at = ?
 where id = ?`,
-		title, description, ratingID,
+		title, slugValue, description, ratingID,
 		nullableString(startDate), nullableString(endDate), boolToInt(isPublic),
 		utcNow(), festID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/host/fest/%d", festID), http.StatusSeeOther)
+	redirectRef := slug
+	if redirectRef == "" {
+		redirectRef = fmt.Sprintf("%d", festID)
+	}
+	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", redirectRef), http.StatusSeeOther)
+}
+
+func (s *server) slugTakenByOtherFest(ctx context.Context, slug string, festID int64) (bool, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `select count(*) from fests where slug = ? and id <> ?`, slug, festID).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s *server) festRefOrID(ctx context.Context, festID int64) string {
+	var slug string
+	if err := s.db.QueryRowContext(ctx, `select coalesce(slug, '') from fests where id = ?`, festID).Scan(&slug); err == nil && slug != "" {
+		return slug
+	}
+	return fmt.Sprintf("%d", festID)
+}
+
+func (s *server) gameRefOrID(ctx context.Context, gameID int64) string {
+	var slug string
+	if err := s.db.QueryRowContext(ctx, `select coalesce(slug, '') from games where id = ?`, gameID).Scan(&slug); err == nil && slug != "" {
+		return slug
+	}
+	return fmt.Sprintf("%d", gameID)
+}
+
+func (s *server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64, errMsg string) {
+	fest, err := s.loadHostFestHeader(r.Context(), festID)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var (
+		code     string
+		title    string
+		gameType string
+		slug     sql.NullString
+	)
+	if err := s.db.QueryRowContext(r.Context(), `
+select code, title, game_type, slug from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = hostGameSettingsTemplate.Execute(w, hostGameSettingsData{
+		Fest: fest,
+		Game: publicFestGame{
+			ID:    gameID,
+			Slug:  slug.String,
+			Code:  code,
+			Title: title,
+			Type:  gameTypeLabel(gameType),
+		},
+		Slug:  slug.String,
+		Error: errMsg,
+	})
+}
+
+func (s *server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	slug := strings.TrimSpace(r.Form.Get("slug"))
+	var slugValue any
+	if slug != "" {
+		if err := validateSlug(slug); err != nil {
+			s.renderHostGameSettings(w, r, festID, gameID, "Slug: "+err.Error())
+			return
+		}
+		var count int
+		if err := s.db.QueryRowContext(r.Context(), `
+select count(*) from games where fest_id = ? and slug = ? and id <> ?`, festID, slug, gameID).Scan(&count); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if count > 0 {
+			s.renderHostGameSettings(w, r, festID, gameID, "Slug уже занят в этом фесте.")
+			return
+		}
+		slugValue = slug
+	}
+	if _, err := s.db.ExecContext(r.Context(), `
+update games set slug = ?, updated_at = ? where id = ? and fest_id = ?`,
+		slugValue, utcNow(), gameID, festID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	gameRef := slug
+	if gameRef == "" {
+		gameRef = fmt.Sprintf("%d", gameID)
+	}
+	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/game/%s/settings", s.festRefOrID(r.Context(), festID), gameRef), http.StatusSeeOther)
 }
 
 func (s *server) handleHostImportScheme(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -1023,7 +1240,7 @@ limit 1`, festID).Scan(&nextGameID, &nextMatchCode); err != nil && !errors.Is(er
 			s.activeMatchCode = ""
 		}
 	}
-	http.Redirect(w, r, fmt.Sprintf("/host/fest/%d", festID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
 }
 
 func (s *server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request, festID int64, errMsg string, selectedType string) {
@@ -1051,7 +1268,7 @@ func (s *server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, fe
 		s.renderHostCreateGamePage(w, r, festID, err.Error(), gameType)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/host/fest/%d/game/%d/", festID, gameID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/game/%s/", s.festRefOrID(r.Context(), festID), s.gameRefOrID(r.Context(), gameID)), http.StatusSeeOther)
 }
 
 func (s *server) createHostGame(ctx context.Context, festID int64, gameType string, form url.Values) (int64, error) {
@@ -1499,6 +1716,7 @@ func (s *server) renderHostSchemeImportPage(w http.ResponseWriter, r *http.Reque
 func (s *server) renderHostFestDashboard(w http.ResponseWriter, r *http.Request, festID int64, msgs hostDashMessages) {
 	var (
 		title       string
+		slug        string
 		description string
 		startDate   sql.NullString
 		endDate     sql.NullString
@@ -1506,8 +1724,8 @@ func (s *server) renderHostFestDashboard(w http.ResponseWriter, r *http.Request,
 		isPublic    int
 	)
 	if err := s.db.QueryRowContext(r.Context(), `
-select title, description, start_date, end_date, rating_id, is_public
-from fests where id = ?`, festID).Scan(&title, &description, &startDate, &endDate, &ratingID, &isPublic); err != nil {
+select title, coalesce(slug, ''), description, start_date, end_date, rating_id, is_public
+from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, &endDate, &ratingID, &isPublic); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -1520,14 +1738,19 @@ from fests where id = ?`, festID).Scan(&title, &description, &startDate, &endDat
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	festRef := slug
+	if festRef == "" {
+		festRef = fmt.Sprintf("%d", festID)
+	}
 	hostGames := make([]publicFestGame, len(games))
 	for i, g := range games {
 		hostGames[i] = publicFestGame{
 			ID:    g.ID,
+			Slug:  g.Slug,
 			Code:  g.Code,
 			Title: g.Title,
 			Type:  gameTypeLabel(g.Type),
-			URL:   fmt.Sprintf("/host/fest/%d/game/%d/", festID, g.ID),
+			URL:   fmt.Sprintf("/host/fest/%s/game/%s/", festRef, g.Ref()),
 		}
 	}
 	teamCount, playerCount, err := s.loadHostFestRosterCounts(r.Context(), festID)
@@ -1553,6 +1776,7 @@ from fest_teams where fest_id = ?`, festID).Scan(&numbersAssigned); err != nil {
 	data := hostFestDashData{
 		Fest: hostMyFest{
 			ID:        festID,
+			Slug:      slug,
 			Title:     title,
 			StartDate: startDate.String,
 			EndDate:   endDate.String,
@@ -1560,6 +1784,7 @@ from fest_teams where fest_id = ?`, festID).Scan(&numbersAssigned); err != nil {
 			IsPublic:  isPublic == 1,
 		},
 		Description:     description,
+		Slug:            slug,
 		Games:           hostGames,
 		TeamCount:       teamCount,
 		PlayerCount:     playerCount,
@@ -1583,8 +1808,8 @@ func (s *server) loadHostFestHeader(ctx context.Context, festID int64) (hostMyFe
 	var t hostMyFest
 	var pub int
 	if err := s.db.QueryRowContext(ctx, `
-select id, title, coalesce(start_date, ''), coalesce(end_date, ''), is_public
-from fests where id = ?`, festID).Scan(&t.ID, &t.Title, &t.StartDate, &t.EndDate, &pub); err != nil {
+select id, coalesce(slug, ''), title, coalesce(start_date, ''), coalesce(end_date, ''), is_public
+from fests where id = ?`, festID).Scan(&t.ID, &t.Slug, &t.Title, &t.StartDate, &t.EndDate, &pub); err != nil {
 		return hostMyFest{}, err
 	}
 	t.IsPublic = pub == 1
@@ -1691,7 +1916,7 @@ func (s *server) loadFestRatingID(ctx context.Context, festID int64) (int64, err
 
 func (s *server) loadHostFests(ctx context.Context, userID int64) ([]hostMyFest, error) {
 	rows, err := s.db.QueryContext(ctx, `
-select t.id, t.title, coalesce(t.start_date, ''), coalesce(t.end_date, ''), t.is_public
+select t.id, coalesce(t.slug, ''), t.title, coalesce(t.start_date, ''), coalesce(t.end_date, ''), t.is_public
 from fests t
 join fest_organizers o on o.fest_id = t.id
 where o.user_id = ?
@@ -1706,7 +1931,7 @@ order by case when t.start_date is null or t.start_date = '' then 1 else 0 end,
 	for rows.Next() {
 		var t hostMyFest
 		var pub int
-		if err := rows.Scan(&t.ID, &t.Title, &t.StartDate, &t.EndDate, &pub); err != nil {
+		if err := rows.Scan(&t.ID, &t.Slug, &t.Title, &t.StartDate, &t.EndDate, &pub); err != nil {
 			return nil, err
 		}
 		t.IsPublic = pub == 1
@@ -1763,22 +1988,3 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-func generateSlug(title string, now time.Time) string {
-	slug := strings.ToLower(strings.TrimSpace(title))
-	out := make([]rune, 0, len(slug))
-	for _, r := range slug {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			out = append(out, r)
-		case r == ' ' || r == '-' || r == '_':
-			if len(out) > 0 && out[len(out)-1] != '-' {
-				out = append(out, '-')
-			}
-		}
-	}
-	stem := strings.Trim(string(out), "-")
-	if stem == "" {
-		stem = "fest"
-	}
-	return fmt.Sprintf("%s-%d", stem, now.Unix())
-}

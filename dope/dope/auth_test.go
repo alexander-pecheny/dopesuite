@@ -186,7 +186,11 @@ func TestHostDashboardDeleteButtonsAndGameDelete(t *testing.T) {
 		t.Fatalf("dashboard status = %d, body %s", dashboardResp.Code, dashboardResp.Body.String())
 	}
 	body := dashboardResp.Body.String()
-	if !strings.Contains(body, fmt.Sprintf(`/host/fest/%d/game/%d/delete`, festID, gameID)) {
+	var festSlug string
+	if err := srv.db.QueryRow(`select slug from fests where id = ?`, festID).Scan(&festSlug); err != nil {
+		t.Fatalf("fest slug: %v", err)
+	}
+	if !strings.Contains(body, fmt.Sprintf(`/host/fest/%s/game/%d/delete`, festSlug, gameID)) {
 		t.Fatalf("dashboard missing game delete form: %s", body)
 	}
 	if !strings.Contains(body, "Удалить игру?") {

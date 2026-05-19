@@ -1092,7 +1092,7 @@ function isLastRenderedTheme(isShootout, themeIndex) {
 
 function currentRoute() {
   const path = window.location.pathname;
-  const prefix = path.match(/^\/host\/fest\/(\d+)\/game\/(\d+)/);
+  const prefix = path.match(/^\/host\/fest\/([^/]+)\/game\/([^/]+)/);
   if (!prefix) {
     return {mode: "missing"};
   }

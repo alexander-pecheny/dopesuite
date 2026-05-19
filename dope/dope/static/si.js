@@ -873,7 +873,7 @@ function applyRemoteState(nextState) {
 
 function currentRoute() {
   const path = window.location.pathname;
-  const host = path.match(/^\/host\/fest\/(\d+)\/game\/(\d+)/);
+  const host = path.match(/^\/host\/fest\/([^/]+)\/game\/([^/]+)/);
   if (host) {
     return {
       viewer: false,
@@ -882,7 +882,7 @@ function currentRoute() {
       apiBase: `/api/fest/${host[1]}/games/${host[2]}`,
     };
   }
-  const pub = path.match(/^\/fest\/(\d+)\/game\/(\d+)/);
+  const pub = path.match(/^\/fest\/([^/]+)\/game\/([^/]+)/);
   if (pub) {
     return {
       viewer: true,

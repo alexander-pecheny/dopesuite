@@ -570,7 +570,106 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
 	}
+	if err := addColumnsIfMissing(db, "games", []columnSpec{
+		{Name: "slug", Type: "TEXT"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`create unique index if not exists games_fest_slug_idx on games(fest_id, slug) where slug is not null`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(9, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := relaxFestSlugNotNull(db); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(10, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
 	return nil
+}
+
+// relaxFestSlugNotNull rebuilds the fests table so slug is nullable. The
+// original create-table set slug to NOT NULL UNIQUE; we want slug to be
+// optional — set only when the user picks one. SQLite can't ALTER a column's
+// nullability, so we copy the table.
+func relaxFestSlugNotNull(db *sql.DB) error {
+	var notNull int
+	if err := db.QueryRow(`select "notnull" from pragma_table_info('fests') where name = 'slug'`).Scan(&notNull); err != nil {
+		return err
+	}
+	if notNull == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	fkOff := true
+	defer func() {
+		if fkOff {
+			_, _ = db.Exec(`PRAGMA foreign_keys = ON`)
+		}
+	}()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// legacy_alter_table = ON keeps RENAME TO from rewriting fest_id FK
+	// references in other tables — we'll point them back at the new fests
+	// table just by creating one with the original name.
+	if _, err := tx.ExecContext(ctx, `PRAGMA legacy_alter_table = ON`); err != nil {
+		return err
+	}
+	legacyOn := true
+	defer func() {
+		if legacyOn {
+			_, _ = tx.ExecContext(ctx, `PRAGMA legacy_alter_table = OFF`)
+		}
+	}()
+	if _, err := tx.ExecContext(ctx, `alter table fests rename to fests_slug_migration_old`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+create table fests(
+  id integer primary key,
+  slug text unique,
+  title text not null,
+  description text not null default '',
+  rating_id integer,
+  created_by integer references users(id),
+  revision integer not null default 1,
+  created_at text not null,
+  updated_at text not null,
+  start_date text,
+  end_date text,
+  is_public integer not null default 0
+)`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+insert into fests(id, slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public)
+select id, slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public
+from fests_slug_migration_old`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `drop table fests_slug_migration_old`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `PRAGMA legacy_alter_table = OFF`); err != nil {
+		return err
+	}
+	legacyOn = false
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		return err
+	}
+	fkOff = false
+	return verifyForeignKeys(db)
 }
 
 func migrateLegacyFestSchema(db *sql.DB) error {
@@ -849,6 +948,76 @@ func defaultGameID(ctx context.Context, q dbQueryer, festID int64) (int64, error
 	return id, err
 }
 
+// validateSlug enforces the slug grammar: 1-64 chars of a-z, 0-9, hyphen;
+// the slug cannot be all digits (so it never collides with a numeric ID lookup).
+func validateSlug(slug string) error {
+	if len(slug) == 0 {
+		return errors.New("slug is empty")
+	}
+	if len(slug) > 64 {
+		return errors.New("slug is longer than 64 characters")
+	}
+	allDigit := true
+	for _, r := range slug {
+		switch {
+		case r >= 'a' && r <= 'z':
+			allDigit = false
+		case r == '-':
+			allDigit = false
+		case r >= '0' && r <= '9':
+			// ok
+		default:
+			return errors.New("slug may contain only a-z, 0-9 and hyphen")
+		}
+	}
+	if allDigit {
+		return errors.New("slug cannot be all digits")
+	}
+	return nil
+}
+
+// resolveFestID accepts either a positive integer (the fest id) or a slug and
+// returns the numeric fest id. Returns sql.ErrNoRows if no fest matches.
+func resolveFestID(ctx context.Context, q dbQueryer, ref string) (int64, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return 0, sql.ErrNoRows
+	}
+	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+		var found int64
+		if err := q.QueryRowContext(ctx, `select id from fests where id = ?`, id).Scan(&found); err != nil {
+			return 0, err
+		}
+		return found, nil
+	}
+	var id int64
+	if err := q.QueryRowContext(ctx, `select id from fests where slug = ?`, ref).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// resolveGameID accepts either a positive integer (the game id) or a slug and
+// returns the numeric game id within the given fest.
+func resolveGameID(ctx context.Context, q dbQueryer, festID int64, ref string) (int64, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return 0, sql.ErrNoRows
+	}
+	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+		var found int64
+		if err := q.QueryRowContext(ctx, `select id from games where id = ? and fest_id = ?`, id, festID).Scan(&found); err != nil {
+			return 0, err
+		}
+		return found, nil
+	}
+	var id int64
+	if err := q.QueryRowContext(ctx, `select id from games where fest_id = ? and slug = ?`, festID, ref).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 func insertTheme(ctx context.Context, tx *sql.Tx, matchID, teamID int64, kind string, themeIndex int, playerID int64, answers [5]string) error {
 	var player any
 	if playerID > 0 {
@@ -910,7 +1079,7 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	festID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("fest_id")), 10, 64)
+	festID, err := resolveFestID(r.Context(), s.db, strings.TrimSpace(r.URL.Query().Get("fest_id")))
 	if err != nil || festID <= 0 {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
@@ -1521,7 +1690,7 @@ func (s *server) loadFestViewLocked(festID, gameID int64) (FestView, error) {
 	}
 	var updatedAt string
 	if err := s.db.QueryRowContext(ctx, `
-select t.slug, t.title, t.revision, t.updated_at, coalesce(g.scheme_json, '')
+select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, '')
 from fests t
 left join games g on g.fest_id = t.id and g.id = ?
 where t.id = ?`, gameID, festID).
