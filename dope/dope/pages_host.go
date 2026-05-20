@@ -266,7 +266,7 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
         <li class="list-action-row">
           <a class="list-row" href="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/">
             <span class="list-row-title">{{.Title}}</span>
-            <span class="muted">{{.Type}}</span>
+            {{if .Slug}}<span class="muted">{{.Slug}}</span>{{end}}
           </a>
           <a class="btn" href="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/settings">Свойства</a>
           <form method="post" action="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/delete" onsubmit="return confirm('Удалить игру? Все результаты этой игры будут потеряны.');">
@@ -1987,4 +1987,3 @@ func boolToInt(b bool) int {
 	}
 	return 0
 }
-

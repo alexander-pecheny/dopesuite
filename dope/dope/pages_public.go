@@ -114,7 +114,7 @@ var publicFestTemplate = template.Must(template.New("publicFest").Parse(`<!docty
         <li>
           <a class="list-row" href="{{.URL}}">
             <span class="list-row-title">{{.Title}}</span>
-            <span class="muted">{{.Type}}</span>
+            {{if .Slug}}<span class="muted">{{.Slug}}</span>{{end}}
           </a>
         </li>
         {{end}}
