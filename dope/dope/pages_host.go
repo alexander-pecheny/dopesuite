@@ -1609,7 +1609,7 @@ func loadFestRosterImportTeamsTx(ctx context.Context, q dbQueryer, festID int64)
 	rows, err := q.QueryContext(ctx, `
 select coalesce(rating_id, 0), name, city, coalesce(number, 0)
 from fest_teams
-where fest_id = ?
+where fest_id = ? and deleted = 0
 order by position, id`, festID)
 	if err != nil {
 		return nil, err
@@ -1761,7 +1761,7 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 	var numbersAssigned int
 	if err := s.db.QueryRowContext(r.Context(), `
 select coalesce(sum(case when number is not null then 1 else 0 end), 0)
-from fest_teams where fest_id = ?`, festID).Scan(&numbersAssigned); err != nil {
+from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigned); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1819,7 +1819,7 @@ from fests where id = ?`, festID).Scan(&t.ID, &t.Slug, &t.Title, &t.StartDate, &
 
 func (s *server) loadHostFestRosterCounts(ctx context.Context, festID int64) (int, int, error) {
 	var teamCount, playerCount int
-	if err := s.db.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&teamCount); err != nil {
+	if err := s.db.QueryRowContext(ctx, `select count(*) from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&teamCount); err != nil {
 		return 0, 0, err
 	}
 	if err := s.db.QueryRowContext(ctx, `select count(*) from fest_players where fest_id = ?`, festID).Scan(&playerCount); err != nil {
@@ -1833,7 +1833,7 @@ func (s *server) loadHostFestTeams(ctx context.Context, festID int64) ([]hostFes
 select coalesce(tt.rating_id, 0), tt.name, tt.city, count(ttp.player_id)
 from fest_teams tt
 left join fest_team_players ttp on ttp.team_id = tt.id
-where tt.fest_id = ?
+where tt.fest_id = ? and tt.deleted = 0
 group by tt.id
 order by tt.position, tt.id`, festID)
 	if err != nil {
@@ -1869,7 +1869,7 @@ select coalesce(p.rating_id, 0), p.first_name, p.last_name, tt.name
 from fest_team_players ttp
 join fest_players p on p.id = ttp.player_id
 join fest_teams tt on tt.id = ttp.team_id
-where tt.fest_id = ?
+where tt.fest_id = ? and tt.deleted = 0
 order by tt.position, tt.id, ttp.roster_order, p.id`, festID)
 	if err != nil {
 		return nil, err

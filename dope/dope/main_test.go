@@ -1122,6 +1122,184 @@ func TestFestNumbersRemapEntries(t *testing.T) {
 
 func itoa(v int64) string { return strconv.FormatInt(v, 10) }
 
+// TestFestNumbersStableAcrossResync verifies that re-importing a roster keeps
+// previously assigned numbers — a team that leaves the roster takes its slot
+// out of circulation (no automatic renumbering) so already-printed answer
+// sheets still point at the right team.
+func TestFestNumbersStableAcrossResync(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, _ := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+
+	// Initial import: 5 teams "А".."Д" with rating IDs 11..15.
+	initial := []festRosterImportTeam{
+		{RatingID: 11, Name: "Алёша", City: "А"},
+		{RatingID: 12, Name: "Боря", City: "Б"},
+		{RatingID: 13, Name: "Витя", City: "В"},
+		{RatingID: 14, Name: "Гена", City: "Г"},
+		{RatingID: 15, Name: "Дима", City: "Д"},
+	}
+	if _, err := srv.importFestRoster(t.Context(), festID, 999, initial); err != nil {
+		t.Fatalf("initial import: %v", err)
+	}
+	teams, err := loadFestTeamsForNumbering(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(teams) != 5 {
+		t.Fatalf("teams = %d, want 5", len(teams))
+	}
+	// Assign numbers 1..5 alphabetically (which matches loadFestTeamsForNumbering ordering).
+	assignments := map[int64]int{}
+	byRating := map[int64]int64{}
+	for i, team := range teams {
+		assignments[team.ID] = i + 1
+		// Stash team id → rating id via separate query.
+		var ratingID int64
+		if err := db.QueryRow(`select coalesce(rating_id, 0) from fest_teams where id = ?`, team.ID).Scan(&ratingID); err != nil {
+			t.Fatalf("rating id: %v", err)
+		}
+		byRating[ratingID] = team.ID
+	}
+	if err := srv.saveFestNumbers(t.Context(), festID, assignments); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	checkNumbers := func(label string, want map[int64]int64) {
+		t.Helper()
+		rows, err := db.Query(`select coalesce(rating_id, 0), coalesce(number, 0) from fest_teams where fest_id = ? and deleted = 0`, festID)
+		if err != nil {
+			t.Fatalf("%s: query: %v", label, err)
+		}
+		defer rows.Close()
+		got := map[int64]int64{}
+		for rows.Next() {
+			var rid, num int64
+			if err := rows.Scan(&rid, &num); err != nil {
+				t.Fatalf("%s: scan: %v", label, err)
+			}
+			got[rid] = num
+		}
+		if len(got) != len(want) {
+			t.Fatalf("%s: got %d active teams, want %d (got=%v)", label, len(got), len(want), got)
+		}
+		for rid, num := range want {
+			if got[rid] != num {
+				t.Fatalf("%s: rating_id %d → %d, want %d (got=%v)", label, rid, got[rid], num, got)
+			}
+		}
+	}
+
+	checkNumbers("after initial assign", map[int64]int64{11: 1, 12: 2, 13: 3, 14: 4, 15: 5})
+
+	// Case 1: team Гена (rating 14, number 4) leaves the rating roster.
+	// Expected: remaining teams keep 1, 2, 3, 5 — no renumbering.
+	without14 := []festRosterImportTeam{
+		{RatingID: 11, Name: "Алёша", City: "А"},
+		{RatingID: 12, Name: "Боря", City: "Б"},
+		{RatingID: 13, Name: "Витя", City: "В"},
+		{RatingID: 15, Name: "Дима", City: "Д"},
+	}
+	if _, err := srv.importFestRoster(t.Context(), festID, 999, without14); err != nil {
+		t.Fatalf("resync without 14: %v", err)
+	}
+	checkNumbers("after Гена leaves", map[int64]int64{11: 1, 12: 2, 13: 3, 15: 5})
+
+	// Case 2: still without Гена, but two new teams join.
+	// Expected: existing keep 1, 2, 3, 5; newcomers receive 6 and 7 (strictly
+	// greater than the largest number ever assigned, never filling the 4-gap).
+	withNewcomers := []festRosterImportTeam{
+		{RatingID: 11, Name: "Алёша", City: "А"},
+		{RatingID: 12, Name: "Боря", City: "Б"},
+		{RatingID: 13, Name: "Витя", City: "В"},
+		{RatingID: 15, Name: "Дима", City: "Д"},
+		{RatingID: 16, Name: "Егор", City: "Е"},
+		{RatingID: 17, Name: "Жора", City: "Ж"},
+	}
+	if _, err := srv.importFestRoster(t.Context(), festID, 999, withNewcomers); err != nil {
+		t.Fatalf("resync with newcomers: %v", err)
+	}
+	checkNumbers("after newcomers join", map[int64]int64{11: 1, 12: 2, 13: 3, 15: 5, 16: 6, 17: 7})
+
+	// Case 3: Гена returns. Expected: her old number 4 comes back because the
+	// soft-deleted row preserved it.
+	withGenaBack := []festRosterImportTeam{
+		{RatingID: 11, Name: "Алёша", City: "А"},
+		{RatingID: 12, Name: "Боря", City: "Б"},
+		{RatingID: 13, Name: "Витя", City: "В"},
+		{RatingID: 14, Name: "Гена", City: "Г"},
+		{RatingID: 15, Name: "Дима", City: "Д"},
+		{RatingID: 16, Name: "Егор", City: "Е"},
+		{RatingID: 17, Name: "Жора", City: "Ж"},
+	}
+	if _, err := srv.importFestRoster(t.Context(), festID, 999, withGenaBack); err != nil {
+		t.Fatalf("resync with Гена back: %v", err)
+	}
+	checkNumbers("after Гена returns", map[int64]int64{11: 1, 12: 2, 13: 3, 14: 4, 15: 5, 16: 6, 17: 7})
+
+	// Case 4: fresh "assign numbers" (auto) must wipe everything and renumber
+	// 1..N alphabetically over the current active roster, including discarding
+	// any leftover soft-deleted rows so their archived numbers don't reserve
+	// slots.
+	autoResp := httptest.NewRecorder()
+	autoReq := httptest.NewRequest(http.MethodPost, "/host/fest/"+itoa(festID)+"/numbers/auto", nil)
+	srv.handleHostAutoFestNumbers(autoResp, autoReq, festID)
+	if autoResp.Code != http.StatusOK {
+		t.Fatalf("auto status %d", autoResp.Code)
+	}
+	checkNumbers("after auto-assign", map[int64]int64{11: 1, 12: 2, 13: 3, 14: 4, 15: 5, 16: 6, 17: 7})
+}
+
+// TestFestNumbersFreshImport ensures that an import into a fest that has never
+// had any numbers leaves teams unnumbered — auto-assignment is an explicit
+// host action.
+func TestFestNumbersFreshImport(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, _ := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+
+	if _, err := srv.importFestRoster(t.Context(), festID, 999, []festRosterImportTeam{
+		{RatingID: 11, Name: "Алёша"},
+		{RatingID: 12, Name: "Боря"},
+	}); err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	allSet, total, err := festTeamsAllNumbered(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("allNumbered: %v", err)
+	}
+	if total != 2 || allSet {
+		t.Fatalf("after fresh import: total=%d allSet=%v, want 2/false", total, allSet)
+	}
+
+	// A second import while nothing has ever been numbered must still leave
+	// teams unnumbered — there's no prior numbering context to extend.
+	if _, err := srv.importFestRoster(t.Context(), festID, 999, []festRosterImportTeam{
+		{RatingID: 11, Name: "Алёша"},
+		{RatingID: 12, Name: "Боря"},
+		{RatingID: 13, Name: "Витя"},
+	}); err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+	allSet, total, err = festTeamsAllNumbered(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("allNumbered: %v", err)
+	}
+	if total != 3 || allSet {
+		t.Fatalf("after second import: total=%d allSet=%v, want 3/false", total, allSet)
+	}
+}
+
 func TestAuthCodeHelpers(t *testing.T) {
 	a, err := newInviteCode()
 	if err != nil {
