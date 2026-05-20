@@ -21,20 +21,12 @@ type hostFestNumberRow struct {
 	TeamLabel string
 }
 
-type hostFestNumberOption struct {
-	ID    int64
-	Label string
-}
-
 type hostFestNumbersData struct {
-	Fest    hostMyFest
-	Rows    []hostFestNumberRow
-	Options []hostFestNumberOption
-	Error   string
-	Notice  string
-	HasAny  bool
-	AllSet  bool
-	Pending int
+	Fest       hostMyFest
+	Rows       []hostFestNumberRow
+	Error      string
+	Notice     string
+	HasNumbers bool
 }
 
 var hostFestNumbersTemplate = template.Must(template.New("hostNumbers").Parse(`<!doctype html>
@@ -56,17 +48,19 @@ var hostFestNumbersTemplate = template.Must(template.New("hostNumbers").Parse(`<
     {{if not .Rows}}
     <p class="empty">Сначала загрузите команды на странице феста.</p>
     {{else}}
-    <p class="muted">Назначьте команду каждому номеру. Номер можно переименовать в любую сторону — например, заменить на резервный (101 и т. п.). При изменении номера все его упоминания в ОД заменятся на новый.</p>
-    <form method="post" action="/host/fest/{{.Fest.Ref}}/numbers/auto" class="cluster" autocomplete="off">
-      <button class="btn" type="submit">Проставить автоматически</button>
-      {{if .HasAny}}
-      <button class="btn" type="submit" formaction="/host/fest/{{.Fest.Ref}}/numbers/clear">Очистить</button>
-      {{end}}
-    </form>
-    <form method="post" action="/host/fest/{{.Fest.Ref}}/numbers" class="card stack number-form" autocomplete="off">
-      <datalist id="number-team-options">
-        {{range .Options}}<option data-id="{{.ID}}" value="{{.Label}}"></option>{{end}}
-      </datalist>
+    <form method="post" action="/host/fest/{{.Fest.Ref}}/numbers" class="card stack number-form" id="numbers-form" autocomplete="off" data-has-numbers="{{if .HasNumbers}}1{{end}}">
+      <div class="cluster numbers-actions">
+        {{if .HasNumbers}}
+        <button class="btn" type="submit" id="numbers-clear-btn" formaction="/host/fest/{{.Fest.Ref}}/numbers/clear" formnovalidate>Очистить</button>
+        {{end}}
+        <button class="btn" type="submit" id="numbers-auto-btn" formaction="/host/fest/{{.Fest.Ref}}/numbers/auto" formnovalidate>Проставить автоматически</button>
+        {{if .HasNumbers}}
+        <button class="btn" type="button" id="numbers-edit-btn">Замена номера</button>
+        {{end}}
+      </div>
+      <p class="muted numbers-help" id="numbers-help" hidden>
+        Меняйте номер прямо в строке. Когда сохраните, все упоминания старого номера в ОД заменятся на новый — удобно, чтобы перевести команду на резервный номер (101 и т. п.), не задевая остальных.
+      </p>
       <ol class="number-list">
         {{range .Rows}}
         <li class="number-row">
@@ -75,42 +69,59 @@ var hostFestNumbersTemplate = template.Must(template.New("hostNumbers").Parse(`<
                  inputmode="numeric"
                  maxlength="4"
                  name="num_{{.Index}}"
-                 value="{{.Number}}">
-          <input class="number-row-team"
-                 list="number-team-options"
-                 name="team_label_{{.Index}}"
-                 value="{{.TeamLabel}}"
-                 placeholder="Название команды">
+                 value="{{.Number}}"
+                 readonly>
+          <span class="number-row-team">{{.TeamLabel}}</span>
+          <input type="hidden" name="team_label_{{.Index}}" value="{{.TeamLabel}}">
           <input type="hidden" name="team_id_{{.Index}}" value="{{if .TeamID}}{{.TeamID}}{{end}}">
         </li>
         {{end}}
       </ol>
-      <div class="cluster">
+      <div class="cluster" id="numbers-save" hidden>
         <button class="btn" type="submit">Сохранить</button>
+        <button class="btn btn-secondary" type="button" id="numbers-cancel-btn">Отмена</button>
       </div>
     </form>
     <script>
       (() => {
-        const list = document.getElementById("number-team-options");
-        if (!list) return;
-        const byLabel = new Map();
-        for (const option of list.options) {
-          byLabel.set(option.value.toLowerCase(), option.dataset.id || "");
+        const form = document.getElementById("numbers-form");
+        if (!form) return;
+        const hasNumbers = form.dataset.hasNumbers === "1";
+        const editBtn = document.getElementById("numbers-edit-btn");
+        const autoBtn = document.getElementById("numbers-auto-btn");
+        const clearBtn = document.getElementById("numbers-clear-btn");
+        const cancelBtn = document.getElementById("numbers-cancel-btn");
+        const help = document.getElementById("numbers-help");
+        const save = document.getElementById("numbers-save");
+        const numInputs = form.querySelectorAll(".number-row-num");
+
+        const enterEdit = () => {
+          form.classList.add("editing");
+          numInputs.forEach((input) => input.removeAttribute("readonly"));
+          help.removeAttribute("hidden");
+          save.removeAttribute("hidden");
+          if (editBtn) editBtn.setAttribute("hidden", "");
+          if (autoBtn) autoBtn.setAttribute("hidden", "");
+          if (clearBtn) clearBtn.setAttribute("hidden", "");
+        };
+        const exitEdit = () => {
+          location.reload();
+        };
+
+        if (editBtn) editBtn.addEventListener("click", enterEdit);
+        if (cancelBtn) cancelBtn.addEventListener("click", exitEdit);
+        if (autoBtn && hasNumbers) {
+          autoBtn.addEventListener("click", (event) => {
+            const ok = window.confirm("Команды будут перенумерованы 1..N по алфавиту. Если бланки ответов уже напечатаны со старыми номерами — они станут невалидными. Продолжить?");
+            if (!ok) event.preventDefault();
+          });
         }
-        document.querySelectorAll(".number-row").forEach((row) => {
-          const teamInput = row.querySelector(".number-row-team");
-          const hidden = row.querySelector('input[type="hidden"]');
-          if (!teamInput || !hidden) return;
-          const sync = () => {
-            const key = teamInput.value.trim().toLowerCase();
-            const id = key ? (byLabel.get(key) || "") : "";
-            hidden.value = id;
-            teamInput.classList.toggle("number-row-bad", Boolean(key) && !id);
-          };
-          teamInput.addEventListener("input", sync);
-          teamInput.addEventListener("change", sync);
-          sync();
-        });
+        if (clearBtn) {
+          clearBtn.addEventListener("click", (event) => {
+            const ok = window.confirm("Очистить все номера команд?");
+            if (!ok) event.preventDefault();
+          });
+        }
       })();
     </script>
     {{end}}
@@ -148,52 +159,25 @@ func (s *server) buildHostFestNumbersData(ctx context.Context, festID int64, err
 		return data, nil
 	}
 
-	byName := append([]festNumberingTeam(nil), teams...)
-	sort.SliceStable(byName, func(i, j int) bool {
-		if cmp := compareAlpha(byName[i].Name, byName[j].Name); cmp != 0 {
-			return cmp < 0
-		}
-		if cmp := compareAlpha(byName[i].City, byName[j].City); cmp != 0 {
-			return cmp < 0
-		}
-		return byName[i].ID < byName[j].ID
-	})
-	data.Options = make([]hostFestNumberOption, len(byName))
-	for i, team := range byName {
-		data.Options[i] = hostFestNumberOption{ID: team.ID, Label: teamDisplayName(team)}
-	}
-
 	if len(override) > 0 {
 		data.Rows = override
 	} else {
 		data.Rows = defaultNumberRows(teams)
 	}
 	for _, row := range data.Rows {
-		if row.TeamID > 0 || strings.TrimSpace(row.Number) != "" {
-			data.HasAny = true
+		if strings.TrimSpace(row.Number) != "" {
+			data.HasNumbers = true
+			break
 		}
 	}
-	assigned := 0
-	for _, row := range data.Rows {
-		if row.TeamID > 0 && strings.TrimSpace(row.Number) != "" {
-			assigned++
-		}
-	}
-	data.AllSet = assigned == len(data.Rows)
-	data.Pending = len(data.Rows) - assigned
 	return data, nil
 }
 
-// defaultNumberRows builds N rows: numbered teams first (sorted by number ascending),
-// followed by unnumbered teams with auto-suggested unused numbers (1..) so the user
-// sees "left=number, right=team" with numbers 1..N pre-filled when nothing is assigned.
+// defaultNumberRows builds one row per team: numbered teams first (sorted by
+// number ascending), then unnumbered teams (alphabetical). Unnumbered teams
+// get an empty number cell — the host has to explicitly trigger numbering via
+// the auto-assign action or by editing a row.
 func defaultNumberRows(teams []festNumberingTeam) []hostFestNumberRow {
-	used := make(map[int]bool, len(teams))
-	for _, team := range teams {
-		if team.Number > 0 {
-			used[team.Number] = true
-		}
-	}
 	numbered := make([]festNumberingTeam, 0, len(teams))
 	unnumbered := make([]festNumberingTeam, 0, len(teams))
 	for _, team := range teams {
@@ -213,7 +197,6 @@ func defaultNumberRows(teams []festNumberingTeam) []hostFestNumberRow {
 		}
 		return unnumbered[i].ID < unnumbered[j].ID
 	})
-	nextUnused := 1
 	rows := make([]hostFestNumberRow, 0, len(teams))
 	for i, team := range numbered {
 		rows = append(rows, hostFestNumberRow{
@@ -224,24 +207,12 @@ func defaultNumberRows(teams []festNumberingTeam) []hostFestNumberRow {
 		})
 	}
 	for i, team := range unnumbered {
-		for used[nextUnused] {
-			nextUnused++
-		}
 		rows = append(rows, hostFestNumberRow{
 			Index:     len(numbered) + i + 1,
-			Number:    strconv.Itoa(nextUnused),
+			Number:    "",
 			TeamID:    team.ID,
 			TeamLabel: teamDisplayName(team),
 		})
-		used[nextUnused] = true
-		nextUnused++
-	}
-	if len(numbered) == 0 {
-		// Fresh state: keep teams empty on the right, just numbers 1..N on the left.
-		for i := range rows {
-			rows[i].TeamID = 0
-			rows[i].TeamLabel = ""
-		}
 	}
 	return rows
 }
@@ -314,12 +285,12 @@ func (s *server) handleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		numTxt := strings.TrimSpace(row.NumRaw)
 		hasNum := numTxt != ""
 		hasTeam := row.TeamID != 0
-		if !hasNum && !hasTeam {
-			continue
-		}
 		if !hasTeam {
-			s.renderHostFestNumbers(w, r, festID, fmt.Sprintf("Строка %d: укажите команду или удалите номер.", row.Index), "", override)
-			return
+			if hasNum {
+				s.renderHostFestNumbers(w, r, festID, fmt.Sprintf("Строка %d: укажите команду или удалите номер.", row.Index), "", override)
+				return
+			}
+			continue
 		}
 		if !validIDs[row.TeamID] {
 			s.renderHostFestNumbers(w, r, festID, fmt.Sprintf("Строка %d: команда не из этого феста.", row.Index), "", override)
@@ -331,8 +302,8 @@ func (s *server) handleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 		}
 		teamToRow[row.TeamID] = row.Index
 		if !hasNum {
-			s.renderHostFestNumbers(w, r, festID, fmt.Sprintf("Строка %d: введите номер.", row.Index), "", override)
-			return
+			// Team intentionally left without a number — keep it unnumbered.
+			continue
 		}
 		n, err := strconv.Atoi(numTxt)
 		if err != nil || n <= 0 || n > festNumberMax {
@@ -359,6 +330,10 @@ func (s *server) handleHostSaveFestNumbers(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *server) handleHostAutoFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
+	if err := s.purgeFestSoftDeletedTeams(r.Context(), festID); err != nil {
+		s.renderHostFestNumbers(w, r, festID, err.Error(), "", nil)
+		return
+	}
 	teams, err := loadFestTeamsForNumbering(r.Context(), s.db, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -390,11 +365,26 @@ func (s *server) handleHostAutoFestNumbers(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *server) handleHostClearFestNumbers(w http.ResponseWriter, r *http.Request, festID int64) {
+	if err := s.purgeFestSoftDeletedTeams(r.Context(), festID); err != nil {
+		s.renderHostFestNumbers(w, r, festID, err.Error(), "", nil)
+		return
+	}
 	if err := s.saveFestNumbers(r.Context(), festID, nil); err != nil {
 		s.renderHostFestNumbers(w, r, festID, err.Error(), "", nil)
 		return
 	}
 	s.renderHostFestNumbers(w, r, festID, "", "Номера очищены.", nil)
+}
+
+// purgeFestSoftDeletedTeams hard-deletes any soft-deleted fest_teams rows for
+// this fest. Used by the "assign numbers" and "clear" actions, which the host
+// has explicitly confirmed as destructive resets — archived numbers from teams
+// that left the roster must not block reuse of those numbers.
+func (s *server) purgeFestSoftDeletedTeams(ctx context.Context, festID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.ExecContext(ctx, `delete from fest_teams where fest_id = ? and deleted = 1`, festID)
+	return err
 }
 
 func (s *server) saveFestNumbers(ctx context.Context, festID int64, assignments map[int64]int) error {
@@ -426,11 +416,11 @@ func (s *server) saveFestNumbers(ctx context.Context, festID int64, assignments 
 			}
 		}
 
-		if _, err := tx.ExecContext(ctx, `update fest_teams set number = null where fest_id = ?`, festID); err != nil {
+		if _, err := tx.ExecContext(ctx, `update fest_teams set number = null where fest_id = ? and deleted = 0`, festID); err != nil {
 			return err
 		}
 		for teamID, number := range assignments {
-			if _, err := tx.ExecContext(ctx, `update fest_teams set number = ? where id = ? and fest_id = ?`, number, teamID, festID); err != nil {
+			if _, err := tx.ExecContext(ctx, `update fest_teams set number = ? where id = ? and fest_id = ? and deleted = 0`, number, teamID, festID); err != nil {
 				return err
 			}
 		}
@@ -481,7 +471,7 @@ func loadFestTeamsForNumbering(ctx context.Context, q dbQueryer, festID int64) (
 	rows, err := q.QueryContext(ctx, `
 select id, name, city, coalesce(number, 0)
 from fest_teams
-where fest_id = ?
+where fest_id = ? and deleted = 0
 order by position, id`, festID)
 	if err != nil {
 		return nil, err
@@ -502,7 +492,7 @@ func festTeamsAllNumbered(ctx context.Context, q dbQueryer, festID int64) (bool,
 	var total, numbered int
 	if err := q.QueryRowContext(ctx, `
 select count(*), coalesce(sum(case when number is not null then 1 else 0 end), 0)
-from fest_teams where fest_id = ?`, festID).Scan(&total, &numbered); err != nil {
+from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&total, &numbered); err != nil {
 		return false, 0, err
 	}
 	if total == 0 {

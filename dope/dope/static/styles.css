@@ -261,7 +261,7 @@ a.list-row:hover { background: #eef1f5; }
 
 .number-row {
   display: grid;
-  grid-template-columns: 5em 1fr;
+  grid-template-columns: 4.5em 1fr;
   align-items: center;
   gap: var(--space-3);
 }
@@ -271,23 +271,53 @@ a.list-row:hover { background: #eef1f5; }
   font-size: var(--text-base);
   min-height: 36px;
   padding: 8px 12px;
-  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--surface);
+  border: 1px solid transparent;
   color: var(--text);
   outline: 0;
-  width: 100%;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
 }
 
 .number-row-num {
   font-variant-numeric: tabular-nums;
   text-align: right;
+  width: 100%;
+  justify-content: flex-end;
 }
 
-.number-row-num:focus,
-.number-row-team:focus { border-color: var(--blue); }
+.number-row-team {
+  text-align: left;
+}
 
-.number-row-team.number-row-bad { border-color: var(--red, #c0392b); }
+/* Default view: number is passive (gray flat), team name looks like a white card. */
+.number-form .number-row-num {
+  background: var(--structure);
+  border-color: transparent;
+}
+.number-form .number-row-team {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+/* Edit view (Замена номера): swap — number becomes the editable card, team name becomes the gray flat label. */
+.number-form.editing .number-row-num {
+  background: var(--surface);
+  border-color: var(--border);
+}
+.number-form.editing .number-row-team {
+  background: var(--structure);
+  border-color: transparent;
+}
+
+.number-row-num:not([readonly]):focus { border-color: var(--blue); }
+
+.numbers-help {
+  margin: 0;
+}
+
+.numbers-actions { flex-wrap: wrap; }
 
 .checkbox {
   display: inline-flex;

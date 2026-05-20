@@ -195,7 +195,35 @@ func (s *server) importFestRoster(ctx context.Context, festID, ratingID int64, t
 			return ratingRosterImportResult{}, sql.ErrNoRows
 		}
 
-		if _, err := tx.ExecContext(ctx, `delete from fest_teams where fest_id = ?`, festID); err != nil {
+		existingByRating, maxSeenNumber, err := loadFestExistingTeams(ctx, tx, festID)
+		if err != nil {
+			return ratingRosterImportResult{}, err
+		}
+		assignFestNumbersForImport(teams, existingByRating, maxSeenNumber)
+
+		// Soft-delete fest_teams whose rating_id is not in the incoming roster.
+		// Their numbers stay in the row so they reappear if the team returns.
+		incomingRatingIDs := make(map[int64]struct{}, len(teams))
+		for _, team := range teams {
+			if team.RatingID > 0 {
+				incomingRatingIDs[team.RatingID] = struct{}{}
+			}
+		}
+		for ratingID, existing := range existingByRating {
+			if _, stays := incomingRatingIDs[ratingID]; stays {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `update fest_teams set deleted = 1 where id = ?`, existing.ID); err != nil {
+				return ratingRosterImportResult{}, err
+			}
+		}
+		// Hard-delete rows that don't have a rating_id — we can't match them
+		// across re-syncs anyway, and they have no archived numbers worth keeping.
+		if _, err := tx.ExecContext(ctx, `delete from fest_teams where fest_id = ? and rating_id is null`, festID); err != nil {
+			return ratingRosterImportResult{}, err
+		}
+		// Players are fully rebuilt on every import.
+		if _, err := tx.ExecContext(ctx, `delete from fest_team_players where team_id in (select id from fest_teams where fest_id = ?)`, festID); err != nil {
 			return ratingRosterImportResult{}, err
 		}
 		if _, err := tx.ExecContext(ctx, `delete from fest_players where fest_id = ?`, festID); err != nil {
@@ -206,11 +234,27 @@ func (s *server) importFestRoster(ctx context.Context, festID, ratingID int64, t
 		playerCount := 0
 		for fallbackPosition, team := range teams {
 			importOrder := fallbackPosition + 1
-			teamID, err := insertReturningID(ctx, tx, `
-insert into fest_teams(fest_id, rating_id, name, city, position)
-values(?, ?, ?, ?, ?)`, festID, nullableInt64(team.RatingID), team.Name, team.City, importOrder)
-			if err != nil {
-				return ratingRosterImportResult{}, err
+			var numberParam any
+			if team.Number > 0 {
+				numberParam = team.Number
+			}
+			var teamID int64
+			if existing, ok := existingByRating[team.RatingID]; ok && team.RatingID > 0 {
+				teamID = existing.ID
+				if _, err := tx.ExecContext(ctx, `
+update fest_teams
+   set name = ?, city = ?, position = ?, number = ?, deleted = 0
+ where id = ?`, team.Name, team.City, importOrder, numberParam, teamID); err != nil {
+					return ratingRosterImportResult{}, err
+				}
+			} else {
+				var err error
+				teamID, err = insertReturningID(ctx, tx, `
+insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted)
+values(?, ?, ?, ?, ?, ?, 0)`, festID, nullableInt64(team.RatingID), team.Name, team.City, importOrder, numberParam)
+				if err != nil {
+					return ratingRosterImportResult{}, err
+				}
 			}
 			for rosterOrder, player := range team.Players {
 				key := rosterPlayerKey(player)
@@ -274,6 +318,75 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 		s.broadcastState(festID, fmt.Sprintf("game-state:%d", update.GameID), revision, update.StateJSON)
 	}
 	return result, nil
+}
+
+type existingFestTeam struct {
+	ID     int64
+	Number int64
+}
+
+// loadFestExistingTeams returns the rating_id → row mapping for every fest_team
+// in this fest (including soft-deleted ones, so that previously archived
+// numbers can be restored when a team is re-added). maxSeenNumber is the
+// largest number ever assigned in this fest — new teams introduced by a
+// re-sync always receive numbers strictly greater than this, so already-printed
+// answer sheets keep referring to the right team.
+func loadFestExistingTeams(ctx context.Context, tx *sql.Tx, festID int64) (map[int64]existingFestTeam, int64, error) {
+	rows, err := tx.QueryContext(ctx, `
+select id, coalesce(rating_id, 0), coalesce(number, 0)
+from fest_teams
+where fest_id = ?`, festID)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	byRating := make(map[int64]existingFestTeam)
+	var maxNum int64
+	for rows.Next() {
+		var id, ratingID, number int64
+		if err := rows.Scan(&id, &ratingID, &number); err != nil {
+			return nil, 0, err
+		}
+		if ratingID > 0 {
+			byRating[ratingID] = existingFestTeam{ID: id, Number: number}
+		}
+		if number > maxNum {
+			maxNum = number
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return byRating, maxNum, nil
+}
+
+// assignFestNumbersForImport mutates teams in place so that:
+//   - teams that already had a number (matched by rating_id, including
+//     previously soft-deleted ones) keep it;
+//   - if any number was ever assigned in this fest, new teams receive fresh
+//     numbers strictly greater than the largest one seen, in the
+//     (alphabetical) order of incoming teams;
+//   - if nothing has ever been numbered, no team gets a number — first-time
+//     imports stay unnumbered until the host explicitly assigns numbers.
+func assignFestNumbersForImport(teams []festRosterImportTeam, existing map[int64]existingFestTeam, maxSeen int64) {
+	for i := range teams {
+		teams[i].Number = 0
+		if teams[i].RatingID > 0 {
+			if e, ok := existing[teams[i].RatingID]; ok {
+				teams[i].Number = e.Number
+			}
+		}
+	}
+	if maxSeen == 0 {
+		return
+	}
+	next := maxSeen + 1
+	for i := range teams {
+		if teams[i].Number == 0 {
+			teams[i].Number = next
+			next++
+		}
+	}
 }
 
 func sortedFestRosterImportTeams(teams []festRosterImportTeam) []festRosterImportTeam {

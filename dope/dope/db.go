@@ -315,7 +315,8 @@ create table if not exists fest_teams(
   name text not null,
   city text not null default '',
   position real not null,
-  number integer
+  number integer,
+  deleted integer not null default 0
 );
 
 create table if not exists fest_players(
@@ -568,6 +569,14 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 		return err
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := addColumnsIfMissing(db, "fest_teams", []columnSpec{
+		{Name: "deleted", Type: "INTEGER NOT NULL DEFAULT 0"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(9, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
 	}
 	if err := addColumnsIfMissing(db, "games", []columnSpec{
