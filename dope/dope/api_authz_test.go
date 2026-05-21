@@ -50,10 +50,16 @@ values(null, null, ?, 0, ?, ?)`, username, now, now)
 
 func addAPITestOrganizer(t *testing.T, srv *server, festID, userID int64) {
 	t.Helper()
+	addAPITestRole(t, srv, festID, userID, festRoleAdmin)
+}
+
+func addAPITestRole(t *testing.T, srv *server, festID, userID int64, role string) {
+	t.Helper()
 	if _, err := srv.db.Exec(`
-insert into fest_organizers(fest_id, user_id, added_at)
-values(?, ?, ?)`, festID, userID, utcNow()); err != nil {
-		t.Fatalf("add organizer: %v", err)
+insert into fest_organizers(fest_id, user_id, role, added_at)
+values(?, ?, ?, ?)
+on conflict(fest_id, user_id) do update set role = excluded.role`, festID, userID, role, utcNow()); err != nil {
+		t.Fatalf("add role %s: %v", role, err)
 	}
 }
 
@@ -129,6 +135,43 @@ func TestScopedAPIRequiresOrganizerForPrivateReadsAndWrites(t *testing.T) {
 	organizerWrite := scopedAPIRequest(t, srv, http.MethodPost, updatePath, payload, organizerToken)
 	if organizerWrite.Code != http.StatusOK {
 		t.Fatalf("organizer write status = %d, body %s", organizerWrite.Code, organizerWrite.Body.String())
+	}
+}
+
+func TestHostRoleCanEditGameTablesOnly(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, gameID := scopedAPITestIDs(t, srv)
+	hostID, hostToken := createAPITestSession(t, srv, "table-host")
+	addAPITestRole(t, srv, festID, hostID, festRoleHost)
+
+	theme := 0
+	answer := 0
+	mark := "right"
+	updatePath := fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/update", festID, gameID, defaultMatchCode)
+	updateResp := scopedAPIRequest(t, srv, http.MethodPost, updatePath, updateRequest{
+		Team:   0,
+		Theme:  &theme,
+		Answer: &answer,
+		Mark:   &mark,
+	}, hostToken)
+	if updateResp.Code != http.StatusOK {
+		t.Fatalf("host match update status = %d, body %s", updateResp.Code, updateResp.Body.String())
+	}
+
+	venueResp := scopedAPIRequest(t, srv, http.MethodPut, fmt.Sprintf("/api/fest/%d/venues/1", festID), venueUpdateRequest{Title: "Новая"}, hostToken)
+	if venueResp.Code != http.StatusForbidden {
+		t.Fatalf("host venue title update status = %d, want 403", venueResp.Code)
+	}
+
+	scheme := festScheme{SchemaVersion: 2, Slug: "host-import", Title: "Host import", GameType: "ek"}
+	body, _ := json.Marshal(scheme)
+	importReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/import?fest_id=%d", festID), bytes.NewReader(body))
+	importReq.Header.Set("Content-Type", "application/json")
+	importReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: hostToken})
+	importResp := httptest.NewRecorder()
+	srv.handleImport(importResp, importReq)
+	if importResp.Code != http.StatusForbidden {
+		t.Fatalf("host import status = %d, want 403", importResp.Code)
 	}
 }
 

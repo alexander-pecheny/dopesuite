@@ -206,6 +206,55 @@ a.list-row:hover { background: #eef1f5; }
   font-weight: 700;
 }
 
+.data-table input:not([type="checkbox"]),
+.data-table select {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.access-table {
+  min-width: 640px;
+  table-layout: fixed;
+}
+
+.access-table th,
+.access-table td {
+  vertical-align: middle;
+}
+
+.access-name-col { width: 48%; }
+.access-role-col { width: 220px; }
+.access-action-col { width: 180px; }
+
+.access-name-cell {
+  font-size: var(--text-base);
+}
+
+.access-role-cell select,
+.access-name-cell input {
+  max-width: 280px;
+}
+
+.access-role-label {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+}
+
+.access-action-cell {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.access-action-cell .btn {
+  min-width: 118px;
+}
+
 /* ── design system: form controls ────────────────────────── */
 
 .field {

@@ -48,12 +48,20 @@ type hostFestDashData struct {
 	Slug            string
 	RatingID        int64
 	Games           []publicFestGame
+	Access          []hostAccessMember
 	TeamCount       int
 	PlayerCount     int
 	NumbersAssigned int
 	NumbersAllSet   bool
+	CurrentRole     string
+	CanManageFest   bool
+	CanManageGames  bool
+	CanManageAccess bool
+	CanDeleteFest   bool
 	IsCreator       bool
 	Error           string
+	AccessError     string
+	AccessNotice    string
 	ImportError     string
 	ImportNotice    string
 	RosterError     string
@@ -224,6 +232,7 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
   </header>
   <main class="public-main">
     {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
+    {{if .CanManageFest}}
     <form method="post" action="/host/fest/{{.Fest.Ref}}" class="card stack" autocomplete="off">
       <label class="field">
         <span>Название</span>
@@ -257,6 +266,7 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
         <button class="btn" type="submit">Сохранить</button>
       </div>
     </form>
+    {{end}}
 
     <section class="section">
       <h2>Игры</h2>
@@ -268,21 +278,74 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
             <span class="list-row-title">{{.Title}}</span>
             {{if .Slug}}<span class="muted">{{.Slug}}</span>{{end}}
           </a>
+          {{if $.CanManageGames}}
           <a class="btn" href="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/settings">Свойства</a>
           <form method="post" action="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/delete" onsubmit="return confirm('Удалить игру? Все результаты этой игры будут потеряны.');">
             <button class="btn danger" type="submit">Удалить</button>
           </form>
+          {{end}}
         </li>
         {{end}}
       </ul>
       {{else}}
       <p class="empty">Игр пока нет.</p>
       {{end}}
+      {{if .CanManageGames}}
       <div class="cluster">
         <a class="btn" href="/host/fest/{{.Fest.Ref}}/game/new">Добавить игру</a>
       </div>
+      {{end}}
     </section>
 
+    {{if .CanManageAccess}}
+    <section class="section" id="access">
+      <h2>Доступ</h2>
+      {{if .AccessError}}<p class="empty">{{.AccessError}}</p>{{end}}
+      {{if .AccessNotice}}<p class="muted">{{.AccessNotice}}</p>{{end}}
+      <form method="post" action="/host/fest/{{.Fest.Ref}}/access#access" class="card stack" autocomplete="off">
+        <div class="table-scroll">
+          <table class="data-table access-table">
+            <thead><tr><th class="access-name-col">Никнейм</th><th class="access-role-col">Роль</th><th class="access-action-col"></th></tr></thead>
+            <tbody>
+              {{range .Access}}
+              <tr>
+                <td class="access-name-cell">{{.Nickname}}</td>
+                <td class="access-role-cell">
+                  {{if .IsCreator}}
+                  <input type="hidden" name="role_{{.UserID}}" value="creator">
+                  <span class="access-role-label">creator</span>
+                  {{else}}
+                  <select name="role_{{.UserID}}" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+                    <option value="admin"{{if eq .Role "admin"}} selected{{end}}>admin</option>
+                    <option value="host"{{if eq .Role "host"}} selected{{end}}>host</option>
+                  </select>
+                  {{end}}
+                </td>
+                <td class="access-action-cell">
+                  {{if not .IsCreator}}
+                  <button class="btn danger" type="submit" name="delete_{{.UserID}}" value="1">Удалить</button>
+                  {{end}}
+                </td>
+              </tr>
+              {{end}}
+              <tr>
+                <td class="access-name-cell"><input name="new_nickname" placeholder="nickname"></td>
+                <td class="access-role-cell">
+                  <select name="new_role">
+                    <option value="host">host</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </td>
+                <td class="access-action-cell"><button class="btn" type="submit" name="add_access" value="1">Добавить</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </form>
+    </section>
+    {{end}}
+
+    {{if .CanManageFest}}
     <section class="section">
       <h2>Участники</h2>
       {{if .RosterError}}<p class="empty">{{.RosterError}}</p>{{end}}
@@ -316,8 +379,9 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
         </li>
       </ul>
     </section>
+    {{end}}
 
-    {{if .IsCreator}}
+    {{if .CanDeleteFest}}
     <section class="section">
       <h2>Удаление</h2>
       <form method="post" action="/host/fest/{{.Fest.Ref}}/delete" class="card stack" autocomplete="off" onsubmit="return confirm('Удалить турнир? Все игры, команды и результаты будут удалены.');">
@@ -691,20 +755,37 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	allowed, err := s.isOrganizer(r.Context(), id, user.UserID)
+	role, err := s.festUserRole(r.Context(), id, user.UserID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if !allowed {
+	if role == "" {
 		http.Redirect(w, r, "/host", http.StatusSeeOther)
 		return
+	}
+	requireManageFest := func() bool {
+		if festRoleCanManageFest(role) {
+			return true
+		}
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return false
+	}
+	requireCreator := func() bool {
+		if festRoleCanDeleteFest(role) {
+			return true
+		}
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return false
 	}
 	if len(parts) == 2 {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			s.renderHostFestDashboard(w, r, id, hostDashMessages{})
 		case http.MethodPost:
+			if !requireManageFest() {
+				return
+			}
 			s.handleHostUpdateFest(w, r, id)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -712,6 +793,9 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 3 && parts[2] == "teams" {
+		if !requireManageFest() {
+			return
+		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -720,6 +804,9 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 3 && parts[2] == "players" {
+		if !requireManageFest() {
+			return
+		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -728,6 +815,9 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 3 && parts[2] == "import" {
+		if !requireManageFest() {
+			return
+		}
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			s.renderHostSchemeImportPage(w, r, id, "", "")
@@ -738,7 +828,21 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if len(parts) == 3 && parts[2] == "access" {
+		if !requireManageFest() {
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleHostSaveAccess(w, r, id, user.UserID)
+		return
+	}
 	if len(parts) == 3 && parts[2] == "delete" {
+		if !requireCreator() {
+			return
+		}
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -747,6 +851,9 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 4 && parts[2] == "game" && parts[3] == "new" {
+		if !requireManageFest() {
+			return
+		}
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			s.renderHostCreateGamePage(w, r, id, "", "")
@@ -758,6 +865,9 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 5 && parts[2] == "game" && parts[4] == "delete" {
+		if !requireManageFest() {
+			return
+		}
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -779,6 +889,9 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 5 && parts[2] == "game" && parts[4] == "settings" {
+		if !requireManageFest() {
+			return
+		}
 		gameID, err := resolveGameID(r.Context(), s.db, id, parts[3])
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
@@ -803,6 +916,9 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 3 && parts[2] == "numbers" {
+		if !requireManageFest() {
+			return
+		}
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			s.renderHostFestNumbers(w, r, id, "", "", nil)
@@ -814,6 +930,9 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 4 && parts[2] == "numbers" && parts[3] == "auto" {
+		if !requireManageFest() {
+			return
+		}
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -822,6 +941,9 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 4 && parts[2] == "numbers" && parts[3] == "clear" {
+		if !requireManageFest() {
+			return
+		}
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -830,6 +952,9 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 4 && parts[2] == "rating" && parts[3] == "import" {
+		if !requireManageFest() {
+			return
+		}
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			s.renderHostRatingImportPage(w, r, id, "", "")
@@ -838,6 +963,10 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+		return
+	}
+	if len(parts) == 5 && parts[2] == "game" && parts[4] == "venues" && !festRoleCanManageFest(role) {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	// /host/fest/{id}/game/{gid}[/...] → serve host.html / od.html / si.html.
@@ -933,8 +1062,8 @@ values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
 		return
 	}
 	if _, err := tx.ExecContext(r.Context(), `
-insert into fest_organizers(fest_id, user_id, added_at)
-values(?, ?, ?)`, festID, user.UserID, now); err != nil {
+insert into fest_organizers(fest_id, user_id, role, added_at)
+values(?, ?, 'creator', ?)`, festID, user.UserID, now); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -947,6 +1076,8 @@ values(?, ?, ?)`, festID, user.UserID, now); err != nil {
 
 type hostDashMessages struct {
 	FormError    string
+	AccessError  string
+	AccessNotice string
 	ImportError  string
 	ImportNotice string
 	RosterError  string
@@ -1000,6 +1131,18 @@ where id = ?`,
 		redirectRef = fmt.Sprintf("%d", festID)
 	}
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", redirectRef), http.StatusSeeOther)
+}
+
+func (s *server) handleHostSaveAccess(w http.ResponseWriter, r *http.Request, festID, actorID int64) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	if err := s.saveFestAccess(r.Context(), festID, actorID, r.Form); err != nil {
+		s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessError: err.Error()})
+		return
+	}
+	s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessNotice: "Доступ сохранён."})
 }
 
 func (s *server) slugTakenByOtherFest(ctx context.Context, slug string, festID int64) (bool, error) {
@@ -1765,9 +1908,21 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	isCreator := false
+	currentRole := ""
 	if user, ok := s.lookupSession(r); ok {
-		isCreator, err = s.isFestCreator(r.Context(), festID, user.UserID)
+		currentRole, err = s.festUserRole(r.Context(), festID, user.UserID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	canManageFest := festRoleCanManageFest(currentRole)
+	canManageAccess := festRoleCanManageAccess(currentRole)
+	canDeleteFest := festRoleCanDeleteFest(currentRole)
+	canManageGames := canManageFest
+	var access []hostAccessMember
+	if canManageAccess {
+		access, err = s.loadFestAccessMembers(r.Context(), festID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -1786,12 +1941,20 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 		Description:     description,
 		Slug:            slug,
 		Games:           hostGames,
+		Access:          access,
 		TeamCount:       teamCount,
 		PlayerCount:     playerCount,
 		NumbersAssigned: numbersAssigned,
 		NumbersAllSet:   teamCount > 0 && numbersAssigned == teamCount,
-		IsCreator:       isCreator,
+		CurrentRole:     currentRole,
+		CanManageFest:   canManageFest,
+		CanManageGames:  canManageGames,
+		CanManageAccess: canManageAccess,
+		CanDeleteFest:   canDeleteFest,
+		IsCreator:       canDeleteFest,
 		Error:           msgs.FormError,
+		AccessError:     msgs.AccessError,
+		AccessNotice:    msgs.AccessNotice,
 		ImportError:     msgs.ImportError,
 		ImportNotice:    msgs.ImportNotice,
 		RosterError:     msgs.RosterError,
@@ -1942,14 +2105,11 @@ order by case when t.start_date is null or t.start_date = '' then 1 else 0 end,
 }
 
 func (s *server) isOrganizer(ctx context.Context, festID, userID int64) (bool, error) {
-	var n int
-	err := s.db.QueryRowContext(ctx, `
-select count(*) from fest_organizers where fest_id = ? and user_id = ?`,
-		festID, userID).Scan(&n)
+	role, err := s.festUserRole(ctx, festID, userID)
 	if err != nil {
 		return false, err
 	}
-	return n > 0, nil
+	return role != "", nil
 }
 
 func (s *server) isFestCreator(ctx context.Context, festID, userID int64) (bool, error) {
