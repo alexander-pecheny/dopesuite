@@ -139,12 +139,12 @@ func (s *server) authorizeFestRead(w http.ResponseWriter, r *http.Request, festI
 		http.NotFound(w, r)
 		return false
 	}
-	allowed, err := s.isOrganizer(r.Context(), festID, user.UserID)
+	role, err := s.festUserRole(r.Context(), festID, user.UserID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return false
 	}
-	if !allowed {
+	if role == "" {
 		http.NotFound(w, r)
 		return false
 	}
@@ -152,33 +152,48 @@ func (s *server) authorizeFestRead(w http.ResponseWriter, r *http.Request, festI
 }
 
 func (s *server) requireFestOrganizer(w http.ResponseWriter, r *http.Request, festID int64) (sessionUser, bool) {
+	user, _, ok := s.requireFestRole(w, r, festID, festRoleCanEditGameTables)
+	return user, ok
+}
+
+func (s *server) requireFestAdmin(w http.ResponseWriter, r *http.Request, festID int64) (sessionUser, bool) {
+	user, _, ok := s.requireFestRole(w, r, festID, festRoleCanManageFest)
+	return user, ok
+}
+
+func (s *server) requireFestTableEditor(w http.ResponseWriter, r *http.Request, festID int64) (sessionUser, bool) {
+	user, _, ok := s.requireFestRole(w, r, festID, festRoleCanEditGameTables)
+	return user, ok
+}
+
+func (s *server) requireFestRole(w http.ResponseWriter, r *http.Request, festID int64, allowed func(string) bool) (sessionUser, string, bool) {
 	if !requireSameOriginUnsafe(w, r) {
-		return sessionUser{}, false
+		return sessionUser{}, "", false
 	}
 	user, ok := s.lookupSession(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return sessionUser{}, false
+		return sessionUser{}, "", false
 	}
-	allowed, err := s.isOrganizer(r.Context(), festID, user.UserID)
+	role, err := s.festUserRole(r.Context(), festID, user.UserID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return sessionUser{}, false
+		return sessionUser{}, "", false
 	}
-	if allowed {
-		return user, true
+	if allowed(role) {
+		return user, role, true
 	}
 	exists, _, err := s.festVisibility(r.Context(), festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return sessionUser{}, false
+		return sessionUser{}, "", false
 	}
 	if !exists {
 		http.NotFound(w, r)
-		return sessionUser{}, false
+		return sessionUser{}, "", false
 	}
 	http.Error(w, "forbidden", http.StatusForbidden)
-	return sessionUser{}, false
+	return sessionUser{}, "", false
 }
 
 func (s *server) authorizeHostPresence(w http.ResponseWriter, r *http.Request, festID int64) bool {
@@ -187,12 +202,12 @@ func (s *server) authorizeHostPresence(w http.ResponseWriter, r *http.Request, f
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return false
 	}
-	allowed, err := s.isOrganizer(r.Context(), festID, user.UserID)
+	role, err := s.festUserRole(r.Context(), festID, user.UserID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return false
 	}
-	if allowed {
+	if festRoleCanEditGameTables(role) {
 		return true
 	}
 	exists, _, err := s.festVisibility(r.Context(), festID)
@@ -308,7 +323,7 @@ func (s *server) handleHostPresence(w http.ResponseWriter, r *http.Request, fest
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	user, ok := s.requireFestOrganizer(w, r, festID)
+	user, ok := s.requireFestTableEditor(w, r, festID)
 	if !ok {
 		return
 	}
@@ -391,7 +406,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write([]byte(stateJSON))
 	case http.MethodPut:
-		if _, ok := s.requireFestOrganizer(w, r, scope.FestID); !ok {
+		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
 		defer r.Body.Close()
@@ -421,7 +436,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write(raw)
 	case http.MethodPatch:
-		if _, ok := s.requireFestOrganizer(w, r, scope.FestID); !ok {
+		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
 		defer r.Body.Close()
@@ -811,7 +826,7 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, fest
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := s.requireFestOrganizer(w, r, festID); !ok {
+	if _, ok := s.requireFestAdmin(w, r, festID); !ok {
 		return
 	}
 	number, err := strconv.Atoi(sub[0])
@@ -880,7 +895,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if _, ok := s.requireFestOrganizer(w, r, scope.FestID); !ok {
+		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
 		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
@@ -910,7 +925,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if _, ok := s.requireFestOrganizer(w, r, scope.FestID); !ok {
+		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
 		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
@@ -944,7 +959,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if _, ok := s.requireFestOrganizer(w, r, scope.FestID); !ok {
+		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
 		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)

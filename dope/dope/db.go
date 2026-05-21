@@ -304,6 +304,7 @@ create table if not exists fests(
 create table if not exists fest_organizers(
   fest_id integer not null references fests(id) on delete cascade,
   user_id integer not null references users(id) on delete cascade,
+  role text not null default 'admin' check (role in ('creator','admin','host')),
   added_at text not null,
   primary key(fest_id, user_id)
 );
@@ -532,6 +533,9 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 		{Name: "end_date", Type: "TEXT"},
 		{Name: "is_public", Type: "INTEGER NOT NULL DEFAULT 0"},
 	}); err != nil {
+		return err
+	}
+	if err := migrateFestOrganizerRoles(db); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
@@ -1080,35 +1084,12 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !requireSameOriginUnsafe(w, r) {
-		return
-	}
-	user, ok := s.lookupSession(r)
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
 	festID, err := resolveFestID(r.Context(), s.db, strings.TrimSpace(r.URL.Query().Get("fest_id")))
 	if err != nil || festID <= 0 {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
 	}
-	allowed, err := s.isOrganizer(r.Context(), festID, user.UserID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if !allowed {
-		exists, _, err := s.festVisibility(r.Context(), festID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if !exists {
-			http.NotFound(w, r)
-			return
-		}
-		http.Error(w, "forbidden", http.StatusForbidden)
+	if _, ok := s.requireFestAdmin(w, r, festID); !ok {
 		return
 	}
 	defer r.Body.Close()
@@ -1184,8 +1165,8 @@ values(?, ?, '', null, ?, 1, ?, ?, 1)`, scheme.Slug, scheme.Title, systemID, now
 		return FestView{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `
-insert into fest_organizers(fest_id, user_id, added_at)
-values(?, ?, ?)`, festID, systemID, now); err != nil {
+insert into fest_organizers(fest_id, user_id, role, added_at)
+values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 		return FestView{}, err
 	}
 	gameType := scheme.GameType

@@ -55,8 +55,8 @@ values(?, ?, ?, null, ?, ?, ?, ?, 1)`, "fixture-ek", "Fixture EK", "", systemID,
 		t.Fatalf("insert fest: %v", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
-insert into fest_organizers(fest_id, user_id, added_at)
-values(?, ?, ?)`, festID, systemID, now); err != nil {
+insert into fest_organizers(fest_id, user_id, role, added_at)
+values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 		t.Fatalf("insert organizer: %v", err)
 	}
 	gameID, err := insertReturningID(ctx, tx, `
@@ -173,8 +173,8 @@ values(?, ?, '', null, ?, 1, ?, ?, 1)`, "roster-fixture", "Roster fixture", owne
 		t.Fatalf("insert fest: %v", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
-insert into fest_organizers(fest_id, user_id, added_at)
-values(?, ?, ?)`, festID, ownerID, now); err != nil {
+insert into fest_organizers(fest_id, user_id, role, added_at)
+values(?, ?, 'creator', ?)`, festID, ownerID, now); err != nil {
 		t.Fatalf("insert organizer: %v", err)
 	}
 

@@ -216,6 +216,109 @@ func TestHostDashboardDeleteButtonsAndGameDelete(t *testing.T) {
 	}
 }
 
+func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, gameID := scopedAPITestIDs(t, srv)
+	creatorID := systemUserID(t, srv.db)
+	creatorToken := createTestSession(t, srv, creatorID)
+	adminID, adminToken := createAPITestSession(t, srv, "fest-admin")
+	hostID, hostToken := createAPITestSession(t, srv, "fest-host")
+	addAPITestRole(t, srv, festID, adminID, festRoleAdmin)
+
+	creatorDashboardReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d", festID), nil)
+	creatorDashboardReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: creatorToken})
+	creatorDashboardResp := httptest.NewRecorder()
+	srv.handleHostRouter(creatorDashboardResp, creatorDashboardReq)
+	if creatorDashboardResp.Code != http.StatusOK {
+		t.Fatalf("creator dashboard status = %d, body %s", creatorDashboardResp.Code, creatorDashboardResp.Body.String())
+	}
+	if body := creatorDashboardResp.Body.String(); !strings.Contains(body, "Доступ") || !strings.Contains(body, "creator") {
+		t.Fatalf("creator dashboard missing access section: %s", body)
+	}
+
+	addHostForm := url.Values{"new_nickname": {"fest-host"}, "new_role": {"host"}, "add_access": {"1"}}
+	addHostReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/access", festID), strings.NewReader(addHostForm.Encode()))
+	addHostReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	addHostReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: creatorToken})
+	addHostResp := httptest.NewRecorder()
+	srv.handleHostRouter(addHostResp, addHostReq)
+	if addHostResp.Code != http.StatusOK {
+		t.Fatalf("add host access status = %d, body %s", addHostResp.Code, addHostResp.Body.String())
+	}
+	if role, err := srv.festUserRole(t.Context(), festID, hostID); err != nil || role != festRoleHost {
+		t.Fatalf("host role = %q, err %v; want host", role, err)
+	}
+
+	hostDashboardReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d", festID), nil)
+	hostDashboardReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: hostToken})
+	hostDashboardResp := httptest.NewRecorder()
+	srv.handleHostRouter(hostDashboardResp, hostDashboardReq)
+	if hostDashboardResp.Code != http.StatusOK {
+		t.Fatalf("host dashboard status = %d, body %s", hostDashboardResp.Code, hostDashboardResp.Body.String())
+	}
+	body := hostDashboardResp.Body.String()
+	if !strings.Contains(body, fmt.Sprintf(`/host/fest/fixture-ek/game/%d/`, gameID)) {
+		t.Fatalf("host dashboard missing game link: %s", body)
+	}
+	for _, forbidden := range []string{`name="title"`, "Доступ", "Добавить игру", "Удалить игру"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("host dashboard contains %q: %s", forbidden, body)
+		}
+	}
+
+	updateFestForm := url.Values{"title": {"Blocked"}}
+	updateFestReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d", festID), strings.NewReader(updateFestForm.Encode()))
+	updateFestReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	updateFestReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: hostToken})
+	updateFestResp := httptest.NewRecorder()
+	srv.handleHostRouter(updateFestResp, updateFestReq)
+	if updateFestResp.Code != http.StatusForbidden {
+		t.Fatalf("host fest update status = %d, want 403", updateFestResp.Code)
+	}
+
+	hostNewGameReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d/game/new", festID), nil)
+	hostNewGameReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: hostToken})
+	hostNewGameResp := httptest.NewRecorder()
+	srv.handleHostRouter(hostNewGameResp, hostNewGameReq)
+	if hostNewGameResp.Code != http.StatusForbidden {
+		t.Fatalf("host new game page status = %d, want 403", hostNewGameResp.Code)
+	}
+
+	hostVenuesReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d/game/%d/venues", festID, gameID), nil)
+	hostVenuesReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: hostToken})
+	hostVenuesResp := httptest.NewRecorder()
+	srv.handleHostRouter(hostVenuesResp, hostVenuesReq)
+	if hostVenuesResp.Code != http.StatusForbidden {
+		t.Fatalf("host venues page status = %d, want 403", hostVenuesResp.Code)
+	}
+
+	adminDeleteReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/delete", festID), nil)
+	adminDeleteReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: adminToken})
+	adminDeleteResp := httptest.NewRecorder()
+	srv.handleHostRouter(adminDeleteResp, adminDeleteReq)
+	if adminDeleteResp.Code != http.StatusForbidden {
+		t.Fatalf("admin delete fest status = %d, want 403", adminDeleteResp.Code)
+	}
+
+	adminRemoveCreator := url.Values{
+		fmt.Sprintf("delete_%d", creatorID): {"1"},
+	}
+	adminAccessReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/access", festID), strings.NewReader(adminRemoveCreator.Encode()))
+	adminAccessReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	adminAccessReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: adminToken})
+	adminAccessResp := httptest.NewRecorder()
+	srv.handleHostRouter(adminAccessResp, adminAccessReq)
+	if adminAccessResp.Code != http.StatusOK {
+		t.Fatalf("admin access save status = %d, body %s", adminAccessResp.Code, adminAccessResp.Body.String())
+	}
+	if !strings.Contains(adminAccessResp.Body.String(), "создателя нельзя") {
+		t.Fatalf("admin access response missing creator error: %s", adminAccessResp.Body.String())
+	}
+	if creatorRole, err := srv.festUserRole(t.Context(), festID, creatorID); err != nil || creatorRole != festRoleCreator {
+		t.Fatalf("creator role = %q, err %v; want creator", creatorRole, err)
+	}
+}
+
 func TestHostCreateGameFlow(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
