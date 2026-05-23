@@ -2,6 +2,7 @@ const odRoot = document.getElementById("odTable");
 const odTabsRoot = document.getElementById("odTabs");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
+const progressNode = document.getElementById("odProgress");
 
 const gameTable = window.DopeTable;
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
@@ -302,6 +303,7 @@ function render() {
   document.title = `${viewer ? "Зритель" : "Ведущий"} · ${scheme.title || "ОД"}`;
   if (!TABS.some((t) => t.key === activeTab)) activeTab = TABS[0].key;
   renderTabs();
+  updateHeaderProgress();
   const activePane = getTabPane(activeTab);
   for (const pane of tabCache.values()) pane.hidden = pane !== activePane;
   if (!activePane.isConnected) odRoot.appendChild(activePane);
@@ -363,6 +365,12 @@ function toggleResultsShootout(roundIndex) {
   else resultsExpandedShootouts.add(roundIndex);
   invalidateTabCache("results");
   render();
+}
+
+function updateHeaderProgress() {
+  if (!progressNode) return;
+  const lastQ = lastEnteredQuestion();
+  progressNode.textContent = lastQ ? `Введён вопрос ${lastQ}` : "Ни одного вопроса не введено";
 }
 
 function renderTabs() {
@@ -1249,6 +1257,7 @@ function handleEntryChange(event) {
   if (!Number.isInteger(qIndex)) return;
   state.completed[qIndex] = cb.checked;
   invalidateScoreCaches();
+  updateHeaderProgress();
   saveState(["completed", qIndex], cb.checked);
 }
 
@@ -1660,11 +1669,6 @@ function lastEnteredQuestion() {
 function buildResultsTable() {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper";
-  const lastQ = lastEnteredQuestion();
-  const meta = document.createElement("div");
-  meta.className = "results-meta";
-  meta.textContent = lastQ ? `Введён вопрос ${lastQ}` : "Ни одного вопроса не введено";
-  wrapper.appendChild(meta);
   wrapper.appendChild(buildResultsTableInner());
   return wrapper;
 }
@@ -2119,6 +2123,7 @@ function applyRemoteState(nextState) {
   );
   state = nextState;
   ensureState();
+  updateHeaderProgress();
   if (editingInput || editingShootout) {
     questionStatsCache = null;
     numberToIndexCache = null;
