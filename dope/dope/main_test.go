@@ -1089,7 +1089,16 @@ func TestFestNumbersRemapEntries(t *testing.T) {
 	// Pre-fill some entries by number.
 	entries := [][]int{{1, 2, 0}, {3, 1, 0}, {2, 0, 0}}
 	entriesJSON, _ := json.Marshal(entries)
-	if _, err := db.Exec(`update games set state_json = json_set(state_json, '$.entries', json(?)) where id = ?`, string(entriesJSON), chgkGameID); err != nil {
+	shootoutRounds := []map[string]any{{
+		"teams":   []int{1, 2},
+		"entries": [][]int{{1, 2}, {2, 1}},
+		"answers": [][]string{{"right", ""}, {"wrong", "right"}},
+	}}
+	shootoutRoundsJSON, _ := json.Marshal(shootoutRounds)
+	if _, err := db.Exec(`
+update games
+set state_json = json_set(state_json, '$.entries', json(?), '$.shootoutRounds', json(?))
+where id = ?`, string(entriesJSON), string(shootoutRoundsJSON), chgkGameID); err != nil {
 		t.Fatalf("seed entries: %v", err)
 	}
 
@@ -1104,7 +1113,12 @@ func TestFestNumbersRemapEntries(t *testing.T) {
 		t.Fatalf("load state: %v", err)
 	}
 	var got struct {
-		Entries [][]int `json:"entries"`
+		Entries        [][]int `json:"entries"`
+		ShootoutRounds []struct {
+			Teams   []int      `json:"teams"`
+			Entries [][]int    `json:"entries"`
+			Answers [][]string `json:"answers"`
+		} `json:"shootoutRounds"`
 	}
 	if err := json.Unmarshal([]byte(stateJSON), &got); err != nil {
 		t.Fatalf("decode state: %v", err)
@@ -1117,6 +1131,18 @@ func TestFestNumbersRemapEntries(t *testing.T) {
 				t.Fatalf("entries[%d][%d]=%d, want %d (entries=%v)", q, slot, got.Entries[q][slot], value, got.Entries)
 			}
 		}
+	}
+	if len(got.ShootoutRounds) != 1 {
+		t.Fatalf("shootout rounds = %#v, want one round", got.ShootoutRounds)
+	}
+	if fmt.Sprint(got.ShootoutRounds[0].Teams) != "[101 1]" {
+		t.Fatalf("shootout teams = %#v, want [101 1]", got.ShootoutRounds[0].Teams)
+	}
+	if fmt.Sprint(got.ShootoutRounds[0].Entries) != "[[101 1] [1 101]]" {
+		t.Fatalf("shootout entries = %#v, want remapped entries", got.ShootoutRounds[0].Entries)
+	}
+	if fmt.Sprint(got.ShootoutRounds[0].Answers) != "[[right ] [wrong right]]" {
+		t.Fatalf("shootout answers = %#v, want answers preserved", got.ShootoutRounds[0].Answers)
 	}
 }
 

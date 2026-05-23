@@ -596,9 +596,45 @@ func applyRosterToChGKState(raw string, teams []festRosterImportTeam, entryRemap
 			obj["entries"] = entriesJSON
 		}
 	}
+	if len(entryRemap) > 0 {
+		if rawRounds, ok := obj["shootoutRounds"]; ok && len(rawRounds) > 0 {
+			if roundsJSON, err := remapChGKShootoutRounds(rawRounds, entryRemap); err == nil {
+				obj["shootoutRounds"] = roundsJSON
+			}
+		}
+	}
 	delete(obj, "answers")
 	delete(obj, "finished")
 	return json.Marshal(obj)
+}
+
+type chgkShootoutRoundJSON struct {
+	Teams     []int      `json:"teams"`
+	Entries   [][]int    `json:"entries,omitempty"`
+	Completed []bool     `json:"completed,omitempty"`
+	Answers   [][]string `json:"answers"`
+}
+
+func remapChGKShootoutRounds(raw json.RawMessage, entryRemap map[int]int) (json.RawMessage, error) {
+	var rounds []chgkShootoutRoundJSON
+	if err := json.Unmarshal(raw, &rounds); err != nil {
+		return nil, err
+	}
+	for roundIndex := range rounds {
+		for teamIndex, number := range rounds[roundIndex].Teams {
+			if mapped, ok := entryRemap[number]; ok {
+				rounds[roundIndex].Teams[teamIndex] = mapped
+			}
+		}
+		for questionIndex := range rounds[roundIndex].Entries {
+			for slot, number := range rounds[roundIndex].Entries[questionIndex] {
+				if mapped, ok := entryRemap[number]; ok {
+					rounds[roundIndex].Entries[questionIndex][slot] = mapped
+				}
+			}
+		}
+	}
+	return json.Marshal(rounds)
 }
 
 func applyRosterToKSIScheme(raw string, teams []festRosterImportTeam) ([]byte, error) {

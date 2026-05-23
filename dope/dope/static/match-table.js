@@ -75,6 +75,7 @@
     }
 
     const themes = options.themes || [];
+    const afterThemeHeaders = options.afterThemeHeaders || [];
     const showPlaceColumn = options.placeColumn !== false;
     const showRowMarker = Boolean(options.rowMarkerColumn);
     const thead = document.createElement("thead");
@@ -99,6 +100,9 @@
       header.appendChild(th(theme.label ?? "", theme.labelClassName || options.themeHeaderClassName || "theme-head"));
       header.appendChild(th("", theme.gapHeaderClassName || options.gapHeaderClassName || "gap-head"));
     }
+    for (const headerCell of afterThemeHeaders) {
+      header.appendChild(cellFromSpec("th", headerCell));
+    }
     thead.appendChild(header);
     table.appendChild(thead);
 
@@ -106,7 +110,8 @@
     const rows = options.rows || [];
     const leadingColumnCount = (showRowMarker ? 1 : 0) + (showPlaceColumn ? 4 : 2);
     const colSpan = options.gapColSpan || leadingColumnCount +
-      themes.reduce((sum, theme) => sum + (theme.questionLabels?.length || 0) + 2, 0);
+      themes.reduce((sum, theme) => sum + (theme.questionLabels?.length || 0) + 2, 0) +
+      afterThemeHeaders.length;
     rows.forEach((rowSpec, rowIndex) => {
       const row = document.createElement("tr");
       if (rowSpec.rowClassName) row.className = rowSpec.rowClassName;
@@ -134,6 +139,9 @@
           className: themeSpec.gapClassName || theme.gapClassName || options.gapClassName || "gap",
         }));
       });
+      for (const extraCell of rowSpec.afterThemeCells || []) {
+        row.appendChild(cellFromSpec("td", extraCell));
+      }
       tbody.appendChild(row);
 
       if (options.gapRows !== false && rowIndex < rows.length - 1) {

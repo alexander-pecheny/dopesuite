@@ -1555,9 +1555,10 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 		"teams":         []chgkTeamJSON{},
 	}))
 	stateJSON := []byte(mustJSON(map[string]any{
-		"teams":     []chgkTeamJSON{},
-		"entries":   entries,
-		"completed": make([]bool, totalQuestions),
+		"teams":          []chgkTeamJSON{},
+		"entries":        entries,
+		"completed":      make([]bool, totalQuestions),
+		"shootoutRounds": []any{},
 	}))
 	teams, err := loadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
