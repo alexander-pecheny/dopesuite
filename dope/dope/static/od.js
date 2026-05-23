@@ -45,7 +45,9 @@ window.addEventListener("hashchange", () => {
 
 window.addEventListener("resize", () => {
   if (renderedTab === "detailed") scheduleDetailedNameOverflowUpdate();
+  updateResultsScrollState();
 });
+document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
 async function loadAll() {
   const [schemeResp, stateResp] = await Promise.all([
@@ -303,6 +305,7 @@ function render() {
   if (!activePane.isConnected) odRoot.appendChild(activePane);
   renderedTab = activeTab;
   restoreTabScroll(activeTab);
+  updateResultsScrollState();
   if (activeTab === "detailed") scheduleDetailedNameOverflowUpdate(activePane);
   refreshPresence();
 }
@@ -338,6 +341,12 @@ function restoreTabScroll(tab) {
   const pos = tabScroll.get(tab) || {top: 0, left: 0};
   frame.scrollTop = pos.top;
   frame.scrollLeft = pos.left;
+}
+
+function updateResultsScrollState() {
+  const frame = scrollFrame();
+  if (!frame) return;
+  frame.classList.toggle("results-scroll-left", activeTab === "results" && frame.scrollLeft > 1);
 }
 
 function renderTabs() {
@@ -1659,32 +1668,30 @@ function buildResultsTableInner() {
     index: i,
     total: totals[i],
     tiebreak: tiebreaks[i],
-    rating: ratings[i],
   }));
   sortKeys.sort((a, b) => {
     if (b.total !== a.total) return b.total - a.total;
     if (b.tiebreak !== a.tiebreak) return b.tiebreak - a.tiebreak;
-    if (b.rating !== a.rating) return b.rating - a.rating;
     return a.index - b.index;
   });
 
   const placeMap = computePlaces(totals);
 
   const table = document.createElement("table");
-  table.className = "results-table";
+  table.className = "results-table od-results-table";
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
   head.appendChild(th("Место", "results-place-head"));
   head.appendChild(th("Команда", "results-team-head"));
   head.appendChild(th("Σ", "results-num-head"));
+  for (let t = 0; t < tourLengths.length; t++) {
+    head.appendChild(th(`T${t + 1}`, "results-tour-head"));
+  }
   for (let roundIndex = 0; roundIndex < shootoutRoundCount; roundIndex++) {
     head.appendChild(th(`П${roundIndex + 1}`, "results-num-head"));
   }
   head.appendChild(th("R", "results-num-head"));
-  for (let t = 0; t < tourLengths.length; t++) {
-    head.appendChild(th(`T${t + 1}`, "results-tour-head"));
-  }
   thead.appendChild(head);
   table.appendChild(thead);
 
@@ -1727,14 +1734,14 @@ function buildResultsTableInner() {
       }
       tr.appendChild(nameTd);
       tr.appendChild(td(total, "results-num total-cell"));
+      for (let t = 0; t < tourLengths.length; t++) {
+        tr.appendChild(td(tourTotals[index][t], "results-tour"));
+      }
       for (let roundIndex = 0; roundIndex < shootoutRoundCount; roundIndex++) {
         const value = shootoutRoundTotals[index][roundIndex];
         tr.appendChild(td(value == null ? "" : value, "results-num"));
       }
       tr.appendChild(td(ratings[index], "results-num"));
-      for (let t = 0; t < tourLengths.length; t++) {
-        tr.appendChild(td(tourTotals[index][t], "results-tour"));
-      }
       tbody.appendChild(tr);
     });
   });

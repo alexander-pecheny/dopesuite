@@ -2726,6 +2726,12 @@ a.list-row:hover { background: #eef1f5; }
 }
 
 .results-meta {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  align-self: flex-start;
+  padding-right: 8px;
+  background: var(--structure);
   color: var(--muted);
   font-size: 13px;
 }
@@ -2737,6 +2743,10 @@ a.list-row:hover { background: #eef1f5; }
   font-size: 14px;
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
+}
+
+.od-results-table {
+  width: max-content;
 }
 
 .results-table th,
@@ -2767,6 +2777,32 @@ a.list-row:hover { background: #eef1f5; }
   text-align: left;
   min-width: 220px;
   padding-left: 14px;
+}
+
+.od-results-table thead th.results-team-head,
+.od-results-table .results-team {
+  width: max-content;
+  min-width: max-content;
+}
+
+.od-results-table thead th.results-team-head {
+  --results-sticky-fade-from: var(--structure);
+}
+
+.od-results-table .results-team {
+  --results-sticky-fade-from: var(--paper);
+}
+
+.results-scroll-left .od-results-table thead th.results-team-head::after,
+.results-scroll-left .od-results-table .results-team::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -28px;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  background: linear-gradient(to right, var(--results-sticky-fade-from), rgba(238, 241, 244, 0));
 }
 
 .results-table .results-place,
@@ -3033,8 +3069,25 @@ a.list-row:hover { background: #eef1f5; }
   .results-table .results-team { padding-left: 8px; min-width: 0; }
   .results-team-city { font-size: 11px; }
   .results-place-head,
+  .results-place {
+    width: 48px;
+    min-width: 48px;
+    max-width: 48px;
+    padding-right: 0;
+    padding-left: 0;
+    font-size: 11px;
+  }
+  .results-table thead th.results-place-head {
+    font-size: 0;
+  }
+  .results-table thead th.results-place-head::after {
+    content: "М";
+    font-size: 11px;
+  }
   .results-num-head,
   .results-tour-head { width: 40px; }
   .results-table .results-team,
-  .results-table thead .results-team-head { left: 40px; }
+  .results-table thead .results-team-head { left: 48px; }
+  .od-results-table .results-team,
+  .od-results-table thead .results-team-head { width: max-content; min-width: max-content; }
 }
