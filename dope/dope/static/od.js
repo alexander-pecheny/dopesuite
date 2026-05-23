@@ -2,6 +2,7 @@ const odRoot = document.getElementById("odTable");
 const odTabsRoot = document.getElementById("odTabs");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
+const progressNode = document.getElementById("odProgress");
 
 const gameTable = window.DopeTable;
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
@@ -10,6 +11,7 @@ const viewer = Boolean(route.viewer);
 document.body.classList.toggle("viewer-readonly", viewer);
 let scheme = null;
 let state = null;
+let fest = null;
 let tourLengths = [];
 let totalQuestions = 0;
 let renderedTab = null;
@@ -20,9 +22,11 @@ let stateSync = null;
 let presence = null;
 const tabCache = new Map();
 const tabScroll = new Map();
+const resultsExpandedTours = new Set();
+const resultsExpandedShootouts = new Set();
 let numberToIndexCache = null;
 let entrySuggest = null;
-let detailedNameOverflowFrame = 0;
+let teamNameOverflowFrame = 0;
 
 const TABS = [
   {key: "results", label: "Итог"},
@@ -44,18 +48,23 @@ window.addEventListener("hashchange", () => {
 });
 
 window.addEventListener("resize", () => {
-  if (renderedTab === "detailed") scheduleDetailedNameOverflowUpdate();
+  if (renderedTab === "detailed" || renderedTab === "results") scheduleTeamNameOverflowUpdate();
+  updateResultsScrollState();
 });
+document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
 async function loadAll() {
-  const [schemeResp, stateResp] = await Promise.all([
+  const [schemeResp, stateResp, festResp] = await Promise.all([
     fetch(`${route.apiBase}/scheme`),
     fetch(`${route.apiBase}/state`),
+    route.festID ? fetch(`/api/fest/${route.festID}`) : Promise.resolve(null),
   ]);
   if (!schemeResp.ok) throw new Error(await schemeResp.text());
   if (!stateResp.ok) throw new Error(await stateResp.text());
+  if (festResp && !festResp.ok) throw new Error(await festResp.text());
   scheme = await schemeResp.json();
   state = await stateResp.json();
+  fest = festResp ? await festResp.json() : null;
   initFromScheme();
   ensureState();
   invalidateAllCaches();
@@ -293,17 +302,20 @@ function teamTookQuestion(teamIndex, qIndex, stats = questionStats()) {
 function render() {
   if (!state || !scheme) return;
   if (renderedTab === "input" && activeTab !== "input") closeEntryEditor();
-  rememberTabScroll(renderedTab);
+  const renderedPane = tabCache.get(renderedTab);
+  if (renderedPane?.isConnected) rememberTabScroll(renderedTab);
   setHeading(scheme.title || "ОД");
-  document.title = `${viewer ? "Зритель" : "Ведущий"} · ${scheme.title || "ОД"}`;
+  document.title = pageTitle();
   if (!TABS.some((t) => t.key === activeTab)) activeTab = TABS[0].key;
   renderTabs();
+  updateHeaderProgress();
   const activePane = getTabPane(activeTab);
   for (const pane of tabCache.values()) pane.hidden = pane !== activePane;
   if (!activePane.isConnected) odRoot.appendChild(activePane);
   renderedTab = activeTab;
   restoreTabScroll(activeTab);
-  if (activeTab === "detailed") scheduleDetailedNameOverflowUpdate(activePane);
+  updateResultsScrollState();
+  if (activeTab === "detailed" || activeTab === "results") scheduleTeamNameOverflowUpdate(activePane);
   refreshPresence();
 }
 
@@ -338,6 +350,40 @@ function restoreTabScroll(tab) {
   const pos = tabScroll.get(tab) || {top: 0, left: 0};
   frame.scrollTop = pos.top;
   frame.scrollLeft = pos.left;
+}
+
+function updateResultsScrollState() {
+  const frame = scrollFrame();
+  if (!frame) return;
+  frame.classList.toggle("results-scroll-left", activeTab === "results" && frame.scrollLeft > 1);
+}
+
+function pageTitle() {
+  const gameTitle = String(scheme?.title || "ОД").trim() || "ОД";
+  const festTitle = String(fest?.title || "").trim();
+  return festTitle ? `${gameTitle} · ${festTitle}` : gameTitle;
+}
+
+function toggleResultsTour(tourIndex) {
+  if (resultsExpandedTours.has(tourIndex)) resultsExpandedTours.delete(tourIndex);
+  else resultsExpandedTours.add(tourIndex);
+  rememberTabScroll("results");
+  invalidateTabCache("results");
+  render();
+}
+
+function toggleResultsShootout(roundIndex) {
+  if (resultsExpandedShootouts.has(roundIndex)) resultsExpandedShootouts.delete(roundIndex);
+  else resultsExpandedShootouts.add(roundIndex);
+  rememberTabScroll("results");
+  invalidateTabCache("results");
+  render();
+}
+
+function updateHeaderProgress() {
+  if (!progressNode) return;
+  const lastQ = lastEnteredQuestion();
+  progressNode.textContent = lastQ ? `Введён вопрос ${lastQ}` : "Ни одного вопроса не введено";
 }
 
 function renderTabs() {
@@ -685,7 +731,7 @@ function shootoutLockCell(roundIndex, questionIndex, className) {
   cb.dataset.round = String(roundIndex);
   cb.dataset.question = String(questionIndex);
   cb.checked = shootoutQuestionCompleted(roundIndex, questionIndex);
-  cb.disabled = viewer;
+  makeViewerCheckboxReadonly(cb);
   label.appendChild(cb);
   cell.appendChild(label);
   return cell;
@@ -711,7 +757,7 @@ function shootoutEntryCell(roundIndex, questionIndex, rowIndex, validationCounts
   checkbox.dataset.question = String(questionIndex);
   checkbox.dataset.row = String(rowIndex);
   checkbox.checked = Boolean(value && value === round?.teams?.[rowIndex]);
-  checkbox.disabled = viewer;
+  makeViewerCheckboxReadonly(checkbox);
   label.appendChild(checkbox);
   cell.appendChild(label);
   markShootoutEntryCellValidity(cell, validationCounts);
@@ -746,10 +792,28 @@ function lockCell(qIndex, className) {
   cb.className = "entry-lock-checkbox";
   cb.dataset.q = String(qIndex);
   cb.checked = Boolean(state.completed[qIndex]);
-  cb.disabled = viewer;
+  makeViewerCheckboxReadonly(cb);
   label.appendChild(cb);
   cell.appendChild(label);
   return cell;
+}
+
+function makeViewerCheckboxReadonly(checkbox) {
+  if (!viewer) return;
+  checkbox.setAttribute("aria-disabled", "true");
+  checkbox.addEventListener("click", preventViewerCheckboxToggle);
+  checkbox.addEventListener("keydown", preventViewerCheckboxKeydown);
+}
+
+function preventViewerCheckboxToggle(event) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function preventViewerCheckboxKeydown(event) {
+  if (event.key !== " " && event.key !== "Enter") return;
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 function entryCell(qIndex, rowIndex, tourEnd, validationCounts) {
@@ -1224,6 +1288,7 @@ function handleEntryChange(event) {
   if (!Number.isInteger(qIndex)) return;
   state.completed[qIndex] = cb.checked;
   invalidateScoreCaches();
+  updateHeaderProgress();
   saveState(["completed", qIndex], cb.checked);
 }
 
@@ -1462,11 +1527,12 @@ function detailedNameHeader() {
   return layout;
 }
 
-function scheduleDetailedNameOverflowUpdate(root = odRoot) {
-  if (detailedNameOverflowFrame) cancelAnimationFrame(detailedNameOverflowFrame);
-  detailedNameOverflowFrame = requestAnimationFrame(() => {
-    detailedNameOverflowFrame = 0;
+function scheduleTeamNameOverflowUpdate(root = odRoot) {
+  if (teamNameOverflowFrame) cancelAnimationFrame(teamNameOverflowFrame);
+  teamNameOverflowFrame = requestAnimationFrame(() => {
+    teamNameOverflowFrame = 0;
     updateDetailedTeamNameOverflow(root);
+    updateResultsTeamNameOverflow(root);
   });
 }
 
@@ -1475,6 +1541,14 @@ function updateDetailedTeamNameOverflow(root = odRoot) {
     const name = cell.querySelector(".od-detailed-team-name");
     const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
     cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
+  });
+}
+
+function updateResultsTeamNameOverflow(root = odRoot) {
+  root.querySelectorAll(".results-team").forEach((cell) => {
+    const name = cell.querySelector(".results-team-name");
+    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    cell.classList.toggle("results-team-truncated", truncated);
   });
 }
 
@@ -1635,11 +1709,6 @@ function lastEnteredQuestion() {
 function buildResultsTable() {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper";
-  const lastQ = lastEnteredQuestion();
-  const meta = document.createElement("div");
-  meta.className = "results-meta";
-  meta.textContent = lastQ ? `Введён вопрос ${lastQ}` : "Ни одного вопроса не введено";
-  wrapper.appendChild(meta);
   wrapper.appendChild(buildResultsTableInner());
   return wrapper;
 }
@@ -1653,42 +1722,54 @@ function buildResultsTableInner() {
     roundTotals.reduce((sum, value) => sum + (value == null ? 0 : value), 0));
   const ratings = state.teams.map((_, i) => ratingForTeam(i, stats));
   const tourTotals = state.teams.map((_, i) => tourSumsForTeam(i, stats));
+  const tourStarts = tourStartIndexes();
+  const tourStarted = tourLengths.map((_, tourIndex) => tourHasStarted(tourIndex));
   const shootoutRoundCount = state.shootoutRounds.length;
 
   const sortKeys = state.teams.map((_, i) => ({
     index: i,
     total: totals[i],
     tiebreak: tiebreaks[i],
-    rating: ratings[i],
   }));
   sortKeys.sort((a, b) => {
     if (b.total !== a.total) return b.total - a.total;
     if (b.tiebreak !== a.tiebreak) return b.tiebreak - a.tiebreak;
-    if (b.rating !== a.rating) return b.rating - a.rating;
     return a.index - b.index;
   });
 
   const placeMap = computePlaces(totals);
 
   const table = document.createElement("table");
-  table.className = "results-table";
+  table.className = "results-table od-results-table";
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
   head.appendChild(th("Место", "results-place-head"));
   head.appendChild(th("Команда", "results-team-head"));
-  head.appendChild(th("Σ", "results-num-head"));
+  head.appendChild(th("Σ", "results-num-head results-total-head"));
+  for (let t = 0; t < tourLengths.length; t++) {
+    head.appendChild(resultsTourHeader(t));
+    if (resultsExpandedTours.has(t)) {
+      for (let q = 0; q < tourLengths[t]; q++) {
+        head.appendChild(th(tourStarts[t] + q + 1, "results-answer-head"));
+      }
+    }
+  }
   for (let roundIndex = 0; roundIndex < shootoutRoundCount; roundIndex++) {
-    head.appendChild(th(`П${roundIndex + 1}`, "results-num-head"));
+    head.appendChild(resultsShootoutHeader(roundIndex));
+    if (resultsExpandedShootouts.has(roundIndex)) {
+      const round = state.shootoutRounds[roundIndex];
+      for (let q = 0; q < (round?.answers || []).length; q++) {
+        head.appendChild(th(shootoutQuestionNumber(roundIndex, q), "results-answer-head results-shootout-answer-head"));
+      }
+    }
   }
   head.appendChild(th("R", "results-num-head"));
-  for (let t = 0; t < tourLengths.length; t++) {
-    head.appendChild(th(`T${t + 1}`, "results-tour-head"));
-  }
   thead.appendChild(head);
   table.appendChild(thead);
 
-  const colCount = 4 + tourLengths.length + shootoutRoundCount;
+  const colCount = 4 + tourLengths.length + shootoutRoundCount +
+    expandedResultsQuestionCount() + expandedResultsShootoutQuestionCount();
   const groups = [];
   sortKeys.forEach((row) => {
     const placeText = placeMap[row.index] || "—";
@@ -1715,31 +1796,157 @@ function buildResultsTableInner() {
       tr.appendChild(td(group.placeText, "results-place"));
       const nameTd = document.createElement("td");
       nameTd.className = "results-team";
+      const teamLabelText = team.name || `Команда ${index + 1}`;
+      const nameWrap = document.createElement("span");
+      nameWrap.className = "results-team-name-wrap";
       const nameSpan = document.createElement("span");
       nameSpan.className = "results-team-name";
-      nameSpan.textContent = team.name || `Команда ${index + 1}`;
-      nameTd.appendChild(nameSpan);
+      nameSpan.textContent = teamLabelText;
+      nameSpan.tabIndex = 0;
+      nameSpan.setAttribute("aria-label", teamLabelText);
+      nameWrap.appendChild(nameSpan);
       if (team.city) {
         const citySpan = document.createElement("span");
         citySpan.className = "results-team-city";
         citySpan.textContent = team.city;
-        nameTd.appendChild(citySpan);
+        nameWrap.appendChild(citySpan);
       }
+      nameTd.appendChild(nameWrap);
+      const fullName = document.createElement("span");
+      fullName.className = "results-team-name-popover";
+      fullName.textContent = teamLabelText;
+      nameTd.appendChild(fullName);
       tr.appendChild(nameTd);
-      tr.appendChild(td(total, "results-num total-cell"));
+      tr.appendChild(td(total, "results-num total-cell results-total"));
+      for (let t = 0; t < tourLengths.length; t++) {
+        if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));
+        else tr.appendChild(td("·", "results-tour results-tour-pending"));
+        if (resultsExpandedTours.has(t)) {
+          for (let q = 0; q < tourLengths[t]; q++) {
+            tr.appendChild(resultsAnswerCell(index, tourStarts[t] + q, stats, q, tourLengths[t]));
+          }
+        }
+      }
       for (let roundIndex = 0; roundIndex < shootoutRoundCount; roundIndex++) {
         const value = shootoutRoundTotals[index][roundIndex];
         tr.appendChild(td(value == null ? "" : value, "results-num"));
+        if (resultsExpandedShootouts.has(roundIndex)) {
+          const round = state.shootoutRounds[roundIndex];
+          for (let q = 0; q < (round?.answers || []).length; q++) {
+            tr.appendChild(resultsShootoutAnswerCell(index, roundIndex, q));
+          }
+        }
       }
       tr.appendChild(td(ratings[index], "results-num"));
-      for (let t = 0; t < tourLengths.length; t++) {
-        tr.appendChild(td(tourTotals[index][t], "results-tour"));
-      }
       tbody.appendChild(tr);
     });
   });
   table.appendChild(tbody);
   return table;
+}
+
+function resultsTourHeader(tourIndex) {
+  const expanded = resultsExpandedTours.has(tourIndex);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "results-tour-toggle";
+  button.textContent = `T${tourIndex + 1}`;
+  button.setAttribute("aria-expanded", expanded ? "true" : "false");
+  button.title = expanded ? "Свернуть тур" : "Показать вопросы тура";
+  button.addEventListener("click", () => toggleResultsTour(tourIndex));
+  return th(button, "results-tour-head results-tour-toggle-head" + (expanded ? " expanded" : ""));
+}
+
+function resultsShootoutHeader(roundIndex) {
+  const expanded = resultsExpandedShootouts.has(roundIndex);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "results-tour-toggle";
+  button.textContent = `П${roundIndex + 1}`;
+  button.setAttribute("aria-expanded", expanded ? "true" : "false");
+  button.title = expanded ? "Свернуть перестрелку" : "Показать вопросы перестрелки";
+  button.addEventListener("click", () => toggleResultsShootout(roundIndex));
+  return th(button, "results-num-head results-tour-toggle-head results-shootout-toggle-head" + (expanded ? " expanded" : ""));
+}
+
+function resultsAnswerCell(teamIndex, qIndex, stats, tourQuestionIndex, tourSize) {
+  const answered = teamTookQuestion(teamIndex, qIndex, stats);
+  const classes = ["results-answer"];
+  if (tourQuestionIndex === 0) classes.push("results-answer-left");
+  if (tourQuestionIndex === tourSize - 1) classes.push("results-answer-right");
+  const cell = td("", classes.join(" "));
+  const mark = document.createElement("span");
+  mark.className = "results-answer-mark";
+  mark.textContent = answered ? String(qIndex + 1) : "";
+  cell.appendChild(mark);
+  if (answered) cell.classList.add("right");
+  return cell;
+}
+
+function resultsShootoutAnswerCell(teamIndex, roundIndex, questionIndex) {
+  const round = state.shootoutRounds[roundIndex];
+  const questionCount = (round?.answers || []).length;
+  const number = teamNumber(teamIndex);
+  const participantIndex = round?.teams?.indexOf(number) ?? -1;
+  const participating = participantIndex >= 0;
+  const completed = shootoutQuestionCompleted(roundIndex, questionIndex);
+  const mark = participating && completed
+    ? normalizeShootoutMark(round.answers[questionIndex]?.[participantIndex])
+    : "";
+  const classes = ["results-answer", "results-shootout-answer"];
+  if (questionIndex === 0) classes.push("results-answer-left");
+  if (questionIndex === questionCount - 1) classes.push("results-answer-right");
+  if (!participating) classes.push("results-answer-excluded");
+  const cell = td("", classes.join(" "));
+  if (!participating) return cell;
+  const markNode = document.createElement("span");
+  markNode.className = "results-answer-mark";
+  cell.appendChild(markNode);
+  if (mark === "right") cell.classList.add("right");
+  return cell;
+}
+
+function tourStartIndexes() {
+  const starts = [];
+  let qIndex = 0;
+  for (const size of tourLengths) {
+    starts.push(qIndex);
+    qIndex += size;
+  }
+  return starts;
+}
+
+function tourHasStarted(tourIndex) {
+  const start = tourStartIndexes()[tourIndex] || 0;
+  const end = start + (tourLengths[tourIndex] || 0);
+  for (let q = start; q < end; q++) {
+    if (state.completed[q]) return true;
+  }
+  return false;
+}
+
+function expandedResultsQuestionCount() {
+  let count = 0;
+  for (const tourIndex of resultsExpandedTours) {
+    count += tourLengths[tourIndex] || 0;
+  }
+  return count;
+}
+
+function expandedResultsShootoutQuestionCount() {
+  let count = 0;
+  for (const roundIndex of resultsExpandedShootouts) {
+    count += (state.shootoutRounds[roundIndex]?.answers || []).length;
+  }
+  return count;
+}
+
+function shootoutQuestionNumber(roundIndex, questionIndex) {
+  let number = questionIndex + 1;
+  for (let i = 0; i < roundIndex; i++) {
+    number += (state.shootoutRounds[i]?.answers || []).length;
+  }
+  return number;
 }
 
 // === scoring helpers ===
@@ -1966,6 +2173,7 @@ function applyRemoteState(nextState) {
   );
   state = nextState;
   ensureState();
+  updateHeaderProgress();
   if (editingInput || editingShootout) {
     questionStatsCache = null;
     numberToIndexCache = null;
