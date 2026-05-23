@@ -1,4 +1,6 @@
 (function () {
+  const MINUS_SIGN = "\u2212";
+
   function th(content, className = "", attrs = {}) {
     return cell("th", content, className, attrs);
   }
@@ -39,11 +41,15 @@
     if (Array.isArray(content)) {
       for (const item of content) {
         if (item instanceof Node) node.appendChild(item);
-        else node.appendChild(document.createTextNode(item == null ? "" : String(item)));
+        else node.appendChild(document.createTextNode(formatDisplayText(item)));
       }
       return;
     }
-    node.textContent = content == null ? "" : String(content);
+    node.textContent = formatDisplayText(content);
+  }
+
+  function formatDisplayText(value) {
+    return value == null ? "" : String(value).replace(/^-/, MINUS_SIGN);
   }
 
   function applyAttrs(node, attrs = {}) {
@@ -62,7 +68,7 @@
   function option(value, label) {
     const node = document.createElement("option");
     node.value = value;
-    node.textContent = label;
+    node.textContent = formatDisplayText(label);
     return node;
   }
 
@@ -278,7 +284,7 @@
     return places;
   }
 
-  function setText(root, selector, value, formatter = String) {
+  function setText(root, selector, value, formatter = formatDisplayText) {
     const node = root.querySelector(selector);
     if (node) node.textContent = formatter(value);
   }
@@ -353,7 +359,7 @@
     return keys.map((key) => String(values[key] ?? "")).join("\u001f");
   }
 
-  function setNodeText(node, value, formatter = String) {
+  function setNodeText(node, value, formatter = formatDisplayText) {
     if (!node) return;
     const text = formatter(value);
     if (node.textContent !== text) node.textContent = text;
@@ -874,6 +880,7 @@
     buildTwoRowScoreTable,
     computePlaces,
     setText,
+    formatDisplayText,
     isFormControl,
     clamp,
     sameArray,
