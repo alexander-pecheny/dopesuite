@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -496,6 +497,9 @@ func (s *server) applyLegacyUpdate(req updateRequest) (MatchView, []byte, error)
 			return MatchView{}, nil, errors.New("finished update must be standalone")
 		}
 		s.state.Finished = *req.Finished
+		if *req.Finished {
+			assignComputedPlaces(&s.state)
+		}
 		return s.commitLocked()
 	}
 	if s.state.Finished {
@@ -678,6 +682,41 @@ func scoreTeam(team TeamState) TeamView {
 	}
 	view.Tiebreak = view.ShootoutTotal
 	return view
+}
+
+func assignComputedPlaces(state *MatchState) {
+	type rankedTeam struct {
+		index int
+		view  TeamView
+	}
+	ranked := make([]rankedTeam, len(state.Teams))
+	for index, team := range state.Teams {
+		ranked[index] = rankedTeam{index: index, view: scoreTeam(team)}
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		return teamRanksHigher(ranked[i].view, ranked[j].view)
+	})
+	for place, team := range ranked {
+		state.Teams[team.index].Place = float64(place + 1)
+	}
+}
+
+func teamRanksHigher(a, b TeamView) bool {
+	if a.Total != b.Total {
+		return a.Total > b.Total
+	}
+	if a.ShootoutTotal != b.ShootoutTotal {
+		return a.ShootoutTotal > b.ShootoutTotal
+	}
+	if a.Plus != b.Plus {
+		return a.Plus > b.Plus
+	}
+	for i := len(a.CorrectCounts) - 1; i >= 0; i-- {
+		if a.CorrectCounts[i] != b.CorrectCounts[i] {
+			return a.CorrectCounts[i] > b.CorrectCounts[i]
+		}
+	}
+	return false
 }
 
 func scoreTheme(theme ThemeEntry) ThemeView {

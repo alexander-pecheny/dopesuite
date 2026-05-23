@@ -67,34 +67,74 @@ function buildMatchBox(match, liveMatch, options = {}) {
   box.dataset.matchCode = match.code || "";
 
   const venue = liveMatch?.venue || match.venue;
-  const table = document.createElement("table");
-  table.className = "grid-slot-table";
-  const thead = document.createElement("thead");
-  const header = document.createElement("tr");
-  header.className = "grid-match-head-row";
-  header.appendChild(matchHeadCell(match, venue, options));
-  header.appendChild(el("th", "slot-total-head", "Σ"));
-  header.appendChild(el("th", "slot-place-head", "М"));
-  thead.appendChild(header);
-  table.appendChild(thead);
-  const tbody = document.createElement("tbody");
+  const grid = document.createElement("div");
+  grid.className = "grid-slot-grid";
+  grid.appendChild(matchHeadCell(match, venue, options));
+  grid.appendChild(gridHeadCell("slot-total-head", "Σ"));
+  grid.appendChild(gridHeadCell("slot-place-head", "М"));
   const liveTeams = liveMatch?.teams || [];
-  (match.slots || []).forEach((slot, index) => {
+  const slots = match.slots || [];
+  const rowCount = gridSlotRowCount(match, slots);
+  const realRows = [];
+  for (let index = 0; index < rowCount; index += 1) {
+    const slot = slots[index];
+    if (!slot) {
+      phantomSlotCells().forEach((cell) => grid.appendChild(cell));
+      continue;
+    }
     const live = liveTeams[index] || {};
-    const row = document.createElement("tr");
-    row.appendChild(slotTeamCell(slotLabel(slot, live)));
-    row.appendChild(el("td", "slot-total", scoreText(live.total)));
-    row.appendChild(el("td", "slot-place", placeText(live.place)));
-    tbody.appendChild(row);
-  });
-  table.appendChild(tbody);
-  box.appendChild(table);
+    const cells = [
+      slotTeamCell(slotLabel(slot, live)),
+      gridCell("slot-total", scoreText(live.total)),
+      gridCell("slot-place", placeText(live.place)),
+    ];
+    realRows.push(cells);
+    cells.forEach((cell) => grid.appendChild(cell));
+  }
+  decorateGridSlotRows(realRows);
+  box.appendChild(grid);
   return box;
 }
 
+function gridSlotRowCount(match, slots) {
+  const declared = Number(match.participantCount);
+  const rowCount = Math.max(slots.length, Number.isFinite(declared) ? declared : 0);
+  return rowCount === 3 ? 4 : rowCount;
+}
+
+function gridHeadCell(className, text) {
+  const cell = gridCell(`grid-slot-head ${className}`, "");
+  cell.appendChild(el("span", "grid-head-metric", text));
+  return cell;
+}
+
+function gridCell(className, text) {
+  return el("div", `grid-slot-cell ${className}`, text);
+}
+
+function phantomSlotCells() {
+  return [
+    gridCell("slot-source grid-slot-phantom-cell", ""),
+    gridCell("slot-total grid-slot-phantom-cell", ""),
+    gridCell("slot-place grid-slot-phantom-cell", ""),
+  ].map((cell) => {
+    cell.setAttribute("aria-hidden", "true");
+    return cell;
+  });
+}
+
+function decorateGridSlotRows(rows) {
+  if (rows.length === 0) return;
+  rows[0][0].classList.add("grid-slot-top-left");
+  rows[0][2].classList.add("grid-slot-top-right");
+  const last = rows[rows.length - 1];
+  last.forEach((cell) => cell.classList.add("grid-slot-row-last"));
+  last[0].classList.add("grid-slot-bottom-left");
+  last[2].classList.add("grid-slot-bottom-right");
+}
+
 function matchHeadCell(match, venue, options = {}) {
-  const cell = document.createElement("th");
-  cell.className = "grid-match-head-cell";
+  const cell = gridCell("grid-slot-head grid-match-head-cell", "");
   const layout = document.createElement("span");
   layout.className = "grid-match-head-layout";
   layout.appendChild(matchTitleNode(match, options));
@@ -165,8 +205,7 @@ function matchLabel(match) {
 }
 
 function slotTeamCell(label) {
-  const cell = document.createElement("td");
-  cell.className = "slot-source grid-slot-team";
+  const cell = gridCell("slot-source grid-slot-team", "");
   const name = document.createElement("span");
   name.className = "grid-slot-team-name";
   name.textContent = label;
@@ -206,10 +245,15 @@ function slotLabel(slot, live = {}) {
     return number ? `seed-${number}` : "seed";
   }
   if (slot.fromMatch) return `${slot.fromMatch.match}${slot.fromMatch.place}`;
-  if (slot.reseed) return "";
+  if (slot.reseed) return reseedLabel(slot.reseed);
   if (slot.team) return slot.team.name || slot.team.label || slot.team.id || "";
   if (slot.placeholder) return slot.placeholder;
   return live.source || "";
+}
+
+function reseedLabel(reseed) {
+  const rank = Number(reseed.rank);
+  return Number.isFinite(rank) && rank > 0 ? `Пересев-${rank}` : "Пересев";
 }
 
 function venueText(venue) {

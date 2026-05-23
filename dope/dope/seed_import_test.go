@@ -58,6 +58,59 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 	}
 }
 
+func TestSeedLabelsShownBeforeImport(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, ekGameID := createSeedImportFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	scope, err := srv.verifyMatchInScope(t.Context(), festScope{FestID: festID, GameID: ekGameID}, "A")
+	if err != nil {
+		t.Fatalf("match scope: %v", err)
+	}
+	view, err := srv.loadScopedMatchViewLocked(scope)
+	if err != nil {
+		t.Fatalf("load match: %v", err)
+	}
+	if got := matchTeamNames(view); !sameStrings(got, []string{"seed-1", "seed-2", "seed-3", "seed-4"}) {
+		t.Fatalf("team names = %#v, want seed labels", got)
+	}
+}
+
+func TestFinishAssignsPlaces(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, ekGameID := createSeedImportFixture(t, db)
+	srv := &server{
+		db:              db,
+		subscribers:     make(map[chan event]struct{}),
+		hostSubscribers: make(map[chan hostPresenceEvent]struct{}),
+	}
+	scopeBase := festScope{FestID: festID, GameID: ekGameID}
+	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
+		t.Fatalf("import seeds: %v", err)
+	}
+	scope, err := srv.verifyMatchInScope(t.Context(), scopeBase, "A")
+	if err != nil {
+		t.Fatalf("match scope: %v", err)
+	}
+	finished := true
+	view, _, err := srv.applyScopedMatchUpdate(scope, updateRequest{Finished: &finished})
+	if err != nil {
+		t.Fatalf("finish match: %v", err)
+	}
+	if got := matchTeamPlaces(view); !sameFloats(got, []float64{1, 2, 3, 4}) {
+		t.Fatalf("places = %#v, want 1..4", got)
+	}
+}
+
 func createSeedImportFixture(t *testing.T, db *sql.DB) (int64, int64) {
 	t.Helper()
 	ctx := t.Context()
@@ -175,6 +228,22 @@ func seedImportRowNames(view seedImportView) []string {
 	return out
 }
 
+func matchTeamNames(view MatchView) []string {
+	out := make([]string, len(view.Teams))
+	for i, team := range view.Teams {
+		out[i] = team.Name
+	}
+	return out
+}
+
+func matchTeamPlaces(view MatchView) []float64 {
+	out := make([]float64, len(view.Teams))
+	for i, team := range view.Teams {
+		out[i] = team.Place
+	}
+	return out
+}
+
 func seedImportSeedNumbers(view seedImportView) []int {
 	out := make([]int, len(view.Rows))
 	for i, row := range view.Rows {
@@ -196,6 +265,18 @@ func sameStrings(a, b []string) bool {
 }
 
 func sameInts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameFloats(a, b []float64) bool {
 	if len(a) != len(b) {
 		return false
 	}

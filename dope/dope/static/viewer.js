@@ -307,8 +307,11 @@ function buildVenuesTable() {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  venues.forEach((venue) => {
+  venues.forEach((venue, index) => {
     const row = document.createElement("tr");
+    row.className = "results-row";
+    if (index === 0) row.classList.add("results-group-first");
+    if (index === venues.length - 1) row.classList.add("results-group-last");
     row.appendChild(td(venue.number, "results-place venues-number"));
     row.appendChild(td(venue.title, "results-team venues-title-cell"));
     tbody.appendChild(row);

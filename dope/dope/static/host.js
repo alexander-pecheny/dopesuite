@@ -323,7 +323,6 @@ function render() {
 
   const focusedPlaceTeam = focusedPlaceTeamIndex();
   const finishToggleFocused = isFinishToggleFocused();
-  const venueFocused = isVenueSelectFocused();
   const table = buildTable();
   matchTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
   activeAnswerNode = state.finished ? null : matchTableIndex.get("answer", activeCell);
@@ -336,10 +335,6 @@ function render() {
   }
   scheduleEKTeamNameOverflowUpdate();
   refreshPresence();
-  if (venueFocused) {
-    focusVenueSelect({preventScroll: true});
-    return;
-  }
   if (finishToggleFocused) {
     focusFinishToggle({preventScroll: true});
     return;
@@ -412,8 +407,11 @@ function buildVenuesTable(editable) {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  venues.forEach((venue) => {
+  venues.forEach((venue, index) => {
     const row = document.createElement("tr");
+    row.className = "results-row";
+    if (index === 0) row.classList.add("results-group-first");
+    if (index === venues.length - 1) row.classList.add("results-group-last");
     row.appendChild(td(venue.number, "results-place venues-number"));
     const titleCell = document.createElement("td");
     titleCell.className = "results-team venues-title-cell";
@@ -937,7 +935,7 @@ function resetMatchTableIndex() {
 function buildTable(options = {}) {
   const matchCode = currentMatchCode();
   const hasShootout = shootoutThemeCount() > 0;
-  const showPlaceColumn = false;
+  const showPlaceColumn = true;
   const themes = renderedThemeHeaders();
   const rows = state.teams.map((team, teamIndex) => {
     const themeCellsList = [];
@@ -1190,25 +1188,25 @@ function battleHeader() {
 
   const title = document.createElement("span");
   title.className = "battle-title";
-  title.textContent = matchTitle();
+  title.textContent = state.title || matchTitle();
   layout.appendChild(title);
 
   if (venues.length > 0) {
-    const venueSelect = document.createElement("select");
-    venueSelect.className = "venue-select";
-    venueSelect.dataset.matchCode = matchCode;
-    venues.forEach((venue) => {
-      venueSelect.appendChild(option(String(venue.number), `${venue.number}: ${venue.title}`));
-    });
-    venueSelect.value = state.venue ? String(state.venue.number) : "";
-    venueSelect.addEventListener("change", () => {
-      sendVenueChange(Number(venueSelect.value), matchCode);
-    });
-    layout.appendChild(venueSelect);
+    const venueButton = document.createElement("button");
+    venueButton.type = "button";
+    venueButton.className = "venue-edit-button";
+    venueButton.dataset.matchCode = matchCode;
+    venueButton.textContent = "✏️";
+    venueButton.title = "Изменить площадку";
+    venueButton.setAttribute("aria-label", "Изменить площадку");
+    venueButton.addEventListener("click", () => openVenueDialog(matchCode));
+    layout.appendChild(venueButton);
   }
 
   const label = document.createElement("label");
   label.className = "finish-control";
+  label.title = "Закончен";
+  label.setAttribute("aria-label", "Закончен");
 
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
@@ -1218,14 +1216,57 @@ function battleHeader() {
   checkbox.addEventListener("change", () => {
     sendUpdate({finished: checkbox.checked}, matchCode);
   });
-
-  const text = document.createElement("span");
-  text.textContent = "Закончен";
-
-  label.append(checkbox, text);
+  label.append(checkbox);
   layout.appendChild(label);
   node.appendChild(layout);
   return node;
+}
+
+function openVenueDialog(matchCode) {
+  const dialog = document.createElement("dialog");
+  dialog.className = "venue-dialog";
+  const form = document.createElement("form");
+  form.className = "venue-dialog-form";
+
+  const title = document.createElement("h2");
+  title.textContent = state.title || matchTitle();
+  form.appendChild(title);
+
+  const select = document.createElement("select");
+  select.className = "venue-dialog-select";
+  venues.forEach((venue) => {
+    select.appendChild(option(String(venue.number), `${venue.number}: ${venue.title}`));
+  });
+  select.value = state.venue ? String(state.venue.number) : "";
+  form.appendChild(select);
+
+  const actions = document.createElement("div");
+  actions.className = "venue-dialog-actions";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn";
+  cancel.textContent = "Отмена";
+  cancel.addEventListener("click", () => dialog.close());
+  const save = document.createElement("button");
+  save.type = "submit";
+  save.className = "btn";
+  save.textContent = "Сохранить";
+  actions.append(cancel, save);
+  form.appendChild(actions);
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const number = Number(select.value);
+    dialog.close();
+    if (number > 0 && number !== state.venue?.number) {
+      sendVenueChange(number, matchCode);
+    }
+  });
+  dialog.addEventListener("close", () => dialog.remove());
+  dialog.appendChild(form);
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  select.focus();
 }
 
 function shootoutControlsHeader() {
@@ -1399,11 +1440,6 @@ function focusFinishToggle(options = {}) {
   if (input) input.focus({preventScroll: options.preventScroll});
 }
 
-function focusVenueSelect(options = {}) {
-  const input = document.querySelector(".venue-select");
-  if (input) input.focus({preventScroll: options.preventScroll});
-}
-
 function focusedPlaceTeamIndex() {
   const element = document.activeElement;
   if (!(element instanceof HTMLInputElement) || !element.classList.contains("place-input")) {
@@ -1416,11 +1452,6 @@ function focusedPlaceTeamIndex() {
 function isFinishToggleFocused() {
   const element = document.activeElement;
   return element instanceof HTMLInputElement && element.classList.contains("finish-toggle");
-}
-
-function isVenueSelectFocused() {
-  const element = document.activeElement;
-  return element instanceof HTMLSelectElement && element.classList.contains("venue-select");
 }
 
 function findActiveCell() {
@@ -1667,7 +1698,7 @@ function currentHostPresenceCursor() {
 }
 
 function hostPresenceCursorFromElement(element) {
-  const target = element?.closest?.(".answer-cell,.player-select,.place-input,.finish-toggle,.venue-select");
+  const target = element?.closest?.(".answer-cell,.player-select,.place-input,.finish-toggle,.venue-edit-button");
   if (!target || !hostRoot.contains(target)) return null;
   const matchCode = target.dataset.matchCode || currentMatchCode();
   if (target.classList.contains("answer-cell")) {
@@ -1699,7 +1730,7 @@ function hostPresenceCursorFromElement(element) {
   if (target.classList.contains("finish-toggle")) {
     return {app: "ek", kind: "finish", gameID: route.gameID, matchCode};
   }
-  if (target.classList.contains("venue-select")) {
+  if (target.classList.contains("venue-edit-button")) {
     return {app: "ek", kind: "venue", gameID: route.gameID, matchCode};
   }
   return null;
@@ -1722,7 +1753,7 @@ function findHostPresenceTarget(cursor) {
   case "finish":
     return hostRoot.querySelector(`.finish-toggle[data-match-code="${matchCode}"]`);
   case "venue":
-    return hostRoot.querySelector(`.venue-select[data-match-code="${matchCode}"]`);
+    return hostRoot.querySelector(`.venue-edit-button[data-match-code="${matchCode}"]`);
   default:
     return null;
   }
