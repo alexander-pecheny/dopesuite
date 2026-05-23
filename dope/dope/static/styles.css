@@ -2262,6 +2262,9 @@ a.list-row:hover { background: #eef1f5; }
 .col-entry-marker { width: 12px; }
 .col-entry-q { width: 38px; }
 .col-entry-tour-end { width: calc(38px + 14px - var(--cell-gap)); }
+.col-entry-shootout-team { width: 230px; }
+.col-entry-shootout-check { width: 38px; }
+.col-entry-shootout-check.col-entry-tour-end { width: calc(38px + 14px - var(--cell-gap)); }
 
 .entry-table th,
 .entry-table td {
@@ -2372,6 +2375,68 @@ a.list-row:hover { background: #eef1f5; }
   background: #fff;
 }
 
+.shootout-entry-check-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 26px;
+  cursor: pointer;
+}
+
+.shootout-entry-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+
+.shootout-entry-checkbox:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.entry-suggest {
+  position: fixed;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--grid-dark);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  box-shadow: 0 8px 24px rgba(32, 33, 36, 0.18);
+}
+
+.entry-suggest-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.entry-suggest-option.active,
+.entry-suggest-option:hover {
+  background: #eef3fa;
+}
+
+.entry-suggest-option .team-number-badge {
+  flex: 0 0 auto;
+  margin-right: 0;
+}
+
 .entry-table .entry-input-bad,
 .entry-table .entry-input-dup {
   background-color: #fde8ea;
@@ -2387,6 +2452,271 @@ a.list-row:hover { background: #eef1f5; }
 .match-table .answer-cell.readonly { cursor: default; }
 .match-table .answer-cell.readonly:hover,
 .match-table .answer-cell.readonly:focus { outline: 0; }
+
+.od-detailed-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.od-input-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  min-width: max-content;
+}
+
+.od-shootout-entry-wrap {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  min-width: max-content;
+  align-self: flex-start;
+}
+
+.od-shootout-entry-block {
+  display: flex;
+  align-items: flex-start;
+  min-width: max-content;
+}
+
+.entry-table .od-shootout-meta-round-cell,
+.entry-table .od-shootout-meta-cell,
+.entry-table .od-shootout-meta-lock-cell {
+  width: 230px;
+  min-width: 230px;
+  max-width: 230px;
+}
+
+.entry-table .od-shootout-meta-cell {
+  padding: 0 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.od-shootout-meta-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 46px;
+  overflow: hidden;
+  white-space: normal;
+}
+
+.od-shootout-entry-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.od-shootout-entry-table thead tr:first-child th { top: 0; height: 28px; }
+.od-shootout-entry-table thead tr:nth-child(2) th { top: 28px; height: 28px; }
+.od-shootout-entry-table thead tr:nth-child(3) th { top: 56px; height: 22px; }
+
+.entry-table .od-shootout-controls-head {
+  top: 0;
+}
+
+.od-shootout-entry-table .od-shootout-round-head {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.entry-table .od-shootout-team-cell {
+  background-color: var(--structure);
+  padding: 0 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.entry-table .od-shootout-excluded {
+  background-color: var(--structure);
+}
+
+.od-shootout-check-cell {
+  cursor: pointer;
+}
+
+.col-entry-shootout-controls {
+  width: 280px;
+}
+
+.entry-table .od-shootout-controls-head,
+.entry-table .od-shootout-controls-cell,
+.match-table .od-shootout-controls-head,
+.match-table .od-shootout-controls-cell {
+  width: 280px;
+  min-width: 280px;
+  max-width: 280px;
+}
+
+.entry-table .od-shootout-controls-head,
+.match-table .od-shootout-controls-head {
+  --cell-fill: var(--structure);
+  padding: 2px;
+  vertical-align: top;
+}
+
+.entry-table .od-shootout-controls-head {
+  overflow: visible;
+}
+
+.entry-table .od-shootout-controls-head .od-shootout-controls-panel {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  left: 2px;
+  z-index: 6;
+}
+
+.entry-table .od-shootout-controls-cell,
+.match-table .od-shootout-controls-cell {
+  --cell-fill: var(--structure);
+  background-color: var(--structure);
+  border-color: var(--structure);
+  border-radius: 0;
+}
+
+.od-shootout-controls-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+}
+
+.od-shootout-controls-panel .btn {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.od-shootout-controls-panel .btn:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.od-shootout-round-controls {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--grid-dark);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+}
+
+.od-shootout-round-label {
+  min-width: 0;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.od-shootout-round-controls .btn {
+  min-width: 0;
+}
+
+.match-table.od-detailed .shootout-head,
+.match-table.od-shootout-input .shootout-head {
+  --cell-fill: #eef3fa;
+}
+
+.fight-frame .match-table.od-shootout-input .sticky {
+  position: static;
+  left: auto;
+}
+
+.match-table.od-detailed .od-shootout-cell,
+.match-table.od-shootout-input .od-shootout-cell {
+  color: transparent;
+}
+
+.match-table.od-detailed .od-shootout-excluded,
+.match-table.od-shootout-input .od-shootout-excluded {
+  --cell-fill: var(--structure);
+  cursor: default;
+}
+
+.od-shootout-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--grid-dark);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+  color: var(--text);
+  box-shadow: 0 18px 48px rgba(32, 33, 36, 0.22);
+}
+
+.od-shootout-dialog::backdrop {
+  background: rgba(32, 33, 36, 0.28);
+}
+
+.od-shootout-dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.od-shootout-dialog h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.od-shootout-team-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  max-height: min(420px, calc(100vh - 190px));
+  overflow: auto;
+}
+
+.od-shootout-team-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.od-shootout-team-option:hover {
+  background: #eef1f5;
+}
+
+.od-shootout-team-option input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--blue);
+}
+
+.od-shootout-team-option .team-number-badge {
+  margin-right: 0;
+}
+
+.od-shootout-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.od-shootout-dialog-actions .btn:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
 
 /* Итог */
 .results-wrapper {
