@@ -20,6 +20,8 @@ let stateSync = null;
 let presence = null;
 const tabCache = new Map();
 const tabScroll = new Map();
+const resultsExpandedTours = new Set();
+const resultsExpandedShootouts = new Set();
 let numberToIndexCache = null;
 let entrySuggest = null;
 let detailedNameOverflowFrame = 0;
@@ -347,6 +349,20 @@ function updateResultsScrollState() {
   const frame = scrollFrame();
   if (!frame) return;
   frame.classList.toggle("results-scroll-left", activeTab === "results" && frame.scrollLeft > 1);
+}
+
+function toggleResultsTour(tourIndex) {
+  if (resultsExpandedTours.has(tourIndex)) resultsExpandedTours.delete(tourIndex);
+  else resultsExpandedTours.add(tourIndex);
+  invalidateTabCache("results");
+  render();
+}
+
+function toggleResultsShootout(roundIndex) {
+  if (resultsExpandedShootouts.has(roundIndex)) resultsExpandedShootouts.delete(roundIndex);
+  else resultsExpandedShootouts.add(roundIndex);
+  invalidateTabCache("results");
+  render();
 }
 
 function renderTabs() {
@@ -1662,6 +1678,8 @@ function buildResultsTableInner() {
     roundTotals.reduce((sum, value) => sum + (value == null ? 0 : value), 0));
   const ratings = state.teams.map((_, i) => ratingForTeam(i, stats));
   const tourTotals = state.teams.map((_, i) => tourSumsForTeam(i, stats));
+  const tourStarts = tourStartIndexes();
+  const tourStarted = tourLengths.map((_, tourIndex) => tourHasStarted(tourIndex));
   const shootoutRoundCount = state.shootoutRounds.length;
 
   const sortKeys = state.teams.map((_, i) => ({
@@ -1686,16 +1704,28 @@ function buildResultsTableInner() {
   head.appendChild(th("Команда", "results-team-head"));
   head.appendChild(th("Σ", "results-num-head"));
   for (let t = 0; t < tourLengths.length; t++) {
-    head.appendChild(th(`T${t + 1}`, "results-tour-head"));
+    head.appendChild(resultsTourHeader(t));
+    if (resultsExpandedTours.has(t)) {
+      for (let q = 0; q < tourLengths[t]; q++) {
+        head.appendChild(th(tourStarts[t] + q + 1, "results-answer-head"));
+      }
+    }
   }
   for (let roundIndex = 0; roundIndex < shootoutRoundCount; roundIndex++) {
-    head.appendChild(th(`П${roundIndex + 1}`, "results-num-head"));
+    head.appendChild(resultsShootoutHeader(roundIndex));
+    if (resultsExpandedShootouts.has(roundIndex)) {
+      const round = state.shootoutRounds[roundIndex];
+      for (let q = 0; q < (round?.answers || []).length; q++) {
+        head.appendChild(th(shootoutQuestionNumber(roundIndex, q), "results-answer-head results-shootout-answer-head"));
+      }
+    }
   }
   head.appendChild(th("R", "results-num-head"));
   thead.appendChild(head);
   table.appendChild(thead);
 
-  const colCount = 4 + tourLengths.length + shootoutRoundCount;
+  const colCount = 4 + tourLengths.length + shootoutRoundCount +
+    expandedResultsQuestionCount() + expandedResultsShootoutQuestionCount();
   const groups = [];
   sortKeys.forEach((row) => {
     const placeText = placeMap[row.index] || "—";
@@ -1735,11 +1765,23 @@ function buildResultsTableInner() {
       tr.appendChild(nameTd);
       tr.appendChild(td(total, "results-num total-cell"));
       for (let t = 0; t < tourLengths.length; t++) {
-        tr.appendChild(td(tourTotals[index][t], "results-tour"));
+        if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));
+        else tr.appendChild(td("·", "results-tour results-tour-pending"));
+        if (resultsExpandedTours.has(t)) {
+          for (let q = 0; q < tourLengths[t]; q++) {
+            tr.appendChild(resultsAnswerCell(index, tourStarts[t] + q, stats, q, tourLengths[t]));
+          }
+        }
       }
       for (let roundIndex = 0; roundIndex < shootoutRoundCount; roundIndex++) {
         const value = shootoutRoundTotals[index][roundIndex];
         tr.appendChild(td(value == null ? "" : value, "results-num"));
+        if (resultsExpandedShootouts.has(roundIndex)) {
+          const round = state.shootoutRounds[roundIndex];
+          for (let q = 0; q < (round?.answers || []).length; q++) {
+            tr.appendChild(resultsShootoutAnswerCell(index, roundIndex, q));
+          }
+        }
       }
       tr.appendChild(td(ratings[index], "results-num"));
       tbody.appendChild(tr);
@@ -1747,6 +1789,110 @@ function buildResultsTableInner() {
   });
   table.appendChild(tbody);
   return table;
+}
+
+function resultsTourHeader(tourIndex) {
+  const expanded = resultsExpandedTours.has(tourIndex);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "results-tour-toggle";
+  button.textContent = `T${tourIndex + 1}`;
+  button.setAttribute("aria-expanded", expanded ? "true" : "false");
+  button.title = expanded ? "Свернуть тур" : "Показать вопросы тура";
+  button.addEventListener("click", () => toggleResultsTour(tourIndex));
+  return th(button, "results-tour-head results-tour-toggle-head" + (expanded ? " expanded" : ""));
+}
+
+function resultsShootoutHeader(roundIndex) {
+  const expanded = resultsExpandedShootouts.has(roundIndex);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "results-tour-toggle";
+  button.textContent = `П${roundIndex + 1}`;
+  button.setAttribute("aria-expanded", expanded ? "true" : "false");
+  button.title = expanded ? "Свернуть перестрелку" : "Показать вопросы перестрелки";
+  button.addEventListener("click", () => toggleResultsShootout(roundIndex));
+  return th(button, "results-num-head results-tour-toggle-head results-shootout-toggle-head" + (expanded ? " expanded" : ""));
+}
+
+function resultsAnswerCell(teamIndex, qIndex, stats, tourQuestionIndex, tourSize) {
+  const answered = teamTookQuestion(teamIndex, qIndex, stats);
+  const classes = ["results-answer"];
+  if (tourQuestionIndex === 0) classes.push("results-answer-left");
+  if (tourQuestionIndex === tourSize - 1) classes.push("results-answer-right");
+  const cell = td("", classes.join(" "));
+  const mark = document.createElement("span");
+  mark.className = "results-answer-mark";
+  mark.textContent = answered ? String(qIndex + 1) : "";
+  cell.appendChild(mark);
+  if (answered) cell.classList.add("right");
+  return cell;
+}
+
+function resultsShootoutAnswerCell(teamIndex, roundIndex, questionIndex) {
+  const round = state.shootoutRounds[roundIndex];
+  const questionCount = (round?.answers || []).length;
+  const number = teamNumber(teamIndex);
+  const participantIndex = round?.teams?.indexOf(number) ?? -1;
+  const participating = participantIndex >= 0;
+  const completed = shootoutQuestionCompleted(roundIndex, questionIndex);
+  const mark = participating && completed
+    ? normalizeShootoutMark(round.answers[questionIndex]?.[participantIndex])
+    : "";
+  const classes = ["results-answer", "results-shootout-answer"];
+  if (questionIndex === 0) classes.push("results-answer-left");
+  if (questionIndex === questionCount - 1) classes.push("results-answer-right");
+  if (!participating) classes.push("results-answer-excluded");
+  const cell = td("", classes.join(" "));
+  if (!participating) return cell;
+  const markNode = document.createElement("span");
+  markNode.className = "results-answer-mark";
+  cell.appendChild(markNode);
+  if (mark === "right") cell.classList.add("right");
+  return cell;
+}
+
+function tourStartIndexes() {
+  const starts = [];
+  let qIndex = 0;
+  for (const size of tourLengths) {
+    starts.push(qIndex);
+    qIndex += size;
+  }
+  return starts;
+}
+
+function tourHasStarted(tourIndex) {
+  const start = tourStartIndexes()[tourIndex] || 0;
+  const end = start + (tourLengths[tourIndex] || 0);
+  for (let q = start; q < end; q++) {
+    if (state.completed[q]) return true;
+  }
+  return false;
+}
+
+function expandedResultsQuestionCount() {
+  let count = 0;
+  for (const tourIndex of resultsExpandedTours) {
+    count += tourLengths[tourIndex] || 0;
+  }
+  return count;
+}
+
+function expandedResultsShootoutQuestionCount() {
+  let count = 0;
+  for (const roundIndex of resultsExpandedShootouts) {
+    count += (state.shootoutRounds[roundIndex]?.answers || []).length;
+  }
+  return count;
+}
+
+function shootoutQuestionNumber(roundIndex, questionIndex) {
+  let number = questionIndex + 1;
+  for (let i = 0; i < roundIndex; i++) {
+    number += (state.shootoutRounds[i]?.answers || []).length;
+  }
+  return number;
 }
 
 // === scoring helpers ===
