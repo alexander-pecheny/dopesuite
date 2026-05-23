@@ -22,6 +22,7 @@ const tabCache = new Map();
 const tabScroll = new Map();
 let numberToIndexCache = null;
 let entrySuggest = null;
+let detailedNameOverflowFrame = 0;
 
 const TABS = [
   {key: "results", label: "Итог"},
@@ -40,6 +41,10 @@ window.addEventListener("hashchange", () => {
     activeTab = next;
     render();
   }
+});
+
+window.addEventListener("resize", () => {
+  if (renderedTab === "detailed") scheduleDetailedNameOverflowUpdate();
 });
 
 async function loadAll() {
@@ -298,6 +303,7 @@ function render() {
   if (!activePane.isConnected) odRoot.appendChild(activePane);
   renderedTab = activeTab;
   restoreTabScroll(activeTab);
+  if (activeTab === "detailed") scheduleDetailedNameOverflowUpdate(activePane);
   refreshPresence();
 }
 
@@ -1300,7 +1306,7 @@ function buildDetailedScoreTable() {
     const team = state.teams[teamIndex];
     let qIndex = 0;
     return {
-      nameCell: nameCell(team, teamIndex),
+      nameCell: nameCell(teamIndex),
       totalCell: {
         content: totals[teamIndex],
         className: "sticky sticky-total number total-cell",
@@ -1340,7 +1346,10 @@ function buildDetailedScoreTable() {
     rowMarkerColumn: true,
     rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
     rowMarkerCellClassName: "sticky row-marker active-row-marker",
-    nameHeader: "Команда",
+    nameHeader: {
+      content: detailedNameHeader(),
+      className: "sticky sticky-name battle od-detailed-team-head",
+    },
     themes,
     rows,
   });
@@ -1366,7 +1375,8 @@ function shootoutThemeCells(teamIndex, options = {}) {
       answers,
       scoreCell: {
         content: participantIndex >= 0 ? score : "",
-        className: "number theme-score theme-block theme-block-score od-shootout-score",
+        className: "number theme-score theme-block theme-block-score od-shootout-score" +
+          (participantIndex >= 0 ? "" : " od-shootout-excluded"),
       },
     };
   });
@@ -1394,6 +1404,10 @@ function detailedTeamOrder() {
   return state.teams
     .map((_, index) => index)
     .sort((a, b) => {
+      const aNumber = teamNumber(a);
+      const bNumber = teamNumber(b);
+      if (aNumber && bNumber && aNumber !== bNumber) return aNumber - bNumber;
+      if (aNumber !== bNumber) return aNumber ? -1 : 1;
       const byName = teamNameCollator.compare(teamLabel(a), teamLabel(b));
       return byName || a - b;
     });
@@ -1404,21 +1418,64 @@ function teamLabel(index) {
   return name || `Команда ${index + 1}`;
 }
 
-function nameCell(team, teamIndex) {
+function nameCell(teamIndex) {
   const cell = document.createElement("td");
-  cell.className = "sticky sticky-name team-name";
+  cell.className = "sticky sticky-name team-name od-detailed-team-cell";
+  const label = teamLabel(teamIndex);
   const num = teamNumber(teamIndex);
-  if (num) {
-    const numSpan = document.createElement("span");
-    numSpan.className = "team-number-badge";
-    numSpan.textContent = String(num);
-    cell.appendChild(numSpan);
-  }
+  const layout = document.createElement("span");
+  layout.className = "od-detailed-team-layout";
+
+  const numSpan = document.createElement("span");
+  numSpan.className = "od-detailed-team-number";
+  numSpan.textContent = num ? String(num) : "";
+  layout.appendChild(numSpan);
+
+  const nameWrap = document.createElement("span");
+  nameWrap.className = "od-detailed-team-name-wrap";
   const name = document.createElement("span");
-  name.className = "readonly-team-name";
-  name.textContent = team.name || `Команда ${teamIndex + 1}`;
-  cell.appendChild(name);
+  name.className = "readonly-team-name od-detailed-team-name";
+  name.textContent = label;
+  name.tabIndex = 0;
+  name.setAttribute("aria-label", label);
+  nameWrap.appendChild(name);
+  layout.appendChild(nameWrap);
+  cell.appendChild(layout);
+
+  const fullName = document.createElement("span");
+  fullName.className = "od-detailed-team-name-popover";
+  fullName.textContent = label;
+  cell.appendChild(fullName);
+
   return cell;
+}
+
+function detailedNameHeader() {
+  const layout = document.createElement("span");
+  layout.className = "od-detailed-team-layout od-detailed-team-head-layout";
+  const numberSpace = document.createElement("span");
+  numberSpace.className = "od-detailed-team-number";
+  const label = document.createElement("span");
+  label.className = "od-detailed-team-head-label";
+  label.textContent = "Команда";
+  layout.append(numberSpace, label);
+  return layout;
+}
+
+function scheduleDetailedNameOverflowUpdate(root = odRoot) {
+  if (detailedNameOverflowFrame) cancelAnimationFrame(detailedNameOverflowFrame);
+  detailedNameOverflowFrame = requestAnimationFrame(() => {
+    detailedNameOverflowFrame = 0;
+    updateDetailedTeamNameOverflow(root);
+  });
+}
+
+function updateDetailedTeamNameOverflow(root = odRoot) {
+  root.querySelectorAll(".od-detailed-team-cell").forEach((cell) => {
+    const name = cell.querySelector(".od-detailed-team-name");
+    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
+  });
 }
 
 function openShootoutRoundDialog() {
