@@ -579,7 +579,7 @@ var hostGameSettingsTemplate = template.Must(template.New("hostGameSettings").Pa
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Game.Title}} · свойства</title>
+  <title>{{.Game.Title}} · {{.Fest.Title}}</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">

@@ -48,16 +48,26 @@ async function loadStage() {
 }
 
 async function loadMatch() {
-  const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode)}`);
-  if (!response.ok) throw new Error(await response.text());
-  state = await response.json();
+  const [matchResponse, festResponse] = await Promise.all([
+    fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode)}`),
+    fetch(route.apiBase),
+  ]);
+  if (!matchResponse.ok) throw new Error(await matchResponse.text());
+  if (!festResponse.ok) throw new Error(await festResponse.text());
+  state = await matchResponse.json();
+  fest = await festResponse.json();
   render();
 }
 
 async function loadVenuesPage() {
-  const response = await fetch(`/api/fest/${route.festID}/venues`);
-  if (!response.ok) throw new Error(await response.text());
-  venues = await response.json();
+  const [venuesResponse, festResponse] = await Promise.all([
+    fetch(`/api/fest/${route.festID}/venues`),
+    fetch(route.apiBase),
+  ]);
+  if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
+  if (!festResponse.ok) throw new Error(await festResponse.text());
+  venues = await venuesResponse.json();
+  fest = await festResponse.json();
   renderVenues();
 }
 
@@ -115,7 +125,7 @@ function renderFest() {
   resetReadonlyTableIndex();
   setViewerMode("grid");
   setHeading(fest.title);
-  document.title = `Зритель · ${fest.title}`;
+  document.title = pageTitle();
   viewerRoot.replaceChildren(buildFestGrid(fest, {viewer: true, basePath: route.base}));
 }
 
@@ -125,7 +135,7 @@ function renderStage() {
   const stage = findStage(fest, route.stageCode);
   setViewerMode("match");
   setHeading(stage?.title || fest.title);
-  document.title = `Зритель · ${stage?.title || fest.title}`;
+  document.title = pageTitle();
   viewerRoot.replaceChildren(buildReadonlyStageTables());
 }
 
@@ -133,7 +143,7 @@ function renderVenues() {
   resetReadonlyTableIndex();
   setViewerMode("grid");
   setHeading("Площадки");
-  document.title = "Зритель · Площадки";
+  document.title = pageTitle("Площадки");
   viewerRoot.replaceChildren(buildSubnav([{href: route.base + "/", label: "Сетка"}]), buildVenuesTable());
 }
 
@@ -141,7 +151,7 @@ function render() {
   if (!state) return;
   setViewerMode("match");
   setHeading(state.stageTitle || state.title);
-  document.title = `Зритель · ${state.title}`;
+  document.title = pageTitle();
   const table = buildReadonlyTable();
   readonlyTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
   if (embedded) {
@@ -485,6 +495,18 @@ function setHeading(text) {
 function setViewerMode(mode) {
   viewerRoot.classList.toggle("grid-host", mode === "grid");
   viewerRoot.classList.toggle("fight-host", mode === "match");
+}
+
+function pageTitle(primary = "") {
+  const main = String(primary || currentGameTitle() || state?.title || "").trim();
+  const festTitle = String(fest?.title || "").trim();
+  if (main && festTitle) return `${main} · ${festTitle}`;
+  return main || festTitle || "Фест";
+}
+
+function currentGameTitle() {
+  const scheme = parseScheme(fest?.schemaJson);
+  return String(scheme?.title || "").trim();
 }
 
 function notifyEmbeddedResize() {
