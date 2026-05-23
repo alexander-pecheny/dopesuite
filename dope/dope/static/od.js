@@ -356,6 +356,7 @@ function updateResultsScrollState() {
   const frame = scrollFrame();
   if (!frame) return;
   frame.classList.toggle("results-scroll-left", activeTab === "results" && frame.scrollLeft > 1);
+  frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && frame.scrollLeft > 1);
 }
 
 function pageTitle() {

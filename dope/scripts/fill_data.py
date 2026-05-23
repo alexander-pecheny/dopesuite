@@ -11,11 +11,14 @@ Per-cell randomization:
 When --game ek, --stage is required so you can fill one stage at a time and
 verify propagation into later stages between runs.
 
-After writing answers the script also refreshes match_results (total, plus,
-metrics_json) so the UI standings match. For ek it additionally writes
-match_results.place by rank-of-total — mimicking the host clicking 1/2/3/4
-on the winner — which is what downstream from_match slots resolve against.
-For od/ksi place stays 0 so the UI keeps auto-ranking by total.
+After writing match-table answers the script also refreshes match_results
+(total, plus, metrics_json) so the UI standings match. For ek it additionally
+writes match_results.place by rank-of-total — mimicking the host clicking
+1/2/3/4 on the winner — which is what downstream from_match slots resolve
+against. For od/ksi place stays 0 so the UI keeps auto-ranking by total.
+
+KSI games that use JSON state instead of match tables are filled directly in
+games.state_json.
 """
 
 import argparse
@@ -45,6 +48,82 @@ def metrics_json(correct, wrong) -> str:
         metrics[f"correct_{value}"] = correct[i]
         metrics[f"wrong_{value}"] = wrong[i]
     return json.dumps(metrics)
+
+
+def bump_fest_revision(cur, fest_id, event_type, payload):
+    now = utc_now()
+    cur.execute("update fests set revision = revision + 1, updated_at = ? where id = ?", (now, fest_id))
+    revision = cur.execute("select revision from fests where id = ?", (fest_id,)).fetchone()[0]
+    cur.execute(
+        "insert into events(fest_id, revision, type, payload_json, created_at) "
+        "values(?, ?, ?, ?, ?)",
+        (fest_id, revision, event_type, payload, now),
+    )
+
+
+def fill_ksi_json_state(cur, fest_id, game_id):
+    row = cur.execute(
+        "select scheme_json, state_json from games where fest_id = ? and id = ?",
+        (fest_id, game_id),
+    ).fetchone()
+    if row is None:
+        return None
+
+    scheme_raw, state_raw = row
+    scheme = json.loads(scheme_raw or "{}")
+    state = json.loads(state_raw or "{}")
+    if not isinstance(state, dict):
+        state = {}
+
+    participants = state.get("participants")
+    if not isinstance(participants, list) or not participants:
+        participants = scheme.get("participants")
+    if not isinstance(participants, list) or not participants:
+        return None
+
+    raw_themes = state.get("themes")
+    if not isinstance(raw_themes, list):
+        raw_themes = []
+    themes_count = len(raw_themes)
+    if themes_count == 0:
+        themes_count = int(scheme.get("themes") or 0)
+    if themes_count <= 0:
+        return None
+
+    themes = []
+    filled = 0
+    for theme_index in range(themes_count):
+        theme = raw_themes[theme_index] if theme_index < len(raw_themes) else {}
+        if not isinstance(theme, dict):
+            theme = {}
+        next_theme = dict(theme)
+        answers = []
+        for _ in participants:
+            row_answers = []
+            for _ in QUESTION_VALUES:
+                row_answers.append(pick_mark("ksi"))
+                filled += 1
+            answers.append(row_answers)
+        next_theme["answers"] = answers
+        themes.append(next_theme)
+
+    state["participants"] = participants
+    state["themes"] = themes
+    if not isinstance(state.get("finished"), bool):
+        state["finished"] = False
+
+    payload = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+    cur.execute(
+        "update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?",
+        (payload, utc_now(), fest_id, game_id),
+    )
+    bump_fest_revision(cur, fest_id, "game:state", payload)
+    return {
+        "participants": len(participants),
+        "themes": themes_count,
+        "answers": len(QUESTION_VALUES),
+        "filled": filled,
+    }
 
 
 def fill_match(cur, match_id, game_type):
@@ -104,15 +183,8 @@ def fill_match(cur, match_id, game_type):
 
 
 def bump_match_revision(cur, fest_id, match_id, code):
-    now = utc_now()
     cur.execute("update matches set revision = revision + 1 where id = ?", (match_id,))
-    cur.execute("update fests set revision = revision + 1, updated_at = ? where id = ?", (now, fest_id))
-    revision = cur.execute("select revision from fests where id = ?", (fest_id,)).fetchone()[0]
-    cur.execute(
-        "insert into events(fest_id, revision, type, payload_json, created_at) "
-        "values(?, ?, 'match:update', ?, ?)",
-        (fest_id, revision, json.dumps({"code": code, "source": "fill_data.py"}), now),
-    )
+    bump_fest_revision(cur, fest_id, "match:update", json.dumps({"code": code, "source": "fill_data.py"}))
 
 
 def main() -> int:
@@ -154,6 +226,18 @@ def main() -> int:
         sys.stderr.write(f"no {args.game} game in fest {args.fest}\n")
         return 1
     game_id = row[0]
+
+    if args.game == "ksi":
+        summary = fill_ksi_json_state(cur, fest_id, game_id)
+        if summary is not None:
+            con.commit()
+            print(
+                "filled ksi state: "
+                f"{summary['participants']} participants × "
+                f"{summary['themes']} themes × "
+                f"{summary['answers']} answers = {summary['filled']} cells"
+            )
+            return 0
 
     where = "fest_id = ? and game_id = ?"
     params = [fest_id, game_id]

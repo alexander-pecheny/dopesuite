@@ -61,21 +61,29 @@ async function loadStage() {
 }
 
 async function loadMatch() {
-  const [matchResponse, venuesResponse] = await Promise.all([
+  const [matchResponse, venuesResponse, festResponse] = await Promise.all([
     fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode)}`),
     fetch(`${route.festApi}/venues`),
+    fetch(route.apiBase),
   ]);
   if (!matchResponse.ok) throw new Error(await matchResponse.text());
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
+  if (!festResponse.ok) throw new Error(await festResponse.text());
   state = await matchResponse.json();
   venues = await venuesResponse.json();
+  fest = await festResponse.json();
   render();
 }
 
 async function loadVenuesPage() {
-  const response = await fetch(`${route.festApi}/venues`);
-  if (!response.ok) throw new Error(await response.text());
-  venues = await response.json();
+  const [venuesResponse, festResponse] = await Promise.all([
+    fetch(`${route.festApi}/venues`),
+    fetch(route.apiBase),
+  ]);
+  if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
+  if (!festResponse.ok) throw new Error(await festResponse.text());
+  venues = await venuesResponse.json();
+  fest = await festResponse.json();
   renderVenues();
 }
 
@@ -220,7 +228,7 @@ function renderFest() {
   setHostMode("grid");
   setHeading(fest.title);
   setViewerLink(route.viewerBase + "/", "Открыть зрительскую сетку");
-  document.title = `Ведущий · ${fest.title}`;
+  document.title = pageTitle();
   hostRoot.replaceChildren(buildFestGrid(fest, {basePath: route.base}));
   refreshPresence();
 }
@@ -235,7 +243,7 @@ function renderStage(options = {}) {
   setHostMode("match");
   setHeading(stage?.title || fest.title);
   setViewerLink(`${route.viewerBase}/stage/${encodeURIComponent(route.stageCode)}`, "Открыть этап для зрителя");
-  document.title = `Ведущий · ${stage?.title || fest.title}`;
+  document.title = pageTitle();
   hostRoot.replaceChildren(buildStageTables());
   if (options.preserveScroll && scrollFrame) {
     scrollFrame.scrollTop = scrollTop;
@@ -249,7 +257,7 @@ function renderVenues() {
   setHostMode("grid");
   setHeading("Площадки");
   setViewerLink(`${route.viewerBase}/venues`, "Открыть площадки для зрителя");
-  document.title = "Ведущий · Площадки";
+  document.title = pageTitle("Площадки");
   hostRoot.replaceChildren(buildSubnav([{href: route.base + "/", label: "Сетка"}]), buildVenuesTable(true));
   refreshPresence();
 }
@@ -260,7 +268,7 @@ function render() {
   normalizeActiveCell();
   setHeading(state.stageTitle || state.title);
   setViewerLink(`${route.viewerBase}/matches/${encodeURIComponent(state.code || route.matchCode)}`, "Открыть зрительский бой");
-  document.title = `Ведущий · ${state.title}`;
+  document.title = pageTitle();
 
   const focusedPlaceTeam = focusedPlaceTeamIndex();
   const finishToggleFocused = isFinishToggleFocused();
@@ -1134,6 +1142,18 @@ function setViewerLink(href, title) {
 function setHostMode(mode) {
   hostRoot.classList.toggle("grid-host", mode === "grid");
   hostRoot.classList.toggle("fight-host", mode === "match");
+}
+
+function pageTitle(primary = "") {
+  const main = String(primary || currentGameTitle() || state?.title || "").trim();
+  const festTitle = String(fest?.title || "").trim();
+  if (main && festTitle) return `${main} · ${festTitle}`;
+  return main || festTitle || "Фест";
+}
+
+function currentGameTitle() {
+  const scheme = parseScheme(fest?.schemaJson);
+  return String(scheme?.title || "").trim();
 }
 
 function notifyEmbeddedResize() {

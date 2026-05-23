@@ -18,6 +18,7 @@ const viewer = Boolean(route.viewer);
 document.body.classList.toggle("viewer-readonly", viewer);
 let scheme = null;
 let state = null;
+let fest = null;
 let participants = [];
 let themesCount = 8;
 let activeCell = {player: 0, theme: 0, answer: 0};
@@ -32,6 +33,7 @@ let activePlayerRows = [];
 let stateSync = null;
 let presence = null;
 const tabScroll = new Map();
+let teamNameOverflowFrame = 0;
 
 function tabFromHash() {
   const key = (window.location.hash || "").replace(/^#/, "");
@@ -46,15 +48,26 @@ window.addEventListener("hashchange", () => {
   }
 });
 
+window.addEventListener("resize", () => {
+  if (isTeamMode() && (renderedTab === "detailed" || renderedTab === "results")) {
+    scheduleTeamNameOverflowUpdate();
+  }
+  updateResultsScrollState();
+});
+document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
+
 async function loadAll() {
-  const [schemeResp, stateResp] = await Promise.all([
+  const [schemeResp, stateResp, festResp] = await Promise.all([
     fetch(`${route.apiBase}/scheme`),
     fetch(`${route.apiBase}/state`),
+    route.festID ? fetch(`/api/fest/${route.festID}`) : Promise.resolve(null),
   ]);
   if (!schemeResp.ok) throw new Error(await schemeResp.text());
   if (!stateResp.ok) throw new Error(await stateResp.text());
+  if (festResp && !festResp.ok) throw new Error(await festResp.text());
   scheme = await schemeResp.json();
   state = await stateResp.json();
+  fest = festResp ? await festResp.json() : null;
   initFromScheme();
   ensureState();
   render();
@@ -103,7 +116,7 @@ function render(options = {}) {
   const defaultTitle = gameTitleFallback();
   normalizeActiveCell();
   setHeading(scheme.title || defaultTitle);
-  document.title = `${viewer ? "Зритель" : "Ведущий"} · ${scheme.title || defaultTitle}`;
+  document.title = pageTitle();
   if (isTeamMode()) {
     rememberTabScroll(renderedTab);
     if (!KSI_TABS.some((t) => t.key === activeTab)) activeTab = "detailed";
@@ -114,6 +127,8 @@ function render(options = {}) {
     siRoot.replaceChildren(node);
     renderedTab = activeTab;
     restoreTabScroll(activeTab);
+    updateResultsScrollState();
+    if (activeTab === "detailed" || activeTab === "results") scheduleTeamNameOverflowUpdate();
   } else {
     renderTabs();
     const frame = scrollFrame();
@@ -126,6 +141,7 @@ function render(options = {}) {
       frame.scrollTop = scrollTop;
       frame.scrollLeft = scrollLeft;
     }
+    updateResultsScrollState();
   }
   refreshPresence();
 }
@@ -158,7 +174,7 @@ function buildTable() {
   }));
 
   const table = gameTable.buildFlatScoreTable({
-    className: "match-table compact-score-table si-table",
+    className: "match-table compact-score-table si-table od-detailed ksi-detailed",
     rowMarkerColumn: true,
     rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
     rowMarkerCellClassName: "sticky row-marker active-row-marker",
@@ -194,7 +210,7 @@ function buildResultsTableInner() {
   const head = document.createElement("tr");
   head.appendChild(gameTable.th("Место", "results-place-head"));
   head.appendChild(gameTable.th("Команда", "results-team-head"));
-  head.appendChild(gameTable.th("Σ", "results-num-head"));
+  head.appendChild(gameTable.th("Σ", "results-num-head results-total-head"));
   head.appendChild(gameTable.th("Σ+", "results-num-head"));
   for (const value of RESULT_VALUES) {
     head.appendChild(gameTable.th(value, "results-num-head"));
@@ -205,15 +221,25 @@ function buildResultsTableInner() {
   const tbody = document.createElement("tbody");
   rows.forEach((row) => {
     const tr = document.createElement("tr");
+    tr.className = "results-row";
     tr.appendChild(gameTable.td(row.placeText, "results-place"));
     const nameTd = document.createElement("td");
     nameTd.className = "results-team";
+    const nameWrap = document.createElement("span");
+    nameWrap.className = "results-team-name-wrap";
     const nameSpan = document.createElement("span");
     nameSpan.className = "results-team-name";
     nameSpan.textContent = row.name;
-    nameTd.appendChild(nameSpan);
+    nameSpan.tabIndex = 0;
+    nameSpan.setAttribute("aria-label", row.name);
+    nameWrap.appendChild(nameSpan);
+    nameTd.appendChild(nameWrap);
+    const fullName = document.createElement("span");
+    fullName.className = "results-team-name-popover";
+    fullName.textContent = row.name;
+    nameTd.appendChild(fullName);
     tr.appendChild(nameTd);
-    tr.appendChild(gameTable.td(row.metrics.total, "results-num total-cell"));
+    tr.appendChild(gameTable.td(row.metrics.total, "results-num total-cell results-total"));
     tr.appendChild(gameTable.td(row.metrics.plus, "results-num"));
     for (const value of RESULT_VALUES) {
       tr.appendChild(gameTable.td(row.metrics.correct[value] || 0, "results-num"));
@@ -328,6 +354,38 @@ function restoreTabScroll(tab) {
   frame.scrollLeft = pos.left;
 }
 
+function updateResultsScrollState() {
+  const frame = scrollFrame();
+  if (!frame) return;
+  frame.classList.toggle("results-scroll-left", isTeamMode() && activeTab === "results" && frame.scrollLeft > 1);
+  frame.classList.toggle("detailed-scroll-left", isTeamMode() && activeTab === "detailed" && frame.scrollLeft > 1);
+}
+
+function scheduleTeamNameOverflowUpdate(root = siRoot) {
+  if (teamNameOverflowFrame) cancelAnimationFrame(teamNameOverflowFrame);
+  teamNameOverflowFrame = requestAnimationFrame(() => {
+    teamNameOverflowFrame = 0;
+    updateDetailedTeamNameOverflow(root);
+    updateResultsTeamNameOverflow(root);
+  });
+}
+
+function updateDetailedTeamNameOverflow(root = siRoot) {
+  root.querySelectorAll(".ksi-detailed-team-cell").forEach((cell) => {
+    const name = cell.querySelector(".od-detailed-team-name");
+    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
+  });
+}
+
+function updateResultsTeamNameOverflow(root = siRoot) {
+  root.querySelectorAll(".results-team").forEach((cell) => {
+    const name = cell.querySelector(".results-team-name");
+    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    cell.classList.toggle("results-team-truncated", truncated);
+  });
+}
+
 function detailedPlayerOrder() {
   if (detailedOrderCache) return detailedOrderCache;
   const order = state.participants.map((_, index) => index);
@@ -350,10 +408,26 @@ function nameCell(name, playerIndex) {
   const cell = document.createElement("td");
   cell.className = "sticky sticky-name team-name";
   if (isTeamMode()) {
+    cell.className = "sticky sticky-name team-name od-detailed-team-cell ksi-detailed-team-cell";
+    const labelText = name || participantFallback(playerIndex);
+    const layout = document.createElement("span");
+    layout.className = "od-detailed-team-layout";
+
+    const nameWrap = document.createElement("span");
+    nameWrap.className = "od-detailed-team-name-wrap";
     const label = document.createElement("span");
-    label.className = "readonly-team-name";
-    label.textContent = name || participantFallback(playerIndex);
-    cell.appendChild(label);
+    label.className = "readonly-team-name od-detailed-team-name";
+    label.textContent = labelText;
+    label.tabIndex = 0;
+    label.setAttribute("aria-label", labelText);
+    nameWrap.appendChild(label);
+    layout.appendChild(nameWrap);
+    cell.appendChild(layout);
+
+    const fullName = document.createElement("span");
+    fullName.className = "od-detailed-team-name-popover";
+    fullName.textContent = labelText;
+    cell.appendChild(fullName);
     return cell;
   }
   const input = document.createElement("input");
@@ -392,6 +466,12 @@ function answerCell(playerIndex, themeIndex, answerIndex, mark) {
 }
 
 function battleHeader() {
+  if (isTeamMode()) {
+    const node = document.createElement("th");
+    node.className = "sticky sticky-name battle od-detailed-team-head";
+    node.appendChild(detailedNameHeader());
+    return node;
+  }
   const node = document.createElement("th");
   node.className = "sticky sticky-name battle";
   const layout = document.createElement("span");
@@ -414,6 +494,16 @@ function battleHeader() {
   layout.appendChild(label);
   node.appendChild(layout);
   return node;
+}
+
+function detailedNameHeader() {
+  const layout = document.createElement("span");
+  layout.className = "od-detailed-team-layout od-detailed-team-head-layout";
+  const label = document.createElement("span");
+  label.className = "od-detailed-team-head-label";
+  label.textContent = "Команда";
+  layout.appendChild(label);
+  return layout;
 }
 
 function handleTableClick(event) {
@@ -699,6 +789,12 @@ function isDetailedTabActive() {
 
 function gameTitleFallback() {
   return isTeamMode() ? "КСИ" : "СИ";
+}
+
+function pageTitle() {
+  const gameTitle = String(scheme?.title || gameTitleFallback()).trim() || gameTitleFallback();
+  const festTitle = String(fest?.title || "").trim();
+  return festTitle ? `${gameTitle} · ${festTitle}` : gameTitle;
 }
 
 function participantFallback(index) {

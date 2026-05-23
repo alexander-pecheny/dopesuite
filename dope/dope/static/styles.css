@@ -556,6 +556,12 @@ a.list-row:hover { background: #eef1f5; }
   padding: 6px 14px;
 }
 
+.si-page .si-host-top {
+  height: 44px;
+  gap: 10px;
+  padding: 6px 14px;
+}
+
 .od-page .od-header-main {
   display: flex;
   align-items: center;
@@ -563,8 +569,17 @@ a.list-row:hover { background: #eef1f5; }
   gap: 12px;
 }
 
+.si-page .si-header-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
 .od-page .host h1,
-.od-page h1 {
+.od-page h1,
+.si-page .host h1,
+.si-page h1 {
   flex: 0 0 auto;
   font-size: 22px;
 }
@@ -581,6 +596,11 @@ a.list-row:hover { background: #eef1f5; }
 }
 
 .od-page .match-main {
+  height: calc(100vh - 44px);
+  padding-top: 8px;
+}
+
+.si-page .match-main {
   height: calc(100vh - 44px);
   padding-top: 8px;
 }
@@ -2262,7 +2282,19 @@ a.list-row:hover { background: #eef1f5; }
   background: transparent;
 }
 
-.od-page .od-tab {
+.si-page .match-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.od-page .od-tab,
+.si-page .match-tab {
   position: relative;
   height: 24px;
   padding: 0 8px;
@@ -2275,26 +2307,31 @@ a.list-row:hover { background: #eef1f5; }
   line-height: 22px;
 }
 
-.od-page .od-tab:first-child {
+.od-page .od-tab:first-child,
+.si-page .match-tab:first-child {
   margin-left: 0;
   border-top-left-radius: var(--cell-radius);
   border-bottom-left-radius: var(--cell-radius);
 }
 
-.od-page .od-tab:last-child {
+.od-page .od-tab:last-child,
+.si-page .match-tab:last-child {
   border-top-right-radius: var(--cell-radius);
   border-bottom-right-radius: var(--cell-radius);
 }
 
-.od-page .od-tab + .od-tab {
+.od-page .od-tab + .od-tab,
+.si-page .match-tab + .match-tab {
   border-left-color: var(--structure);
 }
 
-.od-page .od-tab:hover {
+.od-page .od-tab:hover,
+.si-page .match-tab:hover {
   background: #eef3fa;
 }
 
-.od-page .od-tab.active {
+.od-page .od-tab.active,
+.si-page .match-tab.active {
   z-index: 1;
   border-color: var(--text);
   background: var(--paper);
@@ -2841,7 +2878,8 @@ a.list-row:hover { background: #eef1f5; }
   font-variant-numeric: tabular-nums;
 }
 
-.od-results-table {
+.od-results-table,
+.ksi-results-table {
   width: max-content;
 }
 
@@ -2886,7 +2924,9 @@ a.list-row:hover { background: #eef1f5; }
 }
 
 .od-results-table thead th.results-team-head,
-.od-results-table .results-team {
+.od-results-table .results-team,
+.ksi-results-table thead th.results-team-head,
+.ksi-results-table .results-team {
   width: var(--results-team-col);
   min-width: var(--results-team-col);
   max-width: var(--results-team-col);
@@ -2900,20 +2940,25 @@ a.list-row:hover { background: #eef1f5; }
   font-weight: 700;
 }
 
-.od-results-table thead th.results-team-head {
+.od-results-table thead th.results-team-head,
+.ksi-results-table thead th.results-team-head {
   --results-sticky-fade-from: var(--structure);
 }
 
-.od-results-table thead th.results-total-head {
+.od-results-table thead th.results-total-head,
+.ksi-results-table thead th.results-total-head {
   --results-sticky-fade-from: var(--structure);
 }
 
-.od-results-table .results-total {
+.od-results-table .results-total,
+.ksi-results-table .results-total {
   --results-sticky-fade-from: var(--paper);
 }
 
 .results-scroll-left .od-results-table thead th.results-total-head::after,
-.results-scroll-left .od-results-table .results-total::after {
+.results-scroll-left .od-results-table .results-total::after,
+.results-scroll-left .ksi-results-table thead th.results-total-head::after,
+.results-scroll-left .ksi-results-table .results-total::after {
   content: "";
   position: absolute;
   top: 0;
@@ -2922,6 +2967,18 @@ a.list-row:hover { background: #eef1f5; }
   width: 28px;
   pointer-events: none;
   background: linear-gradient(to right, var(--results-sticky-fade-from), rgba(238, 241, 244, 0));
+}
+
+.detailed-scroll-left .match-table.ksi-detailed .sticky-total::after,
+.detailed-scroll-left .match-table.od-detailed:not(.ksi-detailed) .sticky-place-gap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -28px;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  background: linear-gradient(to right, var(--structure), rgba(238, 241, 244, 0));
 }
 
 .results-table .results-place,
@@ -3148,6 +3205,11 @@ a.list-row:hover { background: #eef1f5; }
   --team-col: calc(var(--od-detailed-number-col) + var(--od-detailed-name-col));
   --place-col: 58px;
 }
+.match-table.ksi-detailed {
+  --od-detailed-name-col: 190px;
+  --team-col: var(--od-detailed-name-col);
+  --total-col: 62px;
+}
 .match-table.od-detailed .sticky-name {
   width: var(--team-col);
   min-width: var(--team-col);
@@ -3225,6 +3287,12 @@ a.list-row:hover { background: #eef1f5; }
   width: 100%;
   height: 100%;
   min-width: 0;
+}
+.match-table.ksi-detailed .od-detailed-team-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.match-table.ksi-detailed .od-detailed-team-name-popover {
+  left: 4px;
 }
 .match-table.od-detailed .od-detailed-team-number {
   display: flex;
@@ -3309,6 +3377,10 @@ a.list-row:hover { background: #eef1f5; }
   padding: 0 6px;
   text-align: left;
 }
+.match-table.ksi-detailed .sticky-total {
+  padding-right: 4px;
+  padding-left: 4px;
+}
 .match-table.compact-score-table .team-name .venue-input {
   min-height: 0;
   height: 21px;
@@ -3352,6 +3424,11 @@ a.list-row:hover { background: #eef1f5; }
     --od-detailed-number-col: 2.75em;
     --od-detailed-name-col: calc(90px + 3em);
   }
+  .match-table.ksi-detailed {
+    --od-detailed-name-col: 140px;
+    --team-col: var(--od-detailed-name-col);
+    --total-col: 58px;
+  }
 
   .results-table th,
   .results-table td { padding: 4px 6px; font-size: 12px; }
@@ -3387,7 +3464,9 @@ a.list-row:hover { background: #eef1f5; }
     left: calc(var(--results-place-col) + var(--results-team-col));
   }
   .od-results-table .results-team,
-  .od-results-table thead .results-team-head {
+  .od-results-table thead .results-team-head,
+  .ksi-results-table .results-team,
+  .ksi-results-table thead .results-team-head {
     width: var(--results-team-col);
     min-width: var(--results-team-col);
     max-width: var(--results-team-col);
