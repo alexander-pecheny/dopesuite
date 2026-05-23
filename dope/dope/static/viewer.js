@@ -539,7 +539,7 @@ function statusLabel(status) {
 }
 
 function formatNumber(value) {
-  return Number.isFinite(Number(value)) ? String(value) : "";
+  return Number.isFinite(Number(value)) ? gameTable.formatDisplayText(value) : "";
 }
 
 function formatPlace(place) {

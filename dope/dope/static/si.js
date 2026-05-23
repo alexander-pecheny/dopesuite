@@ -219,9 +219,12 @@ function buildResultsTableInner() {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  rows.forEach((row) => {
+  rows.forEach((row, rowIdx) => {
     const tr = document.createElement("tr");
-    tr.className = "results-row";
+    const classes = ["results-row"];
+    if (rowIdx === 0) classes.push("results-group-first");
+    if (rowIdx === rows.length - 1) classes.push("results-group-last");
+    tr.className = classes.join(" ");
     tr.appendChild(gameTable.td(row.placeText, "results-place"));
     const nameTd = document.createElement("td");
     nameTd.className = "results-team";
@@ -444,7 +447,7 @@ function nameCell(name, playerIndex) {
 function indexedCell(content, className, dataset = {}) {
   const cell = document.createElement("td");
   cell.className = className;
-  cell.textContent = content == null ? "" : String(content);
+  cell.textContent = gameTable.formatDisplayText(content);
   for (const [key, value] of Object.entries(dataset)) {
     cell.dataset[key] = String(value);
   }

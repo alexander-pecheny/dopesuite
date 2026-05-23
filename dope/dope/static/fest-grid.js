@@ -125,7 +125,7 @@ function venueText(venue) {
 function scoreText(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number === 0) return "";
-  return String(value);
+  return String(value).replace(/^-/, "\u2212");
 }
 
 function placeText(value) {
