@@ -1021,7 +1021,7 @@ func isHostGameSubPath(parts []string) bool {
 		return true
 	}
 	switch parts[2] {
-	case "venues":
+	case "venues", "seed-import":
 		return len(parts) == 3
 	case "matches", "stage":
 		return len(parts) == 4 && parts[3] != ""
@@ -1641,7 +1641,7 @@ func createEKGameTx(ctx context.Context, tx *sql.Tx, festID int64, scheme festSc
 		return 0, err
 	}
 	if len(scheme.Teams) > 0 {
-		return 0, errors.New("команды загружаются только из rating.chgk.info; уберите teams из JSON-схемы")
+		return 0, errors.New("команды загружаются отдельным импортом посева; уберите teams из JSON-схемы")
 	}
 	schemaJSON, err := json.Marshal(scheme)
 	if err != nil {

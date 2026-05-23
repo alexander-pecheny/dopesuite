@@ -231,6 +231,7 @@ func (s *server) authorizeHostPresence(w http.ResponseWriter, r *http.Request, f
 // /api/fest/{tid}/games/{gid}/matches/{code}/update
 // /api/fest/{tid}/games/{gid}/matches/{code}/finish
 // /api/fest/{tid}/games/{gid}/matches/{code}/venue
+// /api/fest/{tid}/games/{gid}/seed-import
 func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/api/fest/")
 	if rest == r.URL.Path {
@@ -312,6 +313,9 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.handleScopedGameScheme(w, r, scope)
+			return
+		case "seed-import":
+			s.handleScopedSeedImport(w, r, scope, parts[4:])
 			return
 		}
 	}

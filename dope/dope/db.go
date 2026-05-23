@@ -149,9 +149,9 @@ type schemeSlot struct {
 }
 
 type schemeSeedRef struct {
-	Basket   int `json:"basket"`
-	Number   int `json:"number"`
-	Position int `json:"position"`
+	Basket   int `json:"basket,omitempty"`
+	Number   int `json:"number,omitempty"`
+	Position int `json:"position,omitempty"`
 }
 
 type schemeFromMatchRef struct {
@@ -170,6 +170,41 @@ type schemeTeamRef struct {
 	City    string   `json:"city"`
 	Label   string   `json:"label"`
 	Players []string `json:"players"`
+}
+
+func (slot *schemeSlot) UnmarshalJSON(data []byte) error {
+	var token string
+	if err := json.Unmarshal(data, &token); err == nil {
+		if number, ok := parseSeedToken(token); ok {
+			slot.Seed = &schemeSeedRef{Number: number}
+			slot.Label = token
+			return nil
+		}
+		slot.Placeholder = token
+		slot.Label = token
+		return nil
+	}
+
+	type schemeSlotAlias schemeSlot
+	var parsed schemeSlotAlias
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	*slot = schemeSlot(parsed)
+	return nil
+}
+
+func parseSeedToken(token string) (int, bool) {
+	token = strings.TrimSpace(token)
+	rest, ok := strings.CutPrefix(token, "seed-")
+	if !ok {
+		return 0, false
+	}
+	number, err := strconv.Atoi(strings.TrimSpace(rest))
+	if err != nil || number <= 0 {
+		return 0, false
+	}
+	return number, true
 }
 
 type dbQueryer interface {
@@ -1318,7 +1353,7 @@ func (s *server) importSchemeIntoFest(ctx context.Context, festID int64, scheme 
 		return err
 	}
 	if len(scheme.Teams) > 0 {
-		return errors.New("команды загружаются только из rating.chgk.info; уберите teams из JSON-схемы и переимпортируйте участников")
+		return errors.New("команды загружаются отдельным импортом посева; уберите teams из JSON-схемы")
 	}
 	schemaJSON, err := json.Marshal(scheme)
 	if err != nil {
@@ -1543,7 +1578,19 @@ func validateScheme(scheme festScheme) error {
 			}
 			for slotIndex, slot := range match.Slots {
 				if slot.Team != nil {
-					return fmt.Errorf("match %q slot %d uses removed source %q; use seed{basket,number}; teams come from rating.chgk.info import", match.Code, slotIndex, "team")
+					return fmt.Errorf("match %q slot %d uses removed source %q; use seed-N or seed{basket,number}; teams come from separate seed import", match.Code, slotIndex, "team")
+				}
+				if slot.Seed != nil {
+					number := slot.Seed.Number
+					if number == 0 {
+						number = slot.Seed.Position
+					}
+					if number <= 0 {
+						return fmt.Errorf("match %q slot %d has bad seed number", match.Code, slotIndex)
+					}
+					if slot.Seed.Basket < 0 {
+						return fmt.Errorf("match %q slot %d has bad seed basket", match.Code, slotIndex)
+					}
 				}
 			}
 		}
@@ -1623,10 +1670,18 @@ func slotSource(slot schemeSlot) (string, string) {
 		if number == 0 {
 			number = slot.Seed.Position
 		}
+		basket := slot.Seed.Basket
+		if basket <= 0 {
+			basket = 1
+		}
+		label := slot.Label
+		if label == "" && slot.Seed.Basket <= 0 {
+			label = fmt.Sprintf("seed-%d", number)
+		}
 		return "seed", mustJSON(map[string]any{
-			"basket": slot.Seed.Basket,
+			"basket": basket,
 			"number": number,
-			"label":  slot.Label,
+			"label":  label,
 		})
 	}
 	if slot.FromMatch != nil {
@@ -1901,7 +1956,7 @@ where `+where, args...).
 	}
 
 	slotRows, err := q.QueryContext(ctx, `
-select ms.slot_index, ms.team_id, coalesce(t.name, ''), coalesce(r.place, 0), ms.source_ref_json
+select ms.slot_index, ms.team_id, coalesce(t.name, ''), coalesce(r.place, 0), ms.source_type, ms.source_ref_json
 from match_slots ms
 left join teams t on t.id = ms.team_id
 left join match_results r on r.match_id = ms.match_id and r.team_id = ms.team_id
@@ -1913,11 +1968,12 @@ order by ms.slot_index`, match.MatchID)
 	defer slotRows.Close()
 
 	type slotRecord struct {
-		Index     int
-		TeamID    sql.NullInt64
-		Name      string
-		Place     float64
-		SourceRef string
+		Index      int
+		TeamID     sql.NullInt64
+		Name       string
+		Place      float64
+		SourceType string
+		SourceRef  string
 	}
 	var slots []slotRecord
 	for slotRows.Next() {
@@ -1925,16 +1981,18 @@ order by ms.slot_index`, match.MatchID)
 		var teamID sql.NullInt64
 		var name string
 		var place float64
+		var sourceType string
 		var sourceRef string
-		if err := slotRows.Scan(&slotIndex, &teamID, &name, &place, &sourceRef); err != nil {
+		if err := slotRows.Scan(&slotIndex, &teamID, &name, &place, &sourceType, &sourceRef); err != nil {
 			return dbMatchState{}, err
 		}
 		slots = append(slots, slotRecord{
-			Index:     slotIndex,
-			TeamID:    teamID,
-			Name:      name,
-			Place:     place,
-			SourceRef: sourceRef,
+			Index:      slotIndex,
+			TeamID:     teamID,
+			Name:       name,
+			Place:      place,
+			SourceType: sourceType,
+			SourceRef:  sourceRef,
 		})
 	}
 	if err := slotRows.Err(); err != nil {
@@ -1950,7 +2008,7 @@ order by ms.slot_index`, match.MatchID)
 		}
 		if !slot.TeamID.Valid {
 			match.State.Teams[slot.Index] = TeamState{
-				Name:   placeholderName(slot.SourceRef),
+				Name:   slotSourceLabel(slot.SourceType, slot.SourceRef),
 				Themes: make([]ThemeEntry, themeCount),
 			}
 			continue
@@ -2160,6 +2218,9 @@ func (s *server) applyMatchUpdateUsing(
 		}
 		if _, err := tx.ExecContext(ctx, `update matches set status = ? where id = ?`, status, match.MatchID); err != nil {
 			return MatchView{}, nil, err
+		}
+		if *req.Finished {
+			assignComputedPlaces(&match.State)
 		}
 	} else {
 		if match.State.Finished {

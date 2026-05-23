@@ -2,6 +2,7 @@ const hostRoot = document.getElementById("hostTable");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 const viewerLink = document.querySelector(".viewer-link");
+const ekTabsRoot = document.getElementById("ekTabs");
 
 const gameTable = window.DopeTable;
 const route = currentRoute();
@@ -9,7 +10,11 @@ const embedded = new URLSearchParams(window.location.search).get("embed") === "1
 let state = null;
 let fest = null;
 let venues = [];
+let stageMatches = [];
 let stageStates = [];
+let stageStateByCode = new Map();
+let stageLoadToken = 0;
+let stageTableObserver = null;
 let renderMatchCode = null;
 let activeCell = {matchCode: "", team: 0, shootout: false, theme: 0, answer: 0};
 let reloadTimer = null;
@@ -18,9 +23,17 @@ let matchTableIndex = null;
 let activeAnswerNode = null;
 let activeTeamRows = [];
 let presence = null;
+let seedImport = null;
+let seedImportNotice = "";
+let gridNameOverflowFrame = 0;
+let ekTeamNameOverflowFrame = 0;
 
 document.body.classList.toggle("embedded-match", embedded);
 document.addEventListener("keydown", handleGlobalKeydown);
+window.addEventListener("resize", () => {
+  if (route.mode === "grid") scheduleGridNameOverflowUpdate();
+  if (route.mode === "match" || route.mode === "stage") scheduleEKTeamNameOverflowUpdate();
+});
 
 async function loadCurrent() {
   if (route.mode === "match") {
@@ -29,6 +42,8 @@ async function loadCurrent() {
     await loadStage();
   } else if (route.mode === "venues") {
     await loadVenuesPage();
+  } else if (route.mode === "seedImport") {
+    await loadSeedImportPage();
   } else {
     await loadFest();
   }
@@ -42,22 +57,25 @@ async function loadFest() {
 }
 
 async function loadStage() {
-  const [festResponse, venuesResponse] = await Promise.all([
+  const token = ++stageLoadToken;
+  const [response, venuesResponse] = await Promise.all([
     fetch(route.apiBase),
     fetch(`${route.festApi}/venues`),
   ]);
-  if (!festResponse.ok) throw new Error(await festResponse.text());
+  if (!response.ok) throw new Error(await response.text());
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
-  fest = await festResponse.json();
+  fest = await response.json();
   venues = await venuesResponse.json();
   const stage = findStage(fest, route.stageCode);
-  const matches = stage?.matches || [];
-  stageStates = await Promise.all(matches.map(async (match) => {
-    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(match.code)}`);
-    if (!response.ok) throw new Error(await response.text());
-    return response.json();
-  }));
+  stageMatches = stage?.matches || [];
+  stageStates = [];
+  stageStateByCode = new Map();
   renderStage();
+  loadStageMatchStates(stageMatches, token).catch((error) => {
+    if (token !== stageLoadToken) return;
+    setStatus("error");
+    console.error(error);
+  });
 }
 
 async function loadMatch() {
@@ -87,6 +105,18 @@ async function loadVenuesPage() {
   renderVenues();
 }
 
+async function loadSeedImportPage() {
+  const [seedResponse, festResponse] = await Promise.all([
+    fetch(`${route.apiBase}/seed-import`),
+    fetch(route.apiBase),
+  ]);
+  if (!seedResponse.ok) throw new Error(await seedResponse.text());
+  if (!festResponse.ok) throw new Error(await festResponse.text());
+  seedImport = await seedResponse.json();
+  fest = await festResponse.json();
+  renderSeedImport();
+}
+
 function connectEvents() {
   const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
   const matchScope = `match:${route.gameID}:${route.matchCode}`;
@@ -109,7 +139,12 @@ function connectEvents() {
       return;
     }
     if (route.mode === "stage" && message.scope.startsWith("match:")) {
-      scheduleReload();
+      if (message.data?.code) {
+        applyStageMatchUpdate(message.data);
+        setStatus("saved");
+      } else {
+        scheduleReload();
+      }
       return;
     }
     scheduleReload();
@@ -226,10 +261,12 @@ function renderFest() {
   if (!fest) return;
   resetMatchTableIndex();
   setHostMode("grid");
-  setHeading(fest.title);
+  setHeading("ЭК");
   setViewerLink(route.viewerBase + "/", "Открыть зрительскую сетку");
   document.title = pageTitle();
+  renderEKTabs();
   hostRoot.replaceChildren(buildFestGrid(fest, {basePath: route.base}));
+  scheduleGridNameOverflowUpdate();
   refreshPresence();
 }
 
@@ -239,12 +276,13 @@ function renderStage(options = {}) {
   const scrollFrame = hostRoot.closest(".sheet-frame");
   const scrollTop = scrollFrame?.scrollTop || 0;
   const scrollLeft = scrollFrame?.scrollLeft || 0;
-  const stage = findStage(fest, route.stageCode);
-  setHostMode("match");
-  setHeading(stage?.title || fest.title);
+  setHostMode("grid");
+  setHeading("ЭК");
   setViewerLink(`${route.viewerBase}/stage/${encodeURIComponent(route.stageCode)}`, "Открыть этап для зрителя");
   document.title = pageTitle();
+  renderEKTabs();
   hostRoot.replaceChildren(buildStageTables());
+  setupStageTableObserver();
   if (options.preserveScroll && scrollFrame) {
     scrollFrame.scrollTop = scrollTop;
     scrollFrame.scrollLeft = scrollLeft;
@@ -255,10 +293,22 @@ function renderStage(options = {}) {
 function renderVenues() {
   resetMatchTableIndex();
   setHostMode("grid");
-  setHeading("Площадки");
+  setHeading("ЭК");
   setViewerLink(`${route.viewerBase}/venues`, "Открыть площадки для зрителя");
   document.title = pageTitle("Площадки");
-  hostRoot.replaceChildren(buildSubnav([{href: route.base + "/", label: "Сетка"}]), buildVenuesTable(true));
+  renderEKTabs();
+  hostRoot.replaceChildren(buildVenuesTable(true));
+  refreshPresence();
+}
+
+function renderSeedImport() {
+  resetMatchTableIndex();
+  setHostMode("grid");
+  setHeading("ЭК");
+  setViewerLink(route.viewerBase + "/", "Открыть зрительскую сетку");
+  document.title = pageTitle("Импорт команд");
+  renderEKTabs();
+  hostRoot.replaceChildren(buildSeedImportPanel());
   refreshPresence();
 }
 
@@ -266,13 +316,13 @@ function render() {
   if (!state) return;
   setHostMode("match");
   normalizeActiveCell();
-  setHeading(state.stageTitle || state.title);
+  setHeading("ЭК");
   setViewerLink(`${route.viewerBase}/matches/${encodeURIComponent(state.code || route.matchCode)}`, "Открыть зрительский бой");
   document.title = pageTitle();
+  renderEKTabs();
 
   const focusedPlaceTeam = focusedPlaceTeamIndex();
   const finishToggleFocused = isFinishToggleFocused();
-  const venueFocused = isVenueSelectFocused();
   const table = buildTable();
   matchTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
   activeAnswerNode = state.finished ? null : matchTableIndex.get("answer", activeCell);
@@ -281,19 +331,10 @@ function render() {
     hostRoot.replaceChildren(table);
     notifyEmbeddedResize();
   } else {
-    hostRoot.replaceChildren(
-      buildSubnav([
-        {href: route.base + "/", label: "Сетка"},
-        {href: route.base + "/venues", label: "Площадки"},
-      ]),
-      table,
-    );
+    hostRoot.replaceChildren(table);
   }
+  scheduleEKTeamNameOverflowUpdate();
   refreshPresence();
-  if (venueFocused) {
-    focusVenueSelect({preventScroll: true});
-    return;
-  }
   if (finishToggleFocused) {
     focusFinishToggle({preventScroll: true});
     return;
@@ -353,20 +394,27 @@ function buildFestTable(data) {
 }
 
 function buildVenuesTable(editable) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "results-wrapper venues-results-wrapper";
+
   const table = document.createElement("table");
-  table.className = "fest-table venues-table";
+  table.className = "results-table venues-results-table";
   const thead = document.createElement("thead");
   const header = document.createElement("tr");
-  header.appendChild(th("№", "number"));
-  header.appendChild(th("Название", ""));
+  header.appendChild(th("№", "results-place-head"));
+  header.appendChild(th("Название", "results-team-head venues-title-head"));
   thead.appendChild(header);
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  venues.forEach((venue) => {
+  venues.forEach((venue, index) => {
     const row = document.createElement("tr");
-    row.appendChild(td(venue.number, "number venue-number"));
+    row.className = "results-row";
+    if (index === 0) row.classList.add("results-group-first");
+    if (index === venues.length - 1) row.classList.add("results-group-last");
+    row.appendChild(td(venue.number, "results-place venues-number"));
     const titleCell = document.createElement("td");
+    titleCell.className = "results-team venues-title-cell";
     if (editable) {
       const input = document.createElement("input");
       input.className = "venue-input";
@@ -390,7 +438,8 @@ function buildVenuesTable(editable) {
     tbody.appendChild(row);
   });
   table.appendChild(tbody);
-  return table;
+  wrapper.appendChild(table);
+  return wrapper;
 }
 
 function teamListCell(teams) {
@@ -417,13 +466,344 @@ function buildSubnav(items) {
   return nav;
 }
 
+function gameSubnavItems() {
+  const items = [
+    {href: route.base + "/", label: "Сетка", key: "grid"},
+    {href: route.base + "/venues", label: "Площадки", key: "venues"},
+    {href: route.base + "/seed-import", label: "Импорт команд", key: "seedImport"},
+  ];
+  const stages = ekSchemeStages().filter((stage) => (stage.stage_type || stage.type) !== "reseed");
+  stages.forEach((stage) => {
+    items.push({
+      href: `${route.base}/stage/${encodeURIComponent(stage.code)}`,
+      label: stageTabLabel(stage),
+      key: `stage:${stage.code}`,
+    });
+  });
+  return items;
+}
+
+function renderEKTabs() {
+  if (!ekTabsRoot || embedded) return;
+  ekTabsRoot.replaceChildren();
+  const active = activeTabKey();
+  for (const item of gameSubnavItems()) {
+    const link = document.createElement("a");
+    link.className = "match-tab" + (item.key === active ? " active" : "");
+    link.href = item.href;
+    link.textContent = item.label;
+    link.setAttribute("role", "tab");
+    link.setAttribute("aria-selected", item.key === active ? "true" : "false");
+    ekTabsRoot.appendChild(link);
+  }
+}
+
+function activeTabKey() {
+  if (route.mode === "stage") return `stage:${route.stageCode}`;
+  if (route.mode === "match") {
+    const stageCode = state?.stageCode || stageCodeForMatch(route.matchCode);
+    return stageCode ? `stage:${stageCode}` : "grid";
+  }
+  if (route.mode === "venues") return "venues";
+  if (route.mode === "seedImport") return "seedImport";
+  return "grid";
+}
+
+function stageCodeForMatch(matchCode) {
+  if (!matchCode) return "";
+  for (const stage of ekSchemeStages()) {
+    if ((stage.matches || []).some((match) => match.code === matchCode)) return stage.code;
+  }
+  return "";
+}
+
+function ekSchemeStages() {
+  const scheme = parseScheme(fest?.schemaJson);
+  return scheme?.stages?.length ? scheme.stages : fest?.stages || [];
+}
+
+function stageTabLabel(stage) {
+  switch (stage.code) {
+  case "r16_run1":
+    return "1/16-1";
+  case "r16_run2":
+    return "1/16-2";
+  case "r8":
+    return "1/8";
+  case "r4":
+    return "1/4";
+  case "r2":
+    return "1/2";
+  case "final":
+    return "Финал";
+  default:
+    return stage.title || stage.code;
+  }
+}
+
+function scheduleGridNameOverflowUpdate(root = hostRoot) {
+  if (gridNameOverflowFrame) cancelAnimationFrame(gridNameOverflowFrame);
+  gridNameOverflowFrame = requestAnimationFrame(() => {
+    gridNameOverflowFrame = 0;
+    updateGridNameOverflow(root);
+  });
+}
+
+function updateGridNameOverflow(root = hostRoot) {
+  root.querySelectorAll(".grid-slot-team").forEach((cell) => {
+    const name = cell.querySelector(".grid-slot-team-name");
+    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    cell.classList.toggle("grid-slot-team-truncated", truncated);
+  });
+}
+
+function scheduleEKTeamNameOverflowUpdate(root = hostRoot) {
+  if (ekTeamNameOverflowFrame) cancelAnimationFrame(ekTeamNameOverflowFrame);
+  ekTeamNameOverflowFrame = requestAnimationFrame(() => {
+    ekTeamNameOverflowFrame = 0;
+    updateEKTeamNameOverflow(root);
+  });
+}
+
+function updateEKTeamNameOverflow(root = hostRoot) {
+  root.querySelectorAll(".ek-team-cell").forEach((cell) => {
+    const name = cell.querySelector(".od-detailed-team-name");
+    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
+  });
+}
+
+function buildSeedImportPanel() {
+  const panel = document.createElement("section");
+  panel.className = "seed-import-panel";
+
+  const actions = document.createElement("div");
+  actions.className = "cluster seed-import-actions";
+  const importButton = document.createElement("button");
+  importButton.type = "button";
+  importButton.className = "btn";
+  importButton.textContent = "Импортировать из КСИ";
+  importButton.addEventListener("click", importSeedsFromKSI);
+  actions.appendChild(importButton);
+  panel.appendChild(actions);
+
+  if (seedImportNotice) {
+    const notice = document.createElement("p");
+    notice.className = seedImportNotice.startsWith("Ошибка:") ? "empty" : "muted";
+    notice.textContent = seedImportNotice;
+    panel.appendChild(notice);
+  }
+
+  const rows = seedImport?.rows || [];
+  if (rows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "Команды ещё не импортированы.";
+    panel.appendChild(empty);
+    return panel;
+  }
+
+  const meta = document.createElement("p");
+  meta.className = "muted";
+  meta.textContent = `В основном посеве: ${Math.min(seedImport.activeCount || 0, seedImport.drawSize || 0)} из ${seedImport.drawSize || 0}. Всего активных команд: ${seedImport.activeCount || 0}.`;
+  panel.appendChild(meta);
+
+  const table = document.createElement("table");
+  table.className = "fest-table seed-import-table";
+  const thead = document.createElement("thead");
+  const head = document.createElement("tr");
+  head.appendChild(th("Посев", "seed-number-head"));
+  head.appendChild(th("Команда", "seed-team-head"));
+  head.appendChild(th("Отказалась", "seed-declined-head"));
+  thead.appendChild(head);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  let waitlistInserted = false;
+  rows.forEach((row) => {
+    if (row.waitlist && !waitlistInserted) {
+      waitlistInserted = true;
+      const divider = document.createElement("tr");
+      divider.className = "seed-waitlist-row";
+      divider.appendChild(td("Лист ожидания", "seed-waitlist-cell", {colSpan: 3}));
+      tbody.appendChild(divider);
+    }
+
+    const tr = document.createElement("tr");
+    tr.className = row.declined ? "seed-declined-row" : "";
+    tr.appendChild(td(row.seedNumber || "", "seed-number-cell"));
+
+    const teamCell = document.createElement("td");
+    teamCell.className = "seed-team-cell";
+    const name = document.createElement("span");
+    name.textContent = row.name || "";
+    teamCell.appendChild(name);
+    if (row.city) {
+      const city = document.createElement("span");
+      city.className = "muted seed-team-city";
+      city.textContent = ` ${row.city}`;
+      teamCell.appendChild(city);
+    }
+    tr.appendChild(teamCell);
+
+    const declinedCell = document.createElement("td");
+    declinedCell.className = "seed-declined-cell";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = Boolean(row.declined);
+    checkbox.setAttribute("aria-label", `Отказалась: ${row.name || "команда"}`);
+    checkbox.addEventListener("change", () => {
+      setSeedDeclined(row.teamID, checkbox.checked).catch(() => {
+        checkbox.checked = !checkbox.checked;
+      });
+    });
+    declinedCell.appendChild(checkbox);
+    tr.appendChild(declinedCell);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  panel.appendChild(table);
+  return panel;
+}
+
+async function importSeedsFromKSI() {
+  setStatus("saving");
+  seedImportNotice = "";
+  try {
+    const response = await fetch(`${route.apiBase}/seed-import/ksi`, {method: "POST"});
+    if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось импортировать команды");
+    seedImport = await response.json();
+    seedImportNotice = `Импортировано команд: ${seedImport.rows?.length || 0}.`;
+    renderSeedImport();
+    setStatus("saved");
+  } catch (error) {
+    seedImportNotice = `Ошибка: ${error.message}`;
+    renderSeedImport();
+    setStatus("error");
+    throw error;
+  }
+}
+
+async function setSeedDeclined(teamID, declined) {
+  setStatus("saving");
+  seedImportNotice = "";
+  try {
+    const response = await fetch(`${route.apiBase}/seed-import/decline`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({teamID, declined}),
+    });
+    if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось сохранить отказ");
+    seedImport = await response.json();
+    renderSeedImport();
+    setStatus("saved");
+  } catch (error) {
+    seedImportNotice = `Ошибка: ${error.message}`;
+    renderSeedImport();
+    setStatus("error");
+    throw error;
+  }
+}
+
 function buildStageTables() {
   const wrapper = document.createElement("div");
-  wrapper.className = "stage-table-stack";
-  stageStates.forEach((matchState) => {
-    wrapper.appendChild(withMatchState(matchState, () => buildTable()));
+  wrapper.className = "stage-table-stack stage-table-stack-lazy";
+  if (stageMatches.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "В этом этапе нет боёв.";
+    wrapper.appendChild(empty);
+    return wrapper;
+  }
+  stageMatches.forEach((match) => {
+    const frame = document.createElement("section");
+    frame.className = "stage-match-frame";
+    frame.dataset.matchCode = match.code || "";
+    frame.appendChild(buildStageMatchPlaceholder(match));
+    wrapper.appendChild(frame);
   });
   return wrapper;
+}
+
+function buildStageMatchPlaceholder(match) {
+  const placeholder = document.createElement("div");
+  placeholder.className = "stage-match-placeholder";
+  placeholder.textContent = match.title || `Бой ${match.code}`;
+  return placeholder;
+}
+
+async function loadStageMatchStates(matches, token) {
+  await Promise.all(matches.map(async (match) => {
+    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(match.code)}`);
+    if (!response.ok) throw new Error(await response.text());
+    const matchState = await response.json();
+    if (token !== stageLoadToken || route.mode !== "stage") return;
+    applyStageMatchUpdate(matchState, {renderOnlyIfNear: true});
+  }));
+}
+
+function setupStageTableObserver() {
+  disconnectStageTableObserver();
+  const frames = Array.from(hostRoot.querySelectorAll(".stage-match-frame"));
+  if (frames.length === 0) return;
+  if (!("IntersectionObserver" in window)) {
+    renderStageMatchFrames(frames, {force: true});
+    return;
+  }
+  const root = hostRoot.closest(".sheet-frame");
+  stageTableObserver = new IntersectionObserver((entries) => {
+    const visibleFrames = [];
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      const frame = entry.target;
+      frame.dataset.nearViewport = "1";
+      visibleFrames.push(frame);
+    });
+    renderStageMatchFrames(visibleFrames);
+    visibleFrames.forEach((frame) => {
+      if (frame.dataset.rendered === "1") stageTableObserver?.unobserve(frame);
+    });
+  }, {root, rootMargin: "900px 0px"});
+  frames.forEach((frame) => stageTableObserver.observe(frame));
+}
+
+function disconnectStageTableObserver() {
+  if (!stageTableObserver) return;
+  stageTableObserver.disconnect();
+  stageTableObserver = null;
+}
+
+function renderStageMatchFrames(frames, options = {}) {
+  let rendered = false;
+  frames.forEach((frame) => {
+    rendered = renderStageMatchFrame(frame, options) || rendered;
+  });
+  if (rendered) scheduleEKTeamNameOverflowUpdate(hostRoot);
+}
+
+function renderStageMatchFrame(frame, options = {}) {
+  if (!frame || (!options.force && frame.dataset.rendered === "1")) return false;
+  const matchState = stageStateByCode.get(frame.dataset.matchCode || "");
+  if (!matchState) return false;
+  const hadFocus = document.activeElement?.closest?.(".stage-match-frame") === frame;
+  frame.dataset.rendered = "1";
+  frame.replaceChildren(withMatchState(matchState, () => buildTable({compact: true})));
+  if (hadFocus && activeCell.matchCode === matchState.code) {
+    focusActiveCell({preventScroll: true});
+  }
+  return true;
+}
+
+function renderStageMatchFrameIfReady(matchCode, options = {}) {
+  const frame = stageMatchFrame(matchCode);
+  if (!frame) return;
+  if (options.force || frame.dataset.nearViewport === "1" || frame.dataset.rendered === "1") {
+    renderStageMatchFrames([frame], options);
+  }
+}
+
+function stageMatchFrame(matchCode) {
+  return hostRoot.querySelector(`.stage-match-frame[data-match-code="${cssEscape(matchCode)}"]`);
 }
 
 function withMatchState(matchState, callback) {
@@ -445,19 +825,24 @@ function currentMatchCode() {
 
 function activeMatchState() {
   if (route.mode === "stage") {
-    return stageStates.find((matchState) => matchState.code === activeCell.matchCode) || stageStates[0] || null;
+    return stageStateByCode.get(activeCell.matchCode) || stageStates[0] || null;
   }
   return state;
 }
 
-function replaceStageState(updated) {
-  stageStates = stageStates.map((matchState) => matchState.code === updated.code ? updated : matchState);
+function applyStageMatchUpdate(updated, options = {}) {
+  const matchCode = updated?.code;
+  if (!matchCode) return;
+  stageStateByCode.set(matchCode, updated);
+  stageStates = stageMatches.map((match) => stageStateByCode.get(match.code)).filter(Boolean);
+  renderStageMatchFrameIfReady(matchCode, {
+    force: !options.renderOnlyIfNear && stageMatchFrame(matchCode)?.dataset.rendered === "1",
+  });
 }
 
 function applyUpdatedMatch(updated, matchCode) {
   if (route.mode === "stage") {
-    replaceStageState(updated);
-    renderStage({preserveScroll: true});
+    applyStageMatchUpdate(updated);
     return;
   }
   const previous = state;
@@ -541,15 +926,16 @@ function indexedNode(name, values) {
 }
 
 function resetMatchTableIndex() {
+  disconnectStageTableObserver();
   matchTableIndex = null;
   activeAnswerNode = null;
   clearActiveTeamRows();
 }
 
-function buildTable() {
+function buildTable(options = {}) {
   const matchCode = currentMatchCode();
   const hasShootout = shootoutThemeCount() > 0;
-  const showPlaceColumn = false;
+  const showPlaceColumn = true;
   const themes = renderedThemeHeaders();
   const rows = state.teams.map((team, teamIndex) => {
     const themeCellsList = [];
@@ -570,7 +956,7 @@ function buildTable() {
   });
 
   const table = gameTable.buildTwoRowScoreTable({
-    className: "match-table",
+    className: options.compact ? "match-table compact-score-table ek-stage-table" : "match-table",
     attrs: {dataset: {matchCode}},
     rowMarkerColumn: true,
     rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
@@ -620,8 +1006,27 @@ function trailingHeaders(hasShootout) {
 }
 
 function teamNameCell(team, teamIndex) {
-  const cell = td(team.name, "sticky sticky-name team-name", {rowSpan: 2});
+  const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: 2});
   cell.dataset.team = String(teamIndex);
+  const labelText = team.name || "";
+  const layout = document.createElement("span");
+  layout.className = "od-detailed-team-layout";
+
+  const nameWrap = document.createElement("span");
+  nameWrap.className = "od-detailed-team-name-wrap";
+  const label = document.createElement("span");
+  label.className = "readonly-team-name od-detailed-team-name";
+  label.textContent = labelText;
+  label.tabIndex = 0;
+  label.setAttribute("aria-label", labelText);
+  nameWrap.appendChild(label);
+  layout.appendChild(nameWrap);
+  cell.appendChild(layout);
+
+  const fullName = document.createElement("span");
+  fullName.className = "od-detailed-team-name-popover";
+  fullName.textContent = labelText;
+  cell.appendChild(fullName);
   return cell;
 }
 
@@ -783,25 +1188,25 @@ function battleHeader() {
 
   const title = document.createElement("span");
   title.className = "battle-title";
-  title.textContent = matchTitle();
+  title.textContent = state.title || matchTitle();
   layout.appendChild(title);
 
   if (venues.length > 0) {
-    const venueSelect = document.createElement("select");
-    venueSelect.className = "venue-select";
-    venueSelect.dataset.matchCode = matchCode;
-    venues.forEach((venue) => {
-      venueSelect.appendChild(option(String(venue.number), `${venue.number}: ${venue.title}`));
-    });
-    venueSelect.value = state.venue ? String(state.venue.number) : "";
-    venueSelect.addEventListener("change", () => {
-      sendVenueChange(Number(venueSelect.value), matchCode);
-    });
-    layout.appendChild(venueSelect);
+    const venueButton = document.createElement("button");
+    venueButton.type = "button";
+    venueButton.className = "venue-edit-button";
+    venueButton.dataset.matchCode = matchCode;
+    venueButton.textContent = "✏️";
+    venueButton.title = "Изменить площадку";
+    venueButton.setAttribute("aria-label", "Изменить площадку");
+    venueButton.addEventListener("click", () => openVenueDialog(matchCode));
+    layout.appendChild(venueButton);
   }
 
   const label = document.createElement("label");
   label.className = "finish-control";
+  label.title = "Закончен";
+  label.setAttribute("aria-label", "Закончен");
 
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
@@ -811,14 +1216,57 @@ function battleHeader() {
   checkbox.addEventListener("change", () => {
     sendUpdate({finished: checkbox.checked}, matchCode);
   });
-
-  const text = document.createElement("span");
-  text.textContent = "Закончен";
-
-  label.append(checkbox, text);
+  label.append(checkbox);
   layout.appendChild(label);
   node.appendChild(layout);
   return node;
+}
+
+function openVenueDialog(matchCode) {
+  const dialog = document.createElement("dialog");
+  dialog.className = "venue-dialog";
+  const form = document.createElement("form");
+  form.className = "venue-dialog-form";
+
+  const title = document.createElement("h2");
+  title.textContent = state.title || matchTitle();
+  form.appendChild(title);
+
+  const select = document.createElement("select");
+  select.className = "venue-dialog-select";
+  venues.forEach((venue) => {
+    select.appendChild(option(String(venue.number), `${venue.number}: ${venue.title}`));
+  });
+  select.value = state.venue ? String(state.venue.number) : "";
+  form.appendChild(select);
+
+  const actions = document.createElement("div");
+  actions.className = "venue-dialog-actions";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn";
+  cancel.textContent = "Отмена";
+  cancel.addEventListener("click", () => dialog.close());
+  const save = document.createElement("button");
+  save.type = "submit";
+  save.className = "btn";
+  save.textContent = "Сохранить";
+  actions.append(cancel, save);
+  form.appendChild(actions);
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const number = Number(select.value);
+    dialog.close();
+    if (number > 0 && number !== state.venue?.number) {
+      sendVenueChange(number, matchCode);
+    }
+  });
+  dialog.addEventListener("close", () => dialog.remove());
+  dialog.appendChild(form);
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  select.focus();
 }
 
 function shootoutControlsHeader() {
@@ -992,11 +1440,6 @@ function focusFinishToggle(options = {}) {
   if (input) input.focus({preventScroll: options.preventScroll});
 }
 
-function focusVenueSelect(options = {}) {
-  const input = document.querySelector(".venue-select");
-  if (input) input.focus({preventScroll: options.preventScroll});
-}
-
 function focusedPlaceTeamIndex() {
   const element = document.activeElement;
   if (!(element instanceof HTMLInputElement) || !element.classList.contains("place-input")) {
@@ -1009,11 +1452,6 @@ function focusedPlaceTeamIndex() {
 function isFinishToggleFocused() {
   const element = document.activeElement;
   return element instanceof HTMLInputElement && element.classList.contains("finish-toggle");
-}
-
-function isVenueSelectFocused() {
-  const element = document.activeElement;
-  return element instanceof HTMLSelectElement && element.classList.contains("venue-select");
 }
 
 function findActiveCell() {
@@ -1115,6 +1553,7 @@ function currentRoute() {
     return {mode: "grid", festID, gameID, base, viewerBase, apiBase, festApi};
   }
   if (rest === "/venues") return {mode: "venues", festID, gameID, base, viewerBase, apiBase, festApi};
+  if (rest === "/seed-import") return {mode: "seedImport", festID, gameID, base, viewerBase, apiBase, festApi};
   const match = rest.match(/^\/matches\/([^/]+)$/);
   if (match) return {mode: "match", matchCode: decodeURIComponent(match[1]), festID, gameID, base, viewerBase, apiBase, festApi};
   const stage = rest.match(/^\/stage\/([^/]+)$/);
@@ -1167,8 +1606,12 @@ function notifyEmbeddedResize() {
 }
 
 function matchTitle() {
-  const venue = state.venue ? ` · пл. ${state.venue.number}: ${state.venue.title}` : "";
+  const venue = state.venue ? ` · ${formatBattleVenue(state.venue)}` : "";
   return `${state.title}${venue}`;
+}
+
+function formatBattleVenue(venue) {
+  return venue.title ? `пл. ${venue.number} (${venue.title})` : `пл. ${venue.number}`;
 }
 
 function formatVenue(venue) {
@@ -1255,7 +1698,7 @@ function currentHostPresenceCursor() {
 }
 
 function hostPresenceCursorFromElement(element) {
-  const target = element?.closest?.(".answer-cell,.player-select,.place-input,.finish-toggle,.venue-select");
+  const target = element?.closest?.(".answer-cell,.player-select,.place-input,.finish-toggle,.venue-edit-button");
   if (!target || !hostRoot.contains(target)) return null;
   const matchCode = target.dataset.matchCode || currentMatchCode();
   if (target.classList.contains("answer-cell")) {
@@ -1287,7 +1730,7 @@ function hostPresenceCursorFromElement(element) {
   if (target.classList.contains("finish-toggle")) {
     return {app: "ek", kind: "finish", gameID: route.gameID, matchCode};
   }
-  if (target.classList.contains("venue-select")) {
+  if (target.classList.contains("venue-edit-button")) {
     return {app: "ek", kind: "venue", gameID: route.gameID, matchCode};
   }
   return null;
@@ -1310,7 +1753,7 @@ function findHostPresenceTarget(cursor) {
   case "finish":
     return hostRoot.querySelector(`.finish-toggle[data-match-code="${matchCode}"]`);
   case "venue":
-    return hostRoot.querySelector(`.venue-select[data-match-code="${matchCode}"]`);
+    return hostRoot.querySelector(`.venue-edit-button[data-match-code="${matchCode}"]`);
   default:
     return null;
   }
