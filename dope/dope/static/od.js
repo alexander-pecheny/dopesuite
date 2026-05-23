@@ -11,6 +11,7 @@ const viewer = Boolean(route.viewer);
 document.body.classList.toggle("viewer-readonly", viewer);
 let scheme = null;
 let state = null;
+let fest = null;
 let tourLengths = [];
 let totalQuestions = 0;
 let renderedTab = null;
@@ -25,7 +26,7 @@ const resultsExpandedTours = new Set();
 const resultsExpandedShootouts = new Set();
 let numberToIndexCache = null;
 let entrySuggest = null;
-let detailedNameOverflowFrame = 0;
+let teamNameOverflowFrame = 0;
 
 const TABS = [
   {key: "results", label: "Итог"},
@@ -47,20 +48,23 @@ window.addEventListener("hashchange", () => {
 });
 
 window.addEventListener("resize", () => {
-  if (renderedTab === "detailed") scheduleDetailedNameOverflowUpdate();
+  if (renderedTab === "detailed" || renderedTab === "results") scheduleTeamNameOverflowUpdate();
   updateResultsScrollState();
 });
 document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
 async function loadAll() {
-  const [schemeResp, stateResp] = await Promise.all([
+  const [schemeResp, stateResp, festResp] = await Promise.all([
     fetch(`${route.apiBase}/scheme`),
     fetch(`${route.apiBase}/state`),
+    route.festID ? fetch(`/api/fest/${route.festID}`) : Promise.resolve(null),
   ]);
   if (!schemeResp.ok) throw new Error(await schemeResp.text());
   if (!stateResp.ok) throw new Error(await stateResp.text());
+  if (festResp && !festResp.ok) throw new Error(await festResp.text());
   scheme = await schemeResp.json();
   state = await stateResp.json();
+  fest = festResp ? await festResp.json() : null;
   initFromScheme();
   ensureState();
   invalidateAllCaches();
@@ -298,9 +302,10 @@ function teamTookQuestion(teamIndex, qIndex, stats = questionStats()) {
 function render() {
   if (!state || !scheme) return;
   if (renderedTab === "input" && activeTab !== "input") closeEntryEditor();
-  rememberTabScroll(renderedTab);
+  const renderedPane = tabCache.get(renderedTab);
+  if (renderedPane?.isConnected) rememberTabScroll(renderedTab);
   setHeading(scheme.title || "ОД");
-  document.title = `${viewer ? "Зритель" : "Ведущий"} · ${scheme.title || "ОД"}`;
+  document.title = pageTitle();
   if (!TABS.some((t) => t.key === activeTab)) activeTab = TABS[0].key;
   renderTabs();
   updateHeaderProgress();
@@ -310,7 +315,7 @@ function render() {
   renderedTab = activeTab;
   restoreTabScroll(activeTab);
   updateResultsScrollState();
-  if (activeTab === "detailed") scheduleDetailedNameOverflowUpdate(activePane);
+  if (activeTab === "detailed" || activeTab === "results") scheduleTeamNameOverflowUpdate(activePane);
   refreshPresence();
 }
 
@@ -353,9 +358,16 @@ function updateResultsScrollState() {
   frame.classList.toggle("results-scroll-left", activeTab === "results" && frame.scrollLeft > 1);
 }
 
+function pageTitle() {
+  const gameTitle = String(scheme?.title || "ОД").trim() || "ОД";
+  const festTitle = String(fest?.title || "").trim();
+  return festTitle ? `${gameTitle} · ${festTitle}` : gameTitle;
+}
+
 function toggleResultsTour(tourIndex) {
   if (resultsExpandedTours.has(tourIndex)) resultsExpandedTours.delete(tourIndex);
   else resultsExpandedTours.add(tourIndex);
+  rememberTabScroll("results");
   invalidateTabCache("results");
   render();
 }
@@ -363,6 +375,7 @@ function toggleResultsTour(tourIndex) {
 function toggleResultsShootout(roundIndex) {
   if (resultsExpandedShootouts.has(roundIndex)) resultsExpandedShootouts.delete(roundIndex);
   else resultsExpandedShootouts.add(roundIndex);
+  rememberTabScroll("results");
   invalidateTabCache("results");
   render();
 }
@@ -718,7 +731,7 @@ function shootoutLockCell(roundIndex, questionIndex, className) {
   cb.dataset.round = String(roundIndex);
   cb.dataset.question = String(questionIndex);
   cb.checked = shootoutQuestionCompleted(roundIndex, questionIndex);
-  cb.disabled = viewer;
+  makeViewerCheckboxReadonly(cb);
   label.appendChild(cb);
   cell.appendChild(label);
   return cell;
@@ -744,7 +757,7 @@ function shootoutEntryCell(roundIndex, questionIndex, rowIndex, validationCounts
   checkbox.dataset.question = String(questionIndex);
   checkbox.dataset.row = String(rowIndex);
   checkbox.checked = Boolean(value && value === round?.teams?.[rowIndex]);
-  checkbox.disabled = viewer;
+  makeViewerCheckboxReadonly(checkbox);
   label.appendChild(checkbox);
   cell.appendChild(label);
   markShootoutEntryCellValidity(cell, validationCounts);
@@ -779,10 +792,28 @@ function lockCell(qIndex, className) {
   cb.className = "entry-lock-checkbox";
   cb.dataset.q = String(qIndex);
   cb.checked = Boolean(state.completed[qIndex]);
-  cb.disabled = viewer;
+  makeViewerCheckboxReadonly(cb);
   label.appendChild(cb);
   cell.appendChild(label);
   return cell;
+}
+
+function makeViewerCheckboxReadonly(checkbox) {
+  if (!viewer) return;
+  checkbox.setAttribute("aria-disabled", "true");
+  checkbox.addEventListener("click", preventViewerCheckboxToggle);
+  checkbox.addEventListener("keydown", preventViewerCheckboxKeydown);
+}
+
+function preventViewerCheckboxToggle(event) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function preventViewerCheckboxKeydown(event) {
+  if (event.key !== " " && event.key !== "Enter") return;
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 function entryCell(qIndex, rowIndex, tourEnd, validationCounts) {
@@ -1496,11 +1527,12 @@ function detailedNameHeader() {
   return layout;
 }
 
-function scheduleDetailedNameOverflowUpdate(root = odRoot) {
-  if (detailedNameOverflowFrame) cancelAnimationFrame(detailedNameOverflowFrame);
-  detailedNameOverflowFrame = requestAnimationFrame(() => {
-    detailedNameOverflowFrame = 0;
+function scheduleTeamNameOverflowUpdate(root = odRoot) {
+  if (teamNameOverflowFrame) cancelAnimationFrame(teamNameOverflowFrame);
+  teamNameOverflowFrame = requestAnimationFrame(() => {
+    teamNameOverflowFrame = 0;
     updateDetailedTeamNameOverflow(root);
+    updateResultsTeamNameOverflow(root);
   });
 }
 
@@ -1509,6 +1541,14 @@ function updateDetailedTeamNameOverflow(root = odRoot) {
     const name = cell.querySelector(".od-detailed-team-name");
     const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
     cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
+  });
+}
+
+function updateResultsTeamNameOverflow(root = odRoot) {
+  root.querySelectorAll(".results-team").forEach((cell) => {
+    const name = cell.querySelector(".results-team-name");
+    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    cell.classList.toggle("results-team-truncated", truncated);
   });
 }
 
@@ -1706,7 +1746,7 @@ function buildResultsTableInner() {
   const head = document.createElement("tr");
   head.appendChild(th("Место", "results-place-head"));
   head.appendChild(th("Команда", "results-team-head"));
-  head.appendChild(th("Σ", "results-num-head"));
+  head.appendChild(th("Σ", "results-num-head results-total-head"));
   for (let t = 0; t < tourLengths.length; t++) {
     head.appendChild(resultsTourHeader(t));
     if (resultsExpandedTours.has(t)) {
@@ -1756,18 +1796,28 @@ function buildResultsTableInner() {
       tr.appendChild(td(group.placeText, "results-place"));
       const nameTd = document.createElement("td");
       nameTd.className = "results-team";
+      const teamLabelText = team.name || `Команда ${index + 1}`;
+      const nameWrap = document.createElement("span");
+      nameWrap.className = "results-team-name-wrap";
       const nameSpan = document.createElement("span");
       nameSpan.className = "results-team-name";
-      nameSpan.textContent = team.name || `Команда ${index + 1}`;
-      nameTd.appendChild(nameSpan);
+      nameSpan.textContent = teamLabelText;
+      nameSpan.tabIndex = 0;
+      nameSpan.setAttribute("aria-label", teamLabelText);
+      nameWrap.appendChild(nameSpan);
       if (team.city) {
         const citySpan = document.createElement("span");
         citySpan.className = "results-team-city";
         citySpan.textContent = team.city;
-        nameTd.appendChild(citySpan);
+        nameWrap.appendChild(citySpan);
       }
+      nameTd.appendChild(nameWrap);
+      const fullName = document.createElement("span");
+      fullName.className = "results-team-name-popover";
+      fullName.textContent = teamLabelText;
+      nameTd.appendChild(fullName);
       tr.appendChild(nameTd);
-      tr.appendChild(td(total, "results-num total-cell"));
+      tr.appendChild(td(total, "results-num total-cell results-total"));
       for (let t = 0; t < tourLengths.length; t++) {
         if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));
         else tr.appendChild(td("·", "results-tour results-tour-pending"));
