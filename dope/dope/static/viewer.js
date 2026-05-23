@@ -89,7 +89,12 @@ function connectEvents() {
       return;
     }
     if (route.mode === "stage" && message.scope.startsWith("match:")) {
-      scheduleReload();
+      if (message.data?.code) {
+        applyReadonlyStageMatchUpdate(message.data);
+        setLive(true);
+      } else {
+        scheduleReload();
+      }
       return;
     }
     scheduleReload();
@@ -176,6 +181,19 @@ function applyUpdatedMatch(updated) {
     return;
   }
   render();
+}
+
+function applyReadonlyStageMatchUpdate(updated) {
+  const index = stageStates.findIndex((matchState) => matchState.code === updated.code);
+  if (index < 0) {
+    scheduleReload();
+    return;
+  }
+  stageStates[index] = updated;
+  const frame = viewerRoot.querySelector(`.stage-match-frame[data-match-code="${cssEscape(updated.code)}"]`);
+  if (frame) {
+    frame.replaceChildren(withMatchState(updated, () => buildReadonlyTable()));
+  }
 }
 
 function canPatchReadonlyMatchTable(previous, next) {
@@ -276,24 +294,28 @@ function buildFestTable(data) {
 }
 
 function buildVenuesTable() {
+  const wrapper = document.createElement("div");
+  wrapper.className = "results-wrapper venues-results-wrapper";
+
   const table = document.createElement("table");
-  table.className = "fest-table venues-table";
+  table.className = "results-table venues-results-table";
   const thead = document.createElement("thead");
   const header = document.createElement("tr");
-  header.appendChild(th("№", "number"));
-  header.appendChild(th("Название", ""));
+  header.appendChild(th("№", "results-place-head"));
+  header.appendChild(th("Название", "results-team-head venues-title-head"));
   thead.appendChild(header);
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
   venues.forEach((venue) => {
     const row = document.createElement("tr");
-    row.appendChild(td(venue.number, "number venue-number"));
-    row.appendChild(td(venue.title, ""));
+    row.appendChild(td(venue.number, "results-place venues-number"));
+    row.appendChild(td(venue.title, "results-team venues-title-cell"));
     tbody.appendChild(row);
   });
   table.appendChild(tbody);
-  return table;
+  wrapper.appendChild(table);
+  return wrapper;
 }
 
 function teamListCell(teams) {
@@ -324,7 +346,11 @@ function buildReadonlyStageTables() {
   const wrapper = document.createElement("div");
   wrapper.className = "stage-table-stack";
   stageStates.forEach((matchState) => {
-    wrapper.appendChild(withMatchState(matchState, () => buildReadonlyTable()));
+    const frame = document.createElement("section");
+    frame.className = "stage-match-frame";
+    frame.dataset.matchCode = matchState.code || "";
+    frame.appendChild(withMatchState(matchState, () => buildReadonlyTable()));
+    wrapper.appendChild(frame);
   });
   return wrapper;
 }
@@ -360,7 +386,7 @@ function buildReadonlyTable() {
   });
 
   return gameTable.buildTwoRowScoreTable({
-    className: "match-table readonly-table",
+    className: "match-table compact-score-table ek-stage-table readonly-table",
     nameHeader: {content: matchTitle(), className: "sticky sticky-name battle"},
     themes,
     afterThemeHeaders: readonlyTrailingHeaders(hasShootout),
@@ -544,6 +570,10 @@ function formatNumber(value) {
 
 function formatPlace(place) {
   return place > 0 ? place : "";
+}
+
+function cssEscape(value) {
+  return gameTable.cssEscape(value);
 }
 
 function th(content, className) {

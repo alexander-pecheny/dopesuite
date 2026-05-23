@@ -3,8 +3,8 @@ import json
 import sys
 
 
-def seed(basket, number):
-    return {"seed": {"basket": basket, "number": number}}
+def seed(number):
+    return f"seed-{number}"
 
 
 def from_match(code, place):
@@ -25,20 +25,14 @@ def match(code, venue, slots):
     }
 
 
-def r16_run_stage(code, title, position, match_codes, first_seed_number):
+def r16_run_stage(code, title, position, matches_seed_numbers):
     matches = []
-    for index, match_code in enumerate(match_codes):
-        seed_number = first_seed_number + index
+    for index, (match_code, seed_numbers) in enumerate(matches_seed_numbers):
         matches.append(
             match(
                 match_code,
                 index % 6 + 1,
-                [
-                    seed(1, seed_number),
-                    seed(2, seed_number),
-                    seed(3, seed_number),
-                    seed(4, seed_number),
-                ],
+                [seed(number) for number in seed_numbers],
             )
         )
     return {
@@ -138,10 +132,26 @@ def final_stage():
 
 
 def build_scheme():
+    r16_run1 = [
+        ("A", [1, 24, 25, 48]),
+        ("B", [2, 23, 26, 47]),
+        ("C", [3, 22, 27, 46]),
+        ("D", [4, 21, 28, 45]),
+        ("E", [5, 20, 29, 44]),
+        ("F", [6, 19, 30, 43]),
+    ]
+    r16_run2 = [
+        ("G", [7, 18, 31, 42]),
+        ("H", [8, 17, 32, 41]),
+        ("I", [9, 16, 33, 40]),
+        ("J", [10, 15, 34, 39]),
+        ("K", [11, 14, 35, 38]),
+        ("L", [12, 13, 36, 37]),
+    ]
     return {
         "schemaVersion": 2,
         "slug": "studchr-ek-2026",
-        "title": "СтудЧР-2026, ЭК",
+        "title": "ЭК",
         "gameType": "ek",
         "questionValues": [10, 20, 30, 40, 50],
         "regularThemeCount": 12,
@@ -154,8 +164,8 @@ def build_scheme():
             {"number": 6, "title": "Рим"},
         ],
         "stages": [
-            r16_run_stage("r16_run1", "1/16 финала, заход 1", 1, ["A", "B", "C", "D", "E", "F"], 1),
-            r16_run_stage("r16_run2", "1/16 финала, заход 2", 2, ["G", "H", "I", "J", "K", "L"], 7),
+            r16_run_stage("r16_run1", "1/16 финала, заход 1", 1, r16_run1),
+            r16_run_stage("r16_run2", "1/16 финала, заход 2", 2, r16_run2),
             r8_stage(),
             reseed_after_r8_stage(),
             r4_stage(),
