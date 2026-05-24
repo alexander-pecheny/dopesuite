@@ -1,6 +1,7 @@
 const viewerRoot = document.getElementById("viewerTable");
 const liveDot = document.getElementById("liveDot");
 const pageHeading = document.querySelector(".host-top h1");
+const viewerTabsRoot = document.getElementById("viewerTabs");
 
 const gameTable = window.DopeTable;
 const route = currentRoute();
@@ -11,8 +12,10 @@ let venues = [];
 let stageStates = [];
 let reloadTimer = null;
 let readonlyTableIndex = null;
+let viewerTabsFadeFrame = 0;
 
 document.body.classList.toggle("embedded-match", embedded);
+window.addEventListener("resize", () => scheduleViewerTabsFadeUpdate());
 
 async function loadCurrent() {
   if (route.mode === "match") {
@@ -129,8 +132,9 @@ function renderFest() {
   if (!fest) return;
   resetReadonlyTableIndex();
   setViewerMode("grid");
-  setHeading(fest.title);
+  setHeading("ЭК");
   document.title = pageTitle();
+  renderViewerTabs();
   viewerRoot.replaceChildren(buildFestGrid(fest, {viewer: true, basePath: route.base}));
 }
 
@@ -139,37 +143,34 @@ function renderStage() {
   resetReadonlyTableIndex();
   const stage = findStage(fest, route.stageCode);
   setViewerMode("match");
-  setHeading(stage?.title || fest.title);
+  setHeading("ЭК");
   document.title = pageTitle();
+  renderViewerTabs();
   viewerRoot.replaceChildren(buildReadonlyStageTables());
 }
 
 function renderVenues() {
   resetReadonlyTableIndex();
   setViewerMode("grid");
-  setHeading("Площадки");
+  setHeading("ЭК");
   document.title = pageTitle("Площадки");
-  viewerRoot.replaceChildren(buildSubnav([{href: route.base + "/", label: "Сетка"}]), buildVenuesTable());
+  renderViewerTabs();
+  viewerRoot.replaceChildren(buildVenuesTable());
 }
 
 function render() {
   if (!state) return;
   setViewerMode("match");
-  setHeading(state.stageTitle || state.title);
+  setHeading("ЭК");
   document.title = pageTitle();
+  renderViewerTabs();
   const table = buildReadonlyTable();
   readonlyTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
   if (embedded) {
     viewerRoot.replaceChildren(table);
     notifyEmbeddedResize();
   } else {
-    viewerRoot.replaceChildren(
-      buildSubnav([
-        {href: route.base + "/", label: "Сетка"},
-        {href: route.base + "/venues", label: "Площадки"},
-      ]),
-      table,
-    );
+    viewerRoot.replaceChildren(table);
   }
 }
 
@@ -345,6 +346,73 @@ function buildSubnav(items) {
   return nav;
 }
 
+function viewerTabItems() {
+  const items = [
+    {href: route.base + "/", label: "Сетка", key: "grid"},
+    {href: route.base + "/venues", label: "Площадки", key: "venues"},
+  ];
+  viewerStages().forEach((stage) => {
+    items.push({
+      href: `${route.base}/stage/${encodeURIComponent(stage.code)}`,
+      label: stageTabLabel(stage),
+      key: `stage:${stage.code}`,
+    });
+  });
+  return items;
+}
+
+function renderViewerTabs() {
+  if (!viewerTabsRoot || embedded || !fest) return;
+  viewerTabsRoot.replaceChildren();
+  const active = activeViewerTabKey();
+  for (const item of viewerTabItems()) {
+    const link = document.createElement("a");
+    link.className = "match-tab" + (item.key === active ? " active" : "");
+    link.href = item.href;
+    link.textContent = item.label;
+    link.setAttribute("role", "tab");
+    link.setAttribute("aria-selected", item.key === active ? "true" : "false");
+    viewerTabsRoot.appendChild(link);
+  }
+  bindViewerTabsScrollFade();
+}
+
+function activeViewerTabKey() {
+  if (route.mode === "stage") return `stage:${route.stageCode}`;
+  if (route.mode === "match") {
+    const stageCode = state?.stageCode || stageCodeForMatch(route.matchCode);
+    return stageCode ? `stage:${stageCode}` : "grid";
+  }
+  if (route.mode === "venues") return "venues";
+  return "grid";
+}
+
+function bindViewerTabsScrollFade() {
+  if (!viewerTabsRoot) return;
+  if (viewerTabsRoot.dataset.scrollFadeBound !== "1") {
+    viewerTabsRoot.addEventListener("scroll", scheduleViewerTabsFadeUpdate, {passive: true});
+    viewerTabsRoot.dataset.scrollFadeBound = "1";
+  }
+  scheduleViewerTabsFadeUpdate();
+}
+
+function scheduleViewerTabsFadeUpdate() {
+  if (!viewerTabsRoot || embedded) return;
+  if (viewerTabsFadeFrame) cancelAnimationFrame(viewerTabsFadeFrame);
+  viewerTabsFadeFrame = requestAnimationFrame(() => {
+    viewerTabsFadeFrame = 0;
+    updateViewerTabsScrollFade();
+  });
+}
+
+function updateViewerTabsScrollFade() {
+  if (!viewerTabsRoot) return;
+  const hasLeft = viewerTabsRoot.scrollLeft > 1;
+  const hasRight = viewerTabsRoot.scrollLeft + viewerTabsRoot.clientWidth < viewerTabsRoot.scrollWidth - 1;
+  viewerTabsRoot.classList.toggle("tabs-scroll-left", hasLeft);
+  viewerTabsRoot.classList.toggle("tabs-scroll-right", hasRight);
+}
+
 function buildReadonlyStageTables() {
   const wrapper = document.createElement("div");
   wrapper.className = "stage-table-stack";
@@ -390,7 +458,7 @@ function buildReadonlyTable() {
 
   return gameTable.buildTwoRowScoreTable({
     className: "match-table compact-score-table ek-stage-table readonly-table",
-    nameHeader: {content: matchTitle(), className: "sticky sticky-name battle"},
+    nameHeader: {content: matchTitleNode(state), className: "sticky sticky-name battle readonly-battle-head"},
     themes,
     afterThemeHeaders: readonlyTrailingHeaders(hasShootout),
     rows,
@@ -511,10 +579,43 @@ function currentRoute() {
   return {mode: "missing"};
 }
 
+function viewerStages() {
+  const scheme = parseScheme(fest?.schemaJson);
+  const stages = scheme?.stages?.length ? scheme.stages : fest?.stages || [];
+  return stages.filter((stage) => (stage.stage_type || stage.type) !== "reseed");
+}
+
 function findStage(data, code) {
   const scheme = parseScheme(data.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : data.stages || [];
   return stages.find((stage) => stage.code === code);
+}
+
+function stageCodeForMatch(matchCode) {
+  if (!matchCode) return "";
+  for (const stage of viewerStages()) {
+    if ((stage.matches || []).some((match) => match.code === matchCode)) return stage.code;
+  }
+  return "";
+}
+
+function stageTabLabel(stage) {
+  switch (stage.code) {
+  case "r16_run1":
+    return "1/16-1";
+  case "r16_run2":
+    return "1/16-2";
+  case "r8":
+    return "1/8";
+  case "r4":
+    return "1/4";
+  case "r2":
+    return "1/2";
+  case "final":
+    return "Финал";
+  default:
+    return stage.title || stage.code;
+  }
 }
 
 function setHeading(text) {
@@ -548,8 +649,22 @@ function notifyEmbeddedResize() {
   });
 }
 
-function matchTitle() {
-  return matchTitleFor(state);
+function matchTitleNode(matchState) {
+  const title = document.createElement("span");
+  title.className = "readonly-battle-title";
+
+  const battle = document.createElement("span");
+  battle.textContent = matchState?.title || "";
+  title.appendChild(battle);
+
+  if (matchState?.venue) {
+    const venue = document.createElement("span");
+    venue.className = "readonly-battle-venue";
+    venue.textContent = `пл. ${matchState.venue.number}: ${matchState.venue.title}`;
+    title.appendChild(venue);
+  }
+
+  return title;
 }
 
 function matchTitleFor(matchState) {
