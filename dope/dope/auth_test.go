@@ -724,7 +724,7 @@ select code from telegram_login_codes where user_id = ? and kind = 'login'`, use
 		t.Fatalf("telegram text %q does not contain issued code %q", sentText, code)
 	}
 	if !isShortLoginCode(code) {
-		t.Fatalf("login code = %q, want [A-Z0-9]{5}", code)
+		t.Fatalf("login code = %q, want [A-Z0-9]{%d}", code, telegramLoginCodeLen)
 	}
 	if !strings.Contains(sentText, "<code>"+code+"</code>") {
 		t.Fatalf("telegram text %q does not render code as monospace", sentText)
@@ -752,10 +752,13 @@ func TestLoginStartPasswordUserRequestsCodeExplicitly(t *testing.T) {
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	salt := "salt"
+	pwHash, err := hashPassword("secret")
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
 	if _, err := srv.db.Exec(`
 insert into users(telegram_user_id, telegram_username, username, password_hash, password_salt, is_system, created_at, updated_at)
-values(?, ?, ?, ?, ?, 0, ?, ?)`, 999, "tg_pass", "passy", hashPassword("secret", salt), salt, now, now); err != nil {
+values(?, ?, ?, ?, null, 0, ?, ?)`, 999, "tg_pass", "passy", pwHash, now, now); err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
 
@@ -925,5 +928,45 @@ values(?, ?, ?, 0, ?, ?)`, 4242, "tg_x", "x", now, now)
 	}
 	if time.Until(parsed) < sessionLifetime/2 {
 		t.Fatalf("expiry was not slid: %s", newExpiry)
+	}
+}
+
+func TestPasswordHashIsBcryptAndVerifies(t *testing.T) {
+	hash, err := hashPassword("hunter2")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if !strings.HasPrefix(hash, "$2") {
+		t.Fatalf("hash %q is not bcrypt", hash)
+	}
+	ok, upgraded, err := verifyPassword(hash, "", "hunter2")
+	if err != nil || !ok {
+		t.Fatalf("verify ok = %v err = %v", ok, err)
+	}
+	if upgraded != "" {
+		t.Fatalf("bcrypt hash should not request upgrade, got %q", upgraded)
+	}
+	ok, _, _ = verifyPassword(hash, "", "wrong")
+	if ok {
+		t.Fatalf("verify with wrong password returned ok")
+	}
+}
+
+func TestLegacySHA256PasswordVerifiesAndUpgradesToBcrypt(t *testing.T) {
+	salt := "legacy-salt"
+	legacy := legacySHA256Password("hunter2", salt)
+	if len(legacy) != 64 {
+		t.Fatalf("expected hex sha256, got %q", legacy)
+	}
+	ok, upgraded, err := verifyPassword(legacy, salt, "hunter2")
+	if err != nil || !ok {
+		t.Fatalf("legacy verify ok = %v err = %v", ok, err)
+	}
+	if !strings.HasPrefix(upgraded, "$2") {
+		t.Fatalf("expected bcrypt upgrade, got %q", upgraded)
+	}
+	ok, _, _ = verifyPassword(legacy, salt, "wrong")
+	if ok {
+		t.Fatalf("legacy verify accepted wrong password")
 	}
 }

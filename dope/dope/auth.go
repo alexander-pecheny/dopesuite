@@ -15,6 +15,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -358,7 +360,11 @@ from users where username = ?`, username).Scan(&userID, &tgUserID, &tgUsername, 
 		return loginStartResponse{}, authError{code: http.StatusForbidden, msg: "system user cannot log in"}
 	}
 
-	hasPassword := hash.Valid && salt.Valid
+	// bcrypt hashes carry their own salt, so a non-null hash is enough.
+	// Legacy SHA256 entries still have salt.Valid; both are accepted at
+	// verify time by verifyPassword.
+	hasPassword := hash.Valid && strings.TrimSpace(hash.String) != ""
+	_ = salt
 	resp := loginStartResponse{Username: username, HasPassword: hasPassword}
 	if hasPassword && !sendCode {
 		return resp, nil
@@ -510,7 +516,7 @@ func (s *server) handleAuthLoginPassword(w http.ResponseWriter, r *http.Request)
 	err = tx.QueryRowContext(ctx, `
 select id, password_hash, password_salt, is_system from users where username = ?`, username).Scan(
 		&userID, &hash, &salt, &isSystem)
-	if errors.Is(err, sql.ErrNoRows) || !hash.Valid || !salt.Valid {
+	if errors.Is(err, sql.ErrNoRows) || !hash.Valid {
 		http.Error(w, "invalid username or password", http.StatusUnauthorized)
 		return
 	}
@@ -522,10 +528,24 @@ select id, password_hash, password_salt, is_system from users where username = ?
 		http.Error(w, "system user cannot log in", http.StatusForbidden)
 		return
 	}
-	expected := hashPassword(password, salt.String)
-	if subtle.ConstantTimeCompare([]byte(hash.String), []byte(expected)) != 1 {
+	ok, upgraded, err := verifyPassword(hash.String, salt.String, password)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !ok {
 		http.Error(w, "invalid username or password", http.StatusUnauthorized)
 		return
+	}
+	if upgraded != "" {
+		// Lazy migration: upgrade legacy SHA256 hashes to bcrypt on first
+		// successful login so the weaker hash leaves the database.
+		if _, err := tx.ExecContext(ctx, `
+update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
+			upgraded, utcNow(), userID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	now := time.Now().UTC()
@@ -547,13 +567,48 @@ select id, password_hash, password_salt, is_system from users where username = ?
 	writeJSONValue(w, meResponseFor(user))
 }
 
-func hashPassword(password, salt string) string {
+// hashPassword returns a bcrypt hash of password. The bcrypt format embeds its
+// own salt, so callers do not pass one in. The legacy SHA256 variant is kept
+// as legacySHA256Password for verifying old database rows during migration.
+func hashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+func legacySHA256Password(password, salt string) string {
 	sum := sha256.Sum256([]byte(salt + ":" + password))
 	return hex.EncodeToString(sum[:])
 }
 
-func newPasswordSalt() (string, error) {
-	return randomBase32(16)
+// verifyPassword checks a candidate password against the stored hash. It
+// returns (ok, upgradedHash, err). If the stored hash is a legacy SHA256 and
+// the password matches, upgradedHash is a fresh bcrypt hash that callers
+// should persist so the next login no longer relies on the weaker scheme.
+func verifyPassword(storedHash, storedSalt, password string) (bool, string, error) {
+	if storedHash == "" {
+		return false, "", nil
+	}
+	if strings.HasPrefix(storedHash, "$2a$") || strings.HasPrefix(storedHash, "$2b$") || strings.HasPrefix(storedHash, "$2y$") {
+		if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)); err != nil {
+			if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+				return false, "", nil
+			}
+			return false, "", err
+		}
+		return true, "", nil
+	}
+	expected := legacySHA256Password(password, storedSalt)
+	if subtle.ConstantTimeCompare([]byte(storedHash), []byte(expected)) != 1 {
+		return false, "", nil
+	}
+	upgraded, err := hashPassword(password)
+	if err != nil {
+		return true, "", nil
+	}
+	return true, upgraded, nil
 }
 
 func (s *server) handleAuthMe(w http.ResponseWriter, r *http.Request) {

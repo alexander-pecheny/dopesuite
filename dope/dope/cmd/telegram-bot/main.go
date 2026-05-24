@@ -26,7 +26,7 @@ const (
 	apiBase       = "https://api.telegram.org"
 	pollTimeout   = 30
 	codeLifetime  = time.Minute
-	loginCodeLen  = 5
+	loginCodeLen  = 8
 
 	registerURL = "https://dope.pecheny.me/register"
 	loginURL    = "https://dope.pecheny.me/login"
