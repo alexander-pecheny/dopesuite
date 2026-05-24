@@ -4232,7 +4232,7 @@ a.list-row:hover { background: #eef1f5; }
   display: none;
 }
 
-.viewer-readonly .fight-frame {
+.viewer-readonly .match-main:has(.fight-host) .fight-frame {
   box-shadow: inset -24px 0 18px -22px rgba(32, 33, 36, 0.45);
 }
 
@@ -4436,5 +4436,10 @@ a.list-row:hover { background: #eef1f5; }
 
   .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player {
     font-size: 12px;
+  }
+
+  .venues-results-table {
+    width: 100%;
+    min-width: 0;
   }
 }

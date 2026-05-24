@@ -179,7 +179,7 @@ function renderStage() {
   if (!fest) return;
   resetReadonlyTableIndex();
   const stage = mergedStage(fest, route.stageCode);
-  setViewerMode("match");
+  setViewerMode(stageType(stage) === "reseed" ? "grid" : "match");
   setHeading("ЭК");
   document.title = pageTitle();
   renderViewerTabs();
