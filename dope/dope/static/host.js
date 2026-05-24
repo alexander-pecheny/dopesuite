@@ -27,12 +27,19 @@ let seedImport = null;
 let seedImportNotice = "";
 let gridNameOverflowFrame = 0;
 let ekTeamNameOverflowFrame = 0;
+let resultsTeamNameOverflowFrame = 0;
+let stageOverflowScrollFrame = null;
+let stageOverflowScrollListener = null;
+let playerSelectMeasureContext = null;
+let ekTabsFadeFrame = 0;
 
 document.body.classList.toggle("embedded-match", embedded);
 document.addEventListener("keydown", handleGlobalKeydown);
 window.addEventListener("resize", () => {
   if (route.mode === "grid") scheduleGridNameOverflowUpdate();
   if (route.mode === "match" || route.mode === "stage") scheduleEKTeamNameOverflowUpdate();
+  if (route.mode === "seedImport") scheduleResultsTeamNameOverflowUpdate();
+  scheduleEKTabsFadeUpdate();
 });
 
 async function loadCurrent() {
@@ -282,6 +289,7 @@ function renderStage(options = {}) {
   document.title = pageTitle();
   renderEKTabs();
   hostRoot.replaceChildren(buildStageTables());
+  bindStageOverflowScroll();
   setupStageTableObserver();
   if (options.preserveScroll && scrollFrame) {
     scrollFrame.scrollTop = scrollTop;
@@ -309,6 +317,7 @@ function renderSeedImport() {
   document.title = pageTitle("Импорт команд");
   renderEKTabs();
   hostRoot.replaceChildren(buildSeedImportPanel());
+  scheduleResultsTeamNameOverflowUpdate();
   refreshPresence();
 }
 
@@ -496,6 +505,33 @@ function renderEKTabs() {
     link.setAttribute("aria-selected", item.key === active ? "true" : "false");
     ekTabsRoot.appendChild(link);
   }
+  bindEKTabsScrollFade();
+}
+
+function bindEKTabsScrollFade() {
+  if (!ekTabsRoot) return;
+  if (ekTabsRoot.dataset.scrollFadeBound !== "1") {
+    ekTabsRoot.addEventListener("scroll", scheduleEKTabsFadeUpdate, {passive: true});
+    ekTabsRoot.dataset.scrollFadeBound = "1";
+  }
+  scheduleEKTabsFadeUpdate();
+}
+
+function scheduleEKTabsFadeUpdate() {
+  if (!ekTabsRoot || embedded) return;
+  if (ekTabsFadeFrame) cancelAnimationFrame(ekTabsFadeFrame);
+  ekTabsFadeFrame = requestAnimationFrame(() => {
+    ekTabsFadeFrame = 0;
+    updateEKTabsScrollFade();
+  });
+}
+
+function updateEKTabsScrollFade() {
+  if (!ekTabsRoot) return;
+  const hasLeft = ekTabsRoot.scrollLeft > 1;
+  const hasRight = ekTabsRoot.scrollLeft + ekTabsRoot.clientWidth < ekTabsRoot.scrollWidth - 1;
+  ekTabsRoot.classList.toggle("tabs-scroll-left", hasLeft);
+  ekTabsRoot.classList.toggle("tabs-scroll-right", hasRight);
 }
 
 function activeTabKey() {
@@ -566,16 +602,116 @@ function scheduleEKTeamNameOverflowUpdate(root = hostRoot) {
 }
 
 function updateEKTeamNameOverflow(root = hostRoot) {
+  updatePlayerSelectOverflow(root);
   root.querySelectorAll(".ek-team-cell").forEach((cell) => {
     const name = cell.querySelector(".od-detailed-team-name");
+    if (cell.closest(".ek-stage-table")) {
+      if (isVisibleInScrollFrame(cell)) {
+        fitEKStageTeamName(cell, name);
+      }
+      return;
+    }
     const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
     cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
   });
 }
 
+function updatePlayerSelectOverflow(root = hostRoot) {
+  root.querySelectorAll(".player-select-wrap").forEach((wrap) => {
+    if (wrap.closest(".ek-stage-table") && !isVisibleInScrollFrame(wrap)) return;
+    const select = wrap.querySelector(".player-select");
+    const popover = wrap.querySelector(".player-select-popover");
+    const label = selectedPlayerLabel(select);
+    if (popover) popover.textContent = label;
+    wrap.classList.toggle("player-select-truncated", Boolean(label && playerSelectTextOverflows(select, label)));
+  });
+}
+
+function selectedPlayerLabel(select) {
+  if (!select) return "";
+  return select.selectedOptions?.[0]?.textContent || select.value || "";
+}
+
+function playerSelectTextOverflows(select, label) {
+  if (!select || !label) return false;
+  const style = getComputedStyle(select);
+  const available = select.clientWidth - parseFloat(style.paddingLeft || "0") - parseFloat(style.paddingRight || "0");
+  if (available <= 0) return false;
+  const context = playerTextMeasureContext();
+  context.font = style.font;
+  return context.measureText(label).width > available + 1;
+}
+
+function playerTextMeasureContext() {
+  if (!playerSelectMeasureContext) {
+    playerSelectMeasureContext = document.createElement("canvas").getContext("2d");
+  }
+  return playerSelectMeasureContext;
+}
+
+function bindStageOverflowScroll() {
+  const scrollFrame = hostRoot.closest(".sheet-frame");
+  if (!scrollFrame || stageOverflowScrollFrame === scrollFrame) return;
+  unbindStageOverflowScroll();
+  stageOverflowScrollListener = () => scheduleEKTeamNameOverflowUpdate(hostRoot);
+  scrollFrame.addEventListener("scroll", stageOverflowScrollListener, {passive: true});
+  stageOverflowScrollFrame = scrollFrame;
+}
+
+function unbindStageOverflowScroll() {
+  if (!stageOverflowScrollFrame || !stageOverflowScrollListener) return;
+  stageOverflowScrollFrame.removeEventListener("scroll", stageOverflowScrollListener);
+  stageOverflowScrollFrame = null;
+  stageOverflowScrollListener = null;
+}
+
+function isVisibleInScrollFrame(element) {
+  const scrollFrame = element.closest(".sheet-frame");
+  if (!scrollFrame) return true;
+  const rect = element.getBoundingClientRect();
+  const frameRect = scrollFrame.getBoundingClientRect();
+  return rect.bottom >= frameRect.top && rect.top <= frameRect.bottom;
+}
+
+function fitEKStageTeamName(cell, name) {
+  cell.classList.remove("od-detailed-team-cell-truncated");
+  if (!name) return;
+  const wrap = name.closest(".od-detailed-team-name-wrap");
+  if (!wrap) return;
+  name.style.fontSize = "";
+  const baseSize = parseFloat(getComputedStyle(name).fontSize) || 13;
+  const minSize = 9;
+  const fits = () => name.scrollHeight <= wrap.clientHeight + 1 && name.scrollWidth <= name.clientWidth;
+  if (fits()) {
+    return;
+  }
+  for (let size = Math.floor(baseSize) - 1; size >= minSize; size -= 1) {
+    name.style.fontSize = `${size}px`;
+    if (fits()) {
+      return;
+    }
+  }
+}
+
+function scheduleResultsTeamNameOverflowUpdate(root = hostRoot) {
+  if (resultsTeamNameOverflowFrame) cancelAnimationFrame(resultsTeamNameOverflowFrame);
+  resultsTeamNameOverflowFrame = requestAnimationFrame(() => {
+    resultsTeamNameOverflowFrame = 0;
+    updateResultsTeamNameOverflow(root);
+  });
+}
+
+function updateResultsTeamNameOverflow(root = hostRoot) {
+  root.querySelectorAll(".results-team").forEach((cell) => {
+    const name = cell.querySelector(".results-team-name");
+    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    cell.classList.toggle("results-team-truncated", truncated);
+  });
+}
+
 function buildSeedImportPanel() {
   const panel = document.createElement("section");
-  panel.className = "seed-import-panel";
+  panel.className = "results-wrapper seed-import-panel";
 
   const actions = document.createElement("div");
   actions.className = "cluster seed-import-actions";
@@ -609,18 +745,18 @@ function buildSeedImportPanel() {
   panel.appendChild(meta);
 
   const table = document.createElement("table");
-  table.className = "fest-table seed-import-table";
+  table.className = "results-table seed-import-table";
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  head.appendChild(th("Посев", "seed-number-head"));
-  head.appendChild(th("Команда", "seed-team-head"));
+  head.appendChild(th("Посев", "results-place-head seed-number-head"));
+  head.appendChild(th("Команда", "results-team-head seed-team-head"));
   head.appendChild(th("Отказалась", "seed-declined-head"));
   thead.appendChild(head);
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
   let waitlistInserted = false;
-  rows.forEach((row) => {
+  rows.forEach((row, index) => {
     if (row.waitlist && !waitlistInserted) {
       waitlistInserted = true;
       const divider = document.createElement("tr");
@@ -630,24 +766,45 @@ function buildSeedImportPanel() {
     }
 
     const tr = document.createElement("tr");
-    tr.className = row.declined ? "seed-declined-row" : "";
-    tr.appendChild(td(row.seedNumber || "", "seed-number-cell"));
+    const classes = ["results-row"];
+    const previousRow = rows[index - 1];
+    const nextRow = rows[index + 1];
+    if (!previousRow || Boolean(previousRow.waitlist) !== Boolean(row.waitlist)) {
+      classes.push("results-group-first");
+    }
+    if (!nextRow || Boolean(nextRow.waitlist) !== Boolean(row.waitlist)) {
+      classes.push("results-group-last");
+    }
+    if (row.declined) classes.push("seed-declined-row");
+    tr.className = classes.join(" ");
+    tr.appendChild(td(row.seedNumber || "", "results-place seed-number-cell"));
 
     const teamCell = document.createElement("td");
-    teamCell.className = "seed-team-cell";
+    teamCell.className = "results-team seed-team-cell";
+    const nameWrap = document.createElement("span");
+    nameWrap.className = "results-team-name-wrap";
+    const teamLabel = row.name || "";
     const name = document.createElement("span");
-    name.textContent = row.name || "";
-    teamCell.appendChild(name);
+    name.className = "results-team-name";
+    name.textContent = teamLabel;
+    name.tabIndex = 0;
+    name.setAttribute("aria-label", teamLabel);
+    nameWrap.appendChild(name);
     if (row.city) {
       const city = document.createElement("span");
-      city.className = "muted seed-team-city";
-      city.textContent = ` ${row.city}`;
-      teamCell.appendChild(city);
+      city.className = "results-team-city seed-team-city";
+      city.textContent = row.city;
+      nameWrap.appendChild(city);
     }
+    teamCell.appendChild(nameWrap);
+    const fullName = document.createElement("span");
+    fullName.className = "results-team-name-popover";
+    fullName.textContent = teamLabel;
+    teamCell.appendChild(fullName);
     tr.appendChild(teamCell);
 
     const declinedCell = document.createElement("td");
-    declinedCell.className = "seed-declined-cell";
+    declinedCell.className = "results-num seed-declined-cell";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = Boolean(row.declined);
@@ -907,6 +1064,7 @@ function patchTheme(teamIndex, themeIndex, isShootout, theme, matchCode) {
     }
     select.value = theme.player || "";
   }
+  updatePlayerSelectOverflow(select?.closest(".player-select-wrap") || hostRoot);
   setIndexedText("themeScore", {team: teamIndex, shootout: shootoutValue, theme: themeIndex}, theme.score);
   theme.answers.forEach((mark, answerIndex) => {
     const cell = indexedNode("answer", {team: teamIndex, shootout: shootoutValue, theme: themeIndex, answer: answerIndex}) ||
@@ -927,6 +1085,7 @@ function indexedNode(name, values) {
 
 function resetMatchTableIndex() {
   disconnectStageTableObserver();
+  unbindStageOverflowScroll();
   matchTableIndex = null;
   activeAnswerNode = null;
   clearActiveTeamRows();
@@ -958,7 +1117,7 @@ function buildTable(options = {}) {
   const table = gameTable.buildTwoRowScoreTable({
     className: options.compact ? "match-table compact-score-table ek-stage-table" : "match-table",
     attrs: {dataset: {matchCode}},
-    rowMarkerColumn: true,
+    rowMarkerColumn: !options.compact,
     rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
     rowMarkerCellClassName: "sticky row-marker active-row-marker",
     nameHeader: battleHeader(),
@@ -1113,9 +1272,14 @@ function themeCells(team, teamIndex, theme, themeIndex, isShootout) {
   select.addEventListener("change", () => {
     const payload = {team: teamIndex, theme: themeIndex, player: select.value};
     if (isShootout) payload.shootout = true;
+    updatePlayerSelectOverflow(selectWrap);
     sendUpdate(payload, matchCode);
   });
   selectWrap.appendChild(select);
+  const playerPopover = document.createElement("span");
+  playerPopover.className = "player-select-popover";
+  playerPopover.textContent = selectedPlayerLabel(select);
+  selectWrap.appendChild(playerPopover);
   editor.appendChild(selectWrap);
 
   playerCell.appendChild(editor);
