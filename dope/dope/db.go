@@ -46,12 +46,21 @@ type FestView struct {
 }
 
 type StageView struct {
-	Code     string          `json:"code"`
-	Title    string          `json:"title"`
-	Type     string          `json:"stage_type"`
-	Position int             `json:"position"`
-	Status   string          `json:"status"`
-	Matches  []FestMatchView `json:"matches,omitempty"`
+	Code          string            `json:"code"`
+	Title         string            `json:"title"`
+	Type          string            `json:"stage_type"`
+	Position      int               `json:"position"`
+	Status        string            `json:"status"`
+	Config        json.RawMessage   `json:"config,omitempty"`
+	Matches       []FestMatchView   `json:"matches,omitempty"`
+	ReseedEntries []ReseedEntryView `json:"reseedEntries,omitempty"`
+}
+
+type ReseedEntryView struct {
+	Rank    int             `json:"rank"`
+	TeamID  int64           `json:"teamID"`
+	Name    string          `json:"name"`
+	Metrics json.RawMessage `json:"metrics,omitempty"`
 }
 
 type FestMatchView struct {
@@ -1779,11 +1788,17 @@ where t.id = ?`, gameID, festID).
 	}
 	view.Venues = venues
 
+	stageWhere := "fest_id = ?"
+	stageArgs := []any{festID}
+	if gameID > 0 {
+		stageWhere += " and game_id = ?"
+		stageArgs = append(stageArgs, gameID)
+	}
 	stageRows, err := s.db.QueryContext(ctx, `
-select id, code, title, stage_type, position, status
+select id, code, title, stage_type, position, status, config_json
 from stages
-where fest_id = ?
-order by position, id`, festID)
+where `+stageWhere+`
+order by position, id`, stageArgs...)
 	if err != nil {
 		return FestView{}, err
 	}
@@ -1797,9 +1812,11 @@ order by position, id`, festID)
 	for stageRows.Next() {
 		var stageID int64
 		var stage StageView
-		if err := stageRows.Scan(&stageID, &stage.Code, &stage.Title, &stage.Type, &stage.Position, &stage.Status); err != nil {
+		var configJSON string
+		if err := stageRows.Scan(&stageID, &stage.Code, &stage.Title, &stage.Type, &stage.Position, &stage.Status, &configJSON); err != nil {
 			return FestView{}, err
 		}
+		stage.Config = json.RawMessage(nonEmptyJSON(configJSON))
 		stageRecords = append(stageRecords, stageRecord{ID: stageID, Stage: stage})
 	}
 	if err := stageRows.Err(); err != nil {
@@ -1809,14 +1826,55 @@ order by position, id`, festID)
 		return FestView{}, err
 	}
 	for _, record := range stageRecords {
-		matches, err := loadFestMatches(ctx, s.db, record.ID)
-		if err != nil {
-			return FestView{}, err
+		if record.Stage.Type == "reseed" {
+			entries, err := loadReseedEntries(ctx, s.db, record.ID)
+			if err != nil {
+				return FestView{}, err
+			}
+			record.Stage.ReseedEntries = entries
+		} else {
+			matches, err := loadFestMatches(ctx, s.db, record.ID)
+			if err != nil {
+				return FestView{}, err
+			}
+			record.Stage.Matches = matches
 		}
-		record.Stage.Matches = matches
 		view.Stages = append(view.Stages, record.Stage)
 	}
 	return view, nil
+}
+
+func loadReseedEntries(ctx context.Context, q dbQueryer, stageID int64) ([]ReseedEntryView, error) {
+	rows, err := q.QueryContext(ctx, `
+select re.rank, re.team_id, coalesce(t.name, ''), re.metrics_json
+from reseed_entries re
+left join teams t on t.id = re.team_id
+where re.stage_id = ?
+order by re.rank`, stageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []ReseedEntryView
+	for rows.Next() {
+		var entry ReseedEntryView
+		var metricsJSON string
+		if err := rows.Scan(&entry.Rank, &entry.TeamID, &entry.Name, &metricsJSON); err != nil {
+			return nil, err
+		}
+		entry.Metrics = json.RawMessage(nonEmptyJSON(metricsJSON))
+		entries = append(entries, entry)
+	}
+	return entries, rows.Err()
+}
+
+func nonEmptyJSON(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "{}"
+	}
+	return value
 }
 
 func loadFestMatches(ctx context.Context, q dbQueryer, stageID int64) ([]FestMatchView, error) {

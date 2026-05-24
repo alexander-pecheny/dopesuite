@@ -32,6 +32,57 @@ function buildFestGrid(data, options = {}) {
   return root;
 }
 
+function buildReseedStagePanel(stage) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "results-wrapper reseed-results-wrapper";
+
+  const entries = Array.isArray(stage?.reseedEntries) ? stage.reseedEntries : [];
+  const sortRules = reseedSortRules(stage);
+  const hasSourceMatch = entries.some((entry) => entry.metrics?.match);
+  const metricColumns = sortRules.length > 0
+    ? sortRules.map((rule) => rule.metric).filter((metric, index, values) => metric && values.indexOf(metric) === index)
+    : fallbackReseedMetrics(entries);
+
+  const table = document.createElement("table");
+  table.className = "results-table reseed-results-table";
+  const thead = document.createElement("thead");
+  const header = document.createElement("tr");
+  header.appendChild(tableCell("th", "Место", "results-place-head"));
+  header.appendChild(tableCell("th", "Команда", "results-team-head reseed-team-head"));
+  if (hasSourceMatch) header.appendChild(tableCell("th", "Бой", "results-num reseed-source-head"));
+  metricColumns.forEach((metric) => {
+    header.appendChild(tableCell("th", reseedMetricHeader(metric, sortRules), "results-num reseed-metric-head"));
+  });
+  thead.appendChild(header);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  entries.forEach((entry, index) => {
+    const row = document.createElement("tr");
+    row.className = "results-row";
+    if (index === 0) row.classList.add("results-group-first");
+    if (index === entries.length - 1) row.classList.add("results-group-last");
+    row.appendChild(tableCell("td", entry.rank || index + 1, "results-place results-num"));
+    row.appendChild(reseedTeamCell(entry.name || ""));
+    if (hasSourceMatch) row.appendChild(tableCell("td", entry.metrics?.match || "", "results-num reseed-source"));
+    metricColumns.forEach((metric) => {
+      row.appendChild(tableCell("td", reseedMetricValue(entry.metrics?.[metric]), "results-num reseed-metric"));
+    });
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+
+  if (entries.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "Пересев пока не рассчитан.";
+    wrapper.appendChild(empty);
+  }
+
+  return wrapper;
+}
+
 function buildMatchesStage(stage, liveStage, options = {}) {
   const section = document.createElement("section");
   section.className = "grid-stage";
@@ -66,7 +117,7 @@ function buildMatchBox(match, liveMatch, options = {}) {
   box.className = `grid-match ${liveMatch?.status || "pending"}`;
   box.dataset.matchCode = match.code || "";
 
-  const venue = liveMatch?.venue || match.venue;
+  const venue = firstVenue(liveMatch?.venue, match.venue);
   const grid = document.createElement("div");
   grid.className = "grid-slot-grid";
   grid.appendChild(matchHeadCell(match, venue, options));
@@ -160,7 +211,7 @@ function repeatedVenueMatches(stage, liveStage, previousVenueByRow) {
   const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
   (stage.matches || []).forEach((match, index) => {
     const liveMatch = liveMatches.get(match.code);
-    const label = venueText(liveMatch?.venue || match.venue);
+    const label = venueText(firstVenue(liveMatch?.venue, match.venue));
     if (!label) return;
     if (previousVenueByRow.get(index) === label) {
       hidden.add(match.code);
@@ -177,6 +228,96 @@ function parseScheme(raw) {
   } catch (error) {
     return null;
   }
+}
+
+function reseedSortRules(stage) {
+  const config = parseObject(stage?.config) || parseObject(stage?.configJson);
+  return Array.isArray(config?.sort) ? config.sort.filter((rule) => rule?.metric) : [];
+}
+
+function parseObject(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  if (typeof value !== "string") return null;
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    return null;
+  }
+}
+
+function fallbackReseedMetrics(entries) {
+  const preferred = ["place_sum", "total", "plus", "correct_50", "correct_40", "correct_30", "correct_20", "draw"];
+  const present = new Set();
+  entries.forEach((entry) => {
+    Object.keys(entry.metrics || {}).forEach((metric) => {
+      if (metric !== "match") present.add(metric);
+    });
+  });
+  const ordered = preferred.filter((metric) => present.has(metric));
+  Array.from(present).sort().forEach((metric) => {
+    if (!ordered.includes(metric)) ordered.push(metric);
+  });
+  return ordered;
+}
+
+function reseedMetricHeader(metric, sortRules) {
+  const rule = sortRules.find((item) => item.metric === metric);
+  const direction = rule?.dir === "asc" ? "↑" : rule?.dir === "desc" ? "↓" : "";
+  return direction ? `${reseedMetricLabel(metric)} ${direction}` : reseedMetricLabel(metric);
+}
+
+function reseedMetricLabel(metric) {
+  const labels = {
+    place_sum: "Σ мест",
+    total: "Σ",
+    plus: "Σ+",
+    tiebreak: "П",
+    correct_50: "+50",
+    correct_40: "+40",
+    correct_30: "+30",
+    correct_20: "+20",
+    correct_10: "+10",
+    wrong_50: "−50",
+    wrong_40: "−40",
+    wrong_30: "−30",
+    wrong_20: "−20",
+    wrong_10: "−10",
+    draw: "Жребий",
+  };
+  return labels[metric] || metric;
+}
+
+function reseedMetricValue(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const number = Number(value);
+  if (Number.isFinite(number) && String(value).trim() !== "") return scoreText(number);
+  return String(value);
+}
+
+function reseedTeamCell(name) {
+  const cell = tableCell("td", "", "results-team reseed-team");
+  const wrap = document.createElement("span");
+  wrap.className = "results-team-name-wrap";
+  const label = document.createElement("span");
+  label.className = "results-team-name";
+  label.textContent = name;
+  label.tabIndex = 0;
+  label.setAttribute("aria-label", name);
+  wrap.appendChild(label);
+  cell.appendChild(wrap);
+  const popover = document.createElement("span");
+  popover.className = "results-team-name-popover";
+  popover.textContent = name;
+  cell.appendChild(popover);
+  return cell;
+}
+
+function tableCell(tagName, text, className) {
+  const node = document.createElement(tagName);
+  if (className) node.className = className;
+  node.textContent = text == null ? "" : String(text).replace(/^-/, "\u2212");
+  return node;
 }
 
 function preferredColumns(count) {
@@ -257,9 +398,29 @@ function reseedLabel(reseed) {
 }
 
 function venueText(venue) {
-  if (!venue) return "";
-  if (typeof venue === "number") return `пл. ${venue}`;
-  return venue.title ? `пл. ${venue.number} (${venue.title})` : `пл. ${venue.number}`;
+  const normalized = normalizeVenue(venue);
+  if (!normalized) return "";
+  return normalized.title ? `пл. ${normalized.number} (${normalized.title})` : `пл. ${normalized.number}`;
+}
+
+function firstVenue(...venues) {
+  for (const venue of venues) {
+    const normalized = normalizeVenue(venue);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+function normalizeVenue(venue) {
+  if (!venue) return null;
+  if (typeof venue === "number" || typeof venue === "string") {
+    const number = Number(venue);
+    return Number.isFinite(number) && number > 0 ? {number, title: ""} : null;
+  }
+  const number = Number(venue.number ?? venue.Number);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  const title = String(venue.title ?? venue.Title ?? "").trim();
+  return {number, title};
 }
 
 function stageClassSuffix(code) {
@@ -267,8 +428,9 @@ function stageClassSuffix(code) {
 }
 
 function scoreText(value) {
+  if (value === null || value === undefined || value === "") return "";
   const number = Number(value);
-  if (!Number.isFinite(number) || number === 0) return "";
+  if (!Number.isFinite(number)) return "";
   return String(value).replace(/^-/, "\u2212");
 }
 
