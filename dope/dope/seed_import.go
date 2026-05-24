@@ -441,6 +441,7 @@ order by ms.id`, gameID)
 		SourceRef string
 	}
 	var slots []slotRecord
+	touchedMatches := make(map[int64]struct{})
 	for rows.Next() {
 		var slot slotRecord
 		if err := rows.Scan(&slot.ID, &slot.MatchID, &slot.SourceRef); err != nil {
@@ -458,6 +459,7 @@ order by ms.id`, gameID)
 	for _, slot := range slots {
 		basket, number := seedRefKey(slot.SourceRef)
 		teamID := assignments[[2]int{basket, number}]
+		touchedMatches[slot.MatchID] = struct{}{}
 		if _, err := tx.ExecContext(ctx, `update match_slots set team_id = ? where id = ?`, nullableInt64(teamID), slot.ID); err != nil {
 			return err
 		}
@@ -467,7 +469,36 @@ order by ms.id`, gameID)
 			}
 		}
 	}
+	for matchID := range touchedMatches {
+		if err := pruneMatchStateToSlots(ctx, tx, matchID); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func pruneMatchStateToSlots(ctx context.Context, tx *sql.Tx, matchID int64) error {
+	if _, err := tx.ExecContext(ctx, `
+delete from match_results
+where match_id = ?
+  and not exists (
+    select 1
+    from match_slots ms
+    where ms.match_id = match_results.match_id
+      and ms.team_id = match_results.team_id
+  )`, matchID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `
+delete from themes
+where match_id = ?
+  and not exists (
+    select 1
+    from match_slots ms
+    where ms.match_id = themes.match_id
+      and ms.team_id = themes.team_id
+  )`, matchID)
+	return err
 }
 
 func ensureRegularThemes(ctx context.Context, tx *sql.Tx, matchID, teamID int64) error {

@@ -1429,6 +1429,11 @@ a.list-row:hover { background: #eef1f5; }
   display: block;
 }
 
+.floating-popovers-enabled .player-select-truncated:hover .player-select-popover,
+.floating-popovers-enabled .player-select-truncated:focus-within .player-select-popover {
+  display: none;
+}
+
 .player-cell select {
   appearance: none;
   -webkit-appearance: none;
@@ -1862,10 +1867,6 @@ a.list-row:hover { background: #eef1f5; }
   overflow: hidden;
 }
 
-.grid-match.finished {
-  border-color: rgba(47, 125, 87, 0.55);
-}
-
 .grid-match-title,
 .grid-match-venue {
   overflow: hidden;
@@ -2059,6 +2060,11 @@ a.list-row:hover { background: #eef1f5; }
 .grid-slot-team-truncated:hover .grid-slot-team-popover,
 .grid-slot-team-truncated:focus-within .grid-slot-team-popover {
   display: block;
+}
+
+.floating-popovers-enabled .grid-slot-team-truncated:hover .grid-slot-team-popover,
+.floating-popovers-enabled .grid-slot-team-truncated:focus-within .grid-slot-team-popover {
+  display: none;
 }
 
 .slot-total,
@@ -3452,6 +3458,17 @@ a.list-row:hover { background: #eef1f5; }
   min-width: 420px;
 }
 
+.reseed-results-wrapper {
+  align-items: flex-start;
+}
+
+.reseed-results-table {
+  --results-place-col: 72px;
+  --results-team-col: 320px;
+  width: max-content;
+  min-width: 720px;
+}
+
 .results-table th,
 .results-table td {
   padding: 8px 10px;
@@ -3497,7 +3514,9 @@ a.list-row:hover { background: #eef1f5; }
 .ksi-results-table thead th.results-team-head,
 .ksi-results-table .results-team,
 .venues-results-table thead th.results-team-head,
-.venues-results-table .results-team {
+.venues-results-table .results-team,
+.reseed-results-table thead th.results-team-head,
+.reseed-results-table .results-team {
   width: var(--results-team-col);
   min-width: var(--results-team-col);
   max-width: var(--results-team-col);
@@ -3660,6 +3679,13 @@ a.list-row:hover { background: #eef1f5; }
 .results-team-truncated:hover .results-team-name-popover,
 .results-team-truncated:focus-within .results-team-name-popover {
   display: block;
+}
+
+.floating-popovers-enabled .results-team-truncated:hover .results-team-name-popover,
+.floating-popovers-enabled .results-team-truncated:focus-within .results-team-name-popover,
+.ek-page .results-team-truncated:hover .results-team-name-popover,
+.ek-page .results-team-truncated:focus-within .results-team-name-popover {
+  display: none;
 }
 
 .results-num,
@@ -4022,6 +4048,43 @@ a.list-row:hover { background: #eef1f5; }
 .match-table .ek-team-cell.od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover {
   display: block;
 }
+.floating-popovers-enabled .match-table.od-detailed .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
+.floating-popovers-enabled .match-table.od-detailed .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
+.floating-popovers-enabled .match-table .ek-team-cell.od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
+.floating-popovers-enabled .match-table .ek-team-cell.od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
+.ek-page .match-table.od-detailed .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
+.ek-page .match-table.od-detailed .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
+.ek-page .match-table .ek-team-cell.od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
+.ek-page .match-table .ek-team-cell.od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover {
+  display: none;
+}
+
+.floating-name-popover {
+  position: fixed;
+  z-index: 2147483647;
+  display: none;
+  max-width: min(420px, calc(100vw - 16px));
+  padding: 5px 8px;
+  border: 1px solid var(--grid-dark);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--text);
+  box-shadow: 0 8px 20px rgba(32, 33, 36, 0.18);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.25;
+  white-space: normal;
+  pointer-events: none;
+}
+
+.floating-name-popover.visible {
+  display: block;
+}
+
+.floating-name-popover.above {
+  box-shadow: 0 -8px 20px rgba(32, 33, 36, 0.18);
+}
+
 .match-table.od-detailed .od-detailed-team-head {
   padding: 0;
   overflow: hidden;

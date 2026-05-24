@@ -39,6 +39,9 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 	if got := seedImportSlotNames(t, db, ekGameID); !sameStrings(got, []string{"B", "A", "C", "D"}) {
 		t.Fatalf("slot names = %#v, want first 4 seeds", got)
 	}
+	if got := seedImportRegularThemeCount(t, db, ekGameID); got != 4*themeCount {
+		t.Fatalf("regular themes = %d, want %d", got, 4*themeCount)
+	}
 
 	view, _, _, err = srv.setSeedImportDeclined(t.Context(), scope, seedDeclineRequest{
 		TeamID:   view.Rows[0].TeamID,
@@ -55,6 +58,12 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 	}
 	if got := seedImportSlotNames(t, db, ekGameID); !sameStrings(got, []string{"A", "C", "D", "E"}) {
 		t.Fatalf("slot names after decline = %#v, want waitlist team promoted", got)
+	}
+	if got := seedImportRegularThemeCount(t, db, ekGameID); got != 4*themeCount {
+		t.Fatalf("regular themes after decline = %d, want %d", got, 4*themeCount)
+	}
+	if got := seedImportExtraThemeCount(t, db, ekGameID); got != 0 {
+		t.Fatalf("extra themes after decline = %d, want 0", got)
 	}
 }
 
@@ -218,6 +227,38 @@ order by ms.slot_index`, gameID)
 		t.Fatalf("slot rows: %v", err)
 	}
 	return out
+}
+
+func seedImportRegularThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
+	t.Helper()
+	var count int
+	if err := db.QueryRowContext(context.Background(), `
+select count(*)
+from themes th
+join matches m on m.id = th.match_id
+where m.game_id = ? and m.code = 'A' and th.kind = 'regular'`, gameID).Scan(&count); err != nil {
+		t.Fatalf("count regular themes: %v", err)
+	}
+	return count
+}
+
+func seedImportExtraThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
+	t.Helper()
+	var count int
+	if err := db.QueryRowContext(context.Background(), `
+select count(*)
+from themes th
+join matches m on m.id = th.match_id
+where m.game_id = ? and m.code = 'A'
+  and not exists (
+    select 1
+    from match_slots ms
+    where ms.match_id = th.match_id
+      and ms.team_id = th.team_id
+  )`, gameID).Scan(&count); err != nil {
+		t.Fatalf("count extra themes: %v", err)
+	}
+	return count
 }
 
 func seedImportRowNames(view seedImportView) []string {

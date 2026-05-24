@@ -5,8 +5,8 @@ Usage:
     uv run python scripts/fill_data.py --db tournament.db --fest <slug> --game <od|ksi|ek> [--stage <code>]
 
 Per-cell randomization:
-  - od (chgk-style):    "right" or blank ("")     i.e. 1 or 0
-  - ksi / ek:           "right" or "wrong"        i.e. + or -
+  - od (chgk-style):    "right" or blank ("")        i.e. 1 or 0
+  - ksi / ek:           "right", "wrong", or blank   i.e. +, -, or no answer
 
 When --game ek, --stage is required so you can fill one stage at a time and
 verify propagation into later stages between runs.
@@ -39,7 +39,7 @@ def utc_now() -> str:
 def pick_mark(game_type: str) -> str:
     if game_type == "od":
         return "right" if random.random() < 0.5 else ""
-    return "right" if random.random() < 0.5 else "wrong"
+    return random.choice(("right", "wrong", ""))
 
 
 def metrics_json(correct, wrong) -> str:
@@ -48,6 +48,15 @@ def metrics_json(correct, wrong) -> str:
         metrics[f"correct_{value}"] = correct[i]
         metrics[f"wrong_{value}"] = wrong[i]
     return json.dumps(metrics)
+
+
+def empty_stats():
+    return {
+        "total": 0,
+        "plus": 0,
+        "correct": [0] * len(QUESTION_VALUES),
+        "wrong": [0] * len(QUESTION_VALUES),
+    }
 
 
 def bump_fest_revision(cur, fest_id, event_type, payload):
@@ -127,20 +136,46 @@ def fill_ksi_json_state(cur, fest_id, game_id):
 
 
 def fill_match(cur, match_id, game_type):
+    participant_ids = []
+    seen_participants = set()
+    for (team_id,) in cur.execute(
+        "select team_id from match_slots where match_id = ? and team_id is not null order by slot_index",
+        (match_id,),
+    ).fetchall():
+        if team_id not in seen_participants:
+            seen_participants.add(team_id)
+            participant_ids.append(team_id)
+
+    if participant_ids:
+        placeholders = ",".join("?" for _ in participant_ids)
+        scoped_ids = [match_id, *participant_ids]
+        cur.execute(
+            f"delete from match_results where match_id = ? and team_id not in ({placeholders})",
+            scoped_ids,
+        )
+        cur.execute(
+            f"delete from themes where match_id = ? and team_id not in ({placeholders})",
+            scoped_ids,
+        )
+
+    params = [match_id]
+    team_filter = ""
+    if participant_ids:
+        placeholders = ",".join("?" for _ in participant_ids)
+        team_filter = f" and team_id in ({placeholders})"
+        params.extend(participant_ids)
+
     rows = cur.execute(
         "select id, team_id from themes where match_id = ? and kind = 'regular' "
-        "order by team_id, theme_index",
-        (match_id,),
+        f"{team_filter} order by team_id, theme_index",
+        params,
     ).fetchall()
     if not rows:
         return {}
 
-    per_team = {}
+    per_team = {team_id: empty_stats() for team_id in participant_ids}
     for theme_id, team_id in rows:
-        stats = per_team.setdefault(team_id, {
-            "total": 0, "plus": 0,
-            "correct": [0] * 5, "wrong": [0] * 5,
-        })
+        stats = per_team.setdefault(team_id, empty_stats())
         for answer_index in range(5):
             mark = pick_mark(game_type)
             cur.execute(
@@ -159,8 +194,9 @@ def fill_match(cur, match_id, game_type):
 
     places = {}
     if game_type == "ek":
-        ordered = sorted(per_team.items(), key=lambda kv: (-kv[1]["total"], kv[0]))
-        places = {tid: float(rank + 1) for rank, (tid, _) in enumerate(ordered)}
+        ranking_ids = participant_ids or list(per_team)
+        ordered = sorted(ranking_ids, key=lambda tid: (-per_team[tid]["total"], tid))
+        places = {tid: float(rank + 1) for rank, tid in enumerate(ordered)}
 
     for team_id, stats in per_team.items():
         cur.execute(

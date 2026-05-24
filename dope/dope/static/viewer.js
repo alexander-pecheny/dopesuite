@@ -14,9 +14,40 @@ let stageStates = [];
 let reloadTimer = null;
 let readonlyTableIndex = null;
 let viewerTabsFadeFrame = 0;
+let readonlyNameOverflowFrame = 0;
+let floatingNamePopover = null;
+let activeFloatingPopover = null;
 
+const floatingPopoverSpecs = [
+  {
+    trigger: ".ek-team-cell.od-detailed-team-cell-truncated",
+    popover: ".od-detailed-team-name-popover",
+    anchor: ".od-detailed-team-name-wrap",
+  },
+  {
+    trigger: ".grid-slot-team-truncated",
+    popover: ".grid-slot-team-popover",
+    anchor: ".grid-slot-team-name",
+  },
+  {
+    trigger: ".results-team-truncated",
+    popover: ".results-team-name-popover",
+    anchor: ".results-team-name",
+  },
+];
+
+document.documentElement.classList.add("floating-popovers-enabled");
 document.body.classList.toggle("embedded-match", embedded);
-window.addEventListener("resize", () => scheduleViewerTabsFadeUpdate());
+document.addEventListener("pointerover", handleFloatingPopoverPointerOver);
+document.addEventListener("pointerout", handleFloatingPopoverPointerOut);
+document.addEventListener("focusin", handleFloatingPopoverFocusIn);
+document.addEventListener("focusout", handleFloatingPopoverFocusOut);
+window.addEventListener("scroll", positionActiveFloatingPopover, {capture: true, passive: true});
+window.addEventListener("resize", () => {
+  scheduleReadonlyNameOverflowUpdate();
+  positionActiveFloatingPopover();
+  scheduleViewerTabsFadeUpdate();
+});
 
 async function loadCurrent() {
   if (route.mode === "match") {
@@ -142,12 +173,15 @@ function renderFest() {
 function renderStage() {
   if (!fest) return;
   resetReadonlyTableIndex();
-  const stage = findStage(fest, route.stageCode);
+  const stage = mergedStage(fest, route.stageCode);
   setViewerMode("match");
   setHeading("ЭК");
   document.title = pageTitle();
   renderViewerTabs();
-  viewerRoot.replaceChildren(buildReadonlyStageTables());
+  viewerRoot.replaceChildren(stageType(stage) === "reseed"
+    ? buildReseedStagePanel(stage)
+    : buildReadonlyStageTables());
+  scheduleReadonlyNameOverflowUpdate();
 }
 
 function renderVenues() {
@@ -173,6 +207,7 @@ function render() {
   } else {
     viewerRoot.replaceChildren(table);
   }
+  scheduleReadonlyNameOverflowUpdate();
 }
 
 function applyUpdatedMatch(updated) {
@@ -195,6 +230,7 @@ function applyReadonlyStageMatchUpdate(updated) {
   const frame = viewerRoot.querySelector(`.stage-match-frame[data-match-code="${cssEscape(updated.code)}"]`);
   if (frame) {
     frame.replaceChildren(withMatchState(updated, () => buildReadonlyTable()));
+    scheduleReadonlyNameOverflowUpdate(frame);
   }
 }
 
@@ -449,7 +485,7 @@ function buildReadonlyTable() {
       themeCells.push(readonlyThemeCells(teamIndex, theme, themeIndex, true));
     });
     return {
-      nameCell: td(team.name, "sticky sticky-name team-name", {rowSpan: 2, dataset: {team: teamIndex}}),
+      nameCell: readonlyTeamNameCell(team, teamIndex),
       totalCell: td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2, dataset: {team: teamIndex}}),
       placeCell: td(formatPlace(team.place), "sticky sticky-place number place-cell", {rowSpan: 2, dataset: {team: teamIndex}}),
       themes: themeCells,
@@ -465,6 +501,166 @@ function buildReadonlyTable() {
     rows,
     gapRowClassName: "team-gap-row",
   });
+}
+
+function readonlyTeamNameCell(team, teamIndex) {
+  const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: 2, dataset: {team: teamIndex}});
+  const labelText = team.name || "";
+  const layout = document.createElement("span");
+  layout.className = "od-detailed-team-layout";
+  const nameWrap = document.createElement("span");
+  nameWrap.className = "od-detailed-team-name-wrap";
+  const label = document.createElement("span");
+  label.className = "readonly-team-name od-detailed-team-name";
+  label.textContent = labelText;
+  label.tabIndex = 0;
+  label.setAttribute("aria-label", labelText);
+  nameWrap.appendChild(label);
+  layout.appendChild(nameWrap);
+  cell.appendChild(layout);
+  const fullName = document.createElement("span");
+  fullName.className = "od-detailed-team-name-popover";
+  fullName.textContent = labelText;
+  cell.appendChild(fullName);
+  return cell;
+}
+
+function scheduleReadonlyNameOverflowUpdate(root = viewerRoot) {
+  if (readonlyNameOverflowFrame) cancelAnimationFrame(readonlyNameOverflowFrame);
+  readonlyNameOverflowFrame = requestAnimationFrame(() => {
+    readonlyNameOverflowFrame = 0;
+    updateReadonlyNameOverflow(root);
+  });
+}
+
+function updateReadonlyNameOverflow(root = viewerRoot) {
+  root.querySelectorAll(".ek-team-cell").forEach((cell) => {
+    const name = cell.querySelector(".od-detailed-team-name");
+    const wrap = cell.querySelector(".od-detailed-team-name-wrap");
+    const truncated = Boolean(name && wrap && (
+      name.scrollWidth > name.clientWidth + 1 ||
+      name.scrollHeight > wrap.clientHeight + 1
+    ));
+    cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
+  });
+  root.querySelectorAll(".results-team").forEach((cell) => {
+    const name = cell.querySelector(".results-team-name");
+    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    cell.classList.toggle("results-team-truncated", truncated);
+  });
+}
+
+function handleFloatingPopoverPointerOver(event) {
+  const trigger = floatingPopoverTrigger(event.target);
+  if (!trigger || activeFloatingPopover?.trigger === trigger) return;
+  showFloatingPopover(trigger);
+}
+
+function handleFloatingPopoverPointerOut(event) {
+  const trigger = activeFloatingPopover?.trigger;
+  if (!trigger || !(event.target instanceof Node) || !trigger.contains(event.target)) return;
+  if (event.relatedTarget instanceof Node && trigger.contains(event.relatedTarget)) return;
+  if (!trigger.matches(":focus-within")) hideFloatingPopover();
+}
+
+function handleFloatingPopoverFocusIn(event) {
+  const trigger = floatingPopoverTrigger(event.target);
+  if (trigger) showFloatingPopover(trigger);
+}
+
+function handleFloatingPopoverFocusOut(event) {
+  const trigger = activeFloatingPopover?.trigger;
+  if (!trigger || !(event.target instanceof Node) || !trigger.contains(event.target)) return;
+  window.setTimeout(() => {
+    if (!trigger.matches(":focus-within") && !trigger.matches(":hover")) hideFloatingPopover();
+  }, 0);
+}
+
+function floatingPopoverTrigger(target) {
+  if (!(target instanceof Element)) return null;
+  for (const spec of floatingPopoverSpecs) {
+    const trigger = target.closest(spec.trigger);
+    if (trigger && viewerRoot.contains(trigger)) return trigger;
+  }
+  return null;
+}
+
+function floatingPopoverSpec(trigger) {
+  return floatingPopoverSpecs.find((spec) => trigger.matches(spec.trigger)) || null;
+}
+
+function showFloatingPopover(trigger) {
+  const spec = floatingPopoverSpec(trigger);
+  const source = spec ? trigger.querySelector(spec.popover) : null;
+  const text = source?.textContent?.trim() || "";
+  if (!spec || !text) {
+    hideFloatingPopover();
+    return;
+  }
+  const popover = ensureFloatingNamePopover();
+  popover.textContent = text;
+  popover.classList.add("visible");
+  activeFloatingPopover = {trigger, spec};
+  positionActiveFloatingPopover();
+}
+
+function hideFloatingPopover() {
+  if (!floatingNamePopover) return;
+  floatingNamePopover.classList.remove("visible", "above");
+  floatingNamePopover.textContent = "";
+  floatingNamePopover.style.removeProperty("top");
+  floatingNamePopover.style.removeProperty("left");
+  floatingNamePopover.style.removeProperty("max-width");
+  activeFloatingPopover = null;
+}
+
+function ensureFloatingNamePopover() {
+  if (!floatingNamePopover) {
+    floatingNamePopover = document.createElement("div");
+    floatingNamePopover.className = "floating-name-popover";
+    document.body.appendChild(floatingNamePopover);
+  }
+  return floatingNamePopover;
+}
+
+function positionActiveFloatingPopover() {
+  if (!activeFloatingPopover || !floatingNamePopover) return;
+  const {trigger, spec} = activeFloatingPopover;
+  if (!document.body.contains(trigger) || !trigger.matches(spec.trigger)) {
+    hideFloatingPopover();
+    return;
+  }
+  const anchor = trigger.querySelector(spec.anchor) || trigger;
+  const rect = anchor.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0 || rect.bottom < 0 || rect.top > window.innerHeight) {
+    hideFloatingPopover();
+    return;
+  }
+
+  const margin = 8;
+  const popover = floatingNamePopover;
+  popover.style.maxWidth = `${Math.max(80, Math.min(420, window.innerWidth - margin * 2))}px`;
+  popover.style.visibility = "hidden";
+  popover.classList.add("visible");
+
+  const width = popover.offsetWidth;
+  const height = popover.offsetHeight;
+  const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+  const left = clampNumber(rect.left, margin, maxLeft);
+  const belowTop = rect.bottom - 2;
+  const aboveTop = rect.top - height + 2;
+  const shouldOpenUp = belowTop + height > window.innerHeight - margin && rect.top > window.innerHeight - rect.bottom;
+  const maxTop = Math.max(margin, window.innerHeight - height - margin);
+  const top = clampNumber(shouldOpenUp ? aboveTop : belowTop, margin, maxTop);
+
+  popover.classList.toggle("above", shouldOpenUp);
+  popover.style.left = `${Math.round(left)}px`;
+  popover.style.top = `${Math.round(top)}px`;
+  popover.style.visibility = "";
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function readonlyThemeHeaders() {
@@ -583,13 +779,28 @@ function currentRoute() {
 function viewerStages() {
   const scheme = parseScheme(fest?.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : fest?.stages || [];
-  return stages.filter((stage) => (stage.stage_type || stage.type) !== "reseed");
+  return stages;
 }
 
 function findStage(data, code) {
   const scheme = parseScheme(data.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : data.stages || [];
   return stages.find((stage) => stage.code === code);
+}
+
+function findLiveStage(data, code) {
+  return (data?.stages || []).find((stage) => stage.code === code);
+}
+
+function mergedStage(data, code) {
+  const schemeStage = findStage(data, code) || {};
+  const liveStage = findLiveStage(data, code) || {};
+  return {
+    ...schemeStage,
+    ...liveStage,
+    config: liveStage.config || schemeStage.config,
+    reseedEntries: liveStage.reseedEntries || schemeStage.reseedEntries || [],
+  };
 }
 
 function stageCodeForMatch(matchCode) {
@@ -601,6 +812,7 @@ function stageCodeForMatch(matchCode) {
 }
 
 function stageTabLabel(stage) {
+  if (stageType(stage) === "reseed") return "Пересев";
   switch (stage.code) {
   case "r16_run1":
     return "1/16-1";
@@ -619,8 +831,15 @@ function stageTabLabel(stage) {
   }
 }
 
+function stageType(stage) {
+  return stage?.stage_type || stage?.type || "";
+}
+
 function setHeading(text) {
-  if (pageHeading) pageHeading.textContent = text;
+  if (pageHeading) {
+    pageHeading.textContent = "";
+    pageHeading.hidden = true;
+  }
   renderGameBreadcrumbs();
 }
 
@@ -680,22 +899,46 @@ function matchTitleNode(matchState) {
   title.appendChild(battle);
 
   if (matchState?.venue) {
-    const venue = document.createElement("span");
-    venue.className = "readonly-battle-venue";
-    venue.textContent = `пл. ${matchState.venue.number}: ${matchState.venue.title}`;
-    title.appendChild(venue);
+    const venueLabel = formatBattleVenue(matchState.venue);
+    if (venueLabel) {
+      const venue = document.createElement("span");
+      venue.className = "readonly-battle-venue";
+      venue.textContent = venueLabel;
+      title.appendChild(venue);
+    }
   }
 
   return title;
 }
 
 function matchTitleFor(matchState) {
-  const venue = matchState?.venue ? ` · пл. ${matchState.venue.number}: ${matchState.venue.title}` : "";
+  const venueLabel = formatBattleVenue(matchState?.venue);
+  const venue = venueLabel ? ` · ${venueLabel}` : "";
   return `${matchState?.title || ""}${venue}`;
 }
 
 function formatVenue(venue) {
-  return venue ? `${venue.number}: ${venue.title}` : "";
+  const normalized = normalizeVenue(venue);
+  if (!normalized) return "";
+  return normalized.title ? `${normalized.number}: ${normalized.title}` : String(normalized.number);
+}
+
+function formatBattleVenue(venue) {
+  const normalized = normalizeVenue(venue);
+  if (!normalized) return "";
+  return normalized.title ? `пл. ${normalized.number}: ${normalized.title}` : `пл. ${normalized.number}`;
+}
+
+function normalizeVenue(venue) {
+  if (!venue) return null;
+  if (typeof venue === "number" || typeof venue === "string") {
+    const number = Number(venue);
+    return Number.isFinite(number) && number > 0 ? {number, title: ""} : null;
+  }
+  const number = Number(venue.number ?? venue.Number);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  const title = String(venue.title ?? venue.Title ?? "").trim();
+  return {number, title};
 }
 
 function statusLabel(status) {
