@@ -238,6 +238,12 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/host", http.StatusSeeOther)
 		return
 	}
+	// SameSite=Lax on the session cookie is the primary CSRF defense, but
+	// also reject cross-origin form submits explicitly so a single browser
+	// quirk cannot escalate into delete-fest / assign-host from another tab.
+	if !requireSameOriginUnsafe(w, r) {
+		return
+	}
 	user, ok := s.lookupSession(r)
 	if !ok {
 		http.Redirect(w, r, "/host", http.StatusSeeOther)

@@ -85,6 +85,9 @@ func (s *server) handleRegisterInviteSubmit(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !requireSameOriginUnsafe(w, r) {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
@@ -106,6 +109,9 @@ func (s *server) handleRegisterInviteSubmit(w http.ResponseWriter, r *http.Reque
 func (s *server) handleRegisterUsernameSubmit(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireSameOriginUnsafe(w, r) {
 		return
 	}
 	user, ok := s.lookupSession(r)

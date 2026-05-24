@@ -2911,7 +2911,7 @@ func nullableInt64(value int64) any {
 const (
 	inviteCodeBytes      = 12
 	telegramAuthBytes    = 12
-	telegramLoginCodeLen = 5
+	telegramLoginCodeLen = 8
 	sessionTokenBytes    = 32
 	telegramAuthLifetime = time.Minute
 	inviteLifetime       = 7 * 24 * time.Hour
