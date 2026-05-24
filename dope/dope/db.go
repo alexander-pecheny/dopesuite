@@ -257,20 +257,53 @@ type dbMatchState struct {
 	RosterSource string
 }
 
+// sqliteMaxOpenConns sizes the read connection pool. SQLite under WAL handles
+// many concurrent readers against a single writer; bumping this lets viewer
+// GETs and SSE bootstraps proceed in parallel with host edits.
+const sqliteMaxOpenConns = 8
+
+// buildSqliteDSN turns a bare file path into a URI that ships
+// per-connection pragmas with every new pool connection. journal_mode is
+// database-wide and only takes effect once, but resetting it on each
+// connection is harmless and lets a freshly-deleted/recreated DB land in WAL
+// without a separate Exec call.
+func buildSqliteDSN(path string) string {
+	pragmas := []string{
+		"_pragma=busy_timeout(5000)",
+		"_pragma=foreign_keys(1)",
+		"_pragma=journal_mode(WAL)",
+		"_pragma=synchronous(NORMAL)",
+		"_pragma=cache_size(-65536)",
+		"_pragma=temp_store(MEMORY)",
+	}
+	params := strings.Join(pragmas, "&")
+	if strings.HasPrefix(path, "file:") {
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		return path + sep + params
+	}
+	return "file:" + path + "?" + params
+}
+
 func openFestDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", buildSqliteDSN(path))
 	if err != nil {
 		return nil, err
 	}
+	// Migrations toggle PRAGMA foreign_keys and run multi-statement
+	// schema rewrites; those need to land on a single connection.
+	// We pin the pool to 1 connection while migrating, then open it up
+	// for runtime concurrency.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(`PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
 	if err := migrateDB(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
+	db.SetMaxOpenConns(sqliteMaxOpenConns)
+	db.SetMaxIdleConns(sqliteMaxOpenConns)
+	db.SetConnMaxIdleTime(30 * time.Minute)
 	return db, nil
 }
 

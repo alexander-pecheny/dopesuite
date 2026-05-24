@@ -637,6 +637,12 @@ update users set username = ?, updated_at = ? where id = ? and username is null`
 	writeJSONValue(w, meResponseFor(user))
 }
 
+// sessionRefreshInterval is the minimum gap between sessions.last_seen_at
+// writes for a given session. Most authenticated requests can be served from
+// a single SELECT — only every ~minute do we round-trip another write to
+// extend the sliding session lifetime.
+const sessionRefreshInterval = time.Minute
+
 func (s *server) lookupSession(r *http.Request) (sessionUser, bool) {
 	if s.db == nil {
 		return sessionUser{}, false
@@ -648,45 +654,58 @@ func (s *server) lookupSession(r *http.Request) (sessionUser, bool) {
 	hash := hashSessionToken(cookie.Value)
 
 	ctx := r.Context()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return sessionUser{}, false
-	}
-	defer tx.Rollback()
 
 	var (
-		sessionID int64
-		userID    int64
-		expiresAt string
+		sessionID  int64
+		userID     int64
+		expiresAt  string
+		lastSeenAt string
+		username   sql.NullString
+		tgUser     sql.NullString
+		isSystem   int
 	)
-	err = tx.QueryRowContext(ctx, `
-select id, user_id, expires_at from sessions where token_hash = ?`, hash).Scan(&sessionID, &userID, &expiresAt)
+	err = s.db.QueryRowContext(ctx, `
+select s.id, s.user_id, s.expires_at, s.last_seen_at,
+       u.username, u.telegram_username, u.is_system
+from sessions s
+join users u on u.id = s.user_id
+where s.token_hash = ?`, hash).Scan(&sessionID, &userID, &expiresAt, &lastSeenAt, &username, &tgUser, &isSystem)
 	if err != nil {
 		return sessionUser{}, false
 	}
 	now := time.Now().UTC()
 	expiry, _ := time.Parse(time.RFC3339, expiresAt)
 	if !expiry.IsZero() && now.After(expiry) {
-		_, _ = tx.ExecContext(ctx, `delete from sessions where id = ?`, sessionID)
-		_ = tx.Commit()
-		return sessionUser{}, false
-	}
-	newExpires := now.Add(sessionLifetime).Format(time.RFC3339)
-	if _, err := tx.ExecContext(ctx, `
-update sessions set last_seen_at = ?, expires_at = ? where id = ?`,
-		now.Format(time.RFC3339), newExpires, sessionID); err != nil {
+		_, _ = s.db.ExecContext(ctx, `delete from sessions where id = ?`, sessionID)
 		return sessionUser{}, false
 	}
 
-	user, err := loadUserTx(ctx, tx, userID)
-	if err != nil {
-		return sessionUser{}, false
+	// Only bump last_seen_at if it has drifted enough to be worth a write.
+	// Without this, every authenticated request triggers a BEGIN / UPDATE /
+	// COMMIT against the sessions table. The expiry-window check still
+	// guarantees the sliding session lifetime when something (admin tool,
+	// migration, test) shortens expires_at independently of last_seen_at.
+	lastSeen, _ := time.Parse(time.RFC3339, lastSeenAt)
+	needsRefresh := lastSeen.IsZero() || now.Sub(lastSeen) >= sessionRefreshInterval
+	if !needsRefresh && !expiry.IsZero() && expiry.Sub(now) < sessionLifetime-sessionRefreshInterval {
+		needsRefresh = true
 	}
-	user.SessionID = sessionID
-	if err := tx.Commit(); err != nil {
-		return sessionUser{}, false
+	if needsRefresh {
+		newExpires := now.Add(sessionLifetime).Format(time.RFC3339)
+		if _, err := s.db.ExecContext(ctx, `
+update sessions set last_seen_at = ?, expires_at = ? where id = ?`,
+			now.Format(time.RFC3339), newExpires, sessionID); err != nil {
+			return sessionUser{}, false
+		}
 	}
-	return user, true
+
+	return sessionUser{
+		UserID:    userID,
+		Username:  username,
+		Telegram:  tgUser,
+		IsSystem:  isSystem == 1,
+		SessionID: sessionID,
+	}, true
 }
 
 func loadUserTx(ctx context.Context, tx *sql.Tx, userID int64) (sessionUser, error) {

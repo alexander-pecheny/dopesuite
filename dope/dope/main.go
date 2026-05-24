@@ -1,11 +1,13 @@
 package main
 
 import (
+	"compress/gzip"
 	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -112,8 +114,11 @@ type server struct {
 	activeGameID    int64
 	activeMatchCode string
 	state           MatchState
-	subscribers     map[chan event]struct{}
-	hostSubscribers map[chan hostPresenceEvent]struct{}
+	// subMu guards the SSE subscriber maps independently of mu so that
+	// DB write transactions (which take mu) don't block event fan-out.
+	subMu           sync.RWMutex
+	subscribers     map[int64]map[chan event]struct{}
+	hostSubscribers map[int64]map[chan hostPresenceEvent]struct{}
 	assets          fs.FS
 	assetNoCache    bool
 	sendTelegram    telegramSender
@@ -178,7 +183,13 @@ func main() {
 		log.Fatalf("bind %s: %v", addr, err)
 	}
 	log.Printf("listening on http://localhost%s/host and http://localhost%s/", addr, addr)
-	log.Fatal(http.Serve(listener, mux))
+	httpSrv := &http.Server{
+		Handler:           gzipMiddleware(mux),
+		ReadHeaderTimeout: 5 * time.Second,
+		// No WriteTimeout: SSE responses are intentionally long-lived.
+		IdleTimeout: 120 * time.Second,
+	}
+	log.Fatal(httpSrv.Serve(listener))
 }
 
 func staticSource() (fs.FS, string) {
@@ -199,9 +210,167 @@ func staticFileServer(source fs.FS, noCache bool) http.Handler {
 			w.Header().Set("Cache-Control", "no-cache")
 		case strings.HasPrefix(r.URL.Path, "/static/fonts/"):
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		default:
+			// In embed mode the asset bytes are baked into the binary
+			// and only change when a new build is deployed. Letting
+			// browsers skip revalidation for a few minutes makes page
+			// loads dramatically cheaper at scale.
+			w.Header().Set("Cache-Control", "public, max-age=300")
 		}
 		handler.ServeHTTP(w, r)
 	})
+}
+
+// gzipPool recycles gzip.Writer instances. Each writer holds a ~64KB internal
+// buffer, so pooling cuts allocations sharply when hundreds of viewers fetch
+// JSON at once.
+var gzipPool = sync.Pool{
+	New: func() any {
+		// BestSpeed is the sweet spot for low-CPU VPS hosting: still ~3x
+		// shrink on JSON, a fraction of the CPU of DefaultCompression.
+		gz, _ := gzip.NewWriterLevel(io.Discard, gzip.BestSpeed)
+		return gz
+	},
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	gz           *gzip.Writer
+	headerSent   bool
+	bypass       bool // true means write straight through, never gzip
+	statusCached int
+}
+
+func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
+	return &gzipResponseWriter{ResponseWriter: w}
+}
+
+func (g *gzipResponseWriter) WriteHeader(status int) {
+	if g.headerSent {
+		return
+	}
+	g.headerSent = true
+	g.statusCached = status
+	h := g.Header()
+	if !shouldGzipResponse(status, h) {
+		g.bypass = true
+		g.ResponseWriter.WriteHeader(status)
+		return
+	}
+	h.Set("Content-Encoding", "gzip")
+	h.Add("Vary", "Accept-Encoding")
+	// Content-Length set by the inner handler is no longer accurate.
+	h.Del("Content-Length")
+	gz := gzipPool.Get().(*gzip.Writer)
+	gz.Reset(g.ResponseWriter)
+	g.gz = gz
+	g.ResponseWriter.WriteHeader(status)
+}
+
+func (g *gzipResponseWriter) Write(b []byte) (int, error) {
+	if !g.headerSent {
+		if g.Header().Get("Content-Type") == "" {
+			g.Header().Set("Content-Type", http.DetectContentType(b))
+		}
+		g.WriteHeader(http.StatusOK)
+	}
+	if g.bypass || g.gz == nil {
+		return g.ResponseWriter.Write(b)
+	}
+	return g.gz.Write(b)
+}
+
+func (g *gzipResponseWriter) Flush() {
+	if g.gz != nil {
+		_ = g.gz.Flush()
+	}
+	if f, ok := g.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (g *gzipResponseWriter) finish() {
+	if g.gz == nil {
+		return
+	}
+	_ = g.gz.Close()
+	g.gz.Reset(io.Discard)
+	gzipPool.Put(g.gz)
+	g.gz = nil
+}
+
+func gzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// SSE responses are flushed incrementally; gzip would buffer
+		// them and break the framing the client expects.
+		if r.URL.Path == "/events" || r.URL.Path == "/host-events" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !acceptsGzip(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		gw := newGzipResponseWriter(w)
+		defer gw.finish()
+		next.ServeHTTP(gw, r)
+	})
+}
+
+func acceptsGzip(r *http.Request) bool {
+	enc := r.Header.Get("Accept-Encoding")
+	if enc == "" {
+		return false
+	}
+	for _, v := range strings.Split(enc, ",") {
+		token := strings.TrimSpace(v)
+		if i := strings.IndexByte(token, ';'); i >= 0 {
+			token = token[:i]
+		}
+		if strings.EqualFold(token, "gzip") {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldGzipResponse(status int, h http.Header) bool {
+	if status < 200 || status == 204 || status == 304 {
+		return false
+	}
+	if h.Get("Content-Encoding") != "" {
+		return false
+	}
+	return isGzippableType(h.Get("Content-Type"))
+}
+
+func isGzippableType(ct string) bool {
+	if ct == "" {
+		// We don't know yet — let it through; http.DetectContentType will
+		// pick a text-ish type for most handler payloads.
+		return true
+	}
+	base := ct
+	if i := strings.IndexByte(ct, ';'); i >= 0 {
+		base = ct[:i]
+	}
+	base = strings.TrimSpace(strings.ToLower(base))
+	if base == "text/event-stream" {
+		return false
+	}
+	switch {
+	case strings.HasPrefix(base, "text/"):
+		return true
+	case base == "application/json":
+		return true
+	case base == "application/javascript":
+		return true
+	case base == "application/xml":
+		return true
+	case base == "image/svg+xml":
+		return true
+	}
+	return false
 }
 
 func newServer() (*server, error) {
@@ -226,8 +395,8 @@ func newServer() (*server, error) {
 		festID:          festID,
 		activeGameID:    gameID,
 		activeMatchCode: matchCode,
-		subscribers:     make(map[chan event]struct{}),
-		hostSubscribers: make(map[chan hostPresenceEvent]struct{}),
+		subscribers:     make(map[int64]map[chan event]struct{}),
+		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}, nil
 }
 
@@ -338,8 +507,8 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ch := make(chan event, 8)
-	s.addSubscriber(ch)
-	defer s.removeSubscriber(ch)
+	s.addSubscriber(festID, ch)
+	defer s.removeSubscriber(festID, ch)
 
 	fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
@@ -350,9 +519,6 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case ev := <-ch:
-			if ev.festID != festID {
-				continue
-			}
 			writeSSE(w, "state", ev.revision, ev.data)
 			flusher.Flush()
 		case <-ticker.C:
@@ -390,8 +556,8 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ch := make(chan hostPresenceEvent, 16)
-	s.addHostSubscriber(ch)
-	defer s.removeHostSubscriber(ch)
+	s.addHostSubscriber(festID, ch)
+	defer s.removeHostSubscriber(festID, ch)
 
 	fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
@@ -402,9 +568,6 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case ev := <-ch:
-			if ev.festID != festID {
-				continue
-			}
 			writeSSE(w, "presence", 0, ev.data)
 			flusher.Flush()
 		case <-ticker.C:
@@ -416,26 +579,51 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) addSubscriber(ch chan event) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.subscribers[ch] = struct{}{}
+func (s *server) addSubscriber(festID int64, ch chan event) {
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+	if s.subscribers == nil {
+		s.subscribers = make(map[int64]map[chan event]struct{})
+	}
+	bucket, ok := s.subscribers[festID]
+	if !ok {
+		bucket = make(map[chan event]struct{})
+		s.subscribers[festID] = bucket
+	}
+	bucket[ch] = struct{}{}
 }
 
-func (s *server) removeSubscriber(ch chan event) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.subscribers, ch)
+func (s *server) removeSubscriber(festID int64, ch chan event) {
+	s.subMu.Lock()
+	if bucket, ok := s.subscribers[festID]; ok {
+		delete(bucket, ch)
+		if len(bucket) == 0 {
+			delete(s.subscribers, festID)
+		}
+	}
+	s.subMu.Unlock()
 	close(ch)
 }
 
 func (s *server) broadcast(ev event) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for ch := range s.subscribers {
+	// Snapshot the channel list under the read lock so the slow send
+	// path runs without keeping other broadcasts or subscriber churn
+	// blocked.
+	var chs []chan event
+	s.subMu.RLock()
+	if bucket, ok := s.subscribers[ev.festID]; ok && len(bucket) > 0 {
+		chs = make([]chan event, 0, len(bucket))
+		for ch := range bucket {
+			chs = append(chs, ch)
+		}
+	}
+	s.subMu.RUnlock()
+	for _, ch := range chs {
 		select {
 		case ch <- ev:
 		default:
+			// Buffer is full; drop the oldest entry and try again so
+			// late subscribers always see the latest state.
 			select {
 			case <-ch:
 			default:
@@ -448,26 +636,43 @@ func (s *server) broadcast(ev event) {
 	}
 }
 
-func (s *server) addHostSubscriber(ch chan hostPresenceEvent) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *server) addHostSubscriber(festID int64, ch chan hostPresenceEvent) {
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
 	if s.hostSubscribers == nil {
-		s.hostSubscribers = make(map[chan hostPresenceEvent]struct{})
+		s.hostSubscribers = make(map[int64]map[chan hostPresenceEvent]struct{})
 	}
-	s.hostSubscribers[ch] = struct{}{}
+	bucket, ok := s.hostSubscribers[festID]
+	if !ok {
+		bucket = make(map[chan hostPresenceEvent]struct{})
+		s.hostSubscribers[festID] = bucket
+	}
+	bucket[ch] = struct{}{}
 }
 
-func (s *server) removeHostSubscriber(ch chan hostPresenceEvent) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.hostSubscribers, ch)
+func (s *server) removeHostSubscriber(festID int64, ch chan hostPresenceEvent) {
+	s.subMu.Lock()
+	if bucket, ok := s.hostSubscribers[festID]; ok {
+		delete(bucket, ch)
+		if len(bucket) == 0 {
+			delete(s.hostSubscribers, festID)
+		}
+	}
+	s.subMu.Unlock()
 	close(ch)
 }
 
 func (s *server) broadcastHostPresence(ev hostPresenceEvent) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for ch := range s.hostSubscribers {
+	var chs []chan hostPresenceEvent
+	s.subMu.RLock()
+	if bucket, ok := s.hostSubscribers[ev.festID]; ok && len(bucket) > 0 {
+		chs = make([]chan hostPresenceEvent, 0, len(bucket))
+		for ch := range bucket {
+			chs = append(chs, ch)
+		}
+	}
+	s.subMu.RUnlock()
+	for _, ch := range chs {
 		select {
 		case ch <- ev:
 		default:

@@ -290,7 +290,7 @@ func TestScopedGameStateRejectsRatingRosterEdits(t *testing.T) {
 	}
 	defer db.Close()
 	festID, chgkGameID, ksiGameID := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
 	organizerID, token := createAPITestSession(t, srv, "roster-editor")
 	addAPITestOrganizer(t, srv, festID, organizerID)
 
