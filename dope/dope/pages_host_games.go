@@ -38,6 +38,7 @@ var hostGameCreateTemplate = template.Must(template.New("hostGameCreate").Parse(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Fest.Title}} · новая игра</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">
@@ -119,6 +120,7 @@ var hostGameSettingsTemplate = template.Must(template.New("hostGameSettings").Pa
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Game.Title}} · {{.Fest.Title}}</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">

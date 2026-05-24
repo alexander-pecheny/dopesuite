@@ -193,11 +193,13 @@ func staticSource() (fs.FS, string) {
 
 func staticFileServer(source fs.FS, noCache bool) http.Handler {
 	handler := http.FileServer(http.FS(source))
-	if !noCache {
-		return handler
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-cache")
+		switch {
+		case noCache:
+			w.Header().Set("Cache-Control", "no-cache")
+		case strings.HasPrefix(r.URL.Path, "/static/fonts/"):
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
 		handler.ServeHTTP(w, r)
 	})
 }
