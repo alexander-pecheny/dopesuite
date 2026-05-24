@@ -20,6 +20,11 @@ let activeFloatingPopover = null;
 
 const floatingPopoverSpecs = [
   {
+    trigger: ".readonly-battle-head.readonly-battle-with-popover",
+    popover: ".readonly-battle-popover",
+    anchor: ".readonly-battle-title",
+  },
+  {
     trigger: ".ek-team-cell.od-detailed-team-cell-truncated",
     popover: ".od-detailed-team-name-popover",
     anchor: ".od-detailed-team-name-wrap",
@@ -174,7 +179,7 @@ function renderStage() {
   if (!fest) return;
   resetReadonlyTableIndex();
   const stage = mergedStage(fest, route.stageCode);
-  setViewerMode("match");
+  setViewerMode(stageType(stage) === "reseed" ? "grid" : "match");
   setHeading("ЭК");
   document.title = pageTitle();
   renderViewerTabs();
@@ -402,6 +407,7 @@ function renderViewerTabs() {
   if (!viewerTabsRoot || embedded || !fest) return;
   viewerTabsRoot.replaceChildren();
   const active = activeViewerTabKey();
+  let activeLink = null;
   for (const item of viewerTabItems()) {
     const link = document.createElement("a");
     link.className = "match-tab" + (item.key === active ? " active" : "");
@@ -409,9 +415,11 @@ function renderViewerTabs() {
     link.textContent = item.label;
     link.setAttribute("role", "tab");
     link.setAttribute("aria-selected", item.key === active ? "true" : "false");
+    if (item.key === active) activeLink = link;
     viewerTabsRoot.appendChild(link);
   }
   bindViewerTabsScrollFade();
+  scrollActiveViewerTabIntoView(activeLink);
 }
 
 function activeViewerTabKey() {
@@ -431,6 +439,26 @@ function bindViewerTabsScrollFade() {
     viewerTabsRoot.dataset.scrollFadeBound = "1";
   }
   scheduleViewerTabsFadeUpdate();
+}
+
+function scrollActiveViewerTabIntoView(activeLink) {
+  if (!viewerTabsRoot || !activeLink) return;
+  requestAnimationFrame(() => {
+    const margin = 8;
+    const currentLeft = viewerTabsRoot.scrollLeft;
+    const currentRight = currentLeft + viewerTabsRoot.clientWidth;
+    const activeLeft = activeLink.offsetLeft;
+    const activeRight = activeLeft + activeLink.offsetWidth;
+    const maxScroll = Math.max(0, viewerTabsRoot.scrollWidth - viewerTabsRoot.clientWidth);
+    let target = currentLeft;
+    if (activeLeft < currentLeft + margin) {
+      target = activeLeft - margin;
+    } else if (activeRight > currentRight - margin) {
+      target = activeRight - viewerTabsRoot.clientWidth + margin;
+    }
+    viewerTabsRoot.scrollLeft = clampNumber(target, 0, maxScroll);
+    scheduleViewerTabsFadeUpdate();
+  });
 }
 
 function scheduleViewerTabsFadeUpdate() {
@@ -495,7 +523,7 @@ function buildReadonlyTable() {
 
   return gameTable.buildTwoRowScoreTable({
     className: "match-table compact-score-table ek-stage-table readonly-table",
-    nameHeader: {content: matchTitleNode(state), className: "sticky sticky-name battle readonly-battle-head"},
+    nameHeader: {content: matchTitleNode(state), className: "sticky sticky-name battle readonly-battle-head readonly-battle-with-popover"},
     themes,
     afterThemeHeaders: readonlyTrailingHeaders(hasShootout),
     rows,
@@ -891,15 +919,20 @@ function notifyEmbeddedResize() {
 }
 
 function matchTitleNode(matchState) {
+  const fullLabel = matchTitleFor(matchState);
   const title = document.createElement("span");
   title.className = "readonly-battle-title";
+  title.tabIndex = 0;
+  title.setAttribute("aria-label", fullLabel);
+  title.title = fullLabel;
 
   const battle = document.createElement("span");
+  battle.className = "readonly-battle-name";
   battle.textContent = matchState?.title || "";
   title.appendChild(battle);
 
   if (matchState?.venue) {
-    const venueLabel = formatBattleVenue(matchState.venue);
+    const venueLabel = formatBattleVenueShort(matchState.venue);
     if (venueLabel) {
       const venue = document.createElement("span");
       venue.className = "readonly-battle-venue";
@@ -907,6 +940,11 @@ function matchTitleNode(matchState) {
       title.appendChild(venue);
     }
   }
+
+  const popover = document.createElement("span");
+  popover.className = "readonly-battle-popover";
+  popover.textContent = fullLabel;
+  title.appendChild(popover);
 
   return title;
 }
@@ -927,6 +965,11 @@ function formatBattleVenue(venue) {
   const normalized = normalizeVenue(venue);
   if (!normalized) return "";
   return normalized.title ? `пл. ${normalized.number}: ${normalized.title}` : `пл. ${normalized.number}`;
+}
+
+function formatBattleVenueShort(venue) {
+  const normalized = normalizeVenue(venue);
+  return normalized ? `пл. ${normalized.number}` : "";
 }
 
 function normalizeVenue(venue) {
