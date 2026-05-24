@@ -221,6 +221,25 @@ type dbQueryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
+// collectRows runs query against q and assembles a slice by calling scan on each row.
+// scan should populate one T from the current row via sql.Rows.Scan and any local conversions.
+func collectRows[T any](ctx context.Context, q dbQueryer, query string, args []any, scan func(*sql.Rows) (T, error)) ([]T, error) {
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []T
+	for rows.Next() {
+		item, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 type dbMatchState struct {
 	MatchID      int64
 	GameID       int64
@@ -1845,28 +1864,20 @@ order by position, id`, stageArgs...)
 }
 
 func loadReseedEntries(ctx context.Context, q dbQueryer, stageID int64) ([]ReseedEntryView, error) {
-	rows, err := q.QueryContext(ctx, `
+	return collectRows(ctx, q, `
 select re.rank, re.team_id, coalesce(t.name, ''), re.metrics_json
 from reseed_entries re
 left join teams t on t.id = re.team_id
 where re.stage_id = ?
-order by re.rank`, stageID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var entries []ReseedEntryView
-	for rows.Next() {
+order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error) {
 		var entry ReseedEntryView
 		var metricsJSON string
 		if err := rows.Scan(&entry.Rank, &entry.TeamID, &entry.Name, &metricsJSON); err != nil {
-			return nil, err
+			return entry, err
 		}
 		entry.Metrics = json.RawMessage(nonEmptyJSON(metricsJSON))
-		entries = append(entries, entry)
-	}
-	return entries, rows.Err()
+		return entry, nil
+	})
 }
 
 func nonEmptyJSON(value string) string {
@@ -1928,26 +1939,19 @@ order by m.position, m.id`, stageID)
 }
 
 func loadMatchSummaries(ctx context.Context, q dbQueryer, matchID int64) ([]MatchTeamSummary, error) {
-	rows, err := q.QueryContext(ctx, `
+	return collectRows(ctx, q, `
 select t.name, ms.source_type, ms.source_ref_json, coalesce(r.place, 0), coalesce(r.total, 0),
        coalesce(r.plus, 0), coalesce(r.tiebreak, 0)
 from match_slots ms
 left join teams t on t.id = ms.team_id
 left join match_results r on r.match_id = ms.match_id and r.team_id = ms.team_id
 where ms.match_id = ?
-order by ms.slot_index`, matchID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var teams []MatchTeamSummary
-	for rows.Next() {
+order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchTeamSummary, error) {
 		var team MatchTeamSummary
 		var name sql.NullString
 		var sourceRef string
 		if err := rows.Scan(&name, &team.SourceType, &sourceRef, &team.Place, &team.Total, &team.Plus, &team.Tiebreak); err != nil {
-			return nil, err
+			return team, err
 		}
 		team.Source = slotSourceLabel(team.SourceType, sourceRef)
 		if name.Valid && name.String != "" {
@@ -1955,9 +1959,8 @@ order by ms.slot_index`, matchID)
 		} else {
 			team.Name = team.Source
 		}
-		teams = append(teams, team)
-	}
-	return teams, rows.Err()
+		return team, nil
+	})
 }
 
 func (s *server) loadVenuesLocked(festID int64) ([]VenueView, error) {
@@ -1965,23 +1968,16 @@ func (s *server) loadVenuesLocked(festID int64) ([]VenueView, error) {
 }
 
 func loadVenues(ctx context.Context, q dbQueryer, festID int64) ([]VenueView, error) {
-	rows, err := q.QueryContext(ctx, `
+	return collectRows(ctx, q, `
 select number, title from venues
 where fest_id = ?
-order by number`, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var venues []VenueView
-	for rows.Next() {
+order by number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
 		var venue VenueView
 		if err := rows.Scan(&venue.Number, &venue.Title); err != nil {
-			return nil, err
+			return venue, err
 		}
-		venues = append(venues, venue)
-	}
-	return venues, rows.Err()
+		return venue, nil
+	})
 }
 
 func (s *server) loadMatchViewLocked(festID int64, code string) (MatchView, error) {

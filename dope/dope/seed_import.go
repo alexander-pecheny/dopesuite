@@ -424,37 +424,27 @@ values(?, 1, ?, ?, null)`, gameID, seedNumber, row.TeamID); err != nil {
 }
 
 func resolveSeedSlots(ctx context.Context, tx *sql.Tx, gameID int64, assignments map[[2]int]int64) error {
-	rows, err := tx.QueryContext(ctx, `
-select ms.id, ms.match_id, ms.source_ref_json
-from match_slots ms
-join matches m on m.id = ms.match_id
-where m.game_id = ? and ms.source_type = 'seed' and ms.locked = 0
-order by ms.id`, gameID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
 	type slotRecord struct {
 		ID        int64
 		MatchID   int64
 		SourceRef string
 	}
-	var slots []slotRecord
-	touchedMatches := make(map[int64]struct{})
-	for rows.Next() {
+	slots, err := collectRows(ctx, tx, `
+select ms.id, ms.match_id, ms.source_ref_json
+from match_slots ms
+join matches m on m.id = ms.match_id
+where m.game_id = ? and ms.source_type = 'seed' and ms.locked = 0
+order by ms.id`, []any{gameID}, func(rows *sql.Rows) (slotRecord, error) {
 		var slot slotRecord
 		if err := rows.Scan(&slot.ID, &slot.MatchID, &slot.SourceRef); err != nil {
-			return err
+			return slot, err
 		}
-		slots = append(slots, slot)
-	}
-	if err := rows.Err(); err != nil {
+		return slot, nil
+	})
+	if err != nil {
 		return err
 	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
+	touchedMatches := make(map[int64]struct{})
 
 	for _, slot := range slots {
 		basket, number := seedRefKey(slot.SourceRef)
@@ -718,25 +708,18 @@ order by position, id`, festID)
 }
 
 func loadSeedRosterPlayers(ctx context.Context, q dbQueryer, festTeamID int64) ([]seedRosterPlayer, error) {
-	rows, err := q.QueryContext(ctx, `
+	return collectRows(ctx, q, `
 select p.first_name, p.last_name
 from fest_team_players ftp
 join fest_players p on p.id = ftp.player_id
 where ftp.team_id = ?
-order by ftp.roster_order, p.id`, festTeamID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var players []seedRosterPlayer
-	for rows.Next() {
+order by ftp.roster_order, p.id`, []any{festTeamID}, func(rows *sql.Rows) (seedRosterPlayer, error) {
 		var player seedRosterPlayer
 		if err := rows.Scan(&player.FirstName, &player.LastName); err != nil {
-			return nil, err
+			return player, err
 		}
-		players = append(players, player)
-	}
-	return players, rows.Err()
+		return player, nil
+	})
 }
 
 func ensureSeedTeam(ctx context.Context, tx *sql.Tx, festID int64, name, city string, players []seedRosterPlayer) (int64, string, error) {

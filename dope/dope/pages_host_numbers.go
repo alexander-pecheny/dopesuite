@@ -468,24 +468,17 @@ func teamDisplayName(team festNumberingTeam) string {
 }
 
 func loadFestTeamsForNumbering(ctx context.Context, q dbQueryer, festID int64) ([]festNumberingTeam, error) {
-	rows, err := q.QueryContext(ctx, `
+	return collectRows(ctx, q, `
 select id, name, city, coalesce(number, 0)
 from fest_teams
 where fest_id = ? and deleted = 0
-order by position, id`, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []festNumberingTeam
-	for rows.Next() {
+order by position, id`, []any{festID}, func(rows *sql.Rows) (festNumberingTeam, error) {
 		var team festNumberingTeam
 		if err := rows.Scan(&team.ID, &team.Name, &team.City, &team.Number); err != nil {
-			return nil, err
+			return team, err
 		}
-		out = append(out, team)
-	}
-	return out, rows.Err()
+		return team, nil
+	})
 }
 
 func festTeamsAllNumbered(ctx context.Context, q dbQueryer, festID int64) (bool, int, error) {
