@@ -652,6 +652,8 @@ func topLevelCanonicalJSON(raw []byte, key string) ([]byte, bool, error) {
 	return canonical, true, nil
 }
 
+const maxPatchArrayIndex = 4096
+
 func parseJSONPatchPath(parts []json.RawMessage) ([]jsonPathSegment, error) {
 	if len(parts) == 0 {
 		return nil, errors.New("empty patch path")
@@ -674,6 +676,9 @@ func parseJSONPatchPath(parts []json.RawMessage) ([]jsonPathSegment, error) {
 		index64, err := strconv.ParseInt(number.String(), 10, 0)
 		if err != nil || index64 < 0 {
 			return nil, errors.New("patch path index must be a non-negative integer")
+		}
+		if index64 > maxPatchArrayIndex {
+			return nil, fmt.Errorf("patch path index exceeds limit (%d)", maxPatchArrayIndex)
 		}
 		path = append(path, jsonPathSegment{index: int(index64), isIndex: true})
 	}

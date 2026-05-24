@@ -913,6 +913,267 @@
     return {connect, disconnect, publish, publishCurrent, publishFromElement, refresh};
   }
 
+  function normalizeVenue(venue) {
+    if (!venue) return null;
+    if (typeof venue === "number" || typeof venue === "string") {
+      const number = Number(venue);
+      return Number.isFinite(number) && number > 0 ? {number, title: ""} : null;
+    }
+    const number = Number(venue.number ?? venue.Number);
+    if (!Number.isFinite(number) || number <= 0) return null;
+    const title = String(venue.title ?? venue.Title ?? "").trim();
+    return {number, title};
+  }
+
+  function formatVenue(venue) {
+    const normalized = normalizeVenue(venue);
+    if (!normalized) return "";
+    return normalized.title ? `${normalized.number}: ${normalized.title}` : String(normalized.number);
+  }
+
+  function formatBattleVenue(venue) {
+    const normalized = normalizeVenue(venue);
+    if (!normalized) return "";
+    return normalized.title ? `пл. ${normalized.number} (${normalized.title})` : `пл. ${normalized.number}`;
+  }
+
+  function formatBattleVenueShort(venue) {
+    const normalized = normalizeVenue(venue);
+    return normalized ? `пл. ${normalized.number}` : "";
+  }
+
+  function statusLabel(status) {
+    if (status === "finished") return "закончен";
+    if (status === "pending") return "ожидает";
+    return "активен";
+  }
+
+  function formatNumber(value) {
+    return Number.isFinite(Number(value)) ? formatDisplayText(value) : "";
+  }
+
+  function formatPlace(place) {
+    return place > 0 ? String(place) : "";
+  }
+
+  function stageType(stage) {
+    return stage?.stage_type || stage?.type || "";
+  }
+
+  function stageTabLabel(stage) {
+    if (stageType(stage) === "reseed") return "Пересев";
+    switch (stage.code) {
+    case "r16_run1":
+      return "1/16-1";
+    case "r16_run2":
+      return "1/16-2";
+    case "r8":
+      return "1/8";
+    case "r4":
+      return "1/4";
+    case "r2":
+      return "1/2";
+    case "final":
+      return "Финал";
+    default:
+      return stage.title || stage.code;
+    }
+  }
+
+  function teamListCell(teams) {
+    const cell = document.createElement("td");
+    cell.className = "teams-cell";
+    (teams || []).forEach((team) => {
+      const row = document.createElement("span");
+      row.textContent = team.name;
+      cell.appendChild(row);
+    });
+    return cell;
+  }
+
+  function buildVenuesTable(venues, options = {}) {
+    const editable = Boolean(options.editable);
+    const onTitleChange = typeof options.onTitleChange === "function" ? options.onTitleChange : null;
+    const wrapper = document.createElement("div");
+    wrapper.className = "results-wrapper venues-results-wrapper";
+
+    const table = document.createElement("table");
+    table.className = "results-table venues-results-table";
+    const thead = document.createElement("thead");
+    const header = document.createElement("tr");
+    header.appendChild(th("№", "results-place-head"));
+    header.appendChild(th("Название", "results-team-head venues-title-head"));
+    thead.appendChild(header);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    const list = venues || [];
+    list.forEach((venue, index) => {
+      const row = document.createElement("tr");
+      row.className = "results-row";
+      if (index === 0) row.classList.add("results-group-first");
+      if (index === list.length - 1) row.classList.add("results-group-last");
+      row.appendChild(td(venue.number, "results-place venues-number"));
+      const titleCell = document.createElement("td");
+      titleCell.className = "results-team venues-title-cell";
+      if (editable && onTitleChange) {
+        const input = document.createElement("input");
+        input.className = "venue-input";
+        input.value = venue.title;
+        input.dataset.committedTitle = venue.title;
+        input.addEventListener("change", () => {
+          const title = input.value.trim();
+          if (!title) {
+            input.value = input.dataset.committedTitle;
+            return;
+          }
+          if (title === input.dataset.committedTitle) return;
+          input.dataset.committedTitle = title;
+          onTitleChange(venue.number, title);
+        });
+        titleCell.appendChild(input);
+      } else {
+        titleCell.textContent = venue.title;
+      }
+      row.appendChild(titleCell);
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    return wrapper;
+  }
+
+  function createFloatingPopover(options) {
+    const root = options.root;
+    const specs = options.specs || [];
+    if (!root || specs.length === 0) {
+      return {bind: () => {}, hide: () => {}, position: () => {}};
+    }
+
+    let popoverNode = null;
+    let active = null;
+
+    function triggerFor(target) {
+      if (!(target instanceof Element)) return null;
+      for (const spec of specs) {
+        const trigger = target.closest(spec.trigger);
+        if (trigger && root.contains(trigger)) return trigger;
+      }
+      return null;
+    }
+
+    function specFor(trigger) {
+      return specs.find((spec) => trigger.matches(spec.trigger)) || null;
+    }
+
+    function ensureNode() {
+      if (!popoverNode) {
+        popoverNode = document.createElement("div");
+        popoverNode.className = "floating-name-popover";
+        document.body.appendChild(popoverNode);
+      }
+      return popoverNode;
+    }
+
+    function show(trigger) {
+      const spec = specFor(trigger);
+      const source = spec ? trigger.querySelector(spec.popover) : null;
+      const text = source?.textContent?.trim() || "";
+      if (!spec || !text) {
+        hide();
+        return;
+      }
+      const popover = ensureNode();
+      popover.textContent = text;
+      popover.classList.add("visible");
+      active = {trigger, spec};
+      position();
+    }
+
+    function hide() {
+      if (!popoverNode) return;
+      popoverNode.classList.remove("visible", "above");
+      popoverNode.textContent = "";
+      popoverNode.style.removeProperty("top");
+      popoverNode.style.removeProperty("left");
+      popoverNode.style.removeProperty("max-width");
+      active = null;
+    }
+
+    function position() {
+      if (!active || !popoverNode) return;
+      const {trigger, spec} = active;
+      if (!document.body.contains(trigger) || !trigger.matches(spec.trigger)) {
+        hide();
+        return;
+      }
+      const anchor = trigger.querySelector(spec.anchor) || trigger;
+      const rect = anchor.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0 || rect.bottom < 0 || rect.top > window.innerHeight) {
+        hide();
+        return;
+      }
+
+      const margin = 8;
+      const popover = popoverNode;
+      popover.style.maxWidth = `${Math.max(80, Math.min(420, window.innerWidth - margin * 2))}px`;
+      popover.style.visibility = "hidden";
+      popover.classList.add("visible");
+
+      const width = popover.offsetWidth;
+      const height = popover.offsetHeight;
+      const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+      const left = clamp(rect.left, margin, maxLeft);
+      const belowTop = rect.bottom - 2;
+      const aboveTop = rect.top - height + 2;
+      const shouldOpenUp = belowTop + height > window.innerHeight - margin && rect.top > window.innerHeight - rect.bottom;
+      const maxTop = Math.max(margin, window.innerHeight - height - margin);
+      const top = clamp(shouldOpenUp ? aboveTop : belowTop, margin, maxTop);
+
+      popover.classList.toggle("above", shouldOpenUp);
+      popover.style.left = `${Math.round(left)}px`;
+      popover.style.top = `${Math.round(top)}px`;
+      popover.style.visibility = "";
+    }
+
+    function onPointerOver(event) {
+      const trigger = triggerFor(event.target);
+      if (!trigger || active?.trigger === trigger) return;
+      show(trigger);
+    }
+
+    function onPointerOut(event) {
+      const trigger = active?.trigger;
+      if (!trigger || !(event.target instanceof Node) || !trigger.contains(event.target)) return;
+      if (event.relatedTarget instanceof Node && trigger.contains(event.relatedTarget)) return;
+      if (!trigger.matches(":focus-within")) hide();
+    }
+
+    function onFocusIn(event) {
+      const trigger = triggerFor(event.target);
+      if (trigger) show(trigger);
+    }
+
+    function onFocusOut(event) {
+      const trigger = active?.trigger;
+      if (!trigger || !(event.target instanceof Node) || !trigger.contains(event.target)) return;
+      window.setTimeout(() => {
+        if (!trigger.matches(":focus-within") && !trigger.matches(":hover")) hide();
+      }, 0);
+    }
+
+    function bind() {
+      document.documentElement.classList.add("floating-popovers-enabled");
+      document.addEventListener("pointerover", onPointerOver);
+      document.addEventListener("pointerout", onPointerOut);
+      document.addEventListener("focusin", onFocusIn);
+      document.addEventListener("focusout", onFocusOut);
+      window.addEventListener("scroll", position, {capture: true, passive: true});
+    }
+
+    return {bind, hide, position};
+  }
+
   window.DopeTable = {
     th,
     td,
@@ -934,5 +1195,17 @@
     parseScopedEvent,
     createStateSync,
     createHostPresence,
+    normalizeVenue,
+    formatVenue,
+    formatBattleVenue,
+    formatBattleVenueShort,
+    statusLabel,
+    formatNumber,
+    formatPlace,
+    stageType,
+    stageTabLabel,
+    teamListCell,
+    buildVenuesTable,
+    createFloatingPopover,
   };
 })();
