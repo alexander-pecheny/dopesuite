@@ -459,20 +459,29 @@ function scheduleReadonlyNameOverflowUpdate(root = viewerRoot) {
 }
 
 function updateReadonlyNameOverflow(root = viewerRoot) {
-  root.querySelectorAll(".ek-team-cell").forEach((cell) => {
+  const ekCells = root.querySelectorAll(".ek-team-cell");
+  const ekReadings = new Array(ekCells.length);
+  for (let i = 0; i < ekCells.length; i++) {
+    const cell = ekCells[i];
     const name = cell.querySelector(".od-detailed-team-name");
     const wrap = cell.querySelector(".od-detailed-team-name-wrap");
-    const truncated = Boolean(name && wrap && (
+    ekReadings[i] = Boolean(name && wrap && (
       name.scrollWidth > name.clientWidth + 1 ||
       name.scrollHeight > wrap.clientHeight + 1
     ));
-    cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
-  });
-  root.querySelectorAll(".results-team").forEach((cell) => {
-    const name = cell.querySelector(".results-team-name");
-    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-    cell.classList.toggle("results-team-truncated", truncated);
-  });
+  }
+  const resultsCells = root.querySelectorAll(".results-team");
+  const resultsReadings = new Array(resultsCells.length);
+  for (let i = 0; i < resultsCells.length; i++) {
+    const name = resultsCells[i].querySelector(".results-team-name");
+    resultsReadings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+  }
+  for (let i = 0; i < ekCells.length; i++) {
+    ekCells[i].classList.toggle("od-detailed-team-cell-truncated", ekReadings[i]);
+  }
+  for (let i = 0; i < resultsCells.length; i++) {
+    resultsCells[i].classList.toggle("results-team-truncated", resultsReadings[i]);
+  }
 }
 
 function readonlyThemeHeaders() {

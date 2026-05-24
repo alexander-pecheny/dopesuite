@@ -369,11 +369,15 @@ function scheduleFestGridNameOverflowUpdate(root) {
 }
 
 function updateFestGridNameOverflow(root) {
-  root.querySelectorAll(".grid-slot-team").forEach((cell) => {
-    const name = cell.querySelector(".grid-slot-team-name");
-    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-    cell.classList.toggle("grid-slot-team-truncated", truncated);
-  });
+  const cells = root.querySelectorAll(".grid-slot-team");
+  const readings = new Array(cells.length);
+  for (let i = 0; i < cells.length; i++) {
+    const name = cells[i].querySelector(".grid-slot-team-name");
+    readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+  }
+  for (let i = 0; i < cells.length; i++) {
+    cells[i].classList.toggle("grid-slot-team-truncated", readings[i]);
+  }
 }
 
 function slotLabel(slot, live = {}) {
