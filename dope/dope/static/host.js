@@ -6,6 +6,7 @@ const ekTabsRoot = document.getElementById("ekTabs");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
+const {formatVenue, formatBattleVenue, statusLabel, formatNumber, formatPlace, sameArray, clamp, cssEscape, th, td} = gameTable;
 const route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 let state = null;
@@ -33,8 +34,6 @@ let stageOverflowScrollFrame = null;
 let stageOverflowScrollListener = null;
 let playerSelectMeasureContext = null;
 let ekTabsFadeFrame = 0;
-let floatingNamePopover = null;
-let activeFloatingPopover = null;
 
 const floatingPopoverSpecs = [
   {
@@ -64,19 +63,15 @@ const floatingPopoverSpecs = [
   },
 ];
 
-document.documentElement.classList.add("floating-popovers-enabled");
 document.body.classList.toggle("embedded-match", embedded);
 document.addEventListener("keydown", handleGlobalKeydown);
-document.addEventListener("pointerover", handleFloatingPopoverPointerOver);
-document.addEventListener("pointerout", handleFloatingPopoverPointerOut);
-document.addEventListener("focusin", handleFloatingPopoverFocusIn);
-document.addEventListener("focusout", handleFloatingPopoverFocusOut);
-window.addEventListener("scroll", positionActiveFloatingPopover, {capture: true, passive: true});
+const floatingPopover = gameTable.createFloatingPopover({root: hostRoot, specs: floatingPopoverSpecs});
+floatingPopover.bind();
 window.addEventListener("resize", () => {
   if (route.mode === "grid") scheduleGridNameOverflowUpdate();
   if (route.mode === "match" || route.mode === "stage") scheduleEKTeamNameOverflowUpdate();
   if (route.mode === "seedImport") scheduleResultsTeamNameOverflowUpdate();
-  positionActiveFloatingPopover();
+  floatingPopover.position();
   scheduleEKTabsFadeUpdate();
 });
 
@@ -349,7 +344,7 @@ function renderVenues() {
   setViewerLink(`${route.viewerBase}/venues`, "Открыть площадки для зрителя");
   document.title = pageTitle("Площадки");
   renderEKTabs();
-  hostRoot.replaceChildren(buildVenuesTable(true));
+  hostRoot.replaceChildren(gameTable.buildVenuesTable(venues, {editable: true, onTitleChange: updateVenueTitle}));
   refreshPresence();
 }
 
@@ -400,125 +395,6 @@ function render() {
   focusActiveCell({preventScroll: true});
 }
 
-function buildFestTable(data) {
-  const table = document.createElement("table");
-  table.className = "fest-table";
-  const thead = document.createElement("thead");
-  const header = document.createElement("tr");
-  ["Этап", "Бой", "Площадка", "Команды", "Σ", "М", "Статус"].forEach((label) => {
-    header.appendChild(th(label, ""));
-  });
-  thead.appendChild(header);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  data.stages.forEach((stage) => {
-    if (!stage.matches || stage.matches.length === 0) {
-      const row = document.createElement("tr");
-      row.appendChild(td(stage.title, "stage-name"));
-      row.appendChild(td(stage.code, "code-cell"));
-      row.appendChild(td("", ""));
-      row.appendChild(td(stage.stage_type || stage.type || "reseed", "muted-cell", {colSpan: 4}));
-      tbody.appendChild(row);
-      return;
-    }
-    stage.matches.forEach((match, matchIndex) => {
-      const row = document.createElement("tr");
-      row.appendChild(td(matchIndex === 0 ? stage.title : "", "stage-name"));
-
-      const linkCell = document.createElement("td");
-      const link = document.createElement("a");
-      link.href = `${route.base}/matches/${encodeURIComponent(match.code)}`;
-      link.className = "match-link";
-      link.textContent = match.code;
-      linkCell.appendChild(link);
-      row.appendChild(linkCell);
-
-      row.appendChild(td(formatVenue(match.venue), "venue-cell"));
-      row.appendChild(teamListCell(match.teams));
-      row.appendChild(td(match.teams.map((team) => formatNumber(team.total)).join(" · "), "number-list"));
-      row.appendChild(td(match.teams.map((team) => formatPlace(team.place) || "—").join(" · "), "number-list"));
-      row.appendChild(td(statusLabel(match.status), `status-cell ${match.status}`));
-      tbody.appendChild(row);
-    });
-  });
-  table.appendChild(tbody);
-  return table;
-}
-
-function buildVenuesTable(editable) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "results-wrapper venues-results-wrapper";
-
-  const table = document.createElement("table");
-  table.className = "results-table venues-results-table";
-  const thead = document.createElement("thead");
-  const header = document.createElement("tr");
-  header.appendChild(th("№", "results-place-head"));
-  header.appendChild(th("Название", "results-team-head venues-title-head"));
-  thead.appendChild(header);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  venues.forEach((venue, index) => {
-    const row = document.createElement("tr");
-    row.className = "results-row";
-    if (index === 0) row.classList.add("results-group-first");
-    if (index === venues.length - 1) row.classList.add("results-group-last");
-    row.appendChild(td(venue.number, "results-place venues-number"));
-    const titleCell = document.createElement("td");
-    titleCell.className = "results-team venues-title-cell";
-    if (editable) {
-      const input = document.createElement("input");
-      input.className = "venue-input";
-      input.value = venue.title;
-      input.dataset.committedTitle = venue.title;
-      input.addEventListener("change", () => {
-        const title = input.value.trim();
-        if (!title) {
-          input.value = input.dataset.committedTitle;
-          return;
-        }
-        if (title === input.dataset.committedTitle) return;
-        input.dataset.committedTitle = title;
-        updateVenueTitle(venue.number, title);
-      });
-      titleCell.appendChild(input);
-    } else {
-      titleCell.textContent = venue.title;
-    }
-    row.appendChild(titleCell);
-    tbody.appendChild(row);
-  });
-  table.appendChild(tbody);
-  wrapper.appendChild(table);
-  return wrapper;
-}
-
-function teamListCell(teams) {
-  const cell = document.createElement("td");
-  cell.className = "teams-cell";
-  teams.forEach((team) => {
-    const row = document.createElement("span");
-    row.textContent = team.name;
-    cell.appendChild(row);
-  });
-  return cell;
-}
-
-function buildSubnav(items) {
-  const nav = document.createElement("nav");
-  nav.className = "subnav";
-  items.forEach((item) => {
-    const link = document.createElement("a");
-    link.className = "action-link";
-    link.href = item.href;
-    link.textContent = item.label;
-    nav.appendChild(link);
-  });
-  return nav;
-}
-
 function gameSubnavItems() {
   const items = [
     {href: route.base + "/", label: "Сетка", key: "grid"},
@@ -528,7 +404,7 @@ function gameSubnavItems() {
   ekSchemeStages().forEach((stage) => {
     items.push({
       href: `${route.base}/stage/${encodeURIComponent(stage.code)}`,
-      label: stageTabLabel(stage),
+      label: gameTable.stageTabLabel(stage),
       key: `stage:${stage.code}`,
     });
   });
@@ -599,26 +475,6 @@ function stageCodeForMatch(matchCode) {
 function ekSchemeStages() {
   const scheme = parseScheme(fest?.schemaJson);
   return scheme?.stages?.length ? scheme.stages : fest?.stages || [];
-}
-
-function stageTabLabel(stage) {
-  if (stageType(stage) === "reseed") return "Пересев";
-  switch (stage.code) {
-  case "r16_run1":
-    return "1/16-1";
-  case "r16_run2":
-    return "1/16-2";
-  case "r8":
-    return "1/8";
-  case "r4":
-    return "1/4";
-  case "r2":
-    return "1/2";
-  case "final":
-    return "Финал";
-  default:
-    return stage.title || stage.code;
-  }
 }
 
 function scheduleGridNameOverflowUpdate(root = hostRoot) {
@@ -736,115 +592,6 @@ function fitEKStageTeamName(cell, name) {
     }
   }
   cell.classList.add("od-detailed-team-cell-truncated");
-}
-
-function handleFloatingPopoverPointerOver(event) {
-  const trigger = floatingPopoverTrigger(event.target);
-  if (!trigger || activeFloatingPopover?.trigger === trigger) return;
-  showFloatingPopover(trigger);
-}
-
-function handleFloatingPopoverPointerOut(event) {
-  const trigger = activeFloatingPopover?.trigger;
-  if (!trigger || !(event.target instanceof Node) || !trigger.contains(event.target)) return;
-  if (event.relatedTarget instanceof Node && trigger.contains(event.relatedTarget)) return;
-  if (!trigger.matches(":focus-within")) hideFloatingPopover();
-}
-
-function handleFloatingPopoverFocusIn(event) {
-  const trigger = floatingPopoverTrigger(event.target);
-  if (trigger) showFloatingPopover(trigger);
-}
-
-function handleFloatingPopoverFocusOut(event) {
-  const trigger = activeFloatingPopover?.trigger;
-  if (!trigger || !(event.target instanceof Node) || !trigger.contains(event.target)) return;
-  window.setTimeout(() => {
-    if (!trigger.matches(":focus-within") && !trigger.matches(":hover")) hideFloatingPopover();
-  }, 0);
-}
-
-function floatingPopoverTrigger(target) {
-  if (!(target instanceof Element)) return null;
-  for (const spec of floatingPopoverSpecs) {
-    const trigger = target.closest(spec.trigger);
-    if (trigger && hostRoot.contains(trigger)) return trigger;
-  }
-  return null;
-}
-
-function floatingPopoverSpec(trigger) {
-  return floatingPopoverSpecs.find((spec) => trigger.matches(spec.trigger)) || null;
-}
-
-function showFloatingPopover(trigger) {
-  const spec = floatingPopoverSpec(trigger);
-  const source = spec ? trigger.querySelector(spec.popover) : null;
-  const text = source?.textContent?.trim() || "";
-  if (!spec || !text) {
-    hideFloatingPopover();
-    return;
-  }
-  const popover = ensureFloatingNamePopover();
-  popover.textContent = text;
-  popover.classList.add("visible");
-  activeFloatingPopover = {trigger, spec};
-  positionActiveFloatingPopover();
-}
-
-function hideFloatingPopover() {
-  if (!floatingNamePopover) return;
-  floatingNamePopover.classList.remove("visible", "above");
-  floatingNamePopover.textContent = "";
-  floatingNamePopover.style.removeProperty("top");
-  floatingNamePopover.style.removeProperty("left");
-  floatingNamePopover.style.removeProperty("max-width");
-  activeFloatingPopover = null;
-}
-
-function ensureFloatingNamePopover() {
-  if (!floatingNamePopover) {
-    floatingNamePopover = document.createElement("div");
-    floatingNamePopover.className = "floating-name-popover";
-    document.body.appendChild(floatingNamePopover);
-  }
-  return floatingNamePopover;
-}
-
-function positionActiveFloatingPopover() {
-  if (!activeFloatingPopover || !floatingNamePopover) return;
-  const {trigger, spec} = activeFloatingPopover;
-  if (!document.body.contains(trigger) || !trigger.matches(spec.trigger)) {
-    hideFloatingPopover();
-    return;
-  }
-  const anchor = trigger.querySelector(spec.anchor) || trigger;
-  const rect = anchor.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0 || rect.bottom < 0 || rect.top > window.innerHeight) {
-    hideFloatingPopover();
-    return;
-  }
-
-  const margin = 8;
-  const popover = floatingNamePopover;
-  popover.style.maxWidth = `${Math.max(80, Math.min(420, window.innerWidth - margin * 2))}px`;
-  popover.style.visibility = "hidden";
-  popover.classList.add("visible");
-
-  const width = popover.offsetWidth;
-  const height = popover.offsetHeight;
-  const maxLeft = Math.max(margin, window.innerWidth - width - margin);
-  const left = clamp(rect.left, margin, maxLeft);
-  const belowTop = rect.bottom - 2;
-  const aboveTop = rect.top - height + 2;
-  const shouldOpenUp = belowTop + height > window.innerHeight - margin && rect.top > window.innerHeight - rect.bottom;
-  const maxTop = Math.max(margin, window.innerHeight - height - margin);
-  const top = clamp(shouldOpenUp ? aboveTop : belowTop, margin, maxTop);
-
-  popover.classList.toggle("above", shouldOpenUp);
-  popover.style.left = `${Math.round(left)}px`;
-  popover.style.top = `${Math.round(top)}px`;
-  popover.style.visibility = "";
 }
 
 function scheduleResultsTeamNameOverflowUpdate(root = hostRoot) {
@@ -1900,9 +1647,7 @@ function mergedStage(data, code) {
   };
 }
 
-function stageType(stage) {
-  return stage?.stage_type || stage?.type || "";
-}
+const stageType = gameTable.stageType;
 
 function setHeading(text) {
   if (pageHeading) {
@@ -1972,70 +1717,12 @@ function matchTitle() {
   return `${state.title}${venue}`;
 }
 
-function formatBattleVenue(venue) {
-  const normalized = normalizeVenue(venue);
-  if (!normalized) return "";
-  return normalized.title ? `пл. ${normalized.number} (${normalized.title})` : `пл. ${normalized.number}`;
-}
-
-function formatVenue(venue) {
-  const normalized = normalizeVenue(venue);
-  if (!normalized) return "";
-  return normalized.title ? `${normalized.number}: ${normalized.title}` : String(normalized.number);
-}
-
-function normalizeVenue(venue) {
-  if (!venue) return null;
-  if (typeof venue === "number" || typeof venue === "string") {
-    const number = Number(venue);
-    return Number.isFinite(number) && number > 0 ? {number, title: ""} : null;
-  }
-  const number = Number(venue.number ?? venue.Number);
-  if (!Number.isFinite(number) || number <= 0) return null;
-  const title = String(venue.title ?? venue.Title ?? "").trim();
-  return {number, title};
-}
-
-function statusLabel(status) {
-  if (status === "finished") return "закончен";
-  if (status === "pending") return "ожидает";
-  return "активен";
-}
-
-function formatNumber(value) {
-  return Number.isFinite(Number(value)) ? gameTable.formatDisplayText(value) : "";
-}
-
-function sameArray(a, b) {
-  return gameTable.sameArray(a, b);
-}
-
-function clamp(value, min, max) {
-  return gameTable.clamp(value, min, max);
-}
-
-function cssEscape(value) {
-  return gameTable.cssEscape(value);
-}
-
 function parsePlace(value) {
   const normalized = value.trim().replace(",", ".");
   if (normalized === "") return 0;
   const place = Number(normalized);
   if (!Number.isFinite(place) || place < 0) return null;
   return place;
-}
-
-function formatPlace(place) {
-  return place > 0 ? String(place) : "";
-}
-
-function th(content, className) {
-  return gameTable.th(content, className);
-}
-
-function td(content, className, attrs = {}) {
-  return gameTable.td(content, className, attrs);
 }
 
 function connectPresence() {

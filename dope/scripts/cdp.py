@@ -128,9 +128,10 @@ def apply_device(c, profile):
         "screenHeight": height,
     }
     c.call("Emulation.setDeviceMetricsOverride", metrics)
+    touch_points = int(profile.get("maxTouchPoints", 0)) or 1
     c.call("Emulation.setTouchEmulationEnabled", {
         "enabled": mobile,
-        "maxTouchPoints": int(profile.get("maxTouchPoints", 0)),
+        "maxTouchPoints": touch_points,
     })
     if profile.get("userAgent"):
         c.call("Emulation.setUserAgentOverride", {
