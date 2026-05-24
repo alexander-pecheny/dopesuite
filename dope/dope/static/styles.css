@@ -1883,6 +1883,11 @@ a.list-row:hover { background: #eef1f5; }
   overflow: hidden;
 }
 
+body:not(.embedded-match) .grid-match {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
+}
+
 .grid-match-title,
 .grid-match-venue {
   overflow: hidden;

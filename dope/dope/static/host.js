@@ -486,11 +486,15 @@ function scheduleGridNameOverflowUpdate(root = hostRoot) {
 }
 
 function updateGridNameOverflow(root = hostRoot) {
-  root.querySelectorAll(".grid-slot-team").forEach((cell) => {
-    const name = cell.querySelector(".grid-slot-team-name");
-    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-    cell.classList.toggle("grid-slot-team-truncated", truncated);
-  });
+  const cells = root.querySelectorAll(".grid-slot-team");
+  const readings = new Array(cells.length);
+  for (let i = 0; i < cells.length; i++) {
+    const name = cells[i].querySelector(".grid-slot-team-name");
+    readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+  }
+  for (let i = 0; i < cells.length; i++) {
+    cells[i].classList.toggle("grid-slot-team-truncated", readings[i]);
+  }
 }
 
 function scheduleEKTeamNameOverflowUpdate(root = hostRoot) {
@@ -503,28 +507,45 @@ function scheduleEKTeamNameOverflowUpdate(root = hostRoot) {
 
 function updateEKTeamNameOverflow(root = hostRoot) {
   updatePlayerSelectOverflow(root);
-  root.querySelectorAll(".ek-team-cell").forEach((cell) => {
+  const cells = Array.from(root.querySelectorAll(".ek-team-cell"));
+  const stageCells = [];
+  const stageNames = [];
+  const detailedCells = [];
+  const detailedReadings = [];
+  for (const cell of cells) {
     const name = cell.querySelector(".od-detailed-team-name");
     if (cell.closest(".ek-stage-table")) {
       if (isVisibleInScrollFrame(cell)) {
-        fitEKStageTeamName(cell, name);
+        stageCells.push(cell);
+        stageNames.push(name);
       }
-      return;
+      continue;
     }
-    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-    cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
-  });
+    detailedCells.push(cell);
+    detailedReadings.push(Boolean(name && name.scrollWidth > name.clientWidth + 1));
+  }
+  for (let i = 0; i < detailedCells.length; i++) {
+    detailedCells[i].classList.toggle("od-detailed-team-cell-truncated", detailedReadings[i]);
+  }
+  for (let i = 0; i < stageCells.length; i++) {
+    fitEKStageTeamName(stageCells[i], stageNames[i]);
+  }
 }
 
 function updatePlayerSelectOverflow(root = hostRoot) {
-  root.querySelectorAll(".player-select-wrap").forEach((wrap) => {
-    if (wrap.closest(".ek-stage-table") && !isVisibleInScrollFrame(wrap)) return;
+  const wraps = root.querySelectorAll(".player-select-wrap");
+  const measurements = [];
+  for (const wrap of wraps) {
+    if (wrap.closest(".ek-stage-table") && !isVisibleInScrollFrame(wrap)) continue;
     const select = wrap.querySelector(".player-select");
     const popover = wrap.querySelector(".player-select-popover");
     const label = selectedPlayerLabel(select);
-    if (popover) popover.textContent = label;
-    wrap.classList.toggle("player-select-truncated", Boolean(label && playerSelectTextOverflows(select, label)));
-  });
+    measurements.push({wrap, popover, label, truncated: Boolean(label && playerSelectTextOverflows(select, label))});
+  }
+  for (const m of measurements) {
+    if (m.popover) m.popover.textContent = m.label;
+    m.wrap.classList.toggle("player-select-truncated", m.truncated);
+  }
 }
 
 function selectedPlayerLabel(select) {
@@ -574,24 +595,50 @@ function isVisibleInScrollFrame(element) {
 }
 
 function fitEKStageTeamName(cell, name) {
-  cell.classList.remove("od-detailed-team-cell-truncated");
-  if (!name) return;
-  const wrap = name.closest(".od-detailed-team-name-wrap");
-  if (!wrap) return;
-  name.style.fontSize = "";
-  const baseSize = parseFloat(getComputedStyle(name).fontSize) || 13;
-  const minSize = 9;
-  const fits = () => name.scrollHeight <= wrap.clientHeight + 1 && name.scrollWidth <= name.clientWidth;
-  if (fits()) {
+  if (!name) {
+    cell.classList.remove("od-detailed-team-cell-truncated");
     return;
   }
-  for (let size = Math.floor(baseSize) - 1; size >= minSize; size -= 1) {
-    name.style.fontSize = `${size}px`;
-    if (fits()) {
-      return;
+  const wrap = name.closest(".od-detailed-team-name-wrap");
+  if (!wrap) {
+    cell.classList.remove("od-detailed-team-cell-truncated");
+    return;
+  }
+  const label = name.textContent || "";
+  const style = getComputedStyle(name);
+  const baseSize = parseFloat(style.fontSize) || 13;
+  const minSize = 9;
+  const available = name.clientWidth;
+  const wrapHeight = wrap.clientHeight + 1;
+  const lineHeight = parseFloat(style.lineHeight) || baseSize * 1.2;
+  const maxLines = Math.max(1, Math.floor(wrapHeight / lineHeight));
+  const ctx = playerTextMeasureContext();
+  const fontSize = parseFloat(style.fontSize) || baseSize;
+  const fontPrefix = style.font
+    ? style.font.replace(`${fontSize}px`, "__SIZE__")
+    : `${style.fontStyle || ""} ${style.fontVariant || ""} ${style.fontWeight || ""} __SIZE__/${style.lineHeight || "normal"} ${style.fontFamily || "sans-serif"}`.trim();
+  const widthAt = (size) => {
+    ctx.font = fontPrefix.replace("__SIZE__", `${size}px`);
+    return ctx.measureText(label).width;
+  };
+  const fitsAt = (size) => {
+    if (available <= 0) return true;
+    const width = widthAt(size);
+    return width <= available * maxLines;
+  };
+  let target = "";
+  let truncated = false;
+  if (!fitsAt(baseSize)) {
+    let size = Math.floor(baseSize) - 1;
+    while (size >= minSize && !fitsAt(size)) size -= 1;
+    if (size >= minSize) target = `${size}px`;
+    else {
+      target = `${minSize}px`;
+      truncated = true;
     }
   }
-  cell.classList.add("od-detailed-team-cell-truncated");
+  if (name.style.fontSize !== target) name.style.fontSize = target;
+  cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
 }
 
 function scheduleResultsTeamNameOverflowUpdate(root = hostRoot) {
@@ -603,11 +650,15 @@ function scheduleResultsTeamNameOverflowUpdate(root = hostRoot) {
 }
 
 function updateResultsTeamNameOverflow(root = hostRoot) {
-  root.querySelectorAll(".results-team").forEach((cell) => {
-    const name = cell.querySelector(".results-team-name");
-    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-    cell.classList.toggle("results-team-truncated", truncated);
-  });
+  const cells = root.querySelectorAll(".results-team");
+  const readings = new Array(cells.length);
+  for (let i = 0; i < cells.length; i++) {
+    const name = cells[i].querySelector(".results-team-name");
+    readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+  }
+  for (let i = 0; i < cells.length; i++) {
+    cells[i].classList.toggle("results-team-truncated", readings[i]);
+  }
 }
 
 function buildSeedImportPanel() {

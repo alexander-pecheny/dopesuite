@@ -661,6 +661,8 @@
     let staleTimer = null;
     let lastCursor = null;
     let connected = false;
+    let refreshFrame = 0;
+    let stickyStyleCache = null;
 
     function connect() {
       if (connected || !options.eventsURL || !options.presenceURL) return;
@@ -678,9 +680,9 @@
       root.addEventListener("focusin", handleFocusOrClick, true);
       root.addEventListener("click", handleFocusOrClick, true);
       document.addEventListener("keydown", handleKeydown, true);
-      document.addEventListener("scroll", refresh, true);
-      window.addEventListener("scroll", refresh, {passive: true});
-      window.addEventListener("resize", refresh);
+      document.addEventListener("scroll", scheduleRefresh, {capture: true, passive: true});
+      window.addEventListener("scroll", scheduleRefresh, {passive: true});
+      window.addEventListener("resize", scheduleRefresh);
       window.addEventListener("beforeunload", sendInactive);
       heartbeatTimer = window.setInterval(() => {
         if (lastCursor) void postPresence(true, lastCursor);
@@ -848,9 +850,11 @@
       const frameRect = frame.getBoundingClientRect();
       let stickyRight = frameRect.left;
       let stickyBottom = frameRect.top;
-      for (const sticky of frame.querySelectorAll(".sticky, thead th")) {
+      const probes = stickyProbes(frame);
+      for (const probe of probes) {
+        const sticky = probe.node;
         if (sticky === target || sticky.contains(target) || target.contains(sticky)) continue;
-        const style = window.getComputedStyle(sticky);
+        const style = probe.style;
         if (style.position !== "sticky") continue;
         const stickyRect = sticky.getBoundingClientRect();
         if (stickyRect.width <= 0 || stickyRect.height <= 0) continue;
@@ -871,10 +875,43 @@
       return rect.left < stickyRight - 1 || rect.top < stickyBottom - 1;
     }
 
+    function scheduleRefresh() {
+      if (refreshFrame) return;
+      refreshFrame = requestAnimationFrame(() => {
+        refreshFrame = 0;
+        refresh();
+      });
+    }
+
     function refresh() {
-      for (const remote of remotes.values()) {
-        renderRemote(remote);
+      stickyStyleCache = new WeakMap();
+      try {
+        for (const remote of remotes.values()) {
+          renderRemote(remote);
+        }
+      } finally {
+        stickyStyleCache = null;
       }
+    }
+
+    function stickyProbes(frame) {
+      const nodes = frame.querySelectorAll(".sticky, thead th");
+      const out = [];
+      const cache = stickyStyleCache;
+      for (const node of nodes) {
+        let style;
+        if (cache) {
+          style = cache.get(node);
+          if (!style) {
+            style = window.getComputedStyle(node);
+            cache.set(node, style);
+          }
+        } else {
+          style = window.getComputedStyle(node);
+        }
+        out.push({node, style});
+      }
+      return out;
     }
 
     function pruneStale() {
@@ -898,19 +935,23 @@
       window.clearTimeout(publishTimer);
       window.clearInterval(heartbeatTimer);
       window.clearInterval(staleTimer);
+      if (refreshFrame) {
+        cancelAnimationFrame(refreshFrame);
+        refreshFrame = 0;
+      }
       source?.close();
       source = null;
       sendInactive();
       root.removeEventListener("focusin", handleFocusOrClick, true);
       root.removeEventListener("click", handleFocusOrClick, true);
       document.removeEventListener("keydown", handleKeydown, true);
-      document.removeEventListener("scroll", refresh, true);
-      window.removeEventListener("scroll", refresh);
-      window.removeEventListener("resize", refresh);
+      document.removeEventListener("scroll", scheduleRefresh, {capture: true});
+      window.removeEventListener("scroll", scheduleRefresh);
+      window.removeEventListener("resize", scheduleRefresh);
       for (const userID of Array.from(remotes.keys())) removeRemote(userID);
     }
 
-    return {connect, disconnect, publish, publishCurrent, publishFromElement, refresh};
+    return {connect, disconnect, publish, publishCurrent, publishFromElement, refresh: scheduleRefresh};
   }
 
   function normalizeVenue(venue) {
@@ -1162,13 +1203,22 @@
       }, 0);
     }
 
+    let positionFrame = 0;
+    function schedulePosition() {
+      if (positionFrame) return;
+      positionFrame = requestAnimationFrame(() => {
+        positionFrame = 0;
+        position();
+      });
+    }
+
     function bind() {
       document.documentElement.classList.add("floating-popovers-enabled");
       document.addEventListener("pointerover", onPointerOver);
       document.addEventListener("pointerout", onPointerOut);
       document.addEventListener("focusin", onFocusIn);
       document.addEventListener("focusout", onFocusOut);
-      window.addEventListener("scroll", position, {capture: true, passive: true});
+      window.addEventListener("scroll", schedulePosition, {capture: true, passive: true});
     }
 
     return {bind, hide, position};
@@ -1215,11 +1265,16 @@
 
   function createTeamNameOverflowController({root, detailed, results}) {
     function updateFor(targetRoot, cfg) {
-      targetRoot.querySelectorAll(cfg.cellSelector).forEach((cell) => {
+      const cells = targetRoot.querySelectorAll(cfg.cellSelector);
+      const readings = new Array(cells.length);
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
         const name = cell.querySelector(cfg.nameSelector);
-        const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-        cell.classList.toggle(cfg.truncatedClass, truncated);
-      });
+        readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+      }
+      for (let i = 0; i < cells.length; i++) {
+        cells[i].classList.toggle(cfg.truncatedClass, readings[i]);
+      }
     }
     function updateDetailed(targetRoot = root) {
       updateFor(targetRoot, detailed);
