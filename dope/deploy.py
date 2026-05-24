@@ -17,10 +17,22 @@ DIST_DIR = ROOT / "dist" / "deploy"
 
 DEFAULT_HOST = "vps2day-ee"
 DEFAULT_REMOTE_DIR = "/opt/dope"
-DEFAULT_SERVICE = "dope.service"
-DEFAULT_PACKAGE = "./dope"
-DEFAULT_BINARY = "dope-server"
 SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
+
+# Per-target defaults. Override any of these from the CLI when needed.
+TARGETS: dict[str, dict[str, str]] = {
+    "server": {
+        "service": "dope.service",
+        "package": "./dope",
+        "binary": "dope-server",
+    },
+    "bot": {
+        "service": "dope-bot.service",
+        "package": "./dope/cmd/telegram-bot",
+        "binary": "dope-bot",
+    },
+}
+DEFAULT_TARGET = "server"
 
 
 def command_text(args: list[str | Path]) -> str:
@@ -164,16 +176,30 @@ echo "Deployed $REMOTE_BIN and restarted $SERVICE"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--target",
+        default=os.environ.get("DOPE_DEPLOY_TARGET", DEFAULT_TARGET),
+        choices=sorted(TARGETS),
+        help="Which component to deploy. Sets package/binary/service presets.",
+    )
     parser.add_argument("--host", default=os.environ.get("DOPE_DEPLOY_HOST", DEFAULT_HOST))
     parser.add_argument("--remote-dir", default=os.environ.get("DOPE_DEPLOY_DIR", DEFAULT_REMOTE_DIR))
-    parser.add_argument("--service", default=os.environ.get("DOPE_DEPLOY_SERVICE", DEFAULT_SERVICE))
-    parser.add_argument("--package", default=os.environ.get("DOPE_DEPLOY_PACKAGE", DEFAULT_PACKAGE))
-    parser.add_argument("--binary", default=os.environ.get("DOPE_DEPLOY_BINARY", DEFAULT_BINARY))
+    parser.add_argument("--service", default=os.environ.get("DOPE_DEPLOY_SERVICE"))
+    parser.add_argument("--package", default=os.environ.get("DOPE_DEPLOY_PACKAGE"))
+    parser.add_argument("--binary", default=os.environ.get("DOPE_DEPLOY_BINARY"))
     parser.add_argument("--arch", default=os.environ.get("DOPE_DEPLOY_ARCH"), choices=["amd64", "arm64"])
     parser.add_argument("--skip-tests", action="store_true", help="Build without running go test ./...")
     parser.add_argument("--health-wait", type=int, default=2, help="Seconds to wait before checking systemd")
     parser.add_argument("--dry-run", action="store_true", help="Build only; do not upload or restart")
-    return parser.parse_args()
+    args = parser.parse_args()
+    preset = TARGETS[args.target]
+    if args.service is None:
+        args.service = preset["service"]
+    if args.package is None:
+        args.package = preset["package"]
+    if args.binary is None:
+        args.binary = preset["binary"]
+    return args
 
 
 def main() -> int:
@@ -181,7 +207,7 @@ def main() -> int:
     stamp = time.strftime("%Y%m%d-%H%M%S")
     goarch = args.arch or detect_goarch(args.host)
 
-    print(f"Deploy target: {args.host}:{args.remote_dir}/{args.binary} ({goarch})", flush=True)
+    print(f"Deploy target: {args.target} → {args.host}:{args.remote_dir}/{args.binary} ({goarch})", flush=True)
     binary = build_binary(args.package, args.binary, goarch, args.skip_tests)
 
     if args.dry_run:
