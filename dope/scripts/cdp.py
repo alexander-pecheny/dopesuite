@@ -13,6 +13,7 @@ Usage:
   cdp.py wait <css>
   cdp.py screenshot <out.png>
   cdp.py size <width> <height>
+  cdp.py device <iphone|android|desktop>
   cdp.py reset
 """
 import base64
@@ -29,6 +30,43 @@ print = functools.partial(print, flush=True)
 
 CDP_HOST = os.environ.get("CDP_HOST", "localhost:9222")
 TAB_FILE = "/tmp/cdp-tab.txt"
+DEVICE_FILE = "/tmp/cdp-device.json"
+
+DEVICE_PROFILES = {
+    "iphone": {
+        "width": 390,
+        "height": 844,
+        "deviceScaleFactor": 3,
+        "mobile": True,
+        "userAgent": (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 "
+            "Mobile/15E148 Safari/604.1"
+        ),
+        "platform": "iPhone",
+        "maxTouchPoints": 5,
+    },
+    "android": {
+        "width": 412,
+        "height": 915,
+        "deviceScaleFactor": 2.625,
+        "mobile": True,
+        "userAgent": (
+            "Mozilla/5.0 (Linux; Android 15; Pixel 8) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0.0.0 Mobile Safari/537.36"
+        ),
+        "platform": "Android",
+        "maxTouchPoints": 5,
+    },
+    "desktop": {
+        "width": 1280,
+        "height": 800,
+        "deviceScaleFactor": 1,
+        "mobile": False,
+        "maxTouchPoints": 0,
+    },
+}
 
 
 def http_get_json(path):
@@ -61,6 +99,44 @@ def ensure_tab():
         if existing:
             return existing
     return open_tab()
+
+
+def save_device(profile):
+    with open(DEVICE_FILE, "w") as fh:
+        json.dump(profile, fh)
+
+
+def load_device():
+    if not os.path.exists(DEVICE_FILE):
+        return None
+    with open(DEVICE_FILE) as fh:
+        return json.load(fh)
+
+
+def apply_device(c, profile):
+    if not profile:
+        return
+    width = int(profile["width"])
+    height = int(profile["height"])
+    mobile = bool(profile.get("mobile", False))
+    metrics = {
+        "width": width,
+        "height": height,
+        "deviceScaleFactor": float(profile.get("deviceScaleFactor", 1)),
+        "mobile": mobile,
+        "screenWidth": width,
+        "screenHeight": height,
+    }
+    c.call("Emulation.setDeviceMetricsOverride", metrics)
+    c.call("Emulation.setTouchEmulationEnabled", {
+        "enabled": mobile,
+        "maxTouchPoints": int(profile.get("maxTouchPoints", 0)),
+    })
+    if profile.get("userAgent"):
+        c.call("Emulation.setUserAgentOverride", {
+            "userAgent": profile["userAgent"],
+            "platform": profile.get("platform", ""),
+        })
 
 
 class Client:
@@ -110,12 +186,16 @@ def main():
             except Exception:
                 pass
             os.remove(TAB_FILE)
+        if os.path.exists(DEVICE_FILE):
+            os.remove(DEVICE_FILE)
         print("ok")
         return
 
     tab = ensure_tab()
     c = Client(tab["webSocketDebuggerUrl"])
     try:
+        if cmd != "device":
+            apply_device(c, load_device())
         if cmd == "navigate":
             c.call("Page.navigate", {"url": args[1]})
             c.wait_ready()
@@ -159,8 +239,25 @@ def main():
             print(args[1])
         elif cmd == "size":
             w, h = int(args[1]), int(args[2])
-            c.call("Emulation.setDeviceMetricsOverride", {"width": w, "height": h, "deviceScaleFactor": 2, "mobile": False})
+            profile = {
+                "width": w,
+                "height": h,
+                "deviceScaleFactor": 2,
+                "mobile": False,
+                "maxTouchPoints": 0,
+            }
+            save_device(profile)
+            apply_device(c, profile)
             print(f"{w}x{h}")
+        elif cmd == "device":
+            name = args[1] if len(args) > 1 else ""
+            profile = DEVICE_PROFILES.get(name)
+            if not profile:
+                print("known devices: " + ", ".join(sorted(DEVICE_PROFILES)), file=sys.stderr)
+                sys.exit(2)
+            save_device(profile)
+            apply_device(c, profile)
+            print(f"{name}:{profile['width']}x{profile['height']}@{profile['deviceScaleFactor']}")
         else:
             print(__doc__)
     finally:

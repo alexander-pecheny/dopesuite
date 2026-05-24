@@ -1,3 +1,19 @@
+@font-face {
+  font-family: "Noto Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/fonts/noto-sans-400.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Noto Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/fonts/noto-sans-700.ttf") format("truetype");
+}
+
 :root {
   --grid: #dfe3e8;
   --grid-dark: #c9ced6;
@@ -64,7 +80,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  font-family: "Noto Sans", Arial, sans-serif;
+  font-family: var(--font-sans);
   color: var(--text);
 }
 
@@ -4208,5 +4224,217 @@ a.list-row:hover { background: #eef1f5; }
     width: var(--results-total-col);
     min-width: var(--results-total-col);
     max-width: var(--results-total-col);
+  }
+}
+
+/* Public EK viewer tuning. */
+.readonly-battle-popover {
+  display: none;
+}
+
+.viewer-readonly .fight-frame {
+  box-shadow: inset -24px 0 18px -22px rgba(32, 33, 36, 0.45);
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table {
+  --question-size: 26px;
+  --team-col: 158px;
+  --total-col: 46px;
+  --place-col: 30px;
+  --place-gap: 8px;
+  --theme-score-col: 42px;
+  --theme-gap-col: 16px;
+  --narrow-col: 24px;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .sticky-name {
+  width: var(--team-col);
+  min-width: var(--team-col);
+  max-width: var(--team-col);
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .sticky-total {
+  left: var(--team-col);
+  width: var(--total-col);
+  min-width: var(--total-col);
+  max-width: var(--total-col);
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table thead .sticky-place,
+.viewer-readonly .match-table.ek-stage-table.readonly-table thead .sticky-place-gap {
+  position: static;
+  z-index: auto;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table tbody .sticky-place,
+.viewer-readonly .match-table.ek-stage-table.readonly-table tbody .sticky-place-gap {
+  position: static;
+  z-index: auto;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .sticky-place {
+  width: var(--place-col);
+  min-width: var(--place-col);
+  max-width: var(--place-col);
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .place-gap,
+.viewer-readonly .match-table.ek-stage-table.readonly-table .place-gap-head {
+  width: var(--place-gap);
+  min-width: var(--place-gap);
+  max-width: var(--place-gap);
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .theme-head,
+.viewer-readonly .match-table.ek-stage-table.readonly-table .theme-score {
+  width: var(--theme-score-col);
+  min-width: var(--theme-score-col);
+  max-width: var(--theme-score-col);
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .gap,
+.viewer-readonly .match-table.ek-stage-table.readonly-table .gap-head {
+  width: var(--theme-gap-col);
+  min-width: var(--theme-gap-col);
+  max-width: var(--theme-gap-col);
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .narrow {
+  width: var(--narrow-col);
+  min-width: var(--narrow-col);
+  max-width: var(--narrow-col);
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-head {
+  padding-right: 6px;
+  padding-left: 6px;
+  font-size: 12px;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-title:focus {
+  outline: 2px solid rgba(26, 115, 232, 0.45);
+  outline-offset: -2px;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-name {
+  flex: 0 0 auto;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-venue {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player {
+  overflow: hidden;
+  padding-right: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name-wrap {
+  align-items: center;
+  overflow: hidden;
+  padding-right: 7px;
+  padding-left: 7px;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name {
+  display: -webkit-box;
+  max-height: 2.3em;
+  overflow: hidden;
+  line-height: 1.15;
+  overflow-wrap: normal;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+@media (max-width: 760px) {
+  .ek-page .ek-host-top {
+    align-items: stretch;
+    height: 60px;
+    padding: 4px 10px;
+  }
+
+  .ek-page .viewer-header-main {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .ek-page .game-breadcrumbs {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    height: 16px;
+    font-size: 12px;
+  }
+
+  .ek-page .ek-tabs {
+    width: 100%;
+    flex: 0 0 auto;
+    padding: 0;
+  }
+
+  .ek-page .ek-tabs .match-tab {
+    height: 24px;
+    padding: 0 10px;
+    font-size: 13px;
+    line-height: 22px;
+  }
+
+  .ek-page .viewer-meta {
+    align-self: flex-start;
+    min-width: 16px;
+    height: 16px;
+    padding-top: 5px;
+  }
+
+  .ek-page .match-main {
+    height: calc(100vh - 60px);
+    height: calc(100dvh - 60px);
+    padding: 3px 4px 4px;
+  }
+
+  .viewer-readonly .match-table.ek-stage-table.readonly-table {
+    --question-size: 26px;
+    --team-col: 112px;
+    --total-col: 42px;
+    --place-col: 24px;
+    --place-gap: 4px;
+    --theme-score-col: 40px;
+    --theme-gap-col: 12px;
+    --narrow-col: 22px;
+    font-size: 12px;
+  }
+
+  .viewer-readonly .match-table.ek-stage-table.readonly-table .team-name {
+    font-size: 12px;
+  }
+
+  .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-battle-head {
+    font-size: 12px;
+  }
+
+  .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player {
+    font-size: 12px;
   }
 }
