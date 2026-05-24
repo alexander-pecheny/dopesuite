@@ -4354,7 +4354,7 @@ a.list-row:hover { background: #eef1f5; }
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name {
-  display: -webkit-box;
+  display: block;
   max-height: 2.3em;
   overflow: hidden;
   line-height: 1.15;
@@ -4362,8 +4362,17 @@ a.list-row:hover { background: #eef1f5; }
   text-overflow: clip;
   white-space: normal;
   word-break: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 34px;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--paper));
+  pointer-events: none;
 }
 
 @media (max-width: 760px) {
