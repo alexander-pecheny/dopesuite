@@ -301,6 +301,15 @@ where fest_id = ? and id = ? and game_type = 'ek'`, string(stateJSON), utcNow(),
 	if err := resolveSeedSlots(ctx, tx, scope.GameID, assignments); err != nil {
 		return seedImportView{}, 0, nil, err
 	}
+	hasRosterOverrides, err := gameHasPlayerOverridesTx(ctx, tx, scope.FestID, scope.GameID)
+	if err != nil {
+		return seedImportView{}, 0, nil, err
+	}
+	if hasRosterOverrides {
+		if err := materializeGameRosterOverridesTx(ctx, tx, scope.FestID, scope.GameID); err != nil {
+			return seedImportView{}, 0, nil, err
+		}
+	}
 	drawSize, err := maxSeedNumber(ctx, tx, scope.GameID)
 	if err != nil {
 		return seedImportView{}, 0, nil, err

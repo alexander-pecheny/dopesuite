@@ -371,6 +371,47 @@
     if (mark) node.classList.add(mark);
   }
 
+  function renderGameBreadcrumbs(root, options = {}) {
+    if (!root) return;
+    const festTitle = String(options.festTitle || "Фест").trim() || "Фест";
+    const gameTitle = String(options.gameTitle || "Игра").trim() || "Игра";
+    const currentTitle = String(options.currentTitle || "").trim();
+    root.replaceChildren();
+
+    const festLink = document.createElement("a");
+    festLink.className = "game-breadcrumbs-fest";
+    festLink.href = options.festHref || "/";
+    festLink.textContent = festTitle;
+    root.appendChild(festLink);
+
+    root.appendChild(breadcrumbSeparator());
+    if (options.gameHref && currentTitle && currentTitle !== gameTitle) {
+      const gameLink = document.createElement("a");
+      gameLink.className = "game-breadcrumbs-game";
+      gameLink.href = options.gameHref;
+      gameLink.textContent = gameTitle;
+      root.appendChild(gameLink);
+      root.appendChild(breadcrumbSeparator());
+      const current = document.createElement("span");
+      current.className = "game-breadcrumbs-current";
+      current.textContent = currentTitle;
+      root.appendChild(current);
+    } else {
+      const game = document.createElement("span");
+      game.className = "game-breadcrumbs-game";
+      game.textContent = currentTitle || gameTitle;
+      root.appendChild(game);
+    }
+  }
+
+  function breadcrumbSeparator() {
+    const sep = document.createElement("span");
+    sep.className = "game-breadcrumbs-sep";
+    sep.textContent = "/";
+    sep.setAttribute("aria-hidden", "true");
+    return sep;
+  }
+
   function parseScopedEvent(raw) {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.scope === "string" && Object.prototype.hasOwnProperty.call(parsed, "data")) {
@@ -889,6 +930,7 @@
     createScoreTableIndex,
     setNodeText,
     setMarkClass,
+    renderGameBreadcrumbs,
     parseScopedEvent,
     createStateSync,
     createHostPresence,

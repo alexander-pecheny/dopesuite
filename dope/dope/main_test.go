@@ -805,6 +805,168 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 	}
 }
 
+func TestImportFestRosterPreservesPlayerTeamOverrides(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, ksiGameID := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	roster := []festRosterImportTeam{
+		{
+			RatingID: 101,
+			Name:     "Первая",
+			City:     "Москва",
+			Players: []festRosterImportPlayer{
+				{RatingID: 1001, FirstName: "Анна", LastName: "Первая"},
+			},
+		},
+		{
+			RatingID: 102,
+			Name:     "Вторая",
+			City:     "Казань",
+			Players: []festRosterImportPlayer{
+				{RatingID: 1002, FirstName: "Борис", LastName: "Второй"},
+			},
+		},
+	}
+	if _, err := srv.importFestRoster(t.Context(), festID, 13533, roster); err != nil {
+		t.Fatalf("initial import roster: %v", err)
+	}
+
+	var playerID, overrideTeamID int64
+	if err := db.QueryRow(`select id from fest_players where fest_id = ? and rating_id = 1001`, festID).Scan(&playerID); err != nil {
+		t.Fatalf("load player: %v", err)
+	}
+	if err := db.QueryRow(`select id from fest_teams where fest_id = ? and rating_id = 102`, festID).Scan(&overrideTeamID); err != nil {
+		t.Fatalf("load override team: %v", err)
+	}
+	if _, _, err := srv.savePlayerTeamOverride(t.Context(), festID, playerID, overrideTeamID, []int64{ksiGameID}); err != nil {
+		t.Fatalf("save override: %v", err)
+	}
+
+	if _, err := srv.importFestRoster(t.Context(), festID, 13533, roster); err != nil {
+		t.Fatalf("second import roster: %v", err)
+	}
+
+	var count int
+	var restoredPlayerRating, restoredTargetRating int64
+	if err := db.QueryRow(`
+select count(*), coalesce(max(p.rating_id), 0), coalesce(max(target.rating_id), 0)
+from game_player_team_overrides o
+join fest_players p on p.id = o.player_id
+join fest_teams target on target.id = o.override_team_id
+where o.fest_id = ? and o.game_id = ?`, festID, ksiGameID).Scan(&count, &restoredPlayerRating, &restoredTargetRating); err != nil {
+		t.Fatalf("load restored override: %v", err)
+	}
+	if count != 1 || restoredPlayerRating != 1001 || restoredTargetRating != 102 {
+		t.Fatalf("restored override = count %d player %d target %d, want 1 / 1001 / 102", count, restoredPlayerRating, restoredTargetRating)
+	}
+}
+
+func TestHostPlayerOverrideRowsGroupGames(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, ksiGameID := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[chan event]struct{})}
+	roster := []festRosterImportTeam{
+		{
+			RatingID: 101,
+			Name:     "Команда добра и позитива",
+			City:     "Москва",
+			Players: []festRosterImportPlayer{
+				{RatingID: 1001, FirstName: "Василиса", LastName: "Павлейчук"},
+			},
+		},
+		{RatingID: 102, Name: "Bikes for Peace", City: "Москва"},
+	}
+	if _, err := srv.importFestRoster(t.Context(), festID, 13533, roster); err != nil {
+		t.Fatalf("import roster: %v", err)
+	}
+	if _, err := db.Exec(`update games set title = 'КСИ' where id = ?`, ksiGameID); err != nil {
+		t.Fatalf("rename ksi game: %v", err)
+	}
+	now := utcNow()
+	res, err := db.Exec(`
+insert into games(fest_id, code, title, game_type, position, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, 'ek', 'ЭК', 'ek', 3, '{}', '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
+		festID, now, now)
+	if err != nil {
+		t.Fatalf("insert ek game: %v", err)
+	}
+	ekGameID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("ek game id: %v", err)
+	}
+
+	var playerID, sourceTeamID, overrideTeamID int64
+	if err := db.QueryRow(`
+select p.id, tt.id
+from fest_team_players ftp
+join fest_players p on p.id = ftp.player_id
+join fest_teams tt on tt.id = ftp.team_id
+where p.fest_id = ? and p.rating_id = 1001`, festID).Scan(&playerID, &sourceTeamID); err != nil {
+		t.Fatalf("load player/source: %v", err)
+	}
+	if err := db.QueryRow(`select id from fest_teams where fest_id = ? and rating_id = 102`, festID).Scan(&overrideTeamID); err != nil {
+		t.Fatalf("load target: %v", err)
+	}
+	for _, gameID := range []int64{ksiGameID, ekGameID} {
+		if _, err := db.Exec(`
+insert into game_player_team_overrides(fest_id, game_id, player_id, source_team_id, override_team_id, created_at, updated_at)
+values(?, ?, ?, ?, ?, ?, ?)`,
+			festID, gameID, playerID, sourceTeamID, overrideTeamID, now, now); err != nil {
+			t.Fatalf("insert override for game %d: %v", gameID, err)
+		}
+	}
+
+	options, err := loadHostPlayerOverrideGameOptions(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("load game options: %v", err)
+	}
+	if len(options) != 2 || options[0].Label != "КСИ" || options[1].Label != "ЭК" {
+		t.Fatalf("game option labels = %#v, want КСИ/ЭК", options)
+	}
+	rows, err := loadHostPlayerOverrideRows(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("load override rows: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Player != "Василиса Павлейчук" || rows[0].SourceTeam != "Команда добра и позитива" || rows[0].OverrideTeam != "Bikes for Peace" || rows[0].Games != "КСИ, ЭК" {
+		t.Fatalf("override rows = %#v, want one grouped row", rows)
+	}
+	if !rows[0].HasGame(ksiGameID) || !rows[0].HasGame(ekGameID) {
+		t.Fatalf("row game ids = %#v, want both games", rows[0].GameIDs)
+	}
+
+	if _, _, err := srv.replacePlayerTeamOverride(t.Context(), festID, playerID, sourceTeamID, overrideTeamID, []int64{ekGameID}); err != nil {
+		t.Fatalf("replace override games: %v", err)
+	}
+	rows, err = loadHostPlayerOverrideRows(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("reload override rows: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Games != "ЭК" || rows[0].HasGame(ksiGameID) || !rows[0].HasGame(ekGameID) {
+		t.Fatalf("rows after replace = %#v, want only ЭК", rows)
+	}
+
+	if _, _, err := srv.replacePlayerTeamOverride(t.Context(), festID, playerID, sourceTeamID, overrideTeamID, nil); err != nil {
+		t.Fatalf("delete override games: %v", err)
+	}
+	rows, err = loadHostPlayerOverrideRows(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("reload deleted rows: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("rows after delete = %#v, want none", rows)
+	}
+}
+
 func TestFestNumbersFlow(t *testing.T) {
 	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {

@@ -214,6 +214,7 @@ type dbQueryer interface {
 
 type dbMatchState struct {
 	MatchID      int64
+	GameID       int64
 	Code         string
 	Title        string
 	Status       string
@@ -225,6 +226,7 @@ type dbMatchState struct {
 	Venue        *VenueView
 	State        MatchState
 	TeamIDs      []int64
+	RosterSource string
 }
 
 func openFestDB(path string) (*sql.DB, error) {
@@ -368,6 +370,17 @@ create table if not exists fest_team_players(
   player_id integer not null references fest_players(id) on delete cascade,
   roster_order integer not null,
   primary key(team_id, player_id)
+);
+
+create table if not exists game_player_team_overrides(
+  fest_id integer not null references fests(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
+  player_id integer not null references fest_players(id) on delete cascade,
+  source_team_id integer not null references fest_teams(id) on delete cascade,
+  override_team_id integer not null references fest_teams(id) on delete cascade,
+  created_at text not null,
+  updated_at text not null,
+  primary key(fest_id, game_id, player_id)
 );
 
 create table if not exists teams(
@@ -633,6 +646,22 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 		return err
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(10, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`
+create table if not exists game_player_team_overrides(
+  fest_id integer not null references fests(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
+  player_id integer not null references fest_players(id) on delete cascade,
+  source_team_id integer not null references fest_teams(id) on delete cascade,
+  override_team_id integer not null references fest_teams(id) on delete cascade,
+  created_at text not null,
+  updated_at text not null,
+  primary key(fest_id, game_id, player_id)
+);
+create index if not exists game_player_team_overrides_game_idx on game_player_team_overrides(game_id);
+insert or ignore into schema_versions(version, applied_at) values(11, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`); err != nil {
 		return err
 	}
 	return nil
@@ -1933,15 +1962,16 @@ func loadDBMatchStateWhere(ctx context.Context, q dbQueryer, where string, args 
 	var venueNumber sql.NullInt64
 	var venueTitle sql.NullString
 	if err := q.QueryRowContext(ctx, `
-select m.id, m.code, m.title, m.status, m.revision,
-       t.revision, t.updated_at, s.code, s.title, v.number, v.title
+select m.id, m.game_id, m.code, m.title, m.status, m.revision,
+       t.revision, t.updated_at, s.code, s.title, v.number, v.title, g.roster_source
 from matches m
 join fests t on t.id = m.fest_id
+join games g on g.id = m.game_id
 join stages s on s.id = m.stage_id
 left join venues v on v.id = m.venue_id
 where `+where, args...).
-		Scan(&match.MatchID, &match.Code, &match.Title, &match.Status, &match.Revision,
-			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle); err != nil {
+		Scan(&match.MatchID, &match.GameID, &match.Code, &match.Title, &match.Status, &match.Revision,
+			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle, &match.RosterSource); err != nil {
 		return dbMatchState{}, err
 	}
 	match.UpdatedAt = parseDBTime(updatedAt)
@@ -2013,7 +2043,7 @@ order by ms.slot_index`, match.MatchID)
 			}
 			continue
 		}
-		team, err := loadTeamState(ctx, q, match.MatchID, slot.TeamID.Int64, slot.Name, slot.Place)
+		team, err := loadTeamState(ctx, q, match.GameID, match.RosterSource, match.MatchID, slot.TeamID.Int64, slot.Name, slot.Place)
 		if err != nil {
 			return dbMatchState{}, err
 		}
@@ -2024,19 +2054,30 @@ order by ms.slot_index`, match.MatchID)
 	return match, nil
 }
 
-func loadTeamState(ctx context.Context, q dbQueryer, matchID, teamID int64, name string, place float64) (TeamState, error) {
+func loadTeamState(ctx context.Context, q dbQueryer, gameID int64, rosterSource string, matchID, teamID int64, name string, place float64) (TeamState, error) {
 	team := TeamState{
 		Name:   name,
 		Place:  place,
 		Themes: make([]ThemeEntry, themeCount),
 	}
 
-	rosterRows, err := q.QueryContext(ctx, `
+	rosterQuery := `
 select p.first_name, p.last_name
 from team_players tp
 join players p on p.id = tp.player_id
 where tp.team_id = ?
-order by tp.roster_order`, teamID)
+order by tp.roster_order`
+	rosterArgs := []any{teamID}
+	if rosterSource == "game" {
+		rosterQuery = `
+select p.first_name, p.last_name
+from game_team_players gtp
+join players p on p.id = gtp.player_id
+where gtp.game_id = ? and gtp.team_id = ?
+order by gtp.roster_order`
+		rosterArgs = []any{gameID, teamID}
+	}
+	rosterRows, err := q.QueryContext(ctx, rosterQuery, rosterArgs...)
 	if err != nil {
 		return TeamState{}, err
 	}
@@ -2306,7 +2347,7 @@ on conflict(match_id, team_id) do update set place = excluded.place`, match.Matc
 			player := strings.TrimSpace(*req.Player)
 			var playerID any
 			if player != "" {
-				id, err := lookupRosterPlayerID(ctx, tx, teamID, player)
+				id, err := lookupRosterPlayerID(ctx, tx, match.GameID, match.RosterSource, teamID, player)
 				if err != nil {
 					return err
 				}
@@ -2392,12 +2433,22 @@ where match_id = ? and team_id = ? and kind = ? and theme_index = ?`, matchID, t
 	return id, err
 }
 
-func lookupRosterPlayerID(ctx context.Context, q dbQueryer, teamID int64, player string) (int64, error) {
-	rows, err := q.QueryContext(ctx, `
+func lookupRosterPlayerID(ctx context.Context, q dbQueryer, gameID int64, rosterSource string, teamID int64, player string) (int64, error) {
+	rosterQuery := `
 select p.id, p.first_name, p.last_name
 from team_players tp
 join players p on p.id = tp.player_id
-where tp.team_id = ?`, teamID)
+where tp.team_id = ?`
+	rosterArgs := []any{teamID}
+	if rosterSource == "game" {
+		rosterQuery = `
+select p.id, p.first_name, p.last_name
+from game_team_players gtp
+join players p on p.id = gtp.player_id
+where gtp.game_id = ? and gtp.team_id = ?`
+		rosterArgs = []any{gameID, teamID}
+	}
+	rows, err := q.QueryContext(ctx, rosterQuery, rosterArgs...)
 	if err != nil {
 		return 0, err
 	}

@@ -2,6 +2,7 @@ const siRoot = document.getElementById("siTable");
 const siTabsRoot = document.getElementById("siTabs");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
+const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
 const QUESTION_VALUES = [10, 20, 30, 40, 50];
@@ -824,10 +825,10 @@ function handleKeydown(event) {
   } else if (key === "q" || key === "й" || key === "1") {
     event.preventDefault();
     setMark("right");
-  } else if (key === "w" || key === "ц" || key === "-") {
+  } else if (key === "w" || key === "ц" || key === "-" || key === "2") {
     event.preventDefault();
     setMark("wrong");
-  } else if (key === "backspace" || key === "delete") {
+  } else if (key === "backspace" || key === "delete" || event.key === " ") {
     event.preventDefault();
     setMark("");
   }
@@ -873,6 +874,16 @@ function setStatus(s) {
 
 function setHeading(text) {
   if (pageHeading) pageHeading.textContent = text;
+  renderGameBreadcrumbs(text);
+}
+
+function renderGameBreadcrumbs(gameTitle) {
+  if (!breadcrumbsNode || !route.festID) return;
+  gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
+    festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
+    festTitle: fest?.title || "Фест",
+    gameTitle: gameTitle || scheme?.title || gameTitleFallback(),
+  });
 }
 
 function connectEvents() {

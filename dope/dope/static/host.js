@@ -3,6 +3,7 @@ const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 const viewerLink = document.querySelector(".viewer-link");
 const ekTabsRoot = document.getElementById("ekTabs");
+const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
 const route = currentRoute();
@@ -1493,10 +1494,10 @@ function handleGlobalKeydown(event) {
     } else if (key === "q" || key === "й" || key === "1") {
       event.preventDefault();
       setActiveMark("right");
-    } else if (key === "w" || key === "ц" || key === "-") {
+    } else if (key === "w" || key === "ц" || key === "-" || key === "2") {
       event.preventDefault();
       setActiveMark("wrong");
-    } else if (key === "backspace" || key === "delete") {
+    } else if (key === "backspace" || key === "delete" || event.key === " ") {
       event.preventDefault();
       setActiveMark("");
     }
@@ -1733,6 +1734,28 @@ function findStage(data, code) {
 
 function setHeading(text) {
   if (pageHeading) pageHeading.textContent = text;
+  renderGameBreadcrumbs();
+}
+
+function renderGameBreadcrumbs() {
+  if (!breadcrumbsNode || !route.festID) return;
+  const gameTitle = currentGameTitle() || "ЭК";
+  gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
+    festHref: `/host/fest/${route.festID}`,
+    festTitle: fest?.title || "Фест",
+    gameHref: route.mode === "grid" ? "" : route.base + "/",
+    gameTitle,
+    currentTitle: breadcrumbCurrentTitle(gameTitle),
+  });
+}
+
+function breadcrumbCurrentTitle(gameTitle) {
+  if (route.mode === "grid") return "";
+  if (route.mode === "venues") return "Площадки";
+  if (route.mode === "seedImport") return "Импорт команд";
+  if (route.mode === "match") return state?.title || route.matchCode || "";
+  if (route.mode === "stage") return findStage(fest, route.stageCode)?.title || route.stageCode || "";
+  return gameTitle;
 }
 
 function setViewerLink(href, title) {
