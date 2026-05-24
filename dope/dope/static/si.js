@@ -5,6 +5,20 @@ const pageHeading = document.querySelector(".host-top h1");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
+const setStatus = gameTable.createStatusReporter(statusNode);
+const teamNameOverflow = gameTable.createTeamNameOverflowController({
+  root: siRoot,
+  detailed: {
+    cellSelector: ".ksi-detailed-team-cell",
+    nameSelector: ".od-detailed-team-name",
+    truncatedClass: "od-detailed-team-cell-truncated",
+  },
+  results: {
+    cellSelector: ".results-team",
+    nameSelector: ".results-team-name",
+    truncatedClass: "results-team-truncated",
+  },
+});
 const QUESTION_VALUES = [10, 20, 30, 40, 50];
 const RESULT_VALUES = QUESTION_VALUES.slice().reverse();
 const KSI_THEMES = 20;
@@ -14,7 +28,7 @@ const KSI_TABS = [
   {key: "results", label: "Итог"},
 ];
 
-const route = currentRoute();
+const route = gameTable.parseGameRoute();
 const viewer = Boolean(route.viewer);
 document.body.classList.toggle("viewer-readonly", viewer);
 let scheme = null;
@@ -34,7 +48,6 @@ let activePlayerRows = [];
 let stateSync = null;
 let presence = null;
 const tabScroll = new Map();
-let teamNameOverflowFrame = 0;
 
 function tabFromHash() {
   const key = (window.location.hash || "").replace(/^#/, "");
@@ -51,7 +64,7 @@ window.addEventListener("hashchange", () => {
 
 window.addEventListener("resize", () => {
   if (isTeamMode() && (renderedTab === "detailed" || renderedTab === "results")) {
-    scheduleTeamNameOverflowUpdate();
+    teamNameOverflow.schedule();
   }
   updateResultsScrollState();
 });
@@ -129,7 +142,7 @@ function render(options = {}) {
     renderedTab = activeTab;
     restoreTabScroll(activeTab);
     updateResultsScrollState();
-    if (activeTab === "detailed" || activeTab === "results") scheduleTeamNameOverflowUpdate();
+    if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule();
   } else {
     renderTabs();
     const frame = scrollFrame();
@@ -363,31 +376,6 @@ function updateResultsScrollState() {
   if (!frame) return;
   frame.classList.toggle("results-scroll-left", isTeamMode() && activeTab === "results" && frame.scrollLeft > 1);
   frame.classList.toggle("detailed-scroll-left", isTeamMode() && activeTab === "detailed" && frame.scrollLeft > 1);
-}
-
-function scheduleTeamNameOverflowUpdate(root = siRoot) {
-  if (teamNameOverflowFrame) cancelAnimationFrame(teamNameOverflowFrame);
-  teamNameOverflowFrame = requestAnimationFrame(() => {
-    teamNameOverflowFrame = 0;
-    updateDetailedTeamNameOverflow(root);
-    updateResultsTeamNameOverflow(root);
-  });
-}
-
-function updateDetailedTeamNameOverflow(root = siRoot) {
-  root.querySelectorAll(".ksi-detailed-team-cell").forEach((cell) => {
-    const name = cell.querySelector(".od-detailed-team-name");
-    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-    cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
-  });
-}
-
-function updateResultsTeamNameOverflow(root = siRoot) {
-  root.querySelectorAll(".results-team").forEach((cell) => {
-    const name = cell.querySelector(".results-team-name");
-    const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-    cell.classList.toggle("results-team-truncated", truncated);
-  });
 }
 
 function detailedPlayerOrder() {
@@ -865,13 +853,6 @@ function saveState(path, value) {
   syncState().save();
 }
 
-function setStatus(s) {
-  const labels = {saved: "Синхронизировано", saving: "Синхронизация", reconnecting: "Переподключение", error: "Ошибка"};
-  statusNode.dataset.state = s;
-  statusNode.setAttribute("aria-label", labels[s] || labels.saving);
-  statusNode.title = labels[s] || labels.saving;
-}
-
 function setHeading(text) {
   if (pageHeading) pageHeading.textContent = text;
   renderGameBreadcrumbs(text);
@@ -979,29 +960,6 @@ function applyRemoteState(nextState) {
   ensureState();
   if (canPatchState(previous, state) && patchTable(previous)) return;
   render({preserveScroll: true});
-}
-
-function currentRoute() {
-  const path = window.location.pathname;
-  const host = path.match(/^\/host\/fest\/([^/]+)\/game\/([^/]+)/);
-  if (host) {
-    return {
-      viewer: false,
-      festID: host[1],
-      gameID: host[2],
-      apiBase: `/api/fest/${host[1]}/games/${host[2]}`,
-    };
-  }
-  const pub = path.match(/^\/fest\/([^/]+)\/game\/([^/]+)/);
-  if (pub) {
-    return {
-      viewer: true,
-      festID: pub[1],
-      gameID: pub[2],
-      apiBase: `/api/fest/${pub[1]}/games/${pub[2]}`,
-    };
-  }
-  return {};
 }
 
 document.addEventListener("keydown", handleKeydown);

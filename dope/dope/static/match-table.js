@@ -1174,6 +1174,71 @@
     return {bind, hide, position};
   }
 
+  const SYNC_STATUS_LABELS = {
+    saved: "Синхронизировано",
+    saving: "Синхронизация",
+    reconnecting: "Переподключение",
+    error: "Ошибка",
+  };
+
+  function createStatusReporter(statusNode) {
+    if (!statusNode) return () => {};
+    return function setStatus(state) {
+      statusNode.dataset.state = state;
+      const label = SYNC_STATUS_LABELS[state] || SYNC_STATUS_LABELS.saving;
+      statusNode.setAttribute("aria-label", label);
+      statusNode.title = label;
+    };
+  }
+
+  function parseGameRoute(pathname = window.location.pathname) {
+    const host = pathname.match(/^\/host\/fest\/([^/]+)\/game\/([^/]+)/);
+    if (host) {
+      return {
+        viewer: false,
+        festID: host[1],
+        gameID: host[2],
+        apiBase: `/api/fest/${host[1]}/games/${host[2]}`,
+      };
+    }
+    const pub = pathname.match(/^\/fest\/([^/]+)\/game\/([^/]+)/);
+    if (pub) {
+      return {
+        viewer: true,
+        festID: pub[1],
+        gameID: pub[2],
+        apiBase: `/api/fest/${pub[1]}/games/${pub[2]}`,
+      };
+    }
+    return {};
+  }
+
+  function createTeamNameOverflowController({root, detailed, results}) {
+    function updateFor(targetRoot, cfg) {
+      targetRoot.querySelectorAll(cfg.cellSelector).forEach((cell) => {
+        const name = cell.querySelector(cfg.nameSelector);
+        const truncated = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+        cell.classList.toggle(cfg.truncatedClass, truncated);
+      });
+    }
+    function updateDetailed(targetRoot = root) {
+      updateFor(targetRoot, detailed);
+    }
+    function updateResults(targetRoot = root) {
+      updateFor(targetRoot, results);
+    }
+    let frame = 0;
+    function schedule(targetRoot = root) {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        updateDetailed(targetRoot);
+        updateResults(targetRoot);
+      });
+    }
+    return {schedule, updateDetailed, updateResults};
+  }
+
   window.DopeTable = {
     th,
     td,
@@ -1207,5 +1272,8 @@
     teamListCell,
     buildVenuesTable,
     createFloatingPopover,
+    createStatusReporter,
+    parseGameRoute,
+    createTeamNameOverflowController,
   };
 })();
