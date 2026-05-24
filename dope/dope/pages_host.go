@@ -44,6 +44,7 @@ var hostLoggedOutTemplate = template.Must(template.New("hostLogin").Parse(`<!doc
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Вход для организаторов · Фест</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">
@@ -66,6 +67,7 @@ var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!docty
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Мои фесты · {{.Username}}</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">
@@ -134,6 +136,7 @@ var profileTemplate = template.Must(template.New("profile").Parse(`<!doctype htm
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Профиль</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">

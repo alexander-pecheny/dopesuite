@@ -50,6 +50,7 @@ var hostFestTeamsTemplate = template.Must(template.New("hostTeams").Parse(`<!doc
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Fest.Title}} · команды</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">
@@ -82,6 +83,7 @@ var hostFestPlayersTemplate = template.Must(template.New("hostPlayers").Parse(`<
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Fest.Title}} · игроки</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">
@@ -271,6 +273,7 @@ var hostFestRatingImportTemplate = template.Must(template.New("hostRatingImport"
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Fest.Title}} · импорт участников</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">
@@ -304,6 +307,7 @@ var hostFestSchemeImportTemplate = template.Must(template.New("hostSchemeImport"
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Fest.Title}} · импорт схемы</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body class="public">
