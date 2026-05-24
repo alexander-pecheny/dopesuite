@@ -90,50 +90,37 @@ func (s *server) loadHostPlayerOverrideOptions(ctx context.Context, festID int64
 }
 
 func loadHostPlayerOverridePlayerOptions(ctx context.Context, q dbQueryer, festID int64) ([]hostPlayerOverrideOption, error) {
-	rows, err := q.QueryContext(ctx, `
+	return collectRows(ctx, q, `
 select p.id, coalesce(p.rating_id, 0), p.first_name, p.last_name, tt.name
 from fest_team_players ttp
 join fest_players p on p.id = ttp.player_id
 join fest_teams tt on tt.id = ttp.team_id
 where p.fest_id = ? and tt.fest_id = ? and tt.deleted = 0
-order by p.last_name, p.first_name, p.id`, festID, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []hostPlayerOverrideOption
-	for rows.Next() {
+order by p.last_name, p.first_name, p.id`, []any{festID, festID}, func(rows *sql.Rows) (hostPlayerOverrideOption, error) {
 		var id, ratingID int64
 		var firstName, lastName, teamName string
 		if err := rows.Scan(&id, &ratingID, &firstName, &lastName, &teamName); err != nil {
-			return nil, err
+			return hostPlayerOverrideOption{}, err
 		}
 		name := joinPlayerName(firstName, lastName)
 		label := fmt.Sprintf("%s - %s", name, teamName)
 		if ratingID > 0 {
 			label = fmt.Sprintf("%s - %s - rating %d", name, teamName, ratingID)
 		}
-		out = append(out, hostPlayerOverrideOption{ID: id, Label: label})
-	}
-	return out, rows.Err()
+		return hostPlayerOverrideOption{ID: id, Label: label}, nil
+	})
 }
 
 func loadHostPlayerOverrideTeamOptions(ctx context.Context, q dbQueryer, festID int64) ([]hostTeamOverrideOption, error) {
-	rows, err := q.QueryContext(ctx, `
+	return collectRows(ctx, q, `
 select id, coalesce(rating_id, 0), name, city
 from fest_teams
 where fest_id = ? and deleted = 0
-order by name, city, id`, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []hostTeamOverrideOption
-	for rows.Next() {
+order by name, city, id`, []any{festID}, func(rows *sql.Rows) (hostTeamOverrideOption, error) {
 		var id, ratingID int64
 		var name, city string
 		if err := rows.Scan(&id, &ratingID, &name, &city); err != nil {
-			return nil, err
+			return hostTeamOverrideOption{}, err
 		}
 		label := name
 		if city != "" {
@@ -142,32 +129,24 @@ order by name, city, id`, festID)
 		if ratingID > 0 {
 			label += fmt.Sprintf(" - rating %d", ratingID)
 		}
-		out = append(out, hostTeamOverrideOption{ID: id, Label: label})
-	}
-	return out, rows.Err()
+		return hostTeamOverrideOption{ID: id, Label: label}, nil
+	})
 }
 
 func loadHostPlayerOverrideGameOptions(ctx context.Context, q dbQueryer, festID int64) ([]hostGameOverrideOption, error) {
-	rows, err := q.QueryContext(ctx, `
+	return collectRows(ctx, q, `
 select id, title, game_type
 from games
 where fest_id = ? and game_type in ('ksi', 'ek')
-order by position, id`, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []hostGameOverrideOption
-	for rows.Next() {
+order by position, id`, []any{festID}, func(rows *sql.Rows) (hostGameOverrideOption, error) {
 		var row hostGameOverrideOption
 		var title, gameType string
 		if err := rows.Scan(&row.ID, &title, &gameType); err != nil {
-			return nil, err
+			return row, err
 		}
 		row.Label = overrideGameLabel(title, gameType)
-		out = append(out, row)
-	}
-	return out, rows.Err()
+		return row, nil
+	})
 }
 
 func loadHostPlayerOverrideRows(ctx context.Context, q dbQueryer, festID int64) ([]hostPlayerOverrideRow, error) {
@@ -568,27 +547,18 @@ order by player_id`, festID, gameID)
 }
 
 func loadBaseFestRosterForOverride(ctx context.Context, q dbQueryer, festID int64) ([]rosterOverrideTeam, error) {
-	rows, err := q.QueryContext(ctx, `
+	teams, err := collectRows(ctx, q, `
 select id, name, city
 from fest_teams
 where fest_id = ? and deleted = 0
-order by position, id`, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var teams []rosterOverrideTeam
-	for rows.Next() {
+order by position, id`, []any{festID}, func(rows *sql.Rows) (rosterOverrideTeam, error) {
 		var team rosterOverrideTeam
 		if err := rows.Scan(&team.FestTeamID, &team.Name, &team.City); err != nil {
-			return nil, err
+			return team, err
 		}
-		teams = append(teams, team)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if err := rows.Close(); err != nil {
+		return team, nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	for i := range teams {
@@ -602,25 +572,18 @@ order by position, id`, festID)
 }
 
 func loadFestRosterOverridePlayers(ctx context.Context, q dbQueryer, festTeamID int64) ([]rosterOverridePlayer, error) {
-	rows, err := q.QueryContext(ctx, `
+	return collectRows(ctx, q, `
 select p.id, p.first_name, p.last_name
 from fest_team_players ftp
 join fest_players p on p.id = ftp.player_id
 where ftp.team_id = ?
-order by ftp.roster_order, p.id`, festTeamID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var players []rosterOverridePlayer
-	for rows.Next() {
+order by ftp.roster_order, p.id`, []any{festTeamID}, func(rows *sql.Rows) (rosterOverridePlayer, error) {
 		var player rosterOverridePlayer
 		if err := rows.Scan(&player.FestPlayerID, &player.FirstName, &player.LastName); err != nil {
-			return nil, err
+			return player, err
 		}
-		players = append(players, player)
-	}
-	return players, rows.Err()
+		return player, nil
+	})
 }
 
 func removeOverridePlayer(teams []rosterOverrideTeam, preferredTeamID, playerID int64) (rosterOverridePlayer, bool) {

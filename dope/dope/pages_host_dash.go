@@ -532,30 +532,23 @@ func (s *server) loadFestRatingID(ctx context.Context, festID int64) (int64, err
 }
 
 func (s *server) loadHostFests(ctx context.Context, userID int64) ([]hostMyFest, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	return collectRows(ctx, s.db, `
 select t.id, coalesce(t.slug, ''), t.title, coalesce(t.start_date, ''), coalesce(t.end_date, ''), t.is_public
 from fests t
 join fest_organizers o on o.fest_id = t.id
 where o.user_id = ?
 order by case when t.start_date is null or t.start_date = '' then 1 else 0 end,
          t.start_date desc,
-         t.id desc`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []hostMyFest
-	for rows.Next() {
+         t.id desc`, []any{userID}, func(rows *sql.Rows) (hostMyFest, error) {
 		var t hostMyFest
 		var pub int
 		if err := rows.Scan(&t.ID, &t.Slug, &t.Title, &t.StartDate, &t.EndDate, &pub); err != nil {
-			return nil, err
+			return t, err
 		}
 		t.IsPublic = pub == 1
 		t.Dates = formatFestDates(t.StartDate, t.EndDate)
-		out = append(out, t)
-	}
-	return out, rows.Err()
+		return t, nil
+	})
 }
 
 func (s *server) isOrganizer(ctx context.Context, festID, userID int64) (bool, error) {

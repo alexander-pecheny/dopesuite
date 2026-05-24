@@ -329,24 +329,18 @@ var hostFestSchemeImportTemplate = template.Must(template.New("hostSchemeImport"
 </html>`))
 
 func loadFestRosterImportTeamsTx(ctx context.Context, q dbQueryer, festID int64) ([]festRosterImportTeam, error) {
-	rows, err := q.QueryContext(ctx, `
+	teams, err := collectRows(ctx, q, `
 select coalesce(rating_id, 0), name, city, coalesce(number, 0)
 from fest_teams
 where fest_id = ? and deleted = 0
-order by position, id`, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var teams []festRosterImportTeam
-	for rows.Next() {
+order by position, id`, []any{festID}, func(rows *sql.Rows) (festRosterImportTeam, error) {
 		var team festRosterImportTeam
 		if err := rows.Scan(&team.RatingID, &team.Name, &team.City, &team.Number); err != nil {
-			return nil, err
+			return team, err
 		}
-		teams = append(teams, team)
-	}
-	if err := rows.Err(); err != nil {
+		return team, nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return sortedFestRosterImportTeams(teams), nil
@@ -525,26 +519,20 @@ func (s *server) renderHostSchemeImportPage(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *server) loadHostFestTeams(ctx context.Context, festID int64) ([]hostFestTeam, error) {
-	teamRows, err := s.db.QueryContext(ctx, `
+	teams, err := collectRows(ctx, s.db, `
 select coalesce(tt.rating_id, 0), tt.name, tt.city, count(ttp.player_id)
 from fest_teams tt
 left join fest_team_players ttp on ttp.team_id = tt.id
 where tt.fest_id = ? and tt.deleted = 0
 group by tt.id
-order by tt.position, tt.id`, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer teamRows.Close()
-	var teams []hostFestTeam
-	for teamRows.Next() {
+order by tt.position, tt.id`, []any{festID}, func(rows *sql.Rows) (hostFestTeam, error) {
 		var team hostFestTeam
-		if err := teamRows.Scan(&team.RatingID, &team.Name, &team.City, &team.Players); err != nil {
-			return nil, err
+		if err := rows.Scan(&team.RatingID, &team.Name, &team.City, &team.Players); err != nil {
+			return team, err
 		}
-		teams = append(teams, team)
-	}
-	if err := teamRows.Err(); err != nil {
+		return team, nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	sort.SliceStable(teams, func(i, j int) bool {
@@ -560,31 +548,25 @@ order by tt.position, tt.id`, festID)
 }
 
 func (s *server) loadHostFestPlayers(ctx context.Context, festID int64) ([]hostFestPlayer, error) {
-	playerRows, err := s.db.QueryContext(ctx, `
+	players, err := collectRows(ctx, s.db, `
 select coalesce(p.rating_id, 0), p.first_name, p.last_name, tt.name
 from fest_team_players ttp
 join fest_players p on p.id = ttp.player_id
 join fest_teams tt on tt.id = ttp.team_id
 where tt.fest_id = ? and tt.deleted = 0
-order by tt.position, tt.id, ttp.roster_order, p.id`, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer playerRows.Close()
-	var players []hostFestPlayer
-	for playerRows.Next() {
+order by tt.position, tt.id, ttp.roster_order, p.id`, []any{festID}, func(rows *sql.Rows) (hostFestPlayer, error) {
 		var firstName, lastName, teamName string
 		var ratingID int64
-		if err := playerRows.Scan(&ratingID, &firstName, &lastName, &teamName); err != nil {
-			return nil, err
+		if err := rows.Scan(&ratingID, &firstName, &lastName, &teamName); err != nil {
+			return hostFestPlayer{}, err
 		}
-		players = append(players, hostFestPlayer{
+		return hostFestPlayer{
 			RatingID: ratingID,
 			Name:     joinPlayerName(firstName, lastName),
 			Team:     teamName,
-		})
-	}
-	if err := playerRows.Err(); err != nil {
+		}, nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	sort.SliceStable(players, func(i, j int) bool {
