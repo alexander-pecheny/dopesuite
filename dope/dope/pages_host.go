@@ -89,9 +89,15 @@ type hostFestPlayer struct {
 }
 
 type hostFestRosterData struct {
-	Fest    hostMyFest
-	Teams   []hostFestTeam
-	Players []hostFestPlayer
+	Fest            hostMyFest
+	Teams           []hostFestTeam
+	Players         []hostFestPlayer
+	OverridePlayers []hostPlayerOverrideOption
+	OverrideTeams   []hostTeamOverrideOption
+	OverrideGames   []hostGameOverrideOption
+	Overrides       []hostPlayerOverrideRow
+	Error           string
+	Notice          string
 }
 
 type hostFestImportData struct {
@@ -523,6 +529,106 @@ var hostFestPlayersTemplate = template.Must(template.New("hostPlayers").Parse(`<
     <h1>Игроки</h1>
   </header>
   <main class="public-main">
+    {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
+    {{if .Notice}}<p class="muted">{{.Notice}}</p>{{end}}
+    <div class="cluster">
+      <button class="btn" type="button" data-player-override-open>Добавить оверрайд для игры</button>
+    </div>
+
+    <dialog class="modal-dialog player-override-dialog" data-player-override-dialog>
+      <form method="post" action="/host/fest/{{.Fest.Ref}}/players/overrides" class="stack" autocomplete="off" data-player-override-form>
+        <h2>Оверрайд игрока</h2>
+        <input type="hidden" name="player_id" data-player-override-player-id>
+        <input type="hidden" name="team_id" data-player-override-team-id>
+        <label class="field">
+          <span>Игрок</span>
+          <input name="player_label" list="playerOverridePlayers" required data-player-override-player>
+        </label>
+        <datalist id="playerOverridePlayers">
+          {{range .OverridePlayers}}<option value="{{.Label}}" data-id="{{.ID}}"></option>{{end}}
+        </datalist>
+        <label class="field">
+          <span>Новая команда</span>
+          <input name="team_label" list="playerOverrideTeams" required data-player-override-team>
+        </label>
+        <datalist id="playerOverrideTeams">
+          {{range .OverrideTeams}}<option value="{{.Label}}" data-id="{{.ID}}"></option>{{end}}
+        </datalist>
+        <fieldset class="field game-type-fieldset">
+          <span>Игры</span>
+          <div class="checkbox-list">
+            {{range .OverrideGames}}
+            <label class="checkbox">
+              <input type="checkbox" name="game_id" value="{{.ID}}">
+              <span>{{.Label}}</span>
+            </label>
+            {{else}}
+            <p class="empty">В фесте пока нет игр КСИ или ЭК.</p>
+            {{end}}
+          </div>
+        </fieldset>
+        <div class="cluster">
+          <button class="btn" type="submit">Сохранить</button>
+          <button class="btn" type="button" data-player-override-close>Отмена</button>
+        </div>
+      </form>
+    </dialog>
+
+    {{if .Overrides}}
+    <section class="section" id="overrides">
+      <h2>Оверрайды</h2>
+      <div class="table-scroll">
+        <table class="data-table player-overrides-table">
+          <thead><tr><th>Игрок</th><th>Из команды</th><th>В команду</th><th>Игры</th><th class="override-action-cell"></th></tr></thead>
+          <tbody>
+            {{range .Overrides}}
+            <tr>
+              <td>{{.Player}}</td>
+              <td>{{.SourceTeam}}</td>
+              <td>{{.OverrideTeam}}</td>
+              <td>{{.Games}}</td>
+              <td class="override-action-cell"><button class="override-edit-button" type="button" data-player-override-edit-open="{{.DialogID}}" aria-label="Редактировать оверрайд" title="Редактировать оверрайд">✏️</button></td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{range .Overrides}}
+      {{$row := .}}
+      <dialog class="modal-dialog player-override-dialog" id="{{.DialogID}}" data-player-override-edit-dialog>
+        <form method="post" action="/host/fest/{{$.Fest.Ref}}/players/overrides" class="stack" autocomplete="off">
+          <h2>Оверрайд игрока</h2>
+          <input type="hidden" name="mode" value="edit">
+          <input type="hidden" name="player_id" value="{{.PlayerID}}">
+          <input type="hidden" name="source_team_id" value="{{.SourceTeamID}}">
+          <input type="hidden" name="team_id" value="{{.OverrideTeamID}}">
+          <div class="override-summary">
+            <div><span>Игрок</span><strong>{{.Player}}</strong></div>
+            <div><span>Из команды</span><strong>{{.SourceTeam}}</strong></div>
+            <div><span>В команду</span><strong>{{.OverrideTeam}}</strong></div>
+          </div>
+          <fieldset class="field game-type-fieldset">
+            <span>Игры</span>
+            <div class="checkbox-list">
+              {{range $.OverrideGames}}
+              <label class="checkbox">
+                <input type="checkbox" name="game_id" value="{{.ID}}" {{if $row.HasGame .ID}}checked{{end}}>
+                <span>{{.Label}}</span>
+              </label>
+              {{end}}
+            </div>
+          </fieldset>
+          <div class="cluster">
+            <button class="btn" type="submit">Сохранить</button>
+            <button class="btn danger" type="submit" name="delete" value="1" formnovalidate data-player-override-delete>Удалить</button>
+            <button class="btn" type="button" data-player-override-edit-close>Отмена</button>
+          </div>
+        </form>
+      </dialog>
+      {{end}}
+    </section>
+    {{end}}
+
     {{if .Players}}
     <div class="table-scroll">
       <table class="data-table">
@@ -538,6 +644,63 @@ var hostFestPlayersTemplate = template.Must(template.New("hostPlayers").Parse(`<
     <p class="empty">Игроки пока не загружены.</p>
     {{end}}
   </main>
+  <script>
+    (() => {
+      const dialog = document.querySelector("[data-player-override-dialog]");
+      const open = document.querySelector("[data-player-override-open]");
+      const close = document.querySelector("[data-player-override-close]");
+      const form = document.querySelector("[data-player-override-form]");
+      if (!dialog || !open || !form) return;
+      const bindSuggest = (inputSelector, hiddenSelector, listID) => {
+        const input = form.querySelector(inputSelector);
+        const hidden = form.querySelector(hiddenSelector);
+        const options = Array.from(document.getElementById(listID)?.options || []);
+        const sync = () => {
+          const found = options.find((option) => option.value === input.value);
+          hidden.value = found?.dataset.id || "";
+          input.setCustomValidity(hidden.value ? "" : "Выберите значение из подсказки");
+        };
+        input.addEventListener("input", sync);
+        input.addEventListener("change", sync);
+        return {sync, input, hidden};
+      };
+      const syncPlayer = bindSuggest("[data-player-override-player]", "[data-player-override-player-id]", "playerOverridePlayers");
+      const syncTeam = bindSuggest("[data-player-override-team]", "[data-player-override-team-id]", "playerOverrideTeams");
+      open.addEventListener("click", () => {
+        if (typeof dialog.showModal === "function") dialog.showModal();
+        else dialog.setAttribute("open", "");
+      });
+      close?.addEventListener("click", () => dialog.close ? dialog.close() : dialog.removeAttribute("open"));
+      document.querySelectorAll("[data-player-override-edit-open]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const editDialog = document.getElementById(button.dataset.playerOverrideEditOpen);
+          if (!editDialog) return;
+          if (typeof editDialog.showModal === "function") editDialog.showModal();
+          else editDialog.setAttribute("open", "");
+        });
+      });
+      document.querySelectorAll("[data-player-override-edit-close]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const editDialog = button.closest("dialog");
+          if (!editDialog) return;
+          if (typeof editDialog.close === "function") editDialog.close();
+          else editDialog.removeAttribute("open");
+        });
+      });
+      document.querySelectorAll("[data-player-override-delete]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          if (!window.confirm("Удалить оверрайд?")) event.preventDefault();
+        });
+      });
+      form.addEventListener("submit", (event) => {
+        syncPlayer.sync();
+        syncTeam.sync();
+        if (syncPlayer.hidden.value && syncTeam.hidden.value) return;
+        event.preventDefault();
+        (syncPlayer.hidden.value ? syncTeam.input : syncPlayer.input).reportValidity();
+      });
+    })();
+  </script>
 </body>
 </html>`))
 
@@ -585,6 +748,11 @@ var hostGameSettingsTemplate = template.Must(template.New("hostGameSettings").Pa
 <body class="public">
   <header class="public-top">
     <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
+    <nav class="public-breadcrumbs" aria-label="Навигация">
+      <a href="/host/fest/{{.Fest.Ref}}">{{.Fest.Title}}</a>
+      <span>/</span>
+      <span>{{.Game.Title}}</span>
+    </nav>
     <h1>{{.Game.Title}}</h1>
   </header>
   <main class="public-main">
@@ -812,6 +980,17 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.renderHostFestPlayers(w, r, id)
+		return
+	}
+	if len(parts) == 4 && parts[2] == "players" && parts[3] == "overrides" {
+		if !requireManageFest() {
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleHostAddPlayerOverride(w, r, id)
 		return
 	}
 	if len(parts) == 3 && parts[2] == "import" {
@@ -1793,6 +1972,10 @@ func (s *server) renderHostFestTeams(w http.ResponseWriter, r *http.Request, fes
 }
 
 func (s *server) renderHostFestPlayers(w http.ResponseWriter, r *http.Request, festID int64) {
+	s.renderHostFestPlayersWithMessage(w, r, festID, "", "")
+}
+
+func (s *server) renderHostFestPlayersWithMessage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
 	fest, err := s.loadHostFestHeader(r.Context(), festID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
@@ -1807,8 +1990,92 @@ func (s *server) renderHostFestPlayers(w http.ResponseWriter, r *http.Request, f
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	overridePlayers, overrideTeams, overrideGames, overrides, err := s.loadHostPlayerOverrideOptions(r.Context(), festID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = hostFestPlayersTemplate.Execute(w, hostFestRosterData{Fest: fest, Players: players})
+	_ = hostFestPlayersTemplate.Execute(w, hostFestRosterData{
+		Fest:            fest,
+		Players:         players,
+		OverridePlayers: overridePlayers,
+		OverrideTeams:   overrideTeams,
+		OverrideGames:   overrideGames,
+		Overrides:       overrides,
+		Error:           errMsg,
+		Notice:          notice,
+	})
+}
+
+func (s *server) handleHostAddPlayerOverride(w http.ResponseWriter, r *http.Request, festID int64) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	if r.Form.Get("mode") == "edit" || r.Form.Get("delete") == "1" {
+		s.handleHostEditPlayerOverride(w, r, festID)
+		return
+	}
+	playerID, err := parseHostOverrideID(r.Form.Get("player_id"), "игрока")
+	if err != nil {
+		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
+		return
+	}
+	teamID, err := parseHostOverrideID(r.Form.Get("team_id"), "команду")
+	if err != nil {
+		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
+		return
+	}
+	gameIDs, err := parseHostOverrideGameIDs(r.Form["game_id"])
+	if err != nil {
+		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
+		return
+	}
+	revision, ekGameIDs, err := s.savePlayerTeamOverride(r.Context(), festID, playerID, teamID, gameIDs)
+	if err != nil {
+		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
+		return
+	}
+	for _, gameID := range ekGameIDs {
+		s.broadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))
+	}
+	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/players#overrides", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
+}
+
+func (s *server) handleHostEditPlayerOverride(w http.ResponseWriter, r *http.Request, festID int64) {
+	playerID, err := parseHostOverrideID(r.Form.Get("player_id"), "игрока")
+	if err != nil {
+		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
+		return
+	}
+	sourceTeamID, err := parseHostOverrideID(r.Form.Get("source_team_id"), "исходную команду")
+	if err != nil {
+		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
+		return
+	}
+	teamID, err := parseHostOverrideID(r.Form.Get("team_id"), "команду")
+	if err != nil {
+		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
+		return
+	}
+	var gameIDs []int64
+	if r.Form.Get("delete") != "1" {
+		gameIDs, err = parseHostOverrideGameIDs(r.Form["game_id"])
+		if err != nil {
+			s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
+			return
+		}
+	}
+	revision, ekGameIDs, err := s.replacePlayerTeamOverride(r.Context(), festID, playerID, sourceTeamID, teamID, gameIDs)
+	if err != nil {
+		s.renderHostFestPlayersWithMessage(w, r, festID, err.Error(), "")
+		return
+	}
+	for _, gameID := range ekGameIDs {
+		s.broadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))
+	}
+	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/players#overrides", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
 }
 
 func (s *server) renderHostRatingImportPage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {

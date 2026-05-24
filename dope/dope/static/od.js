@@ -3,6 +3,7 @@ const odTabsRoot = document.getElementById("odTabs");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 const progressNode = document.getElementById("odProgress");
+const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
@@ -26,7 +27,19 @@ const resultsExpandedTours = new Set();
 const resultsExpandedShootouts = new Set();
 let numberToIndexCache = null;
 let entrySuggest = null;
+let entrySelection = null;
+let entryDragSelection = null;
+let entrySuppressClickSelection = false;
 let teamNameOverflowFrame = 0;
+
+const ENTRY_SELECTION_CLASSES = [
+  "entry-selected",
+  "entry-selection-anchor",
+  "entry-selection-top",
+  "entry-selection-bottom",
+  "entry-selection-left",
+  "entry-selection-right",
+];
 
 const TABS = [
   {key: "results", label: "Итог"},
@@ -421,10 +434,292 @@ function questionCounts(qIndex) {
 function buildInputView() {
   const wrapper = document.createElement("div");
   wrapper.className = "od-input-wrap";
-  wrapper.appendChild(allTeamsNumbered() ? buildInputTable() : buildInputGate());
+  if (!allTeamsNumbered()) {
+    wrapper.appendChild(buildInputGate());
+    return wrapper;
+  }
+  const tables = document.createElement("div");
+  tables.className = "od-input-tables";
+  tables.appendChild(buildInputTable());
   const shootout = buildInputShootoutTable();
-  if (shootout) wrapper.appendChild(shootout);
+  if (shootout) tables.appendChild(shootout);
+  wrapper.appendChild(tables);
+  updateEntrySelectionSoon();
   return wrapper;
+}
+
+function updateEntrySelectionSoon() {
+  window.requestAnimationFrame(updateEntrySelectionUI);
+}
+
+function updateEntrySelectionUI() {
+  odRoot.querySelectorAll(".entry-cell.entry-selected, .entry-cell.entry-selection-anchor, .entry-cell.entry-selection-top, .entry-cell.entry-selection-bottom, .entry-cell.entry-selection-left, .entry-cell.entry-selection-right").forEach((cell) => {
+    cell.classList.remove(...ENTRY_SELECTION_CLASSES);
+  });
+  const selection = normalizedEntrySelection();
+  if (selection) {
+    for (let row = selection.rowStart; row <= selection.rowEnd; row++) {
+      for (let q = selection.qStart; q <= selection.qEnd; q++) {
+        const cell = entryCellNode(q, row);
+        if (!cell) continue;
+        cell.classList.add("entry-selected");
+        if (row === selection.rowStart) cell.classList.add("entry-selection-top");
+        if (row === selection.rowEnd) cell.classList.add("entry-selection-bottom");
+        if (q === selection.qStart) cell.classList.add("entry-selection-left");
+        if (q === selection.qEnd) cell.classList.add("entry-selection-right");
+      }
+    }
+    const anchor = entryCellNode(entrySelection.anchorQ, entrySelection.anchorRow);
+    if (anchor) anchor.classList.add("entry-selection-anchor");
+  }
+}
+
+function normalizedEntrySelection() {
+  if (!entrySelection) return null;
+  const qStart = Math.max(0, Math.min(entrySelection.anchorQ, entrySelection.focusQ));
+  const qEnd = Math.min(totalQuestions - 1, Math.max(entrySelection.anchorQ, entrySelection.focusQ));
+  const rowStart = Math.max(0, Math.min(entrySelection.anchorRow, entrySelection.focusRow));
+  const rowEnd = Math.min(state.teams.length - 1, Math.max(entrySelection.anchorRow, entrySelection.focusRow));
+  if (qStart > qEnd || rowStart > rowEnd) return null;
+  return {qStart, qEnd, rowStart, rowEnd};
+}
+
+function setEntrySelection(anchorQ, anchorRow, focusQ = anchorQ, focusRow = anchorRow, options = {}) {
+  if (viewer) return;
+  anchorQ = gameTable.clamp(Number(anchorQ), 0, totalQuestions - 1);
+  focusQ = gameTable.clamp(Number(focusQ), 0, totalQuestions - 1);
+  anchorRow = gameTable.clamp(Number(anchorRow), 0, state.teams.length - 1);
+  focusRow = gameTable.clamp(Number(focusRow), 0, state.teams.length - 1);
+  entrySelection = {anchorQ, anchorRow, focusQ, focusRow};
+  updateEntrySelectionUI();
+  const focusCell = entryCellNode(focusQ, focusRow);
+  if (focusCell && options.focus !== false) {
+    focusCell.focus({preventScroll: options.preventScroll});
+    markActiveEntryRow(focusCell);
+  }
+}
+
+function entryCellNode(qIndex, rowIndex) {
+  return odRoot.querySelector(`.entry-cell[data-q="${gameTable.cssEscape(qIndex)}"][data-row="${gameTable.cssEscape(rowIndex)}"]:not([data-entry-kind="shootout"])`);
+}
+
+function entryCellPosition(cell) {
+  if (!cell || isShootoutEntryCell(cell)) return null;
+  const q = Number(cell.dataset.q);
+  const row = Number(cell.dataset.row);
+  if (!Number.isInteger(q) || !Number.isInteger(row)) return null;
+  return {q, row};
+}
+
+function selectedEntryText() {
+  const selection = normalizedEntrySelection();
+  if (!selection) return "";
+  const lines = [];
+  for (let row = selection.rowStart; row <= selection.rowEnd; row++) {
+    const cols = [];
+    for (let q = selection.qStart; q <= selection.qEnd; q++) {
+      const value = state.entries[q]?.[row] || 0;
+      cols.push(value ? String(value) : "");
+    }
+    lines.push(cols.join("\t"));
+  }
+  return lines.join("\n");
+}
+
+function clearSelectedEntryCells() {
+  const selection = normalizedEntrySelection();
+  if (!selection || viewer) return;
+  closeEntryEditor();
+  let changed = false;
+  for (let q = selection.qStart; q <= selection.qEnd; q++) {
+    for (let row = selection.rowStart; row <= selection.rowEnd; row++) {
+      if (state.entries[q]?.[row]) {
+        state.entries[q][row] = 0;
+        changed = true;
+      }
+    }
+  }
+  if (!changed) return;
+  invalidateScoreCaches();
+  invalidateTabCache("input");
+  saveState(["entries"], state.entries);
+  render();
+  focusEntrySelection();
+}
+
+function focusEntrySelection() {
+  if (!entrySelection) return;
+  window.requestAnimationFrame(() => {
+    const cell = entryCellNode(entrySelection.focusQ, entrySelection.focusRow);
+    if (cell) {
+      cell.focus({preventScroll: true});
+      markActiveEntryRow(cell);
+    }
+    updateEntrySelectionUI();
+  });
+}
+
+function parseEntryClipboard(text) {
+  const normalized = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalized.split("\n");
+  if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+  return lines.map((line) => line.split("\t"));
+}
+
+function clipboardValueToEntry(raw) {
+  const value = String(raw || "").trim();
+  if (value === "") return 0;
+  if (/^\d+$/.test(value)) return Number(value);
+  const lower = value.toLocaleLowerCase("ru");
+  for (let teamIndex = 0; teamIndex < state.teams.length; teamIndex++) {
+    if (teamLabel(teamIndex).toLocaleLowerCase("ru") === lower) {
+      return teamNumber(teamIndex);
+    }
+  }
+  return 0;
+}
+
+function pasteEntryClipboard(text) {
+  const selection = normalizedEntrySelection();
+  if (!selection || viewer) return;
+  const rows = parseEntryClipboard(text);
+  if (rows.length === 0) return;
+  closeEntryEditor();
+  const startQ = selection.qStart;
+  const startRow = selection.rowStart;
+  let changed = false;
+  let lastQ = startQ;
+  let lastRow = startRow;
+  for (let rowOffset = 0; rowOffset < rows.length; rowOffset++) {
+    const rowIndex = startRow + rowOffset;
+    if (rowIndex >= state.teams.length) break;
+    const cols = rows[rowOffset];
+    for (let colOffset = 0; colOffset < cols.length; colOffset++) {
+      const qIndex = startQ + colOffset;
+      if (qIndex >= totalQuestions) break;
+      const value = clipboardValueToEntry(cols[colOffset]);
+      if (state.entries[qIndex][rowIndex] !== value) {
+        state.entries[qIndex][rowIndex] = value;
+        changed = true;
+      }
+      lastQ = qIndex;
+      lastRow = rowIndex;
+    }
+  }
+  if (!changed) return;
+  setEntrySelection(startQ, startRow, lastQ, lastRow, {focus: false});
+  invalidateScoreCaches();
+  invalidateTabCache("input");
+  saveState(["entries"], state.entries);
+  render();
+  focusEntrySelection();
+}
+
+function startEntryEditWithText(cell, text) {
+  const pos = entryCellPosition(cell);
+  if (!pos) return;
+  openEntryEditor(cell);
+  if (!activeEntryEditor?.input) return;
+  activeEntryEditor.input.value = text;
+  activeEntryEditor.input.dispatchEvent(new Event("input", {bubbles: true}));
+  activeEntryEditor.input.focus();
+  activeEntryEditor.input.setSelectionRange(activeEntryEditor.input.value.length, activeEntryEditor.input.value.length);
+}
+
+function moveEntrySelection(dRow, dQ, extend) {
+  if (!entrySelection) {
+    setEntrySelection(0, 0);
+    return;
+  }
+  const nextQ = gameTable.clamp(entrySelection.focusQ + dQ, 0, totalQuestions - 1);
+  const nextRow = gameTable.clamp(entrySelection.focusRow + dRow, 0, state.teams.length - 1);
+  if (extend) setEntrySelection(entrySelection.anchorQ, entrySelection.anchorRow, nextQ, nextRow);
+  else setEntrySelection(nextQ, nextRow);
+}
+
+function handleEntryMouseDown(event) {
+  if (viewer || event.button !== 0) return;
+  if (event.target instanceof HTMLInputElement) return;
+  const cell = event.target.closest?.(".entry-cell");
+  const pos = entryCellPosition(cell);
+  if (!pos) return;
+  event.preventDefault();
+  closeEntryEditor();
+  entrySuppressClickSelection = Boolean(event.shiftKey && entrySelection);
+  const anchor = event.shiftKey && entrySelection
+    ? {q: entrySelection.anchorQ, row: entrySelection.anchorRow}
+    : pos;
+  setEntrySelection(anchor.q, anchor.row, pos.q, pos.row, {preventScroll: true});
+  entryDragSelection = {anchorQ: anchor.q, anchorRow: anchor.row, focusQ: pos.q, focusRow: pos.row, moved: false};
+  document.addEventListener("mouseup", handleEntryMouseUp, {once: true});
+}
+
+function handleEntryMouseOver(event) {
+  if (!entryDragSelection || viewer) return;
+  const pos = entryCellPosition(event.target.closest?.(".entry-cell"));
+  if (!pos) return;
+  if (pos.q !== entryDragSelection.focusQ || pos.row !== entryDragSelection.focusRow) {
+    entryDragSelection.moved = true;
+    entryDragSelection.focusQ = pos.q;
+    entryDragSelection.focusRow = pos.row;
+    setEntrySelection(entryDragSelection.anchorQ, entryDragSelection.anchorRow, pos.q, pos.row, {focus: false});
+  }
+}
+
+function handleEntryMouseUp() {
+  entryDragSelection = null;
+}
+
+function handleEntryDoubleClick(event) {
+  if (viewer) return;
+  const cell = event.target.closest?.(".entry-cell");
+  if (!entryCellPosition(cell)) return;
+  openEntryEditor(cell);
+}
+
+function handleEntryCopy(event) {
+  if (viewer) return;
+  if (event.target instanceof HTMLInputElement) return;
+  const text = selectedEntryText();
+  if (!text) return;
+  event.preventDefault();
+  event.clipboardData?.setData("text/plain", text);
+}
+
+function handleEntryPaste(event) {
+  if (viewer) return;
+  if (event.target instanceof HTMLInputElement) return;
+  const text = event.clipboardData?.getData("text/plain") || "";
+  if (!text) return;
+  event.preventDefault();
+  pasteEntryClipboard(text);
+}
+
+function handleEntryCellKeydown(event, cell) {
+  if (viewer) return;
+  if (!entryCellPosition(cell)) return;
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    moveEntrySelection(0, -1, event.shiftKey);
+  } else if (event.key === "ArrowRight") {
+    event.preventDefault();
+    moveEntrySelection(0, 1, event.shiftKey);
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    moveEntrySelection(-1, 0, event.shiftKey);
+  } else if (event.key === "ArrowDown") {
+    event.preventDefault();
+    moveEntrySelection(1, 0, event.shiftKey);
+  } else if (event.key === "Enter" || event.key === "F2") {
+    event.preventDefault();
+    openEntryEditor(cell);
+  } else if (event.key === "Backspace" || event.key === "Delete" || event.key === " ") {
+    event.preventDefault();
+    clearSelectedEntryCells();
+  } else if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
+    event.preventDefault();
+    startEntryEditWithText(cell, event.key);
+  }
 }
 
 function buildInputTable() {
@@ -433,6 +728,11 @@ function buildInputTable() {
   const table = document.createElement("table");
   table.className = "entry-table" + (viewer ? " entry-readonly" : "");
   table.addEventListener("click", handleEntryClick);
+  table.addEventListener("dblclick", handleEntryDoubleClick);
+  table.addEventListener("mousedown", handleEntryMouseDown);
+  table.addEventListener("mouseover", handleEntryMouseOver);
+  table.addEventListener("copy", handleEntryCopy);
+  table.addEventListener("paste", handleEntryPaste);
   table.addEventListener("input", handleEntryInput);
   table.addEventListener("keydown", handleEntryKeydown);
   table.addEventListener("focusin", handleEntryFocus);
@@ -967,11 +1267,16 @@ function handleEntryClick(event) {
   if (event.target instanceof HTMLInputElement && event.target.classList.contains("shootout-entry-checkbox")) return;
   const cell = event.target.closest?.(".entry-cell");
   if (!cell || viewer) return;
+  if (entrySuppressClickSelection) {
+    entrySuppressClickSelection = false;
+    return;
+  }
   if (isShootoutEntryCell(cell)) {
     cell.querySelector(".shootout-entry-checkbox")?.focus();
     return;
   }
-  openEntryEditor(cell);
+  const pos = entryCellPosition(cell);
+  if (pos) setEntrySelection(pos.q, pos.row, pos.q, pos.row, {preventScroll: true});
 }
 
 function handleEntryInput(event) {
@@ -1011,6 +1316,11 @@ function handleEntryInput(event) {
 
 function handleEntryKeydown(event) {
   const input = event.target;
+  const cell = event.target.closest?.(".entry-cell");
+  if (!(input instanceof HTMLInputElement) && cell) {
+    handleEntryCellKeydown(event, cell);
+    return;
+  }
   if (!(input instanceof HTMLInputElement) || !input.classList.contains("entry-input")) return;
   if (handleEntrySuggestKeydown(event, input)) return;
   if (input.dataset.entryKind === "shootout") {
@@ -1049,6 +1359,23 @@ function handleEntryKeydown(event) {
   }
 }
 
+function handleEntryDocumentKeydown(event) {
+  if (viewer || event.defaultPrevented || activeTab !== "input" || !entrySelection) return;
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.key !== "Backspace" && event.key !== "Delete" && event.key !== " ") return;
+  const target = event.target;
+  const editable = target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement
+    || Boolean(target?.isContentEditable);
+  if (editable) return;
+  if (target !== document.body && target !== document.documentElement && !odRoot.contains(target)) return;
+  event.preventDefault();
+  clearSelectedEntryCells();
+}
+
+document.addEventListener("keydown", handleEntryDocumentKeydown);
+
 function handleEntryFocus(event) {
   const target = event.target;
   if (target instanceof HTMLInputElement && target.classList.contains("shootout-entry-checkbox")) {
@@ -1063,7 +1390,8 @@ function handleEntryFocus(event) {
   const cell = target.closest?.(".entry-cell");
   if (cell && !viewer) {
     markActiveEntryRow(cell);
-    openEntryEditor(cell);
+    const pos = entryCellPosition(cell);
+    if (pos && !entrySelection) setEntrySelection(pos.q, pos.row, pos.q, pos.row, {focus: false});
   }
 }
 
@@ -1087,6 +1415,7 @@ function openEntryEditor(cell) {
   const rowIndex = Number(cell.dataset.row);
   if (!Number.isInteger(rowIndex) || (!shootout && !Number.isInteger(qIndex))) return;
   markActiveEntryRow(cell);
+  if (!shootout) setEntrySelection(qIndex, rowIndex, qIndex, rowIndex, {focus: false});
   const input = document.createElement("input");
   input.type = "text";
   input.inputMode = "text";
@@ -2078,6 +2407,16 @@ function setStatus(s) {
 
 function setHeading(text) {
   if (pageHeading) pageHeading.textContent = text;
+  renderGameBreadcrumbs(text);
+}
+
+function renderGameBreadcrumbs(gameTitle) {
+  if (!breadcrumbsNode || !route.festID) return;
+  gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
+    festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
+    festTitle: fest?.title || "Фест",
+    gameTitle: gameTitle || scheme?.title || "ОД",
+  });
 }
 
 function connectEvents() {

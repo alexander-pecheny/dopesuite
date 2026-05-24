@@ -176,6 +176,7 @@ func (s *server) importFestRoster(ctx context.Context, festID, ratingID int64, t
 	teams = sortedFestRosterImportTeams(teams)
 
 	var updates []gameStateBroadcast
+	var ekOverrideGameIDs []int64
 	var revision int64
 	result, err := func() (ratingRosterImportResult, error) {
 		s.mu.Lock()
@@ -196,6 +197,10 @@ func (s *server) importFestRoster(ctx context.Context, festID, ratingID int64, t
 		}
 
 		existingByRating, maxSeenNumber, err := loadFestExistingTeams(ctx, tx, festID)
+		if err != nil {
+			return ratingRosterImportResult{}, err
+		}
+		preservedOverrides, err := loadRatingPlayerTeamOverrides(ctx, tx, festID)
 		if err != nil {
 			return ratingRosterImportResult{}, err
 		}
@@ -286,6 +291,10 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 			return ratingRosterImportResult{}, err
 		}
 		updates = append(chgkUpdates, ksiUpdates...)
+		ekOverrideGameIDs, err = restoreRatingPlayerTeamOverridesTx(ctx, tx, festID, preservedOverrides)
+		if err != nil {
+			return ratingRosterImportResult{}, err
+		}
 		if _, err := tx.ExecContext(ctx, `update fests set rating_id = ?, updated_at = ? where id = ?`, ratingID, utcNow(), festID); err != nil {
 			return ratingRosterImportResult{}, err
 		}
@@ -316,6 +325,9 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 
 	for _, update := range updates {
 		s.broadcastState(festID, fmt.Sprintf("game-state:%d", update.GameID), revision, update.StateJSON)
+	}
+	for _, gameID := range ekOverrideGameIDs {
+		s.broadcastState(festID, fmt.Sprintf("game-roster:%d", gameID), revision, []byte(`{}`))
 	}
 	return result, nil
 }

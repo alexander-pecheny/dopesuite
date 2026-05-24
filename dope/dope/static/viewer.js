@@ -2,6 +2,7 @@ const viewerRoot = document.getElementById("viewerTable");
 const liveDot = document.getElementById("liveDot");
 const pageHeading = document.querySelector(".host-top h1");
 const viewerTabsRoot = document.getElementById("viewerTabs");
+const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
 const route = currentRoute();
@@ -620,6 +621,27 @@ function stageTabLabel(stage) {
 
 function setHeading(text) {
   if (pageHeading) pageHeading.textContent = text;
+  renderGameBreadcrumbs();
+}
+
+function renderGameBreadcrumbs() {
+  if (!breadcrumbsNode || !route.festID) return;
+  const gameTitle = currentGameTitle() || "ЭК";
+  gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
+    festHref: `/fest/${route.festID}`,
+    festTitle: fest?.title || "Фест",
+    gameHref: route.mode === "grid" ? "" : route.base + "/",
+    gameTitle,
+    currentTitle: breadcrumbCurrentTitle(gameTitle),
+  });
+}
+
+function breadcrumbCurrentTitle(gameTitle) {
+  if (route.mode === "grid") return "";
+  if (route.mode === "venues") return "Площадки";
+  if (route.mode === "match") return state?.title || route.matchCode || "";
+  if (route.mode === "stage") return findStage(fest, route.stageCode)?.title || route.stageCode || "";
+  return gameTitle;
 }
 
 function setViewerMode(mode) {
