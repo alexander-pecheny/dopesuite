@@ -19,6 +19,8 @@ const teamNameOverflow = gameTable.createTeamNameOverflowController({
     cellSelector: ".results-team",
     nameSelector: ".results-team-name",
     truncatedClass: "results-team-truncated",
+    citySelector: ".results-team-city",
+    cityTruncatedClass: "results-team-city-truncated",
   },
 });
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
@@ -1752,9 +1754,6 @@ function buildDetailedScoreTable() {
 
   return gameTable.buildFlatScoreTable({
     className: "match-table compact-score-table od-detailed",
-    rowMarkerColumn: true,
-    rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
-    rowMarkerCellClassName: "sticky row-marker active-row-marker",
     nameHeader: {
       content: detailedNameHeader(),
       className: "sticky sticky-name battle od-detailed-team-head",

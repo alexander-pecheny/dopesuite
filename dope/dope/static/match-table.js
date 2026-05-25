@@ -1273,7 +1273,12 @@
         readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
       }
       for (let i = 0; i < cells.length; i++) {
-        cells[i].classList.toggle(cfg.truncatedClass, readings[i]);
+        const cell = cells[i];
+        cell.classList.toggle(cfg.truncatedClass, readings[i]);
+        if (cfg.citySelector && cfg.cityTruncatedClass) {
+          const city = cell.querySelector(cfg.citySelector);
+          city?.classList.toggle(cfg.cityTruncatedClass, city.scrollWidth > city.clientWidth + 1);
+        }
       }
     }
     function updateDetailed(targetRoot = root) {
