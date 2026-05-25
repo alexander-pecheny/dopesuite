@@ -1,10 +1,11 @@
 const viewerRoot = document.getElementById("viewerTable");
-const liveDot = document.getElementById("liveDot");
+const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 const viewerTabsRoot = document.getElementById("viewerTabs");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
+const setStatus = gameTable.createStatusReporter(statusNode);
 const {formatVenue, formatBattleVenue, formatBattleVenueShort, statusLabel, formatNumber, formatPlace, cssEscape, th, td} = gameTable;
 const route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
@@ -154,10 +155,7 @@ function parseEventData(raw) {
 }
 
 function setLive(ok) {
-  liveDot.classList.toggle("offline", !ok);
-  const label = ok ? "Трансляция активна" : "Нет соединения";
-  liveDot.setAttribute("aria-label", label);
-  liveDot.title = label;
+  setStatus(ok ? "saved" : "error");
 }
 
 function renderFest() {

@@ -4618,45 +4618,76 @@ body:not(.embedded-match) .grid-match {
 }
 
 @media (max-width: 760px) {
+  .od-page .od-host-top,
+  .si-page .si-host-top,
   .ek-page .ek-host-top {
-    align-items: stretch;
-    height: 60px;
-    padding: 4px 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-rows: auto;
+    align-items: center;
+    column-gap: var(--space-2);
+    row-gap: var(--space-1);
+    height: auto;
+    padding: var(--space-1-5) var(--space-2-5);
   }
 
-  .ek-page .viewer-header-main {
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: center;
-    gap: 4px;
+  .od-page .od-host-top:has(.od-tabs:not(:empty)),
+  .si-page .si-host-top:has(.match-tabs:not([hidden])),
+  .ek-page .ek-host-top:has(.ek-tabs:not(:empty)) {
+    grid-template-rows: auto auto;
   }
 
+  .od-page .od-header-main,
+  .si-page .si-header-main,
+  .ek-page .ek-header-main {
+    display: contents;
+  }
+
+  .od-page .game-breadcrumbs,
+  .si-page .game-breadcrumbs,
   .ek-page .game-breadcrumbs {
-    width: 100%;
-    max-width: none;
+    grid-column: 1;
+    grid-row: 1;
     min-width: 0;
-    height: 16px;
+    max-width: 100%;
     font-size: var(--text-xs);
   }
 
+  .od-page .od-header-progress {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    font-size: var(--text-xs);
+  }
+
+  .od-page .od-tabs,
+  .si-page .match-tabs,
   .ek-page .ek-tabs {
+    grid-column: 1 / span 2;
+    grid-row: 2;
     width: 100%;
-    flex: 0 0 auto;
-    padding: 0;
+  }
+
+  .od-page .host-actions,
+  .si-page .host-actions,
+  .ek-page .host-actions {
+    grid-column: 3;
+    grid-row: 1 / -1;
+    align-self: center;
+    justify-self: end;
   }
 
   .ek-page .ek-tabs .match-tab {
     height: 24px;
-    padding: 0 10px;
+    padding: 0 var(--space-2-5);
     font-size: var(--text-xs-plus);
     line-height: 22px;
   }
 
-  .ek-page .viewer-meta {
-    align-self: flex-start;
-    min-width: 16px;
-    height: 16px;
-    padding-top: 5px;
+  .od-page .match-main,
+  .si-page .match-main {
+    height: calc(100vh - 60px);
+    height: calc(100dvh - 60px);
   }
 
   .ek-page .match-main {
