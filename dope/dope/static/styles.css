@@ -4565,10 +4565,69 @@ body:not(.embedded-match) .grid-match {
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player {
+  position: relative;
   overflow: hidden;
   padding-right: 8px;
-  text-overflow: ellipsis;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-text-wrap {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-text {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   white-space: nowrap;
+  text-overflow: clip;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-text::-webkit-scrollbar {
+  display: none;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated .readonly-player-text-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--inline-fade-width);
+  background: var(--inline-fade-bg);
+  pointer-events: none;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-popover {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: var(--space-1);
+  z-index: var(--z-dropdown);
+  display: none;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover {
+  display: block;
+}
+
+.floating-popovers-enabled .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
+.floating-popovers-enabled .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover,
+.ek-page .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
+.ek-page .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover {
+  display: none;
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name-wrap {

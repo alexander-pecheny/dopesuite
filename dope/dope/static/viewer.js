@@ -30,6 +30,11 @@ const floatingPopoverSpecs = [
     anchor: ".od-detailed-team-name-wrap",
   },
   {
+    trigger: ".readonly-player.readonly-player-cell-truncated",
+    popover: ".readonly-player-popover",
+    anchor: ".readonly-player-text-wrap",
+  },
+  {
     trigger: ".grid-slot-team-truncated",
     popover: ".grid-slot-team-popover",
     anchor: ".grid-slot-team-name",
@@ -463,6 +468,12 @@ function updateReadonlyNameOverflow(root = viewerRoot) {
     const truncated = gameTable.fitEKStageTeamName(cell, name);
     cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
   }
+  const playerCells = root.querySelectorAll(".readonly-player");
+  for (const cell of playerCells) {
+    const text = cell.querySelector(".readonly-player-text");
+    const truncated = Boolean(text && text.scrollWidth > text.clientWidth + 1);
+    cell.classList.toggle("readonly-player-cell-truncated", truncated);
+  }
   const resultsCells = root.querySelectorAll(".results-team");
   for (const cell of resultsCells) {
     const name = cell.querySelector(".results-team-name");
@@ -503,7 +514,20 @@ function readonlyThemeCells(teamIndex, theme, themeIndex, isShootout) {
   if (isShootout) {
     playerCell.classList.add("shootout-block");
   }
-  playerCell.textContent = theme.player || "";
+  const playerLabel = theme.player || "";
+  const playerWrap = document.createElement("span");
+  playerWrap.className = "readonly-player-text-wrap";
+  const playerText = document.createElement("span");
+  playerText.className = "readonly-player-text";
+  playerText.textContent = playerLabel;
+  playerWrap.appendChild(playerText);
+  playerCell.appendChild(playerWrap);
+  if (playerLabel) {
+    const playerPopover = document.createElement("span");
+    playerPopover.className = "readonly-player-popover";
+    playerPopover.textContent = playerLabel;
+    playerCell.appendChild(playerPopover);
+  }
   const answers = theme.answers.map((mark, answerIndex) => {
     const className = answerIndex === 0
       ? `answer-cell theme-block theme-block-bottom-left ${mark}`
