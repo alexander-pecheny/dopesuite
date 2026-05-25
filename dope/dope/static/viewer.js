@@ -458,27 +458,15 @@ function scheduleReadonlyNameOverflowUpdate(root = viewerRoot) {
 
 function updateReadonlyNameOverflow(root = viewerRoot) {
   const ekCells = root.querySelectorAll(".ek-team-cell");
-  const ekReadings = new Array(ekCells.length);
-  for (let i = 0; i < ekCells.length; i++) {
-    const cell = ekCells[i];
+  for (const cell of ekCells) {
     const name = cell.querySelector(".od-detailed-team-name");
-    const wrap = cell.querySelector(".od-detailed-team-name-wrap");
-    ekReadings[i] = Boolean(name && wrap && (
-      name.scrollWidth > name.clientWidth + 1 ||
-      name.scrollHeight > wrap.clientHeight + 1
-    ));
+    const truncated = gameTable.fitEKStageTeamName(cell, name);
+    cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
   }
   const resultsCells = root.querySelectorAll(".results-team");
-  const resultsReadings = new Array(resultsCells.length);
-  for (let i = 0; i < resultsCells.length; i++) {
-    const name = resultsCells[i].querySelector(".results-team-name");
-    resultsReadings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-  }
-  for (let i = 0; i < ekCells.length; i++) {
-    ekCells[i].classList.toggle("od-detailed-team-cell-truncated", ekReadings[i]);
-  }
-  for (let i = 0; i < resultsCells.length; i++) {
-    resultsCells[i].classList.toggle("results-team-truncated", resultsReadings[i]);
+  for (const cell of resultsCells) {
+    const name = cell.querySelector(".results-team-name");
+    cell.classList.toggle("results-team-truncated", Boolean(name && name.scrollWidth > name.clientWidth + 1));
   }
 }
 

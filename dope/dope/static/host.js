@@ -595,49 +595,7 @@ function isVisibleInScrollFrame(element) {
 }
 
 function fitEKStageTeamName(cell, name) {
-  if (!name) {
-    cell.classList.remove("od-detailed-team-cell-truncated");
-    return;
-  }
-  const wrap = name.closest(".od-detailed-team-name-wrap");
-  if (!wrap) {
-    cell.classList.remove("od-detailed-team-cell-truncated");
-    return;
-  }
-  const label = name.textContent || "";
-  const style = getComputedStyle(name);
-  const baseSize = parseFloat(style.fontSize) || 13;
-  const minSize = 9;
-  const available = name.clientWidth;
-  const wrapHeight = wrap.clientHeight + 1;
-  const lineHeight = parseFloat(style.lineHeight) || baseSize * 1.2;
-  const maxLines = Math.max(1, Math.floor(wrapHeight / lineHeight));
-  const ctx = playerTextMeasureContext();
-  const fontSize = parseFloat(style.fontSize) || baseSize;
-  const fontPrefix = style.font
-    ? style.font.replace(`${fontSize}px`, "__SIZE__")
-    : `${style.fontStyle || ""} ${style.fontVariant || ""} ${style.fontWeight || ""} __SIZE__/${style.lineHeight || "normal"} ${style.fontFamily || "sans-serif"}`.trim();
-  const widthAt = (size) => {
-    ctx.font = fontPrefix.replace("__SIZE__", `${size}px`);
-    return ctx.measureText(label).width;
-  };
-  const fitsAt = (size) => {
-    if (available <= 0) return true;
-    const width = widthAt(size);
-    return width <= available * maxLines;
-  };
-  let target = "";
-  let truncated = false;
-  if (!fitsAt(baseSize)) {
-    let size = Math.floor(baseSize) - 1;
-    while (size >= minSize && !fitsAt(size)) size -= 1;
-    if (size >= minSize) target = `${size}px`;
-    else {
-      target = `${minSize}px`;
-      truncated = true;
-    }
-  }
-  if (name.style.fontSize !== target) name.style.fontSize = target;
+  const truncated = gameTable.fitEKStageTeamName(cell, name);
   cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
 }
 
