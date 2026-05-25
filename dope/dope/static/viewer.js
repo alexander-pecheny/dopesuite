@@ -30,6 +30,11 @@ const floatingPopoverSpecs = [
     anchor: ".od-detailed-team-name-wrap",
   },
   {
+    trigger: ".readonly-player.readonly-player-cell-truncated",
+    popover: ".readonly-player-popover",
+    anchor: ".readonly-player-text-wrap",
+  },
+  {
     trigger: ".grid-slot-team-truncated",
     popover: ".grid-slot-team-popover",
     anchor: ".grid-slot-team-name",
@@ -458,27 +463,21 @@ function scheduleReadonlyNameOverflowUpdate(root = viewerRoot) {
 
 function updateReadonlyNameOverflow(root = viewerRoot) {
   const ekCells = root.querySelectorAll(".ek-team-cell");
-  const ekReadings = new Array(ekCells.length);
-  for (let i = 0; i < ekCells.length; i++) {
-    const cell = ekCells[i];
+  for (const cell of ekCells) {
     const name = cell.querySelector(".od-detailed-team-name");
-    const wrap = cell.querySelector(".od-detailed-team-name-wrap");
-    ekReadings[i] = Boolean(name && wrap && (
-      name.scrollWidth > name.clientWidth + 1 ||
-      name.scrollHeight > wrap.clientHeight + 1
-    ));
+    const truncated = gameTable.fitEKStageTeamName(cell, name);
+    cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
+  }
+  const playerCells = root.querySelectorAll(".readonly-player");
+  for (const cell of playerCells) {
+    const text = cell.querySelector(".readonly-player-text");
+    const truncated = Boolean(text && text.scrollWidth > text.clientWidth + 1);
+    cell.classList.toggle("readonly-player-cell-truncated", truncated);
   }
   const resultsCells = root.querySelectorAll(".results-team");
-  const resultsReadings = new Array(resultsCells.length);
-  for (let i = 0; i < resultsCells.length; i++) {
-    const name = resultsCells[i].querySelector(".results-team-name");
-    resultsReadings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-  }
-  for (let i = 0; i < ekCells.length; i++) {
-    ekCells[i].classList.toggle("od-detailed-team-cell-truncated", ekReadings[i]);
-  }
-  for (let i = 0; i < resultsCells.length; i++) {
-    resultsCells[i].classList.toggle("results-team-truncated", resultsReadings[i]);
+  for (const cell of resultsCells) {
+    const name = cell.querySelector(".results-team-name");
+    cell.classList.toggle("results-team-truncated", Boolean(name && name.scrollWidth > name.clientWidth + 1));
   }
 }
 
@@ -515,7 +514,20 @@ function readonlyThemeCells(teamIndex, theme, themeIndex, isShootout) {
   if (isShootout) {
     playerCell.classList.add("shootout-block");
   }
-  playerCell.textContent = theme.player || "";
+  const playerLabel = theme.player || "";
+  const playerWrap = document.createElement("span");
+  playerWrap.className = "readonly-player-text-wrap";
+  const playerText = document.createElement("span");
+  playerText.className = "readonly-player-text";
+  playerText.textContent = playerLabel;
+  playerWrap.appendChild(playerText);
+  playerCell.appendChild(playerWrap);
+  if (playerLabel) {
+    const playerPopover = document.createElement("span");
+    playerPopover.className = "readonly-player-popover";
+    playerPopover.textContent = playerLabel;
+    playerCell.appendChild(playerPopover);
+  }
   const answers = theme.answers.map((mark, answerIndex) => {
     const className = answerIndex === 0
       ? `answer-cell theme-block theme-block-bottom-left ${mark}`

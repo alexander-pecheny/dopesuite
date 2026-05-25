@@ -1184,6 +1184,7 @@
     }
 
     function onPointerOut(event) {
+      if (event.pointerType === "touch") return;
       const trigger = active?.trigger;
       if (!trigger || !(event.target instanceof Node) || !trigger.contains(event.target)) return;
       if (event.relatedTarget instanceof Node && trigger.contains(event.relatedTarget)) return;
@@ -1212,12 +1213,19 @@
       });
     }
 
+    function onPointerDownOutside(event) {
+      if (!active || event.pointerType !== "touch") return;
+      if (event.target instanceof Node && active.trigger.contains(event.target)) return;
+      hide();
+    }
+
     function bind() {
       document.documentElement.classList.add("floating-popovers-enabled");
       document.addEventListener("pointerover", onPointerOver);
       document.addEventListener("pointerout", onPointerOut);
       document.addEventListener("focusin", onFocusIn);
       document.addEventListener("focusout", onFocusOut);
+      document.addEventListener("pointerdown", onPointerDownOutside, true);
       window.addEventListener("scroll", schedulePosition, {capture: true, passive: true});
     }
 
@@ -1299,6 +1307,25 @@
     return {schedule, updateDetailed, updateResults};
   }
 
+  function fitEKStageTeamName(cell, name) {
+    if (!cell || !name) return false;
+    const baseSize = parseFloat(getComputedStyle(name).fontSize) || 13;
+    const minSize = 9;
+    const vertOverflows = () => name.scrollHeight > name.clientHeight + 1;
+    const horizOverflows = () => name.scrollWidth > name.clientWidth + 1;
+    name.style.fontSize = "";
+    if (vertOverflows()) {
+      let size = Math.floor(baseSize) - 1;
+      while (size >= minSize) {
+        name.style.fontSize = `${size}px`;
+        if (!vertOverflows()) break;
+        size -= 1;
+      }
+      if (size < minSize) name.style.fontSize = `${minSize}px`;
+    }
+    return vertOverflows() || horizOverflows();
+  }
+
   window.DopeTable = {
     th,
     td,
@@ -1335,5 +1362,6 @@
     createStatusReporter,
     parseGameRoute,
     createTeamNameOverflowController,
+    fitEKStageTeamName,
   };
 })();

@@ -890,6 +890,8 @@ a.list-row:hover { background: var(--hover-bg); }
 }
 
 .host-top {
+  position: relative;
+  z-index: var(--z-dropdown);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1417,7 +1419,11 @@ a.list-row:hover { background: var(--hover-bg); }
 }
 
 .match-table thead .sticky {
-  z-index: 7;
+  z-index: 9;
+}
+
+.match-table tbody .sticky {
+  z-index: 3;
 }
 
 .sticky-name {
@@ -4122,6 +4128,8 @@ body:not(.embedded-match) .grid-match {
 }
 .match-table.ek-stage-table .ek-team-cell .od-detailed-team-layout {
   min-height: calc(var(--question-size) * 2 - var(--cell-gap) * 2);
+  max-height: calc(var(--question-size) * 2 - var(--cell-gap) * 2);
+  overflow: hidden;
 }
 .match-table.ksi-detailed .od-detailed-team-name-popover {
   left: 4px;
@@ -4168,14 +4176,34 @@ body:not(.embedded-match) .grid-match {
   outline-offset: var(--focus-outline-offset-tight);
 }
 .match-table.ek-stage-table .ek-team-cell .od-detailed-team-name {
+  display: block;
   width: 100%;
+  min-width: 0;
   max-height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   overflow-wrap: normal;
   word-break: normal;
   white-space: normal;
 }
+.match-table.ek-stage-table .ek-team-cell .od-detailed-team-name::-webkit-scrollbar {
+  display: none;
+}
 .match-table.ek-stage-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name::after {
   content: none;
+}
+.match-table.ek-stage-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--paper));
+  pointer-events: none;
 }
 .match-table.od-detailed .od-detailed-team-cell-truncated .od-detailed-team-name::after,
 .match-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name::after {
@@ -4469,18 +4497,6 @@ body:not(.embedded-match) .grid-match {
   max-width: var(--total-col);
 }
 
-.viewer-readonly .match-table.ek-stage-table.readonly-table thead .sticky-place,
-.viewer-readonly .match-table.ek-stage-table.readonly-table thead .sticky-place-gap {
-  position: static;
-  z-index: auto;
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table tbody .sticky-place,
-.viewer-readonly .match-table.ek-stage-table.readonly-table tbody .sticky-place-gap {
-  position: static;
-  z-index: auto;
-}
-
 .viewer-readonly .match-table.ek-stage-table.readonly-table .sticky-place {
   width: var(--place-col);
   min-width: var(--place-col);
@@ -4549,10 +4565,69 @@ body:not(.embedded-match) .grid-match {
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player {
+  position: relative;
   overflow: hidden;
   padding-right: 8px;
-  text-overflow: ellipsis;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-text-wrap {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-text {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   white-space: nowrap;
+  text-overflow: clip;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-text::-webkit-scrollbar {
+  display: none;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated .readonly-player-text-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--inline-fade-width);
+  background: var(--inline-fade-bg);
+  pointer-events: none;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-popover {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: var(--space-1);
+  z-index: var(--z-dropdown);
+  display: none;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover {
+  display: block;
+}
+
+.floating-popovers-enabled .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
+.floating-popovers-enabled .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover,
+.ek-page .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
+.ek-page .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover {
+  display: none;
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name-wrap {
@@ -4564,22 +4639,33 @@ body:not(.embedded-match) .grid-match {
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name {
   display: block;
-  max-height: 2.3em;
-  overflow: hidden;
+  max-height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   line-height: 1.15;
   overflow-wrap: normal;
   text-overflow: clip;
   white-space: normal;
   word-break: normal;
 }
+.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name::-webkit-scrollbar {
+  display: none;
+}
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name::after {
+  content: none;
+}
+
+.viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name-wrap::after {
   content: "";
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 34px;
+  width: 28px;
   background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--paper));
   pointer-events: none;
 }
