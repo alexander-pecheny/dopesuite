@@ -1,0 +1,3 @@
+- When working on this project, always use cdp.py on port 9222 to test UI changes
+- Always strive to reuse already-existing functions and classes, not reinvent the wheel. If no such idiom exists for the task, think about whether you should create a reusable component
+- **All** CSS params should be variables, never static values on classes.
