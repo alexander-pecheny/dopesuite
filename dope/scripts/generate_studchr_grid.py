@@ -164,8 +164,8 @@ def build_scheme():
             {"number": 6, "title": "Рим"},
         ],
         "stages": [
-            r16_run_stage("r16_run1", "1/16 финала, заход 1", 1, r16_run1),
-            r16_run_stage("r16_run2", "1/16 финала, заход 2", 2, r16_run2),
+            r16_run_stage("r16_run1", "1/16 финала, заход 1", 1, r16_run1),
+            r16_run_stage("r16_run2", "1/16 финала, заход 2", 2, r16_run2),
             r8_stage(),
             reseed_after_r8_stage(),
             r4_stage(),
