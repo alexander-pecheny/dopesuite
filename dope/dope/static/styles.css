@@ -1195,7 +1195,7 @@ a.list-row:hover { background: var(--hover-bg); }
 
 .fight-frame {
   border: 0;
-  background: var(--structure);
+  background-color: var(--structure);
 }
 
 .corner-cell {
@@ -2316,7 +2316,7 @@ body:not(.embedded-match) .grid-match {
 }
 
 .embedded-match .fight-frame {
-  background: var(--structure);
+  background-color: var(--structure);
 }
 
 .import-frame {
