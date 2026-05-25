@@ -418,7 +418,7 @@ function buildReadonlyTable() {
 
   return gameTable.buildTwoRowScoreTable({
     className: "match-table compact-score-table ek-stage-table readonly-table",
-    nameHeader: {content: matchTitleNode(state), className: "sticky sticky-name battle readonly-battle-head readonly-battle-with-popover"},
+    nameHeader: {content: readonlyBattleTitleNode(state), className: "sticky sticky-name battle readonly-battle-head readonly-battle-with-popover"},
     themes,
     afterThemeHeaders: readonlyTrailingHeaders(hasShootout),
     rows,
@@ -687,7 +687,7 @@ function notifyEmbeddedResize() {
   });
 }
 
-function matchTitleNode(matchState) {
+function readonlyBattleTitleNode(matchState) {
   const fullLabel = matchTitleFor(matchState);
   const title = document.createElement("span");
   title.className = "readonly-battle-title";
