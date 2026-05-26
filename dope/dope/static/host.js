@@ -90,6 +90,47 @@ async function loadCurrent() {
   }
 }
 
+// localStorage SWR cache for FestView. We render the previous fest immediately
+// on every navigation, then revalidate against the server in the background.
+// Skips the cache silently when localStorage is unavailable (private mode,
+// quota, disabled cookies).
+function festCacheKey() {
+  return `host:fest:${route.festID}:${route.gameID}`;
+}
+
+function readFestCache() {
+  try {
+    const raw = localStorage.getItem(festCacheKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+function writeFestCache(view) {
+  if (!view) return;
+  try {
+    localStorage.setItem(festCacheKey(), JSON.stringify(view));
+  } catch (_err) {
+    // ignore (quota / disabled)
+  }
+}
+
+function adoptFestView(view) {
+  fest = view;
+  venues = Array.isArray(view?.venues) ? view.venues : [];
+}
+
+// hydrateFestFromCache returns true if it managed to populate `fest` from
+// either memory or localStorage (without hitting the network).
+function hydrateFestFromCache() {
+  if (fest) return true;
+  const cached = readFestCache();
+  if (!cached) return false;
+  adoptFestView(cached);
+  return true;
+}
+
 // consumeHostInit renders the first frame from the server-inlined
 // window.__HOST_INIT__ payload, skipping the API round trips that loadX would
 // otherwise make. Returns true on success; on any shape mismatch, falls back
@@ -103,8 +144,8 @@ function consumeHostInit() {
   if (route.mode === "stage" && init.route.stageCode !== route.stageCode) return false;
   window.__HOST_INIT__ = null;
 
-  fest = init.fest;
-  venues = Array.isArray(fest.venues) ? fest.venues : [];
+  adoptFestView(init.fest);
+  writeFestCache(init.fest);
 
   if (route.mode === "match") {
     if (!init.match) return false;
@@ -136,30 +177,52 @@ function consumeHostInit() {
 }
 
 async function loadFest() {
+  const cached = hydrateFestFromCache();
+  if (cached) renderFest();
   const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
-  fest = await response.json();
-  renderFest();
+  const fresh = await response.json();
+  const changed = !cached || fresh.revision !== fest?.revision;
+  adoptFestView(fresh);
+  writeFestCache(fresh);
+  if (changed || !cached) renderFest();
 }
 
 async function loadStage() {
   ++stageLoadToken;
+  const cached = hydrateFestFromCache();
+  if (cached) {
+    const stage = findStage(fest, route.stageCode);
+    stageMatches = stage?.matches || [];
+    stageStates = [];
+    stageStateByCode = new Map();
+    renderStage();
+  }
   const [response, venuesResponse] = await Promise.all([
     fetch(route.apiBase),
     fetch(`${route.festApi}/venues`),
   ]);
   if (!response.ok) throw new Error(await response.text());
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
-  fest = await response.json();
-  venues = await venuesResponse.json();
-  const stage = findStage(fest, route.stageCode);
-  stageMatches = stage?.matches || [];
-  stageStates = [];
-  stageStateByCode = new Map();
-  renderStage();
+  const fresh = await response.json();
+  const freshVenues = await venuesResponse.json();
+  const changed = !cached || fresh.revision !== fest?.revision;
+  fest = fresh;
+  venues = freshVenues;
+  writeFestCache(fresh);
+  if (changed) {
+    const stage = findStage(fest, route.stageCode);
+    stageMatches = stage?.matches || [];
+    stageStates = [];
+    stageStateByCode = new Map();
+    renderStage();
+  }
 }
 
 async function loadMatch() {
+  // Match state changes per cell edit, so we don't cache it — the match table
+  // still waits on its fetch.
+  hydrateFestFromCache();
   const [matchResponse, venuesResponse, festResponse] = await Promise.all([
     fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode)}`),
     fetch(`${route.festApi}/venues`),
@@ -171,22 +234,31 @@ async function loadMatch() {
   state = await matchResponse.json();
   venues = await venuesResponse.json();
   fest = await festResponse.json();
+  writeFestCache(fest);
   render();
 }
 
 async function loadVenuesPage() {
+  const cached = hydrateFestFromCache();
+  if (cached) renderVenues();
   const [venuesResponse, festResponse] = await Promise.all([
     fetch(`${route.festApi}/venues`),
     fetch(route.apiBase),
   ]);
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  venues = await venuesResponse.json();
-  fest = await festResponse.json();
-  renderVenues();
+  const freshVenues = await venuesResponse.json();
+  const freshFest = await festResponse.json();
+  const changed = !cached || JSON.stringify(freshVenues) !== JSON.stringify(venues);
+  venues = freshVenues;
+  fest = freshFest;
+  writeFestCache(fest);
+  if (changed) renderVenues();
 }
 
 async function loadSeedImportPage() {
+  // Seed-import payload is small and not cached separately.
+  hydrateFestFromCache();
   const [seedResponse, festResponse] = await Promise.all([
     fetch(`${route.apiBase}/seed-import`),
     fetch(route.apiBase),
@@ -195,6 +267,7 @@ async function loadSeedImportPage() {
   if (!festResponse.ok) throw new Error(await festResponse.text());
   seedImport = await seedResponse.json();
   fest = await festResponse.json();
+  writeFestCache(fest);
   renderSeedImport();
 }
 
