@@ -157,13 +157,10 @@ function consumeHostInit() {
     return true;
   }
   if (route.mode === "stage") {
-    ++stageLoadToken;
-    const stage = findStage(fest, route.stageCode);
-    stageMatches = stage?.matches || [];
-    stageStates = [];
-    stageStateByCode = new Map();
-    renderStage();
-    return true;
+    // Server inlines fest data but not per-match state. Adopt the fest from
+    // __HOST_INIT__ (already done above) and fall through so loadStage runs
+    // its batched matches fetch. Otherwise placeholders never get replaced.
+    return false;
   }
   if (route.mode === "venues") {
     renderVenues();
