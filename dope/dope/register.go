@@ -132,7 +132,7 @@ func (s *server) handleRegisterUsernameSubmit(w http.ResponseWriter, r *http.Req
 		renderRegisterStage(w, "username", registerStageData{Username: username, Error: "Никнейм должен быть 2–32 символа: латиница, цифры, _ - ."})
 		return
 	}
-	res, err := s.db.ExecContext(r.Context(), `
+	res, err := s.writeExec(r.Context(), `
 update users set username = ?, updated_at = ? where id = ? and username is null`,
 		username, utcNow(), user.UserID)
 	if err != nil {

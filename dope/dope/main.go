@@ -190,7 +190,7 @@ func main() {
 	}
 	log.Printf("listening on http://localhost%s/host and http://localhost%s/", addr, addr)
 	httpSrv := &http.Server{
-		Handler:           gzipMiddleware(mux),
+		Handler:           srv.auditContextMiddleware(gzipMiddleware(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 		// No WriteTimeout: SSE responses are intentionally long-lived.
 		IdleTimeout: 120 * time.Second,

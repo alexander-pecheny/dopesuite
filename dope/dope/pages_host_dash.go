@@ -243,7 +243,7 @@ func (s *server) handleHostCreateFest(w http.ResponseWriter, r *http.Request, us
 	isPublic := r.Form.Get("is_public") == "1"
 
 	now := utcNow()
-	tx, err := s.db.BeginTx(r.Context(), nil)
+	tx, err := s.beginWriteTx(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -303,7 +303,7 @@ func (s *server) handleHostUpdateFest(w http.ResponseWriter, r *http.Request, fe
 		slugValue = slug
 	}
 
-	if _, err := s.db.ExecContext(r.Context(), `
+	if _, err := s.writeExec(r.Context(), `
 update fests
 set title = ?, slug = ?, description = ?, rating_id = ?, start_date = ?, end_date = ?, is_public = ?, updated_at = ?
 where id = ?`,
@@ -369,7 +369,7 @@ func (s *server) handleHostDeleteFest(w http.ResponseWriter, r *http.Request, fe
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result, err := s.db.ExecContext(r.Context(), `delete from fests where id = ? and created_by = ?`, festID, userID)
+	result, err := s.writeExec(r.Context(), `delete from fests where id = ? and created_by = ?`, festID, userID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

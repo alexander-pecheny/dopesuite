@@ -107,7 +107,7 @@ func (s *server) handleAuthRegisterStart(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *server) startRegister(ctx context.Context, invite string) (startRegisterResponse, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return startRegisterResponse{}, err
 	}
@@ -178,7 +178,7 @@ func (s *server) handleAuthRegisterStatus(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) finalizeRegister(ctx context.Context, code string) (registerStatusResponse, string, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return registerStatusResponse{}, "", err
 	}
@@ -422,7 +422,7 @@ func loginCodeTelegramMessage(code string) string {
 }
 
 func (s *server) consumeLoginCode(ctx context.Context, code string) (string, sessionUser, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return "", sessionUser{}, err
 	}
@@ -500,7 +500,7 @@ func (s *server) handleAuthLoginPassword(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := r.Context()
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -672,7 +672,7 @@ func (s *server) handleAuthUsername(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad username", http.StatusBadRequest)
 		return
 	}
-	res, err := s.db.ExecContext(r.Context(), `
+	res, err := s.writeExec(r.Context(), `
 update users set username = ?, updated_at = ? where id = ? and username is null`,
 		username, utcNow(), user.UserID)
 	if err != nil {

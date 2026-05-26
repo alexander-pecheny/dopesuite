@@ -303,6 +303,10 @@ func openFestDB(path string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := ensureAuditTriggers(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	db.SetMaxOpenConns(sqliteMaxOpenConns)
 	db.SetMaxIdleConns(sqliteMaxOpenConns)
 	db.SetConnMaxIdleTime(30 * time.Minute)
@@ -725,6 +729,12 @@ create table if not exists game_player_team_overrides(
 create index if not exists game_player_team_overrides_game_idx on game_player_team_overrides(game_id);
 insert or ignore into schema_versions(version, applied_at) values(11, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 `); err != nil {
+		return err
+	}
+	if err := installAuditSchema(db); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(12, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
 	}
 	return nil
@@ -1523,7 +1533,7 @@ func (s *server) importScheme(scheme festScheme) (FestView, error) {
 	defer s.mu.Unlock()
 
 	ctx := context.Background()
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return FestView{}, err
 	}
@@ -1714,7 +1724,7 @@ func (s *server) importSchemeIntoFest(ctx context.Context, festID int64, scheme 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -2586,7 +2596,7 @@ func (s *server) applyMatchUpdateUsing(
 	defer s.mu.Unlock()
 
 	ctx := context.Background()
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -2898,7 +2908,7 @@ func (s *server) updateMatchVenueUsing(
 	defer s.mu.Unlock()
 
 	ctx := context.Background()
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -2945,7 +2955,7 @@ func (s *server) updateVenue(festID int64, number int, title string) ([]VenueVie
 	defer s.mu.Unlock()
 
 	ctx := context.Background()
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -2979,7 +2989,7 @@ where fest_id = ? and number = ?`, title, utcNow(), festID, number)
 }
 
 func (s *server) bumpFestRevisionStandalone(ctx context.Context, festID int64, eventType, payload string) (int64, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return 0, err
 	}

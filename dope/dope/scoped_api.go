@@ -478,7 +478,7 @@ func (s *server) replaceGameState(ctx context.Context, scope festScope, raw []by
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -525,7 +525,7 @@ func (s *server) patchGameState(ctx context.Context, scope festScope, req gameSt
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return nil, 0, err
 	}

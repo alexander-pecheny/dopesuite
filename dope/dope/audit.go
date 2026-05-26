@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 )
@@ -89,6 +90,34 @@ func newRequestID() string {
 		return ""
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// auditContextMiddleware stamps every incoming request with a fresh
+// request_id and, when a session cookie is present, the actor user ID, so
+// beginWriteTx can attribute every mutation to a user + request without each
+// handler having to thread that data through manually.
+//
+// Session lookup is restricted to potentially-mutating methods. Idempotent
+// reads (GET/HEAD/OPTIONS) and static/SSE endpoints skip the lookup to keep
+// the read path cheap; handlers that need the user still call lookupSession.
+func (s *server) auditContextMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := withAuditRequestID(r.Context(), newRequestID())
+		if mayMutate(r) {
+			if user, ok := s.lookupSession(r); ok {
+				ctx = withAuditActor(ctx, user.UserID)
+			}
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func mayMutate(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	}
+	return false
 }
 
 // beginWriteTx begins a transaction and seeds the audit_ctx row from request

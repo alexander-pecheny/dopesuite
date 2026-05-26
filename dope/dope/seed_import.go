@@ -161,7 +161,7 @@ func (s *server) importSeedsFromKSI(ctx context.Context, scope festScope) (seedI
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return seedImportView{}, 0, nil, err
 	}
@@ -235,7 +235,7 @@ func (s *server) setSeedImportDeclined(ctx context.Context, scope festScope, req
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return seedImportView{}, 0, nil, err
 	}

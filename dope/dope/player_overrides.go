@@ -242,7 +242,7 @@ func (s *server) savePlayerTeamOverride(ctx context.Context, festID, playerID, o
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -317,7 +317,7 @@ func (s *server) replacePlayerTeamOverride(ctx context.Context, festID, playerID
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return 0, nil, err
 	}
