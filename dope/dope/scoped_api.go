@@ -300,6 +300,9 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 		case "matches":
 			s.handleScopedMatches(w, r, scope, parts[4:])
 			return
+		case "stages":
+			s.handleScopedStages(w, r, scope, parts[4:])
+			return
 		case "state":
 			if len(parts) != 4 {
 				http.NotFound(w, r)
@@ -853,6 +856,83 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, fest
 	data, _ := json.Marshal(venues)
 	s.broadcastState(festID, fmt.Sprintf("venues:%d", festID), revision, data)
 	writeJSON(w, data)
+}
+
+// handleScopedStages routes /api/fest/{tid}/games/{gid}/stages/{code}/...
+// Currently the only supported sub-resource is "/matches" which returns
+// every match's full MatchView for the stage in a single response — a batch
+// replacement for the N parallel /matches/{code} fetches.
+func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scope festScope, sub []string) {
+	if len(sub) != 2 || sub[0] == "" || sub[1] != "matches" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.authorizeFestRead(w, r, scope.FestID) {
+		return
+	}
+	stageCode := sub[0]
+	matches, err := s.loadStageMatchViews(r.Context(), scope, stageCode)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSONValue(w, matches)
+}
+
+func (s *server) loadStageMatchViews(ctx context.Context, scope festScope, stageCode string) ([]MatchView, error) {
+	rows, err := s.db.QueryContext(ctx, `
+select m.code
+from matches m
+join stages st on st.id = m.stage_id
+where m.fest_id = ? and m.game_id = ? and st.code = ?
+order by m.position, m.id`, scope.FestID, scope.GameID, stageCode)
+	if err != nil {
+		return nil, err
+	}
+	var codes []string
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		codes = append(codes, code)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if len(codes) == 0 {
+		// Empty stage or unknown stage code; let the caller distinguish via
+		// the more specific error from verifyMatchInScope if needed. An empty
+		// result is fine: client renders no tables.
+		return []MatchView{}, nil
+	}
+	views := make([]MatchView, 0, len(codes))
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, code := range codes {
+		mscope, err := s.verifyMatchInScope(ctx, scope, code)
+		if err != nil {
+			if errors.Is(err, errMatchNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		view, err := s.loadScopedMatchViewLocked(mscope)
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, view)
+	}
+	return views, nil
 }
 
 func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, scope festScope, sub []string) {

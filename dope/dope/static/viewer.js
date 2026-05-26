@@ -17,7 +17,6 @@ let stageLoadToken = 0;
 let stageMatches = [];
 let stageStateByCode = new Map();
 let stageTableObserver = null;
-const stageMatchInflight = new Set();
 let reloadTimer = null;
 let readonlyTableIndex = null;
 let viewerTabsFadeFrame = 0;
@@ -158,7 +157,7 @@ async function loadFest() {
 }
 
 async function loadStage() {
-  ++stageLoadToken;
+  const token = ++stageLoadToken;
   const cached = hydrateFestFromCache();
   if (cached) {
     const stage = findStage(fest, route.stageCode);
@@ -167,9 +166,15 @@ async function loadStage() {
     stageStateByCode = new Map();
     renderStage();
   }
-  const response = await fetch(route.apiBase);
+  const [response, batchResponse] = await Promise.all([
+    fetch(route.apiBase),
+    fetch(`${route.apiBase}/stages/${encodeURIComponent(route.stageCode)}/matches`),
+  ]);
   if (!response.ok) throw new Error(await response.text());
+  if (!batchResponse.ok) throw new Error(await batchResponse.text());
   const fresh = await response.json();
+  const batchedMatches = await batchResponse.json();
+  if (token !== stageLoadToken || route.mode !== "stage") return;
   const changed = !cached || fresh.revision !== fest?.revision;
   adoptFestView(fresh);
   writeFestCache(fresh);
@@ -178,28 +183,14 @@ async function loadStage() {
     stageMatches = stage?.matches || [];
     stageStates = [];
     stageStateByCode = new Map();
-    renderStage();
   }
-}
-
-async function fetchStageMatchState(matchCode, token) {
-  if (!matchCode || stageStateByCode.has(matchCode) || stageMatchInflight.has(matchCode)) return;
-  stageMatchInflight.add(matchCode);
-  try {
-    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}`);
-    if (!response.ok) throw new Error(await response.text());
-    const matchState = await response.json();
-    if (token !== stageLoadToken || route.mode !== "stage") return;
-    stageStateByCode.set(matchCode, matchState);
-    stageStates = stageMatches.map((match) => stageStateByCode.get(match.code)).filter(Boolean);
-    const frame = viewerRoot.querySelector(`.stage-match-frame[data-match-code="${cssEscape(matchCode)}"]`);
-    if (frame) {
-      frame.replaceChildren(withMatchState(matchState, () => buildReadonlyTable()));
-      scheduleReadonlyNameOverflowUpdate(frame);
+  if (Array.isArray(batchedMatches)) {
+    for (const m of batchedMatches) {
+      if (m?.code) stageStateByCode.set(m.code, m);
     }
-  } finally {
-    stageMatchInflight.delete(matchCode);
+    stageStates = stageMatches.map((match) => stageStateByCode.get(match.code)).filter(Boolean);
   }
+  renderStage();
 }
 
 function setupViewerStageObserver() {
@@ -209,14 +200,11 @@ function setupViewerStageObserver() {
   }
   const frames = Array.from(viewerRoot.querySelectorAll(".stage-match-frame"));
   if (frames.length === 0) return;
-  const observerToken = stageLoadToken;
+  // After loadStage's batched /stages/{code}/matches fetch lands, every
+  // match's state is already in stageStateByCode. The observer just defers
+  // DOM construction for tables that aren't near the viewport.
   if (!("IntersectionObserver" in window)) {
-    frames.forEach((frame) => {
-      fetchStageMatchState(frame.dataset.matchCode || "", observerToken).catch((error) => {
-        if (observerToken !== stageLoadToken) return;
-        console.error(error);
-      });
-    });
+    frames.forEach((frame) => paintStageFrameIfReady(frame));
     return;
   }
   const root = viewerRoot.closest(".sheet-frame");
@@ -224,18 +212,21 @@ function setupViewerStageObserver() {
     entries.forEach((entry) => {
       if (!entry.isIntersecting) return;
       const frame = entry.target;
-      fetchStageMatchState(frame.dataset.matchCode || "", observerToken)
-        .then(() => {
-          if (observerToken !== stageLoadToken) return;
-          stageTableObserver?.unobserve(frame);
-        })
-        .catch((error) => {
-          if (observerToken !== stageLoadToken) return;
-          console.error(error);
-        });
+      if (paintStageFrameIfReady(frame)) {
+        stageTableObserver?.unobserve(frame);
+      }
     });
   }, {root, rootMargin: "900px 0px"});
   frames.forEach((frame) => stageTableObserver.observe(frame));
+}
+
+function paintStageFrameIfReady(frame) {
+  const code = frame.dataset.matchCode || "";
+  const matchState = stageStateByCode.get(code);
+  if (!matchState) return false;
+  frame.replaceChildren(withMatchState(matchState, () => buildReadonlyTable()));
+  scheduleReadonlyNameOverflowUpdate(frame);
+  return true;
 }
 
 async function loadMatch() {
