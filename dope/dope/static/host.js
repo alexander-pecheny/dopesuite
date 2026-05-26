@@ -7,7 +7,7 @@ const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
 const {formatVenue, formatBattleVenue, statusLabel, formatNumber, formatPlace, sameArray, clamp, cssEscape, th, td} = gameTable;
-const route = currentRoute();
+let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 let state = null;
 let fest = null;
@@ -76,6 +76,7 @@ window.addEventListener("resize", () => {
 });
 
 async function loadCurrent() {
+  if (consumeHostInit()) return;
   if (route.mode === "match") {
     await loadMatch();
   } else if (route.mode === "stage") {
@@ -89,36 +90,139 @@ async function loadCurrent() {
   }
 }
 
+// localStorage SWR cache for FestView. We render the previous fest immediately
+// on every navigation, then revalidate against the server in the background.
+// Skips the cache silently when localStorage is unavailable (private mode,
+// quota, disabled cookies).
+function festCacheKey() {
+  return `host:fest:${route.festID}:${route.gameID}`;
+}
+
+function readFestCache() {
+  try {
+    const raw = localStorage.getItem(festCacheKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+function writeFestCache(view) {
+  if (!view) return;
+  try {
+    localStorage.setItem(festCacheKey(), JSON.stringify(view));
+  } catch (_err) {
+    // ignore (quota / disabled)
+  }
+}
+
+function adoptFestView(view) {
+  fest = view;
+  venues = Array.isArray(view?.venues) ? view.venues : [];
+}
+
+// hydrateFestFromCache returns true if it managed to populate `fest` from
+// either memory or localStorage (without hitting the network).
+function hydrateFestFromCache() {
+  if (fest) return true;
+  const cached = readFestCache();
+  if (!cached) return false;
+  adoptFestView(cached);
+  return true;
+}
+
+// consumeHostInit renders the first frame from the server-inlined
+// window.__HOST_INIT__ payload, skipping the API round trips that loadX would
+// otherwise make. Returns true on success; on any shape mismatch, falls back
+// to the normal fetch path.
+function consumeHostInit() {
+  const init = window.__HOST_INIT__;
+  if (!init || !init.route || !init.fest) return false;
+  if (init.route.mode !== route.mode) return false;
+  if (String(init.route.gameID) !== String(route.gameID)) return false;
+  if (route.mode === "match" && init.route.matchCode !== route.matchCode) return false;
+  if (route.mode === "stage" && init.route.stageCode !== route.stageCode) return false;
+  window.__HOST_INIT__ = null;
+
+  adoptFestView(init.fest);
+  writeFestCache(init.fest);
+
+  if (route.mode === "match") {
+    if (!init.match) return false;
+    state = init.match;
+    render();
+    return true;
+  }
+  if (route.mode === "stage") {
+    ++stageLoadToken;
+    const stage = findStage(fest, route.stageCode);
+    stageMatches = stage?.matches || [];
+    stageStates = [];
+    stageStateByCode = new Map();
+    renderStage();
+    return true;
+  }
+  if (route.mode === "venues") {
+    renderVenues();
+    return true;
+  }
+  if (route.mode === "seedImport") {
+    if (!init.seedImport) return false;
+    seedImport = init.seedImport;
+    renderSeedImport();
+    return true;
+  }
+  renderFest();
+  return true;
+}
+
 async function loadFest() {
+  const cached = hydrateFestFromCache();
+  if (cached) renderFest();
   const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
-  fest = await response.json();
-  renderFest();
+  const fresh = await response.json();
+  const changed = !cached || fresh.revision !== fest?.revision;
+  adoptFestView(fresh);
+  writeFestCache(fresh);
+  if (changed || !cached) renderFest();
 }
 
 async function loadStage() {
-  const token = ++stageLoadToken;
+  ++stageLoadToken;
+  const cached = hydrateFestFromCache();
+  if (cached) {
+    const stage = findStage(fest, route.stageCode);
+    stageMatches = stage?.matches || [];
+    stageStates = [];
+    stageStateByCode = new Map();
+    renderStage();
+  }
   const [response, venuesResponse] = await Promise.all([
     fetch(route.apiBase),
     fetch(`${route.festApi}/venues`),
   ]);
   if (!response.ok) throw new Error(await response.text());
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
-  fest = await response.json();
-  venues = await venuesResponse.json();
-  const stage = findStage(fest, route.stageCode);
-  stageMatches = stage?.matches || [];
-  stageStates = [];
-  stageStateByCode = new Map();
-  renderStage();
-  loadStageMatchStates(stageMatches, token).catch((error) => {
-    if (token !== stageLoadToken) return;
-    setStatus("error");
-    console.error(error);
-  });
+  const fresh = await response.json();
+  const freshVenues = await venuesResponse.json();
+  const changed = !cached || fresh.revision !== fest?.revision;
+  fest = fresh;
+  venues = freshVenues;
+  writeFestCache(fresh);
+  if (changed) {
+    const stage = findStage(fest, route.stageCode);
+    stageMatches = stage?.matches || [];
+    stageStates = [];
+    stageStateByCode = new Map();
+    renderStage();
+  }
 }
 
 async function loadMatch() {
+  // Match state changes per cell edit, so we don't cache it — the match table
+  // still waits on its fetch.
+  hydrateFestFromCache();
   const [matchResponse, venuesResponse, festResponse] = await Promise.all([
     fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode)}`),
     fetch(`${route.festApi}/venues`),
@@ -130,22 +234,31 @@ async function loadMatch() {
   state = await matchResponse.json();
   venues = await venuesResponse.json();
   fest = await festResponse.json();
+  writeFestCache(fest);
   render();
 }
 
 async function loadVenuesPage() {
+  const cached = hydrateFestFromCache();
+  if (cached) renderVenues();
   const [venuesResponse, festResponse] = await Promise.all([
     fetch(`${route.festApi}/venues`),
     fetch(route.apiBase),
   ]);
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  venues = await venuesResponse.json();
-  fest = await festResponse.json();
-  renderVenues();
+  const freshVenues = await venuesResponse.json();
+  const freshFest = await festResponse.json();
+  const changed = !cached || JSON.stringify(freshVenues) !== JSON.stringify(venues);
+  venues = freshVenues;
+  fest = freshFest;
+  writeFestCache(fest);
+  if (changed) renderVenues();
 }
 
 async function loadSeedImportPage() {
+  // Seed-import payload is small and not cached separately.
+  hydrateFestFromCache();
   const [seedResponse, festResponse] = await Promise.all([
     fetch(`${route.apiBase}/seed-import`),
     fetch(route.apiBase),
@@ -154,19 +267,20 @@ async function loadSeedImportPage() {
   if (!festResponse.ok) throw new Error(await festResponse.text());
   seedImport = await seedResponse.json();
   fest = await festResponse.json();
+  writeFestCache(fest);
   renderSeedImport();
 }
 
 function connectEvents() {
   const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
-  const matchScope = `match:${route.gameID}:${route.matchCode}`;
-  const venuesScope = `venues:${route.festID}`;
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
     if (consumeLocalMatchEcho(message)) {
       setStatus("saved");
       return;
     }
+    const matchScope = `match:${route.gameID}:${route.matchCode}`;
+    const venuesScope = `venues:${route.festID}`;
     if (route.mode === "match" && message.scope === matchScope) {
       applyUpdatedMatch(message.data, route.matchCode);
       setStatus("saved");
@@ -190,6 +304,56 @@ function connectEvents() {
     scheduleReload();
   });
   events.onerror = () => setStatus("reconnecting");
+}
+
+// SPA navigation for the EK tab strip: intercept same-origin clicks within
+// #ekTabs, update history, re-parse the route, and re-run loadCurrent. Keeps
+// the EventSource and presence connections alive across tab switches, so the
+// only work on switch is the data fetch and DOM rebuild for the new view.
+function bindSPANavigation() {
+  if (embedded) return;
+  ekTabsRoot?.addEventListener("click", (event) => {
+    if (event.defaultPrevented) return;
+    if (event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target?.closest?.("a[href]");
+    if (!link || !ekTabsRoot.contains(link)) return;
+    if (link.target && link.target !== "" && link.target !== "_self") return;
+    const href = link.getAttribute("href");
+    if (!href || href.startsWith("#")) return;
+    let url;
+    try {
+      url = new URL(href, window.location.origin);
+    } catch (_err) {
+      return;
+    }
+    if (url.origin !== window.location.origin) return;
+    if (url.pathname === window.location.pathname && url.search === window.location.search) {
+      event.preventDefault();
+      return;
+    }
+    event.preventDefault();
+    navigateTo(url.pathname + url.search);
+  });
+  window.addEventListener("popstate", () => {
+    runCurrentRoute();
+  });
+}
+
+function navigateTo(target) {
+  history.pushState(null, "", target);
+  runCurrentRoute();
+}
+
+function runCurrentRoute() {
+  route = currentRoute();
+  setStatus("saving");
+  loadCurrent()
+    .then(() => setStatus("saved"))
+    .catch((error) => {
+      setStatus("error");
+      console.error(error);
+    });
 }
 
 function scheduleReload() {
@@ -799,21 +963,37 @@ function buildStageMatchPlaceholder(match) {
   return placeholder;
 }
 
-async function loadStageMatchStates(matches, token) {
-  await Promise.all(matches.map(async (match) => {
-    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(match.code)}`);
+const stageMatchInflight = new Set();
+
+async function fetchStageMatchState(matchCode, token) {
+  if (!matchCode) return;
+  if (stageStateByCode.has(matchCode)) return;
+  if (stageMatchInflight.has(matchCode)) return;
+  stageMatchInflight.add(matchCode);
+  try {
+    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}`);
     if (!response.ok) throw new Error(await response.text());
     const matchState = await response.json();
     if (token !== stageLoadToken || route.mode !== "stage") return;
     applyStageMatchUpdate(matchState, {renderOnlyIfNear: true});
-  }));
+  } finally {
+    stageMatchInflight.delete(matchCode);
+  }
 }
 
 function setupStageTableObserver() {
   disconnectStageTableObserver();
   const frames = Array.from(hostRoot.querySelectorAll(".stage-match-frame"));
   if (frames.length === 0) return;
+  const observerToken = stageLoadToken;
   if (!("IntersectionObserver" in window)) {
+    // Fallback for old browsers: fetch everything up front, render all frames.
+    frames.forEach((frame) => {
+      fetchStageMatchState(frame.dataset.matchCode || "", observerToken).catch((error) => {
+        if (observerToken !== stageLoadToken) return;
+        console.error(error);
+      });
+    });
     renderStageMatchFrames(frames, {force: true});
     return;
   }
@@ -825,6 +1005,18 @@ function setupStageTableObserver() {
       const frame = entry.target;
       frame.dataset.nearViewport = "1";
       visibleFrames.push(frame);
+      fetchStageMatchState(frame.dataset.matchCode || "", observerToken)
+        .then(() => {
+          if (observerToken !== stageLoadToken) return;
+          // applyStageMatchUpdate already re-renders when state arrives, but
+          // call again here to cover the race where the frame is still in
+          // placeholder mode when fetch resolves out-of-order.
+          if (frame.dataset.rendered !== "1") renderStageMatchFrames([frame]);
+        })
+        .catch((error) => {
+          if (observerToken !== stageLoadToken) return;
+          console.error(error);
+        });
     });
     renderStageMatchFrames(visibleFrames);
     visibleFrames.forEach((frame) => {
@@ -1837,6 +2029,7 @@ function option(value, label) {
   return gameTable.option(value, label);
 }
 
+bindSPANavigation();
 loadCurrent()
   .then(() => {
     setStatus("saved");

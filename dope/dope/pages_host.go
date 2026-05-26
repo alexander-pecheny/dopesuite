@@ -542,7 +542,7 @@ func (s *server) serveHostGamePage(w http.ResponseWriter, r *http.Request, festI
 	case "si", "ksi":
 		s.serveAppHTML(w, r, "static/si.html")
 	default:
-		s.serveHostHTML(w, r)
+		s.serveHostHTMLWithInit(w, r, festScope{FestID: festID, GameID: gameID}, parts)
 	}
 }
 

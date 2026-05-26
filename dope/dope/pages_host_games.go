@@ -218,6 +218,7 @@ update games set slug = ?, updated_at = ? where id = ? and fest_id = ?`,
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.invalidateFestViewCache(festID)
 	gameRef := slug
 	if gameRef == "" {
 		gameRef = fmt.Sprintf("%d", gameID)

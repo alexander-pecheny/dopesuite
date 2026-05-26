@@ -122,6 +122,12 @@ type server struct {
 	assets          fs.FS
 	assetNoCache    bool
 	sendTelegram    telegramSender
+	// festViewCache holds JSON-marshaled FestView responses keyed by
+	// (festID, gameID). Invalidated wholesale per fest on broadcastState,
+	// since any of the data folded into FestView (venues, stages, matches)
+	// may have changed.
+	festViewMu    sync.RWMutex
+	festViewCache map[int64]map[int64][]byte
 }
 
 type updateRequest struct {

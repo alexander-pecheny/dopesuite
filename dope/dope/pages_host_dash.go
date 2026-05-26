@@ -313,6 +313,7 @@ where id = ?`,
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.invalidateFestViewCache(festID)
 	redirectRef := slug
 	if redirectRef == "" {
 		redirectRef = fmt.Sprintf("%d", festID)
