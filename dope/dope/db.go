@@ -1197,13 +1197,30 @@ func (s *server) serveHostHTML(w http.ResponseWriter, r *http.Request) {
 
 // hostInitMarker is the placeholder string inside static/host.html that is
 // replaced with the actual init JSON. Keep in sync with the file.
-const hostInitMarker = "null;/*__HOST_INIT__*/"
+const (
+	hostInitMarker   = "null;/*__HOST_INIT__*/"
+	viewerInitMarker = "null;/*__VIEWER_INIT__*/"
+	gameInitMarker   = "null;/*__GAME_INIT__*/"
+)
 
 type hostInitPayload struct {
 	Route      hostInitRoute   `json:"route"`
 	Fest       json.RawMessage `json:"fest,omitempty"`
 	Match      *MatchView      `json:"match,omitempty"`
 	SeedImport *seedImportView `json:"seedImport,omitempty"`
+}
+
+type gameInitPayload struct {
+	Scheme json.RawMessage `json:"scheme,omitempty"`
+	State  json.RawMessage `json:"state,omitempty"`
+	Fest   json.RawMessage `json:"fest,omitempty"`
+}
+
+type viewerInitPayload struct {
+	Route  hostInitRoute   `json:"route"`
+	Fest   json.RawMessage `json:"fest,omitempty"`
+	Match  *MatchView      `json:"match,omitempty"`
+	Venues json.RawMessage `json:"venues,omitempty"`
 }
 
 type hostInitRoute struct {
@@ -1229,27 +1246,77 @@ func (s *server) serveHostHTMLWithInit(w http.ResponseWriter, r *http.Request, s
 		s.serveHostHTML(w, r)
 		return
 	}
-	body, err := fs.ReadFile(s.assets, "static/host.html")
-	if err != nil {
-		s.serveHostHTML(w, r)
-		return
-	}
-	marker := []byte(hostInitMarker)
-	idx := bytes.Index(body, marker)
-	if idx < 0 {
-		s.serveHostHTML(w, r)
-		return
-	}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		s.serveHostHTML(w, r)
 		return
 	}
-	out := make([]byte, 0, len(body)+len(data))
-	out = append(out, body[:idx]...)
-	out = append(out, data...)
-	out = append(out, body[idx+len(marker):]...)
+	s.serveInjectedHTML(w, r, "static/host.html", hostInitMarker, data)
+}
 
+// serveGameHTMLWithInit serves od.html or si.html with window.__GAME_INIT__
+// populated with scheme/state/fest, sparing the JS three cold API round trips
+// on first load. Falls back to the plain HTML on any error.
+func (s *server) serveGameHTMLWithInit(w http.ResponseWriter, r *http.Request, htmlPath string, scope festScope) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	payload, err := s.buildGameInit(r.Context(), scope)
+	if err != nil {
+		s.serveAppHTML(w, r, htmlPath)
+		return
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.serveAppHTML(w, r, htmlPath)
+		return
+	}
+	s.serveInjectedHTML(w, r, htmlPath, gameInitMarker, data)
+}
+
+// serveViewerHTMLWithInit serves static/viewer.html with the relevant
+// per-route data already populated.
+func (s *server) serveViewerHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	route := parseHostInitRoute(parts, scope)
+	payload, err := s.buildViewerInit(r.Context(), route)
+	if err != nil {
+		s.serveViewerHTML(w, r)
+		return
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.serveViewerHTML(w, r)
+		return
+	}
+	s.serveInjectedHTML(w, r, "static/viewer.html", viewerInitMarker, data)
+}
+
+// serveInjectedHTML reads an HTML file from the embedded asset FS, splices
+// the JSON payload over the marker token, and writes it as the response. The
+// caller is responsible for pre-marshaling and for ensuring the marker is
+// present in the HTML. On any I/O or marker-mismatch error the function
+// silently falls back to serving the file unchanged.
+func (s *server) serveInjectedHTML(w http.ResponseWriter, r *http.Request, htmlPath, marker string, payload []byte) {
+	body, err := fs.ReadFile(s.assets, htmlPath)
+	if err != nil {
+		s.serveAppHTML(w, r, htmlPath)
+		return
+	}
+	markerBytes := []byte(marker)
+	idx := bytes.Index(body, markerBytes)
+	if idx < 0 {
+		s.serveAppHTML(w, r, htmlPath)
+		return
+	}
+	out := make([]byte, 0, len(body)+len(payload))
+	out = append(out, body[:idx]...)
+	out = append(out, payload...)
+	out = append(out, body[idx+len(markerBytes):]...)
 	if s.assetNoCache {
 		w.Header().Set("Cache-Control", "no-cache")
 	}
@@ -1260,6 +1327,63 @@ func (s *server) serveHostHTMLWithInit(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 	_, _ = w.Write(out)
+}
+
+func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPayload, error) {
+	payload := gameInitPayload{}
+	var schemeJSON, stateJSON string
+	if err := s.db.QueryRowContext(ctx, `
+select coalesce(scheme_json, ''), coalesce(state_json, '')
+from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&schemeJSON, &stateJSON); err != nil {
+		return payload, err
+	}
+	if schemeJSON == "" {
+		schemeJSON = "{}"
+	}
+	if stateJSON == "" {
+		stateJSON = "{}"
+	}
+	payload.Scheme = json.RawMessage(schemeJSON)
+	payload.State = json.RawMessage(stateJSON)
+	if festBytes, err := s.festViewBytes(scope.FestID, scope.GameID); err == nil {
+		payload.Fest = festBytes
+	}
+	return payload, nil
+}
+
+func (s *server) buildViewerInit(ctx context.Context, route hostInitRoute) (viewerInitPayload, error) {
+	payload := viewerInitPayload{Route: route}
+
+	festBytes, err := s.festViewBytes(route.FestID, route.GameID)
+	if err != nil {
+		return payload, err
+	}
+	payload.Fest = festBytes
+
+	switch route.Mode {
+	case "match":
+		mscope, err := s.verifyMatchInScope(ctx, festScope{FestID: route.FestID, GameID: route.GameID}, route.MatchCode)
+		if err != nil {
+			return payload, nil
+		}
+		s.mu.RLock()
+		match, err := s.loadScopedMatchViewLocked(mscope)
+		s.mu.RUnlock()
+		if err != nil {
+			return payload, nil
+		}
+		payload.Match = &match
+	case "venues":
+		s.mu.RLock()
+		venues, err := s.loadVenuesLocked(route.FestID)
+		s.mu.RUnlock()
+		if err == nil {
+			if venuesBytes, err := json.Marshal(venues); err == nil {
+				payload.Venues = venuesBytes
+			}
+		}
+	}
+	return payload, nil
 }
 
 func parseHostInitRoute(parts []string, scope festScope) hostInitRoute {

@@ -83,6 +83,7 @@ window.addEventListener("resize", () => {
 document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
 async function loadAll() {
+  if (consumeGameInit()) return;
   const [schemeResp, stateResp, festResp] = await Promise.all([
     fetch(`${route.apiBase}/scheme`),
     fetch(`${route.apiBase}/state`),
@@ -98,6 +99,23 @@ async function loadAll() {
   ensureState();
   invalidateAllCaches();
   render();
+}
+
+// consumeGameInit hydrates scheme/state/fest from the server-inlined
+// window.__GAME_INIT__ payload, skipping the three cold API round trips that
+// loadAll would otherwise make. Returns true on success.
+function consumeGameInit() {
+  const init = window.__GAME_INIT__;
+  if (!init || !init.scheme || !init.state) return false;
+  window.__GAME_INIT__ = null;
+  scheme = init.scheme;
+  state = init.state;
+  fest = init.fest || null;
+  initFromScheme();
+  ensureState();
+  invalidateAllCaches();
+  render();
+  return true;
 }
 
 function initFromScheme() {
