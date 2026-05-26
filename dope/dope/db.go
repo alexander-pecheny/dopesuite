@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -10,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -1191,6 +1193,131 @@ func (s *server) serveViewerHTML(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) serveHostHTML(w http.ResponseWriter, r *http.Request) {
 	s.serveAppHTML(w, r, "static/host.html")
+}
+
+// hostInitMarker is the placeholder string inside static/host.html that is
+// replaced with the actual init JSON. Keep in sync with the file.
+const hostInitMarker = "null;/*__HOST_INIT__*/"
+
+type hostInitPayload struct {
+	Route      hostInitRoute   `json:"route"`
+	Fest       *FestView       `json:"fest,omitempty"`
+	Match      *MatchView      `json:"match,omitempty"`
+	SeedImport *seedImportView `json:"seedImport,omitempty"`
+}
+
+type hostInitRoute struct {
+	Mode      string `json:"mode"`
+	FestID    int64  `json:"festID"`
+	GameID    int64  `json:"gameID"`
+	StageCode string `json:"stageCode,omitempty"`
+	MatchCode string `json:"matchCode,omitempty"`
+}
+
+// serveHostHTMLWithInit renders static/host.html with window.__HOST_INIT__
+// pre-populated for the current route, eliminating the cold API round trips
+// the SPA would otherwise make immediately after parsing host.js. Falls back
+// to plain serveHostHTML on any error so a payload bug never breaks the page.
+func (s *server) serveHostHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	route := parseHostInitRoute(parts, scope)
+	payload, err := s.buildHostInit(r.Context(), route)
+	if err != nil {
+		s.serveHostHTML(w, r)
+		return
+	}
+	body, err := fs.ReadFile(s.assets, "static/host.html")
+	if err != nil {
+		s.serveHostHTML(w, r)
+		return
+	}
+	marker := []byte(hostInitMarker)
+	idx := bytes.Index(body, marker)
+	if idx < 0 {
+		s.serveHostHTML(w, r)
+		return
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.serveHostHTML(w, r)
+		return
+	}
+	out := make([]byte, 0, len(body)+len(data))
+	out = append(out, body[:idx]...)
+	out = append(out, data...)
+	out = append(out, body[idx+len(marker):]...)
+
+	if s.assetNoCache {
+		w.Header().Set("Cache-Control", "no-cache")
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(out)))
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	_, _ = w.Write(out)
+}
+
+func parseHostInitRoute(parts []string, scope festScope) hostInitRoute {
+	route := hostInitRoute{Mode: "grid", FestID: scope.FestID, GameID: scope.GameID}
+	if len(parts) <= 2 {
+		return route
+	}
+	switch parts[2] {
+	case "venues":
+		route.Mode = "venues"
+	case "seed-import":
+		route.Mode = "seedImport"
+	case "matches":
+		if len(parts) >= 4 {
+			route.Mode = "match"
+			route.MatchCode = parts[3]
+		}
+	case "stage":
+		if len(parts) >= 4 {
+			route.Mode = "stage"
+			route.StageCode = parts[3]
+		}
+	}
+	return route
+}
+
+func (s *server) buildHostInit(ctx context.Context, route hostInitRoute) (hostInitPayload, error) {
+	payload := hostInitPayload{Route: route}
+
+	s.mu.RLock()
+	view, err := s.loadFestViewLocked(route.FestID, route.GameID)
+	s.mu.RUnlock()
+	if err != nil {
+		return payload, err
+	}
+	payload.Fest = &view
+
+	switch route.Mode {
+	case "match":
+		mscope, err := s.verifyMatchInScope(ctx, festScope{FestID: route.FestID, GameID: route.GameID}, route.MatchCode)
+		if err != nil {
+			return payload, nil
+		}
+		s.mu.RLock()
+		match, err := s.loadScopedMatchViewLocked(mscope)
+		s.mu.RUnlock()
+		if err != nil {
+			return payload, nil
+		}
+		payload.Match = &match
+	case "seedImport":
+		view, err := s.loadSeedImportView(ctx, festScope{FestID: route.FestID, GameID: route.GameID})
+		if err != nil {
+			return payload, nil
+		}
+		payload.SeedImport = &view
+	}
+	return payload, nil
 }
 
 func (s *server) serveAppHTML(w http.ResponseWriter, r *http.Request, path string) {

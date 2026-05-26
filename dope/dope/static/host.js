@@ -76,6 +76,7 @@ window.addEventListener("resize", () => {
 });
 
 async function loadCurrent() {
+  if (consumeHostInit()) return;
   if (route.mode === "match") {
     await loadMatch();
   } else if (route.mode === "stage") {
@@ -87,6 +88,56 @@ async function loadCurrent() {
   } else {
     await loadFest();
   }
+}
+
+// consumeHostInit renders the first frame from the server-inlined
+// window.__HOST_INIT__ payload, skipping the API round trips that loadX would
+// otherwise make. Returns true on success; on any shape mismatch, falls back
+// to the normal fetch path.
+function consumeHostInit() {
+  const init = window.__HOST_INIT__;
+  if (!init || !init.route || !init.fest) return false;
+  if (init.route.mode !== route.mode) return false;
+  if (String(init.route.gameID) !== String(route.gameID)) return false;
+  if (route.mode === "match" && init.route.matchCode !== route.matchCode) return false;
+  if (route.mode === "stage" && init.route.stageCode !== route.stageCode) return false;
+  window.__HOST_INIT__ = null;
+
+  fest = init.fest;
+  venues = Array.isArray(fest.venues) ? fest.venues : [];
+
+  if (route.mode === "match") {
+    if (!init.match) return false;
+    state = init.match;
+    render();
+    return true;
+  }
+  if (route.mode === "stage") {
+    const token = ++stageLoadToken;
+    const stage = findStage(fest, route.stageCode);
+    stageMatches = stage?.matches || [];
+    stageStates = [];
+    stageStateByCode = new Map();
+    renderStage();
+    loadStageMatchStates(stageMatches, token).catch((error) => {
+      if (token !== stageLoadToken) return;
+      setStatus("error");
+      console.error(error);
+    });
+    return true;
+  }
+  if (route.mode === "venues") {
+    renderVenues();
+    return true;
+  }
+  if (route.mode === "seedImport") {
+    if (!init.seedImport) return false;
+    seedImport = init.seedImport;
+    renderSeedImport();
+    return true;
+  }
+  renderFest();
+  return true;
 }
 
 async function loadFest() {
