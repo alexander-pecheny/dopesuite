@@ -7,7 +7,7 @@ const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
 const {formatVenue, formatBattleVenue, statusLabel, formatNumber, formatPlace, sameArray, clamp, cssEscape, th, td} = gameTable;
-const route = currentRoute();
+let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 let state = null;
 let fest = null;
@@ -210,14 +210,14 @@ async function loadSeedImportPage() {
 
 function connectEvents() {
   const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
-  const matchScope = `match:${route.gameID}:${route.matchCode}`;
-  const venuesScope = `venues:${route.festID}`;
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
     if (consumeLocalMatchEcho(message)) {
       setStatus("saved");
       return;
     }
+    const matchScope = `match:${route.gameID}:${route.matchCode}`;
+    const venuesScope = `venues:${route.festID}`;
     if (route.mode === "match" && message.scope === matchScope) {
       applyUpdatedMatch(message.data, route.matchCode);
       setStatus("saved");
@@ -241,6 +241,56 @@ function connectEvents() {
     scheduleReload();
   });
   events.onerror = () => setStatus("reconnecting");
+}
+
+// SPA navigation for the EK tab strip: intercept same-origin clicks within
+// #ekTabs, update history, re-parse the route, and re-run loadCurrent. Keeps
+// the EventSource and presence connections alive across tab switches, so the
+// only work on switch is the data fetch and DOM rebuild for the new view.
+function bindSPANavigation() {
+  if (embedded) return;
+  ekTabsRoot?.addEventListener("click", (event) => {
+    if (event.defaultPrevented) return;
+    if (event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target?.closest?.("a[href]");
+    if (!link || !ekTabsRoot.contains(link)) return;
+    if (link.target && link.target !== "" && link.target !== "_self") return;
+    const href = link.getAttribute("href");
+    if (!href || href.startsWith("#")) return;
+    let url;
+    try {
+      url = new URL(href, window.location.origin);
+    } catch (_err) {
+      return;
+    }
+    if (url.origin !== window.location.origin) return;
+    if (url.pathname === window.location.pathname && url.search === window.location.search) {
+      event.preventDefault();
+      return;
+    }
+    event.preventDefault();
+    navigateTo(url.pathname + url.search);
+  });
+  window.addEventListener("popstate", () => {
+    runCurrentRoute();
+  });
+}
+
+function navigateTo(target) {
+  history.pushState(null, "", target);
+  runCurrentRoute();
+}
+
+function runCurrentRoute() {
+  route = currentRoute();
+  setStatus("saving");
+  loadCurrent()
+    .then(() => setStatus("saved"))
+    .catch((error) => {
+      setStatus("error");
+      console.error(error);
+    });
 }
 
 function scheduleReload() {
@@ -1888,6 +1938,7 @@ function option(value, label) {
   return gameTable.option(value, label);
 }
 
+bindSPANavigation();
 loadCurrent()
   .then(() => {
     setStatus("saved");
