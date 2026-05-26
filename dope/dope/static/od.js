@@ -83,6 +83,83 @@ window.addEventListener("resize", () => {
 document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
 async function loadAll() {
+  if (consumeGameInit()) {
+    revalidateAll().catch((error) => console.error(error));
+    return;
+  }
+  if (hydrateFromCache()) {
+    revalidateAll().catch((error) => console.error(error));
+    return;
+  }
+  await fetchAll();
+}
+
+// consumeGameInit hydrates scheme/state/fest from the server-inlined
+// window.__GAME_INIT__ payload, skipping the three cold API round trips that
+// loadAll would otherwise make. Returns true on success.
+function consumeGameInit() {
+  const init = window.__GAME_INIT__;
+  if (!init || !init.scheme || !init.state) return false;
+  window.__GAME_INIT__ = null;
+  scheme = init.scheme;
+  state = init.state;
+  fest = init.fest || null;
+  initFromScheme();
+  ensureState();
+  invalidateAllCaches();
+  render();
+  writeGameCache();
+  return true;
+}
+
+function gameCacheKey() {
+  return `od:game:${route.festID || ""}:${route.gameID || ""}`;
+}
+
+function readGameCache() {
+  try {
+    const raw = localStorage.getItem(gameCacheKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+function writeGameCache() {
+  if (!scheme || !state) return;
+  try {
+    localStorage.setItem(gameCacheKey(), JSON.stringify({scheme, state, fest}));
+  } catch (_err) {
+    // ignore quota / disabled
+  }
+}
+
+function hydrateFromCache() {
+  const cached = readGameCache();
+  if (!cached || !cached.scheme || !cached.state) return false;
+  scheme = cached.scheme;
+  state = cached.state;
+  fest = cached.fest || null;
+  initFromScheme();
+  ensureState();
+  invalidateAllCaches();
+  render();
+  return true;
+}
+
+async function fetchAll() {
+  const data = await fetchAllRaw();
+  scheme = data.scheme;
+  state = data.state;
+  fest = data.fest;
+  initFromScheme();
+  ensureState();
+  invalidateAllCaches();
+  render();
+  writeGameCache();
+}
+
+async function fetchAllRaw() {
   const [schemeResp, stateResp, festResp] = await Promise.all([
     fetch(`${route.apiBase}/scheme`),
     fetch(`${route.apiBase}/state`),
@@ -91,9 +168,24 @@ async function loadAll() {
   if (!schemeResp.ok) throw new Error(await schemeResp.text());
   if (!stateResp.ok) throw new Error(await stateResp.text());
   if (festResp && !festResp.ok) throw new Error(await festResp.text());
-  scheme = await schemeResp.json();
-  state = await stateResp.json();
-  fest = festResp ? await festResp.json() : null;
+  return {
+    scheme: await schemeResp.json(),
+    state: await stateResp.json(),
+    fest: festResp ? await festResp.json() : null,
+  };
+}
+
+async function revalidateAll() {
+  const prevSchemeJSON = JSON.stringify(scheme);
+  const prevStateJSON = JSON.stringify(state);
+  const fresh = await fetchAllRaw();
+  const freshSchemeJSON = JSON.stringify(fresh.scheme);
+  const freshStateJSON = JSON.stringify(fresh.state);
+  scheme = fresh.scheme;
+  state = fresh.state;
+  fest = fresh.fest;
+  writeGameCache();
+  if (freshSchemeJSON === prevSchemeJSON && freshStateJSON === prevStateJSON) return;
   initFromScheme();
   ensureState();
   invalidateAllCaches();

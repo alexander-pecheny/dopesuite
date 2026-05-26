@@ -536,13 +536,14 @@ func (s *server) serveHostGamePage(w http.ResponseWriter, r *http.Request, festI
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	scope := festScope{FestID: festID, GameID: gameID}
 	switch gameType {
 	case "od":
-		s.serveAppHTML(w, r, "static/od.html")
+		s.serveGameHTMLWithInit(w, r, "static/od.html", scope)
 	case "si", "ksi":
-		s.serveAppHTML(w, r, "static/si.html")
+		s.serveGameHTMLWithInit(w, r, "static/si.html", scope)
 	default:
-		s.serveHostHTMLWithInit(w, r, festScope{FestID: festID, GameID: gameID}, parts)
+		s.serveHostHTMLWithInit(w, r, scope, parts)
 	}
 }
 

@@ -199,12 +199,16 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 		if err == nil && gameID > 0 {
 			var gameType string
 			if err := s.db.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, id).Scan(&gameType); err == nil {
+				scope := festScope{FestID: id, GameID: gameID}
 				switch gameType {
 				case "od":
-					s.serveAppHTML(w, r, "static/od.html")
+					s.serveGameHTMLWithInit(w, r, "static/od.html", scope)
 					return
 				case "si", "ksi":
-					s.serveAppHTML(w, r, "static/si.html")
+					s.serveGameHTMLWithInit(w, r, "static/si.html", scope)
+					return
+				default:
+					s.serveViewerHTMLWithInit(w, r, scope, parts[1:])
 					return
 				}
 			}

@@ -7,12 +7,17 @@ const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 const gameTable = window.DopeTable;
 const setStatus = gameTable.createStatusReporter(statusNode);
 const {formatVenue, formatBattleVenue, formatBattleVenueShort, statusLabel, formatNumber, formatPlace, cssEscape, th, td} = gameTable;
-const route = currentRoute();
+let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 let state = null;
 let fest = null;
 let venues = [];
 let stageStates = [];
+let stageLoadToken = 0;
+let stageMatches = [];
+let stageStateByCode = new Map();
+let stageTableObserver = null;
+const stageMatchInflight = new Set();
 let reloadTimer = null;
 let readonlyTableIndex = null;
 let viewerTabsFadeFrame = 0;
@@ -56,6 +61,7 @@ window.addEventListener("resize", () => {
 });
 
 async function loadCurrent() {
+  if (consumeViewerInit()) return;
   if (route.mode === "match") {
     await loadMatch();
   } else if (route.mode === "stage") {
@@ -67,28 +73,172 @@ async function loadCurrent() {
   }
 }
 
+// consumeViewerInit renders the first frame from server-inlined
+// window.__VIEWER_INIT__, skipping the cold API round trips. Returns true on
+// success; mismatched routes fall back to the network path.
+function consumeViewerInit() {
+  const init = window.__VIEWER_INIT__;
+  if (!init || !init.route || !init.fest) return false;
+  if (init.route.mode !== route.mode) return false;
+  if (String(init.route.gameID) !== String(route.gameID)) return false;
+  if (route.mode === "match" && init.route.matchCode !== route.matchCode) return false;
+  if (route.mode === "stage" && init.route.stageCode !== route.stageCode) return false;
+  window.__VIEWER_INIT__ = null;
+
+  adoptFestView(init.fest);
+  if (Array.isArray(init.venues)) venues = init.venues;
+  writeFestCache(init.fest);
+
+  if (route.mode === "match") {
+    if (!init.match) return false;
+    state = init.match;
+    render();
+    return true;
+  }
+  if (route.mode === "venues") {
+    renderVenues();
+    return true;
+  }
+  if (route.mode === "stage") {
+    // Stage view needs per-match state which isn't in init. Fall back to the
+    // network path but with fest already hydrated, the wait shrinks to one
+    // batch of parallel match fetches.
+    return false;
+  }
+  renderFest();
+  return true;
+}
+
+function festCacheKey() {
+  return `viewer:fest:${route.festID || ""}:${route.gameID || ""}`;
+}
+
+function readFestCache() {
+  try {
+    const raw = localStorage.getItem(festCacheKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+function writeFestCache(view) {
+  if (!view) return;
+  try {
+    localStorage.setItem(festCacheKey(), JSON.stringify(view));
+  } catch (_err) {
+    // ignore
+  }
+}
+
+function adoptFestView(view) {
+  fest = view;
+  if (Array.isArray(view?.venues)) venues = view.venues;
+}
+
+function hydrateFestFromCache() {
+  if (fest) return true;
+  const cached = readFestCache();
+  if (!cached) return false;
+  adoptFestView(cached);
+  return true;
+}
+
 async function loadFest() {
+  const cached = hydrateFestFromCache();
+  if (cached) renderFest();
   const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
-  fest = await response.json();
-  renderFest();
+  const fresh = await response.json();
+  const changed = !cached || fresh.revision !== fest?.revision;
+  adoptFestView(fresh);
+  writeFestCache(fresh);
+  if (changed) renderFest();
 }
 
 async function loadStage() {
+  ++stageLoadToken;
+  const cached = hydrateFestFromCache();
+  if (cached) {
+    const stage = findStage(fest, route.stageCode);
+    stageMatches = stage?.matches || [];
+    stageStates = [];
+    stageStateByCode = new Map();
+    renderStage();
+  }
   const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
-  fest = await response.json();
-  const stage = findStage(fest, route.stageCode);
-  const matches = stage?.matches || [];
-  stageStates = await Promise.all(matches.map(async (match) => {
-    const matchResponse = await fetch(`${route.apiBase}/matches/${encodeURIComponent(match.code)}`);
-    if (!matchResponse.ok) throw new Error(await matchResponse.text());
-    return matchResponse.json();
-  }));
-  renderStage();
+  const fresh = await response.json();
+  const changed = !cached || fresh.revision !== fest?.revision;
+  adoptFestView(fresh);
+  writeFestCache(fresh);
+  if (changed) {
+    const stage = findStage(fest, route.stageCode);
+    stageMatches = stage?.matches || [];
+    stageStates = [];
+    stageStateByCode = new Map();
+    renderStage();
+  }
+}
+
+async function fetchStageMatchState(matchCode, token) {
+  if (!matchCode || stageStateByCode.has(matchCode) || stageMatchInflight.has(matchCode)) return;
+  stageMatchInflight.add(matchCode);
+  try {
+    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}`);
+    if (!response.ok) throw new Error(await response.text());
+    const matchState = await response.json();
+    if (token !== stageLoadToken || route.mode !== "stage") return;
+    stageStateByCode.set(matchCode, matchState);
+    stageStates = stageMatches.map((match) => stageStateByCode.get(match.code)).filter(Boolean);
+    const frame = viewerRoot.querySelector(`.stage-match-frame[data-match-code="${cssEscape(matchCode)}"]`);
+    if (frame) {
+      frame.replaceChildren(withMatchState(matchState, () => buildReadonlyTable()));
+      scheduleReadonlyNameOverflowUpdate(frame);
+    }
+  } finally {
+    stageMatchInflight.delete(matchCode);
+  }
+}
+
+function setupViewerStageObserver() {
+  if (stageTableObserver) {
+    stageTableObserver.disconnect();
+    stageTableObserver = null;
+  }
+  const frames = Array.from(viewerRoot.querySelectorAll(".stage-match-frame"));
+  if (frames.length === 0) return;
+  const observerToken = stageLoadToken;
+  if (!("IntersectionObserver" in window)) {
+    frames.forEach((frame) => {
+      fetchStageMatchState(frame.dataset.matchCode || "", observerToken).catch((error) => {
+        if (observerToken !== stageLoadToken) return;
+        console.error(error);
+      });
+    });
+    return;
+  }
+  const root = viewerRoot.closest(".sheet-frame");
+  stageTableObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      const frame = entry.target;
+      fetchStageMatchState(frame.dataset.matchCode || "", observerToken)
+        .then(() => {
+          if (observerToken !== stageLoadToken) return;
+          stageTableObserver?.unobserve(frame);
+        })
+        .catch((error) => {
+          if (observerToken !== stageLoadToken) return;
+          console.error(error);
+        });
+    });
+  }, {root, rootMargin: "900px 0px"});
+  frames.forEach((frame) => stageTableObserver.observe(frame));
 }
 
 async function loadMatch() {
+  hydrateFestFromCache();
   const [matchResponse, festResponse] = await Promise.all([
     fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode)}`),
     fetch(route.apiBase),
@@ -96,28 +246,35 @@ async function loadMatch() {
   if (!matchResponse.ok) throw new Error(await matchResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
   state = await matchResponse.json();
-  fest = await festResponse.json();
+  adoptFestView(await festResponse.json());
+  writeFestCache(fest);
   render();
 }
 
 async function loadVenuesPage() {
+  const cached = hydrateFestFromCache();
+  if (cached) renderVenues();
   const [venuesResponse, festResponse] = await Promise.all([
     fetch(`/api/fest/${route.festID}/venues`),
     fetch(route.apiBase),
   ]);
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  venues = await venuesResponse.json();
-  fest = await festResponse.json();
-  renderVenues();
+  const freshVenues = await venuesResponse.json();
+  const freshFest = await festResponse.json();
+  const changed = !cached || JSON.stringify(freshVenues) !== JSON.stringify(venues);
+  venues = freshVenues;
+  adoptFestView(freshFest);
+  writeFestCache(freshFest);
+  if (changed) renderVenues();
 }
 
 function connectEvents() {
   const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
-  const matchScope = `match:${route.gameID}:${route.matchCode}`;
-  const venuesScope = `venues:${route.festID}`;
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
+    const matchScope = `match:${route.gameID}:${route.matchCode}`;
+    const venuesScope = `venues:${route.festID}`;
     if (route.mode === "match" && message.scope === matchScope) {
       applyUpdatedMatch(message.data);
       setLive(true);
@@ -141,6 +298,51 @@ function connectEvents() {
     scheduleReload();
   });
   events.onerror = () => setLive(false);
+}
+
+// SPA navigation for the viewer tab strip: same pattern as the host EK page.
+// Intercepts same-origin clicks within #viewerTabs, pushes the URL, and runs
+// loadCurrent without reloading the page.
+function bindViewerSPANavigation() {
+  if (embedded) return;
+  viewerTabsRoot?.addEventListener("click", (event) => {
+    if (event.defaultPrevented) return;
+    if (event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target?.closest?.("a[href]");
+    if (!link || !viewerTabsRoot.contains(link)) return;
+    if (link.target && link.target !== "" && link.target !== "_self") return;
+    const href = link.getAttribute("href");
+    if (!href || href.startsWith("#")) return;
+    let url;
+    try {
+      url = new URL(href, window.location.origin);
+    } catch (_err) {
+      return;
+    }
+    if (url.origin !== window.location.origin) return;
+    if (url.pathname === window.location.pathname && url.search === window.location.search) {
+      event.preventDefault();
+      return;
+    }
+    event.preventDefault();
+    history.pushState(null, "", url.pathname + url.search);
+    runViewerCurrentRoute();
+  });
+  window.addEventListener("popstate", () => {
+    runViewerCurrentRoute();
+  });
+}
+
+function runViewerCurrentRoute() {
+  route = currentRoute();
+  setStatus("saving");
+  loadCurrent()
+    .then(() => setLive(true))
+    .catch((error) => {
+      setLive(false);
+      console.error(error);
+    });
 }
 
 function scheduleReload() {
@@ -181,9 +383,12 @@ function renderStage() {
   setHeading("ЭК");
   document.title = pageTitle();
   renderViewerTabs();
-  viewerRoot.replaceChildren(stageType(stage) === "reseed"
-    ? buildReseedStagePanel(stage)
-    : buildReadonlyStageTables());
+  if (stageType(stage) === "reseed") {
+    viewerRoot.replaceChildren(buildReseedStagePanel(stage));
+  } else {
+    viewerRoot.replaceChildren(buildReadonlyStageTables());
+    setupViewerStageObserver();
+  }
   scheduleReadonlyNameOverflowUpdate();
 }
 
@@ -224,12 +429,13 @@ function applyUpdatedMatch(updated) {
 }
 
 function applyReadonlyStageMatchUpdate(updated) {
-  const index = stageStates.findIndex((matchState) => matchState.code === updated.code);
-  if (index < 0) {
+  if (!updated?.code) return;
+  if (!stageMatches.some((match) => match.code === updated.code)) {
     scheduleReload();
     return;
   }
-  stageStates[index] = updated;
+  stageStateByCode.set(updated.code, updated);
+  stageStates = stageMatches.map((match) => stageStateByCode.get(match.code)).filter(Boolean);
   const frame = viewerRoot.querySelector(`.stage-match-frame[data-match-code="${cssEscape(updated.code)}"]`);
   if (frame) {
     frame.replaceChildren(withMatchState(updated, () => buildReadonlyTable()));
@@ -381,11 +587,19 @@ function updateViewerTabsScrollFade() {
 function buildReadonlyStageTables() {
   const wrapper = document.createElement("div");
   wrapper.className = "stage-table-stack";
-  stageStates.forEach((matchState) => {
+  stageMatches.forEach((match) => {
     const frame = document.createElement("section");
     frame.className = "stage-match-frame";
-    frame.dataset.matchCode = matchState.code || "";
-    frame.appendChild(withMatchState(matchState, () => buildReadonlyTable()));
+    frame.dataset.matchCode = match.code || "";
+    const matchState = stageStateByCode.get(match.code);
+    if (matchState) {
+      frame.appendChild(withMatchState(matchState, () => buildReadonlyTable()));
+    } else {
+      const placeholder = document.createElement("div");
+      placeholder.className = "stage-match-placeholder";
+      placeholder.textContent = match.title || `Бой ${match.code}`;
+      frame.appendChild(placeholder);
+    }
     wrapper.appendChild(frame);
   });
   return wrapper;
@@ -736,6 +950,7 @@ function matchTitleFor(matchState) {
   return `${matchState?.title || ""}${venue}`;
 }
 
+bindViewerSPANavigation();
 loadCurrent()
   .then(() => {
     setLive(true);
