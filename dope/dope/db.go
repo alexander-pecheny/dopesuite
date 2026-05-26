@@ -1211,16 +1211,18 @@ type hostInitPayload struct {
 }
 
 type gameInitPayload struct {
-	Scheme json.RawMessage `json:"scheme,omitempty"`
-	State  json.RawMessage `json:"state,omitempty"`
-	Fest   json.RawMessage `json:"fest,omitempty"`
+	Scheme  json.RawMessage `json:"scheme,omitempty"`
+	State   json.RawMessage `json:"state,omitempty"`
+	Fest    json.RawMessage `json:"fest,omitempty"`
+	CanEdit bool            `json:"canEdit,omitempty"`
 }
 
 type viewerInitPayload struct {
-	Route  hostInitRoute   `json:"route"`
-	Fest   json.RawMessage `json:"fest,omitempty"`
-	Match  *MatchView      `json:"match,omitempty"`
-	Venues json.RawMessage `json:"venues,omitempty"`
+	Route   hostInitRoute   `json:"route"`
+	Fest    json.RawMessage `json:"fest,omitempty"`
+	Match   *MatchView      `json:"match,omitempty"`
+	Venues  json.RawMessage `json:"venues,omitempty"`
+	CanEdit bool            `json:"canEdit,omitempty"`
 }
 
 type hostInitRoute struct {
@@ -1267,6 +1269,11 @@ func (s *server) serveGameHTMLWithInit(w http.ResponseWriter, r *http.Request, h
 		s.serveAppHTML(w, r, htmlPath)
 		return
 	}
+	if user, ok := s.lookupSession(r); ok {
+		if role, err := s.festUserRole(r.Context(), scope.FestID, user.UserID); err == nil && festRoleCanEditGameTables(role) {
+			payload.CanEdit = true
+		}
+	}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		s.serveAppHTML(w, r, htmlPath)
@@ -1287,6 +1294,11 @@ func (s *server) serveViewerHTMLWithInit(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		s.serveViewerHTML(w, r)
 		return
+	}
+	if user, ok := s.lookupSession(r); ok {
+		if role, err := s.festUserRole(r.Context(), scope.FestID, user.UserID); err == nil && festRoleCanEditGameTables(role) {
+			payload.CanEdit = true
+		}
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

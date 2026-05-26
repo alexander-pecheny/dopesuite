@@ -9,6 +9,8 @@ const setStatus = gameTable.createStatusReporter(statusNode);
 const {formatVenue, formatBattleVenue, formatBattleVenueShort, statusLabel, formatNumber, formatPlace, cssEscape, th, td} = gameTable;
 let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
+const canEdit = Boolean(window.__VIEWER_INIT__?.canEdit);
+const editorLink = canEdit && !embedded ? gameTable.mountEditorLink(statusNode) : null;
 let state = null;
 let fest = null;
 let venues = [];
@@ -329,6 +331,7 @@ function bindViewerSPANavigation() {
 function runViewerCurrentRoute() {
   route = currentRoute();
   setStatus("saving");
+  editorLink?.refresh();
   loadCurrent()
     .then(() => setLive(true))
     .catch((error) => {

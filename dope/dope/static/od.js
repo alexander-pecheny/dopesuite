@@ -27,6 +27,11 @@ const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "b
 const route = gameTable.parseGameRoute();
 const viewer = Boolean(route.viewer);
 document.body.classList.toggle("viewer-readonly", viewer);
+if (viewer) {
+  if (window.__GAME_INIT__?.canEdit) gameTable.mountEditorLink(statusNode);
+} else {
+  gameTable.mountViewerLink(statusNode);
+}
 let scheme = null;
 let state = null;
 let fest = null;

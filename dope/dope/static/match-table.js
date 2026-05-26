@@ -1249,6 +1249,53 @@
     };
   }
 
+  function mountEditorLink(statusNode) {
+    const actions = statusNode?.parentElement;
+    if (!actions) return null;
+    const link = document.createElement("a");
+    link.className = "action-icon editor-link";
+    link.setAttribute("aria-label", "Открыть в режиме редактирования");
+    link.title = "Открыть в режиме редактирования";
+    link.textContent = "✏️";
+    link.href = editorHrefForCurrentLocation();
+    actions.appendChild(link);
+    return {
+      element: link,
+      refresh() {
+        link.href = editorHrefForCurrentLocation();
+      },
+    };
+  }
+
+  function editorHrefForCurrentLocation() {
+    return "/host" + window.location.pathname + window.location.search;
+  }
+
+  function mountViewerLink(statusNode) {
+    const actions = statusNode?.parentElement;
+    if (!actions) return null;
+    const link = document.createElement("a");
+    link.className = "action-icon viewer-link";
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.setAttribute("aria-label", "Открыть зрительскую страницу");
+    link.title = "Открыть зрительскую страницу";
+    link.textContent = "👀";
+    link.href = viewerHrefForCurrentLocation();
+    actions.appendChild(link);
+    return {
+      element: link,
+      refresh() {
+        link.href = viewerHrefForCurrentLocation();
+      },
+    };
+  }
+
+  function viewerHrefForCurrentLocation() {
+    const path = window.location.pathname.replace(/^\/host(?=\/|$)/, "");
+    return (path || "/") + window.location.search;
+  }
+
   function parseGameRoute(pathname = window.location.pathname) {
     const host = pathname.match(/^\/host\/fest\/([^/]+)\/game\/([^/]+)/);
     if (host) {
@@ -1360,6 +1407,8 @@
     buildVenuesTable,
     createFloatingPopover,
     createStatusReporter,
+    mountEditorLink,
+    mountViewerLink,
     parseGameRoute,
     createTeamNameOverflowController,
     fitEKStageTeamName,
