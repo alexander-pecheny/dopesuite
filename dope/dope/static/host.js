@@ -192,7 +192,7 @@ async function loadFest() {
 }
 
 async function loadStage() {
-  ++stageLoadToken;
+  const token = ++stageLoadToken;
   const cached = hydrateFestFromCache();
   if (cached) {
     const stage = findStage(fest, route.stageCode);
@@ -201,14 +201,18 @@ async function loadStage() {
     stageStateByCode = new Map();
     renderStage();
   }
-  const [response, venuesResponse] = await Promise.all([
+  const [response, venuesResponse, batchResponse] = await Promise.all([
     fetch(route.apiBase),
     fetch(`${route.festApi}/venues`),
+    fetch(`${route.apiBase}/stages/${encodeURIComponent(route.stageCode)}/matches`),
   ]);
   if (!response.ok) throw new Error(await response.text());
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
+  if (!batchResponse.ok) throw new Error(await batchResponse.text());
   const fresh = await response.json();
   const freshVenues = await venuesResponse.json();
+  const batchedMatches = await batchResponse.json();
+  if (token !== stageLoadToken || route.mode !== "stage") return;
   const changed = !cached || fresh.revision !== fest?.revision;
   fest = fresh;
   venues = freshVenues;
@@ -218,8 +222,17 @@ async function loadStage() {
     stageMatches = stage?.matches || [];
     stageStates = [];
     stageStateByCode = new Map();
-    renderStage();
   }
+  if (Array.isArray(batchedMatches)) {
+    for (const m of batchedMatches) {
+      if (m?.code) stageStateByCode.set(m.code, m);
+    }
+    stageStates = stageMatches.map((match) => stageStateByCode.get(match.code)).filter(Boolean);
+  }
+  // Re-render so rendered placeholder frames pick up the freshly-batched
+  // state immediately. Frames not yet rendered will hit the populated map
+  // the moment the IntersectionObserver fires for them.
+  renderStage();
 }
 
 async function loadMatch() {
@@ -966,40 +979,17 @@ function buildStageMatchPlaceholder(match) {
   return placeholder;
 }
 
-const stageMatchInflight = new Set();
-
-async function fetchStageMatchState(matchCode, token) {
-  if (!matchCode) return;
-  if (stageStateByCode.has(matchCode)) return;
-  if (stageMatchInflight.has(matchCode)) return;
-  stageMatchInflight.add(matchCode);
-  try {
-    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}`);
-    if (!response.ok) throw new Error(await response.text());
-    const matchState = await response.json();
-    if (token !== stageLoadToken || route.mode !== "stage") return;
-    applyStageMatchUpdate(matchState, {renderOnlyIfNear: true});
-  } finally {
-    stageMatchInflight.delete(matchCode);
-  }
-}
-
 function setupStageTableObserver() {
   disconnectStageTableObserver();
   const frames = Array.from(hostRoot.querySelectorAll(".stage-match-frame"));
   if (frames.length === 0) return;
-  const observerToken = stageLoadToken;
   if (!("IntersectionObserver" in window)) {
-    // Fallback for old browsers: fetch everything up front, render all frames.
-    frames.forEach((frame) => {
-      fetchStageMatchState(frame.dataset.matchCode || "", observerToken).catch((error) => {
-        if (observerToken !== stageLoadToken) return;
-        console.error(error);
-      });
-    });
     renderStageMatchFrames(frames, {force: true});
     return;
   }
+  // After the batched /stages/{code}/matches fetch lands, the data for every
+  // frame is in stageStateByCode. The observer's only job now is to defer
+  // DOM construction for off-screen tables.
   const root = hostRoot.closest(".sheet-frame");
   stageTableObserver = new IntersectionObserver((entries) => {
     const visibleFrames = [];
@@ -1008,18 +998,6 @@ function setupStageTableObserver() {
       const frame = entry.target;
       frame.dataset.nearViewport = "1";
       visibleFrames.push(frame);
-      fetchStageMatchState(frame.dataset.matchCode || "", observerToken)
-        .then(() => {
-          if (observerToken !== stageLoadToken) return;
-          // applyStageMatchUpdate already re-renders when state arrives, but
-          // call again here to cover the race where the frame is still in
-          // placeholder mode when fetch resolves out-of-order.
-          if (frame.dataset.rendered !== "1") renderStageMatchFrames([frame]);
-        })
-        .catch((error) => {
-          if (observerToken !== stageLoadToken) return;
-          console.error(error);
-        });
     });
     renderStageMatchFrames(visibleFrames);
     visibleFrames.forEach((frame) => {
