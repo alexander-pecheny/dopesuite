@@ -1779,6 +1779,44 @@ a.list-row:hover { background: var(--hover-bg); }
   --cell-fill: var(--red);
 }
 
+.answer-cell.cell-selected {
+  position: relative;
+}
+
+.answer-cell.cell-selected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(26, 115, 232, 0.18);
+  box-shadow:
+    var(--cell-selection-top, 0 0 0 0 transparent),
+    var(--cell-selection-bottom, 0 0 0 0 transparent),
+    var(--cell-selection-left, 0 0 0 0 transparent),
+    var(--cell-selection-right, 0 0 0 0 transparent);
+  z-index: 1;
+}
+
+.answer-cell.cell-selected.active::after {
+  background: transparent;
+}
+
+.answer-cell.cell-selection-top {
+  --cell-selection-top: inset 0 2px 0 var(--blue);
+}
+
+.answer-cell.cell-selection-bottom {
+  --cell-selection-bottom: inset 0 -2px 0 var(--blue);
+}
+
+.answer-cell.cell-selection-left {
+  --cell-selection-left: inset 2px 0 0 var(--blue);
+}
+
+.answer-cell.cell-selection-right {
+  --cell-selection-right: inset -2px 0 0 var(--blue);
+}
+
 .answer-row td {
   height: var(--question-size);
 }

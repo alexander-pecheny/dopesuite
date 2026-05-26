@@ -24,6 +24,8 @@ const localMatchEchoes = new Set();
 let matchTableIndex = null;
 let activeAnswerNode = null;
 let activeTeamRows = [];
+const matchSelections = new Map();
+let stageSelection = null;
 let presence = null;
 let seedImport = null;
 let seedImportNotice = "";
@@ -506,6 +508,7 @@ function renderStage(options = {}) {
     hostRoot.replaceChildren(buildStageTables());
     bindStageOverflowScroll();
     setupStageTableObserver();
+    attachStageSelection(hostRoot.querySelector(".stage-table-stack"));
   }
   if (options.preserveScroll && scrollFrame) {
     scrollFrame.scrollTop = scrollTop;
@@ -552,6 +555,7 @@ function render() {
   matchTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
   activeAnswerNode = state.finished ? null : matchTableIndex.get("answer", activeCell);
   markActiveTeamRows(activeAnswerNode);
+  attachMatchSelection(table, state, state.code || route.matchCode);
   if (embedded) {
     hostRoot.replaceChildren(table);
     notifyEmbeddedResize();
@@ -1024,7 +1028,9 @@ function renderStageMatchFrame(frame, options = {}) {
   if (!matchState) return false;
   const hadFocus = document.activeElement?.closest?.(".stage-match-frame") === frame;
   frame.dataset.rendered = "1";
-  frame.replaceChildren(withMatchState(matchState, () => buildTable({compact: true})));
+  const stageTable = withMatchState(matchState, () => buildTable({compact: true}));
+  frame.replaceChildren(stageTable);
+  stageSelection?.refresh();
   if (hadFocus && activeCell.matchCode === matchState.code) {
     focusActiveCell({preventScroll: true});
   }
@@ -1169,6 +1175,237 @@ function resetMatchTableIndex() {
   matchTableIndex = null;
   activeAnswerNode = null;
   clearActiveTeamRows();
+  for (const helper of matchSelections.values()) helper.unbind();
+  matchSelections.clear();
+  if (stageSelection) {
+    stageSelection.unbind();
+    stageSelection = null;
+  }
+}
+
+function stageRowOffset(matchIndex) {
+  let offset = 0;
+  for (let i = 0; i < matchIndex && i < stageMatches.length; i++) {
+    const s = stageStateByCode.get(stageMatches[i]?.code);
+    offset += s?.teams?.length || 0;
+  }
+  return offset;
+}
+
+function stageCoordOf(cell) {
+  const team = Number(cell.dataset.team);
+  const theme = Number(cell.dataset.theme);
+  const answer = Number(cell.dataset.answer);
+  if (!Number.isInteger(team) || !Number.isInteger(theme) || !Number.isInteger(answer)) return null;
+  const matchCode = cell.dataset.matchCode;
+  const matchIndex = stageMatches.findIndex((m) => m.code === matchCode);
+  if (matchIndex < 0) return null;
+  const matchState = stageStateByCode.get(matchCode);
+  if (!matchState) return null;
+  const answers = answerCountFor(matchState);
+  if (answers <= 0) return null;
+  const shootout = cell.dataset.shootout === "1";
+  const themeOrder = shootout ? regularThemeCountFor(matchState) + theme : theme;
+  return {row: stageRowOffset(matchIndex) + team, col: themeOrder * answers + answer};
+}
+
+function stageCellAtCoord(coord) {
+  if (!coord) return null;
+  let remaining = coord.row;
+  for (const match of stageMatches) {
+    const matchState = stageStateByCode.get(match.code);
+    if (!matchState) continue;
+    const teamCount = matchState.teams?.length || 0;
+    if (remaining < teamCount) {
+      const team = remaining;
+      const answers = answerCountFor(matchState);
+      if (answers <= 0) return null;
+      const regular = regularThemeCountFor(matchState);
+      const themeOrder = Math.floor(coord.col / answers);
+      const answer = coord.col % answers;
+      const shootout = themeOrder >= regular;
+      const theme = shootout ? themeOrder - regular : themeOrder;
+      const frame = stageMatchFrame(match.code);
+      return frame?.querySelector(
+        `.answer-cell[data-team="${cssEscape(team)}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(theme)}"][data-answer="${cssEscape(answer)}"]`,
+      ) || null;
+    }
+    remaining -= teamCount;
+  }
+  return null;
+}
+
+function stageApplyValues(edits) {
+  for (const {cell, value} of edits) {
+    const matchCode = cell.dataset.matchCode;
+    if (!matchCode) continue;
+    const matchState = stageStateByCode.get(matchCode);
+    if (!matchState || matchState.finished) continue;
+    ekApplyValues(matchCode, matchState, [{cell, value}]);
+  }
+}
+
+function attachStageSelection(container) {
+  if (stageSelection) {
+    stageSelection.unbind();
+    stageSelection = null;
+  }
+  if (!container) return null;
+  stageSelection = gameTable.createCellRangeSelection({
+    root: container,
+    cellSelector: ".answer-cell",
+    readonly: () => false,
+    coordOf: stageCoordOf,
+    cellAtCoord: stageCellAtCoord,
+    serialize: ekSerializeMark,
+    parse: parseMarkText,
+    applyValues: stageApplyValues,
+    onActiveChange: (cell) => {
+      if (!cell) return;
+      const team = Number(cell.dataset.team);
+      const theme = Number(cell.dataset.theme);
+      const answer = Number(cell.dataset.answer);
+      const shootout = cell.dataset.shootout === "1";
+      const matchCode = cell.dataset.matchCode || activeCell.matchCode;
+      activeCell = {matchCode, team, shootout, theme, answer};
+      markActiveCell();
+      publishPresence();
+    },
+  });
+  stageSelection.bind();
+  return stageSelection;
+}
+
+function answerCountFor(matchState) {
+  return matchState?.questionValues?.length || 0;
+}
+
+function regularThemeCountFor(matchState) {
+  return matchState?.teams?.[0]?.themes?.length || 0;
+}
+
+function ekCoordOf(cell, matchState) {
+  const team = Number(cell.dataset.team);
+  const theme = Number(cell.dataset.theme);
+  const answer = Number(cell.dataset.answer);
+  if (!Number.isInteger(team) || !Number.isInteger(theme) || !Number.isInteger(answer)) return null;
+  const shootout = cell.dataset.shootout === "1";
+  const themeOrder = shootout ? regularThemeCountFor(matchState) + theme : theme;
+  const answers = answerCountFor(matchState);
+  if (answers <= 0) return null;
+  return {row: team, col: themeOrder * answers + answer};
+}
+
+function ekCellAtCoord(table, coord, matchState) {
+  if (!coord) return null;
+  const answers = answerCountFor(matchState);
+  if (answers <= 0) return null;
+  const themeOrder = Math.floor(coord.col / answers);
+  const answer = coord.col % answers;
+  const regular = regularThemeCountFor(matchState);
+  const shootout = themeOrder >= regular;
+  const theme = shootout ? themeOrder - regular : themeOrder;
+  return table.querySelector(
+    `.answer-cell[data-team="${cssEscape(coord.row)}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(theme)}"][data-answer="${cssEscape(answer)}"]`,
+  );
+}
+
+function ekSerializeMark(cell) {
+  if (cell.classList.contains("right")) return "+";
+  if (cell.classList.contains("wrong")) return "-";
+  return "";
+}
+
+function parseMarkText(text) {
+  const value = String(text || "").trim().toLowerCase();
+  if (value === "") return "";
+  if (["+", "1", "right", "y", "yes", "✓", "v", "да", "п", "п."].includes(value)) return "right";
+  if (["-", "−", "0", "wrong", "n", "no", "x", "✗", "нет", "м", "м."].includes(value)) return "wrong";
+  return "";
+}
+
+function ekApplyValues(matchCode, matchState, edits) {
+  for (const {cell, value} of edits) {
+    const mark = value === "right" ? "right" : value === "wrong" ? "wrong" : "";
+    gameTable.setMarkClass(cell, mark);
+    const team = Number(cell.dataset.team);
+    const theme = Number(cell.dataset.theme);
+    const answer = Number(cell.dataset.answer);
+    const shootout = cell.dataset.shootout === "1";
+    const target = shootout ? shootoutThemesFor(matchState.teams[team])[theme] : matchState.teams[team]?.themes?.[theme];
+    if (target?.answers) target.answers[answer] = mark;
+    const payload = {team, theme, answer, mark};
+    if (shootout) payload.shootout = true;
+    sendUpdate(payload, matchCode);
+  }
+}
+
+function attachMatchSelection(table, matchState, matchCode) {
+  if (!table || !matchState) return;
+  if (matchSelections.has(matchCode)) {
+    matchSelections.get(matchCode).unbind();
+    matchSelections.delete(matchCode);
+  }
+  const helper = gameTable.createCellRangeSelection({
+    root: table,
+    cellSelector: ".answer-cell",
+    readonly: () => Boolean(matchState.finished),
+    coordOf: (cell) => ekCoordOf(cell, matchState),
+    cellAtCoord: (coord) => ekCellAtCoord(table, coord, matchState),
+    serialize: ekSerializeMark,
+    parse: parseMarkText,
+    applyValues: (edits) => ekApplyValues(matchCode, matchState, edits),
+    onActiveChange: (cell) => {
+      if (!cell) return;
+      const team = Number(cell.dataset.team);
+      const theme = Number(cell.dataset.theme);
+      const answer = Number(cell.dataset.answer);
+      const shootout = cell.dataset.shootout === "1";
+      activeCell = {matchCode, team, shootout, theme, answer};
+      markActiveCell();
+      publishPresence();
+    },
+  });
+  helper.bind();
+  matchSelections.set(matchCode, helper);
+  return helper;
+}
+
+function activeMatchSelection() {
+  if (route.mode === "stage") return stageSelection;
+  return matchSelections.get(activeCell.matchCode || currentMatchCode()) || null;
+}
+
+function activeSelectionCoord() {
+  if (route.mode === "stage") {
+    const matchCode = activeCell.matchCode || currentMatchCode();
+    const matchIndex = stageMatches.findIndex((m) => m.code === matchCode);
+    if (matchIndex < 0) return null;
+    const matchState = stageStateByCode.get(matchCode);
+    if (!matchState) return null;
+    const answers = answerCountFor(matchState);
+    if (answers <= 0) return null;
+    const themeOrder = activeCell.shootout ? regularThemeCountFor(matchState) + activeCell.theme : activeCell.theme;
+    return {row: stageRowOffset(matchIndex) + activeCell.team, col: themeOrder * answers + activeCell.answer};
+  }
+  const matchState = activeMatchState();
+  if (!matchState) return null;
+  return ekCoordOf({
+    dataset: {
+      team: String(activeCell.team),
+      theme: String(activeCell.theme),
+      answer: String(activeCell.answer),
+      shootout: activeCell.shootout ? "1" : "0",
+    },
+  }, matchState);
+}
+
+function syncSelectionToActiveCell() {
+  const helper = activeMatchSelection();
+  if (!helper) return;
+  const coord = activeSelectionCoord();
+  if (!coord) return;
+  helper.setSelection(coord, coord, {focus: false});
 }
 
 function buildTable(options = {}) {
@@ -1560,27 +1797,44 @@ function handleGlobalKeydown(event) {
     const key = event.key.toLowerCase();
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      moveActiveCell(0, -1);
+      moveActiveCell(0, -1, event.shiftKey);
     } else if (event.key === "ArrowRight") {
       event.preventDefault();
-      moveActiveCell(0, 1);
+      moveActiveCell(0, 1, event.shiftKey);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      moveActiveCell(-1, 0);
+      moveActiveCell(-1, 0, event.shiftKey);
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      moveActiveCell(1, 0);
+      moveActiveCell(1, 0, event.shiftKey);
     } else if (key === "q" || key === "й" || key === "1") {
       event.preventDefault();
-      setActiveMark("right");
+      setMarkForSelection("right");
     } else if (key === "w" || key === "ц" || key === "-" || key === "2") {
       event.preventDefault();
-      setActiveMark("wrong");
+      setMarkForSelection("wrong");
     } else if (key === "backspace" || key === "delete" || event.key === " ") {
       event.preventDefault();
-      setActiveMark("");
+      setMarkForSelection("");
     }
   });
+}
+
+function setMarkForSelection(mark) {
+  if (state?.finished && route.mode === "match") return;
+  const helper = activeMatchSelection();
+  const cells = helper?.selectedCells() || [];
+  if (cells.length > 1) {
+    if (route.mode === "stage") {
+      stageApplyValues(cells.map((cell) => ({cell, value: mark})));
+      return;
+    }
+    const matchState = activeMatchState();
+    if (!matchState || matchState.finished) return;
+    ekApplyValues(activeCell.matchCode || currentMatchCode(), matchState, cells.map((cell) => ({cell, value: mark})));
+    return;
+  }
+  setActiveMark(mark);
 }
 
 function isFormControl(target) {
@@ -1594,17 +1848,68 @@ function selectAnswerCell(team, shootout, theme, answer, options = {}) {
   if (options.focus !== false) {
     focusActiveCell();
   }
+  if (options.syncSelection) syncSelectionToActiveCell();
 }
 
-function moveActiveCell(teamDelta, answerDelta) {
+function moveActiveCell(teamDelta, answerDelta, extend = false) {
   const maxTeam = state.teams.length - 1;
   const maxColumn = totalThemeCount() * state.questionValues.length - 1;
   const column = activeCellColumn();
-  const nextTeam = clamp(activeCell.team + teamDelta, 0, maxTeam);
-  const nextColumn = clamp(column + answerDelta, 0, maxColumn);
-  activeCell = cellFromColumn(nextTeam, nextColumn);
+  let nextTeam = activeCell.team + teamDelta;
+  let nextColumn = column + answerDelta;
+  let nextMatchCode = activeCell.matchCode || currentMatchCode();
+  if (route.mode === "stage" && (nextTeam < 0 || nextTeam > maxTeam)) {
+    const sibling = adjacentStageMatch(nextMatchCode, nextTeam < 0 ? -1 : 1);
+    if (sibling) {
+      nextMatchCode = sibling.code;
+      const siblingMaxTeam = (sibling.state?.teams?.length || 1) - 1;
+      nextTeam = nextTeam < 0 ? siblingMaxTeam : 0;
+    } else {
+      nextTeam = clamp(nextTeam, 0, maxTeam);
+    }
+  } else {
+    nextTeam = clamp(nextTeam, 0, maxTeam);
+  }
+  nextColumn = clamp(nextColumn, 0, maxColumn);
+  const previousMatchCode = activeCell.matchCode || currentMatchCode();
+  if (nextMatchCode !== previousMatchCode) {
+    const siblingState = stageStateByCode.get(nextMatchCode);
+    if (siblingState) {
+      withMatchState(siblingState, () => {
+        activeCell = {...cellFromColumn(nextTeam, nextColumn), matchCode: nextMatchCode};
+      });
+    }
+  } else {
+    activeCell = cellFromColumn(nextTeam, nextColumn);
+  }
   markActiveCell();
   focusActiveCell();
+  if (extend) {
+    extendSelectionToActiveCell();
+  } else {
+    syncSelectionToActiveCell();
+  }
+}
+
+function adjacentStageMatch(matchCode, direction) {
+  if (route.mode !== "stage") return null;
+  const index = stageMatches.findIndex((match) => match.code === matchCode);
+  if (index < 0) return null;
+  const targetIndex = index + direction;
+  const targetMatch = stageMatches[targetIndex];
+  if (!targetMatch) return null;
+  const targetState = stageStateByCode.get(targetMatch.code);
+  if (!targetState) return null;
+  return {code: targetMatch.code, state: targetState};
+}
+
+function extendSelectionToActiveCell() {
+  const helper = activeMatchSelection();
+  if (!helper) return;
+  const coord = activeSelectionCoord();
+  if (!coord) return;
+  const currentAnchor = helper.anchor || coord;
+  helper.setSelection(currentAnchor, coord, {focus: false});
 }
 
 function setActiveMark(mark) {

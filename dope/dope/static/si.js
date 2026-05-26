@@ -52,6 +52,7 @@ let activeAnswerNode = null;
 let activePlayerRows = [];
 let stateSync = null;
 let presence = null;
+let cellSelection = null;
 const tabScroll = new Map();
 
 function tabFromHash() {
@@ -298,7 +299,95 @@ function buildTable() {
   table.classList.toggle("match-finished", state.finished);
   tableIndex = gameTable.createScoreTableIndex(table, {entity: "player"});
   activeAnswerNode = state.finished || viewer ? null : tableIndex.get("answer", activeCell);
+  attachKSISelection(table);
   return table;
+}
+
+function attachKSISelection(table) {
+  if (cellSelection) {
+    cellSelection.unbind();
+    cellSelection = null;
+  }
+  if (viewer) return;
+  cellSelection = gameTable.createCellRangeSelection({
+    root: table,
+    cellSelector: ".answer-cell",
+    readonly: () => Boolean(state?.finished),
+    coordOf: ksiCoordOf,
+    cellAtCoord: ksiCellAtCoord,
+    serialize: ksiSerializeMark,
+    parse: parseKSIMarkText,
+    applyValues: applyKSIEdits,
+    onActiveChange: (cell) => {
+      if (!cell) return;
+      const player = Number(cell.dataset.player);
+      const theme = Number(cell.dataset.theme);
+      const answer = Number(cell.dataset.answer);
+      activeCell = {player, theme, answer};
+      markActive();
+    },
+  });
+  cellSelection.bind();
+}
+
+function ksiCoordOf(cell) {
+  const player = Number(cell.dataset.player);
+  const theme = Number(cell.dataset.theme);
+  const answer = Number(cell.dataset.answer);
+  if (!Number.isInteger(player) || !Number.isInteger(theme) || !Number.isInteger(answer)) return null;
+  const order = detailedPlayerOrder();
+  const row = order.indexOf(player);
+  if (row < 0) return null;
+  return {row, col: theme * QUESTION_VALUES.length + answer};
+}
+
+function ksiCellAtCoord(coord) {
+  if (!coord) return null;
+  const order = detailedPlayerOrder();
+  const player = order[coord.row];
+  if (player === undefined) return null;
+  const answers = QUESTION_VALUES.length;
+  const theme = Math.floor(coord.col / answers);
+  const answer = coord.col % answers;
+  return tableIndex?.get("answer", {player, theme, answer})
+    || siRoot.querySelector(
+      `.answer-cell[data-player="${gameTable.cssEscape(player)}"][data-theme="${gameTable.cssEscape(theme)}"][data-answer="${gameTable.cssEscape(answer)}"]`,
+    );
+}
+
+function ksiSerializeMark(cell) {
+  if (cell.classList.contains("right")) return "+";
+  if (cell.classList.contains("wrong")) return "-";
+  return "";
+}
+
+function parseKSIMarkText(text) {
+  const value = String(text || "").trim().toLowerCase();
+  if (value === "") return "";
+  if (["+", "1", "right", "y", "yes", "✓", "v", "да"].includes(value)) return "right";
+  if (["-", "−", "0", "wrong", "n", "no", "x", "✗", "нет"].includes(value)) return "wrong";
+  return "";
+}
+
+function applyKSIEdits(edits) {
+  if (state?.finished || viewer) return;
+  for (const {cell, value} of edits) {
+    const player = Number(cell.dataset.player);
+    const theme = Number(cell.dataset.theme);
+    const answer = Number(cell.dataset.answer);
+    if (!Number.isInteger(player) || !Number.isInteger(theme) || !Number.isInteger(answer)) continue;
+    const mark = value === "right" ? "right" : value === "wrong" ? "wrong" : "";
+    const row = state.themes[theme]?.answers?.[player];
+    if (!row) continue;
+    const previousMark = row[answer];
+    if (previousMark === mark) continue;
+    getScoreCache();
+    row[answer] = mark;
+    applyScoreDelta(player, theme, answer, previousMark, mark);
+    updateAnswerCell(player, theme, answer, mark);
+    refreshChangedScores(player, theme);
+    saveState(["themes", theme, "answers", player, answer], mark);
+  }
 }
 
 function buildResultsTable() {
@@ -893,29 +982,39 @@ function handleKeydown(event) {
   const key = event.key.toLowerCase();
   if (event.key === "ArrowLeft") {
     event.preventDefault();
-    moveCell(0, -1);
+    moveCell(0, -1, event.shiftKey);
   } else if (event.key === "ArrowRight") {
     event.preventDefault();
-    moveCell(0, 1);
+    moveCell(0, 1, event.shiftKey);
   } else if (event.key === "ArrowUp") {
     event.preventDefault();
-    moveCell(-1, 0);
+    moveCell(-1, 0, event.shiftKey);
   } else if (event.key === "ArrowDown") {
     event.preventDefault();
-    moveCell(1, 0);
+    moveCell(1, 0, event.shiftKey);
   } else if (key === "q" || key === "й" || key === "1") {
     event.preventDefault();
-    setMark("right");
+    setMarkForSelection("right");
   } else if (key === "w" || key === "ц" || key === "-" || key === "2") {
     event.preventDefault();
-    setMark("wrong");
+    setMarkForSelection("wrong");
   } else if (key === "backspace" || key === "delete" || event.key === " ") {
     event.preventDefault();
-    setMark("");
+    setMarkForSelection("");
   }
 }
 
-function moveCell(dPlayer, dAnswer) {
+function setMarkForSelection(mark) {
+  if (state?.finished || viewer || !isDetailedTabActive()) return;
+  const cells = cellSelection?.selectedCells() || [];
+  if (cells.length > 1) {
+    applyKSIEdits(cells.map((cell) => ({cell, value: mark})));
+    return;
+  }
+  setMark(mark);
+}
+
+function moveCell(dPlayer, dAnswer, extend = false) {
   const playerOrder = detailedPlayerOrder();
   const players = playerOrder.length;
   const totalCols = themesCount * QUESTION_VALUES.length;
@@ -924,7 +1023,24 @@ function moveCell(dPlayer, dAnswer) {
   const currentPosition = Math.max(0, playerOrder.indexOf(activeCell.player));
   const nextPosition = gameTable.clamp(currentPosition + dPlayer, 0, players - 1);
   const player = playerOrder[nextPosition];
-  selectCell(player, Math.floor(column / QUESTION_VALUES.length), column % QUESTION_VALUES.length);
+  const nextTheme = Math.floor(column / QUESTION_VALUES.length);
+  const nextAnswer = column % QUESTION_VALUES.length;
+  if (extend && cellSelection) {
+    const anchor = cellSelection.anchor || ksiCoordForActive();
+    const focusCoord = {row: nextPosition, col: column};
+    cellSelection.setSelection(anchor, focusCoord, {focus: true});
+    activeCell = {player, theme: nextTheme, answer: nextAnswer};
+    markActive();
+    return;
+  }
+  selectCell(player, nextTheme, nextAnswer);
+  if (cellSelection) cellSelection.setSelection({row: nextPosition, col: column}, {row: nextPosition, col: column}, {focus: false});
+}
+
+function ksiCoordForActive() {
+  const order = detailedPlayerOrder();
+  const row = order.indexOf(activeCell.player);
+  return {row: row < 0 ? 0 : row, col: activeCell.theme * QUESTION_VALUES.length + activeCell.answer};
 }
 
 function normalizeActiveCell() {

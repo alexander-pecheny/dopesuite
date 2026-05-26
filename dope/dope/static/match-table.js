@@ -1354,6 +1354,249 @@
     return {schedule, updateDetailed, updateResults};
   }
 
+  function createCellRangeSelection(options) {
+    const {
+      root,
+      cellSelector = ".answer-cell",
+      readonly = () => false,
+      coordOf,
+      cellAtCoord,
+      serialize = (cell) => (cell?.textContent || "").trim(),
+      parse = (text) => String(text || "").trim(),
+      applyValues,
+      onSelectionChange,
+      onActiveChange,
+      classes = {},
+    } = options;
+    const cls = {
+      selected: "cell-selected",
+      anchor: "cell-selection-anchor",
+      top: "cell-selection-top",
+      bottom: "cell-selection-bottom",
+      left: "cell-selection-left",
+      right: "cell-selection-right",
+      ...classes,
+    };
+    const allClasses = [cls.selected, cls.anchor, cls.top, cls.bottom, cls.left, cls.right];
+    const isReadonly = typeof readonly === "function" ? readonly : () => Boolean(readonly);
+
+    let anchor = null;
+    let focusCoord = null;
+    let dragState = null;
+    let suppressNextClick = false;
+
+    function rect() {
+      if (!anchor || !focusCoord) return null;
+      return {
+        rowStart: Math.min(anchor.row, focusCoord.row),
+        rowEnd: Math.max(anchor.row, focusCoord.row),
+        colStart: Math.min(anchor.col, focusCoord.col),
+        colEnd: Math.max(anchor.col, focusCoord.col),
+      };
+    }
+
+    function clearClasses() {
+      root.querySelectorAll(`${cellSelector}.${cls.selected}, ${cellSelector}.${cls.anchor}`).forEach((cell) => {
+        cell.classList.remove(...allClasses);
+      });
+    }
+
+    function renderClasses() {
+      clearClasses();
+      const r = rect();
+      if (!r) return;
+      for (let row = r.rowStart; row <= r.rowEnd; row++) {
+        for (let col = r.colStart; col <= r.colEnd; col++) {
+          const cell = cellAtCoord({row, col});
+          if (!cell) continue;
+          cell.classList.add(cls.selected);
+          if (row === r.rowStart) cell.classList.add(cls.top);
+          if (row === r.rowEnd) cell.classList.add(cls.bottom);
+          if (col === r.colStart) cell.classList.add(cls.left);
+          if (col === r.colEnd) cell.classList.add(cls.right);
+        }
+      }
+      const anchorCell = cellAtCoord(anchor);
+      if (anchorCell) anchorCell.classList.add(cls.anchor);
+    }
+
+    function selectedCells() {
+      const out = [];
+      const r = rect();
+      if (!r) return out;
+      for (let row = r.rowStart; row <= r.rowEnd; row++) {
+        for (let col = r.colStart; col <= r.colEnd; col++) {
+          const cell = cellAtCoord({row, col});
+          if (cell) out.push(cell);
+        }
+      }
+      return out;
+    }
+
+    function setSelection(newAnchor, newFocus = newAnchor, opts = {}) {
+      anchor = newAnchor ? {row: newAnchor.row, col: newAnchor.col} : null;
+      focusCoord = newFocus ? {row: newFocus.row, col: newFocus.col} : null;
+      renderClasses();
+      onSelectionChange?.({anchor, focus: focusCoord, rect: rect()});
+      const focusCell = cellAtCoord(focusCoord);
+      if (focusCell) {
+        if (opts.focus !== false) focusCell.focus({preventScroll: opts.preventScroll});
+        onActiveChange?.(focusCell, focusCoord);
+      }
+    }
+
+    function clearSelection() {
+      anchor = null;
+      focusCoord = null;
+      clearClasses();
+      onSelectionChange?.(null);
+    }
+
+    function deleteSelected() {
+      if (isReadonly()) return false;
+      const cells = selectedCells();
+      if (cells.length === 0) return false;
+      const empty = parse("");
+      const edits = [];
+      for (const cell of cells) edits.push({cell, value: empty});
+      applyValues?.(edits);
+      return true;
+    }
+
+    function copySelection(event) {
+      const r = rect();
+      if (!r) return false;
+      const lines = [];
+      for (let row = r.rowStart; row <= r.rowEnd; row++) {
+        const cols = [];
+        for (let col = r.colStart; col <= r.colEnd; col++) {
+          const cell = cellAtCoord({row, col});
+          cols.push(cell ? serialize(cell) : "");
+        }
+        lines.push(cols.join("\t"));
+      }
+      event.clipboardData?.setData("text/plain", lines.join("\n"));
+      event.preventDefault();
+      return true;
+    }
+
+    function pasteSelection(event) {
+      if (isReadonly() || !anchor) return false;
+      const text = event.clipboardData?.getData("text/plain") || "";
+      if (!text) return false;
+      event.preventDefault();
+      const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      const lines = normalized.split("\n");
+      if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+      const grid = lines.map((line) => line.split("\t"));
+      if (grid.length === 0) return false;
+      const r = rect();
+      const startRow = r.rowStart;
+      const startCol = r.colStart;
+      const edits = [];
+      let lastRow = startRow;
+      let lastCol = startCol;
+      for (let rOff = 0; rOff < grid.length; rOff++) {
+        const cols = grid[rOff];
+        for (let cOff = 0; cOff < cols.length; cOff++) {
+          const cell = cellAtCoord({row: startRow + rOff, col: startCol + cOff});
+          if (!cell) continue;
+          edits.push({cell, value: parse(cols[cOff])});
+          lastRow = startRow + rOff;
+          lastCol = startCol + cOff;
+        }
+      }
+      if (edits.length > 0) applyValues?.(edits);
+      setSelection({row: startRow, col: startCol}, {row: lastRow, col: lastCol}, {focus: true});
+      return true;
+    }
+
+    function handleMouseDown(event) {
+      if (event.button !== 0 || isReadonly()) return;
+      const cell = event.target.closest?.(cellSelector);
+      if (!cell || !root.contains(cell)) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
+      const coord = coordOf(cell);
+      if (!coord) return;
+      event.preventDefault();
+      suppressNextClick = Boolean(event.shiftKey && anchor);
+      const nextAnchor = event.shiftKey && anchor ? anchor : coord;
+      setSelection(nextAnchor, coord, {preventScroll: true});
+      dragState = {anchor: nextAnchor, focus: coord};
+      document.addEventListener("mouseup", handleMouseUp, {once: true});
+    }
+
+    function handleMouseUp() {
+      dragState = null;
+    }
+
+    function handleMouseOver(event) {
+      if (!dragState || isReadonly()) return;
+      const cell = event.target.closest?.(cellSelector);
+      if (!cell || !root.contains(cell)) return;
+      const coord = coordOf(cell);
+      if (!coord) return;
+      if (coord.row === dragState.focus.row && coord.col === dragState.focus.col) return;
+      dragState.focus = coord;
+      setSelection(dragState.anchor, coord, {focus: false});
+    }
+
+    function handleClickCapture(event) {
+      if (suppressNextClick) {
+        suppressNextClick = false;
+        event.stopPropagation();
+      }
+    }
+
+    function isEditableTarget(target) {
+      return target instanceof HTMLInputElement
+        || target instanceof HTMLTextAreaElement
+        || target instanceof HTMLSelectElement
+        || Boolean(target?.isContentEditable);
+    }
+
+    function handleCopy(event) {
+      if (isEditableTarget(event.target)) return;
+      if (!root.contains(event.target) && !root.contains(document.activeElement)) return;
+      copySelection(event);
+    }
+
+    function handlePaste(event) {
+      if (isEditableTarget(event.target)) return;
+      if (!root.contains(event.target) && !root.contains(document.activeElement)) return;
+      pasteSelection(event);
+    }
+
+    function bind() {
+      root.addEventListener("mousedown", handleMouseDown);
+      root.addEventListener("mouseover", handleMouseOver);
+      root.addEventListener("click", handleClickCapture, true);
+      document.addEventListener("copy", handleCopy);
+      document.addEventListener("paste", handlePaste);
+    }
+
+    function unbind() {
+      root.removeEventListener("mousedown", handleMouseDown);
+      root.removeEventListener("mouseover", handleMouseOver);
+      root.removeEventListener("click", handleClickCapture, true);
+      document.removeEventListener("copy", handleCopy);
+      document.removeEventListener("paste", handlePaste);
+    }
+
+    return {
+      bind,
+      unbind,
+      setSelection,
+      clearSelection,
+      deleteSelected,
+      selectedCells,
+      refresh: renderClasses,
+      get anchor() { return anchor; },
+      get focus() { return focusCoord; },
+      get rect() { return rect(); },
+    };
+  }
+
   function fitEKStageTeamName(cell, name) {
     if (!cell || !name) return false;
     const baseSize = parseFloat(getComputedStyle(name).fontSize) || 13;
@@ -1412,5 +1655,6 @@
     parseGameRoute,
     createTeamNameOverflowController,
     fitEKStageTeamName,
+    createCellRangeSelection,
   };
 })();
