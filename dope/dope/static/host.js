@@ -1073,6 +1073,11 @@ function activeMatchState() {
   return state;
 }
 
+function matchStateFor(matchCode) {
+  if (route.mode === "stage") return stageStateByCode.get(matchCode) || null;
+  return state;
+}
+
 function applyStageMatchUpdate(updated, options = {}) {
   const matchCode = updated?.code;
   if (!matchCode) return;
@@ -1704,13 +1709,15 @@ function battleHeader() {
 }
 
 function openVenueDialog(matchCode) {
+  const matchState = matchStateFor(matchCode);
+  if (!matchState) return;
   const dialog = document.createElement("dialog");
   dialog.className = "venue-dialog";
   const form = document.createElement("form");
   form.className = "venue-dialog-form";
 
   const title = document.createElement("h2");
-  title.textContent = state.title || matchTitle();
+  title.textContent = matchState.title || matchTitle(matchState);
   form.appendChild(title);
 
   const select = document.createElement("select");
@@ -1718,7 +1725,7 @@ function openVenueDialog(matchCode) {
   venues.forEach((venue) => {
     select.appendChild(option(String(venue.number), `${venue.number}: ${venue.title}`));
   });
-  select.value = state.venue ? String(state.venue.number) : "";
+  select.value = matchState.venue ? String(matchState.venue.number) : "";
   form.appendChild(select);
 
   const actions = document.createElement("div");
@@ -1739,7 +1746,8 @@ function openVenueDialog(matchCode) {
     event.preventDefault();
     const number = Number(select.value);
     dialog.close();
-    if (number > 0 && number !== state.venue?.number) {
+    const current = matchStateFor(matchCode) || matchState;
+    if (number > 0 && number !== current.venue?.number) {
       sendVenueChange(number, matchCode);
     }
   });
@@ -1763,8 +1771,12 @@ function shootoutControlsHeader() {
   addShootout.setAttribute("aria-label", "Добавить тему перестрелки");
   addShootout.disabled = state.finished;
   addShootout.addEventListener("click", () => {
-    activeCell = {matchCode, team: 0, shootout: true, theme: shootoutThemeCount(), answer: 0};
-    sendUpdate({action: "addShootoutTheme"}, matchCode);
+    const ms = matchStateFor(matchCode);
+    if (!ms) return;
+    withMatchState(ms, () => {
+      activeCell = {matchCode, team: 0, shootout: true, theme: shootoutThemeCount(), answer: 0};
+      sendUpdate({action: "addShootoutTheme"}, matchCode);
+    });
   });
   node.appendChild(addShootout);
 
@@ -1780,7 +1792,9 @@ function shootoutControlsHeader() {
       event.preventDefault();
       event.stopPropagation();
       if (!window.confirm("Удалить тему перестрелки?")) return;
-      removeLastShootoutTheme(matchCode);
+      const ms = matchStateFor(matchCode);
+      if (!ms) return;
+      withMatchState(ms, () => removeLastShootoutTheme(matchCode));
     });
     node.appendChild(deleteButton);
   }
@@ -2196,9 +2210,9 @@ function notifyEmbeddedResize() {
   });
 }
 
-function matchTitle() {
-  const venue = state.venue ? ` · ${formatBattleVenue(state.venue)}` : "";
-  return `${state.title}${venue}`;
+function matchTitle(matchState = state) {
+  const venue = matchState.venue ? ` · ${formatBattleVenue(matchState.venue)}` : "";
+  return `${matchState.title}${venue}`;
 }
 
 function parsePlace(value) {
