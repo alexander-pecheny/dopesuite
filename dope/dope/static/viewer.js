@@ -14,11 +14,15 @@ const editorLink = canEdit && !embedded ? gameTable.mountEditorLink(statusNode) 
 let state = null;
 let fest = null;
 let venues = [];
-let stageStates = [];
-let stageLoadToken = 0;
-let stageMatches = [];
-let stageStateByCode = new Map();
-let stageTableObserver = null;
+// Per-stage caches. stageDataByCode owns the live MatchView for every match
+// in every stage; stagePaneByCode owns the built DOM. SSE match-update events
+// land in stageDataByCode and patch the matching pane in place, so tab
+// switches reduce to toggling `hidden` on already-rendered DOM.
+const stageDataByCode = new Map();      // stageCode -> {matches: [], stateByCode: Map<code, MatchView>}
+const stagePaneByCode = new Map();      // stageCode -> HTMLElement (pane root mounted in viewerRoot)
+const stageFetchPromises = new Map();   // stageCode -> in-flight prefetch Promise
+const matchCodeToStageCode = new Map(); // matchCode -> stageCode (SSE routing)
+let stageCachesRevision = null;         // fest.revision the caches were built against
 let reloadTimer = null;
 let readonlyTableIndex = null;
 let viewerTabsFadeFrame = 0;
@@ -136,6 +140,14 @@ function writeFestCache(view) {
 function adoptFestView(view) {
   fest = view;
   if (Array.isArray(view?.venues)) venues = view.venues;
+  // Stage caches are tied to a specific fest revision. A revision bump means
+  // the stage list or match metadata may have changed under us; drop caches
+  // so we rebuild against the new shape.
+  if (stageCachesRevision != null && stageCachesRevision !== view?.revision) {
+    clearStageCaches();
+  }
+  if (view?.revision != null) stageCachesRevision = view.revision;
+  indexAllStages();
 }
 
 function hydrateFestFromCache() {
@@ -159,76 +171,132 @@ async function loadFest() {
 }
 
 async function loadStage() {
-  const token = ++stageLoadToken;
   const cached = hydrateFestFromCache();
-  if (cached) {
-    const stage = findStage(fest, route.stageCode);
-    stageMatches = stage?.matches || [];
-    stageStates = [];
-    stageStateByCode = new Map();
-    renderStage();
-  }
-  const [response, batchResponse] = await Promise.all([
-    fetch(route.apiBase),
-    fetch(`${route.apiBase}/stages/${encodeURIComponent(route.stageCode)}/matches`),
-  ]);
-  if (!response.ok) throw new Error(await response.text());
-  if (!batchResponse.ok) throw new Error(await batchResponse.text());
-  const fresh = await response.json();
-  const batchedMatches = await batchResponse.json();
-  if (token !== stageLoadToken || route.mode !== "stage") return;
-  const changed = !cached || fresh.revision !== fest?.revision;
-  adoptFestView(fresh);
-  writeFestCache(fresh);
-  if (changed) {
-    const stage = findStage(fest, route.stageCode);
-    stageMatches = stage?.matches || [];
-    stageStates = [];
-    stageStateByCode = new Map();
-  }
-  if (Array.isArray(batchedMatches)) {
-    for (const m of batchedMatches) {
-      if (m?.code) stageStateByCode.set(m.code, m);
-    }
-    stageStates = stageMatches.map((match) => stageStateByCode.get(match.code)).filter(Boolean);
-  }
+  if (cached) renderStage();
+  const stageCode = route.stageCode;
+  // Revalidate fest and fetch this stage's matches in parallel.
+  // adoptFestView clears stage caches if the revision changed.
+  const festPromise = fetch(route.apiBase).then(async (response) => {
+    if (!response.ok) throw new Error(await response.text());
+    const fresh = await response.json();
+    adoptFestView(fresh);
+    writeFestCache(fresh);
+  });
+  const stagePromise = prefetchStageMatches(stageCode);
+  await Promise.all([festPromise, stagePromise]);
+  if (route.mode !== "stage" || route.stageCode !== stageCode) return;
   renderStage();
+  // Background prefetch of every other stage. Each payload is <10KB and
+  // makes subsequent tab switches instant (cache hit + pane already built).
+  prefetchAllStages();
 }
 
-function setupViewerStageObserver() {
-  if (stageTableObserver) {
-    stageTableObserver.disconnect();
-    stageTableObserver = null;
+// indexAllStages walks the scheme stages and seeds stageDataByCode +
+// matchCodeToStageCode for every stage. Done eagerly so SSE match-update
+// events can find their stage even for stages we haven't fetched yet.
+function indexAllStages() {
+  if (!fest) return;
+  for (const stage of viewerStages()) {
+    ensureStageDataShape(stage.code);
   }
-  const frames = Array.from(viewerRoot.querySelectorAll(".stage-match-frame"));
-  if (frames.length === 0) return;
-  // After loadStage's batched /stages/{code}/matches fetch lands, every
-  // match's state is already in stageStateByCode. The observer just defers
-  // DOM construction for tables that aren't near the viewport.
-  if (!("IntersectionObserver" in window)) {
-    frames.forEach((frame) => paintStageFrameIfReady(frame));
+}
+
+function ensureStageDataShape(stageCode) {
+  let data = stageDataByCode.get(stageCode);
+  const stage = findStage(fest, stageCode);
+  const matches = stage?.matches || [];
+  if (!data) {
+    data = {matches, stateByCode: new Map()};
+    stageDataByCode.set(stageCode, data);
+  } else if (data.matches !== matches) {
+    // Fest revision may have rewritten the match list; keep the same
+    // stateByCode entries that still correspond to known codes.
+    const known = new Set(matches.map((m) => m.code));
+    for (const code of Array.from(data.stateByCode.keys())) {
+      if (!known.has(code)) data.stateByCode.delete(code);
+    }
+    data.matches = matches;
+  }
+  for (const m of matches) {
+    if (m?.code) matchCodeToStageCode.set(m.code, stageCode);
+  }
+  return data;
+}
+
+function prefetchStageMatches(stageCode) {
+  if (!stageCode) return Promise.resolve();
+  const inflight = stageFetchPromises.get(stageCode);
+  if (inflight) return inflight;
+  const url = `${route.apiBase}/stages/${encodeURIComponent(stageCode)}/matches`;
+  const promise = fetch(url)
+    .then(async (response) => {
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    })
+    .then((batchedMatches) => {
+      const data = ensureStageDataShape(stageCode);
+      if (Array.isArray(batchedMatches)) {
+        for (const m of batchedMatches) {
+          if (m?.code) data.stateByCode.set(m.code, m);
+        }
+      }
+      // If this stage is already on screen (cached pane mounted and not
+      // hidden, or pane built but waiting), repaint its frames in place.
+      if (stagePaneByCode.has(stageCode)) repaintStagePane(stageCode);
+    })
+    .catch((err) => {
+      console.error("prefetch stage failed", stageCode, err);
+      stageFetchPromises.delete(stageCode); // allow retry on next visit
+      throw err;
+    });
+  stageFetchPromises.set(stageCode, promise);
+  return promise;
+}
+
+function prefetchAllStages() {
+  if (!fest) return;
+  for (const stage of viewerStages()) {
+    if (stageType(stage) === "reseed") continue; // no per-match data needed
+    prefetchStageMatches(stage.code).catch(() => {});
+  }
+}
+
+function clearStageCaches() {
+  for (const pane of stagePaneByCode.values()) pane.remove();
+  stageDataByCode.clear();
+  stagePaneByCode.clear();
+  stageFetchPromises.clear();
+  matchCodeToStageCode.clear();
+  stageCachesRevision = null;
+}
+
+function repaintStagePane(stageCode) {
+  const pane = stagePaneByCode.get(stageCode);
+  const data = stageDataByCode.get(stageCode);
+  if (!pane || !data) return;
+  const stage = mergedStage(fest, stageCode);
+  if (stageType(stage) === "reseed") {
+    pane.replaceChildren(buildReseedStagePanel(stage));
     return;
   }
-  const root = viewerRoot.closest(".sheet-frame");
-  stageTableObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (!entry.isIntersecting) return;
-      const frame = entry.target;
-      if (paintStageFrameIfReady(frame)) {
-        stageTableObserver?.unobserve(frame);
-      }
-    });
-  }, {root, rootMargin: "900px 0px"});
-  frames.forEach((frame) => stageTableObserver.observe(frame));
+  const frames = pane.querySelectorAll(".stage-match-frame");
+  for (const frame of frames) {
+    const code = frame.dataset.matchCode || "";
+    const descriptor = data.matches.find((m) => m.code === code);
+    paintStageFrame(frame, data.stateByCode.get(code), descriptor);
+  }
+  if (pane.isConnected && !pane.hidden) scheduleReadonlyNameOverflowUpdate(pane);
 }
 
-function paintStageFrameIfReady(frame) {
-  const code = frame.dataset.matchCode || "";
-  const matchState = stageStateByCode.get(code);
-  if (!matchState) return false;
-  frame.replaceChildren(withMatchState(matchState, () => buildReadonlyTable()));
-  scheduleReadonlyNameOverflowUpdate(frame);
-  return true;
+function paintStageFrame(frame, matchState, descriptor) {
+  if (matchState) {
+    frame.replaceChildren(withMatchState(matchState, () => buildReadonlyTable()));
+    return;
+  }
+  const placeholder = document.createElement("div");
+  placeholder.className = "stage-match-placeholder";
+  placeholder.textContent = descriptor?.title || `Бой ${descriptor?.code || ""}`;
+  frame.replaceChildren(placeholder);
 }
 
 async function loadMatch() {
@@ -269,24 +337,24 @@ function connectEvents() {
     const message = parseEventData(event.data);
     const matchScope = `match:${route.gameID}:${route.matchCode}`;
     const venuesScope = `venues:${route.festID}`;
-    if (route.mode === "match" && message.scope === matchScope) {
-      applyUpdatedMatch(message.data);
+    // Always update cached stage state for any match-scoped event, regardless
+    // of which page we're on. Keeps cached panes for other stages live so a
+    // later tab switch sees fresh data without a fetch.
+    if (message.scope?.startsWith("match:")) {
+      if (message.data?.code) {
+        applyReadonlyStageMatchUpdate(message.data);
+      }
+      if (route.mode === "match" && message.scope === matchScope) {
+        applyUpdatedMatch(message.data);
+      }
       setLive(true);
+      if (!message.data?.code) scheduleReload();
       return;
     }
     if (route.mode === "venues" && message.scope === venuesScope) {
       venues = message.data;
       renderVenues();
       setLive(true);
-      return;
-    }
-    if (route.mode === "stage" && message.scope.startsWith("match:")) {
-      if (message.data?.code) {
-        applyReadonlyStageMatchUpdate(message.data);
-        setLive(true);
-      } else {
-        scheduleReload();
-      }
       return;
     }
     scheduleReload();
@@ -372,19 +440,59 @@ function renderFest() {
 
 function renderStage() {
   if (!fest) return;
+  const stageCode = route.stageCode;
+  if (!stageCode) return;
   resetReadonlyTableIndex();
-  const stage = mergedStage(fest, route.stageCode);
+  const stage = mergedStage(fest, stageCode);
   setViewerMode(stageType(stage) === "reseed" ? "grid" : "match");
   setHeading("ЭК");
   document.title = pageTitle();
   renderViewerTabs();
-  if (stageType(stage) === "reseed") {
-    viewerRoot.replaceChildren(buildReseedStagePanel(stage));
-  } else {
-    viewerRoot.replaceChildren(buildReadonlyStageTables());
-    setupViewerStageObserver();
+  ensureStageDataShape(stageCode);
+  let pane = stagePaneByCode.get(stageCode);
+  if (!pane) {
+    pane = buildStagePane(stageCode);
   }
-  scheduleReadonlyNameOverflowUpdate();
+  // Sync viewerRoot's children to the cached panes without churning DOM:
+  // if a previous render put non-pane content here (renderFest/renderVenues/
+  // render via replaceChildren), wipe it; then attach any cached panes that
+  // aren't already mounted, and toggle hidden so only the active one shows.
+  for (const node of Array.from(viewerRoot.children)) {
+    if (!stagePaneByCode.has(node.dataset?.stageCode)) node.remove();
+  }
+  for (const [code, p] of stagePaneByCode) {
+    if (!p.isConnected) viewerRoot.appendChild(p);
+    p.hidden = code !== stageCode;
+  }
+  scheduleReadonlyNameOverflowUpdate(pane);
+}
+
+function buildStagePane(stageCode) {
+  const stage = mergedStage(fest, stageCode);
+  const pane = document.createElement("div");
+  pane.className = "stage-pane";
+  pane.dataset.stageCode = stageCode;
+  if (stageType(stage) === "reseed") {
+    pane.appendChild(buildReseedStagePanel(stage));
+  } else {
+    pane.appendChild(buildReadonlyStageTablesFor(stageCode));
+  }
+  stagePaneByCode.set(stageCode, pane);
+  return pane;
+}
+
+function buildReadonlyStageTablesFor(stageCode) {
+  const data = ensureStageDataShape(stageCode);
+  const wrapper = document.createElement("div");
+  wrapper.className = "stage-table-stack";
+  for (const match of data.matches) {
+    const frame = document.createElement("section");
+    frame.className = "stage-match-frame";
+    frame.dataset.matchCode = match.code || "";
+    paintStageFrame(frame, data.stateByCode.get(match.code), match);
+    wrapper.appendChild(frame);
+  }
+  return wrapper;
 }
 
 function renderVenues() {
@@ -425,17 +533,21 @@ function applyUpdatedMatch(updated) {
 
 function applyReadonlyStageMatchUpdate(updated) {
   if (!updated?.code) return;
-  if (!stageMatches.some((match) => match.code === updated.code)) {
+  const stageCode = matchCodeToStageCode.get(updated.code);
+  if (!stageCode) {
+    // Match not in any known stage — fest scheme probably changed.
     scheduleReload();
     return;
   }
-  stageStateByCode.set(updated.code, updated);
-  stageStates = stageMatches.map((match) => stageStateByCode.get(match.code)).filter(Boolean);
-  const frame = viewerRoot.querySelector(`.stage-match-frame[data-match-code="${cssEscape(updated.code)}"]`);
-  if (frame) {
-    frame.replaceChildren(withMatchState(updated, () => buildReadonlyTable()));
-    scheduleReadonlyNameOverflowUpdate(frame);
-  }
+  const data = ensureStageDataShape(stageCode);
+  data.stateByCode.set(updated.code, updated);
+  const pane = stagePaneByCode.get(stageCode);
+  if (!pane) return; // pane not built yet; will pick up the update when built
+  const frame = pane.querySelector(`.stage-match-frame[data-match-code="${cssEscape(updated.code)}"]`);
+  if (!frame) return;
+  const descriptor = data.matches.find((m) => m.code === updated.code);
+  paintStageFrame(frame, updated, descriptor);
+  if (pane.isConnected && !pane.hidden) scheduleReadonlyNameOverflowUpdate(frame);
 }
 
 function canPatchReadonlyMatchTable(previous, next) {
@@ -577,27 +689,6 @@ function updateViewerTabsScrollFade() {
   const hasRight = viewerTabsRoot.scrollLeft + viewerTabsRoot.clientWidth < viewerTabsRoot.scrollWidth - 1;
   viewerTabsRoot.classList.toggle("tabs-scroll-left", hasLeft);
   viewerTabsRoot.classList.toggle("tabs-scroll-right", hasRight);
-}
-
-function buildReadonlyStageTables() {
-  const wrapper = document.createElement("div");
-  wrapper.className = "stage-table-stack";
-  stageMatches.forEach((match) => {
-    const frame = document.createElement("section");
-    frame.className = "stage-match-frame";
-    frame.dataset.matchCode = match.code || "";
-    const matchState = stageStateByCode.get(match.code);
-    if (matchState) {
-      frame.appendChild(withMatchState(matchState, () => buildReadonlyTable()));
-    } else {
-      const placeholder = document.createElement("div");
-      placeholder.className = "stage-match-placeholder";
-      placeholder.textContent = match.title || `Бой ${match.code}`;
-      frame.appendChild(placeholder);
-    }
-    wrapper.appendChild(frame);
-  });
-  return wrapper;
 }
 
 function withMatchState(matchState, callback) {
