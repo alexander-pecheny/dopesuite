@@ -80,7 +80,8 @@ function consumeViewerInit() {
   const init = window.__VIEWER_INIT__;
   if (!init || !init.route || !init.fest) return false;
   if (init.route.mode !== route.mode) return false;
-  if (String(init.route.gameID) !== String(route.gameID)) return false;
+  // See consumeHostInit: don't compare festID/gameID. Server resolved slugs
+  // to numeric ids, which won't string-match the URL slug.
   if (route.mode === "match" && init.route.matchCode !== route.matchCode) return false;
   if (route.mode === "stage" && init.route.stageCode !== route.stageCode) return false;
   window.__VIEWER_INIT__ = null;
