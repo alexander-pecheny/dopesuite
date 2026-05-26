@@ -85,12 +85,9 @@ function consumeViewerInit() {
   if (route.mode === "stage" && init.route.stageCode !== route.stageCode) return false;
   window.__VIEWER_INIT__ = null;
 
-  fest = init.fest;
-  if (Array.isArray(init.venues)) {
-    venues = init.venues;
-  } else if (Array.isArray(fest?.venues)) {
-    venues = fest.venues;
-  }
+  adoptFestView(init.fest);
+  if (Array.isArray(init.venues)) venues = init.venues;
+  writeFestCache(init.fest);
 
   if (route.mode === "match") {
     if (!init.match) return false;
@@ -112,25 +109,76 @@ function consumeViewerInit() {
   return true;
 }
 
+function festCacheKey() {
+  return `viewer:fest:${route.festID || ""}:${route.gameID || ""}`;
+}
+
+function readFestCache() {
+  try {
+    const raw = localStorage.getItem(festCacheKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+function writeFestCache(view) {
+  if (!view) return;
+  try {
+    localStorage.setItem(festCacheKey(), JSON.stringify(view));
+  } catch (_err) {
+    // ignore
+  }
+}
+
+function adoptFestView(view) {
+  fest = view;
+  if (Array.isArray(view?.venues)) venues = view.venues;
+}
+
+function hydrateFestFromCache() {
+  if (fest) return true;
+  const cached = readFestCache();
+  if (!cached) return false;
+  adoptFestView(cached);
+  return true;
+}
+
 async function loadFest() {
+  const cached = hydrateFestFromCache();
+  if (cached) renderFest();
   const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
-  fest = await response.json();
-  renderFest();
+  const fresh = await response.json();
+  const changed = !cached || fresh.revision !== fest?.revision;
+  adoptFestView(fresh);
+  writeFestCache(fresh);
+  if (changed) renderFest();
 }
 
 async function loadStage() {
   ++stageLoadToken;
-  if (!fest) {
-    const response = await fetch(route.apiBase);
-    if (!response.ok) throw new Error(await response.text());
-    fest = await response.json();
+  const cached = hydrateFestFromCache();
+  if (cached) {
+    const stage = findStage(fest, route.stageCode);
+    stageMatches = stage?.matches || [];
+    stageStates = [];
+    stageStateByCode = new Map();
+    renderStage();
   }
-  const stage = findStage(fest, route.stageCode);
-  stageMatches = stage?.matches || [];
-  stageStates = [];
-  stageStateByCode = new Map();
-  renderStage();
+  const response = await fetch(route.apiBase);
+  if (!response.ok) throw new Error(await response.text());
+  const fresh = await response.json();
+  const changed = !cached || fresh.revision !== fest?.revision;
+  adoptFestView(fresh);
+  writeFestCache(fresh);
+  if (changed) {
+    const stage = findStage(fest, route.stageCode);
+    stageMatches = stage?.matches || [];
+    stageStates = [];
+    stageStateByCode = new Map();
+    renderStage();
+  }
 }
 
 async function fetchStageMatchState(matchCode, token) {
@@ -190,6 +238,7 @@ function setupViewerStageObserver() {
 }
 
 async function loadMatch() {
+  hydrateFestFromCache();
   const [matchResponse, festResponse] = await Promise.all([
     fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode)}`),
     fetch(route.apiBase),
@@ -197,20 +246,27 @@ async function loadMatch() {
   if (!matchResponse.ok) throw new Error(await matchResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
   state = await matchResponse.json();
-  fest = await festResponse.json();
+  adoptFestView(await festResponse.json());
+  writeFestCache(fest);
   render();
 }
 
 async function loadVenuesPage() {
+  const cached = hydrateFestFromCache();
+  if (cached) renderVenues();
   const [venuesResponse, festResponse] = await Promise.all([
     fetch(`/api/fest/${route.festID}/venues`),
     fetch(route.apiBase),
   ]);
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  venues = await venuesResponse.json();
-  fest = await festResponse.json();
-  renderVenues();
+  const freshVenues = await venuesResponse.json();
+  const freshFest = await festResponse.json();
+  const changed = !cached || JSON.stringify(freshVenues) !== JSON.stringify(venues);
+  venues = freshVenues;
+  adoptFestView(freshFest);
+  writeFestCache(freshFest);
+  if (changed) renderVenues();
 }
 
 function connectEvents() {
