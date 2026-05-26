@@ -113,17 +113,12 @@ function consumeHostInit() {
     return true;
   }
   if (route.mode === "stage") {
-    const token = ++stageLoadToken;
+    ++stageLoadToken;
     const stage = findStage(fest, route.stageCode);
     stageMatches = stage?.matches || [];
     stageStates = [];
     stageStateByCode = new Map();
     renderStage();
-    loadStageMatchStates(stageMatches, token).catch((error) => {
-      if (token !== stageLoadToken) return;
-      setStatus("error");
-      console.error(error);
-    });
     return true;
   }
   if (route.mode === "venues") {
@@ -148,7 +143,7 @@ async function loadFest() {
 }
 
 async function loadStage() {
-  const token = ++stageLoadToken;
+  ++stageLoadToken;
   const [response, venuesResponse] = await Promise.all([
     fetch(route.apiBase),
     fetch(`${route.festApi}/venues`),
@@ -162,11 +157,6 @@ async function loadStage() {
   stageStates = [];
   stageStateByCode = new Map();
   renderStage();
-  loadStageMatchStates(stageMatches, token).catch((error) => {
-    if (token !== stageLoadToken) return;
-    setStatus("error");
-    console.error(error);
-  });
 }
 
 async function loadMatch() {
@@ -900,21 +890,37 @@ function buildStageMatchPlaceholder(match) {
   return placeholder;
 }
 
-async function loadStageMatchStates(matches, token) {
-  await Promise.all(matches.map(async (match) => {
-    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(match.code)}`);
+const stageMatchInflight = new Set();
+
+async function fetchStageMatchState(matchCode, token) {
+  if (!matchCode) return;
+  if (stageStateByCode.has(matchCode)) return;
+  if (stageMatchInflight.has(matchCode)) return;
+  stageMatchInflight.add(matchCode);
+  try {
+    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}`);
     if (!response.ok) throw new Error(await response.text());
     const matchState = await response.json();
     if (token !== stageLoadToken || route.mode !== "stage") return;
     applyStageMatchUpdate(matchState, {renderOnlyIfNear: true});
-  }));
+  } finally {
+    stageMatchInflight.delete(matchCode);
+  }
 }
 
 function setupStageTableObserver() {
   disconnectStageTableObserver();
   const frames = Array.from(hostRoot.querySelectorAll(".stage-match-frame"));
   if (frames.length === 0) return;
+  const observerToken = stageLoadToken;
   if (!("IntersectionObserver" in window)) {
+    // Fallback for old browsers: fetch everything up front, render all frames.
+    frames.forEach((frame) => {
+      fetchStageMatchState(frame.dataset.matchCode || "", observerToken).catch((error) => {
+        if (observerToken !== stageLoadToken) return;
+        console.error(error);
+      });
+    });
     renderStageMatchFrames(frames, {force: true});
     return;
   }
@@ -926,6 +932,18 @@ function setupStageTableObserver() {
       const frame = entry.target;
       frame.dataset.nearViewport = "1";
       visibleFrames.push(frame);
+      fetchStageMatchState(frame.dataset.matchCode || "", observerToken)
+        .then(() => {
+          if (observerToken !== stageLoadToken) return;
+          // applyStageMatchUpdate already re-renders when state arrives, but
+          // call again here to cover the race where the frame is still in
+          // placeholder mode when fetch resolves out-of-order.
+          if (frame.dataset.rendered !== "1") renderStageMatchFrames([frame]);
+        })
+        .catch((error) => {
+          if (observerToken !== stageLoadToken) return;
+          console.error(error);
+        });
     });
     renderStageMatchFrames(visibleFrames);
     visibleFrames.forEach((frame) => {
