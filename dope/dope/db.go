@@ -1201,7 +1201,7 @@ const hostInitMarker = "null;/*__HOST_INIT__*/"
 
 type hostInitPayload struct {
 	Route      hostInitRoute   `json:"route"`
-	Fest       *FestView       `json:"fest,omitempty"`
+	Fest       json.RawMessage `json:"fest,omitempty"`
 	Match      *MatchView      `json:"match,omitempty"`
 	SeedImport *seedImportView `json:"seedImport,omitempty"`
 }
@@ -1289,13 +1289,11 @@ func parseHostInitRoute(parts []string, scope festScope) hostInitRoute {
 func (s *server) buildHostInit(ctx context.Context, route hostInitRoute) (hostInitPayload, error) {
 	payload := hostInitPayload{Route: route}
 
-	s.mu.RLock()
-	view, err := s.loadFestViewLocked(route.FestID, route.GameID)
-	s.mu.RUnlock()
+	festBytes, err := s.festViewBytes(route.FestID, route.GameID)
 	if err != nil {
 		return payload, err
 	}
-	payload.Fest = &view
+	payload.Fest = festBytes
 
 	switch route.Mode {
 	case "match":
@@ -2876,10 +2874,64 @@ values(?, ?, ?, ?, ?)`, festID, revision, eventType, payload, now)
 }
 
 func (s *server) broadcastState(festID int64, scope string, revision int64, payload []byte) {
+	s.invalidateFestViewCache(festID)
 	if s.db != nil {
 		payload = eventEnvelopeJSON(scope, revision, payload)
 	}
 	s.broadcast(event{festID: festID, revision: revision, data: payload})
+}
+
+func (s *server) cachedFestViewBytes(festID, gameID int64) ([]byte, bool) {
+	s.festViewMu.RLock()
+	defer s.festViewMu.RUnlock()
+	games, ok := s.festViewCache[festID]
+	if !ok {
+		return nil, false
+	}
+	data, ok := games[gameID]
+	return data, ok
+}
+
+func (s *server) storeFestViewBytes(festID, gameID int64, data []byte) {
+	s.festViewMu.Lock()
+	defer s.festViewMu.Unlock()
+	if s.festViewCache == nil {
+		s.festViewCache = map[int64]map[int64][]byte{}
+	}
+	games := s.festViewCache[festID]
+	if games == nil {
+		games = map[int64][]byte{}
+		s.festViewCache[festID] = games
+	}
+	games[gameID] = data
+}
+
+func (s *server) invalidateFestViewCache(festID int64) {
+	s.festViewMu.Lock()
+	defer s.festViewMu.Unlock()
+	delete(s.festViewCache, festID)
+}
+
+// festViewBytes returns the JSON-marshaled FestView for (festID, gameID),
+// using the in-memory cache when fresh. Cache misses run the same DB queries
+// as the original handler and store the result. Invalidation is driven by
+// broadcastState.
+func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
+	if data, ok := s.cachedFestViewBytes(festID, gameID); ok {
+		return data, nil
+	}
+	s.mu.RLock()
+	view, err := s.loadFestViewLocked(festID, gameID)
+	s.mu.RUnlock()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(view)
+	if err != nil {
+		return nil, err
+	}
+	s.storeFestViewBytes(festID, gameID, data)
+	return data, nil
 }
 
 func eventEnvelopeJSON(scope string, revision int64, payload []byte) []byte {

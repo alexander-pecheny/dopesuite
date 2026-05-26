@@ -779,14 +779,12 @@ func (s *server) handleScopedFest(w http.ResponseWriter, r *http.Request, festID
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.mu.RLock()
-	view, err := s.loadFestViewLocked(festID, gameID)
-	s.mu.RUnlock()
+	data, err := s.festViewBytes(festID, gameID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSONValue(w, view)
+	writeJSON(w, data)
 }
 
 func (s *server) handleScopedGame(w http.ResponseWriter, r *http.Request, scope festScope) {
@@ -797,14 +795,12 @@ func (s *server) handleScopedGame(w http.ResponseWriter, r *http.Request, scope 
 	if !s.authorizeFestRead(w, r, scope.FestID) {
 		return
 	}
-	s.mu.RLock()
-	view, err := s.loadFestViewLocked(scope.FestID, scope.GameID)
-	s.mu.RUnlock()
+	data, err := s.festViewBytes(scope.FestID, scope.GameID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSONValue(w, view)
+	writeJSON(w, data)
 }
 
 func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, festID int64, sub []string) {
