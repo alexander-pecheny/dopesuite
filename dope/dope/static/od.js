@@ -343,6 +343,7 @@ function syncShootoutAnswersFromEntries(round, questionIndex) {
 }
 
 function invalidateAllCaches() {
+  rememberTabScroll(activeTab);
   activeEntryEditor = null;
   closeEntrySuggest();
   questionStatsCache = null;
@@ -392,6 +393,7 @@ function numbersPageURL() {
 }
 
 function invalidateTabCache(...tabs) {
+  if (tabs.includes(activeTab)) rememberTabScroll(activeTab);
   for (const tab of tabs) {
     const pane = tabCache.get(tab);
     if (pane) pane.remove();
@@ -639,6 +641,34 @@ function selectedEntryText() {
   return lines.join("\n");
 }
 
+function fillEntryColumnWithAllTeams(qIndex) {
+  if (viewer) return;
+  if (!Number.isInteger(qIndex) || qIndex < 0 || qIndex >= totalQuestions) return;
+  if (state.completed[qIndex]) return;
+  const numbers = state.teams
+    .map((_, i) => teamNumber(i))
+    .filter((n) => Number.isInteger(n) && n > 0)
+    .sort((a, b) => a - b);
+  const next = new Array(state.teams.length).fill(0);
+  numbers.forEach((n, i) => {
+    if (i < next.length) next[i] = n;
+  });
+  const current = state.entries[qIndex] || [];
+  let same = current.length === next.length;
+  for (let i = 0; same && i < next.length; i++) {
+    if ((current[i] || 0) !== next[i]) same = false;
+  }
+  if (same) return;
+  closeEntryEditor();
+  closeEntrySuggest();
+  state.entries[qIndex] = next;
+  invalidateScoreCaches();
+  invalidateTabCache("input");
+  saveState(["entries", qIndex], next);
+  render();
+  focusEntrySelection();
+}
+
 function clearSelectedEntryCells() {
   const selection = normalizedEntrySelection();
   if (!selection || viewer) return;
@@ -829,10 +859,23 @@ function handleEntryCellKeydown(event, cell) {
   } else if (event.key === "Backspace" || event.key === "Delete" || event.key === " ") {
     event.preventDefault();
     clearSelectedEntryCells();
+  } else if (!event.metaKey && !event.ctrlKey && !event.altKey && isFillAllKey(event.key)) {
+    const qIndex = Number(cell.dataset.q);
+    if (Number.isInteger(qIndex) && !state.completed[qIndex]) {
+      event.preventDefault();
+      fillEntryColumnWithAllTeams(qIndex);
+      return;
+    }
+    event.preventDefault();
+    startEntryEditWithText(cell, event.key);
   } else if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
     event.preventDefault();
     startEntryEditWithText(cell, event.key);
   }
+}
+
+function isFillAllKey(key) {
+  return key === "a" || key === "A" || key === "а" || key === "А";
 }
 
 function buildInputTable() {
@@ -1237,10 +1280,34 @@ function entryCell(qIndex, rowIndex, tourEnd, validationCounts) {
   td.dataset.row = String(rowIndex);
   if (!viewer) td.tabIndex = 0;
   td.setAttribute("role", "gridcell");
-  const value = state.entries[qIndex][rowIndex];
-  td.textContent = value ? String(value) : "";
+  applyEntryCellDisplay(td, qIndex, rowIndex);
   markEntryCellValidity(td, qIndex, validationCounts);
   return td;
+}
+
+function entryCellShowsCoffin(qIndex, rowIndex) {
+  return rowIndex === 0 && Boolean(state.completed[qIndex]) && countValidEntries(qIndex) === 0;
+}
+
+function applyEntryCellDisplay(td, qIndex, rowIndex) {
+  if (entryCellShowsCoffin(qIndex, rowIndex)) {
+    td.textContent = "⚰️";
+    td.classList.add("entry-coffin");
+    return;
+  }
+  td.classList.remove("entry-coffin");
+  const value = state.entries[qIndex]?.[rowIndex] || 0;
+  td.textContent = value ? String(value) : "";
+}
+
+function refreshEntryColumnCoffin(qIndex) {
+  if (!Number.isInteger(qIndex)) return;
+  if (activeEntryEditor) {
+    const editorCell = activeEntryEditor.cell;
+    if (Number(editorCell?.dataset.q) === qIndex && Number(editorCell?.dataset.row) === 0) return;
+  }
+  const cell = entryCellNode(qIndex, 0);
+  if (cell) applyEntryCellDisplay(cell, qIndex, 0);
 }
 
 function buildInputValidationCounts() {
@@ -1424,6 +1491,7 @@ function handleEntryInput(event) {
   closeEntrySuggest();
   invalidateScoreCaches();
   updateInputValidity(qIndex);
+  refreshEntryColumnCoffin(qIndex);
   saveState(["entries", qIndex, rowIndex], parsed.value);
 }
 
@@ -1568,12 +1636,14 @@ function closeEntryEditor() {
   activeEntryEditor = null;
   input.remove();
   cell.classList.remove("entry-editing");
-  const value = shootout
-    ? shootoutEntryValue(Number(cell.dataset.round), Number(cell.dataset.question), rowIndex)
-    : state.entries[qIndex]?.[rowIndex] || 0;
-  cell.textContent = value ? String(value) : "";
-  if (shootout) markShootoutEntryCellValidity(cell);
-  else markEntryCellValidity(cell, qIndex);
+  if (shootout) {
+    const value = shootoutEntryValue(Number(cell.dataset.round), Number(cell.dataset.question), rowIndex);
+    cell.textContent = value ? String(value) : "";
+    markShootoutEntryCellValidity(cell);
+  } else {
+    applyEntryCellDisplay(cell, qIndex, rowIndex);
+    markEntryCellValidity(cell, qIndex);
+  }
 }
 
 function parseEntryInput(input) {
@@ -1732,6 +1802,7 @@ function handleEntryChange(event) {
   state.completed[qIndex] = cb.checked;
   invalidateScoreCaches();
   updateHeaderProgress();
+  refreshEntryColumnCoffin(qIndex);
   saveState(["completed", qIndex], cb.checked);
 }
 
@@ -2066,6 +2137,7 @@ function createShootoutRound(numbers) {
     completed: [false],
     answers: [Array(teams.length).fill("")],
   };
+  rememberTabScroll(activeTab);
   state.shootoutRounds.push(round);
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
@@ -2086,6 +2158,7 @@ function addShootoutQuestion(roundIndex) {
   round.answers.push(Array(round.teams.length).fill(""));
   round.entries.push(Array(round.teams.length).fill(0));
   round.completed.push(false);
+  rememberTabScroll(activeTab);
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
   render();
@@ -2106,6 +2179,7 @@ function removeShootoutQuestion(roundIndex) {
     round.entries.pop();
     round.completed.pop();
   }
+  rememberTabScroll(activeTab);
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
   render();
@@ -2133,8 +2207,7 @@ function buildResultsTableInner() {
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const shootoutRoundTotals = state.teams.map((_, teamIndex) =>
     state.shootoutRounds.map((__, roundIndex) => shootoutRoundTotalForTeam(teamIndex, roundIndex)));
-  const tiebreaks = shootoutRoundTotals.map((roundTotals) =>
-    roundTotals.reduce((sum, value) => sum + (value == null ? 0 : value), 0));
+  const tiebreaks = state.teams.map((_, i) => shootoutTiebreakForTeam(i));
   const ratings = state.teams.map((_, i) => ratingForTeam(i, stats));
   const tourTotals = state.teams.map((_, i) => tourSumsForTeam(i, stats));
   const tourStarts = tourStartIndexes();
@@ -2148,7 +2221,8 @@ function buildResultsTableInner() {
   }));
   sortKeys.sort((a, b) => {
     if (b.total !== a.total) return b.total - a.total;
-    if (b.tiebreak !== a.tiebreak) return b.tiebreak - a.tiebreak;
+    const cmp = compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
+    if (cmp !== 0) return cmp;
     return a.index - b.index;
   });
 
@@ -2399,13 +2473,25 @@ function ratingForTeam(teamIndex, stats = questionStats()) {
   return r;
 }
 
-function shootoutTotalForTeam(teamIndex) {
-  let total = 0;
+function shootoutTiebreakForTeam(teamIndex) {
+  // Per-round scores for lexicographic comparison; -1 marks rounds the team didn't play,
+  // so an early-exit team isn't overtaken by teams who continued accumulating points.
+  const result = [];
   for (let roundIndex = 0; roundIndex < state.shootoutRounds.length; roundIndex++) {
     const roundTotal = shootoutRoundTotalForTeam(teamIndex, roundIndex);
-    if (roundTotal != null) total += roundTotal;
+    result.push(roundTotal != null ? roundTotal : -1);
   }
-  return total;
+  return result;
+}
+
+function compareShootoutTiebreaks(a, b) {
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const av = a[i] ?? -1;
+    const bv = b[i] ?? -1;
+    if (av !== bv) return bv - av;
+  }
+  return 0;
 }
 
 function shootoutRoundTotalForTeam(teamIndex, roundIndex) {
@@ -2449,12 +2535,12 @@ function anyQuestionCompleted(stats = questionStats()) {
 function computePlaces(totals) {
   const places = new Array(totals.length).fill("");
   if (!anyQuestionCompleted() && !anyShootoutMarked()) return places;
-  const tiebreaks = state.teams.map((_, index) => shootoutTotalForTeam(index));
+  const tiebreaks = state.teams.map((_, index) => shootoutTiebreakForTeam(index));
   const sorted = totals
     .map((total, index) => ({total, tiebreak: tiebreaks[index], index}))
     .sort((a, b) => {
       if (b.total !== a.total) return b.total - a.total;
-      return b.tiebreak - a.tiebreak;
+      return compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
     });
   let i = 0;
   while (i < sorted.length) {
@@ -2462,7 +2548,7 @@ function computePlaces(totals) {
     while (
       j + 1 < sorted.length &&
       sorted[j + 1].total === sorted[i].total &&
-      sorted[j + 1].tiebreak === sorted[i].tiebreak
+      compareShootoutTiebreaks(sorted[j + 1].tiebreak, sorted[i].tiebreak) === 0
     ) j++;
     const label = i === j ? String(i + 1) : `${i + 1}–${j + 1}`;
     for (let k = i; k <= j; k++) {
