@@ -12,11 +12,43 @@ const embedded = new URLSearchParams(window.location.search).get("embed") === "1
 let state = null;
 let fest = null;
 let venues = [];
-let stageMatches = [];
-let stageStates = [];
-let stageStateByCode = new Map();
-let stageLoadToken = 0;
-let stageTableObserver = null;
+let stageSelection = null;            // points at the active pane's selection helper
+const stageCache = window.DopeStageCache.create({
+  container: hostRoot,
+  apiBase: () => route.apiBase,
+  schemeStages: () => (fest ? ekSchemeStages() : []),
+  findStage: (code) => findStage(fest, code),
+  stageType: (stage) => stageType(stage),
+  getMatches: (stage) => stage?.matches || [],
+  buildPaneContent: ({pane, stageCode, stage, data}) => {
+    if (stageType(stage) === "reseed") {
+      pane.appendChild(buildReseedStagePanel(mergedStage(fest, stageCode)));
+      return;
+    }
+    pane.appendChild(buildStageTableStack(data));
+    setupStageTableObserver(pane);
+    pane._stageSelection = attachStageSelection(pane.querySelector(".stage-table-stack"));
+  },
+  onStageDataChanged: ({pane, stageCode, data}) => {
+    refreshPaneFrames(pane, data);
+  },
+  onMatchUpdated: ({pane, frame, matchState}) => {
+    if (frame.dataset.rendered === "1" || frame.dataset.nearViewport === "1") {
+      renderStageMatchFrame(frame, matchState, {force: frame.dataset.rendered === "1"});
+    }
+  },
+  onPaneShown: ({pane, stageCode}) => {
+    stageSelection = pane._stageSelection || null;
+    bindStageOverflowScroll();
+    scheduleEKTeamNameOverflowUpdate(pane);
+  },
+  cleanupPane: ({pane}) => {
+    pane._stageObserver?.disconnect();
+    pane._stageObserver = null;
+    pane._stageSelection?.unbind();
+    pane._stageSelection = null;
+  },
+});
 let renderMatchCode = null;
 let activeCell = {matchCode: "", team: 0, shootout: false, theme: 0, answer: 0};
 let reloadTimer = null;
@@ -25,7 +57,6 @@ let matchTableIndex = null;
 let activeAnswerNode = null;
 let activeTeamRows = [];
 const matchSelections = new Map();
-let stageSelection = null;
 let presence = null;
 let seedImport = null;
 let seedImportNotice = "";
@@ -120,7 +151,8 @@ function writeFestCache(view) {
 
 function adoptFestView(view) {
   fest = view;
-  venues = Array.isArray(view?.venues) ? view.venues : [];
+  if (Array.isArray(view?.venues)) venues = view.venues;
+  stageCache.adoptFest(view);
 }
 
 // hydrateFestFromCache returns true if it managed to populate `fest` from
@@ -191,47 +223,30 @@ async function loadFest() {
 }
 
 async function loadStage() {
-  const token = ++stageLoadToken;
   const cached = hydrateFestFromCache();
-  if (cached) {
-    const stage = findStage(fest, route.stageCode);
-    stageMatches = stage?.matches || [];
-    stageStates = [];
-    stageStateByCode = new Map();
-    renderStage();
-  }
-  const [response, venuesResponse, batchResponse] = await Promise.all([
+  if (cached) renderStage();
+  const stageCode = route.stageCode;
+  // Revalidate fest+venues and fetch this stage's matches in parallel.
+  // adoptFestView routes through the cache, which clears caches on revision bump.
+  const festPromise = Promise.all([
     fetch(route.apiBase),
     fetch(`${route.festApi}/venues`),
-    fetch(`${route.apiBase}/stages/${encodeURIComponent(route.stageCode)}/matches`),
-  ]);
-  if (!response.ok) throw new Error(await response.text());
-  if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
-  if (!batchResponse.ok) throw new Error(await batchResponse.text());
-  const fresh = await response.json();
-  const freshVenues = await venuesResponse.json();
-  const batchedMatches = await batchResponse.json();
-  if (token !== stageLoadToken || route.mode !== "stage") return;
-  const changed = !cached || fresh.revision !== fest?.revision;
-  fest = fresh;
-  venues = freshVenues;
-  writeFestCache(fresh);
-  if (changed) {
-    const stage = findStage(fest, route.stageCode);
-    stageMatches = stage?.matches || [];
-    stageStates = [];
-    stageStateByCode = new Map();
-  }
-  if (Array.isArray(batchedMatches)) {
-    for (const m of batchedMatches) {
-      if (m?.code) stageStateByCode.set(m.code, m);
-    }
-    stageStates = stageMatches.map((match) => stageStateByCode.get(match.code)).filter(Boolean);
-  }
-  // Re-render so rendered placeholder frames pick up the freshly-batched
-  // state immediately. Frames not yet rendered will hit the populated map
-  // the moment the IntersectionObserver fires for them.
+  ]).then(async ([response, venuesResponse]) => {
+    if (!response.ok) throw new Error(await response.text());
+    if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
+    const fresh = await response.json();
+    const freshVenues = await venuesResponse.json();
+    venues = freshVenues;
+    adoptFestView(fresh);
+    writeFestCache(fresh);
+  });
+  const stagePromise = stageCache.prefetchStage(stageCode);
+  await Promise.all([festPromise, stagePromise]);
+  if (route.mode !== "stage" || route.stageCode !== stageCode) return;
   renderStage();
+  // Background prefetch of every other stage. Each payload is small and makes
+  // subsequent tab switches instant (data + pane already cached).
+  stageCache.prefetchAllStages();
 }
 
 async function loadMatch() {
@@ -248,7 +263,7 @@ async function loadMatch() {
   if (!festResponse.ok) throw new Error(await festResponse.text());
   state = await matchResponse.json();
   venues = await venuesResponse.json();
-  fest = await festResponse.json();
+  adoptFestView(await festResponse.json());
   writeFestCache(fest);
   render();
 }
@@ -266,7 +281,7 @@ async function loadVenuesPage() {
   const freshFest = await festResponse.json();
   const changed = !cached || JSON.stringify(freshVenues) !== JSON.stringify(venues);
   venues = freshVenues;
-  fest = freshFest;
+  adoptFestView(freshFest);
   writeFestCache(fest);
   if (changed) renderVenues();
 }
@@ -281,7 +296,7 @@ async function loadSeedImportPage() {
   if (!seedResponse.ok) throw new Error(await seedResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
   seedImport = await seedResponse.json();
-  fest = await festResponse.json();
+  adoptFestView(await festResponse.json());
   writeFestCache(fest);
   renderSeedImport();
 }
@@ -296,24 +311,26 @@ function connectEvents() {
     }
     const matchScope = `match:${route.gameID}:${route.matchCode}`;
     const venuesScope = `venues:${route.festID}`;
-    if (route.mode === "match" && message.scope === matchScope) {
-      applyUpdatedMatch(message.data, route.matchCode);
-      setStatus("saved");
+    // Match-scoped events: always route into cached stage data, regardless of
+    // which page we're on. Keeps cached panes for other stages live so a later
+    // tab switch sees fresh data without a fetch.
+    if (message.scope?.startsWith("match:")) {
+      if (message.data?.code) {
+        const result = stageCache.applyMatchUpdate(message.data);
+        if (route.mode === "match" && message.scope === matchScope) {
+          applyUpdatedMatch(message.data, route.matchCode);
+        }
+        if (!result.found && route.mode === "stage") scheduleReload();
+        setStatus("saved");
+        return;
+      }
+      scheduleReload();
       return;
     }
     if (route.mode === "venues" && message.scope === venuesScope) {
       venues = message.data;
       renderVenues();
       setStatus("saved");
-      return;
-    }
-    if (route.mode === "stage" && message.scope.startsWith("match:")) {
-      if (message.data?.code) {
-        applyStageMatchUpdate(message.data);
-        setStatus("saved");
-      } else {
-        scheduleReload();
-      }
       return;
     }
     scheduleReload();
@@ -489,30 +506,19 @@ function renderFest() {
   refreshPresence();
 }
 
-function renderStage(options = {}) {
+function renderStage() {
   if (!fest) return;
   resetMatchTableIndex();
-  const stage = mergedStage(fest, route.stageCode);
-  const scrollFrame = hostRoot.closest(".sheet-frame");
-  const scrollTop = scrollFrame?.scrollTop || 0;
-  const scrollLeft = scrollFrame?.scrollLeft || 0;
+  const stageCode = route.stageCode;
+  const stage = mergedStage(fest, stageCode);
   setHostMode("grid");
   setHeading("ЭК");
-  setViewerLink(`${route.viewerBase}/stage/${encodeURIComponent(route.stageCode)}`, "Открыть этап для зрителя");
+  setViewerLink(`${route.viewerBase}/stage/${encodeURIComponent(stageCode)}`, "Открыть этап для зрителя");
   document.title = pageTitle();
   renderEKTabs();
+  stageCache.showStage(stageCode);
   if (stageType(stage) === "reseed") {
-    hostRoot.replaceChildren(buildReseedStagePanel(stage));
     scheduleResultsTeamNameOverflowUpdate();
-  } else {
-    hostRoot.replaceChildren(buildStageTables());
-    bindStageOverflowScroll();
-    setupStageTableObserver();
-    attachStageSelection(hostRoot.querySelector(".stage-table-stack"));
-  }
-  if (options.preserveScroll && scrollFrame) {
-    scrollFrame.scrollTop = scrollTop;
-    scrollFrame.scrollLeft = scrollLeft;
   }
   refreshPresence();
 }
@@ -953,17 +959,18 @@ async function setSeedDeclined(teamID, declined) {
   }
 }
 
-function buildStageTables() {
+function buildStageTableStack(data) {
   const wrapper = document.createElement("div");
   wrapper.className = "stage-table-stack stage-table-stack-lazy";
-  if (stageMatches.length === 0) {
+  const matches = data?.matches || [];
+  if (matches.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty";
     empty.textContent = "В этом этапе нет боёв.";
     wrapper.appendChild(empty);
     return wrapper;
   }
-  stageMatches.forEach((match) => {
+  matches.forEach((match) => {
     const frame = document.createElement("section");
     frame.className = "stage-match-frame";
     frame.dataset.matchCode = match.code || "";
@@ -980,19 +987,18 @@ function buildStageMatchPlaceholder(match) {
   return placeholder;
 }
 
-function setupStageTableObserver() {
-  disconnectStageTableObserver();
-  const frames = Array.from(hostRoot.querySelectorAll(".stage-match-frame"));
+// setupStageTableObserver installs a per-pane IntersectionObserver that defers
+// DOM construction for off-screen match tables. Stored on the pane element so
+// cleanupPane (from the cache) can disconnect it on revision invalidation.
+function setupStageTableObserver(pane) {
+  const frames = Array.from(pane.querySelectorAll(".stage-match-frame"));
   if (frames.length === 0) return;
   if (!("IntersectionObserver" in window)) {
-    renderStageMatchFrames(frames, {force: true});
+    frames.forEach((frame) => renderStageMatchFrameIfReady(pane, frame, {force: true}));
     return;
   }
-  // After the batched /stages/{code}/matches fetch lands, the data for every
-  // frame is in stageStateByCode. The observer's only job now is to defer
-  // DOM construction for off-screen tables.
   const root = hostRoot.closest(".sheet-frame");
-  stageTableObserver = new IntersectionObserver((entries) => {
+  const observer = new IntersectionObserver((entries) => {
     const visibleFrames = [];
     entries.forEach((entry) => {
       if (!entry.isIntersecting) return;
@@ -1000,32 +1006,47 @@ function setupStageTableObserver() {
       frame.dataset.nearViewport = "1";
       visibleFrames.push(frame);
     });
-    renderStageMatchFrames(visibleFrames);
+    let rendered = false;
     visibleFrames.forEach((frame) => {
-      if (frame.dataset.rendered === "1") stageTableObserver?.unobserve(frame);
+      rendered = renderStageMatchFrameIfReady(pane, frame) || rendered;
+      if (frame.dataset.rendered === "1") observer.unobserve(frame);
     });
+    if (rendered) scheduleEKTeamNameOverflowUpdate(pane);
   }, {root, rootMargin: "900px 0px"});
-  frames.forEach((frame) => stageTableObserver.observe(frame));
+  frames.forEach((frame) => observer.observe(frame));
+  pane._stageObserver = observer;
 }
 
-function disconnectStageTableObserver() {
-  if (!stageTableObserver) return;
-  stageTableObserver.disconnect();
-  stageTableObserver = null;
-}
-
-function renderStageMatchFrames(frames, options = {}) {
+// refreshPaneFrames re-runs the frame paint pass after the cache's stage-data
+// fetch lands. Frames already rendered or near-viewport pick up the new state
+// immediately; the rest stay as placeholders until the observer fires.
+function refreshPaneFrames(pane, data) {
+  if (!pane || !data) return;
+  const stage = mergedStage(fest, pane.dataset.stageCode);
+  if (stageType(stage) === "reseed") {
+    pane.replaceChildren(buildReseedStagePanel(stage));
+    return;
+  }
   let rendered = false;
-  frames.forEach((frame) => {
-    rendered = renderStageMatchFrame(frame, options) || rendered;
+  pane.querySelectorAll(".stage-match-frame").forEach((frame) => {
+    const matchState = data.stateByCode.get(frame.dataset.matchCode || "");
+    if (!matchState) return;
+    if (frame.dataset.rendered === "1" || frame.dataset.nearViewport === "1") {
+      rendered = renderStageMatchFrame(frame, matchState, {force: frame.dataset.rendered === "1"}) || rendered;
+    }
   });
-  if (rendered) scheduleEKTeamNameOverflowUpdate(hostRoot);
+  if (rendered) scheduleEKTeamNameOverflowUpdate(pane);
 }
 
-function renderStageMatchFrame(frame, options = {}) {
-  if (!frame || (!options.force && frame.dataset.rendered === "1")) return false;
-  const matchState = stageStateByCode.get(frame.dataset.matchCode || "");
+function renderStageMatchFrameIfReady(pane, frame, options = {}) {
+  const data = stageCache.getData(pane.dataset.stageCode);
+  const matchState = data?.stateByCode.get(frame.dataset.matchCode || "");
   if (!matchState) return false;
+  return renderStageMatchFrame(frame, matchState, options);
+}
+
+function renderStageMatchFrame(frame, matchState, options = {}) {
+  if (!frame || (!options.force && frame.dataset.rendered === "1")) return false;
   const hadFocus = document.activeElement?.closest?.(".stage-match-frame") === frame;
   frame.dataset.rendered = "1";
   const stageTable = withMatchState(matchState, () => buildTable({compact: true}));
@@ -1037,16 +1058,11 @@ function renderStageMatchFrame(frame, options = {}) {
   return true;
 }
 
-function renderStageMatchFrameIfReady(matchCode, options = {}) {
-  const frame = stageMatchFrame(matchCode);
-  if (!frame) return;
-  if (options.force || frame.dataset.nearViewport === "1" || frame.dataset.rendered === "1") {
-    renderStageMatchFrames([frame], options);
-  }
-}
-
 function stageMatchFrame(matchCode) {
-  return hostRoot.querySelector(`.stage-match-frame[data-match-code="${cssEscape(matchCode)}"]`);
+  const stageCode = stageCache.stageCodeForMatch(matchCode);
+  if (!stageCode) return null;
+  const pane = stageCache.getPane(stageCode);
+  return pane?.querySelector(`.stage-match-frame[data-match-code="${cssEscape(matchCode)}"]`) || null;
 }
 
 function withMatchState(matchState, callback) {
@@ -1066,31 +1082,36 @@ function currentMatchCode() {
   return renderMatchCode || activeCell.matchCode || route.matchCode;
 }
 
+function currentStageMatches() {
+  return stageCache.getData(route.stageCode)?.matches || [];
+}
+
+function currentStageStateByCode() {
+  return stageCache.getData(route.stageCode)?.stateByCode || null;
+}
+
 function activeMatchState() {
   if (route.mode === "stage") {
-    return stageStateByCode.get(activeCell.matchCode) || stageStates[0] || null;
+    const byCode = currentStageStateByCode();
+    if (!byCode) return null;
+    if (activeCell.matchCode && byCode.has(activeCell.matchCode)) return byCode.get(activeCell.matchCode);
+    for (const match of currentStageMatches()) {
+      const ms = byCode.get(match.code);
+      if (ms) return ms;
+    }
+    return null;
   }
   return state;
 }
 
 function matchStateFor(matchCode) {
-  if (route.mode === "stage") return stageStateByCode.get(matchCode) || null;
+  if (route.mode === "stage") return currentStageStateByCode()?.get(matchCode) || null;
   return state;
-}
-
-function applyStageMatchUpdate(updated, options = {}) {
-  const matchCode = updated?.code;
-  if (!matchCode) return;
-  stageStateByCode.set(matchCode, updated);
-  stageStates = stageMatches.map((match) => stageStateByCode.get(match.code)).filter(Boolean);
-  renderStageMatchFrameIfReady(matchCode, {
-    force: !options.renderOnlyIfNear && stageMatchFrame(matchCode)?.dataset.rendered === "1",
-  });
 }
 
 function applyUpdatedMatch(updated, matchCode) {
   if (route.mode === "stage") {
-    applyStageMatchUpdate(updated);
+    stageCache.applyMatchUpdate(updated);
     return;
   }
   const previous = state;
@@ -1175,23 +1196,24 @@ function indexedNode(name, values) {
 }
 
 function resetMatchTableIndex() {
-  disconnectStageTableObserver();
-  unbindStageOverflowScroll();
   matchTableIndex = null;
   activeAnswerNode = null;
   clearActiveTeamRows();
   for (const helper of matchSelections.values()) helper.unbind();
   matchSelections.clear();
-  if (stageSelection) {
-    stageSelection.unbind();
-    stageSelection = null;
-  }
+  // Stage selections live on cached panes — cleared by cleanupPane when the
+  // cache invalidates a pane, not on every render. unbindStageOverflowScroll
+  // only matters when leaving stage mode (renderFest/renderVenues/etc).
+  stageSelection = null;
+  if (route.mode !== "stage") unbindStageOverflowScroll();
 }
 
 function stageRowOffset(matchIndex) {
+  const matches = currentStageMatches();
+  const byCode = currentStageStateByCode();
   let offset = 0;
-  for (let i = 0; i < matchIndex && i < stageMatches.length; i++) {
-    const s = stageStateByCode.get(stageMatches[i]?.code);
+  for (let i = 0; i < matchIndex && i < matches.length; i++) {
+    const s = byCode?.get(matches[i]?.code);
     offset += s?.teams?.length || 0;
   }
   return offset;
@@ -1203,9 +1225,10 @@ function stageCoordOf(cell) {
   const answer = Number(cell.dataset.answer);
   if (!Number.isInteger(team) || !Number.isInteger(theme) || !Number.isInteger(answer)) return null;
   const matchCode = cell.dataset.matchCode;
-  const matchIndex = stageMatches.findIndex((m) => m.code === matchCode);
+  const matches = currentStageMatches();
+  const matchIndex = matches.findIndex((m) => m.code === matchCode);
   if (matchIndex < 0) return null;
-  const matchState = stageStateByCode.get(matchCode);
+  const matchState = currentStageStateByCode()?.get(matchCode);
   if (!matchState) return null;
   const answers = answerCountFor(matchState);
   if (answers <= 0) return null;
@@ -1217,8 +1240,9 @@ function stageCoordOf(cell) {
 function stageCellAtCoord(coord) {
   if (!coord) return null;
   let remaining = coord.row;
-  for (const match of stageMatches) {
-    const matchState = stageStateByCode.get(match.code);
+  const byCode = currentStageStateByCode();
+  for (const match of currentStageMatches()) {
+    const matchState = byCode?.get(match.code);
     if (!matchState) continue;
     const teamCount = matchState.teams?.length || 0;
     if (remaining < teamCount) {
@@ -1241,22 +1265,19 @@ function stageCellAtCoord(coord) {
 }
 
 function stageApplyValues(edits) {
+  const byCode = currentStageStateByCode();
   for (const {cell, value} of edits) {
     const matchCode = cell.dataset.matchCode;
     if (!matchCode) continue;
-    const matchState = stageStateByCode.get(matchCode);
+    const matchState = byCode?.get(matchCode);
     if (!matchState || matchState.finished) continue;
     ekApplyValues(matchCode, matchState, [{cell, value}]);
   }
 }
 
 function attachStageSelection(container) {
-  if (stageSelection) {
-    stageSelection.unbind();
-    stageSelection = null;
-  }
   if (!container) return null;
-  stageSelection = gameTable.createCellRangeSelection({
+  const helper = gameTable.createCellRangeSelection({
     root: container,
     cellSelector: ".answer-cell",
     readonly: () => false,
@@ -1277,8 +1298,8 @@ function attachStageSelection(container) {
       publishPresence();
     },
   });
-  stageSelection.bind();
-  return stageSelection;
+  helper.bind();
+  return helper;
 }
 
 function answerCountFor(matchState) {
@@ -1384,9 +1405,9 @@ function activeMatchSelection() {
 function activeSelectionCoord() {
   if (route.mode === "stage") {
     const matchCode = activeCell.matchCode || currentMatchCode();
-    const matchIndex = stageMatches.findIndex((m) => m.code === matchCode);
+    const matchIndex = currentStageMatches().findIndex((m) => m.code === matchCode);
     if (matchIndex < 0) return null;
-    const matchState = stageStateByCode.get(matchCode);
+    const matchState = currentStageStateByCode()?.get(matchCode);
     if (!matchState) return null;
     const answers = answerCountFor(matchState);
     if (answers <= 0) return null;
@@ -1887,7 +1908,7 @@ function moveActiveCell(teamDelta, answerDelta, extend = false) {
   nextColumn = clamp(nextColumn, 0, maxColumn);
   const previousMatchCode = activeCell.matchCode || currentMatchCode();
   if (nextMatchCode !== previousMatchCode) {
-    const siblingState = stageStateByCode.get(nextMatchCode);
+    const siblingState = currentStageStateByCode()?.get(nextMatchCode);
     if (siblingState) {
       withMatchState(siblingState, () => {
         activeCell = {...cellFromColumn(nextTeam, nextColumn), matchCode: nextMatchCode};
@@ -1907,12 +1928,12 @@ function moveActiveCell(teamDelta, answerDelta, extend = false) {
 
 function adjacentStageMatch(matchCode, direction) {
   if (route.mode !== "stage") return null;
-  const index = stageMatches.findIndex((match) => match.code === matchCode);
+  const matches = currentStageMatches();
+  const index = matches.findIndex((match) => match.code === matchCode);
   if (index < 0) return null;
-  const targetIndex = index + direction;
-  const targetMatch = stageMatches[targetIndex];
+  const targetMatch = matches[index + direction];
   if (!targetMatch) return null;
-  const targetState = stageStateByCode.get(targetMatch.code);
+  const targetState = currentStageStateByCode()?.get(targetMatch.code);
   if (!targetState) return null;
   return {code: targetMatch.code, state: targetState};
 }
