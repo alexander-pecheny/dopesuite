@@ -2066,6 +2066,7 @@ function createShootoutRound(numbers) {
     completed: [false],
     answers: [Array(teams.length).fill("")],
   };
+  rememberTabScroll(activeTab);
   state.shootoutRounds.push(round);
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
@@ -2086,6 +2087,7 @@ function addShootoutQuestion(roundIndex) {
   round.answers.push(Array(round.teams.length).fill(""));
   round.entries.push(Array(round.teams.length).fill(0));
   round.completed.push(false);
+  rememberTabScroll(activeTab);
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
   render();
@@ -2106,6 +2108,7 @@ function removeShootoutQuestion(roundIndex) {
     round.entries.pop();
     round.completed.pop();
   }
+  rememberTabScroll(activeTab);
   invalidateShootoutCaches();
   saveState(["shootoutRounds"], state.shootoutRounds);
   render();
