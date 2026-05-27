@@ -639,6 +639,34 @@ function selectedEntryText() {
   return lines.join("\n");
 }
 
+function fillEntryColumnWithAllTeams(qIndex) {
+  if (viewer) return;
+  if (!Number.isInteger(qIndex) || qIndex < 0 || qIndex >= totalQuestions) return;
+  if (state.completed[qIndex]) return;
+  const numbers = state.teams
+    .map((_, i) => teamNumber(i))
+    .filter((n) => Number.isInteger(n) && n > 0)
+    .sort((a, b) => a - b);
+  const next = new Array(state.teams.length).fill(0);
+  numbers.forEach((n, i) => {
+    if (i < next.length) next[i] = n;
+  });
+  const current = state.entries[qIndex] || [];
+  let same = current.length === next.length;
+  for (let i = 0; same && i < next.length; i++) {
+    if ((current[i] || 0) !== next[i]) same = false;
+  }
+  if (same) return;
+  closeEntryEditor();
+  closeEntrySuggest();
+  state.entries[qIndex] = next;
+  invalidateScoreCaches();
+  invalidateTabCache("input");
+  saveState(["entries", qIndex], next);
+  render();
+  focusEntrySelection();
+}
+
 function clearSelectedEntryCells() {
   const selection = normalizedEntrySelection();
   if (!selection || viewer) return;
@@ -829,10 +857,23 @@ function handleEntryCellKeydown(event, cell) {
   } else if (event.key === "Backspace" || event.key === "Delete" || event.key === " ") {
     event.preventDefault();
     clearSelectedEntryCells();
+  } else if (!event.metaKey && !event.ctrlKey && !event.altKey && isFillAllKey(event.key)) {
+    const qIndex = Number(cell.dataset.q);
+    if (Number.isInteger(qIndex) && !state.completed[qIndex]) {
+      event.preventDefault();
+      fillEntryColumnWithAllTeams(qIndex);
+      return;
+    }
+    event.preventDefault();
+    startEntryEditWithText(cell, event.key);
   } else if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
     event.preventDefault();
     startEntryEditWithText(cell, event.key);
   }
+}
+
+function isFillAllKey(key) {
+  return key === "a" || key === "A" || key === "а" || key === "А";
 }
 
 function buildInputTable() {
@@ -1237,10 +1278,34 @@ function entryCell(qIndex, rowIndex, tourEnd, validationCounts) {
   td.dataset.row = String(rowIndex);
   if (!viewer) td.tabIndex = 0;
   td.setAttribute("role", "gridcell");
-  const value = state.entries[qIndex][rowIndex];
-  td.textContent = value ? String(value) : "";
+  applyEntryCellDisplay(td, qIndex, rowIndex);
   markEntryCellValidity(td, qIndex, validationCounts);
   return td;
+}
+
+function entryCellShowsCoffin(qIndex, rowIndex) {
+  return rowIndex === 0 && Boolean(state.completed[qIndex]) && countValidEntries(qIndex) === 0;
+}
+
+function applyEntryCellDisplay(td, qIndex, rowIndex) {
+  if (entryCellShowsCoffin(qIndex, rowIndex)) {
+    td.textContent = "⚰️";
+    td.classList.add("entry-coffin");
+    return;
+  }
+  td.classList.remove("entry-coffin");
+  const value = state.entries[qIndex]?.[rowIndex] || 0;
+  td.textContent = value ? String(value) : "";
+}
+
+function refreshEntryColumnCoffin(qIndex) {
+  if (!Number.isInteger(qIndex)) return;
+  if (activeEntryEditor) {
+    const editorCell = activeEntryEditor.cell;
+    if (Number(editorCell?.dataset.q) === qIndex && Number(editorCell?.dataset.row) === 0) return;
+  }
+  const cell = entryCellNode(qIndex, 0);
+  if (cell) applyEntryCellDisplay(cell, qIndex, 0);
 }
 
 function buildInputValidationCounts() {
@@ -1424,6 +1489,7 @@ function handleEntryInput(event) {
   closeEntrySuggest();
   invalidateScoreCaches();
   updateInputValidity(qIndex);
+  refreshEntryColumnCoffin(qIndex);
   saveState(["entries", qIndex, rowIndex], parsed.value);
 }
 
@@ -1568,12 +1634,14 @@ function closeEntryEditor() {
   activeEntryEditor = null;
   input.remove();
   cell.classList.remove("entry-editing");
-  const value = shootout
-    ? shootoutEntryValue(Number(cell.dataset.round), Number(cell.dataset.question), rowIndex)
-    : state.entries[qIndex]?.[rowIndex] || 0;
-  cell.textContent = value ? String(value) : "";
-  if (shootout) markShootoutEntryCellValidity(cell);
-  else markEntryCellValidity(cell, qIndex);
+  if (shootout) {
+    const value = shootoutEntryValue(Number(cell.dataset.round), Number(cell.dataset.question), rowIndex);
+    cell.textContent = value ? String(value) : "";
+    markShootoutEntryCellValidity(cell);
+  } else {
+    applyEntryCellDisplay(cell, qIndex, rowIndex);
+    markEntryCellValidity(cell, qIndex);
+  }
 }
 
 function parseEntryInput(input) {
@@ -1732,6 +1800,7 @@ function handleEntryChange(event) {
   state.completed[qIndex] = cb.checked;
   invalidateScoreCaches();
   updateHeaderProgress();
+  refreshEntryColumnCoffin(qIndex);
   saveState(["completed", qIndex], cb.checked);
 }
 
