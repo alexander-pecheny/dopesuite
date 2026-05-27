@@ -2136,8 +2136,7 @@ function buildResultsTableInner() {
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const shootoutRoundTotals = state.teams.map((_, teamIndex) =>
     state.shootoutRounds.map((__, roundIndex) => shootoutRoundTotalForTeam(teamIndex, roundIndex)));
-  const tiebreaks = shootoutRoundTotals.map((roundTotals) =>
-    roundTotals.reduce((sum, value) => sum + (value == null ? 0 : value), 0));
+  const tiebreaks = state.teams.map((_, i) => shootoutTiebreakForTeam(i));
   const ratings = state.teams.map((_, i) => ratingForTeam(i, stats));
   const tourTotals = state.teams.map((_, i) => tourSumsForTeam(i, stats));
   const tourStarts = tourStartIndexes();
@@ -2151,7 +2150,8 @@ function buildResultsTableInner() {
   }));
   sortKeys.sort((a, b) => {
     if (b.total !== a.total) return b.total - a.total;
-    if (b.tiebreak !== a.tiebreak) return b.tiebreak - a.tiebreak;
+    const cmp = compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
+    if (cmp !== 0) return cmp;
     return a.index - b.index;
   });
 
@@ -2402,13 +2402,25 @@ function ratingForTeam(teamIndex, stats = questionStats()) {
   return r;
 }
 
-function shootoutTotalForTeam(teamIndex) {
-  let total = 0;
+function shootoutTiebreakForTeam(teamIndex) {
+  // Per-round scores for lexicographic comparison; -1 marks rounds the team didn't play,
+  // so an early-exit team isn't overtaken by teams who continued accumulating points.
+  const result = [];
   for (let roundIndex = 0; roundIndex < state.shootoutRounds.length; roundIndex++) {
     const roundTotal = shootoutRoundTotalForTeam(teamIndex, roundIndex);
-    if (roundTotal != null) total += roundTotal;
+    result.push(roundTotal != null ? roundTotal : -1);
   }
-  return total;
+  return result;
+}
+
+function compareShootoutTiebreaks(a, b) {
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const av = a[i] ?? -1;
+    const bv = b[i] ?? -1;
+    if (av !== bv) return bv - av;
+  }
+  return 0;
 }
 
 function shootoutRoundTotalForTeam(teamIndex, roundIndex) {
@@ -2452,12 +2464,12 @@ function anyQuestionCompleted(stats = questionStats()) {
 function computePlaces(totals) {
   const places = new Array(totals.length).fill("");
   if (!anyQuestionCompleted() && !anyShootoutMarked()) return places;
-  const tiebreaks = state.teams.map((_, index) => shootoutTotalForTeam(index));
+  const tiebreaks = state.teams.map((_, index) => shootoutTiebreakForTeam(index));
   const sorted = totals
     .map((total, index) => ({total, tiebreak: tiebreaks[index], index}))
     .sort((a, b) => {
       if (b.total !== a.total) return b.total - a.total;
-      return b.tiebreak - a.tiebreak;
+      return compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
     });
   let i = 0;
   while (i < sorted.length) {
@@ -2465,7 +2477,7 @@ function computePlaces(totals) {
     while (
       j + 1 < sorted.length &&
       sorted[j + 1].total === sorted[i].total &&
-      sorted[j + 1].tiebreak === sorted[i].tiebreak
+      compareShootoutTiebreaks(sorted[j + 1].tiebreak, sorted[i].tiebreak) === 0
     ) j++;
     const label = i === j ? String(i + 1) : `${i + 1}–${j + 1}`;
     for (let k = i; k <= j; k++) {
