@@ -343,6 +343,7 @@ function syncShootoutAnswersFromEntries(round, questionIndex) {
 }
 
 function invalidateAllCaches() {
+  rememberTabScroll(activeTab);
   activeEntryEditor = null;
   closeEntrySuggest();
   questionStatsCache = null;
@@ -392,6 +393,7 @@ function numbersPageURL() {
 }
 
 function invalidateTabCache(...tabs) {
+  if (tabs.includes(activeTab)) rememberTabScroll(activeTab);
   for (const tab of tabs) {
     const pane = tabCache.get(tab);
     if (pane) pane.remove();
