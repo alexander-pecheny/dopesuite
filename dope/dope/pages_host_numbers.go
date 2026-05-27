@@ -384,7 +384,7 @@ func (s *server) handleHostClearFestNumbers(w http.ResponseWriter, r *http.Reque
 func (s *server) purgeFestSoftDeletedTeams(ctx context.Context, festID int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.ExecContext(ctx, `delete from fest_teams where fest_id = ? and deleted = 1`, festID)
+	_, err := s.writeExec(ctx, `delete from fest_teams where fest_id = ? and deleted = 1`, festID)
 	return err
 }
 
@@ -395,7 +395,7 @@ func (s *server) saveFestNumbers(ctx context.Context, festID int64, assignments 
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.beginWriteTx(ctx)
 		if err != nil {
 			return err
 		}

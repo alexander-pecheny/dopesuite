@@ -212,7 +212,7 @@ select count(*) from games where fest_id = ? and slug = ? and id <> ?`, festID, 
 		}
 		slugValue = slug
 	}
-	if _, err := s.db.ExecContext(r.Context(), `
+	if _, err := s.writeExec(r.Context(), `
 update games set slug = ?, updated_at = ? where id = ? and fest_id = ?`,
 		slugValue, utcNow(), gameID, festID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -230,7 +230,7 @@ func (s *server) handleHostDeleteGame(w http.ResponseWriter, r *http.Request, fe
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(r.Context(), nil)
+	tx, err := s.beginWriteTx(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -327,7 +327,7 @@ func (s *server) createHostGame(ctx context.Context, festID int64, gameType stri
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return 0, err
 	}

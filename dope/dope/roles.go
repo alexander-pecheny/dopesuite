@@ -172,7 +172,7 @@ order by case member.role when 'creator' then 0 when 'admin' then 1 else 2 end,
 }
 
 func (s *server) saveFestAccess(ctx context.Context, festID, actorID int64, form url.Values) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return err
 	}

@@ -182,7 +182,7 @@ func (s *server) importFestRoster(ctx context.Context, festID, ratingID int64, t
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.beginWriteTx(ctx)
 		if err != nil {
 			return ratingRosterImportResult{}, err
 		}
