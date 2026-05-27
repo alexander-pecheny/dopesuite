@@ -28,6 +28,7 @@
       onStageDataChanged,
       onMatchUpdated,
       onPaneShown,
+      cleanupPane,
     } = options;
 
     const stageDataByCode = new Map();
@@ -117,7 +118,10 @@
     }
 
     function clear() {
-      for (const pane of stagePaneByCode.values()) pane.remove();
+      for (const [stageCode, pane] of stagePaneByCode) {
+        cleanupPane?.({pane, stageCode});
+        pane.remove();
+      }
       stageDataByCode.clear();
       stagePaneByCode.clear();
       stageFetchPromises.clear();
