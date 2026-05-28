@@ -57,6 +57,10 @@ let matchTableIndex = null;
 let activeAnswerNode = null;
 let activeTeamRows = [];
 const matchSelections = new Map();
+const undoStack = [];
+const UNDO_LIMIT = 200;
+let undoStackContext = null;
+let undoApplying = false;
 let presence = null;
 let seedImport = null;
 let seedImportNotice = "";
@@ -1266,12 +1270,36 @@ function stageCellAtCoord(coord) {
 
 function stageApplyValues(edits) {
   const byCode = currentStageStateByCode();
+  const applies = [];
   for (const {cell, value} of edits) {
     const matchCode = cell.dataset.matchCode;
     if (!matchCode) continue;
     const matchState = byCode?.get(matchCode);
     if (!matchState || matchState.finished) continue;
-    ekApplyValues(matchCode, matchState, [{cell, value}]);
+    applies.push({matchCode, matchState, cell, value});
+  }
+  if (applies.length === 0) return;
+  if (!undoApplying) {
+    const groupsByCode = new Map();
+    for (const {matchCode, cell, value} of applies) {
+      if (!groupsByCode.has(matchCode)) groupsByCode.set(matchCode, []);
+      groupsByCode.get(matchCode).push({cell, value});
+    }
+    const groups = [];
+    for (const [matchCode, items] of groupsByCode) {
+      const reverse = snapshotMatchEdits(matchCode, items);
+      if (reverse.length > 0) groups.push({matchCode, items: reverse});
+    }
+    if (groups.length > 0) {
+      pushUndoEntry({
+        kind: "match-edits",
+        groups,
+        selection: captureSelectionFromHelper(stageSelection),
+      });
+    }
+  }
+  for (const {matchCode, matchState, cell, value} of applies) {
+    ekApplyValues(matchCode, matchState, [{cell, value}], {recordUndo: false});
   }
 }
 
@@ -1350,7 +1378,18 @@ function parseMarkText(text) {
   return "";
 }
 
-function ekApplyValues(matchCode, matchState, edits) {
+function ekApplyValues(matchCode, matchState, edits, options = {}) {
+  if (options.recordUndo !== false && !undoApplying) {
+    const reverse = snapshotMatchEdits(matchCode, edits);
+    if (reverse.length > 0) {
+      const helper = activeMatchSelection();
+      pushUndoEntry({
+        kind: "match-edits",
+        groups: [{matchCode, items: reverse}],
+        selection: captureSelectionFromHelper(helper),
+      });
+    }
+  }
   for (const {cell, value} of edits) {
     const mark = value === "right" ? "right" : value === "wrong" ? "wrong" : "";
     gameTable.setMarkClass(cell, mark);
@@ -1364,6 +1403,104 @@ function ekApplyValues(matchCode, matchState, edits) {
     if (shootout) payload.shootout = true;
     sendUpdate(payload, matchCode);
   }
+}
+
+function snapshotMatchEdits(matchCode, edits) {
+  const out = [];
+  for (const {cell, value} of edits) {
+    const team = Number(cell.dataset.team);
+    const theme = Number(cell.dataset.theme);
+    const answer = Number(cell.dataset.answer);
+    if (!Number.isInteger(team) || !Number.isInteger(theme) || !Number.isInteger(answer)) continue;
+    const shootout = cell.dataset.shootout === "1";
+    const previous = cell.classList.contains("right") ? "right"
+      : cell.classList.contains("wrong") ? "wrong" : "";
+    const target = value === "right" ? "right" : value === "wrong" ? "wrong" : "";
+    if (previous === target) continue;
+    out.push({team, theme, answer, shootout, previous});
+  }
+  return out;
+}
+
+function captureSelectionFromHelper(helper) {
+  if (!helper) return null;
+  const anchor = helper.anchor;
+  const focus = helper.focus;
+  if (!anchor || !focus) return null;
+  return {
+    anchor: {row: anchor.row, col: anchor.col},
+    focus: {row: focus.row, col: focus.col},
+  };
+}
+
+function currentUndoContext() {
+  if (route.mode === "match") return {mode: "match", matchCode: route.matchCode || null, stageCode: null};
+  if (route.mode === "stage") return {mode: "stage", matchCode: null, stageCode: route.stageCode || null};
+  return null;
+}
+
+function ensureUndoContext() {
+  const next = currentUndoContext();
+  if (!next) {
+    undoStack.length = 0;
+    undoStackContext = null;
+    return null;
+  }
+  if (!undoStackContext ||
+      undoStackContext.mode !== next.mode ||
+      undoStackContext.matchCode !== next.matchCode ||
+      undoStackContext.stageCode !== next.stageCode) {
+    undoStack.length = 0;
+    undoStackContext = next;
+  }
+  return next;
+}
+
+function pushUndoEntry(entry) {
+  if (!ensureUndoContext()) return;
+  undoStack.push(entry);
+  while (undoStack.length > UNDO_LIMIT) undoStack.shift();
+}
+
+function performUndo() {
+  if (!ensureUndoContext() || undoStack.length === 0) return false;
+  const entry = undoStack.pop();
+  if (!entry || entry.kind !== "match-edits") return false;
+  undoApplying = true;
+  try {
+    for (const group of entry.groups) {
+      const matchCode = group.matchCode;
+      const matchState = matchStateFor(matchCode);
+      if (!matchState) continue;
+      const edits = [];
+      for (const item of group.items) {
+        const cell = findAnswerCell(matchCode, item);
+        if (cell) edits.push({cell, value: item.previous});
+      }
+      if (edits.length > 0) ekApplyValues(matchCode, matchState, edits, {recordUndo: false});
+    }
+  } finally {
+    undoApplying = false;
+  }
+  restoreSelectionFromUndoEntry(entry);
+  return true;
+}
+
+function findAnswerCell(matchCode, {team, theme, answer, shootout}) {
+  if (route.mode === "match") {
+    const node = indexedNode("answer", {team, theme, answer, shootout: shootout ? "1" : "0"});
+    if (node) return node;
+  }
+  return document.querySelector(
+    `.answer-cell[data-match-code="${cssEscape(matchCode)}"][data-team="${cssEscape(team)}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(theme)}"][data-answer="${cssEscape(answer)}"]`,
+  );
+}
+
+function restoreSelectionFromUndoEntry(entry) {
+  if (!entry.selection) return;
+  const helper = route.mode === "stage" ? stageSelection : matchSelections.get(undoStackContext?.matchCode || currentMatchCode());
+  if (!helper) return;
+  helper.setSelection(entry.selection.anchor, entry.selection.focus, {focus: true});
 }
 
 function attachMatchSelection(table, matchState, matchCode) {
@@ -1825,6 +1962,10 @@ function shootoutControlsHeader() {
 
 function handleGlobalKeydown(event) {
   if ((route.mode !== "match" && route.mode !== "stage") || isFormControl(event.target)) return;
+  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z") {
+    if (performUndo()) event.preventDefault();
+    return;
+  }
   const matchState = activeMatchState();
   if (!matchState) return;
 
@@ -1949,6 +2090,13 @@ function extendSelectionToActiveCell() {
 
 function setActiveMark(mark) {
   if (state.finished) return;
+  const matchCode = currentMatchCode();
+  const matchState = matchStateFor(matchCode);
+  const cell = findActiveCell();
+  if (matchState && cell) {
+    ekApplyValues(matchCode, matchState, [{cell, value: mark}]);
+    return;
+  }
   const payload = {
     team: activeCell.team,
     theme: activeCell.theme,
@@ -1956,7 +2104,7 @@ function setActiveMark(mark) {
     mark,
   };
   if (activeCell.shootout) payload.shootout = true;
-  sendUpdate(payload, currentMatchCode());
+  sendUpdate(payload, matchCode);
 }
 
 function markActiveCell() {

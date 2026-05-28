@@ -52,6 +52,8 @@ let entrySuggest = null;
 let entrySelection = null;
 let entryDragSelection = null;
 let entrySuppressClickSelection = false;
+const undoStack = [];
+const UNDO_LIMIT = 100;
 
 const ENTRY_SELECTION_CLASSES = [
   "entry-selected",
@@ -659,14 +661,53 @@ function fillEntryColumnWithAllTeams(qIndex) {
     if ((current[i] || 0) !== next[i]) same = false;
   }
   if (same) return;
+  const hasExistingValues = current.some((v) => Number.isInteger(v) && v > 0);
+  if (hasExistingValues && !window.confirm("Заменить значения в колонке номерами всех команд?")) return;
+  const previous = current.slice();
+  while (previous.length < state.teams.length) previous.push(0);
   closeEntryEditor();
   closeEntrySuggest();
   state.entries[qIndex] = next;
+  pushUndoEntry({kind: "entry-column", qIndex, previous});
   invalidateScoreCaches();
   invalidateTabCache("input");
   saveState(["entries", qIndex], next);
   render();
   focusEntrySelection();
+}
+
+function pushUndoEntry(entry) {
+  undoStack.push(entry);
+  while (undoStack.length > UNDO_LIMIT) undoStack.shift();
+}
+
+function performUndo() {
+  if (viewer || undoStack.length === 0) return false;
+  const entry = undoStack.pop();
+  if (!entry) return false;
+  if (entry.kind === "entry-column") {
+    const {qIndex, previous} = entry;
+    if (!Number.isInteger(qIndex) || qIndex < 0 || qIndex >= totalQuestions) return false;
+    if (state.completed[qIndex]) return false;
+    const restored = previous.slice(0, state.teams.length);
+    while (restored.length < state.teams.length) restored.push(0);
+    closeEntryEditor();
+    closeEntrySuggest();
+    state.entries[qIndex] = restored;
+    invalidateScoreCaches();
+    invalidateTabCache("input");
+    saveState(["entries", qIndex], restored);
+    if (activeTab !== "input") {
+      activeTab = "input";
+      if (window.location.hash.replace(/^#/, "") !== "input") {
+        history.replaceState(null, "", "#input");
+      }
+    }
+    render();
+    setEntrySelection(qIndex, 0, qIndex, Math.max(0, state.teams.length - 1), {focus: true});
+    return true;
+  }
+  return false;
 }
 
 function clearSelectedEntryCells() {
@@ -1556,6 +1597,21 @@ function handleEntryDocumentKeydown(event) {
 }
 
 document.addEventListener("keydown", handleEntryDocumentKeydown);
+document.addEventListener("keydown", handleUndoKeydown);
+
+function handleUndoKeydown(event) {
+  if (viewer || event.defaultPrevented) return;
+  if (!event.metaKey && !event.ctrlKey) return;
+  if (event.shiftKey || event.altKey) return;
+  if (event.key.toLowerCase() !== "z") return;
+  const target = event.target;
+  const editable = target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement
+    || Boolean(target?.isContentEditable);
+  if (editable) return;
+  if (performUndo()) event.preventDefault();
+}
 
 function handleEntryFocus(event) {
   const target = event.target;
