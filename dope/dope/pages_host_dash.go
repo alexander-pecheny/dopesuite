@@ -153,7 +153,7 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
                 </td>
                 <td class="access-action-cell">
                   {{if not .IsCreator}}
-                  <button class="btn danger" type="submit" name="delete_{{.UserID}}" value="1">Удалить</button>
+                  <button class="btn danger" type="submit" name="delete_{{.UserID}}" value="1" onclick="return confirm('Удалить доступ для {{.Nickname}}?');">Удалить</button>
                   {{end}}
                 </td>
               </tr>
