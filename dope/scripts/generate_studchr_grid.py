@@ -74,6 +74,10 @@ def reseed_after_r8_stage():
         "stage_type": "reseed",
         "position": 4,
         "teams": teams,
+        # Metrics (place_sum, total, plus, correct_*) are summed across every
+        # game each advancing team played, not just the 1/8. Listing both 1/16
+        # heats and the 1/8 makes the aggregation scope explicit.
+        "sources": ["r16_run1", "r16_run2", "r8"],
         "sort": [
             {"metric": "place_sum", "dir": "asc"},
             {"metric": "total", "dir": "desc"},
