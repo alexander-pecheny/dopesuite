@@ -173,6 +173,88 @@ values(null, null, ?, 0, ?, ?)`, "profile_user", now, now)
 	}
 }
 
+func TestProfileSetAndChangePassword(t *testing.T) {
+	srv := newAuthTestServer(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := srv.db.Exec(`
+insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
+values(null, null, ?, 0, ?, ?)`, "pw_user", now, now)
+	if err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	userID, _ := res.LastInsertId()
+	cookie := createTestSession(t, srv, userID)
+
+	postPassword := func(body passwordRequest) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/password", bytes.NewReader(raw))
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: cookie})
+		resp := httptest.NewRecorder()
+		srv.handleAuthPassword(resp, req)
+		return resp
+	}
+
+	// Profile page shows the "set password" form when none is set.
+	profileReq := httptest.NewRequest(http.MethodGet, "/profile", nil)
+	profileReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: cookie})
+	profileResp := httptest.NewRecorder()
+	srv.handleProfilePage(profileResp, profileReq)
+	if body := profileResp.Body.String(); !strings.Contains(body, `data-has-password="0"`) {
+		t.Fatalf("profile page should show set-password form: %s", body)
+	}
+
+	// Too-short password is rejected.
+	if resp := postPassword(passwordRequest{NewPassword: "short"}); resp.Code != http.StatusBadRequest {
+		t.Fatalf("short password status = %d, want 400", resp.Code)
+	}
+
+	// First set: no current password required.
+	if resp := postPassword(passwordRequest{NewPassword: "firstpass1"}); resp.Code != http.StatusNoContent {
+		t.Fatalf("set password status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	var hash sql.NullString
+	if err := srv.db.QueryRow(`select password_hash from users where id = ?`, userID).Scan(&hash); err != nil {
+		t.Fatalf("read hash: %v", err)
+	}
+	if ok, _, _ := verifyPassword(hash.String, "", "firstpass1"); !ok {
+		t.Fatalf("stored hash does not verify against new password")
+	}
+
+	// Profile page now shows the "change password" form.
+	profileResp2 := httptest.NewRecorder()
+	srv.handleProfilePage(profileResp2, profileReq)
+	if body := profileResp2.Body.String(); !strings.Contains(body, `data-has-password="1"`) {
+		t.Fatalf("profile page should show change-password form: %s", body)
+	}
+
+	// Changing with a wrong current password fails.
+	if resp := postPassword(passwordRequest{CurrentPassword: "wrong", NewPassword: "secondpass2"}); resp.Code != http.StatusUnauthorized {
+		t.Fatalf("change with wrong current status = %d, want 401", resp.Code)
+	}
+
+	// Changing with the correct current password succeeds.
+	if resp := postPassword(passwordRequest{CurrentPassword: "firstpass1", NewPassword: "secondpass2"}); resp.Code != http.StatusNoContent {
+		t.Fatalf("change password status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	if err := srv.db.QueryRow(`select password_hash from users where id = ?`, userID).Scan(&hash); err != nil {
+		t.Fatalf("read hash after change: %v", err)
+	}
+	if ok, _, _ := verifyPassword(hash.String, "", "secondpass2"); !ok {
+		t.Fatalf("stored hash does not verify against changed password")
+	}
+}
+
+func TestProfilePasswordRequiresAuth(t *testing.T) {
+	srv := newAuthTestServer(t)
+	raw, _ := json.Marshal(passwordRequest{NewPassword: "whatever1"})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password", bytes.NewReader(raw))
+	resp := httptest.NewRecorder()
+	srv.handleAuthPassword(resp, req)
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("password without session status = %d, want 401", resp.Code)
+	}
+}
+
 func TestHostDashboardDeleteButtonsAndGameDelete(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)

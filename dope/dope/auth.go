@@ -23,6 +23,10 @@ const (
 	sessionCookieName = "session"
 	usernameMaxLen    = 32
 	usernameMinLen    = 2
+	passwordMinLen    = 8
+	// bcrypt only hashes the first 72 bytes of its input and rejects longer
+	// passwords, so cap the new password at that boundary.
+	passwordMaxLen = 72
 )
 
 type startRegisterRequest struct {
@@ -62,6 +66,11 @@ type loginPasswordRequest struct {
 
 type usernameRequest struct {
 	Username string `json:"username"`
+}
+
+type passwordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
 }
 
 type meResponse struct {
@@ -690,6 +699,85 @@ update users set username = ?, updated_at = ? where id = ? and username is null`
 	}
 	user.Username = sql.NullString{String: username, Valid: true}
 	writeJSONValue(w, meResponseFor(user))
+}
+
+// handleAuthPassword sets a password for the logged-in user, or changes an
+// existing one. When a password is already set, the caller must supply the
+// current password; the first time a password is set, no current password is
+// required.
+func (s *server) handleAuthPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireSameOriginUnsafe(w, r) {
+		return
+	}
+	defer r.Body.Close()
+	user, ok := s.lookupSession(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req passwordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	if len(req.NewPassword) < passwordMinLen {
+		http.Error(w, fmt.Sprintf("password must be at least %d characters", passwordMinLen), http.StatusBadRequest)
+		return
+	}
+	if len(req.NewPassword) > passwordMaxLen {
+		http.Error(w, fmt.Sprintf("password must be at most %d characters", passwordMaxLen), http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	tx, err := s.beginWriteTx(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	var (
+		hash sql.NullString
+		salt sql.NullString
+	)
+	if err := tx.QueryRowContext(ctx, `
+select password_hash, password_salt from users where id = ?`, user.UserID).Scan(&hash, &salt); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Changing an existing password requires proving knowledge of the old one.
+	if hash.Valid && hash.String != "" {
+		ok, _, err := verifyPassword(hash.String, salt.String, req.CurrentPassword)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, "current password is incorrect", http.StatusUnauthorized)
+			return
+		}
+	}
+	hashed, err := hashPassword(req.NewPassword)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.ExecContext(ctx, `
+update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
+		hashed, utcNow(), user.UserID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // sessionRefreshInterval is the minimum gap between sessions.last_seen_at
