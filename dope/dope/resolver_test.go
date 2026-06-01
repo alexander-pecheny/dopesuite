@@ -39,6 +39,22 @@ func TestResolverPropagatesBracket(t *testing.T) {
 			t.Fatalf("finish %s=%v: %v", code, finished, err)
 		}
 	}
+	// mark answers a single question (value index 4 == +50) for one team slot.
+	mark := func(code string, teamIndex, theme, answer int, value string) {
+		t.Helper()
+		scope, err := srv.verifyMatchInScope(t.Context(), scopeBase, code)
+		if err != nil {
+			t.Fatalf("scope %s: %v", code, err)
+		}
+		if _, _, err := srv.applyScopedMatchUpdate(scope, updateRequest{Team: teamIndex, Theme: &theme, Answer: &answer, Mark: &value}); err != nil {
+			t.Fatalf("mark %s team %d: %v", code, teamIndex, err)
+		}
+	}
+
+	// One correct +50 (answer index 4) in the 1/16 — its pair in the 1/8 is
+	// entered once B's slots resolve, below — so the reseed's summed correct_50
+	// column is non-zero and actually exercised.
+	mark("A", 0, 0, 4, "right")
 
 	// Only the 1/16 bout is done — reseed cannot be computed and the 1/4 slot
 	// stays unresolved.
@@ -52,6 +68,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 
 	// Both games done — reseed sums place across A and B (1+1, 2+2, ...) and the
 	// 1/4 bout's reseed slots resolve to the ranked teams.
+	mark("B", 0, 0, 4, "right")
 	finish("B", true)
 	entries := reseedEntries(t, db, gameID, "rs")
 	if len(entries) != 4 {
@@ -59,6 +76,13 @@ func TestResolverPropagatesBracket(t *testing.T) {
 	}
 	if got := entries[0].num("place_sum"); got != 2 {
 		t.Fatalf("rank 1 place_sum = %v, want 2 (place 1 in each of two games)", got)
+	}
+	var totalCorrect50 float64
+	for _, e := range entries {
+		totalCorrect50 += e.num("correct_50")
+	}
+	if totalCorrect50 != 2 {
+		t.Fatalf("summed correct_50 across reseed = %v, want 2 (one +50 in each game)", totalCorrect50)
 	}
 	cTeams := slotTeams(t, db, gameID, "C")
 	if allZero(cTeams) {
@@ -78,6 +102,59 @@ func TestResolverPropagatesBracket(t *testing.T) {
 	}
 	if teams := slotTeams(t, db, gameID, "C"); !allZero(teams) {
 		t.Fatalf("1/4 slots still resolved after reopening 1/16: %v", teams)
+	}
+}
+
+// TestAssignDrawLots covers the Жребий lottery: only true ties draw lots, the
+// lots are distinct, and they persist across recomputes while untied teams stay
+// at draw 0.
+func TestAssignDrawLots(t *testing.T) {
+	rules := []reseedSortRule{
+		{Metric: "place_sum", Dir: "asc"},
+		{Metric: "total", Dir: "desc"},
+		{Metric: "draw", Dir: "desc"},
+	}
+	mk := func(team int64, place, total float64) reseedEntry {
+		return reseedEntry{teamID: team, metrics: map[string]float64{"place_sum": place, "total": total}}
+	}
+	// Teams 1,2,3 tie completely; team 4 stands alone.
+	entries := []reseedEntry{mk(1, 3, 100), mk(2, 3, 100), mk(3, 3, 100), mk(4, 3, 90)}
+
+	sortReseedEntries(entries, rules)
+	assignDrawLots(entries, rules, map[int64]float64{})
+	sortReseedEntries(entries, rules)
+
+	draws := map[int64]float64{}
+	for _, e := range entries {
+		draws[e.teamID] = e.metrics["draw"]
+	}
+	if draws[4] != 0 {
+		t.Fatalf("untied team 4 got a lot %v, want 0", draws[4])
+	}
+	seen := map[float64]bool{}
+	for _, team := range []int64{1, 2, 3} {
+		lot := draws[team]
+		if lot == 0 {
+			t.Fatalf("tied team %d got no lot", team)
+		}
+		if seen[lot] {
+			t.Fatalf("tied teams share lot %v", lot)
+		}
+		seen[lot] = true
+	}
+
+	// Recompute with the prior lots persisted: order and lots must be unchanged.
+	next := []reseedEntry{mk(3, 3, 100), mk(1, 3, 100), mk(2, 3, 100), mk(4, 3, 90)}
+	sortReseedEntries(next, rules)
+	assignDrawLots(next, rules, draws)
+	sortReseedEntries(next, rules)
+	for idx, e := range next {
+		if e.metrics["draw"] != draws[e.teamID] {
+			t.Fatalf("team %d lot changed across recompute: %v != %v", e.teamID, e.metrics["draw"], draws[e.teamID])
+		}
+		if e.teamID != entries[idx].teamID {
+			t.Fatalf("order changed across recompute at %d: %d != %d", idx, e.teamID, entries[idx].teamID)
+		}
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"sort"
 	"strings"
 )
@@ -292,19 +293,17 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 	if len(rules) == 0 {
 		rules = []reseedSortRule{{Metric: "place_sum", Dir: "asc"}}
 	}
-	sort.SliceStable(entries, func(i, j int) bool {
-		for _, rule := range rules {
-			a, b := entries[i].metrics[rule.Metric], entries[j].metrics[rule.Metric]
-			if a == b {
-				continue
-			}
-			if rule.Dir == "desc" {
-				return a > b
-			}
-			return a < b
-		}
-		return entries[i].teamID < entries[j].teamID // deterministic tiebreak
-	})
+
+	// Persisted lots (Жребий) for teams that were tied on a previous recompute,
+	// so the lottery order stays stable as unrelated scores change.
+	prevDraw, err := loadReseedDraws(ctx, tx, stageID)
+	if err != nil {
+		return err
+	}
+
+	sortReseedEntries(entries, rules)
+	assignDrawLots(entries, rules, prevDraw)
+	sortReseedEntries(entries, rules) // re-order now that tied groups have lots
 
 	if err := clear(); err != nil {
 		return err
@@ -327,6 +326,103 @@ values(?, ?, ?, ?)`, stageID, rank+1, entry.teamID, mustJSON(out)); err != nil {
 		}
 	}
 	return nil
+}
+
+// sortReseedEntries orders entries by the configured sort rules, with team id
+// as a final deterministic tiebreak.
+func sortReseedEntries(entries []reseedEntry, rules []reseedSortRule) {
+	sort.SliceStable(entries, func(i, j int) bool {
+		for _, rule := range rules {
+			a, b := entries[i].metrics[rule.Metric], entries[j].metrics[rule.Metric]
+			if a == b {
+				continue
+			}
+			if rule.Dir == "desc" {
+				return a > b
+			}
+			return a < b
+		}
+		return entries[i].teamID < entries[j].teamID
+	})
+}
+
+// tiedOnEveryMetricButDraw reports whether two entries are equal on every sort
+// metric except the lottery (draw) — i.e. only Жребий can separate them.
+func tiedOnEveryMetricButDraw(a, b reseedEntry, rules []reseedSortRule) bool {
+	for _, rule := range rules {
+		if rule.Metric == "draw" {
+			continue
+		}
+		if a.metrics[rule.Metric] != b.metrics[rule.Metric] {
+			return false
+		}
+	}
+	return true
+}
+
+// assignDrawLots gives every team in a true tie group a Жребий lot. Lots already
+// drawn on a prior recompute are reused (so the order is stable); only teams
+// without one draw a fresh, distinct lot. Untied teams keep draw 0.
+func assignDrawLots(entries []reseedEntry, rules []reseedSortRule, prevDraw map[int64]float64) {
+	i := 0
+	for i < len(entries) {
+		j := i + 1
+		for j < len(entries) && tiedOnEveryMetricButDraw(entries[i], entries[j], rules) {
+			j++
+		}
+		if j-i >= 2 {
+			used := map[int64]bool{}
+			for k := i; k < j; k++ {
+				if lot := prevDraw[entries[k].teamID]; lot != 0 {
+					entries[k].metrics["draw"] = lot
+					used[int64(lot)] = true
+				}
+			}
+			for k := i; k < j; k++ {
+				if entries[k].metrics["draw"] == 0 {
+					lot := freshLot(used)
+					entries[k].metrics["draw"] = float64(lot)
+					used[lot] = true
+				}
+			}
+		}
+		i = j
+	}
+}
+
+// freshLot returns a positive lot value not already used in its tie group.
+func freshLot(used map[int64]bool) int64 {
+	for {
+		lot := rand.Int64N(1_000_000) + 1
+		if !used[lot] {
+			return lot
+		}
+	}
+}
+
+// loadReseedDraws reads the current draw (Жребий) lot per team for a stage, so
+// previously drawn lots survive a recompute.
+func loadReseedDraws(ctx context.Context, tx *sql.Tx, stageID int64) (map[int64]float64, error) {
+	draws := map[int64]float64{}
+	rows, err := tx.QueryContext(ctx, `select team_id, metrics_json from reseed_entries where stage_id = ?`, stageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var teamID int64
+		var raw string
+		if err := rows.Scan(&teamID, &raw); err != nil {
+			return nil, err
+		}
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
+			if lot := numFromAny(parsed["draw"]); lot != 0 {
+				draws[teamID] = lot
+			}
+		}
+	}
+	return draws, rows.Err()
 }
 
 // reseedSourceMatches returns the bout ids that contribute to a reseed and
@@ -386,6 +482,14 @@ func scanResolverBout(rows *sql.Rows) (resolverBout, error) {
 	return b, rows.Scan(&b.id, &b.status)
 }
 
+// numFromAny reads a JSON number decoded into an interface{} (always float64).
+func numFromAny(value any) float64 {
+	if n, ok := value.(float64); ok {
+		return n
+	}
+	return 0
+}
+
 // aggregateReseedMetrics sums one team's place/total/plus/correct_* across the
 // given source bouts.
 func aggregateReseedMetrics(ctx context.Context, tx *sql.Tx, teamID int64, sourceMatchIDs []int64) (reseedEntry, error) {
@@ -417,11 +521,14 @@ order by s.position, m.position, m.id`, placeholders), args...)
 		entry.metrics["place_sum"] += place
 		entry.metrics["total"] += float64(total)
 		entry.metrics["plus"] += float64(plus)
-		var parsed map[string]float64
+		// metrics_json mixes scalars (correct_50, draw, ...) with arrays
+		// (correctCounts, wrongCounts), so decode into map[string]any and pull
+		// just the scalar keys we sum — decoding into map[string]float64 would
+		// fail on the arrays and silently drop every count.
+		var parsed map[string]any
 		if err := json.Unmarshal([]byte(rawMetrics), &parsed); err == nil {
-			entry.metrics["draw"] += parsed["draw"]
 			for _, key := range reseedCountMetrics {
-				entry.metrics[key] += parsed[key]
+				entry.metrics[key] += numFromAny(parsed[key])
 			}
 		}
 	}
