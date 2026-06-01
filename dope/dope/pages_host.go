@@ -130,6 +130,10 @@ var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!docty
 </body>
 </html>`))
 
+type profileData struct {
+	HasPassword bool
+}
+
 var profileTemplate = template.Must(template.New("profile").Parse(`<!doctype html>
 <html lang="ru">
 <head>
@@ -138,12 +142,25 @@ var profileTemplate = template.Must(template.New("profile").Parse(`<!doctype htm
   <title>Профиль</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script defer src="/static/profile.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
     <h1>Профиль</h1>
   </header>
   <main class="public-main">
+    <section class="auth-step">
+      <p class="auth-hint">{{if .HasPassword}}Сменить пароль{{else}}Установить пароль{{end}}</p>
+      <form id="passwordForm" class="auth-form auth-form-stack" autocomplete="off" data-has-password="{{if .HasPassword}}1{{else}}0{{end}}">
+        {{if .HasPassword}}
+        <input class="input" id="currentPassword" name="current_password" type="password" placeholder="Текущий пароль" autocomplete="current-password" required>
+        {{end}}
+        <input class="input" id="newPassword" name="new_password" type="password" placeholder="Новый пароль" autocomplete="new-password" minlength="8" required>
+        <input class="input" id="confirmPassword" name="confirm_password" type="password" placeholder="Повторите новый пароль" autocomplete="new-password" minlength="8" required>
+        <button class="btn" type="submit">{{if .HasPassword}}Сменить пароль{{else}}Установить пароль{{end}}</button>
+      </form>
+      <pre id="passwordMessage" class="import-message"></pre>
+    </section>
     <form method="post" action="/profile/logout">
       <button class="btn" type="submit">Разлогиниться</button>
     </form>
@@ -200,12 +217,19 @@ func (s *server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		if _, ok := s.lookupSession(r); !ok {
+		user, ok := s.lookupSession(r)
+		if !ok {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
+		var hash sql.NullString
+		if err := s.db.QueryRowContext(r.Context(),
+			`select password_hash from users where id = ?`, user.UserID).Scan(&hash); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = profileTemplate.Execute(w, nil)
+		_ = profileTemplate.Execute(w, profileData{HasPassword: hash.Valid && hash.String != ""})
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}

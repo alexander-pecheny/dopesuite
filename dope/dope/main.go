@@ -174,6 +174,7 @@ func main() {
 	mux.HandleFunc("/api/auth/logout", srv.handleAuthLogout)
 	mux.HandleFunc("/api/auth/me", srv.handleAuthMe)
 	mux.HandleFunc("/api/auth/username", srv.handleAuthUsername)
+	mux.HandleFunc("/api/auth/password", srv.handleAuthPassword)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
 	mux.Handle("/static/", staticFileServer(assets, noCacheAssets))
