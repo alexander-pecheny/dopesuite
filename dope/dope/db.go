@@ -137,6 +137,7 @@ type schemeStage struct {
 	Position  int             `json:"position"`
 	Matches   []schemeMatch   `json:"matches"`
 	Teams     []schemeSlot    `json:"teams"`
+	Sources   []string        `json:"sources"`
 	Sort      json.RawMessage `json:"sort"`
 	Config    json.RawMessage `json:"config"`
 	Layout    json.RawMessage `json:"layout"`
@@ -2013,6 +2014,10 @@ func stageConfigJSON(stage schemeStage) string {
 		data, _ := json.Marshal(stage.Teams)
 		config["teams"] = data
 	}
+	if len(stage.Sources) > 0 {
+		data, _ := json.Marshal(stage.Sources)
+		config["sources"] = data
+	}
 	if len(stage.Sort) > 0 {
 		config["sort"] = stage.Sort
 	}
@@ -2631,6 +2636,9 @@ func (s *server) applyMatchUpdateUsing(
 	}
 
 	if err := recalculateMatchResultsForStateTx(ctx, tx, match); err != nil {
+		return MatchView{}, nil, err
+	}
+	if err := resolveGameSlotsTx(ctx, tx, match.GameID); err != nil {
 		return MatchView{}, nil, err
 	}
 	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:update", mustJSON(req))
