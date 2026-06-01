@@ -822,32 +822,6 @@ a.list-row:hover { background: var(--hover-bg); }
   color: inherit;
 }
 
-.public-breadcrumbs {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  white-space: nowrap;
-}
-
-.public-breadcrumbs a,
-.public-breadcrumbs span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.public-breadcrumbs a {
-  color: inherit;
-  font-weight: var(--fw-bold);
-  text-decoration: none;
-}
-
-.public-breadcrumbs a:hover {
-  text-decoration: underline;
-}
-
 .public-main {
   max-width: 720px;
   margin: 0 auto;
