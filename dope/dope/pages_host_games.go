@@ -126,16 +126,19 @@ var hostGameSettingsTemplate = template.Must(template.New("hostGameSettings").Pa
 <body class="public">
   <header class="public-top">
     <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
-    <nav class="public-breadcrumbs" aria-label="Навигация">
-      <a href="/host/fest/{{.Fest.Ref}}">{{.Fest.Title}}</a>
-      <span>/</span>
-      <span>{{.Game.Title}}</span>
-    </nav>
     <h1>{{.Game.Title}}</h1>
   </header>
   <main class="public-main">
     {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
     <form method="post" action="/host/fest/{{.Fest.Ref}}/game/{{.Game.Ref}}/settings" class="card stack" autocomplete="off">
+      <label class="field">
+        <span>Тип игры</span>
+        <input value="{{.Game.Type}}" disabled>
+      </label>
+      <label class="field">
+        <span>Название</span>
+        <input name="title" value="{{.Game.Title}}" required>
+      </label>
       <label class="field">
         <span>Slug (необязательно, a-z, 0-9, дефис)</span>
         <input name="slug" value="{{.Slug}}" pattern="[a-z0-9-]+">
@@ -193,6 +196,11 @@ func (s *server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Req
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
+	title := strings.TrimSpace(r.Form.Get("title"))
+	if title == "" {
+		s.renderHostGameSettings(w, r, festID, gameID, "Название обязательно.")
+		return
+	}
 	slug := strings.TrimSpace(r.Form.Get("slug"))
 	var slugValue any
 	if slug != "" {
@@ -213,8 +221,8 @@ select count(*) from games where fest_id = ? and slug = ? and id <> ?`, festID, 
 		slugValue = slug
 	}
 	if _, err := s.writeExec(r.Context(), `
-update games set slug = ?, updated_at = ? where id = ? and fest_id = ?`,
-		slugValue, utcNow(), gameID, festID); err != nil {
+update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = ?`,
+		title, slugValue, utcNow(), gameID, festID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
