@@ -1,7 +1,7 @@
 // Command loadtest drives a concurrent load test against a running dope server:
-// it holds N long-lived SSE viewer connections open while M editors push game
-// state edits, and measures the metrics that actually matter for this app on
-// its single-core VPS:
+// it holds long-lived SSE viewer connections open while editors push game state
+// edits, and measures the metrics that actually matter for this app on its
+// single-core VPS:
 //
 //   - edit latency (the editor PUT round trip) and error rate, which exposes
 //     contention on the global write mutex + the single SQLite writer;
@@ -18,11 +18,16 @@
 // network the way real clients do. Provision a disposable public fest and the
 // editor session tokens first with provision.py (run on the VPS).
 //
-//	go run ./scripts/loadtest \
-//	  -base https://dope.pecheny.me \
-//	  -fest-id 42 -fest dope-loadtest-260602 -game 99 \
-//	  -viewers 120 -editors 3 -edit-interval 2s -duration 90s \
-//	  -tokens tok1,tok2,tok3
+// Single load level:
+//
+//	go run ./scripts/loadtest -base https://dope.pecheny.me \
+//	  -fest <slug> -fest-id <id> -game <id> -tokens t1,t2,t3 \
+//	  -viewers 120 -editors 3 -duration 90s
+//
+// Cumulative staged ramp (viewers stay connected and grow each stage):
+//
+//	go run ./scripts/loadtest ... -editors 3 \
+//	  -stages 50:24s,100:24s,200:24s,500:24s,1000:24s
 package main
 
 import (
@@ -44,20 +49,24 @@ import (
 	"time"
 )
 
+type stageCfg struct {
+	viewers int
+	dur     time.Duration
+}
+
 type config struct {
 	base         string
 	festRef      string
 	festID       string
 	gameID       string
-	viewers      int
 	editors      int
 	editInterval time.Duration
-	duration     time.Duration
 	ramp         time.Duration
 	tokens       []string
 	payloadBytes int
 	outPath      string
 	insecure     bool
+	stages       []stageCfg
 }
 
 // eventEnvelope mirrors the server's SSE payload wrapper (db.go eventEnvelope).
@@ -85,16 +94,19 @@ func main() {
 
 func parseFlags() config {
 	var cfg config
-	var tokens string
+	var tokens, stages string
+	var viewers int
+	var duration time.Duration
 	flag.StringVar(&cfg.base, "base", "https://dope.pecheny.me", "server base URL")
 	flag.StringVar(&cfg.festRef, "fest", "", "fest slug or id used in /api/fest/{ref} edit paths")
 	flag.StringVar(&cfg.festID, "fest-id", "", "numeric fest id used in /events?fest_id= (defaults to -fest)")
 	flag.StringVar(&cfg.gameID, "game", "", "game id to edit")
-	flag.IntVar(&cfg.viewers, "viewers", 100, "number of concurrent SSE viewers")
-	flag.IntVar(&cfg.editors, "editors", 3, "number of concurrent editors")
+	flag.IntVar(&viewers, "viewers", 100, "viewers for a single-level run (ignored when -stages is set)")
+	flag.DurationVar(&duration, "duration", 60*time.Second, "duration for a single-level run (ignored when -stages is set)")
+	flag.StringVar(&stages, "stages", "", "cumulative ramp as count:dur pairs, e.g. 50:24s,100:24s,200:24s")
+	flag.IntVar(&cfg.editors, "editors", 3, "number of concurrent editors (run for the whole test)")
 	flag.DurationVar(&cfg.editInterval, "edit-interval", 2*time.Second, "delay between edits per editor (jittered ±25%)")
-	flag.DurationVar(&cfg.duration, "duration", 60*time.Second, "total test duration")
-	flag.DurationVar(&cfg.ramp, "ramp", 5*time.Second, "spread viewer connects over this window to avoid a thundering herd")
+	flag.DurationVar(&cfg.ramp, "ramp", 5*time.Second, "window to spread each stage's new viewer connects over")
 	flag.StringVar(&tokens, "tokens", "", "comma-separated editor session tokens (one per editor; reused round-robin)")
 	flag.IntVar(&cfg.payloadBytes, "payload-bytes", 1200, "approximate edit payload size, padded to model a real game-state blob")
 	flag.StringVar(&cfg.outPath, "out", "", "optional path to write the JSON report")
@@ -109,6 +121,11 @@ func parseFlags() config {
 			cfg.tokens = append(cfg.tokens, t)
 		}
 	}
+	if stages != "" {
+		cfg.stages = parseStages(stages)
+	} else {
+		cfg.stages = []stageCfg{{viewers: viewers, dur: duration}}
+	}
 	if cfg.festRef == "" || cfg.gameID == "" {
 		fmt.Fprintln(os.Stderr, "loadtest: -fest and -game are required")
 		os.Exit(2)
@@ -120,38 +137,57 @@ func parseFlags() config {
 	return cfg
 }
 
+func parseStages(s string) []stageCfg {
+	var out []stageCfg
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		count, durStr, ok := strings.Cut(part, ":")
+		if !ok {
+			fmt.Fprintf(os.Stderr, "loadtest: bad stage %q, want count:dur\n", part)
+			os.Exit(2)
+		}
+		var n int
+		if _, err := fmt.Sscanf(strings.TrimSpace(count), "%d", &n); err != nil || n < 0 {
+			fmt.Fprintf(os.Stderr, "loadtest: bad viewer count in stage %q\n", part)
+			os.Exit(2)
+		}
+		dur, err := time.ParseDuration(strings.TrimSpace(durStr))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "loadtest: bad duration in stage %q: %v\n", part, err)
+			os.Exit(2)
+		}
+		out = append(out, stageCfg{viewers: n, dur: dur})
+	}
+	if len(out) == 0 {
+		fmt.Fprintln(os.Stderr, "loadtest: -stages parsed to nothing")
+		os.Exit(2)
+	}
+	return out
+}
+
 func run(cfg config) error {
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.duration)
+	var total time.Duration
+	maxViewers := 0
+	for _, st := range cfg.stages {
+		total += st.dur
+		if st.viewers > maxViewers {
+			maxViewers = st.viewers
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), total+5*time.Second)
 	defer cancel()
 
-	stats := newStats()
+	stats := newStats(cfg.stages)
 	var wg sync.WaitGroup
 
-	// Viewers: a dedicated client with no response-header/idle timeout so SSE
-	// streams stay open for the full run. Connections per host are uncapped so
-	// 100+ viewers each get their own socket.
-	viewerClient := newHTTPClient(cfg, 0, cfg.viewers+cfg.editors+10)
-	rng := rand.New(rand.NewSource(1)) // fixed seed: reproducible ramp jitter
-	for i := 0; i < cfg.viewers; i++ {
-		delay := time.Duration(0)
-		if cfg.ramp > 0 {
-			delay = time.Duration(rng.Int63n(int64(cfg.ramp)))
-		}
-		wg.Add(1)
-		go func(id int, start time.Duration) {
-			defer wg.Done()
-			select {
-			case <-time.After(start):
-			case <-ctx.Done():
-				return
-			}
-			runViewer(ctx, cfg, viewerClient, stats)
-		}(i, delay)
-	}
-
-	// Editors: a separate client with a sane per-request timeout so a stuck
-	// write surfaces as a failure rather than hanging the whole run.
+	viewerClient := newHTTPClient(cfg, 0, maxViewers+cfg.editors+10)
 	editorClient := newHTTPClient(cfg, 30*time.Second, cfg.editors+4)
+
+	// Editors run for the whole test, attributing each edit to whatever stage
+	// is current when it completes.
 	for i := 0; i < cfg.editors; i++ {
 		token := cfg.tokens[i%len(cfg.tokens)]
 		wg.Add(1)
@@ -161,13 +197,62 @@ func run(cfg config) error {
 		}(i, token)
 	}
 
-	fmt.Printf("running: %d viewers, %d editors, %s, target %s\n", cfg.viewers, cfg.editors, cfg.duration, cfg.base)
+	fmt.Printf("running: %d editors, %d stages, %s total, target %s\n",
+		cfg.editors, len(cfg.stages), total, cfg.base)
 	done := make(chan struct{})
 	go progress(ctx, stats, done)
+
+	// Walk the stages. New viewers needed for a stage are spawned at its start
+	// (spread over the ramp window) and kept running for the rest of the test,
+	// so load is cumulative.
+	rng := rand.New(rand.NewSource(1))
+	spawned := 0
+	for idx, st := range cfg.stages {
+		stats.curStage.Store(int32(idx))
+		stageStart := time.Now()
+		need := st.viewers - spawned
+		if need < 0 {
+			need = 0 // a stage with fewer viewers than the prior one just holds existing connections
+		}
+		rampWin := cfg.ramp
+		if rampWin > st.dur/2 {
+			rampWin = st.dur / 2
+		}
+		for j := 0; j < need; j++ {
+			delay := time.Duration(0)
+			if rampWin > 0 {
+				delay = time.Duration(rng.Int63n(int64(rampWin) + 1))
+			}
+			wg.Add(1)
+			go func(start time.Duration) {
+				defer wg.Done()
+				select {
+				case <-time.After(start):
+				case <-ctx.Done():
+					return
+				}
+				runViewer(ctx, cfg, viewerClient, stats)
+			}(delay)
+		}
+		spawned += need
+
+		// Hold for the remainder of the stage.
+		remain := st.dur - time.Since(stageStart)
+		if remain > 0 {
+			select {
+			case <-time.After(remain):
+			case <-ctx.Done():
+			}
+		}
+		stats.stages[idx].connectedAtEnd = stats.viewerConnected.Load()
+		stats.stages[idx].targetViewers = st.viewers
+	}
+
+	cancel() // stages done: drop all viewer streams and stop editors
 	wg.Wait()
 	close(done)
 
-	report := stats.finalize(cfg)
+	report := stats.finalize(cfg, total)
 	report.print()
 	if cfg.outPath != "" {
 		if err := report.writeJSON(cfg.outPath); err != nil {
@@ -198,23 +283,24 @@ func runViewer(ctx context.Context, cfg config, client *http.Client, stats *stat
 	url := fmt.Sprintf("%s/events?fest_id=%s", strings.TrimRight(cfg.base, "/"), cfg.festID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		stats.viewerFailed.Add(1)
+		stats.stage().viewerFailed.Add(1)
 		return
 	}
 	req.Header.Set("Accept", "text/event-stream")
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == nil {
-			stats.viewerFailed.Add(1)
+			stats.stage().viewerFailed.Add(1)
 		}
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		stats.viewerFailed.Add(1)
+		stats.stage().viewerFailed.Add(1)
 		return
 	}
 	stats.viewerConnected.Add(1)
+	defer stats.viewerConnected.Add(-1)
 
 	reader := bufio.NewReaderSize(resp.Body, 64*1024)
 	var dataBuf bytes.Buffer
@@ -229,7 +315,6 @@ func runViewer(ctx context.Context, cfg config, client *http.Client, stats *stat
 		line = strings.TrimRight(line, "\r\n")
 		switch {
 		case line == "":
-			// End of one SSE event: process accumulated data field.
 			if dataBuf.Len() > 0 {
 				stats.recordEvent(dataBuf.Bytes())
 				dataBuf.Reset()
@@ -249,7 +334,6 @@ func runEditor(ctx context.Context, cfg config, client *http.Client, stats *stat
 		strings.TrimRight(cfg.base, "/"), cfg.festRef, cfg.gameID)
 	pad := strings.Repeat("x", cfg.payloadBytes)
 	for {
-		// Jitter ±25% so editors don't march in lockstep.
 		jitter := time.Duration(rng.Int63n(int64(cfg.editInterval)/2+1)) - cfg.editInterval/4
 		select {
 		case <-time.After(cfg.editInterval + jitter):
@@ -285,9 +369,6 @@ func runEditor(ctx context.Context, cfg config, client *http.Client, stats *stat
 }
 
 func buildPayload(m marker, pad string) []byte {
-	// A flat object the server stores verbatim and rebroadcasts: marker fields
-	// at the top level (so viewers can read them straight off the envelope's
-	// data) plus padding to model a realistic game-state blob size.
 	obj := map[string]any{
 		"_lt_seq":    m.Seq,
 		"_lt_ts":     m.TSNano,
@@ -301,49 +382,64 @@ func buildPayload(m marker, pad string) []byte {
 
 // ---- metrics ----
 
-type stats struct {
-	editSeq atomic.Int64
-
-	viewerConnected atomic.Int64
-	viewerFailed    atomic.Int64
-	viewerDropped   atomic.Int64
-
-	eventsReceived atomic.Int64 // all SSE state events seen across viewers
-	markersSeen    atomic.Int64 // events carrying our loadtest marker
+type stageStat struct {
+	targetViewers  int
+	connectedAtEnd int64
 
 	editsOK    atomic.Int64
 	editsBusy  atomic.Int64 // 5xx — the signature of write-lock/contention failures
 	editsOther atomic.Int64 // non-2xx, non-5xx (auth, 404, etc.)
 	editsErr   atomic.Int64 // transport error / timeout (status 0)
 
-	mu        sync.Mutex
-	editMS    []float64 // edit round-trip latencies, ms
-	propMS    []float64 // propagation latencies (edit send -> viewer receive), ms
+	eventsReceived atomic.Int64
+	markersSeen    atomic.Int64
+	viewerFailed   atomic.Int64
+
+	mu     sync.Mutex
+	editMS []float64
+	propMS []float64
+}
+
+type stats struct {
+	editSeq         atomic.Int64
+	viewerConnected atomic.Int64
+	viewerDropped   atomic.Int64
+
+	stages    []*stageStat
+	curStage  atomic.Int32
 	startTime time.Time
 }
 
-func newStats() *stats {
-	return &stats{startTime: time.Now()}
+func newStats(cfgStages []stageCfg) *stats {
+	s := &stats{startTime: time.Now()}
+	for range cfgStages {
+		s.stages = append(s.stages, &stageStat{})
+	}
+	return s
 }
 
+func (s *stats) stage() *stageStat { return s.stages[s.curStage.Load()] }
+
 func (s *stats) recordEdit(elapsed time.Duration, status int) {
+	st := s.stage()
 	switch {
 	case status == 0:
-		s.editsErr.Add(1)
+		st.editsErr.Add(1)
 	case status >= 200 && status < 300:
-		s.editsOK.Add(1)
+		st.editsOK.Add(1)
 	case status >= 500:
-		s.editsBusy.Add(1)
+		st.editsBusy.Add(1)
 	default:
-		s.editsOther.Add(1)
+		st.editsOther.Add(1)
 	}
-	s.mu.Lock()
-	s.editMS = append(s.editMS, float64(elapsed.Microseconds())/1000)
-	s.mu.Unlock()
+	st.mu.Lock()
+	st.editMS = append(st.editMS, float64(elapsed.Microseconds())/1000)
+	st.mu.Unlock()
 }
 
 func (s *stats) recordEvent(data []byte) {
-	s.eventsReceived.Add(1)
+	st := s.stage()
+	st.eventsReceived.Add(1)
 	var env eventEnvelope
 	if err := json.Unmarshal(data, &env); err != nil || len(env.Data) == 0 {
 		return
@@ -352,75 +448,73 @@ func (s *stats) recordEvent(data []byte) {
 	if err := json.Unmarshal(env.Data, &m); err != nil || m.TSNano == 0 {
 		return
 	}
-	s.markersSeen.Add(1)
+	st.markersSeen.Add(1)
 	latency := float64(time.Now().UnixNano()-m.TSNano) / 1e6
-	s.mu.Lock()
-	s.propMS = append(s.propMS, latency)
-	s.mu.Unlock()
+	st.mu.Lock()
+	st.propMS = append(st.propMS, latency)
+	st.mu.Unlock()
+}
+
+type stageReport struct {
+	Viewers        int     `json:"target_viewers"`
+	ConnectedAtEnd int64   `json:"connected_at_end"`
+	ViewersFailed  int64   `json:"viewers_failed"`
+	EditsOK        int64   `json:"edits_ok"`
+	Edits5xx       int64   `json:"edits_5xx_busy"`
+	EditsOther     int64   `json:"edits_other"`
+	EditsErr       int64   `json:"edits_transport_err"`
+	EditP50        float64 `json:"edit_ms_p50"`
+	EditP95        float64 `json:"edit_ms_p95"`
+	EditMax        float64 `json:"edit_ms_max"`
+	EventsReceived int64   `json:"sse_events_received"`
+	MarkersSeen    int64   `json:"sse_markers_seen"`
+	DeliveryRatio  float64 `json:"delivery_ratio"`
+	PropP50        float64 `json:"propagation_ms_p50"`
+	PropP95        float64 `json:"propagation_ms_p95"`
+	PropP99        float64 `json:"propagation_ms_p99"`
+	PropMax        float64 `json:"propagation_ms_max"`
 }
 
 type report struct {
-	DurationSec     float64 `json:"duration_sec"`
-	Viewers         int     `json:"viewers"`
-	ViewersConn     int64   `json:"viewers_connected"`
-	ViewersFailed   int64   `json:"viewers_failed"`
-	ViewersDropped  int64   `json:"viewers_dropped_midrun"`
-	Editors         int     `json:"editors"`
-	EditsTotal      int64   `json:"edits_total"`
-	EditsOK         int64   `json:"edits_ok"`
-	Edits5xx        int64   `json:"edits_5xx_busy"`
-	EditsOther      int64   `json:"edits_other_4xx"`
-	EditsErr        int64   `json:"edits_transport_err"`
-	EditThroughput  float64 `json:"edit_throughput_per_sec"`
-	EditP50         float64 `json:"edit_latency_ms_p50"`
-	EditP95         float64 `json:"edit_latency_ms_p95"`
-	EditP99         float64 `json:"edit_latency_ms_p99"`
-	EditMax         float64 `json:"edit_latency_ms_max"`
-	EventsReceived  int64   `json:"sse_events_received"`
-	MarkersSeen     int64   `json:"sse_markers_seen"`
-	DeliveryRatio   float64 `json:"delivery_ratio"`
-	PropP50         float64 `json:"propagation_ms_p50"`
-	PropP95         float64 `json:"propagation_ms_p95"`
-	PropP99         float64 `json:"propagation_ms_p99"`
-	PropMax         float64 `json:"propagation_ms_max"`
-	ExpectedDeliver int64   `json:"expected_deliveries"`
+	DurationSec float64       `json:"duration_sec"`
+	Editors     int           `json:"editors"`
+	Stages      []stageReport `json:"stages"`
 }
 
-func (s *stats) finalize(cfg config) report {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	dur := time.Since(s.startTime).Seconds()
-	total := s.editsOK.Load() + s.editsBusy.Load() + s.editsOther.Load() + s.editsErr.Load()
-	conn := s.viewerConnected.Load()
-	okEdits := s.editsOK.Load()
-	// Each successful edit should reach every viewer that was connected.
-	expected := okEdits * conn
-	ratio := 0.0
-	if expected > 0 {
-		ratio = float64(s.markersSeen.Load()) / float64(expected)
+func (s *stats) finalize(cfg config, total time.Duration) report {
+	r := report{DurationSec: total.Seconds(), Editors: cfg.editors}
+	for _, st := range s.stages {
+		st.mu.Lock()
+		editP50, editP95, _, editMax := percentiles(st.editMS)
+		propP50, propP95, propP99, propMax := percentiles(st.propMS)
+		st.mu.Unlock()
+
+		okEdits := st.editsOK.Load()
+		expected := okEdits * st.connectedAtEnd
+		ratio := 0.0
+		if expected > 0 {
+			ratio = float64(st.markersSeen.Load()) / float64(expected)
+		}
+		r.Stages = append(r.Stages, stageReport{
+			Viewers:        st.targetViewers,
+			ConnectedAtEnd: st.connectedAtEnd,
+			ViewersFailed:  st.viewerFailed.Load(),
+			EditsOK:        okEdits,
+			Edits5xx:       st.editsBusy.Load(),
+			EditsOther:     st.editsOther.Load(),
+			EditsErr:       st.editsErr.Load(),
+			EditP50:        editP50,
+			EditP95:        editP95,
+			EditMax:        editMax,
+			EventsReceived: st.eventsReceived.Load(),
+			MarkersSeen:    st.markersSeen.Load(),
+			DeliveryRatio:  ratio,
+			PropP50:        propP50,
+			PropP95:        propP95,
+			PropP99:        propP99,
+			PropMax:        propMax,
+		})
 	}
-	r := report{
-		DurationSec:     dur,
-		Viewers:         cfg.viewers,
-		ViewersConn:     conn,
-		ViewersFailed:   s.viewerFailed.Load(),
-		ViewersDropped:  s.viewerDropped.Load(),
-		Editors:         cfg.editors,
-		EditsTotal:      total,
-		EditsOK:         okEdits,
-		Edits5xx:        s.editsBusy.Load(),
-		EditsOther:      s.editsOther.Load(),
-		EditsErr:        s.editsErr.Load(),
-		EventsReceived:  s.eventsReceived.Load(),
-		MarkersSeen:     s.markersSeen.Load(),
-		ExpectedDeliver: expected,
-		DeliveryRatio:   ratio,
-	}
-	if dur > 0 {
-		r.EditThroughput = float64(okEdits) / dur
-	}
-	r.EditP50, r.EditP95, r.EditP99, r.EditMax = percentiles(s.editMS)
-	r.PropP50, r.PropP95, r.PropP99, r.PropMax = percentiles(s.propMS)
 	return r
 }
 
@@ -438,24 +532,20 @@ func percentiles(v []float64) (p50, p95, p99, max float64) {
 }
 
 func (r report) print() {
-	fmt.Println("\n================ load test report ================")
-	fmt.Printf("duration            %.1fs\n", r.DurationSec)
-	fmt.Printf("viewers             %d requested, %d connected, %d failed, %d dropped mid-run\n",
-		r.Viewers, r.ViewersConn, r.ViewersFailed, r.ViewersDropped)
-	fmt.Println("---- edits (write path / SQLite + global write mutex) ----")
-	fmt.Printf("editors             %d\n", r.Editors)
-	fmt.Printf("edits               %d total | %d ok | %d 5xx/busy | %d 4xx | %d transport-err\n",
-		r.EditsTotal, r.EditsOK, r.Edits5xx, r.EditsOther, r.EditsErr)
-	fmt.Printf("edit throughput     %.1f ok/s\n", r.EditThroughput)
-	fmt.Printf("edit latency ms     p50=%.0f  p95=%.0f  p99=%.0f  max=%.0f\n",
-		r.EditP50, r.EditP95, r.EditP99, r.EditMax)
-	fmt.Println("---- propagation (edit -> viewer over SSE) ----")
-	fmt.Printf("sse events recv     %d (%d carried markers)\n", r.EventsReceived, r.MarkersSeen)
-	fmt.Printf("delivery ratio      %.3f  (%d seen / %d expected = ok_edits*viewers)\n",
-		r.DeliveryRatio, r.MarkersSeen, r.ExpectedDeliver)
-	fmt.Printf("propagation ms      p50=%.0f  p95=%.0f  p99=%.0f  max=%.0f\n",
-		r.PropP50, r.PropP95, r.PropP99, r.PropMax)
-	fmt.Println("==================================================")
+	fmt.Printf("\n================ load test report (%.0fs, %d editors) ================\n", r.DurationSec, r.Editors)
+	fmt.Printf("%-8s %-9s %-7s %-22s %-16s %s\n",
+		"viewers", "conn/fail", "edits", "edit_ms(p50/p95/max)", "deliver_ratio", "prop_ms(p50/p95/p99/max)")
+	for _, s := range r.Stages {
+		fmt.Printf("%-8d %3d/%-5d %3dok/%-3d5xx %6.0f /%6.0f /%6.0f   %-16.3f %5.0f /%5.0f /%5.0f /%5.0f\n",
+			s.Viewers, s.ConnectedAtEnd, s.ViewersFailed,
+			s.EditsOK, s.Edits5xx,
+			s.EditP50, s.EditP95, s.EditMax,
+			s.DeliveryRatio,
+			s.PropP50, s.PropP95, s.PropP99, s.PropMax)
+	}
+	fmt.Println("==============================================================================")
+	fmt.Println("conn = SSE viewers connected at stage end; deliver_ratio = markers_seen / (edits_ok * conn).")
+	fmt.Println("Watch for: viewers_failed > 0 (nginx ceiling), 5xx > 0 (write contention), prop p95 climbing.")
 }
 
 func (r report) writeJSON(path string) error {
@@ -473,8 +563,10 @@ func progress(ctx context.Context, s *stats, done chan struct{}) {
 	for {
 		select {
 		case <-t.C:
-			fmt.Printf("\r  conn=%d edits_ok=%d 5xx=%d events=%d   ",
-				s.viewerConnected.Load(), s.editsOK.Load(), s.editsBusy.Load(), s.eventsReceived.Load())
+			st := s.stage()
+			fmt.Printf("\r  stage=%d conn=%d edits_ok=%d 5xx=%d events=%d   ",
+				s.curStage.Load(), s.viewerConnected.Load(),
+				st.editsOK.Load(), st.editsBusy.Load(), st.eventsReceived.Load())
 		case <-ctx.Done():
 			return
 		case <-done:
