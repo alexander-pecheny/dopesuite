@@ -16,10 +16,17 @@ real edits, then reports the numbers that matter for this app:
 
 `vps2day-ee`: **1 CPU, ~960 MB RAM**, nginx → Go (`:8090`) → SQLite (`/var/lib/dope/fest.db`, WAL).
 
-- nginx is `worker_processes auto` = **1 worker**, `worker_connections 768`. Each viewer
-  costs ~2 (client + upstream), so the practical ceiling is **~350 SSE viewers** before
-  nginx refuses connections. 100+ is comfortable; don't expect thousands.
+- nginx is `worker_processes auto` = **1 worker**. Each viewer costs ~2 connection slots
+  (client + a fresh upstream connection — there is no upstream `keepalive`, and an active
+  SSE stream holds both open for its whole life).
+- **Tuned 2026-06-02** for up to ~1000 viewers: `worker_connections 4096` +
+  `worker_rlimit_nofile 8192` in `/etc/nginx/nginx.conf` (backup alongside it as
+  `nginx.conf.bak.*`). Ceiling is now ~2000 SSE viewers (4096 slots ÷ 2); 1000 sits at
+  ~50% with headroom. Applied with `nginx -t` + `systemctl reload` (no dropped conns).
+  These limits are **not in the repo** — they live only on the VPS, so re-apply them if
+  the box is rebuilt. Past ~2000 the next wall is the single CPU under edit fan-out.
 - nginx is already SSE-correct: `proxy_buffering off`, `proxy_read_timeout 1h`.
+- `worker_processes` stays 1 (only 1 CPU) — adding workers wouldn't help.
 - The **single CPU** is shared by nginx + Go + SQLite. Under concurrent edits, CPU
   saturation (not file descriptors — `LimitNOFILE=524288`) breaks first.
 - The global write mutex means your test edits contend with **real users' edits**.
@@ -81,7 +88,8 @@ Start small, confirm clean, then climb until something bends:
 1. **Baseline** `-viewers 20 -editors 1 -edit-interval 2s` — sanity; everything ~0 errors.
 2. **Target** `-viewers 120 -editors 3 -edit-interval 2s` — your stated goal.
 3. **Editor stress** `-viewers 120 -editors 6 -edit-interval 500ms` — push the write mutex.
-4. **Viewer stress** `-viewers 300 -editors 2` — approach the nginx connection ceiling.
+4. **Viewer stress** `-viewers 1000 -editors 2 -ramp 30s` — your worst case; expect
+   `viewers_failed` to stay 0 now that the nginx limits are raised (ceiling ~2000).
 
 Find the knee, then decide whether the fix is config (nginx workers, more vCPU) or code
 (per-fest locking instead of the global `s.mu`).
