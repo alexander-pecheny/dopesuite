@@ -30,6 +30,10 @@ const KSI_TABS = [
 
 const route = gameTable.parseGameRoute();
 const viewer = Boolean(route.viewer);
+// The URL carries the game slug, but the server broadcasts SSE state under the
+// numeric game id (`game-state:<id>`). Default to the slug and upgrade to the
+// numeric id from __GAME_INIT__ so the scope matches and remote edits apply.
+let scopeGameID = route.gameID;
 document.body.classList.toggle("viewer-readonly", viewer);
 if (viewer) {
   if (window.__GAME_INIT__?.canEdit) gameTable.mountEditorLink(statusNode);
@@ -94,6 +98,7 @@ function consumeGameInit() {
   const init = window.__GAME_INIT__;
   if (!init || !init.scheme || !init.state) return false;
   window.__GAME_INIT__ = null;
+  if (init.gameID != null) scopeGameID = String(init.gameID);
   scheme = init.scheme;
   state = init.state;
   fest = init.fest || null;
@@ -1086,7 +1091,7 @@ function syncState() {
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
     eventsURL: `/events?fest_id=${encodeURIComponent(route.festID)}`,
-    scope: `game-state:${route.gameID}`,
+    scope: `game-state:${scopeGameID}`,
     getState: () => state,
     setStatus,
     onRemoteState: applyRemoteState,
