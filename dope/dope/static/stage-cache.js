@@ -206,6 +206,24 @@
       return {found: true, stageCode, pane};
     }
 
+    // matchState returns the cached MatchView for a code (the delta base), or
+    // null if that match's stage hasn't been fetched.
+    function matchState(code) {
+      const stageCode = matchCodeToStageCode.get(code);
+      if (!stageCode) return null;
+      return stageDataByCode.get(stageCode)?.stateByCode.get(code) || null;
+    }
+
+    // invalidateMatch drops a match's cached view and forces its stage to
+    // refetch on next access — used when a delta can't be safely applied (no
+    // base or a seq gap) so the next render/prefetch pulls a fresh, correct view.
+    function invalidateMatch(code) {
+      const stageCode = matchCodeToStageCode.get(code);
+      if (!stageCode) return;
+      stageDataByCode.get(stageCode)?.stateByCode.delete(code);
+      stageFetchPromises.delete(stageCode);
+    }
+
     return {
       adoptFest,
       ensureStageData,
@@ -214,6 +232,8 @@
       clear,
       showStage,
       applyMatchUpdate,
+      matchState,
+      invalidateMatch,
       getPane: (stageCode) => stagePaneByCode.get(stageCode) || null,
       getData: (stageCode) => stageDataByCode.get(stageCode) || null,
       stageCodeForMatch: (matchCode) => matchCodeToStageCode.get(matchCode) || null,

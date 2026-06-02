@@ -300,14 +300,8 @@ function connectEvents() {
     // of which page we're on. Keeps cached panes for other stages live so a
     // later tab switch sees fresh data without a fetch.
     if (message.scope?.startsWith("match:")) {
-      if (message.data?.code) {
-        applyReadonlyStageMatchUpdate(message.data);
-      }
-      if (route.mode === "match" && message.scope === matchScope) {
-        applyUpdatedMatch(message.data);
-      }
+      handleMatchEvent(message, matchScope);
       setLive(true);
-      if (!message.data?.code) scheduleReload();
       return;
     }
     if (route.mode === "venues" && message.scope === venuesScope) {
@@ -457,6 +451,75 @@ function applyReadonlyStageMatchUpdate(updated) {
   if (!result.found) {
     // Match not in any known stage — fest scheme probably changed.
     scheduleReload();
+  }
+}
+
+// matchCodeFromScope extracts the match code from a "match:<gameID>:<code>"
+// scope (codes never contain ':', but join the tail defensively).
+function matchCodeFromScope(scope) {
+  return scope.split(":").slice(2).join(":");
+}
+
+function isFocusedMatch(code) {
+  return route.mode === "match" && code === route.matchCode;
+}
+
+// isDisplayed reports whether a match is currently on screen — the focused match
+// in match mode, or any match of the open stage in stage mode. A seq gap on a
+// displayed match must trigger a resync so the visible pane refreshes; a gap on
+// an off-screen match only needs its cache evicted (refetched on navigation).
+function isDisplayed(code) {
+  if (isFocusedMatch(code)) return true;
+  if (route.mode === "stage") return stageCache.stageCodeForMatch(code) === route.stageCode;
+  return false;
+}
+
+// matchBase returns the cached full view a delta should apply onto: the focused
+// match's `state` when we're on it, else the stage cache. null means we have no
+// base (e.g. a match in a stage we haven't fetched yet).
+function matchBase(code) {
+  if (isFocusedMatch(code) && state?.code === code) return state;
+  return stageCache.matchState(code);
+}
+
+// handleMatchEvent applies a match-scope SSE event — a scoped delta when ops are
+// present, a full-state snapshot otherwise. Deltas reconstruct the full view by
+// applying ops to the cached base, but only when they chain (prevSeq === the
+// base's seq); a missing base or a seq gap can't be applied safely, so we evict
+// (forcing a fresh fetch) and resync the match we're actually showing. This
+// keeps the cached view correct-or-absent — a bug degrades to a refetch, never
+// a wrong bracket.
+function handleMatchEvent(message, matchScope) {
+  if (Array.isArray(message.ops)) {
+    const code = matchCodeFromScope(message.scope);
+    const base = matchBase(code);
+    const prev = Number(message.prevSeq) || 0;
+    if (!base || (Number(base.seq) || 0) !== prev) {
+      stageCache.invalidateMatch(code);
+      if (isDisplayed(code)) scheduleReload();
+      return;
+    }
+    const next = gameTable.applyDeltaOps(base, message.ops);
+    next.seq = Number(message.seq) || prev;
+    applyMatchView(next, message.scope, matchScope);
+    return;
+  }
+  if (message.data?.code) {
+    const view = message.data;
+    view.seq = Number(message.seq) || 0;
+    applyMatchView(view, message.scope, matchScope);
+    return;
+  }
+  // Match event with no usable payload — fall back to a reload.
+  scheduleReload();
+}
+
+// applyMatchView warms the stage cache for any match and re-renders the focused
+// match in place when the event is for the one we're viewing.
+function applyMatchView(view, scope, matchScope) {
+  applyReadonlyStageMatchUpdate(view);
+  if (route.mode === "match" && scope === matchScope) {
+    applyUpdatedMatch(view);
   }
 }
 
