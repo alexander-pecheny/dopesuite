@@ -131,7 +131,12 @@ type server struct {
 	hostSubscribers map[int64]map[chan hostPresenceEvent]struct{}
 	assets          fs.FS
 	assetNoCache    bool
-	sendTelegram    telegramSender
+	// assetETags maps "/static/..." paths to their content-hash ETag. Used to
+	// stamp "?v=<hash>" cache-busters onto asset URLs in served HTML so a deploy
+	// is picked up immediately instead of after the cached copy's max-age. Nil
+	// in disk mode (assets served no-cache there).
+	assetETags   map[string]string
+	sendTelegram telegramSender
 	// festViewCache holds JSON-marshaled FestView responses keyed by
 	// (festID, gameID). Invalidated wholesale per fest on broadcastState,
 	// since any of the data folded into FestView (venues, stages, matches)
@@ -183,6 +188,7 @@ func main() {
 	if !noCacheAssets {
 		assetETags = buildAssetETags(assets)
 	}
+	srv.assetETags = assetETags
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", srv.handlePublicIndex)
@@ -190,7 +196,7 @@ func main() {
 	mux.HandleFunc("/register", srv.handleRegisterPage)
 	mux.HandleFunc("/register/invite", srv.handleRegisterInviteSubmit)
 	mux.HandleFunc("/register/username", srv.handleRegisterUsernameSubmit)
-	mux.HandleFunc("/login", srv.serveStaticPage(assets, "static/login.html", noCacheAssets))
+	mux.HandleFunc("/login", srv.serveStaticPage(assets, "static/login.html"))
 	mux.HandleFunc("/profile", srv.handleProfilePage)
 	mux.HandleFunc("/profile/logout", srv.handleProfileLogout)
 	mux.HandleFunc("/api/import", srv.handleImport)
@@ -277,7 +283,15 @@ func staticFileServer(source fs.FS, noCache bool, etags map[string]string) http.
 			if tag := etags[r.URL.Path]; tag != "" {
 				w.Header().Set("ETag", tag)
 			}
-			w.Header().Set("Cache-Control", "public, max-age=3600, stale-while-revalidate=604800")
+			// A "?v=<hash>" request is content-addressed (the HTML shell only
+			// emits it for the current deploy's bytes), so it can be cached
+			// forever — a new deploy changes the hash, i.e. the URL. Bare
+			// (unversioned) requests still get the revalidating policy.
+			if strings.Contains(r.URL.RawQuery, "v=") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "public, max-age=3600, stale-while-revalidate=604800")
+			}
 		}
 		handler.ServeHTTP(w, r)
 	})
@@ -550,16 +564,20 @@ func normalizeState(state *MatchState) {
 	}
 }
 
-func (s *server) serveStaticPage(source fs.FS, path string, noCache bool) http.HandlerFunc {
+func (s *server) serveStaticPage(source fs.FS, path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if noCache {
-			w.Header().Set("Cache-Control", "no-cache")
+		body, err := fs.ReadFile(source, path)
+		if err != nil {
+			http.NotFound(w, r)
+			return
 		}
-		http.ServeFileFS(w, r, source, path)
+		// HTML shells go through writeAppHTML so their asset URLs get the
+		// "?v=<hash>" cache-buster and the shell itself stays no-cache.
+		s.writeAppHTML(w, r, body)
 	}
 }
 

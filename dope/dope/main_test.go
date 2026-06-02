@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestDefaultMatchScores(t *testing.T) {
@@ -1509,5 +1510,93 @@ func TestAuthCodeHelpers(t *testing.T) {
 	}
 	if hashSessionToken(tok) != hashSessionToken(tok) {
 		t.Fatal("session hash should be deterministic")
+	}
+}
+
+func TestVersionAssetRefs(t *testing.T) {
+	s := &server{assetETags: map[string]string{
+		"/static/host.js":    `"abc123"`,
+		"/static/styles.css": `"def456"`,
+	}}
+	in := []byte(`<link rel="stylesheet" href="/static/styles.css">` +
+		`<link rel="preload" href="/static/fonts/x.woff2">` +
+		`<script defer src="/static/host.js"></script>` +
+		`<script defer src="/static/unknown.js"></script>` +
+		`<script defer src="/static/host.js?v=stale"></script>`)
+	out := string(s.versionAssetRefs(in))
+	if !strings.Contains(out, `href="/static/styles.css?v=def456"`) {
+		t.Fatalf("css not versioned: %s", out)
+	}
+	if !strings.Contains(out, `src="/static/host.js?v=abc123"`) {
+		t.Fatalf("js not versioned: %s", out)
+	}
+	if strings.Contains(out, "woff2?v=") {
+		t.Fatalf("font (non js/css) must be untouched: %s", out)
+	}
+	if strings.Contains(out, "unknown.js?v=") {
+		t.Fatalf("asset with no known etag must be untouched: %s", out)
+	}
+	// Already-versioned URL must not be double-stamped.
+	if strings.Contains(out, "v=stale?v=") || strings.Contains(out, "host.js?v=abc123?") {
+		t.Fatalf("already-versioned URL was double-stamped: %s", out)
+	}
+	if !strings.Contains(out, `src="/static/host.js?v=stale"`) {
+		t.Fatalf("already-versioned URL should be left as-is: %s", out)
+	}
+	// Disk mode (no etags) is a no-op.
+	bare := &server{}
+	if got := string(bare.versionAssetRefs(in)); got != string(in) {
+		t.Fatalf("disk-mode versionAssetRefs should be a no-op")
+	}
+}
+
+func TestStaticFileServerCachePolicy(t *testing.T) {
+	src := fstest.MapFS{"static/host.js": &fstest.MapFile{Data: []byte("// host")}}
+	h := staticFileServer(src, false, map[string]string{"/static/host.js": `"abc"`})
+
+	serve := func(target string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+		return rec
+	}
+
+	// A content-addressed "?v=" request is cached forever.
+	versioned := serve("/static/host.js?v=abc")
+	if versioned.Code != http.StatusOK {
+		t.Fatalf("versioned status = %d", versioned.Code)
+	}
+	if cc := versioned.Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Fatalf("versioned Cache-Control = %q, want immutable", cc)
+	}
+
+	// A bare request keeps the revalidating policy.
+	bare := serve("/static/host.js")
+	if cc := bare.Header().Get("Cache-Control"); !strings.Contains(cc, "stale-while-revalidate") {
+		t.Fatalf("bare Cache-Control = %q, want stale-while-revalidate", cc)
+	}
+	if et := bare.Header().Get("ETag"); et != `"abc"` {
+		t.Fatalf("bare ETag = %q, want \"abc\"", et)
+	}
+}
+
+func TestServeStaticPageVersionsAndNoCache(t *testing.T) {
+	html := `<!doctype html><link rel="stylesheet" href="/static/styles.css">` +
+		`<script defer src="/static/login.js"></script>`
+	src := fstest.MapFS{"static/login.html": &fstest.MapFile{Data: []byte(html)}}
+	s := &server{assetETags: map[string]string{
+		"/static/login.js":   `"j1"`,
+		"/static/styles.css": `"c1"`,
+	}}
+	rec := httptest.NewRecorder()
+	s.serveStaticPage(src, "static/login.html").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/login", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `src="/static/login.js?v=j1"`) || !strings.Contains(body, `href="/static/styles.css?v=c1"`) {
+		t.Fatalf("assets not versioned: %s", body)
+	}
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+		t.Fatalf("Cache-Control = %q, want no-cache", cc)
 	}
 }
