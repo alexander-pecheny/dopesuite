@@ -6,7 +6,7 @@ const ekTabsRoot = document.getElementById("ekTabs");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
-const {formatVenue, formatBattleVenue, statusLabel, formatNumber, formatPlace, sameArray, clamp, cssEscape, th, td} = gameTable;
+const {formatVenue, formatBattleVenue, statusLabel, formatNumber, formatPlace, clamp, cssEscape, th, td} = gameTable;
 let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 let state = null;
@@ -32,9 +32,9 @@ const stageCache = window.DopeStageCache.create({
   onStageDataChanged: ({pane, stageCode, data}) => {
     refreshPaneFrames(pane, data);
   },
-  onMatchUpdated: ({pane, frame, matchState}) => {
+  onMatchUpdated: ({frame, matchState}) => {
     if (frame.dataset.rendered === "1" || frame.dataset.nearViewport === "1") {
-      renderStageMatchFrame(frame, matchState, {force: frame.dataset.rendered === "1"});
+      updateStageFrame(frame, matchState);
     }
   },
   onPaneShown: ({pane, stageCode}) => {
@@ -1090,15 +1090,15 @@ function refreshPaneFrames(pane, data) {
     pane.replaceChildren(buildReseedStagePanel(stage));
     return;
   }
-  let rendered = false;
+  let rebuilt = false;
   pane.querySelectorAll(".stage-match-frame").forEach((frame) => {
     const matchState = data.stateByCode.get(frame.dataset.matchCode || "");
     if (!matchState) return;
     if (frame.dataset.rendered === "1" || frame.dataset.nearViewport === "1") {
-      rendered = renderStageMatchFrame(frame, matchState, {force: frame.dataset.rendered === "1"}) || rendered;
+      rebuilt = updateStageFrame(frame, matchState) || rebuilt;
     }
   });
-  if (rendered) scheduleEKTeamNameOverflowUpdate(pane);
+  if (rebuilt) scheduleEKTeamNameOverflowUpdate(pane);
 }
 
 function renderStageMatchFrameIfReady(pane, frame, options = {}) {
@@ -1114,11 +1114,32 @@ function renderStageMatchFrame(frame, matchState, options = {}) {
   frame.dataset.rendered = "1";
   const stageTable = withMatchState(matchState, () => buildTable({compact: true}));
   frame.replaceChildren(stageTable);
+  // Per-frame score index + last state, so a later same-shape update patches
+  // this frame's cells in place (updateStageFrame) instead of rebuilding it —
+  // the rebuild is what flickered the cell being edited.
+  frame.__scoreIndex = gameTable.createScoreTableIndex(stageTable, {entity: "team", shootout: true});
+  frame.__matchState = matchState;
   stageSelection?.refresh();
   if (hadFocus && activeCell.matchCode === matchState.code) {
     focusActiveCell({preventScroll: true});
   }
   return true;
+}
+
+// updateStageFrame applies a fresh MatchView to an already-built stage frame,
+// patching cells in place when the battle shape is unchanged (the common case
+// for a score edit) and falling back to a full rebuild only on a shape change.
+// Patching preserves the DOM, so the edited cell keeps focus and team names
+// don't re-fit — no flicker.
+function updateStageFrame(frame, matchState) {
+  if (!frame || !matchState) return false;
+  if (frame.dataset.rendered === "1" && frame.__scoreIndex && frame.__matchState &&
+      canPatchMatchShape(frame.__matchState, matchState)) {
+    patchHostScoreTable(frame.__scoreIndex, matchState);
+    frame.__matchState = matchState;
+    return false;
+  }
+  return renderStageMatchFrame(frame, matchState, {force: frame.dataset.rendered === "1"});
 }
 
 function stageMatchFrame(matchCode) {
@@ -1185,78 +1206,52 @@ function applyUpdatedMatch(updated, matchCode) {
   if (state && Number(state.seq || 0) > Number(updated.seq || 0)) return;
   const previous = state;
   state = updated;
-  if (canPatchMatchTable(previous, updated)) {
+  if (matchTableIndex && canPatchMatchShape(previous, updated)) {
     normalizeActiveCell();
-    patchMatchTable(matchCode);
+    patchHostScoreTable(matchTableIndex, updated);
+    markActiveCell();
     return;
   }
   render();
 }
 
-function canPatchMatchTable(previous, next) {
-  if (route.mode !== "match" || !matchTableIndex || !previous || !next) return false;
-  if (previous.code !== next.code || previous.title !== next.title || previous.finished !== next.finished) return false;
+// canPatchMatchShape: shared shape check plus the host's structural extras. The
+// editable table renders the title/venue in a header, so a change there needs a
+// rebuild; place is an editable input, so a place change is patched in place
+// (unlike the viewer, which rebuilds on place change).
+function canPatchMatchShape(previous, next) {
+  if (!previous || !next) return false;
+  if (previous.title !== next.title) return false;
   if (formatVenue(previous.venue) !== formatVenue(next.venue)) return false;
-  if (!sameArray(previous.questionValues, next.questionValues)) return false;
-  if ((previous.teams || []).length !== (next.teams || []).length) return false;
-  for (let i = 0; i < next.teams.length; i++) {
-    const prevTeam = previous.teams[i];
-    const nextTeam = next.teams[i];
-    if (prevTeam.name !== nextTeam.name) return false;
-    if ((prevTeam.themes || []).length !== (nextTeam.themes || []).length) return false;
-    if (shootoutThemesFor(prevTeam).length !== shootoutThemesFor(nextTeam).length) return false;
-  }
-  return true;
+  return gameTable.canPatchScoreShape(previous, next);
 }
 
-function patchMatchTable(matchCode) {
-  state.teams.forEach((team, teamIndex) => {
-    setIndexedText("total", {team: teamIndex}, team.total);
-    setIndexedText("plus", {team: teamIndex}, team.plus);
-    setIndexedText("tiebreak", {team: teamIndex}, team.shootoutTotal ?? team.tiebreak);
-    const placeInput = indexedNode("placeInput", {team: teamIndex}) ||
-      document.querySelector(`.place-input[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"]`);
-    if (placeInput && document.activeElement !== placeInput) {
-      placeInput.value = formatPlace(team.place);
-    }
-    if (placeInput) {
-      placeInput.dataset.committedPlace = String(team.place || 0);
-    }
-    [0, 1, 2, 3, 4].forEach((idx) => {
-      setIndexedText("correctCount", {team: teamIndex, valueIndex: idx}, team.correctCounts[4 - idx]);
-    });
-    team.themes.forEach((theme, themeIndex) => {
-      patchTheme(teamIndex, themeIndex, false, theme, matchCode);
-    });
-    shootoutThemesFor(team).forEach((theme, themeIndex) => {
-      patchTheme(teamIndex, themeIndex, true, theme, matchCode);
-    });
+// patchHostScoreTable patches a built editable score table in place from a
+// MatchView via its score index. The shared gameTable.patchScoreTable handles
+// the value cells common to host and viewer; the hooks patch the host's
+// editable-only cells (place inputs, player selects), leaving any focused
+// control untouched so a live update never steals the cursor mid-edit.
+function patchHostScoreTable(index, matchState) {
+  gameTable.patchScoreTable(index, matchState, {
+    formatNumber,
+    patchTeam: (idx, teamIndex, team) => {
+      const placeInput = idx.get("placeInput", {team: teamIndex});
+      if (placeInput && document.activeElement !== placeInput) {
+        placeInput.value = formatPlace(team.place);
+      }
+      if (placeInput) placeInput.dataset.committedPlace = String(team.place || 0);
+    },
+    patchTheme: (idx, teamIndex, themeIndex, shootout, theme) => {
+      const select = idx.get("playerSelect", {team: teamIndex, shootout, theme: themeIndex});
+      if (select && document.activeElement !== select) {
+        if (theme.player && !Array.from(select.options).some((item) => item.value === theme.player)) {
+          select.appendChild(option(theme.player, theme.player));
+        }
+        select.value = theme.player || "";
+      }
+      updatePlayerSelectOverflow(select?.closest(".player-select-wrap") || hostRoot);
+    },
   });
-  markActiveCell();
-}
-
-function patchTheme(teamIndex, themeIndex, isShootout, theme, matchCode) {
-  const shootoutValue = isShootout ? "1" : "0";
-  const select = indexedNode("playerSelect", {team: teamIndex, shootout: shootoutValue, theme: themeIndex}) ||
-    document.querySelector(`.player-select[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"][data-shootout="${shootoutValue}"][data-theme="${themeIndex}"]`);
-  if (select && document.activeElement !== select) {
-    if (theme.player && !Array.from(select.options).some((item) => item.value === theme.player)) {
-      select.appendChild(option(theme.player, theme.player));
-    }
-    select.value = theme.player || "";
-  }
-  updatePlayerSelectOverflow(select?.closest(".player-select-wrap") || hostRoot);
-  setIndexedText("themeScore", {team: teamIndex, shootout: shootoutValue, theme: themeIndex}, theme.score);
-  theme.answers.forEach((mark, answerIndex) => {
-    const cell = indexedNode("answer", {team: teamIndex, shootout: shootoutValue, theme: themeIndex, answer: answerIndex}) ||
-      document.querySelector(`.answer-cell[data-match-code="${cssEscape(matchCode)}"][data-team="${teamIndex}"][data-shootout="${shootoutValue}"][data-theme="${themeIndex}"][data-answer="${answerIndex}"]`);
-    gameTable.setMarkClass(cell, mark);
-  });
-}
-
-function setIndexedText(name, values, value) {
-  const node = indexedNode(name, values);
-  if (node) gameTable.setNodeText(node, value, formatNumber);
 }
 
 function indexedNode(name, values) {
