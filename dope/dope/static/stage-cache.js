@@ -80,6 +80,20 @@
       return data;
     }
 
+    // applyStageBatch folds an array of MatchViews (from a per-stage or bulk
+    // fetch) into the cache and notifies any open pane.
+    function applyStageBatch(stageCode, batchedMatches) {
+      const data = ensureStageData(stageCode);
+      if (Array.isArray(batchedMatches)) {
+        for (const m of batchedMatches) {
+          if (m?.code) data.stateByCode.set(m.code, m);
+        }
+      }
+      const pane = stagePaneByCode.get(stageCode);
+      if (pane) onStageDataChanged?.({pane, stageCode, data});
+      return data;
+    }
+
     function prefetchStage(stageCode) {
       if (!stageCode) return Promise.resolve();
       const inflight = stageFetchPromises.get(stageCode);
@@ -91,14 +105,7 @@
           return response.json();
         })
         .then((batchedMatches) => {
-          const data = ensureStageData(stageCode);
-          if (Array.isArray(batchedMatches)) {
-            for (const m of batchedMatches) {
-              if (m?.code) data.stateByCode.set(m.code, m);
-            }
-          }
-          const pane = stagePaneByCode.get(stageCode);
-          if (pane) onStageDataChanged?.({pane, stageCode, data});
+          applyStageBatch(stageCode, batchedMatches);
         })
         .catch((err) => {
           console.error("prefetch stage failed", stageCode, err);
@@ -109,12 +116,37 @@
       return promise;
     }
 
+    // prefetchAllStages warms every stage's match data so later tab switches are
+    // instant. It pulls the whole game in ONE request (/stages/matches) instead
+    // of one request per stage — far fewer round-trips, which matters most when
+    // the connection is congested. Falls back to per-stage fetches if the bulk
+    // endpoint is unavailable (e.g. an older server).
     function prefetchAllStages() {
-      const stages = schemeStages() || [];
-      for (const stage of stages) {
-        if (stageType(stage) === "reseed") continue; // no per-match data needed
-        prefetchStage(stage.code).catch(() => {});
-      }
+      const url = `${apiBase()}/stages/matches`;
+      return fetch(url)
+        .then(async (response) => {
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        })
+        .then((stages) => {
+          if (!Array.isArray(stages)) return;
+          for (const st of stages) {
+            if (!st?.code) continue;
+            applyStageBatch(st.code, st.matches);
+            // Mark fetched so a later single prefetch dedupes to the cache.
+            if (!stageFetchPromises.has(st.code)) {
+              stageFetchPromises.set(st.code, Promise.resolve());
+            }
+          }
+        })
+        .catch((err) => {
+          console.error("bulk prefetch failed; falling back to per-stage", err);
+          const stages = schemeStages() || [];
+          for (const stage of stages) {
+            if (stageType(stage) === "reseed") continue;
+            prefetchStage(stage.code).catch(() => {});
+          }
+        });
     }
 
     function clear() {
