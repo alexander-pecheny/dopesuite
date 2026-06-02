@@ -273,6 +273,9 @@ class Client:
     def post_json(self, path: str, obj) -> None:
         self._req("POST", path, json.dumps(obj).encode())
 
+    def patch_json(self, path: str, obj) -> None:
+        self._req("PATCH", path, json.dumps(obj).encode())
+
 
 def pct(vals: list, p: float) -> float:
     if not vals:
@@ -572,6 +575,123 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
     print_report(stats, duration, viewers_min, viewers_max)
 
 
+# --------------------------------------------------- simulate (realistic) ---
+
+def simulate_realistic(base: str, fest: int, game_id: int, game_type: str,
+                       token: str, duration: float, eps: float, editors: int,
+                       viewers_min: int, viewers_max: int, ramp_period: float) -> None:
+    """Model the REAL production workload: one active game, a handful of
+    concurrent organizers each toggling a single cell via the same scoped PATCH
+    the UI sends, with a fleet of SSE spectators watching.
+
+    Unlike `simulate` (full-state PUT, one serial editor), this exercises the
+    `patchGameState` path and keeps the game's real state blob intact, so the
+    server's per-edit cost — re-marshal + write the whole state_json, audit it
+    twice, and fan the whole next state out to every viewer — is realistic and
+    scales with the blob size (OD is the worst case).
+
+    Each edit carries a single real-cell op plus an `_lt_ts` op so viewers can
+    still compute propagation latency out of the broadcast state.
+    """
+    install_dns_cache()  # keep the viewer fleet from flooding the resolver
+    c = Client(base, token)
+    stats = Stats()
+
+    state = c.get_json(f"/api/fest/{fest}/games/{game_id}/state")
+    if game_type == "od":
+        entries = state.get("entries") or []
+        n_entries = len(entries)
+        n_slots = len(entries[0]) if n_entries else 0
+        od_numbers = []
+        for t in state.get("teams", []):
+            num = t.get("number") if isinstance(t, dict) else t
+            if isinstance(num, int) and num > 0:
+                od_numbers.append(num)
+        if not (n_entries and n_slots and od_numbers):
+            raise SystemExit("OD game has no editable entries/teams to patch")
+
+        def make_ops(rng, ts):
+            return [
+                {"op": "set",
+                 "path": ["entries", rng.randrange(n_entries), rng.randrange(n_slots)],
+                 "value": rng.choice(od_numbers)},
+                {"op": "set", "path": ["_lt_ts"], "value": ts},
+            ]
+        dims = f"OD({n_entries}x{n_slots}, {len(od_numbers)} teams)"
+    elif game_type == "ksi":
+        themes = state.get("themes") or []
+        answers = themes[0]["answers"] if themes else []
+        n_parts = len(answers)
+        n_ans = len(answers[0]) if n_parts else 0
+        if not (n_parts and n_ans):
+            raise SystemExit("KSI game has no editable theme-0 answers to patch")
+
+        def make_ops(rng, ts):
+            return [
+                {"op": "set",
+                 "path": ["themes", 0, "answers", rng.randrange(n_parts), rng.randrange(n_ans)],
+                 "value": rng.choice(["right", "wrong"])},
+                {"op": "set", "path": ["_lt_ts"], "value": ts},
+            ]
+        dims = f"KSI(theme0 {n_parts}p x {n_ans}a)"
+    else:
+        raise SystemExit(f"realistic mode supports od/ksi, not {game_type!r}")
+
+    path = f"/api/fest/{fest}/games/{game_id}/state"
+    print(f"simulating REALISTIC: {dims} via single-cell PATCH, {editors} editors "
+          f"@ {eps:.1f} edits/s total, viewers {viewers_min}-{viewers_max} for {duration:.0f}s",
+          flush=True)
+
+    stop_all = threading.Event()
+    pool = threading.Thread(
+        target=run_viewer_pool,
+        args=(base, fest, stats, viewers_min, viewers_max, ramp_period, duration, stop_all),
+        daemon=True,
+    )
+    pool.start()
+
+    # Closed-loop per editor: each waits for its PATCH to land, then paces so the
+    # fleet aims for `eps` total. If the server can't keep up the editors fall
+    # behind and achieved eps drops — exactly how a real organizer experiences it.
+    per_editor_interval = (editors / eps) if eps > 0 else 0.3
+    deadline = time.monotonic() + duration
+
+    def editor_loop(editor_id: int):
+        rng = random.Random(editor_id + 1)
+        while time.monotonic() < deadline and not stop_all.is_set():
+            ts = time.monotonic()
+            ops = make_ops(rng, ts)
+            t0 = time.monotonic()
+            try:
+                c.patch_json(path, {"ops": ops})
+                stats.add_edit((time.monotonic() - t0) * 1000, ok=True)
+            except urllib.error.HTTPError as e:
+                stats.add_edit((time.monotonic() - t0) * 1000, ok=False)
+                print(f"\n  edit error: {e.code} {e.reason}", flush=True)
+            except Exception as e:  # noqa: BLE001 — surface but keep going
+                stats.add_edit((time.monotonic() - t0) * 1000, ok=False)
+                print(f"\n  edit error: {e}", flush=True)
+            slack = per_editor_interval - (time.monotonic() - ts)
+            if slack > 0:
+                time.sleep(slack)
+
+    threads = [threading.Thread(target=editor_loop, args=(i,), daemon=True) for i in range(editors)]
+    for t in threads:
+        t.start()
+
+    while time.monotonic() < deadline:
+        time.sleep(1)
+        total = stats.edit_ok + stats.edit_err
+        print(f"\r  edits={total} ok={stats.edit_ok} err={stats.edit_err} "
+              f"viewers={stats.peak_viewers} events={stats.events}   ", end="", flush=True)
+
+    stop_all.set()
+    for t in threads:
+        t.join(timeout=5)
+    pool.join(timeout=10)
+    print_report(stats, duration, viewers_min, viewers_max)
+
+
 # ----------------------------------------------------------------- main -----
 
 def main() -> int:
@@ -603,6 +723,11 @@ def main() -> int:
     sim.add_argument("--viewers-min", type=int, default=0, help="min concurrent SSE viewers in the ramp")
     sim.add_argument("--viewers-max", type=int, default=0, help="max concurrent SSE viewers in the ramp")
     sim.add_argument("--ramp-period", type=float, default=60.0, help="seconds for one min->max->min viewer cycle")
+    sim.add_argument("--mode", choices=["visual", "patch"], default="visual",
+                     help="visual = full-state PUT across od/ksi/ek (watchable demo); "
+                          "patch = realistic single-cell PATCH load on one game")
+    sim.add_argument("--editors", type=int, default=6, help="concurrent editors (patch mode)")
+    sim.add_argument("--game", choices=["od", "ksi"], default="od", help="active game to edit (patch mode)")
 
     args = p.parse_args()
 
@@ -618,6 +743,11 @@ def main() -> int:
             print(json.dumps(teardown(con, args.db, args.stamp)))
         finally:
             con.close()
+    elif args.mode == "patch":
+        game_id = {"od": args.od, "ksi": args.ksi}[args.game]
+        simulate_realistic(args.base, args.fest, game_id, args.game, args.token,
+                           args.duration, args.eps, args.editors,
+                           args.viewers_min, args.viewers_max, args.ramp_period)
     else:
         simulate(args.base, args.fest, args.od, args.ksi, args.ek, args.ek_match,
                  args.token, args.duration, args.eps, args.burst, args.burst_teams,

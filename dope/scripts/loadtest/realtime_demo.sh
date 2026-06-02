@@ -43,6 +43,9 @@ EPS=${EPS:-3}
 BURST=${BURST:-8}
 VIEWERS=${VIEWERS:-0}
 RAMP_PERIOD=${RAMP_PERIOD:-60}
+MODE=${MODE:-visual}      # visual = watchable full-state PUT demo; patch = realistic single-cell load
+EDITORS=${EDITORS:-6}     # concurrent editors (patch mode)
+GAME=${GAME:-od}          # active game to edit (patch mode): od|ksi
 
 # VIEWERS accepts "N" (fixed) or "MIN-MAX" (continually ramping).
 if [[ "$VIEWERS" == *-* ]]; then
@@ -67,6 +70,8 @@ if [[ "$LOCAL" == 1 ]]; then
   SRC_DB=${SRC_DB:-tournament.db}
   PORT=${PORT:-9690}
   BASE=${BASE:-http://localhost:$PORT}
+  PROFILE=${PROFILE:-0}                  # 1 = capture a CPU profile during the run
+  PPROF_PORT=${PPROF_PORT:-$((PORT + 1))} # localhost-only pprof listener for the local server
   DB_PATH=""  # set in prov_setup
 
   start_local_server() {
@@ -76,8 +81,9 @@ if [[ "$LOCAL" == 1 ]]; then
     TMP_BIN="$(mktemp -t dope_demo_bin.XXXXXX)"
     echo "==> building dedicated server -> $TMP_BIN" >&2
     ( cd "$ROOT" && go build -o "$TMP_BIN" ./dope )
-    echo "==> starting server on :$PORT (GOMAXPROCS=${GOMAXPROCS:-1}) db=$TMP_DB" >&2
-    ( cd "$ROOT" && DOPE_DB="$TMP_DB" PORT="$PORT" GOMAXPROCS="${GOMAXPROCS:-1}" "$TMP_BIN" ) &
+    echo "==> starting server on :$PORT (GOMAXPROCS=${GOMAXPROCS:-1}) db=$TMP_DB pprof=localhost:$PPROF_PORT" >&2
+    ( cd "$ROOT" && DOPE_DB="$TMP_DB" PORT="$PORT" GOMAXPROCS="${GOMAXPROCS:-1}" \
+        DOPE_PPROF="localhost:$PPROF_PORT" "$TMP_BIN" ) &
     SRV_PID=$!
     for _ in $(seq 1 60); do
       if curl -fsS -o /dev/null "$BASE/" 2>/dev/null; then
@@ -133,9 +139,33 @@ cat >&2 <<EOF
 
 EOF
 
-echo "==> driving ${EPS} edits/s for ${DURATION}s (burst ${BURST}, viewers ${VIEWERS_MIN}-${VIEWERS_MAX})" >&2
+if [[ "$MODE" == patch ]]; then
+  echo "==> driving ${EPS} edits/s for ${DURATION}s (mode patch, ${EDITORS} editors on ${GAME}, viewers ${VIEWERS_MIN}-${VIEWERS_MAX})" >&2
+else
+  echo "==> driving ${EPS} edits/s for ${DURATION}s (mode visual, burst ${BURST}, viewers ${VIEWERS_MIN}-${VIEWERS_MAX})" >&2
+fi
+# Capture a CPU profile of the local server over the run (LOCAL + PROFILE=1).
+PROF_PID=""
+if [[ "$LOCAL" == 1 && "${PROFILE:-0}" == 1 ]]; then
+  PROF_OUT="${PROF_OUT:-/tmp/dope_demo_cpu.pb.gz}"
+  echo "==> capturing CPU profile for ${DURATION}s -> $PROF_OUT" >&2
+  go tool pprof -proto -seconds "$DURATION" \
+    -output "$PROF_OUT" "http://localhost:$PPROF_PORT/debug/pprof/profile" >/dev/null 2>&1 &
+  PROF_PID=$!
+fi
+
 uv run python "$PY" simulate \
   --base "$BASE" --fest "$FEST" \
   --od "$OD" --ksi "$KSI" --ek "$EK" --ek-match "$EK_MATCH" \
   --token "$TOKEN" --duration "$DURATION" --eps "$EPS" --burst "$BURST" \
-  --viewers-min "$VIEWERS_MIN" --viewers-max "$VIEWERS_MAX" --ramp-period "$RAMP_PERIOD"
+  --viewers-min "$VIEWERS_MIN" --viewers-max "$VIEWERS_MAX" --ramp-period "$RAMP_PERIOD" \
+  --mode "$MODE" --editors "$EDITORS" --game "$GAME"
+
+if [[ -n "$PROF_PID" ]]; then
+  wait "$PROF_PID" 2>/dev/null || true
+  echo "" >&2
+  echo "================ CPU profile (top 25, cumulative) ================" >&2
+  go tool pprof -top -cum -nodecount=25 "$PROF_OUT" >&2 2>&1 || \
+    echo "!! pprof analysis failed; raw profile at $PROF_OUT" >&2
+  echo "  full profile: go tool pprof $PROF_OUT   (or -http=:0 for the web UI)" >&2
+fi
