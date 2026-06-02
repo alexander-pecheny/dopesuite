@@ -1177,6 +1177,12 @@ function applyUpdatedMatch(updated, matchCode) {
     stageCache.applyMatchUpdate(updated);
     return;
   }
+  // Drop a stale optimistic response: with several edits in flight, POST
+  // responses can land out of order and after the ordered SSE deltas have
+  // already advanced `state` past this seq. Re-applying the older snapshot
+  // would regress the view and gap the next delta (→ resync → flash). Mirrors
+  // the seq-monotonic guard in stageCache.applyMatchUpdate.
+  if (state && Number(state.seq || 0) > Number(updated.seq || 0)) return;
   const previous = state;
   state = updated;
   if (canPatchMatchTable(previous, updated)) {
