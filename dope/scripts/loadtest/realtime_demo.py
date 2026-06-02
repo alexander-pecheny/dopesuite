@@ -389,9 +389,18 @@ class Viewer(threading.Thread):
         view_ms = None
         try:
             env = json.loads(data)
-            inner = env.get("data") if isinstance(env, dict) else None
-            if isinstance(inner, dict) and "_lt_ts" in inner:
-                view_ms = (time.monotonic() - float(inner["_lt_ts"])) * 1000
+            if isinstance(env, dict):
+                # Snapshot frames carry the stamp in `data._lt_ts`; delta frames
+                # carry it as a `set _lt_ts` op. Read whichever is present.
+                inner = env.get("data")
+                if isinstance(inner, dict) and "_lt_ts" in inner:
+                    view_ms = (time.monotonic() - float(inner["_lt_ts"])) * 1000
+                ops = env.get("ops")
+                if view_ms is None and isinstance(ops, list):
+                    for op in ops:
+                        if isinstance(op, dict) and op.get("path") == ["_lt_ts"]:
+                            view_ms = (time.monotonic() - float(op.get("value"))) * 1000
+                            break
         except Exception:  # noqa: BLE001 — keepalives / non-JSON frames
             pass
         self.stats.add_event(view_ms)
