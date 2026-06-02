@@ -414,7 +414,9 @@
 
   function parseScopedEvent(raw) {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.scope === "string" && Object.prototype.hasOwnProperty.call(parsed, "data")) {
+    if (parsed && typeof parsed.scope === "string" &&
+        (Object.prototype.hasOwnProperty.call(parsed, "data") ||
+         Object.prototype.hasOwnProperty.call(parsed, "ops"))) {
       return parsed;
     }
     return {scope: "unknown", revision: 0, data: parsed};
@@ -433,6 +435,13 @@
     let patchInFlight = false;
     let patchQueue = new Map();
     let inFlightPatchOps = [];
+    // Unified SSE protocol: lastSeq is the per-scope position we have applied.
+    // A delta applies only if its prevSeq === lastSeq; otherwise a drop / late
+    // join / restart left a gap and we resync the full state. Seeded once from
+    // the server-rendered initial seq so the first remote edit chains cleanly.
+    let lastSeq = 0;
+    let lastSeqSeeded = false;
+    let resyncing = false;
 
     function save() {
       if (options.readonly) return;
@@ -565,6 +574,10 @@
     }
 
     function connect() {
+      if (!lastSeqSeeded) {
+        lastSeq = Number(options.getInitialSeq?.()) || 0;
+        lastSeqSeeded = true;
+      }
       const events = new EventSource(options.eventsURL);
       events.addEventListener("state", (event) => {
         let message;
@@ -574,7 +587,30 @@
           return;
         }
         if (message.scope !== options.scope) return;
+
+        if (Array.isArray(message.ops)) {
+          // Scoped delta: apply the ops in place, but only if they chain onto
+          // what we have. A gap means we missed an event, so refetch instead of
+          // misapplying. Drop deltas mid-resync; the refetch supersedes them.
+          if (resyncing) return;
+          if ((Number(message.prevSeq) || 0) !== lastSeq) {
+            void resync();
+            return;
+          }
+          let next = cloneJSON(options.getState ? options.getState() : {});
+          for (const op of message.ops) {
+            if (op.op && op.op !== "set") continue;
+            next = applySetPatch(next, op.path, op.value);
+          }
+          lastSeq = Number(message.seq) || lastSeq;
+          options.onRemoteState?.(withPendingLocalPatches(next), message);
+          if (!hasPendingSave()) setSyncStatus("saved");
+          return;
+        }
+
+        // Full-state snapshot (initial / wholesale PUT / non-PATCH mutation).
         const raw = JSON.stringify(message.data);
+        if (message.seq) lastSeq = Number(message.seq) || lastSeq;
         if (consumeLocalEcho(raw)) {
           if (!hasPendingSave()) setSyncStatus("saved");
           return;
@@ -584,6 +620,28 @@
       });
       events.onerror = () => setSyncStatus("reconnecting");
       return events;
+    }
+
+    // resync refetches the full state after a gap and realigns lastSeq from the
+    // X-State-Seq header so the next delta chains. Jittered so a fleet of viewers
+    // that all gap on the same dropped event don't refetch in lockstep.
+    async function resync() {
+      if (resyncing || !options.stateURL) return;
+      resyncing = true;
+      try {
+        await new Promise((r) => window.setTimeout(r, Math.floor(Math.random() * 400)));
+        const response = await fetch(options.stateURL);
+        if (!response.ok) return;
+        const seqHeader = response.headers.get("X-State-Seq");
+        const data = await response.json();
+        if (seqHeader != null) lastSeq = Number(seqHeader) || 0;
+        options.onRemoteState?.(withPendingLocalPatches(data), {scope: options.scope, resync: true});
+        if (!hasPendingSave()) setSyncStatus("saved");
+      } catch (error) {
+        console.error(error);
+      } finally {
+        resyncing = false;
+      }
     }
 
     function normalizePatchPath(path) {

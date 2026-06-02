@@ -129,6 +129,14 @@ type server struct {
 	// may have changed.
 	festViewMu    sync.RWMutex
 	festViewCache map[int64]map[int64][]byte
+	// stateSeq is a per-scope monotonic counter for the unified SSE protocol.
+	// Every broadcast on a scope bumps it; delta events carry (seq, prevSeq) so
+	// a client can tell whether it can apply ops in place or must resync. We use
+	// this rather than the fest revision because revision bumps for *all* scopes,
+	// so per-scope deltas wouldn't be contiguous. seqMu also serialises the
+	// seq-assign + fan-out so per-scope event order matches seq order.
+	seqMu    sync.Mutex
+	stateSeq map[string]uint64
 }
 
 type updateRequest struct {

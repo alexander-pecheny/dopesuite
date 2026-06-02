@@ -95,10 +95,18 @@ type matchVenueRequest struct {
 	VenueNumber int `json:"venueNumber"`
 }
 
+// eventEnvelope is the unified SSE payload for every scope. Exactly one of Data
+// (a full-state snapshot — initial/resync/wholesale-replace) or Ops (a scoped
+// delta to apply in place) is set. Seq is the per-scope monotonic position;
+// PrevSeq (delta only) is the seq the ops apply on top of, so a client with a
+// gap (dropped/late event) knows to resync instead of misapplying.
 type eventEnvelope struct {
 	Scope    string          `json:"scope"`
 	Revision int64           `json:"revision"`
-	Data     json.RawMessage `json:"data"`
+	Seq      uint64          `json:"seq,omitempty"`
+	PrevSeq  uint64          `json:"prevSeq,omitempty"`
+	Ops      json.RawMessage `json:"ops,omitempty"`
+	Data     json.RawMessage `json:"data,omitempty"`
 }
 
 type festScheme struct {
@@ -1225,12 +1233,17 @@ type gameInitPayload struct {
 	// FestID/GameID are the resolved numeric ids. The client needs the numeric
 	// game id to build the SSE scope (`game-state:<id>`); the URL only carries
 	// the slug, which does not match the numeric scope the server broadcasts.
-	FestID  int64           `json:"festID,omitempty"`
-	GameID  int64           `json:"gameID,omitempty"`
-	Scheme  json.RawMessage `json:"scheme,omitempty"`
-	State   json.RawMessage `json:"state,omitempty"`
-	Fest    json.RawMessage `json:"fest,omitempty"`
-	CanEdit bool            `json:"canEdit,omitempty"`
+	FestID int64           `json:"festID,omitempty"`
+	GameID int64           `json:"gameID,omitempty"`
+	Scheme json.RawMessage `json:"scheme,omitempty"`
+	State  json.RawMessage `json:"state,omitempty"`
+	Fest   json.RawMessage `json:"fest,omitempty"`
+	// Seq is the game-state scope's seq at render time, so the SSE client seeds
+	// its lastSeq to exactly the state it was handed. Without it every viewer
+	// would start at 0 and the first remote edit would gap-resync them all at
+	// once (a thundering-herd full-state refetch — the very thing deltas avoid).
+	Seq     uint64 `json:"seq"`
+	CanEdit bool   `json:"canEdit,omitempty"`
 }
 
 type viewerInitPayload struct {
@@ -1373,6 +1386,7 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&sche
 	}
 	payload.Scheme = json.RawMessage(schemeJSON)
 	payload.State = json.RawMessage(stateJSON)
+	payload.Seq = s.currentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
 	if festBytes, err := s.festViewBytes(scope.FestID, scope.GameID); err == nil {
 		payload.Fest = festBytes
 	}
@@ -3032,12 +3046,59 @@ values(?, ?, ?, ?, ?)`, festID, revision, eventType, payload, now)
 	return revision, err
 }
 
+// broadcastState fans out a full-state SNAPSHOT for a scope (initial load,
+// wholesale PUT, or any non-PATCH mutation). It still bumps the scope seq so the
+// counter stays uniform with broadcastStateDelta; clients adopt the snapshot and
+// set their lastSeq from it. Use broadcastStateDelta for in-place PATCH edits.
 func (s *server) broadcastState(festID int64, scope string, revision int64, payload []byte) {
 	s.invalidateFestViewCache(festID)
+	s.seqMu.Lock()
+	defer s.seqMu.Unlock()
+	seq := s.bumpSeqLocked(scope)
 	if s.db != nil {
-		payload = eventEnvelopeJSON(scope, revision, payload)
+		payload = eventSnapshotJSON(scope, revision, seq, payload)
 	}
 	s.broadcast(event{festID: festID, revision: revision, data: payload})
+}
+
+// broadcastStateDelta fans out a scoped DELTA (the ops that produced the new
+// state) instead of the whole state — the core fan-out win: every viewer gets a
+// ~100-byte op list rather than the full game blob. Seq assignment and fan-out
+// happen under seqMu so per-scope event order matches seq order; a client whose
+// lastSeq != prevSeq resyncs.
+func (s *server) broadcastStateDelta(festID int64, scope string, revision int64, ops []byte) {
+	s.invalidateFestViewCache(festID)
+	s.seqMu.Lock()
+	defer s.seqMu.Unlock()
+	prev := s.stateSeqLocked(scope)
+	seq := s.bumpSeqLocked(scope)
+	payload := eventDeltaJSON(scope, revision, seq, prev, ops)
+	s.broadcast(event{festID: festID, revision: revision, data: payload})
+}
+
+// bumpSeqLocked increments and returns the scope's seq. Caller holds seqMu.
+func (s *server) bumpSeqLocked(scope string) uint64 {
+	if s.stateSeq == nil {
+		s.stateSeq = map[string]uint64{}
+	}
+	s.stateSeq[scope]++
+	return s.stateSeq[scope]
+}
+
+// stateSeqLocked returns the scope's current seq. Caller holds seqMu.
+func (s *server) stateSeqLocked(scope string) uint64 {
+	if s.stateSeq == nil {
+		return 0
+	}
+	return s.stateSeq[scope]
+}
+
+// currentStateSeq returns the scope's current seq (for the GET /state resync
+// header). Safe to call without holding seqMu.
+func (s *server) currentStateSeq(scope string) uint64 {
+	s.seqMu.Lock()
+	defer s.seqMu.Unlock()
+	return s.stateSeqLocked(scope)
 }
 
 func (s *server) cachedFestViewBytes(festID, gameID int64) ([]byte, bool) {
@@ -3093,14 +3154,31 @@ func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
 	return data, nil
 }
 
-func eventEnvelopeJSON(scope string, revision int64, payload []byte) []byte {
+// eventSnapshotJSON wraps a full-state payload as a snapshot envelope.
+func eventSnapshotJSON(scope string, revision int64, seq uint64, payload []byte) []byte {
 	data, err := json.Marshal(eventEnvelope{
 		Scope:    scope,
 		Revision: revision,
+		Seq:      seq,
 		Data:     json.RawMessage(payload),
 	})
 	if err != nil {
 		return payload
+	}
+	return data
+}
+
+// eventDeltaJSON wraps an ops array as a delta envelope carrying (seq, prevSeq).
+func eventDeltaJSON(scope string, revision int64, seq, prevSeq uint64, ops []byte) []byte {
+	data, err := json.Marshal(eventEnvelope{
+		Scope:    scope,
+		Revision: revision,
+		Seq:      seq,
+		PrevSeq:  prevSeq,
+		Ops:      json.RawMessage(ops),
+	})
+	if err != nil {
+		return ops
 	}
 	return data
 }
