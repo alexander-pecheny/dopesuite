@@ -883,11 +883,37 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, fest
 	writeJSON(w, data)
 }
 
-// handleScopedStages routes /api/fest/{tid}/games/{gid}/stages/{code}/...
-// Currently the only supported sub-resource is "/matches" which returns
-// every match's full MatchView for the stage in a single response — a batch
-// replacement for the N parallel /matches/{code} fetches.
+// stageMatches is one stage's full match views in the bulk all-stages response.
+type stageMatches struct {
+	Code    string      `json:"code"`
+	Matches []MatchView `json:"matches"`
+}
+
+// handleScopedStages routes /api/fest/{tid}/games/{gid}/stages/...
+//
+//	/stages/{code}/matches → every full MatchView for one stage (a batch
+//	                         replacement for the N parallel /matches/{code} fetches).
+//	/stages/matches        → every stage's full MatchViews in one response, so the
+//	                         bracket page can prefetch the whole game in a single
+//	                         request instead of one per stage.
 func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scope festScope, sub []string) {
+	// All-stages bulk form: /stages/matches (no stage code).
+	if len(sub) == 1 && sub[0] == "matches" {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !s.authorizeFestRead(w, r, scope.FestID) {
+			return
+		}
+		stages, err := s.loadAllStageMatchViews(r.Context(), scope)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSONValue(w, stages)
+		return
+	}
 	if len(sub) != 2 || sub[0] == "" || sub[1] != "matches" {
 		http.NotFound(w, r)
 		return
@@ -910,6 +936,59 @@ func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scop
 		return
 	}
 	writeJSONValue(w, matches)
+}
+
+// loadAllStageMatchViews returns every stage's full match views for the game in
+// one pass, stages ordered by position, matches ordered within each. Empty
+// stages (e.g. reseed) are omitted. Takes the read lock once for the whole set.
+func (s *server) loadAllStageMatchViews(ctx context.Context, scope festScope) ([]stageMatches, error) {
+	rows, err := s.db.QueryContext(ctx, `
+select st.code, m.code
+from matches m
+join stages st on st.id = m.stage_id
+where m.fest_id = ? and m.game_id = ?
+order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
+	if err != nil {
+		return nil, err
+	}
+	type pair struct{ stageCode, matchCode string }
+	var pairs []pair
+	for rows.Next() {
+		var p pair
+		if err := rows.Scan(&p.stageCode, &p.matchCode); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		pairs = append(pairs, p)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	out := make([]stageMatches, 0)
+	byCode := map[string]int{} // stage code -> index in out, preserving order
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, p := range pairs {
+		mscope, err := s.verifyMatchInScope(ctx, scope, p.matchCode)
+		if err != nil {
+			if errors.Is(err, errMatchNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		view, err := s.loadScopedMatchViewLocked(mscope)
+		if err != nil {
+			return nil, err
+		}
+		idx, ok := byCode[p.stageCode]
+		if !ok {
+			idx = len(out)
+			byCode[p.stageCode] = idx
+			out = append(out, stageMatches{Code: p.stageCode})
+		}
+		out[idx].Matches = append(out[idx].Matches, view)
+	}
+	return out, nil
 }
 
 func (s *server) loadStageMatchViews(ctx context.Context, scope festScope, stageCode string) ([]MatchView, error) {
