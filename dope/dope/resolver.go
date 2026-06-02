@@ -38,7 +38,7 @@ func runResolveBracket(args []string) {
 		log.Fatalf("begin tx: %v", err)
 	}
 	defer tx.Rollback()
-	if err := resolveGameSlotsTx(ctx, tx, *gameID); err != nil {
+	if _, err := resolveGameSlotsTx(ctx, tx, *gameID); err != nil {
 		log.Fatalf("resolve game %d: %v", *gameID, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -61,10 +61,14 @@ func runResolveBracket(args []string) {
 // themes/answers/results in that bout are dropped and the bout is reopened, so
 // a single forward pass (stages in position order) also invalidates anything
 // further downstream.
-func resolveGameSlotsTx(ctx context.Context, tx *sql.Tx, gameID int64) error {
+// resolveGameSlotsTx resolves every from_match/reseed slot in the game and
+// returns the ids of matches whose slots actually changed — so a caller can
+// broadcast those downstream matches (a finished bout advances teams into the
+// next round, which would otherwise only show up on a viewer reload).
+func resolveGameSlotsTx(ctx context.Context, tx *sql.Tx, gameID int64) ([]int64, error) {
 	var gameType string
 	if err := tx.QueryRowContext(ctx, `select game_type from games where id = ?`, gameID).Scan(&gameType); err != nil {
-		return err
+		return nil, err
 	}
 
 	stages, err := collectRows(ctx, tx, `
@@ -75,20 +79,29 @@ from stages where game_id = ? order by position, id`,
 			return st, rows.Scan(&st.id, &st.code, &st.stageType, &st.config)
 		})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var affected []int64
+	seen := map[int64]bool{}
 	for _, stage := range stages {
 		if stage.stageType == "reseed" {
 			if err := recomputeReseedEntriesTx(ctx, tx, stage.id, stage.config, gameID); err != nil {
-				return err
+				return nil, err
 			}
 		}
-		if err := resolveStageSlotsTx(ctx, tx, gameID, stage.id, gameType); err != nil {
-			return err
+		changed, err := resolveStageSlotsTx(ctx, tx, gameID, stage.id, gameType)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range changed {
+			if !seen[id] {
+				seen[id] = true
+				affected = append(affected, id)
+			}
 		}
 	}
-	return nil
+	return affected, nil
 }
 
 type resolverStage struct {
@@ -98,8 +111,9 @@ type resolverStage struct {
 	config    []byte
 }
 
-// resolveStageSlotsTx resolves every from_match/reseed slot of one stage.
-func resolveStageSlotsTx(ctx context.Context, tx *sql.Tx, gameID, stageID int64, gameType string) error {
+// resolveStageSlotsTx resolves every from_match/reseed slot of one stage and
+// returns the ids of matches whose slots changed.
+func resolveStageSlotsTx(ctx context.Context, tx *sql.Tx, gameID, stageID int64, gameType string) ([]int64, error) {
 	type slotRow struct {
 		id         int64
 		matchID    int64
@@ -118,9 +132,10 @@ order by ms.match_id, ms.slot_index`,
 			return s, rows.Scan(&s.id, &s.matchID, &s.sourceType, &s.sourceRef, &s.teamID)
 		})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var affected []int64
 	for _, slot := range slots {
 		var ref map[string]any
 		_ = json.Unmarshal([]byte(slot.sourceRef), &ref)
@@ -133,13 +148,17 @@ order by ms.match_id, ms.slot_index`,
 			desired, err = teamAtReseedRank(ctx, tx, gameID, stringFromMap(ref, "stage"), intFromMap(ref, "rank"))
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if err := applyResolvedSlotTx(ctx, tx, slot.id, slot.matchID, slot.teamID, desired, gameType); err != nil {
-			return err
+		changed, err := applyResolvedSlotTx(ctx, tx, slot.id, slot.matchID, slot.teamID, desired, gameType)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			affected = append(affected, slot.matchID)
 		}
 	}
-	return nil
+	return affected, nil
 }
 
 // teamAtMatchPlace returns the team that took the given place in a bout, but
@@ -183,33 +202,35 @@ where s.game_id = ? and s.code = ? and re.rank = ?`,
 
 // applyResolvedSlotTx writes a slot's resolved team when it changed. Replacing
 // an existing occupant drops that team's data in the bout and reopens it.
-func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, current, desired int64, gameType string) error {
+// applyResolvedSlotTx writes a slot's resolved occupant and reports whether it
+// actually changed (so the caller can collect the affected match for broadcast).
+func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, current, desired int64, gameType string) (bool, error) {
 	if desired == current {
-		return nil
+		return false, nil
 	}
 	if current != 0 {
 		// The previous occupant's protocol and standing in this bout are no
 		// longer valid; drop them (answers cascade from themes) and reopen the
 		// bout so its results — and anything downstream — get recomputed.
 		if _, err := tx.ExecContext(ctx, `delete from themes where match_id = ? and team_id = ?`, matchID, current); err != nil {
-			return err
+			return false, err
 		}
 		if _, err := tx.ExecContext(ctx, `delete from match_results where match_id = ? and team_id = ?`, matchID, current); err != nil {
-			return err
+			return false, err
 		}
 		if _, err := tx.ExecContext(ctx, `update matches set status = 'active' where id = ? and status = 'finished'`, matchID); err != nil {
-			return err
+			return false, err
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `update match_slots set team_id = ? where id = ?`, nullableInt64(desired), slotID); err != nil {
-		return err
+		return false, err
 	}
 	if desired != 0 && gameType == "ek" {
 		if err := ensureRegularThemes(ctx, tx, matchID, desired); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return true, nil
 }
 
 // --- reseed computation --------------------------------------------------

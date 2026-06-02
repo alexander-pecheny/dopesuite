@@ -73,6 +73,20 @@ func matchScopeKey(scope matchScope) string {
 	return fmt.Sprintf("match:%d:%s", scope.GameID, scope.Code)
 }
 
+// broadcastMatchCascade fans out the views of downstream matches whose slots
+// changed when an edit resolved the bracket, so spectators on those matches (or
+// the grid) see advancing teams live instead of only on reload.
+func (s *server) broadcastMatchCascade(festID, gameID int64, cascaded []MatchView) {
+	for _, cv := range cascaded {
+		data, err := json.Marshal(cv)
+		if err != nil {
+			continue
+		}
+		scopeKey := matchScopeKey(matchScope{festScope: festScope{FestID: festID, GameID: gameID}, Code: cv.Code})
+		s.broadcastState(festID, scopeKey, cv.Revision, data)
+	}
+}
+
 var errMatchNotFound = errors.New("match not found in this game")
 var errRatingRosterImmutable = errors.New("команды загружаются из rating.chgk.info; чтобы изменить список, переимпортируйте участников")
 
@@ -1009,12 +1023,13 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "bad json", http.StatusBadRequest)
 			return
 		}
-		view, data, err := s.applyScopedMatchUpdate(mscope, req)
+		view, data, cascaded, err := s.applyScopedMatchUpdate(mscope, req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		s.broadcastState(scope.FestID, matchScopeKey(mscope), view.Revision, data)
+		s.broadcastMatchCascade(scope.FestID, mscope.GameID, cascaded)
 		writeJSON(w, data)
 	case "finish":
 		if r.Method != http.MethodPost {
@@ -1043,12 +1058,13 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "missing finished", http.StatusBadRequest)
 			return
 		}
-		view, data, err := s.applyScopedMatchUpdate(mscope, updateRequest{Finished: req.Finished})
+		view, data, cascaded, err := s.applyScopedMatchUpdate(mscope, updateRequest{Finished: req.Finished})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		s.broadcastState(scope.FestID, matchScopeKey(mscope), view.Revision, data)
+		s.broadcastMatchCascade(scope.FestID, mscope.GameID, cascaded)
 		writeJSON(w, data)
 	case "venue":
 		if r.Method != http.MethodPost {

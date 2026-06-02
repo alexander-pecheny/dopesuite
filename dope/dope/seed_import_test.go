@@ -111,7 +111,7 @@ func TestFinishAssignsPlaces(t *testing.T) {
 		t.Fatalf("match scope: %v", err)
 	}
 	finished := true
-	view, _, err := srv.applyScopedMatchUpdate(scope, updateRequest{Finished: &finished})
+	view, _, _, err := srv.applyScopedMatchUpdate(scope, updateRequest{Finished: &finished})
 	if err != nil {
 		t.Fatalf("finish match: %v", err)
 	}
