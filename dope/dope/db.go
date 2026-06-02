@@ -1222,6 +1222,11 @@ type hostInitPayload struct {
 }
 
 type gameInitPayload struct {
+	// FestID/GameID are the resolved numeric ids. The client needs the numeric
+	// game id to build the SSE scope (`game-state:<id>`); the URL only carries
+	// the slug, which does not match the numeric scope the server broadcasts.
+	FestID  int64           `json:"festID,omitempty"`
+	GameID  int64           `json:"gameID,omitempty"`
 	Scheme  json.RawMessage `json:"scheme,omitempty"`
 	State   json.RawMessage `json:"state,omitempty"`
 	Fest    json.RawMessage `json:"fest,omitempty"`
@@ -1353,7 +1358,7 @@ func (s *server) serveInjectedHTML(w http.ResponseWriter, r *http.Request, htmlP
 }
 
 func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPayload, error) {
-	payload := gameInitPayload{}
+	payload := gameInitPayload{FestID: scope.FestID, GameID: scope.GameID}
 	var schemeJSON, stateJSON string
 	if err := s.db.QueryRowContext(ctx, `
 select coalesce(scheme_json, ''), coalesce(state_json, '')

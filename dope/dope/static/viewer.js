@@ -10,6 +10,12 @@ const {formatVenue, formatBattleVenue, formatBattleVenueShort, statusLabel, form
 let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 const canEdit = Boolean(window.__VIEWER_INIT__?.canEdit);
+// The server scopes SSE events by NUMERIC game id (`match:<id>:<code>`), but the
+// URL only carries the game slug. Take the numeric id from the inlined init so
+// match-scope comparisons match and the focused match patches in place.
+const scopeGameID = window.__VIEWER_INIT__?.route?.gameID != null
+  ? String(window.__VIEWER_INIT__.route.gameID)
+  : route.gameID;
 const editorLink = canEdit && !embedded ? gameTable.mountEditorLink(statusNode) : null;
 let state = null;
 let fest = null;
@@ -217,9 +223,22 @@ function repaintStagePane(pane, stageCode, data) {
 
 function paintStageFrame(frame, matchState, descriptor) {
   if (matchState) {
-    frame.replaceChildren(withMatchState(matchState, () => buildReadonlyTable()));
+    // Patch scores/marks into the existing table when only those changed, so a
+    // live update doesn't tear down and re-render the whole battle. Fall back
+    // to a full rebuild (and re-index) when the table shape changes.
+    const previous = frame.__matchState;
+    if (previous && frame.__scoreIndex && canPatchMatchTable(previous, matchState)) {
+      patchMatchTable(frame.__scoreIndex, matchState);
+    } else {
+      const table = withMatchState(matchState, () => buildReadonlyTable());
+      frame.replaceChildren(table);
+      frame.__scoreIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
+    }
+    frame.__matchState = matchState;
     return;
   }
+  frame.__scoreIndex = null;
+  frame.__matchState = null;
   const placeholder = document.createElement("div");
   placeholder.className = "stage-match-placeholder";
   placeholder.textContent = descriptor?.title || `Бой ${descriptor?.code || ""}`;
@@ -275,7 +294,7 @@ function connectEvents() {
   const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
-    const matchScope = `match:${route.gameID}:${route.matchCode}`;
+    const matchScope = `match:${scopeGameID}:${route.matchCode}`;
     const venuesScope = `venues:${route.festID}`;
     // Always update cached stage state for any match-scoped event, regardless
     // of which page we're on. Keeps cached panes for other stages live so a
@@ -295,6 +314,12 @@ function connectEvents() {
       venues = message.data;
       renderVenues();
       setLive(true);
+      return;
+    }
+    // Sibling games (e.g. OD/KSI) share this fest's SSE stream and emit
+    // game-state:<theirID> events that don't affect the EK view. Ignore them —
+    // otherwise editing a sibling game reloads (and flashes) the whole bracket.
+    if (message.scope?.startsWith("game-state:") && message.scope !== `game-state:${scopeGameID}`) {
       return;
     }
     scheduleReload();
@@ -420,8 +445,8 @@ function render() {
 function applyUpdatedMatch(updated) {
   const previous = state;
   state = updated;
-  if (canPatchReadonlyMatchTable(previous, updated)) {
-    patchReadonlyMatchTable();
+  if (readonlyTableIndex && canPatchMatchTable(previous, updated)) {
+    patchMatchTable(readonlyTableIndex, updated);
     return;
   }
   render();
@@ -435,8 +460,12 @@ function applyReadonlyStageMatchUpdate(updated) {
   }
 }
 
-function canPatchReadonlyMatchTable(previous, next) {
-  if (route.mode !== "match" || !readonlyTableIndex || !previous || !next) return false;
+// canPatchMatchTable reports whether `next` differs from `previous` only in
+// scores/marks, so an existing rendered table can be patched cell-by-cell
+// instead of rebuilt. Used for both the focused match view and each stage
+// frame (so live updates don't tear down and re-render the whole battle).
+function canPatchMatchTable(previous, next) {
+  if (!previous || !next) return false;
   if (previous.code !== next.code || previous.title !== next.title || previous.finished !== next.finished) return false;
   if (matchTitleFor(previous) !== matchTitleFor(next)) return false;
   if (!gameTable.sameArray(previous.questionValues, next.questionValues)) return false;
@@ -451,34 +480,34 @@ function canPatchReadonlyMatchTable(previous, next) {
   return true;
 }
 
-function patchReadonlyMatchTable() {
-  state.teams.forEach((team, teamIndex) => {
-    setIndexedText("total", {team: teamIndex}, team.total);
-    setIndexedText("plus", {team: teamIndex}, team.plus);
-    setIndexedText("tiebreak", {team: teamIndex}, team.shootoutTotal ?? team.tiebreak);
+function patchMatchTable(index, matchState) {
+  matchState.teams.forEach((team, teamIndex) => {
+    setIndexedTextOn(index, "total", {team: teamIndex}, team.total);
+    setIndexedTextOn(index, "plus", {team: teamIndex}, team.plus);
+    setIndexedTextOn(index, "tiebreak", {team: teamIndex}, team.shootoutTotal ?? team.tiebreak);
     [0, 1, 2, 3, 4].forEach((idx) => {
-      setIndexedText("correctCount", {team: teamIndex, valueIndex: idx}, team.correctCounts[4 - idx]);
+      setIndexedTextOn(index, "correctCount", {team: teamIndex, valueIndex: idx}, team.correctCounts[4 - idx]);
     });
     team.themes.forEach((theme, themeIndex) => {
-      patchReadonlyTheme(teamIndex, themeIndex, false, theme);
+      patchTheme(index, teamIndex, themeIndex, false, theme);
     });
     shootoutThemesFor(team).forEach((theme, themeIndex) => {
-      patchReadonlyTheme(teamIndex, themeIndex, true, theme);
+      patchTheme(index, teamIndex, themeIndex, true, theme);
     });
   });
 }
 
-function patchReadonlyTheme(teamIndex, themeIndex, isShootout, theme) {
+function patchTheme(index, teamIndex, themeIndex, isShootout, theme) {
   const shootout = isShootout ? "1" : "0";
-  setIndexedText("themeScore", {team: teamIndex, shootout, theme: themeIndex}, theme.score);
+  setIndexedTextOn(index, "themeScore", {team: teamIndex, shootout, theme: themeIndex}, theme.score);
   theme.answers.forEach((mark, answerIndex) => {
-    const cell = readonlyTableIndex?.get("answer", {team: teamIndex, shootout, theme: themeIndex, answer: answerIndex});
+    const cell = index?.get("answer", {team: teamIndex, shootout, theme: themeIndex, answer: answerIndex});
     gameTable.setMarkClass(cell, mark);
   });
 }
 
-function setIndexedText(name, values, value) {
-  const node = readonlyTableIndex?.get(name, values);
+function setIndexedTextOn(index, name, values, value) {
+  const node = index?.get(name, values);
   if (node) gameTable.setNodeText(node, value, formatNumber);
 }
 
