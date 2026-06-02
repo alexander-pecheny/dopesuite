@@ -34,8 +34,10 @@ import json
 import os
 import random
 import secrets
+import socket
 import sqlite3
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -109,6 +111,9 @@ def setup(con: sqlite3.Connection, db_path: str, fest_id: int, stamp: str, expir
         "stamp": stamp,
         "fest_id": fest_id,
         "max_event_id": (con.execute("select coalesce(max(id),0) m from events where fest_id=?", (fest_id,)).fetchone()["m"]),
+        # Capture the high-water audit_log id so teardown can purge exactly the
+        # rows this demo's edits generated (and then VACUUM to reclaim space).
+        "max_audit_id": (con.execute("select coalesce(max(id),0) m from audit_log").fetchone()["m"]),
         "fest_revision": con.execute("select revision from fests where id=?", (fest_id,)).fetchone()["revision"],
         "games": rows(con, f"select id, state_json, revision, updated_at from games where id in ({qmarks})", game_ids),
         # Snapshot the whole EK bracket's mutable state so restore is exact
@@ -199,10 +204,21 @@ def teardown(con: sqlite3.Connection, db_path: str, stamp: str) -> dict:
     cur.execute("delete from events where fest_id=? and id>?", (fest_id, snap["max_event_id"]))
     cur.execute("delete from users where id=?", (snap["temp_user_id"],))  # cascades sessions
     cur.execute("delete from fest_organizers where user_id=?", (snap["temp_user_id"],))
+
+    # Purge the audit_log rows this demo's edits generated, then reclaim the
+    # space. Scoped to rows newer than the setup high-water mark, so we never
+    # touch pre-existing history. (Older backups lack the key — skip then.)
+    purged_audit = 0
+    if "max_audit_id" in snap:
+        purged_audit = cur.execute("delete from audit_log where id>?", (snap["max_audit_id"],)).rowcount
     con.commit()
+    if "max_audit_id" in snap:
+        con.isolation_level = None  # VACUUM cannot run inside a transaction
+        con.execute("VACUUM")
     os.remove(path)
     return {"restored_games": len(snap["games"]), "restored_slots": len(snap["match_slots"]),
-            "restored_results": len(snap["match_results"]), "removed_user": snap["temp_user_id"]}
+            "restored_results": len(snap["match_results"]), "removed_user": snap["temp_user_id"],
+            "purged_audit_rows": purged_audit}
 
 
 # ------------------------------------------------------------- simulate -----
@@ -230,11 +246,182 @@ class Client:
         self._req("POST", path, json.dumps(obj).encode())
 
 
+def pct(vals: list, p: float) -> float:
+    if not vals:
+        return 0.0
+    s = sorted(vals)
+    return s[int(p * (len(s) - 1))]
+
+
+class Stats:
+    """Thread-safe collector shared by the editor loop and the viewer pool.
+
+    edit_ms   — editor request round-trip (write path under the global mutex)
+    view_ms   — edit->viewer propagation: a viewer reads `_lt_ts` (a monotonic
+                send-stamp the editor embeds in OD/KSI state) back out of the
+                SSE broadcast. Editor and viewers share this process's clock,
+                so the delta needs no clock sync. EK match edits don't carry
+                the stamp, so view_ms reflects OD/KSI only.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.edit_ms: list = []
+        self.view_ms: list = []
+        self.edit_ok = 0
+        self.edit_err = 0
+        self.events = 0
+        self.viewer_fail = 0
+        self.viewer_drop = 0
+        self.peak_viewers = 0
+
+    def add_edit(self, ms: float, ok: bool):
+        with self._lock:
+            self.edit_ms.append(ms)
+            if ok:
+                self.edit_ok += 1
+            else:
+                self.edit_err += 1
+
+    def add_event(self, view_ms: float | None):
+        with self._lock:
+            self.events += 1
+            if view_ms is not None:
+                self.view_ms.append(view_ms)
+
+    def bump(self, field: str, n: int = 1):
+        with self._lock:
+            setattr(self, field, getattr(self, field) + n)
+
+    def note_peak(self, n: int):
+        with self._lock:
+            if n > self.peak_viewers:
+                self.peak_viewers = n
+
+
+class Viewer(threading.Thread):
+    """One long-lived SSE reader, mirroring a browser on a viewer page.
+
+    /events is public (no auth), so this needs no session — exactly what a real
+    spectator's connection looks like through nginx.
+    """
+
+    def __init__(self, base: str, fest: int, stats: Stats):
+        super().__init__(daemon=True)
+        self.url = f"{base.rstrip('/')}/events?fest_id={fest}"
+        self.stats = stats
+        self.stop = threading.Event()
+        self._resp = None
+
+    def shutdown(self):
+        self.stop.set()
+        try:
+            if self._resp is not None:
+                self._resp.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def run(self):
+        req = urllib.request.Request(self.url)
+        req.add_header("Accept", "text/event-stream")
+        try:
+            self._resp = urllib.request.urlopen(req, timeout=15)
+        except Exception:  # noqa: BLE001
+            self.stats.bump("viewer_fail")
+            return
+        if getattr(self._resp, "status", 200) != 200:
+            self.stats.bump("viewer_fail")
+            return
+        buf = []
+        while not self.stop.is_set():
+            try:
+                raw = self._resp.readline()
+            except (socket.timeout, TimeoutError):
+                continue
+            except Exception:  # noqa: BLE001 — connection dropped under load
+                if not self.stop.is_set():
+                    self.stats.bump("viewer_drop")
+                return
+            if not raw:  # server closed the stream
+                if not self.stop.is_set():
+                    self.stats.bump("viewer_drop")
+                return
+            line = raw.decode("utf-8", "replace").rstrip("\r\n")
+            if line == "":
+                if buf:
+                    self._on_frame("".join(buf))
+                    buf = []
+            elif line.startswith("data:"):
+                buf.append(line[len("data:"):].strip())
+
+    def _on_frame(self, data: str):
+        view_ms = None
+        try:
+            env = json.loads(data)
+            inner = env.get("data") if isinstance(env, dict) else None
+            if isinstance(inner, dict) and "_lt_ts" in inner:
+                view_ms = (time.monotonic() - float(inner["_lt_ts"])) * 1000
+        except Exception:  # noqa: BLE001 — keepalives / non-JSON frames
+            pass
+        self.stats.add_event(view_ms)
+
+
+def run_viewer_pool(base: str, fest: int, stats: Stats, vmin: int, vmax: int,
+                    period: float, duration: float, stop_all: threading.Event):
+    """Hold a fleet of SSE viewers that continually ramps between vmin and vmax.
+
+    The target count traces a triangle wave (vmin -> vmax -> vmin every
+    `period` seconds), so the server sees fan-out fan in and out the whole run.
+    """
+    viewers: list[Viewer] = []
+    start = time.monotonic()
+    while not stop_all.is_set() and time.monotonic() - start < duration:
+        viewers = [v for v in viewers if v.is_alive()]  # drop dead/failed
+        t = time.monotonic() - start
+        if vmax <= vmin or period <= 0:
+            target = vmin
+        else:
+            phase = (t % period) / period
+            tri = 1 - abs(2 * phase - 1)  # 0 -> 1 -> 0
+            target = round(vmin + (vmax - vmin) * tri)
+        while len(viewers) < target:
+            v = Viewer(base, fest, stats)
+            v.start()
+            viewers.append(v)
+        while len(viewers) > target:
+            viewers.pop().shutdown()
+        stats.note_peak(len(viewers))
+        time.sleep(1)
+    for v in viewers:
+        v.shutdown()
+    for v in viewers:
+        v.join(timeout=3)
+
+
+def print_report(stats: Stats, duration: float, vmin: int, vmax: int):
+    em, vm = stats.edit_ms, stats.view_ms
+    total_edits = stats.edit_ok + stats.edit_err
+    eps = total_edits / duration if duration else 0
+    print("\n================ realtime demo report ================", flush=True)
+    print(f"  duration {duration:.0f}s   viewers {vmin}-{vmax} (peak {stats.peak_viewers})", flush=True)
+    print(f"  edits: {total_edits} total  {stats.edit_ok} ok  {stats.edit_err} err  ({eps:.1f}/s)", flush=True)
+    print(f"  SSE events received {stats.events}  (viewer connect fails {stats.viewer_fail}, drops {stats.viewer_drop})", flush=True)
+    print(f"\n  {'metric':<22}{'p50':>9}{'p95':>9}{'p99':>9}{'max':>9}{'n':>8}", flush=True)
+    print(f"  {'-' * 64}", flush=True)
+    print(f"  {'edit latency ms':<22}{pct(em,.5):>9.0f}{pct(em,.95):>9.0f}{pct(em,.99):>9.0f}{(max(em) if em else 0):>9.0f}{len(em):>8}", flush=True)
+    print(f"  {'view latency ms':<22}{pct(vm,.5):>9.0f}{pct(vm,.95):>9.0f}{pct(vm,.99):>9.0f}{(max(vm) if vm else 0):>9.0f}{len(vm):>8}", flush=True)
+    print("======================================================", flush=True)
+    print("  edit = editor PUT/POST round-trip; view = edit->viewer SSE propagation (OD/KSI).", flush=True)
+
+
 def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
-             token: str, duration: float, interval: float,
-             burst: int, burst_teams: int) -> None:
+             token: str, duration: float, eps: float,
+             burst: int, burst_teams: int,
+             viewers_min: int, viewers_max: int, ramp_period: float) -> None:
     rng = random.Random()
     c = Client(base, token)
+    stats = Stats()
+    interval = (1.0 / eps) if eps > 0 else 0.3
 
     # Pull current state once; we are the only editor, so we mutate local copies
     # and PUT them back (OD/KSI replace the whole state blob each edit).
@@ -252,7 +439,17 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
     n_ksi_answers = len(ksi_state["themes"][0]["answers"][0]) if n_ksi_themes else 0
 
     print(f"simulating: OD({n_entries}x{n_od_teams}) KSI({n_ksi_themes}t x{n_participants}p) "
-          f"EK match {ek_match}({n_ek_teams}t x{n_themes}th x{n_answers}a) for {duration:.0f}s", flush=True)
+          f"EK match {ek_match}({n_ek_teams}t x{n_themes}th x{n_answers}a) for {duration:.0f}s "
+          f"@ {eps:.1f} edits/s, viewers {viewers_min}-{viewers_max}", flush=True)
+
+    # Hold a continually-ramping fleet of SSE viewers for the whole run.
+    stop_all = threading.Event()
+    pool = threading.Thread(
+        target=run_viewer_pool,
+        args=(base, fest, stats, viewers_min, viewers_max, ramp_period, duration, stop_all),
+        daemon=True,
+    )
+    pool.start()
 
     # EK marks can only be edited on an active match; reopen it for the demo.
     # teardown restores its finished status from the snapshot.
@@ -261,60 +458,89 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
     except Exception as e:  # noqa: BLE001
         print(f"  warning: could not reopen EK match {ek_match}: {e}", flush=True)
 
-    od_marks = [10, 20, 30, 40, 50]
-    # Concentrate edits on the FIRST round/theme/match and the first handful of
-    # teams/participants, so changes land where a viewer is looking, and do a
-    # burst of cell changes per tick so movement is obvious.
-    od_teams = min(burst_teams, n_od_teams)
+    def timed(fn) -> bool:
+        """Run one HTTP edit, record its latency, return True on success."""
+        t0 = time.monotonic()
+        try:
+            fn()
+            stats.add_edit((time.monotonic() - t0) * 1000, ok=True)
+            return True
+        except urllib.error.HTTPError as e:
+            stats.add_edit((time.monotonic() - t0) * 1000, ok=False)
+            print(f"\n  edit error: {e.code} {e.reason}", flush=True)
+            return False
+        except Exception as e:  # noqa: BLE001 — surface anything else but keep going
+            stats.add_edit((time.monotonic() - t0) * 1000, ok=False)
+            print(f"\n  edit error: {e}", flush=True)
+            return False
+
+    # OD entries hold TEAM NUMBERS, not scores: entries[question][slot] is the
+    # number of a team that "took" that question. A team's total is simply how
+    # many completed questions it appears in (sumRow/teamTookQuestion), and a
+    # number may appear at most once per question (a repeat is flagged as a
+    # duplicate). So we assign DISTINCT real team numbers, with a varying random
+    # subset of teams taking each question — that makes the Итог standings
+    # re-sort between ticks without ever producing duplicates.
+    od_numbers = []
+    for t in od_state.get("teams", []):
+        num = t.get("number") if isinstance(t, dict) else t
+        if isinstance(num, int) and num > 0:
+            od_numbers.append(num)
+    # Concentrate KSI edits on the first handful of participants so changes land
+    # where a viewer is looking, in a burst per tick.
     ksi_parts = min(burst_teams, n_participants)
+    rounds = min(24, n_entries)
     deadline = time.monotonic() + duration
     edits = {"od": 0, "ksi": 0, "ek": 0}
-    errors = 0
     nxt = 0
     while time.monotonic() < deadline:
         which = ("od", "ksi", "ek")[nxt % 3]
         nxt += 1
-        try:
-            if which == "od" and n_entries and n_od_teams:
-                # Boost a rotating team to the max across the first rounds (and
-                # knock the previous one down) so the Итог standings visibly
-                # re-sort. Rounds must be marked complete — the results table
-                # only aggregates completed rounds.
-                rounds = min(10, n_entries)
-                hot = nxt % od_teams
-                cold = (hot - 1) % od_teams
-                for r in range(rounds):
-                    od_state["completed"][r] = True
-                    od_state["entries"][r][hot] = 50
-                    od_state["entries"][r][cold] = 0
-                c.put_json(f"/api/fest/{fest}/games/{od}/state", od_state)
+        if which == "od" and n_entries and od_numbers:
+            # Each tick, re-roll which distinct teams "took" each (completed)
+            # question. Totals = #questions-taken, so varying membership makes
+            # the standings re-sort; distinct numbers per column means no
+            # duplicate flags. Rounds must be complete — Итог only aggregates
+            # completed questions.
+            for r in range(rounds):
+                od_state["completed"][r] = True
+                row = od_state["entries"][r]
+                present = [n for n in od_numbers if rng.random() < 0.6]
+                rng.shuffle(present)
+                for i in range(len(row)):
+                    row[i] = present[i] if i < len(present) else 0
+            od_state["_lt_ts"] = time.monotonic()  # propagation stamp (echoed in broadcast)
+            if timed(lambda: c.put_json(f"/api/fest/{fest}/games/{od}/state", od_state)):
                 edits["od"] += 1
-            elif which == "ksi" and n_ksi_themes and n_participants:
-                for _ in range(burst):
-                    p = rng.randrange(ksi_parts)
-                    q = rng.randrange(n_ksi_answers)
-                    cur = ksi_state["themes"][0]["answers"][p][q]
-                    ksi_state["themes"][0]["answers"][p][q] = "wrong" if cur == "right" else "right"
-                c.put_json(f"/api/fest/{fest}/games/{ksi}/state", ksi_state)
+        elif which == "ksi" and n_ksi_themes and n_participants:
+            for _ in range(burst):
+                p = rng.randrange(ksi_parts)
+                q = rng.randrange(n_ksi_answers)
+                cur = ksi_state["themes"][0]["answers"][p][q]
+                ksi_state["themes"][0]["answers"][p][q] = "wrong" if cur == "right" else "right"
+            ksi_state["_lt_ts"] = time.monotonic()
+            if timed(lambda: c.put_json(f"/api/fest/{fest}/games/{ksi}/state", ksi_state)):
                 edits["ksi"] += 1
-            else:
-                for _ in range(max(1, burst // 2)):
-                    c.post_json(f"/api/fest/{fest}/games/{ek}/matches/{ek_match}/update", {
+        else:
+            ok_any = False
+            for _ in range(max(1, burst // 2)):
+                ok_any = timed(lambda: c.post_json(
+                    f"/api/fest/{fest}/games/{ek}/matches/{ek_match}/update", {
                         "team": rng.randrange(n_ek_teams),
                         "theme": rng.randrange(min(6, n_themes)),
                         "answer": rng.randrange(n_answers),
                         "mark": rng.choice(["right", "wrong"]),
-                    })
+                    })) or ok_any
+            if ok_any:
                 edits["ek"] += 1
-        except urllib.error.HTTPError as e:
-            errors += 1
-            print(f"\n  edit error ({which}): {e.code} {e.reason}", flush=True)
-        except Exception as e:  # noqa: BLE001 — surface anything else but keep going
-            errors += 1
-            print(f"\n  edit error ({which}): {e}", flush=True)
-        print(f"\r  edits od={edits['od']} ksi={edits['ksi']} ek={edits['ek']} errors={errors}   ", end="", flush=True)
+        print(f"\r  edits od={edits['od']} ksi={edits['ksi']} ek={edits['ek']} "
+              f"err={stats.edit_err} viewers={stats.peak_viewers} events={stats.events}   ",
+              end="", flush=True)
         time.sleep(interval)
-    print(f"\ndone: {edits}, errors={errors}", flush=True)
+
+    stop_all.set()
+    pool.join(timeout=10)
+    print_report(stats, duration, viewers_min, viewers_max)
 
 
 # ----------------------------------------------------------------- main -----
@@ -342,9 +568,12 @@ def main() -> int:
     sim.add_argument("--ek-match", required=True)
     sim.add_argument("--token", required=True)
     sim.add_argument("--duration", type=float, default=120.0)
-    sim.add_argument("--interval", type=float, default=0.3, help="seconds between ticks (rotates od/ksi/ek)")
+    sim.add_argument("--eps", type=float, default=3.0, help="edits per second (one game edit per tick, rotating od/ksi/ek)")
     sim.add_argument("--burst", type=int, default=8, help="cell changes per tick (visible movement)")
     sim.add_argument("--burst-teams", type=int, default=20, help="restrict edits to the first N teams/participants")
+    sim.add_argument("--viewers-min", type=int, default=0, help="min concurrent SSE viewers in the ramp")
+    sim.add_argument("--viewers-max", type=int, default=0, help="max concurrent SSE viewers in the ramp")
+    sim.add_argument("--ramp-period", type=float, default=60.0, help="seconds for one min->max->min viewer cycle")
 
     args = p.parse_args()
 
@@ -362,7 +591,8 @@ def main() -> int:
             con.close()
     else:
         simulate(args.base, args.fest, args.od, args.ksi, args.ek, args.ek_match,
-                 args.token, args.duration, args.interval, args.burst, args.burst_teams)
+                 args.token, args.duration, args.eps, args.burst, args.burst_teams,
+                 args.viewers_min, args.viewers_max, args.ramp_period)
     return 0
 
 
