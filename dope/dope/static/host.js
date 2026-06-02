@@ -317,12 +317,20 @@ function connectEvents() {
     const venuesScope = `venues:${route.festID}`;
     // Match-scoped events: always route into cached stage data, regardless of
     // which page we're on. Keeps cached panes for other stages live so a later
-    // tab switch sees fresh data without a fetch.
+    // tab switch sees fresh data without a fetch. Events arrive either as a
+    // scoped delta (ops) — the common case since EK broadcasts deltas — or as a
+    // full-state snapshot.
     if (message.scope?.startsWith("match:")) {
+      if (Array.isArray(message.ops)) {
+        applyMatchDelta(message, matchScope);
+        return;
+      }
       if (message.data?.code) {
-        const result = stageCache.applyMatchUpdate(message.data);
+        const view = message.data;
+        view.seq = Number(message.seq) || 0;
+        const result = stageCache.applyMatchUpdate(view);
         if (route.mode === "match" && message.scope === matchScope) {
-          applyUpdatedMatch(message.data, route.matchCode);
+          applyUpdatedMatch(view, route.matchCode);
         }
         if (!result.found && route.mode === "stage") scheduleReload();
         setStatus("saved");
@@ -340,6 +348,57 @@ function connectEvents() {
     scheduleReload();
   });
   events.onerror = () => setStatus("reconnecting");
+}
+
+// matchCodeFromScope extracts the match code from a "match:<gameID>:<code>"
+// scope (codes never contain ':', but join the tail defensively).
+function matchCodeFromScope(scope) {
+  return scope.split(":").slice(2).join(":");
+}
+
+// matchBase returns the cached full view a delta should apply onto: the focused
+// match's `state` when we're on it, else the stage cache. null means we have no
+// base (e.g. a match in a stage we haven't fetched yet).
+function matchBase(code) {
+  if (route.mode === "match" && state?.code === code) return state;
+  return stageCache.matchState(code);
+}
+
+// matchVisible reports whether a match is currently on screen — the focused
+// match in match mode, or any match of the open stage in stage mode. A delta we
+// can't apply (no base / seq gap) only needs a reload when it would change what
+// the user is looking at; otherwise evicting the stale cache entry is enough.
+function matchVisible(code) {
+  if (route.mode === "match") return code === route.matchCode;
+  if (route.mode === "stage") return stageCache.stageCodeForMatch(code) === route.stageCode;
+  return false;
+}
+
+// applyMatchDelta reconstructs the full match view from a scoped delta by
+// applying its ops to the cached base, but only when the delta chains
+// (prevSeq === the base's seq). A missing base or a seq gap can't be applied
+// safely, so we evict the cache entry (forcing a fresh fetch) and reload only
+// when the affected match is on screen — never repainting the placeholder
+// skeleton for an off-screen stage. This is the host-side mirror of viewer.js's
+// handleMatchEvent: without it, delta events (the default for EK) fall through
+// to a full reload, flashing the stage skeleton on every edit.
+function applyMatchDelta(message, matchScope) {
+  const code = matchCodeFromScope(message.scope);
+  const base = matchBase(code);
+  const prev = Number(message.prevSeq) || 0;
+  if (!base || (Number(base.seq) || 0) !== prev) {
+    stageCache.invalidateMatch(code);
+    if (matchVisible(code)) scheduleReload();
+    setStatus("saved");
+    return;
+  }
+  const next = gameTable.applyDeltaOps(base, message.ops);
+  next.seq = Number(message.seq) || prev;
+  stageCache.applyMatchUpdate(next);
+  if (route.mode === "match" && message.scope === matchScope) {
+    applyUpdatedMatch(next, route.matchCode);
+  }
+  setStatus("saved");
 }
 
 // SPA navigation for the EK tab strip: intercept same-origin clicks within

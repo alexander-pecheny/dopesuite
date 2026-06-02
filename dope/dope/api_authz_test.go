@@ -358,6 +358,78 @@ func TestScopedGameStatePatchBroadcastsDelta(t *testing.T) {
 	}
 }
 
+// TestScopedMatchUpdateResponseCarriesBroadcastSeq guards the EK host stage
+// skeleton-flash fix: a match update must return the same seq it broadcast, so
+// the editor's locally-applied view chains onto the delta it also receives over
+// SSE instead of gap-resyncing (which repaints the stage skeleton on every
+// edit). Two consecutive edits must produce strictly increasing, chained seqs.
+func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, gameID := scopedAPITestIDs(t, srv)
+	organizerID, token := createAPITestSession(t, srv, "seq-editor")
+	addAPITestOrganizer(t, srv, festID, organizerID)
+
+	ch := make(chan event, 8)
+	srv.addSubscriber(festID, ch)
+	defer srv.removeSubscriber(festID, ch)
+
+	type envelope struct {
+		Scope   string `json:"scope"`
+		Seq     uint64 `json:"seq"`
+		PrevSeq uint64 `json:"prevSeq"`
+	}
+	nextSeq := func() envelope {
+		t.Helper()
+		select {
+		case ev := <-ch:
+			var env envelope
+			if err := json.Unmarshal(ev.data, &env); err != nil {
+				t.Fatalf("decode envelope: %v (raw %s)", err, ev.data)
+			}
+			return env
+		default:
+			t.Fatal("expected a broadcast event, got none")
+			return envelope{}
+		}
+	}
+
+	theme := 0
+	mark := "right"
+	updatePath := fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/update", festID, gameID, defaultMatchCode)
+	edit := func(ans int) MatchView {
+		t.Helper()
+		a := ans
+		resp := scopedAPIRequest(t, srv, http.MethodPost, updatePath, updateRequest{Team: 0, Theme: &theme, Answer: &a, Mark: &mark}, token)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("update status = %d, body %s", resp.Code, resp.Body.String())
+		}
+		var view MatchView
+		if err := json.Unmarshal(resp.Body.Bytes(), &view); err != nil {
+			t.Fatalf("decode update response: %v", err)
+		}
+		return view
+	}
+
+	firstView := edit(0)
+	firstBroadcast := nextSeq()
+	if firstView.Seq == 0 {
+		t.Fatalf("update response carried no seq; editor cannot chain onto its own broadcast")
+	}
+	if firstView.Seq != firstBroadcast.Seq {
+		t.Fatalf("response seq %d != broadcast seq %d", firstView.Seq, firstBroadcast.Seq)
+	}
+
+	secondView := edit(1)
+	secondBroadcast := nextSeq()
+	if secondView.Seq != secondBroadcast.Seq {
+		t.Fatalf("second response seq %d != broadcast seq %d", secondView.Seq, secondBroadcast.Seq)
+	}
+	if secondBroadcast.PrevSeq != firstBroadcast.Seq || secondBroadcast.Seq != firstBroadcast.Seq+1 {
+		t.Fatalf("second broadcast seq/prevSeq = %d/%d, want %d/%d (must chain)",
+			secondBroadcast.Seq, secondBroadcast.PrevSeq, firstBroadcast.Seq+1, firstBroadcast.Seq)
+	}
+}
+
 func TestScopedGameStateRejectsRatingRosterEdits(t *testing.T) {
 	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {

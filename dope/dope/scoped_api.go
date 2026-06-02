@@ -1110,9 +1110,9 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
+		view.Seq = s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
 		s.broadcastMatchCascade(scope.FestID, mscope.GameID, cascaded)
-		writeJSON(w, data)
+		writeJSONValue(w, view)
 	case "finish":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1145,9 +1145,9 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
+		view.Seq = s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
 		s.broadcastMatchCascade(scope.FestID, mscope.GameID, cascaded)
-		writeJSON(w, data)
+		writeJSONValue(w, view)
 	case "venue":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1180,8 +1180,8 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
-		writeJSON(w, data)
+		view.Seq = s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
+		writeJSONValue(w, view)
 	default:
 		http.NotFound(w, r)
 	}

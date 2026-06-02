@@ -3129,7 +3129,10 @@ values(?, ?, ?, ?, ?)`, festID, revision, eventType, payload, now)
 // wholesale PUT, or any non-PATCH mutation). It still bumps the scope seq so the
 // counter stays uniform with broadcastStateDelta; clients adopt the snapshot and
 // set their lastSeq from it. Use broadcastStateDelta for in-place PATCH edits.
-func (s *server) broadcastState(festID int64, scope string, revision int64, payload []byte) {
+// Returns the seq it assigned so a caller can echo it in its HTTP response,
+// keeping a client's locally-applied view in lockstep with the broadcast it
+// will also receive over SSE.
+func (s *server) broadcastState(festID int64, scope string, revision int64, payload []byte) uint64 {
 	s.invalidateFestViewCache(festID)
 	s.seqMu.Lock()
 	defer s.seqMu.Unlock()
@@ -3138,18 +3141,20 @@ func (s *server) broadcastState(festID int64, scope string, revision int64, payl
 		payload = eventSnapshotJSON(scope, revision, seq, payload)
 	}
 	s.broadcast(event{festID: festID, revision: revision, data: payload})
+	return seq
 }
 
 // broadcastMatchView fans out a match-scope update as a minimal delta when ops
 // are available (cheaper than the full view) and as a full-state snapshot
 // otherwise. Centralizes the delta-or-snapshot choice for the match handlers.
-func (s *server) broadcastMatchView(festID int64, mscope matchScope, revision int64, deltaOps, data []byte) {
+// Returns the seq assigned to the broadcast so the handler can stamp it on the
+// HTTP response.
+func (s *server) broadcastMatchView(festID int64, mscope matchScope, revision int64, deltaOps, data []byte) uint64 {
 	scope := matchScopeKey(mscope)
 	if len(deltaOps) > 0 {
-		s.broadcastStateDelta(festID, scope, revision, deltaOps)
-		return
+		return s.broadcastStateDelta(festID, scope, revision, deltaOps)
 	}
-	s.broadcastState(festID, scope, revision, data)
+	return s.broadcastState(festID, scope, revision, data)
 }
 
 // broadcastStateDelta fans out a scoped DELTA (the ops that produced the new
@@ -3157,7 +3162,7 @@ func (s *server) broadcastMatchView(festID int64, mscope matchScope, revision in
 // ~100-byte op list rather than the full game blob. Seq assignment and fan-out
 // happen under seqMu so per-scope event order matches seq order; a client whose
 // lastSeq != prevSeq resyncs.
-func (s *server) broadcastStateDelta(festID int64, scope string, revision int64, ops []byte) {
+func (s *server) broadcastStateDelta(festID int64, scope string, revision int64, ops []byte) uint64 {
 	s.invalidateFestViewCache(festID)
 	s.seqMu.Lock()
 	defer s.seqMu.Unlock()
@@ -3165,6 +3170,7 @@ func (s *server) broadcastStateDelta(festID int64, scope string, revision int64,
 	seq := s.bumpSeqLocked(scope)
 	payload := eventDeltaJSON(scope, revision, seq, prev, ops)
 	s.broadcast(event{festID: festID, revision: revision, data: payload})
+	return seq
 }
 
 // bumpSeqLocked increments and returns the scope's seq. Caller holds seqMu.
