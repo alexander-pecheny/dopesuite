@@ -82,11 +82,21 @@
 
     // applyStageBatch folds an array of MatchViews (from a per-stage or bulk
     // fetch) into the cache and notifies any open pane.
+    //
+    // A fetch can race live SSE deltas: it may have read the match BEFORE an
+    // edit committed, so its `seq` lags what we've already applied in place.
+    // Merging by seq (never replace a cached view with an older-or-equal-seq
+    // one) keeps a slow/background prefetch from clobbering newer delta state —
+    // which would otherwise desync lastSeq and make the next delta look like a
+    // gap. Views without a seq (legacy/no broadcasts yet) always apply.
     function applyStageBatch(stageCode, batchedMatches) {
       const data = ensureStageData(stageCode);
       if (Array.isArray(batchedMatches)) {
         for (const m of batchedMatches) {
-          if (m?.code) data.stateByCode.set(m.code, m);
+          if (!m?.code) continue;
+          const existing = data.stateByCode.get(m.code);
+          if (existing && Number(existing.seq || 0) > Number(m.seq || 0)) continue;
+          data.stateByCode.set(m.code, m);
         }
       }
       const pane = stagePaneByCode.get(stageCode);
@@ -214,13 +224,15 @@
       return stageDataByCode.get(stageCode)?.stateByCode.get(code) || null;
     }
 
-    // invalidateMatch drops a match's cached view and forces its stage to
-    // refetch on next access — used when a delta can't be safely applied (no
-    // base or a seq gap) so the next render/prefetch pulls a fresh, correct view.
+    // invalidateMatch forces a match's stage to refetch on next access, used
+    // when a delta can't be safely applied (no base or a seq gap). It KEEPS the
+    // last-good cached view so the frame keeps showing real (if briefly stale)
+    // data until the refetch lands — dropping it would repaint the title-only
+    // placeholder ("skeleton") on every gap. The seq-aware merge in
+    // applyStageBatch then adopts the fresh view.
     function invalidateMatch(code) {
       const stageCode = matchCodeToStageCode.get(code);
       if (!stageCode) return;
-      stageDataByCode.get(stageCode)?.stateByCode.delete(code);
       stageFetchPromises.delete(stageCode);
     }
 
