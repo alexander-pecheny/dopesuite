@@ -527,51 +527,23 @@ function applyMatchView(view, scope, matchScope) {
 // scores/marks, so an existing rendered table can be patched cell-by-cell
 // instead of rebuilt. Used for both the focused match view and each stage
 // frame (so live updates don't tear down and re-render the whole battle).
+// canPatchMatchTable: shared shape check plus the viewer's structural extras —
+// the read-only table renders the venue/title in a header and place as text
+// (with medal styling), so a change there needs a rebuild rather than a patch.
 function canPatchMatchTable(previous, next) {
   if (!previous || !next) return false;
-  if (previous.code !== next.code || previous.title !== next.title || previous.finished !== next.finished) return false;
   if (matchTitleFor(previous) !== matchTitleFor(next)) return false;
-  if (!gameTable.sameArray(previous.questionValues, next.questionValues)) return false;
-  if ((previous.teams || []).length !== (next.teams || []).length) return false;
-  for (let i = 0; i < next.teams.length; i++) {
-    const prevTeam = previous.teams[i];
-    const nextTeam = next.teams[i];
-    if (prevTeam.name !== nextTeam.name || formatPlace(prevTeam.place) !== formatPlace(nextTeam.place)) return false;
-    if ((prevTeam.themes || []).length !== (nextTeam.themes || []).length) return false;
-    if (shootoutThemesFor(prevTeam).length !== shootoutThemesFor(nextTeam).length) return false;
+  if (!gameTable.canPatchScoreShape(previous, next)) return false;
+  const prevTeams = previous.teams || [];
+  const nextTeams = next.teams || [];
+  for (let i = 0; i < nextTeams.length; i++) {
+    if (formatPlace(prevTeams[i].place) !== formatPlace(nextTeams[i].place)) return false;
   }
   return true;
 }
 
 function patchMatchTable(index, matchState) {
-  matchState.teams.forEach((team, teamIndex) => {
-    setIndexedTextOn(index, "total", {team: teamIndex}, team.total);
-    setIndexedTextOn(index, "plus", {team: teamIndex}, team.plus);
-    setIndexedTextOn(index, "tiebreak", {team: teamIndex}, team.shootoutTotal ?? team.tiebreak);
-    [0, 1, 2, 3, 4].forEach((idx) => {
-      setIndexedTextOn(index, "correctCount", {team: teamIndex, valueIndex: idx}, team.correctCounts[4 - idx]);
-    });
-    team.themes.forEach((theme, themeIndex) => {
-      patchTheme(index, teamIndex, themeIndex, false, theme);
-    });
-    shootoutThemesFor(team).forEach((theme, themeIndex) => {
-      patchTheme(index, teamIndex, themeIndex, true, theme);
-    });
-  });
-}
-
-function patchTheme(index, teamIndex, themeIndex, isShootout, theme) {
-  const shootout = isShootout ? "1" : "0";
-  setIndexedTextOn(index, "themeScore", {team: teamIndex, shootout, theme: themeIndex}, theme.score);
-  theme.answers.forEach((mark, answerIndex) => {
-    const cell = index?.get("answer", {team: teamIndex, shootout, theme: themeIndex, answer: answerIndex});
-    gameTable.setMarkClass(cell, mark);
-  });
-}
-
-function setIndexedTextOn(index, name, values, value) {
-  const node = index?.get(name, values);
-  if (node) gameTable.setNodeText(node, value, formatNumber);
+  gameTable.patchScoreTable(index, matchState, {formatNumber});
 }
 
 function resetReadonlyTableIndex() {

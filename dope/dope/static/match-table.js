@@ -371,6 +371,62 @@
     if (mark) node.classList.add(mark);
   }
 
+  // canPatchScoreShape reports whether `next` can be patched into a table built
+  // for `previous` without a rebuild — i.e. the table SHAPE (team/theme counts,
+  // team names, finished flag, question values) is unchanged and only cell
+  // VALUES (scores, marks, players, places) differ. Callers add their own extra
+  // gates (title, venue, place) for fields their table renders structurally.
+  // Shared by the host (editable) and viewer (read-only) so a live edit patches
+  // in place instead of tearing down and rebuilding the whole battle.
+  function canPatchScoreShape(previous, next) {
+    if (!previous || !next) return false;
+    if (previous.code !== next.code || previous.finished !== next.finished) return false;
+    if (!sameArray(previous.questionValues, next.questionValues)) return false;
+    const prevTeams = previous.teams || [];
+    const nextTeams = next.teams || [];
+    if (prevTeams.length !== nextTeams.length) return false;
+    for (let i = 0; i < nextTeams.length; i++) {
+      if (prevTeams[i].name !== nextTeams[i].name) return false;
+      if ((prevTeams[i].themes || []).length !== (nextTeams[i].themes || []).length) return false;
+      if ((prevTeams[i].shootoutThemes || []).length !== (nextTeams[i].shootoutThemes || []).length) return false;
+    }
+    return true;
+  }
+
+  // patchScoreTable updates a built score table in place from a MatchView via
+  // its score index (createScoreTableIndex), touching only the value cells —
+  // totals, plus, tiebreak, correct counts, theme scores, answer marks — common
+  // to the host and viewer tables. The optional patchTeam/patchTheme hooks let
+  // the host also patch its editable-only cells (place inputs, player selects);
+  // the viewer omits them. opts.formatNumber formats numeric text.
+  function patchScoreTable(index, matchState, opts = {}) {
+    if (!index || !matchState) return;
+    const fmt = opts.formatNumber;
+    const text = (name, values, value) => {
+      const node = index.get(name, values);
+      if (node) setNodeText(node, value, fmt);
+    };
+    (matchState.teams || []).forEach((team, t) => {
+      text("total", {team: t}, team.total);
+      text("plus", {team: t}, team.plus);
+      text("tiebreak", {team: t}, team.shootoutTotal ?? team.tiebreak);
+      for (let i = 0; i < 5; i++) {
+        text("correctCount", {team: t, valueIndex: i}, (team.correctCounts || [])[4 - i]);
+      }
+      opts.patchTeam?.(index, t, team);
+      const patchRow = (theme, themeIndex, isShootout) => {
+        const shootout = isShootout ? "1" : "0";
+        text("themeScore", {team: t, shootout, theme: themeIndex}, theme.score);
+        (theme.answers || []).forEach((mark, a) => {
+          setMarkClass(index.get("answer", {team: t, shootout, theme: themeIndex, answer: a}), mark);
+        });
+        opts.patchTheme?.(index, t, themeIndex, shootout, theme);
+      };
+      (team.themes || []).forEach((theme, ti) => patchRow(theme, ti, false));
+      (team.shootoutThemes || []).forEach((theme, ti) => patchRow(theme, ti, true));
+    });
+  }
+
   function renderGameBreadcrumbs(root, options = {}) {
     if (!root) return;
     const festTitle = String(options.festTitle || "Фест").trim() || "Фест";
@@ -1719,6 +1775,8 @@
     createScoreTableIndex,
     setNodeText,
     setMarkClass,
+    canPatchScoreShape,
+    patchScoreTable,
     renderGameBreadcrumbs,
     parseScopedEvent,
     createStateSync,
