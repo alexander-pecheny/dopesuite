@@ -199,11 +199,23 @@
       return pane;
     }
 
+    // applyMatchUpdate folds a single MatchView into the cache and re-renders
+    // its frame. Monotonic by seq (same rule as applyStageBatch): never regress
+    // to an older-seq view. Several host edits can be in flight at once, and an
+    // optimistic POST response carries its OWN seq + snapshot — which can land
+    // AFTER the ordered SSE delta stream has already advanced the cached view
+    // past it. Re-applying that older snapshot would both flash stale scores and
+    // desync the seq, making the next delta look like a gap (→ refetch → stage
+    // skeleton flash). Seqless views (0) always apply (legacy / pre-broadcast).
     function applyMatchUpdate(updated) {
       if (!updated?.code) return {found: false};
       const stageCode = matchCodeToStageCode.get(updated.code);
       if (!stageCode) return {found: false};
       const data = ensureStageData(stageCode);
+      const existing = data.stateByCode.get(updated.code);
+      if (existing && Number(existing.seq || 0) > Number(updated.seq || 0)) {
+        return {found: true, stageCode, pane: stagePaneByCode.get(stageCode), stale: true};
+      }
       data.stateByCode.set(updated.code, updated);
       const pane = stagePaneByCode.get(stageCode);
       if (pane) {
