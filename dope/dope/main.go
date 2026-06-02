@@ -2,8 +2,10 @@ package main
 
 import (
 	"compress/gzip"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -166,6 +168,14 @@ func main() {
 	noCacheAssets := assetMode == "disk"
 	srv.assets = assets
 	srv.assetNoCache = noCacheAssets
+	// In embed mode the asset bytes change only on deploy, so precompute a
+	// content-hash ETag per file: it gives a strong validator (embed files
+	// have a zero ModTime, so without one a browser revalidation re-downloads
+	// the whole file instead of getting a 304) and lets us cache aggressively.
+	var assetETags map[string]string
+	if !noCacheAssets {
+		assetETags = buildAssetETags(assets)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", srv.handlePublicIndex)
@@ -191,7 +201,7 @@ func main() {
 	mux.HandleFunc("/api/auth/password", srv.handleAuthPassword)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
-	mux.Handle("/static/", staticFileServer(assets, noCacheAssets))
+	mux.Handle("/static/", staticFileServer(assets, noCacheAssets, assetETags))
 
 	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
 	if port == "" {
@@ -241,7 +251,7 @@ func staticSource() (fs.FS, string) {
 	return staticFiles, "embed"
 }
 
-func staticFileServer(source fs.FS, noCache bool) http.Handler {
+func staticFileServer(source fs.FS, noCache bool, etags map[string]string) http.Handler {
 	handler := http.FileServer(http.FS(source))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -250,14 +260,40 @@ func staticFileServer(source fs.FS, noCache bool) http.Handler {
 		case strings.HasPrefix(r.URL.Path, "/static/fonts/"):
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		default:
-			// In embed mode the asset bytes are baked into the binary
-			// and only change when a new build is deployed. Letting
-			// browsers skip revalidation for a few minutes makes page
-			// loads dramatically cheaper at scale.
-			w.Header().Set("Cache-Control", "public, max-age=300")
+			// Embed-mode asset bytes change only on deploy. The content-hash
+			// ETag is a strong validator (http.FileServer would otherwise have
+			// no Last-Modified for embedded files and re-send the whole body on
+			// every revalidation), so an expired cache entry costs a tiny 304
+			// instead of a full re-download. max-age keeps repeat loads request-
+			// free; stale-while-revalidate keeps any revalidation off the
+			// critical path. A new deploy changes the hash, busting the cache.
+			if tag := etags[r.URL.Path]; tag != "" {
+				w.Header().Set("ETag", tag)
+			}
+			w.Header().Set("Cache-Control", "public, max-age=3600, stale-while-revalidate=604800")
 		}
 		handler.ServeHTTP(w, r)
 	})
+}
+
+// buildAssetETags precomputes a strong content-hash ETag for every embedded
+// static file, keyed by its request path ("/static/..."). Computed once at
+// startup; used only in embed mode (disk mode serves no-cache for live edits).
+func buildAssetETags(source fs.FS) map[string]string {
+	etags := map[string]string{}
+	_ = fs.WalkDir(source, "static", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		b, rerr := fs.ReadFile(source, path)
+		if rerr != nil {
+			return nil
+		}
+		sum := sha256.Sum256(b)
+		etags["/"+path] = `"` + hex.EncodeToString(sum[:16]) + `"`
+		return nil
+	})
+	return etags
 }
 
 // gzipPool recycles gzip.Writer instances. Each writer holds a ~64KB internal
