@@ -231,7 +231,8 @@ class Client:
 
 
 def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
-             token: str, duration: float, interval: float) -> None:
+             token: str, duration: float, interval: float,
+             burst: int, burst_teams: int) -> None:
     rng = random.Random()
     c = Client(base, token)
 
@@ -260,7 +261,12 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
     except Exception as e:  # noqa: BLE001
         print(f"  warning: could not reopen EK match {ek_match}: {e}", flush=True)
 
-    od_marks = [0, 10, 20, 30, 40, 50]
+    od_marks = [10, 20, 30, 40, 50]
+    # Concentrate edits on the FIRST round/theme/match and the first handful of
+    # teams/participants, so changes land where a viewer is looking, and do a
+    # burst of cell changes per tick so movement is obvious.
+    od_teams = min(burst_teams, n_od_teams)
+    ksi_parts = min(burst_teams, n_participants)
     deadline = time.monotonic() + duration
     edits = {"od": 0, "ksi": 0, "ek": 0}
     errors = 0
@@ -270,27 +276,35 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
         nxt += 1
         try:
             if which == "od" and n_entries and n_od_teams:
-                r = rng.randrange(n_entries)
-                j = rng.randrange(n_od_teams)
-                od_state["entries"][r][j] = rng.choice(od_marks)
+                # Boost a rotating team to the max across the first rounds (and
+                # knock the previous one down) so the Итог standings visibly
+                # re-sort. Rounds must be marked complete — the results table
+                # only aggregates completed rounds.
+                rounds = min(10, n_entries)
+                hot = nxt % od_teams
+                cold = (hot - 1) % od_teams
+                for r in range(rounds):
+                    od_state["completed"][r] = True
+                    od_state["entries"][r][hot] = 50
+                    od_state["entries"][r][cold] = 0
                 c.put_json(f"/api/fest/{fest}/games/{od}/state", od_state)
                 edits["od"] += 1
             elif which == "ksi" and n_ksi_themes and n_participants:
-                t = rng.randrange(n_ksi_themes)
-                p = rng.randrange(n_participants)
-                q = rng.randrange(n_ksi_answers)
-                cur = ksi_state["themes"][t]["answers"][p][q]
-                ksi_state["themes"][t]["answers"][p][q] = "wrong" if cur == "right" else "right"
+                for _ in range(burst):
+                    p = rng.randrange(ksi_parts)
+                    q = rng.randrange(n_ksi_answers)
+                    cur = ksi_state["themes"][0]["answers"][p][q]
+                    ksi_state["themes"][0]["answers"][p][q] = "wrong" if cur == "right" else "right"
                 c.put_json(f"/api/fest/{fest}/games/{ksi}/state", ksi_state)
                 edits["ksi"] += 1
             else:
-                payload = {
-                    "team": rng.randrange(n_ek_teams),
-                    "theme": rng.randrange(n_themes),
-                    "answer": rng.randrange(n_answers),
-                    "mark": rng.choice(["right", "wrong", ""]),
-                }
-                c.post_json(f"/api/fest/{fest}/games/{ek}/matches/{ek_match}/update", payload)
+                for _ in range(max(1, burst // 2)):
+                    c.post_json(f"/api/fest/{fest}/games/{ek}/matches/{ek_match}/update", {
+                        "team": rng.randrange(n_ek_teams),
+                        "theme": rng.randrange(min(6, n_themes)),
+                        "answer": rng.randrange(n_answers),
+                        "mark": rng.choice(["right", "wrong"]),
+                    })
                 edits["ek"] += 1
         except urllib.error.HTTPError as e:
             errors += 1
@@ -328,7 +342,9 @@ def main() -> int:
     sim.add_argument("--ek-match", required=True)
     sim.add_argument("--token", required=True)
     sim.add_argument("--duration", type=float, default=120.0)
-    sim.add_argument("--interval", type=float, default=0.7, help="seconds between edits (rotates od/ksi/ek)")
+    sim.add_argument("--interval", type=float, default=0.3, help="seconds between ticks (rotates od/ksi/ek)")
+    sim.add_argument("--burst", type=int, default=8, help="cell changes per tick (visible movement)")
+    sim.add_argument("--burst-teams", type=int, default=20, help="restrict edits to the first N teams/participants")
 
     args = p.parse_args()
 
@@ -346,7 +362,7 @@ def main() -> int:
             con.close()
     else:
         simulate(args.base, args.fest, args.od, args.ksi, args.ek, args.ek_match,
-                 args.token, args.duration, args.interval)
+                 args.token, args.duration, args.interval, args.burst, args.burst_teams)
     return 0
 
 
