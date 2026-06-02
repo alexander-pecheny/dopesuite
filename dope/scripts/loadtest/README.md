@@ -93,3 +93,27 @@ Start small, confirm clean, then climb until something bends:
 
 Find the knee, then decide whether the fix is config (nginx workers, more vCPU) or code
 (per-fest locking instead of the global `s.mu`).
+
+## Realtime multi-game demo (`realtime_demo.sh`)
+
+Drives watchable OD/KSI/EK edits on the public `test` fest, optionally with a
+continually-ramping fleet of SSE viewers, and reports edit & view (propagation)
+latency percentiles. Restores the fest + purges its own audit_log rows + VACUUMs
+on exit.
+
+```bash
+# prod (over SSH), 30–100 ramping viewers, 5 edits/s, 10 min
+VIEWERS=30-100 EPS=5 DURATION=600 scripts/loadtest/realtime_demo.sh
+
+# local repro: dedicated GOMAXPROCS=1 server on a throwaway tournament.db copy
+LOCAL=1 VIEWERS=30-100 scripts/loadtest/realtime_demo.sh
+```
+
+## Gotcha: SSE needs HTTP/2 (fixed 2026-06-02)
+
+Viewer pages hold a long-lived `EventSource`. Over **HTTP/1.1** browsers cap ~6
+connections per host, so ~6 open viewer tabs exhaust the pool and any *new* tab's
+fetches (EK bracket → skeleton forever) or `EventSource` (OD/KSI → no live
+updates) hang. This is load-independent — purely the connection count. Fix: serve
+**HTTP/2** at nginx (`listen 443 ssl http2;`), which multiplexes unlimited streams
+over one connection. Verify: `curl -o /dev/null -w '%{http_version}\n' https://dope.pecheny.me/` → `2`.
