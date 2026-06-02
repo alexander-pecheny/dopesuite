@@ -2588,18 +2588,21 @@ func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) 
 	if s.db == nil {
 		return s.applyLegacyUpdate(req)
 	}
-	return s.applyMatchUpdateUsing(festID, req,
+	// Legacy single-fest path: no SSE fan-out, so the cascade list is discarded.
+	view, data, _, err := s.applyMatchUpdateUsing(festID, req,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchState(ctx, q, festID, code)
 		},
 		func() (MatchView, error) {
 			return s.loadMatchViewLocked(festID, code)
 		})
+	return view, data, err
 }
 
-func (s *server) applyScopedMatchUpdate(scope matchScope, req updateRequest) (MatchView, []byte, error) {
+func (s *server) applyScopedMatchUpdate(scope matchScope, req updateRequest) (MatchView, []byte, []MatchView, error) {
 	if s.db == nil {
-		return s.applyLegacyUpdate(req)
+		view, data, err := s.applyLegacyUpdate(req)
+		return view, data, nil, err
 	}
 	return s.applyMatchUpdateUsing(scope.FestID, req,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
@@ -2610,73 +2613,110 @@ func (s *server) applyScopedMatchUpdate(scope matchScope, req updateRequest) (Ma
 		})
 }
 
+// applyMatchUpdateUsing applies one match edit and returns the edited match's
+// view plus `cascaded`: the views of any OTHER matches whose slots changed when
+// the edit resolved the bracket (e.g. finishing a bout advances teams into the
+// next round). The handler broadcasts those too, so spectators see downstream
+// matches update live instead of only on reload.
 func (s *server) applyMatchUpdateUsing(
 	festID int64,
 	req updateRequest,
 	loadMatch func(context.Context, dbQueryer) (dbMatchState, error),
 	loadView func() (MatchView, error),
-) (MatchView, []byte, error) {
+) (MatchView, []byte, []MatchView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	ctx := context.Background()
 	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
-		return MatchView{}, nil, err
+		return MatchView{}, nil, nil, err
 	}
 	defer tx.Rollback()
 
 	match, err := loadMatch(ctx, tx)
 	if err != nil {
-		return MatchView{}, nil, err
+		return MatchView{}, nil, nil, err
 	}
 
 	if req.Finished != nil {
 		if hasMatchEdit(req) {
-			return MatchView{}, nil, errors.New("finished update must be standalone")
+			return MatchView{}, nil, nil, errors.New("finished update must be standalone")
 		}
 		status := "active"
 		if *req.Finished {
 			status = "finished"
 		}
 		if _, err := tx.ExecContext(ctx, `update matches set status = ? where id = ?`, status, match.MatchID); err != nil {
-			return MatchView{}, nil, err
+			return MatchView{}, nil, nil, err
 		}
 		if *req.Finished {
 			assignComputedPlaces(&match.State)
 		}
 	} else {
 		if match.State.Finished {
-			return MatchView{}, nil, errors.New("match is finished")
+			return MatchView{}, nil, nil, errors.New("match is finished")
 		}
 		if err := applyMatchEditTx(ctx, tx, match, req); err != nil {
-			return MatchView{}, nil, err
+			return MatchView{}, nil, nil, err
 		}
 	}
 
 	if err := recalculateMatchResultsForStateTx(ctx, tx, match); err != nil {
-		return MatchView{}, nil, err
+		return MatchView{}, nil, nil, err
 	}
-	if err := resolveGameSlotsTx(ctx, tx, match.GameID); err != nil {
-		return MatchView{}, nil, err
+	affected, err := resolveGameSlotsTx(ctx, tx, match.GameID)
+	if err != nil {
+		return MatchView{}, nil, nil, err
 	}
 	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:update", mustJSON(req))
 	if err != nil {
-		return MatchView{}, nil, err
+		return MatchView{}, nil, nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return MatchView{}, nil, err
+		return MatchView{}, nil, nil, err
 	}
 
 	view, err := loadView()
 	if err != nil {
-		return MatchView{}, nil, err
+		return MatchView{}, nil, nil, err
 	}
 	if revision > 0 {
 		view.Revision = maxInt64(view.Revision, revision)
 	}
 	data, err := json.Marshal(view)
-	return view, data, err
+	if err != nil {
+		return MatchView{}, nil, nil, err
+	}
+
+	// Load the views of downstream matches that changed, skipping the edited
+	// match itself (already returned as `view`). Failures here are non-fatal —
+	// the edit is committed; a missed cascade broadcast just costs a reload.
+	var cascaded []MatchView
+	for _, mid := range affected {
+		if mid == match.MatchID {
+			continue
+		}
+		cv, err := s.loadMatchViewByIDLocked(festID, match.GameID, mid)
+		if err != nil || cv.Code == "" {
+			continue
+		}
+		cascaded = append(cascaded, cv)
+	}
+	return view, data, cascaded, nil
+}
+
+// loadMatchViewByIDLocked loads a match view by its numeric id (used to render
+// downstream matches touched by a bracket cascade). Caller holds s.mu.
+func (s *server) loadMatchViewByIDLocked(festID, gameID, matchID int64) (MatchView, error) {
+	if s.db == nil {
+		return MatchView{}, nil
+	}
+	match, err := loadDBMatchStateWhere(context.Background(), s.db, `m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, festID, gameID)
+	if err != nil {
+		return MatchView{}, err
+	}
+	return matchViewFromDBState(match), nil
 }
 
 func applyMatchEditTx(ctx context.Context, tx *sql.Tx, match dbMatchState, req updateRequest) error {

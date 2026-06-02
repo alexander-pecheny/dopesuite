@@ -35,7 +35,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		if err != nil {
 			t.Fatalf("scope %s: %v", code, err)
 		}
-		if _, _, err := srv.applyScopedMatchUpdate(scope, updateRequest{Finished: &finished}); err != nil {
+		if _, _, _, err := srv.applyScopedMatchUpdate(scope, updateRequest{Finished: &finished}); err != nil {
 			t.Fatalf("finish %s=%v: %v", code, finished, err)
 		}
 	}
@@ -46,7 +46,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		if err != nil {
 			t.Fatalf("scope %s: %v", code, err)
 		}
-		if _, _, err := srv.applyScopedMatchUpdate(scope, updateRequest{Team: teamIndex, Theme: &theme, Answer: &answer, Mark: &value}); err != nil {
+		if _, _, _, err := srv.applyScopedMatchUpdate(scope, updateRequest{Team: teamIndex, Theme: &theme, Answer: &answer, Mark: &value}); err != nil {
 			t.Fatalf("mark %s team %d: %v", code, teamIndex, err)
 		}
 	}
@@ -102,6 +102,75 @@ func TestResolverPropagatesBracket(t *testing.T) {
 	}
 	if teams := slotTeams(t, db, gameID, "C"); !allZero(teams) {
 		t.Fatalf("1/4 slots still resolved after reopening 1/16: %v", teams)
+	}
+}
+
+// TestMatchUpdateBroadcastsCascade verifies that finishing a bout which resolves
+// downstream bracket slots reports those downstream matches as `cascaded`, so the
+// handler can broadcast them and spectators see advancing teams without a reload.
+func TestMatchUpdateBroadcastsCascade(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, gameID := createBracketFixture(t, db)
+	srv := &server{
+		db:              db,
+		subscribers:     make(map[int64]map[chan event]struct{}),
+		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+	}
+	scopeBase := festScope{FestID: festID, GameID: gameID}
+	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
+		t.Fatalf("import seeds: %v", err)
+	}
+
+	apply := func(code string, req updateRequest) []MatchView {
+		t.Helper()
+		scope, err := srv.verifyMatchInScope(t.Context(), scopeBase, code)
+		if err != nil {
+			t.Fatalf("scope %s: %v", code, err)
+		}
+		_, _, cascaded, err := srv.applyScopedMatchUpdate(scope, req)
+		if err != nil {
+			t.Fatalf("apply %s: %v", code, err)
+		}
+		return cascaded
+	}
+	tr := true
+	theme, answer := 0, 4
+	right := "right"
+
+	// Only the 1/16 done so far — the 1/4 reseed needs both games, so C stays
+	// unresolved and must NOT appear in any cascade yet.
+	apply("A", updateRequest{Team: 0, Theme: &theme, Answer: &answer, Mark: &right})
+	for _, v := range apply("A", updateRequest{Finished: &tr}) {
+		if v.Code == "C" {
+			t.Fatalf("1/4 match C cascaded before its reseed could compute")
+		}
+	}
+
+	// Finishing the 1/8 completes both games -> the reseed resolves the 1/4 (C)
+	// slots, so C must come back as a cascaded match (with a renderable view) for
+	// broadcast — the whole point: spectators see the advancing teams live.
+	apply("B", updateRequest{Team: 0, Theme: &theme, Answer: &answer, Mark: &right})
+	cascaded := apply("B", updateRequest{Finished: &tr})
+	var cView *MatchView
+	for i := range cascaded {
+		if cascaded[i].Code == "C" {
+			cView = &cascaded[i]
+		}
+	}
+	if cView == nil {
+		got := make([]string, 0, len(cascaded))
+		for _, v := range cascaded {
+			got = append(got, v.Code)
+		}
+		t.Fatalf("finishing the 1/8 did not cascade the 1/4 match C; cascaded=%v", got)
+	}
+	if len(cView.Teams) == 0 {
+		t.Fatalf("cascaded match C carried no teams view")
 	}
 }
 
