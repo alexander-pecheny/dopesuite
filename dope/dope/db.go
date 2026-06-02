@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"math/big"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -1337,6 +1338,47 @@ func (s *server) serveViewerHTMLWithInit(w http.ResponseWriter, r *http.Request,
 	s.serveInjectedHTML(w, r, "static/viewer.html", viewerInitMarker, data)
 }
 
+// assetRefRe matches a local /static .js/.css reference in an HTML attribute
+// (src=/href=), capturing the attribute name and the path. The [^"?]+ guard
+// skips URLs that already carry a query string.
+var assetRefRe = regexp.MustCompile(`(src|href)="(/static/[^"?]+\.(?:js|css))"`)
+
+// versionAssetRefs appends a "?v=<content-hash>" cache-buster to every local
+// /static .js/.css URL in an HTML body. The hash changes when the file's bytes
+// change, so a deploy busts the browser cache the instant the (no-cache) HTML
+// shell is re-fetched — without it the stable URL keeps serving the cached copy
+// until its max-age expires. URLs whose asset has no known hash (disk/dev mode,
+// where assets are already served no-cache) are left untouched.
+func (s *server) versionAssetRefs(body []byte) []byte {
+	if len(s.assetETags) == 0 {
+		return body
+	}
+	return assetRefRe.ReplaceAllFunc(body, func(m []byte) []byte {
+		sub := assetRefRe.FindSubmatch(m)
+		path := string(sub[2])
+		tag := strings.Trim(s.assetETags[path], `"`)
+		if tag == "" {
+			return m
+		}
+		return []byte(fmt.Sprintf(`%s="%s?v=%s"`, sub[1], path, tag))
+	})
+}
+
+// writeAppHTML cache-busts the body's asset URLs, marks the shell no-cache (it
+// embeds per-request init JSON and deploy-specific version pointers, so it must
+// never be served stale), and writes it. HEAD returns headers only.
+func (s *server) writeAppHTML(w http.ResponseWriter, r *http.Request, body []byte) {
+	body = s.versionAssetRefs(body)
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	_, _ = w.Write(body)
+}
+
 // serveInjectedHTML reads an HTML file from the embedded asset FS, splices
 // the JSON payload over the marker token, and writes it as the response. The
 // caller is responsible for pre-marshaling and for ensuring the marker is
@@ -1358,16 +1400,7 @@ func (s *server) serveInjectedHTML(w http.ResponseWriter, r *http.Request, htmlP
 	out = append(out, body[:idx]...)
 	out = append(out, payload...)
 	out = append(out, body[idx+len(markerBytes):]...)
-	if s.assetNoCache {
-		w.Header().Set("Cache-Control", "no-cache")
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Length", strconv.Itoa(len(out)))
-	if r.Method == http.MethodHead {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	_, _ = w.Write(out)
+	s.writeAppHTML(w, r, out)
 }
 
 func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPayload, error) {
@@ -1489,10 +1522,12 @@ func (s *server) serveAppHTML(w http.ResponseWriter, r *http.Request, path strin
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.assetNoCache {
-		w.Header().Set("Cache-Control", "no-cache")
+	body, err := fs.ReadFile(s.assets, path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
 	}
-	http.ServeFileFS(w, r, s.assets, path)
+	s.writeAppHTML(w, r, body)
 }
 
 func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
