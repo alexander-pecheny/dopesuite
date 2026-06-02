@@ -2588,29 +2588,38 @@ func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) 
 	if s.db == nil {
 		return s.applyLegacyUpdate(req)
 	}
-	// Legacy single-fest path: no SSE fan-out, so the cascade list is discarded.
+	// Legacy single-fest path: no SSE fan-out, so cascade + delta are discarded.
 	view, data, _, err := s.applyMatchUpdateUsing(festID, req,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchState(ctx, q, festID, code)
 		},
 		func() (MatchView, error) {
 			return s.loadMatchViewLocked(festID, code)
-		})
+		}, nil)
 	return view, data, err
 }
 
-func (s *server) applyScopedMatchUpdate(scope matchScope, req updateRequest) (MatchView, []byte, []MatchView, error) {
+// applyScopedMatchUpdate applies a match edit and additionally returns deltaOps:
+// the set-ops that turn the pre-edit view into the new one, when broadcasting
+// them is cheaper than the full view (else nil — caller broadcasts full state).
+func (s *server) applyScopedMatchUpdate(scope matchScope, req updateRequest) (MatchView, []byte, []byte, []MatchView, error) {
 	if s.db == nil {
 		view, data, err := s.applyLegacyUpdate(req)
-		return view, data, nil, err
+		return view, data, nil, nil, err
 	}
-	return s.applyMatchUpdateUsing(scope.FestID, req,
+	var oldData []byte
+	view, data, cascaded, err := s.applyMatchUpdateUsing(scope.FestID, req,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchStateByScope(ctx, q, scope)
 		},
 		func() (MatchView, error) {
 			return s.loadScopedMatchViewLocked(scope)
-		})
+		}, &oldData)
+	if err != nil {
+		return view, data, nil, cascaded, err
+	}
+	deltaOps, _ := matchDeltaOps(oldData, data)
+	return view, data, deltaOps, cascaded, nil
 }
 
 // applyMatchUpdateUsing applies one match edit and returns the edited match's
@@ -2623,9 +2632,21 @@ func (s *server) applyMatchUpdateUsing(
 	req updateRequest,
 	loadMatch func(context.Context, dbQueryer) (dbMatchState, error),
 	loadView func() (MatchView, error),
+	oldDataOut *[]byte,
 ) (MatchView, []byte, []MatchView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Capture the committed pre-image of this match under our exclusive lock,
+	// before the mutation commits, so the caller can broadcast a minimal delta
+	// against it. Atomic with the mutation (same lock hold) — no TOCTOU window.
+	// Best-effort: on any failure oldDataOut stays empty and the caller falls
+	// back to a full-state broadcast.
+	if oldDataOut != nil {
+		if oldView, oerr := loadView(); oerr == nil {
+			*oldDataOut, _ = json.Marshal(oldView)
+		}
+	}
 
 	ctx := context.Background()
 	tx, err := s.beginWriteTx(ctx)
@@ -2949,17 +2970,26 @@ func (s *server) updateMatchVenue(festID int64, code string, number int) (MatchV
 		},
 		func() (MatchView, error) {
 			return s.loadMatchViewLocked(festID, code)
-		})
+		}, nil)
 }
 
-func (s *server) updateScopedMatchVenue(scope matchScope, number int) (MatchView, []byte, error) {
-	return s.updateMatchVenueUsing(scope.FestID, number,
+// updateScopedMatchVenue updates a match's venue and additionally returns
+// deltaOps (set-ops vs the pre-edit view) when a delta broadcast beats the full
+// view; nil otherwise.
+func (s *server) updateScopedMatchVenue(scope matchScope, number int) (MatchView, []byte, []byte, error) {
+	var oldData []byte
+	view, data, err := s.updateMatchVenueUsing(scope.FestID, number,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchStateByScope(ctx, q, scope)
 		},
 		func() (MatchView, error) {
 			return s.loadScopedMatchViewLocked(scope)
-		})
+		}, &oldData)
+	if err != nil {
+		return view, data, nil, err
+	}
+	deltaOps, _ := matchDeltaOps(oldData, data)
+	return view, data, deltaOps, nil
 }
 
 func (s *server) updateMatchVenueUsing(
@@ -2967,12 +2997,21 @@ func (s *server) updateMatchVenueUsing(
 	number int,
 	loadMatch func(context.Context, dbQueryer) (dbMatchState, error),
 	loadView func() (MatchView, error),
+	oldDataOut *[]byte,
 ) (MatchView, []byte, error) {
 	if number <= 0 {
 		return MatchView{}, nil, errors.New("bad venue number")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Pre-image under the exclusive lock for a minimal delta broadcast (see
+	// applyMatchUpdateUsing). Best-effort; empty → caller sends full state.
+	if oldDataOut != nil {
+		if oldView, oerr := loadView(); oerr == nil {
+			*oldDataOut, _ = json.Marshal(oldView)
+		}
+	}
 
 	ctx := context.Background()
 	tx, err := s.beginWriteTx(ctx)
@@ -3099,6 +3138,18 @@ func (s *server) broadcastState(festID int64, scope string, revision int64, payl
 		payload = eventSnapshotJSON(scope, revision, seq, payload)
 	}
 	s.broadcast(event{festID: festID, revision: revision, data: payload})
+}
+
+// broadcastMatchView fans out a match-scope update as a minimal delta when ops
+// are available (cheaper than the full view) and as a full-state snapshot
+// otherwise. Centralizes the delta-or-snapshot choice for the match handlers.
+func (s *server) broadcastMatchView(festID int64, mscope matchScope, revision int64, deltaOps, data []byte) {
+	scope := matchScopeKey(mscope)
+	if len(deltaOps) > 0 {
+		s.broadcastStateDelta(festID, scope, revision, deltaOps)
+		return
+	}
+	s.broadcastState(festID, scope, revision, data)
 }
 
 // broadcastStateDelta fans out a scoped DELTA (the ops that produced the new

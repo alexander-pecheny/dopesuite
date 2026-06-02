@@ -980,6 +980,7 @@ order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
 		if err != nil {
 			return nil, err
 		}
+		view.Seq = s.currentStateSeq(matchScopeKey(mscope))
 		idx, ok := byCode[p.stageCode]
 		if !ok {
 			idx = len(out)
@@ -1034,6 +1035,7 @@ order by m.position, m.id`, scope.FestID, scope.GameID, stageCode)
 		if err != nil {
 			return nil, err
 		}
+		view.Seq = s.currentStateSeq(matchScopeKey(mscope))
 		views = append(views, view)
 	}
 	return views, nil
@@ -1078,6 +1080,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		view.Seq = s.currentStateSeq(matchScopeKey(mscope))
 		writeJSONValue(w, view)
 	case "update":
 		if r.Method != http.MethodPost {
@@ -1102,12 +1105,12 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "bad json", http.StatusBadRequest)
 			return
 		}
-		view, data, cascaded, err := s.applyScopedMatchUpdate(mscope, req)
+		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(mscope, req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s.broadcastState(scope.FestID, matchScopeKey(mscope), view.Revision, data)
+		s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
 		s.broadcastMatchCascade(scope.FestID, mscope.GameID, cascaded)
 		writeJSON(w, data)
 	case "finish":
@@ -1137,12 +1140,12 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "missing finished", http.StatusBadRequest)
 			return
 		}
-		view, data, cascaded, err := s.applyScopedMatchUpdate(mscope, updateRequest{Finished: req.Finished})
+		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(mscope, updateRequest{Finished: req.Finished})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s.broadcastState(scope.FestID, matchScopeKey(mscope), view.Revision, data)
+		s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
 		s.broadcastMatchCascade(scope.FestID, mscope.GameID, cascaded)
 		writeJSON(w, data)
 	case "venue":
@@ -1172,12 +1175,12 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 		if number == 0 {
 			number = req.VenueNumber
 		}
-		view, data, err := s.updateScopedMatchVenue(mscope, number)
+		view, data, ops, err := s.updateScopedMatchVenue(mscope, number)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s.broadcastState(scope.FestID, matchScopeKey(mscope), view.Revision, data)
+		s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
 		writeJSON(w, data)
 	default:
 		http.NotFound(w, r)

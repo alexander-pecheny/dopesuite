@@ -1674,10 +1674,38 @@
     return vertOverflows() || horizOverflows();
   }
 
+  // applyDeltaOps returns a deep clone of `base` with scoped set-ops applied.
+  // Standalone (mirrors createStateSync's applySetPatch) so the read-only viewer
+  // can reconstruct a full match view from a delta without the host sync
+  // controller. Non-"set" ops are skipped.
+  function applyDeltaOps(base, ops) {
+    let next = base == null ? {} : JSON.parse(JSON.stringify(base));
+    for (const op of ops || []) {
+      if (op && op.op && op.op !== "set") continue;
+      next = setAtDeltaPath(next, op?.path || [], op?.value);
+    }
+    return next;
+  }
+
+  function setAtDeltaPath(root, path, value) {
+    if (!path || path.length === 0) return value;
+    const [segment, ...rest] = path;
+    if (typeof segment === "number") {
+      const arr = Array.isArray(root) ? root : [];
+      while (arr.length <= segment) arr.push(null);
+      arr[segment] = setAtDeltaPath(arr[segment], rest, value);
+      return arr;
+    }
+    const obj = root && typeof root === "object" && !Array.isArray(root) ? root : {};
+    obj[segment] = setAtDeltaPath(obj[segment], rest, value);
+    return obj;
+  }
+
   window.DopeTable = {
     th,
     td,
     option,
+    applyDeltaOps,
     buildFlatScoreTable,
     buildTwoRowScoreTable,
     computePlaces,
