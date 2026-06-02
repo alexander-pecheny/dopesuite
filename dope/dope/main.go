@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	_ "net/http/pprof" // gated /debug/pprof handlers on a localhost-only listener (DOPE_PPROF)
 	"os"
 	"sort"
 	"strings"
@@ -195,6 +196,24 @@ func main() {
 		log.Fatalf("bind %s: %v", addr, err)
 	}
 	log.Printf("listening on http://localhost%s/host and http://localhost%s/", addr, addr)
+
+	// Optional pprof on a SEPARATE localhost-only listener so it never rides the
+	// public mux/middleware (and is never reachable through Caddy in prod). Set
+	// DOPE_PPROF=1 for localhost:6060, or DOPE_PPROF=host:port for a custom bind.
+	// The net/http/pprof blank import registered its handlers on DefaultServeMux.
+	if pp := os.Getenv("DOPE_PPROF"); pp != "" {
+		pprofAddr := pp
+		if pp == "1" {
+			pprofAddr = "localhost:6060"
+		}
+		go func() {
+			log.Printf("pprof listening on http://%s/debug/pprof/", pprofAddr)
+			if err := http.ListenAndServe(pprofAddr, nil); err != nil {
+				log.Printf("pprof server stopped: %v", err)
+			}
+		}()
+	}
+
 	httpSrv := &http.Server{
 		Handler:           srv.auditContextMiddleware(gzipMiddleware(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
