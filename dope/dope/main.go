@@ -97,10 +97,12 @@ type MatchView struct {
 	QuestionValues [5]int         `json:"questionValues"`
 	Teams          []TeamView     `json:"teams"`
 	Standings      []StandingView `json:"standings"`
-	// Seq is the match scope's current SSE sequence at fetch time. It is set
-	// only on GET responses so a viewer can seed its per-match lastSeq and chain
-	// onto subsequent deltas; it is never set on broadcast payloads (so the
-	// delta diff ignores it).
+	// Seq is the match scope's current SSE sequence. GET responses carry the
+	// seq at fetch time, and mutating responses (update/finish/venue) carry the
+	// seq their own broadcast assigned — so the editor that issued the edit can
+	// keep its locally-applied view in lockstep with the delta it will also
+	// receive over SSE and chain onto subsequent deltas. It is never set on
+	// broadcast payloads themselves (so the delta diff ignores it).
 	Seq uint64 `json:"seq,omitempty"`
 }
 
