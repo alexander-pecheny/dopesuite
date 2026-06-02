@@ -35,16 +35,30 @@
     const stagePaneByCode = new Map();
     const stageFetchPromises = new Map();
     const matchCodeToStageCode = new Map();
-    let cachesRevision = null;
+    let cachesSignature = null;
 
-    function adoptFest(view) {
-      // Stage caches are tied to a specific fest revision. A revision bump means
-      // the stage list or match metadata may have changed under us; drop caches
-      // so we rebuild against the new shape.
-      if (cachesRevision != null && cachesRevision !== view?.revision) {
+    // stageStructureSignature captures only what determines the pane/frame DOM
+    // shape: the ordered stages (code + type) and, per stage, its ordered match
+    // codes. A score edit bumps the fest revision WITHOUT changing this.
+    function stageStructureSignature() {
+      const stages = schemeStages() || [];
+      return stages
+        .map((s) => `${s.code}#${stageType(s)}:${(getMatches(s) || []).map((m) => m.code).join(",")}`)
+        .join("|");
+    }
+
+    function adoptFest(_view) {
+      // Drop the caches (tearing down panes) only when the stage/match STRUCTURE
+      // changed — not on every revision bump. Every match edit bumps the fest
+      // revision; keying invalidation on the raw revision used to clear() on each
+      // edit-driven refetch, so showStage rebuilt panes with title-only
+      // placeholders — the "skeleton" flash. ensureStageData already reconciles
+      // an in-place match-list change, so a same-structure bump needs no teardown.
+      const signature = stageStructureSignature();
+      if (cachesSignature != null && cachesSignature !== signature) {
         clear();
       }
-      if (view?.revision != null) cachesRevision = view.revision;
+      cachesSignature = signature;
       indexAllStages();
     }
 
@@ -168,7 +182,7 @@
       stagePaneByCode.clear();
       stageFetchPromises.clear();
       matchCodeToStageCode.clear();
-      cachesRevision = null;
+      cachesSignature = null;
     }
 
     // showStage attaches a pane for the given stage to the container and hides
