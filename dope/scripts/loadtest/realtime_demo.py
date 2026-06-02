@@ -43,6 +43,34 @@ import urllib.error
 import urllib.request
 
 
+def install_dns_cache() -> None:
+    """Memoize socket.getaddrinfo so each host resolves exactly once.
+
+    urllib does no DNS caching, so a fleet of hundreds/thousands of viewer
+    threads (plus the editor) each fire a fresh getaddrinfo on every request.
+    That thundering herd overwhelms the local resolver (e.g. Tailscale MagicDNS
+    on 100.100.100.100), which then returns EAI_NONAME spuriously — surfaced as
+    "[Errno 8] nodename nor servname provided, or not known". Resolving each
+    (host, port, ...) once and sharing the result removes the herd entirely.
+    """
+    real = socket.getaddrinfo
+    cache: dict = {}
+    lock = threading.Lock()
+
+    def cached_getaddrinfo(*args, **kwargs):
+        key = (args, tuple(sorted(kwargs.items())))
+        with lock:
+            hit = cache.get(key)
+        if hit is not None:
+            return hit
+        res = real(*args, **kwargs)
+        with lock:
+            cache[key] = res
+        return res
+
+    socket.getaddrinfo = cached_getaddrinfo
+
+
 def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -418,6 +446,7 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
              token: str, duration: float, eps: float,
              burst: int, burst_teams: int,
              viewers_min: int, viewers_max: int, ramp_period: float) -> None:
+    install_dns_cache()  # keep the viewer fleet from flooding the resolver
     rng = random.Random()
     c = Client(base, token)
     stats = Stats()
