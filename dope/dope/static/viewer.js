@@ -316,6 +316,12 @@ function connectEvents() {
       setLive(true);
       return;
     }
+    // Sibling games (e.g. OD/KSI) share this fest's SSE stream and emit
+    // game-state:<theirID> events that don't affect the EK view. Ignore them —
+    // otherwise editing a sibling game reloads (and flashes) the whole bracket.
+    if (message.scope?.startsWith("game-state:") && message.scope !== `game-state:${scopeGameID}`) {
+      return;
+    }
     scheduleReload();
   });
   events.onerror = () => setLive(false);
