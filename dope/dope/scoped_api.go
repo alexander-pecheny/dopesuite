@@ -410,6 +410,9 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		if stateJSON == "" {
 			stateJSON = "{}"
 		}
+		// X-State-Seq lets a resyncing SSE client align its lastSeq with the
+		// state it just fetched, so the next delta chains cleanly.
+		w.Header().Set("X-State-Seq", strconv.FormatUint(s.currentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID)), 10))
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write([]byte(stateJSON))
 	case http.MethodPut:
@@ -466,7 +469,15 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		s.broadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, next)
+		// Broadcast the ops we just applied as a scoped delta — viewers apply
+		// them in place instead of receiving the whole state blob. If marshalling
+		// the ops fails, fall back to a full-state snapshot so viewers still sync.
+		scopeKey := fmt.Sprintf("game-state:%d", scope.GameID)
+		if opsJSON, mErr := json.Marshal(req.Ops); mErr == nil {
+			s.broadcastStateDelta(scope.FestID, scopeKey, revision, opsJSON)
+		} else {
+			s.broadcastState(scope.FestID, scopeKey, revision, next)
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write(next)
 	default:

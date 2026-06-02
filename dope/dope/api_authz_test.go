@@ -283,6 +283,81 @@ func TestScopedGameStatePatchMergesIndependentEdits(t *testing.T) {
 	}
 }
 
+func TestScopedGameStatePatchBroadcastsDelta(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, gameID := scopedAPITestIDs(t, srv)
+	organizerID, token := createAPITestSession(t, srv, "delta-patcher")
+	addAPITestOrganizer(t, srv, festID, organizerID)
+
+	// Subscribe like an SSE viewer so we can read what the PATCH fans out.
+	ch := make(chan event, 8)
+	srv.addSubscriber(festID, ch)
+	defer srv.removeSubscriber(festID, ch)
+
+	path := fmt.Sprintf("/api/fest/%d/games/%d/state", festID, gameID)
+	patch := func(p []any, value any) map[string]any {
+		return map[string]any{"ops": []map[string]any{{"op": "set", "path": p, "value": value}}}
+	}
+
+	type envelope struct {
+		Scope   string          `json:"scope"`
+		Seq     uint64          `json:"seq"`
+		PrevSeq uint64          `json:"prevSeq"`
+		Ops     json.RawMessage `json:"ops"`
+		Data    json.RawMessage `json:"data"`
+	}
+	nextEnvelope := func() envelope {
+		t.Helper()
+		select {
+		case ev := <-ch:
+			var env envelope
+			if err := json.Unmarshal(ev.data, &env); err != nil {
+				t.Fatalf("decode envelope: %v (raw %s)", err, ev.data)
+			}
+			return env
+		default:
+			t.Fatal("expected a broadcast event, got none")
+			return envelope{}
+		}
+	}
+
+	wantScope := fmt.Sprintf("game-state:%d", gameID)
+
+	if resp := scopedAPIRequest(t, srv, http.MethodPatch, path, patch([]any{"entries", 0, 0}, 1), token); resp.Code != http.StatusOK {
+		t.Fatalf("first patch status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	first := nextEnvelope()
+	if first.Scope != wantScope {
+		t.Fatalf("scope = %q, want %q", first.Scope, wantScope)
+	}
+	if len(first.Ops) == 0 {
+		t.Fatalf("first delta carried no ops: %+v", first)
+	}
+	if len(first.Data) != 0 {
+		t.Fatalf("delta must not carry full state, got data %s", first.Data)
+	}
+	if first.Seq != 1 || first.PrevSeq != 0 {
+		t.Fatalf("first delta seq/prevSeq = %d/%d, want 1/0", first.Seq, first.PrevSeq)
+	}
+
+	if resp := scopedAPIRequest(t, srv, http.MethodPatch, path, patch([]any{"entries", 0, 1}, 2), token); resp.Code != http.StatusOK {
+		t.Fatalf("second patch status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	second := nextEnvelope()
+	if second.Seq != 2 || second.PrevSeq != 1 {
+		t.Fatalf("second delta seq/prevSeq = %d/%d, want 2/1 (must chain)", second.Seq, second.PrevSeq)
+	}
+
+	// A resyncing client reads the current seq off the GET so its next delta chains.
+	get := scopedAPIRequest(t, srv, http.MethodGet, path, nil, token)
+	if get.Code != http.StatusOK {
+		t.Fatalf("get status = %d", get.Code)
+	}
+	if got := get.Header().Get("X-State-Seq"); got != "2" {
+		t.Fatalf("X-State-Seq = %q, want \"2\"", got)
+	}
+}
+
 func TestScopedGameStateRejectsRatingRosterEdits(t *testing.T) {
 	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
