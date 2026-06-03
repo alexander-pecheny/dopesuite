@@ -107,3 +107,42 @@ Deno.test("applyDeltaOps skips non-set ops", () => {
   assert.equal(next.a, 1);
   assert.equal(next.b, 2);
 });
+
+Deno.test("computeEKPlayerStats aggregates per player across battles, regular themes only", () => {
+  const stages = [
+    {code: "r16", matches: [
+      {code: "A", teams: [
+        {name: "Alpha", themes: [
+          {player: "Ann", answers: ["right", "wrong", "", "", "right"]},
+          {player: "Bob", answers: ["", "", "right", "", ""]},
+          {player: "", answers: ["right", "right", "right", "right", "right"]},
+        ], shootoutThemes: [
+          {player: "Ann", answers: ["right", "right", "right", "right", "right"]},
+        ]},
+      ]},
+    ]},
+    {code: "r8", matches: [
+      {code: "M", teams: [
+        {name: "Alpha", themes: [
+          {player: "Ann", answers: ["right", "", "", "", ""]},
+        ]},
+      ]},
+    ]},
+  ];
+  const rows = T.computeEKPlayerStats(stages);
+  assert.equal(rows.length, 2, "empty-player theme is skipped");
+  const ann = rows[0];
+  const bob = rows[1];
+  assert.equal(ann.player, "Ann", "ordered by Σ desc");
+  assert.equal(ann.sum, 50, "10+50-20 + 10, shootout excluded");
+  assert.equal(ann.plus, 70, "10+50+10, no negatives");
+  assert.equal(ann.battles, 2);
+  assert.deepEqual(ann.right, [2, 0, 0, 0, 1]);
+  assert.deepEqual(ann.wrong, [0, 1, 0, 0, 0]);
+  assert.equal(ann.rightTotal, 3);
+  assert.equal(bob.sum, 30);
+  assert.equal(bob.battles, 1);
+  // Team-share: Alpha's attributed correct answers = Ann 3 + Bob 1 = 4.
+  assert.equal(Math.round(ann.share * 100), 75);
+  assert.equal(Math.round(bob.share * 100), 25);
+});
