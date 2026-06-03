@@ -1711,6 +1711,43 @@
     };
   }
 
+  // createViewerCounter renders a live "NN👀" concurrent-viewer tally
+  // immediately to the left of the sync-status tick. The span is created and
+  // inserted dynamically (no markup change needed) and stays hidden until a
+  // positive count arrives. setCount is driven by "viewers" SSE events.
+  function createViewerCounter(statusNode) {
+    if (!statusNode || !statusNode.parentElement) {
+      return {setCount: () => {}};
+    }
+    const node = document.createElement("span");
+    node.className = "viewers-count";
+    node.hidden = true;
+    node.setAttribute("aria-label", "Зрителей онлайн");
+    // Number and eyes are separate children so the flex `gap` spaces them — a
+    // single "N👀" text node would render them touching.
+    const num = document.createElement("span");
+    num.className = "viewers-count-num";
+    const eyes = document.createElement("span");
+    eyes.className = "viewers-count-eyes";
+    eyes.textContent = "\u{1F440}";
+    eyes.setAttribute("aria-hidden", "true");
+    node.append(num, eyes);
+    statusNode.parentElement.insertBefore(node, statusNode);
+    return {
+      setCount(count) {
+        const n = Number(count);
+        if (!Number.isFinite(n) || n <= 0) {
+          node.hidden = true;
+          num.textContent = "";
+          return;
+        }
+        num.textContent = String(n);
+        node.title = `Зрителей онлайн: ${n}`;
+        node.hidden = false;
+      },
+    };
+  }
+
   function fitEKStageTeamName(cell, name) {
     if (!cell || !name) return false;
     const baseSize = parseFloat(getComputedStyle(name).fontSize) || 13;
@@ -1762,6 +1799,7 @@
     td,
     option,
     applyDeltaOps,
+    createViewerCounter,
     buildFlatScoreTable,
     buildTwoRowScoreTable,
     computePlaces,

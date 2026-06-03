@@ -110,6 +110,9 @@ type event struct {
 	festID   int64
 	revision int64
 	data     []byte
+	// name is the SSE event name. Empty means "state" (the common case); the
+	// concurrent-viewer tally uses "viewers".
+	name string
 }
 
 type hostPresenceEvent struct {
@@ -613,7 +616,11 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 	ch := make(chan event, 8)
 	s.addSubscriber(festID, ch)
-	defer s.removeSubscriber(festID, ch)
+	s.broadcastViewerCount(festID)
+	defer func() {
+		s.removeSubscriber(festID, ch)
+		s.broadcastViewerCount(festID)
+	}()
 
 	fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
@@ -624,7 +631,11 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case ev := <-ch:
-			writeSSE(w, "state", ev.revision, ev.data)
+			name := ev.name
+			if name == "" {
+				name = "state"
+			}
+			writeSSE(w, name, ev.revision, ev.data)
 			flusher.Flush()
 		case <-ticker.C:
 			fmt.Fprint(w, ": keepalive\n\n")
@@ -708,6 +719,38 @@ func (s *server) removeSubscriber(festID int64, ch chan event) {
 	}
 	s.subMu.Unlock()
 	close(ch)
+}
+
+// broadcastViewerCount fans out the current /events subscriber count for a fest
+// as a "viewers" SSE event, so every connected client shows a live
+// concurrent-viewer tally. Called on each connect and disconnect.
+//
+// Unlike broadcast(), it holds subMu.RLock for the whole fan-out. The sends are
+// all non-blocking (buffered channel + select/default), so this never stalls,
+// and holding the read lock guarantees no subscriber is removed — and its
+// channel closed — mid-send, which would panic. That race is benign in
+// broadcast() (state events rarely coincide with churn) but viewer-count events
+// fire exactly when subscribers churn, so it must be excluded here.
+func (s *server) broadcastViewerCount(festID int64) {
+	s.subMu.RLock()
+	defer s.subMu.RUnlock()
+	bucket := s.subscribers[festID]
+	data := []byte(fmt.Sprintf(`{"count":%d}`, len(bucket)))
+	ev := event{festID: festID, name: "viewers", data: data}
+	for ch := range bucket {
+		select {
+		case ch <- ev:
+		default:
+			select {
+			case <-ch:
+			default:
+			}
+			select {
+			case ch <- ev:
+			default:
+			}
+		}
+	}
 }
 
 func (s *server) broadcast(ev event) {
