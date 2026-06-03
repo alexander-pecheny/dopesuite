@@ -1400,6 +1400,26 @@ a.list-row:hover { background: var(--hover-bg); }
   z-index: 3;
 }
 
+/* Frozen cells sit above scrolling content, so the transparency around their
+   rounded-corner cards (the corner pockets and inter-cell seams) lets colored
+   answer cells show through as they scroll underneath. A structure-colored
+   box-shadow fills those gaps with solid gray. The sticky header row gets the
+   same treatment so its bottom edge stays a clean gray line instead of going
+   jagged where body cells scroll under the rounded corners. */
+.match-table thead th,
+.match-table tbody .sticky {
+  box-shadow: 0 0 0 var(--cell-gap) var(--structure);
+}
+
+/* The sticky header's rounded bottom corners leave transparent pockets that
+   reveal body rows scrolling underneath, so its bottom edge reads as a jagged,
+   scalloped line. Squaring just the bottom corners turns it into one clean gray
+   rule while keeping the rounded top. */
+.match-table thead th {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 .sticky-name {
   left: var(--sheet-corner-col);
   width: var(--team-col);
@@ -3753,6 +3773,21 @@ body:not(.embedded-match) .grid-match {
 }
 
 .detailed-scroll-left .match-table.od-detailed .sticky-total::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -28px;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  background: linear-gradient(to right, var(--structure), rgba(238, 241, 244, 0));
+}
+
+/* EK stage tables get the same scrolled-under fade as OD/KSI, drawn off the
+   right edge of the place-gap (the rightmost frozen column) once the score
+   columns have been scrolled. .stage-scroll-left is toggled on the scroll
+   frame by host.js / viewer.js. */
+.sheet-frame.stage-scroll-left .match-table.ek-stage-table .sticky-place-gap::after {
   content: "";
   position: absolute;
   top: 0;
