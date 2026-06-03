@@ -822,11 +822,23 @@ function playerTextMeasureContext() {
 
 function bindStageOverflowScroll() {
   const scrollFrame = hostRoot.closest(".sheet-frame");
-  if (!scrollFrame || stageOverflowScrollFrame === scrollFrame) return;
+  if (!scrollFrame) return;
+  updateStageScrollState(scrollFrame);
+  if (stageOverflowScrollFrame === scrollFrame) return;
   unbindStageOverflowScroll();
-  stageOverflowScrollListener = () => scheduleEKTeamNameOverflowUpdate(hostRoot);
+  stageOverflowScrollListener = () => {
+    scheduleEKTeamNameOverflowUpdate(hostRoot);
+    updateStageScrollState(scrollFrame);
+  };
   scrollFrame.addEventListener("scroll", stageOverflowScrollListener, {passive: true});
   stageOverflowScrollFrame = scrollFrame;
+}
+
+// Toggles the scrolled-under fade on the frozen-column boundary (see the
+// .stage-scroll-left rule in styles.css), mirroring OD/KSI behaviour.
+function updateStageScrollState(frame) {
+  if (!frame) return;
+  frame.classList.toggle("stage-scroll-left", frame.scrollLeft > 1);
 }
 
 function unbindStageOverflowScroll() {

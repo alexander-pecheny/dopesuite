@@ -43,6 +43,7 @@ const stageCache = window.DopeStageCache.create({
   },
   onPaneShown: ({pane}) => {
     scheduleReadonlyNameOverflowUpdate(pane);
+    updateStageScrollState(viewerRoot.closest(".sheet-frame"));
   },
 });
 let reloadTimer = null;
@@ -321,6 +322,22 @@ function connectEvents() {
   events.onerror = () => setLive(false);
 }
 
+// Toggles the scrolled-under fade on the frozen-column boundary of the EK
+// stage tables (see the .stage-scroll-left rule in styles.css), mirroring the
+// OD/KSI behaviour. The .sheet-frame is static, so we bind the scroll listener
+// once and let updateStageScrollState run on every scroll.
+function bindStageScrollFade() {
+  const scrollFrame = viewerRoot.closest(".sheet-frame");
+  if (!scrollFrame) return;
+  updateStageScrollState(scrollFrame);
+  scrollFrame.addEventListener("scroll", () => updateStageScrollState(scrollFrame), {passive: true});
+}
+
+function updateStageScrollState(frame) {
+  if (!frame) return;
+  frame.classList.toggle("stage-scroll-left", frame.scrollLeft > 1);
+}
+
 // SPA navigation for the viewer tab strip: same pattern as the host EK page.
 // Intercepts same-origin clicks within #viewerTabs, pushes the URL, and runs
 // loadCurrent without reloading the page.
@@ -434,6 +451,7 @@ function render() {
     viewerRoot.replaceChildren(table);
   }
   scheduleReadonlyNameOverflowUpdate();
+  updateStageScrollState(viewerRoot.closest(".sheet-frame"));
 }
 
 function applyUpdatedMatch(updated) {
@@ -986,6 +1004,7 @@ function matchTitleFor(matchState) {
 }
 
 bindViewerSPANavigation();
+bindStageScrollFade();
 loadCurrent()
   .then(() => {
     setLive(true);
