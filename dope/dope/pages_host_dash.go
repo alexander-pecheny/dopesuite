@@ -207,6 +207,12 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
             <span class="muted">{{if .RatingID}}rating {{.RatingID}}{{else}}нет rating ID{{end}}</span>
           </a>
         </li>
+        <li>
+          <a class="list-row" href="/host/fest/{{.Fest.Ref}}/audit">
+            <span class="list-row-title">История изменений</span>
+            <span class="muted">откат состояния</span>
+          </a>
+        </li>
       </ul>
     </section>
     {{end}}

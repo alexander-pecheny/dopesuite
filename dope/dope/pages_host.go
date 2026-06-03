@@ -525,6 +525,28 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if len(parts) == 3 && parts[2] == "audit" {
+		if !requireManageFest() {
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.renderHostFestAudit(w, r, id, "", "")
+		return
+	}
+	if len(parts) == 4 && parts[2] == "audit" && parts[3] == "revert" {
+		if !requireManageFest() {
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleHostFestAuditRevert(w, r, id)
+		return
+	}
 	if len(parts) == 5 && parts[2] == "game" && parts[4] == "venues" && !festRoleCanManageFest(role) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return

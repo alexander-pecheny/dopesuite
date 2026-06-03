@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -52,7 +53,13 @@ type auditCtxKey string
 const (
 	auditCtxKeyActor     auditCtxKey = "audit.actor_user_id"
 	auditCtxKeyRequestID auditCtxKey = "audit.request_id"
+	auditCtxKeyFestID    auditCtxKey = "audit.fest_id"
 )
+
+// auditTriggerTemplateVersion is mixed into the trigger fingerprint so that a
+// change to the trigger SQL (e.g. adding the fest_id column) forces a rebuild on
+// the next startup, even when no audited table's shape changed.
+const auditTriggerTemplateVersion = 2
 
 func withAuditActor(ctx context.Context, userID int64) context.Context {
 	if userID == 0 {
@@ -68,8 +75,24 @@ func withAuditRequestID(ctx context.Context, reqID string) context.Context {
 	return context.WithValue(ctx, auditCtxKeyRequestID, reqID)
 }
 
+// withAuditFestID stamps the fest a mutation belongs to so audit_log rows carry
+// fest_id, which the admin revert page uses to scope a roll-back to one fest.
+func withAuditFestID(ctx context.Context, festID int64) context.Context {
+	if festID <= 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, auditCtxKeyFestID, festID)
+}
+
 func actorFromContext(ctx context.Context) (int64, bool) {
 	if v, ok := ctx.Value(auditCtxKeyActor).(int64); ok && v != 0 {
+		return v, true
+	}
+	return 0, false
+}
+
+func auditFestIDFromContext(ctx context.Context) (int64, bool) {
+	if v, ok := ctx.Value(auditCtxKeyFestID).(int64); ok && v > 0 {
 		return v, true
 	}
 	return 0, false
@@ -107,9 +130,55 @@ func (s *server) auditContextMiddleware(next http.Handler) http.Handler {
 			if user, ok := s.lookupSession(r); ok {
 				ctx = withAuditActor(ctx, user.UserID)
 			}
+			if festID := s.auditFestIDFromPath(r.Context(), r.URL.Path); festID > 0 {
+				ctx = withAuditFestID(ctx, festID)
+			}
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// auditFestIDFromPath resolves the fest a mutating request targets from its URL
+// path, covering the three fest-scoped prefixes. Returns 0 when the path is not
+// fest-scoped or the ref doesn't resolve (those mutations get a null fest_id and
+// are never touched by a fest-scoped revert).
+func (s *server) auditFestIDFromPath(ctx context.Context, path string) int64 {
+	if s.db == nil {
+		return 0
+	}
+	var rest string
+	switch {
+	case strings.HasPrefix(path, "/api/fest/"):
+		rest = strings.TrimPrefix(path, "/api/fest/")
+	case strings.HasPrefix(path, "/host/fest/"):
+		rest = strings.TrimPrefix(path, "/host/fest/")
+	case strings.HasPrefix(path, "/fest/"):
+		rest = strings.TrimPrefix(path, "/fest/")
+	default:
+		return 0
+	}
+	ref := rest
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		ref = rest[:i]
+	}
+	if ref == "" || ref == "fest" {
+		return 0
+	}
+	// Fast path: a numeric ref is the fest id itself, so skip the DB lookup that
+	// would otherwise run on every mutating request (including frequent presence
+	// POSTs). Stamping a non-existent id is harmless — handlers reject unknown
+	// fests before any audited mutation, so it never reaches audit_log.
+	if id, err := strconv.ParseInt(ref, 10, 64); err == nil {
+		if id <= 0 {
+			return 0
+		}
+		return id
+	}
+	id, err := resolveFestID(ctx, s.db, ref)
+	if err != nil || id <= 0 {
+		return 0
+	}
+	return id
 }
 
 func mayMutate(r *http.Request) bool {
@@ -146,9 +215,13 @@ func seedAuditCtx(ctx context.Context, tx *sql.Tx) error {
 	if v := requestIDFromContext(ctx); v != "" {
 		reqID = v
 	}
+	var festID any
+	if v, ok := auditFestIDFromContext(ctx); ok {
+		festID = v
+	}
 	_, err := tx.ExecContext(ctx,
-		`insert or replace into audit_ctx(id, actor_user_id, request_id) values(1, ?, ?)`,
-		actor, reqID)
+		`insert or replace into audit_ctx(id, actor_user_id, request_id, fest_id) values(1, ?, ?, ?)`,
+		actor, reqID, festID)
 	return err
 }
 
@@ -185,7 +258,8 @@ create table if not exists audit_log(
   before_json text,
   after_json text,
   actor_user_id integer,
-  request_id text
+  request_id text,
+  fest_id integer
 );
 create index if not exists audit_log_table_pk_idx on audit_log(table_name, row_pk, id);
 create index if not exists audit_log_ts_idx on audit_log(ts);
@@ -194,9 +268,10 @@ create index if not exists audit_log_request_idx on audit_log(request_id) where 
 create table if not exists audit_ctx(
   id integer primary key check(id = 1),
   actor_user_id integer,
-  request_id text
+  request_id text,
+  fest_id integer
 );
-insert or ignore into audit_ctx(id, actor_user_id, request_id) values(1, null, null);
+insert or ignore into audit_ctx(id) values(1);
 
 create table if not exists audit_trigger_state(
   id integer primary key check(id = 1),
@@ -204,7 +279,21 @@ create table if not exists audit_trigger_state(
 );
 insert or ignore into audit_trigger_state(id, fingerprint) values(1, '');
 `)
-	return err
+	if err != nil {
+		return err
+	}
+	// fest_id was added after the initial release; backfill the column on
+	// databases that predate it so the CREATEs above stay no-ops.
+	if err := addColumnsIfMissing(db, "audit_log", []columnSpec{{Name: "fest_id", Type: "integer"}}); err != nil {
+		return err
+	}
+	if err := addColumnsIfMissing(db, "audit_ctx", []columnSpec{{Name: "fest_id", Type: "integer"}}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`create index if not exists audit_log_fest_idx on audit_log(fest_id, id) where fest_id is not null`); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ensureAuditTriggers rebuilds AFTER triggers on every audited table when the
@@ -231,6 +320,7 @@ func ensureAuditTriggers(db *sql.DB) error {
 	}
 
 	h := sha256.New()
+	fmt.Fprintf(h, "template-version=%d\n", auditTriggerTemplateVersion)
 	for _, s := range shapes {
 		sortedCols := append([]string(nil), s.cols...)
 		sort.Strings(sortedCols)
@@ -338,6 +428,7 @@ func buildAuditTrigger(table string, cols, pks []string, op string) string {
 
 	const actorSel = `(select actor_user_id from audit_ctx where id = 1)`
 	const reqSel = `(select request_id from audit_ctx where id = 1)`
+	const festSel = `(select fest_id from audit_ctx where id = 1)`
 
 	name := fmt.Sprintf("audit_%s_%s", table, op)
 	switch op {
@@ -345,29 +436,29 @@ func buildAuditTrigger(table string, cols, pks []string, op string) string {
 		return fmt.Sprintf(`create trigger %s
 after insert on %s
 begin
-  insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id)
-  values('%s', %s, 'INSERT', null, %s, %s, %s);
+  insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id, fest_id)
+  values('%s', %s, 'INSERT', null, %s, %s, %s, %s);
 end`,
 			name, table,
-			table, pkExpr("new"), rowJSON("new"), actorSel, reqSel)
+			table, pkExpr("new"), rowJSON("new"), actorSel, reqSel, festSel)
 	case "update":
 		return fmt.Sprintf(`create trigger %s
 after update on %s
 begin
-  insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id)
-  values('%s', %s, 'UPDATE', %s, %s, %s, %s);
+  insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id, fest_id)
+  values('%s', %s, 'UPDATE', %s, %s, %s, %s, %s);
 end`,
 			name, table,
-			table, pkExpr("new"), rowJSON("old"), rowJSON("new"), actorSel, reqSel)
+			table, pkExpr("new"), rowJSON("old"), rowJSON("new"), actorSel, reqSel, festSel)
 	case "delete":
 		return fmt.Sprintf(`create trigger %s
 after delete on %s
 begin
-  insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id)
-  values('%s', %s, 'DELETE', %s, null, %s, %s);
+  insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id, fest_id)
+  values('%s', %s, 'DELETE', %s, null, %s, %s, %s);
 end`,
 			name, table,
-			table, pkExpr("old"), rowJSON("old"), actorSel, reqSel)
+			table, pkExpr("old"), rowJSON("old"), actorSel, reqSel, festSel)
 	}
 	return ""
 }
