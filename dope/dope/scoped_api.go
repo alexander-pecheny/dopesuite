@@ -1105,7 +1105,13 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "bad json", http.StatusBadRequest)
 			return
 		}
-		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(mscope, req)
+		// A request may carry a batch of edits to apply atomically (range
+		// clear/fill); otherwise the request itself is the single edit.
+		reqs := req.Edits
+		if len(reqs) == 0 {
+			reqs = []updateRequest{req}
+		}
+		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(mscope, reqs)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1140,7 +1146,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "missing finished", http.StatusBadRequest)
 			return
 		}
-		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(mscope, updateRequest{Finished: req.Finished})
+		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(mscope, []updateRequest{{Finished: req.Finished}})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
