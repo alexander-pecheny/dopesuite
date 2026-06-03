@@ -97,6 +97,8 @@ async function loadCurrent() {
     await loadStage();
   } else if (route.mode === "venues") {
     await loadVenuesPage();
+  } else if (route.mode === "stats") {
+    await loadStats();
   } else {
     await loadFest();
   }
@@ -292,10 +294,66 @@ async function loadVenuesPage() {
   if (changed) renderVenues();
 }
 
+async function loadStats() {
+  // Stats are an aggregate of every battle, computed from the shared stage
+  // cache (the same per-match MatchViews the bracket holds). Warm it once with a
+  // single /stages/matches request, deduped with the bracket prefetch; SSE
+  // deltas then keep it live and renderStats reads from memory — no refetch.
+  hydrateFestFromCache();
+  const response = await fetch(route.apiBase);
+  if (!response.ok) throw new Error(await response.text());
+  adoptFestView(await response.json());
+  writeFestCache(fest);
+  await stageCache.prefetchAllStages();
+  if (route.mode !== "stats") return;
+  renderStats();
+}
+
+// statsStagesFromCache shapes the live stage cache into the
+// [{code, matches:[MatchView]}] form computeEKPlayerStats expects.
+function statsStagesFromCache() {
+  const stages = [];
+  for (const stage of viewerStages()) {
+    const data = stageCache.getData(stage.code);
+    if (!data) continue;
+    const matches = [];
+    for (const match of data.matches || []) {
+      const ms = data.stateByCode.get(match.code);
+      if (ms) matches.push(ms);
+    }
+    stages.push({code: stage.code, matches});
+  }
+  return stages;
+}
+
+function renderStats() {
+  resetReadonlyTableIndex();
+  setViewerMode("grid");
+  setHeading("ЭК");
+  document.title = pageTitle("Статистика");
+  renderViewerTabs();
+  rerenderStatsTable();
+}
+
+// rerenderStatsTable recomputes the table from the live stage cache and swaps it
+// in. Cheap (in-memory over the cached MatchViews); no network. Re-runs the
+// name overflow pass so long player/team names get the fade + popover.
+function rerenderStatsTable() {
+  const rows = gameTable.computeEKPlayerStats(statsStagesFromCache());
+  viewerRoot.replaceChildren(gameTable.buildEKStatsTable(rows));
+  scheduleReadonlyNameOverflowUpdate();
+}
+
 function connectEvents() {
   const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
+    // On the stats page, fold match edits into the cache in place and recompute
+    // from memory — no refetch. Other scopes don't affect the aggregate.
+    if (route.mode === "stats") {
+      if (message.scope?.startsWith("match:")) applyStatsMatchEvent(message);
+      return;
+    }
     const matchScope = `match:${scopeGameID}:${route.matchCode}`;
     const venuesScope = `venues:${route.festID}`;
     // Always update cached stage state for any match-scoped event, regardless
@@ -402,6 +460,73 @@ function scheduleReload() {
         console.error(error);
       });
   }, 120);
+}
+
+// applyStatsMatchEvent keeps the stats page live the same way the bracket does:
+// it folds a match-scoped SSE event into the shared stage cache in place (a
+// chained delta, or a full snapshot) and recomputes the table from memory — no
+// refetch. A delta that can't chain (missing base / seq gap) means a dropped
+// event, so we resync the bracket once, mirroring the bracket's gap path.
+function applyStatsMatchEvent(message) {
+  const code = matchCodeFromScope(message.scope);
+  if (Array.isArray(message.ops)) {
+    const base = stageCache.matchState(code);
+    const prev = Number(message.prevSeq) || 0;
+    if (!base || (Number(base.seq) || 0) !== prev) {
+      scheduleStatsResync();
+      return;
+    }
+    const next = gameTable.applyDeltaOps(base, message.ops);
+    next.seq = Number(message.seq) || prev;
+    stageCache.applyMatchUpdate(next);
+  } else if (message.data?.code) {
+    const view = message.data;
+    view.seq = Number(message.seq) || 0;
+    stageCache.applyMatchUpdate(view);
+  } else {
+    scheduleStatsResync();
+    return;
+  }
+  scheduleStatsRerender();
+}
+
+// scheduleStatsRerender throttles the in-memory recompute to once per ~400ms
+// (leading + trailing) so a burst of cell deltas rebuilds the table a few times
+// a second at most, while staying near-live.
+let statsRerenderTimer = null;
+let statsRerenderPending = false;
+function scheduleStatsRerender() {
+  if (route.mode !== "stats") return;
+  if (statsRerenderTimer) {
+    statsRerenderPending = true;
+    return;
+  }
+  rerenderStatsTable();
+  statsRerenderTimer = window.setTimeout(function tick() {
+    if (statsRerenderPending && route.mode === "stats") {
+      statsRerenderPending = false;
+      rerenderStatsTable();
+      statsRerenderTimer = window.setTimeout(tick, 400);
+    } else {
+      statsRerenderTimer = null;
+    }
+  }, 400);
+}
+
+// scheduleStatsResync refetches the bracket once after a dropped SSE event (a
+// seq gap), then recomputes. Debounced so a fleet that all gap together doesn't
+// stampede the bulk endpoint.
+let statsResyncTimer = null;
+function scheduleStatsResync() {
+  if (statsResyncTimer) return;
+  statsResyncTimer = window.setTimeout(() => {
+    statsResyncTimer = null;
+    stageCache.prefetchAllStages()
+      .then(() => {
+        if (route.mode === "stats") rerenderStatsTable();
+      })
+      .catch((error) => console.error(error));
+  }, 400);
 }
 
 function parseEventData(raw) {
@@ -588,6 +713,8 @@ function viewerTabItems() {
       key: `stage:${stage.code}`,
     });
   });
+  // Статистика sits at the very end, after all stage tabs.
+  items.push({href: route.base + "/stats", label: "Статистика", key: "stats"});
   return items;
 }
 
@@ -617,6 +744,7 @@ function activeViewerTabKey() {
     return stageCode ? `stage:${stageCode}` : "grid";
   }
   if (route.mode === "venues") return "venues";
+  if (route.mode === "stats") return "stats";
   return "grid";
 }
 
@@ -875,6 +1003,7 @@ function currentRoute() {
     return {mode: "grid", festID, gameID, base, apiBase};
   }
   if (stripped === "/venues") return {mode: "venues", festID, gameID, base, apiBase};
+  if (stripped === "/stats") return {mode: "stats", festID, gameID, base, apiBase};
   const match = stripped.match(/^\/matches\/([^/]+)$/);
   if (match) return {mode: "match", matchCode: decodeURIComponent(match[1]), festID, gameID, base, apiBase};
   const stage = stripped.match(/^\/stage\/([^/]+)$/);
@@ -942,6 +1071,7 @@ function renderGameBreadcrumbs() {
 function breadcrumbCurrentTitle(gameTitle) {
   if (route.mode === "grid") return "";
   if (route.mode === "venues") return "Площадки";
+  if (route.mode === "stats") return "Статистика";
   if (route.mode === "match") return state?.title || route.matchCode || "";
   if (route.mode === "stage") return findStage(fest, route.stageCode)?.title || route.stageCode || "";
   return gameTitle;

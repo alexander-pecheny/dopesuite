@@ -1767,6 +1767,159 @@
     return vertOverflows() || horizOverflows();
   }
 
+  // computeEKPlayerStats aggregates per-player individual stats across every
+  // battle of an EK game. `stages` is the payload from /stages/matches:
+  // [{code, matches: [MatchView, ...]}, ...]. Only regular themes are counted —
+  // shootout ("перестрелка") themes are a tiebreaker and are excluded, matching
+  // the Σ+ semantics shown in a battle (TeamView.plus ignores shootouts too).
+  //
+  // Players are keyed by (team, player) so namesakes on different teams stay
+  // separate. The denominator for the team-share column is the sum of that
+  // team's attributed correct answers, so the shares of a team's players sum to
+  // exactly 100%. Returns rows sorted by Σ descending (then Σ+, then name).
+  function computeEKPlayerStats(stages) {
+    const values = [10, 20, 30, 40, 50]; // answer index → nominal value
+    const players = new Map();   // key → stat row
+    const teamTaken = new Map(); // team name → total attributed correct answers
+    const battleSeen = new Map(); // key → Set of battle ids (for the Бои count)
+    for (const stage of stages || []) {
+      for (const match of stage.matches || []) {
+        const battleID = `${stage.code || ""}${match.code || ""}`;
+        for (const team of match.teams || []) {
+          const teamName = team.name || "";
+          for (const theme of team.themes || []) {
+            const playerName = String(theme.player || "").trim();
+            if (!playerName) continue;
+            const key = `${teamName}${playerName}`;
+            let row = players.get(key);
+            if (!row) {
+              row = {
+                player: playerName,
+                team: teamName,
+                sum: 0,
+                plus: 0,
+                battles: 0,
+                right: [0, 0, 0, 0, 0],
+                wrong: [0, 0, 0, 0, 0],
+                rightTotal: 0,
+                share: 0,
+              };
+              players.set(key, row);
+              battleSeen.set(key, new Set());
+            }
+            const seen = battleSeen.get(key);
+            if (!seen.has(battleID)) {
+              seen.add(battleID);
+              row.battles++;
+            }
+            (theme.answers || []).forEach((mark, i) => {
+              const value = values[i] || 0;
+              if (mark === "right") {
+                row.sum += value;
+                row.plus += value;
+                row.right[i]++;
+                row.rightTotal++;
+                teamTaken.set(teamName, (teamTaken.get(teamName) || 0) + 1);
+              } else if (mark === "wrong") {
+                row.sum -= value;
+                row.wrong[i]++;
+              }
+            });
+          }
+        }
+      }
+    }
+    const rows = Array.from(players.values());
+    for (const row of rows) {
+      const denom = teamTaken.get(row.team) || 0;
+      row.share = denom > 0 ? row.rightTotal / denom : 0;
+    }
+    rows.sort((a, b) =>
+      b.sum - a.sum ||
+      b.plus - a.plus ||
+      a.player.localeCompare(b.player, "ru"));
+    return rows;
+  }
+
+  // buildEKStatsTable renders the rows from computeEKPlayerStats into the
+  // "Статистика" table. Columns: Игрок, Команда, Σ, Σ+, Бои, 50/40/30/20/10
+  // (correct counts, descending nominal), −50…−10 (wrong counts, shown as a
+  // plain positive count), and the team-share percentage. Counts are always
+  // shown (including 0). Name cells reuse the results-team truncate+fade+popover
+  // structure so long names behave like everywhere else. Shared host/viewer.
+  function buildEKStatsTable(rows) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "results-wrapper ek-stats-wrapper";
+    if (!rows || rows.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "Пока нет данных: ни одного ответа не отмечено.";
+      wrapper.appendChild(empty);
+      return wrapper;
+    }
+
+    const table = document.createElement("table");
+    table.className = "results-table ek-stats-table";
+    const thead = document.createElement("thead");
+    const head = document.createElement("tr");
+    head.appendChild(th("Игрок", "results-team-head ek-stats-name-head ek-stats-player-head"));
+    head.appendChild(th("Команда", "results-team-head ek-stats-name-head ek-stats-team-head"));
+    head.appendChild(th("Σ", "number ek-stats-sum-head"));
+    head.appendChild(th("Σ+", "number"));
+    head.appendChild(th("Бои", "number"));
+    for (const value of [50, 40, 30, 20, 10]) {
+      head.appendChild(th(value, "number narrow"));
+    }
+    for (const value of [50, 40, 30, 20, 10]) {
+      head.appendChild(th(`-${value}`, "number narrow ek-stats-wrong-head"));
+    }
+    head.appendChild(th("% от команды", "number ek-stats-share-head"));
+    thead.appendChild(head);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    const nameCell = (text, className) => {
+      const cell = document.createElement("td");
+      cell.className = `results-team ek-stats-name ${className}`;
+      const wrap = document.createElement("span");
+      wrap.className = "results-team-name-wrap";
+      const name = document.createElement("span");
+      name.className = "results-team-name";
+      name.textContent = text;
+      name.tabIndex = 0;
+      name.setAttribute("aria-label", text);
+      wrap.appendChild(name);
+      cell.appendChild(wrap);
+      const popover = document.createElement("span");
+      popover.className = "results-team-name-popover";
+      popover.textContent = text;
+      cell.appendChild(popover);
+      return cell;
+    };
+    rows.forEach((row, index) => {
+      const tr = document.createElement("tr");
+      tr.className = "results-row";
+      if (index === 0) tr.classList.add("results-group-first");
+      if (index === rows.length - 1) tr.classList.add("results-group-last");
+      tr.appendChild(nameCell(row.player, "ek-stats-player"));
+      tr.appendChild(nameCell(row.team, "ek-stats-team"));
+      tr.appendChild(td(row.sum, "number ek-stats-sum"));
+      tr.appendChild(td(row.plus, "number"));
+      tr.appendChild(td(row.battles, "number"));
+      for (let i = 4; i >= 0; i--) {
+        tr.appendChild(td(row.right[i] || 0, "number narrow"));
+      }
+      for (let i = 4; i >= 0; i--) {
+        tr.appendChild(td(row.wrong[i] || 0, "number narrow ek-stats-wrong"));
+      }
+      tr.appendChild(td(`${Math.round(row.share * 100)}%`, "number ek-stats-share"));
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    return wrapper;
+  }
+
   // applyDeltaOps returns a deep clone of `base` with scoped set-ops applied.
   // Standalone (mirrors createStateSync's applySetPatch) so the read-only viewer
   // can reconstruct a full match view from a delta without the host sync
@@ -1838,5 +1991,7 @@
     createTeamNameOverflowController,
     fitEKStageTeamName,
     createCellRangeSelection,
+    computeEKPlayerStats,
+    buildEKStatsTable,
   };
 })();

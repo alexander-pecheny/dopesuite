@@ -3698,6 +3698,52 @@ body:not(.embedded-match) .grid-match {
   min-width: 720px;
 }
 
+.ek-stats-wrapper {
+  align-items: flex-start;
+}
+
+.ek-stats-table {
+  --ek-stats-name-col: 200px;
+  width: max-content;
+}
+
+.ek-stats-table thead th.ek-stats-name-head,
+.ek-stats-table .ek-stats-name {
+  width: var(--ek-stats-name-col);
+  min-width: var(--ek-stats-name-col);
+  max-width: var(--ek-stats-name-col);
+  text-align: left;
+  padding-left: var(--results-team-pad);
+}
+
+.ek-stats-table .number {
+  text-align: center;
+}
+
+/* Many numeric columns — keep them compact so more fits before scrolling. */
+.ek-stats-table thead th.number,
+.ek-stats-table td.number {
+  padding-left: var(--space-1);
+  padding-right: var(--space-1);
+}
+
+.ek-stats-table .narrow {
+  width: 30px;
+  min-width: 30px;
+}
+
+.ek-stats-table thead th.ek-stats-sum-head,
+.ek-stats-table .ek-stats-sum {
+  font-weight: var(--fw-semibold);
+}
+
+.ek-stats-table thead th.ek-stats-wrong-head,
+.ek-stats-table .ek-stats-wrong,
+.ek-stats-table .ek-stats-share,
+.ek-stats-table thead th.ek-stats-share-head {
+  color: var(--muted);
+}
+
 .results-table th,
 .results-table td {
   padding: 8px 10px;
@@ -4475,6 +4521,17 @@ body:not(.embedded-match) .grid-match {
   .results-table .results-team-head,
   .results-table .results-team { padding-left: var(--results-team-pad); min-width: 0; }
   .results-team-city { font-size: var(--results-team-city-size-mobile); }
+  /* Narrow the two name columns and the count columns so the wide stats table
+     stays usable on a phone; long names truncate (fade + popover) and the rest
+     scrolls horizontally. */
+  .ek-stats-table { --ek-stats-name-col: 116px; }
+  .ek-stats-table thead th.ek-stats-name-head,
+  .ek-stats-table .ek-stats-name {
+    width: var(--ek-stats-name-col);
+    min-width: var(--ek-stats-name-col);
+    max-width: var(--ek-stats-name-col);
+  }
+  .ek-stats-table .narrow { width: 26px; min-width: 26px; }
   .results-place-head,
   .results-place {
     width: var(--results-place-col);
