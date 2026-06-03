@@ -1095,6 +1095,22 @@ a.list-row:hover { background: var(--hover-bg); }
   background: var(--grid-dark);
 }
 
+.viewers-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs-plus);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.viewers-count[hidden] {
+  display: none;
+}
+
 .sync-status {
   display: inline-grid;
   place-items: center;

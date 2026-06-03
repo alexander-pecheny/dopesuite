@@ -6,6 +6,7 @@ const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
 const setStatus = gameTable.createStatusReporter(statusNode);
+const viewerCounter = gameTable.createViewerCounter(statusNode);
 const {formatVenue, formatBattleVenue, formatBattleVenueShort, statusLabel, formatNumber, formatPlace, cssEscape, th, td} = gameTable;
 let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
@@ -318,6 +319,13 @@ function connectEvents() {
       return;
     }
     scheduleReload();
+  });
+  events.addEventListener("viewers", (event) => {
+    try {
+      viewerCounter.setCount(JSON.parse(event.data)?.count);
+    } catch (_err) {
+      // ignore malformed viewer-count payloads
+    }
   });
   events.onerror = () => setLive(false);
 }
