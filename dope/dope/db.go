@@ -2624,7 +2624,7 @@ func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) 
 		return s.applyLegacyUpdate(req)
 	}
 	// Legacy single-fest path: no SSE fan-out, so cascade + delta are discarded.
-	view, data, _, err := s.applyMatchUpdateUsing(festID, req,
+	view, data, _, err := s.applyMatchUpdateUsing(festID, []updateRequest{req},
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchState(ctx, q, festID, code)
 		},
@@ -2637,13 +2637,20 @@ func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) 
 // applyScopedMatchUpdate applies a match edit and additionally returns deltaOps:
 // the set-ops that turn the pre-edit view into the new one, when broadcasting
 // them is cheaper than the full view (else nil — caller broadcasts full state).
-func (s *server) applyScopedMatchUpdate(scope matchScope, req updateRequest) (MatchView, []byte, []byte, []MatchView, error) {
+func (s *server) applyScopedMatchUpdate(scope matchScope, reqs []updateRequest) (MatchView, []byte, []byte, []MatchView, error) {
 	if s.db == nil {
-		view, data, err := s.applyLegacyUpdate(req)
+		var view MatchView
+		var data []byte
+		var err error
+		for _, req := range reqs {
+			if view, data, err = s.applyLegacyUpdate(req); err != nil {
+				return view, data, nil, nil, err
+			}
+		}
 		return view, data, nil, nil, err
 	}
 	var oldData []byte
-	view, data, cascaded, err := s.applyMatchUpdateUsing(scope.FestID, req,
+	view, data, cascaded, err := s.applyMatchUpdateUsing(scope.FestID, reqs,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchStateByScope(ctx, q, scope)
 		},
@@ -2664,7 +2671,7 @@ func (s *server) applyScopedMatchUpdate(scope matchScope, req updateRequest) (Ma
 // matches update live instead of only on reload.
 func (s *server) applyMatchUpdateUsing(
 	festID int64,
-	req updateRequest,
+	reqs []updateRequest,
 	loadMatch func(context.Context, dbQueryer) (dbMatchState, error),
 	loadView func() (MatchView, error),
 	oldDataOut *[]byte,
@@ -2695,25 +2702,41 @@ func (s *server) applyMatchUpdateUsing(
 		return MatchView{}, nil, nil, err
 	}
 
-	if req.Finished != nil {
-		if hasMatchEdit(req) {
-			return MatchView{}, nil, nil, errors.New("finished update must be standalone")
+	dataEdited := false
+	for _, req := range reqs {
+		if req.Finished != nil {
+			if len(reqs) > 1 || hasMatchEdit(req) {
+				return MatchView{}, nil, nil, errors.New("finished update must be standalone")
+			}
+			status := "active"
+			if *req.Finished {
+				status = "finished"
+			}
+			if _, err := tx.ExecContext(ctx, `update matches set status = ? where id = ?`, status, match.MatchID); err != nil {
+				return MatchView{}, nil, nil, err
+			}
+			if *req.Finished {
+				assignComputedPlaces(&match.State)
+			}
+			continue
 		}
-		status := "active"
-		if *req.Finished {
-			status = "finished"
-		}
-		if _, err := tx.ExecContext(ctx, `update matches set status = ? where id = ?`, status, match.MatchID); err != nil {
-			return MatchView{}, nil, nil, err
-		}
-		if *req.Finished {
-			assignComputedPlaces(&match.State)
-		}
-	} else {
 		if match.State.Finished {
 			return MatchView{}, nil, nil, errors.New("match is finished")
 		}
 		if err := applyMatchEditTx(ctx, tx, match, req); err != nil {
+			return MatchView{}, nil, nil, err
+		}
+		dataEdited = true
+	}
+
+	// applyMatchEditTx writes answer/theme rows, not the in-memory match.State,
+	// so reload before recalc/slot resolution to compute results from the edited
+	// rows — otherwise a batch would persist results that lag every edit. The
+	// finished branch instead computes places into match.State in memory and
+	// relies on the recalc to persist them, so it must keep the in-memory state.
+	if dataEdited {
+		match, err = loadMatch(ctx, tx)
+		if err != nil {
 			return MatchView{}, nil, nil, err
 		}
 	}
@@ -2725,7 +2748,7 @@ func (s *server) applyMatchUpdateUsing(
 	if err != nil {
 		return MatchView{}, nil, nil, err
 	}
-	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:update", mustJSON(req))
+	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:update", mustJSON(reqs))
 	if err != nil {
 		return MatchView{}, nil, nil, err
 	}

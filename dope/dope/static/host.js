@@ -500,17 +500,46 @@ function setStatus(state) {
   statusNode.title = labels[state] || labels.saving;
 }
 
+async function sendUpdateRaw(payload, matchCode) {
+  const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}/update`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  const updated = await response.json();
+  rememberLocalMatchEcho(matchCode, updated);
+  return updated;
+}
+
 async function sendUpdate(payload, matchCode = currentMatchCode()) {
   setStatus("saving");
   try {
-    const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}/update`, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) throw new Error(await response.text());
-    const updated = await response.json();
-    rememberLocalMatchEcho(matchCode, updated);
+    const updated = await sendUpdateRaw(payload, matchCode);
+    applyUpdatedMatch(updated, matchCode);
+    setStatus("saved");
+  } catch (error) {
+    setStatus("error");
+    console.error(error);
+  }
+}
+
+// sendUpdates posts a batch of edits (a range clear/fill) as a single request.
+// The server applies them atomically — one revision bump, one broadcast — and
+// returns one match view, so the table re-renders once. Sending one request per
+// cell instead produced the "one by one" flicker: each response is an
+// intermediate snapshot that has not applied the other cells yet, so patching
+// from it regressed those optimistically-edited cells to their old marks. This
+// mirrors OD/KSI, which coalesce their edits into a single debounced PATCH.
+async function sendUpdates(payloads, matchCode) {
+  if (payloads.length === 0) return;
+  if (payloads.length === 1) {
+    sendUpdate(payloads[0], matchCode);
+    return;
+  }
+  setStatus("saving");
+  try {
+    const updated = await sendUpdateRaw({edits: payloads}, matchCode);
     applyUpdatedMatch(updated, matchCode);
     setStatus("saved");
   } catch (error) {
@@ -1342,23 +1371,22 @@ function stageCellAtCoord(coord) {
 
 function stageApplyValues(edits) {
   const byCode = currentStageStateByCode();
-  const applies = [];
+  // Group edits by match so each match's cells are applied through a single
+  // ekApplyValues call (and thus a single coalesced re-render), rather than one
+  // call — and one re-render — per cell.
+  const groupsByCode = new Map();
   for (const {cell, value} of edits) {
     const matchCode = cell.dataset.matchCode;
     if (!matchCode) continue;
     const matchState = byCode?.get(matchCode);
     if (!matchState || matchState.finished) continue;
-    applies.push({matchCode, matchState, cell, value});
+    if (!groupsByCode.has(matchCode)) groupsByCode.set(matchCode, {matchState, items: []});
+    groupsByCode.get(matchCode).items.push({cell, value});
   }
-  if (applies.length === 0) return;
+  if (groupsByCode.size === 0) return;
   if (!undoApplying) {
-    const groupsByCode = new Map();
-    for (const {matchCode, cell, value} of applies) {
-      if (!groupsByCode.has(matchCode)) groupsByCode.set(matchCode, []);
-      groupsByCode.get(matchCode).push({cell, value});
-    }
     const groups = [];
-    for (const [matchCode, items] of groupsByCode) {
+    for (const [matchCode, {items}] of groupsByCode) {
       const reverse = snapshotMatchEdits(matchCode, items);
       if (reverse.length > 0) groups.push({matchCode, items: reverse});
     }
@@ -1370,8 +1398,8 @@ function stageApplyValues(edits) {
       });
     }
   }
-  for (const {matchCode, matchState, cell, value} of applies) {
-    ekApplyValues(matchCode, matchState, [{cell, value}], {recordUndo: false});
+  for (const [matchCode, {matchState, items}] of groupsByCode) {
+    ekApplyValues(matchCode, matchState, items, {recordUndo: false});
   }
 }
 
@@ -1462,6 +1490,7 @@ function ekApplyValues(matchCode, matchState, edits, options = {}) {
       });
     }
   }
+  const payloads = [];
   for (const {cell, value} of edits) {
     const mark = value === "right" ? "right" : value === "wrong" ? "wrong" : "";
     gameTable.setMarkClass(cell, mark);
@@ -1473,8 +1502,9 @@ function ekApplyValues(matchCode, matchState, edits, options = {}) {
     if (target?.answers) target.answers[answer] = mark;
     const payload = {team, theme, answer, mark};
     if (shootout) payload.shootout = true;
-    sendUpdate(payload, matchCode);
+    payloads.push(payload);
   }
+  sendUpdates(payloads, matchCode);
 }
 
 function snapshotMatchEdits(matchCode, edits) {

@@ -164,6 +164,11 @@ type updateRequest struct {
 	Player   *string  `json:"player,omitempty"`
 	Tiebreak *int     `json:"tiebreak,omitempty"`
 	Place    *float64 `json:"place,omitempty"`
+	// Edits, when non-empty, carries a batch of per-cell edits to apply
+	// atomically in one transaction (one revision bump, one broadcast). Used by
+	// range clear/fill so a multi-cell edit is a single round-trip and a single
+	// client re-render. Nested Edits on a batched item are ignored.
+	Edits []updateRequest `json:"edits,omitempty"`
 }
 
 func main() {

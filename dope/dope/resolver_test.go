@@ -35,7 +35,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		if err != nil {
 			t.Fatalf("scope %s: %v", code, err)
 		}
-		if _, _, _, _, err := srv.applyScopedMatchUpdate(scope, updateRequest{Finished: &finished}); err != nil {
+		if _, _, _, _, err := srv.applyScopedMatchUpdate(scope, []updateRequest{{Finished: &finished}}); err != nil {
 			t.Fatalf("finish %s=%v: %v", code, finished, err)
 		}
 	}
@@ -46,7 +46,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		if err != nil {
 			t.Fatalf("scope %s: %v", code, err)
 		}
-		if _, _, _, _, err := srv.applyScopedMatchUpdate(scope, updateRequest{Team: teamIndex, Theme: &theme, Answer: &answer, Mark: &value}); err != nil {
+		if _, _, _, _, err := srv.applyScopedMatchUpdate(scope, []updateRequest{{Team: teamIndex, Theme: &theme, Answer: &answer, Mark: &value}}); err != nil {
 			t.Fatalf("mark %s team %d: %v", code, teamIndex, err)
 		}
 	}
@@ -132,7 +132,7 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 		if err != nil {
 			t.Fatalf("scope %s: %v", code, err)
 		}
-		_, _, _, cascaded, err := srv.applyScopedMatchUpdate(scope, req)
+		_, _, _, cascaded, err := srv.applyScopedMatchUpdate(scope, []updateRequest{req})
 		if err != nil {
 			t.Fatalf("apply %s: %v", code, err)
 		}
