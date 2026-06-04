@@ -24,7 +24,11 @@
 #   BASE        (derived)                public base URL
 #   FEST        3                        fest id (the public `test` fest)
 #   DURATION    180                      seconds to run
-#   EPS         3                        edits per second (rotates od/ksi/ek)
+#   EPS         3                        edits per second (rotates od/ksi/ek).
+#                                        EPS=0 drives NO edits — holds the viewer
+#                                        fleet only, so viewers and editors can be
+#                                        load-tested separately (VIEWERS=0 + EPS>0
+#                                        is the editors-only converse).
 #   BURST       8                        cell changes per tick
 #   VIEWERS     0                        concurrent SSE viewers: "N" fixed, or
 #                                        "MIN-MAX" to continually ramp (e.g. 30-100)

@@ -304,7 +304,10 @@ class Stats:
         self.events = 0
         self.viewer_fail = 0
         self.viewer_drop = 0
-        self.peak_viewers = 0
+        self.peak_viewers = 0      # high-water of LOCAL viewer threads we hold
+        self.local_alive = 0       # CURRENT live local viewer threads
+        self.server_count = 0      # latest subscriber count the SERVER reported
+        self.server_peak = 0       # high-water of the server-reported count
 
     def add_edit(self, ms: float, ok: bool):
         with self._lock:
@@ -328,6 +331,22 @@ class Stats:
         with self._lock:
             if n > self.peak_viewers:
                 self.peak_viewers = n
+
+    def note_local(self, n: int):
+        """Record the current count of live local viewer threads."""
+        with self._lock:
+            self.local_alive = n
+            if n > self.peak_viewers:
+                self.peak_viewers = n
+
+    def note_server_count(self, n: int):
+        """Record the subscriber count the SERVER just broadcast. This is the
+        same number the UI shows, so reporting it makes the loadtest agree with
+        the page exactly (vs. our local thread count, which leads it)."""
+        with self._lock:
+            self.server_count = n
+            if n > self.server_peak:
+                self.server_peak = n
 
 
 class Viewer(threading.Thread):
@@ -390,6 +409,12 @@ class Viewer(threading.Thread):
         try:
             env = json.loads(data)
             if isinstance(env, dict):
+                # The server's viewer-count broadcast is exactly {"count":N} —
+                # the same payload the UI reads. Mirror it so our report agrees
+                # with the page instead of with our (leading) local thread count.
+                if "count" in env and isinstance(env["count"], int):
+                    self.stats.note_server_count(env["count"])
+                    return
                 # Snapshot frames carry the stamp in `data._lt_ts`; delta frames
                 # carry it as a `set _lt_ts` op. Read whichever is present.
                 inner = env.get("data")
@@ -430,7 +455,7 @@ def run_viewer_pool(base: str, fest: int, stats: Stats, vmin: int, vmax: int,
             viewers.append(v)
         while len(viewers) > target:
             viewers.pop().shutdown()
-        stats.note_peak(len(viewers))
+        stats.note_local(len(viewers))
         time.sleep(1)
     for v in viewers:
         v.shutdown()
@@ -443,7 +468,9 @@ def print_report(stats: Stats, duration: float, vmin: int, vmax: int):
     total_edits = stats.edit_ok + stats.edit_err
     eps = total_edits / duration if duration else 0
     print("\n================ realtime demo report ================", flush=True)
-    print(f"  duration {duration:.0f}s   viewers {vmin}-{vmax} (peak {stats.peak_viewers})", flush=True)
+    print(f"  duration {duration:.0f}s   viewers {vmin}-{vmax}", flush=True)
+    print(f"  viewers: server peak {stats.server_peak} (the count the UI shows)  "
+          f"| local-thread peak {stats.peak_viewers}", flush=True)
     print(f"  edits: {total_edits} total  {stats.edit_ok} ok  {stats.edit_err} err  ({eps:.1f}/s)", flush=True)
     print(f"  SSE events received {stats.events}  (viewer connect fails {stats.viewer_fail}, drops {stats.viewer_drop})", flush=True)
     print(f"\n  {'metric':<22}{'p50':>9}{'p95':>9}{'p99':>9}{'max':>9}{'n':>8}", flush=True)
@@ -454,15 +481,51 @@ def print_report(stats: Stats, duration: float, vmin: int, vmax: int):
     print("  edit = editor PUT/POST round-trip; view = edit->viewer SSE propagation (OD/KSI).", flush=True)
 
 
+def run_viewers_only(base: str, fest: int, stats: Stats,
+                     vmin: int, vmax: int, ramp_period: float, duration: float) -> None:
+    """Hold the SSE viewer fleet with NO edits, so the viewer/fan-out side can be
+    exercised in isolation (`--eps 0`). The live count printed is the SERVER's own
+    subscriber count — the same `viewers` event the UI consumes — so it matches the
+    page exactly; the local thread count is shown beside it to expose connect
+    lag/failures (threads we hold but whose SSE hasn't connected, or has dropped)."""
+    install_dns_cache()  # keep the viewer fleet from flooding the resolver
+    print(f"simulating VIEWERS ONLY (no edits): viewers {vmin}-{vmax} "
+          f"(ramp {ramp_period:.0f}s) for {duration:.0f}s", flush=True)
+    stop_all = threading.Event()
+    pool = threading.Thread(
+        target=run_viewer_pool,
+        args=(base, fest, stats, vmin, vmax, ramp_period, duration, stop_all),
+        daemon=True,
+    )
+    pool.start()
+    deadline = time.monotonic() + duration
+    while time.monotonic() < deadline:
+        time.sleep(1)
+        print(f"\r  viewers srv={stats.server_count} thr={stats.local_alive} "
+              f"peak(srv={stats.server_peak} thr={stats.peak_viewers}) events={stats.events} "
+              f"fail={stats.viewer_fail} drop={stats.viewer_drop}   ", end="", flush=True)
+    stop_all.set()
+    pool.join(timeout=10)
+    print_report(stats, duration, vmin, vmax)
+
+
 def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
              token: str, duration: float, eps: float,
              burst: int, burst_teams: int,
              viewers_min: int, viewers_max: int, ramp_period: float) -> None:
-    install_dns_cache()  # keep the viewer fleet from flooding the resolver
     rng = random.Random()
     c = Client(base, token)
     stats = Stats()
-    interval = (1.0 / eps) if eps > 0 else 0.3
+
+    # eps<=0 means "no edits" — hold the viewer fleet only, so viewers and editors
+    # can be load-tested separately. (Previously eps=0 silently fell back to a
+    # 0.3s tick and kept driving ~3 edits/s.)
+    if eps <= 0:
+        run_viewers_only(base, fest, stats, viewers_min, viewers_max, ramp_period, duration)
+        return
+
+    install_dns_cache()  # keep the viewer fleet from flooding the resolver
+    interval = 1.0 / eps
 
     # Pull current state once; we are the only editor, so we mutate local copies
     # and PUT them back (OD/KSI replace the whole state blob each edit).
@@ -575,8 +638,8 @@ def simulate(base: str, fest: int, od: int, ksi: int, ek: int, ek_match: str,
             if ok_any:
                 edits["ek"] += 1
         print(f"\r  edits od={edits['od']} ksi={edits['ksi']} ek={edits['ek']} "
-              f"err={stats.edit_err} viewers={stats.peak_viewers} events={stats.events}   ",
-              end="", flush=True)
+              f"err={stats.edit_err} viewers srv={stats.server_count} thr={stats.local_alive} "
+              f"events={stats.events}   ", end="", flush=True)
         time.sleep(interval)
 
     stop_all.set()
@@ -602,10 +665,15 @@ def simulate_realistic(base: str, fest: int, game_id: int, game_type: str,
     Each edit carries a single real-cell op plus an `_lt_ts` op so viewers can
     still compute propagation latency out of the broadcast state.
     """
-    install_dns_cache()  # keep the viewer fleet from flooding the resolver
     c = Client(base, token)
     stats = Stats()
 
+    # eps<=0 means "no edits" — hold the viewer fleet only (test viewers alone).
+    if eps <= 0:
+        run_viewers_only(base, fest, stats, viewers_min, viewers_max, ramp_period, duration)
+        return
+
+    install_dns_cache()  # keep the viewer fleet from flooding the resolver
     state = c.get_json(f"/api/fest/{fest}/games/{game_id}/state")
     if game_type == "od":
         entries = state.get("entries") or []
@@ -662,7 +730,7 @@ def simulate_realistic(base: str, fest: int, game_id: int, game_type: str,
     # Closed-loop per editor: each waits for its PATCH to land, then paces so the
     # fleet aims for `eps` total. If the server can't keep up the editors fall
     # behind and achieved eps drops — exactly how a real organizer experiences it.
-    per_editor_interval = (editors / eps) if eps > 0 else 0.3
+    per_editor_interval = editors / eps  # eps>0 guaranteed (eps<=0 handled above)
     deadline = time.monotonic() + duration
 
     def editor_loop(editor_id: int):
@@ -692,7 +760,8 @@ def simulate_realistic(base: str, fest: int, game_id: int, game_type: str,
         time.sleep(1)
         total = stats.edit_ok + stats.edit_err
         print(f"\r  edits={total} ok={stats.edit_ok} err={stats.edit_err} "
-              f"viewers={stats.peak_viewers} events={stats.events}   ", end="", flush=True)
+              f"viewers srv={stats.server_count} thr={stats.local_alive} "
+              f"events={stats.events}   ", end="", flush=True)
 
     stop_all.set()
     for t in threads:
@@ -726,7 +795,7 @@ def main() -> int:
     sim.add_argument("--ek-match", required=True)
     sim.add_argument("--token", required=True)
     sim.add_argument("--duration", type=float, default=120.0)
-    sim.add_argument("--eps", type=float, default=3.0, help="edits per second (one game edit per tick, rotating od/ksi/ek)")
+    sim.add_argument("--eps", type=float, default=3.0, help="edits per second (one game edit per tick, rotating od/ksi/ek); 0 = no edits, hold viewers only")
     sim.add_argument("--burst", type=int, default=8, help="cell changes per tick (visible movement)")
     sim.add_argument("--burst-teams", type=int, default=20, help="restrict edits to the first N teams/participants")
     sim.add_argument("--viewers-min", type=int, default=0, help="min concurrent SSE viewers in the ramp")

@@ -45,6 +45,8 @@ deploy *args:
 # Usage:
 #   just loadtest --eps 10 --viewers 200-1000
 #   just loadtest --eps 5 --viewers 30-100 --duration 600 --local
+#   just loadtest --eps 0 --viewers 10-1000   # viewers only, no edits
+#   just loadtest --eps 5 --viewers 0         # editors only, no viewers
 loadtest *args:
     #!/usr/bin/env bash
     set -euo pipefail
