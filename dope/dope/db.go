@@ -39,6 +39,7 @@ type VenueView struct {
 type FestView struct {
 	Slug              string      `json:"slug"`
 	Title             string      `json:"title"`
+	GameName          string      `json:"gameName,omitempty"`
 	Revision          int64       `json:"revision"`
 	UpdatedAt         string      `json:"updatedAt"`
 	SchemaJSON        string      `json:"schemaJson,omitempty"`
@@ -2155,11 +2156,11 @@ func (s *server) loadFestViewLocked(festID, gameID int64) (FestView, error) {
 	}
 	var updatedAt string
 	if err := s.db.QueryRowContext(ctx, `
-select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, '')
+select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, ''), coalesce(g.title, '')
 from fests t
 left join games g on g.fest_id = t.id and g.id = ?
 where t.id = ?`, gameID, festID).
-		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON); err != nil {
+		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON, &view.GameName); err != nil {
 		return FestView{}, err
 	}
 	view.UpdatedAt = updatedAt

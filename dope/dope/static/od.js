@@ -2642,7 +2642,7 @@ function renderGameBreadcrumbs(gameTitle) {
   gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
     festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
     festTitle: fest?.title || "Фест",
-    gameTitle: gameTitle || scheme?.title || "ОД",
+    gameTitle: fest?.gameName || gameTitle || scheme?.title || "ОД",
   });
 }
 

@@ -1070,7 +1070,7 @@ function setHeading(text) {
 
 function renderGameBreadcrumbs() {
   if (!breadcrumbsNode || !route.festID) return;
-  const gameTitle = currentGameTitle() || "ЭК";
+  const gameTitle = fest?.gameName || currentGameTitle() || "ЭК";
   gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
     festHref: `/fest/${route.festID}`,
     festTitle: fest?.title || "Фест",
