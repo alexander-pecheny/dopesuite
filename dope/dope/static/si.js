@@ -6,6 +6,7 @@ const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
 const setStatus = gameTable.createStatusReporter(statusNode);
+const viewerCounter = gameTable.createViewerCounter(statusNode);
 const teamNameOverflow = gameTable.createTeamNameOverflowController({
   root: siRoot,
   detailed: {
@@ -1098,6 +1099,7 @@ function syncState() {
     getInitialSeq: () => initialStateSeq,
     setStatus,
     onRemoteState: applyRemoteState,
+    onViewers: (count) => viewerCounter.setCount(count),
   });
   return stateSync;
 }

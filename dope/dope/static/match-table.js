@@ -761,6 +761,15 @@
         lastSeqSeeded = true;
       }
       const events = new EventSource(options.eventsURL);
+      if (options.onViewers) {
+        events.addEventListener("viewers", (event) => {
+          try {
+            options.onViewers(JSON.parse(event.data)?.count);
+          } catch (_error) {
+            // ignore malformed viewer-count payloads
+          }
+        });
+      }
       events.addEventListener("state", (event) => {
         let message;
         try {
@@ -1465,7 +1474,7 @@
   }
 
   function mountEditorLink(statusNode) {
-    const actions = statusNode?.parentElement;
+    const actions = statusNode?.closest(".host-actions");
     if (!actions) return null;
     const link = document.createElement("a");
     link.className = "action-icon editor-link";
@@ -1487,7 +1496,7 @@
   }
 
   function mountViewerLink(statusNode) {
-    const actions = statusNode?.parentElement;
+    const actions = statusNode?.closest(".host-actions");
     if (!actions) return null;
     const link = document.createElement("a");
     link.className = "action-icon viewer-link";
