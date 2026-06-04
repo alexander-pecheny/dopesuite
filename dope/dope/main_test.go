@@ -84,7 +84,7 @@ func TestShootoutThemeActions(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv := &server{
 		state:       defaultMatch(),
-		subscribers: make(map[int64]map[chan event]struct{}),
+		subscribers: make(map[int64]map[chan event]bool),
 	}
 
 	if _, _, err := srv.applyUpdate(updateRequest{Action: actionAddShootoutTheme}); err != nil {
@@ -142,7 +142,7 @@ func TestFinishedMatchRejectsEditsButCanBeReopened(t *testing.T) {
 	t.Chdir(t.TempDir())
 	srv := &server{
 		state:       defaultMatch(),
-		subscribers: make(map[int64]map[chan event]struct{}),
+		subscribers: make(map[int64]map[chan event]bool),
 	}
 
 	finished := true
@@ -204,7 +204,7 @@ func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 		festID:          festID,
 		activeGameID:    gameID,
 		activeMatchCode: defaultMatchCode,
-		subscribers:     make(map[int64]map[chan event]struct{}),
+		subscribers:     make(map[int64]map[chan event]bool),
 	}
 
 	view, err := srv.loadMatchViewLocked(festID, defaultMatchCode)
@@ -262,7 +262,7 @@ func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 		festID:          festID,
 		activeGameID:    gameID,
 		activeMatchCode: defaultMatchCode,
-		subscribers:     make(map[int64]map[chan event]struct{}),
+		subscribers:     make(map[int64]map[chan event]bool),
 	}
 
 	venues, _, err := srv.updateVenue(festID, 1, "Рим")
@@ -378,7 +378,7 @@ func TestImportMultiStageScheme(t *testing.T) {
 	srv := &server{
 		db:              db,
 		activeMatchCode: defaultMatchCode,
-		subscribers:     make(map[int64]map[chan event]struct{}),
+		subscribers:     make(map[int64]map[chan event]bool),
 	}
 	view, err := srv.importScheme(scheme)
 	if err != nil {
@@ -415,7 +415,7 @@ func TestEmptyDatabaseHasNoFest(t *testing.T) {
 	if festID != 0 || gameID != 0 || matchCode != "" {
 		t.Fatalf("empty db produced (%d, %d, %q), want zero values", festID, gameID, matchCode)
 	}
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 	view, err := srv.loadFestViewLocked(0, 0)
 	if err != nil {
 		t.Fatalf("loadFestViewLocked: %v", err)
@@ -505,7 +505,7 @@ func TestImportRejectsTeamSlot(t *testing.T) {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 	scheme := festScheme{
 		SchemaVersion: 2,
 		Slug:          "with-team-slot",
@@ -538,7 +538,7 @@ func TestImportSeedSlotsResolveViaAssignments(t *testing.T) {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 	scheme := festScheme{
 		SchemaVersion: 2,
 		Slug:          "symbolic",
@@ -601,7 +601,7 @@ func TestSystemUserIsCreatedOnImport(t *testing.T) {
 		t.Fatalf("open db: %v", err)
 	}
 	defer db.Close()
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 	scheme := festScheme{
 		SchemaVersion: 2,
 		Slug:          "minimal",
@@ -689,7 +689,7 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 
 	festID, chgkGameID, ksiGameID := createRosterPropagationFixture(t, db)
 
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 	result, err := srv.importFestRoster(t.Context(), festID, 13533, []festRosterImportTeam{
 		{
 			RatingID: 101,
@@ -814,7 +814,7 @@ func TestImportFestRosterPreservesPlayerTeamOverrides(t *testing.T) {
 	defer db.Close()
 
 	festID, _, ksiGameID := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 	roster := []festRosterImportTeam{
 		{
 			RatingID: 101,
@@ -875,7 +875,7 @@ func TestHostPlayerOverrideRowsGroupGames(t *testing.T) {
 	defer db.Close()
 
 	festID, _, ksiGameID := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 	roster := []festRosterImportTeam{
 		{
 			RatingID: 101,
@@ -976,7 +976,7 @@ func TestFestNumbersFlow(t *testing.T) {
 	defer db.Close()
 
 	festID, chgkGameID, _ := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 	if _, err := srv.importFestRoster(t.Context(), festID, 999, []festRosterImportTeam{
 		{RatingID: 11, Name: "Алёша", City: "А"},
 		{RatingID: 12, Name: "Боря", City: "Б"},
@@ -1228,7 +1228,7 @@ func TestFestNumbersRemapEntries(t *testing.T) {
 	defer db.Close()
 
 	festID, chgkGameID, _ := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 	if _, err := srv.importFestRoster(t.Context(), festID, 1, []festRosterImportTeam{
 		{RatingID: 11, Name: "Алёша"},
 		{RatingID: 12, Name: "Боря"},
@@ -1323,7 +1323,7 @@ func TestFestNumbersStableAcrossResync(t *testing.T) {
 	defer db.Close()
 
 	festID, _, _ := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 
 	// Initial import: 5 teams "А".."Д" with rating IDs 11..15.
 	initial := []festRosterImportTeam{
@@ -1455,7 +1455,7 @@ func TestFestNumbersFreshImport(t *testing.T) {
 	defer db.Close()
 
 	festID, _, _ := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 
 	if _, err := srv.importFestRoster(t.Context(), festID, 999, []festRosterImportTeam{
 		{RatingID: 11, Name: "Алёша"},

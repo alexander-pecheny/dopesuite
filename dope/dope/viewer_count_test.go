@@ -6,10 +6,10 @@ func TestBroadcastViewerCount(t *testing.T) {
 	srv := &server{}
 	a := make(chan event, 8)
 	b := make(chan event, 8)
-	srv.addSubscriber(7, a)
-	srv.addSubscriber(7, b)
+	srv.addSubscriber(7, a, false)
+	srv.addSubscriber(7, b, false)
 	// A subscriber on a different fest must not be counted.
-	srv.addSubscriber(9, make(chan event, 8))
+	srv.addSubscriber(9, make(chan event, 8), false)
 
 	srv.broadcastViewerCount(7)
 

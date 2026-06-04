@@ -27,7 +27,7 @@ func auditOpenDB(t *testing.T) *sql.DB {
 func auditTestServer(db *sql.DB) *server {
 	return &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]struct{}),
+		subscribers:     make(map[int64]map[chan event]bool),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}
 }

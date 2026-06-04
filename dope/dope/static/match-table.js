@@ -714,6 +714,13 @@
           // what we have. A gap means we missed an event, so refetch instead of
           // misapplying. Drop deltas mid-resync; the refetch supersedes them.
           if (resyncing) return;
+          // Already applied: a coalesced viewer delta whose seq range we fetched
+          // past on connect arrives with seq <= lastSeq. The state already
+          // reflects it, so ignore it rather than read the older prevSeq as a gap.
+          if ((Number(message.seq) || 0) <= lastSeq) {
+            if (!hasPendingSave()) setSyncStatus("saved");
+            return;
+          }
           if ((Number(message.prevSeq) || 0) !== lastSeq) {
             void resync();
             return;

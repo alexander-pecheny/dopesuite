@@ -38,44 +38,55 @@ func TestMergeOpsArrays(t *testing.T) {
 	}
 }
 
-// A window of delta broadcasts for one scope must buffer (no event until flush),
-// collapse to a single seq increment, carry the merged ops, and chain prevSeq
-// across windows.
-func TestBroadcastStateDeltaCoalesces(t *testing.T) {
+// Editors get every delta immediately with per-edit seqs; viewers get one merged
+// delta per window. Seqs are per-edit (not collapsed), and the merged viewer
+// delta spans [prevSeq, lastSeq].
+func TestBroadcastStateDeltaCoalescesForViewersImmediateForEditors(t *testing.T) {
 	srv := &server{}
-	ch := make(chan event, 8)
-	srv.addSubscriber(1, ch)
+	editor := make(chan event, 8)
+	viewer := make(chan event, 8)
+	srv.addSubscriber(1, editor, true)
+	srv.addSubscriber(1, viewer, false)
 
 	scope := "game-state:5"
 	seq1 := srv.broadcastStateDelta(1, scope, 10, []byte(`[{"op":"set","path":["x"],"value":1}]`))
 	seq2 := srv.broadcastStateDelta(1, scope, 11, []byte(`[{"op":"set","path":["y"],"value":2}]`))
-	// Both edits in the window resolve to the same (predicted) flush seq.
-	if seq1 != 1 || seq2 != 1 {
-		t.Fatalf("window seqs = %d,%d, want 1,1", seq1, seq2)
+	// Per-edit seqs, assigned immediately.
+	if seq1 != 1 || seq2 != 2 {
+		t.Fatalf("per-edit seqs = %d,%d, want 1,2", seq1, seq2)
 	}
-	// Nothing fanned out yet — still buffered.
+
+	// Editor saw both deltas immediately, each chaining per edit.
+	e1 := drainOne(t, editor)
+	if e1.Seq != 1 || e1.PrevSeq != 0 {
+		t.Fatalf("editor delta 1 seq/prev = %d/%d, want 1/0", e1.Seq, e1.PrevSeq)
+	}
+	e2 := drainOne(t, editor)
+	if e2.Seq != 2 || e2.PrevSeq != 1 {
+		t.Fatalf("editor delta 2 seq/prev = %d/%d, want 2/1", e2.Seq, e2.PrevSeq)
+	}
+
+	// Viewer saw nothing yet — buffered until flush.
 	select {
-	case ev := <-ch:
-		t.Fatalf("expected no broadcast before flush, got %s", ev.data)
+	case ev := <-viewer:
+		t.Fatalf("expected no viewer broadcast before flush, got %s", ev.data)
 	default:
 	}
 
 	srv.flushDelta(scope)
-	env := drainOne(t, ch)
-	if env.Seq != 1 || env.PrevSeq != 0 {
-		t.Fatalf("flushed seq/prevSeq = %d/%d, want 1/0", env.Seq, env.PrevSeq)
+	v := drainOne(t, viewer)
+	if v.Seq != 2 || v.PrevSeq != 0 {
+		t.Fatalf("merged viewer delta seq/prev = %d/%d, want 2/0", v.Seq, v.PrevSeq)
 	}
 	var ops []map[string]any
-	if err := json.Unmarshal(env.Ops, &ops); err != nil || len(ops) != 2 {
-		t.Fatalf("merged ops = %s (err %v), want 2 ops", env.Ops, err)
+	if err := json.Unmarshal(v.Ops, &ops); err != nil || len(ops) != 2 {
+		t.Fatalf("merged ops = %s (err %v), want 2 ops", v.Ops, err)
 	}
-
-	// A second window chains: prevSeq is the prior flush's seq.
-	srv.broadcastStateDelta(1, scope, 12, []byte(`[{"op":"set","path":["z"],"value":3}]`))
-	srv.flushDelta(scope)
-	env2 := drainOne(t, ch)
-	if env2.Seq != 2 || env2.PrevSeq != 1 {
-		t.Fatalf("second window seq/prevSeq = %d/%d, want 2/1", env2.Seq, env2.PrevSeq)
+	// Editor must NOT also receive the merged viewer delta.
+	select {
+	case ev := <-editor:
+		t.Fatalf("editor unexpectedly got the coalesced viewer delta: %s", ev.data)
+	default:
 	}
 }
 
@@ -84,8 +95,8 @@ func TestBroadcastStateDeltaCoalesces(t *testing.T) {
 // supersedes.
 func TestBroadcastStateFlushesBufferedDeltasFirst(t *testing.T) {
 	srv := &server{}
-	ch := make(chan event, 8)
-	srv.addSubscriber(1, ch)
+	ch := make(chan event, 8) // a viewer, so it sees the coalesced delta + snapshot
+	srv.addSubscriber(1, ch, false)
 	scope := "game-state:5"
 
 	srv.broadcastStateDelta(1, scope, 10, []byte(`[{"op":"set","path":["x"],"value":1}]`))
@@ -95,7 +106,7 @@ func TestBroadcastStateFlushesBufferedDeltasFirst(t *testing.T) {
 	if snapSeq != 2 {
 		t.Fatalf("snapshot seq = %d, want 2 (after the flushed delta at 1)", snapSeq)
 	}
-	// First out is the flushed delta (envelope, seq 1, carries ops)...
+	// First out is the flushed viewer delta (envelope, seq 1, carries ops)...
 	delta := drainOne(t, ch)
 	if delta.Seq != 1 || len(delta.Ops) == 0 {
 		t.Fatalf("first event = seq %d ops %s, want the buffered delta at seq 1", delta.Seq, delta.Ops)

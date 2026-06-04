@@ -129,8 +129,12 @@ type server struct {
 	state           MatchState
 	// subMu guards the SSE subscriber maps independently of mu so that
 	// DB write transactions (which take mu) don't block event fan-out.
-	subMu           sync.RWMutex
-	subscribers     map[int64]map[chan event]struct{}
+	subMu sync.RWMutex
+	// subscribers maps fest -> SSE channel -> isEditor. Editors (fest organizers)
+	// get every state delta immediately; viewers get coalesced merged deltas (see
+	// broadcastStateDelta). There are only a handful of editors, so the per-edit
+	// fan-out to them is cheap.
+	subscribers     map[int64]map[chan event]bool
 	hostSubscribers map[int64]map[chan hostPresenceEvent]struct{}
 	assets          fs.FS
 	assetNoCache    bool
@@ -518,7 +522,7 @@ func newServer() (*server, error) {
 		festID:          festID,
 		activeGameID:    gameID,
 		activeMatchCode: matchCode,
-		subscribers:     make(map[int64]map[chan event]struct{}),
+		subscribers:     make(map[int64]map[chan event]bool),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}, nil
 }
@@ -634,7 +638,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ch := make(chan event, 8)
-	s.addSubscriber(festID, ch)
+	s.addSubscriber(festID, ch, s.isFestEditor(r, festID))
 	s.scheduleViewerCount(festID)
 	defer func() {
 		s.removeSubscriber(festID, ch)
@@ -714,18 +718,33 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) addSubscriber(festID int64, ch chan event) {
+// isFestEditor reports whether the /events request comes from a fest organizer
+// (table editor or higher). Best-effort: any lookup failure means "not an
+// editor", so the connection just receives the coalesced viewer stream.
+func (s *server) isFestEditor(r *http.Request, festID int64) bool {
+	user, ok := s.lookupSession(r)
+	if !ok {
+		return false
+	}
+	role, err := s.festUserRole(r.Context(), festID, user.UserID)
+	if err != nil {
+		return false
+	}
+	return festRoleCanEditGameTables(role)
+}
+
+func (s *server) addSubscriber(festID int64, ch chan event, isEditor bool) {
 	s.subMu.Lock()
 	defer s.subMu.Unlock()
 	if s.subscribers == nil {
-		s.subscribers = make(map[int64]map[chan event]struct{})
+		s.subscribers = make(map[int64]map[chan event]bool)
 	}
 	bucket, ok := s.subscribers[festID]
 	if !ok {
-		bucket = make(map[chan event]struct{})
+		bucket = make(map[chan event]bool)
 		s.subscribers[festID] = bucket
 	}
-	bucket[ch] = struct{}{}
+	bucket[ch] = isEditor
 }
 
 func (s *server) removeSubscriber(festID int64, ch chan event) {
@@ -805,7 +824,18 @@ func (s *server) broadcastViewerCount(festID int64) {
 	}
 }
 
-func (s *server) broadcast(ev event) {
+// audience selects which SSE subscribers a broadcast reaches.
+type audience int
+
+const (
+	audAll     audience = iota // editors + viewers (snapshots, fest-wide events)
+	audEditors                 // organizers only — immediate, uncoalesced deltas
+	audViewers                 // spectators only — coalesced merged deltas
+)
+
+func (s *server) broadcast(ev event) { s.broadcastTo(ev, audAll) }
+
+func (s *server) broadcastTo(ev event, aud audience) {
 	// Snapshot the channel list under the read lock so the slow send
 	// path runs without keeping other broadcasts or subscriber churn
 	// blocked.
@@ -813,7 +843,17 @@ func (s *server) broadcast(ev event) {
 	s.subMu.RLock()
 	if bucket, ok := s.subscribers[ev.festID]; ok && len(bucket) > 0 {
 		chs = make([]chan event, 0, len(bucket))
-		for ch := range bucket {
+		for ch, isEditor := range bucket {
+			switch aud {
+			case audEditors:
+				if !isEditor {
+					continue
+				}
+			case audViewers:
+				if isEditor {
+					continue
+				}
+			}
 			chs = append(chs, ch)
 		}
 	}

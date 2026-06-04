@@ -291,7 +291,7 @@ func TestScopedGameStatePatchBroadcastsDelta(t *testing.T) {
 
 	// Subscribe like an SSE viewer so we can read what the PATCH fans out.
 	ch := make(chan event, 8)
-	srv.addSubscriber(festID, ch)
+	srv.addSubscriber(festID, ch, false)
 	defer srv.removeSubscriber(festID, ch)
 
 	path := fmt.Sprintf("/api/fest/%d/games/%d/state", festID, gameID)
@@ -374,7 +374,7 @@ func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
 	addAPITestOrganizer(t, srv, festID, organizerID)
 
 	ch := make(chan event, 8)
-	srv.addSubscriber(festID, ch)
+	srv.addSubscriber(festID, ch, false)
 	defer srv.removeSubscriber(festID, ch)
 
 	type envelope struct {
@@ -448,7 +448,7 @@ func TestScopedGameStateRejectsRatingRosterEdits(t *testing.T) {
 	}
 	defer db.Close()
 	festID, chgkGameID, ksiGameID := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]struct{})}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
 	organizerID, token := createAPITestSession(t, srv, "roster-editor")
 	addAPITestOrganizer(t, srv, festID, organizerID)
 

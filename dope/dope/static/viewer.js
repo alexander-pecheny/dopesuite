@@ -472,6 +472,7 @@ function applyStatsMatchEvent(message) {
   if (Array.isArray(message.ops)) {
     const base = stageCache.matchState(code);
     const prev = Number(message.prevSeq) || 0;
+    if (base && (Number(message.seq) || 0) <= (Number(base.seq) || 0)) return; // already applied
     if (!base || (Number(base.seq) || 0) !== prev) {
       scheduleStatsResync();
       return;
@@ -645,6 +646,9 @@ function handleMatchEvent(message, matchScope) {
     const code = matchCodeFromScope(message.scope);
     const base = matchBase(code);
     const prev = Number(message.prevSeq) || 0;
+    // Already applied: a coalesced delta whose range we fetched past on connect
+    // arrives with seq <= base.seq. Ignore it instead of reloading on the gap.
+    if (base && (Number(message.seq) || 0) <= (Number(base.seq) || 0)) return;
     if (!base || (Number(base.seq) || 0) !== prev) {
       stageCache.invalidateMatch(code);
       if (isDisplayed(code)) scheduleReload();

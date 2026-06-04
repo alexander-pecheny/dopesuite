@@ -441,6 +441,13 @@ function applyMatchDelta(message, matchScope) {
   const code = matchCodeFromScope(message.scope);
   const base = matchBase(code);
   const prev = Number(message.prevSeq) || 0;
+  // Already applied: a coalesced viewer delta whose range this view was fetched
+  // past arrives with seq <= base.seq. Ignore it rather than treat the older
+  // prevSeq as a gap (which would force a needless reload).
+  if (base && (Number(message.seq) || 0) <= (Number(base.seq) || 0)) {
+    setStatus("saved");
+    return;
+  }
   if (!base || (Number(base.seq) || 0) !== prev) {
     stageCache.invalidateMatch(code);
     if (matchVisible(code)) scheduleReload();
@@ -528,6 +535,7 @@ function applyStatsMatchEvent(message) {
   if (Array.isArray(message.ops)) {
     const base = stageCache.matchState(code);
     const prev = Number(message.prevSeq) || 0;
+    if (base && (Number(message.seq) || 0) <= (Number(base.seq) || 0)) return; // already applied
     if (!base || (Number(base.seq) || 0) !== prev) {
       scheduleStatsResync();
       return;

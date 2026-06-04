@@ -3206,21 +3206,23 @@ func (s *server) broadcastState(festID int64, scope string, revision int64, payl
 }
 
 // deltaCoalesceWindow bounds how long delta ops for one scope buffer before they
-// fan out as a single merged delta. Clients already debounce their own edits, so
-// this mainly caps the fan-out rate across concurrent editors and adds at most
-// this much latency to a viewer's update — a trade the product accepts (viewers
-// may lag; editors stay instant via their local optimistic overlay).
+// fan out to VIEWERS as a single merged delta. Editors are exempt — they get
+// every delta immediately (see broadcastStateDelta) — so this adds latency only
+// to spectators, a trade the product accepts (viewers may lag; editors stay
+// current, both for their own edits and co-editors').
 const deltaCoalesceWindow = 150 * time.Millisecond
 
-// pendingDelta accumulates one scope's delta ops within a coalescing window.
-// Seq is NOT assigned per edit; the whole window collapses to a single seq
-// increment at flush (prevSeq -> prevSeq+1). That keeps a client that fetched
-// the post-edit state mid-window (X-State-Seq == prevSeq) from seeing the merged
-// delta as a gap: its prevSeq still matches, and re-applying the (idempotent)
-// set-ops it already has is harmless.
+// pendingDelta accumulates one scope's delta ops for the VIEWER fan-out within a
+// coalescing window. Each edit still bumps the per-scope seq immediately (so the
+// editor stream and HTTP responses carry per-edit seqs); the window's merged
+// viewer delta spans [prevSeq, lastSeq] and applies as one step. A viewer that
+// connected mid-window fetched state at the already-bumped seq, so the merged
+// delta's seq <= its lastSeq and the client ignores it (seq-monotonic guard)
+// instead of gap-resyncing.
 type pendingDelta struct {
 	festID   int64
 	prevSeq  uint64
+	lastSeq  uint64
 	revision int64
 	ops      [][]byte
 	timer    *time.Timer
@@ -3240,44 +3242,50 @@ func (s *server) broadcastMatchView(festID int64, mscope matchScope, revision in
 }
 
 // broadcastStateDelta fans out a scoped DELTA (the ops that produced the new
-// state) instead of the whole state — the core fan-out win: every viewer gets a
-// ~100-byte op list rather than the full game blob. Seq assignment and fan-out
-// happen under seqMu so per-scope event order matches seq order; a client whose
-// lastSeq != prevSeq resyncs.
+// state) instead of the whole state — the core fan-out win: every client gets a
+// ~100-byte op list rather than the full game blob. Editors receive the delta
+// IMMEDIATELY (there are only a handful, so the per-edit fan-out is cheap, and
+// they must always see co-editors' changes without delay); viewers receive a
+// single merged delta per coalescing window. Seq is bumped per edit under seqMu
+// so per-scope order matches seq order and HTTP responses can carry it.
 func (s *server) broadcastStateDelta(festID int64, scope string, revision int64, ops []byte) uint64 {
 	s.invalidateFestViewCache(festID)
 	s.seqMu.Lock()
 	defer s.seqMu.Unlock()
+	prev := s.stateSeqLocked(scope)
+	seq := s.bumpSeqLocked(scope)
+	// Editors: immediate, uncoalesced — chains per edit (prevSeq = seq-1).
+	s.broadcastTo(event{festID: festID, revision: revision,
+		data: eventDeltaJSON(scope, revision, seq, prev, ops)}, audEditors)
+	// Viewers: buffer for a merged broadcast at window end.
 	if s.deltaBuf == nil {
 		s.deltaBuf = map[string]*pendingDelta{}
 	}
 	pd := s.deltaBuf[scope]
 	if pd == nil {
-		pd = &pendingDelta{festID: festID, prevSeq: s.stateSeqLocked(scope)}
+		pd = &pendingDelta{festID: festID, prevSeq: prev}
 		s.deltaBuf[scope] = pd
 		sc := scope
 		pd.timer = time.AfterFunc(deltaCoalesceWindow, func() { s.flushDelta(sc) })
 	}
 	pd.festID = festID
 	pd.revision = revision
+	pd.lastSeq = seq
 	pd.ops = append(pd.ops, ops)
-	// Every edit in this window flushes as the same single seq (prevSeq+1), so a
-	// handler can stamp it on its HTTP response and stay in lockstep with the
-	// merged broadcast it will receive (and, for match echoes, drop) over SSE.
-	return pd.prevSeq + 1
+	return seq
 }
 
-// flushDelta emits a scope's buffered delta as one merged broadcast. Called from
-// the coalescing timer.
+// flushDelta emits a scope's buffered viewer delta as one merged broadcast.
+// Called from the coalescing timer.
 func (s *server) flushDelta(scope string) {
 	s.seqMu.Lock()
 	defer s.seqMu.Unlock()
 	s.flushDeltaLocked(scope)
 }
 
-// flushDeltaLocked bumps the scope seq exactly once and fans out the merged ops.
-// Caller holds seqMu. No-op if nothing is buffered (e.g. a snapshot already
-// flushed this window, or the timer raced a flush).
+// flushDeltaLocked fans the buffered window's merged ops out to VIEWERS as a
+// single delta spanning [prevSeq, lastSeq]. Caller holds seqMu. No-op if nothing
+// is buffered (a snapshot already flushed this window, or the timer raced one).
 func (s *server) flushDeltaLocked(scope string) {
 	pd := s.deltaBuf[scope]
 	if pd == nil {
@@ -3287,9 +3295,8 @@ func (s *server) flushDeltaLocked(scope string) {
 	if pd.timer != nil {
 		pd.timer.Stop()
 	}
-	seq := s.bumpSeqLocked(scope) // exactly prevSeq+1, since nothing else bumps a buffered scope
-	payload := eventDeltaJSON(scope, pd.revision, seq, pd.prevSeq, mergeOpsArrays(pd.ops))
-	s.broadcast(event{festID: pd.festID, revision: pd.revision, data: payload})
+	payload := eventDeltaJSON(scope, pd.revision, pd.lastSeq, pd.prevSeq, mergeOpsArrays(pd.ops))
+	s.broadcastTo(event{festID: pd.festID, revision: pd.revision, data: payload}, audViewers)
 }
 
 // mergeOpsArrays concatenates several JSON op-arrays into one, preserving order
