@@ -142,7 +142,37 @@ Deno.test("computeEKPlayerStats aggregates per player across battles, regular th
   assert.equal(ann.rightTotal, 3);
   assert.equal(bob.sum, 30);
   assert.equal(bob.battles, 1);
-  // Team-share: Alpha's attributed correct answers = Ann 3 + Bob 1 = 4.
-  assert.equal(Math.round(ann.share * 100), 75);
-  assert.equal(Math.round(bob.share * 100), 25);
+  // Team-share is each player's slice of the team's net Σ: Alpha total = 50 + 30 = 80.
+  assert.equal(Math.round(ann.share * 100), 63); // 50/80
+  assert.equal(Math.round(bob.share * 100), 38); // 30/80
+});
+
+Deno.test("computeEKPlayerStats team-share zeroes out non-helpers", () => {
+  const stages = [
+    {code: "r16", matches: [
+      {code: "A", teams: [
+        // Net-positive team: only the positive player gets a share.
+        {name: "Plus", themes: [
+          {player: "Up", answers: ["right", "right", "", "", ""]},   // +30
+          {player: "Down", answers: ["wrong", "", "", "", ""]},      // -10
+        ]},
+        // Net-negative team: everyone is 0, even the positive player.
+        {name: "Minus", themes: [
+          {player: "Good", answers: ["right", "", "", "", ""]},      // +10
+          {player: "Bad", answers: ["", "", "", "", "wrong"]},       // -50
+        ]},
+      ]},
+    ]},
+  ];
+  const byName = Object.fromEntries(computeEKShareStats(stages));
+  // Plus team total = 30 - 10 = 20. Up gets 30/20 = 150%; Down (negative) is 0.
+  assert.equal(Math.round(byName["Up"] * 100), 150);
+  assert.equal(byName["Down"], 0);
+  // Minus team total = 10 - 50 = -40 < 0, so even Good (+10) is 0.
+  assert.equal(byName["Good"], 0);
+  assert.equal(byName["Bad"], 0);
+
+  function computeEKShareStats(s) {
+    return T.computeEKPlayerStats(s).map((r) => [r.player, r.share]);
+  }
 });

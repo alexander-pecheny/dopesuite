@@ -3703,17 +3703,38 @@ body:not(.embedded-match) .grid-match {
 }
 
 .ek-stats-table {
-  --ek-stats-name-col: 200px;
+  /* Cap on the two name columns. They size to their content (so short names sit
+     tight and the whole table stays compact), and only names past this cap
+     truncate with the fade + popover. Generous on desktop where there's room. */
+  --ek-stats-name-col: 320px;
   width: max-content;
 }
 
 .ek-stats-table thead th.ek-stats-name-head,
 .ek-stats-table .ek-stats-name {
-  width: var(--ek-stats-name-col);
-  min-width: var(--ek-stats-name-col);
-  max-width: var(--ek-stats-name-col);
   text-align: left;
   padding-left: var(--results-team-pad);
+}
+
+/* The name cells borrow the .results-team(-head) classes only for the truncate
+   + fade + popover primitive — NOT the OD/KSI frozen-column layout. Cancel the
+   inherited place-column offset (those rules set position:sticky; left:place-col,
+   which on this table just shoves the first column 60px in and overlaps the two
+   name columns). Higher specificity than the .results-table sticky rules, so
+   this holds regardless of source order. Mobile re-pins just the player column. */
+.ek-stats-table td.ek-stats-name {
+  position: static;
+}
+.ek-stats-table thead th.ek-stats-name-head,
+.ek-stats-table td.ek-stats-name {
+  left: auto;
+}
+
+/* Size each name column to its content, capped at --ek-stats-name-col. The cell
+   follows its inner wrap, so the column is exactly as wide as the longest name
+   (up to the cap) — no dead space, no premature clipping. */
+.ek-stats-table .ek-stats-name .results-team-name-wrap {
+  max-width: var(--ek-stats-name-col);
 }
 
 .ek-stats-table .number {
@@ -4521,15 +4542,32 @@ body:not(.embedded-match) .grid-match {
   .results-table .results-team-head,
   .results-table .results-team { padding-left: var(--results-team-pad); min-width: 0; }
   .results-team-city { font-size: var(--results-team-city-size-mobile); }
-  /* Narrow the two name columns and the count columns so the wide stats table
-     stays usable on a phone; long names truncate (fade + popover) and the rest
-     scrolls horizontally. */
-  .ek-stats-table { --ek-stats-name-col: 116px; }
-  .ek-stats-table thead th.ek-stats-name-head,
-  .ek-stats-table .ek-stats-name {
-    width: var(--ek-stats-name-col);
-    min-width: var(--ek-stats-name-col);
-    max-width: var(--ek-stats-name-col);
+  /* Phone: tighten the name cap and the count columns so the wide stats table
+     stays usable. Long names truncate (fade + popover); the numeric grid scrolls
+     horizontally. The player column (Игрок) freezes at the left edge — same
+     frozen-first-column pattern as the OD/KSI results tables — so it stays put
+     while Команда and the counts scroll under it. */
+  .ek-stats-table { --ek-stats-name-col: 132px; }
+  .ek-stats-table thead th.ek-stats-player-head,
+  .ek-stats-table td.ek-stats-player {
+    position: sticky;
+    left: 0;
+  }
+  .ek-stats-table td.ek-stats-player { z-index: 1; --ek-stats-fade-from: var(--paper); }
+  .ek-stats-table thead th.ek-stats-player-head { z-index: 4; --ek-stats-fade-from: var(--structure); }
+  /* Scrolled-under fade off the frozen player column's right edge, drawn once
+     the rest has scrolled — same cue as the OD/KSI results tables. The scroll
+     frame toggles .stage-scroll-left (viewer.js / host.js). */
+  .sheet-frame.stage-scroll-left .ek-stats-table td.ek-stats-player::after,
+  .sheet-frame.stage-scroll-left .ek-stats-table thead th.ek-stats-player-head::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: -28px;
+    bottom: 0;
+    width: 28px;
+    pointer-events: none;
+    background: linear-gradient(to right, var(--ek-stats-fade-from), rgba(238, 241, 244, 0));
   }
   .ek-stats-table .narrow { width: 26px; min-width: 26px; }
   .results-place-head,

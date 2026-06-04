@@ -1774,13 +1774,13 @@
   // the Σ+ semantics shown in a battle (TeamView.plus ignores shootouts too).
   //
   // Players are keyed by (team, player) so namesakes on different teams stay
-  // separate. The denominator for the team-share column is the sum of that
-  // team's attributed correct answers, so the shares of a team's players sum to
-  // exactly 100%. Returns rows sorted by Σ descending (then Σ+, then name).
+  // separate. The team-share column ("% от команды") is the player's share of
+  // the team's net points (Σ): only positive contributors to a net-positive
+  // team count, everyone else is 0 (see the share loop below). Returns rows
+  // sorted by Σ descending (then Σ+, then name).
   function computeEKPlayerStats(stages) {
     const values = [10, 20, 30, 40, 50]; // answer index → nominal value
     const players = new Map();   // key → stat row
-    const teamTaken = new Map(); // team name → total attributed correct answers
     const battleSeen = new Map(); // key → Set of battle ids (for the Бои count)
     for (const stage of stages || []) {
       for (const match of stage.matches || []) {
@@ -1819,7 +1819,6 @@
                 row.plus += value;
                 row.right[i]++;
                 row.rightTotal++;
-                teamTaken.set(teamName, (teamTaken.get(teamName) || 0) + 1);
               } else if (mark === "wrong") {
                 row.sum -= value;
                 row.wrong[i]++;
@@ -1830,9 +1829,15 @@
       }
     }
     const rows = Array.from(players.values());
+    // "% от команды": a player's share of the team's net points (Σ). Only
+    // positive contributors to a net-positive team count — anyone who finished
+    // negative, or whose whole team finished negative, is 0 (they harmed the
+    // team rather than helping, so a share is meaningless).
+    const teamSum = new Map();
+    for (const row of rows) teamSum.set(row.team, (teamSum.get(row.team) || 0) + row.sum);
     for (const row of rows) {
-      const denom = teamTaken.get(row.team) || 0;
-      row.share = denom > 0 ? row.rightTotal / denom : 0;
+      const total = teamSum.get(row.team) || 0;
+      row.share = row.sum > 0 && total > 0 ? row.sum / total : 0;
     }
     rows.sort((a, b) =>
       b.sum - a.sum ||

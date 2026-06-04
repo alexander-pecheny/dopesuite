@@ -70,6 +70,7 @@ let ekTeamNameOverflowFrame = 0;
 let resultsTeamNameOverflowFrame = 0;
 let stageOverflowScrollFrame = null;
 let stageOverflowScrollListener = null;
+let statsScrollFadeFrame = null;
 let playerSelectMeasureContext = null;
 let ekTabsFadeFrame = 0;
 
@@ -751,6 +752,7 @@ function renderStats() {
   document.title = pageTitle("Статистика");
   renderEKTabs();
   rerenderStatsTable();
+  bindStatsScrollFade();
   refreshPresence();
 }
 
@@ -1015,6 +1017,19 @@ function unbindStageOverflowScroll() {
   stageOverflowScrollFrame.removeEventListener("scroll", stageOverflowScrollListener);
   stageOverflowScrollFrame = null;
   stageOverflowScrollListener = null;
+}
+
+// Stats page reuses the .stage-scroll-left fade cue for its frozen player
+// column. The .sheet-frame is static, so bind the listener once and leave it —
+// the toggle is a harmless no-op on routes without an ek-stats-table. (Viewer
+// binds the same thing globally via bindStageScrollFade.)
+function bindStatsScrollFade() {
+  const scrollFrame = hostRoot.closest(".sheet-frame");
+  if (!scrollFrame) return;
+  updateStageScrollState(scrollFrame);
+  if (statsScrollFadeFrame === scrollFrame) return;
+  scrollFrame.addEventListener("scroll", () => updateStageScrollState(scrollFrame), {passive: true});
+  statsScrollFadeFrame = scrollFrame;
 }
 
 function isVisibleInScrollFrame(element) {
