@@ -21,6 +21,10 @@ const stageCache = window.DopeStageCache.create({
   findStage: (code) => findStage(fest, code),
   stageType: (stage) => stageType(stage),
   getMatches: (stage) => stage?.matches || [],
+  // Re-overlay un-acked local edits onto every MatchView the cache stores, so a
+  // background refetch (prefetchStage/prefetchAllStages) or an SSE update can
+  // never wipe an optimistically-marked cell before the server confirms it.
+  overlayMatch: (view) => overlayPendingMatch(view?.code, view),
   buildPaneContent: ({pane, stageCode, stage, data}) => {
     if (stageType(stage) === "reseed") {
       pane.appendChild(buildReseedStagePanel(mergedStage(fest, stageCode)));
@@ -269,7 +273,7 @@ async function loadMatch() {
   if (!matchResponse.ok) throw new Error(await matchResponse.text());
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  state = await matchResponse.json();
+  state = overlayPendingMatch(route.matchCode, await matchResponse.json());
   venues = await venuesResponse.json();
   adoptFestView(await festResponse.json());
   writeFestCache(fest);
@@ -642,27 +646,127 @@ async function sendUpdate(payload, matchCode = currentMatchCode()) {
   }
 }
 
-// sendUpdates posts a batch of edits (a range clear/fill) as a single request.
-// The server applies them atomically — one revision bump, one broadcast — and
-// returns one match view, so the table re-renders once. Sending one request per
-// cell instead produced the "one by one" flicker: each response is an
-// intermediate snapshot that has not applied the other cells yet, so patching
-// from it regressed those optimistically-edited cells to their old marks. This
-// mirrors OD/KSI, which coalesce their edits into a single debounced PATCH.
-async function sendUpdates(payloads, matchCode) {
-  if (payloads.length === 0) return;
-  if (payloads.length === 1) {
-    sendUpdate(payloads[0], matchCode);
-    return;
+// ---- EK optimistic edit durability + batching --------------------------------
+// EK edits are applied to the DOM + match state instantly (see ekApplyValues),
+// then queued here as scoped set-ops per match. Two guarantees, shared with how
+// OD/KSI behave via createStateSync:
+//   - durability: un-acked ops are re-overlaid on top of any MatchView we render
+//     (POST response, SSE delta, or full refetch) via overlayPendingMatch, so an
+//     optimistically-marked cell never regresses before the server confirms it —
+//     even when a slow server makes the write take seconds.
+//   - batching: rapid edits coalesce into ONE atomic /update POST per match per
+//     debounce window (one DB write, one broadcast) instead of one per cell.
+// Ops to the same cell coalesce (last write wins). Structural edits (finished /
+// add/removeShootoutTheme) aren't cell edits — they go straight to sendUpdate.
+const EK_EDIT_DEBOUNCE_MS = 150;
+const ekPending = new Map(); // matchScope -> {ops, inFlight, timer}
+
+function ekEntry(matchCode) {
+  const scope = matchScopeFor(matchCode);
+  let entry = ekPending.get(scope);
+  if (!entry) {
+    entry = {ops: gameTable.createPendingOps(), inFlight: false, timer: null};
+    ekPending.set(scope, entry);
   }
-  setStatus("saving");
+  return entry;
+}
+
+// overlayPendingMatch re-applies a match's un-acked local edits on top of a
+// MatchView. Used everywhere a MatchView enters the render pipeline.
+function overlayPendingMatch(matchCode, view) {
+  if (!view || !matchCode) return view;
+  const entry = ekPending.get(matchScopeFor(matchCode));
+  if (!entry || entry.ops.size() === 0) return view;
+  return entry.ops.overlay(view);
+}
+
+// payloadToOpPath maps an /update cell payload to its MatchView path (matching
+// the server's matchDeltaOps shape). Returns null for non-cell (structural)
+// payloads, which must not be overlay-tracked.
+function payloadToOpPath(payload) {
+  if (payload.place !== undefined) return ["teams", payload.team, "place"];
+  const themesKey = payload.shootout ? "shootoutThemes" : "themes";
+  if (payload.player !== undefined) return ["teams", payload.team, themesKey, payload.theme, "player"];
+  if (payload.mark !== undefined) return ["teams", payload.team, themesKey, payload.theme, "answers", payload.answer];
+  return null;
+}
+
+function payloadToOpValue(payload) {
+  if (payload.place !== undefined) return payload.place;
+  if (payload.player !== undefined) return payload.player;
+  return payload.mark;
+}
+
+// opToPayload is the inverse: rebuild the /update payload from a queued op so a
+// coalesced batch can be POSTed as {edits: [...]}.
+function opToPayload(op) {
+  const [, team, key, theme, leaf, answer] = op.path;
+  if (op.path.length === 3) return {team, place: op.value}; // ["teams", team, "place"]
+  const shootout = key === "shootoutThemes";
+  if (leaf === "player") {
+    const payload = {team, theme, player: op.value};
+    if (shootout) payload.shootout = true;
+    return payload;
+  }
+  const payload = {team, theme, answer, mark: op.value};
+  if (shootout) payload.shootout = true;
+  return payload;
+}
+
+// queueEKEdits records cell edits as pending ops and schedules a batched flush.
+// Non-cell (structural) payloads can't be expressed as a tracked op, so they are
+// sent immediately to preserve their ordering relative to nothing else.
+function queueEKEdits(matchCode, payloads) {
+  const entry = ekEntry(matchCode);
+  let queued = false;
+  for (const payload of payloads) {
+    const path = payloadToOpPath(payload);
+    if (!path) { sendUpdate(payload, matchCode); continue; }
+    entry.ops.add(path, payloadToOpValue(payload));
+    queued = true;
+  }
+  if (queued) {
+    setStatus("saving");
+    scheduleEKFlush(matchCode, EK_EDIT_DEBOUNCE_MS);
+  }
+}
+
+function scheduleEKFlush(matchCode, delay) {
+  const entry = ekEntry(matchCode);
+  window.clearTimeout(entry.timer);
+  entry.timer = window.setTimeout(() => {
+    entry.timer = null;
+    void flushEKEdits(matchCode);
+  }, delay);
+}
+
+async function flushEKEdits(matchCode) {
+  const entry = ekEntry(matchCode);
+  if (entry.inFlight || entry.ops.queued() === 0) return;
+  const ops = entry.ops.take();
+  const payloads = ops.map(opToPayload);
+  entry.inFlight = true;
+  let saved = false;
   try {
-    const updated = await sendUpdateRaw({edits: payloads}, matchCode);
+    const body = payloads.length === 1 ? payloads[0] : {edits: payloads};
+    const updated = await sendUpdateRaw(body, matchCode);
+    entry.ops.ack(ops);
     applyUpdatedMatch(updated, matchCode);
-    setStatus("saved");
+    saved = true;
   } catch (error) {
-    setStatus("error");
+    // Re-queue for retry (set-ops are idempotent, so re-sending is safe). The
+    // overlay keeps the optimistic value on screen meanwhile.
+    entry.ops.ack(ops);
+    entry.ops.requeue(ops);
     console.error(error);
+    setStatus("error");
+  } finally {
+    entry.inFlight = false;
+    if (entry.ops.queued() > 0) {
+      if (!entry.timer) scheduleEKFlush(matchCode, saved ? 0 : 2000);
+    } else if (saved) {
+      setStatus("saved");
+    }
   }
 }
 
@@ -1390,6 +1494,10 @@ function matchStateFor(matchCode) {
 }
 
 function applyUpdatedMatch(updated, matchCode) {
+  // Re-apply any still-un-acked local edits on top, so a server view that
+  // predates them (out-of-order response, delta from another editor, refetch)
+  // never regresses an optimistic cell. No-op once everything is acked.
+  updated = overlayPendingMatch(matchCode, updated);
   if (route.mode === "stage") {
     stageCache.applyMatchUpdate(updated);
     return;
@@ -1659,7 +1767,7 @@ function ekApplyValues(matchCode, matchState, edits, options = {}) {
     if (shootout) payload.shootout = true;
     payloads.push(payload);
   }
-  sendUpdates(payloads, matchCode);
+  queueEKEdits(matchCode, payloads);
 }
 
 function snapshotMatchEdits(matchCode, edits) {
@@ -1953,7 +2061,7 @@ function placeCell(team, teamIndex, matchCode) {
       return true;
     }
     input.dataset.committedPlace = String(place);
-    sendUpdate({team: teamIndex, place}, matchCode);
+    queueEKEdits(matchCode, [{team: teamIndex, place}]);
     return true;
   };
   input.addEventListener("change", commitPlace);
@@ -2010,7 +2118,7 @@ function themeCells(team, teamIndex, theme, themeIndex, isShootout) {
     const payload = {team: teamIndex, theme: themeIndex, player: select.value};
     if (isShootout) payload.shootout = true;
     updatePlayerSelectOverflow(selectWrap);
-    sendUpdate(payload, matchCode);
+    queueEKEdits(matchCode, [payload]);
   });
   selectWrap.appendChild(select);
   const playerPopover = document.createElement("span");
@@ -2361,7 +2469,7 @@ function setActiveMark(mark) {
     mark,
   };
   if (activeCell.shootout) payload.shootout = true;
-  sendUpdate(payload, matchCode);
+  queueEKEdits(matchCode, [payload]);
 }
 
 function markActiveCell() {

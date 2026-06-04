@@ -29,6 +29,11 @@
       onMatchUpdated,
       onPaneShown,
       cleanupPane,
+      // overlayMatch optionally transforms a MatchView before it is cached, used
+      // by the host to re-apply un-acked local edits so a refetch/update can't
+      // regress an optimistic cell. Defaults to identity (the viewer has no
+      // local edits to preserve).
+      overlayMatch = (view) => view,
     } = options;
 
     const stageDataByCode = new Map();
@@ -110,7 +115,7 @@
           if (!m?.code) continue;
           const existing = data.stateByCode.get(m.code);
           if (existing && Number(existing.seq || 0) > Number(m.seq || 0)) continue;
-          data.stateByCode.set(m.code, m);
+          data.stateByCode.set(m.code, overlayMatch(m));
         }
       }
       const pane = stagePaneByCode.get(stageCode);
@@ -230,6 +235,7 @@
       if (existing && Number(existing.seq || 0) > Number(updated.seq || 0)) {
         return {found: true, stageCode, pane: stagePaneByCode.get(stageCode), stale: true};
       }
+      updated = overlayMatch(updated);
       data.stateByCode.set(updated.code, updated);
       const pane = stagePaneByCode.get(stageCode);
       if (pane) {
