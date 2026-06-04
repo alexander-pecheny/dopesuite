@@ -1246,6 +1246,9 @@ type gameInitPayload struct {
 	// once (a thundering-herd full-state refetch — the very thing deltas avoid).
 	Seq     uint64 `json:"seq"`
 	CanEdit bool   `json:"canEdit,omitempty"`
+	// Static marks a snapshot served in static (lockdown) mode: the client skips
+	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
+	Static bool `json:"static,omitempty"`
 }
 
 type viewerInitPayload struct {
@@ -1254,6 +1257,9 @@ type viewerInitPayload struct {
 	Match   *MatchView      `json:"match,omitempty"`
 	Venues  json.RawMessage `json:"venues,omitempty"`
 	CanEdit bool            `json:"canEdit,omitempty"`
+	// Static marks a snapshot served in static (lockdown) mode: the client skips
+	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
+	Static bool `json:"static,omitempty"`
 }
 
 type hostInitRoute struct {

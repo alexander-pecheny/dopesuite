@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -172,6 +173,26 @@ type server struct {
 	viewerCountMu    sync.Mutex
 	viewerCountAt    map[int64]time.Time
 	viewerCountTimer map[int64]*time.Timer
+
+	// Static ("DDoS lockdown") mode — see static_mode.go. staticMode is the
+	// effective state; staticManual is the override (0=auto, 1=force-on,
+	// 2=force-off). The gauges feed the auto-trigger and the control endpoint:
+	// reqRate is the per-second request count (Swap(0) each tick), sseConns the
+	// current viewer /events connections, inFlight a live request gauge.
+	// liveFallthrough caps cookie-bearing requests on the live path under
+	// lockdown. The cache holds precomputed per-route HTML snapshots, with
+	// staticBuilds providing per-route singleflight on misses.
+	staticMode      atomic.Bool
+	staticManual    atomic.Int32
+	inFlight        atomic.Int64
+	reqRate         atomic.Int64
+	lastRate        atomic.Int64
+	sseConns        atomic.Int64
+	liveFallthrough atomic.Int64
+	staticMu        sync.RWMutex
+	staticCache     map[hostInitRoute]*staticEntry
+	staticBuilds    map[hostInitRoute]*staticBuildCall
+	staticCfg       staticConfig
 }
 
 // viewerCountInterval bounds how often the concurrent-viewer tally is fanned
@@ -275,6 +296,10 @@ func main() {
 			}
 		}()
 	}
+
+	// Static ("DDoS lockdown") mode: load-eval + snapshot-regen tickers and the
+	// optional localhost-only control endpoint. See static_mode.go.
+	srv.initStaticMode()
 
 	httpSrv := &http.Server{
 		Handler:           srv.auditContextMiddleware(gzipMiddleware(mux)),
@@ -626,6 +651,19 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Under static mode, shed anonymous viewers (the DDoS vector) but keep editors
+	// live so organizers can still run the event. The editor check only runs for
+	// cookie-bearing requests, so the anonymous flood is rejected without a DB
+	// session lookup.
+	editor := false
+	if hasSessionCookie(r) {
+		editor = s.isFestEditor(r, festID)
+	}
+	if s.staticMode.Load() && !editor {
+		http.Error(w, "static mode", http.StatusServiceUnavailable)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -638,10 +676,12 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ch := make(chan event, 8)
-	s.addSubscriber(festID, ch, s.isFestEditor(r, festID))
+	s.addSubscriber(festID, ch, editor)
+	s.sseConns.Add(1)
 	s.scheduleViewerCount(festID)
 	defer func() {
 		s.removeSubscriber(festID, ch)
+		s.sseConns.Add(-1)
 		s.scheduleViewerCount(festID)
 	}()
 
@@ -654,6 +694,14 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case ev := <-ch:
+			// lockdown is a server-side sentinel telling this viewer to drop the
+			// stream so it reloads into the (now-static) page; without it the
+			// browser's native EventSource would just auto-reconnect. Returning
+			// runs the deferred removeSubscriber, which closes ch — so only this
+			// goroutine ever closes its own channel (no double-close race).
+			if ev.name == "lockdown" {
+				return
+			}
 			name := ev.name
 			if name == "" {
 				name = "state"

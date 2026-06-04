@@ -35,6 +35,10 @@ const viewer = Boolean(route.viewer);
 // numeric game id (`game-state:<id>`). Default to the slug and upgrade to the
 // numeric id from __GAME_INIT__ so the scope matches and remote edits apply.
 let scopeGameID = route.gameID;
+// staticMode: served as a precomputed snapshot under DDoS lockdown. Skip the SSE
+// connection and refresh by reloading on a jitter. Captured before consumeGameInit
+// nulls window.__GAME_INIT__.
+const staticMode = Boolean(window.__GAME_INIT__?.static);
 document.body.classList.toggle("viewer-readonly", viewer);
 if (viewer) {
   if (window.__GAME_INIT__?.canEdit) gameTable.mountEditorLink(statusNode);
@@ -1084,7 +1088,17 @@ function renderGameBreadcrumbs(gameTitle) {
   });
 }
 
+// scheduleStaticReload reloads the page after ~5s (jittered 4-7s) so a fleet of
+// static viewers spreads its reloads across the window instead of stampeding.
+function scheduleStaticReload() {
+  window.setTimeout(() => window.location.reload(), 4000 + Math.floor(Math.random() * 3000));
+}
+
 function connectEvents() {
+  if (staticMode) {
+    scheduleStaticReload();
+    return;
+  }
   syncState().connect();
 }
 
@@ -1100,6 +1114,7 @@ function syncState() {
     setStatus,
     onRemoteState: applyRemoteState,
     onViewers: (count) => viewerCounter.setCount(count),
+    onLockdown: scheduleStaticReload,
   });
   return stateSync;
 }

@@ -816,6 +816,12 @@
         options.onRemoteState?.(pending.overlay(message.data), message);
         if (!hasPendingSave()) setSyncStatus("saved");
       });
+      events.addEventListener("lockdown", () => {
+        // Server entered static mode: drop the stream so the page reloads into
+        // the static snapshot, instead of letting EventSource auto-reconnect.
+        events.close();
+        options.onLockdown?.();
+      });
       events.onerror = () => setSyncStatus("reconnecting");
       return events;
     }

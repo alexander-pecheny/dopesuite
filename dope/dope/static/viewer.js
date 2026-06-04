@@ -11,6 +11,10 @@ const {formatVenue, formatBattleVenue, formatBattleVenueShort, statusLabel, form
 let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
 const canEdit = Boolean(window.__VIEWER_INIT__?.canEdit);
+// staticMode: served as a precomputed snapshot under DDoS lockdown. Skip the SSE
+// connection entirely and refresh by reloading the page on a jitter. Captured at
+// load time because consumeViewerInit nulls window.__VIEWER_INIT__.
+const staticMode = Boolean(window.__VIEWER_INIT__?.static);
 // The server scopes SSE events by NUMERIC game id (`match:<id>:<code>`), but the
 // URL only carries the game slug. Take the numeric id from the inlined init so
 // match-scope comparisons match and the focused match patches in place.
@@ -344,8 +348,25 @@ function rerenderStatsTable() {
   scheduleReadonlyNameOverflowUpdate();
 }
 
+// scheduleStaticReload reloads the whole page after ~5s (jittered 4-7s). The
+// jitter spreads a fleet of static viewers across the window so their reloads
+// don't all land on the same second (a self-inflicted thundering herd).
+function scheduleStaticReload() {
+  window.setTimeout(() => window.location.reload(), 4000 + Math.floor(Math.random() * 3000));
+}
+
 function connectEvents() {
+  if (staticMode) {
+    scheduleStaticReload();
+    return;
+  }
   const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
+  events.addEventListener("lockdown", () => {
+    // Server entered static mode: drop the stream and reload into the static
+    // page (otherwise native EventSource would just auto-reconnect).
+    events.close();
+    scheduleStaticReload();
+  });
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
     // On the stats page, fold match edits into the cache in place and recompute
