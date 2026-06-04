@@ -1095,6 +1095,12 @@ a.list-row:hover { background: var(--hover-bg); }
   background: var(--grid-dark);
 }
 
+.sync-stack {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .viewers-count {
   display: inline-flex;
   align-items: center;
@@ -4886,6 +4892,22 @@ body:not(.embedded-match) .grid-match {
     grid-row: 1 / -1;
     align-self: center;
     justify-self: end;
+  }
+
+  /* Stack the viewer count above the sync tick, shrinking both so the pair
+     stays the same height as the viewer-mode button instead of widening. */
+  .host-actions .sync-stack {
+    flex-direction: column;
+    gap: var(--space-0-5);
+  }
+
+  .host-actions .sync-stack .viewers-count {
+    font-size: var(--text-xs);
+  }
+
+  .host-actions .sync-stack .sync-status {
+    width: auto;
+    height: 16px;
   }
 
   .ek-page .ek-tabs .match-tab {
