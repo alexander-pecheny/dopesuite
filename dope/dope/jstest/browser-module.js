@@ -26,20 +26,29 @@ export function fakeCell() {
       remove: (...xs) => xs.forEach((x) => classes.delete(x)),
       contains: (x) => classes.has(x),
     },
+    // Minimal stubs for syncs that walk the DOM (e.g. the player popover lookup);
+    // tests that need real traversal assert on the node directly instead.
+    closest: () => null,
   };
 }
 
-// fakeIndex mimics createScoreTableIndex: get(name, values) -> node. register()
-// adds a node under a key so a test can assert what patchScoreTable wrote.
-export function fakeIndex() {
-  const store = new Map();
-  const key = (name, values) => name + ":" + JSON.stringify(values || {});
+// fakeIndex mimics what createScoreTableIndex returns, without a DOM: it carries
+// the real `specs` (pass T.scoreCellSpecs(...) so patchScoreTable runs the real
+// per-cell sync logic) and lets a test register cells under a spec name with
+// their data-* coordinates. register() returns the cell so the test can assert
+// what the sync wrote; eachNode/get drive patchScoreTable and lookups.
+export function fakeIndex(specs = []) {
+  const byName = new Map(); // name -> [cell, ...]
   return {
-    get: (name, values) => store.get(key(name, values)) || null,
-    register: (name, values) => {
+    specs,
+    register: (name, dataset = {}) => {
       const cell = fakeCell();
-      store.set(key(name, values), cell);
+      for (const [k, v] of Object.entries(dataset)) cell.dataset[k] = String(v);
+      if (!byName.has(name)) byName.set(name, []);
+      byName.get(name).push(cell);
       return cell;
     },
+    eachNode: (name, cb) => (byName.get(name) || []).forEach(cb),
+    get: (name) => (byName.get(name) || [])[0] || null,
   };
 }

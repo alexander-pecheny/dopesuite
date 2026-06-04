@@ -313,8 +313,9 @@
   }
 
   function createNodeIndex(root, specs) {
+    const list = specs || [];
     const maps = new Map();
-    for (const spec of specs || []) {
+    for (const spec of list) {
       const map = new Map();
       root.querySelectorAll(spec.selector).forEach((node) => {
         map.set(indexKeyFromDataset(node.dataset, spec.keys), node);
@@ -322,31 +323,111 @@
       maps.set(spec.name, {keys: spec.keys, map});
     }
     return {
+      // specs is retained so patchScoreTable can drive the sync from the same
+      // single source of truth used to build the index.
+      specs: list,
       get(name, values = {}) {
         const entry = maps.get(name);
         if (!entry) return null;
         return entry.map.get(indexKeyFromValues(values, entry.keys)) || null;
       },
+      eachNode(name, cb) {
+        const entry = maps.get(name);
+        if (!entry) return;
+        entry.map.forEach((node) => cb(node));
+      },
     };
   }
 
   function createScoreTableIndex(root, options = {}) {
+    return createNodeIndex(root, scoreCellSpecs(options).concat(options.extraSpecs || []));
+  }
+
+  // scoreTeamOf / scoreThemeOf resolve the MatchView team / theme a built cell
+  // refers to, straight from the cell's own data-* coordinates — so a sync needs
+  // nothing but the node and the new state.
+  function scoreTeamOf(node, matchState) {
+    return (matchState.teams || [])[Number(node.dataset.team)] || null;
+  }
+
+  function scoreThemeOf(node, matchState) {
+    const team = scoreTeamOf(node, matchState);
+    if (!team) return null;
+    const themes = node.dataset.shootout === "1" ? team.shootoutThemes : team.themes;
+    return (themes || [])[Number(node.dataset.theme)] || null;
+  }
+
+  // scoreCellSpecs is the SINGLE source of truth for the score table's live
+  // cells. Each entry says how to find the cell (selector + dataset keys, used to
+  // build the index) AND how to keep it in step with a MatchView (sync, used by
+  // patchScoreTable). Adding a new live cell means adding one entry here —
+  // indexing and the in-place patch both pick it up, so no cell can be rendered
+  // but silently left un-synced (the bug this replaced). A spec without a sync is
+  // index-only: its value change is handled by a full rebuild (place medals) or
+  // it is host-managed out of band (venue input).
+  function scoreCellSpecs(options = {}) {
     const entity = options.entity || "team";
     const prefix = options.matchScoped ? ["matchCode"] : [];
-    const themeKeys = prefix.concat([entity], options.shootout ? ["shootout"] : [], ["theme"]);
-    const specs = [
-      {name: "answer", selector: ".answer-cell", keys: themeKeys.concat(["answer"])},
-      {name: "themeScore", selector: ".theme-score", keys: themeKeys},
-      {name: "total", selector: ".total-cell", keys: prefix.concat([entity])},
-      {name: "place", selector: ".place-cell", keys: prefix.concat([entity])},
-      {name: "input", selector: ".venue-input", keys: prefix.concat([entity])},
-      {name: "placeInput", selector: ".place-input", keys: prefix.concat([entity])},
-      {name: "plus", selector: ".plus-cell", keys: prefix.concat([entity])},
-      {name: "tiebreak", selector: ".tiebreak-cell", keys: prefix.concat([entity])},
-      {name: "correctCount", selector: ".correct-count-cell", keys: prefix.concat([entity], ["valueIndex"])},
-      {name: "playerSelect", selector: ".player-select", keys: themeKeys},
+    const teamKeys = prefix.concat([entity]);
+    const themeKeys = teamKeys.concat(options.shootout ? ["shootout"] : [], ["theme"]);
+    return [
+      {name: "answer", selector: ".answer-cell", keys: themeKeys.concat(["answer"]),
+        sync: (node, ms) => {
+          const theme = scoreThemeOf(node, ms);
+          if (theme) setMarkClass(node, (theme.answers || [])[Number(node.dataset.answer)]);
+        }},
+      {name: "themeScore", selector: ".theme-score", keys: themeKeys,
+        sync: (node, ms, o) => {
+          const theme = scoreThemeOf(node, ms);
+          if (theme) setNodeText(node, theme.score, o.formatNumber);
+        }},
+      // The per-round player shows as read-only text on the viewer and as an
+      // editable <select> on the host; each surface has its own spec so both stay
+      // live. (Before, only the host's select was patched — the viewer's text was
+      // forgotten, so player changes never reached spectators.)
+      {name: "playerText", selector: ".readonly-player-text", keys: themeKeys,
+        sync: (node, ms) => {
+          const theme = scoreThemeOf(node, ms);
+          if (!theme) return;
+          setNodeText(node, theme.player);
+          const popover = node.closest(".readonly-player")?.querySelector(".readonly-player-popover");
+          if (popover) setNodeText(popover, theme.player);
+        }},
+      {name: "playerSelect", selector: ".player-select", keys: themeKeys,
+        sync: (node, ms, o) => {
+          const theme = scoreThemeOf(node, ms);
+          if (!theme || document.activeElement === node) return; // don't clobber an open select
+          const value = theme.player || "";
+          if (value && !Array.from(node.options).some((opt) => opt.value === value)) {
+            node.appendChild(new Option(value, value));
+          }
+          if (node.value !== value) node.value = value;
+          o.onPlayerSelectSynced?.(node);
+        }},
+      {name: "total", selector: ".total-cell", keys: teamKeys,
+        sync: (node, ms, o) => { const t = scoreTeamOf(node, ms); if (t) setNodeText(node, t.total, o.formatNumber); }},
+      {name: "plus", selector: ".plus-cell", keys: teamKeys,
+        sync: (node, ms, o) => { const t = scoreTeamOf(node, ms); if (t) setNodeText(node, t.plus, o.formatNumber); }},
+      {name: "tiebreak", selector: ".tiebreak-cell", keys: teamKeys,
+        sync: (node, ms, o) => { const t = scoreTeamOf(node, ms); if (t) setNodeText(node, t.shootoutTotal ?? t.tiebreak, o.formatNumber); }},
+      {name: "correctCount", selector: ".correct-count-cell", keys: teamKeys.concat(["valueIndex"]),
+        sync: (node, ms, o) => {
+          const t = scoreTeamOf(node, ms);
+          // Columns render reversed: cell valueIndex i shows correctCounts[4 - i].
+          if (t) setNodeText(node, (t.correctCounts || [])[4 - Number(node.dataset.valueIndex)], o.formatNumber);
+        }},
+      {name: "placeInput", selector: ".place-input", keys: teamKeys,
+        sync: (node, ms) => {
+          const t = scoreTeamOf(node, ms);
+          if (!t) return;
+          if (document.activeElement !== node) node.value = formatPlace(t.place);
+          node.dataset.committedPlace = String(t.place || 0);
+        }},
+      // Index-only (no sync): place restyles medal classes and the viewer renders
+      // it as text, so a place change forces a rebuild; venue input is host-managed.
+      {name: "place", selector: ".place-cell", keys: teamKeys},
+      {name: "input", selector: ".venue-input", keys: teamKeys},
     ];
-    return createNodeIndex(root, specs.concat(options.extraSpecs || []));
   }
 
   function indexKeyFromDataset(dataset, keys) {
@@ -393,38 +474,18 @@
     return true;
   }
 
-  // patchScoreTable updates a built score table in place from a MatchView via
-  // its score index (createScoreTableIndex), touching only the value cells —
-  // totals, plus, tiebreak, correct counts, theme scores, answer marks — common
-  // to the host and viewer tables. The optional patchTeam/patchTheme hooks let
-  // the host also patch its editable-only cells (place inputs, player selects);
-  // the viewer omits them. opts.formatNumber formats numeric text.
+  // patchScoreTable updates a built score table in place from a MatchView. It is
+  // data-driven: for every spec that declares a `sync` (see scoreCellSpecs), it
+  // runs that sync over each indexed cell of that type, each cell reading its own
+  // data-* coordinates. Shared verbatim by the host and viewer — whatever cells
+  // their tables contain get patched. opts.formatNumber formats numeric text;
+  // opts.onPlayerSelectSynced lets the host refresh its select's overflow chrome.
   function patchScoreTable(index, matchState, opts = {}) {
     if (!index || !matchState) return;
-    const fmt = opts.formatNumber;
-    const text = (name, values, value) => {
-      const node = index.get(name, values);
-      if (node) setNodeText(node, value, fmt);
-    };
-    (matchState.teams || []).forEach((team, t) => {
-      text("total", {team: t}, team.total);
-      text("plus", {team: t}, team.plus);
-      text("tiebreak", {team: t}, team.shootoutTotal ?? team.tiebreak);
-      for (let i = 0; i < 5; i++) {
-        text("correctCount", {team: t, valueIndex: i}, (team.correctCounts || [])[4 - i]);
-      }
-      opts.patchTeam?.(index, t, team);
-      const patchRow = (theme, themeIndex, isShootout) => {
-        const shootout = isShootout ? "1" : "0";
-        text("themeScore", {team: t, shootout, theme: themeIndex}, theme.score);
-        (theme.answers || []).forEach((mark, a) => {
-          setMarkClass(index.get("answer", {team: t, shootout, theme: themeIndex, answer: a}), mark);
-        });
-        opts.patchTheme?.(index, t, themeIndex, shootout, theme);
-      };
-      (team.themes || []).forEach((theme, ti) => patchRow(theme, ti, false));
-      (team.shootoutThemes || []).forEach((theme, ti) => patchRow(theme, ti, true));
-    });
+    for (const spec of index.specs || []) {
+      if (!spec.sync) continue;
+      index.eachNode(spec.name, (node) => spec.sync(node, matchState, opts));
+    }
   }
 
   function renderGameBreadcrumbs(root, options = {}) {
@@ -2009,6 +2070,7 @@
     cssEscape,
     createNodeIndex,
     createScoreTableIndex,
+    scoreCellSpecs,
     setNodeText,
     setMarkClass,
     canPatchScoreShape,

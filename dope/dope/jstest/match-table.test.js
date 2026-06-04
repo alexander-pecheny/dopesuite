@@ -3,8 +3,10 @@ import {loadStaticModule, fakeIndex} from "./browser-module.js";
 
 const T = loadStaticModule("match-table.js").DopeTable;
 
+const SCORE_OPTS = {entity: "team", shootout: true};
+
 Deno.test("patchScoreTable writes shared value cells through the index", () => {
-  const idx = fakeIndex();
+  const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS));
   const total0 = idx.register("total", {team: 0});
   const plus1 = idx.register("plus", {team: 1});
   const tiebreak0 = idx.register("tiebreak", {team: 0});
@@ -32,7 +34,7 @@ Deno.test("patchScoreTable writes shared value cells through the index", () => {
 });
 
 Deno.test("patchScoreTable clears a stale mark before applying the new one", () => {
-  const idx = fakeIndex();
+  const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS));
   const answer = idx.register("answer", {team: 0, shootout: "0", theme: 0, answer: 0});
   answer.classList.add("wrong");
   const state = {teams: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
@@ -42,23 +44,29 @@ Deno.test("patchScoreTable clears a stale mark before applying the new one", () 
   assert.ok(!answer.classList.contains("wrong"), "previous mark removed");
 });
 
-Deno.test("patchScoreTable invokes the host editable hooks once per team/theme", () => {
-  const idx = fakeIndex();
-  const state = {teams: [{total: 0, plus: 0, place: 1, correctCounts: [], shootoutThemes: [],
-    themes: [{score: 0, answers: []}, {score: 0, answers: []}]}]};
-  let teamHooks = 0;
-  let themeHooks = 0;
-  T.patchScoreTable(idx, state, {
-    formatNumber: String,
-    patchTeam: () => teamHooks++,
-    patchTheme: () => themeHooks++,
-  });
-  assert.equal(teamHooks, 1, "one patchTeam call per team");
-  assert.equal(themeHooks, 2, "one patchTheme call per theme row");
+Deno.test("patchScoreTable syncs the per-round player name in place", () => {
+  const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS));
+  const player0 = idx.register("playerText", {team: 0, shootout: "0", theme: 0});
+  const player1 = idx.register("playerText", {team: 0, shootout: "0", theme: 1});
+  const state = {teams: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
+    themes: [{score: 0, answers: [], player: "Alice"}, {score: 0, answers: [], player: "Bob"}]}]};
+  T.patchScoreTable(idx, state, {formatNumber: String});
+  assert.equal(player0.textContent, "Alice", "player text patched from MatchView, not just marks");
+  assert.equal(player1.textContent, "Bob");
+});
+
+// Guardrail for the class of bug this refactor fixes: any live cell must be in
+// the single spec list with a sync, so it can never be rendered-but-not-synced.
+Deno.test("scoreCellSpecs declares a sync for every live cell, incl. the player", () => {
+  const synced = T.scoreCellSpecs(SCORE_OPTS).filter((s) => s.sync).map((s) => s.name);
+  for (const name of ["answer", "themeScore", "total", "plus", "tiebreak", "correctCount",
+    "playerText", "playerSelect"]) {
+    assert.ok(synced.includes(name), `${name} must sync in place`);
+  }
 });
 
 Deno.test("patchScoreTable tolerates cells missing from the index", () => {
-  const idx = fakeIndex(); // nothing registered
+  const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS)); // specs present, nothing registered
   assert.doesNotThrow(() =>
     T.patchScoreTable(idx, {teams: [{total: 1, plus: 1, correctCounts: [], themes: [], shootoutThemes: []}]}, {formatNumber: String}));
 });

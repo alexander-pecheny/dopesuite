@@ -699,6 +699,9 @@ function canPatchMatchTable(previous, next) {
 
 function patchMatchTable(index, matchState) {
   gameTable.patchScoreTable(index, matchState, {formatNumber});
+  // A patched player name may now overflow (or stop overflowing); refresh the
+  // truncation/popover chrome. rAF-throttled, so cheap on frequent mark patches.
+  scheduleReadonlyNameOverflowUpdate();
 }
 
 function resetReadonlyTableIndex() {
@@ -926,15 +929,20 @@ function readonlyThemeCells(teamIndex, theme, themeIndex, isShootout) {
   playerWrap.className = "readonly-player-text-wrap";
   const playerText = document.createElement("span");
   playerText.className = "readonly-player-text";
+  // Coordinates so patchScoreTable's playerText sync can find and update this
+  // cell in place when the player changes (keys: team, shootout, theme).
+  playerText.dataset.team = String(teamIndex);
+  playerText.dataset.shootout = isShootout ? "1" : "0";
+  playerText.dataset.theme = String(themeIndex);
   playerText.textContent = playerLabel;
   playerWrap.appendChild(playerText);
   playerCell.appendChild(playerWrap);
-  if (playerLabel) {
-    const playerPopover = document.createElement("span");
-    playerPopover.className = "readonly-player-popover";
-    playerPopover.textContent = playerLabel;
-    playerCell.appendChild(playerPopover);
-  }
+  // Always render the popover (even empty) so the sync keeps it in step when the
+  // player changes from/to blank, rather than only existing at build time.
+  const playerPopover = document.createElement("span");
+  playerPopover.className = "readonly-player-popover";
+  playerPopover.textContent = playerLabel;
+  playerCell.appendChild(playerPopover);
   const answers = theme.answers.map((mark, answerIndex) => {
     const className = answerIndex === 0
       ? `answer-cell theme-block theme-block-bottom-left ${mark}`

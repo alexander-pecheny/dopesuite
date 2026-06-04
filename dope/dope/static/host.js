@@ -1539,30 +1539,15 @@ function canPatchMatchShape(previous, next) {
 }
 
 // patchHostScoreTable patches a built editable score table in place from a
-// MatchView via its score index. The shared gameTable.patchScoreTable handles
-// the value cells common to host and viewer; the hooks patch the host's
-// editable-only cells (place inputs, player selects), leaving any focused
-// control untouched so a live update never steals the cursor mid-edit.
+// MatchView. All cell syncing — including the editable place inputs and player
+// selects, which skip a focused control so a live update never steals the cursor
+// — lives in the shared scoreCellSpecs; the host only injects the callback that
+// refreshes a synced select's overflow chrome.
 function patchHostScoreTable(index, matchState) {
   gameTable.patchScoreTable(index, matchState, {
     formatNumber,
-    patchTeam: (idx, teamIndex, team) => {
-      const placeInput = idx.get("placeInput", {team: teamIndex});
-      if (placeInput && document.activeElement !== placeInput) {
-        placeInput.value = formatPlace(team.place);
-      }
-      if (placeInput) placeInput.dataset.committedPlace = String(team.place || 0);
-    },
-    patchTheme: (idx, teamIndex, themeIndex, shootout, theme) => {
-      const select = idx.get("playerSelect", {team: teamIndex, shootout, theme: themeIndex});
-      if (select && document.activeElement !== select) {
-        if (theme.player && !Array.from(select.options).some((item) => item.value === theme.player)) {
-          select.appendChild(option(theme.player, theme.player));
-        }
-        select.value = theme.player || "";
-      }
-      updatePlayerSelectOverflow(select?.closest(".player-select-wrap") || hostRoot);
-    },
+    onPlayerSelectSynced: (select) =>
+      updatePlayerSelectOverflow(select?.closest(".player-select-wrap") || hostRoot),
   });
 }
 
