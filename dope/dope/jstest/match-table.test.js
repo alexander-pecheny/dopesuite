@@ -108,6 +108,38 @@ Deno.test("applyDeltaOps skips non-set ops", () => {
   assert.equal(next.b, 2);
 });
 
+Deno.test("createPendingOps overlays un-acked edits and coalesces by path", () => {
+  const p = T.createPendingOps();
+  p.add(["teams", 0, "themes", 1, "answers", 2], "right");
+  p.add(["teams", 0, "themes", 1, "answers", 2], "wrong"); // same path: last write wins
+  p.add(["teams", 1, "player"], "Bob");
+  const base = {teams: [{themes: [{}, {answers: ["", "", ""]}]}, {player: ""}]};
+  const overlaid = p.overlay(base);
+  assert.equal(overlaid.teams[0].themes[1].answers[2], "wrong");
+  assert.equal(overlaid.teams[1].player, "Bob");
+  assert.equal(base.teams[0].themes[1].answers[2], "", "base not mutated");
+  assert.equal(p.queued(), 2, "two distinct paths queued");
+});
+
+Deno.test("createPendingOps: ack drops confirmed ops, requeue keeps them, newer queued wins", () => {
+  const p = T.createPendingOps();
+  p.add(["a"], 1);
+  const sent = p.take(); // a:1 now in-flight
+  assert.equal(p.queued(), 0);
+  assert.equal(p.inFlightCount(), 1);
+  // A newer edit to the same path lands while the first is in flight.
+  p.add(["a"], 2);
+  p.ack(sent); // server confirmed a:1; drop only it, keep the queued a:2
+  assert.equal(p.inFlightCount(), 0);
+  assert.equal(p.overlay({}).a, 2, "newer queued value survives ack of the in-flight one");
+  // Requeue of a stale op must not clobber the newer queued op for the same path.
+  const sent2 = p.take();
+  p.add(["a"], 3);
+  p.ack(sent2);
+  p.requeue(sent2); // sent2 is a:2; queue already has a:3 → keep a:3
+  assert.equal(p.overlay({}).a, 3);
+});
+
 Deno.test("computeEKPlayerStats aggregates per player across battles, regular themes only", () => {
   const stages = [
     {code: "r16", matches: [

@@ -154,7 +154,20 @@ type server struct {
 	// seq-assign + fan-out so per-scope event order matches seq order.
 	seqMu    sync.Mutex
 	stateSeq map[string]uint64
+	// viewerCount* throttle the "viewers" tally fan-out. A viewer ramp can
+	// open/close hundreds of SSE connections a second, and each connect/
+	// disconnect would otherwise trigger a full O(viewers) fan-out — enough to
+	// peg a single CPU and starve editor requests. scheduleViewerCount collapses
+	// the churn into at most one broadcast per fest per viewerCountInterval.
+	viewerCountMu    sync.Mutex
+	viewerCountAt    map[int64]time.Time
+	viewerCountTimer map[int64]*time.Timer
 }
+
+// viewerCountInterval bounds how often the concurrent-viewer tally is fanned
+// out. A tally a few seconds stale is fine; freeing the CPU during connection
+// churn is not.
+const viewerCountInterval = 10 * time.Second
 
 type updateRequest struct {
 	Team     int      `json:"team"`
@@ -616,10 +629,10 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 	ch := make(chan event, 8)
 	s.addSubscriber(festID, ch)
-	s.broadcastViewerCount(festID)
+	s.scheduleViewerCount(festID)
 	defer func() {
 		s.removeSubscriber(festID, ch)
-		s.broadcastViewerCount(festID)
+		s.scheduleViewerCount(festID)
 	}()
 
 	fmt.Fprint(w, ": connected\n\n")
@@ -721,9 +734,42 @@ func (s *server) removeSubscriber(festID int64, ch chan event) {
 	close(ch)
 }
 
+// scheduleViewerCount fans out the viewer tally at most once per fest per
+// viewerCountInterval. The first change after a quiet period broadcasts
+// immediately (leading edge) so the count stays fresh when things are calm;
+// changes during the cooldown collapse into a single trailing broadcast at the
+// end of the window, so a connect/disconnect storm costs one fan-out per
+// interval instead of one per connection. Eventual consistency is guaranteed:
+// the trailing timer always sends the final count.
+func (s *server) scheduleViewerCount(festID int64) {
+	s.viewerCountMu.Lock()
+	defer s.viewerCountMu.Unlock()
+	if s.viewerCountAt == nil {
+		s.viewerCountAt = make(map[int64]time.Time)
+		s.viewerCountTimer = make(map[int64]*time.Timer)
+	}
+	now := time.Now()
+	if since := now.Sub(s.viewerCountAt[festID]); since >= viewerCountInterval {
+		s.viewerCountAt[festID] = now
+		go s.broadcastViewerCount(festID) // off-lock: fan-out must not hold viewerCountMu
+		return
+	}
+	if s.viewerCountTimer[festID] != nil {
+		return // a trailing broadcast is already pending
+	}
+	delay := viewerCountInterval - now.Sub(s.viewerCountAt[festID])
+	s.viewerCountTimer[festID] = time.AfterFunc(delay, func() {
+		s.viewerCountMu.Lock()
+		s.viewerCountAt[festID] = time.Now()
+		s.viewerCountTimer[festID] = nil
+		s.viewerCountMu.Unlock()
+		s.broadcastViewerCount(festID)
+	})
+}
+
 // broadcastViewerCount fans out the current /events subscriber count for a fest
 // as a "viewers" SSE event, so every connected client shows a live
-// concurrent-viewer tally. Called on each connect and disconnect.
+// concurrent-viewer tally. Throttled via scheduleViewerCount (see there).
 //
 // Unlike broadcast(), it holds subMu.RLock for the whole fan-out. The sends are
 // all non-blocking (buffered channel + select/default), so this never stalls,
