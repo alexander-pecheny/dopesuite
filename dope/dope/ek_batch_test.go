@@ -44,7 +44,7 @@ func TestBatchMatchUpdateAppliesAllEdits(t *testing.T) {
 		{Team: 1, Theme: &theme, Answer: &ans0, Mark: &right},
 		{Team: 2, Theme: &theme, Answer: &ans0, Mark: &wrong},
 	}
-	view, _, _, _, err := srv.applyScopedMatchUpdate(scope, edits)
+	view, _, _, _, err := srv.applyScopedMatchUpdate(t.Context(), scope, edits)
 	if err != nil {
 		t.Fatalf("batch update: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestBatchMatchUpdateIsAtomic(t *testing.T) {
 		{Team: 0, Theme: &theme, Answer: &ans0, Mark: &right},
 		{Team: badTeam, Theme: &theme, Answer: &ans0, Mark: &right},
 	}
-	if _, _, _, _, err := srv.applyScopedMatchUpdate(scope, edits); err == nil {
+	if _, _, _, _, err := srv.applyScopedMatchUpdate(t.Context(), scope, edits); err == nil {
 		t.Fatal("batch with a bad edit should fail")
 	}
 
@@ -100,5 +100,45 @@ func TestBatchMatchUpdateIsAtomic(t *testing.T) {
 	}
 	if got := view.Teams[0].Themes[0].Answers[0]; got != "" {
 		t.Fatalf("team0 ans0 = %q after failed batch, want empty (rolled back)", got)
+	}
+}
+
+// TestScopedMatchUpdateStampsAudit guards the regression where match/stage table
+// edits were committed under a bare context.Background(), so their audit_log rows
+// carried a null fest_id and never showed on the fest-scoped audit/revert page —
+// only meta edits (fest_organizers etc.) did. The edit must record rows stamped
+// with the scope's fest_id and the acting user from the request context.
+func TestScopedMatchUpdateStampsAudit(t *testing.T) {
+	srv, scope := newBatchTestServer(t)
+
+	var target int64
+	if err := srv.db.QueryRow(`select coalesce(max(id), 0) from audit_log`).Scan(&target); err != nil {
+		t.Fatalf("max audit id: %v", err)
+	}
+
+	// Mimic auditContextMiddleware: the handler's request context carries the
+	// acting user. The fest is stamped from the scope inside the write helper.
+	const actor = int64(77)
+	ctx := withAuditActor(t.Context(), actor)
+	theme, answer := 0, 0
+	right := "right"
+	if _, _, _, _, err := srv.applyScopedMatchUpdate(ctx, scope,
+		[]updateRequest{{Team: 0, Theme: &theme, Answer: &answer, Mark: &right}}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	var rows, mismatched int
+	if err := srv.db.QueryRow(
+		`select count(*), coalesce(sum(case when fest_id is ? and actor_user_id is ? then 0 else 1 end), 0)
+		   from audit_log where id > ?`, scope.FestID, actor, target).
+		Scan(&rows, &mismatched); err != nil {
+		t.Fatalf("scan audit rows: %v", err)
+	}
+	if rows == 0 {
+		t.Fatal("match edit recorded no audit_log rows")
+	}
+	if mismatched != 0 {
+		t.Fatalf("%d of %d new audit rows are not stamped with fest_id=%d actor=%d",
+			mismatched, rows, scope.FestID, actor)
 	}
 }

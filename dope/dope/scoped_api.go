@@ -873,7 +873,7 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, fest
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
 	}
-	venues, revision, err := s.updateVenue(festID, number, req.Title)
+	venues, revision, err := s.updateVenue(r.Context(), festID, number, req.Title)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1111,7 +1111,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 		if len(reqs) == 0 {
 			reqs = []updateRequest{req}
 		}
-		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(mscope, reqs)
+		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(r.Context(), mscope, reqs)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1146,7 +1146,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "missing finished", http.StatusBadRequest)
 			return
 		}
-		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(mscope, []updateRequest{{Finished: req.Finished}})
+		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(r.Context(), mscope, []updateRequest{{Finished: req.Finished}})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1181,7 +1181,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 		if number == 0 {
 			number = req.VenueNumber
 		}
-		view, data, ops, err := s.updateScopedMatchVenue(mscope, number)
+		view, data, ops, err := s.updateScopedMatchVenue(r.Context(), mscope, number)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

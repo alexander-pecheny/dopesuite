@@ -265,7 +265,7 @@ func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 		subscribers:     make(map[int64]map[chan event]bool),
 	}
 
-	venues, _, err := srv.updateVenue(festID, 1, "Рим")
+	venues, _, err := srv.updateVenue(t.Context(), festID, 1, "Рим")
 	if err != nil {
 		t.Fatalf("update venue: %v", err)
 	}
