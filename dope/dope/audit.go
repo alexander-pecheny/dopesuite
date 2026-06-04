@@ -125,6 +125,14 @@ func newRequestID() string {
 // the read path cheap; handlers that need the user still call lookupSession.
 func (s *server) auditContextMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Load gauges for static mode (see static_mode.go). Exclude long-lived SSE
+		// (would pin inFlight) and already-cheap static assets so the counts track
+		// the page/API request rate the auto-trigger cares about.
+		if p := r.URL.Path; p != "/events" && p != "/host-events" && !strings.HasPrefix(p, "/static/") {
+			s.reqRate.Add(1)
+			s.inFlight.Add(1)
+			defer s.inFlight.Add(-1)
+		}
 		ctx := withAuditRequestID(r.Context(), newRequestID())
 		if mayMutate(r) {
 			if user, ok := s.lookupSession(r); ok {

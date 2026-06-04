@@ -164,6 +164,13 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// A trailing /static segment forces the static snapshot for this viewer page
+	// (the always-on, edge-cacheable handle), independent of load mode.
+	forceStatic := false
+	if len(parts) > 1 && parts[len(parts)-1] == "static" {
+		forceStatic = true
+		parts = parts[:len(parts)-1]
+	}
 	id, err := resolveFestID(r.Context(), s.db, parts[0])
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -200,6 +207,32 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 			var gameType string
 			if err := s.db.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, id).Scan(&gameType); err == nil {
 				scope := festScope{FestID: id, GameID: gameID}
+				route := parseHostInitRoute(parts[1:], scope)
+				if gameType == "od" || gameType == "si" || gameType == "ksi" {
+					// OD/SI viewers always render the whole game regardless of
+					// sub-route, so collapse to one snapshot cache key.
+					route = hostInitRoute{Mode: "grid", FestID: id, GameID: gameID}
+				}
+				// Serve the static snapshot when forced (/static) or, under load,
+				// for cookie-less viewers. Cookie-bearing requests fall through to
+				// the live path so editors keep working — but only up to a small
+				// concurrency budget, so a flood of forged session cookies can't
+				// pierce the shield.
+				serveStatic := forceStatic
+				if !serveStatic && s.staticMode.Load() {
+					if hasSessionCookie(r) {
+						if s.liveFallthrough.Add(1) > liveFallthroughCap {
+							serveStatic = true
+						}
+						defer s.liveFallthrough.Add(-1)
+					} else {
+						serveStatic = true
+					}
+				}
+				if serveStatic {
+					s.serveStaticSnapshot(w, r, route)
+					return
+				}
 				switch gameType {
 				case "od":
 					s.serveGameHTMLWithInit(w, r, "static/od.html", scope)
