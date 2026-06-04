@@ -21,7 +21,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]struct{}),
+		subscribers:     make(map[int64]map[chan event]bool),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
@@ -118,7 +118,7 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]struct{}),
+		subscribers:     make(map[int64]map[chan event]bool),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}

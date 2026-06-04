@@ -129,8 +129,12 @@ type server struct {
 	state           MatchState
 	// subMu guards the SSE subscriber maps independently of mu so that
 	// DB write transactions (which take mu) don't block event fan-out.
-	subMu           sync.RWMutex
-	subscribers     map[int64]map[chan event]struct{}
+	subMu sync.RWMutex
+	// subscribers maps fest -> SSE channel -> isEditor. Editors (fest organizers)
+	// get every state delta immediately; viewers get coalesced merged deltas (see
+	// broadcastStateDelta). There are only a handful of editors, so the per-edit
+	// fan-out to them is cheap.
+	subscribers     map[int64]map[chan event]bool
 	hostSubscribers map[int64]map[chan hostPresenceEvent]struct{}
 	assets          fs.FS
 	assetNoCache    bool
@@ -154,7 +158,26 @@ type server struct {
 	// seq-assign + fan-out so per-scope event order matches seq order.
 	seqMu    sync.Mutex
 	stateSeq map[string]uint64
+	// deltaBuf coalesces scoped delta broadcasts: rapid edits to one scope buffer
+	// their ops for deltaCoalesceWindow and fan out as ONE merged delta, so a
+	// fleet of viewers gets a single fan-out per window instead of one per edit.
+	// Guarded by seqMu (seq assignment and buffering are coupled). See
+	// broadcastStateDelta / flushDelta.
+	deltaBuf map[string]*pendingDelta
+	// viewerCount* throttle the "viewers" tally fan-out. A viewer ramp can
+	// open/close hundreds of SSE connections a second, and each connect/
+	// disconnect would otherwise trigger a full O(viewers) fan-out — enough to
+	// peg a single CPU and starve editor requests. scheduleViewerCount collapses
+	// the churn into at most one broadcast per fest per viewerCountInterval.
+	viewerCountMu    sync.Mutex
+	viewerCountAt    map[int64]time.Time
+	viewerCountTimer map[int64]*time.Timer
 }
+
+// viewerCountInterval bounds how often the concurrent-viewer tally is fanned
+// out. A tally a few seconds stale is fine; freeing the CPU during connection
+// churn is not.
+const viewerCountInterval = 10 * time.Second
 
 type updateRequest struct {
 	Team     int      `json:"team"`
@@ -499,7 +522,7 @@ func newServer() (*server, error) {
 		festID:          festID,
 		activeGameID:    gameID,
 		activeMatchCode: matchCode,
-		subscribers:     make(map[int64]map[chan event]struct{}),
+		subscribers:     make(map[int64]map[chan event]bool),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}, nil
 }
@@ -615,11 +638,11 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ch := make(chan event, 8)
-	s.addSubscriber(festID, ch)
-	s.broadcastViewerCount(festID)
+	s.addSubscriber(festID, ch, s.isFestEditor(r, festID))
+	s.scheduleViewerCount(festID)
 	defer func() {
 		s.removeSubscriber(festID, ch)
-		s.broadcastViewerCount(festID)
+		s.scheduleViewerCount(festID)
 	}()
 
 	fmt.Fprint(w, ": connected\n\n")
@@ -695,18 +718,33 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) addSubscriber(festID int64, ch chan event) {
+// isFestEditor reports whether the /events request comes from a fest organizer
+// (table editor or higher). Best-effort: any lookup failure means "not an
+// editor", so the connection just receives the coalesced viewer stream.
+func (s *server) isFestEditor(r *http.Request, festID int64) bool {
+	user, ok := s.lookupSession(r)
+	if !ok {
+		return false
+	}
+	role, err := s.festUserRole(r.Context(), festID, user.UserID)
+	if err != nil {
+		return false
+	}
+	return festRoleCanEditGameTables(role)
+}
+
+func (s *server) addSubscriber(festID int64, ch chan event, isEditor bool) {
 	s.subMu.Lock()
 	defer s.subMu.Unlock()
 	if s.subscribers == nil {
-		s.subscribers = make(map[int64]map[chan event]struct{})
+		s.subscribers = make(map[int64]map[chan event]bool)
 	}
 	bucket, ok := s.subscribers[festID]
 	if !ok {
-		bucket = make(map[chan event]struct{})
+		bucket = make(map[chan event]bool)
 		s.subscribers[festID] = bucket
 	}
-	bucket[ch] = struct{}{}
+	bucket[ch] = isEditor
 }
 
 func (s *server) removeSubscriber(festID int64, ch chan event) {
@@ -721,9 +759,42 @@ func (s *server) removeSubscriber(festID int64, ch chan event) {
 	close(ch)
 }
 
+// scheduleViewerCount fans out the viewer tally at most once per fest per
+// viewerCountInterval. The first change after a quiet period broadcasts
+// immediately (leading edge) so the count stays fresh when things are calm;
+// changes during the cooldown collapse into a single trailing broadcast at the
+// end of the window, so a connect/disconnect storm costs one fan-out per
+// interval instead of one per connection. Eventual consistency is guaranteed:
+// the trailing timer always sends the final count.
+func (s *server) scheduleViewerCount(festID int64) {
+	s.viewerCountMu.Lock()
+	defer s.viewerCountMu.Unlock()
+	if s.viewerCountAt == nil {
+		s.viewerCountAt = make(map[int64]time.Time)
+		s.viewerCountTimer = make(map[int64]*time.Timer)
+	}
+	now := time.Now()
+	if since := now.Sub(s.viewerCountAt[festID]); since >= viewerCountInterval {
+		s.viewerCountAt[festID] = now
+		go s.broadcastViewerCount(festID) // off-lock: fan-out must not hold viewerCountMu
+		return
+	}
+	if s.viewerCountTimer[festID] != nil {
+		return // a trailing broadcast is already pending
+	}
+	delay := viewerCountInterval - now.Sub(s.viewerCountAt[festID])
+	s.viewerCountTimer[festID] = time.AfterFunc(delay, func() {
+		s.viewerCountMu.Lock()
+		s.viewerCountAt[festID] = time.Now()
+		s.viewerCountTimer[festID] = nil
+		s.viewerCountMu.Unlock()
+		s.broadcastViewerCount(festID)
+	})
+}
+
 // broadcastViewerCount fans out the current /events subscriber count for a fest
 // as a "viewers" SSE event, so every connected client shows a live
-// concurrent-viewer tally. Called on each connect and disconnect.
+// concurrent-viewer tally. Throttled via scheduleViewerCount (see there).
 //
 // Unlike broadcast(), it holds subMu.RLock for the whole fan-out. The sends are
 // all non-blocking (buffered channel + select/default), so this never stalls,
@@ -753,7 +824,18 @@ func (s *server) broadcastViewerCount(festID int64) {
 	}
 }
 
-func (s *server) broadcast(ev event) {
+// audience selects which SSE subscribers a broadcast reaches.
+type audience int
+
+const (
+	audAll     audience = iota // editors + viewers (snapshots, fest-wide events)
+	audEditors                 // organizers only — immediate, uncoalesced deltas
+	audViewers                 // spectators only — coalesced merged deltas
+)
+
+func (s *server) broadcast(ev event) { s.broadcastTo(ev, audAll) }
+
+func (s *server) broadcastTo(ev event, aud audience) {
 	// Snapshot the channel list under the read lock so the slow send
 	// path runs without keeping other broadcasts or subscriber churn
 	// blocked.
@@ -761,7 +843,17 @@ func (s *server) broadcast(ev event) {
 	s.subMu.RLock()
 	if bucket, ok := s.subscribers[ev.festID]; ok && len(bucket) > 0 {
 		chs = make([]chan event, 0, len(bucket))
-		for ch := range bucket {
+		for ch, isEditor := range bucket {
+			switch aud {
+			case audEditors:
+				if !isEditor {
+					continue
+				}
+			case audViewers:
+				if isEditor {
+					continue
+				}
+			}
 			chs = append(chs, ch)
 		}
 	}

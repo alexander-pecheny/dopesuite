@@ -478,6 +478,77 @@
     return {scope: "unknown", revision: 0, data: parsed};
   }
 
+  function cloneJSON(value) {
+    if (value === undefined) return null;
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function normalizePatchPath(path) {
+    if (!Array.isArray(path) || path.length === 0) {
+      throw new Error("state patch path must be a non-empty array");
+    }
+    return path.map((segment) => {
+      if (typeof segment === "string" && segment !== "") return segment;
+      if (Number.isInteger(segment) && segment >= 0) return segment;
+      throw new Error("state patch path segments must be strings or non-negative integers");
+    });
+  }
+
+  function patchKey(op) {
+    return JSON.stringify(op.path);
+  }
+
+  // createPendingOps tracks un-acked local edits as scoped set-ops so they can be
+  // (a) batched into one request and (b) re-overlaid on top of any server state
+  // we render before the edit is confirmed — so an optimistically-applied cell
+  // never regresses while its write is in flight, even across a full resync /
+  // refetch. Shared by createStateSync (OD/KSI whole-game state) and host.js (EK
+  // per-match edits) so all three editors get identical durability.
+  //
+  // Ops to the same path coalesce, last-write-wins. take() moves the queued batch
+  // to "in flight"; ack() drops them once the server confirms; requeue() returns
+  // them for retry (without clobbering a newer queued op for the same path);
+  // overlay() applies (in-flight then queued) onto a clone of the given state.
+  function createPendingOps() {
+    let queue = new Map();
+    let inFlight = [];
+    function add(path, value) {
+      const op = {op: "set", path: normalizePatchPath(path), value: cloneJSON(value)};
+      queue.set(patchKey(op), op);
+      return op;
+    }
+    function take() {
+      const ops = Array.from(queue.values());
+      queue.clear();
+      inFlight = inFlight.concat(ops);
+      return ops;
+    }
+    function ack(ops) {
+      const sent = new Set(ops);
+      inFlight = inFlight.filter((op) => !sent.has(op));
+    }
+    function requeue(ops) {
+      for (const op of ops) {
+        const key = patchKey(op);
+        if (!queue.has(key)) queue.set(key, op);
+      }
+    }
+    function all() {
+      return inFlight.concat(Array.from(queue.values()));
+    }
+    function overlay(state) {
+      let next = cloneJSON(state);
+      for (const op of all()) next = setAtDeltaPath(next, op.path, op.value);
+      return next;
+    }
+    return {
+      add, take, ack, requeue, all, overlay,
+      queued: () => queue.size,
+      inFlightCount: () => inFlight.length,
+      size: () => queue.size + inFlight.length,
+    };
+  }
+
   function createStateSync(options) {
     const debounceMs = Number.isFinite(options.debounceMs) ? options.debounceMs : 250;
     const maxEchoes = Number.isFinite(options.maxEchoes) ? options.maxEchoes : 12;
@@ -489,8 +560,7 @@
     let saveInFlight = false;
     let patchTimer = null;
     let patchInFlight = false;
-    let patchQueue = new Map();
-    let inFlightPatchOps = [];
+    const pending = createPendingOps();
     // Unified SSE protocol: lastSeq is the per-scope position we have applied.
     // A delta applies only if its prevSeq === lastSeq; otherwise a drop / late
     // join / restart left a gap and we resync the full state. Seeded once from
@@ -508,15 +578,13 @@
 
     function patch(path, value) {
       if (options.readonly) return;
-      let op;
       try {
-        op = {op: "set", path: normalizePatchPath(path), value: cloneJSON(value)};
+        pending.add(path, value);
       } catch (error) {
         console.error(error);
         setSyncStatus("error");
         return;
       }
-      patchQueue.set(patchKey(op), op);
       setSyncStatus("saving");
       schedulePatch(debounceMs);
     }
@@ -566,11 +634,9 @@
     }
 
     async function flushPatch() {
-      if (options.readonly || patchInFlight || patchQueue.size === 0) return;
-      const ops = Array.from(patchQueue.values());
-      patchQueue.clear();
+      if (options.readonly || patchInFlight || pending.queued() === 0) return;
+      const ops = pending.take();
       patchInFlight = true;
-      inFlightPatchOps = inFlightPatchOps.concat(ops);
       let saved = false;
       let retry = true;
       try {
@@ -584,18 +650,18 @@
           throw new Error(await response.text());
         }
         const updated = await response.json();
-        removeInFlightPatchOps(ops);
+        pending.ack(ops);
         rememberLocalEcho(JSON.stringify(updated));
-        options.onRemoteState?.(withPendingLocalPatches(updated), {local: true});
+        options.onRemoteState?.(pending.overlay(updated), {local: true});
         saved = true;
       } catch (error) {
-        removeInFlightPatchOps(ops);
-        if (retry) requeuePatchOps(ops);
+        pending.ack(ops);
+        if (retry) pending.requeue(ops);
         console.error(error);
         setSyncStatus("error");
       } finally {
         patchInFlight = false;
-        if (patchQueue.size > 0) {
+        if (pending.queued() > 0) {
           if (!patchTimer) schedulePatch(saved ? 0 : 2000);
         } else if (saved && !hasPendingSave()) {
           setSyncStatus("saved");
@@ -623,10 +689,9 @@
       return saveQueued ||
         saveInFlight ||
         saveTimer !== null ||
-        patchQueue.size > 0 ||
         patchInFlight ||
         patchTimer !== null ||
-        inFlightPatchOps.length > 0;
+        pending.size() > 0;
     }
 
     function connect() {
@@ -649,6 +714,13 @@
           // what we have. A gap means we missed an event, so refetch instead of
           // misapplying. Drop deltas mid-resync; the refetch supersedes them.
           if (resyncing) return;
+          // Already applied: a coalesced viewer delta whose seq range we fetched
+          // past on connect arrives with seq <= lastSeq. The state already
+          // reflects it, so ignore it rather than read the older prevSeq as a gap.
+          if ((Number(message.seq) || 0) <= lastSeq) {
+            if (!hasPendingSave()) setSyncStatus("saved");
+            return;
+          }
           if ((Number(message.prevSeq) || 0) !== lastSeq) {
             void resync();
             return;
@@ -656,10 +728,10 @@
           let next = cloneJSON(options.getState ? options.getState() : {});
           for (const op of message.ops) {
             if (op.op && op.op !== "set") continue;
-            next = applySetPatch(next, op.path, op.value);
+            next = setAtDeltaPath(next, op.path, op.value);
           }
           lastSeq = Number(message.seq) || lastSeq;
-          options.onRemoteState?.(withPendingLocalPatches(next), message);
+          options.onRemoteState?.(pending.overlay(next), message);
           if (!hasPendingSave()) setSyncStatus("saved");
           return;
         }
@@ -671,7 +743,7 @@
           if (!hasPendingSave()) setSyncStatus("saved");
           return;
         }
-        options.onRemoteState?.(withPendingLocalPatches(message.data), message);
+        options.onRemoteState?.(pending.overlay(message.data), message);
         if (!hasPendingSave()) setSyncStatus("saved");
       });
       events.onerror = () => setSyncStatus("reconnecting");
@@ -691,71 +763,13 @@
         const seqHeader = response.headers.get("X-State-Seq");
         const data = await response.json();
         if (seqHeader != null) lastSeq = Number(seqHeader) || 0;
-        options.onRemoteState?.(withPendingLocalPatches(data), {scope: options.scope, resync: true});
+        options.onRemoteState?.(pending.overlay(data), {scope: options.scope, resync: true});
         if (!hasPendingSave()) setSyncStatus("saved");
       } catch (error) {
         console.error(error);
       } finally {
         resyncing = false;
       }
-    }
-
-    function normalizePatchPath(path) {
-      if (!Array.isArray(path) || path.length === 0) {
-        throw new Error("state patch path must be a non-empty array");
-      }
-      return path.map((segment) => {
-        if (typeof segment === "string" && segment !== "") return segment;
-        if (Number.isInteger(segment) && segment >= 0) return segment;
-        throw new Error("state patch path segments must be strings or non-negative integers");
-      });
-    }
-
-    function patchKey(op) {
-      return JSON.stringify(op.path);
-    }
-
-    function cloneJSON(value) {
-      if (value === undefined) return null;
-      return JSON.parse(JSON.stringify(value));
-    }
-
-    function removeInFlightPatchOps(ops) {
-      const sent = new Set(ops);
-      inFlightPatchOps = inFlightPatchOps.filter((op) => !sent.has(op));
-    }
-
-    function requeuePatchOps(ops) {
-      for (const op of ops) {
-        const key = patchKey(op);
-        if (!patchQueue.has(key)) patchQueue.set(key, op);
-      }
-    }
-
-    function pendingPatchOps() {
-      return inFlightPatchOps.concat(Array.from(patchQueue.values()));
-    }
-
-    function withPendingLocalPatches(remoteState) {
-      let next = cloneJSON(remoteState);
-      for (const op of pendingPatchOps()) {
-        next = applySetPatch(next, op.path, op.value);
-      }
-      return next;
-    }
-
-    function applySetPatch(root, path, value) {
-      if (path.length === 0) return cloneJSON(value);
-      const [segment, ...rest] = path;
-      if (typeof segment === "number") {
-        const arr = Array.isArray(root) ? root : [];
-        while (arr.length <= segment) arr.push(null);
-        arr[segment] = applySetPatch(arr[segment], rest, value);
-        return arr;
-      }
-      const obj = root && typeof root === "object" && !Array.isArray(root) ? root : {};
-      obj[segment] = applySetPatch(obj[segment], rest, value);
-      return obj;
     }
 
     return {connect, flushSave, flushPatch, hasPendingSave, save, patch};
@@ -1951,10 +1965,10 @@
     return wrapper;
   }
 
-  // applyDeltaOps returns a deep clone of `base` with scoped set-ops applied.
-  // Standalone (mirrors createStateSync's applySetPatch) so the read-only viewer
-  // can reconstruct a full match view from a delta without the host sync
-  // controller. Non-"set" ops are skipped.
+  // applyDeltaOps returns a deep clone of `base` with scoped set-ops applied,
+  // via the shared setAtDeltaPath (also used by createPendingOps.overlay), so the
+  // read-only viewer can reconstruct a full match view from a delta without the
+  // host sync controller. Non-"set" ops are skipped.
   function applyDeltaOps(base, ops) {
     let next = base == null ? {} : JSON.parse(JSON.stringify(base));
     for (const op of ops || []) {
@@ -2002,6 +2016,7 @@
     renderGameBreadcrumbs,
     parseScopedEvent,
     createStateSync,
+    createPendingOps,
     createHostPresence,
     normalizeVenue,
     formatVenue,
