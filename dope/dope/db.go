@@ -3194,12 +3194,36 @@ func (s *server) broadcastState(festID int64, scope string, revision int64, payl
 	s.invalidateFestViewCache(festID)
 	s.seqMu.Lock()
 	defer s.seqMu.Unlock()
+	// A snapshot supersedes any buffered deltas for this scope; flush them first
+	// (they carry lower seqs) so viewers never see the snapshot before them.
+	s.flushDeltaLocked(scope)
 	seq := s.bumpSeqLocked(scope)
 	if s.db != nil {
 		payload = eventSnapshotJSON(scope, revision, seq, payload)
 	}
 	s.broadcast(event{festID: festID, revision: revision, data: payload})
 	return seq
+}
+
+// deltaCoalesceWindow bounds how long delta ops for one scope buffer before they
+// fan out as a single merged delta. Clients already debounce their own edits, so
+// this mainly caps the fan-out rate across concurrent editors and adds at most
+// this much latency to a viewer's update — a trade the product accepts (viewers
+// may lag; editors stay instant via their local optimistic overlay).
+const deltaCoalesceWindow = 150 * time.Millisecond
+
+// pendingDelta accumulates one scope's delta ops within a coalescing window.
+// Seq is NOT assigned per edit; the whole window collapses to a single seq
+// increment at flush (prevSeq -> prevSeq+1). That keeps a client that fetched
+// the post-edit state mid-window (X-State-Seq == prevSeq) from seeing the merged
+// delta as a gap: its prevSeq still matches, and re-applying the (idempotent)
+// set-ops it already has is harmless.
+type pendingDelta struct {
+	festID   int64
+	prevSeq  uint64
+	revision int64
+	ops      [][]byte
+	timer    *time.Timer
 }
 
 // broadcastMatchView fans out a match-scope update as a minimal delta when ops
@@ -3224,11 +3248,69 @@ func (s *server) broadcastStateDelta(festID int64, scope string, revision int64,
 	s.invalidateFestViewCache(festID)
 	s.seqMu.Lock()
 	defer s.seqMu.Unlock()
-	prev := s.stateSeqLocked(scope)
-	seq := s.bumpSeqLocked(scope)
-	payload := eventDeltaJSON(scope, revision, seq, prev, ops)
-	s.broadcast(event{festID: festID, revision: revision, data: payload})
-	return seq
+	if s.deltaBuf == nil {
+		s.deltaBuf = map[string]*pendingDelta{}
+	}
+	pd := s.deltaBuf[scope]
+	if pd == nil {
+		pd = &pendingDelta{festID: festID, prevSeq: s.stateSeqLocked(scope)}
+		s.deltaBuf[scope] = pd
+		sc := scope
+		pd.timer = time.AfterFunc(deltaCoalesceWindow, func() { s.flushDelta(sc) })
+	}
+	pd.festID = festID
+	pd.revision = revision
+	pd.ops = append(pd.ops, ops)
+	// Every edit in this window flushes as the same single seq (prevSeq+1), so a
+	// handler can stamp it on its HTTP response and stay in lockstep with the
+	// merged broadcast it will receive (and, for match echoes, drop) over SSE.
+	return pd.prevSeq + 1
+}
+
+// flushDelta emits a scope's buffered delta as one merged broadcast. Called from
+// the coalescing timer.
+func (s *server) flushDelta(scope string) {
+	s.seqMu.Lock()
+	defer s.seqMu.Unlock()
+	s.flushDeltaLocked(scope)
+}
+
+// flushDeltaLocked bumps the scope seq exactly once and fans out the merged ops.
+// Caller holds seqMu. No-op if nothing is buffered (e.g. a snapshot already
+// flushed this window, or the timer raced a flush).
+func (s *server) flushDeltaLocked(scope string) {
+	pd := s.deltaBuf[scope]
+	if pd == nil {
+		return
+	}
+	delete(s.deltaBuf, scope)
+	if pd.timer != nil {
+		pd.timer.Stop()
+	}
+	seq := s.bumpSeqLocked(scope) // exactly prevSeq+1, since nothing else bumps a buffered scope
+	payload := eventDeltaJSON(scope, pd.revision, seq, pd.prevSeq, mergeOpsArrays(pd.ops))
+	s.broadcast(event{festID: pd.festID, revision: pd.revision, data: payload})
+}
+
+// mergeOpsArrays concatenates several JSON op-arrays into one, preserving order
+// (later ops override earlier for the same path when the client applies them).
+func mergeOpsArrays(arrays [][]byte) []byte {
+	if len(arrays) == 1 {
+		return arrays[0]
+	}
+	merged := make([]json.RawMessage, 0, len(arrays))
+	for _, a := range arrays {
+		var ops []json.RawMessage
+		if err := json.Unmarshal(a, &ops); err != nil {
+			continue
+		}
+		merged = append(merged, ops...)
+	}
+	out, err := json.Marshal(merged)
+	if err != nil {
+		return arrays[len(arrays)-1]
+	}
+	return out
 }
 
 // bumpSeqLocked increments and returns the scope's seq. Caller holds seqMu.

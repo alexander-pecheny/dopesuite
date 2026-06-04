@@ -326,6 +326,9 @@ func TestScopedGameStatePatchBroadcastsDelta(t *testing.T) {
 	if resp := scopedAPIRequest(t, srv, http.MethodPatch, path, patch([]any{"entries", 0, 0}, 1), token); resp.Code != http.StatusOK {
 		t.Fatalf("first patch status = %d, body %s", resp.Code, resp.Body.String())
 	}
+	// Delta broadcasts coalesce over a window; force the flush so the test reads
+	// the merged delta deterministically instead of waiting on the timer.
+	srv.flushDelta(wantScope)
 	first := nextEnvelope()
 	if first.Scope != wantScope {
 		t.Fatalf("scope = %q, want %q", first.Scope, wantScope)
@@ -343,6 +346,7 @@ func TestScopedGameStatePatchBroadcastsDelta(t *testing.T) {
 	if resp := scopedAPIRequest(t, srv, http.MethodPatch, path, patch([]any{"entries", 0, 1}, 2), token); resp.Code != http.StatusOK {
 		t.Fatalf("second patch status = %d, body %s", resp.Code, resp.Body.String())
 	}
+	srv.flushDelta(wantScope)
 	second := nextEnvelope()
 	if second.Seq != 2 || second.PrevSeq != 1 {
 		t.Fatalf("second delta seq/prevSeq = %d/%d, want 2/1 (must chain)", second.Seq, second.PrevSeq)
@@ -410,7 +414,13 @@ func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
 		return view
 	}
 
+	// Delta broadcasts coalesce over a window; flush so the merged broadcast is
+	// emitted now. The response seq is the seq the window WILL flush as, so it
+	// still equals the broadcast seq and chains across windows.
+	matchScope := fmt.Sprintf("match:%d:%s", gameID, defaultMatchCode)
+
 	firstView := edit(0)
+	srv.flushDelta(matchScope)
 	firstBroadcast := nextSeq()
 	if firstView.Seq == 0 {
 		t.Fatalf("update response carried no seq; editor cannot chain onto its own broadcast")
@@ -420,6 +430,7 @@ func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
 	}
 
 	secondView := edit(1)
+	srv.flushDelta(matchScope)
 	secondBroadcast := nextSeq()
 	if secondView.Seq != secondBroadcast.Seq {
 		t.Fatalf("second response seq %d != broadcast seq %d", secondView.Seq, secondBroadcast.Seq)

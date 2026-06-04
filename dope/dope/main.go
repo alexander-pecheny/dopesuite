@@ -154,6 +154,12 @@ type server struct {
 	// seq-assign + fan-out so per-scope event order matches seq order.
 	seqMu    sync.Mutex
 	stateSeq map[string]uint64
+	// deltaBuf coalesces scoped delta broadcasts: rapid edits to one scope buffer
+	// their ops for deltaCoalesceWindow and fan out as ONE merged delta, so a
+	// fleet of viewers gets a single fan-out per window instead of one per edit.
+	// Guarded by seqMu (seq assignment and buffering are coupled). See
+	// broadcastStateDelta / flushDelta.
+	deltaBuf map[string]*pendingDelta
 	// viewerCount* throttle the "viewers" tally fan-out. A viewer ramp can
 	// open/close hundreds of SSE connections a second, and each connect/
 	// disconnect would otherwise trigger a full O(viewers) fan-out — enough to
