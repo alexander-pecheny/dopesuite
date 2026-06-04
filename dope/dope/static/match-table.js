@@ -1292,9 +1292,33 @@
     }
 
     function onPointerOver(event) {
+      // On touch, pointerover fires while swiping across cells; showing here
+      // would pop the popover on every swipe. Touch shows via tap (see onTapEnd).
+      if (event.pointerType === "touch") return;
       const trigger = triggerFor(event.target);
       if (!trigger || active?.trigger === trigger) return;
       show(trigger);
+    }
+
+    let tapStart = null;
+    const TAP_MOVE_THRESHOLD = 10;
+
+    function onTapStart(event) {
+      if (event.pointerType !== "touch") return;
+      tapStart = {x: event.clientX, y: event.clientY};
+    }
+
+    function onTapEnd(event) {
+      if (event.pointerType !== "touch" || !tapStart) return;
+      const moved = Math.hypot(event.clientX - tapStart.x, event.clientY - tapStart.y);
+      tapStart = null;
+      if (moved > TAP_MOVE_THRESHOLD) return; // a swipe, not a tap
+      const trigger = triggerFor(event.target);
+      if (trigger) {
+        if (active?.trigger !== trigger) show(trigger);
+      } else {
+        hide();
+      }
     }
 
     function onPointerOut(event) {
@@ -1340,6 +1364,8 @@
       document.addEventListener("focusin", onFocusIn);
       document.addEventListener("focusout", onFocusOut);
       document.addEventListener("pointerdown", onPointerDownOutside, true);
+      document.addEventListener("pointerdown", onTapStart, true);
+      document.addEventListener("pointerup", onTapEnd, true);
       window.addEventListener("scroll", schedulePosition, {capture: true, passive: true});
     }
 
