@@ -2320,7 +2320,11 @@ function shootoutControlsHeader() {
 
 function handleGlobalKeydown(event) {
   if ((route.mode !== "match" && route.mode !== "stage") || isFormControl(event.target)) return;
-  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z") {
+  // event.code is the physical key (layout-independent), so Cmd/Ctrl-Z fires on a
+  // Russian layout too — there the Z key reports event.key "я", which the old
+  // key-based check missed, so undo did nothing for Cyrillic-keyboard users.
+  const isUndoKey = event.code === "KeyZ" || event.key.toLowerCase() === "z" || event.key === "я" || event.key === "Я";
+  if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && isUndoKey) {
     if (performUndo()) event.preventDefault();
     return;
   }

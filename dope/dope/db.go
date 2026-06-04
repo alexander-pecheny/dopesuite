@@ -2631,7 +2631,7 @@ func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) 
 		return s.applyLegacyUpdate(req)
 	}
 	// Legacy single-fest path: no SSE fan-out, so cascade + delta are discarded.
-	view, data, _, err := s.applyMatchUpdateUsing(festID, []updateRequest{req},
+	view, data, _, err := s.applyMatchUpdateUsing(context.Background(), festID, []updateRequest{req},
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchState(ctx, q, festID, code)
 		},
@@ -2644,7 +2644,7 @@ func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) 
 // applyScopedMatchUpdate applies a match edit and additionally returns deltaOps:
 // the set-ops that turn the pre-edit view into the new one, when broadcasting
 // them is cheaper than the full view (else nil — caller broadcasts full state).
-func (s *server) applyScopedMatchUpdate(scope matchScope, reqs []updateRequest) (MatchView, []byte, []byte, []MatchView, error) {
+func (s *server) applyScopedMatchUpdate(ctx context.Context, scope matchScope, reqs []updateRequest) (MatchView, []byte, []byte, []MatchView, error) {
 	if s.db == nil {
 		var view MatchView
 		var data []byte
@@ -2657,7 +2657,7 @@ func (s *server) applyScopedMatchUpdate(scope matchScope, reqs []updateRequest) 
 		return view, data, nil, nil, err
 	}
 	var oldData []byte
-	view, data, cascaded, err := s.applyMatchUpdateUsing(scope.FestID, reqs,
+	view, data, cascaded, err := s.applyMatchUpdateUsing(ctx, scope.FestID, reqs,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchStateByScope(ctx, q, scope)
 		},
@@ -2677,6 +2677,7 @@ func (s *server) applyScopedMatchUpdate(scope matchScope, reqs []updateRequest) 
 // next round). The handler broadcasts those too, so spectators see downstream
 // matches update live instead of only on reload.
 func (s *server) applyMatchUpdateUsing(
+	reqCtx context.Context,
 	festID int64,
 	reqs []updateRequest,
 	loadMatch func(context.Context, dbQueryer) (dbMatchState, error),
@@ -2697,7 +2698,10 @@ func (s *server) applyMatchUpdateUsing(
 		}
 	}
 
-	ctx := context.Background()
+	// Carry the request's audit attribution (actor/request/fest) into the write
+	// tx, detached from the request's cancellation, so this match edit is
+	// recorded in audit_log against the right user and fest.
+	ctx := auditDetachedContext(reqCtx, festID)
 	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return MatchView{}, nil, nil, err
@@ -3029,7 +3033,7 @@ values(?, ?, ?, ?, ?)`, festID, revision, eventType, payload, now)
 }
 
 func (s *server) updateMatchVenue(festID int64, code string, number int) (MatchView, []byte, error) {
-	return s.updateMatchVenueUsing(festID, number,
+	return s.updateMatchVenueUsing(context.Background(), festID, number,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchState(ctx, q, festID, code)
 		},
@@ -3041,9 +3045,9 @@ func (s *server) updateMatchVenue(festID int64, code string, number int) (MatchV
 // updateScopedMatchVenue updates a match's venue and additionally returns
 // deltaOps (set-ops vs the pre-edit view) when a delta broadcast beats the full
 // view; nil otherwise.
-func (s *server) updateScopedMatchVenue(scope matchScope, number int) (MatchView, []byte, []byte, error) {
+func (s *server) updateScopedMatchVenue(ctx context.Context, scope matchScope, number int) (MatchView, []byte, []byte, error) {
 	var oldData []byte
-	view, data, err := s.updateMatchVenueUsing(scope.FestID, number,
+	view, data, err := s.updateMatchVenueUsing(ctx, scope.FestID, number,
 		func(ctx context.Context, q dbQueryer) (dbMatchState, error) {
 			return loadDBMatchStateByScope(ctx, q, scope)
 		},
@@ -3058,6 +3062,7 @@ func (s *server) updateScopedMatchVenue(scope matchScope, number int) (MatchView
 }
 
 func (s *server) updateMatchVenueUsing(
+	reqCtx context.Context,
 	festID int64,
 	number int,
 	loadMatch func(context.Context, dbQueryer) (dbMatchState, error),
@@ -3078,7 +3083,7 @@ func (s *server) updateMatchVenueUsing(
 		}
 	}
 
-	ctx := context.Background()
+	ctx := auditDetachedContext(reqCtx, festID)
 	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return MatchView{}, nil, err
@@ -3116,7 +3121,7 @@ select id from venues where fest_id = ? and number = ?`, festID, number).Scan(&v
 	return view, data, err
 }
 
-func (s *server) updateVenue(festID int64, number int, title string) ([]VenueView, int64, error) {
+func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, title string) ([]VenueView, int64, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return nil, 0, errors.New("empty venue title")
@@ -3125,7 +3130,7 @@ func (s *server) updateVenue(festID int64, number int, title string) ([]VenueVie
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ctx := context.Background()
+	ctx := auditDetachedContext(reqCtx, festID)
 	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
 		return nil, 0, err

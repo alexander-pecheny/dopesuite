@@ -84,6 +84,30 @@ func withAuditFestID(ctx context.Context, festID int64) context.Context {
 	return context.WithValue(ctx, auditCtxKeyFestID, festID)
 }
 
+// auditDetachedContext returns a non-cancelable context carrying the audit
+// attribution (actor + request_id) copied from src, with fest_id stamped from
+// the explicit festID argument (falling back to whatever src carried). Write
+// helpers that run under the global write mutex and previously used a bare
+// context.Background() use this instead, so their mutations are still attributed
+// to the acting user/request/fest in audit_log without becoming abortable by a
+// client disconnect mid-write. Without it, those rows get a null fest_id and
+// never appear on the fest-scoped revert/audit page.
+func auditDetachedContext(src context.Context, festID int64) context.Context {
+	ctx := context.Background()
+	if v, ok := actorFromContext(src); ok {
+		ctx = withAuditActor(ctx, v)
+	}
+	if v := requestIDFromContext(src); v != "" {
+		ctx = withAuditRequestID(ctx, v)
+	}
+	if festID > 0 {
+		ctx = withAuditFestID(ctx, festID)
+	} else if v, ok := auditFestIDFromContext(src); ok {
+		ctx = withAuditFestID(ctx, v)
+	}
+	return ctx
+}
+
 func actorFromContext(ctx context.Context) (int64, bool) {
 	if v, ok := ctx.Value(auditCtxKeyActor).(int64); ok && v != 0 {
 		return v, true

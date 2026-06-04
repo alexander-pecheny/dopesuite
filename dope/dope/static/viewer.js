@@ -1030,7 +1030,11 @@ function currentRoute() {
   const gameID = prefix[2];
   const base = `/fest/${festID}/game/${gameID}`;
   const apiBase = `/api/fest/${festID}/games/${gameID}`;
-  const rest = path.slice(prefix[0].length);
+  // A trailing /static segment forces the static snapshot server-side (see
+  // handleFestRouter) but leaves the URL in the bar. Strip it before matching the
+  // sub-route, else it falls through to mode "missing" and the injected snapshot
+  // (route.mode "grid"/"match"/…) is rejected, leaving the page a blank spinner.
+  const rest = path.slice(prefix[0].length).replace(/\/static$/, "");
   const stripped = rest.replace(/\/$/, "");
   if (stripped === "" || stripped === "/") {
     return {mode: "grid", festID, gameID, base, apiBase};
