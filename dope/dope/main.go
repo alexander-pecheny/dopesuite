@@ -301,6 +301,10 @@ func main() {
 	// optional localhost-only control endpoint. See static_mode.go.
 	srv.initStaticMode()
 
+	// Audit-log retention sweep: bounds audit_log by age and on-disk size so it
+	// can't fill the disk. See audit_prune.go.
+	srv.initAuditPrune()
+
 	httpSrv := &http.Server{
 		Handler:           srv.auditContextMiddleware(gzipMiddleware(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
