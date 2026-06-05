@@ -1019,11 +1019,25 @@ func requireSameOriginUnsafe(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	u, err := url.Parse(origin)
-	if err != nil || !strings.EqualFold(u.Host, r.Host) {
+	if err != nil || !sameOriginRequestHost(u.Host, r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return false
 	}
 	return true
+}
+
+func sameOriginRequestHost(originHost string, r *http.Request) bool {
+	if strings.EqualFold(originHost, r.Host) {
+		return true
+	}
+	for _, value := range r.Header.Values("X-Forwarded-Host") {
+		for _, host := range strings.Split(value, ",") {
+			if strings.EqualFold(originHost, strings.TrimSpace(host)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // createInvite is a small helper used by tests / future admin tooling. Not
