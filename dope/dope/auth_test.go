@@ -1052,15 +1052,18 @@ values(?, ?, ?, 0, ?, ?)`, 4242, "tg_x", "x", now, now)
 	}
 }
 
-func TestRequireSameOriginUnsafeAcceptsForwardedHost(t *testing.T) {
+func TestRequireSameOriginUnsafeRejectsForwardedHostWithoutTrustedOrigin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "https://dope.pecheny.me/api/fest/test/presence", nil)
 	req.Host = "dope.pecheny.me"
 	req.Header.Set("Origin", "https://dope.pecheny.kz")
 	req.Header.Set("X-Forwarded-Host", "dope.pecheny.kz")
 	resp := httptest.NewRecorder()
 
-	if !requireSameOriginUnsafe(resp, req) {
-		t.Fatalf("same-origin check rejected forwarded browser host: status %d body %q", resp.Code, resp.Body.String())
+	if requireSameOriginUnsafe(resp, req) {
+		t.Fatal("same-origin check accepted untrusted forwarded host")
+	}
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", resp.Code)
 	}
 }
 
