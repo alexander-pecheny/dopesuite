@@ -1031,13 +1031,6 @@ func sameOriginRequestHost(originHost string, r *http.Request) bool {
 	if strings.EqualFold(originHost, r.Host) {
 		return true
 	}
-	for _, value := range r.Header.Values("X-Forwarded-Host") {
-		for _, host := range strings.Split(value, ",") {
-			if strings.EqualFold(originHost, strings.TrimSpace(host)) {
-				return true
-			}
-		}
-	}
 	if trustedOriginHost(originHost, os.Getenv(trustedOriginHostsEnv)) {
 		return true
 	}
