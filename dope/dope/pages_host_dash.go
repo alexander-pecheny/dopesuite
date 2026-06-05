@@ -132,6 +132,23 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
       <h2>Доступ</h2>
       {{if .AccessError}}<p class="empty">{{.AccessError}}</p>{{end}}
       {{if .AccessNotice}}<p class="muted">{{.AccessNotice}}</p>{{end}}
+      <div class="cluster">
+        <button class="btn" type="button" data-access-bulk-open>Массовое действие</button>
+      </div>
+      <dialog class="modal-dialog" data-access-bulk-dialog>
+        <form method="post" action="/host/fest/{{.Fest.Ref}}/access#access" class="stack" autocomplete="off">
+          <h2>Массовое действие</h2>
+          <input type="hidden" name="bulk_access" value="1">
+          <label class="field">
+            <span>Данные</span>
+            <textarea name="bulk_access_lines" rows="8" placeholder="username1:host&#10;username2:host&#10;username3:admin&#10;username4:remove" required></textarea>
+          </label>
+          <div class="cluster">
+            <button class="btn" type="submit">Применить</button>
+            <button class="btn" type="button" data-access-bulk-close>Отмена</button>
+          </div>
+        </form>
+      </dialog>
       <form method="post" action="/host/fest/{{.Fest.Ref}}/access#access" class="card stack" autocomplete="off">
         <div class="table-scroll">
           <table class="data-table access-table">
@@ -229,6 +246,22 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
     </section>
     {{end}}
   </main>
+  <script>
+    (() => {
+      const dialog = document.querySelector("[data-access-bulk-dialog]");
+      const open = document.querySelector("[data-access-bulk-open]");
+      const close = document.querySelector("[data-access-bulk-close]");
+      if (!dialog || !open) return;
+      open.addEventListener("click", () => {
+        if (typeof dialog.showModal === "function") dialog.showModal();
+        else dialog.setAttribute("open", "");
+      });
+      close?.addEventListener("click", () => {
+        if (typeof dialog.close === "function") dialog.close();
+        else dialog.removeAttribute("open");
+      });
+    })();
+  </script>
 </body>
 </html>`))
 
@@ -330,6 +363,15 @@ where id = ?`,
 func (s *server) handleHostSaveAccess(w http.ResponseWriter, r *http.Request, festID, actorID int64) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	if r.Form.Get("bulk_access") == "1" {
+		count, err := s.saveFestAccessBulk(r.Context(), festID, actorID, r.Form.Get("bulk_access_lines"))
+		if err != nil {
+			s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessError: err.Error()})
+			return
+		}
+		s.renderHostFestDashboard(w, r, festID, hostDashMessages{AccessNotice: fmt.Sprintf("Массовое действие выполнено: %d.", count)})
 		return
 	}
 	if err := s.saveFestAccess(r.Context(), festID, actorID, r.Form); err != nil {

@@ -22,6 +22,13 @@ type hostAccessMember struct {
 	IsCreator bool
 }
 
+type bulkFestAccessLine struct {
+	Line     int
+	Nickname string
+	Role     string
+	Delete   bool
+}
+
 func migrateFestOrganizerRoles(db *sql.DB) error {
 	if err := addColumnsIfMissing(db, "fest_organizers", []columnSpec{
 		{Name: "role", Type: "TEXT NOT NULL DEFAULT 'admin' CHECK (role in ('creator','admin','host'))"},
@@ -191,33 +198,10 @@ func (s *server) saveFestAccess(ctx context.Context, festID, actorID int64, form
 		return err
 	}
 
-	rows, err := tx.QueryContext(ctx, `
-select o.user_id,
-       case
-         when ? > 0 and o.user_id = ? then 'creator'
-         when o.role = 'creator' then 'admin'
-         else coalesce(o.role, 'admin')
-       end
-from fest_organizers o
-where o.fest_id = ?`, creatorID, creatorID, festID)
+	current, err := loadFestAccessRoleMapTx(ctx, tx, festID, creatorID)
 	if err != nil {
 		return err
 	}
-	current := make(map[int64]string)
-	for rows.Next() {
-		var userID int64
-		var role string
-		if err := rows.Scan(&userID, &role); err != nil {
-			rows.Close()
-			return err
-		}
-		current[userID] = normalizeFestRole(role)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return err
-	}
-	rows.Close()
 
 	now := utcNow()
 	for userID, currentRole := range current {
@@ -225,32 +209,7 @@ where o.fest_id = ?`, creatorID, creatorID, festID)
 		deleteField := fmt.Sprintf("delete_%d", userID)
 		nextRole := normalizeFestRole(form.Get(roleField))
 		deleteMember := form.Get(deleteField) == "1"
-		if userID == creatorID || currentRole == festRoleCreator {
-			if deleteMember || (nextRole != "" && nextRole != festRoleCreator) {
-				return errors.New("создателя нельзя удалить или изменить")
-			}
-			if _, err := tx.ExecContext(ctx, `
-update fest_organizers set role = 'creator' where fest_id = ? and user_id = ?`, festID, userID); err != nil {
-				return err
-			}
-			continue
-		}
-		if deleteMember {
-			if _, err := tx.ExecContext(ctx, `
-delete from fest_organizers where fest_id = ? and user_id = ?`, festID, userID); err != nil {
-				return err
-			}
-			continue
-		}
-		if nextRole == "" {
-			nextRole = currentRole
-		}
-		if !assignableFestRole(nextRole) {
-			return errors.New("роль должна быть admin или host")
-		}
-		if _, err := tx.ExecContext(ctx, `
-update fest_organizers set role = ? where fest_id = ? and user_id = ?`,
-			nextRole, festID, userID); err != nil {
+		if err := applyFestAccessMemberTx(ctx, tx, festID, creatorID, userID, currentRole, nextRole, deleteMember, now); err != nil {
 			return err
 		}
 	}
@@ -275,11 +234,7 @@ update fest_organizers set role = ? where fest_id = ? and user_id = ?`,
 		if userID == creatorID {
 			return errors.New("создатель уже есть в доступе")
 		}
-		if _, err := tx.ExecContext(ctx, `
-insert into fest_organizers(fest_id, user_id, role, added_at)
-values(?, ?, ?, ?)
-on conflict(fest_id, user_id) do update set role = excluded.role`,
-			festID, userID, role, now); err != nil {
+		if err := applyFestAccessMemberTx(ctx, tx, festID, creatorID, userID, current[userID], role, false, now); err != nil {
 			return err
 		}
 	}
@@ -288,6 +243,155 @@ on conflict(fest_id, user_id) do update set role = excluded.role`,
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *server) saveFestAccessBulk(ctx context.Context, festID, actorID int64, raw string) (int, error) {
+	changes, err := parseFestAccessBulkLines(raw)
+	if err != nil {
+		return 0, err
+	}
+	if len(changes) == 0 {
+		return 0, errors.New("вставьте хотя бы одну строку")
+	}
+
+	tx, err := s.beginWriteTx(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	actorRole, err := festUserRoleFromQuery(ctx, tx, festID, actorID)
+	if err != nil {
+		return 0, err
+	}
+	if !festRoleCanManageAccess(actorRole) {
+		return 0, errors.New("нет прав менять доступ")
+	}
+
+	creatorID, err := syncFestCreatorAccessTx(ctx, tx, festID)
+	if err != nil {
+		return 0, err
+	}
+	current, err := loadFestAccessRoleMapTx(ctx, tx, festID, creatorID)
+	if err != nil {
+		return 0, err
+	}
+
+	now := utcNow()
+	for _, change := range changes {
+		userID, err := lookupUserIDByNicknameTx(ctx, tx, change.Nickname)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return 0, fmt.Errorf("строка %d: пользователь %q не найден", change.Line, change.Nickname)
+			}
+			return 0, err
+		}
+		if err := applyFestAccessMemberTx(ctx, tx, festID, creatorID, userID, current[userID], change.Role, change.Delete, now); err != nil {
+			return 0, fmt.Errorf("строка %d: %w", change.Line, err)
+		}
+		if change.Delete {
+			delete(current, userID)
+		} else {
+			current[userID] = change.Role
+		}
+	}
+
+	if _, err := bumpFestRevisionTx(ctx, tx, festID, "fest:access", "{}"); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(changes), nil
+}
+
+func parseFestAccessBulkLines(raw string) ([]bulkFestAccessLine, error) {
+	var out []bulkFestAccessLine
+	for idx, line := range strings.Split(raw, "\n") {
+		lineNo := idx + 1
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		nickname, action, ok := strings.Cut(line, ":")
+		if !ok {
+			return nil, fmt.Errorf("строка %d: нужен формат username:role", lineNo)
+		}
+		nickname = strings.TrimSpace(nickname)
+		action = strings.ToLower(strings.TrimSpace(action))
+		if nickname == "" || action == "" {
+			return nil, fmt.Errorf("строка %d: нужен формат username:role", lineNo)
+		}
+		change := bulkFestAccessLine{Line: lineNo, Nickname: nickname}
+		switch action {
+		case festRoleAdmin, festRoleHost:
+			change.Role = action
+		case "remove":
+			change.Delete = true
+		default:
+			return nil, fmt.Errorf("строка %d: действие должно быть host, admin или remove", lineNo)
+		}
+		out = append(out, change)
+	}
+	return out, nil
+}
+
+func loadFestAccessRoleMapTx(ctx context.Context, tx *sql.Tx, festID, creatorID int64) (map[int64]string, error) {
+	rows, err := tx.QueryContext(ctx, `
+select o.user_id,
+       case
+         when ? > 0 and o.user_id = ? then 'creator'
+         when o.role = 'creator' then 'admin'
+         else coalesce(o.role, 'admin')
+       end
+from fest_organizers o
+where o.fest_id = ?`, creatorID, creatorID, festID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	current := make(map[int64]string)
+	for rows.Next() {
+		var userID int64
+		var role string
+		if err := rows.Scan(&userID, &role); err != nil {
+			return nil, err
+		}
+		current[userID] = normalizeFestRole(role)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return current, nil
+}
+
+func applyFestAccessMemberTx(ctx context.Context, tx *sql.Tx, festID, creatorID, userID int64, currentRole, nextRole string, deleteMember bool, now string) error {
+	if userID == creatorID || currentRole == festRoleCreator {
+		if deleteMember || (nextRole != "" && nextRole != festRoleCreator) {
+			return errors.New("создателя нельзя удалить или изменить")
+		}
+		_, err := tx.ExecContext(ctx, `
+update fest_organizers set role = 'creator' where fest_id = ? and user_id = ?`, festID, userID)
+		return err
+	}
+	if deleteMember {
+		_, err := tx.ExecContext(ctx, `
+delete from fest_organizers where fest_id = ? and user_id = ?`, festID, userID)
+		return err
+	}
+	if nextRole == "" {
+		nextRole = currentRole
+	}
+	if !assignableFestRole(nextRole) {
+		return errors.New("роль должна быть admin или host")
+	}
+	_, err := tx.ExecContext(ctx, `
+insert into fest_organizers(fest_id, user_id, role, added_at)
+values(?, ?, ?, ?)
+on conflict(fest_id, user_id) do update set role = excluded.role`,
+		festID, userID, nextRole, now)
+	return err
 }
 
 func syncFestCreatorAccessTx(ctx context.Context, tx *sql.Tx, festID int64) (int64, error) {

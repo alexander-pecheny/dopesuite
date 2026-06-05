@@ -305,7 +305,11 @@ func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 	creatorToken := createTestSession(t, srv, creatorID)
 	adminID, adminToken := createAPITestSession(t, srv, "fest-admin")
 	hostID, hostToken := createAPITestSession(t, srv, "fest-host")
+	bulkHostID, _ := createAPITestSession(t, srv, "bulk-host")
+	bulkAdminID, _ := createAPITestSession(t, srv, "bulk-admin")
+	bulkRemoveID, _ := createAPITestSession(t, srv, "bulk-remove")
 	addAPITestRole(t, srv, festID, adminID, festRoleAdmin)
+	addAPITestRole(t, srv, festID, bulkRemoveID, festRoleHost)
 
 	creatorDashboardReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d", festID), nil)
 	creatorDashboardReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: creatorToken})
@@ -314,7 +318,7 @@ func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 	if creatorDashboardResp.Code != http.StatusOK {
 		t.Fatalf("creator dashboard status = %d, body %s", creatorDashboardResp.Code, creatorDashboardResp.Body.String())
 	}
-	if body := creatorDashboardResp.Body.String(); !strings.Contains(body, "Доступ") || !strings.Contains(body, "creator") {
+	if body := creatorDashboardResp.Body.String(); !strings.Contains(body, "Доступ") || !strings.Contains(body, "creator") || !strings.Contains(body, "Массовое действие") {
 		t.Fatalf("creator dashboard missing access section: %s", body)
 	}
 
@@ -372,6 +376,41 @@ func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 	srv.handleHostRouter(hostVenuesResp, hostVenuesReq)
 	if hostVenuesResp.Code != http.StatusOK {
 		t.Fatalf("host venues page status = %d, body %s", hostVenuesResp.Code, hostVenuesResp.Body.String())
+	}
+
+	bulkAccessForm := url.Values{
+		"bulk_access": {"1"},
+		"bulk_access_lines": {strings.Join([]string{
+			"fest-host:admin",
+			"bulk-host:host",
+			"bulk-admin:admin",
+			"bulk-remove:remove",
+		}, "\n")},
+	}
+	bulkAccessReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/access", festID), strings.NewReader(bulkAccessForm.Encode()))
+	bulkAccessReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	bulkAccessReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: creatorToken})
+	bulkAccessResp := httptest.NewRecorder()
+	srv.handleHostRouter(bulkAccessResp, bulkAccessReq)
+	if bulkAccessResp.Code != http.StatusOK {
+		t.Fatalf("bulk access status = %d, body %s", bulkAccessResp.Code, bulkAccessResp.Body.String())
+	}
+	if body := bulkAccessResp.Body.String(); !strings.Contains(body, "Массовое действие выполнено") {
+		t.Fatalf("bulk access response missing notice: %s", body)
+	}
+	for _, tc := range []struct {
+		name   string
+		userID int64
+		want   string
+	}{
+		{name: "changed host", userID: hostID, want: festRoleAdmin},
+		{name: "added host", userID: bulkHostID, want: festRoleHost},
+		{name: "added admin", userID: bulkAdminID, want: festRoleAdmin},
+		{name: "removed", userID: bulkRemoveID, want: ""},
+	} {
+		if role, err := srv.festUserRole(t.Context(), festID, tc.userID); err != nil || role != tc.want {
+			t.Fatalf("%s role = %q, err %v; want %q", tc.name, role, err, tc.want)
+		}
 	}
 
 	adminDeleteReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/delete", festID), nil)
