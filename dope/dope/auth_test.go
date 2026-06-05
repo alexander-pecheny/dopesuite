@@ -1064,6 +1064,18 @@ func TestRequireSameOriginUnsafeAcceptsForwardedHost(t *testing.T) {
 	}
 }
 
+func TestRequireSameOriginUnsafeAcceptsTrustedOriginHost(t *testing.T) {
+	t.Setenv(trustedOriginHostsEnv, "https://dope.pecheny.kz, dope.pecheny.test")
+	req := httptest.NewRequest(http.MethodPost, "https://dope.pecheny.me/api/fest/test/presence", nil)
+	req.Host = "dope.pecheny.me"
+	req.Header.Set("Origin", "https://dope.pecheny.kz")
+	resp := httptest.NewRecorder()
+
+	if !requireSameOriginUnsafe(resp, req) {
+		t.Fatalf("same-origin check rejected configured origin host: status %d body %q", resp.Code, resp.Body.String())
+	}
+}
+
 func TestRequireSameOriginUnsafeRejectsMismatchedForwardedHost(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "https://dope.pecheny.me/api/fest/test/presence", nil)
 	req.Host = "dope.pecheny.me"

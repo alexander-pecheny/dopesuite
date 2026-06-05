@@ -20,10 +20,11 @@ import (
 )
 
 const (
-	sessionCookieName = "session"
-	usernameMaxLen    = 32
-	usernameMinLen    = 2
-	passwordMinLen    = 8
+	sessionCookieName     = "session"
+	trustedOriginHostsEnv = "DOPE_TRUSTED_ORIGIN_HOSTS"
+	usernameMaxLen        = 32
+	usernameMinLen        = 2
+	passwordMinLen        = 8
 	// bcrypt only hashes the first 72 bytes of its input and rejects longer
 	// passwords, so cap the new password at that boundary.
 	passwordMaxLen = 72
@@ -1035,6 +1036,25 @@ func sameOriginRequestHost(originHost string, r *http.Request) bool {
 			if strings.EqualFold(originHost, strings.TrimSpace(host)) {
 				return true
 			}
+		}
+	}
+	if trustedOriginHost(originHost, os.Getenv(trustedOriginHostsEnv)) {
+		return true
+	}
+	return false
+}
+
+func trustedOriginHost(originHost, trustedHosts string) bool {
+	for _, candidate := range strings.Split(trustedHosts, ",") {
+		host := strings.TrimSpace(candidate)
+		if host == "" {
+			continue
+		}
+		if u, err := url.Parse(host); err == nil && u.Host != "" {
+			host = u.Host
+		}
+		if strings.EqualFold(originHost, host) {
+			return true
 		}
 	}
 	return false
