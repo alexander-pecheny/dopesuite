@@ -547,10 +547,6 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		s.handleHostFestAuditRevert(w, r, id)
 		return
 	}
-	if len(parts) == 5 && parts[2] == "game" && parts[4] == "venues" && !festRoleCanManageFest(role) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
 	// /host/fest/{id}/game/{gid}[/...] → serve host.html / od.html / si.html.
 	if !isHostGameSubPath(parts[2:]) {
 		http.NotFound(w, r)

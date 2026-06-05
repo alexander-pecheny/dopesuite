@@ -162,10 +162,11 @@ async function fetchAll() {
 }
 
 async function fetchAllRaw() {
+  const festURL = route.apiBase || (route.festID ? `/api/fest/${route.festID}` : "");
   const [schemeResp, stateResp, festResp] = await Promise.all([
     fetch(`${route.apiBase}/scheme`),
     fetch(`${route.apiBase}/state`),
-    route.festID ? fetch(`/api/fest/${route.festID}`) : Promise.resolve(null),
+    festURL ? fetch(festURL) : Promise.resolve(null),
   ]);
   if (!schemeResp.ok) throw new Error(await schemeResp.text());
   if (!stateResp.ok) throw new Error(await stateResp.text());
@@ -180,14 +181,16 @@ async function fetchAllRaw() {
 async function revalidateAll() {
   const prevSchemeJSON = JSON.stringify(scheme);
   const prevStateJSON = JSON.stringify(state);
+  const prevFestJSON = JSON.stringify(fest);
   const fresh = await fetchAllRaw();
   const freshSchemeJSON = JSON.stringify(fresh.scheme);
   const freshStateJSON = JSON.stringify(fresh.state);
+  const freshFestJSON = JSON.stringify(fresh.fest);
   scheme = fresh.scheme;
   state = fresh.state;
   fest = fresh.fest;
   writeGameCache();
-  if (freshSchemeJSON === prevSchemeJSON && freshStateJSON === prevStateJSON) return;
+  if (freshSchemeJSON === prevSchemeJSON && freshStateJSON === prevStateJSON && freshFestJSON === prevFestJSON) return;
   initFromScheme();
   ensureState();
   render();

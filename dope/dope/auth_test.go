@@ -24,7 +24,7 @@ func newAuthTestServer(t *testing.T) *server {
 	}
 	t.Cleanup(func() { db.Close() })
 	createDefaultFestFixture(t, db, defaultMatch())
-	return &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
+	return &server{db: db, assets: staticFiles, subscribers: make(map[int64]map[chan event]bool)}
 }
 
 func systemUserID(t *testing.T, db *sql.DB) int64 {
@@ -370,8 +370,8 @@ func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 	hostVenuesReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: hostToken})
 	hostVenuesResp := httptest.NewRecorder()
 	srv.handleHostRouter(hostVenuesResp, hostVenuesReq)
-	if hostVenuesResp.Code != http.StatusForbidden {
-		t.Fatalf("host venues page status = %d, want 403", hostVenuesResp.Code)
+	if hostVenuesResp.Code != http.StatusOK {
+		t.Fatalf("host venues page status = %d, body %s", hostVenuesResp.Code, hostVenuesResp.Body.String())
 	}
 
 	adminDeleteReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/delete", festID), nil)

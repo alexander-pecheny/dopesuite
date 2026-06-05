@@ -56,6 +56,9 @@ type StageView struct {
 	Position      int               `json:"position"`
 	Status        string            `json:"status"`
 	Config        json.RawMessage   `json:"config,omitempty"`
+	ReseedReady   bool              `json:"reseedReady,omitempty"`
+	ReseedPending []string          `json:"reseedPendingMatches,omitempty"`
+	ReseedMessage string            `json:"reseedBlockedMessage,omitempty"`
 	Matches       []FestMatchView   `json:"matches,omitempty"`
 	ReseedEntries []ReseedEntryView `json:"reseedEntries,omitempty"`
 }
@@ -2221,6 +2224,15 @@ order by position, id`, stageArgs...)
 				return FestView{}, err
 			}
 			record.Stage.ReseedEntries = entries
+			state, err := reseedPrerequisites(ctx, s.db, record.Stage.Config, gameID)
+			if err != nil {
+				return FestView{}, err
+			}
+			record.Stage.ReseedReady = state.Ready
+			record.Stage.ReseedPending = state.PendingMatches
+			if !state.Ready {
+				record.Stage.ReseedMessage = reseedNotReadyMessage(state.PendingMatches)
+			}
 		} else {
 			matches, err := loadFestMatches(ctx, s.db, record.ID)
 			if err != nil {

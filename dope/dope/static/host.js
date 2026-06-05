@@ -27,7 +27,7 @@ const stageCache = window.DopeStageCache.create({
   overlayMatch: (view) => overlayPendingMatch(view?.code, view),
   buildPaneContent: ({pane, stageCode, stage, data}) => {
     if (stageType(stage) === "reseed") {
-      pane.appendChild(buildReseedStagePanel(mergedStage(fest, stageCode)));
+      pane.appendChild(buildHostReseedStagePanel(mergedStage(fest, stageCode)));
       return;
     }
     pane.appendChild(buildStageTableStack(data));
@@ -393,6 +393,11 @@ function connectEvents() {
       setStatus("saved");
       return;
     }
+    if (message.scope?.startsWith("fest:") && message.data?.stages) {
+      applyFestViewEvent(message.data);
+      setStatus("saved");
+      return;
+    }
     scheduleReload();
   });
   events.addEventListener("viewers", (event) => {
@@ -403,6 +408,20 @@ function connectEvents() {
     }
   });
   events.onerror = () => setStatus("reconnecting");
+}
+
+function applyFestViewEvent(view) {
+  adoptFestView(view);
+  writeFestCache(fest);
+  if (route.mode === "stage") {
+    renderStage();
+  } else if (route.mode === "venues") {
+    renderVenues();
+  } else if (route.mode === "seedImport") {
+    renderSeedImport();
+  } else if (route.mode !== "match" && route.mode !== "stats") {
+    renderFest();
+  }
 }
 
 // matchCodeFromScope extracts the match code from a "match:<gameID>:<code>"
@@ -815,6 +834,33 @@ async function updateVenueTitle(number, title) {
   }
 }
 
+async function calculateReseed(stageCode) {
+  if (!stageCode) return;
+  setStatus("saving");
+  try {
+    const response = await fetch(`${route.apiBase}/stages/${encodeURIComponent(stageCode)}/reseed`, {
+      method: "POST",
+    });
+    if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось рассчитать пересев");
+    const fresh = await response.json();
+    adoptFestView(fresh);
+    writeFestCache(fest);
+    renderStage();
+    setStatus("saved");
+  } catch (error) {
+    setStatus("error");
+    console.error(error);
+  }
+}
+
+function buildHostReseedStagePanel(stage) {
+  return buildReseedStagePanel(stage, {
+    editable: true,
+    canCalculate: Boolean(stage?.reseedReady),
+    onCalculate: () => calculateReseed(stage?.code || route.stageCode),
+  });
+}
+
 function renderFest() {
   if (!fest) return;
   resetMatchTableIndex();
@@ -838,8 +884,9 @@ function renderStage() {
   setViewerLink(`${route.viewerBase}/stage/${encodeURIComponent(stageCode)}`, "Открыть этап для зрителя");
   document.title = pageTitle();
   renderEKTabs();
-  stageCache.showStage(stageCode);
+  const pane = stageCache.showStage(stageCode);
   if (stageType(stage) === "reseed") {
+    pane?.replaceChildren(buildHostReseedStagePanel(stage));
     scheduleResultsTeamNameOverflowUpdate();
   }
   refreshPresence();
@@ -1395,7 +1442,7 @@ function refreshPaneFrames(pane, data) {
   if (!pane || !data) return;
   const stage = mergedStage(fest, pane.dataset.stageCode);
   if (stageType(stage) === "reseed") {
-    pane.replaceChildren(buildReseedStagePanel(stage));
+    pane.replaceChildren(buildHostReseedStagePanel(stage));
     return;
   }
   let rebuilt = false;

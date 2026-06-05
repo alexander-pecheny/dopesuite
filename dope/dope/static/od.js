@@ -179,10 +179,11 @@ async function fetchAll() {
 }
 
 async function fetchAllRaw() {
+  const festURL = route.apiBase || (route.festID ? `/api/fest/${route.festID}` : "");
   const [schemeResp, stateResp, festResp] = await Promise.all([
     fetch(`${route.apiBase}/scheme`),
     fetch(`${route.apiBase}/state`),
-    route.festID ? fetch(`/api/fest/${route.festID}`) : Promise.resolve(null),
+    festURL ? fetch(festURL) : Promise.resolve(null),
   ]);
   if (!schemeResp.ok) throw new Error(await schemeResp.text());
   if (!stateResp.ok) throw new Error(await stateResp.text());

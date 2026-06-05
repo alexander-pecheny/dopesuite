@@ -85,6 +85,12 @@
   --action-bg: #f8fafc;
   --action-fg: var(--text);
   --action-border: #cfd7e3;
+  --action-disabled-bg: var(--structure);
+  --action-disabled-fg: var(--muted-light);
+  --action-disabled-border: var(--grid-dark);
+  --action-disabled-opacity: 0.72;
+  --cursor-action: pointer;
+  --cursor-disabled: not-allowed;
 
   --space-0: 0;
   --space-0-5: 2px;
@@ -668,7 +674,7 @@ a.list-row:hover { background: var(--hover-bg); }
   background: var(--action-bg);
   color: var(--text);
   font-weight: var(--fw-bold);
-  cursor: pointer;
+  cursor: var(--cursor-action);
   text-decoration: none;
 }
 
@@ -678,6 +684,15 @@ a.list-row:hover { background: var(--hover-bg); }
   border-color: var(--red-dark);
   color: var(--red-dark);
   background: var(--red-soft);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  border-color: var(--action-disabled-border);
+  background: var(--action-disabled-bg);
+  color: var(--action-disabled-fg);
+  cursor: var(--cursor-disabled);
+  opacity: var(--action-disabled-opacity);
 }
 
 .btn-block { width: 100%; }

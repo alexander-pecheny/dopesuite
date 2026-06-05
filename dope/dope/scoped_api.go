@@ -73,6 +73,19 @@ func matchScopeKey(scope matchScope) string {
 	return fmt.Sprintf("match:%d:%s", scope.GameID, scope.Code)
 }
 
+func festViewScopeKey(scope festScope) string {
+	return fmt.Sprintf("fest:%d:%d", scope.FestID, scope.GameID)
+}
+
+func (s *server) broadcastFestView(scope festScope, revision int64) {
+	s.invalidateFestViewCache(scope.FestID)
+	data, err := s.festViewBytes(scope.FestID, scope.GameID)
+	if err != nil {
+		return
+	}
+	s.broadcastState(scope.FestID, festViewScopeKey(scope), revision, data)
+}
+
 // broadcastMatchCascade fans out the views of downstream matches whose slots
 // changed when an edit resolved the bracket, so spectators on those matches (or
 // the grid) see advancing teams live instead of only on reload.
@@ -859,7 +872,7 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, fest
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := s.requireFestAdmin(w, r, festID); !ok {
+	if _, ok := s.requireFestTableEditor(w, r, festID); !ok {
 		return
 	}
 	number, err := strconv.Atoi(sub[0])
@@ -893,6 +906,7 @@ type stageMatches struct {
 //
 //	/stages/{code}/matches → every full MatchView for one stage (a batch
 //	                         replacement for the N parallel /matches/{code} fetches).
+//	/stages/{code}/reseed  → explicitly calculate one ready reseed stage.
 //	/stages/matches        → every stage's full MatchViews in one response, so the
 //	                         bracket page can prefetch the whole game in a single
 //	                         request instead of one per stage.
@@ -912,6 +926,32 @@ func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scop
 			return
 		}
 		writeJSONValue(w, stages)
+		return
+	}
+	if len(sub) == 2 && sub[0] != "" && sub[1] == "reseed" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
+			return
+		}
+		data, cascaded, revision, err := s.calculateScopedReseed(r.Context(), scope, sub[0])
+		if errors.Is(err, errReseedStageNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		if errors.Is(err, errReseedNotReady) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		s.broadcastMatchCascade(scope.FestID, scope.GameID, cascaded)
+		s.broadcastState(scope.FestID, festViewScopeKey(scope), revision, data)
+		writeJSON(w, data)
 		return
 	}
 	if len(sub) != 2 || sub[0] == "" || sub[1] != "matches" {
@@ -1153,6 +1193,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 		}
 		view.Seq = s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
 		s.broadcastMatchCascade(scope.FestID, mscope.GameID, cascaded)
+		s.broadcastFestView(scope, view.Revision)
 		writeJSONValue(w, view)
 	case "venue":
 		if r.Method != http.MethodPost {
