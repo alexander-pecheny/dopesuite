@@ -7,7 +7,9 @@ import (
 	"github.com/yuin/goldmark"
 )
 
-var markdownEngine = goldmark.New()
+var markdownEngine = goldmark.New(
+	goldmark.WithExtensions(detailsExtension{}),
+)
 
 func renderMarkdown(source string) template.HTML {
 	if source == "" {
