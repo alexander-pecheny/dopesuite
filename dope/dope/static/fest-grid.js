@@ -32,11 +32,31 @@ function buildFestGrid(data, options = {}) {
   return root;
 }
 
-function buildReseedStagePanel(stage) {
+function buildReseedStagePanel(stage, options = {}) {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper reseed-results-wrapper";
 
   const entries = Array.isArray(stage?.reseedEntries) ? stage.reseedEntries : [];
+  const blockedMessage = reseedBlockedMessage(stage, options);
+  if (options.editable) {
+    const actions = document.createElement("div");
+    actions.className = "cluster reseed-actions";
+    const calculateButton = document.createElement("button");
+    calculateButton.type = "button";
+    calculateButton.className = "btn";
+    calculateButton.textContent = entries.length > 0 ? "Пересчитать" : "Рассчитать";
+    calculateButton.disabled = !options.canCalculate;
+    if (!options.canCalculate) {
+      calculateButton.title = blockedMessage || "Исходные бои ещё не закончены";
+    }
+    calculateButton.addEventListener("click", () => {
+      if (calculateButton.disabled) return;
+      options.onCalculate?.();
+    });
+    actions.appendChild(calculateButton);
+    wrapper.appendChild(actions);
+  }
+
   const sortRules = reseedSortRules(stage);
   const hasSourceMatch = entries.some((entry) => entry.metrics?.match);
   const metricColumns = sortRules.length > 0
@@ -73,7 +93,12 @@ function buildReseedStagePanel(stage) {
   table.appendChild(tbody);
   wrapper.appendChild(table);
 
-  if (entries.length === 0) {
+  if (options.editable && !options.canCalculate && blockedMessage) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = blockedMessage;
+    wrapper.appendChild(empty);
+  } else if (entries.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty";
     empty.textContent = "Пересев пока не рассчитан.";
@@ -81,6 +106,19 @@ function buildReseedStagePanel(stage) {
   }
 
   return wrapper;
+}
+
+function reseedBlockedMessage(stage, options = {}) {
+  const fromOptions = String(options.blockedMessage || "").trim();
+  if (fromOptions) return fromOptions;
+  const fromStage = String(stage?.reseedBlockedMessage || "").trim();
+  if (fromStage) return fromStage;
+  const pending = Array.isArray(stage?.reseedPendingMatches)
+    ? stage.reseedPendingMatches.map((code) => String(code || "").trim()).filter(Boolean)
+    : [];
+  if (pending.length === 1) return `Бой ${pending[0]} не закончен`;
+  if (pending.length > 1) return `Бои ${pending.join(", ")} не закончены`;
+  return "";
 }
 
 function buildMatchesStage(stage, liveStage, options = {}) {

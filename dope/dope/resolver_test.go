@@ -4,13 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
 // TestResolverPropagatesBracket exercises the full forward chain: finishing the
-// 1/16 and 1/8 bouts must compute a reseed that sums both games and resolve the
-// downstream reseed slots; un-finishing an upstream bout must roll it all back.
+// 1/16 and 1/8 bouts makes the reseed ready but still empty, the explicit
+// calculate action sums both games and resolves downstream slots, and
+// un-finishing an upstream bout rolls it all back.
 func TestResolverPropagatesBracket(t *testing.T) {
 	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -28,6 +31,12 @@ func TestResolverPropagatesBracket(t *testing.T) {
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
+	assertReseedState(t, loadReseedStageView(t, srv, festID, gameID, "rs"), false, []string{"A", "B"}, "Бои A, B не закончены")
+	if _, _, _, err := srv.calculateScopedReseed(t.Context(), scopeBase, "rs"); !errors.Is(err, errReseedNotReady) {
+		t.Fatalf("calculate reseed before sources finished error = %v, want errReseedNotReady", err)
+	} else if got, want := err.Error(), "Бои A, B не закончены"; got != want {
+		t.Fatalf("calculate reseed before sources finished error = %q, want %q", got, want)
+	}
 
 	finish := func(code string, finished bool) {
 		t.Helper()
@@ -37,6 +46,12 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		}
 		if _, _, _, _, err := srv.applyScopedMatchUpdate(t.Context(), scope, []updateRequest{{Finished: &finished}}); err != nil {
 			t.Fatalf("finish %s=%v: %v", code, finished, err)
+		}
+	}
+	calculate := func() {
+		t.Helper()
+		if _, _, _, err := srv.calculateScopedReseed(t.Context(), scopeBase, "rs"); err != nil {
+			t.Fatalf("calculate reseed: %v", err)
 		}
 	}
 	// mark answers a single question (value index 4 == +50) for one team slot.
@@ -59,6 +74,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 	// Only the 1/16 bout is done — reseed cannot be computed and the 1/4 slot
 	// stays unresolved.
 	finish("A", true)
+	assertReseedState(t, loadReseedStageView(t, srv, festID, gameID, "rs"), false, []string{"B"}, "Бой B не закончен")
 	if n := reseedEntryCount(t, db, gameID, "rs"); n != 0 {
 		t.Fatalf("reseed entries before 1/8 finished = %d, want 0", n)
 	}
@@ -66,10 +82,20 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		t.Fatalf("1/4 slots resolved too early: %v", teams)
 	}
 
-	// Both games done — reseed sums place across A and B (1+1, 2+2, ...) and the
-	// 1/4 bout's reseed slots resolve to the ranked teams.
+	// Both games done — the reseed is ready, but still not calculated.
 	mark("B", 0, 0, 4, "right")
 	finish("B", true)
+	if n := reseedEntryCount(t, db, gameID, "rs"); n != 0 {
+		t.Fatalf("reseed entries before manual calculation = %d, want 0", n)
+	}
+	if teams := slotTeams(t, db, gameID, "C"); !allZero(teams) {
+		t.Fatalf("1/4 slots resolved before manual reseed calculation: %v", teams)
+	}
+	assertReseedState(t, loadReseedStageView(t, srv, festID, gameID, "rs"), true, nil, "")
+
+	// Manual calculation sums place across A and B (1+1, 2+2, ...) and the 1/4
+	// bout's reseed slots resolve to the ranked teams.
+	calculate()
 	entries := reseedEntries(t, db, gameID, "rs")
 	if len(entries) != 4 {
 		t.Fatalf("reseed entries = %d, want 4", len(entries))
@@ -95,19 +121,21 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		t.Fatalf("resolved 1/4 team has %d regular themes, want %d", got, themeCount)
 	}
 
-	// Reopening the 1/16 invalidates everything downstream again.
+	// Reopening the 1/16 invalidates the calculated reseed and everything
+	// downstream again.
 	finish("A", false)
 	if n := reseedEntryCount(t, db, gameID, "rs"); n != 0 {
 		t.Fatalf("reseed entries after reopening 1/16 = %d, want 0", n)
 	}
+	assertReseedState(t, loadReseedStageView(t, srv, festID, gameID, "rs"), false, []string{"A", "B"}, "Бои A, B не закончены")
 	if teams := slotTeams(t, db, gameID, "C"); !allZero(teams) {
 		t.Fatalf("1/4 slots still resolved after reopening 1/16: %v", teams)
 	}
 }
 
-// TestMatchUpdateBroadcastsCascade verifies that finishing a bout which resolves
-// downstream bracket slots reports those downstream matches as `cascaded`, so the
-// handler can broadcast them and spectators see advancing teams without a reload.
+// TestMatchUpdateBroadcastsCascade verifies that explicit reseed calculation
+// reports downstream matches as `cascaded`, so the handler can broadcast them
+// and spectators see advancing teams without a reload.
 func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -151,11 +179,18 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 		}
 	}
 
-	// Finishing the 1/8 completes both games -> the reseed resolves the 1/4 (C)
-	// slots, so C must come back as a cascaded match (with a renderable view) for
-	// broadcast — the whole point: spectators see the advancing teams live.
+	// Finishing the 1/8 completes both games, but the 1/4 reseed slots stay empty
+	// until the explicit calculate action.
 	apply("B", updateRequest{Team: 0, Theme: &theme, Answer: &answer, Mark: &right})
-	cascaded := apply("B", updateRequest{Finished: &tr})
+	for _, v := range apply("B", updateRequest{Finished: &tr}) {
+		if v.Code == "C" {
+			t.Fatalf("1/4 match C cascaded before manual reseed calculation")
+		}
+	}
+	_, cascaded, _, err := srv.calculateScopedReseed(t.Context(), scopeBase, "rs")
+	if err != nil {
+		t.Fatalf("calculate reseed: %v", err)
+	}
 	var cView *MatchView
 	for i := range cascaded {
 		if cascaded[i].Code == "C" {
@@ -276,6 +311,36 @@ order by re.rank`, gameID, stageCode)
 func reseedEntryCount(t *testing.T, db *sql.DB, gameID int64, stageCode string) int {
 	t.Helper()
 	return len(reseedEntries(t, db, gameID, stageCode))
+}
+
+func loadReseedStageView(t *testing.T, srv *server, festID, gameID int64, code string) StageView {
+	t.Helper()
+	srv.mu.RLock()
+	view, err := srv.loadFestViewLocked(festID, gameID)
+	srv.mu.RUnlock()
+	if err != nil {
+		t.Fatalf("load fest view: %v", err)
+	}
+	for _, stage := range view.Stages {
+		if stage.Code == code {
+			return stage
+		}
+	}
+	t.Fatalf("reseed stage %s not found", code)
+	return StageView{}
+}
+
+func assertReseedState(t *testing.T, stage StageView, ready bool, pending []string, message string) {
+	t.Helper()
+	if stage.ReseedReady != ready {
+		t.Fatalf("reseed ready = %v, want %v", stage.ReseedReady, ready)
+	}
+	if !slices.Equal(stage.ReseedPending, pending) {
+		t.Fatalf("reseed pending = %v, want %v", stage.ReseedPending, pending)
+	}
+	if stage.ReseedMessage != message {
+		t.Fatalf("reseed message = %q, want %q", stage.ReseedMessage, message)
+	}
 }
 
 func slotTeams(t *testing.T, db *sql.DB, gameID int64, matchCode string) []int64 {

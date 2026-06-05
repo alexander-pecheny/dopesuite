@@ -391,6 +391,11 @@ function connectEvents() {
       setLive(true);
       return;
     }
+    if (message.scope?.startsWith("fest:") && message.data?.stages) {
+      applyFestViewEvent(message.data);
+      setLive(true);
+      return;
+    }
     // Sibling games (e.g. OD/KSI) share this fest's SSE stream and emit
     // game-state:<theirID> events that don't affect the EK view. Ignore them —
     // otherwise editing a sibling game reloads (and flashes) the whole bracket.
@@ -407,6 +412,18 @@ function connectEvents() {
     }
   });
   events.onerror = () => setLive(false);
+}
+
+function applyFestViewEvent(view) {
+  adoptFestView(view);
+  writeFestCache(fest);
+  if (route.mode === "stage") {
+    renderStage();
+  } else if (route.mode === "venues") {
+    renderVenues();
+  } else if (route.mode !== "match" && route.mode !== "stats") {
+    renderFest();
+  }
 }
 
 // Toggles the scrolled-under fade on the frozen-column boundary of the EK
@@ -579,7 +596,10 @@ function renderStage() {
   setHeading("ЭК");
   document.title = pageTitle();
   renderViewerTabs();
-  stageCache.showStage(stageCode);
+  const pane = stageCache.showStage(stageCode);
+  if (stageType(stage) === "reseed") {
+    pane?.replaceChildren(buildReseedStagePanel(stage));
+  }
 }
 
 function renderVenues() {

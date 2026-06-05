@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -38,7 +39,7 @@ func runResolveBracket(args []string) {
 		log.Fatalf("begin tx: %v", err)
 	}
 	defer tx.Rollback()
-	if _, err := resolveGameSlotsTx(ctx, tx, *gameID); err != nil {
+	if _, err := resolveGameSlotsAndReseedsTx(ctx, tx, *gameID); err != nil {
 		log.Fatalf("resolve game %d: %v", *gameID, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -47,12 +48,38 @@ func runResolveBracket(args []string) {
 	log.Printf("resolve-bracket: reconciled game %d in %s", *gameID, *dbPath)
 }
 
+var (
+	errReseedStageNotFound = errors.New("reseed stage not found")
+	errReseedNotReady      = errors.New("пересев можно рассчитать после завершения всех исходных боёв")
+)
+
+type reseedNotReadyError struct {
+	pending []string
+}
+
+func (e reseedNotReadyError) Error() string {
+	return reseedNotReadyMessage(e.pending)
+}
+
+func (e reseedNotReadyError) Is(target error) bool {
+	return target == errReseedNotReady
+}
+
+type reseedResolveMode int
+
+const (
+	reseedInvalidateOnly reseedResolveMode = iota
+	reseedCalculateOne
+	reseedCalculateAll
+)
+
 // resolveGameSlotsTx propagates results forward through a game's bracket. It
 // runs inside the write transaction after a match's results are recalculated,
 // and is responsible for the parts of the bracket that depend on other matches:
 //
-//   - reseed stages: recompute reseed_entries from the results of their source
-//     bouts (summed across every game each advancing team played);
+//   - reseed stages: update readiness and clear stale reseed_entries when their
+//     prerequisites are no longer complete. Live match edits do not create
+//     reseed_entries; an explicit calculate action does that.
 //   - from_match / reseed slots: fill match_slots.team_id once the upstream
 //     source is final, and (for EK) create that team's themes.
 //
@@ -66,17 +93,80 @@ func runResolveBracket(args []string) {
 // broadcast those downstream matches (a finished bout advances teams into the
 // next round, which would otherwise only show up on a viewer reload).
 func resolveGameSlotsTx(ctx context.Context, tx *sql.Tx, gameID int64) ([]int64, error) {
+	return resolveGameSlotsWithReseedModeTx(ctx, tx, gameID, reseedInvalidateOnly, "")
+}
+
+// resolveGameSlotsAndReseedsTx is the maintenance form used by the CLI: it
+// reconciles every ready reseed stage instead of requiring a UI button press.
+func resolveGameSlotsAndReseedsTx(ctx context.Context, tx *sql.Tx, gameID int64) ([]int64, error) {
+	return resolveGameSlotsWithReseedModeTx(ctx, tx, gameID, reseedCalculateAll, "")
+}
+
+// calculateReseedStageSlotsTx calculates one reseed stage and then resolves
+// every downstream slot that depends on it.
+func calculateReseedStageSlotsTx(ctx context.Context, tx *sql.Tx, gameID int64, stageCode string) ([]int64, error) {
+	return resolveGameSlotsWithReseedModeTx(ctx, tx, gameID, reseedCalculateOne, stageCode)
+}
+
+func (s *server) calculateScopedReseed(ctx context.Context, scope festScope, stageCode string) ([]byte, []MatchView, int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	txCtx := auditDetachedContext(ctx, scope.FestID)
+	tx, err := s.beginWriteTx(txCtx)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	defer tx.Rollback()
+
+	affected, err := calculateReseedStageSlotsTx(txCtx, tx, scope.GameID, stageCode)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	revision, err := bumpFestRevisionTx(txCtx, tx, scope.FestID, "reseed:calculate", mustJSON(map[string]any{
+		"gameID": scope.GameID,
+		"stage":  stageCode,
+	}))
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, 0, err
+	}
+
+	view, err := s.loadFestViewLocked(scope.FestID, scope.GameID)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	view.Revision = maxInt64(view.Revision, revision)
+	data, err := json.Marshal(view)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	var cascaded []MatchView
+	for _, mid := range affected {
+		cv, err := s.loadMatchViewByIDLocked(scope.FestID, scope.GameID, mid)
+		if err != nil || cv.Code == "" {
+			continue
+		}
+		cascaded = append(cascaded, cv)
+	}
+	return data, cascaded, revision, nil
+}
+
+func resolveGameSlotsWithReseedModeTx(ctx context.Context, tx *sql.Tx, gameID int64, mode reseedResolveMode, targetStageCode string) ([]int64, error) {
 	var gameType string
 	if err := tx.QueryRowContext(ctx, `select game_type from games where id = ?`, gameID).Scan(&gameType); err != nil {
 		return nil, err
 	}
 
 	stages, err := collectRows(ctx, tx, `
-select id, code, stage_type, config_json
+select id, code, stage_type, status, config_json
 from stages where game_id = ? order by position, id`,
 		[]any{gameID}, func(rows *sql.Rows) (resolverStage, error) {
 			var st resolverStage
-			return st, rows.Scan(&st.id, &st.code, &st.stageType, &st.config)
+			return st, rows.Scan(&st.id, &st.code, &st.stageType, &st.status, &st.config)
 		})
 	if err != nil {
 		return nil, err
@@ -84,9 +174,20 @@ from stages where game_id = ? order by position, id`,
 
 	var affected []int64
 	seen := map[int64]bool{}
+	foundTarget := mode != reseedCalculateOne
 	for _, stage := range stages {
 		if stage.stageType == "reseed" {
-			if err := recomputeReseedEntriesTx(ctx, tx, stage.id, stage.config, gameID); err != nil {
+			var err error
+			switch {
+			case mode == reseedCalculateAll:
+				err = calculateReadyReseedEntriesTx(ctx, tx, stage, gameID)
+			case mode == reseedCalculateOne && stage.code == targetStageCode:
+				foundTarget = true
+				err = calculateRequiredReseedEntriesTx(ctx, tx, stage, gameID)
+			default:
+				err = syncReseedReadinessTx(ctx, tx, stage, gameID)
+			}
+			if err != nil {
 				return nil, err
 			}
 		}
@@ -101,6 +202,9 @@ from stages where game_id = ? order by position, id`,
 			}
 		}
 	}
+	if !foundTarget {
+		return nil, errReseedStageNotFound
+	}
 	return affected, nil
 }
 
@@ -108,6 +212,7 @@ type resolverStage struct {
 	id        int64
 	code      string
 	stageType string
+	status    string
 	config    []byte
 }
 
@@ -164,12 +269,12 @@ order by ms.match_id, ms.slot_index`,
 // teamAtMatchPlace returns the team that took the given place in a bout, but
 // only once that bout is finished — provisional standings must not leak
 // downstream. Returns 0 when unresolved.
-func teamAtMatchPlace(ctx context.Context, tx *sql.Tx, gameID int64, matchCode string, place int) (int64, error) {
+func teamAtMatchPlace(ctx context.Context, q dbQueryer, gameID int64, matchCode string, place int) (int64, error) {
 	if matchCode == "" || place <= 0 {
 		return 0, nil
 	}
 	var teamID int64
-	err := tx.QueryRowContext(ctx, `
+	err := q.QueryRowContext(ctx, `
 select mr.team_id
 from match_results mr
 join matches m on m.id = mr.match_id
@@ -183,12 +288,12 @@ where m.game_id = ? and m.code = ? and m.status = 'finished' and mr.place = ?`,
 
 // teamAtReseedRank returns the team at a reseed rank, or 0 when the reseed has
 // not been computed yet.
-func teamAtReseedRank(ctx context.Context, tx *sql.Tx, gameID int64, stageCode string, rank int) (int64, error) {
+func teamAtReseedRank(ctx context.Context, q dbQueryer, gameID int64, stageCode string, rank int) (int64, error) {
 	if stageCode == "" || rank <= 0 {
 		return 0, nil
 	}
 	var teamID int64
-	err := tx.QueryRowContext(ctx, `
+	err := q.QueryRowContext(ctx, `
 select re.team_id
 from reseed_entries re
 join stages s on s.id = re.stage_id
@@ -255,6 +360,134 @@ type reseedEntry struct {
 	bouts   []string
 }
 
+func syncReseedReadinessTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
+	state, err := reseedPrerequisites(ctx, tx, stage.config, gameID)
+	if err != nil {
+		return err
+	}
+	if !state.Ready {
+		if _, err := tx.ExecContext(ctx, `delete from reseed_entries where stage_id = ?`, stage.id); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `update stages set status = 'pending' where id = ? and status <> 'pending'`, stage.id)
+		return err
+	}
+	if stage.status == "pending" {
+		_, err := tx.ExecContext(ctx, `update stages set status = 'active' where id = ?`, stage.id)
+		return err
+	}
+	return nil
+}
+
+func calculateReadyReseedEntriesTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
+	state, err := reseedPrerequisites(ctx, tx, stage.config, gameID)
+	if err != nil {
+		return err
+	}
+	if !state.Ready {
+		return syncReseedReadinessTx(ctx, tx, stage, gameID)
+	}
+	if err := recomputeReseedEntriesTx(ctx, tx, stage.id, stage.config, gameID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `update stages set status = 'finished' where id = ?`, stage.id)
+	return err
+}
+
+func calculateRequiredReseedEntriesTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
+	state, err := reseedPrerequisites(ctx, tx, stage.config, gameID)
+	if err != nil {
+		return err
+	}
+	if !state.Ready {
+		return reseedNotReadyError{pending: state.PendingMatches}
+	}
+	if err := recomputeReseedEntriesTx(ctx, tx, stage.id, stage.config, gameID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `update stages set status = 'finished' where id = ?`, stage.id)
+	return err
+}
+
+type reseedPrerequisiteState struct {
+	Ready          bool
+	SourceMatchIDs []int64
+	PendingMatches []string
+}
+
+func reseedPrerequisitesReady(ctx context.Context, q dbQueryer, config []byte, gameID int64) (bool, error) {
+	state, err := reseedPrerequisites(ctx, q, config, gameID)
+	return state.Ready, err
+}
+
+func reseedPrerequisites(ctx context.Context, q dbQueryer, config []byte, gameID int64) (reseedPrerequisiteState, error) {
+	var state reseedPrerequisiteState
+	var cfg reseedConfig
+	if err := json.Unmarshal(config, &cfg); err != nil {
+		return state, err
+	}
+
+	sourceMatchIDs, sourcePending, err := reseedSourceMatches(ctx, q, gameID, cfg)
+	if err != nil {
+		return state, err
+	}
+	state.SourceMatchIDs = sourceMatchIDs
+	for _, code := range sourcePending {
+		state.addPending(code)
+	}
+
+	advancing := 0
+	for _, slot := range cfg.Teams {
+		if slot.FromMatch == nil {
+			continue
+		}
+		teamID, err := teamAtMatchPlace(ctx, q, gameID, slot.FromMatch.Match, slot.FromMatch.Place)
+		if err != nil {
+			return state, err
+		}
+		if teamID == 0 {
+			state.addPending(slot.FromMatch.Match)
+		}
+		advancing++
+	}
+	if advancing == 0 {
+		return state, nil
+	}
+	state.Ready = len(state.SourceMatchIDs) > 0 && len(state.PendingMatches) == 0
+	return state, nil
+}
+
+func (state *reseedPrerequisiteState) addPending(code string) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return
+	}
+	for _, existing := range state.PendingMatches {
+		if existing == code {
+			return
+		}
+	}
+	state.PendingMatches = append(state.PendingMatches, code)
+}
+
+func reseedNotReadyMessage(pending []string) string {
+	codes := make([]string, 0, len(pending))
+	for _, code := range pending {
+		code = strings.TrimSpace(code)
+		if code != "" {
+			codes = append(codes, code)
+		}
+	}
+	switch len(codes) {
+	case 0:
+		return errReseedNotReady.Error()
+	case 1:
+		return fmt.Sprintf("Бой %s не закончен", codes[0])
+	default:
+		return fmt.Sprintf("Бои %s не закончены", strings.Join(codes, ", "))
+	}
+}
+
 // recomputeReseedEntriesTx rebuilds a reseed stage's entries from match
 // results. Metrics (place_sum, total, plus, correct_*) are summed across every
 // bout each advancing team played in the stages listed under config `sources`
@@ -293,17 +526,17 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 
 	// Source bouts whose results are summed. Either the listed source stages or
 	// (fallback) just the bouts named in `teams`.
-	sourceMatchIDs, allFinished, err := reseedSourceMatches(ctx, tx, gameID, cfg)
+	state, err := reseedPrerequisites(ctx, tx, config, gameID)
 	if err != nil {
 		return err
 	}
-	if len(sourceMatchIDs) == 0 || !allFinished {
+	if !state.Ready {
 		return clear()
 	}
 
 	entries := make([]reseedEntry, 0, len(advancing))
 	for _, teamID := range advancing {
-		entry, err := aggregateReseedMetrics(ctx, tx, teamID, sourceMatchIDs)
+		entry, err := aggregateReseedMetrics(ctx, tx, teamID, state.SourceMatchIDs)
 		if err != nil {
 			return err
 		}
@@ -423,9 +656,9 @@ func freshLot(used map[int64]bool) int64 {
 
 // loadReseedDraws reads the current draw (Жребий) lot per team for a stage, so
 // previously drawn lots survive a recompute.
-func loadReseedDraws(ctx context.Context, tx *sql.Tx, stageID int64) (map[int64]float64, error) {
+func loadReseedDraws(ctx context.Context, q dbQueryer, stageID int64) (map[int64]float64, error) {
 	draws := map[int64]float64{}
-	rows, err := tx.QueryContext(ctx, `select team_id, metrics_json from reseed_entries where stage_id = ?`, stageID)
+	rows, err := q.QueryContext(ctx, `select team_id, metrics_json from reseed_entries where stage_id = ?`, stageID)
 	if err != nil {
 		return nil, err
 	}
@@ -446,9 +679,9 @@ func loadReseedDraws(ctx context.Context, tx *sql.Tx, stageID int64) (map[int64]
 	return draws, rows.Err()
 }
 
-// reseedSourceMatches returns the bout ids that contribute to a reseed and
-// whether all of them are finished.
-func reseedSourceMatches(ctx context.Context, tx *sql.Tx, gameID int64, cfg reseedConfig) ([]int64, bool, error) {
+// reseedSourceMatches returns the bout ids that contribute to a reseed and the
+// codes of source bouts that are not finished yet.
+func reseedSourceMatches(ctx context.Context, q dbQueryer, gameID int64, cfg reseedConfig) ([]int64, []string, error) {
 	var rows []resolverBout
 	var err error
 	if len(cfg.Sources) > 0 {
@@ -457,10 +690,11 @@ func reseedSourceMatches(ctx context.Context, tx *sql.Tx, gameID int64, cfg rese
 		for _, code := range cfg.Sources {
 			args = append(args, code)
 		}
-		rows, err = collectRows(ctx, tx, fmt.Sprintf(`
-select m.id, m.status from matches m
+		rows, err = collectRows(ctx, q, fmt.Sprintf(`
+select m.id, m.code, m.status from matches m
 join stages s on s.id = m.stage_id
-where m.game_id = ? and s.code in (%s)`, placeholders), args, scanResolverBout)
+where m.game_id = ? and s.code in (%s)
+order by s.position, m.position, m.id`, placeholders), args, scanResolverBout)
 	} else {
 		codes := make(map[string]struct{})
 		for _, slot := range cfg.Teams {
@@ -469,38 +703,45 @@ where m.game_id = ? and s.code in (%s)`, placeholders), args, scanResolverBout)
 			}
 		}
 		if len(codes) == 0 {
-			return nil, false, nil
+			return nil, nil, nil
 		}
 		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(codes)), ",")
 		args := []any{gameID}
+		orderedCodes := make([]string, 0, len(codes))
 		for code := range codes {
+			orderedCodes = append(orderedCodes, code)
+		}
+		sort.Strings(orderedCodes)
+		for _, code := range orderedCodes {
 			args = append(args, code)
 		}
-		rows, err = collectRows(ctx, tx, fmt.Sprintf(`
-select id, status from matches where game_id = ? and code in (%s)`, placeholders), args, scanResolverBout)
+		rows, err = collectRows(ctx, q, fmt.Sprintf(`
+select id, code, status from matches where game_id = ? and code in (%s)
+order by position, id`, placeholders), args, scanResolverBout)
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	ids := make([]int64, 0, len(rows))
-	allFinished := true
+	pending := make([]string, 0)
 	for _, r := range rows {
 		ids = append(ids, r.id)
 		if r.status != "finished" {
-			allFinished = false
+			pending = append(pending, r.code)
 		}
 	}
-	return ids, allFinished, nil
+	return ids, pending, nil
 }
 
 type resolverBout struct {
 	id     int64
+	code   string
 	status string
 }
 
 func scanResolverBout(rows *sql.Rows) (resolverBout, error) {
 	var b resolverBout
-	return b, rows.Scan(&b.id, &b.status)
+	return b, rows.Scan(&b.id, &b.code, &b.status)
 }
 
 // numFromAny reads a JSON number decoded into an interface{} (always float64).
@@ -513,14 +754,14 @@ func numFromAny(value any) float64 {
 
 // aggregateReseedMetrics sums one team's place/total/plus/correct_* across the
 // given source bouts.
-func aggregateReseedMetrics(ctx context.Context, tx *sql.Tx, teamID int64, sourceMatchIDs []int64) (reseedEntry, error) {
+func aggregateReseedMetrics(ctx context.Context, q dbQueryer, teamID int64, sourceMatchIDs []int64) (reseedEntry, error) {
 	entry := reseedEntry{teamID: teamID, metrics: map[string]float64{}}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(sourceMatchIDs)), ",")
 	args := []any{teamID}
 	for _, id := range sourceMatchIDs {
 		args = append(args, id)
 	}
-	rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
+	rows, err := q.QueryContext(ctx, fmt.Sprintf(`
 select m.code, mr.place, mr.total, mr.plus, mr.metrics_json
 from match_results mr
 join matches m on m.id = mr.match_id
