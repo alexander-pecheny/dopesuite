@@ -14,6 +14,21 @@ export function loadStaticModule(filename) {
   return window;
 }
 
+// fakeLocalStorage is an in-memory Storage stand-in for testing persistence;
+// assign it to a loaded module's `window.localStorage` before exercising code
+// that reads it (the real one isn't available in the Deno test runtime).
+export function fakeLocalStorage() {
+  const store = new Map();
+  return {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+    get length() {
+      return store.size;
+    },
+  };
+}
+
 // fakeCell is a minimal stand-in for a DOM node: textContent + classList + value.
 export function fakeCell() {
   const classes = new Set();
