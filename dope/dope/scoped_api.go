@@ -423,6 +423,16 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		if !s.authorizeFestRead(w, r, scope.FestID) {
 			return
 		}
+		// Read the scope's seq BEFORE the state, not after. A write commits the
+		// new state_json (under s.mu) and only then bumps the seq (under seqMu),
+		// so reading seq first guarantees the state we read next is at least as
+		// new as that seq — i.e. the returned X-State-Seq is never AHEAD of the
+		// returned body. Reading it after (the old order) could observe a seq
+		// bumped by a write whose state landed after our state read, handing the
+		// client a lastSeq past its actual state; it would then silently skip the
+		// next delta and diverge permanently. Erring low instead means at worst a
+		// already-applied delta re-applies (idempotent) or one extra resync.
+		seq := s.currentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
 		var stateJSON string
 		err := s.db.QueryRowContext(r.Context(), `
 	select state_json from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&stateJSON)
@@ -439,7 +449,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		}
 		// X-State-Seq lets a resyncing SSE client align its lastSeq with the
 		// state it just fetched, so the next delta chains cleanly.
-		w.Header().Set("X-State-Seq", strconv.FormatUint(s.currentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID)), 10))
+		w.Header().Set("X-State-Seq", strconv.FormatUint(seq, 10))
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write([]byte(stateJSON))
 	case http.MethodPut:
