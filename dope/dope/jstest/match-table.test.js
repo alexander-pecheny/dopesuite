@@ -161,6 +161,14 @@ Deno.test("createPendingOps.has reports un-acked paths (queued then in flight, c
   assert.equal(p.has(path), false, "cleared once the server confirms it");
 });
 
+Deno.test("createPendingOps.has marks cells under a coarse ancestor op (OD whole-array patch)", () => {
+  const p = T.createPendingOps();
+  p.add(["entries"], [[1, 2]]); // OD patches the whole entries array in some flows
+  assert.equal(p.has(["entries", 3, 0]), true, "a cell under the patched subtree is pending");
+  assert.equal(p.has(["entries"]), true, "the patched path itself is pending");
+  assert.equal(p.has(["shootoutRounds", 0]), false, "an unrelated subtree is not pending");
+});
+
 Deno.test("createPendingOps persists un-acked edits and rehydrates them on a fresh instance", () => {
   const mod = loadStaticModule("match-table.js");
   mod.localStorage = fakeLocalStorage();
