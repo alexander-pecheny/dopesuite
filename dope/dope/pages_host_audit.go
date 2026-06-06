@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,6 +21,11 @@ const auditRevertScanRows = 5000
 
 // auditRevertMaxGroups caps how many change groups the page renders.
 const auditRevertMaxGroups = 300
+
+// auditDetailMaxLines caps how many individual changes one group spells out
+// before collapsing the rest into a "+N more" note, so a 60-cell bulk edit
+// doesn't blow up the page.
+const auditDetailMaxLines = 24
 
 // auditTableLabels maps audited table names to short Russian labels for the
 // change summary. Unlisted tables fall back to their raw name.
@@ -38,14 +44,16 @@ var auditTableLabels = map[string]string{
 }
 
 type auditChangeGroup struct {
-	MinID    int64
-	MaxID    int64
-	When     string
-	Actor    string
-	Summary  string
-	Count    int
-	IsNewest bool
-	RevertTo int64 // target id for "revert to the state before this group"
+	MinID       int64
+	MaxID       int64
+	When        string
+	Actor       string
+	Summary     string
+	Details     []string // human-readable per-cell / per-field changes
+	MoreDetails int      // changes beyond auditDetailMaxLines, summarised as "+N"
+	Count       int
+	IsNewest    bool
+	RevertTo    int64 // target id for "revert to the state before this group"
 }
 
 type hostFestAuditData struct {
@@ -63,6 +71,11 @@ var hostFestAuditTemplate = template.Must(template.New("hostAudit").Parse(`<!doc
   <title>{{.Fest.Title}} · история изменений</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .audit-changes { margin: .25rem 0 0; padding-left: 1.1rem; font-size: .85em; line-height: 1.35; }
+    .audit-changes li { color: var(--muted, #555); }
+    .audit-more { display: inline-block; margin-top: .15rem; font-size: .85em; }
+  </style>
 </head>
 <body class="public">
   <header class="public-top">
@@ -83,7 +96,10 @@ var hostFestAuditTemplate = template.Must(template.New("hostAudit").Parse(`<!doc
         <tr>
           <td class="audit-when">{{.When}}</td>
           <td class="audit-actor">{{.Actor}}</td>
-          <td class="audit-summary">{{.Summary}}{{if .IsNewest}} <span class="muted">(последнее)</span>{{end}}</td>
+          <td class="audit-summary">{{.Summary}}{{if .IsNewest}} <span class="muted">(последнее)</span>{{end}}
+            {{if .Details}}<ul class="audit-changes">{{range .Details}}<li>{{.}}</li>{{end}}</ul>{{end}}
+            {{if .MoreDetails}}<span class="audit-more muted">…и ещё {{.MoreDetails}} изменений</span>{{end}}
+          </td>
           <td class="audit-action">
             <form method="post" action="/host/fest/{{$.Fest.Ref}}/audit/revert">
               <input type="hidden" name="target" value="{{.RevertTo}}">
@@ -128,7 +144,8 @@ func (s *server) renderHostFestAudit(w http.ResponseWriter, r *http.Request, fes
 // id-descending scan), newest first.
 func (s *server) loadFestAuditGroups(ctx context.Context, festID int64) ([]auditChangeGroup, error) {
 	rows, err := s.db.QueryContext(ctx, `
-select a.id, a.ts, a.table_name, coalesce(a.request_id, ''), coalesce(u.username, '')
+select a.id, a.ts, a.table_name, coalesce(a.request_id, ''), coalesce(u.username, ''),
+       a.before_json, a.after_json
 from audit_log a
 left join users u on u.id = a.actor_user_id
 where a.fest_id = ?
@@ -140,11 +157,13 @@ limit ?`, festID, auditRevertScanRows)
 	defer rows.Close()
 
 	type entry struct {
-		id        int64
-		ts        string
-		table     string
-		requestID string
-		username  string
+		id         int64
+		ts         string
+		table      string
+		requestID  string
+		username   string
+		beforeJSON sql.NullString
+		afterJSON  sql.NullString
 	}
 	var groups []auditChangeGroup
 	var cur *auditChangeGroup
@@ -158,9 +177,20 @@ limit ?`, festID, auditRevertScanRows)
 		cur.RevertTo = cur.MinID - 1
 		groups = append(groups, *cur)
 	}
+	// addDetail appends human-readable change lines to the current group, capped
+	// so a huge bulk edit collapses the tail into a "+N" note.
+	addDetail := func(lines []string) {
+		for _, ln := range lines {
+			if len(cur.Details) >= auditDetailMaxLines {
+				cur.MoreDetails++
+				continue
+			}
+			cur.Details = append(cur.Details, ln)
+		}
+	}
 	for rows.Next() {
 		var e entry
-		if err := rows.Scan(&e.id, &e.ts, &e.table, &e.requestID, &e.username); err != nil {
+		if err := rows.Scan(&e.id, &e.ts, &e.table, &e.requestID, &e.username, &e.beforeJSON, &e.afterJSON); err != nil {
 			return nil, err
 		}
 		// Group rows of the same request; a blank request_id is its own group.
@@ -195,6 +225,12 @@ limit ?`, festID, auditRevertScanRows)
 		}
 		cur.Count++
 		tableCounts[e.table]++
+		switch e.table {
+		case "games":
+			addDetail(gamesRowChanges(e.beforeJSON, e.afterJSON))
+		case "matches":
+			addDetail(matchRowChanges(e.beforeJSON, e.afterJSON))
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -233,6 +269,285 @@ func summarizeAuditTables(counts map[string]int) string {
 		parts = append(parts, fmt.Sprintf("%s ×%d", it.label, it.count))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// leafChange is one differing JSON leaf between a before/after pair, keyed by
+// its path (string map keys and int slice indices interleaved).
+type leafChange struct {
+	path []any
+	old  any
+	new  any
+}
+
+// gamesRowChanges diffs the state_json of a games-row audit entry and renders the
+// changed leaves. KSI/SI answer-grid cells (themes[t].answers[team][q]) become
+// "Тема t · Вопрос q · «команда»: было → стало"; the finished flag and any other
+// leaf fall back to a compact rendering. Returns nil when neither side parses.
+func gamesRowChanges(before, after sql.NullString) []string {
+	beforeState, _ := gameAuditState(before)
+	afterState, _ := gameAuditState(after)
+	if beforeState == nil && afterState == nil {
+		return nil
+	}
+	names := stateParticipantNames(afterState)
+	if names == nil {
+		names = stateParticipantNames(beforeState)
+	}
+	var leaves []leafChange
+	diffJSONLeaves(nil, beforeState, afterState, &leaves)
+	out := make([]string, 0, len(leaves))
+	for _, lc := range leaves {
+		out = append(out, formatGameChange(lc, names))
+	}
+	return out
+}
+
+// gameAuditState unwraps a games-row audit JSON ({..., "state_json": "..."}) to
+// the parsed state value.
+func gameAuditState(raw sql.NullString) (any, string) {
+	row := auditRowMap(raw)
+	if row == nil {
+		return nil, ""
+	}
+	gameType, _ := row["game_type"].(string)
+	stateStr, _ := row["state_json"].(string)
+	if stateStr == "" {
+		return nil, gameType
+	}
+	var state any
+	if err := json.Unmarshal([]byte(stateStr), &state); err != nil {
+		return nil, gameType
+	}
+	return state, gameType
+}
+
+func stateParticipantNames(state any) []string {
+	m, ok := state.(map[string]any)
+	if !ok {
+		return nil
+	}
+	arr, ok := m["participants"].([]any)
+	if !ok {
+		return nil
+	}
+	names := make([]string, len(arr))
+	for i, v := range arr {
+		names[i], _ = v.(string)
+	}
+	return names
+}
+
+// diffJSONLeaves walks two decoded JSON values in lockstep and records every
+// differing leaf into out. Maps recurse by (sorted) key, slices by index; a
+// scalar change or a container/scalar shape change is recorded as one leaf.
+func diffJSONLeaves(prefix []any, before, after any, out *[]leafChange) {
+	if reflect.DeepEqual(before, after) {
+		return
+	}
+	switch b := before.(type) {
+	case map[string]any:
+		if a, ok := after.(map[string]any); ok {
+			seen := map[string]struct{}{}
+			keys := make([]string, 0, len(b)+len(a))
+			for k := range b {
+				if _, dup := seen[k]; !dup {
+					seen[k] = struct{}{}
+					keys = append(keys, k)
+				}
+			}
+			for k := range a {
+				if _, dup := seen[k]; !dup {
+					seen[k] = struct{}{}
+					keys = append(keys, k)
+				}
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				diffJSONLeaves(append(append([]any{}, prefix...), k), b[k], a[k], out)
+			}
+			return
+		}
+	case []any:
+		if a, ok := after.([]any); ok {
+			n := len(b)
+			if len(a) > n {
+				n = len(a)
+			}
+			for i := 0; i < n; i++ {
+				var bv, av any
+				if i < len(b) {
+					bv = b[i]
+				}
+				if i < len(a) {
+					av = a[i]
+				}
+				diffJSONLeaves(append(append([]any{}, prefix...), i), bv, av, out)
+			}
+			return
+		}
+	}
+	*out = append(*out, leafChange{path: append([]any{}, prefix...), old: before, new: after})
+}
+
+func formatGameChange(lc leafChange, names []string) string {
+	// KSI/SI answer cell: themes[t].answers[team][q].
+	if len(lc.path) == 5 {
+		if k0, _ := lc.path[0].(string); k0 == "themes" {
+			if k2, _ := lc.path[2].(string); k2 == "answers" {
+				t, ok1 := pathIndex(lc.path[1])
+				team, ok2 := pathIndex(lc.path[3])
+				q, ok3 := pathIndex(lc.path[4])
+				if ok1 && ok2 && ok3 {
+					return fmt.Sprintf("Тема %d · Вопрос %d · %s: %s → %s",
+						t+1, q+1, participantLabel(names, team), answerLabel(lc.old), answerLabel(lc.new))
+				}
+			}
+		}
+	}
+	if len(lc.path) == 1 {
+		if k0, _ := lc.path[0].(string); k0 == "finished" {
+			if truthyJSON(lc.new) {
+				return "Игра отмечена завершённой"
+			}
+			return "С игры снята отметка о завершении"
+		}
+	}
+	return fmt.Sprintf("%s: %s → %s", joinAuditPath(lc.path), leafLabel(lc.old), leafLabel(lc.new))
+}
+
+// matchRowChanges renders the meaningful changes of a matches-row audit entry —
+// primarily the finished/active status toggle (the EK "tick").
+func matchRowChanges(before, after sql.NullString) []string {
+	a := auditRowMap(after)
+	if a == nil {
+		return nil
+	}
+	b := auditRowMap(before)
+	title, _ := a["title"].(string)
+	if title == "" {
+		title, _ = b["title"].(string)
+	}
+	label := "Бой"
+	if title != "" {
+		label = "Бой «" + title + "»"
+	}
+	var out []string
+	if b != nil {
+		bs, _ := b["status"].(string)
+		as, _ := a["status"].(string)
+		if bs != as {
+			switch as {
+			case "finished":
+				out = append(out, label+": отмечен законченным")
+			case "active":
+				out = append(out, label+": снята отметка о завершении")
+			default:
+				out = append(out, fmt.Sprintf("%s: статус → %s", label, as))
+			}
+		}
+	}
+	return out
+}
+
+func auditRowMap(raw sql.NullString) map[string]any {
+	if !raw.Valid || raw.String == "" {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(raw.String), &m); err != nil {
+		return nil
+	}
+	return m
+}
+
+func pathIndex(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case float64:
+		return int(n), true
+	}
+	return 0, false
+}
+
+func participantLabel(names []string, idx int) string {
+	if idx >= 0 && idx < len(names) && strings.TrimSpace(names[idx]) != "" {
+		return "«" + names[idx] + "»"
+	}
+	return fmt.Sprintf("команда %d", idx+1)
+}
+
+func answerLabel(v any) string {
+	switch s := v.(type) {
+	case string:
+		switch s {
+		case "right":
+			return "верно"
+		case "wrong":
+			return "неверно"
+		case "":
+			return "пусто"
+		}
+		return s
+	case nil:
+		return "пусто"
+	}
+	return leafLabel(v)
+}
+
+func leafLabel(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return "пусто"
+	case string:
+		if t == "" {
+			return "пусто"
+		}
+		return t
+	case bool:
+		if t {
+			return "да"
+		}
+		return "нет"
+	case float64:
+		if t == float64(int64(t)) {
+			return strconv.FormatInt(int64(t), 10)
+		}
+		return strconv.FormatFloat(t, 'g', -1, 64)
+	case map[string]any, []any:
+		return "(изменено)"
+	}
+	return fmt.Sprint(v)
+}
+
+func joinAuditPath(path []any) string {
+	var b strings.Builder
+	for _, p := range path {
+		switch v := p.(type) {
+		case string:
+			if b.Len() > 0 {
+				b.WriteByte('.')
+			}
+			b.WriteString(v)
+		case int:
+			b.WriteString("[" + strconv.Itoa(v) + "]")
+		case float64:
+			b.WriteString("[" + strconv.Itoa(int(v)) + "]")
+		}
+	}
+	return b.String()
+}
+
+func truthyJSON(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		return t != "" && t != "false"
+	case float64:
+		return t != 0
+	}
+	return v != nil
 }
 
 func formatAuditTime(ts string) string {
