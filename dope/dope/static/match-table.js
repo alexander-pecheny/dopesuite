@@ -705,6 +705,11 @@
           method: "PATCH",
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({ops}),
+          // keepalive lets the request complete even if the page is navigating
+          // or being backgrounded — without it, edits debounced/in-flight at the
+          // moment of a reload are silently dropped. Ops are tiny, well under the
+          // 64KB keepalive cap.
+          keepalive: true,
         });
         if (!response.ok) {
           retry = response.status >= 500;
@@ -717,8 +722,16 @@
         saved = true;
       } catch (error) {
         pending.ack(ops);
-        if (retry) pending.requeue(ops);
-        console.error(error);
+        if (retry) {
+          pending.requeue(ops);
+        } else {
+          // A 4xx means the server rejected these ops and a retry won't help, so
+          // they are dropped — but never silently: log them and notify so the
+          // loss is visible (in the console, the client recorder, and the sync
+          // status) instead of a cell quietly reverting on the next render.
+          console.error("dropped rejected patch ops", {error: String(error), ops});
+          options.onWriteError?.({kind: "rejected", ops, error: String(error)});
+        }
         setSyncStatus("error");
       } finally {
         patchInFlight = false;
@@ -823,6 +836,17 @@
         options.onLockdown?.();
       });
       events.onerror = () => setSyncStatus("reconnecting");
+      // Flush debounced edits the moment the tab is hidden or the page is being
+      // navigated away from, so the 250ms debounce window can't swallow the
+      // operator's last edits on reload. Paired with keepalive on the PATCH, the
+      // flushed request still completes during unload.
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState !== "hidden") return;
+        if (patchTimer) { window.clearTimeout(patchTimer); patchTimer = null; }
+        if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
+        void flushPatch();
+        void flushSave();
+      });
       return events;
     }
 
