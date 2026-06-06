@@ -861,9 +861,7 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, fest
 			if !s.authorizeFestRead(w, r, festID) {
 				return
 			}
-			s.mu.RLock()
 			venues, err := s.loadVenuesLocked(festID)
-			s.mu.RUnlock()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -1016,8 +1014,14 @@ order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
 	}
 	out := make([]stageMatches, 0)
 	byCode := map[string]int{} // stage code -> index in out, preserving order
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	// Read every match view on ONE read-only snapshot, off the write lock: the
+	// whole bracket is a consistent point-in-time and a busy editor never stalls
+	// this fetch (the old global RLock queued behind any pending writer).
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 	for _, p := range pairs {
 		mscope, err := s.verifyMatchInScope(ctx, scope, p.matchCode)
 		if err != nil {
@@ -1026,7 +1030,7 @@ order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
 			}
 			return nil, err
 		}
-		view, err := s.loadScopedMatchViewLocked(mscope)
+		view, err := s.loadScopedMatchViewUsing(tx, mscope)
 		if err != nil {
 			return nil, err
 		}
@@ -1071,8 +1075,11 @@ order by m.position, m.id`, scope.FestID, scope.GameID, stageCode)
 		return []MatchView{}, nil
 	}
 	views := make([]MatchView, 0, len(codes))
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 	for _, code := range codes {
 		mscope, err := s.verifyMatchInScope(ctx, scope, code)
 		if err != nil {
@@ -1081,7 +1088,7 @@ order by m.position, m.id`, scope.FestID, scope.GameID, stageCode)
 			}
 			return nil, err
 		}
-		view, err := s.loadScopedMatchViewLocked(mscope)
+		view, err := s.loadScopedMatchViewUsing(tx, mscope)
 		if err != nil {
 			return nil, err
 		}
@@ -1123,9 +1130,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		s.mu.RLock()
-		view, err := s.loadScopedMatchViewLocked(mscope)
-		s.mu.RUnlock()
+		view, err := s.loadScopedMatchViewSnapshot(mscope)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
