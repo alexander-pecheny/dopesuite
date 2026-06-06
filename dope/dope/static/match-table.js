@@ -570,12 +570,47 @@
   // to "in flight"; ack() drops them once the server confirms; requeue() returns
   // them for retry (without clobbering a newer queued op for the same path);
   // overlay() applies (in-flight then queued) onto a clone of the given state.
-  function createPendingOps() {
+  // createPendingOps tracks un-acked edits. With opts.storageKey set (and
+  // localStorage available) the un-acked set is also mirrored to localStorage and
+  // rehydrated on the next page load, so a refresh/crash mid-sync — exactly when
+  // edits "don't apply" and the operator reloads — doesn't silently drop edits
+  // the server never confirmed: they reappear (overlaid + spinner) and re-send.
+  // Persistence is opt-in (host.js EK pending passes no key) and TTL-bounded so a
+  // long-abandoned session can't resurrect ancient edits.
+  function createPendingOps(opts) {
+    opts = opts || {};
+    const ttlMs = Number.isFinite(opts.ttlMs) ? opts.ttlMs : 15 * 60 * 1000;
+    let store = null;
+    if (opts.storageKey) {
+      try {
+        store = window.localStorage;
+      } catch (_e) {
+        store = null;
+      }
+    }
+    const storageKey = store ? opts.storageKey : null;
+
     let queue = new Map();
     let inFlight = [];
+
+    // persist mirrors the current un-acked set (in-flight + queued) to storage.
+    // take() is intentionally not persisted: it only moves ops queued->in-flight,
+    // so all() — and thus what we'd write — is unchanged. Best-effort.
+    function persist() {
+      if (!storageKey) return;
+      try {
+        const ops = all();
+        if (ops.length === 0) store.removeItem(storageKey);
+        else store.setItem(storageKey, JSON.stringify(ops));
+      } catch (_e) {
+        /* quota / serialization — recovery is best-effort, never break editing */
+      }
+    }
+
     function add(path, value) {
-      const op = {op: "set", path: normalizePatchPath(path), value: cloneJSON(value)};
+      const op = {op: "set", path: normalizePatchPath(path), value: cloneJSON(value), ts: pendingTimestamp()};
       queue.set(patchKey(op), op);
+      persist();
       return op;
     }
     function take() {
@@ -587,12 +622,14 @@
     function ack(ops) {
       const sent = new Set(ops);
       inFlight = inFlight.filter((op) => !sent.has(op));
+      persist();
     }
     function requeue(ops) {
       for (const op of ops) {
         const key = patchKey(op);
         if (!queue.has(key)) queue.set(key, op);
       }
+      persist();
     }
     function all() {
       return inFlight.concat(Array.from(queue.values()));
@@ -609,12 +646,47 @@
       if (queue.has(key)) return true;
       return inFlight.some((op) => patchKey(op) === key);
     }
+
+    // Rehydrate un-acked ops persisted by a previous load. Nothing is truly in
+    // flight after a reload, so everything re-queues (to be overlaid + re-sent).
+    if (storageKey) {
+      try {
+        const saved = JSON.parse(store.getItem(storageKey) || "[]");
+        const now = pendingTimestamp();
+        let kept = 0;
+        for (const op of Array.isArray(saved) ? saved : []) {
+          if (!op || !Array.isArray(op.path)) continue;
+          if (op.ts && now - op.ts > ttlMs) continue; // stale — don't resurrect
+          queue.set(patchKey(op), {op: "set", path: op.path, value: op.value, ts: op.ts || now});
+          kept++;
+        }
+        persist(); // rewrite without the stale entries we filtered out
+        if (kept === 0) {
+          try {
+            store.removeItem(storageKey);
+          } catch (_e) {
+            /* ignore */
+          }
+        }
+      } catch (_e) {
+        /* corrupt payload — ignore, start clean */
+      }
+    }
+
     return {
       add, take, ack, requeue, all, overlay, has,
       queued: () => queue.size,
       inFlightCount: () => inFlight.length,
       size: () => queue.size + inFlight.length,
     };
+  }
+
+  function pendingTimestamp() {
+    try {
+      return Date.now();
+    } catch (_e) {
+      return 0;
+    }
   }
 
   function createStateSync(options) {
@@ -628,7 +700,11 @@
     let saveInFlight = false;
     let patchTimer = null;
     let patchInFlight = false;
-    const pending = createPendingOps();
+    // Editors persist un-acked edits per scope so a mid-sync refresh recovers
+    // them; viewers never edit, so they don't (and can't resurrect stray ops).
+    const pending = createPendingOps({
+      storageKey: !options.readonly && options.scope ? `dope.pending:${options.scope}` : null,
+    });
     // Unified SSE protocol: lastSeq is the per-scope position we have applied.
     // A delta applies only if its prevSeq === lastSeq; otherwise a drop / late
     // join / restart left a gap and we resync the full state. Seeded once from
@@ -779,6 +855,15 @@
       if (!lastSeqSeeded) {
         lastSeq = Number(options.getInitialSeq?.()) || 0;
         lastSeqSeeded = true;
+      }
+      // Un-acked edits recovered from localStorage by createPendingOps (a previous
+      // load refreshed mid-sync): show them overlaid on the seeded state right
+      // away — with their pending spinner — then re-send (idempotent set-ops).
+      if (!options.readonly && pending.queued() > 0) {
+        options.recorder?.event("recovered-pending", {scope: options.scope, count: pending.queued()});
+        options.onRemoteState?.(pending.overlay(options.getState ? options.getState() : {}), {local: true, recovered: true});
+        setSyncStatus("saving");
+        schedulePatch(0);
       }
       const events = new EventSource(options.eventsURL);
       if (options.onViewers) {

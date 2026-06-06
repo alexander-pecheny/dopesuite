@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {loadStaticModule, fakeIndex} from "./browser-module.js";
+import {loadStaticModule, fakeIndex, fakeLocalStorage} from "./browser-module.js";
 
 const T = loadStaticModule("match-table.js").DopeTable;
 
@@ -159,6 +159,40 @@ Deno.test("createPendingOps.has reports un-acked paths (queued then in flight, c
   assert.equal(p.has(["themes", 0, "answers", 1, 3]), false, "a different cell is not pending");
   p.ack(sent);
   assert.equal(p.has(path), false, "cleared once the server confirms it");
+});
+
+Deno.test("createPendingOps persists un-acked edits and rehydrates them on a fresh instance", () => {
+  const mod = loadStaticModule("match-table.js");
+  mod.localStorage = fakeLocalStorage();
+  const ops = mod.DopeTable.createPendingOps;
+  const key = "dope.pending:game-state:2";
+
+  const p1 = ops({storageKey: key});
+  p1.add(["themes", 0, "answers", 1, 2], "right");
+  p1.add(["themes", 0, "answers", 1, 3], "wrong");
+
+  // A fresh instance (simulating a page reload) recovers the un-acked edits.
+  const p2 = ops({storageKey: key});
+  assert.equal(p2.queued(), 2, "recovered both un-acked edits");
+  assert.equal(p2.has(["themes", 0, "answers", 1, 2]), true);
+  const overlaid = p2.overlay({});
+  assert.equal(overlaid.themes[0].answers[1][2], "right");
+  assert.equal(overlaid.themes[0].answers[1][3], "wrong");
+
+  // Once confirmed (take + ack), persistence is cleared and a later load is empty.
+  p2.ack(p2.take());
+  assert.equal(ops({storageKey: key}).queued(), 0, "nothing recovered after ack");
+});
+
+Deno.test("createPendingOps drops persisted edits past the TTL (no resurrecting ancient sessions)", () => {
+  const mod = loadStaticModule("match-table.js");
+  mod.localStorage = fakeLocalStorage();
+  const key = "dope.pending:game-state:9";
+  // Pre-seed an ancient op (ts near epoch) directly in storage.
+  mod.localStorage.setItem(key, JSON.stringify([{op: "set", path: ["a"], value: 1, ts: 1}]));
+  const p = mod.DopeTable.createPendingOps({storageKey: key, ttlMs: 1000});
+  assert.equal(p.queued(), 0, "stale op past TTL is not recovered");
+  assert.equal(mod.localStorage.getItem(key), null, "and the stale entry is purged");
 });
 
 Deno.test("createClientRecorder is a safe no-op when localStorage is unavailable", () => {
