@@ -148,6 +148,19 @@ Deno.test("createPendingOps: ack drops confirmed ops, requeue keeps them, newer 
   assert.equal(p.overlay({}).a, 3);
 });
 
+Deno.test("createPendingOps.has reports un-acked paths (queued then in flight, cleared on ack)", () => {
+  const p = T.createPendingOps();
+  const path = ["themes", 0, "answers", 1, 2];
+  assert.equal(p.has(path), false);
+  p.add(path, "right");
+  assert.equal(p.has(path), true, "queued edit is pending");
+  const sent = p.take(); // moved to in-flight
+  assert.equal(p.has(path), true, "in-flight edit is still pending");
+  assert.equal(p.has(["themes", 0, "answers", 1, 3]), false, "a different cell is not pending");
+  p.ack(sent);
+  assert.equal(p.has(path), false, "cleared once the server confirms it");
+});
+
 Deno.test("createClientRecorder is a safe no-op when localStorage is unavailable", () => {
   // The test window has no localStorage; the recorder must degrade to disabled
   // and never throw, so it can never break a page where storage is blocked.

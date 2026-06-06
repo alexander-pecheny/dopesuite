@@ -602,8 +602,15 @@
       for (const op of all()) next = setAtDeltaPath(next, op.path, op.value);
       return next;
     }
+    // has reports whether a path has an un-acked edit (queued or in flight), so
+    // the UI can mark that cell as pending until the server confirms it.
+    function has(path) {
+      const key = patchKey({path: normalizePatchPath(path)});
+      if (queue.has(key)) return true;
+      return inFlight.some((op) => patchKey(op) === key);
+    }
     return {
-      add, take, ack, requeue, all, overlay,
+      add, take, ack, requeue, all, overlay, has,
       queued: () => queue.size,
       inFlightCount: () => inFlight.length,
       size: () => queue.size + inFlight.length,
@@ -880,7 +887,7 @@
       }
     }
 
-    return {connect, flushSave, flushPatch, hasPendingSave, save, patch};
+    return {connect, flushSave, flushPatch, hasPendingSave, save, patch, isPending: (path) => pending.has(path)};
   }
 
   function createHostPresence(options) {

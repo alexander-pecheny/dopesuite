@@ -1795,6 +1795,27 @@ a.list-row:hover { background: var(--hover-bg); }
   --cell-fill: var(--red);
 }
 
+/* Pending edit: a small spinner in the cell's lower-right corner while the
+   edit is in flight, cleared once the server confirms it (refreshPendingMarkers). */
+.answer-cell.pending {
+  position: relative;
+}
+
+.answer-cell.pending::before {
+  content: "";
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.2);
+  border-top-color: var(--blue, #1a73e8);
+  animation: sync-spin 700ms linear infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .answer-cell.cell-selected {
   position: relative;
 }
