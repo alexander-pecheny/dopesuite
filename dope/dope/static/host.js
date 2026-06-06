@@ -673,6 +673,36 @@ async function sendUpdate(payload, matchCode = currentMatchCode()) {
   }
 }
 
+// setMatchFinished toggles a match's finished flag. Unlike a plain sendUpdate it
+// (a) applies the new value optimistically so the tick reflects intent at once,
+// and (b) records it in ekPendingFinished so overlayPendingMatch re-asserts it on
+// every MatchView that lands while the write is in flight — without this, a slow
+// finish-write plus an incoming broadcast reverts the checkbox and the operator
+// re-clicks, producing the finished/active flapping seen under load. The pending
+// intent is cleared only when its OWN write settles and no newer toggle has since
+// superseded it (token check), so rapid re-toggles converge to the last intent.
+async function setMatchFinished(matchCode, value) {
+  const scope = matchScopeFor(matchCode);
+  const token = ++ekFinishedToken;
+  ekPendingFinished.set(scope, {value, token});
+  if (state && state.code === matchCode) {
+    state.finished = value;
+    render();
+  }
+  setStatus("saving");
+  try {
+    const updated = await sendUpdateRaw({finished: value}, matchCode);
+    applyUpdatedMatch(updated, matchCode);
+    setStatus("saved");
+  } catch (error) {
+    setStatus("error");
+    console.error(error);
+  } finally {
+    const pending = ekPendingFinished.get(scope);
+    if (pending && pending.token === token) ekPendingFinished.delete(scope);
+  }
+}
+
 // ---- EK optimistic edit durability + batching --------------------------------
 // EK edits are applied to the DOM + match state instantly (see ekApplyValues),
 // then queued here as scoped set-ops per match. Two guarantees, shared with how
@@ -688,6 +718,15 @@ async function sendUpdate(payload, matchCode = currentMatchCode()) {
 const EK_EDIT_DEBOUNCE_MS = 150;
 const ekPending = new Map(); // matchScope -> {ops, inFlight, timer}
 
+// ekPendingFinished tracks an un-acked finish/unfinish per match so it survives
+// incoming MatchViews until the server confirms it. The finished flag is sent
+// immediately (it's not a queued cell op) and was otherwise NOT overlay-tracked,
+// so under load a slow finish-write plus a co-incident broadcast would visually
+// revert the tick — which is what made operators re-click it repeatedly. Tokened
+// so an older write completing late never clears a newer toggle's intent.
+const ekPendingFinished = new Map(); // matchScope -> {value: boolean, token: number}
+let ekFinishedToken = 0;
+
 function ekEntry(matchCode) {
   const scope = matchScopeFor(matchCode);
   let entry = ekPending.get(scope);
@@ -702,9 +741,14 @@ function ekEntry(matchCode) {
 // MatchView. Used everywhere a MatchView enters the render pipeline.
 function overlayPendingMatch(matchCode, view) {
   if (!view || !matchCode) return view;
-  const entry = ekPending.get(matchScopeFor(matchCode));
-  if (!entry || entry.ops.size() === 0) return view;
-  return entry.ops.overlay(view);
+  const scope = matchScopeFor(matchCode);
+  const entry = ekPending.get(scope);
+  const pendingFinished = ekPendingFinished.get(scope);
+  const hasCellOps = entry && entry.ops.size() > 0;
+  if (!hasCellOps && !pendingFinished) return view;
+  const out = hasCellOps ? entry.ops.overlay(view) : {...view};
+  if (pendingFinished) out.finished = pendingFinished.value;
+  return out;
 }
 
 // payloadToOpPath maps an /update cell payload to its MatchView path (matching
@@ -2263,7 +2307,7 @@ function battleHeader() {
   checkbox.dataset.matchCode = matchCode;
   checkbox.checked = Boolean(state.finished);
   checkbox.addEventListener("change", () => {
-    sendUpdate({finished: checkbox.checked}, matchCode);
+    setMatchFinished(matchCode, checkbox.checked);
   });
   label.append(checkbox);
   layout.appendChild(label);
