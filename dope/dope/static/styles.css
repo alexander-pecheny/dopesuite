@@ -1796,12 +1796,16 @@ a.list-row:hover { background: var(--hover-bg); }
 }
 
 /* Pending edit: a small spinner in the cell's lower-right corner while the
-   edit is in flight, cleared once the server confirms it (refreshPendingMarkers). */
-.answer-cell.pending {
+   edit is in flight, cleared once the server confirms it (refreshPendingMarkers).
+   Covers KSI/EK answer cells and OD entry cells (OD shootout cells also carry
+   .answer-cell). */
+.answer-cell.pending,
+.entry-cell.pending {
   position: relative;
 }
 
-.answer-cell.pending::before {
+.answer-cell.pending::before,
+.entry-cell.pending::before {
   content: "";
   position: absolute;
   right: 2px;

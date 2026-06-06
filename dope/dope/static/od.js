@@ -2634,9 +2634,30 @@ function computePlaces(totals) {
 function saveState(path, value) {
   if (Array.isArray(path)) {
     syncState().patch(path, value);
+    refreshPendingMarkers();
     return;
   }
   syncState().save();
+}
+
+// refreshPendingMarkers reconciles the per-cell "pending" spinner with the sync
+// controller's un-acked edits: an entry cell stays marked until the edit
+// covering it is confirmed (isPending is ancestor-aware, so a whole-column or
+// whole-grid patch marks the cells under it too). Driven from saveState (edit)
+// and applyRemoteState (ack / any remote update, incl. after a full rebuild).
+function refreshPendingMarkers() {
+  if (viewer || !stateSync || !stateSync.isPending) return;
+  odRoot.querySelectorAll(".entry-cell").forEach((cell) => {
+    const q = Number(cell.dataset.q);
+    const row = Number(cell.dataset.row);
+    const pending = Number.isInteger(q) && Number.isInteger(row) &&
+      stateSync.isPending(["entries", q, row]);
+    cell.classList.toggle("pending", Boolean(pending));
+  });
+  const shootoutPending = stateSync.isPending(["shootoutRounds"]);
+  odRoot.querySelectorAll(".od-shootout-cell").forEach((cell) => {
+    cell.classList.toggle("pending", shootoutPending);
+  });
 }
 
 function setHeading(text) {
@@ -2772,10 +2793,12 @@ function applyRemoteState(nextState) {
     questionStatsCache = null;
     numberToIndexCache = null;
     invalidateTabCache("detailed", "results");
+    refreshPendingMarkers();
     return;
   }
   invalidateAllCaches();
   render();
+  refreshPendingMarkers();
 }
 
 loadAll()

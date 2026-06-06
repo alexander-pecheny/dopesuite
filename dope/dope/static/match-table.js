@@ -555,6 +555,17 @@
     });
   }
 
+  // isPathPrefix reports whether `prefix` is an ancestor-or-equal of `full`
+  // (both already normalized, so segments compare strictly). Used so a coarse
+  // op marks every cell under the subtree it rewrote.
+  function isPathPrefix(prefix, full) {
+    if (prefix.length > full.length) return false;
+    for (let i = 0; i < prefix.length; i++) {
+      if (prefix[i] !== full[i]) return false;
+    }
+    return true;
+  }
+
   function patchKey(op) {
     return JSON.stringify(op.path);
   }
@@ -639,12 +650,14 @@
       for (const op of all()) next = setAtDeltaPath(next, op.path, op.value);
       return next;
     }
-    // has reports whether a path has an un-acked edit (queued or in flight), so
-    // the UI can mark that cell as pending until the server confirms it.
+    // has reports whether `path` is covered by an un-acked edit, so the UI can
+    // mark that cell pending until the server confirms it. True when a queued/
+    // in-flight op targets `path` exactly OR an ANCESTOR of it — so a coarse
+    // whole-array patch (e.g. OD's ["entries"]) marks every cell beneath it,
+    // while exact-path editors (KSI/EK) behave as a plain equality check.
     function has(path) {
-      const key = patchKey({path: normalizePatchPath(path)});
-      if (queue.has(key)) return true;
-      return inFlight.some((op) => patchKey(op) === key);
+      const norm = normalizePatchPath(path);
+      return all().some((op) => isPathPrefix(op.path, norm));
     }
 
     // Rehydrate un-acked ops persisted by a previous load. Nothing is truly in
