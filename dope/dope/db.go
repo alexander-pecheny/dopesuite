@@ -1451,17 +1451,13 @@ func (s *server) buildViewerInit(ctx context.Context, route hostInitRoute) (view
 		if err != nil {
 			return payload, nil
 		}
-		s.mu.RLock()
-		match, err := s.loadScopedMatchViewLocked(mscope)
-		s.mu.RUnlock()
+		match, err := s.loadScopedMatchViewSnapshot(mscope)
 		if err != nil {
 			return payload, nil
 		}
 		payload.Match = &match
 	case "venues":
-		s.mu.RLock()
 		venues, err := s.loadVenuesLocked(route.FestID)
-		s.mu.RUnlock()
 		if err == nil {
 			if venuesBytes, err := json.Marshal(venues); err == nil {
 				payload.Venues = venuesBytes
@@ -1510,9 +1506,7 @@ func (s *server) buildHostInit(ctx context.Context, route hostInitRoute) (hostIn
 		if err != nil {
 			return payload, nil
 		}
-		s.mu.RLock()
-		match, err := s.loadScopedMatchViewLocked(mscope)
-		s.mu.RUnlock()
+		match, err := s.loadScopedMatchViewSnapshot(mscope)
 		if err != nil {
 			return payload, nil
 		}
@@ -1570,9 +1564,7 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.mu.RLock()
-	view, err := s.loadFestViewLocked(festID, gameID)
-	s.mu.RUnlock()
+	view, err := s.loadFestViewSnapshot(festID, gameID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -2152,7 +2144,31 @@ func (s *server) loadFestViewLocked(festID, gameID int64) (FestView, error) {
 			RegularThemeCount: themeCount,
 		}, nil
 	}
+	return s.loadFestViewUsing(s.db, festID, gameID)
+}
 
+// loadFestViewSnapshot builds the fest view on a read-only transaction WITHOUT
+// taking the global write mutex. WAL gives the read a consistent snapshot even
+// while a writer holds s.mu, so cross-game page loads / bracket fetches no longer
+// queue behind a busy editor — Go's RWMutex is writer-preferring, so a single
+// pending writer otherwise blocks every RLock reader. Falls back to the locked
+// path in legacy (no-DB) mode.
+func (s *server) loadFestViewSnapshot(festID, gameID int64) (FestView, error) {
+	if s.db == nil {
+		return s.loadFestViewLocked(festID, gameID)
+	}
+	tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return FestView{}, err
+	}
+	defer tx.Rollback()
+	return s.loadFestViewUsing(tx, festID, gameID)
+}
+
+// loadFestViewUsing runs every fest-view query against the given queryer, so the
+// snapshot path can pass a read-only tx (one WAL snapshot, off the write lock)
+// and the locked path can pass s.db while holding s.mu.
+func (s *server) loadFestViewUsing(q dbQueryer, festID, gameID int64) (FestView, error) {
 	ctx := context.Background()
 	var view FestView
 	view.QuestionValues = questionValues
@@ -2164,7 +2180,7 @@ func (s *server) loadFestViewLocked(festID, gameID int64) (FestView, error) {
 		return view, nil
 	}
 	var updatedAt string
-	if err := s.db.QueryRowContext(ctx, `
+	if err := q.QueryRowContext(ctx, `
 select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, ''), coalesce(g.title, '')
 from fests t
 left join games g on g.fest_id = t.id and g.id = ?
@@ -2174,7 +2190,7 @@ where t.id = ?`, gameID, festID).
 	}
 	view.UpdatedAt = updatedAt
 
-	venues, err := loadVenues(ctx, s.db, festID)
+	venues, err := loadVenues(ctx, q, festID)
 	if err != nil {
 		return FestView{}, err
 	}
@@ -2186,7 +2202,7 @@ where t.id = ?`, gameID, festID).
 		stageWhere += " and game_id = ?"
 		stageArgs = append(stageArgs, gameID)
 	}
-	stageRows, err := s.db.QueryContext(ctx, `
+	stageRows, err := q.QueryContext(ctx, `
 select id, code, title, stage_type, position, status, config_json
 from stages
 where `+stageWhere+`
@@ -2219,12 +2235,12 @@ order by position, id`, stageArgs...)
 	}
 	for _, record := range stageRecords {
 		if record.Stage.Type == "reseed" {
-			entries, err := loadReseedEntries(ctx, s.db, record.ID)
+			entries, err := loadReseedEntries(ctx, q, record.ID)
 			if err != nil {
 				return FestView{}, err
 			}
 			record.Stage.ReseedEntries = entries
-			state, err := reseedPrerequisites(ctx, s.db, record.Stage.Config, gameID)
+			state, err := reseedPrerequisites(ctx, q, record.Stage.Config, gameID)
 			if err != nil {
 				return FestView{}, err
 			}
@@ -2234,7 +2250,7 @@ order by position, id`, stageArgs...)
 				record.Stage.ReseedMessage = reseedNotReadyMessage(state.PendingMatches)
 			}
 		} else {
-			matches, err := loadFestMatches(ctx, s.db, record.ID)
+			matches, err := loadFestMatches(ctx, q, record.ID)
 			if err != nil {
 				return FestView{}, err
 			}
@@ -2377,11 +2393,32 @@ func (s *server) loadScopedMatchViewLocked(scope matchScope) (MatchView, error) 
 	if s.db == nil {
 		return buildView(s.state), nil
 	}
-	match, err := loadDBMatchStateByScope(context.Background(), s.db, scope)
+	return s.loadScopedMatchViewUsing(s.db, scope)
+}
+
+// loadScopedMatchViewUsing reads a match view via the given queryer, so callers
+// can supply a read-only snapshot tx (off the write lock) or s.db under s.mu.
+func (s *server) loadScopedMatchViewUsing(q dbQueryer, scope matchScope) (MatchView, error) {
+	match, err := loadDBMatchStateByScope(context.Background(), q, scope)
 	if err != nil {
 		return MatchView{}, err
 	}
 	return matchViewFromDBState(match), nil
+}
+
+// loadScopedMatchViewSnapshot reads a match view on a read-only transaction
+// WITHOUT the global write mutex (see loadFestViewSnapshot) — so a viewer/host
+// reading match B doesn't stall behind an editor writing match A.
+func (s *server) loadScopedMatchViewSnapshot(scope matchScope) (MatchView, error) {
+	if s.db == nil {
+		return s.loadScopedMatchViewLocked(scope)
+	}
+	tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return MatchView{}, err
+	}
+	defer tx.Rollback()
+	return s.loadScopedMatchViewUsing(tx, scope)
 }
 
 func loadDBMatchState(ctx context.Context, q dbQueryer, festID int64, code string) (dbMatchState, error) {
@@ -3408,9 +3445,7 @@ func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
 	if data, ok := s.cachedFestViewBytes(festID, gameID); ok {
 		return data, nil
 	}
-	s.mu.RLock()
-	view, err := s.loadFestViewLocked(festID, gameID)
-	s.mu.RUnlock()
+	view, err := s.loadFestViewSnapshot(festID, gameID)
 	if err != nil {
 		return nil, err
 	}
