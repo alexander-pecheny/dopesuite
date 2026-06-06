@@ -18,6 +18,8 @@ func gamesAuditRow(t *testing.T, state map[string]any) sql.NullString {
 	}
 	row, err := json.Marshal(map[string]any{
 		"id":         2,
+		"code":       "ksi1",
+		"title":      "Своя игра",
 		"game_type":  "ksi",
 		"state_json": string(stateJSON),
 	})
@@ -56,7 +58,7 @@ func TestGamesRowChangesRendersKSICellClear(t *testing.T) {
 	if len(lines) != 1 {
 		t.Fatalf("want 1 change, got %d: %v", len(lines), lines)
 	}
-	want := "Тема 2 · Вопрос 5 · «Гамма»: верно → пусто"
+	want := "Своя игра — Тема 2 · Вопрос 5 · «Гамма»: верно → пусто"
 	if lines[0] != want {
 		t.Fatalf("want %q, got %q", want, lines[0])
 	}
@@ -93,5 +95,42 @@ func TestMatchRowChangesRendersStatusToggle(t *testing.T) {
 	none := matchRowChanges(mk("active"), mk("active"))
 	if len(none) != 0 {
 		t.Fatalf("no status change should produce no lines: %v", none)
+	}
+}
+
+// TestAnswerRowChangesLabelsEKMatch drives a real EK cell edit through the write
+// path and checks the audit line leads with the match it belongs to (the
+// user-facing "Бой «A»" prefix), so EK history is attributable to a bout.
+func TestAnswerRowChangesLabelsEKMatch(t *testing.T) {
+	srv, scope := newBatchTestServer(t)
+
+	theme, answer := 0, 0
+	right := "right"
+	if _, _, _, _, err := srv.applyScopedMatchUpdate(t.Context(), scope,
+		[]updateRequest{{Team: 0, Theme: &theme, Answer: &answer, Mark: &right}}); err != nil {
+		t.Fatalf("apply edit: %v", err)
+	}
+
+	var title string
+	if err := srv.db.QueryRow(`select title from matches where id = ?`, scope.MatchID).Scan(&title); err != nil {
+		t.Fatalf("match title: %v", err)
+	}
+
+	rows := loadAuditRows(t, srv.db, "answers")
+	if len(rows) == 0 {
+		t.Fatal("no answers audit rows recorded for the EK edit")
+	}
+	res := newAuditMatchResolver(t.Context(), srv.db)
+	last := rows[len(rows)-1]
+	lines := answerRowChanges(res, last.BeforeJSON, last.AfterJSON)
+	if len(lines) != 1 {
+		t.Fatalf("want 1 change line, got %d: %v", len(lines), lines)
+	}
+	wantMatch := "Бой «" + title + "»"
+	if !strings.HasPrefix(lines[0], wantMatch) {
+		t.Fatalf("line should lead with the match %q: %q", wantMatch, lines[0])
+	}
+	if !strings.Contains(lines[0], "вопрос 1") || !strings.Contains(lines[0], "верно") {
+		t.Fatalf("line should show the cell and mark: %q", lines[0])
 	}
 }

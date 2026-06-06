@@ -14,13 +14,14 @@ import (
 	"strings"
 )
 
-// auditRevertScanRows bounds how many recent audit rows the page reads before
-// grouping. One edit is one request (one group), so this covers a deep history
-// while keeping the query and the page size bounded.
+// auditRevertScanRows is a hard ceiling on how many recent audit rows the page
+// reads before grouping. One edit is one request (one group); pagination breaks
+// out of the scan as soon as it has filled the requested page, so this only
+// caps pathological deep pages.
 const auditRevertScanRows = 5000
 
-// auditRevertMaxGroups caps how many change groups the page renders.
-const auditRevertMaxGroups = 300
+// auditPageSize is how many change groups (edits) one audit page shows.
+const auditPageSize = 100
 
 // auditDetailMaxLines caps how many individual changes one group spells out
 // before collapsing the rest into a "+N more" note, so a 60-cell bulk edit
@@ -57,10 +58,15 @@ type auditChangeGroup struct {
 }
 
 type hostFestAuditData struct {
-	Fest   hostMyFest
-	Groups []auditChangeGroup
-	Error  string
-	Notice string
+	Fest      hostMyFest
+	Groups    []auditChangeGroup
+	Error     string
+	Notice    string
+	PageHuman int // 1-based page number for display
+	HasPrev   bool
+	HasNext   bool
+	PrevPage  int
+	NextPage  int
 }
 
 var hostFestAuditTemplate = template.Must(template.New("hostAudit").Parse(`<!doctype html>
@@ -75,6 +81,8 @@ var hostFestAuditTemplate = template.Must(template.New("hostAudit").Parse(`<!doc
     .audit-changes { margin: .25rem 0 0; padding-left: 1.1rem; font-size: .85em; line-height: 1.35; }
     .audit-changes li { color: var(--muted, #555); }
     .audit-more { display: inline-block; margin-top: .15rem; font-size: .85em; }
+    .audit-pager { display: flex; gap: .75rem; align-items: center; justify-content: center; margin: 1.25rem 0 .5rem; }
+    .audit-pager .audit-page-num { font-size: .9em; }
   </style>
 </head>
 <body class="public">
@@ -110,6 +118,13 @@ var hostFestAuditTemplate = template.Must(template.New("hostAudit").Parse(`<!doc
         {{end}}
       </tbody>
     </table>
+    {{if or .HasPrev .HasNext}}
+    <nav class="audit-pager">
+      {{if .HasPrev}}<a class="btn" href="?page={{.PrevPage}}">← Новее</a>{{else}}<span class="btn" aria-disabled="true">← Новее</span>{{end}}
+      <span class="audit-page-num muted">страница {{.PageHuman}}</span>
+      {{if .HasNext}}<a class="btn" href="?page={{.NextPage}}">Старее →</a>{{else}}<span class="btn" aria-disabled="true">Старее →</span>{{end}}
+    </nav>
+    {{end}}
     {{end}}
   </main>
 </body>
@@ -125,24 +140,39 @@ func (s *server) renderHostFestAudit(w http.ResponseWriter, r *http.Request, fes
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	groups, err := s.loadFestAuditGroups(r.Context(), festID)
+	page := 0
+	if v := strings.TrimSpace(r.URL.Query().Get("page")); v != "" {
+		if p, perr := strconv.Atoi(v); perr == nil && p > 0 {
+			page = p
+		}
+	}
+	groups, hasPrev, hasNext, err := s.loadFestAuditPage(r.Context(), festID, page)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = hostFestAuditTemplate.Execute(w, hostFestAuditData{
-		Fest:   fest,
-		Groups: groups,
-		Error:  errMsg,
-		Notice: notice,
+		Fest:      fest,
+		Groups:    groups,
+		Error:     errMsg,
+		Notice:    notice,
+		PageHuman: page + 1,
+		HasPrev:   hasPrev,
+		HasNext:   hasNext,
+		PrevPage:  page - 1,
+		NextPage:  page + 1,
 	})
 }
 
-// loadFestAuditGroups reads the recent fest-scoped audit rows and folds them
-// into per-request change groups (rows of one request are contiguous in the
-// id-descending scan), newest first.
-func (s *server) loadFestAuditGroups(ctx context.Context, festID int64) ([]auditChangeGroup, error) {
+// loadFestAuditPage reads the recent fest-scoped audit rows, folds them into
+// per-request change groups (newest first), and returns the requested page of
+// auditPageSize groups together with whether older/newer pages exist. page is
+// 0-based.
+func (s *server) loadFestAuditPage(ctx context.Context, festID int64, page int) (groups []auditChangeGroup, hasPrev, hasNext bool, err error) {
+	if page < 0 {
+		page = 0
+	}
 	rows, err := s.db.QueryContext(ctx, `
 select a.id, a.ts, a.table_name, coalesce(a.request_id, ''), coalesce(u.username, ''),
        a.before_json, a.after_json
@@ -152,20 +182,39 @@ where a.fest_id = ?
 order by a.id desc
 limit ?`, festID, auditRevertScanRows)
 	if err != nil {
-		return nil, err
+		return nil, false, false, err
 	}
 	defer rows.Close()
 
-	type entry struct {
-		id         int64
-		ts         string
-		table      string
-		requestID  string
-		username   string
-		beforeJSON sql.NullString
-		afterJSON  sql.NullString
+	// Fold enough groups to cover the requested page; `more` tells us a further
+	// (older) group exists just past it, which is exactly our "next page" signal.
+	res := newAuditMatchResolver(ctx, s.db)
+	all, more, err := foldAuditGroups(rows, (page+1)*auditPageSize, res)
+	if err != nil {
+		return nil, false, false, err
 	}
-	var groups []auditChangeGroup
+	hasPrev = page > 0
+	hasNext = more
+	start := page * auditPageSize
+	if start >= len(all) {
+		return nil, hasPrev, false, nil
+	}
+	end := start + auditPageSize
+	if end > len(all) {
+		end = len(all)
+	}
+	groups = all[start:end]
+	if page == 0 && len(groups) > 0 {
+		groups[0].IsNewest = true
+	}
+	return groups, hasPrev, hasNext, nil
+}
+
+// foldAuditGroups reads id-descending audit rows and folds runs of same-request
+// rows into change groups (rows of one request are contiguous in the scan),
+// newest first. It returns at most `limit` groups; `more` is true when at least
+// one further group exists beyond the limit (so a caller can offer a next page).
+func foldAuditGroups(rows *sql.Rows, limit int, res *auditMatchResolver) (groups []auditChangeGroup, more bool, err error) {
 	var cur *auditChangeGroup
 	var curKey string
 	var tableCounts map[string]int
@@ -176,6 +225,7 @@ limit ?`, festID, auditRevertScanRows)
 		cur.Summary = summarizeAuditTables(tableCounts)
 		cur.RevertTo = cur.MinID - 1
 		groups = append(groups, *cur)
+		cur = nil
 	}
 	// addDetail appends human-readable change lines to the current group, capped
 	// so a huge bulk edit collapses the tail into a "+N" note.
@@ -189,57 +239,66 @@ limit ?`, festID, auditRevertScanRows)
 		}
 	}
 	for rows.Next() {
-		var e entry
-		if err := rows.Scan(&e.id, &e.ts, &e.table, &e.requestID, &e.username, &e.beforeJSON, &e.afterJSON); err != nil {
-			return nil, err
+		var (
+			id         int64
+			ts         string
+			table      string
+			requestID  string
+			username   string
+			beforeJSON sql.NullString
+			afterJSON  sql.NullString
+		)
+		if err := rows.Scan(&id, &ts, &table, &requestID, &username, &beforeJSON, &afterJSON); err != nil {
+			return nil, false, err
 		}
 		// Group rows of the same request; a blank request_id is its own group.
-		key := e.requestID
+		key := requestID
 		if key == "" {
-			key = fmt.Sprintf("id:%d", e.id)
+			key = fmt.Sprintf("id:%d", id)
 		}
 		if cur == nil || key != curKey {
 			flush()
-			if len(groups) >= auditRevertMaxGroups {
-				cur = nil
+			if len(groups) >= limit {
+				// We just saw the first row of the (limit+1)th group: there is an
+				// older page, but it's out of this window — stop here.
+				more = true
 				break
 			}
-			actor := strings.TrimSpace(e.username)
+			actor := strings.TrimSpace(username)
 			if actor == "" {
 				actor = "система"
 			}
 			cur = &auditChangeGroup{
-				MinID: e.id,
-				MaxID: e.id,
-				When:  formatAuditTime(e.ts),
+				MinID: id,
+				MaxID: id,
+				When:  formatAuditTime(ts),
 				Actor: actor,
 			}
 			curKey = key
 			tableCounts = map[string]int{}
 		}
-		if e.id > cur.MaxID {
-			cur.MaxID = e.id
+		if id > cur.MaxID {
+			cur.MaxID = id
 		}
-		if e.id < cur.MinID {
-			cur.MinID = e.id
+		if id < cur.MinID {
+			cur.MinID = id
 		}
 		cur.Count++
-		tableCounts[e.table]++
-		switch e.table {
+		tableCounts[table]++
+		switch table {
 		case "games":
-			addDetail(gamesRowChanges(e.beforeJSON, e.afterJSON))
+			addDetail(gamesRowChanges(beforeJSON, afterJSON))
 		case "matches":
-			addDetail(matchRowChanges(e.beforeJSON, e.afterJSON))
+			addDetail(matchRowChanges(beforeJSON, afterJSON))
+		case "answers":
+			addDetail(answerRowChanges(res, beforeJSON, afterJSON))
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	flush()
-	if len(groups) > 0 {
-		groups[0].IsNewest = true
-	}
-	return groups, nil
+	return groups, more, nil
 }
 
 func summarizeAuditTables(counts map[string]int) string {
@@ -284,8 +343,10 @@ type leafChange struct {
 // "Тема t · Вопрос q · «команда»: было → стало"; the finished flag and any other
 // leaf fall back to a compact rendering. Returns nil when neither side parses.
 func gamesRowChanges(before, after sql.NullString) []string {
-	beforeState, _ := gameAuditState(before)
-	afterState, _ := gameAuditState(after)
+	beforeRow := auditRowMap(before)
+	afterRow := auditRowMap(after)
+	beforeState := gameStateFromRow(beforeRow)
+	afterState := gameStateFromRow(afterRow)
 	if beforeState == nil && afterState == nil {
 		return nil
 	}
@@ -293,32 +354,59 @@ func gamesRowChanges(before, after sql.NullString) []string {
 	if names == nil {
 		names = stateParticipantNames(beforeState)
 	}
+	// Prefix every line with the game it belongs to, so a mixed group (e.g. a
+	// revert touching several games) stays readable.
+	label := gameAuditLabel(afterRow, beforeRow)
 	var leaves []leafChange
 	diffJSONLeaves(nil, beforeState, afterState, &leaves)
 	out := make([]string, 0, len(leaves))
 	for _, lc := range leaves {
-		out = append(out, formatGameChange(lc, names))
+		line := formatGameChange(lc, names)
+		if label != "" {
+			line = label + " — " + line
+		}
+		out = append(out, line)
 	}
 	return out
 }
 
-// gameAuditState unwraps a games-row audit JSON ({..., "state_json": "..."}) to
-// the parsed state value.
-func gameAuditState(raw sql.NullString) (any, string) {
-	row := auditRowMap(raw)
+// gameStateFromRow parses the state_json field of a games-row audit map into a
+// decoded JSON value (nil when absent or unparseable).
+func gameStateFromRow(row map[string]any) any {
 	if row == nil {
-		return nil, ""
+		return nil
 	}
-	gameType, _ := row["game_type"].(string)
 	stateStr, _ := row["state_json"].(string)
 	if stateStr == "" {
-		return nil, gameType
+		return nil
 	}
 	var state any
 	if err := json.Unmarshal([]byte(stateStr), &state); err != nil {
-		return nil, gameType
+		return nil
 	}
-	return state, gameType
+	return state
+}
+
+// gameAuditLabel picks a short human label for a games-row audit entry: the game
+// title, falling back to its code, then "игра #id". Rows are tried in order
+// (after-state first), so a delete still resolves a name from the before-row.
+func gameAuditLabel(rows ...map[string]any) string {
+	for _, row := range rows {
+		if title, _ := row["title"].(string); strings.TrimSpace(title) != "" {
+			return strings.TrimSpace(title)
+		}
+	}
+	for _, row := range rows {
+		if code, _ := row["code"].(string); strings.TrimSpace(code) != "" {
+			return strings.TrimSpace(code)
+		}
+	}
+	for _, row := range rows {
+		if id, ok := pathIndex(row["id"]); ok {
+			return fmt.Sprintf("игра #%d", id)
+		}
+	}
+	return ""
 }
 
 func stateParticipantNames(state any) []string {
@@ -447,6 +535,131 @@ func matchRowChanges(before, after sql.NullString) []string {
 		}
 	}
 	return out
+}
+
+// auditMatchResolver resolves match/team labels for EK (bracket) audit rows,
+// which reference rows by id rather than carrying a title. Lookups are cached
+// (including misses) so one page of answer edits costs only a handful of
+// queries. Labels reflect current DB state, which is fine for display.
+type auditMatchResolver struct {
+	ctx        context.Context
+	db         *sql.DB
+	themes     map[int64]*themeRef
+	matchTitle map[int64]string
+	teamName   map[int64]string
+}
+
+type themeRef struct {
+	matchID    int64
+	teamID     int64
+	kind       string
+	themeIndex int64
+}
+
+func newAuditMatchResolver(ctx context.Context, db *sql.DB) *auditMatchResolver {
+	return &auditMatchResolver{
+		ctx:        ctx,
+		db:         db,
+		themes:     map[int64]*themeRef{},
+		matchTitle: map[int64]string{},
+		teamName:   map[int64]string{},
+	}
+}
+
+func (r *auditMatchResolver) theme(id int64) *themeRef {
+	if ref, ok := r.themes[id]; ok {
+		return ref
+	}
+	var ref themeRef
+	err := r.db.QueryRowContext(r.ctx,
+		`select match_id, team_id, kind, theme_index from themes where id = ?`, id).
+		Scan(&ref.matchID, &ref.teamID, &ref.kind, &ref.themeIndex)
+	if err != nil {
+		r.themes[id] = nil
+		return nil
+	}
+	r.themes[id] = &ref
+	return &ref
+}
+
+func (r *auditMatchResolver) matchLabel(matchID int64) string {
+	title, ok := r.matchTitle[matchID]
+	if !ok {
+		if err := r.db.QueryRowContext(r.ctx, `select title from matches where id = ?`, matchID).Scan(&title); err != nil {
+			title = ""
+		}
+		r.matchTitle[matchID] = title
+	}
+	if strings.TrimSpace(title) != "" {
+		return "Бой «" + title + "»"
+	}
+	return fmt.Sprintf("Бой #%d", matchID)
+}
+
+func (r *auditMatchResolver) team(teamID int64) string {
+	if name, ok := r.teamName[teamID]; ok {
+		return name
+	}
+	var name string
+	if err := r.db.QueryRowContext(r.ctx, `select name from teams where id = ?`, teamID).Scan(&name); err != nil {
+		name = ""
+	}
+	r.teamName[teamID] = name
+	return name
+}
+
+// cellLabel builds the "Бой «A» · «Команда» · тема 2 · вопрос 3" prefix for one
+// EK answer cell, resolving the match/team via the theme id.
+func (r *auditMatchResolver) cellLabel(themeID int64, answerIndex int) string {
+	th := r.theme(themeID)
+	if th == nil {
+		return fmt.Sprintf("вопрос %d", answerIndex+1)
+	}
+	parts := []string{r.matchLabel(th.matchID)}
+	if name := strings.TrimSpace(r.team(th.teamID)); name != "" {
+		parts = append(parts, "«"+name+"»")
+	}
+	if th.kind == "shootout" {
+		parts = append(parts, "перестрелка")
+	} else {
+		parts = append(parts, fmt.Sprintf("тема %d", th.themeIndex+1))
+	}
+	parts = append(parts, fmt.Sprintf("вопрос %d", answerIndex+1))
+	return strings.Join(parts, " · ")
+}
+
+// answerRowChanges renders one EK answer-cell change, leading with the match it
+// belongs to (e.g. "Бой «A» · «Команда» · тема 2 · вопрос 3: пусто → верно").
+func answerRowChanges(res *auditMatchResolver, before, after sql.NullString) []string {
+	if res == nil {
+		return nil
+	}
+	b := auditRowMap(before)
+	a := auditRowMap(after)
+	row := a
+	if row == nil {
+		row = b
+	}
+	if row == nil {
+		return nil
+	}
+	themeID, ok := pathIndex(row["theme_id"])
+	if !ok {
+		return nil
+	}
+	var oldMark, newMark any
+	if b != nil {
+		oldMark = b["mark"]
+	}
+	if a != nil {
+		newMark = a["mark"]
+	}
+	if reflect.DeepEqual(oldMark, newMark) {
+		return nil
+	}
+	answerIndex, _ := pathIndex(row["answer_index"])
+	return []string{fmt.Sprintf("%s: %s → %s",
+		res.cellLabel(int64(themeID), answerIndex), answerLabel(oldMark), answerLabel(newMark))}
 }
 
 func auditRowMap(raw sql.NullString) map[string]any {
