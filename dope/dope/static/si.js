@@ -1073,9 +1073,34 @@ function normalizeActiveCell() {
 function saveState(path, value) {
   if (Array.isArray(path)) {
     syncState().patch(path, value);
+    // Mark the just-edited answer cell as pending right away; it clears when the
+    // server confirms the edit (refreshPendingMarkers, driven from
+    // applyRemoteState on the PATCH ack / any remote update).
+    if (path.length === 5 && path[0] === "themes" && path[2] === "answers") {
+      answerCellNode(path[3], path[1], path[4])?.classList.add("pending");
+    }
     return;
   }
   syncState().save();
+}
+
+function answerCellNode(player, theme, answer) {
+  return tableIndex?.get("answer", {player, theme, answer}) ||
+    siRoot.querySelector(`.answer-cell[data-player="${gameTable.cssEscape(player)}"][data-theme="${gameTable.cssEscape(theme)}"][data-answer="${gameTable.cssEscape(answer)}"]`);
+}
+
+// refreshPendingMarkers reconciles the per-cell "pending" highlight with the
+// sync controller's un-acked edits: a cell stays marked until its own PATCH is
+// confirmed, then clears. Called after any remote update / ack and after a full
+// re-render (which rebuilds cells without the class).
+function refreshPendingMarkers() {
+  if (viewer || !stateSync?.isPending) return;
+  siRoot.querySelectorAll(".answer-cell").forEach((cell) => {
+    const player = Number(cell.dataset.player);
+    const theme = Number(cell.dataset.theme);
+    const answer = Number(cell.dataset.answer);
+    cell.classList.toggle("pending", stateSync.isPending(["themes", theme, "answers", player, answer]));
+  });
 }
 
 function setHeading(text) {
@@ -1205,8 +1230,12 @@ function applyRemoteState(nextState) {
   const previous = state;
   state = nextState;
   ensureState();
-  if (canPatchState(previous, state) && patchTable(previous)) return;
+  if (canPatchState(previous, state) && patchTable(previous)) {
+    refreshPendingMarkers();
+    return;
+  }
   render({preserveScroll: true});
+  refreshPendingMarkers();
 }
 
 document.addEventListener("keydown", handleKeydown);
