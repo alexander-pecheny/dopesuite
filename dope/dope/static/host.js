@@ -60,6 +60,7 @@ let reloadTimer = null;
 const localMatchEchoes = new Set();
 let matchTableIndex = null;
 let activeAnswerNode = null;
+let recorder = null;
 let activeTeamRows = [];
 const matchSelections = new Map();
 const undoStack = [];
@@ -119,7 +120,10 @@ window.addEventListener("resize", () => {
 });
 
 async function loadCurrent() {
-  if (consumeHostInit()) return;
+  if (consumeHostInit()) {
+    recoverMatchPendingEdits();
+    return;
+  }
   if (route.mode === "match") {
     await loadMatch();
   } else if (route.mode === "stage") {
@@ -133,6 +137,7 @@ async function loadCurrent() {
   } else {
     await loadFest();
   }
+  recoverMatchPendingEdits();
 }
 
 // localStorage SWR cache for FestView. We render the previous fest immediately
@@ -407,7 +412,11 @@ function connectEvents() {
       // ignore malformed viewer-count payloads
     }
   });
-  events.onerror = () => setStatus("reconnecting");
+  events.addEventListener("open", () => recorder?.event("sse-open", {mode: route.mode, matchCode: route.matchCode}));
+  events.onerror = () => {
+    setStatus("reconnecting");
+    recorder?.event("sse-error", {mode: route.mode, matchCode: route.matchCode});
+  };
 }
 
 function applyFestViewEvent(view) {
@@ -684,6 +693,7 @@ async function sendUpdate(payload, matchCode = currentMatchCode()) {
 async function setMatchFinished(matchCode, value) {
   const scope = matchScopeFor(matchCode);
   const token = ++ekFinishedToken;
+  recorder?.event("ek-finished", {matchCode, value, token});
   ekPendingFinished.set(scope, {value, token});
   if (state && state.code === matchCode) {
     state.finished = value;
@@ -731,7 +741,9 @@ function ekEntry(matchCode) {
   const scope = matchScopeFor(matchCode);
   let entry = ekPending.get(scope);
   if (!entry) {
-    entry = {ops: gameTable.createPendingOps(), inFlight: false, timer: null};
+    // Persist per-match so a mid-sync refresh recovers un-acked EK edits
+    // (recoverMatchPendingEdits re-overlays + re-sends them on the next load).
+    entry = {ops: gameTable.createPendingOps({storageKey: `dope.pending:${scope}`}), inFlight: false, timer: null};
     ekPending.set(scope, entry);
   }
   return entry;
@@ -749,6 +761,41 @@ function overlayPendingMatch(matchCode, view) {
   const out = hasCellOps ? entry.ops.overlay(view) : {...view};
   if (pendingFinished) out.finished = pendingFinished.value;
   return out;
+}
+
+// refreshMatchPendingMarkers toggles the per-cell pending spinner on the focused
+// match's answer cells from that match's un-acked edits — the EK analogue of
+// si.js/od.js refreshPendingMarkers. Called after a match renders and after an
+// edit/ack so a cell stays marked until the server confirms it.
+function refreshMatchPendingMarkers(matchCode) {
+  const entry = matchCode ? ekPending.get(matchScopeFor(matchCode)) : null;
+  hostRoot.querySelectorAll(".answer-cell").forEach((cell) => {
+    let pending = false;
+    if (entry) {
+      const team = Number(cell.dataset.team);
+      const theme = Number(cell.dataset.theme);
+      const answer = Number(cell.dataset.answer);
+      if (Number.isInteger(team) && Number.isInteger(theme) && Number.isInteger(answer)) {
+        const themeKey = cell.dataset.shootout === "1" ? "shootoutThemes" : "themes";
+        pending = entry.ops.has(["teams", team, themeKey, theme, "answers", answer]);
+      }
+    }
+    cell.classList.toggle("pending", pending);
+  });
+}
+
+// recoverMatchPendingEdits, after a (re)load of the focused match, rehydrates any
+// un-acked edits persisted by a previous page load (ekEntry reads them from
+// localStorage), re-renders the match with them overlaid — showing their pending
+// spinner — and re-sends them. No-op when there is nothing to recover.
+function recoverMatchPendingEdits() {
+  if (route.mode !== "match" || !state || !state.code) return;
+  const entry = ekEntry(state.code); // creates + rehydrates persisted ops
+  if (entry.ops.size() === 0) return;
+  recorder?.event("recovered-pending", {scope: matchScopeFor(state.code), count: entry.ops.size()});
+  applyUpdatedMatch(state, state.code); // overlays pending → re-renders with them
+  setStatus("saving");
+  scheduleEKFlush(state.code, 0);
 }
 
 // payloadToOpPath maps an /update cell payload to its MatchView path (matching
@@ -798,6 +845,7 @@ function queueEKEdits(matchCode, payloads) {
   }
   if (queued) {
     setStatus("saving");
+    refreshMatchPendingMarkers(matchCode);
     scheduleEKFlush(matchCode, EK_EDIT_DEBOUNCE_MS);
   }
 }
@@ -1002,6 +1050,7 @@ function render() {
   } else {
     hostRoot.replaceChildren(table);
   }
+  refreshMatchPendingMarkers(state.code || route.matchCode);
   scheduleEKTeamNameOverflowUpdate();
   refreshPresence();
   if (finishToggleFocused) {
@@ -1613,6 +1662,7 @@ function applyUpdatedMatch(updated, matchCode) {
     normalizeActiveCell();
     patchHostScoreTable(matchTableIndex, updated);
     markActiveCell();
+    refreshMatchPendingMarkers(matchCode);
     return;
   }
   render();
@@ -2951,6 +3001,10 @@ function option(value, label) {
 }
 
 bindSPANavigation();
+recorder = gameTable.installClientRecorder({
+  scope: `ek:${route.festID}:${route.gameID}`,
+  getState: () => ({mode: route.mode, matchCode: route.matchCode, stageCode: route.stageCode, state}),
+});
 loadCurrent()
   .then(() => {
     setStatus("saved");

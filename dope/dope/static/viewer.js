@@ -23,6 +23,7 @@ const scopeGameID = window.__VIEWER_INIT__?.route?.gameID != null
   : route.gameID;
 const editorLink = canEdit && !embedded ? gameTable.mountEditorLink(statusNode) : null;
 let state = null;
+let recorder = null;
 let fest = null;
 let venues = [];
 const stageCache = window.DopeStageCache.create({
@@ -411,7 +412,11 @@ function connectEvents() {
       // ignore malformed viewer-count payloads
     }
   });
-  events.onerror = () => setLive(false);
+  events.addEventListener("open", () => recorder?.event("sse-open", {mode: route.mode, matchCode: route.matchCode}));
+  events.onerror = () => {
+    setLive(false);
+    recorder?.event("sse-error", {mode: route.mode, matchCode: route.matchCode});
+  };
 }
 
 function applyFestViewEvent(view) {
@@ -489,6 +494,7 @@ function runViewerCurrentRoute() {
 }
 
 function scheduleReload() {
+  recorder?.event("reload", {mode: route.mode, matchCode: route.matchCode});
   window.clearTimeout(reloadTimer);
   reloadTimer = window.setTimeout(() => {
     loadCurrent()
@@ -1200,6 +1206,12 @@ function matchTitleFor(matchState) {
 
 bindViewerSPANavigation();
 bindStageScrollFade();
+recorder = gameTable.installClientRecorder({
+  scope: `viewer:${route.festID}:${route.gameID}`,
+  getState: () => ({mode: route.mode, matchCode: route.matchCode, state}),
+  // Spectators only get the download button when they opt in with ?log.
+  showButton: /[?&]log\b/.test(location.search),
+});
 loadCurrent()
   .then(() => {
     setLive(true);
