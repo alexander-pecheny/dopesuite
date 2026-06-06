@@ -148,6 +148,20 @@ Deno.test("createPendingOps: ack drops confirmed ops, requeue keeps them, newer 
   assert.equal(p.overlay({}).a, 3);
 });
 
+Deno.test("createClientRecorder is a safe no-op when localStorage is unavailable", () => {
+  // The test window has no localStorage; the recorder must degrade to disabled
+  // and never throw, so it can never break a page where storage is blocked.
+  const rec = T.createClientRecorder({scope: "game-state:2"});
+  assert.equal(rec.enabled, false);
+  assert.doesNotThrow(() => {
+    rec.event("delta", {seq: 5});
+    rec.snapshot("tick", {finished: false, themes: []});
+  });
+  const dump = rec.dump();
+  assert.equal(dump.scope, "game-state:2");
+  assert.ok(Array.isArray(dump.events) && Array.isArray(dump.snapshots));
+});
+
 Deno.test("computeEKPlayerStats aggregates per player across battles, regular themes only", () => {
   const stages = [
     {code: "r16", matches: [

@@ -61,6 +61,7 @@ let detailedOrderCache = null;
 let activeAnswerNode = null;
 let activePlayerRows = [];
 let stateSync = null;
+let recorder = null;
 let presence = null;
 let cellSelection = null;
 const tabScroll = new Map();
@@ -1107,6 +1108,13 @@ function connectEvents() {
 
 function syncState() {
   if (stateSync) return stateSync;
+  recorder = gameTable.installClientRecorder({
+    scope: `game-state:${scopeGameID}`,
+    getState: () => state,
+    // Editors always get the download button; spectators only when they add
+    // ?log to the URL, so the diagnostic UI stays off the public view.
+    showButton: !viewer || /[?&]log\b/.test(location.search),
+  });
   stateSync = gameTable.createStateSync({
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
@@ -1118,6 +1126,8 @@ function syncState() {
     onRemoteState: applyRemoteState,
     onViewers: (count) => viewerCounter.setCount(count),
     onLockdown: scheduleStaticReload,
+    recorder,
+    onWriteError: (info) => recorder?.event("write-rejected", info),
   });
   return stateSync;
 }

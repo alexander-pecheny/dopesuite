@@ -52,6 +52,7 @@ let questionStatsCache = null;
 let activeEntryEditor = null;
 let activeEntryRows = [];
 let stateSync = null;
+let recorder = null;
 let presence = null;
 const tabCache = new Map();
 const tabScroll = new Map();
@@ -2668,6 +2669,11 @@ function connectEvents() {
 
 function syncState() {
   if (stateSync) return stateSync;
+  recorder = gameTable.installClientRecorder({
+    scope: `game-state:${scopeGameID}`,
+    getState: () => state,
+    showButton: !viewer || /[?&]log\b/.test(location.search),
+  });
   stateSync = gameTable.createStateSync({
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
@@ -2679,6 +2685,8 @@ function syncState() {
     onRemoteState: applyRemoteState,
     onViewers: (count) => viewerCounter.setCount(count),
     onLockdown: scheduleStaticReload,
+    recorder,
+    onWriteError: (info) => recorder?.event("write-rejected", info),
   });
   return stateSync;
 }

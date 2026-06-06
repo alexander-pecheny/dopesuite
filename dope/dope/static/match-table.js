@@ -805,6 +805,7 @@
             return;
           }
           if ((Number(message.prevSeq) || 0) !== lastSeq) {
+            options.recorder?.event("gap", {scope: options.scope, have: lastSeq, prevSeq: Number(message.prevSeq) || 0, seq: Number(message.seq) || 0});
             void resync();
             return;
           }
@@ -814,6 +815,7 @@
             next = setAtDeltaPath(next, op.path, op.value);
           }
           lastSeq = Number(message.seq) || lastSeq;
+          options.recorder?.event("delta", {scope: options.scope, seq: lastSeq, prevSeq: Number(message.prevSeq) || 0, ops: message.ops.length});
           options.onRemoteState?.(pending.overlay(next), message);
           if (!hasPendingSave()) setSyncStatus("saved");
           return;
@@ -822,6 +824,7 @@
         // Full-state snapshot (initial / wholesale PUT / non-PATCH mutation).
         const raw = JSON.stringify(message.data);
         if (message.seq) lastSeq = Number(message.seq) || lastSeq;
+        options.recorder?.event("snapshot", {scope: options.scope, seq: lastSeq});
         if (consumeLocalEcho(raw)) {
           if (!hasPendingSave()) setSyncStatus("saved");
           return;
@@ -835,7 +838,11 @@
         events.close();
         options.onLockdown?.();
       });
-      events.onerror = () => setSyncStatus("reconnecting");
+      events.addEventListener("open", () => options.recorder?.event("sse-open", {scope: options.scope, have: lastSeq}));
+      events.onerror = () => {
+        setSyncStatus("reconnecting");
+        options.recorder?.event("sse-error", {scope: options.scope, have: lastSeq});
+      };
       // Flush debounced edits the moment the tab is hidden or the page is being
       // navigated away from, so the 250ms debounce window can't swallow the
       // operator's last edits on reload. Paired with keepalive on the PATCH, the
@@ -863,6 +870,7 @@
         const seqHeader = response.headers.get("X-State-Seq");
         const data = await response.json();
         if (seqHeader != null) lastSeq = Number(seqHeader) || 0;
+        options.recorder?.event("resync", {scope: options.scope, seq: lastSeq});
         options.onRemoteState?.(pending.overlay(data), {scope: options.scope, resync: true});
         if (!hasPendingSave()) setSyncStatus("saved");
       } catch (error) {
@@ -2092,11 +2100,200 @@
     return obj;
   }
 
+  // ---- Client-side state recorder ------------------------------------------
+  // A best-effort black box for diagnosis: a ring of timeline EVENTS (SSE
+  // open/close, applied deltas/snapshots, resyncs, sent/rejected patches) and a
+  // ring of periodic STATE snapshots, persisted to localStorage so an operator
+  // can download a JSON log after something looked wrong. It pairs with the two
+  // other evidence sources: the server audit is what COMMITTED, a HAR is what
+  // crossed the WIRE, and this is what THIS client believed and rendered — the
+  // only one that can reveal optimistic-but-never-committed state. Every
+  // localStorage touch is guarded; a quota error trims the oldest half instead
+  // of throwing.
+  const RECORDER_EVENT_CAP = 1500;
+  const RECORDER_SNAPSHOT_CAP = 40;
+
+  function recorderNow() {
+    try {
+      return new Date().toISOString();
+    } catch (_e) {
+      return "";
+    }
+  }
+
+  function cheapHash(str) {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return h;
+  }
+
+  function createClientRecorder(options) {
+    const scope = (options && options.scope) || "page";
+    const evKey = `dope.rec.ev:${scope}`;
+    const snapKey = `dope.rec.snap:${scope}`;
+    // Per page-load id so a downloaded log spanning a reload stays separable.
+    const session = Math.random().toString(36).slice(2, 10);
+    let store = null;
+    try {
+      store = window.localStorage;
+    } catch (_e) {
+      store = null;
+    }
+
+    function load(key) {
+      if (!store) return [];
+      try {
+        return JSON.parse(store.getItem(key) || "[]");
+      } catch (_e) {
+        return [];
+      }
+    }
+    function save(key, arr) {
+      if (!store) return;
+      try {
+        store.setItem(key, JSON.stringify(arr));
+      } catch (_e) {
+        try {
+          store.setItem(key, JSON.stringify(arr.slice(Math.floor(arr.length / 2))));
+        } catch (_e2) {
+          /* give up silently — recording must never break the page */
+        }
+      }
+    }
+    function push(key, cap, record) {
+      const arr = load(key);
+      arr.push(record);
+      while (arr.length > cap) arr.shift();
+      save(key, arr);
+    }
+
+    function event(type, data) {
+      push(evKey, RECORDER_EVENT_CAP, {t: recorderNow(), s: session, type, ...(data || {})});
+    }
+
+    let lastSnapshotHash = null;
+    function snapshot(reason, state, meta) {
+      let json = null;
+      try {
+        json = state === undefined ? null : JSON.stringify(state);
+      } catch (_e) {
+        json = null;
+      }
+      const hash = json ? cheapHash(json) : null;
+      // Skip an idle "tick" that changed nothing, so quiet periods don't fill
+      // the ring with identical copies.
+      if (reason === "tick" && hash !== null && hash === lastSnapshotHash) return;
+      lastSnapshotHash = hash;
+      push(snapKey, RECORDER_SNAPSHOT_CAP, {
+        t: recorderNow(),
+        s: session,
+        reason,
+        len: json ? json.length : 0,
+        ...(meta || {}),
+        state: json ? JSON.parse(json) : null,
+      });
+    }
+
+    function dump() {
+      return {
+        scope,
+        session,
+        ua: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        href: typeof location !== "undefined" ? location.href : "",
+        exportedAt: recorderNow(),
+        events: load(evKey),
+        snapshots: load(snapKey),
+      };
+    }
+    function download() {
+      try {
+        const blob = new Blob([JSON.stringify(dump(), null, 2)], {type: "application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `dope-log-${scope.replace(/[^\w.-]+/g, "_")}-${recorderNow().replace(/[:.]/g, "-")}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      } catch (_e) {
+        /* download is best-effort */
+      }
+    }
+    function clear() {
+      try {
+        if (store) {
+          store.removeItem(evKey);
+          store.removeItem(snapKey);
+        }
+      } catch (_e) {
+        /* ignore */
+      }
+    }
+
+    return {scope, session, event, snapshot, dump, download, clear, enabled: Boolean(store)};
+  }
+
+  // installClientRecorder wires a recorder for a page: periodic state snapshots,
+  // lifecycle markers, and (when showButton) a small floating "download log"
+  // button. Returns the recorder — pass it to createStateSync so its SSE timeline
+  // is captured too — or null when localStorage is unavailable.
+  function installClientRecorder(options) {
+    options = options || {};
+    const recorder = createClientRecorder({scope: options.scope});
+    if (!recorder.enabled) return null;
+    const getState = typeof options.getState === "function" ? options.getState : null;
+    const intervalMs = Number.isFinite(options.intervalMs) ? options.intervalMs : 5000;
+    const snap = (reason) => recorder.snapshot(reason, getState ? getState() : undefined, options.getMeta ? options.getMeta() : null);
+    snap("init");
+    if (intervalMs > 0) window.setInterval(() => snap("tick"), intervalMs);
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", () => {
+        recorder.event("visibility", {state: document.visibilityState});
+        if (document.visibilityState === "hidden") snap("hidden");
+      });
+      if (options.showButton !== false) mountRecorderButton(recorder, options.label);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("pagehide", () => recorder.event("pagehide", {}));
+    }
+    return recorder;
+  }
+
+  function mountRecorderButton(recorder, label) {
+    if (document.querySelector(".dope-rec-btn")) return; // one per page
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "dope-rec-btn";
+    btn.textContent = label || "Скачать лог";
+    btn.title = "Скачать журнал состояния этой вкладки (для диагностики)";
+    Object.assign(btn.style, {
+      position: "fixed",
+      bottom: "8px",
+      right: "8px",
+      zIndex: "2147483000",
+      font: "12px/1.2 system-ui, sans-serif",
+      padding: "4px 8px",
+      background: "rgba(30,30,30,.82)",
+      color: "#fff",
+      border: "0",
+      borderRadius: "6px",
+      cursor: "pointer",
+      opacity: "0.5",
+    });
+    btn.addEventListener("mouseenter", () => (btn.style.opacity = "1"));
+    btn.addEventListener("mouseleave", () => (btn.style.opacity = "0.5"));
+    btn.addEventListener("click", () => recorder.download());
+    document.body.appendChild(btn);
+  }
+
   window.DopeTable = {
     th,
     td,
     option,
     applyDeltaOps,
+    createClientRecorder,
+    installClientRecorder,
     createViewerCounter,
     buildFlatScoreTable,
     buildTwoRowScoreTable,
