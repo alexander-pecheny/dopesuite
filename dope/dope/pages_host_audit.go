@@ -175,7 +175,7 @@ func (s *server) loadFestAuditPage(ctx context.Context, festID int64, page int) 
 	}
 	rows, err := s.db.QueryContext(ctx, `
 select a.id, a.ts, a.table_name, coalesce(a.request_id, ''), coalesce(u.username, ''),
-       a.before_json, a.after_json
+       dope_unz(a.before_json), dope_unz(a.after_json)
 from audit_log a
 left join users u on u.id = a.actor_user_id
 where a.fest_id = ?
@@ -287,9 +287,9 @@ func foldAuditGroups(rows *sql.Rows, limit int, res *auditMatchResolver) (groups
 		tableCounts[table]++
 		switch table {
 		case "games":
-			addDetail(gamesRowChanges(beforeJSON, afterJSON))
+			addDetail(gamesRowChanges(res, beforeJSON, afterJSON))
 		case "matches":
-			addDetail(matchRowChanges(beforeJSON, afterJSON))
+			addDetail(matchRowChanges(res, beforeJSON, afterJSON))
 		case "answers":
 			addDetail(answerRowChanges(res, beforeJSON, afterJSON))
 		}
@@ -342,7 +342,7 @@ type leafChange struct {
 // changed leaves. KSI/SI answer-grid cells (themes[t].answers[team][q]) become
 // "Тема t · Вопрос q · «команда»: было → стало"; the finished flag and any other
 // leaf fall back to a compact rendering. Returns nil when neither side parses.
-func gamesRowChanges(before, after sql.NullString) []string {
+func gamesRowChanges(res *auditMatchResolver, before, after sql.NullString) []string {
 	beforeRow := auditRowMap(before)
 	afterRow := auditRowMap(after)
 	beforeState := gameStateFromRow(beforeRow)
@@ -355,8 +355,21 @@ func gamesRowChanges(before, after sql.NullString) []string {
 		names = stateParticipantNames(beforeState)
 	}
 	// Prefix every line with the game it belongs to, so a mixed group (e.g. a
-	// revert touching several games) stays readable.
+	// revert touching several games) stays readable. title/code are unchanged on
+	// a state_json edit and thus dropped from the diff; fall back to a live title
+	// lookup by id before settling for "игра #id".
 	label := gameAuditLabel(afterRow, beforeRow)
+	if res != nil && strings.HasPrefix(label, "игра #") {
+		id, ok := pathIndex(afterRow["id"])
+		if !ok {
+			id, ok = pathIndex(beforeRow["id"])
+		}
+		if ok {
+			if t := strings.TrimSpace(res.gameTitle(int64(id))); t != "" {
+				label = t
+			}
+		}
+	}
 	var leaves []leafChange
 	diffJSONLeaves(nil, beforeState, afterState, &leaves)
 	out := make([]string, 0, len(leaves))
@@ -510,7 +523,7 @@ func formatGameChange(lc leafChange, names []string) string {
 
 // matchRowChanges renders the meaningful changes of a matches-row audit entry —
 // primarily the finished/active status toggle (the EK "tick").
-func matchRowChanges(before, after sql.NullString) []string {
+func matchRowChanges(res *auditMatchResolver, before, after sql.NullString) []string {
 	a := auditRowMap(after)
 	if a == nil {
 		return nil
@@ -523,6 +536,11 @@ func matchRowChanges(before, after sql.NullString) []string {
 	label := "Бой"
 	if title != "" {
 		label = "Бой «" + title + "»"
+	} else if res != nil {
+		// title is unchanged → dropped from the diff; resolve it live by id.
+		if id, ok := pathIndex(a["id"]); ok {
+			label = res.matchLabel(int64(id))
+		}
 	}
 	var out []string
 	if b != nil {
@@ -552,6 +570,13 @@ type auditMatchResolver struct {
 	themes     map[int64]*themeRef
 	matchTitle map[int64]string
 	teamName   map[int64]string
+	gameTitles map[int64]string
+	answerCell map[int64]*answerCellRef
+}
+
+type answerCellRef struct {
+	themeID     int64
+	answerIndex int64
 }
 
 type themeRef struct {
@@ -568,7 +593,43 @@ func newAuditMatchResolver(ctx context.Context, db *sql.DB) *auditMatchResolver 
 		themes:     map[int64]*themeRef{},
 		matchTitle: map[int64]string{},
 		teamName:   map[int64]string{},
+		gameTitles: map[int64]string{},
+		answerCell: map[int64]*answerCellRef{},
 	}
+}
+
+// gameTitle resolves a game's current title by id. UPDATE audit snapshots store
+// only changed columns, so a state_json edit drops the (unchanged) title — we
+// look it up live for the line label. Returns "" when the game is gone.
+func (r *auditMatchResolver) gameTitle(id int64) string {
+	if t, ok := r.gameTitles[id]; ok {
+		return t
+	}
+	var title string
+	if err := r.db.QueryRowContext(r.ctx, `select title from games where id = ?`, id).Scan(&title); err != nil {
+		title = ""
+	}
+	r.gameTitles[id] = title
+	return title
+}
+
+// cellRef resolves an answer row's (theme_id, answer_index) by its id. Those
+// columns are immutable identity and get dropped from a mark-only UPDATE diff,
+// so we recover them live (current value == historical value). Returns nil when
+// the answer row no longer exists.
+func (r *auditMatchResolver) cellRef(id int64) *answerCellRef {
+	if ref, ok := r.answerCell[id]; ok {
+		return ref
+	}
+	var ref answerCellRef
+	if err := r.db.QueryRowContext(r.ctx,
+		`select theme_id, answer_index from answers where id = ?`, id).
+		Scan(&ref.themeID, &ref.answerIndex); err != nil {
+		r.answerCell[id] = nil
+		return nil
+	}
+	r.answerCell[id] = &ref
+	return &ref
 }
 
 func (r *auditMatchResolver) theme(id int64) *themeRef {
@@ -648,10 +709,6 @@ func answerRowChanges(res *auditMatchResolver, before, after sql.NullString) []s
 	if row == nil {
 		return nil
 	}
-	themeID, ok := pathIndex(row["theme_id"])
-	if !ok {
-		return nil
-	}
 	var oldMark, newMark any
 	if b != nil {
 		oldMark = b["mark"]
@@ -662,7 +719,21 @@ func answerRowChanges(res *auditMatchResolver, before, after sql.NullString) []s
 	if reflect.DeepEqual(oldMark, newMark) {
 		return nil
 	}
-	answerIndex, _ := pathIndex(row["answer_index"])
+	// theme_id / answer_index are dropped from a mark-only UPDATE diff; recover
+	// them from the row JSON (legacy full snapshots) or live by the answer id.
+	themeID, ok := pathIndex(row["theme_id"])
+	answerIndex, hasIdx := pathIndex(row["answer_index"])
+	if (!ok || !hasIdx) && res != nil {
+		if id, hasID := pathIndex(row["id"]); hasID {
+			if ref := res.cellRef(int64(id)); ref != nil {
+				themeID, ok = int(ref.themeID), true
+				answerIndex = int(ref.answerIndex)
+			}
+		}
+	}
+	if !ok {
+		return nil
+	}
 	return []string{fmt.Sprintf("%s: %s → %s",
 		res.cellLabel(int64(themeID), answerIndex), answerLabel(oldMark), answerLabel(newMark))}
 }
@@ -834,7 +905,7 @@ func (s *server) revertFestToAudit(ctx context.Context, festID, targetID int64) 
 	}
 
 	rows, err := tx.QueryContext(ctx, `
-select table_name, op, before_json, after_json
+select table_name, op, dope_unz(before_json), dope_unz(after_json)
 from audit_log
 where fest_id = ? and id > ?
 order by id desc`, festID, targetID)

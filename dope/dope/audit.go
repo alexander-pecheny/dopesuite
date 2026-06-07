@@ -59,7 +59,10 @@ const (
 // auditTriggerTemplateVersion is mixed into the trigger fingerprint so that a
 // change to the trigger SQL (e.g. adding the fest_id column) forces a rebuild on
 // the next startup, even when no audited table's shape changed.
-const auditTriggerTemplateVersion = 2
+//
+// v3: snapshots are DEFLATE-compressed via dope_z(); UPDATE snapshots keep only
+// PK + changed columns (see buildAuditTrigger).
+const auditTriggerTemplateVersion = 3
 
 func withAuditActor(ctx context.Context, userID int64) context.Context {
 	if userID == 0 {
@@ -447,6 +450,43 @@ func buildAuditTrigger(table string, cols, pks []string, op string) string {
 		}
 		return "json_object(" + strings.Join(parts, ", ") + ")"
 	}
+
+	// jsonPathLit renders a JSON path string literal for a column, e.g. `'$."x"'`.
+	jsonPathLit := func(c string) string {
+		return "'$.\"" + strings.ReplaceAll(c, `"`, `""`) + "\"'"
+	}
+
+	// changedRowJSON builds the row snapshot for an UPDATE keeping only the
+	// primary-key columns plus columns whose value actually changed. Unchanged
+	// non-PK columns are dropped via json_remove (a no-op sentinel path is passed
+	// when the column did change, so it survives). This collapses the common case
+	// — a single field edited on a wide row — from the full row down to a tiny
+	// diff, while staying fully revert-safe: reverseAuditEntry restores an UPDATE
+	// column-by-column from before_json keyed on the PK, so omitted (unchanged)
+	// columns are simply left untouched.
+	changedRowJSON := func(prefix string) string {
+		pkSet := make(map[string]bool, len(pks))
+		for _, p := range pks {
+			pkSet[p] = true
+		}
+		removals := make([]string, 0, len(cols))
+		for _, c := range cols {
+			if pkSet[c] {
+				continue
+			}
+			removals = append(removals, fmt.Sprintf(
+				"case when old.%s is new.%s then %s else '$.\"__dope_keep__\"' end",
+				quoteIdent(c), quoteIdent(c), jsonPathLit(c)))
+		}
+		if len(removals) == 0 {
+			return rowJSON(prefix)
+		}
+		return "json_remove(" + rowJSON(prefix) + ", " + strings.Join(removals, ", ") + ")"
+	}
+
+	// z wraps a JSON expression so the trigger stores it DEFLATE-compressed; see
+	// audit_compress.go. Read paths must unwrap with dope_unz(...).
+	z := func(expr string) string { return "dope_z(" + expr + ")" }
 	pkExpr := func(prefix string) string {
 		if len(pks) == 1 {
 			return fmt.Sprintf("cast(%s.%s as text)", prefix, quoteIdent(pks[0]))
@@ -472,7 +512,7 @@ begin
   values('%s', %s, 'INSERT', null, %s, %s, %s, %s);
 end`,
 			name, table,
-			table, pkExpr("new"), rowJSON("new"), actorSel, reqSel, festSel)
+			table, pkExpr("new"), z(rowJSON("new")), actorSel, reqSel, festSel)
 	case "update":
 		return fmt.Sprintf(`create trigger %s
 after update on %s
@@ -481,7 +521,7 @@ begin
   values('%s', %s, 'UPDATE', %s, %s, %s, %s, %s);
 end`,
 			name, table,
-			table, pkExpr("new"), rowJSON("old"), rowJSON("new"), actorSel, reqSel, festSel)
+			table, pkExpr("new"), z(changedRowJSON("old")), z(changedRowJSON("new")), actorSel, reqSel, festSel)
 	case "delete":
 		return fmt.Sprintf(`create trigger %s
 after delete on %s
@@ -490,7 +530,7 @@ begin
   values('%s', %s, 'DELETE', %s, null, %s, %s, %s);
 end`,
 			name, table,
-			table, pkExpr("old"), rowJSON("old"), actorSel, reqSel, festSel)
+			table, pkExpr("old"), z(rowJSON("old")), actorSel, reqSel, festSel)
 	}
 	return ""
 }
