@@ -703,8 +703,8 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			// lockdown is a server-side sentinel telling this viewer to drop the
 			// stream so it reloads into the (now-static) page; without it the
 			// browser's native EventSource would just auto-reconnect. Returning
-			// runs the deferred removeSubscriber, which closes ch — so only this
-			// goroutine ever closes its own channel (no double-close race).
+			// runs the deferred removeSubscriber, which removes ch from the
+			// subscriber map (it does not close ch — see removeSubscriber).
 			if ev.name == "lockdown" {
 				return
 			}
@@ -810,7 +810,16 @@ func (s *server) removeSubscriber(festID int64, ch chan event) {
 		}
 	}
 	s.subMu.Unlock()
-	close(ch)
+	// Deliberately do NOT close(ch). broadcastTo snapshots the channel list
+	// under subMu.RLock and then sends AFTER releasing the lock; closing here
+	// would race that send and panic ("send on closed channel"), which —
+	// because broadcasts also run from the detached delta-coalescing timer
+	// goroutine (no net/http recover above it) — crashes the whole process.
+	// Removal from the map is enough: future broadcasts won't see ch, and an
+	// in-flight broadcast that already snapshotted it just sends into the
+	// buffered channel (cap-8, drop-oldest) that nobody reads; ch is then GC'd
+	// once the broadcaster's snapshot is gone. The reader goroutine exits on
+	// ctx.Done()/lockdown and never relies on close as a signal.
 }
 
 // scheduleViewerCount fans out the viewer tally at most once per fest per
