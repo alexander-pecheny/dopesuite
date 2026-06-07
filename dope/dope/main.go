@@ -149,6 +149,13 @@ type server struct {
 	// co-located bot sends it as X-Bot-Secret so only it can issue/consume login
 	// codes; empty disables the bridge. Set from DOPE_BOT_SECRET at startup.
 	botSecret string
+	// epoch is a per-process random token stamped on every SSE envelope, the
+	// GET /state header, and the page init. stateSeq resets to 0 on restart, so
+	// a long-lived client holding a high lastSeq would silently drop every
+	// post-restart delta (seq <= lastSeq) and diverge — the data-loss incident's
+	// amplifier. A changed epoch tells the client the seq space reset, so it
+	// resyncs instead of ignoring. Constant for a process's lifetime.
+	epoch string
 	// festViewCache holds JSON-marshaled FestView responses keyed by
 	// (festID, gameID). Invalidated wholesale per fest on broadcastState,
 	// since any of the data folded into FestView (venues, stages, matches)
@@ -556,6 +563,11 @@ func newServer() (*server, error) {
 	if matchCode == "" {
 		matchCode = defaultMatchCode
 	}
+	epoch, err := randomBase32(8)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return &server{
 		db:              db,
 		festID:          festID,
@@ -564,6 +576,7 @@ func newServer() (*server, error) {
 		subscribers:     make(map[int64]map[chan event]bool),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 		botSecret:       os.Getenv("DOPE_BOT_SECRET"),
+		epoch:           epoch,
 	}, nil
 }
 

@@ -450,6 +450,10 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		// X-State-Seq lets a resyncing SSE client align its lastSeq with the
 		// state it just fetched, so the next delta chains cleanly.
 		w.Header().Set("X-State-Seq", strconv.FormatUint(seq, 10))
+		// X-State-Epoch pairs with the seq: if it differs from what the client
+		// last saw, the server restarted and the seq space reset, so the client
+		// adopts this epoch+seq instead of treating low post-restart seqs as stale.
+		w.Header().Set("X-State-Epoch", s.epoch)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write([]byte(stateJSON))
 	case http.MethodPut:
