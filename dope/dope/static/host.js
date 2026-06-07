@@ -352,10 +352,47 @@ async function loadSeedImportPage() {
   renderSeedImport();
 }
 
+// lastEpoch tracks the server's per-process token (see server.epoch). The
+// per-scope seq resets to 0 on a server restart, so cached MatchViews keep a
+// high seq the new seq space will never reach — every post-restart delta would
+// read as "seq <= base.seq" (applyMatchDelta) and be silently dropped, leaving
+// the editor diverged. A changed epoch means the seq space reset; the cleanest
+// recovery (given the stage cache's monotonic-by-seq merge) is a full reload,
+// which re-seeds everything. Un-acked edits survive via durable pending storage.
+let lastEpoch = "";
+let epochReloadScheduled = false;
+
+// epochChanged adopts the first epoch seen as the baseline and reports a genuine
+// change. An empty epoch (older server build) is ignored.
+function epochChanged(message) {
+  const epoch = message?.epoch ? String(message.epoch) : "";
+  if (!epoch) return false;
+  if (lastEpoch === "") {
+    lastEpoch = epoch;
+    return false;
+  }
+  return epoch !== lastEpoch;
+}
+
+function scheduleEpochReload() {
+  if (epochReloadScheduled) return;
+  epochReloadScheduled = true;
+  recorder?.event("epoch-reload", {mode: route.mode, from: lastEpoch});
+  // Jittered so a fleet of editors doesn't reload the cold post-restart server
+  // in lockstep.
+  window.setTimeout(() => window.location.reload(), 2000 + Math.floor(Math.random() * 3000));
+}
+
 function connectEvents() {
   const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
+    // A changed server epoch means a restart reset the seq space; reload to
+    // re-seed instead of silently dropping every post-restart delta by seq.
+    if (epochChanged(message)) {
+      scheduleEpochReload();
+      return;
+    }
     // On the stats page, fold match edits into the cache in place and recompute
     // from memory — no refetch. Other scopes don't affect the aggregate.
     if (route.mode === "stats") {
