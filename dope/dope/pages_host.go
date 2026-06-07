@@ -511,6 +511,24 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		s.handleHostClearFestNumbers(w, r, id)
 		return
 	}
+	if len(parts) == 5 && parts[2] == "numbers" && parts[3] == "import" {
+		if !requireManageFest() {
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		switch parts[4] {
+		case "match":
+			s.handleHostFestNumbersImportMatch(w, r, id)
+		case "apply":
+			s.handleHostFestNumbersImportApply(w, r, id)
+		default:
+			http.NotFound(w, r)
+		}
+		return
+	}
 	if len(parts) == 4 && parts[2] == "rating" && parts[3] == "import" {
 		if !requireManageFest() {
 			return
