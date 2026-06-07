@@ -684,6 +684,14 @@ func applyRosterToKSIState(raw string, teams []festRosterImportTeam, targetTheme
 	if err != nil {
 		return nil, err
 	}
+	// Capture the pre-import participant order before overwriting it, so the
+	// answer grid (keyed by row position) can be remapped to follow each team
+	// across roster reorders/additions/removals instead of staying at its old
+	// index. The KSI state only stores names, so names are the join key.
+	var oldParticipants []string
+	if rawParts, ok := obj["participants"]; ok && len(rawParts) > 0 {
+		_ = json.Unmarshal(rawParts, &oldParticipants)
+	}
 	participants := teamNamesFromRoster(teams)
 	participantsJSON, err := json.Marshal(participants)
 	if err != nil {
@@ -715,7 +723,7 @@ func applyRosterToKSIState(raw string, teams []festRosterImportTeam, targetTheme
 		if rawAnswers, ok := themes[i]["answers"]; ok && len(rawAnswers) > 0 {
 			_ = json.Unmarshal(rawAnswers, &answers)
 		}
-		answers = resizeStringMatrix(answers, len(participants), len(questionValues))
+		answers = remapAnswerMatrix(answers, oldParticipants, participants, len(questionValues))
 		answersJSON, err := json.Marshal(answers)
 		if err != nil {
 			return nil, err
@@ -782,6 +790,35 @@ func resizeIntSlice(values []int, size int) []int {
 	out := append([]int(nil), values...)
 	for len(out) < size {
 		out = append(out, 0)
+	}
+	return out
+}
+
+// remapAnswerMatrix rebuilds a KSI answer grid for a new participant order,
+// moving each old row to wherever its team now sits (matched by name) so scores
+// follow their team across roster reorders, additions, and removals. New teams
+// get an empty row; teams that dropped out lose their row. Duplicate names are
+// consumed in their existing order. Falls back to a positional resize only when
+// the old participant list is unknown (e.g. legacy state without names).
+func remapAnswerMatrix(values [][]string, oldNames, newNames []string, cols int) [][]string {
+	if len(oldNames) == 0 {
+		return resizeStringMatrix(values, len(newNames), cols)
+	}
+	byName := make(map[string][]int, len(oldNames))
+	for i, name := range oldNames {
+		byName[name] = append(byName[name], i)
+	}
+	out := make([][]string, len(newNames))
+	for j, name := range newNames {
+		var srcRow []string
+		if queue := byName[name]; len(queue) > 0 {
+			i := queue[0]
+			byName[name] = queue[1:]
+			if i < len(values) {
+				srcRow = values[i]
+			}
+		}
+		out[j] = resizeStringSlice(srcRow, cols)
 	}
 	return out
 }
