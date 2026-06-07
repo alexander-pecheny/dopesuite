@@ -725,6 +725,27 @@
     let lastSeq = 0;
     let lastSeqSeeded = false;
     let resyncing = false;
+    // lastEpoch is the server's per-process token (see server.epoch). The server
+    // resets its per-scope seq to 0 on restart, so without this a long-lived
+    // client holding a high lastSeq would read every post-restart delta as
+    // "seq <= lastSeq" (already applied) and silently stop syncing — the
+    // data-loss incident's amplifier. A changed epoch means the seq space reset,
+    // so we resync to adopt the new epoch+seq instead of ignoring the deltas.
+    let lastEpoch = "";
+    let lastEpochSeeded = false;
+
+    // epochReset adopts the first epoch we see as the baseline and reports a
+    // reset only on a genuine change. An empty epoch (older server build) is
+    // ignored so the protocol degrades gracefully.
+    function epochReset(epoch) {
+      if (!epoch) return false;
+      if (!lastEpochSeeded) {
+        lastEpoch = epoch;
+        lastEpochSeeded = true;
+        return false;
+      }
+      return epoch !== lastEpoch;
+    }
 
     function save() {
       if (options.readonly) return;
@@ -869,6 +890,13 @@
         lastSeq = Number(options.getInitialSeq?.()) || 0;
         lastSeqSeeded = true;
       }
+      if (!lastEpochSeeded) {
+        const seededEpoch = options.getInitialEpoch?.();
+        if (seededEpoch) {
+          lastEpoch = String(seededEpoch);
+          lastEpochSeeded = true;
+        }
+      }
       // Un-acked edits recovered from localStorage by createPendingOps (a previous
       // load refreshed mid-sync): show them overlaid on the seeded state right
       // away — with their pending spinner — then re-send (idempotent set-ops).
@@ -902,6 +930,15 @@
           // what we have. A gap means we missed an event, so refetch instead of
           // misapplying. Drop deltas mid-resync; the refetch supersedes them.
           if (resyncing) return;
+          // Epoch changed → the server restarted and its seq reset to a low
+          // number. Our lastSeq belongs to the dead seq space, so the seq<=lastSeq
+          // guard below would silently drop every post-restart delta forever.
+          // Resync to adopt the new epoch+seq instead. MUST precede the seq guard.
+          if (epochReset(message.epoch)) {
+            options.recorder?.event("epoch-change", {scope: options.scope, from: lastEpoch, to: String(message.epoch || ""), seq: Number(message.seq) || 0});
+            void resync();
+            return;
+          }
           // Already applied: a coalesced viewer delta whose seq range we fetched
           // past on connect arrives with seq <= lastSeq. The state already
           // reflects it, so ignore it rather than read the older prevSeq as a gap.
@@ -926,9 +963,16 @@
           return;
         }
 
-        // Full-state snapshot (initial / wholesale PUT / non-PATCH mutation).
+        // Full-state snapshot (initial / wholesale PUT / non-PATCH mutation). It
+        // carries the whole state plus its own seq+epoch, so it re-baselines us
+        // unconditionally — even across a server restart (changed epoch) there's
+        // nothing to resync; we just adopt it.
         const raw = JSON.stringify(message.data);
         if (message.seq) lastSeq = Number(message.seq) || lastSeq;
+        if (message.epoch) {
+          lastEpoch = String(message.epoch);
+          lastEpochSeeded = true;
+        }
         options.recorder?.event("snapshot", {scope: options.scope, seq: lastSeq});
         if (consumeLocalEcho(raw)) {
           if (!hasPendingSave()) setSyncStatus("saved");
@@ -973,9 +1017,16 @@
         const response = await fetch(options.stateURL);
         if (!response.ok) return;
         const seqHeader = response.headers.get("X-State-Seq");
+        const epochHeader = response.headers.get("X-State-Epoch");
         const data = await response.json();
         if (seqHeader != null) lastSeq = Number(seqHeader) || 0;
-        options.recorder?.event("resync", {scope: options.scope, seq: lastSeq});
+        // Adopt the server's current epoch so post-resync deltas chain instead of
+        // re-triggering an epoch reset every event.
+        if (epochHeader) {
+          lastEpoch = epochHeader;
+          lastEpochSeeded = true;
+        }
+        options.recorder?.event("resync", {scope: options.scope, seq: lastSeq, epoch: lastEpoch});
         options.onRemoteState?.(pending.overlay(data), {scope: options.scope, resync: true});
         if (!hasPendingSave()) setSyncStatus("saved");
       } catch (error) {

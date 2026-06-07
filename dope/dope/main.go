@@ -145,6 +145,17 @@ type server struct {
 	// in disk mode (assets served no-cache there).
 	assetETags   map[string]string
 	sendTelegram telegramSender
+	// botSecret gates the Telegram bridge endpoints (/api/telegram/*). The
+	// co-located bot sends it as X-Bot-Secret so only it can issue/consume login
+	// codes; empty disables the bridge. Set from DOPE_BOT_SECRET at startup.
+	botSecret string
+	// epoch is a per-process random token stamped on every SSE envelope, the
+	// GET /state header, and the page init. stateSeq resets to 0 on restart, so
+	// a long-lived client holding a high lastSeq would silently drop every
+	// post-restart delta (seq <= lastSeq) and diverge — the data-loss incident's
+	// amplifier. A changed epoch tells the client the seq space reset, so it
+	// resyncs instead of ignoring. Constant for a process's lifetime.
+	epoch string
 	// festViewCache holds JSON-marshaled FestView responses keyed by
 	// (festID, gameID). Invalidated wholesale per fest on broadcastState,
 	// since any of the data folded into FestView (venues, stages, matches)
@@ -266,6 +277,10 @@ func main() {
 	mux.HandleFunc("/api/auth/me", srv.handleAuthMe)
 	mux.HandleFunc("/api/auth/username", srv.handleAuthUsername)
 	mux.HandleFunc("/api/auth/password", srv.handleAuthPassword)
+	// Telegram bridge: the bot calls these (shared-secret gated) instead of
+	// opening fest.db itself — see telegram_bridge.go.
+	mux.HandleFunc("/api/telegram/register", srv.handleTelegramRegister)
+	mux.HandleFunc("/api/telegram/login", srv.handleTelegramLogin)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
 	mux.Handle("/static/", staticFileServer(assets, noCacheAssets, assetETags))
@@ -548,6 +563,11 @@ func newServer() (*server, error) {
 	if matchCode == "" {
 		matchCode = defaultMatchCode
 	}
+	epoch, err := randomBase32(8)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return &server{
 		db:              db,
 		festID:          festID,
@@ -555,6 +575,8 @@ func newServer() (*server, error) {
 		activeMatchCode: matchCode,
 		subscribers:     make(map[int64]map[chan event]bool),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		botSecret:       os.Getenv("DOPE_BOT_SECRET"),
+		epoch:           epoch,
 	}, nil
 }
 
@@ -703,8 +725,8 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			// lockdown is a server-side sentinel telling this viewer to drop the
 			// stream so it reloads into the (now-static) page; without it the
 			// browser's native EventSource would just auto-reconnect. Returning
-			// runs the deferred removeSubscriber, which closes ch — so only this
-			// goroutine ever closes its own channel (no double-close race).
+			// runs the deferred removeSubscriber, which removes ch from the
+			// subscriber map (it does not close ch — see removeSubscriber).
 			if ev.name == "lockdown" {
 				return
 			}
@@ -810,7 +832,16 @@ func (s *server) removeSubscriber(festID int64, ch chan event) {
 		}
 	}
 	s.subMu.Unlock()
-	close(ch)
+	// Deliberately do NOT close(ch). broadcastTo snapshots the channel list
+	// under subMu.RLock and then sends AFTER releasing the lock; closing here
+	// would race that send and panic ("send on closed channel"), which —
+	// because broadcasts also run from the detached delta-coalescing timer
+	// goroutine (no net/http recover above it) — crashes the whole process.
+	// Removal from the map is enough: future broadcasts won't see ch, and an
+	// in-flight broadcast that already snapshotted it just sends into the
+	// buffered channel (cap-8, drop-oldest) that nobody reads; ch is then GC'd
+	// once the broadcaster's snapshot is gone. The reader goroutine exits on
+	// ctx.Done()/lockdown and never relies on close as a signal.
 }
 
 // scheduleViewerCount fans out the viewer tally at most once per fest per

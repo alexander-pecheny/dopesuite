@@ -356,6 +356,25 @@ function scheduleStaticReload() {
   window.setTimeout(() => window.location.reload(), 4000 + Math.floor(Math.random() * 3000));
 }
 
+// lastEpoch tracks the server's per-process token (see server.epoch). On a
+// server restart the per-scope seq resets to 0, so cached MatchViews keep a high
+// seq the new space never reaches and every post-restart delta is silently
+// dropped as "already applied" — the bracket freezes. A changed epoch means the
+// seq space reset; reload to re-seed (the stage cache merges monotonically by
+// seq, so an in-place resync can't adopt the lower fresh seqs).
+let lastEpoch = "";
+let epochReloadScheduled = false;
+
+function epochChanged(message) {
+  const epoch = message?.epoch ? String(message.epoch) : "";
+  if (!epoch) return false;
+  if (lastEpoch === "") {
+    lastEpoch = epoch;
+    return false;
+  }
+  return epoch !== lastEpoch;
+}
+
 function connectEvents() {
   if (staticMode) {
     scheduleStaticReload();
@@ -370,6 +389,14 @@ function connectEvents() {
   });
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
+    // A changed server epoch means a restart reset the seq space; reload to
+    // re-seed rather than silently dropping every post-restart delta by seq.
+    if (epochChanged(message) && !epochReloadScheduled) {
+      epochReloadScheduled = true;
+      recorder?.event("epoch-reload", {mode: route.mode});
+      scheduleStaticReload();
+      return;
+    }
     // On the stats page, fold match edits into the cache in place and recompute
     // from memory — no refetch. Other scopes don't affect the aggregate.
     if (route.mode === "stats") {

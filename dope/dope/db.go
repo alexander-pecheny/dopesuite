@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"math/big"
 	"net/http"
 	"regexp"
@@ -106,12 +107,17 @@ type matchVenueRequest struct {
 // PrevSeq (delta only) is the seq the ops apply on top of, so a client with a
 // gap (dropped/late event) knows to resync instead of misapplying.
 type eventEnvelope struct {
-	Scope    string          `json:"scope"`
-	Revision int64           `json:"revision"`
-	Seq      uint64          `json:"seq,omitempty"`
-	PrevSeq  uint64          `json:"prevSeq,omitempty"`
-	Ops      json.RawMessage `json:"ops,omitempty"`
-	Data     json.RawMessage `json:"data,omitempty"`
+	Scope    string `json:"scope"`
+	Revision int64  `json:"revision"`
+	Seq      uint64 `json:"seq,omitempty"`
+	PrevSeq  uint64 `json:"prevSeq,omitempty"`
+	// Epoch is the server's per-process token. It changes on restart (when the
+	// per-scope seq counter resets to 0), so a client that sees a new epoch
+	// knows its lastSeq belongs to a dead seq space and must resync rather than
+	// silently dropping the lower-numbered deltas. See server.epoch.
+	Epoch string          `json:"epoch,omitempty"`
+	Ops   json.RawMessage `json:"ops,omitempty"`
+	Data  json.RawMessage `json:"data,omitempty"`
 }
 
 type festScheme struct {
@@ -288,7 +294,18 @@ func buildSqliteDSN(path string) string {
 		"_pragma=busy_timeout(5000)",
 		"_pragma=foreign_keys(1)",
 		"_pragma=journal_mode(WAL)",
-		"_pragma=synchronous(NORMAL)",
+		// synchronous=FULL fsyncs the WAL on every commit, so an acknowledged
+		// (200 OK) edit can never be rolled back by a crash or restart — WAL +
+		// NORMAL only guarantees durability across an app crash in theory, and a
+		// crash-loop here once silently reverted ~3 min of committed edits to the
+		// last checkpoint. Measured cost on prod's disk is ~0.8 ms/commit (~1160
+		// commits/s ceiling) vs an observed peak of ~10 edits/s, i.e. negligible.
+		"_pragma=synchronous(FULL)",
+		// Cap the WAL file so it's truncated back down after a checkpoint instead
+		// of growing without bound (prod's WAL had ballooned past 500 MB — a
+		// long-lived second connection from the bot kept pinning it; that's gone
+		// now, but bound it regardless). 64 MB comfortably spans a write burst.
+		"_pragma=journal_size_limit(67108864)",
 		"_pragma=cache_size(-65536)",
 		"_pragma=temp_store(MEMORY)",
 	}
@@ -1247,7 +1264,10 @@ type gameInitPayload struct {
 	// its lastSeq to exactly the state it was handed. Without it every viewer
 	// would start at 0 and the first remote edit would gap-resync them all at
 	// once (a thundering-herd full-state refetch — the very thing deltas avoid).
-	Seq     uint64 `json:"seq"`
+	Seq uint64 `json:"seq"`
+	// Epoch seeds the SSE client's epoch so it can detect a later server restart
+	// (seq reset) and resync instead of silently dropping post-restart deltas.
+	Epoch   string `json:"epoch,omitempty"`
 	CanEdit bool   `json:"canEdit,omitempty"`
 	// Static marks a snapshot served in static (lockdown) mode: the client skips
 	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
@@ -1430,6 +1450,7 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&sche
 	payload.Scheme = json.RawMessage(schemeJSON)
 	payload.State = json.RawMessage(stateJSON)
 	payload.Seq = s.currentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
+	payload.Epoch = s.epoch
 	if festBytes, err := s.festViewBytes(scope.FestID, scope.GameID); err == nil {
 		payload.Fest = festBytes
 	}
@@ -3260,7 +3281,7 @@ func (s *server) broadcastState(festID int64, scope string, revision int64, payl
 	s.flushDeltaLocked(scope)
 	seq := s.bumpSeqLocked(scope)
 	if s.db != nil {
-		payload = eventSnapshotJSON(scope, revision, seq, payload)
+		payload = eventSnapshotJSON(scope, s.epoch, revision, seq, payload)
 	}
 	s.broadcast(event{festID: festID, revision: revision, data: payload})
 	return seq
@@ -3317,7 +3338,7 @@ func (s *server) broadcastStateDelta(festID int64, scope string, revision int64,
 	seq := s.bumpSeqLocked(scope)
 	// Editors: immediate, uncoalesced — chains per edit (prevSeq = seq-1).
 	s.broadcastTo(event{festID: festID, revision: revision,
-		data: eventDeltaJSON(scope, revision, seq, prev, ops)}, audEditors)
+		data: eventDeltaJSON(scope, s.epoch, revision, seq, prev, ops)}, audEditors)
 	// Viewers: buffer for a merged broadcast at window end.
 	if s.deltaBuf == nil {
 		s.deltaBuf = map[string]*pendingDelta{}
@@ -3327,7 +3348,19 @@ func (s *server) broadcastStateDelta(festID int64, scope string, revision int64,
 		pd = &pendingDelta{festID: festID, prevSeq: prev}
 		s.deltaBuf[scope] = pd
 		sc := scope
-		pd.timer = time.AfterFunc(deltaCoalesceWindow, func() { s.flushDelta(sc) })
+		// This fires in a detached timer goroutine with no net/http recover
+		// above it, so any panic here would crash the whole process. The
+		// close-race that caused exactly that is fixed in removeSubscriber, but
+		// keep a recover as defense-in-depth: a stray panic in the viewer
+		// fan-out must degrade to a dropped broadcast, never a server crash.
+		pd.timer = time.AfterFunc(deltaCoalesceWindow, func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("recovered panic in delta flush for scope %s: %v", sc, r)
+				}
+			}()
+			s.flushDelta(sc)
+		})
 	}
 	pd.festID = festID
 	pd.revision = revision
@@ -3356,7 +3389,7 @@ func (s *server) flushDeltaLocked(scope string) {
 	if pd.timer != nil {
 		pd.timer.Stop()
 	}
-	payload := eventDeltaJSON(scope, pd.revision, pd.lastSeq, pd.prevSeq, mergeOpsArrays(pd.ops))
+	payload := eventDeltaJSON(scope, s.epoch, pd.revision, pd.lastSeq, pd.prevSeq, mergeOpsArrays(pd.ops))
 	s.broadcastTo(event{festID: pd.festID, revision: pd.revision, data: payload}, audViewers)
 }
 
@@ -3458,11 +3491,12 @@ func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
 }
 
 // eventSnapshotJSON wraps a full-state payload as a snapshot envelope.
-func eventSnapshotJSON(scope string, revision int64, seq uint64, payload []byte) []byte {
+func eventSnapshotJSON(scope, epoch string, revision int64, seq uint64, payload []byte) []byte {
 	data, err := json.Marshal(eventEnvelope{
 		Scope:    scope,
 		Revision: revision,
 		Seq:      seq,
+		Epoch:    epoch,
 		Data:     json.RawMessage(payload),
 	})
 	if err != nil {
@@ -3472,12 +3506,13 @@ func eventSnapshotJSON(scope string, revision int64, seq uint64, payload []byte)
 }
 
 // eventDeltaJSON wraps an ops array as a delta envelope carrying (seq, prevSeq).
-func eventDeltaJSON(scope string, revision int64, seq, prevSeq uint64, ops []byte) []byte {
+func eventDeltaJSON(scope, epoch string, revision int64, seq, prevSeq uint64, ops []byte) []byte {
 	data, err := json.Marshal(eventEnvelope{
 		Scope:    scope,
 		Revision: revision,
 		Seq:      seq,
 		PrevSeq:  prevSeq,
+		Epoch:    epoch,
 		Ops:      json.RawMessage(ops),
 	})
 	if err != nil {

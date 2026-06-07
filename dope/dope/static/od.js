@@ -45,6 +45,7 @@ let scheme = null;
 let state = null;
 let fest = null;
 let initialStateSeq = 0; // game-state scope seq at page render; seeds the SSE client's lastSeq
+let initialStateEpoch = ""; // server epoch at page render; seeds the SSE client's epoch baseline
 let tourLengths = [];
 let totalQuestions = 0;
 let renderedTab = null;
@@ -121,6 +122,7 @@ function consumeGameInit() {
   window.__GAME_INIT__ = null;
   if (init.gameID != null) scopeGameID = String(init.gameID);
   if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
+  if (init.epoch != null) initialStateEpoch = String(init.epoch);
   scheme = init.scheme;
   state = init.state;
   fest = init.fest || null;
@@ -2702,6 +2704,7 @@ function syncState() {
     scope: `game-state:${scopeGameID}`,
     getState: () => state,
     getInitialSeq: () => initialStateSeq,
+    getInitialEpoch: () => initialStateEpoch,
     setStatus,
     onRemoteState: applyRemoteState,
     onViewers: (count) => viewerCounter.setCount(count),
