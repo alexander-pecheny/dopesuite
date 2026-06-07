@@ -118,6 +118,10 @@ type eventEnvelope struct {
 	Epoch string          `json:"epoch,omitempty"`
 	Ops   json.RawMessage `json:"ops,omitempty"`
 	Data  json.RawMessage `json:"data,omitempty"`
+	// EmitMs is the server's unix-millis emit time, stamped on deltas so a client
+	// can log the server→render delivery leg (Date.now()-EmitMs). Cross-machine,
+	// so it carries client/server clock skew — a rough delivery gauge, not exact.
+	EmitMs int64 `json:"emitMs,omitempty"`
 }
 
 type festScheme struct {
@@ -768,6 +772,222 @@ insert or ignore into schema_versions(version, applied_at) values(11, strftime('
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(12, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
 	}
+	// v13: backfill team numbers so every active fest_team has one. Team number
+	// is the universal team identity across game formats; an editing guard
+	// blocks play until teams are numbered, and this backfill makes existing
+	// fests editable without a manual re-number. Gated on the version row so it
+	// runs exactly once and does not undo an intentional later "clear numbers".
+	var hasV13 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 13`).Scan(&hasV13); err != nil {
+		return err
+	}
+	if hasV13 == 0 {
+		if err := backfillFestTeamNumbers(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(13, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
+	// v14: give the EK game-scoped `teams` table a `number` natural key (the same
+	// universal team identity OD/KSI use). teams.id stays the physical FK for
+	// gameplay rows (ON DELETE CASCADE preserved); number drives seed matching so
+	// re-seeding follows teams by identity and same-named teams stay distinct.
+	// Nullable: scheme-defined teams without a printed number keep working.
+	if err := addColumnsIfMissing(db, "teams", []columnSpec{
+		{Name: "number", Type: "INTEGER"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`create unique index if not exists teams_fest_number_idx on teams(fest_id, number) where number is not null`); err != nil {
+		return err
+	}
+	var hasV14 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 14`).Scan(&hasV14); err != nil {
+		return err
+	}
+	if hasV14 == 0 {
+		if err := backfillEKTeamNumbers(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(14, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// backfillEKTeamNumbers gives existing EK `teams` rows a number, matched to
+// fest_teams by name, so re-seeding finds them by identity instead of creating
+// duplicates. Best-effort and conflict-free: ambiguous (duplicate) names are
+// skipped, and a number already claimed by another teams row in the fest is not
+// reused — those rows stay null (the unresolvable legacy ambiguity this whole
+// change exists to prevent going forward). Gated by the caller to run once.
+func backfillEKTeamNumbers(db *sql.DB) error {
+	festRows, err := db.Query(`select distinct fest_id from teams where number is null`)
+	if err != nil {
+		return err
+	}
+	var festIDs []int64
+	for festRows.Next() {
+		var id int64
+		if err := festRows.Scan(&id); err != nil {
+			festRows.Close()
+			return err
+		}
+		festIDs = append(festIDs, id)
+	}
+	if err := festRows.Err(); err != nil {
+		festRows.Close()
+		return err
+	}
+	festRows.Close()
+
+	for _, festID := range festIDs {
+		// fest_teams name -> number, dropping ambiguous duplicate names.
+		numByName := map[string]int64{}
+		ambiguous := map[string]bool{}
+		ftRows, err := db.Query(`select name, number from fest_teams where fest_id = ? and deleted = 0 and number is not null`, festID)
+		if err != nil {
+			return err
+		}
+		for ftRows.Next() {
+			var name string
+			var number int64
+			if err := ftRows.Scan(&name, &number); err != nil {
+				ftRows.Close()
+				return err
+			}
+			key := seedTeamNameKey(name)
+			if _, seen := numByName[key]; seen {
+				ambiguous[key] = true
+			} else {
+				numByName[key] = number
+			}
+		}
+		if err := ftRows.Err(); err != nil {
+			ftRows.Close()
+			return err
+		}
+		ftRows.Close()
+		for key := range ambiguous {
+			delete(numByName, key)
+		}
+
+		// Numbers already claimed by teams rows in this fest.
+		claimed := map[int64]bool{}
+		clRows, err := db.Query(`select number from teams where fest_id = ? and number is not null`, festID)
+		if err != nil {
+			return err
+		}
+		for clRows.Next() {
+			var n int64
+			if err := clRows.Scan(&n); err != nil {
+				clRows.Close()
+				return err
+			}
+			claimed[n] = true
+		}
+		if err := clRows.Err(); err != nil {
+			clRows.Close()
+			return err
+		}
+		clRows.Close()
+
+		teamRows, err := db.Query(`select id, name from teams where fest_id = ? and number is null order by id`, festID)
+		if err != nil {
+			return err
+		}
+		type pending struct {
+			id  int64
+			num int64
+		}
+		var assigns []pending
+		for teamRows.Next() {
+			var id int64
+			var name string
+			if err := teamRows.Scan(&id, &name); err != nil {
+				teamRows.Close()
+				return err
+			}
+			num, ok := numByName[seedTeamNameKey(name)]
+			if ok && !claimed[num] {
+				claimed[num] = true
+				assigns = append(assigns, pending{id: id, num: num})
+			}
+		}
+		if err := teamRows.Err(); err != nil {
+			teamRows.Close()
+			return err
+		}
+		teamRows.Close()
+		for _, a := range assigns {
+			if _, err := db.Exec(`update teams set number = ? where id = ?`, a.num, a.id); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// backfillFestTeamNumbers assigns a number to every active (non-deleted)
+// fest_team that lacks one, per fest, continuing past the largest number ever
+// used in that fest (soft-deleted rows included, so a returning team can't
+// collide). Deterministic order (position, id) matches the import/auto-assign
+// ordering. Idempotent and a no-op once every active team is numbered; the
+// caller gates it on the v13 version row so a later host "clear numbers" is not
+// silently undone on the next startup.
+func backfillFestTeamNumbers(db *sql.DB) error {
+	rows, err := db.Query(`select distinct fest_id from fest_teams where deleted = 0 and number is null`)
+	if err != nil {
+		return err
+	}
+	var festIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		festIDs = append(festIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	for _, festID := range festIDs {
+		var maxNum sql.NullInt64
+		if err := db.QueryRow(`select max(number) from fest_teams where fest_id = ?`, festID).Scan(&maxNum); err != nil {
+			return err
+		}
+		next := maxNum.Int64 + 1 // NullInt64 zero value is 0, so this is 1 when no numbers exist
+		idRows, err := db.Query(`select id from fest_teams where fest_id = ? and deleted = 0 and number is null order by position, id`, festID)
+		if err != nil {
+			return err
+		}
+		var ids []int64
+		for idRows.Next() {
+			var id int64
+			if err := idRows.Scan(&id); err != nil {
+				idRows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		if err := idRows.Err(); err != nil {
+			idRows.Close()
+			return err
+		}
+		idRows.Close()
+		for _, id := range ids {
+			if _, err := db.Exec(`update fest_teams set number = ? where id = ?`, next, id); err != nil {
+				return err
+			}
+			next++
+		}
+	}
 	return nil
 }
 
@@ -1249,6 +1469,9 @@ type hostInitPayload struct {
 	Fest       json.RawMessage `json:"fest,omitempty"`
 	Match      *MatchView      `json:"match,omitempty"`
 	SeedImport *seedImportView `json:"seedImport,omitempty"`
+	// TeamsUnnumbered mirrors gameInitPayload.TeamsUnnumbered for the EK host
+	// surface: editing is blocked server-side until every team has a number.
+	TeamsUnnumbered bool `json:"teamsUnnumbered,omitempty"`
 }
 
 type gameInitPayload struct {
@@ -1269,6 +1492,11 @@ type gameInitPayload struct {
 	// (seq reset) and resync instead of silently dropping post-restart deltas.
 	Epoch   string `json:"epoch,omitempty"`
 	CanEdit bool   `json:"canEdit,omitempty"`
+	// TeamsUnnumbered is true when the fest has active teams that lack a number.
+	// Team number is the universal team identity, so editing is blocked server-
+	// side (see requireNumberedTeams); the client uses this to show a banner
+	// pointing the host at the numbers page.
+	TeamsUnnumbered bool `json:"teamsUnnumbered,omitempty"`
 	// Static marks a snapshot served in static (lockdown) mode: the client skips
 	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
 	Static bool `json:"static,omitempty"`
@@ -1454,6 +1682,9 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&sche
 	if festBytes, err := s.festViewBytes(scope.FestID, scope.GameID); err == nil {
 		payload.Fest = festBytes
 	}
+	if unnumbered, err := festHasUnnumberedTeams(ctx, s.db, scope.FestID); err == nil {
+		payload.TeamsUnnumbered = unnumbered
+	}
 	return payload, nil
 }
 
@@ -1520,6 +1751,9 @@ func (s *server) buildHostInit(ctx context.Context, route hostInitRoute) (hostIn
 		return payload, err
 	}
 	payload.Fest = festBytes
+	if unnumbered, err := festHasUnnumberedTeams(ctx, s.db, route.FestID); err == nil {
+		payload.TeamsUnnumbered = unnumbered
+	}
 
 	switch route.Mode {
 	case "match":
@@ -3476,8 +3710,16 @@ func (s *server) invalidateFestViewCache(festID int64) {
 // broadcastState.
 func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
 	if data, ok := s.cachedFestViewBytes(festID, gameID); ok {
+		if s.editMetricsOn {
+			s.festViewHits.Add(1)
+		}
 		return data, nil
 	}
+	// Cache miss: rebuild from the DB. Edits invalidate the whole fest's cache
+	// (see invalidateFestViewCache), so under concurrent editing this rebuild can
+	// fire on every reader request — the suspected amplification. Time it so the
+	// live test shows whether it's actually costly.
+	tRebuild := nowIf(s.editMetricsOn)
 	view, err := s.loadFestViewSnapshot(festID, gameID)
 	if err != nil {
 		return nil, err
@@ -3487,6 +3729,11 @@ func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
 		return nil, err
 	}
 	s.storeFestViewBytes(festID, gameID, data)
+	if s.editMetricsOn {
+		s.festViewMisses.Add(1)
+		log.Printf("editmetric festview fest=%d game=%d rebuild_ms=%s bytes=%d",
+			festID, gameID, fmtMs(time.Since(tRebuild)), len(data))
+	}
 	return data, nil
 }
 
@@ -3514,6 +3761,7 @@ func eventDeltaJSON(scope, epoch string, revision int64, seq, prevSeq uint64, op
 		PrevSeq:  prevSeq,
 		Epoch:    epoch,
 		Ops:      json.RawMessage(ops),
+		EmitMs:   time.Now().UnixMilli(),
 	})
 	if err != nil {
 		return ops

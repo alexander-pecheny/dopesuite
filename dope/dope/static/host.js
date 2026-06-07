@@ -196,6 +196,7 @@ function consumeHostInit() {
   // it just served — trust the route mode + resource codes.
   if (route.mode === "match" && init.route.matchCode !== route.matchCode) return false;
   if (route.mode === "stage" && init.route.stageCode !== route.stageCode) return false;
+  if (init.teamsUnnumbered) gameTable.mountUnnumberedBanner(route.festID);
   window.__HOST_INIT__ = null;
 
   adoptFestView(init.fest);
@@ -805,8 +806,13 @@ function overlayPendingMatch(matchCode, view) {
 // si.js/od.js refreshPendingMarkers. Called after a match renders and after an
 // edit/ack so a cell stays marked until the server confirms it.
 function refreshMatchPendingMarkers(matchCode) {
-  const entry = matchCode ? ekPending.get(matchScopeFor(matchCode)) : null;
-  hostRoot.querySelectorAll(".answer-cell").forEach((cell) => {
+  if (!matchCode) return;
+  const entry = ekPending.get(matchScopeFor(matchCode));
+  // Scope to THIS match's cells: in a stage view many battles are on screen at
+  // once and every battle has cells at the same (team-slot, theme, answer)
+  // coordinates, so an unscoped selector would mark — and never clear — the
+  // same-positioned cells in every other battle.
+  hostRoot.querySelectorAll(`.answer-cell[data-match-code="${cssEscape(matchCode)}"]`).forEach((cell) => {
     let pending = false;
     if (entry) {
       const team = Number(cell.dataset.team);
@@ -1685,6 +1691,10 @@ function applyUpdatedMatch(updated, matchCode) {
   updated = overlayPendingMatch(matchCode, updated);
   if (route.mode === "stage") {
     stageCache.applyMatchUpdate(updated);
+    // Re-evaluate this match's spinners against the now-acked ops; without this
+    // the stage path never clears the per-cell pending markers (it returns
+    // before the single-match path's refresh below).
+    refreshMatchPendingMarkers(matchCode);
     return;
   }
   // Drop a stale optimistic response: with several edits in flight, POST

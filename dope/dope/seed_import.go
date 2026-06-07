@@ -57,6 +57,7 @@ type ksiSeedCandidate struct {
 	SourceIndex int
 	SourceRank  int
 	Name        string
+	Number      int // team number (universal identity); 0 for legacy number-less KSI state
 	Metrics     ksiSeedMetrics
 }
 
@@ -67,6 +68,7 @@ type ksiSeedMetrics struct {
 }
 
 type seedRosterTeam struct {
+	Number  int64
 	Name    string
 	City    string
 	Players []seedRosterPlayer
@@ -106,6 +108,9 @@ func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, 
 	case "ksi":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !s.requireNumberedTeams(w, r, scope.FestID) {
 			return
 		}
 		view, revision, stateJSON, err := s.importSeedsFromKSI(r.Context(), scope)
@@ -186,12 +191,43 @@ func (s *server) importSeedsFromKSI(ctx context.Context, scope festScope) (seedI
 		return seedImportView{}, 0, nil, err
 	}
 
+	// Index the roster by number (the identity) and by name (to recover a number
+	// for a legacy number-less KSI state). First entry wins on duplicates.
+	rosterByNumber := make(map[int64]seedRosterTeam, len(roster))
+	rosterByName := make(map[string]seedRosterTeam, len(roster))
+	for _, rt := range roster {
+		if rt.Number > 0 {
+			if _, ok := rosterByNumber[rt.Number]; !ok {
+				rosterByNumber[rt.Number] = rt
+			}
+		}
+		if key := seedTeamNameKey(rt.Name); key != "" {
+			if _, ok := rosterByName[key]; !ok {
+				rosterByName[key] = rt
+			}
+		}
+	}
+
 	rows := make([]seedImportStateRow, 0, len(candidates))
 	seenTeams := make(map[int64]string, len(candidates))
 	for _, candidate := range candidates {
-		teamRoster := roster[seedTeamNameKey(candidate.Name)]
-		city := teamRoster.City
-		teamID, city, err := ensureSeedTeam(ctx, tx, scope.FestID, candidate.Name, city, teamRoster.Players)
+		// Prefer the KSI participant's own number; for a legacy number-less state
+		// recover it from the numbered fest roster by name when unambiguous.
+		number := int64(candidate.Number)
+		rt := rosterByNumber[number]
+		if number <= 0 {
+			if m, ok := rosterByName[seedTeamNameKey(candidate.Name)]; ok {
+				rt = m
+				number = m.Number
+			}
+		}
+		var teamID int64
+		var city string
+		if number > 0 {
+			teamID, city, err = ensureSeedTeamByNumber(ctx, tx, scope.FestID, number, candidate.Name, rt.City, rt.Players)
+		} else {
+			teamID, city, err = ensureSeedTeam(ctx, tx, scope.FestID, candidate.Name, rt.City, rt.Players)
+		}
 		if err != nil {
 			return seedImportView{}, 0, nil, err
 		}
@@ -571,14 +607,15 @@ limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
 		return 0, nil, errors.New("в КСИ нет команд")
 	}
 	candidates := make([]ksiSeedCandidate, 0, len(participants))
-	for index, name := range participants {
-		name = strings.TrimSpace(name)
+	for index, p := range participants {
+		name := strings.TrimSpace(p.Name)
 		if name == "" {
 			name = fmt.Sprintf("Команда %d", index+1)
 		}
 		candidates = append(candidates, ksiSeedCandidate{
 			SourceIndex: index,
 			Name:        name,
+			Number:      p.Number,
 			Metrics:     ksiMetricsForParticipant(themes, index),
 		})
 	}
@@ -591,9 +628,9 @@ limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
 	return sourceGameID, candidates, nil
 }
 
-func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]string, [][][]string, error) {
+func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]ksiParticipant, [][][]string, error) {
 	var state struct {
-		Participants []string `json:"participants"`
+		Participants json.RawMessage `json:"participants"`
 		Themes       []struct {
 			Answers [][]string `json:"answers"`
 		} `json:"themes"`
@@ -601,15 +638,16 @@ func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]string, [][][]string
 	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
 		return nil, nil, fmt.Errorf("не удалось разобрать состояние КСИ: %w", err)
 	}
-	participants := state.Participants
+	// Participants may be the current [{number,name}] objects or legacy names.
+	participants := parseKSIParticipants(state.Participants)
 	if len(participants) == 0 {
 		var scheme struct {
-			Participants []string `json:"participants"`
+			Participants json.RawMessage `json:"participants"`
 		}
 		if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
 			return nil, nil, fmt.Errorf("не удалось разобрать схему КСИ: %w", err)
 		}
-		participants = scheme.Participants
+		participants = parseKSIParticipants(scheme.Participants)
 	}
 	themes := make([][][]string, 0, len(state.Themes))
 	for _, theme := range state.Themes {
@@ -661,9 +699,9 @@ func compareKSISeedCandidates(a, b ksiSeedCandidate) int {
 	return a.SourceIndex - b.SourceIndex
 }
 
-func loadSeedRosterTeams(ctx context.Context, q dbQueryer, festID int64) (map[string]seedRosterTeam, error) {
+func loadSeedRosterTeams(ctx context.Context, q dbQueryer, festID int64) ([]seedRosterTeam, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, name, city
+select id, coalesce(number, 0), name, city
 from fest_teams
 where fest_id = ? and deleted = 0
 order by position, id`, festID)
@@ -673,14 +711,15 @@ order by position, id`, festID)
 	defer rows.Close()
 
 	type teamRow struct {
-		ID   int64
-		Name string
-		City string
+		ID     int64
+		Number int64
+		Name   string
+		City   string
 	}
 	var teamRows []teamRow
 	for rows.Next() {
 		var row teamRow
-		if err := rows.Scan(&row.ID, &row.Name, &row.City); err != nil {
+		if err := rows.Scan(&row.ID, &row.Number, &row.Name, &row.City); err != nil {
 			return nil, err
 		}
 		teamRows = append(teamRows, row)
@@ -692,17 +731,13 @@ order by position, id`, festID)
 		return nil, err
 	}
 
-	out := make(map[string]seedRosterTeam, len(teamRows))
+	out := make([]seedRosterTeam, 0, len(teamRows))
 	for _, row := range teamRows {
 		players, err := loadSeedRosterPlayers(ctx, q, row.ID)
 		if err != nil {
 			return nil, err
 		}
-		key := seedTeamNameKey(row.Name)
-		if _, exists := out[key]; exists {
-			continue
-		}
-		out[key] = seedRosterTeam{Name: row.Name, City: row.City, Players: players}
+		out = append(out, seedRosterTeam{Number: row.Number, Name: row.Name, City: row.City, Players: players})
 	}
 	return out, nil
 }
@@ -753,6 +788,57 @@ values(?, ?, ?)`, festID, name, city)
 			return 0, "", err
 		}
 		existingCity = city
+	}
+	if len(players) > 0 {
+		if err := replaceSeedTeamRoster(ctx, tx, festID, teamID, players); err != nil {
+			return 0, "", err
+		}
+	}
+	return teamID, existingCity, nil
+}
+
+// ensureSeedTeamByNumber finds or creates the game-scoped team identified by its
+// universal NUMBER (not name), updating name/city to the current roster. Because
+// number is the identity, two same-named teams stay distinct and re-seeding
+// follows a team across name changes — the EK side of the team-number
+// unification. Falls back to name-keyed ensureSeedTeam when no number is known.
+func ensureSeedTeamByNumber(ctx context.Context, tx *sql.Tx, festID, number int64, name, city string, players []seedRosterPlayer) (int64, string, error) {
+	name = strings.TrimSpace(name)
+	city = strings.TrimSpace(city)
+	if number <= 0 {
+		return ensureSeedTeam(ctx, tx, festID, name, city, players)
+	}
+	if name == "" {
+		return 0, "", errors.New("empty team name")
+	}
+	var teamID int64
+	var existingName, existingCity string
+	err := tx.QueryRowContext(ctx, `
+select id, name, city from teams where fest_id = ? and number = ? limit 1`, festID, number).Scan(&teamID, &existingName, &existingCity)
+	if errors.Is(err, sql.ErrNoRows) {
+		teamID, err = insertReturningID(ctx, tx, `
+insert into teams(fest_id, name, city, number) values(?, ?, ?, ?)`, festID, name, city, number)
+		if err != nil {
+			return 0, "", err
+		}
+		existingCity = city
+	} else if err != nil {
+		return 0, "", err
+	} else {
+		// Keep the display name/city in step with the current roster.
+		newName, newCity := existingName, existingCity
+		if name != "" {
+			newName = name
+		}
+		if city != "" {
+			newCity = city
+		}
+		if newName != existingName || newCity != existingCity {
+			if _, err := tx.ExecContext(ctx, `update teams set name = ?, city = ? where id = ?`, newName, newCity, teamID); err != nil {
+				return 0, "", err
+			}
+			existingCity = newCity
+		}
 	}
 	if len(players) > 0 {
 		if err := replaceSeedTeamRoster(ctx, tx, festID, teamID, players); err != nil {

@@ -747,6 +747,25 @@
       return epoch !== lastEpoch;
     }
 
+    // Felt-latency instrumentation. Every sample goes into the client recorder
+    // ring (downloadable via the log button), and is mirrored to the console when
+    // localStorage["dope.editmetrics"] === "1" so a tester with devtools sees it
+    // live. monoNow uses the monotonic clock for the own-edit round-trip (immune
+    // to wall-clock jumps); delivery latency necessarily uses Date.now() against
+    // the server's emit stamp, so it carries clock skew (rough gauge, not exact).
+    const feltConsole = (() => {
+      try { return window.localStorage.getItem("dope.editmetrics") === "1"; }
+      catch (_e) { return false; }
+    })();
+    const monoNow = () => (typeof performance !== "undefined" && performance.now
+      ? performance.now() : Date.now());
+    function feltMetric(type, data) {
+      options.recorder?.event(type, data);
+      if (feltConsole) {
+        try { console.debug(`editmetric ${type} scope=${options.scope}`, data); } catch (_e) {}
+      }
+    }
+
     function save() {
       if (options.readonly) return;
       saveQueued = true;
@@ -817,6 +836,7 @@
       patchInFlight = true;
       let saved = false;
       let retry = true;
+      const tSend = monoNow();
       try {
         const response = await fetch(options.stateURL, {
           method: "PATCH",
@@ -833,6 +853,9 @@
           throw new Error(await response.text());
         }
         const updated = await response.json();
+        // Own-edit felt latency: keystroke-batch send to server-confirmed (the
+        // moment the optimistic cell stops being "pending"). Single clock.
+        feltMetric("patch-rtt", {rtt_ms: Math.round(monoNow() - tSend), ops: ops.length, status: response.status});
         pending.ack(ops);
         rememberLocalEcho(JSON.stringify(updated));
         options.onRemoteState?.(pending.overlay(updated), {local: true});
@@ -958,6 +981,12 @@
           }
           lastSeq = Number(message.seq) || lastSeq;
           options.recorder?.event("delta", {scope: options.scope, seq: lastSeq, prevSeq: Number(message.prevSeq) || 0, ops: message.ops.length});
+          // Delivery leg: server emit (message.emitMs) to this client rendering
+          // the delta — the latency a watching co-editor/viewer feels. Carries
+          // client/server clock skew; read as a rough gauge.
+          if (message.emitMs) {
+            feltMetric("delta-latency", {delivery_ms: Date.now() - Number(message.emitMs), seq: lastSeq, ops: message.ops.length});
+          }
           options.onRemoteState?.(pending.overlay(next), message);
           if (!hasPendingSave()) setSyncStatus("saved");
           return;
@@ -1687,6 +1716,35 @@
 
   function editorHrefForCurrentLocation() {
     return "/host" + window.location.pathname + window.location.search;
+  }
+
+  // mountUnnumberedBanner shows a sticky notice when the fest has teams without
+  // numbers. Team number is the universal team identity, so the server blocks
+  // result editing until every team is numbered (409); this points the host at
+  // the numbers page. Idempotent — re-mounting is a no-op while the banner is up.
+  function mountUnnumberedBanner(festID) {
+    if (!festID || document.querySelector(".dope-unnumbered-banner")) return null;
+    const bar = document.createElement("div");
+    bar.className = "dope-unnumbered-banner";
+    Object.assign(bar.style, {
+      position: "sticky",
+      top: "0",
+      zIndex: "2147483600",
+      background: "#fde68a",
+      color: "#7c2d12",
+      font: "13px/1.4 system-ui, sans-serif",
+      padding: "8px 12px",
+      textAlign: "center",
+      borderBottom: "1px solid #f59e0b",
+    });
+    bar.append("Командам не присвоены номера — редактирование результатов заблокировано. ");
+    const link = document.createElement("a");
+    link.href = `/host/fest/${festID}/numbers`;
+    link.textContent = "Присвоить номера";
+    Object.assign(link.style, {color: "inherit", fontWeight: "600", textDecoration: "underline"});
+    bar.appendChild(link);
+    document.body.prepend(bar);
+    return bar;
   }
 
   function mountViewerLink(statusNode) {
@@ -2487,6 +2545,7 @@
     createStatusReporter,
     mountEditorLink,
     mountViewerLink,
+    mountUnnumberedBanner,
     parseGameRoute,
     createTeamNameOverflowController,
     fitEKStageTeamName,

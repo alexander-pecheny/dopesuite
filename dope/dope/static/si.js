@@ -109,6 +109,7 @@ function consumeGameInit() {
   if (init.gameID != null) scopeGameID = String(init.gameID);
   if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
   if (init.epoch != null) initialStateEpoch = String(init.epoch);
+  if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
   scheme = init.scheme;
   state = init.state;
   fest = init.fest || null;
@@ -281,7 +282,7 @@ function buildTable() {
   }));
   const rows = detailedPlayerOrder().map((playerIndex) => ({
     rowClassName: isActivePlayerRow(playerIndex) ? "active-team-row" : "",
-    nameCell: nameCell(state.participants[playerIndex], playerIndex),
+    nameCell: nameCell(participantName(playerIndex), playerIndex),
     totalCell: indexedCell(scores.totals[playerIndex], "sticky sticky-total number total-cell", {player: playerIndex}),
     placeCell: showPlaceColumn
       ? indexedCell(scores.places[playerIndex] || "", "sticky sticky-place number place-cell", {player: playerIndex})
@@ -591,8 +592,34 @@ function compareParticipantNames(a, b) {
   return byName || a - b;
 }
 
+// Participants are stored as {number, name} objects in team mode — number is the
+// universal team identity — but as bare name strings in player mode / legacy
+// states. These read either shape.
+function participantName(index) {
+  const p = state.participants?.[index];
+  if (typeof p === "string") return p;
+  return p && typeof p === "object" ? String(p.name ?? "") : "";
+}
+
+function participantNumber(index) {
+  const p = state.participants?.[index];
+  return p && typeof p === "object" ? Number(p.number) || 0 : 0;
+}
+
+// participantsEqual compares two participant arrays by identity (number + name),
+// tolerating both shapes, so in-place patching isn't defeated by fresh object
+// references arriving on every delta.
+function participantsEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  const key = (p) => (typeof p === "string" ? `n:${p}` : `${p?.number || 0}:${p?.name ?? ""}`);
+  for (let i = 0; i < a.length; i++) {
+    if (key(a[i]) !== key(b[i])) return false;
+  }
+  return true;
+}
+
 function participantLabel(index) {
-  const name = String(state.participants[index] || "").trim();
+  const name = participantName(index).trim();
   return name || participantFallback(index);
 }
 
@@ -601,7 +628,9 @@ function nameCell(name, playerIndex) {
   cell.className = "sticky sticky-name team-name";
   if (isTeamMode()) {
     cell.className = "sticky sticky-name team-name od-detailed-team-cell ksi-detailed-team-cell";
-    const labelText = name || participantFallback(playerIndex);
+    const number = participantNumber(playerIndex);
+    const baseName = name || participantFallback(playerIndex);
+    const labelText = number > 0 ? `${number}. ${baseName}` : baseName;
     const layout = document.createElement("span");
     layout.className = "od-detailed-team-layout";
 
@@ -912,12 +941,12 @@ function scoreNode(name, values) {
 
 function patchTable(previous = null) {
   if (!renderedTable || !tableIndex) return false;
-  const participantNamesChanged = previous?.participants && !gameTable.sameArray(previous.participants, state.participants);
+  const participantNamesChanged = previous?.participants && !participantsEqual(previous.participants, state.participants);
   const changedThemes = new Map();
-  state.participants.forEach((participant, playerIndex) => {
+  state.participants.forEach((_, playerIndex) => {
     const input = tableIndex.get("input", {player: playerIndex});
     if (input) {
-      if (document.activeElement !== input) input.value = participant || "";
+      if (document.activeElement !== input) input.value = participantName(playerIndex);
       input.placeholder = participantFallback(playerIndex);
     }
     for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
@@ -953,7 +982,7 @@ function canPatchState(previous, next) {
   if (previous.finished !== next.finished) return false;
   if (!Array.isArray(previous.participants) || !Array.isArray(next.participants)) return false;
   if (previous.participants.length !== next.participants.length) return false;
-  if (isTeamMode() && !gameTable.sameArray(previous.participants, next.participants)) return false;
+  if (isTeamMode() && !participantsEqual(previous.participants, next.participants)) return false;
   if (!Array.isArray(previous.themes) || !Array.isArray(next.themes)) return false;
   if (previous.themes.length !== next.themes.length) return false;
   for (let themeIndex = 0; themeIndex < next.themes.length; themeIndex++) {
@@ -968,7 +997,7 @@ function canPatchState(previous, next) {
 }
 
 function answerTitle(playerIndex, themeIndex, answerIndex) {
-  return `${state.participants[playerIndex] || participantFallback(playerIndex)}, Т${themeIndex + 1}, ${QUESTION_VALUES[answerIndex]}`;
+  return `${participantLabel(playerIndex)}, Т${themeIndex + 1}, ${QUESTION_VALUES[answerIndex]}`;
 }
 
 function isTeamMode() {

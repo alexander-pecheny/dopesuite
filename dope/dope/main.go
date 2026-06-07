@@ -204,6 +204,19 @@ type server struct {
 	staticCache     map[hostInitRoute]*staticEntry
 	staticBuilds    map[hostInitRoute]*staticBuildCall
 	staticCfg       staticConfig
+
+	// Edit-path instrumentation (DOPE_EDIT_METRICS). editMetricsOn gates all of
+	// it so prod pays nothing when off. writeWaiters is a live gauge of goroutines
+	// queued on (or just past) the global write mutex in the game-state PATCH
+	// path — the headline contention signal. festViewHits/Misses tally the
+	// FestView cache. editMu guards editWindow, the per-interval sample buffer the
+	// summary goroutine drains. See edit_metrics.go.
+	editMetricsOn  bool
+	writeWaiters   atomic.Int64
+	festViewHits   atomic.Int64
+	festViewMisses atomic.Int64
+	editMu         sync.Mutex
+	editWindow     []editSample
 }
 
 // viewerCountInterval bounds how often the concurrent-viewer tally is fanned
@@ -321,6 +334,10 @@ func main() {
 	// Audit-log retention sweep: bounds audit_log by age and on-disk size so it
 	// can't fill the disk. See audit_prune.go.
 	srv.initAuditPrune()
+
+	// Edit-path instrumentation (off unless DOPE_EDIT_METRICS is set). See
+	// edit_metrics.go.
+	srv.initEditMetrics()
 
 	httpSrv := &http.Server{
 		Handler:           srv.auditContextMiddleware(gzipMiddleware(mux)),

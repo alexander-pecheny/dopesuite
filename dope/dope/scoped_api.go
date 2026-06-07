@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type festScope struct {
@@ -102,6 +103,7 @@ func (s *server) broadcastMatchCascade(festID, gameID int64, cascaded []MatchVie
 
 var errMatchNotFound = errors.New("match not found in this game")
 var errRatingRosterImmutable = errors.New("команды загружаются из rating.chgk.info; чтобы изменить список, переимпортируйте участников")
+var errTeamsUnnumbered = errors.New("сначала присвойте номера всем командам — без номеров результаты нельзя редактировать")
 
 type gameStatePatchRequest struct {
 	Ops []gameStatePatchOp `json:"ops"`
@@ -191,6 +193,25 @@ func (s *server) requireFestAdmin(w http.ResponseWriter, r *http.Request, festID
 func (s *server) requireFestTableEditor(w http.ResponseWriter, r *http.Request, festID int64) (sessionUser, bool) {
 	user, _, ok := s.requireFestRole(w, r, festID, festRoleCanEditGameTables)
 	return user, ok
+}
+
+// requireNumberedTeams blocks game editing until every active fest team has a
+// number. Team number is the universal team identity across OD/KSI/EK, so
+// scoring before teams are numbered would attach data to an unstable key — the
+// guard the user asked for. Writes 409 Conflict and returns false when blocked.
+// A fest with no teams at all is not blocked (nothing to number yet). Called at
+// the write gates right after requireFestTableEditor.
+func (s *server) requireNumberedTeams(w http.ResponseWriter, r *http.Request, festID int64) bool {
+	blocked, err := festHasUnnumberedTeams(r.Context(), s.db, festID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return false
+	}
+	if blocked {
+		http.Error(w, errTeamsUnnumbered.Error(), http.StatusConflict)
+		return false
+	}
+	return true
 }
 
 func (s *server) requireFestRole(w http.ResponseWriter, r *http.Request, festID int64, allowed func(string) bool) (sessionUser, string, bool) {
@@ -460,6 +481,9 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
+		if !s.requireNumberedTeams(w, r, scope.FestID) {
+			return
+		}
 		defer r.Body.Close()
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -490,6 +514,13 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
+		if !s.requireNumberedTeams(w, r, scope.FestID) {
+			return
+		}
+		// Edit-path timing: tE2E marks request-in; we stamp e2e at response-out so
+		// the per-edit line spans the whole handler, not just the locked section.
+		var sample editSample
+		tE2E := nowIf(s.editMetricsOn)
 		defer r.Body.Close()
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -501,7 +532,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 			http.Error(w, "bad json", http.StatusBadRequest)
 			return
 		}
-		next, revision, err := s.patchGameState(r.Context(), scope, req, string(raw))
+		next, revision, err := s.patchGameState(r.Context(), scope, req, string(raw), &sample)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -514,6 +545,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		// them in place instead of receiving the whole state blob. If marshalling
 		// the ops fails, fall back to a full-state snapshot so viewers still sync.
 		scopeKey := fmt.Sprintf("game-state:%d", scope.GameID)
+		tBroadcast := nowIf(s.editMetricsOn)
 		if opsJSON, mErr := json.Marshal(req.Ops); mErr == nil {
 			s.broadcastStateDelta(scope.FestID, scopeKey, revision, opsJSON)
 		} else {
@@ -521,6 +553,11 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write(next)
+		if s.editMetricsOn {
+			sample.broadcast = time.Since(tBroadcast)
+			sample.e2e = time.Since(tE2E)
+			s.recordEdit(sample)
+		}
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -569,13 +606,33 @@ update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
 	return revision, nil
 }
 
-func (s *server) patchGameState(ctx context.Context, scope festScope, req gameStatePatchRequest, payload string) ([]byte, int64, error) {
+func (s *server) patchGameState(ctx context.Context, scope festScope, req gameStatePatchRequest, payload string, sample *editSample) ([]byte, int64, error) {
 	if len(req.Ops) == 0 {
 		return nil, 0, errors.New("missing patch ops")
 	}
 
+	// Lock-contention instrumentation (gated; see edit_metrics.go). writeWaiters
+	// counts goroutines queued on the global write mutex in this path, so a high
+	// gauge under concurrent editors localizes the bottleneck to the lock itself
+	// rather than the work it serializes. wait is time blocked on Lock (captures
+	// stalls behind ANY writer, not just other patches); hold is the critical
+	// section. Both measured only when on, so prod adds no time.Now() calls.
+	metrics := s.editMetricsOn && sample != nil
+	var tWait time.Time
+	if metrics {
+		sample.fest, sample.game = scope.FestID, scope.GameID
+		sample.ops = len(req.Ops)
+		sample.waiters = s.writeWaiters.Add(1)
+		tWait = time.Now()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var tHold time.Time
+	if metrics {
+		sample.wait = time.Since(tWait)
+		s.writeWaiters.Add(-1)
+		tHold = time.Now()
+	}
 
 	tx, err := s.beginWriteTx(ctx)
 	if err != nil {
@@ -594,8 +651,12 @@ select game_type, state_json from games where fest_id = ? and id = ?`,
 	}
 
 	var root any
+	tUnmarshal := nowIf(metrics)
 	if err := json.Unmarshal([]byte(stateJSON), &root); err != nil {
 		return nil, 0, fmt.Errorf("stored game state is invalid json: %w", err)
+	}
+	if metrics {
+		sample.unmarshal = time.Since(tUnmarshal)
 	}
 	if root == nil {
 		root = map[string]any{}
@@ -622,9 +683,14 @@ select game_type, state_json from games where fest_id = ? and id = ?`,
 		}
 	}
 
+	tMarshal := nowIf(metrics)
 	next, err := json.Marshal(root)
 	if err != nil {
 		return nil, 0, err
+	}
+	tDB := nowIf(metrics)
+	if metrics {
+		sample.marshal = tDB.Sub(tMarshal)
 	}
 	result, err := tx.ExecContext(ctx, `
 update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
@@ -645,6 +711,11 @@ update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, 0, err
+	}
+	if metrics {
+		sample.db = time.Since(tDB)
+		sample.bytes = len(next)
+		sample.hold = time.Since(tHold)
 	}
 	return next, revision, nil
 }
@@ -948,6 +1019,9 @@ func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scop
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
+		if !s.requireNumberedTeams(w, r, scope.FestID) {
+			return
+		}
 		data, cascaded, revision, err := s.calculateScopedReseed(r.Context(), scope, sub[0])
 		if errors.Is(err, errReseedStageNotFound) {
 			http.NotFound(w, r)
@@ -1149,6 +1223,9 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
+		if !s.requireNumberedTeams(w, r, scope.FestID) {
+			return
+		}
 		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
 		if err != nil {
 			if errors.Is(err, errMatchNotFound) {
@@ -1184,6 +1261,9 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			return
 		}
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
+			return
+		}
+		if !s.requireNumberedTeams(w, r, scope.FestID) {
 			return
 		}
 		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)

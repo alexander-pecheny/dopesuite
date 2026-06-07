@@ -8,22 +8,24 @@ import (
 )
 
 type ksiTestState struct {
-	Participants []string `json:"participants"`
+	Participants []ksiParticipant `json:"participants"`
 	Themes       []struct {
 		Answers [][]string `json:"answers"`
 	} `json:"themes"`
 }
 
+func parts(specs ...ksiParticipant) []ksiParticipant { return specs }
+
 func TestRemapAnswerMatrixFollowsTeams(t *testing.T) {
 	old := [][]string{
-		{"", "", "", "", ""},  // A
-		{"", "x", "", "", ""}, // B
-		{"", "", "", "y", ""}, // C
+		{"", "", "", "", ""},  // A (#1)
+		{"", "x", "", "", ""}, // B (#2)
+		{"", "", "", "y", ""}, // C (#3)
 	}
-	oldNames := []string{"A", "B", "C"}
-	newNames := []string{"C", "B", "D"} // A removed, D added, order changed
+	oldParts := parts(ksiParticipant{1, "A"}, ksiParticipant{2, "B"}, ksiParticipant{3, "C"})
+	newParts := parts(ksiParticipant{3, "C"}, ksiParticipant{2, "B"}, ksiParticipant{9, "D"}) // A removed, D added, reordered
 
-	out := remapAnswerMatrix(old, oldNames, newNames, 5)
+	out := remapAnswerMatrix(old, oldParts, newParts, 5)
 	if len(out) != 3 {
 		t.Fatalf("want 3 rows, got %d: %v", len(out), out)
 	}
@@ -40,11 +42,50 @@ func TestRemapAnswerMatrixFollowsTeams(t *testing.T) {
 	}
 }
 
-func TestRemapAnswerMatrixLegacyNoNamesResizesPositionally(t *testing.T) {
+// TestRemapAnswerMatrixDistinguishesDuplicateNamesByNumber is the case the old
+// name-keyed remap could not handle: two teams share a name but have distinct
+// numbers, and a reorder must keep each team's scores attached by number.
+func TestRemapAnswerMatrixDistinguishesDuplicateNamesByNumber(t *testing.T) {
+	old := [][]string{
+		{"a", "", "", "", ""}, // #7 "Дубль"
+		{"b", "", "", "", ""}, // #8 "Дубль"
+	}
+	oldParts := parts(ksiParticipant{7, "Дубль"}, ksiParticipant{8, "Дубль"})
+	newParts := parts(ksiParticipant{8, "Дубль"}, ksiParticipant{7, "Дубль"}) // swap order
+
+	out := remapAnswerMatrix(old, oldParts, newParts, 5)
+	if out[0][0] != "b" {
+		t.Fatalf("#8's mark should follow it to new index 0, got %q", out[0][0])
+	}
+	if out[1][0] != "a" {
+		t.Fatalf("#7's mark should follow it to new index 1, got %q", out[1][0])
+	}
+}
+
+// TestRemapAnswerMatrixLegacyNameFallback: an old state captured before numbers
+// existed (participants have names, no number) still remaps by name onto the new
+// numbered roster for that one transition.
+func TestRemapAnswerMatrixLegacyNameFallback(t *testing.T) {
+	old := [][]string{
+		{"x", "", "", "", ""}, // "A", no number (legacy)
+		{"y", "", "", "", ""}, // "B", no number (legacy)
+	}
+	oldParts := parts(ksiParticipant{0, "A"}, ksiParticipant{0, "B"})
+	newParts := parts(ksiParticipant{2, "B"}, ksiParticipant{1, "A"}) // now numbered, reordered
+	out := remapAnswerMatrix(old, oldParts, newParts, 5)
+	if out[0][0] != "y" {
+		t.Fatalf("B should map by name to new index 0, got %q", out[0][0])
+	}
+	if out[1][0] != "x" {
+		t.Fatalf("A should map by name to new index 1, got %q", out[1][0])
+	}
+}
+
+func TestRemapAnswerMatrixLegacyNoParticipantsResizesPositionally(t *testing.T) {
 	old := [][]string{{"a"}, {"b"}}
-	out := remapAnswerMatrix(old, nil, []string{"X", "Y", "Z"}, 2)
+	out := remapAnswerMatrix(old, nil, parts(ksiParticipant{0, "X"}, ksiParticipant{0, "Y"}, ksiParticipant{0, "Z"}), 2)
 	if len(out) != 3 || out[0][0] != "a" || out[1][0] != "b" || out[2][0] != "" {
-		t.Fatalf("legacy state (no names) should resize positionally: %v", out)
+		t.Fatalf("no old participants should resize positionally: %v", out)
 	}
 }
 
@@ -136,10 +177,10 @@ func loadKSIState(t *testing.T, db *sql.DB, gameID int64) ksiTestState {
 	return st
 }
 
-func nameIndex(names []string) map[string]int {
-	idx := make(map[string]int, len(names))
-	for i, n := range names {
-		idx[n] = i
+func nameIndex(participants []ksiParticipant) map[string]int {
+	idx := make(map[string]int, len(participants))
+	for i, p := range participants {
+		idx[p.Name] = i
 	}
 	return idx
 }

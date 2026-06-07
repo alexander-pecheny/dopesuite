@@ -420,7 +420,12 @@ func stateParticipantNames(state any) []string {
 	}
 	names := make([]string, len(arr))
 	for i, v := range arr {
-		names[i], _ = v.(string)
+		switch p := v.(type) {
+		case string: // legacy ["name", ...]
+			names[i] = p
+		case map[string]any: // current [{number,name}, ...]
+			names[i], _ = p["name"].(string)
+		}
 	}
 	return names
 }
