@@ -64,6 +64,12 @@ type ratingPlayer struct {
 	Surname string `json:"surname"`
 }
 
+// chgkTeamJSON is one team in an OD game's state. OD keys scores by team NUMBER,
+// not by position: each cell of state.entries stores the team's Number, and the
+// teams array is only a number→name/city lookup. Number is the universal team
+// identity (shared with KSI/EK) and is guaranteed present for active teams, so
+// re-import reorders never misattribute scores — the entries stay valid as long
+// as a team keeps its number (sticky across re-import).
 type chgkTeamJSON struct {
 	Name   string `json:"name"`
 	City   string `json:"city,omitempty"`
@@ -375,11 +381,15 @@ where fest_id = ?`, festID)
 // assignFestNumbersForImport mutates teams in place so that:
 //   - teams that already had a number (matched by rating_id, including
 //     previously soft-deleted ones) keep it;
-//   - if any number was ever assigned in this fest, new teams receive fresh
-//     numbers strictly greater than the largest one seen, in the
-//     (alphabetical) order of incoming teams;
-//   - if nothing has ever been numbered, no team gets a number — first-time
-//     imports stay unnumbered until the host explicitly assigns numbers.
+//   - every still-unnumbered team receives a fresh number strictly greater than
+//     the largest one ever seen in this fest, in the (alphabetical) order of
+//     incoming teams.
+//
+// Team number is the universal team identity across OD/KSI/EK (see the
+// team-number unification), so every active team must always have one. On a
+// first-ever import maxSeen is 0 and numbering starts at 1; on re-import,
+// rating-matched teams keep their numbers and new teams continue past maxSeen
+// (which counts soft-deleted rows too, so a returning team can't collide).
 func assignFestNumbersForImport(teams []festRosterImportTeam, existing map[int64]existingFestTeam, maxSeen int64) {
 	for i := range teams {
 		teams[i].Number = 0
@@ -388,9 +398,6 @@ func assignFestNumbersForImport(teams []festRosterImportTeam, existing map[int64
 				teams[i].Number = e.Number
 			}
 		}
-	}
-	if maxSeen == 0 {
-		return
 	}
 	next := maxSeen + 1
 	for i := range teams {
@@ -577,6 +584,11 @@ func applyRosterToChGKScheme(raw string, teams []festRosterImportTeam) ([]byte, 
 	return json.Marshal(obj)
 }
 
+// applyRosterToChGKState refreshes an OD game's teams lookup and resizes its
+// entries grid for the new roster. Entries hold team NUMBERS as values (the
+// universal identity), so a roster reorder needs no per-cell remap — only an
+// explicit number reassignment does (entryRemap, supplied by saveFestNumbers,
+// nil on plain re-import). See chgkTeamJSON.
 func applyRosterToChGKState(raw string, teams []festRosterImportTeam, entryRemap map[int]int) ([]byte, error) {
 	obj, err := rawJSONObject(raw)
 	if err != nil {
@@ -661,7 +673,7 @@ func applyRosterToKSIScheme(raw string, teams []festRosterImportTeam) ([]byte, e
 			themesCount = configured
 		}
 	}
-	participantsJSON, err := json.Marshal(teamNamesFromRoster(teams))
+	participantsJSON, err := json.Marshal(teamParticipantsFromRoster(teams))
 	if err != nil {
 		return nil, err
 	}
@@ -687,12 +699,10 @@ func applyRosterToKSIState(raw string, teams []festRosterImportTeam, targetTheme
 	// Capture the pre-import participant order before overwriting it, so the
 	// answer grid (keyed by row position) can be remapped to follow each team
 	// across roster reorders/additions/removals instead of staying at its old
-	// index. The KSI state only stores names, so names are the join key.
-	var oldParticipants []string
-	if rawParts, ok := obj["participants"]; ok && len(rawParts) > 0 {
-		_ = json.Unmarshal(rawParts, &oldParticipants)
-	}
-	participants := teamNamesFromRoster(teams)
+	// index. Read tolerantly: new states store [{number,name}], legacy states a
+	// bare name array (matched by name for that one transition).
+	oldParticipants := parseKSIParticipants(obj["participants"])
+	participants := teamParticipantsFromRoster(teams)
 	participantsJSON, err := json.Marshal(participants)
 	if err != nil {
 		return nil, err
@@ -783,6 +793,54 @@ func teamNamesFromRoster(teams []festRosterImportTeam) []string {
 	return out
 }
 
+// ksiParticipant is one row of a KSI game's participants list. Number is the
+// team's universal identity (the join key for the answer-grid remap); Name is
+// shown in the UI. Stored as objects [{number,name}]; legacy states stored a
+// bare name array and are read tolerantly via parseKSIParticipants.
+type ksiParticipant struct {
+	Number int    `json:"number"`
+	Name   string `json:"name"`
+}
+
+func teamParticipantsFromRoster(teams []festRosterImportTeam) []ksiParticipant {
+	out := make([]ksiParticipant, 0, len(teams))
+	for _, team := range teams {
+		out = append(out, ksiParticipant{Number: int(team.Number), Name: team.Name})
+	}
+	return out
+}
+
+// parseKSIParticipants decodes a participants array tolerating both the current
+// [{number,name}] shape and the legacy ["name", ...] shape (so existing game
+// states keep loading during/after the migration).
+func parseKSIParticipants(raw json.RawMessage) []ksiParticipant {
+	if len(raw) == 0 {
+		return nil
+	}
+	var objs []ksiParticipant
+	if err := json.Unmarshal(raw, &objs); err == nil {
+		return objs
+	}
+	var names []string
+	if err := json.Unmarshal(raw, &names); err == nil {
+		out := make([]ksiParticipant, len(names))
+		for i, name := range names {
+			out[i] = ksiParticipant{Name: name}
+		}
+		return out
+	}
+	return nil
+}
+
+// participantNames projects the name column out of a participants list.
+func participantNames(parts []ksiParticipant) []string {
+	out := make([]string, len(parts))
+	for i, p := range parts {
+		out[i] = p.Name
+	}
+	return out
+}
+
 func resizeIntSlice(values []int, size int) []int {
 	if len(values) > size {
 		return values[:size]
@@ -795,28 +853,41 @@ func resizeIntSlice(values []int, size int) []int {
 }
 
 // remapAnswerMatrix rebuilds a KSI answer grid for a new participant order,
-// moving each old row to wherever its team now sits (matched by name) so scores
-// follow their team across roster reorders, additions, and removals. New teams
-// get an empty row; teams that dropped out lose their row. Duplicate names are
-// consumed in their existing order. Falls back to a positional resize only when
-// the old participant list is unknown (e.g. legacy state without names).
-func remapAnswerMatrix(values [][]string, oldNames, newNames []string, cols int) [][]string {
-	if len(oldNames) == 0 {
-		return resizeStringMatrix(values, len(newNames), cols)
+// moving each old row to wherever its team now sits so scores follow their team
+// across roster reorders, additions, and removals. Teams are matched by NUMBER
+// (the universal, unique identity) — so two teams sharing a name keep distinct
+// scores — falling back to name only when the old participant has no number
+// (legacy state captured before numbers were stored). New teams get an empty
+// row; teams that dropped out lose their row. Each old row is claimed at most
+// once. With no old participants at all, a plain positional resize is used.
+func remapAnswerMatrix(values [][]string, oldParts, newParts []ksiParticipant, cols int) [][]string {
+	if len(oldParts) == 0 {
+		return resizeStringMatrix(values, len(newParts), cols)
 	}
-	byName := make(map[string][]int, len(oldNames))
-	for i, name := range oldNames {
-		byName[name] = append(byName[name], i)
-	}
-	out := make([][]string, len(newNames))
-	for j, name := range newNames {
-		var srcRow []string
-		if queue := byName[name]; len(queue) > 0 {
-			i := queue[0]
-			byName[name] = queue[1:]
-			if i < len(values) {
-				srcRow = values[i]
+	consumed := make([]bool, len(oldParts))
+	claim := func(match func(ksiParticipant) bool) int {
+		for i, p := range oldParts {
+			if !consumed[i] && match(p) {
+				consumed[i] = true
+				return i
 			}
+		}
+		return -1
+	}
+	out := make([][]string, len(newParts))
+	for j, p := range newParts {
+		idx := -1
+		if p.Number > 0 {
+			num := p.Number
+			idx = claim(func(o ksiParticipant) bool { return o.Number == num })
+		}
+		if idx < 0 && p.Name != "" {
+			name := p.Name
+			idx = claim(func(o ksiParticipant) bool { return o.Name == name })
+		}
+		var srcRow []string
+		if idx >= 0 && idx < len(values) {
+			srcRow = values[idx]
 		}
 		out[j] = resizeStringSlice(srcRow, cols)
 	}

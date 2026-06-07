@@ -123,6 +123,7 @@ function consumeGameInit() {
   if (init.gameID != null) scopeGameID = String(init.gameID);
   if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
   if (init.epoch != null) initialStateEpoch = String(init.epoch);
+  if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
   scheme = init.scheme;
   state = init.state;
   fest = init.fest || null;

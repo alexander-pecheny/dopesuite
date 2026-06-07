@@ -494,3 +494,15 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&total, &number
 	}
 	return numbered == total, total, nil
 }
+
+// festHasUnnumberedTeams reports whether the fest has active teams of which some
+// lack a number — the precondition that blocks game editing (see
+// requireNumberedTeams). A fest with no teams at all returns false: there is
+// nothing to number yet, so editing (e.g. player-mode KSI) is not blocked.
+func festHasUnnumberedTeams(ctx context.Context, q dbQueryer, festID int64) (bool, error) {
+	allNumbered, total, err := festTeamsAllNumbered(ctx, q, festID)
+	if err != nil {
+		return false, err
+	}
+	return total > 0 && !allNumbered, nil
+}

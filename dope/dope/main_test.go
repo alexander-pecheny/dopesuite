@@ -779,18 +779,18 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 		t.Fatalf("load ksi json: %v", err)
 	}
 	var ksiScheme struct {
-		GameType     string   `json:"gameType"`
-		Participants []string `json:"participants"`
-		Themes       int      `json:"themes"`
+		GameType     string           `json:"gameType"`
+		Participants []ksiParticipant `json:"participants"`
+		Themes       int              `json:"themes"`
 	}
 	if err := json.Unmarshal([]byte(schemeJSON), &ksiScheme); err != nil {
 		t.Fatalf("decode ksi scheme: %v", err)
 	}
-	if ksiScheme.GameType != "ksi" || len(ksiScheme.Participants) != 2 || ksiScheme.Participants[0] != "Вторая" || ksiScheme.Participants[1] != "Первая" || ksiScheme.Themes != ksiThemeCount {
+	if ksiScheme.GameType != "ksi" || len(ksiScheme.Participants) != 2 || ksiScheme.Participants[0].Name != "Вторая" || ksiScheme.Participants[1].Name != "Первая" || ksiScheme.Themes != ksiThemeCount {
 		t.Fatalf("ksi scheme = %#v, want alphabetically sorted imported participants", ksiScheme)
 	}
 	var ksiState struct {
-		Participants []string `json:"participants"`
+		Participants []ksiParticipant `json:"participants"`
 		Themes       []struct {
 			Answers [][]string `json:"answers"`
 		} `json:"themes"`
@@ -798,8 +798,11 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 	if err := json.Unmarshal([]byte(stateJSON), &ksiState); err != nil {
 		t.Fatalf("decode ksi state: %v", err)
 	}
-	if len(ksiState.Participants) != 2 || ksiState.Participants[0] != "Вторая" || ksiState.Participants[1] != "Первая" {
+	if len(ksiState.Participants) != 2 || ksiState.Participants[0].Name != "Вторая" || ksiState.Participants[1].Name != "Первая" {
 		t.Fatalf("ksi state participants = %#v, want alphabetically sorted imported teams", ksiState.Participants)
+	}
+	if ksiState.Participants[0].Number == 0 || ksiState.Participants[1].Number == 0 {
+		t.Fatalf("ksi participants must carry numbers: %#v", ksiState.Participants)
 	}
 	if len(ksiState.Themes) != ksiThemeCount || len(ksiState.Themes[0].Answers) != 2 || len(ksiState.Themes[0].Answers[0]) != 5 {
 		t.Fatalf("ksi answers shape = %#v, want %dx2x5", ksiState.Themes, ksiThemeCount)
@@ -985,16 +988,16 @@ func TestFestNumbersFlow(t *testing.T) {
 		t.Fatalf("import roster: %v", err)
 	}
 
-	// After roster import, no numbers are assigned.
+	// After roster import every team is numbered (1..N alphabetically).
 	allSet, total, err := festTeamsAllNumbered(t.Context(), db, festID)
 	if err != nil {
 		t.Fatalf("allNumbered: %v", err)
 	}
-	if total != 3 || allSet {
-		t.Fatalf("after import: total=%d allSet=%v, want 3/false", total, allSet)
+	if total != 3 || !allSet {
+		t.Fatalf("after import: total=%d allSet=%v, want 3/true", total, allSet)
 	}
 
-	// Auto-assign numbers by alphabet.
+	// Auto-assign numbers by alphabet (idempotent here — import already did this).
 	teams, err := loadFestTeamsForNumbering(t.Context(), db, festID)
 	if err != nil {
 		t.Fatalf("load teams: %v", err)
@@ -1444,9 +1447,10 @@ func TestFestNumbersStableAcrossResync(t *testing.T) {
 	checkNumbers("after auto-assign", map[int64]int64{11: 1, 12: 2, 13: 3, 14: 4, 15: 5, 16: 6, 17: 7})
 }
 
-// TestFestNumbersFreshImport ensures that an import into a fest that has never
-// had any numbers leaves teams unnumbered — auto-assignment is an explicit
-// host action.
+// TestFestNumbersFreshImport ensures that a first-ever import now numbers every
+// team (team number is the universal identity, so every active team must have
+// one), deterministically by alphabetical order, and that a later import keeps
+// existing numbers and continues past the largest one for new teams.
 func TestFestNumbersFreshImport(t *testing.T) {
 	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -1467,12 +1471,14 @@ func TestFestNumbersFreshImport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("allNumbered: %v", err)
 	}
-	if total != 2 || allSet {
-		t.Fatalf("after fresh import: total=%d allSet=%v, want 2/false", total, allSet)
+	if total != 2 || !allSet {
+		t.Fatalf("after fresh import: total=%d allSet=%v, want 2/true", total, allSet)
 	}
+	checkFestTeamNumber(t, db, festID, 11, 1)
+	checkFestTeamNumber(t, db, festID, 12, 2)
 
-	// A second import while nothing has ever been numbered must still leave
-	// teams unnumbered — there's no prior numbering context to extend.
+	// A second import keeps the existing numbers and assigns the new team the
+	// next number past the largest one seen.
 	if _, err := srv.importFestRoster(t.Context(), festID, 999, []festRosterImportTeam{
 		{RatingID: 11, Name: "Алёша"},
 		{RatingID: 12, Name: "Боря"},
@@ -1484,8 +1490,75 @@ func TestFestNumbersFreshImport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("allNumbered: %v", err)
 	}
-	if total != 3 || allSet {
-		t.Fatalf("after second import: total=%d allSet=%v, want 3/false", total, allSet)
+	if total != 3 || !allSet {
+		t.Fatalf("after second import: total=%d allSet=%v, want 3/true", total, allSet)
+	}
+	checkFestTeamNumber(t, db, festID, 11, 1)
+	checkFestTeamNumber(t, db, festID, 12, 2)
+	checkFestTeamNumber(t, db, festID, 13, 3)
+}
+
+// checkFestTeamNumber asserts the active fest_team with the given rating_id has
+// the expected number.
+func checkFestTeamNumber(t *testing.T, db *sql.DB, festID, ratingID, want int64) {
+	t.Helper()
+	var got sql.NullInt64
+	if err := db.QueryRow(`select number from fest_teams where fest_id = ? and rating_id = ? and deleted = 0`, festID, ratingID).Scan(&got); err != nil {
+		t.Fatalf("number for rating_id %d: %v", ratingID, err)
+	}
+	if !got.Valid || got.Int64 != want {
+		t.Fatalf("rating_id %d number = %v, want %d", ratingID, got, want)
+	}
+}
+
+// TestBackfillFestTeamNumbers covers the v13 migration helper: every active
+// unnumbered team gets a fresh number past the largest ever seen (soft-deleted
+// rows counted), in (position, id) order, leaving already-numbered teams alone.
+func TestBackfillFestTeamNumbers(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, _ := createRosterPropagationFixture(t, db)
+	ctx := t.Context()
+	mustExec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, q, args...); err != nil {
+			t.Fatalf("exec %q: %v", q, err)
+		}
+	}
+	ins := `insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted) values(?, ?, ?, '', ?, ?, ?)`
+	mustExec(ins, festID, 101, "A", 1, 5, 0)           // active, already numbered
+	mustExec(ins, festID, 102, "B", 2, nil, 0)         // active, unnumbered
+	mustExec(ins, festID, 103, "C", 3, nil, 0)         // active, unnumbered
+	mustExec(ins, festID, 104, "D", 4, 9, 1)           // soft-deleted, number 9 (counts toward maxSeen)
+
+	if err := backfillFestTeamNumbers(db); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+
+	// maxSeen = 9 (soft-deleted included), so the two unnumbered teams continue at
+	// 10 and 11 in position order; the already-numbered team is untouched.
+	checkFestTeamNumber(t, db, festID, 101, 5)
+	checkFestTeamNumber(t, db, festID, 102, 10)
+	checkFestTeamNumber(t, db, festID, 103, 11)
+
+	allSet, total, err := festTeamsAllNumbered(ctx, db, festID)
+	if err != nil {
+		t.Fatalf("allNumbered: %v", err)
+	}
+	if !allSet || total != 3 {
+		t.Fatalf("after backfill: total=%d allSet=%v, want 3/true", total, allSet)
+	}
+
+	var collisions int
+	if err := db.QueryRow(`select count(*) - count(distinct number) from fest_teams where fest_id = ? and deleted = 0 and number is not null`, festID).Scan(&collisions); err != nil {
+		t.Fatalf("collision check: %v", err)
+	}
+	if collisions != 0 {
+		t.Fatalf("active teams share a number (%d collisions)", collisions)
 	}
 }
 
