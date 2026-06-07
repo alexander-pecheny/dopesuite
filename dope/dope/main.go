@@ -145,6 +145,10 @@ type server struct {
 	// in disk mode (assets served no-cache there).
 	assetETags   map[string]string
 	sendTelegram telegramSender
+	// botSecret gates the Telegram bridge endpoints (/api/telegram/*). The
+	// co-located bot sends it as X-Bot-Secret so only it can issue/consume login
+	// codes; empty disables the bridge. Set from DOPE_BOT_SECRET at startup.
+	botSecret string
 	// festViewCache holds JSON-marshaled FestView responses keyed by
 	// (festID, gameID). Invalidated wholesale per fest on broadcastState,
 	// since any of the data folded into FestView (venues, stages, matches)
@@ -266,6 +270,10 @@ func main() {
 	mux.HandleFunc("/api/auth/me", srv.handleAuthMe)
 	mux.HandleFunc("/api/auth/username", srv.handleAuthUsername)
 	mux.HandleFunc("/api/auth/password", srv.handleAuthPassword)
+	// Telegram bridge: the bot calls these (shared-secret gated) instead of
+	// opening fest.db itself — see telegram_bridge.go.
+	mux.HandleFunc("/api/telegram/register", srv.handleTelegramRegister)
+	mux.HandleFunc("/api/telegram/login", srv.handleTelegramLogin)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
 	mux.Handle("/static/", staticFileServer(assets, noCacheAssets, assetETags))
@@ -555,6 +563,7 @@ func newServer() (*server, error) {
 		activeMatchCode: matchCode,
 		subscribers:     make(map[int64]map[chan event]bool),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		botSecret:       os.Getenv("DOPE_BOT_SECRET"),
 	}, nil
 }
 

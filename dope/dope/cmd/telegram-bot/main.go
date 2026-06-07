@@ -1,15 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
-	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,27 +15,35 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	_ "modernc.org/sqlite"
 )
 
 const (
-	defaultDBFile = "fest.db"
-	apiBase       = "https://api.telegram.org"
-	pollTimeout   = 30
-	codeLifetime  = time.Minute
-	loginCodeLen  = 8
+	apiBase     = "https://api.telegram.org"
+	pollTimeout = 30
+
+	defaultServerURL = "http://localhost:8090"
 
 	registerURL = "https://dope.pecheny.me/register"
 	loginURL    = "https://dope.pecheny.me/login"
 )
 
-const loginCodeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
 const startMessage = "Этот бот выдает одноразовые коды для входа на dope.pecheny.me.\n\n" +
 	"• Зарегистрироваться по инвайту: " + registerURL + "\n" +
 	"• Войти в существующий аккаунт: " + loginURL + "\n\n" +
 	"После регистрации на сайте пришли мне код, который он покажет. Чтобы войти — введи логин на сайте; если выберешь код, я пришлю его сюда."
+
+// botErrorMessage is shown when the bot can't reach the server bridge (network
+// error / non-200). The bridge itself returns its own user-facing messages.
+const botErrorMessage = "Произошла ошибка. Попробуй еще раз через минуту."
+
+// botConfig is the bot's connection to the dope server. The bot holds NO
+// database handle: all login/registration writes go through the server's
+// Telegram bridge endpoints (shared-secret gated) so the server stays the sole
+// writer of fest.db.
+type botConfig struct {
+	serverURL string
+	secret    string
+}
 
 type tgUpdate struct {
 	UpdateID int64 `json:"update_id"`
@@ -62,20 +68,18 @@ type tgResponse struct {
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	dbPath := os.Getenv("DOPE_DB")
-	if dbPath == "" {
-		dbPath = defaultDBFile
-	}
 	token := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
-
-	db, err := openDB(dbPath)
-	if err != nil {
-		log.Fatalf("open db %s: %v", dbPath, err)
+	cfg := botConfig{
+		serverURL: strings.TrimRight(getenvDefault("DOPE_SERVER_URL", defaultServerURL), "/"),
+		secret:    os.Getenv("DOPE_BOT_SECRET"),
 	}
-	defer db.Close()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if cfg.secret == "" {
+		log.Printf("DOPE_BOT_SECRET is not set; the server bridge will reject all requests")
+	}
 
 	if token == "" {
 		log.Printf("TELEGRAM_BOT_TOKEN is not set; running in stub mode (no updates will be processed)")
@@ -83,26 +87,20 @@ func main() {
 		return
 	}
 
-	log.Printf("telegram bot polling, db=%s", dbPath)
-	if err := runBot(ctx, db, token); err != nil && !errors.Is(err, context.Canceled) {
+	log.Printf("telegram bot polling, server=%s", cfg.serverURL)
+	if err := runBot(ctx, cfg, token); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("bot: %v", err)
 	}
 }
 
-func openDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, err
+func getenvDefault(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
 	}
-	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(`PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	return db, nil
+	return fallback
 }
 
-func runBot(ctx context.Context, db *sql.DB, token string) error {
+func runBot(ctx context.Context, cfg botConfig, token string) error {
 	client := &http.Client{Timeout: (pollTimeout + 10) * time.Second}
 	var offset int64
 
@@ -130,7 +128,7 @@ func runBot(ctx context.Context, db *sql.DB, token string) error {
 			if u.Message == nil || u.Message.From == nil || u.Message.Chat == nil {
 				continue
 			}
-			handleMessage(ctx, db, client, token, u)
+			handleMessage(ctx, cfg, client, token, u)
 		}
 	}
 }
@@ -203,7 +201,7 @@ func sendMessageWithParseMode(ctx context.Context, c *http.Client, token string,
 	}
 }
 
-func handleMessage(ctx context.Context, db *sql.DB, c *http.Client, token string, u tgUpdate) {
+func handleMessage(ctx context.Context, cfg botConfig, c *http.Client, token string, u tgUpdate) {
 	text := strings.TrimSpace(u.Message.Text)
 	if text == "" {
 		return
@@ -212,19 +210,25 @@ func handleMessage(ctx context.Context, db *sql.DB, c *http.Client, token string
 	from := u.Message.From
 
 	if strings.HasPrefix(text, "/") {
-		cmd := commandName(text)
-		switch cmd {
+		switch commandName(text) {
 		case "/start", "/help":
 			sendMessage(ctx, c, token, chatID, startMessage)
 		case "/login":
-			sendHTMLMessage(ctx, c, token, chatID, issueLoginCode(ctx, db, from.ID, from.Username))
+			sendHTMLMessage(ctx, c, token, chatID, serverIssueLogin(ctx, c, cfg, from.ID, from.Username))
 		default:
 			sendMessage(ctx, c, token, chatID, startMessage)
 		}
 		return
 	}
 
-	sendMessage(ctx, c, token, chatID, consumeRegisterCode(ctx, db, strings.ToUpper(text), from.ID, from.Username))
+	// Plain text is treated as a register code. Triage locally so obvious
+	// non-codes get the help text without a server round-trip.
+	code := strings.ToUpper(text)
+	if !looksLikeCode(code) {
+		sendMessage(ctx, c, token, chatID, startMessage)
+		return
+	}
+	sendMessage(ctx, c, token, chatID, serverConsumeRegister(ctx, c, cfg, code, from.ID, from.Username))
 }
 
 func commandName(text string) string {
@@ -239,98 +243,6 @@ func commandName(text string) string {
 	return strings.ToLower(cmd)
 }
 
-func consumeRegisterCode(ctx context.Context, db *sql.DB, code string, tgUserID int64, tgUsername string) string {
-	if !looksLikeCode(code) {
-		return startMessage
-	}
-	now := utcNow()
-	res, err := db.ExecContext(ctx, `
-update telegram_login_codes
-set telegram_user_id = ?, telegram_username = ?, consumed_at = ?
-where code = ?
-  and kind = 'register'
-  and consumed_at is null
-  and expires_at > ?`, tgUserID, tgUsername, now, code, now)
-	if err != nil {
-		log.Printf("register consume %s: %v", code, err)
-		return "Произошла ошибка. Попробуй еще раз через минуту."
-	}
-	n, _ := res.RowsAffected()
-	if n == 1 {
-		return "Готово! Вернись на сайт — там уже видна твоя регистрация."
-	}
-	return registerFailureReason(ctx, db, code)
-}
-
-func registerFailureReason(ctx context.Context, db *sql.DB, code string) string {
-	var kind string
-	var consumedAt sql.NullString
-	err := db.QueryRowContext(ctx, `
-select kind, consumed_at from telegram_login_codes where code = ?`, code).Scan(&kind, &consumedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "Такого кода нет. Проверь, что скопировал его без пробелов и не дольше минуты прошло."
-	}
-	if err != nil {
-		log.Printf("lookup code: %v", err)
-		return "Произошла ошибка. Попробуй еще раз через минуту."
-	}
-	if consumedAt.Valid {
-		return "Этот код уже использован. Запроси новый на сайте."
-	}
-	if kind != "register" {
-		return "Этот код не для регистрации. Открой " + registerURL + " и начни заново."
-	}
-	return "Срок действия кода истек. Запроси новый на " + registerURL + "."
-}
-
-func issueLoginCode(ctx context.Context, db *sql.DB, tgUserID int64, tgUsername string) string {
-	var userID int64
-	err := db.QueryRowContext(ctx, `select id from users where telegram_user_id = ? and is_system = 0`, tgUserID).Scan(&userID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "Сначала зарегистрируйся по инвайту: " + registerURL
-	}
-	if err != nil {
-		log.Printf("lookup user: %v", err)
-		return "Произошла ошибка. Попробуй еще раз через минуту."
-	}
-
-	now := time.Now().UTC()
-	expires := now.Add(codeLifetime).Format(time.RFC3339)
-	createdAt := now.Format(time.RFC3339)
-
-	for attempt := 0; attempt < 3; attempt++ {
-		code, err := newLoginCode()
-		if err != nil {
-			log.Printf("generate code: %v", err)
-			return "Произошла ошибка. Попробуй еще раз через минуту."
-		}
-		_, err = db.ExecContext(ctx, `
-insert into telegram_login_codes(code, kind, user_id, telegram_user_id, telegram_username, created_at, expires_at)
-values(?, 'login', ?, ?, ?, ?, ?)`, code, userID, tgUserID, tgUsername, createdAt, expires)
-		if err == nil {
-			return "Твой код для входа:\n<code>" + code + "</code>\nВведи его на странице входа после логина в течение минуты."
-		}
-		if !strings.Contains(strings.ToLower(err.Error()), "unique") {
-			log.Printf("issue login code: %v", err)
-			return "Произошла ошибка. Попробуй еще раз через минуту."
-		}
-	}
-	return "Не получилось выдать код, попробуй еще раз."
-}
-
-func newLoginCode() (string, error) {
-	buf := make([]byte, loginCodeLen)
-	max := big.NewInt(int64(len(loginCodeAlphabet)))
-	for i := range buf {
-		n, err := rand.Int(rand.Reader, max)
-		if err != nil {
-			return "", err
-		}
-		buf[i] = loginCodeAlphabet[n.Int64()]
-	}
-	return string(buf), nil
-}
-
 func looksLikeCode(s string) bool {
 	if len(s) < 4 || len(s) > 64 {
 		return false
@@ -343,6 +255,53 @@ func looksLikeCode(s string) bool {
 	return true
 }
 
-func utcNow() string {
-	return time.Now().UTC().Format(time.RFC3339)
+// serverConsumeRegister / serverIssueLogin call the dope server's Telegram
+// bridge and return the user-facing reply text it produced.
+func serverConsumeRegister(ctx context.Context, c *http.Client, cfg botConfig, code string, tgUserID int64, tgUsername string) string {
+	return callBridge(ctx, c, cfg, "/api/telegram/register", map[string]any{
+		"code":              code,
+		"telegram_user_id":  tgUserID,
+		"telegram_username": tgUsername,
+	})
+}
+
+func serverIssueLogin(ctx context.Context, c *http.Client, cfg botConfig, tgUserID int64, tgUsername string) string {
+	return callBridge(ctx, c, cfg, "/api/telegram/login", map[string]any{
+		"telegram_user_id":  tgUserID,
+		"telegram_username": tgUsername,
+	})
+}
+
+func callBridge(ctx context.Context, c *http.Client, cfg botConfig, path string, payload any) string {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("bridge %s marshal: %v", path, err)
+		return botErrorMessage
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.serverURL+path, bytes.NewReader(body))
+	if err != nil {
+		log.Printf("bridge %s build: %v", path, err)
+		return botErrorMessage
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Bot-Secret", cfg.secret)
+	resp, err := c.Do(req)
+	if err != nil {
+		log.Printf("bridge %s: %v", path, err)
+		return botErrorMessage
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("bridge %s: status %d: %s", path, resp.StatusCode, strings.TrimSpace(string(data)))
+		return botErrorMessage
+	}
+	var out struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil || out.Message == "" {
+		log.Printf("bridge %s: bad response: %v", path, err)
+		return botErrorMessage
+	}
+	return out.Message
 }

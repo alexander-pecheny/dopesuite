@@ -296,6 +296,11 @@ func buildSqliteDSN(path string) string {
 		// last checkpoint. Measured cost on prod's disk is ~0.8 ms/commit (~1160
 		// commits/s ceiling) vs an observed peak of ~10 edits/s, i.e. negligible.
 		"_pragma=synchronous(FULL)",
+		// Cap the WAL file so it's truncated back down after a checkpoint instead
+		// of growing without bound (prod's WAL had ballooned past 500 MB — a
+		// long-lived second connection from the bot kept pinning it; that's gone
+		// now, but bound it regardless). 64 MB comfortably spans a write burst.
+		"_pragma=journal_size_limit(67108864)",
 		"_pragma=cache_size(-65536)",
 		"_pragma=temp_store(MEMORY)",
 	}
