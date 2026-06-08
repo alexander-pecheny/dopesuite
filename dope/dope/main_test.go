@@ -1312,6 +1312,82 @@ where id = ?`, string(entriesJSON), string(shootoutRoundsJSON), chgkGameID); err
 	}
 }
 
+// TestFestNumbersPropagateToKSI guards the bug where a number reassignment
+// flowed into OD states but not KSI: KSI participants kept their stale numbers
+// (e.g. the 1..N auto-assigned at import) while OD showed the corrected ones.
+// The reassignment must update KSI participant numbers and carry each team's
+// answers along by name (since the number itself changed).
+func TestFestNumbersPropagateToKSI(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, ksiGameID := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
+	if _, err := srv.importFestRoster(t.Context(), festID, 1, []festRosterImportTeam{
+		{RatingID: 11, Name: "Алёша"},
+		{RatingID: 12, Name: "Боря"},
+		{RatingID: 13, Name: "Витя"},
+	}); err != nil {
+		t.Fatalf("import roster: %v", err)
+	}
+
+	// Mark a right answer for Боря (alphabetical row 1) before renumbering.
+	if _, err := db.Exec(`
+update games
+set state_json = json_set(state_json, '$.themes[0].answers', json(?))
+where id = ?`, `[["",""],["right",""],["",""]]`, ksiGameID); err != nil {
+		t.Fatalf("seed answers: %v", err)
+	}
+
+	teams, err := loadFestTeamsForNumbering(t.Context(), db, festID)
+	if err != nil {
+		t.Fatalf("load teams: %v", err)
+	}
+	byName := map[string]int64{}
+	for _, team := range teams {
+		byName[team.Name] = team.ID
+	}
+	// Reassign to numbers far from the 1..3 import default so a stale KSI state
+	// is unmistakable.
+	reassign := map[int64]int{byName["Алёша"]: 201, byName["Боря"]: 202, byName["Витя"]: 203}
+	if err := srv.saveFestNumbers(t.Context(), festID, reassign); err != nil {
+		t.Fatalf("reassign: %v", err)
+	}
+
+	var stateJSON string
+	if err := db.QueryRow(`select state_json from games where id = ?`, ksiGameID).Scan(&stateJSON); err != nil {
+		t.Fatalf("load ksi state: %v", err)
+	}
+	var got struct {
+		Participants []ksiParticipant `json:"participants"`
+		Themes       []struct {
+			Answers [][]string `json:"answers"`
+		} `json:"themes"`
+	}
+	if err := json.Unmarshal([]byte(stateJSON), &got); err != nil {
+		t.Fatalf("decode ksi state: %v", err)
+	}
+	wantNum := map[string]int{"Алёша": 201, "Боря": 202, "Витя": 203}
+	for _, p := range got.Participants {
+		if wantNum[p.Name] != p.Number {
+			t.Fatalf("participant %q number=%d, want %d (participants=%+v)", p.Name, p.Number, wantNum[p.Name], got.Participants)
+		}
+	}
+	// Боря's right answer follows him by name across the renumber.
+	boryRow := -1
+	for i, p := range got.Participants {
+		if p.Name == "Боря" {
+			boryRow = i
+		}
+	}
+	if boryRow < 0 || len(got.Themes) == 0 || got.Themes[0].Answers[boryRow][0] != "right" {
+		t.Fatalf("Боря answer not preserved: row=%d themes=%+v", boryRow, got.Themes)
+	}
+}
+
 func itoa(v int64) string { return strconv.FormatInt(v, 10) }
 
 // TestFestNumbersStableAcrossResync verifies that re-importing a roster keeps
