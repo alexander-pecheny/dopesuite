@@ -4939,3 +4939,110 @@ body:not(.embedded-match) .grid-match {
     min-width: 0;
   }
 }
+
+/* Mass number import (Импорт номеров) — paste modal + confirmation modal. */
+.numbers-import-dialog {
+  width: min(640px, calc(100vw - var(--space-6)));
+  padding: 0;
+  border: 1px solid var(--grid-dark);
+  border-radius: var(--radius-md);
+  background-color: var(--paper);
+  color: var(--text);
+  box-shadow: var(--shadow-modal);
+}
+
+.numbers-import-dialog::backdrop {
+  background: var(--backdrop);
+}
+
+.numbers-import-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4, 16px);
+  max-height: calc(100vh - var(--space-6));
+}
+
+.numbers-import-form h2 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--fw-bold);
+}
+
+.numbers-import-textarea {
+  width: 100%;
+  resize: vertical;
+  padding: var(--space-2) var(--space-2-5);
+  border: 1px solid var(--action-border);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-sm);
+}
+
+.numbers-import-errors {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.numbers-import-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+
+.numbers-import-row {
+  display: grid;
+  grid-template-columns: 2.5em minmax(0, 1fr) auto minmax(0, 1.4fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1, 4px) 0;
+}
+
+.numbers-import-num {
+  font-weight: var(--fw-bold);
+  text-align: right;
+}
+
+.numbers-import-raw {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.numbers-import-arrow {
+  color: var(--muted-light);
+}
+
+.numbers-import-select {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 1px solid var(--action-border);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--text);
+  font: inherit;
+}
+
+.numbers-import-badge {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.numbers-import-row.is-fuzzy .numbers-import-badge { color: #b06a00; }
+.numbers-import-row.is-unmatched .numbers-import-badge { color: var(--muted-light); }
+
+.numbers-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
