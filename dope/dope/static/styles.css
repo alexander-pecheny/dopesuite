@@ -4417,6 +4417,10 @@ body:not(.embedded-match) .grid-match {
   appearance: none;
   -webkit-appearance: none;
   border: 0;
+  /* <button> defaults to the UA text colour (black) rather than inheriting, so
+     the inactive sort header vanished on dark themes. Inherit the themed header
+     colour instead. */
+  color: inherit;
   font-family: inherit;
   font-size: inherit;
   cursor: pointer;
