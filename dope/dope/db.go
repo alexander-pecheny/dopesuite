@@ -1851,6 +1851,13 @@ func (s *server) importScheme(scheme festScheme) (FestView, error) {
 	}
 	defer tx.Rollback()
 
+	// A full import wipes and rebuilds every structural row; that churn carries no
+	// incremental-undo value and is recorded as one 'import' event below, so skip
+	// per-row audit capture (import is a revert boundary).
+	if err := suppressAuditTx(ctx, tx); err != nil {
+		return FestView{}, err
+	}
+
 	if err := clearImportedData(ctx, tx); err != nil {
 		return FestView{}, err
 	}
@@ -2041,6 +2048,12 @@ func (s *server) importSchemeIntoFest(ctx context.Context, festID int64, scheme 
 		return err
 	}
 	defer tx.Rollback()
+
+	// Skip per-row audit churn for the wipe-and-rebuild; the import is recorded as
+	// one 'import' event below and acts as a revert boundary. See suppressAuditTx.
+	if err := suppressAuditTx(ctx, tx); err != nil {
+		return err
+	}
 
 	if err := clearFestImportData(ctx, tx, festID); err != nil {
 		return err

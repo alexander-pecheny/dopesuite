@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -46,7 +47,7 @@ type auditRow struct {
 func loadAuditRows(t *testing.T, db *sql.DB, table string) []auditRow {
 	t.Helper()
 	rows, err := db.Query(
-		`select id, table_name, row_pk, op, before_json, after_json, actor_user_id, request_id
+		`select id, table_name, row_pk, op, dope_unz(before_json), dope_unz(after_json), actor_user_id, request_id
 		 from audit_log where table_name = ? order by id`, table)
 	if err != nil {
 		t.Fatalf("select audit_log: %v", err)
@@ -150,6 +151,168 @@ values(?, ?, '', null, null, 1, ?, ?, 0)`, "audit-test", "Audit Test", now, now)
 	}
 	if del.AfterJSON.Valid {
 		t.Errorf("delete after_json should be NULL, got %q", del.AfterJSON.String)
+	}
+}
+
+// TestAuditUpdateStoresOnlyChangedColumns verifies the column-diff optimization:
+// an UPDATE snapshot keeps the primary key plus columns that actually changed,
+// and drops unchanged columns. This is what lets a single edit on a wide row
+// (e.g. a fest with a big state-like field) stay small while remaining
+// revert-safe, since reverseAuditEntry restores changed columns by PK.
+func TestAuditUpdateStoresOnlyChangedColumns(t *testing.T) {
+	db := auditOpenDB(t)
+	srv := auditTestServer(db)
+	ctx := context.Background()
+	now := utcNow()
+
+	res, err := srv.writeExec(ctx, `
+insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
+values(?, ?, 'orig description', null, null, 1, ?, ?, 0)`, "diff-test", "Orig Title", now, now)
+	if err != nil {
+		t.Fatalf("insert fest: %v", err)
+	}
+	festID, _ := res.LastInsertId()
+
+	// Change only `title`; description and most other columns stay the same.
+	if _, err := srv.writeExec(ctx, `update fests set title = ? where id = ?`,
+		"New Title", festID); err != nil {
+		t.Fatalf("update fest: %v", err)
+	}
+
+	rows := loadAuditRows(t, db, "fests")
+	var upd auditRow
+	for _, r := range rows {
+		if r.Op == "UPDATE" {
+			upd = r
+		}
+	}
+	if upd.Op != "UPDATE" {
+		t.Fatalf("no UPDATE audit row found: %+v", rows)
+	}
+
+	var before, after map[string]any
+	if err := json.Unmarshal([]byte(upd.BeforeJSON.String), &before); err != nil {
+		t.Fatalf("before json %q: %v", upd.BeforeJSON.String, err)
+	}
+	if err := json.Unmarshal([]byte(upd.AfterJSON.String), &after); err != nil {
+		t.Fatalf("after json %q: %v", upd.AfterJSON.String, err)
+	}
+
+	// PK + changed column present, unchanged columns dropped.
+	if _, ok := before["id"]; !ok {
+		t.Errorf("before is missing PK 'id': %v", before)
+	}
+	if before["title"] != "Orig Title" || after["title"] != "New Title" {
+		t.Errorf("title not captured: before=%v after=%v", before["title"], after["title"])
+	}
+	if _, ok := after["description"]; ok {
+		t.Errorf("unchanged column 'description' should be dropped from UPDATE diff: %v", after)
+	}
+	if _, ok := after["slug"]; ok {
+		t.Errorf("unchanged column 'slug' should be dropped from UPDATE diff: %v", after)
+	}
+}
+
+// TestImportSuppressesAuditChurn verifies a bulk import rebuilds all structural
+// rows without logging any of them (it's recorded as an 'events' row and acts as
+// a revert boundary), while a normal edit afterwards is still audited — proving
+// the suppress flag resets per transaction.
+func TestImportSuppressesAuditChurn(t *testing.T) {
+	db := auditOpenDB(t)
+	srv := auditTestServer(db)
+
+	scheme := festScheme{
+		SchemaVersion:     2,
+		Slug:              "imp",
+		Title:             "Imp",
+		GameType:          "ek",
+		RegularThemeCount: 3,
+		Venues:            []schemeVenue{{Number: 1, Title: "Main"}},
+		Teams: []schemeTeam{
+			{Name: "Alpha", Basket: 1, Number: 1},
+			{Name: "Beta", Basket: 1, Number: 2},
+		},
+		Stages: []schemeStage{{
+			Code:      "r1",
+			Title:     "R1",
+			StageType: "matches",
+			Position:  1,
+			Matches: []schemeMatch{{
+				Code:             "A",
+				Title:            "A",
+				Venue:            1,
+				ParticipantCount: 2,
+				Slots: []schemeSlot{
+					{Seed: &schemeSeedRef{Basket: 1, Number: 1}},
+					{Seed: &schemeSeedRef{Basket: 1, Number: 2}},
+				},
+			}},
+		}},
+	}
+	if _, err := srv.importScheme(scheme); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	var n int
+	if err := db.QueryRow(`select count(*) from audit_log`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("import should be audit-suppressed; got %d audit rows", n)
+	}
+
+	// A normal edit after the import (new tx → suppress reset) is still captured.
+	var festID int64
+	if err := db.QueryRow(`select id from fests limit 1`).Scan(&festID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.writeExec(context.Background(),
+		`update fests set title = ? where id = ?`, "Renamed", festID); err != nil {
+		t.Fatal(err)
+	}
+	rows := loadAuditRows(t, db, "fests")
+	if len(rows) != 1 || rows[0].Op != "UPDATE" {
+		t.Fatalf("normal edit after import should be audited once; got %+v", rows)
+	}
+}
+
+// TestAuditCompressRoundTrip exercises the dope_z/dope_unz storage codec
+// directly: compressed values round-trip, and legacy plain-text rows (written
+// before compression existed) pass through dope_unz untouched.
+func TestAuditCompressRoundTrip(t *testing.T) {
+	db := auditOpenDB(t)
+
+	cases := []string{
+		"",
+		`{"id":1}`,
+		`{"title":"hello","state_json":"` + strings.Repeat("x", 5000) + `"}`,
+	}
+	for _, in := range cases {
+		var out string
+		if err := db.QueryRow(`select dope_unz(dope_z(?))`, in).Scan(&out); err != nil {
+			t.Fatalf("round-trip %q: %v", in, err)
+		}
+		if out != in {
+			t.Errorf("round-trip mismatch: got %q want %q", out, in)
+		}
+	}
+
+	// Legacy uncompressed JSON text (first byte '{') must pass through unchanged.
+	var legacy string
+	if err := db.QueryRow(`select dope_unz(?)`, `{"legacy":true}`).Scan(&legacy); err != nil {
+		t.Fatalf("legacy passthrough: %v", err)
+	}
+	if legacy != `{"legacy":true}` {
+		t.Errorf("legacy passthrough = %q", legacy)
+	}
+
+	// NULL stays NULL.
+	var nullOut sql.NullString
+	if err := db.QueryRow(`select dope_unz(dope_z(NULL))`).Scan(&nullOut); err != nil {
+		t.Fatalf("null round-trip: %v", err)
+	}
+	if nullOut.Valid {
+		t.Errorf("NULL should round-trip to NULL, got %q", nullOut.String)
 	}
 }
 

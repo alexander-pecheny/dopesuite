@@ -247,6 +247,10 @@ func main() {
 		runResolveBracket(os.Args[2:])
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "compact-audit" {
+		runCompactAudit(os.Args[2:])
+		return
+	}
 
 	srv, err := newServer()
 	if err != nil {

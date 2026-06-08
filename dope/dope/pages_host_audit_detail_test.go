@@ -54,7 +54,7 @@ func TestGamesRowChangesRendersKSICellClear(t *testing.T) {
 	parts := []string{"Альфа", "Бета", "Гамма"}
 	before := gamesAuditRow(t, ksiState(parts, map[[3]int]string{{1, 2, 4}: "right"}))
 	after := gamesAuditRow(t, ksiState(parts, map[[3]int]string{}))
-	lines := gamesRowChanges(before, after)
+	lines := gamesRowChanges(nil, before, after)
 	if len(lines) != 1 {
 		t.Fatalf("want 1 change, got %d: %v", len(lines), lines)
 	}
@@ -69,7 +69,7 @@ func TestGamesRowChangesRendersSetAndFinished(t *testing.T) {
 	bs := ksiState(parts, map[[3]int]string{})
 	as := ksiState(parts, map[[3]int]string{{0, 1, 0}: "wrong"})
 	as["finished"] = true
-	lines := gamesRowChanges(gamesAuditRow(t, bs), gamesAuditRow(t, as))
+	lines := gamesRowChanges(nil, gamesAuditRow(t, bs), gamesAuditRow(t, as))
 	joined := strings.Join(lines, "\n")
 	if !strings.Contains(joined, "Тема 1 · Вопрос 1 · «Бета»: пусто → неверно") {
 		t.Fatalf("missing cell set line: %v", lines)
@@ -84,15 +84,15 @@ func TestMatchRowChangesRendersStatusToggle(t *testing.T) {
 		row, _ := json.Marshal(map[string]any{"id": 11, "title": "1/8 №3", "status": status})
 		return sql.NullString{String: string(row), Valid: true}
 	}
-	finish := matchRowChanges(mk("active"), mk("finished"))
+	finish := matchRowChanges(nil, mk("active"), mk("finished"))
 	if len(finish) != 1 || !strings.Contains(finish[0], "отмечен законченным") || !strings.Contains(finish[0], "1/8 №3") {
 		t.Fatalf("finish toggle: %v", finish)
 	}
-	resume := matchRowChanges(mk("finished"), mk("active"))
+	resume := matchRowChanges(nil, mk("finished"), mk("active"))
 	if len(resume) != 1 || !strings.Contains(resume[0], "снята отметка") {
 		t.Fatalf("resume toggle: %v", resume)
 	}
-	none := matchRowChanges(mk("active"), mk("active"))
+	none := matchRowChanges(nil, mk("active"), mk("active"))
 	if len(none) != 0 {
 		t.Fatalf("no status change should produce no lines: %v", none)
 	}
