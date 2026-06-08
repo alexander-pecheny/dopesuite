@@ -917,7 +917,7 @@ function handleEntryCellKeydown(event, cell) {
   } else if (event.key === "Backspace" || event.key === "Delete" || event.key === " ") {
     event.preventDefault();
     clearSelectedEntryCells();
-  } else if (!event.metaKey && !event.ctrlKey && !event.altKey && isFillAllKey(event.key)) {
+  } else if (!event.metaKey && !event.ctrlKey && !event.altKey && isFillAllKey(event)) {
     const qIndex = Number(cell.dataset.q);
     if (Number.isInteger(qIndex) && !state.completed[qIndex]) {
       event.preventDefault();
@@ -932,7 +932,13 @@ function handleEntryCellKeydown(event, cell) {
   }
 }
 
-function isFillAllKey(key) {
+function isFillAllKey(event) {
+  // Layout-independent: event.code is the physical key, so the A key fires this
+  // on any layout (e.g. Russian ЙЦУКЕН, where that key types "ф"). Fall back to
+  // the produced character for environments that don't report a code, covering
+  // Latin a/A and Cyrillic а/А.
+  if (event.code === "KeyA") return true;
+  const key = event.key;
   return key === "a" || key === "A" || key === "а" || key === "А";
 }
 

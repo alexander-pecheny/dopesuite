@@ -5237,17 +5237,14 @@ body:not(.embedded-match) .grid-match {
   z-index: var(--z-dropdown);
 }
 
-.appearance-trigger {
-  font-size: var(--text-lg);
-  line-height: 1;
+.appearance-trigger svg {
+  display: block;
 }
 
 .appearance-menu-floating .appearance-trigger {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
   box-shadow: var(--shadow-popover);
-  padding: var(--space-1) var(--space-2);
 }
 
 .appearance-dropdown {

@@ -93,7 +93,10 @@
     trigger.setAttribute("aria-label", "Меню");
     trigger.setAttribute("aria-haspopup", "true");
     trigger.setAttribute("aria-expanded", "false");
-    trigger.textContent = "☰";
+    // An SVG hamburger centers crisply at any size; the ☰ glyph (U+2630) sits
+    // high in its em-box and reads off-centre inside the icon button.
+    trigger.innerHTML = '<svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true" focusable="false">'
+      + '<path d="M2.5 5h13M2.5 9h13M2.5 13h13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 
     const dropdown = document.createElement("div");
     dropdown.className = "appearance-dropdown";
