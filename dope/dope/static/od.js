@@ -1672,7 +1672,10 @@ function openEntryEditor(cell) {
   if (!shootout) setEntrySelection(qIndex, rowIndex, qIndex, rowIndex, {focus: false});
   const input = document.createElement("input");
   input.type = "text";
-  input.inputMode = "text";
+  // Hint mobile keyboards to open straight into the digit keypad (like OTP
+  // entry) — team numbers are digits-only. On desktop inputMode is ignored, so
+  // typing a team name to filter the suggest list still works there.
+  input.inputMode = "numeric";
   input.className = "entry-input";
   if (shootout) {
     input.dataset.entryKind = "shootout";

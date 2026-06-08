@@ -1842,6 +1842,11 @@
       applyValues,
       onSelectionChange,
       onActiveChange,
+      // cycle(cell) -> next value (in applyValues' value space) for a touch tap.
+      // When provided, tapping a cell on a touch device advances it through its
+      // states (e.g. empty → right → wrong → empty), the only way to enter data
+      // on mobile where there is no physical +/- keyboard.
+      cycle = null,
       classes = {},
     } = options;
     const cls = {
@@ -1860,6 +1865,7 @@
     let focusCoord = null;
     let dragState = null;
     let suppressNextClick = false;
+    let tapStart = null;
 
     function rect() {
       if (!anchor || !focusCoord) return null;
@@ -2043,10 +2049,53 @@
       pasteSelection(event);
     }
 
+    // Touch taps cycle a cell's value via `cycle` (see option docs). We track
+    // the touch from pointerdown so we can tell a tap from a scroll: if the
+    // finger moves more than a few px or lifts off a different cell, it was a
+    // scroll and we leave the value alone. Gated on pointerType === "touch", so
+    // mouse clicks (desktop select/drag) are unaffected.
+    const TAP_MOVE_TOLERANCE = 10;
+
+    function handlePointerDown(event) {
+      if (event.pointerType !== "touch" || !cycle || isReadonly()) {
+        tapStart = null;
+        return;
+      }
+      const cell = event.target.closest?.(cellSelector);
+      if (!cell || !root.contains(cell) || isEditableTarget(event.target)) {
+        tapStart = null;
+        return;
+      }
+      tapStart = {cell, x: event.clientX, y: event.clientY};
+    }
+
+    function handlePointerUp(event) {
+      if (event.pointerType !== "touch" || !cycle) return;
+      const start = tapStart;
+      tapStart = null;
+      if (!start || isReadonly()) return;
+      const cell = event.target.closest?.(cellSelector);
+      if (!cell || cell !== start.cell) return;
+      if (Math.abs(event.clientX - start.x) > TAP_MOVE_TOLERANCE
+        || Math.abs(event.clientY - start.y) > TAP_MOVE_TOLERANCE) return;
+      const value = cycle(cell);
+      if (value === undefined || value === null) return;
+      applyValues?.([{cell, value}]);
+      const coord = coordOf(cell);
+      if (coord) setSelection(coord, coord, {focus: false});
+    }
+
+    function handlePointerCancel() {
+      tapStart = null;
+    }
+
     function bind() {
       root.addEventListener("mousedown", handleMouseDown);
       root.addEventListener("mouseover", handleMouseOver);
       root.addEventListener("click", handleClickCapture, true);
+      root.addEventListener("pointerdown", handlePointerDown);
+      root.addEventListener("pointerup", handlePointerUp);
+      root.addEventListener("pointercancel", handlePointerCancel);
       document.addEventListener("copy", handleCopy);
       document.addEventListener("paste", handlePaste);
     }
@@ -2055,6 +2104,9 @@
       root.removeEventListener("mousedown", handleMouseDown);
       root.removeEventListener("mouseover", handleMouseOver);
       root.removeEventListener("click", handleClickCapture, true);
+      root.removeEventListener("pointerdown", handlePointerDown);
+      root.removeEventListener("pointerup", handlePointerUp);
+      root.removeEventListener("pointercancel", handlePointerCancel);
       document.removeEventListener("copy", handleCopy);
       document.removeEventListener("paste", handlePaste);
     }

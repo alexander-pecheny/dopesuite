@@ -339,6 +339,7 @@ function attachKSISelection(table) {
     cellAtCoord: ksiCellAtCoord,
     serialize: ksiSerializeMark,
     parse: parseKSIMarkText,
+    cycle: ksiCycleMark,
     applyValues: applyKSIEdits,
     onActiveChange: (cell) => {
       if (!cell) return;
@@ -381,6 +382,13 @@ function ksiSerializeMark(cell) {
   if (cell.classList.contains("right")) return "+";
   if (cell.classList.contains("wrong")) return "-";
   return "";
+}
+
+// Touch tap cycle: empty → right → wrong → empty.
+function ksiCycleMark(cell) {
+  if (cell.classList.contains("right")) return "wrong";
+  if (cell.classList.contains("wrong")) return "";
+  return "right";
 }
 
 function parseKSIMarkText(text) {
