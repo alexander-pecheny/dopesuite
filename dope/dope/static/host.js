@@ -1857,6 +1857,7 @@ function attachStageSelection(container) {
     cellAtCoord: stageCellAtCoord,
     serialize: ekSerializeMark,
     parse: parseMarkText,
+    cycle: ekCycleMark,
     applyValues: stageApplyValues,
     onActiveChange: (cell) => {
       if (!cell) return;
@@ -1912,6 +1913,13 @@ function ekSerializeMark(cell) {
   if (cell.classList.contains("right")) return "+";
   if (cell.classList.contains("wrong")) return "-";
   return "";
+}
+
+// Touch tap cycle: empty → right → wrong → empty.
+function ekCycleMark(cell) {
+  if (cell.classList.contains("right")) return "wrong";
+  if (cell.classList.contains("wrong")) return "";
+  return "right";
 }
 
 function parseMarkText(text) {
@@ -2063,6 +2071,7 @@ function attachMatchSelection(table, matchState, matchCode) {
     cellAtCoord: (coord) => ekCellAtCoord(table, coord, matchState),
     serialize: ekSerializeMark,
     parse: parseMarkText,
+    cycle: ekCycleMark,
     applyValues: (edits) => ekApplyValues(matchCode, matchState, edits),
     onActiveChange: (cell) => {
       if (!cell) return;
