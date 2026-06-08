@@ -36,6 +36,14 @@
   --danger: #dc2626;
   --danger-soft: #fdf0f2;
   --warning-soft: #dfe9f9;
+  /* Amber/warning cluster: the unnumbered-teams banner and fuzzy-match badge. */
+  --amber-bg: #fde68a;
+  --amber-border: #f59e0b;
+  --amber-text-strong: #7c2d12;
+  --amber-text: #b06a00;
+  /* Diagnostic chip (download-log button): stays dark in every theme. */
+  --diag-bg: rgba(30, 30, 30, 0.82);
+  --diag-fg: #ffffff;
   --paper: #ffffff;
   --paper-transparent: rgba(255, 255, 255, 0);
   --structure: #eef1f4;
@@ -1814,7 +1822,7 @@ a.list-row:hover { background: var(--hover-bg); }
   height: 7px;
   border-radius: 50%;
   border: 1.5px solid rgba(0, 0, 0, 0.2);
-  border-top-color: var(--blue, #1a73e8);
+  border-top-color: var(--blue);
   animation: sync-spin 700ms linear infinite;
   pointer-events: none;
   z-index: 2;
@@ -5053,7 +5061,7 @@ body:not(.embedded-match) .grid-match {
   white-space: nowrap;
 }
 
-.numbers-import-row.is-fuzzy .numbers-import-badge { color: #b06a00; }
+.numbers-import-row.is-fuzzy .numbers-import-badge { color: var(--amber-text); }
 .numbers-import-row.is-unmatched .numbers-import-badge { color: var(--muted-light); }
 
 .numbers-import-actions {

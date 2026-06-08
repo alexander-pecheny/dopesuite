@@ -1196,7 +1196,7 @@
       const remote = remotes.get(message.userID) || {};
       remote.userID = message.userID;
       remote.username = message.username || `user-${message.userID}`;
-      remote.color = message.color || "#1a73e8";
+      remote.color = message.color || "var(--blue)";
       remote.cursor = message.cursor;
       remote.seenAt = Date.now();
       remotes.set(message.userID, remote);
@@ -1730,12 +1730,12 @@
       position: "sticky",
       top: "0",
       zIndex: "2147483600",
-      background: "#fde68a",
-      color: "#7c2d12",
+      background: "var(--amber-bg)",
+      color: "var(--amber-text-strong)",
       font: "13px/1.4 system-ui, sans-serif",
       padding: "8px 12px",
       textAlign: "center",
-      borderBottom: "1px solid #f59e0b",
+      borderBottom: "1px solid var(--amber-border)",
     });
     bar.append("Командам не присвоены номера — редактирование результатов заблокировано. ");
     const link = document.createElement("a");
@@ -2540,8 +2540,8 @@
       zIndex: "2147483000",
       font: "12px/1.2 system-ui, sans-serif",
       padding: "4px 8px",
-      background: "rgba(30,30,30,.82)",
-      color: "#fff",
+      background: "var(--diag-bg)",
+      color: "var(--diag-fg)",
       border: "0",
       borderRadius: "6px",
       cursor: "pointer",
