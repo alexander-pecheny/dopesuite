@@ -2533,10 +2533,10 @@ function handleGlobalKeydown(event) {
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
       moveActiveCell(1, 0, event.shiftKey);
-    } else if (key === "q" || key === "й" || key === "1") {
+    } else if (key === "q" || key === "й" || key === "+" || key === "1" || event.code === "NumpadAdd") {
       event.preventDefault();
       setMarkForSelection("right");
-    } else if (key === "w" || key === "ц" || key === "-" || key === "2") {
+    } else if (key === "w" || key === "ц" || key === "-" || key === "2" || event.code === "NumpadSubtract") {
       event.preventDefault();
       setMarkForSelection("wrong");
     } else if (key === "backspace" || key === "delete" || event.key === " ") {
