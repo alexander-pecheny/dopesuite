@@ -1696,22 +1696,18 @@
     };
   }
 
-  function mountEditorLink(statusNode) {
-    const actions = statusNode?.closest(".host-actions");
-    if (!actions) return null;
-    const link = document.createElement("a");
-    link.className = "action-icon editor-link";
-    link.setAttribute("aria-label", "Открыть в режиме редактирования");
-    link.title = "Открыть в режиме редактирования";
-    link.textContent = "✏️";
-    link.href = editorHrefForCurrentLocation();
-    actions.appendChild(link);
-    return {
-      element: link,
-      refresh() {
-        link.href = editorHrefForCurrentLocation();
-      },
-    };
+  // The standalone ✏️/👀 icons were folded into the ☰ menu (appearance.js).
+  // These now register the menu's context-aware jump item instead of mounting
+  // an icon; .refresh() re-points it after SPA navigation. statusNode is kept
+  // for call-site compatibility but unused.
+  function mountEditorLink() {
+    const set = () => window.dopeAppearance?.setJump({
+      label: "Режим редактирования",
+      href: editorHrefForCurrentLocation(),
+      title: "Открыть в режиме редактирования",
+    });
+    set();
+    return {refresh: set};
   }
 
   function editorHrefForCurrentLocation() {
@@ -1747,24 +1743,15 @@
     return bar;
   }
 
-  function mountViewerLink(statusNode) {
-    const actions = statusNode?.closest(".host-actions");
-    if (!actions) return null;
-    const link = document.createElement("a");
-    link.className = "action-icon viewer-link";
-    link.target = "_blank";
-    link.rel = "noreferrer";
-    link.setAttribute("aria-label", "Открыть зрительскую страницу");
-    link.title = "Открыть зрительскую страницу";
-    link.textContent = "👀";
-    link.href = viewerHrefForCurrentLocation();
-    actions.appendChild(link);
-    return {
-      element: link,
-      refresh() {
-        link.href = viewerHrefForCurrentLocation();
-      },
-    };
+  function mountViewerLink() {
+    const set = () => window.dopeAppearance?.setJump({
+      label: "Страница зрителя",
+      href: viewerHrefForCurrentLocation(),
+      title: "Открыть зрительскую страницу",
+      external: true,
+    });
+    set();
+    return {refresh: set};
   }
 
   function viewerHrefForCurrentLocation() {

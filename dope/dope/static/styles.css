@@ -5069,3 +5069,286 @@ body:not(.embedded-match) .grid-match {
   justify-content: flex-end;
   gap: var(--space-2);
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   APPEARANCE: dark theme + high-contrast mode
+   Two independent axes set by appearance.js on <html>:
+     data-theme    = light | dark
+     data-contrast = regular | high
+   Default (no overrides) is the light/regular palette in :root above. Each
+   block below only re-points existing color variables, so the whole app
+   re-themes through the variables it already uses. The high-contrast blocks
+   are scoped per theme ([data-theme=light/dark][data-contrast=high]) so they
+   layer on top of the active theme with higher specificity than the bare
+   dark block — order-independent.
+   Palette rationale (Material dark theme + WCAG): no pure black; depth via
+   lighter surfaces ~3-4 L apart, not shadows; off-white (not #fff) text;
+   lightened/desaturated accents; high-contrast separates adjacent surfaces
+   with stronger, text-colored borders and darker grays.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Dark theme ─────────────────────────────────────────────────────────── */
+:root[data-theme="dark"] {
+  /* neutral surfaces — base (page) darkest, paper/cards lifted, structure/
+     header/hover progressively lighter to read as elevation */
+  --page: #14161b;
+  --paper: #1e2128;
+  --paper-transparent: rgba(30, 33, 40, 0);
+  --surface: var(--paper);
+  --structure: #262a31;
+  --header: #22262d;
+  --toolbar: #20242b;
+  --hover-bg: #2c313a;
+  --accent-soft: #1d2532;
+  --grid: #353b45;
+  --grid-dark: #474e5a;
+  --border: var(--grid-dark);
+  --border-soft: #2d323b;
+  --action-bg: #262a31;
+  --action-border: #3a414c;
+  --action-disabled-bg: #20242b;
+
+  /* text — off-white high-emphasis, dimmer for muted (avoids halation) */
+  --text: #e4e6ea;
+  --text-strong: #f2f4f6;
+  --muted: #a6acb5;
+  --muted-light: #7a818b;
+  --slate: #94a3b8;
+  --slate-strong: #cbd5e1;
+
+  /* accents — lighter + a touch desaturated so they don't vibrate on dark */
+  --blue: #5b9bf5;
+  --blue-tint: #1b2942;
+  --blue-soft: #213450;
+  --blue-strong: #8fbaf8;
+  --blue-bright: #5e8ff2;
+  --warning-soft: #243349;
+
+  /* status — re-picked for dark, not desaturated light values */
+  --green: #3a6b4d;
+  --green-dark: #7fcf9a;
+  --red: #6b3138;
+  --red-dark: #f0a0aa;
+  --red-soft: #2a1c1e;
+  --success: #2ecc6f;
+  --success-alt: #3ed47e;
+  --success-soft: #15291d;
+  --success-text: #86e6a8;
+  --danger: #f25555;
+  --danger-soft: #2c1518;
+  --danger-text: #f7a6b4;
+
+  /* amber/warning — shifted warm so it stays visible on dark */
+  --amber-bg: #463713;
+  --amber-border: #c4881d;
+  --amber-text-strong: #f6ddc0;
+  --amber-text: #e3aa55;
+
+  /* overlays — deepen black-based scrims; shadows are a weak cue on dark */
+  --backdrop: rgba(0, 0, 0, 0.6);
+  --scroll-fade-color: rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="dark"] body {
+  background: var(--page);
+}
+
+/* ── High contrast, light theme ─────────────────────────────────────────────
+   Motivating case: a monitor that can't separate white from light gray.
+   Darken the structural grays well clear of white and strengthen borders so
+   cell/row boundaries carry separation regardless of fill. Push text toward
+   AAA. */
+:root[data-theme="light"][data-contrast="high"] {
+  --grid: #9aa1ab;
+  --grid-dark: #5f6772;
+  --border: var(--grid-dark);
+  --border-soft: #b5bcc6;
+  --structure: #d2d8e0;
+  --header: #cbd0d7;
+  --toolbar: #dbe1ea;
+  --page: #e6e9ee;
+  --hover-bg: #ccd2da;
+  --accent-soft: #dbe5f4;
+  --action-bg: #e9edf2;
+  --action-border: #8b929c;
+
+  --text: #16181b;
+  --text-strong: #000000;
+  --muted: #3c4043;
+  --muted-light: #5f6368;
+
+  --blue-strong: #103d86;
+  --green-dark: #1f6e44;
+  --red-dark: #8a2e37;
+  --success-text: #0f5132;
+  --danger-text: #7a0c2e;
+}
+
+/* ── High contrast, dark theme ─────────────────────────────────────────────
+   Brighten borders and text, and widen the surface lightness gaps so adjacent
+   panels stay distinct on a poor display. */
+:root[data-theme="dark"][data-contrast="high"] {
+  --page: #0e1014;
+  --paper: #1f232b;
+  --structure: #2f3540;
+  --header: #2b313b;
+  --toolbar: #282d36;
+  --hover-bg: #363d49;
+  --grid: #5a626e;
+  --grid-dark: #828b98;
+  --border: var(--grid-dark);
+  --border-soft: #4a515c;
+  --action-border: #5a626e;
+
+  --text: #f6f8fa;
+  --text-strong: #ffffff;
+  --muted: #c4cad2;
+  --muted-light: #9aa1ab;
+
+  --blue: #7fb0f8;
+  --green-dark: #9be0b3;
+  --red-dark: #f6bcc3;
+}
+
+/* ── ☰ menu (Appearance + the edit/view jump) ───────────────────────────── */
+.appearance-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.appearance-menu-floating {
+  position: fixed;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--z-dropdown);
+}
+
+.appearance-trigger {
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.appearance-menu-floating .appearance-trigger {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  padding: var(--space-1) var(--space-2);
+}
+
+.appearance-dropdown {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  min-width: 184px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-dropdown);
+}
+
+.appearance-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-2-5);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  cursor: var(--cursor-action);
+}
+
+.appearance-item:hover,
+.appearance-item:focus-visible {
+  background: var(--hover-bg);
+}
+
+/* ── Appearance modal ───────────────────────────────────────────────────── */
+.appearance-modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--backdrop);
+  z-index: var(--z-modal);
+}
+
+.appearance-modal {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+}
+
+.appearance-modal-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+}
+
+.appearance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.appearance-row-label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.appearance-segment {
+  display: inline-flex;
+  padding: var(--space-0-5);
+  background: var(--structure);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.appearance-segment-btn {
+  padding: var(--space-1-5) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: var(--cursor-action);
+}
+
+.appearance-segment-btn.is-active {
+  background: var(--surface);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-popover);
+  font-weight: var(--fw-semibold);
+}
+
+.appearance-modal-done {
+  align-self: flex-end;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--action-border);
+  border-radius: var(--radius-md);
+  background: var(--action-bg);
+  color: var(--action-fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  cursor: var(--cursor-action);
+}

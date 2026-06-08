@@ -63,6 +63,7 @@ var adminIndexTemplate = template.Must(template.New("adminIndex").Parse(`<!docty
   <title>Админка</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/appearance.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
@@ -114,6 +115,7 @@ var adminCreateUsersTemplate = template.Must(template.New("adminCreateUsers").Pa
   <title>Создать пользователей · Админка</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/appearance.js"></script>
 </head>
 <body class="public">
   <header class="public-top">

@@ -1,7 +1,6 @@
 const hostRoot = document.getElementById("hostTable");
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
-const viewerLink = document.querySelector(".viewer-link");
 const ekTabsRoot = document.getElementById("ekTabs");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
@@ -2911,10 +2910,9 @@ function breadcrumbCurrentTitle(gameTitle) {
 }
 
 function setViewerLink(href, title) {
-  if (!viewerLink) return;
-  viewerLink.href = href;
-  viewerLink.title = title;
-  viewerLink.setAttribute("aria-label", title);
+  // Folded into the ☰ menu (appearance.js): register the context-aware jump
+  // with the precise per-mode viewer href instead of a standalone 👀 icon.
+  window.dopeAppearance?.setJump({label: "Страница зрителя", href, title, external: true});
 }
 
 function setHostMode(mode) {
