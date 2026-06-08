@@ -1196,7 +1196,7 @@
       const remote = remotes.get(message.userID) || {};
       remote.userID = message.userID;
       remote.username = message.username || `user-${message.userID}`;
-      remote.color = message.color || "#1a73e8";
+      remote.color = message.color || "var(--blue)";
       remote.cursor = message.cursor;
       remote.seenAt = Date.now();
       remotes.set(message.userID, remote);
@@ -1696,22 +1696,18 @@
     };
   }
 
-  function mountEditorLink(statusNode) {
-    const actions = statusNode?.closest(".host-actions");
-    if (!actions) return null;
-    const link = document.createElement("a");
-    link.className = "action-icon editor-link";
-    link.setAttribute("aria-label", "Открыть в режиме редактирования");
-    link.title = "Открыть в режиме редактирования";
-    link.textContent = "✏️";
-    link.href = editorHrefForCurrentLocation();
-    actions.appendChild(link);
-    return {
-      element: link,
-      refresh() {
-        link.href = editorHrefForCurrentLocation();
-      },
-    };
+  // The standalone ✏️/👀 icons were folded into the ☰ menu (appearance.js).
+  // These now register the menu's context-aware jump item instead of mounting
+  // an icon; .refresh() re-points it after SPA navigation. statusNode is kept
+  // for call-site compatibility but unused.
+  function mountEditorLink() {
+    const set = () => window.dopeAppearance?.setJump({
+      label: "Режим редактирования",
+      href: editorHrefForCurrentLocation(),
+      title: "Открыть в режиме редактирования",
+    });
+    set();
+    return {refresh: set};
   }
 
   function editorHrefForCurrentLocation() {
@@ -1730,12 +1726,12 @@
       position: "sticky",
       top: "0",
       zIndex: "2147483600",
-      background: "#fde68a",
-      color: "#7c2d12",
+      background: "var(--amber-bg)",
+      color: "var(--amber-text-strong)",
       font: "13px/1.4 system-ui, sans-serif",
       padding: "8px 12px",
       textAlign: "center",
-      borderBottom: "1px solid #f59e0b",
+      borderBottom: "1px solid var(--amber-border)",
     });
     bar.append("Командам не присвоены номера — редактирование результатов заблокировано. ");
     const link = document.createElement("a");
@@ -1747,24 +1743,15 @@
     return bar;
   }
 
-  function mountViewerLink(statusNode) {
-    const actions = statusNode?.closest(".host-actions");
-    if (!actions) return null;
-    const link = document.createElement("a");
-    link.className = "action-icon viewer-link";
-    link.target = "_blank";
-    link.rel = "noreferrer";
-    link.setAttribute("aria-label", "Открыть зрительскую страницу");
-    link.title = "Открыть зрительскую страницу";
-    link.textContent = "👀";
-    link.href = viewerHrefForCurrentLocation();
-    actions.appendChild(link);
-    return {
-      element: link,
-      refresh() {
-        link.href = viewerHrefForCurrentLocation();
-      },
-    };
+  function mountViewerLink() {
+    const set = () => window.dopeAppearance?.setJump({
+      label: "Страница зрителя",
+      href: viewerHrefForCurrentLocation(),
+      title: "Открыть зрительскую страницу",
+      external: true,
+    });
+    set();
+    return {refresh: set};
   }
 
   function viewerHrefForCurrentLocation() {
@@ -2188,10 +2175,10 @@
   // the Σ+ semantics shown in a battle (TeamView.plus ignores shootouts too).
   //
   // Players are keyed by (team, player) so namesakes on different teams stay
-  // separate. The team-share column ("% от команды") is the player's share of
-  // the team's net points (Σ): only positive contributors to a net-positive
-  // team count, everyone else is 0 (see the share loop below). Returns rows
-  // sorted by Σ descending (then Σ+, then name).
+  // separate. The team-share column ("% от команды") is a positive player's
+  // share among the team's positive contributors (denominator = sum of only the
+  // positive players' Σ); players with Σ <= 0 are 0 (see the share loop below).
+  // Returns rows sorted by Σ descending (then Σ+, then name).
   function computeEKPlayerStats(stages) {
     const values = [10, 20, 30, 40, 50]; // answer index → nominal value
     const players = new Map();   // key → stat row
@@ -2243,14 +2230,17 @@
       }
     }
     const rows = Array.from(players.values());
-    // "% от команды": a player's share of the team's net points (Σ). Only
-    // positive contributors to a net-positive team count — anyone who finished
-    // negative, or whose whole team finished negative, is 0 (they harmed the
-    // team rather than helping, so a share is meaningless).
-    const teamSum = new Map();
-    for (const row of rows) teamSum.set(row.team, (teamSum.get(row.team) || 0) + row.sum);
+    // "% от команды": a positive player's share among the team's POSITIVE
+    // contributors. A player with Σ <= 0 is 0 (they didn't help), and the
+    // denominator is the sum of only the positive players' Σ — so the team's
+    // positive players' shares add up to 100%, independent of how negative the
+    // rest of the team went.
+    const teamPositiveSum = new Map();
     for (const row of rows) {
-      const total = teamSum.get(row.team) || 0;
+      if (row.sum > 0) teamPositiveSum.set(row.team, (teamPositiveSum.get(row.team) || 0) + row.sum);
+    }
+    for (const row of rows) {
+      const total = teamPositiveSum.get(row.team) || 0;
       row.share = row.sum > 0 && total > 0 ? row.sum / total : 0;
     }
     rows.sort((a, b) =>
@@ -2540,8 +2530,8 @@
       zIndex: "2147483000",
       font: "12px/1.2 system-ui, sans-serif",
       padding: "4px 8px",
-      background: "rgba(30,30,30,.82)",
-      color: "#fff",
+      background: "var(--diag-bg)",
+      color: "var(--diag-fg)",
       border: "0",
       borderRadius: "6px",
       cursor: "pointer",

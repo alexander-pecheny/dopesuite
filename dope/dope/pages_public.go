@@ -67,6 +67,7 @@ var publicListTemplate = template.Must(template.New("publicList").Parse(`<!docty
   <title>Фесты</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/appearance.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
@@ -99,6 +100,7 @@ var publicFestTemplate = template.Must(template.New("publicFest").Parse(`<!docty
   <title>{{.Title}}</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/appearance.js"></script>
 </head>
 <body class="public">
   <header class="public-top">

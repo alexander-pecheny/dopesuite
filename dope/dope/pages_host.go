@@ -46,6 +46,7 @@ var hostLoggedOutTemplate = template.Must(template.New("hostLogin").Parse(`<!doc
   <title>Вход для организаторов · Фест</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/appearance.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
@@ -69,11 +70,11 @@ var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!docty
   <title>Мои фесты · {{.Username}}</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/appearance.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
     <h1>Мои фесты</h1>
-    <a class="public-user" href="/profile">{{.Username}}</a>
   </header>
   <main class="public-main">
     {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
@@ -142,6 +143,7 @@ var profileTemplate = template.Must(template.New("profile").Parse(`<!doctype htm
   <title>Профиль</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/appearance.js"></script>
   <script defer src="/static/profile.js"></script>
 </head>
 <body class="public">

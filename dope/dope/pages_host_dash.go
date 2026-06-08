@@ -54,6 +54,7 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
   <title>{{.Fest.Title}} · ведущий</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/appearance.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
