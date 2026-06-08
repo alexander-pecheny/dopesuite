@@ -663,10 +663,20 @@ func (s *server) saveFestNumbers(ctx context.Context, festID int64, assignments 
 		if len(entryRemap) == 0 {
 			entryRemap = nil
 		}
-		updates, err = propagateRosterToChGKTx(ctx, tx, festID, teams, entryRemap)
+		chgkUpdates, err := propagateRosterToChGKTx(ctx, tx, festID, teams, entryRemap)
 		if err != nil {
 			return err
 		}
+		// KSI carries the same universal team number in its participants list, so a
+		// number reassignment must flow into KSI states too (the full roster import
+		// propagates to both; the number-edit path used to skip KSI, leaving its
+		// numbers stale relative to OD). Answers follow each team by name when the
+		// number changed, so scores are preserved.
+		ksiUpdates, err := propagateRosterToKSITx(ctx, tx, festID, teams)
+		if err != nil {
+			return err
+		}
+		updates = append(chgkUpdates, ksiUpdates...)
 		revision, err = bumpFestRevisionTx(ctx, tx, festID, "fest:numbers", mustJSON(map[string]any{
 			"assigned": len(assignments),
 			"remapped": len(entryRemap),

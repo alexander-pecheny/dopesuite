@@ -4250,9 +4250,6 @@ body:not(.embedded-match) .grid-match {
   height: 100%;
   min-width: 0;
 }
-.match-table.ksi-detailed .od-detailed-team-layout {
-  grid-template-columns: minmax(0, 1fr);
-}
 .match-table .ek-team-cell .od-detailed-team-layout {
   grid-template-columns: minmax(0, 1fr);
   min-height: calc(var(--question-size) * 2 + var(--cell-gap) * 2);
@@ -4261,9 +4258,6 @@ body:not(.embedded-match) .grid-match {
   min-height: calc(var(--question-size) * 2 - var(--cell-gap) * 2);
   max-height: calc(var(--question-size) * 2 - var(--cell-gap) * 2);
   overflow: hidden;
-}
-.match-table.ksi-detailed .od-detailed-team-name-popover {
-  left: 4px;
 }
 .match-table .ek-team-cell .od-detailed-team-name-popover {
   left: 4px;
@@ -4407,6 +4401,27 @@ body:not(.embedded-match) .grid-match {
   min-width: 0;
   padding: 0 6px;
   text-align: left;
+}
+/* KSI «Подробно» sortable headers: the № column and the Команда label are
+   buttons that pick the local row order. Reset native button chrome but keep
+   each one's column styling (.od-detailed-team-number / -head-label). */
+.match-table.od-detailed .ksi-sort-head {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+.match-table.od-detailed .od-detailed-team-head-label.ksi-sort-head {
+  background: none;
+}
+.match-table.od-detailed .ksi-sort-head:hover {
+  text-decoration: underline;
+}
+.match-table.od-detailed .ksi-sort-head.ksi-sort-active {
+  color: var(--text);
+  text-decoration: underline;
 }
 .match-table.ksi-detailed .sticky-total {
   padding-right: 4px;

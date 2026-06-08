@@ -59,6 +59,9 @@ let activeTab = tabFromHash() || "detailed";
 let tableIndex = null;
 let scoreCache = null;
 let detailedOrderCache = null;
+// Client-local row order for the «Подробно» sheet: "name" (default) or "number".
+// Editors pick whichever identity they read off the floor; never synced.
+let detailedSort = "name";
 let activeAnswerNode = null;
 let activePlayerRows = [];
 let stateSync = null;
@@ -582,7 +585,9 @@ function updateResultsScrollState() {
 function detailedPlayerOrder() {
   if (detailedOrderCache) return detailedOrderCache;
   const order = state.participants.map((_, index) => index);
-  if (isTeamMode()) order.sort((a, b) => compareParticipantNames(a, b));
+  if (isTeamMode()) {
+    order.sort(detailedSort === "number" ? compareParticipantNumbers : compareParticipantNames);
+  }
   detailedOrderCache = order;
   return detailedOrderCache;
 }
@@ -590,6 +595,27 @@ function detailedPlayerOrder() {
 function compareParticipantNames(a, b) {
   const byName = teamNameCollator.compare(participantLabel(a), participantLabel(b));
   return byName || a - b;
+}
+
+function compareParticipantNumbers(a, b) {
+  const na = participantNumber(a);
+  const nb = participantNumber(b);
+  // Numbered teams ascending; unnumbered fall to the bottom, then by name so the
+  // order is stable regardless of participant index.
+  if (na > 0 && nb > 0 && na !== nb) return na - nb;
+  if (na > 0 !== nb > 0) return na > 0 ? -1 : 1;
+  return compareParticipantNames(a, b);
+}
+
+// setDetailedSort changes the local row order of the «Подробно» sheet and
+// re-renders. Purely a view concern — no state write, no broadcast — so it is
+// available to viewers too.
+function setDetailedSort(key) {
+  if (key !== "number" && key !== "name") return;
+  if (detailedSort === key) return;
+  detailedSort = key;
+  invalidateDetailedOrder();
+  render();
 }
 
 // Participants are stored as {number, name} objects in team mode — number is the
@@ -630,24 +656,28 @@ function nameCell(name, playerIndex) {
     cell.className = "sticky sticky-name team-name od-detailed-team-cell ksi-detailed-team-cell";
     const number = participantNumber(playerIndex);
     const baseName = name || participantFallback(playerIndex);
-    const labelText = number > 0 ? `${number}. ${baseName}` : baseName;
     const layout = document.createElement("span");
     layout.className = "od-detailed-team-layout";
+
+    const numSpan = document.createElement("span");
+    numSpan.className = "od-detailed-team-number";
+    numSpan.textContent = number > 0 ? String(number) : "";
+    layout.appendChild(numSpan);
 
     const nameWrap = document.createElement("span");
     nameWrap.className = "od-detailed-team-name-wrap";
     const label = document.createElement("span");
     label.className = "readonly-team-name od-detailed-team-name";
-    label.textContent = labelText;
+    label.textContent = baseName;
     label.tabIndex = 0;
-    label.setAttribute("aria-label", labelText);
+    label.setAttribute("aria-label", baseName);
     nameWrap.appendChild(label);
     layout.appendChild(nameWrap);
     cell.appendChild(layout);
 
     const fullName = document.createElement("span");
     fullName.className = "od-detailed-team-name-popover";
-    fullName.textContent = labelText;
+    fullName.textContent = baseName;
     cell.appendChild(fullName);
     return cell;
   }
@@ -720,10 +750,26 @@ function battleHeader() {
 function detailedNameHeader() {
   const layout = document.createElement("span");
   layout.className = "od-detailed-team-layout od-detailed-team-head-layout";
-  const label = document.createElement("span");
-  label.className = "od-detailed-team-head-label";
+
+  const numberHead = document.createElement("button");
+  numberHead.type = "button";
+  numberHead.className = "od-detailed-team-number ksi-sort-head";
+  numberHead.textContent = "№";
+  numberHead.title = "Сортировать по номеру";
+  numberHead.setAttribute("aria-label", "Сортировать по номеру");
+  numberHead.classList.toggle("ksi-sort-active", detailedSort === "number");
+  numberHead.addEventListener("click", () => setDetailedSort("number"));
+
+  const label = document.createElement("button");
+  label.type = "button";
+  label.className = "od-detailed-team-head-label ksi-sort-head";
   label.textContent = "Команда";
-  layout.appendChild(label);
+  label.title = "Сортировать по названию";
+  label.setAttribute("aria-label", "Сортировать по названию");
+  label.classList.toggle("ksi-sort-active", detailedSort === "name");
+  label.addEventListener("click", () => setDetailedSort("name"));
+
+  layout.append(numberHead, label);
   return layout;
 }
 
