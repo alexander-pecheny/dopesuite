@@ -1717,7 +1717,7 @@ a.list-row:hover { background: var(--hover-bg); }
 
 .answer-cell:hover:not(.active),
 .answer-cell:focus:not(.active) {
-  outline: 2px solid rgba(26, 115, 232, 0.4);
+  outline: 2px dashed rgba(26, 115, 232, 0.4);
   outline-offset: -3px;
 }
 

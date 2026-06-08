@@ -2300,6 +2300,10 @@ function themeCells(team, teamIndex, theme, themeIndex, isShootout) {
     if (isShootout) payload.shootout = true;
     updatePlayerSelectOverflow(selectWrap);
     queueEKEdits(matchCode, [payload]);
+    // Drop focus off the dropdown so the global keydown handler (which ignores
+    // form controls) takes the arrow keys and moves the active cell, instead of
+    // the native <select> cycling its options.
+    select.blur();
   });
   selectWrap.appendChild(select);
   const playerPopover = document.createElement("span");
