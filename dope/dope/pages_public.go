@@ -184,6 +184,27 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// /fest/{festRef}/game/{gameRef}.xlsx — XLSX archive download. Read-gated by
+	// handleScopedGameExport (authorizeFestRead), so hosts of non-public fests can
+	// download too; it deliberately skips the assertFestPublic check below.
+	if len(parts) == 3 && parts[1] == "game" && strings.HasSuffix(parts[2], ".xlsx") {
+		gameRef := strings.TrimSuffix(parts[2], ".xlsx")
+		gameID, err := resolveGameID(r.Context(), s.db, id, gameRef)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if gameID <= 0 {
+			http.NotFound(w, r)
+			return
+		}
+		s.handleScopedGameExport(w, r, festScope{FestID: id, GameID: gameID})
+		return
+	}
 	if len(parts) == 1 {
 		s.renderPublicFestPage(w, r, id)
 		return

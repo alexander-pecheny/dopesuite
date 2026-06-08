@@ -368,6 +368,13 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 		case "seed-import":
 			s.handleScopedSeedImport(w, r, scope, parts[4:])
 			return
+		case "export.xlsx":
+			if len(parts) != 4 {
+				http.NotFound(w, r)
+				return
+			}
+			s.handleScopedGameExport(w, r, scope)
+			return
 		}
 	}
 	http.NotFound(w, r)
