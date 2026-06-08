@@ -194,6 +194,14 @@ func (s *server) importFestRoster(ctx context.Context, festID, ratingID int64, t
 		}
 		defer tx.Rollback()
 
+		// A rating.chgk.info roster import is a bulk machine sync (soft-deletes
+		// missing teams, rebuilds players and game rosters); its per-row churn has
+		// no incremental-undo value, so skip audit capture. Manual host roster
+		// edits run in their own (un-suppressed) tx and stay audited.
+		if err := suppressAuditTx(ctx, tx); err != nil {
+			return ratingRosterImportResult{}, err
+		}
+
 		var exists int
 		if err := tx.QueryRowContext(ctx, `select count(*) from fests where id = ?`, festID).Scan(&exists); err != nil {
 			return ratingRosterImportResult{}, err

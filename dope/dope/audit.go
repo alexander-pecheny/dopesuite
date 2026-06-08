@@ -60,9 +60,10 @@ const (
 // change to the trigger SQL (e.g. adding the fest_id column) forces a rebuild on
 // the next startup, even when no audited table's shape changed.
 //
-// v3: snapshots are DEFLATE-compressed via dope_z(); UPDATE snapshots keep only
+// v3: snapshots are zstd-compressed via dope_z(); UPDATE snapshots keep only
 // PK + changed columns (see buildAuditTrigger).
-const auditTriggerTemplateVersion = 3
+// v4: capture is skipped when audit_ctx.suppress is set (bulk import/reseed).
+const auditTriggerTemplateVersion = 4
 
 func withAuditActor(ctx context.Context, userID int64) context.Context {
 	if userID == 0 {
@@ -260,6 +261,16 @@ func seedAuditCtx(ctx context.Context, tx *sql.Tx) error {
 	return err
 }
 
+// suppressAuditTx marks the current transaction's audit context so the AFTER
+// triggers skip capture for the rest of the tx. Use it for bulk structural
+// rebuilds (import/reseed) whose per-row churn carries no incremental-undo value
+// and is already recorded at a higher level in the events log. The flag resets
+// to 0 on the next beginWriteTx (seedAuditCtx replaces the row).
+func suppressAuditTx(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `update audit_ctx set suppress = 1 where id = 1`)
+	return err
+}
+
 // writeExec wraps a single non-transactional mutation in an implicit tx so
 // audit_ctx is set before the mutation's AFTER triggers fire. Use this in
 // place of s.db.ExecContext for any single-statement mutation against an
@@ -296,15 +307,21 @@ create table if not exists audit_log(
   request_id text,
   fest_id integer
 );
-create index if not exists audit_log_table_pk_idx on audit_log(table_name, row_pk, id);
-create index if not exists audit_log_ts_idx on audit_log(ts);
-create index if not exists audit_log_request_idx on audit_log(request_id) where request_id is not null;
+-- The only audit_log read paths (the fest audit page and revert) filter on
+-- fest_id; pruning keys on id. table_pk_idx / request_idx served per-row-history
+-- and request-scoped queries that don't exist, and ts_idx only sped the prune
+-- (now reworked to key on id). They were ~38 MB of dead weight that also slowed
+-- every audited write, so drop them. fest_idx is created below.
+drop index if exists audit_log_table_pk_idx;
+drop index if exists audit_log_ts_idx;
+drop index if exists audit_log_request_idx;
 
 create table if not exists audit_ctx(
   id integer primary key check(id = 1),
   actor_user_id integer,
   request_id text,
-  fest_id integer
+  fest_id integer,
+  suppress integer not null default 0
 );
 insert or ignore into audit_ctx(id) values(1);
 
@@ -323,6 +340,12 @@ insert or ignore into audit_trigger_state(id, fingerprint) values(1, '');
 		return err
 	}
 	if err := addColumnsIfMissing(db, "audit_ctx", []columnSpec{{Name: "fest_id", Type: "integer"}}); err != nil {
+		return err
+	}
+	// suppress lets a bulk operation (import/reseed) skip audit capture for its
+	// own structural churn; the triggers check it. Added after release, so
+	// backfill on older DBs. Default 0 = audit normally.
+	if err := addColumnsIfMissing(db, "audit_ctx", []columnSpec{{Name: "suppress", Type: "integer not null default 0"}}); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`create index if not exists audit_log_fest_idx on audit_log(fest_id, id) where fest_id is not null`); err != nil {
@@ -501,6 +524,10 @@ func buildAuditTrigger(table string, cols, pks []string, op string) string {
 	const actorSel = `(select actor_user_id from audit_ctx where id = 1)`
 	const reqSel = `(select request_id from audit_ctx where id = 1)`
 	const festSel = `(select fest_id from audit_ctx where id = 1)`
+	// Skip capture entirely when the current transaction set audit_ctx.suppress
+	// (a bulk import/reseed rebuilding structural rows). INSERT..SELECT..WHERE
+	// makes the whole audit row conditional on the flag.
+	const notSuppressed = `(select suppress from audit_ctx where id = 1) = 0`
 
 	name := fmt.Sprintf("audit_%s_%s", table, op)
 	switch op {
@@ -509,28 +536,28 @@ func buildAuditTrigger(table string, cols, pks []string, op string) string {
 after insert on %s
 begin
   insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id, fest_id)
-  values('%s', %s, 'INSERT', null, %s, %s, %s, %s);
+  select '%s', %s, 'INSERT', null, %s, %s, %s, %s where %s;
 end`,
 			name, table,
-			table, pkExpr("new"), z(rowJSON("new")), actorSel, reqSel, festSel)
+			table, pkExpr("new"), z(rowJSON("new")), actorSel, reqSel, festSel, notSuppressed)
 	case "update":
 		return fmt.Sprintf(`create trigger %s
 after update on %s
 begin
   insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id, fest_id)
-  values('%s', %s, 'UPDATE', %s, %s, %s, %s, %s);
+  select '%s', %s, 'UPDATE', %s, %s, %s, %s, %s where %s;
 end`,
 			name, table,
-			table, pkExpr("new"), z(changedRowJSON("old")), z(changedRowJSON("new")), actorSel, reqSel, festSel)
+			table, pkExpr("new"), z(changedRowJSON("old")), z(changedRowJSON("new")), actorSel, reqSel, festSel, notSuppressed)
 	case "delete":
 		return fmt.Sprintf(`create trigger %s
 after delete on %s
 begin
   insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id, fest_id)
-  values('%s', %s, 'DELETE', %s, null, %s, %s, %s);
+  select '%s', %s, 'DELETE', %s, null, %s, %s, %s where %s;
 end`,
 			name, table,
-			table, pkExpr("old"), z(rowJSON("old")), actorSel, reqSel, festSel)
+			table, pkExpr("old"), z(rowJSON("old")), actorSel, reqSel, festSel, notSuppressed)
 	}
 	return ""
 }

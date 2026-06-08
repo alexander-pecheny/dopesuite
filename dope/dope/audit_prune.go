@@ -83,28 +83,36 @@ func (s *server) pruneAuditLog(ctx context.Context, retentionDays, maxBytes int6
 	}
 
 	// 1) Age-based: drop everything past the retention horizon, batched so a big
-	// first-run backlog doesn't hold the writer lock in one long delete. Rows are
-	// ordered by id (monotonic with ts) so each batch removes the oldest first.
+	// first-run backlog doesn't hold the writer lock in one long delete. We resolve
+	// the horizon to a cutoff id once (ts is monotonic with id) and then delete by
+	// id — that keeps the deletes on the primary key and avoids needing an index on
+	// ts. The single max(id) scan per cycle is cheap and held only briefly.
 	if retentionDays > 0 {
 		modifier := fmt.Sprintf("-%d days", retentionDays)
-		var removed int64
-		for {
-			res, err := s.db.ExecContext(ctx, `
-delete from audit_log where id in (
-  select id from audit_log
-  where ts < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)
-  order by id limit ?)`, modifier, auditPruneBatch)
-			if err != nil {
-				return fmt.Errorf("age prune: %w", err)
-			}
-			n, _ := res.RowsAffected()
-			removed += n
-			if n < auditPruneBatch {
-				break
-			}
+		var cutoff sql.NullInt64
+		if err := s.db.QueryRowContext(ctx, `
+select max(id) from audit_log
+where ts < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`, modifier).Scan(&cutoff); err != nil {
+			return fmt.Errorf("age prune cutoff: %w", err)
 		}
-		if removed > 0 {
-			log.Printf("audit prune: removed %d rows older than %d days", removed, retentionDays)
+		if cutoff.Valid {
+			var removed int64
+			for {
+				res, err := s.db.ExecContext(ctx, `
+delete from audit_log where id in (
+  select id from audit_log where id <= ? order by id limit ?)`, cutoff.Int64, auditPruneBatch)
+				if err != nil {
+					return fmt.Errorf("age prune: %w", err)
+				}
+				n, _ := res.RowsAffected()
+				removed += n
+				if n < auditPruneBatch {
+					break
+				}
+			}
+			if removed > 0 {
+				log.Printf("audit prune: removed %d rows older than %d days", removed, retentionDays)
+			}
 		}
 	}
 

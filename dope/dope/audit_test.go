@@ -213,6 +213,69 @@ values(?, ?, 'orig description', null, null, 1, ?, ?, 0)`, "diff-test", "Orig Ti
 	}
 }
 
+// TestImportSuppressesAuditChurn verifies a bulk import rebuilds all structural
+// rows without logging any of them (it's recorded as an 'events' row and acts as
+// a revert boundary), while a normal edit afterwards is still audited — proving
+// the suppress flag resets per transaction.
+func TestImportSuppressesAuditChurn(t *testing.T) {
+	db := auditOpenDB(t)
+	srv := auditTestServer(db)
+
+	scheme := festScheme{
+		SchemaVersion:     2,
+		Slug:              "imp",
+		Title:             "Imp",
+		GameType:          "ek",
+		RegularThemeCount: 3,
+		Venues:            []schemeVenue{{Number: 1, Title: "Main"}},
+		Teams: []schemeTeam{
+			{Name: "Alpha", Basket: 1, Number: 1},
+			{Name: "Beta", Basket: 1, Number: 2},
+		},
+		Stages: []schemeStage{{
+			Code:      "r1",
+			Title:     "R1",
+			StageType: "matches",
+			Position:  1,
+			Matches: []schemeMatch{{
+				Code:             "A",
+				Title:            "A",
+				Venue:            1,
+				ParticipantCount: 2,
+				Slots: []schemeSlot{
+					{Seed: &schemeSeedRef{Basket: 1, Number: 1}},
+					{Seed: &schemeSeedRef{Basket: 1, Number: 2}},
+				},
+			}},
+		}},
+	}
+	if _, err := srv.importScheme(scheme); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	var n int
+	if err := db.QueryRow(`select count(*) from audit_log`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("import should be audit-suppressed; got %d audit rows", n)
+	}
+
+	// A normal edit after the import (new tx → suppress reset) is still captured.
+	var festID int64
+	if err := db.QueryRow(`select id from fests limit 1`).Scan(&festID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.writeExec(context.Background(),
+		`update fests set title = ? where id = ?`, "Renamed", festID); err != nil {
+		t.Fatal(err)
+	}
+	rows := loadAuditRows(t, db, "fests")
+	if len(rows) != 1 || rows[0].Op != "UPDATE" {
+		t.Fatalf("normal edit after import should be audited once; got %+v", rows)
+	}
+}
+
 // TestAuditCompressRoundTrip exercises the dope_z/dope_unz storage codec
 // directly: compressed values round-trip, and legacy plain-text rows (written
 // before compression existed) pass through dope_unz untouched.
