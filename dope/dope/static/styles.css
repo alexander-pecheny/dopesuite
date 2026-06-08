@@ -5153,6 +5153,13 @@ body:not(.embedded-match) .grid-match {
   background: var(--page);
 }
 
+/* The detailed team number is muted (secondary) in light, but on dark a muted
+   gray drops below the names/scores and disappears on poor displays — the very
+   monitors this feature targets. Promote it to the primary text color. */
+:root[data-theme="dark"] .match-table.od-detailed .od-detailed-team-number {
+  color: var(--text);
+}
+
 /* ── High contrast, light theme ─────────────────────────────────────────────
    Motivating case: a monitor that can't separate white from light gray.
    Darken the structural grays well clear of white and strengthen borders so
@@ -5182,6 +5189,13 @@ body:not(.embedded-match) .grid-match {
   --red-dark: #8a2e37;
   --success-text: #0f5132;
   --danger-text: #7a0c2e;
+
+  /* answer-cell fills (right/wrong). The default pastel 'wrong' reads as gray
+     on the high-contrast gray page. Saturate both, and separate them in
+     LUMINANCE as well as hue (dark green vs light coral) so they stay
+     distinguishable for red-green colour-blindness, not by hue alone. */
+  --green: #3d8f5b;
+  --red: #ec8585;
 }
 
 /* ── High contrast, dark theme ─────────────────────────────────────────────

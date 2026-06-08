@@ -42,8 +42,25 @@
   // the viewer. Pages without edit context never set it, so their menu shows
   // only "Оформление".
   let jump = null; // {label, href, title, external}
+  let account = null; // null until /api/auth/me resolves; then {loggedIn, username}
   let renderItems = null; // wired once the menu is built
   let openModalFn = null;
+
+  // Fetch the signed-in user once so the menu can show a profile link (logged
+  // in) or a "Вход для ведущих" link (anonymous), folding in what used to be a
+  // separate corner link. 401 = anonymous; network error = leave it out.
+  function loadAccount() {
+    fetch("/api/auth/me", {headers: {Accept: "application/json"}, credentials: "same-origin"})
+      .then((res) => {
+        if (!res.ok) return {loggedIn: false};
+        return res.json().then((data) => ({
+          loggedIn: true,
+          username: (data && (data.username || data.telegram)) || null,
+        }));
+      })
+      .catch(() => null)
+      .then((next) => { account = next; renderItems?.(); });
+  }
 
   function setJump(next) {
     jump = next || null;
@@ -114,6 +131,21 @@
       appearance.textContent = "Оформление";
       appearance.addEventListener("click", () => { closeMenu(); openModal(); });
       dropdown.appendChild(appearance);
+
+      if (account) {
+        const link = document.createElement("a");
+        link.className = "appearance-item";
+        link.setAttribute("role", "menuitem");
+        if (account.loggedIn) {
+          link.href = "/profile";
+          link.textContent = account.username || "Профиль";
+        } else {
+          link.href = "/host";
+          link.textContent = "Вход для ведущих";
+        }
+        link.addEventListener("click", closeMenu);
+        dropdown.appendChild(link);
+      }
     };
 
     function openMenu() {
@@ -232,6 +264,7 @@
 
     openModalFn = openModal;
     renderItems();
+    loadAccount();
   }
 
   if (document.readyState === "loading") {

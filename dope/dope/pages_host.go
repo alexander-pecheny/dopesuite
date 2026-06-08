@@ -75,7 +75,6 @@ var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!docty
 <body class="public">
   <header class="public-top">
     <h1>Мои фесты</h1>
-    <a class="public-user" href="/profile">{{.Username}}</a>
   </header>
   <main class="public-main">
     {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
