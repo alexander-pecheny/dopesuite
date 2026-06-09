@@ -5245,6 +5245,13 @@ body:not(.embedded-match) .grid-match {
   display: block;
 }
 
+/* In a .public-top bar (which baseline-aligns its title), pin the menu to the
+   right and centre it vertically against the bar instead of riding the baseline. */
+.appearance-menu-public {
+  margin-left: auto;
+  align-self: center;
+}
+
 .appearance-menu-floating .appearance-trigger {
   background: var(--surface);
   border: 1px solid var(--border);

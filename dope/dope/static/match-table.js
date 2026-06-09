@@ -1702,7 +1702,7 @@
   // for call-site compatibility but unused.
   function mountEditorLink() {
     const set = () => window.dopeAppearance?.setJump({
-      label: "Режим редактирования",
+      label: "Редактировать",
       href: editorHrefForCurrentLocation(),
       title: "Открыть в режиме редактирования",
     });
