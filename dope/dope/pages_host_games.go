@@ -297,6 +297,168 @@ limit 1`, festID).Scan(&nextGameID, &nextMatchCode); err != nil && !errors.Is(er
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
 }
 
+// handleHostClearGame resets a game to its just-created state: it drops every
+// game-scoped derived row (results, imported seeds/rosters, EK bracket
+// resolution) and regenerates the pristine scheme/state — the same content a
+// fresh game of this type would have — while keeping the game's id, code, slug
+// and title so its URLs stay valid. Fest-scoped teams/players and the audit log
+// are left intact (the latter is fest-scoped, like the delete path leaves it).
+func (s *server) handleHostClearGame(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tx, err := s.beginWriteTx(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	var gameType, title, schemeJSON string
+	if err := tx.QueryRowContext(r.Context(), `
+select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and fest_id = ?`,
+		gameID, festID).Scan(&gameType, &title, &schemeJSON); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Drop all game-scoped derived rows. matches/stages cascade to their slots,
+	// themes, answers, results and reseed entries (FKs are ON). Fest-scoped
+	// teams/players are shared across games and intentionally left alone.
+	for _, q := range []string{
+		`delete from matches where game_id = ?`,
+		`delete from stages where game_id = ?`,
+		`delete from game_assignments where game_id = ?`,
+		`delete from game_teams where game_id = ?`,
+		`delete from game_players where game_id = ?`,
+		`delete from game_team_players where game_id = ?`,
+		`delete from game_player_team_overrides where game_id = ?`,
+	} {
+		if _, err := tx.ExecContext(r.Context(), q, gameID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Preserve the game's display slug/title from its current scheme.
+	var meta struct {
+		Slug  string `json:"slug"`
+		Title string `json:"title"`
+	}
+	_ = json.Unmarshal([]byte(schemeJSON), &meta)
+	if strings.TrimSpace(meta.Title) == "" {
+		meta.Title = title
+	}
+
+	now := utcNow()
+	status := "active"
+	var newScheme, newState []byte
+
+	switch gameType {
+	case "od":
+		tourComp := parseTourComp(schemeJSON)
+		if len(tourComp) == 0 {
+			tourComp = []int{15}
+		}
+		newScheme, newState = odEmptyGameJSON(meta.Slug, meta.Title, tourComp)
+		teams, err := loadFestRosterImportTeamsTx(r.Context(), tx, festID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if len(teams) > 0 {
+			if newScheme, err = applyRosterToChGKScheme(string(newScheme), teams); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if newState, err = applyRosterToChGKState(string(newState), teams, nil); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	case "ksi":
+		var sc struct {
+			Themes int `json:"themes"`
+		}
+		_ = json.Unmarshal([]byte(schemeJSON), &sc)
+		if sc.Themes <= 0 {
+			sc.Themes = 20
+		}
+		newScheme, newState = ksiEmptyGameJSON(meta.Slug, meta.Title, sc.Themes)
+		teams, err := loadFestRosterImportTeamsTx(r.Context(), tx, festID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if len(teams) > 0 {
+			if newScheme, err = applyRosterToKSIScheme(string(newScheme), teams); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if newState, err = applyRosterToKSIState(string(newState), teams, sc.Themes); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	case "ek":
+		status = "pending"
+		var scheme festScheme
+		if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
+			http.Error(w, fmt.Sprintf("не удалось разобрать схему ЭК: %v", err), http.StatusInternalServerError)
+			return
+		}
+		scheme.Teams = nil // seeded teams come from a fresh import, not the scheme
+		if newScheme, err = json.Marshal(scheme); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		newState = []byte("{}")
+		if err := buildEKStructureTx(r.Context(), tx, festID, gameID, scheme, now); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	default:
+		http.Error(w, "очистка не поддерживается для этого типа игры", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := tx.ExecContext(r.Context(), `
+update games set scheme_json = ?, state_json = ?, status = ?,
+  team_list_source = 'fest', roster_source = 'fest', revision = revision + 1, updated_at = ?
+where id = ? and fest_id = ?`, string(newScheme), string(newState), status, now, gameID, festID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var nextMatchCode sql.NullString
+	if err := tx.QueryRowContext(r.Context(), `
+select coalesce((select code from matches where game_id = ? order by position, id limit 1), '')`,
+		gameID).Scan(&nextMatchCode); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := bumpFestRevisionTx(r.Context(), tx, festID, "game:clear", mustJSON(map[string]any{
+		"gameID": gameID,
+		"title":  title,
+	})); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if s.festID == festID && s.activeGameID == gameID {
+		s.activeMatchCode = nextMatchCode.String
+	}
+	s.invalidateFestViewCache(festID)
+	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s", s.festRefOrID(r.Context(), festID)), http.StatusSeeOther)
+}
+
 func (s *server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request, festID int64, errMsg string, selectedType string) {
 	fest, err := s.loadHostFestHeader(r.Context(), festID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -427,24 +589,21 @@ func nextGameIdentityTx(ctx context.Context, tx *sql.Tx, festID int64, gameType,
 	}
 }
 
-func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questions int) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "od", "ОД")
-	if err != nil {
-		return 0, err
+// odEmptyGameJSON builds the pristine scheme/state for an OD game (no teams, no
+// entries). Shared by creation and the clear-to-pristine path so they can't drift.
+func odEmptyGameJSON(slug, title string, tourComp []int) ([]byte, []byte) {
+	totalQuestions := 0
+	for _, n := range tourComp {
+		totalQuestions += n
 	}
-	tourComp := make([]int, tours)
-	for i := range tourComp {
-		tourComp[i] = questions
-	}
-	totalQuestions := tours * questions
 	entries := make([][]int, totalQuestions)
 	for i := range entries {
 		entries[i] = []int{}
 	}
 	schemeJSON := []byte(mustJSON(map[string]any{
 		"schemaVersion": 2,
-		"slug":          identity.Code,
-		"title":         identity.Title,
+		"slug":          slug,
+		"title":         title,
 		"gameType":      "od",
 		"tourComp":      tourComp,
 		"nTeams":        0,
@@ -456,6 +615,42 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 		"completed":      make([]bool, totalQuestions),
 		"shootoutRounds": []any{},
 	}))
+	return schemeJSON, stateJSON
+}
+
+// ksiEmptyGameJSON builds the pristine scheme/state for a KSI game. Shared by
+// creation and the clear-to-pristine path.
+func ksiEmptyGameJSON(slug, title string, themesCount int) ([]byte, []byte) {
+	themes := make([]map[string]any, themesCount)
+	for i := range themes {
+		themes[i] = map[string]any{"answers": [][]string{}}
+	}
+	schemeJSON := []byte(mustJSON(map[string]any{
+		"schemaVersion": 2,
+		"slug":          slug,
+		"title":         title,
+		"gameType":      "ksi",
+		"participants":  []string{},
+		"themes":        themesCount,
+	}))
+	stateJSON := []byte(mustJSON(map[string]any{
+		"participants": []string{},
+		"themes":       themes,
+		"finished":     false,
+	}))
+	return schemeJSON, stateJSON
+}
+
+func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questions int) (int64, error) {
+	identity, err := nextGameIdentityTx(ctx, tx, festID, "od", "ОД")
+	if err != nil {
+		return 0, err
+	}
+	tourComp := make([]int, tours)
+	for i := range tourComp {
+		tourComp[i] = questions
+	}
+	schemeJSON, stateJSON := odEmptyGameJSON(identity.Code, identity.Title, tourComp)
 	teams, err := loadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
 		return 0, err
@@ -478,23 +673,7 @@ func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount 
 	if err != nil {
 		return 0, err
 	}
-	themes := make([]map[string]any, themesCount)
-	for i := range themes {
-		themes[i] = map[string]any{"answers": [][]string{}}
-	}
-	schemeJSON := []byte(mustJSON(map[string]any{
-		"schemaVersion": 2,
-		"slug":          identity.Code,
-		"title":         identity.Title,
-		"gameType":      "ksi",
-		"participants":  []string{},
-		"themes":        themesCount,
-	}))
-	stateJSON := []byte(mustJSON(map[string]any{
-		"participants": []string{},
-		"themes":       themes,
-		"finished":     false,
-	}))
+	schemeJSON, stateJSON := ksiEmptyGameJSON(identity.Code, identity.Title, themesCount)
 	teams, err := loadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
 		return 0, err
@@ -568,11 +747,21 @@ values(?, ?, ?, ?, ?, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
 		return 0, err
 	}
 
+	if err := buildEKStructureTx(ctx, tx, festID, gameID, scheme, now); err != nil {
+		return 0, err
+	}
+	return gameID, nil
+}
+
+// buildEKStructureTx materialises an EK game's bracket (venues, stages, matches
+// and their unresolved seed slots) from the scheme. Shared by game creation and
+// the "clear to pristine" path, which rebuilds the same empty bracket in place.
+func buildEKStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, scheme festScheme, now string) error {
 	venueIDs := make(map[int]int64, len(scheme.Venues))
 	for _, venue := range scheme.Venues {
 		venueID, err := upsertVenueTx(ctx, tx, festID, venue, now)
 		if err != nil {
-			return 0, err
+			return err
 		}
 		venueIDs[venue.Number] = venueID
 	}
@@ -591,7 +780,7 @@ values(?, ?, ?, ?, ?, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
 insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
 values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
 		if err != nil {
-			return 0, err
+			return err
 		}
 		if stageType != "matches" {
 			continue
@@ -609,19 +798,19 @@ values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title
 insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
 values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
 			if err != nil {
-				return 0, err
+				return err
 			}
 			for slotIndex, slot := range match.Slots {
 				sourceType, sourceRef := slotSource(slot)
 				if _, err := tx.ExecContext(ctx, `
 insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
 values(?, ?, ?, ?, null, 0)`, matchID, slotIndex, sourceType, sourceRef); err != nil {
-					return 0, err
+					return err
 				}
 			}
 		}
 	}
-	return gameID, nil
+	return nil
 }
 
 func upsertVenueTx(ctx context.Context, tx *sql.Tx, festID int64, venue schemeVenue, now string) (int64, error) {
