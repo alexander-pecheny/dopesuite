@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // game_results.go exposes a computed "results" view for a game: the same total
@@ -27,6 +28,7 @@ type odResultsTeam struct {
 	Total      int    `json:"total"`      // questions taken across all tours (Σ on the page)
 	TourTotals []int  `json:"tourTotals"` // questions taken per tour, aligned with tourComp
 	Rating     int    `json:"rating"`     // Buchholz-style R: sum over taken questions of (teamCount − takers)
+	Mask       string `json:"mask"`       // per-question "1"/"0" (took/not), rating.chgk.info style, length = sum(tourComp)
 }
 
 type odResults struct {
@@ -122,10 +124,16 @@ func computeODResults(schemeJSON, stateJSON string) (odResults, error) {
 
 	teams := make([]odResultsTeam, teamCount)
 	totals := make([]int, teamCount)
+	totalQuestions := 0
+	for _, tourSize := range tours {
+		totalQuestions += tourSize
+	}
 	for teamIdx, team := range state.Teams {
 		tourTotals := make([]int, len(tours))
 		total := 0
 		rating := 0
+		var mask strings.Builder
+		mask.Grow(totalQuestions)
 		qBase := 0
 		for tourIdx, tourSize := range tours {
 			for i := 0; i < tourSize; i++ {
@@ -134,6 +142,9 @@ func computeODResults(schemeJSON, stateJSON string) (odResults, error) {
 					total++
 					tourTotals[tourIdx]++
 					rating += teamCount - len(took[q])
+					mask.WriteByte('1')
+				} else {
+					mask.WriteByte('0')
 				}
 			}
 			qBase += tourSize
@@ -147,6 +158,7 @@ func computeODResults(schemeJSON, stateJSON string) (odResults, error) {
 			Total:      total,
 			TourTotals: tourTotals,
 			Rating:     rating,
+			Mask:       mask.String(),
 		}
 	}
 

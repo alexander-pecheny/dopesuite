@@ -37,11 +37,13 @@ func TestComputeODResults(t *testing.T) {
 		place      string
 		total      int
 		tourTotals []int
+		mask       string
 	}{
-		{1, "1", 3, []int{2, 1}}, // q0,q1 in tour1; q2 in tour2
-		{2, "2", 2, []int{2, 0}}, // q0,q1
-		{3, "3", 1, []int{1, 0}}, // q0
-		{4, "4", 0, []int{0, 0}},
+		// 4 questions total (q3 not completed → 0 for everyone).
+		{1, "1", 3, []int{2, 1}, "1110"}, // q0,q1 (tour1), q2 (tour2)
+		{2, "2", 2, []int{2, 0}, "1100"}, // q0,q1
+		{3, "3", 1, []int{1, 0}, "1000"}, // q0
+		{4, "4", 0, []int{0, 0}, "0000"},
 	}
 	for i, w := range want {
 		got := res.Teams[i]
@@ -51,6 +53,9 @@ func TestComputeODResults(t *testing.T) {
 		}
 		if len(got.TourTotals) != 2 || got.TourTotals[0] != w.tourTotals[0] || got.TourTotals[1] != w.tourTotals[1] {
 			t.Errorf("rank %d: tourTotals = %v, want %v", i, got.TourTotals, w.tourTotals)
+		}
+		if got.Mask != w.mask {
+			t.Errorf("rank %d: mask = %q, want %q", i, got.Mask, w.mask)
 		}
 	}
 
