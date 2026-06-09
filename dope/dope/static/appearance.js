@@ -47,7 +47,7 @@
   let openModalFn = null;
 
   // Fetch the signed-in user once so the menu can show a profile link (logged
-  // in) or a "Вход для ведущих" link (anonymous), folding in what used to be a
+  // in) or a "Вход для ведущего" link (anonymous), folding in what used to be a
   // separate corner link. 401 = anonymous; network error = leave it out.
   function loadAccount() {
     fetch("/api/auth/me", {headers: {Accept: "application/json"}, credentials: "same-origin"})
@@ -105,10 +105,16 @@
 
     wrap.append(trigger, dropdown);
 
+    // Mount inline in a page header when there is one so the button sits
+    // vertically centred in the bar; only truly chrome-less pages float it.
     const actions = document.querySelector(".host-actions");
+    const header = document.querySelector(".public-top");
     if (actions) {
       wrap.classList.add("appearance-menu-inline");
       actions.appendChild(wrap);
+    } else if (header) {
+      wrap.classList.add("appearance-menu-inline", "appearance-menu-public");
+      header.appendChild(wrap);
     } else {
       wrap.classList.add("appearance-menu-floating");
       document.body.appendChild(wrap);
@@ -116,6 +122,16 @@
 
     renderItems = function () {
       dropdown.replaceChildren();
+      // Order: Оформление, then the page-supplied jump (Редактировать / Страница
+      // зрителя), then the account link (Вход для ведущего / Профиль ведущего).
+      const appearance = document.createElement("button");
+      appearance.type = "button";
+      appearance.className = "appearance-item";
+      appearance.setAttribute("role", "menuitem");
+      appearance.textContent = "Оформление";
+      appearance.addEventListener("click", () => { closeMenu(); openModal(); });
+      dropdown.appendChild(appearance);
+
       if (jump) {
         const link = document.createElement("a");
         link.className = "appearance-item";
@@ -127,13 +143,6 @@
         link.addEventListener("click", closeMenu);
         dropdown.appendChild(link);
       }
-      const appearance = document.createElement("button");
-      appearance.type = "button";
-      appearance.className = "appearance-item";
-      appearance.setAttribute("role", "menuitem");
-      appearance.textContent = "Оформление";
-      appearance.addEventListener("click", () => { closeMenu(); openModal(); });
-      dropdown.appendChild(appearance);
 
       if (account) {
         const link = document.createElement("a");
@@ -141,10 +150,10 @@
         link.setAttribute("role", "menuitem");
         if (account.loggedIn) {
           link.href = "/profile";
-          link.textContent = account.username || "Профиль";
+          link.textContent = "Профиль ведущего";
         } else {
           link.href = "/host";
-          link.textContent = "Вход для ведущих";
+          link.textContent = "Вход для ведущего";
         }
         link.addEventListener("click", closeMenu);
         dropdown.appendChild(link);
