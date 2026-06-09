@@ -178,7 +178,7 @@ func TestBuildEKSheets(t *testing.T) {
 				Total: 40,
 				Place: 1,
 				Themes: []ThemeView{
-					{Answers: [5]string{"right", "", "right", "", ""}, Score: 40},
+					{Player: "Аня", Answers: [5]string{"right", "", "right", "", ""}, Score: 40},
 				},
 			},
 			{
@@ -186,7 +186,7 @@ func TestBuildEKSheets(t *testing.T) {
 				Total: -20,
 				Place: 2,
 				Themes: []ThemeView{
-					{Answers: [5]string{"", "wrong", "", "", ""}, Score: -20},
+					{Player: "Боря", Answers: [5]string{"", "wrong", "", "", ""}, Score: -20},
 				},
 			},
 		},
@@ -197,6 +197,7 @@ func TestBuildEKSheets(t *testing.T) {
 	if err := buildEKSheets(f, stages); err != nil {
 		t.Fatalf("buildEKSheets: %v", err)
 	}
+
 	const sheet = "Плей-офф"
 	if idx, err := f.GetSheetIndex(sheet); err != nil || idx < 0 {
 		t.Fatalf("missing stage sheet %q (have %v): %v", sheet, f.GetSheetList(), err)
@@ -204,18 +205,24 @@ func TestBuildEKSheets(t *testing.T) {
 	if got := cell(t, f, sheet, "A1"); got != "Финал" {
 		t.Fatalf("A1 match title = %q", got)
 	}
-	// Row 2 header: Команда | Σ | М | Т1 ...
+	// Row 2 header: Команда | Σ | М | Т1(merged) | Σ | R
 	if got := cell(t, f, sheet, "A2"); got != "Команда" {
 		t.Fatalf("A2 = %q", got)
 	}
 	if got := cell(t, f, sheet, "D2"); got != "Т1" {
 		t.Fatalf("D2 = %q, want Т1", got)
 	}
+	if got := cell(t, f, sheet, "I2"); got != "Σ" { // theme score column header
+		t.Fatalf("I2 = %q, want Σ", got)
+	}
+	if got := cell(t, f, sheet, "J2"); got != "R" {
+		t.Fatalf("J2 = %q, want R", got)
+	}
 	// Row 3 value sub-headers under theme 1: D..H = 10..50.
 	if got := cell(t, f, sheet, "D3"); got != "10" {
 		t.Fatalf("D3 value = %q", got)
 	}
-	// Row 4 first team Эпсилон.
+	// Row 4 — Эпсилон "names" row: team, Σ, place, player(merged at D), theme score (I), R (J).
 	if got := cell(t, f, sheet, "A4"); got != "Эпсилон" {
 		t.Fatalf("A4 = %q", got)
 	}
@@ -225,18 +232,75 @@ func TestBuildEKSheets(t *testing.T) {
 	if got := cell(t, f, sheet, "C4"); got != "1" {
 		t.Fatalf("C4 place = %q", got)
 	}
-	if got := cell(t, f, sheet, "D4"); got != "10" { // right on 10
-		t.Fatalf("D4 = %q, want 10", got)
+	if got := cell(t, f, sheet, "D4"); got != "Аня" {
+		t.Fatalf("D4 player = %q, want Аня", got)
 	}
-	if got := cell(t, f, sheet, "E4"); got != "" { // blank on 20
-		t.Fatalf("E4 = %q, want empty", got)
+	if got := cell(t, f, sheet, "I4"); got != "40" { // theme score
+		t.Fatalf("I4 theme score = %q, want 40", got)
 	}
-	if got := cell(t, f, sheet, "F4"); got != "30" { // right on 30
-		t.Fatalf("F4 = %q, want 30", got)
+	// Row 5 — Эпсилон "answers" row: signed marks under the values.
+	if got := cell(t, f, sheet, "D5"); got != "10" { // right on 10
+		t.Fatalf("D5 = %q, want 10", got)
 	}
-	// Дзета row 5, wrong on 20 → -20.
-	if got := cell(t, f, sheet, "E5"); got != "-20" {
-		t.Fatalf("E5 = %q, want -20", got)
+	if got := cell(t, f, sheet, "E5"); got != "" { // blank on 20
+		t.Fatalf("E5 = %q, want empty", got)
+	}
+	if got := cell(t, f, sheet, "F5"); got != "30" { // right on 30
+		t.Fatalf("F5 = %q, want 30", got)
+	}
+	// Дзета names row 6, answers row 7: wrong on 20 → -20.
+	if got := cell(t, f, sheet, "A6"); got != "Дзета" {
+		t.Fatalf("A6 = %q, want Дзета", got)
+	}
+	if got := cell(t, f, sheet, "D6"); got != "Боря" {
+		t.Fatalf("D6 player = %q, want Боря", got)
+	}
+	if got := cell(t, f, sheet, "E7"); got != "-20" {
+		t.Fatalf("E7 = %q, want -20", got)
+	}
+
+	// "Статистика" sheet: per-player aggregate, sorted by Σ desc.
+	const stats = "Статистика"
+	if idx, err := f.GetSheetIndex(stats); err != nil || idx < 0 {
+		t.Fatalf("missing %q sheet (have %v): %v", stats, f.GetSheetList(), err)
+	}
+	wantHeader := map[string]string{
+		"A1": "Игрок", "B1": "Команда", "C1": "Σ", "D1": "Σ+", "E1": "Бои",
+		"F1": "50", "J1": "10", "K1": "-50", "O1": "-10", "P1": "% от команды",
+	}
+	for axis, want := range wantHeader {
+		if got := cell(t, f, stats, axis); got != want {
+			t.Fatalf("stats %s = %q, want %q", axis, got, want)
+		}
+	}
+	// Row 2: Аня (Эпсилон) Σ=40, Σ+=40, Бои=1, right@30 (H), right@10 (J), 100%.
+	if got := cell(t, f, stats, "A2"); got != "Аня" {
+		t.Fatalf("stats A2 = %q, want Аня", got)
+	}
+	if got := cell(t, f, stats, "C2"); got != "40" {
+		t.Fatalf("stats C2 Σ = %q, want 40", got)
+	}
+	if got := cell(t, f, stats, "H2"); got != "1" { // correct on 30
+		t.Fatalf("stats H2 (30 correct) = %q, want 1", got)
+	}
+	if got := cell(t, f, stats, "J2"); got != "1" { // correct on 10
+		t.Fatalf("stats J2 (10 correct) = %q, want 1", got)
+	}
+	if got := cell(t, f, stats, "P2"); got != "100%" {
+		t.Fatalf("stats P2 share = %q, want 100%%", got)
+	}
+	// Row 3: Боря (Дзета) Σ=-20, wrong@20 (N), 0%.
+	if got := cell(t, f, stats, "A3"); got != "Боря" {
+		t.Fatalf("stats A3 = %q, want Боря", got)
+	}
+	if got := cell(t, f, stats, "C3"); got != "-20" {
+		t.Fatalf("stats C3 Σ = %q, want -20", got)
+	}
+	if got := cell(t, f, stats, "N3"); got != "1" { // wrong on 20
+		t.Fatalf("stats N3 (-20 wrong) = %q, want 1", got)
+	}
+	if got := cell(t, f, stats, "P3"); got != "0%" {
+		t.Fatalf("stats P3 share = %q, want 0%%", got)
 	}
 }
 
