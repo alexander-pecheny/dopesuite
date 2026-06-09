@@ -3179,39 +3179,26 @@ body:not(.embedded-match) .grid-match {
 .entry-table thead tr:first-child th { top: 0; height: 28px; }
 .entry-table thead tr:nth-child(2) th { top: 28px; height: 22px; }
 
-/* The main input table reserves a band above the numbers for the per-column
-   invert button; the shootout table keeps the compact header. */
-.entry-table:not(.od-shootout-entry-table) thead tr:first-child th { height: 48px; }
-.entry-table:not(.od-shootout-entry-table) thead tr:nth-child(2) th { top: 48px; }
-.entry-table:not(.od-shootout-entry-table) .entry-q-head { vertical-align: bottom; }
+.entry-q-head { font-size: var(--text-xs); }
 
-.entry-q-head {
-  position: relative;
-  font-size: var(--text-xs);
-}
-
-.entry-q-num { display: block; padding-bottom: 5px; }
-
-/* The invert button sits in the reserved band above the number, shown only on
-   the column the cursor is in. */
+/* Floating "Инвертировать" button: a small yin-yang parked in the gap above the
+   active column's number. Fixed-positioned (placed by positionInvertOverlay) so
+   the entry table's `contain: paint` doesn't clip it. */
 .entry-invert {
-  position: absolute;
-  top: 3px;
-  left: 50%;
-  width: 20px;
-  height: 20px;
-  margin-left: -10px;
+  position: fixed;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--text);
   cursor: var(--cursor-action);
-  display: none;
   line-height: 0;
+  z-index: var(--z-dropdown);
 }
-.entry-q-head.is-active .entry-invert { display: block; }
+.entry-invert[hidden] { display: none; }
 .entry-invert:hover { color: var(--blue); }
-.entry-invert svg { display: block; width: 20px; height: 20px; }
+.entry-invert svg { display: block; width: 16px; height: 16px; }
 .entry-invert .yy-light { fill: var(--surface); }
 .entry-invert .yy-dark { fill: currentColor; }
 .entry-invert .yy-ring { stroke: currentColor; stroke-width: 4; }

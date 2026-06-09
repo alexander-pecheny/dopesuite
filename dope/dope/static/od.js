@@ -64,11 +64,11 @@ let entrySuggest = null;
 let entrySelection = null;
 let entryDragSelection = null;
 let entrySuppressClickSelection = false;
-let pendingInvertSpinQ = null; // column whose header yin-yang should spin after the next render
+let invertOverlay = null; // floating yin-yang "Инвертировать" button, positioned over the active column
 const undoStack = [];
 
-// Two-tone yin-yang for the per-column "Инвертировать" button. The dark lobe/dot
-// use currentColor and the light lobe/dot use the surface colour, so it reads on
+// Two-tone yin-yang for the "Инвертировать" button. The dark lobe/dot use
+// currentColor and the light lobe/dot use the surface colour, so it reads on
 // both themes (inverted on dark, which still looks like a yin-yang).
 const YINYANG_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">'
   + '<circle class="yy-ring yy-light" cx="50" cy="50" r="48"/>'
@@ -474,6 +474,7 @@ function render() {
   restoreTabScroll(activeTab);
   updateResultsScrollState();
   if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule(activePane);
+  positionInvertOverlay();
   refreshPresence();
 }
 
@@ -617,30 +618,71 @@ function updateEntrySelectionUI() {
     const anchor = entryCellNode(entrySelection.anchorQ, entrySelection.anchorRow);
     if (anchor) anchor.classList.add("entry-selection-anchor");
   }
-  updateInvertColumnUI();
+  positionInvertOverlay();
 }
 
-// updateInvertColumnUI shows the yin-yang invert button on the header of the
-// column the cursor is in (skipping locked columns) and, right after an invert,
-// spins the freshly rendered icon 360°.
-function updateInvertColumnUI() {
-  odRoot.querySelectorAll(".entry-q-head.is-active").forEach((h) => h.classList.remove("is-active"));
-  if (viewer || !entrySelection) return;
+// ensureInvertOverlay lazily creates the floating yin-yang button. It lives on
+// <body> (fixed-positioned) so it can sit in the slim gap above the question
+// numbers without the entry table's `contain: paint` clipping it, and survives
+// table re-renders so its spin animation isn't cut short.
+function ensureInvertOverlay() {
+  if (invertOverlay) return invertOverlay;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "entry-invert";
+  button.title = "Инвертировать";
+  button.setAttribute("aria-label", "Инвертировать");
+  button.hidden = true;
+  button.innerHTML = YINYANG_SVG;
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    const q = Number(button.dataset.q);
+    if (!Number.isInteger(q)) return;
+    button.classList.remove("spinning");
+    void button.offsetWidth; // restart the spin if clicked again mid-animation
+    button.classList.add("spinning");
+    button.addEventListener("animationend", () => button.classList.remove("spinning"), {once: true});
+    invertEntryColumn(q);
+  });
+  document.body.appendChild(button);
+  invertOverlay = button;
+  return button;
+}
+
+// positionInvertOverlay parks the invert button in the gap above the active
+// column's number, or hides it when there's no eligible target (not the input
+// tab, no cursor, a locked column, viewer mode, or the column scrolled out of
+// the table's visible width).
+function positionInvertOverlay() {
+  const overlay = invertOverlay;
+  if (!overlay) return;
+  const hide = () => { overlay.hidden = true; };
+  if (viewer || activeTab !== "input" || !entrySelection) return hide();
   const q = entrySelection.focusQ;
-  if (!Number.isInteger(q) || q < 0 || q >= totalQuestions || state.completed[q]) return;
-  const head = odRoot.querySelector(`.entry-q-head[data-q="${gameTable.cssEscape(q)}"]`);
-  if (!head) return;
-  head.classList.add("is-active");
-  if (pendingInvertSpinQ === q) {
-    pendingInvertSpinQ = null;
-    const icon = head.querySelector(".entry-invert");
-    if (icon) {
-      icon.classList.remove("spinning");
-      void icon.offsetWidth; // restart the animation if it was mid-flight
-      icon.classList.add("spinning");
-      icon.addEventListener("animationend", () => icon.classList.remove("spinning"), {once: true});
-    }
-  }
+  if (!Number.isInteger(q) || q < 0 || q >= totalQuestions || state.completed[q]) return hide();
+  const head = odRoot.querySelector(
+    `.entry-table:not(.od-shootout-entry-table) thead tr:first-child th[data-q="${gameTable.cssEscape(q)}"]`);
+  const frame = scrollFrame();
+  if (!head || !frame) return hide();
+  const r = head.getBoundingClientRect();
+  const f = frame.getBoundingClientRect();
+  const center = r.left + r.width / 2;
+  // Hide when the column is scrolled under the sticky row-marker or past the edge.
+  if (center < f.left + 12 || center > f.right) return hide();
+  overlay.dataset.q = String(q);
+  overlay.hidden = false; // unhide first so offsetWidth/Height are measurable
+  overlay.style.left = `${Math.round(center - overlay.offsetWidth / 2)}px`;
+  overlay.style.top = `${Math.round(r.top - overlay.offsetHeight - 2)}px`;
+}
+
+let invertListenersAttached = false;
+function attachInvertListeners() {
+  if (invertListenersAttached) return;
+  invertListenersAttached = true;
+  // Capture-phase catches the table's own horizontal scroll so the button
+  // tracks its column; resize keeps it aligned when the layout reflows.
+  document.addEventListener("scroll", positionInvertOverlay, true);
+  window.addEventListener("resize", positionInvertOverlay);
 }
 
 function normalizedEntrySelection() {
@@ -724,7 +766,6 @@ function invertEntryColumn(qIndex) {
   closeEntrySuggest();
   state.entries[qIndex] = next;
   pushUndoEntry({kind: "entry-column", qIndex, previous});
-  pendingInvertSpinQ = qIndex; // play the spin on the re-rendered header icon
   invalidateScoreCaches();
   invalidateTabCache("input");
   saveState(["entries", qIndex], next);
@@ -965,36 +1006,20 @@ function handleEntryCellKeydown(event, cell) {
   }
 }
 
-// entryQuestionHeadCell renders a question-number header carrying a hidden
-// yin-yang invert button; CSS reveals the button only on the active column.
+// entryQuestionHeadCell renders a question-number header tagged with its column
+// index, which the floating invert button (positionInvertOverlay) targets.
 function entryQuestionHeadCell(qIndex, displayNumber, className) {
-  const cell = document.createElement("th");
-  cell.className = className;
+  const cell = th(displayNumber, className);
   cell.dataset.q = String(qIndex);
-  if (!viewer) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "entry-invert";
-    button.title = "Инвертировать";
-    button.setAttribute("aria-label", "Инвертировать");
-    button.tabIndex = -1;
-    button.innerHTML = YINYANG_SVG;
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      invertEntryColumn(qIndex);
-    });
-    cell.appendChild(button);
-  }
-  const num = document.createElement("span");
-  num.className = "entry-q-num";
-  num.textContent = String(displayNumber);
-  cell.appendChild(num);
   return cell;
 }
 
 function buildInputTable() {
   const n = state.teams.length;
+  if (!viewer) {
+    ensureInvertOverlay();
+    attachInvertListeners();
+  }
   const showShootoutControls = !viewer && state.shootoutRounds.length === 0;
   const table = document.createElement("table");
   table.className = "entry-table" + (viewer ? " entry-readonly" : "");
