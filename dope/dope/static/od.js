@@ -64,7 +64,18 @@ let entrySuggest = null;
 let entrySelection = null;
 let entryDragSelection = null;
 let entrySuppressClickSelection = false;
+let pendingInvertSpinQ = null; // column whose header yin-yang should spin after the next render
 const undoStack = [];
+
+// Two-tone yin-yang for the per-column "Инвертировать" button. The dark lobe/dot
+// use currentColor and the light lobe/dot use the surface colour, so it reads on
+// both themes (inverted on dark, which still looks like a yin-yang).
+const YINYANG_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">'
+  + '<circle class="yy-ring yy-light" cx="50" cy="50" r="48"/>'
+  + '<path class="yy-dark" d="M50 2a48 48 0 0 1 0 96 24 24 0 0 1 0-48 24 24 0 0 0 0-48z"/>'
+  + '<circle class="yy-light" cx="50" cy="26" r="6"/>'
+  + '<circle class="yy-dark" cx="50" cy="74" r="6"/>'
+  + '</svg>';
 const UNDO_LIMIT = 100;
 
 const ENTRY_SELECTION_CLASSES = [
@@ -606,6 +617,30 @@ function updateEntrySelectionUI() {
     const anchor = entryCellNode(entrySelection.anchorQ, entrySelection.anchorRow);
     if (anchor) anchor.classList.add("entry-selection-anchor");
   }
+  updateInvertColumnUI();
+}
+
+// updateInvertColumnUI shows the yin-yang invert button on the header of the
+// column the cursor is in (skipping locked columns) and, right after an invert,
+// spins the freshly rendered icon 360°.
+function updateInvertColumnUI() {
+  odRoot.querySelectorAll(".entry-q-head.is-active").forEach((h) => h.classList.remove("is-active"));
+  if (viewer || !entrySelection) return;
+  const q = entrySelection.focusQ;
+  if (!Number.isInteger(q) || q < 0 || q >= totalQuestions || state.completed[q]) return;
+  const head = odRoot.querySelector(`.entry-q-head[data-q="${gameTable.cssEscape(q)}"]`);
+  if (!head) return;
+  head.classList.add("is-active");
+  if (pendingInvertSpinQ === q) {
+    pendingInvertSpinQ = null;
+    const icon = head.querySelector(".entry-invert");
+    if (icon) {
+      icon.classList.remove("spinning");
+      void icon.offsetWidth; // restart the animation if it was mid-flight
+      icon.classList.add("spinning");
+      icon.addEventListener("animationend", () => icon.classList.remove("spinning"), {once: true});
+    }
+  }
 }
 
 function normalizedEntrySelection() {
@@ -660,32 +695,36 @@ function selectedEntryText() {
   return lines.join("\n");
 }
 
-function fillEntryColumnWithAllTeams(qIndex) {
+// invertEntryColumn replaces a column's teams with their complement among all
+// numbered teams: a column holding {2,4,5} of ten teams becomes {1,3,6,7,8,9,10}.
+// It is its own inverse, so a second invert restores the original — no
+// confirmation needed. Triggered by the per-column yin-yang header button.
+function invertEntryColumn(qIndex) {
   if (viewer) return;
   if (!Number.isInteger(qIndex) || qIndex < 0 || qIndex >= totalQuestions) return;
   if (state.completed[qIndex]) return;
-  const numbers = state.teams
+  const allNumbers = state.teams
     .map((_, i) => teamNumber(i))
-    .filter((n) => Number.isInteger(n) && n > 0)
-    .sort((a, b) => a - b);
+    .filter((n) => Number.isInteger(n) && n > 0);
+  const current = state.entries[qIndex] || [];
+  const present = new Set(current.filter((v) => Number.isInteger(v) && v > 0));
+  const complement = allNumbers.filter((n) => !present.has(n)).sort((a, b) => a - b);
   const next = new Array(state.teams.length).fill(0);
-  numbers.forEach((n, i) => {
+  complement.forEach((n, i) => {
     if (i < next.length) next[i] = n;
   });
-  const current = state.entries[qIndex] || [];
   let same = current.length === next.length;
   for (let i = 0; same && i < next.length; i++) {
     if ((current[i] || 0) !== next[i]) same = false;
   }
   if (same) return;
-  const hasExistingValues = current.some((v) => Number.isInteger(v) && v > 0);
-  if (hasExistingValues && !window.confirm("Заменить значения в колонке номерами всех команд?")) return;
   const previous = current.slice();
   while (previous.length < state.teams.length) previous.push(0);
   closeEntryEditor();
   closeEntrySuggest();
   state.entries[qIndex] = next;
   pushUndoEntry({kind: "entry-column", qIndex, previous});
+  pendingInvertSpinQ = qIndex; // play the spin on the re-rendered header icon
   invalidateScoreCaches();
   invalidateTabCache("input");
   saveState(["entries", qIndex], next);
@@ -917,29 +956,41 @@ function handleEntryCellKeydown(event, cell) {
   } else if (event.key === "Backspace" || event.key === "Delete" || event.key === " ") {
     event.preventDefault();
     clearSelectedEntryCells();
-  } else if (!event.metaKey && !event.ctrlKey && !event.altKey && isFillAllKey(event)) {
-    const qIndex = Number(cell.dataset.q);
-    if (Number.isInteger(qIndex) && !state.completed[qIndex]) {
-      event.preventDefault();
-      fillEntryColumnWithAllTeams(qIndex);
-      return;
-    }
-    event.preventDefault();
-    startEntryEditWithText(cell, event.key);
   } else if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
+    // Any single character (including "a"/"а") just starts editing the cell;
+    // column inversion lives on the yin-yang header button, not a key, so it no
+    // longer clashes with typing team names.
     event.preventDefault();
     startEntryEditWithText(cell, event.key);
   }
 }
 
-function isFillAllKey(event) {
-  // Layout-independent: event.code is the physical key, so the A key fires this
-  // on any layout (e.g. Russian ЙЦУКЕН, where that key types "ф"). Fall back to
-  // the produced character for environments that don't report a code, covering
-  // Latin a/A and Cyrillic а/А.
-  if (event.code === "KeyA") return true;
-  const key = event.key;
-  return key === "a" || key === "A" || key === "а" || key === "А";
+// entryQuestionHeadCell renders a question-number header carrying a hidden
+// yin-yang invert button; CSS reveals the button only on the active column.
+function entryQuestionHeadCell(qIndex, displayNumber, className) {
+  const cell = document.createElement("th");
+  cell.className = className;
+  cell.dataset.q = String(qIndex);
+  if (!viewer) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "entry-invert";
+    button.title = "Инвертировать";
+    button.setAttribute("aria-label", "Инвертировать");
+    button.tabIndex = -1;
+    button.innerHTML = YINYANG_SVG;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      invertEntryColumn(qIndex);
+    });
+    cell.appendChild(button);
+  }
+  const num = document.createElement("span");
+  num.className = "entry-q-num";
+  num.textContent = String(displayNumber);
+  cell.appendChild(num);
+  return cell;
 }
 
 function buildInputTable() {
@@ -981,7 +1032,7 @@ function buildInputTable() {
   tourLengths.forEach((tourSize, tourIndex) => {
     for (let i = 0; i < tourSize; i++) {
       const cls = "entry-q-head" + (i === tourSize - 1 && tourIndex < tourLengths.length - 1 ? " entry-tour-end" : "");
-      head.appendChild(th(q, cls));
+      head.appendChild(entryQuestionHeadCell(q - 1, q, cls));
       q++;
     }
   });
