@@ -302,6 +302,91 @@ func TestHostDashboardDeleteButtonsAndGameDelete(t *testing.T) {
 	}
 }
 
+func TestHostClearGameResetsToPristine(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, gameID := scopedAPITestIDs(t, srv)
+	token := createTestSession(t, srv, systemUserID(t, srv.db))
+
+	var festSlug string
+	if err := srv.db.QueryRow(`select slug from fests where id = ?`, festID).Scan(&festSlug); err != nil {
+		t.Fatalf("fest slug: %v", err)
+	}
+
+	// Dashboard exposes the clear control before the delete control.
+	dashReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d", festID), nil)
+	dashReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	dashResp := httptest.NewRecorder()
+	srv.handleHostRouter(dashResp, dashReq)
+	body := dashResp.Body.String()
+	if !strings.Contains(body, fmt.Sprintf(`/host/fest/%s/game/%d/clear`, festSlug, gameID)) {
+		t.Fatalf("dashboard missing game clear form: %s", body)
+	}
+	if !strings.Contains(body, "Очистить игру?") || !strings.Contains(body, ">Очистить<") {
+		t.Fatalf("dashboard missing clear button/confirmation: %s", body)
+	}
+
+	countByGame := func(label, q string) int {
+		t.Helper()
+		var n int
+		if err := srv.db.QueryRow(q, gameID).Scan(&n); err != nil {
+			t.Fatalf("%s: %v", label, err)
+		}
+		return n
+	}
+	themesQ := `select count(*) from themes th join matches m on m.id = th.match_id where m.game_id = ?`
+	resultsQ := `select count(*) from match_results r join matches m on m.id = r.match_id where m.game_id = ?`
+	assignQ := `select count(*) from game_assignments where game_id = ?`
+	matchesQ := `select count(*) from matches where game_id = ?`
+
+	if countByGame("themes", themesQ) == 0 {
+		t.Fatalf("fixture expected to have themes before clear")
+	}
+	if countByGame("results", resultsQ) == 0 {
+		t.Fatalf("fixture expected to have match_results before clear")
+	}
+	var teamsBefore int
+	if err := srv.db.QueryRow(`select count(*) from teams where fest_id = ?`, festID).Scan(&teamsBefore); err != nil {
+		t.Fatalf("teams before: %v", err)
+	}
+
+	clearReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/game/%d/clear", festID, gameID), nil)
+	clearReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: token})
+	clearResp := httptest.NewRecorder()
+	srv.handleHostRouter(clearResp, clearReq)
+	if clearResp.Code != http.StatusSeeOther {
+		t.Fatalf("clear status = %d, body %s", clearResp.Code, clearResp.Body.String())
+	}
+
+	// The game survives with the same id; derived data is gone, the bracket is
+	// rebuilt empty, and fest-scoped teams are untouched.
+	var status string
+	if err := srv.db.QueryRow(`select status from games where id = ? and fest_id = ?`, gameID, festID).Scan(&status); err != nil {
+		t.Fatalf("game gone after clear: %v", err)
+	}
+	if status != "pending" {
+		t.Fatalf("status after clear = %q, want pending", status)
+	}
+	if n := countByGame("themes", themesQ); n != 0 {
+		t.Fatalf("themes after clear = %d, want 0", n)
+	}
+	if n := countByGame("results", resultsQ); n != 0 {
+		t.Fatalf("match_results after clear = %d, want 0", n)
+	}
+	if n := countByGame("assignments", assignQ); n != 0 {
+		t.Fatalf("game_assignments after clear = %d, want 0", n)
+	}
+	if n := countByGame("matches", matchesQ); n != 1 {
+		t.Fatalf("matches after clear = %d, want 1 (rebuilt from scheme)", n)
+	}
+	var teamsAfter int
+	if err := srv.db.QueryRow(`select count(*) from teams where fest_id = ?`, festID).Scan(&teamsAfter); err != nil {
+		t.Fatalf("teams after: %v", err)
+	}
+	if teamsAfter != teamsBefore {
+		t.Fatalf("fest teams changed by clear: before %d, after %d", teamsBefore, teamsAfter)
+	}
+}
+
 func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)

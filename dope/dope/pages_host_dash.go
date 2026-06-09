@@ -111,6 +111,9 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
           </a>
           {{if $.CanManageGames}}
           <a class="btn" href="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/settings">Свойства</a>
+          <form method="post" action="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/clear" onsubmit="return confirm('Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся.');">
+            <button class="btn danger" type="submit">Очистить</button>
+          </form>
           <form method="post" action="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/delete" onsubmit="return confirm('Удалить игру? Все результаты этой игры будут потеряны.');">
             <button class="btn danger" type="submit">Удалить</button>
           </form>

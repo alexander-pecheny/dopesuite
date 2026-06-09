@@ -426,7 +426,7 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if len(parts) == 5 && parts[2] == "game" && parts[4] == "delete" {
+	if len(parts) == 5 && parts[2] == "game" && (parts[4] == "delete" || parts[4] == "clear") {
 		if !requireManageFest() {
 			return
 		}
@@ -447,7 +447,11 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		s.handleHostDeleteGame(w, r, id, gameID)
+		if parts[4] == "clear" {
+			s.handleHostClearGame(w, r, id, gameID)
+		} else {
+			s.handleHostDeleteGame(w, r, id, gameID)
+		}
 		return
 	}
 	if len(parts) == 5 && parts[2] == "game" && parts[4] == "settings" {
