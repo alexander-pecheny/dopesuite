@@ -3181,6 +3181,34 @@ body:not(.embedded-match) .grid-match {
 
 .entry-q-head { font-size: var(--text-xs); }
 
+/* Floating "Инвертировать" button: a small yin-yang parked in the gap above the
+   active column's number. Fixed-positioned (placed by positionInvertOverlay) so
+   the entry table's `contain: paint` doesn't clip it. */
+.entry-invert {
+  position: fixed;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: var(--cursor-action);
+  line-height: 0;
+  z-index: var(--z-dropdown);
+}
+.entry-invert[hidden] { display: none; }
+.entry-invert:hover { color: var(--blue); }
+.entry-invert svg { display: block; width: 16px; height: 16px; }
+.entry-invert .yy-light { fill: var(--surface); }
+.entry-invert .yy-dark { fill: currentColor; }
+.entry-invert .yy-ring { stroke: currentColor; stroke-width: 4; }
+.entry-invert.spinning { animation: yinyang-spin 0.45s ease; }
+
+@keyframes yinyang-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .entry-table .entry-row-marker {
   position: sticky;
   left: 0;
