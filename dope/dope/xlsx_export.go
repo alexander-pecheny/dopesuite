@@ -456,6 +456,11 @@ func buildEKSheets(f *excelize.File, stages []stageMatches) error {
 	if len(stages) == 0 {
 		return nil
 	}
+	// "Статистика" first (leftmost) so the per-player overview — the most readable
+	// view — opens by default. Skipped when no answers are marked anywhere.
+	if err := buildEKStatsSheet(f, stages); err != nil {
+		return err
+	}
 	for _, stage := range stages {
 		name := stage.Code
 		if len(stage.Matches) > 0 && strings.TrimSpace(stage.Matches[0].StageTitle) != "" {
@@ -465,6 +470,7 @@ func buildEKSheets(f *excelize.File, stages []stageMatches) error {
 		if _, err := f.NewSheet(sheet); err != nil {
 			return err
 		}
+		_ = f.SetColWidth(sheet, "A", "A", 26) // team / player name column
 		row := 1
 		for _, mv := range stage.Matches {
 			n, err := writeEKMatchBlock(f, sheet, row, mv)
@@ -477,9 +483,19 @@ func buildEKSheets(f *excelize.File, stages []stageMatches) error {
 	return nil
 }
 
-// writeEKMatchBlock writes one match's flat score table starting at startRow and
-// returns the number of rows written. Mirrors the on-screen match-table:
-// Команда | Σ | М | per-theme(values + score) | shootout themes | R.
+// axis converts 1-based (col, row) to an A1 cell reference for merges.
+func axis(col, row int) string {
+	name, _ := excelize.CoordinatesToCellName(col, row)
+	return name
+}
+
+// writeEKMatchBlock writes one match's score table starting at startRow and
+// returns the number of rows written. It mirrors the on-screen two-row match
+// layout: per team a "names" row (team, Σ, place, the player who played each
+// theme, theme score, R) and an "answers" row beneath it carrying the signed
+// per-question marks under each player. The player name is merged across its
+// theme's value columns so it sits above that player's answers, exactly as the
+// page renders it.
 func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv MatchView) (int, error) {
 	nv := len(mv.QuestionValues)
 
@@ -492,6 +508,10 @@ func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv MatchVie
 			maxShootout = len(t.ShootoutThemes)
 		}
 	}
+	blockCount := maxThemes + maxShootout
+	hasR := blockCount > 0
+	// Each theme block is nv value columns + 1 score column; blocks start at col 4.
+	blockStart := func(b int) int { return 4 + b*(nv+1) }
 
 	row := startRow
 	// Match title row.
@@ -504,41 +524,41 @@ func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv MatchVie
 	}
 	row++
 
-	// Theme label header row.
+	// Theme label header row: "Т1".."Тn" then "П1".. ; each label spans its value
+	// columns, with a "Σ" score-column header after it.
+	labelRow := row
 	labels := []interface{}{"Команда", "Σ", "М"}
 	for t := 0; t < maxThemes; t++ {
 		labels = append(labels, fmt.Sprintf("Т%d", t+1))
-		for i := 1; i < nv+1; i++ {
+		for i := 1; i < nv; i++ {
 			labels = append(labels, nil)
 		}
+		labels = append(labels, "Σ")
 	}
 	for t := 0; t < maxShootout; t++ {
 		labels = append(labels, fmt.Sprintf("П%d", t+1))
-		for i := 1; i < nv+1; i++ {
+		for i := 1; i < nv; i++ {
 			labels = append(labels, nil)
 		}
+		labels = append(labels, "Σ")
 	}
-	if maxShootout > 0 || maxThemes > 0 {
+	if hasR {
 		labels = append(labels, "R")
 	}
-	if err := setRow(f, sheet, row, labels); err != nil {
+	if err := setRow(f, sheet, labelRow, labels); err != nil {
 		return 0, err
 	}
 	row++
 
-	// Value sub-header row.
+	// Value sub-header row: the nominal point values under each theme block.
 	sub := []interface{}{nil, nil, nil}
-	appendValueBlock := func(n int) {
-		for t := 0; t < n; t++ {
-			for _, v := range mv.QuestionValues {
-				sub = append(sub, v)
-			}
-			sub = append(sub, "Σ")
+	for b := 0; b < blockCount; b++ {
+		for _, v := range mv.QuestionValues {
+			sub = append(sub, v)
 		}
+		sub = append(sub, nil) // score column
 	}
-	appendValueBlock(maxThemes)
-	appendValueBlock(maxShootout)
-	if maxShootout > 0 || maxThemes > 0 {
+	if hasR {
 		sub = append(sub, nil)
 	}
 	if err := setRow(f, sheet, row, sub); err != nil {
@@ -546,43 +566,202 @@ func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv MatchVie
 	}
 	row++
 
+	if nv > 1 {
+		for b := 0; b < blockCount; b++ {
+			_ = f.MergeCell(sheet, axis(blockStart(b), labelRow), axis(blockStart(b)+nv-1, labelRow))
+		}
+	}
+
 	for _, team := range mv.Teams {
 		place := interface{}(nil)
 		if team.Place > 0 {
 			place = formatPlace(team.Place)
 		}
-		cells := []interface{}{team.Name, team.Total, place}
-		writeThemes := func(themes []ThemeView, count int) {
+		nameRow := row
+		ansRow := row + 1
+		nameCells := []interface{}{team.Name, team.Total, place}
+		ansCells := []interface{}{nil, nil, nil}
+		appendBlocks := func(themes []ThemeView, count int) {
 			for t := 0; t < count; t++ {
 				var tv *ThemeView
 				if t < len(themes) {
 					tv = &themes[t]
+				}
+				player := ""
+				if tv != nil {
+					player = tv.Player
+				}
+				nameCells = append(nameCells, player)
+				for i := 1; i < nv; i++ {
+					nameCells = append(nameCells, nil)
+				}
+				if tv != nil {
+					nameCells = append(nameCells, tv.Score)
+				} else {
+					nameCells = append(nameCells, nil)
 				}
 				for a := 0; a < nv; a++ {
 					mark := ""
 					if tv != nil && a < len(tv.Answers) {
 						mark = tv.Answers[a]
 					}
-					cells = append(cells, signedMarkValue(mark, mv.QuestionValues[a]))
+					ansCells = append(ansCells, signedMarkValue(normalizeMark(mark), mv.QuestionValues[a]))
 				}
-				if tv != nil {
-					cells = append(cells, tv.Score)
-				} else {
-					cells = append(cells, nil)
+				ansCells = append(ansCells, nil) // score column
+			}
+		}
+		appendBlocks(team.Themes, maxThemes)
+		appendBlocks(team.ShootoutThemes, maxShootout)
+		if hasR {
+			nameCells = append(nameCells, team.Tiebreak)
+			ansCells = append(ansCells, nil)
+		}
+		if err := setRow(f, sheet, nameRow, nameCells); err != nil {
+			return 0, err
+		}
+		if err := setRow(f, sheet, ansRow, ansCells); err != nil {
+			return 0, err
+		}
+		if nv > 1 {
+			for b := 0; b < blockCount; b++ {
+				_ = f.MergeCell(sheet, axis(blockStart(b), nameRow), axis(blockStart(b)+nv-1, nameRow))
+			}
+		}
+		row += 2
+	}
+	return row - startRow, nil
+}
+
+// ekPlayerStat is one row of the "Статистика" sheet: a player's aggregate across
+// every match they played, mirroring computeEKPlayerStats in static/match-table.js.
+type ekPlayerStat struct {
+	Player  string
+	Team    string
+	Sum     int     // Σ: signed point total
+	Plus    int     // Σ+: points from correct answers only
+	Battles int     // Бои: distinct matches the player appeared in
+	Right   [5]int  // correct counts by value index (0→10 … 4→50)
+	Wrong   [5]int  // wrong counts by value index
+	Share   float64 // 0..1 share among the team's positive contributors
+}
+
+// computeEKPlayerStats aggregates per-player stats across all stages/matches,
+// keyed by (team, player), mirroring the client-side helper of the same name.
+// Only regular themes count (not shootout), matching the on-screen table.
+func computeEKPlayerStats(stages []stageMatches) []ekPlayerStat {
+	values := [5]int{10, 20, 30, 40, 50}
+	type agg struct {
+		stat    ekPlayerStat
+		battles map[string]bool
+	}
+	byKey := map[string]*agg{}
+	order := []string{}
+	for _, stage := range stages {
+		for _, match := range stage.Matches {
+			battleID := stage.Code + match.Code
+			for _, team := range match.Teams {
+				for _, theme := range team.Themes {
+					player := strings.TrimSpace(theme.Player)
+					if player == "" {
+						continue
+					}
+					key := team.Name + "\x00" + player
+					a := byKey[key]
+					if a == nil {
+						a = &agg{stat: ekPlayerStat{Player: player, Team: team.Name}, battles: map[string]bool{}}
+						byKey[key] = a
+						order = append(order, key)
+					}
+					if !a.battles[battleID] {
+						a.battles[battleID] = true
+						a.stat.Battles++
+					}
+					for i, mark := range theme.Answers {
+						v := 0
+						if i < len(values) {
+							v = values[i]
+						}
+						switch normalizeMark(mark) {
+						case "right":
+							a.stat.Sum += v
+							a.stat.Plus += v
+							a.stat.Right[i]++
+						case "wrong":
+							a.stat.Sum -= v
+							a.stat.Wrong[i]++
+						}
+					}
 				}
 			}
 		}
-		writeThemes(team.Themes, maxThemes)
-		writeThemes(team.ShootoutThemes, maxShootout)
-		if maxShootout > 0 || maxThemes > 0 {
-			cells = append(cells, team.Tiebreak)
-		}
-		if err := setRow(f, sheet, row, cells); err != nil {
-			return 0, err
-		}
-		row++
 	}
-	return row - startRow, nil
+	// "% от команды": a positive player's share among their team's positive
+	// contributors, so a team's positive players' shares sum to 100%.
+	teamPositive := map[string]int{}
+	rows := make([]ekPlayerStat, 0, len(order))
+	for _, key := range order {
+		st := byKey[key].stat
+		if st.Sum > 0 {
+			teamPositive[st.Team] += st.Sum
+		}
+		rows = append(rows, st)
+	}
+	for i := range rows {
+		if total := teamPositive[rows[i].Team]; rows[i].Sum > 0 && total > 0 {
+			rows[i].Share = float64(rows[i].Sum) / float64(total)
+		}
+	}
+	sort.SliceStable(rows, func(a, b int) bool {
+		if rows[a].Sum != rows[b].Sum {
+			return rows[a].Sum > rows[b].Sum
+		}
+		if rows[a].Plus != rows[b].Plus {
+			return rows[a].Plus > rows[b].Plus
+		}
+		return rows[a].Player < rows[b].Player
+	})
+	return rows
+}
+
+// buildEKStatsSheet writes the per-player "Статистика" sheet. Columns mirror the
+// on-screen table: Игрок, Команда, Σ, Σ+, Бои, 50…10 (correct counts), −50…−10
+// (wrong counts), % от команды. No sheet is added when nothing is scored yet.
+func buildEKStatsSheet(f *excelize.File, stages []stageMatches) error {
+	rows := computeEKPlayerStats(stages)
+	if len(rows) == 0 {
+		return nil
+	}
+	sheet := uniqueSheetName(f, "Статистика")
+	if _, err := f.NewSheet(sheet); err != nil {
+		return err
+	}
+	header := []interface{}{"Игрок", "Команда", "Σ", "Σ+", "Бои"}
+	for _, v := range []int{50, 40, 30, 20, 10} {
+		header = append(header, v)
+	}
+	for _, v := range []int{50, 40, 30, 20, 10} {
+		header = append(header, fmt.Sprintf("-%d", v))
+	}
+	header = append(header, "% от команды")
+	if err := setRow(f, sheet, 1, header); err != nil {
+		return err
+	}
+	for i, r := range rows {
+		cells := []interface{}{r.Player, r.Team, r.Sum, r.Plus, r.Battles}
+		for v := 4; v >= 0; v-- {
+			cells = append(cells, r.Right[v])
+		}
+		for v := 4; v >= 0; v-- {
+			cells = append(cells, r.Wrong[v])
+		}
+		cells = append(cells, fmt.Sprintf("%d%%", int(r.Share*100+0.5)))
+		if err := setRow(f, sheet, i+2, cells); err != nil {
+			return err
+		}
+	}
+	_ = f.SetColWidth(sheet, "A", "B", 24) // player + team names
+	_ = f.SetPanes(sheet, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"})
+	return nil
 }
 
 func formatPlace(p float64) interface{} {
