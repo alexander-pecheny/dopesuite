@@ -5,7 +5,7 @@
 //
 // Two independent axes, persisted in localStorage and reflected as attributes
 // on :root (see styles.css overrides):
-//   data-theme    = "light" | "dark"      (default light; we do NOT follow the OS)
+//   data-theme    = "light" | "dark"      (resolved from "system"|"light"|"dark"; default system)
 //   data-contrast = "regular" | "high"    (default regular)
 (function () {
   "use strict";
@@ -28,14 +28,27 @@
     if (s) { try { s.setItem(key, value); } catch (_) {} }
   }
 
-  let theme = readPref(THEME_KEY, ["light", "dark"], "light");
+  let theme = readPref(THEME_KEY, ["light", "dark", "system"], "system");
   let contrast = readPref(CONTRAST_KEY, ["regular", "high"], "regular");
 
+  function resolveTheme() {
+    if (theme !== "system") return theme;
+    try { return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; }
+    catch (_) { return "light"; }
+  }
+
   function apply() {
-    root.dataset.theme = theme;
+    root.dataset.theme = resolveTheme();
     root.dataset.contrast = contrast;
   }
   apply(); // synchronous — runs during <head> parse, before the body paints
+
+  // Re-apply when OS preference changes while "system" mode is active.
+  try {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+      if (theme === "system") apply();
+    });
+  } catch (_) {}
 
   // The jump item is page-supplied (match-table.js / host.js): on a view-only
   // page with edit rights it links to the editor; on a host page it links to
@@ -235,7 +248,7 @@
 
       const themeGroup = segmented(
         "Тема",
-        [{value: "light", label: "Светлая"}, {value: "dark", label: "Тёмная"}],
+        [{value: "system", label: "Системная"}, {value: "light", label: "Светлая"}, {value: "dark", label: "Тёмная"}],
         () => theme,
         (value) => { theme = value; writePref(THEME_KEY, value); apply(); },
       );
