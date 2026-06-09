@@ -365,6 +365,13 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			s.handleScopedGameScheme(w, r, scope)
 			return
+		case "results":
+			if len(parts) != 4 {
+				http.NotFound(w, r)
+				return
+			}
+			s.handleScopedGameResults(w, r, scope)
+			return
 		case "seed-import":
 			s.handleScopedSeedImport(w, r, scope, parts[4:])
 			return
