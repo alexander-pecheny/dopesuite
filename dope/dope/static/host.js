@@ -2729,6 +2729,49 @@ function focusPlaceInput(team, options = {}) {
   if (options.select) input.select();
 }
 
+// The mobile decimal keypad behind the place inputs has no Return key on iOS,
+// so this floating ↑/↓ bar is the only way to step between teams without
+// dismissing the keypad. Touch-only (installCellNavBar no-ops on desktop, where
+// Enter/Tab/arrows already navigate). Shown while a place input is focused.
+let ekNavBar = null;
+function ensureEKNavBar() {
+  if (ekNavBar) return ekNavBar;
+  ekNavBar = gameTable.installCellNavBar({
+    onPrev: () => advanceActivePlaceInput(-1),
+    onNext: () => advanceActivePlaceInput(1),
+  });
+  return ekNavBar;
+}
+
+function advanceActivePlaceInput(direction) {
+  const input = document.activeElement;
+  if (!(input instanceof HTMLInputElement) || !input.classList.contains("place-input")) return;
+  input.dispatchEvent(new Event("change")); // commit current value before moving
+  const team = Number(input.dataset.team);
+  if (!Number.isInteger(team) || !state) return;
+  const nextTeam = clamp(team + direction, 0, state.teams.length - 1);
+  focusPlaceInput(nextTeam, {select: true, matchCode: input.dataset.matchCode});
+}
+
+document.addEventListener("focusin", (event) => {
+  const target = event.target;
+  if (target instanceof HTMLInputElement && target.classList.contains("place-input")) {
+    ensureEKNavBar().show();
+  }
+});
+document.addEventListener("focusout", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || !target.classList.contains("place-input")) return;
+  // Advancing briefly drops focus before the next input gains it; defer the
+  // hide and only act if focus truly left the place column.
+  setTimeout(() => {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLInputElement) || !active.classList.contains("place-input")) {
+      ekNavBar?.hide();
+    }
+  }, 0);
+});
+
 function focusFinishToggle(options = {}) {
   const input = document.querySelector(".finish-toggle");
   if (input) input.focus({preventScroll: options.preventScroll});

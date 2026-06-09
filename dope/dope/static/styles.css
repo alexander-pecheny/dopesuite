@@ -25,9 +25,9 @@
   --muted-light: #9aa0a6;
   --blue: #1a73e8;
   --blue-tint: #e8f0fe;
-  --green: #79a987;
-  --green-dark: #2f7d57;
-  --red: #e6c4c8;
+  --green: #52a76c;
+  --green-dark: #206836;
+  --red: #f0939e;
   --red-dark: #9b3f48;
   --red-soft: #fff7f7;
   --success: #16a34a;
@@ -3204,6 +3204,36 @@ body:not(.embedded-match) .grid-match {
 .entry-invert .yy-ring { stroke: currentColor; stroke-width: 4; }
 .entry-invert.spinning { animation: yinyang-spin 0.45s ease; }
 
+/* Floating ↑/↓ cell-navigation bar (installCellNavBar). Pinned just above the
+   on-screen keyboard via visualViewport (top set in JS) because mobile numeric
+   keypads have no Return key on iOS — this is the only way to step between
+   cells without dismissing the keypad. Touch devices only. */
+.entry-nav-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 1px;
+  padding: 0;
+  background: var(--border);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
+  z-index: var(--z-toast);
+}
+.entry-nav-bar[hidden] { display: none; }
+.entry-nav-bar button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 48px;
+  padding: 0;
+  font-size: var(--text-lg);
+  line-height: 1;
+  border: 0;
+  background: var(--surface-tint);
+  color: var(--text);
+  cursor: var(--cursor-action);
+}
+.entry-nav-bar button:active { background: var(--blue-tint); }
+
 @keyframes yinyang-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -5157,9 +5187,9 @@ body:not(.embedded-match) .grid-match {
   --warning-soft: #243349;
 
   /* status — re-picked for dark, not desaturated light values */
-  --green: #3a6b4d;
-  --green-dark: #7fcf9a;
-  --red: #6b3138;
+  --green: #33814b;
+  --green-dark: #2b8446;
+  --red: #9a353c;
   --red-dark: #f0a0aa;
   --red-soft: #2a1c1e;
   --success: #2ecc6f;

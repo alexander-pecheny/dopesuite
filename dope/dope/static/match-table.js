@@ -1505,6 +1505,71 @@
     return wrapper;
   }
 
+  // installCellNavBar mounts a floating ↑/↓ bar pinned just above the on-screen
+  // keyboard for advancing between editable cells. Mobile numeric keypads
+  // (inputmode=numeric/decimal) have no Return key on iOS, so this is the only
+  // way to step cell-to-cell without dismissing the keypad. Rendered only on
+  // coarse-pointer (touch) devices — on desktop, Enter/Tab already do this.
+  //
+  // The caller drives visibility with show()/hide(); buttons fire onPrev/onNext
+  // on `pointerdown` with the default prevented, so the focused input is never
+  // blurred and the keyboard stays up while we programmatically move focus.
+  function installCellNavBar(options = {}) {
+    const coarse = typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    if (!coarse) return {show: () => {}, hide: () => {}};
+
+    const {onPrev, onNext, prevLabel = "▲", nextLabel = "▼"} = options;
+    const bar = document.createElement("div");
+    bar.className = "entry-nav-bar";
+    bar.hidden = true;
+    const make = (label, aria, handler) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.setAttribute("aria-label", aria);
+      button.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        handler?.();
+      });
+      return button;
+    };
+    bar.append(
+      make(prevLabel, "Предыдущая ячейка", onPrev),
+      make(nextLabel, "Следующая ячейка", onNext),
+    );
+    document.body.appendChild(bar);
+
+    let visible = false;
+    const position = () => {
+      if (!visible) return;
+      const vv = window.visualViewport;
+      if (vv) {
+        bar.style.top = `${Math.round(vv.offsetTop + vv.height - bar.offsetHeight)}px`;
+        bar.style.bottom = "auto";
+      } else {
+        bar.style.top = "auto";
+        bar.style.bottom = "0px";
+      }
+    };
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", position);
+      vv.addEventListener("scroll", position);
+    }
+    return {
+      show() {
+        visible = true;
+        bar.hidden = false; // unhide before measuring offsetHeight
+        position();
+      },
+      hide() {
+        visible = false;
+        bar.hidden = true;
+      },
+    };
+  }
+
   function createFloatingPopover(options) {
     const root = options.root;
     const specs = options.specs || [];
@@ -2584,6 +2649,7 @@
     teamListCell,
     buildVenuesTable,
     createFloatingPopover,
+    installCellNavBar,
     createStatusReporter,
     mountEditorLink,
     mountViewerLink,

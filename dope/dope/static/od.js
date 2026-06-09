@@ -65,6 +65,7 @@ let entrySelection = null;
 let entryDragSelection = null;
 let entrySuppressClickSelection = false;
 let invertOverlay = null; // floating yin-yang "Инвертировать" button, positioned over the active column
+let entryNavBar = null; // floating ↑/↓ bar for stepping cells from the mobile numeric keypad (no Return key)
 const undoStack = [];
 
 // Two-tone yin-yang for the "Инвертировать" button. The dark lobe/dot use
@@ -543,7 +544,7 @@ function toggleResultsShootout(roundIndex) {
 function updateHeaderProgress() {
   if (!progressNode) return;
   const lastQ = lastEnteredQuestion();
-  progressNode.textContent = lastQ ? `Введён вопрос ${lastQ}` : "Ни одного вопроса не введено";
+  progressNode.textContent = lastQ ? `Введён вопрос ${lastQ}` : "Игра не началась";
 }
 
 function renderTabs() {
@@ -673,6 +674,31 @@ function positionInvertOverlay() {
   overlay.hidden = false; // unhide first so offsetWidth/Height are measurable
   overlay.style.left = `${Math.round(center - overlay.offsetWidth / 2)}px`;
   overlay.style.top = `${Math.round(r.top - overlay.offsetHeight - 2)}px`;
+}
+
+// ensureEntryNavBar lazily mounts the floating ↑/↓ navigation bar (touch-only;
+// installCellNavBar returns no-ops on desktop). Down advances to the next team
+// in the column, up to the previous — mirroring the Enter/ArrowDown path in
+// handleEntryKeydown so the bar and the keyboard stay in sync.
+function ensureEntryNavBar() {
+  if (entryNavBar) return entryNavBar;
+  entryNavBar = gameTable.installCellNavBar({
+    onPrev: () => advanceActiveEntryEditor(-1),
+    onNext: () => advanceActiveEntryEditor(1),
+  });
+  return entryNavBar;
+}
+
+function advanceActiveEntryEditor(direction) {
+  if (!activeEntryEditor) return;
+  const {cell} = activeEntryEditor;
+  const rowIndex = Number(cell.dataset.row);
+  if (!Number.isInteger(rowIndex)) return;
+  if (isShootoutEntryCell(cell)) {
+    focusShootoutInput(Number(cell.dataset.round), Number(cell.dataset.question), rowIndex + direction);
+  } else {
+    focusInput(Number(cell.dataset.q), rowIndex + direction);
+  }
 }
 
 let invertListenersAttached = false;
@@ -1782,6 +1808,7 @@ function openEntryEditor(cell) {
   syncActiveEditorValidity(cell);
   input.focus();
   input.select();
+  ensureEntryNavBar().show();
 }
 
 function closeEntryEditor() {
@@ -1802,6 +1829,7 @@ function closeEntryEditor() {
     applyEntryCellDisplay(cell, qIndex, rowIndex);
     markEntryCellValidity(cell, qIndex);
   }
+  entryNavBar?.hide();
 }
 
 function parseEntryInput(input) {
