@@ -667,7 +667,14 @@ function positionInvertOverlay() {
   if (!head || !frame) return hide();
   const r = head.getBoundingClientRect();
   const f = frame.getBoundingClientRect();
-  const center = r.left + r.width / 2;
+  // Center over the visible (padding-box) cell, not the border box: end-of-tour
+  // columns carry an extra-wide right border (the inter-tour gap), so r.width/2
+  // would push the marker off to the right. Subtract the borders to land it over
+  // the number itself.
+  const cs = getComputedStyle(head);
+  const borderLeft = parseFloat(cs.borderLeftWidth) || 0;
+  const borderRight = parseFloat(cs.borderRightWidth) || 0;
+  const center = r.left + borderLeft + (r.width - borderLeft - borderRight) / 2;
   // Hide when the column is scrolled under the sticky row-marker or past the edge.
   if (center < f.left + 12 || center > f.right) return hide();
   overlay.dataset.q = String(q);
