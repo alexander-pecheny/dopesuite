@@ -56,7 +56,7 @@ var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!docty
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/appearance.js"></script>
 </head>
-<body class="public">
+<body class="public"{{if .Fest.IsPublic}} data-jump-label="Страница зрителя" data-jump-href="/fest/{{.Fest.Ref}}" data-jump-title="Открыть зрительскую страницу"{{end}}>
   <header class="public-top">
     <a class="public-back" href="/host">←</a>
     <h1>{{.Fest.Title}}</h1>

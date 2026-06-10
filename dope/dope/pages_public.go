@@ -69,7 +69,7 @@ var publicListTemplate = template.Must(template.New("publicList").Parse(`<!docty
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/appearance.js"></script>
 </head>
-<body class="public">
+<body class="public" data-jump-label="Режим ведущего" data-jump-href="/host" data-jump-title="Перейти в режим ведущего">
   <header class="public-top">
     <h1>Фесты</h1>
   </header>
@@ -102,7 +102,7 @@ var publicFestTemplate = template.Must(template.New("publicFest").Parse(`<!docty
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/appearance.js"></script>
 </head>
-<body class="public">
+<body class="public" data-jump-label="Режим ведущего" data-jump-href="/host/fest/{{.Ref}}" data-jump-title="Открыть в режиме ведущего">
   <header class="public-top">
     <a class="public-back" href="/">←</a>
     <h1>{{.Title}}</h1>

@@ -288,6 +288,20 @@
     function onModalKey(event) { if (event.key === "Escape") closeModal(); }
 
     openModalFn = openModal;
+    // Server-rendered pages with no JS of their own (home, fest overviews)
+    // declare their host/viewer jump statically via body data-jump-* attributes.
+    // Honour it unless a page script already supplied one.
+    if (!jump) {
+      const d = document.body ? document.body.dataset : {};
+      if (d.jumpHref) {
+        jump = {
+          label: d.jumpLabel || "Перейти",
+          href: d.jumpHref,
+          title: d.jumpTitle || "",
+          external: d.jumpExternal === "1",
+        };
+      }
+    }
     renderItems();
     loadAccount();
   }

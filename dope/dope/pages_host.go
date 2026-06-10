@@ -48,7 +48,7 @@ var hostLoggedOutTemplate = template.Must(template.New("hostLogin").Parse(`<!doc
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/appearance.js"></script>
 </head>
-<body class="public">
+<body class="public" data-jump-label="Страница зрителя" data-jump-href="/" data-jump-title="Открыть зрительскую страницу">
   <header class="public-top">
     <h1>Организаторы</h1>
   </header>
@@ -72,7 +72,7 @@ var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!docty
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/appearance.js"></script>
 </head>
-<body class="public">
+<body class="public" data-jump-label="Страница зрителя" data-jump-href="/" data-jump-title="Открыть зрительскую страницу">
   <header class="public-top">
     <h1>Мои фесты</h1>
   </header>
