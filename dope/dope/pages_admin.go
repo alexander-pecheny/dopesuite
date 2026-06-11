@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 // adminUsername gates the /admin tooling. Defaults to "pecheny"; override with
@@ -63,7 +65,7 @@ var adminIndexTemplate = template.Must(template.New("adminIndex").Parse(`<!docty
   <title>Админка</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
@@ -72,6 +74,7 @@ var adminIndexTemplate = template.Must(template.New("adminIndex").Parse(`<!docty
   <main class="public-main">
     <ul class="list">
       <li><a class="list-row" href="/admin/create_users"><span class="list-row-title">Создать пользователей</span></a></li>
+      <li><a class="list-row" href="/admin/users"><span class="list-row-title">Пользователи</span></a></li>
     </ul>
   </main>
 </body>
@@ -115,7 +118,7 @@ var adminCreateUsersTemplate = template.Must(template.New("adminCreateUsers").Pa
   <title>Создать пользователей · Админка</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
@@ -171,6 +174,90 @@ var adminCreateUsersTemplate = template.Must(template.New("adminCreateUsers").Pa
   </main>
 </body>
 </html>`))
+
+type adminUserRow struct {
+	ID        int64
+	Username  string
+	Telegram  string
+	IsSystem  bool
+	CreatedAt string
+}
+
+type adminUsersData struct {
+	Users []adminUserRow
+}
+
+var adminUsersTemplate = template.Must(template.New("adminUsers").Parse(`<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Пользователи · Админка</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+</head>
+<body class="public">
+  <header class="public-top">
+    <h1>Пользователи</h1>
+    <a class="public-user" href="/admin">Админка</a>
+  </header>
+  <main class="public-main">
+    {{if .Users}}
+    <section class="section">
+      <table class="data-table">
+        <thead><tr><th>ID</th><th>Логин</th><th>Telegram</th><th>Создан</th></tr></thead>
+        <tbody>
+          {{range .Users}}<tr><td>{{.ID}}</td><td>{{.Username}}{{if .IsSystem}} <span class="muted">(система)</span>{{end}}</td><td>{{.Telegram}}</td><td>{{.CreatedAt}}</td></tr>{{end}}
+        </tbody>
+      </table>
+    </section>
+    {{else}}
+    <p class="empty">Пользователей нет.</p>
+    {{end}}
+  </main>
+</body>
+</html>`))
+
+// /admin/users — lists all users with their creation timestamp.
+func (s *server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/admin/users" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := s.requireAdmin(w, r); !ok {
+		return
+	}
+	users, err := s.loadAdminUsers(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = adminUsersTemplate.Execute(w, adminUsersData{Users: users})
+}
+
+func (s *server) loadAdminUsers(ctx context.Context) ([]adminUserRow, error) {
+	return collectRows(ctx, s.db, `
+select id, coalesce(username, ''), coalesce(telegram_username, ''), is_system, created_at
+from users
+order by created_at desc, id desc`, nil, func(rows *sql.Rows) (adminUserRow, error) {
+		var u adminUserRow
+		var isSystem int
+		if err := rows.Scan(&u.ID, &u.Username, &u.Telegram, &isSystem, &u.CreatedAt); err != nil {
+			return u, err
+		}
+		u.IsSystem = isSystem == 1
+		if t, err := time.Parse(time.RFC3339, u.CreatedAt); err == nil {
+			u.CreatedAt = t.Format("2006-01-02 15:04")
+		}
+		return u, nil
+	})
+}
 
 // /admin — landing page with links to admin tools.
 func (s *server) handleAdminLanding(w http.ResponseWriter, r *http.Request) {
