@@ -3223,6 +3223,9 @@ body:not(.embedded-match) .grid-match {
 .entry-nav-bar button {
   flex: 1 1 0;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 48px;
   padding: 0;
   font-size: var(--text-lg);
@@ -3233,6 +3236,59 @@ body:not(.embedded-match) .grid-match {
   cursor: var(--cursor-action);
 }
 .entry-nav-bar button:active { background: var(--blue-tint); }
+
+/* Virtual numeric keypad (installVirtualKeypad). Replaces the OS keyboard for
+   digit-only cell entry on touch devices: the host input sets inputmode="none"
+   to suppress the native keypad, and these keys drive it via callbacks. Pinned
+   to the bottom of the visual viewport (top set in JS). Touch devices only. A
+   nav row (← ↑ ↓ →) sits above a 3-column digit pad; 1px gaps over the --border
+   backdrop draw the key seams, so every key stays equal-width via the grid. */
+.entry-keypad {
+  position: fixed;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 1px;
+  background: var(--border);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.18);
+  z-index: var(--z-toast);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.entry-keypad[hidden] { display: none; }
+.entry-keypad-nav,
+.entry-keypad-digits {
+  display: grid;
+  gap: 1px;
+}
+.entry-keypad-nav { grid-template-columns: repeat(4, 1fr); }
+.entry-keypad-digits { grid-template-columns: repeat(3, 1fr); }
+.entry-keypad-zero { grid-column: span 2; }
+.entry-keypad-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  background: var(--paper);
+  color: var(--text);
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: var(--cursor-action);
+  touch-action: manipulation;
+}
+.entry-keypad-arrow {
+  height: 44px;
+  background: var(--surface-tint);
+  font-size: var(--text-lg);
+}
+.entry-keypad-back { font-size: var(--text-lg); }
+.entry-keypad-key:active { background: var(--blue-tint); }
 
 @keyframes yinyang-spin {
   from { transform: rotate(0deg); }
