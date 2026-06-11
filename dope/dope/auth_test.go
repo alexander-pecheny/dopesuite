@@ -139,10 +139,10 @@ values(null, null, ?, 0, ?, ?)`, "profile_user", now, now)
 		t.Fatalf("host: status %d, body %s", hostResp.Code, hostResp.Body.String())
 	}
 	// The profile link was folded into the ☰ appearance menu (loaded via
-	// appearance.js, which fetches /api/auth/me), so it is no longer in the
+	// menu.js, which fetches /api/auth/me), so it is no longer in the
 	// server HTML. The username still appears in the title, and the menu script
 	// must be present to reach the profile.
-	if body := hostResp.Body.String(); !strings.Contains(body, "profile_user") || !strings.Contains(body, "/static/appearance.js") {
+	if body := hostResp.Body.String(); !strings.Contains(body, "profile_user") || !strings.Contains(body, "/static/menu.js") {
 		t.Fatalf("host page missing username/appearance menu: %s", body)
 	}
 

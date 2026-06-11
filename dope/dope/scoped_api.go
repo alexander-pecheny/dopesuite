@@ -382,6 +382,13 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			s.handleScopedGameExport(w, r, scope)
 			return
+		case "export.json.gz":
+			if len(parts) != 4 {
+				http.NotFound(w, r)
+				return
+			}
+			s.handleScopedGameArchive(w, r, scope)
+			return
 		}
 	}
 	http.NotFound(w, r)

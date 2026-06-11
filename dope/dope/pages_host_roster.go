@@ -52,7 +52,7 @@ var hostFestTeamsTemplate = template.Must(template.New("hostTeams").Parse(`<!doc
   <title>{{.Fest.Title}} · команды</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
@@ -86,7 +86,7 @@ var hostFestPlayersTemplate = template.Must(template.New("hostPlayers").Parse(`<
   <title>{{.Fest.Title}} · игроки</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
@@ -277,7 +277,7 @@ var hostFestRatingImportTemplate = template.Must(template.New("hostRatingImport"
   <title>{{.Fest.Title}} · импорт участников</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
 </head>
 <body class="public">
   <header class="public-top">
@@ -312,7 +312,7 @@ var hostFestSchemeImportTemplate = template.Must(template.New("hostSchemeImport"
   <title>{{.Fest.Title}} · импорт схемы</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
 </head>
 <body class="public">
   <header class="public-top">

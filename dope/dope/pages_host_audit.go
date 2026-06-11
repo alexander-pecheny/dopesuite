@@ -77,7 +77,7 @@ var hostFestAuditTemplate = template.Must(template.New("hostAudit").Parse(`<!doc
   <title>{{.Fest.Title}} · история изменений</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
   <style>
     .audit-changes { margin: .25rem 0 0; padding-left: 1.1rem; font-size: .85em; line-height: 1.35; }
     .audit-changes li { color: var(--muted, #555); }

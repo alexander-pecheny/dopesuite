@@ -27,7 +27,7 @@ type odResultsTeam struct {
 	City       string `json:"city"`       //
 	Total      int    `json:"total"`      // questions taken across all tours (Σ on the page)
 	TourTotals []int  `json:"tourTotals"` // questions taken per tour, aligned with tourComp
-	Rating     int    `json:"rating"`     // Buchholz-style R: sum over taken questions of (teamCount − takers)
+	Rating     int    `json:"rating"`     // Buchholz-style R: sum over taken questions of (teamCount − takers + 1)
 	Mask       string `json:"mask"`       // per-question "1"/"0" (took/not), rating.chgk.info style, length = sum(tourComp)
 }
 
@@ -141,7 +141,7 @@ func computeODResults(schemeJSON, stateJSON string) (odResults, error) {
 				if q < len(took) && took[q] != nil && took[q][teamIdx] {
 					total++
 					tourTotals[tourIdx]++
-					rating += teamCount - len(took[q])
+					rating += teamCount - len(took[q]) + 1
 					mask.WriteByte('1')
 				} else {
 					mask.WriteByte('0')

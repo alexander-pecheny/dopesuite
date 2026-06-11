@@ -60,9 +60,9 @@ func TestComputeODResults(t *testing.T) {
 	}
 
 	// Rating for team A: took q0 (3 takers), q1 (2 takers), q2 (1 taker), teamCount=4.
-	// R = (4-3)+(4-2)+(4-1) = 1+2+3 = 6.
-	if res.Teams[0].Rating != 6 {
-		t.Errorf("team A rating = %d, want 6", res.Teams[0].Rating)
+	// R = (4-3+1)+(4-2+1)+(4-1+1) = 2+3+4 = 9.
+	if res.Teams[0].Rating != 9 {
+		t.Errorf("team A rating = %d, want 9", res.Teams[0].Rating)
 	}
 }
 

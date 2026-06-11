@@ -284,6 +284,7 @@ func main() {
 	mux.HandleFunc("/host/", srv.handleHostRouter)
 	mux.HandleFunc("/admin", srv.handleAdminLanding)
 	mux.HandleFunc("/admin/create_users", srv.handleAdminCreateUsers)
+	mux.HandleFunc("/admin/users", srv.handleAdminUsers)
 	mux.HandleFunc("/api/fest/", srv.handleScopedAPI)
 	mux.HandleFunc("/api/auth/register/start", srv.handleAuthRegisterStart)
 	mux.HandleFunc("/api/auth/register/status", srv.handleAuthRegisterStatus)

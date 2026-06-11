@@ -9,6 +9,8 @@ const {formatVenue, formatBattleVenue, statusLabel, formatNumber, formatPlace, c
 const viewerCounter = gameTable.createViewerCounter(statusNode);
 let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
+const canEdit = Boolean(window.__HOST_INIT__?.canEdit);
+if (!embedded && route.apiBase) gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
 let state = null;
 let fest = null;
 let venues = [];
@@ -2953,9 +2955,9 @@ function breadcrumbCurrentTitle(gameTitle) {
 }
 
 function setViewerLink(href, title) {
-  // Folded into the ☰ menu (appearance.js): register the context-aware jump
+  // Folded into the ☰ menu (menu.js): register the context-aware jump
   // with the precise per-mode viewer href instead of a standalone 👀 icon.
-  window.dopeAppearance?.setJump({label: "Страница зрителя", href, title, external: true});
+  window.dopeMenu?.setJump({label: "Страница зрителя", href, title, external: true});
 }
 
 function setHostMode(mode) {

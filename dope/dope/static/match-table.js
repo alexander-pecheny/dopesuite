@@ -1761,12 +1761,12 @@
     };
   }
 
-  // The standalone ✏️/👀 icons were folded into the ☰ menu (appearance.js).
+  // The standalone ✏️/👀 icons were folded into the ☰ menu (menu.js).
   // These now register the menu's context-aware jump item instead of mounting
   // an icon; .refresh() re-points it after SPA navigation. statusNode is kept
   // for call-site compatibility but unused.
   function mountEditorLink() {
-    const set = () => window.dopeAppearance?.setJump({
+    const set = () => window.dopeMenu?.setJump({
       label: "Редактировать",
       href: editorHrefForCurrentLocation(),
       title: "Открыть в режиме редактирования",
@@ -1809,7 +1809,7 @@
   }
 
   function mountViewerLink() {
-    const set = () => window.dopeAppearance?.setJump({
+    const set = () => window.dopeMenu?.setJump({
       label: "Страница зрителя",
       href: viewerHrefForCurrentLocation(),
       title: "Открыть зрительскую страницу",
@@ -1822,6 +1822,29 @@
   function viewerHrefForCurrentLocation() {
     const path = window.location.pathname.replace(/^\/host(?=\/|$)/, "");
     return (path || "/") + window.location.search;
+  }
+
+  // mountGameDownloads registers the game's archive download links in the ☰ menu:
+  // "Скачать XLSX" for everyone, and "Скачать .json.gz" (current state + edit
+  // history) for hosts only. apiBase is the game's /api/fest/.../games/... base.
+  function mountGameDownloads(opts) {
+    const apiBase = opts && opts.apiBase;
+    if (!apiBase || !window.dopeMenu?.setExtras) return;
+    const items = [{
+      label: "Скачать XLSX",
+      href: `${apiBase}/export.xlsx`,
+      title: "Скачать таблицу игры в формате XLSX",
+      download: true,
+    }];
+    if (opts.canEdit) {
+      items.push({
+        label: "Скачать .json.gz",
+        href: `${apiBase}/export.json.gz`,
+        title: "Скачать текущее состояние игры и историю правок",
+        download: true,
+      });
+    }
+    window.dopeMenu.setExtras(items);
   }
 
   function parseGameRoute(pathname = window.location.pathname) {
@@ -2654,6 +2677,7 @@
     mountEditorLink,
     mountViewerLink,
     mountUnnumberedBanner,
+    mountGameDownloads,
     parseGameRoute,
     createTeamNameOverflowController,
     fitEKStageTeamName,

@@ -1472,6 +1472,9 @@ type hostInitPayload struct {
 	// TeamsUnnumbered mirrors gameInitPayload.TeamsUnnumbered for the EK host
 	// surface: editing is blocked server-side until every team has a number.
 	TeamsUnnumbered bool `json:"teamsUnnumbered,omitempty"`
+	// CanEdit reflects table-editor rights, so the page can show host-only
+	// actions (e.g. the .json.gz archive download) without a probe round trip.
+	CanEdit bool `json:"canEdit,omitempty"`
 }
 
 type gameInitPayload struct {
@@ -1535,6 +1538,11 @@ func (s *server) serveHostHTMLWithInit(w http.ResponseWriter, r *http.Request, s
 	if err != nil {
 		s.serveHostHTML(w, r)
 		return
+	}
+	if user, ok := s.lookupSession(r); ok {
+		if role, err := s.festUserRole(r.Context(), scope.FestID, user.UserID); err == nil && festRoleCanEditGameTables(role) {
+			payload.CanEdit = true
+		}
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
