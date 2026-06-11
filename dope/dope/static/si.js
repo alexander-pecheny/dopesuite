@@ -27,6 +27,7 @@ const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "b
 const KSI_TABS = [
   {key: "detailed", label: "Подробно"},
   {key: "results", label: "Итог"},
+  {key: "refusals", label: "Отказы"},
 ];
 
 const route = gameTable.parseGameRoute();
@@ -72,9 +73,16 @@ let presence = null;
 let cellSelection = null;
 const tabScroll = new Map();
 
+// The «Отказы» (refusals) tab is a host-only control surface; its effect — declined
+// teams dropping out of the «Итог» ranking — is visible to spectators in that tab, so
+// they never need the management list itself.
+function visibleTabs() {
+  return KSI_TABS.filter((t) => t.key !== "refusals" || !viewer);
+}
+
 function tabFromHash() {
   const key = (window.location.hash || "").replace(/^#/, "");
-  return KSI_TABS.some((t) => t.key === key) ? key : null;
+  return visibleTabs().some((t) => t.key === key) ? key : null;
 }
 
 window.addEventListener("hashchange", () => {
@@ -239,6 +247,13 @@ function ensureState() {
     return {answers: padded};
   });
   if (typeof state.finished !== "boolean") state.finished = false;
+  // Refused-to-play flags live in a dedicated top-level map keyed by team identity
+  // (`n<number>`, or `s<name>` for the legacy number-less case) rather than on the
+  // participant objects, which are an immutable rating roster and get fully rebuilt
+  // on every roster re-import — keys here survive that.
+  if (!state.declined || typeof state.declined !== "object" || Array.isArray(state.declined)) {
+    state.declined = {};
+  }
   invalidateScores();
   invalidateDetailedOrder();
 }
@@ -251,9 +266,13 @@ function render(options = {}) {
   document.title = pageTitle();
   if (isTeamMode()) {
     rememberTabScroll(renderedTab);
-    if (!KSI_TABS.some((t) => t.key === activeTab)) activeTab = "detailed";
+    if (!visibleTabs().some((t) => t.key === activeTab)) activeTab = "detailed";
     renderTabs();
-    const node = activeTab === "results" ? buildResultsTable() : buildTable();
+    const node = activeTab === "results"
+      ? buildResultsTable()
+      : activeTab === "refusals"
+        ? buildRefusalsTable()
+        : buildTable();
     renderedTable = activeTab === "detailed" ? node : null;
     if (activeTab !== "detailed") resetTableIndex();
     siRoot.replaceChildren(node);
@@ -429,6 +448,75 @@ function buildResultsTable() {
   return wrapper;
 }
 
+// The «Отказы» tab: every team with a checkbox to mark it as having refused to play.
+// Mirrors the EK seed-import decline list; a checked team drops out of the «Итог»
+// ranking. Reuses the seed-import table styling for a consistent look.
+function buildRefusalsTable() {
+  const wrapper = document.createElement("div");
+  wrapper.className = "results-wrapper";
+
+  const order = state.participants.map((_, index) => index).sort(compareParticipantNumbers);
+
+  const table = document.createElement("table");
+  table.className = "results-table seed-import-table ksi-refusals-table";
+
+  const thead = document.createElement("thead");
+  const head = document.createElement("tr");
+  head.appendChild(gameTable.th("№", "results-place-head seed-number-head"));
+  head.appendChild(gameTable.th("Команда", "results-team-head seed-team-head"));
+  head.appendChild(gameTable.th("Отказалась", "seed-declined-head"));
+  thead.appendChild(head);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  order.forEach((index, rowIdx) => {
+    const declined = participantDeclined(index);
+    const tr = document.createElement("tr");
+    const classes = ["results-row"];
+    if (rowIdx === 0) classes.push("results-group-first");
+    if (rowIdx === order.length - 1) classes.push("results-group-last");
+    if (declined) classes.push("seed-declined-row");
+    tr.className = classes.join(" ");
+
+    const number = participantNumber(index);
+    tr.appendChild(gameTable.td(number > 0 ? number : "", "results-place seed-number-cell"));
+
+    const teamCell = document.createElement("td");
+    teamCell.className = "results-team seed-team-cell";
+    const nameWrap = document.createElement("span");
+    nameWrap.className = "results-team-name-wrap";
+    const label = participantLabel(index);
+    const name = document.createElement("span");
+    name.className = "results-team-name";
+    name.textContent = label;
+    name.tabIndex = 0;
+    name.setAttribute("aria-label", label);
+    nameWrap.appendChild(name);
+    teamCell.appendChild(nameWrap);
+    const fullName = document.createElement("span");
+    fullName.className = "results-team-name-popover";
+    fullName.textContent = label;
+    teamCell.appendChild(fullName);
+    tr.appendChild(teamCell);
+
+    const declinedCell = document.createElement("td");
+    declinedCell.className = "results-num seed-declined-cell";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = declined;
+    checkbox.disabled = viewer;
+    checkbox.setAttribute("aria-label", `Отказалась: ${label}`);
+    checkbox.addEventListener("change", () => setParticipantDeclined(index, checkbox.checked));
+    declinedCell.appendChild(checkbox);
+    tr.appendChild(declinedCell);
+
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+  return wrapper;
+}
+
 function buildResultsTableInner() {
   const rows = rankedResultRows();
   const table = document.createElement("table");
@@ -482,12 +570,17 @@ function buildResultsTableInner() {
 }
 
 function rankedResultRows() {
-  const rows = state.participants.map((_, index) => ({
-    index,
-    name: participantLabel(index),
-    metrics: resultMetrics(index),
-    placeText: "",
-  }));
+  // Teams that refused to play are excluded from the ranking entirely — they take no
+  // place and don't shift anyone else, mirroring how declined teams are skipped in EK
+  // seeding. They appear only in the «Отказы» tab.
+  const rows = state.participants
+    .map((_, index) => ({
+      index,
+      name: participantLabel(index),
+      metrics: resultMetrics(index),
+      placeText: "",
+    }))
+    .filter((row) => !participantDeclined(row.index));
   rows.sort(compareResultRows);
   let i = 0;
   while (i < rows.length) {
@@ -548,7 +641,7 @@ function renderTabs() {
     return;
   }
   siTabsRoot.hidden = false;
-  for (const tab of KSI_TABS) {
+  for (const tab of visibleTabs()) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "match-tab" + (activeTab === tab.key ? " active" : "");
@@ -594,8 +687,10 @@ function updateResultsScrollState() {
 
 function detailedPlayerOrder() {
   if (detailedOrderCache) return detailedOrderCache;
-  const order = state.participants.map((_, index) => index);
+  let order = state.participants.map((_, index) => index);
   if (isTeamMode()) {
+    // Teams that refused to play are dropped from the «Подробно» sheet entirely.
+    order = order.filter((index) => !participantDeclined(index));
     order.sort(detailedSort === "number" ? compareParticipantNumbers : compareParticipantNames);
   }
   detailedOrderCache = order;
@@ -640,6 +735,32 @@ function participantName(index) {
 function participantNumber(index) {
   const p = state.participants?.[index];
   return p && typeof p === "object" ? Number(p.number) || 0 : 0;
+}
+
+// Identity key for the refused-to-play map: the team number when known (the stable
+// identity that survives roster reorders/renames), else a name fallback for legacy
+// number-less states. Returns "" when there's nothing to key on.
+function declinedKey(index) {
+  const number = participantNumber(index);
+  if (number > 0) return `n${number}`;
+  const name = participantName(index).trim().toLowerCase();
+  return name ? `s${name}` : "";
+}
+
+function participantDeclined(index) {
+  const key = declinedKey(index);
+  return key ? Boolean(state.declined?.[key]) : false;
+}
+
+function setParticipantDeclined(index, declined) {
+  if (viewer) return;
+  const key = declinedKey(index);
+  if (!key) return;
+  if (!state.declined || typeof state.declined !== "object") state.declined = {};
+  state.declined[key] = declined;
+  invalidateDetailedOrder();
+  render();
+  saveState(["declined", key], declined);
 }
 
 // participantsEqual compares two participant arrays by identity (number + name),
@@ -1036,6 +1157,9 @@ function rememberChangedTheme(changedThemes, player, theme) {
 function canPatchState(previous, next) {
   if (!renderedTable || !previous || !next) return false;
   if (previous.finished !== next.finished) return false;
+  // A refusal toggle adds/removes a team from the «Подробно» sheet and «Итог» ranking
+  // but leaves participants/themes untouched, so force a full re-render to reflect it.
+  if (JSON.stringify(previous.declined || {}) !== JSON.stringify(next.declined || {})) return false;
   if (!Array.isArray(previous.participants) || !Array.isArray(next.participants)) return false;
   if (previous.participants.length !== next.participants.length) return false;
   if (isTeamMode() && !participantsEqual(previous.participants, next.participants)) return false;
