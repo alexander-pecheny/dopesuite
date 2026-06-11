@@ -2374,7 +2374,7 @@ func slotSource(slot schemeSlot) (string, string) {
 		}
 		label := slot.Label
 		if label == "" && slot.Seed.Basket <= 0 {
-			label = fmt.Sprintf("seed-%d", number)
+			label = fmt.Sprintf("Посев-%d", number)
 		}
 		return "seed", mustJSON(map[string]any{
 			"basket": basket,
@@ -3853,6 +3853,11 @@ func slotSourceLabel(sourceType, sourceRef string) string {
 	var ref map[string]any
 	_ = json.Unmarshal([]byte(sourceRef), &ref)
 	if label, ok := ref["label"].(string); ok && label != "" {
+		// Legacy schemes baked the English token "seed-N" as the display label;
+		// surface the Russian "Посев-N" without a data migration.
+		if rest, found := strings.CutPrefix(label, "seed-"); found {
+			return "Посев-" + rest
+		}
 		return label
 	}
 	switch sourceType {

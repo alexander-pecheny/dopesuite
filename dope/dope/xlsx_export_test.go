@@ -165,6 +165,40 @@ func TestBuildKSISheets(t *testing.T) {
 	}
 }
 
+func TestBuildKSISheetsExcludesDeclined(t *testing.T) {
+	// Дельта (number 8) refused to play → excluded from both sheets; Гамма remains.
+	state := `{
+		"participants":[{"number":7,"name":"Гамма"},{"number":8,"name":"Дельта"}],
+		"declined":{"n8":true},
+		"themes":[
+			{"answers":[["right","wrong","right","",""],["","","","","right"]]},
+			{"answers":[["","","","",""],["","","","",""]]}
+		]
+	}`
+	f := excelize.NewFile()
+	defer f.Close()
+	if err := buildKSISheets(f, state); err != nil {
+		t.Fatalf("buildKSISheets: %v", err)
+	}
+	// Подробно: Гамма is the only data row (row 3); Дельта's row is gone.
+	if got := cell(t, f, "Подробно", "A3"); got != "Гамма" {
+		t.Fatalf("det A3 = %q, want Гамма", got)
+	}
+	if got := cell(t, f, "Подробно", "A4"); got != "" {
+		t.Fatalf("det A4 = %q, want empty (Дельта excluded)", got)
+	}
+	// Итог: Гамма ranks first and alone; Дельта absent.
+	if got := cell(t, f, "Итог", "A2"); got != "1" {
+		t.Fatalf("res A2 place = %q, want 1", got)
+	}
+	if got := cell(t, f, "Итог", "B2"); got != "Гамма" {
+		t.Fatalf("res B2 = %q, want Гамма", got)
+	}
+	if got := cell(t, f, "Итог", "B3"); got != "" {
+		t.Fatalf("res B3 = %q, want empty (only one ranked team)", got)
+	}
+}
+
 func TestBuildEKSheets(t *testing.T) {
 	mv := MatchView{
 		Title:          "Финал",

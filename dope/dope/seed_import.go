@@ -57,7 +57,8 @@ type ksiSeedCandidate struct {
 	SourceIndex int
 	SourceRank  int
 	Name        string
-	Number      int // team number (universal identity); 0 for legacy number-less KSI state
+	Number      int  // team number (universal identity); 0 for legacy number-less KSI state
+	Declined    bool // marked refused-to-play in the KSI «Отказы» tab
 	Metrics     ksiSeedMetrics
 }
 
@@ -235,7 +236,10 @@ func (s *server) importSeedsFromKSI(ctx context.Context, scope festScope) (seedI
 			return seedImportView{}, 0, nil, fmt.Errorf("КСИ содержит команду %q больше одного раза (первое имя: %q)", candidate.Name, previous)
 		}
 		seenTeams[teamID] = candidate.Name
-		declined := previousDeclinesByTeam[teamID]
+		// A team that refused to play in KSI lands pre-declined on the EK import page
+		// (visible but skipped in seeding). Union with any prior EK-side decline so a
+		// re-import never silently un-declines a team.
+		declined := candidate.Declined || previousDeclinesByTeam[teamID]
 		if !declined {
 			declined = previousDeclinesByName[seedTeamNameKey(candidate.Name)]
 		}
@@ -599,7 +603,7 @@ limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
 		return 0, nil, err
 	}
 
-	participants, themes, err := decodeKSIStateForSeed(schemeJSON, stateJSON)
+	participants, themes, declined, err := decodeKSIStateForSeed(schemeJSON, stateJSON)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -616,6 +620,7 @@ limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
 			SourceIndex: index,
 			Name:        name,
 			Number:      p.Number,
+			Declined:    ksiParticipantDeclined(declined, p),
 			Metrics:     ksiMetricsForParticipant(themes, index),
 		})
 	}
@@ -628,15 +633,16 @@ limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
 	return sourceGameID, candidates, nil
 }
 
-func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]ksiParticipant, [][][]string, error) {
+func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]ksiParticipant, [][][]string, map[string]bool, error) {
 	var state struct {
 		Participants json.RawMessage `json:"participants"`
+		Declined     map[string]bool `json:"declined"`
 		Themes       []struct {
 			Answers [][]string `json:"answers"`
 		} `json:"themes"`
 	}
 	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
-		return nil, nil, fmt.Errorf("не удалось разобрать состояние КСИ: %w", err)
+		return nil, nil, nil, fmt.Errorf("не удалось разобрать состояние КСИ: %w", err)
 	}
 	// Participants may be the current [{number,name}] objects or legacy names.
 	participants := parseKSIParticipants(state.Participants)
@@ -645,7 +651,7 @@ func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]ksiParticipant, [][]
 			Participants json.RawMessage `json:"participants"`
 		}
 		if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
-			return nil, nil, fmt.Errorf("не удалось разобрать схему КСИ: %w", err)
+			return nil, nil, nil, fmt.Errorf("не удалось разобрать схему КСИ: %w", err)
 		}
 		participants = parseKSIParticipants(scheme.Participants)
 	}
@@ -653,7 +659,7 @@ func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]ksiParticipant, [][]
 	for _, theme := range state.Themes {
 		themes = append(themes, theme.Answers)
 	}
-	return participants, themes, nil
+	return participants, themes, state.Declined, nil
 }
 
 func ksiMetricsForParticipant(themes [][][]string, participantIndex int) ksiSeedMetrics {

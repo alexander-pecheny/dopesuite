@@ -261,6 +261,7 @@ func filterPositive(in []int) []int {
 
 type ksiExportState struct {
 	Participants []ksiParticipant `json:"participants"`
+	Declined     map[string]bool  `json:"declined"`
 	Themes       []struct {
 		Answers [][]string `json:"answers"`
 	} `json:"themes"`
@@ -320,11 +321,13 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 		col += nv + 1
 	}
 
+	r := 3 // output row; advances only for teams that played (declined teams omitted)
 	for p := range state.Participants {
-		r := 3 + p
+		if ksiParticipantDeclined(state.Declined, state.Participants[p]) {
+			continue
+		}
 		total := 0
 		rowCells := []interface{}{participantExportName(state.Participants, p), nil}
-		col := 3
 		for t := 0; t < themesCount; t++ {
 			themeScore := 0
 			for a := 0; a < nv; a++ {
@@ -337,11 +340,11 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 			total += themeScore
 			rowCells = append(rowCells, themeScore)
 		}
-		_ = col
 		rowCells[1] = total
 		if err := setRow(f, sheet, r, rowCells); err != nil {
 			return err
 		}
+		r++
 	}
 	return nil
 }
@@ -372,8 +375,13 @@ func buildKSIResultsSheet(f *excelize.File, state *ksiExportState) error {
 		plus    int
 		correct map[int]int
 	}
-	rows := make([]metrics, len(state.Participants))
+	// Teams that refused to play are excluded from the ranking, matching the KSI
+	// «Итог» tab and the EK seed import.
+	rows := make([]metrics, 0, len(state.Participants))
 	for p := range state.Participants {
+		if ksiParticipantDeclined(state.Declined, state.Participants[p]) {
+			continue
+		}
 		m := metrics{index: p, name: participantExportName(state.Participants, p), correct: map[int]int{}}
 		for t := 0; t < len(state.Themes); t++ {
 			for a := 0; a < len(questionValues); a++ {
@@ -388,7 +396,7 @@ func buildKSIResultsSheet(f *excelize.File, state *ksiExportState) error {
 				}
 			}
 		}
-		rows[p] = m
+		rows = append(rows, m)
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		a, b := rows[i], rows[j]
