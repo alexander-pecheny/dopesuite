@@ -5188,7 +5188,10 @@ body:not(.embedded-match) .grid-match {
 
   /* status — re-picked for dark, not desaturated light values */
   --green: #33814b;
-  --green-dark: #2b8446;
+  /* --green-dark is a *foreground* on dark: green text on dark paper, and the
+     question-number digit over the --green cell fill. #2b8446 sat too close to
+     both surfaces in luminance to read — lift it to a legible light green. */
+  --green-dark: #7fd29b;
   --red: #9a353c;
   --red-dark: #f0a0aa;
   --red-soft: #2a1c1e;
