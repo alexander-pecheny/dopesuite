@@ -67,7 +67,9 @@ let entrySelection = null;
 let entryDragSelection = null;
 let entrySuppressClickSelection = false;
 let invertOverlay = null; // floating yin-yang "Инвертировать" button, positioned over the active column
-let entryNavBar = null; // floating ↑/↓ bar for stepping cells from the mobile numeric keypad (no Return key)
+let entryKeypad = null; // floating virtual numeric keypad shown for cell entry on touch devices
+const coarsePointer = typeof window.matchMedia === "function" &&
+  window.matchMedia("(pointer: coarse)").matches;
 const undoStack = [];
 
 // Two-tone yin-yang for the "Инвертировать" button. The dark lobe/dot use
@@ -685,29 +687,61 @@ function positionInvertOverlay() {
   overlay.style.top = `${Math.round(r.top - overlay.offsetHeight - 2)}px`;
 }
 
-// ensureEntryNavBar lazily mounts the floating ↑/↓ navigation bar (touch-only;
-// installCellNavBar returns no-ops on desktop). Down advances to the next team
-// in the column, up to the previous — mirroring the Enter/ArrowDown path in
-// handleEntryKeydown so the bar and the keyboard stay in sync.
-function ensureEntryNavBar() {
-  if (entryNavBar) return entryNavBar;
-  entryNavBar = gameTable.installCellNavBar({
-    onPrev: () => advanceActiveEntryEditor(-1),
-    onNext: () => advanceActiveEntryEditor(1),
+// ensureEntryKeypad lazily mounts the floating virtual numeric keypad
+// (touch-only; installVirtualKeypad returns no-ops on desktop). Its arrow row
+// steps between cells and its digit keys type into the active editor —
+// mirroring the physical-keyboard paths in handleEntryKeydown/handleEntryInput
+// so the keypad and a hardware keyboard stay interchangeable.
+function ensureEntryKeypad() {
+  if (entryKeypad) return entryKeypad;
+  entryKeypad = gameTable.installVirtualKeypad({
+    onDigit: typeIntoActiveEditor,
+    onBackspace: backspaceActiveEditor,
+    onNav: navigateActiveEntryEditor,
   });
-  return entryNavBar;
+  return entryKeypad;
 }
 
-function advanceActiveEntryEditor(direction) {
+// navigateActiveEntryEditor moves the open editor by (dCol, dRow). Shootout
+// cells step by round/question; normal cells by question column / team row.
+function navigateActiveEntryEditor(dCol, dRow) {
   if (!activeEntryEditor) return;
   const {cell} = activeEntryEditor;
   const rowIndex = Number(cell.dataset.row);
   if (!Number.isInteger(rowIndex)) return;
   if (isShootoutEntryCell(cell)) {
-    focusShootoutInput(Number(cell.dataset.round), Number(cell.dataset.question), rowIndex + direction);
+    focusShootoutInput(Number(cell.dataset.round), Number(cell.dataset.question) + dCol, rowIndex + dRow);
   } else {
-    focusInput(Number(cell.dataset.q), rowIndex + direction);
+    focusInput(Number(cell.dataset.q) + dCol, rowIndex + dRow);
   }
+}
+
+// typeIntoActiveEditor / backspaceActiveEditor mutate the focused input the way
+// a key press would (respecting the caret/selection) and dispatch a synthetic
+// `input` event so handleEntryInput validates and persists the value as usual.
+function typeIntoActiveEditor(ch) {
+  const input = activeEntryEditor?.input;
+  if (!input) return;
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, start) + ch + input.value.slice(end);
+  const caret = start + ch.length;
+  input.setSelectionRange(caret, caret);
+  input.dispatchEvent(new Event("input", {bubbles: true}));
+}
+
+function backspaceActiveEditor() {
+  const input = activeEntryEditor?.input;
+  if (!input) return;
+  let start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  if (start === end) {
+    if (start === 0) return;
+    start -= 1; // collapsed caret: delete the char to its left
+  }
+  input.value = input.value.slice(0, start) + input.value.slice(end);
+  input.setSelectionRange(start, start);
+  input.dispatchEvent(new Event("input", {bubbles: true}));
 }
 
 let invertListenersAttached = false;
@@ -1789,10 +1823,12 @@ function openEntryEditor(cell) {
   if (!shootout) setEntrySelection(qIndex, rowIndex, qIndex, rowIndex, {focus: false});
   const input = document.createElement("input");
   input.type = "text";
-  // Hint mobile keyboards to open straight into the digit keypad (like OTP
-  // entry) — team numbers are digits-only. On desktop inputMode is ignored, so
-  // typing a team name to filter the suggest list still works there.
-  input.inputMode = "numeric";
+  // On touch devices suppress the native keyboard (inputmode="none") and drive
+  // entry with our own virtual keypad — the OS numeric keypad looks out of place
+  // and, on iOS, has no Return key. The input stays focused so its caret and
+  // selection still work. On desktop the physical keyboard handles entry (and
+  // typing a team name to filter the suggest list), so keep the numeric hint.
+  input.inputMode = coarsePointer ? "none" : "numeric";
   input.className = "entry-input";
   if (shootout) {
     input.dataset.entryKind = "shootout";
@@ -1817,7 +1853,26 @@ function openEntryEditor(cell) {
   syncActiveEditorValidity(cell);
   input.focus();
   input.select();
-  ensureEntryNavBar().show();
+  ensureEntryKeypad().show();
+  scrollCellAboveKeypad(cell);
+}
+
+// scrollCellAboveKeypad nudges the active cell out from behind the fixed
+// keypad. The browser auto-scrolls focused inputs above the OS keyboard, but our
+// keypad is just an overlay, so we do it ourselves within the sheet scroller.
+function scrollCellAboveKeypad(cell) {
+  const padHeight = entryKeypad?.height?.() || 0;
+  if (!padHeight) return;
+  const frame = scrollFrame();
+  if (!frame) return;
+  const vv = window.visualViewport;
+  const viewBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  const padTop = viewBottom - padHeight;
+  const rect = cell.getBoundingClientRect();
+  const margin = 8;
+  if (rect.bottom > padTop - margin) {
+    frame.scrollTop += rect.bottom - (padTop - margin);
+  }
 }
 
 function closeEntryEditor() {
@@ -1838,7 +1893,7 @@ function closeEntryEditor() {
     applyEntryCellDisplay(cell, qIndex, rowIndex);
     markEntryCellValidity(cell, qIndex);
   }
-  entryNavBar?.hide();
+  entryKeypad?.hide();
 }
 
 function parseEntryInput(input) {

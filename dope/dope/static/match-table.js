@@ -1541,13 +1541,22 @@
     document.body.appendChild(bar);
 
     let visible = false;
+    // Pin to the visual viewport's box (see installVirtualKeypad): iOS resolves
+    // fixed + right:0 against the document width when the page scrolls
+    // horizontally, overflowing the screen and skewing the arrows.
     const position = () => {
       if (!visible) return;
       const vv = window.visualViewport;
       if (vv) {
+        bar.style.left = `${Math.round(vv.offsetLeft)}px`;
+        bar.style.right = "auto";
+        bar.style.width = `${Math.round(vv.width)}px`;
         bar.style.top = `${Math.round(vv.offsetTop + vv.height - bar.offsetHeight)}px`;
         bar.style.bottom = "auto";
       } else {
+        bar.style.left = "0px";
+        bar.style.right = "0px";
+        bar.style.width = "auto";
         bar.style.top = "auto";
         bar.style.bottom = "0px";
       }
@@ -1567,6 +1576,101 @@
         visible = false;
         bar.hidden = true;
       },
+    };
+  }
+
+  // installVirtualKeypad mounts a full on-screen numeric keypad pinned to the
+  // bottom of the visual viewport. It replaces the OS keyboard for digit-only
+  // cell entry on touch devices: the host <input> sets inputmode="none" so
+  // iOS/Android suppress their native keypad (which looks out of place and,
+  // on iOS, lacks a Return key), and these keys drive the input via callbacks.
+  // Layout: a navigation row (← ↑ ↓ →) above a 3-column digit pad (1–9, then a
+  // double-width 0 and ⌫). Rendered only on coarse-pointer devices — on desktop
+  // the physical keyboard and arrow-key navigation already cover this, so it
+  // returns no-ops. Buttons fire on `pointerdown` with the default prevented so
+  // the focused input is never blurred and its caret/selection survive editing.
+  function installVirtualKeypad(options = {}) {
+    const coarse = typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    if (!coarse) return {show: () => {}, hide: () => {}, visible: () => false, height: () => 0};
+
+    const {onDigit, onBackspace, onNav} = options;
+    const pad = document.createElement("div");
+    pad.className = "entry-keypad";
+    pad.hidden = true;
+
+    const key = (label, aria, className, handler) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = className;
+      button.textContent = label;
+      button.setAttribute("aria-label", aria);
+      button.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        handler?.();
+      });
+      return button;
+    };
+
+    const navRow = document.createElement("div");
+    navRow.className = "entry-keypad-nav";
+    navRow.append(
+      key("←", "Предыдущая колонка", "entry-keypad-key entry-keypad-arrow", () => onNav?.(-1, 0)),
+      key("↑", "Предыдущая строка", "entry-keypad-key entry-keypad-arrow", () => onNav?.(0, -1)),
+      key("↓", "Следующая строка", "entry-keypad-key entry-keypad-arrow", () => onNav?.(0, 1)),
+      key("→", "Следующая колонка", "entry-keypad-key entry-keypad-arrow", () => onNav?.(1, 0)),
+    );
+
+    const digits = document.createElement("div");
+    digits.className = "entry-keypad-digits";
+    for (let n = 1; n <= 9; n++) {
+      digits.appendChild(key(String(n), String(n), "entry-keypad-key", () => onDigit?.(String(n))));
+    }
+    digits.appendChild(key("0", "0", "entry-keypad-key entry-keypad-zero", () => onDigit?.("0")));
+    digits.appendChild(key("⌫", "Удалить", "entry-keypad-key entry-keypad-back", () => onBackspace?.()));
+
+    pad.append(navRow, digits);
+    document.body.appendChild(pad);
+
+    let isVisible = false;
+    // Pin to the visual viewport's box explicitly. iOS Safari resolves
+    // position:fixed + right:0 against the document width when the page scrolls
+    // horizontally (our entry table is wide), which overflows the screen — so we
+    // set left/width/top from visualViewport instead of relying on left/right:0.
+    const position = () => {
+      if (!isVisible) return;
+      const vv = window.visualViewport;
+      if (vv) {
+        pad.style.left = `${Math.round(vv.offsetLeft)}px`;
+        pad.style.right = "auto";
+        pad.style.width = `${Math.round(vv.width)}px`;
+        pad.style.top = `${Math.round(vv.offsetTop + vv.height - pad.offsetHeight)}px`;
+        pad.style.bottom = "auto";
+      } else {
+        pad.style.left = "0px";
+        pad.style.right = "0px";
+        pad.style.width = "auto";
+        pad.style.top = "auto";
+        pad.style.bottom = "0px";
+      }
+    };
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", position);
+      vv.addEventListener("scroll", position);
+    }
+    return {
+      show() {
+        isVisible = true;
+        pad.hidden = false; // unhide before measuring offsetHeight
+        position();
+      },
+      hide() {
+        isVisible = false;
+        pad.hidden = true;
+      },
+      visible: () => isVisible,
+      height: () => (isVisible ? pad.offsetHeight : 0),
     };
   }
 
@@ -2673,6 +2777,7 @@
     buildVenuesTable,
     createFloatingPopover,
     installCellNavBar,
+    installVirtualKeypad,
     createStatusReporter,
     mountEditorLink,
     mountViewerLink,
