@@ -212,7 +212,7 @@ const registerLayout = `{{define "page"}}<!doctype html>
   <title>Регистрация · Фест</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
   {{block "head" .}}{{end}}
 </head>
 <body class="host import-page">

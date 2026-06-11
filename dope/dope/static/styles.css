@@ -5134,7 +5134,7 @@ body:not(.embedded-match) .grid-match {
 
 /* ════════════════════════════════════════════════════════════════════════
    APPEARANCE: dark theme + high-contrast mode
-   Two independent axes set by appearance.js on <html>:
+   Two independent axes set by menu.js on <html>:
      data-theme    = light | dark
      data-contrast = regular | high
    Default (no overrides) is the light/regular palette in :root above. Each
@@ -5286,37 +5286,37 @@ body:not(.embedded-match) .grid-match {
   --red-dark: #f6bcc3;
 }
 
-/* ── ☰ menu (Appearance + the edit/view jump) ───────────────────────────── */
-.appearance-menu {
+/* ── ☰ menu (Appearance item, edit/view jump, downloads, account) ───────── */
+.menu {
   position: relative;
   display: inline-flex;
 }
 
-.appearance-menu-floating {
+.menu-floating {
   position: fixed;
   top: var(--space-2);
   right: var(--space-2);
   z-index: var(--z-dropdown);
 }
 
-.appearance-trigger svg {
+.menu-trigger svg {
   display: block;
 }
 
 /* In a .public-top bar (which baseline-aligns its title), pin the menu to the
    right and centre it vertically against the bar instead of riding the baseline. */
-.appearance-menu-public {
+.menu-public {
   margin-left: auto;
   align-self: center;
 }
 
-.appearance-menu-floating .appearance-trigger {
+.menu-floating .menu-trigger {
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-popover);
 }
 
-.appearance-dropdown {
+.menu-dropdown {
   position: absolute;
   top: calc(100% + var(--space-1));
   right: 0;
@@ -5331,7 +5331,7 @@ body:not(.embedded-match) .grid-match {
   z-index: var(--z-dropdown);
 }
 
-.appearance-item {
+.menu-item {
   display: block;
   width: 100%;
   text-align: left;
@@ -5346,8 +5346,8 @@ body:not(.embedded-match) .grid-match {
   cursor: var(--cursor-action);
 }
 
-.appearance-item:hover,
-.appearance-item:focus-visible {
+.menu-item:hover,
+.menu-item:focus-visible {
   background: var(--hover-bg);
 }
 

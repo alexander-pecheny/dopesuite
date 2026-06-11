@@ -22,6 +22,7 @@ const scopeGameID = window.__VIEWER_INIT__?.route?.gameID != null
   ? String(window.__VIEWER_INIT__.route.gameID)
   : route.gameID;
 const editorLink = canEdit && !embedded ? gameTable.mountEditorLink(statusNode) : null;
+if (!embedded && route.apiBase) gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
 let state = null;
 let recorder = null;
 let fest = null;

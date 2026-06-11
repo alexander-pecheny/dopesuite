@@ -1,5 +1,6 @@
-// appearance.js — site-wide theme boot + the ☰ menu (Appearance modal + the
-// context-aware "edit / view" jump). Loaded as a NON-deferred <head> script on
+// menu.js — site-wide theme boot + the ☰ menu (Appearance modal + the
+// context-aware "edit / view" jump, page-supplied download links, account link).
+// Loaded as a NON-deferred <head> script on
 // every page so the stored theme is applied to <html> before first paint (no
 // flash of the wrong theme). The menu/modal are built on DOMContentLoaded.
 //
@@ -55,6 +56,7 @@
   // the viewer. Pages without edit context never set it, so their menu shows
   // only "Оформление".
   let jump = null; // {label, href, title, external}
+  let extras = []; // page-supplied action links, e.g. downloads: [{label, href, title, download}]
   let account = null; // null until /api/auth/me resolves; then {loggedIn, username}
   let renderItems = null; // wired once the menu is built
   let openModalFn = null;
@@ -80,9 +82,16 @@
     renderItems?.();
   }
 
-  window.dopeAppearance = {
+  function setExtras(items) {
+    extras = Array.isArray(items) ? items.slice() : [];
+    renderItems?.();
+  }
+
+  window.dopeMenu = {
     setJump,
     clearJump: () => setJump(null),
+    setExtras,
+    clearExtras: () => setExtras([]),
     openModal: () => openModalFn?.(),
     get theme() { return theme; },
     get contrast() { return contrast; },
@@ -98,11 +107,11 @@
     if (embedded) return;
 
     const wrap = document.createElement("div");
-    wrap.className = "appearance-menu";
+    wrap.className = "menu";
 
     const trigger = document.createElement("button");
     trigger.type = "button";
-    trigger.className = "action-icon appearance-trigger";
+    trigger.className = "action-icon menu-trigger";
     trigger.setAttribute("aria-label", "Меню");
     trigger.setAttribute("aria-haspopup", "true");
     trigger.setAttribute("aria-expanded", "false");
@@ -112,7 +121,7 @@
       + '<path d="M2.5 5h13M2.5 9h13M2.5 13h13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 
     const dropdown = document.createElement("div");
-    dropdown.className = "appearance-dropdown";
+    dropdown.className = "menu-dropdown";
     dropdown.setAttribute("role", "menu");
     dropdown.hidden = true;
 
@@ -123,13 +132,13 @@
     const actions = document.querySelector(".host-actions");
     const header = document.querySelector(".public-top");
     if (actions) {
-      wrap.classList.add("appearance-menu-inline");
+      wrap.classList.add("menu-inline");
       actions.appendChild(wrap);
     } else if (header) {
-      wrap.classList.add("appearance-menu-inline", "appearance-menu-public");
+      wrap.classList.add("menu-inline", "menu-public");
       header.appendChild(wrap);
     } else {
-      wrap.classList.add("appearance-menu-floating");
+      wrap.classList.add("menu-floating");
       document.body.appendChild(wrap);
     }
 
@@ -139,7 +148,7 @@
       // зрителя), then the account link (Вход для ведущего / Профиль ведущего).
       const appearance = document.createElement("button");
       appearance.type = "button";
-      appearance.className = "appearance-item";
+      appearance.className = "menu-item";
       appearance.setAttribute("role", "menuitem");
       appearance.textContent = "Оформление";
       appearance.addEventListener("click", () => { closeMenu(); openModal(); });
@@ -147,7 +156,7 @@
 
       if (jump) {
         const link = document.createElement("a");
-        link.className = "appearance-item";
+        link.className = "menu-item";
         link.setAttribute("role", "menuitem");
         link.href = jump.href;
         link.textContent = jump.label;
@@ -157,9 +166,21 @@
         dropdown.appendChild(link);
       }
 
+      for (const item of extras) {
+        const link = document.createElement("a");
+        link.className = "menu-item";
+        link.setAttribute("role", "menuitem");
+        link.href = item.href;
+        link.textContent = item.label;
+        if (item.title) link.title = item.title;
+        if (item.download) link.setAttribute("download", "");
+        link.addEventListener("click", closeMenu);
+        dropdown.appendChild(link);
+      }
+
       if (account) {
         const link = document.createElement("a");
-        link.className = "appearance-item";
+        link.className = "menu-item";
         link.setAttribute("role", "menuitem");
         if (account.loggedIn) {
           link.href = "/profile";

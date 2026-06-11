@@ -39,12 +39,14 @@ let scopeGameID = route.gameID;
 // connection and refresh by reloading on a jitter. Captured before consumeGameInit
 // nulls window.__GAME_INIT__.
 const staticMode = Boolean(window.__GAME_INIT__?.static);
+const canEdit = Boolean(window.__GAME_INIT__?.canEdit);
 document.body.classList.toggle("viewer-readonly", viewer);
 if (viewer) {
-  if (window.__GAME_INIT__?.canEdit) gameTable.mountEditorLink(statusNode);
+  if (canEdit) gameTable.mountEditorLink(statusNode);
 } else {
   gameTable.mountViewerLink(statusNode);
 }
+gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
 let scheme = null;
 let state = null;
 let fest = null;

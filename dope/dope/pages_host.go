@@ -46,7 +46,7 @@ var hostLoggedOutTemplate = template.Must(template.New("hostLogin").Parse(`<!doc
   <title>Вход для организаторов · Фест</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
 </head>
 <body class="public" data-jump-label="Страница зрителя" data-jump-href="/" data-jump-title="Открыть зрительскую страницу">
   <header class="public-top">
@@ -70,7 +70,7 @@ var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!docty
   <title>Мои фесты · {{.Username}}</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
 </head>
 <body class="public" data-jump-label="Страница зрителя" data-jump-href="/" data-jump-title="Открыть зрительскую страницу">
   <header class="public-top">
@@ -143,7 +143,7 @@ var profileTemplate = template.Must(template.New("profile").Parse(`<!doctype htm
   <title>Профиль</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/appearance.js"></script>
+  <script src="/static/menu.js"></script>
   <script defer src="/static/profile.js"></script>
 </head>
 <body class="public">
