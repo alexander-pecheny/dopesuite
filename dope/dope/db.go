@@ -3009,6 +3009,21 @@ func (s *server) applyMatchUpdateUsing(
 	loadView func() (MatchView, error),
 	oldDataOut *[]byte,
 ) (MatchView, []byte, []MatchView, error) {
+	// Carry the request's audit attribution (actor/request/fest) into the write
+	// tx, detached from the request's cancellation, so this match edit is
+	// recorded in audit_log against the right user and fest. The ctx carries a
+	// writeTxTimeout so the write can never hold s.mu indefinitely.
+	ctx, cancel := auditDetachedContext(reqCtx, festID)
+	defer cancel()
+	// Acquire the pooled connection BEFORE taking the lock: the pool wait is the
+	// one step that can block unbounded under connection starvation, so keep it
+	// off s.mu (see the 2026-06-13 site-wide freeze). ctx bounds the wait.
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return MatchView{}, nil, nil, err
+	}
+	defer conn.Close()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -3023,11 +3038,7 @@ func (s *server) applyMatchUpdateUsing(
 		}
 	}
 
-	// Carry the request's audit attribution (actor/request/fest) into the write
-	// tx, detached from the request's cancellation, so this match edit is
-	// recorded in audit_log against the right user and fest.
-	ctx := auditDetachedContext(reqCtx, festID)
-	tx, err := s.beginWriteTx(ctx)
+	tx, err := s.beginWriteTxConn(ctx, conn)
 	if err != nil {
 		return MatchView{}, nil, nil, err
 	}
@@ -3397,6 +3408,16 @@ func (s *server) updateMatchVenueUsing(
 	if number <= 0 {
 		return MatchView{}, nil, errors.New("bad venue number")
 	}
+	// Bounded, attributed write context + off-lock pool acquisition (see
+	// applyMatchUpdateUsing / the 2026-06-13 freeze).
+	ctx, cancel := auditDetachedContext(reqCtx, festID)
+	defer cancel()
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return MatchView{}, nil, err
+	}
+	defer conn.Close()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -3408,8 +3429,7 @@ func (s *server) updateMatchVenueUsing(
 		}
 	}
 
-	ctx := auditDetachedContext(reqCtx, festID)
-	tx, err := s.beginWriteTx(ctx)
+	tx, err := s.beginWriteTxConn(ctx, conn)
 	if err != nil {
 		return MatchView{}, nil, err
 	}
@@ -3452,11 +3472,18 @@ func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, t
 		return nil, 0, errors.New("empty venue title")
 	}
 
+	ctx, cancel := auditDetachedContext(reqCtx, festID)
+	defer cancel()
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer conn.Close()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ctx := auditDetachedContext(reqCtx, festID)
-	tx, err := s.beginWriteTx(ctx)
+	tx, err := s.beginWriteTxConn(ctx, conn)
 	if err != nil {
 		return nil, 0, err
 	}
