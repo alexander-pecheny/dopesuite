@@ -62,6 +62,9 @@ const localMatchEchoes = new Set();
 let matchTableIndex = null;
 let activeAnswerNode = null;
 let recorder = null;
+// Live SSE stream, kept at module scope so the visibility/online recovery below
+// can tear down a dead connection and re-establish it. null while disconnected.
+let events = null;
 let activeTeamRows = [];
 const matchSelections = new Map();
 const undoStack = [];
@@ -386,7 +389,10 @@ function scheduleEpochReload() {
 }
 
 function connectEvents() {
-  const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
+  if (events) {
+    try { events.close(); } catch (_err) { /* already closed */ }
+  }
+  events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
     // A changed server epoch means a restart reset the seq space; reload to
@@ -457,6 +463,33 @@ function connectEvents() {
     recorder?.event("sse-error", {mode: route.mode, matchCode: route.matchCode});
   };
 }
+
+// iOS aggressively freezes backgrounded tabs, silently killing the SSE socket.
+// Native EventSource auto-reconnect frequently never recovers on resume — it
+// sits in CONNECTING while onerror has already flipped the status to a spinning
+// "reconnecting", so it spins forever. On regaining visibility/network, drop any
+// non-OPEN stream and re-seed from a fresh fetch. Guarding on readyState === OPEN
+// keeps a healthy stream untouched, so the steady-state cost is zero.
+function recoverLive() {
+  if (epochReloadScheduled) return;
+  if (document.visibilityState !== "visible") return;
+  if (events && events.readyState === EventSource.OPEN) return;
+  recorder?.event("sse-recover", {mode: route.mode, readyState: events?.readyState ?? null});
+  setStatus("reconnecting");
+  loadCurrent()
+    .then(() => {
+      setStatus("saved");
+      connectEvents();
+    })
+    .catch((error) => {
+      setStatus("error");
+      console.error(error);
+    });
+}
+
+document.addEventListener("visibilitychange", recoverLive);
+window.addEventListener("pageshow", recoverLive);
+window.addEventListener("online", recoverLive);
 
 function applyFestViewEvent(view) {
   adoptFestView(view);

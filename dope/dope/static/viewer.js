@@ -25,6 +25,9 @@ const editorLink = canEdit && !embedded ? gameTable.mountEditorLink(statusNode) 
 if (!embedded && route.apiBase) gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
 let state = null;
 let recorder = null;
+// Live SSE stream, kept at module scope so the visibility/online recovery below
+// can tear down a dead connection and re-establish it. null while disconnected.
+let events = null;
 let fest = null;
 let venues = [];
 const stageCache = window.DopeStageCache.create({
@@ -381,7 +384,10 @@ function connectEvents() {
     scheduleStaticReload();
     return;
   }
-  const events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
+  if (events) {
+    try { events.close(); } catch (_err) { /* already closed */ }
+  }
+  events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
   events.addEventListener("lockdown", () => {
     // Server entered static mode: drop the stream and reload into the static
     // page (otherwise native EventSource would just auto-reconnect).
@@ -445,6 +451,34 @@ function connectEvents() {
     setLive(false);
     recorder?.event("sse-error", {mode: route.mode, matchCode: route.matchCode});
   };
+}
+
+// iOS (and other browsers) aggressively freeze backgrounded tabs, silently
+// killing the SSE socket. Native EventSource auto-reconnect frequently never
+// recovers on resume — it sits in CONNECTING while onerror has already flipped
+// the status to "error", so the spinner spins forever. On regaining
+// visibility/network, drop any non-OPEN stream and re-seed from a fresh fetch.
+function recoverLive() {
+  if (staticMode || epochReloadScheduled) return;
+  if (document.visibilityState !== "visible") return;
+  if (events && events.readyState === EventSource.OPEN) return;
+  recorder?.event("sse-recover", {mode: route.mode, readyState: events?.readyState ?? null});
+  setStatus("reconnecting");
+  loadCurrent()
+    .then(() => {
+      setLive(true);
+      connectEvents();
+    })
+    .catch((error) => {
+      setLive(false);
+      console.error(error);
+    });
+}
+
+if (!staticMode) {
+  document.addEventListener("visibilitychange", recoverLive);
+  window.addEventListener("pageshow", recoverLive);
+  window.addEventListener("online", recoverLive);
 }
 
 function applyFestViewEvent(view) {
