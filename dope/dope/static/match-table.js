@@ -725,6 +725,11 @@
     let lastSeq = 0;
     let lastSeqSeeded = false;
     let resyncing = false;
+    // Active SSE stream, plus guards so connect()'s lifecycle listeners bind
+    // once and so recovery never re-opens a stream the server locked down.
+    let stream = null;
+    let lifecycleBound = false;
+    let lockedDown = false;
     // lastEpoch is the server's per-process token (see server.epoch). The server
     // resets its per-scope seq to 0 on restart, so without this a long-lived
     // client holding a high lastSeq would read every post-restart delta as
@@ -929,7 +934,20 @@
         setSyncStatus("saving");
         schedulePatch(0);
       }
+      openStream();
+      bindLifecycle();
+      return stream;
+    }
+
+    // openStream (re)creates the EventSource, closing any prior one. Split from
+    // connect() so recovery can re-open the stream without re-seeding seq/epoch,
+    // re-running pending recovery, or re-binding lifecycle listeners.
+    function openStream() {
+      if (stream) {
+        try { stream.close(); } catch (_err) { /* already closed */ }
+      }
       const events = new EventSource(options.eventsURL);
+      stream = events;
       if (options.onViewers) {
         events.addEventListener("viewers", (event) => {
           try {
@@ -1013,6 +1031,8 @@
       events.addEventListener("lockdown", () => {
         // Server entered static mode: drop the stream so the page reloads into
         // the static snapshot, instead of letting EventSource auto-reconnect.
+        // Latch lockedDown so visibility recovery doesn't re-open it meanwhile.
+        lockedDown = true;
         events.close();
         options.onLockdown?.();
       });
@@ -1021,18 +1041,44 @@
         setSyncStatus("reconnecting");
         options.recorder?.event("sse-error", {scope: options.scope, have: lastSeq});
       };
-      // Flush debounced edits the moment the tab is hidden or the page is being
-      // navigated away from, so the 250ms debounce window can't swallow the
-      // operator's last edits on reload. Paired with keepalive on the PATCH, the
-      // flushed request still completes during unload.
+    }
+
+    // bindLifecycle wires tab/network listeners exactly once. connect() runs it
+    // on first connect; recovery re-opens the stream without touching listeners.
+    function bindLifecycle() {
+      if (lifecycleBound) return;
+      lifecycleBound = true;
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState !== "hidden") return;
-        if (patchTimer) { window.clearTimeout(patchTimer); patchTimer = null; }
-        if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
-        void flushPatch();
-        void flushSave();
+        // Flush debounced edits the moment the tab is hidden or the page is
+        // being navigated away from, so the 250ms debounce window can't swallow
+        // the operator's last edits on reload. Paired with keepalive on the
+        // PATCH, the flushed request still completes during unload.
+        if (document.visibilityState === "hidden") {
+          if (patchTimer) { window.clearTimeout(patchTimer); patchTimer = null; }
+          if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
+          void flushPatch();
+          void flushSave();
+          return;
+        }
+        recoverStream();
       });
-      return events;
+      window.addEventListener("pageshow", recoverStream);
+      window.addEventListener("online", recoverStream);
+    }
+
+    // recoverStream re-opens a dead SSE stream and resyncs. iOS aggressively
+    // freezes backgrounded tabs, silently killing the socket; native
+    // EventSource auto-reconnect frequently never recovers on resume, leaving
+    // the status stuck on a spinning "reconnecting". Guarding on
+    // readyState === OPEN keeps a healthy stream from ever being churned, so
+    // the steady-state cost is zero — we only act on a genuinely dead stream.
+    function recoverStream() {
+      if (lockedDown) return;
+      if (document.visibilityState !== "visible") return;
+      if (stream && stream.readyState === EventSource.OPEN) return;
+      options.recorder?.event("sse-recover", {scope: options.scope, readyState: stream?.readyState ?? null});
+      openStream();
+      void resync();
     }
 
     // resync refetches the full state after a gap and realigns lastSeq from the
