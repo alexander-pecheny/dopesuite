@@ -67,6 +67,72 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 	}
 }
 
+func TestSeedImportFromKSIPropagatesDeclines(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, ekGameID := createSeedImportFixture(t, db)
+	// Mark team "B" (the KSI top seed) as refused-to-play. The fixture uses legacy
+	// number-less participants, so the identity key is "s"+lowercased name.
+	declineKSIParticipant(t, db, festID, "sb")
+
+	srv := &server{
+		db:              db,
+		subscribers:     make(map[int64]map[chan event]bool),
+		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+	}
+	scope := festScope{FestID: festID, GameID: ekGameID}
+
+	view, _, _, err := srv.importSeedsFromKSI(t.Context(), scope)
+	if err != nil {
+		t.Fatalf("import seeds: %v", err)
+	}
+
+	// B is still imported (visible on the EK page) but lands pre-declined: no seed.
+	bRow, ok := seedImportRowByName(view, "B")
+	if !ok || !bRow.Declined || bRow.SeedNumber != 0 {
+		t.Fatalf("B row = %#v (found=%v), want declined with no seed number", bRow, ok)
+	}
+	// Seeding skips B and fills the bracket with the teams that actually played.
+	if got := seedImportSlotNames(t, db, ekGameID); !sameStrings(got, []string{"A", "C", "D", "E"}) {
+		t.Fatalf("slot names = %#v, want B excluded", got)
+	}
+}
+
+func declineKSIParticipant(t *testing.T, db *sql.DB, festID int64, key string) {
+	t.Helper()
+	var gameID int64
+	var raw string
+	if err := db.QueryRowContext(context.Background(), `
+select id, coalesce(state_json, '{}') from games where fest_id = ? and game_type = 'ksi'`, festID).Scan(&gameID, &raw); err != nil {
+		t.Fatalf("load ksi game: %v", err)
+	}
+	obj := map[string]json.RawMessage{}
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+		t.Fatalf("decode ksi state: %v", err)
+	}
+	obj["declined"] = json.RawMessage(`{"` + key + `":true}`)
+	next, err := json.Marshal(obj)
+	if err != nil {
+		t.Fatalf("encode ksi state: %v", err)
+	}
+	if _, err := db.ExecContext(context.Background(), `update games set state_json = ? where id = ?`, string(next), gameID); err != nil {
+		t.Fatalf("update ksi state: %v", err)
+	}
+}
+
+func seedImportRowByName(view seedImportView, name string) (seedImportViewRow, bool) {
+	for _, row := range view.Rows {
+		if row.Name == name {
+			return row, true
+		}
+	}
+	return seedImportViewRow{}, false
+}
+
 func TestSeedLabelsShownBeforeImport(t *testing.T) {
 	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -84,7 +150,7 @@ func TestSeedLabelsShownBeforeImport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load match: %v", err)
 	}
-	if got := matchTeamNames(view); !sameStrings(got, []string{"seed-1", "seed-2", "seed-3", "seed-4"}) {
+	if got := matchTeamNames(view); !sameStrings(got, []string{"Посев-1", "Посев-2", "Посев-3", "Посев-4"}) {
 		t.Fatalf("team names = %#v, want seed labels", got)
 	}
 }

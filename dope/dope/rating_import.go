@@ -840,6 +840,32 @@ func parseKSIParticipants(raw json.RawMessage) []ksiParticipant {
 	return nil
 }
 
+// ksiDeclinedKey mirrors si.js declinedKey(): a team that refused to play is keyed by
+// its number when known (the stable identity that survives roster reorders/renames),
+// else by lowercased name for legacy number-less states. Returns "" when there is
+// nothing to key on. Must stay in sync with the frontend so KSI refusals propagate to
+// the server-side consumers (EK seed import, xlsx export).
+func ksiDeclinedKey(number int, name string) string {
+	if number > 0 {
+		return fmt.Sprintf("n%d", number)
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return ""
+	}
+	return "s" + name
+}
+
+// ksiParticipantDeclined reports whether a participant is marked refused-to-play in the
+// given declined map (the KSI state's top-level "declined" object).
+func ksiParticipantDeclined(declined map[string]bool, p ksiParticipant) bool {
+	if len(declined) == 0 {
+		return false
+	}
+	key := ksiDeclinedKey(p.Number, p.Name)
+	return key != "" && declined[key]
+}
+
 // participantNames projects the name column out of a participants list.
 func participantNames(parts []ksiParticipant) []string {
 	out := make([]string, len(parts))
