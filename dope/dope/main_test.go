@@ -809,6 +809,82 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 	}
 }
 
+func TestImportFestRosterNoOpWhenUnchanged(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, _ := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
+
+	roster := []festRosterImportTeam{
+		{
+			RatingID: 101, Name: "Первая", City: "Москва",
+			Players: []festRosterImportPlayer{
+				{RatingID: 1002, FirstName: "Борис", LastName: "Второй"},
+				{RatingID: 1001, FirstName: "Анна", LastName: "Первая"},
+			},
+		},
+		{
+			RatingID: 102, Name: "Вторая", City: "Казань",
+			Players: []festRosterImportPlayer{
+				{RatingID: 1003, FirstName: "Вера", LastName: "Третья"},
+			},
+		},
+	}
+
+	// First import does the real work and bumps the fest revision.
+	first, err := srv.importFestRoster(t.Context(), festID, 13533, roster)
+	if err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	if first.Unchanged {
+		t.Fatalf("first import should not be a no-op: %#v", first)
+	}
+	var revAfterFirst int64
+	if err := db.QueryRow(`select revision from fests where id = ?`, festID).Scan(&revAfterFirst); err != nil {
+		t.Fatalf("revision after first: %v", err)
+	}
+
+	// Re-importing the identical roster must short-circuit: Unchanged, accurate
+	// counts, and crucially NO revision bump (proving no write tx ran).
+	second, err := srv.importFestRoster(t.Context(), festID, 13533, roster)
+	if err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+	if !second.Unchanged {
+		t.Fatalf("identical re-import should be a no-op, got %#v", second)
+	}
+	if second.TeamCount != 2 || second.PlayerCount != 3 {
+		t.Fatalf("no-op counts = %d teams / %d players, want 2/3", second.TeamCount, second.PlayerCount)
+	}
+	if second.ODGameCount != 0 || second.KSIGameCount != 0 {
+		t.Fatalf("no-op must report 0 games rewritten, got od=%d ksi=%d", second.ODGameCount, second.KSIGameCount)
+	}
+	var revAfterSecond int64
+	if err := db.QueryRow(`select revision from fests where id = ?`, festID).Scan(&revAfterSecond); err != nil {
+		t.Fatalf("revision after second: %v", err)
+	}
+	if revAfterSecond != revAfterFirst {
+		t.Fatalf("no-op re-import bumped revision %d -> %d; should not write at all", revAfterFirst, revAfterSecond)
+	}
+
+	// A real change (added player) must fall through to the full rebuild again.
+	roster[1].Players = append(roster[1].Players, festRosterImportPlayer{RatingID: 1004, FirstName: "Глеб", LastName: "Четвёртый"})
+	third, err := srv.importFestRoster(t.Context(), festID, 13533, roster)
+	if err != nil {
+		t.Fatalf("third import: %v", err)
+	}
+	if third.Unchanged {
+		t.Fatalf("roster with an added player must not be treated as unchanged: %#v", third)
+	}
+	if third.PlayerCount != 4 {
+		t.Fatalf("after adding a player, PlayerCount = %d, want 4", third.PlayerCount)
+	}
+}
+
 func TestImportFestRosterPreservesPlayerTeamOverrides(t *testing.T) {
 	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {

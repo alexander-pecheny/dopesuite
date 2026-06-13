@@ -21,6 +21,11 @@ type ratingRosterImportResult struct {
 	PlayerCount  int
 	ODGameCount  int
 	KSIGameCount int
+	// Unchanged is set when the incoming roster matched the fest's current roster
+	// exactly, so the import short-circuited to a no-op (no writes, no game-state
+	// propagation, no broadcasts). TeamCount/PlayerCount still report the roster
+	// size; the game counts stay zero because nothing was rewritten.
+	Unchanged bool
 }
 
 type festRosterImportTeam struct {
@@ -181,14 +186,56 @@ func (s *server) importFestRoster(ctx context.Context, festID, ratingID int64, t
 	}
 	teams = sortedFestRosterImportTeams(teams)
 
+	// Acquire the pooled connection OFF the global write lock. The import is a
+	// bulk op so it keeps the request context (no writeTxTimeout cap — a large
+	// rebuild may legitimately run several seconds), but the pool wait must never
+	// pin s.mu (see the 2026-06-13 freeze).
+	conn, err := s.acquireWriteConn(ctx, "rating-import")
+	if err != nil {
+		return ratingRosterImportResult{}, err
+	}
+	defer conn.Close()
+
 	var updates []gameStateBroadcast
 	var ekOverrideGameIDs []int64
 	var revision int64
 	result, err := func() (ratingRosterImportResult, error) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		defer s.lockWrite("rating-import")()
 
-		tx, err := s.beginWriteTx(ctx)
+		var exists int
+		if err := conn.QueryRowContext(ctx, `select count(*) from fests where id = ?`, festID).Scan(&exists); err != nil {
+			return ratingRosterImportResult{}, err
+		}
+		if exists == 0 {
+			return ratingRosterImportResult{}, sql.ErrNoRows
+		}
+
+		existingByRating, maxSeenNumber, err := loadFestExistingTeams(ctx, conn, festID)
+		if err != nil {
+			return ratingRosterImportResult{}, err
+		}
+		assignFestNumbersForImport(teams, existingByRating, maxSeenNumber)
+
+		// Fast path: if the incoming roster is identical to the fest's current
+		// active roster (same teams, numbers, and players in canonical order), the
+		// rebuild below would rewrite every row to its current value and re-derive
+		// identical game state — all no-ops. Skip the whole write tx, propagation,
+		// and broadcasts, so a "refresh" that changed nothing is near-instant and
+		// adds zero churn during a live tournament. These reads run on conn outside
+		// any tx (we hold s.mu, so no writer can race them).
+		current, err := loadFestActiveRoster(ctx, conn, festID)
+		if err != nil {
+			return ratingRosterImportResult{}, err
+		}
+		if festRostersEqual(sortedFestRosterImportTeams(current), teams) {
+			return ratingRosterImportResult{
+				TeamCount:   len(teams),
+				PlayerCount: distinctPlayerCount(teams),
+				Unchanged:   true,
+			}, nil
+		}
+
+		tx, err := s.beginWriteTxConn(ctx, conn)
 		if err != nil {
 			return ratingRosterImportResult{}, err
 		}
@@ -202,23 +249,12 @@ func (s *server) importFestRoster(ctx context.Context, festID, ratingID int64, t
 			return ratingRosterImportResult{}, err
 		}
 
-		var exists int
-		if err := tx.QueryRowContext(ctx, `select count(*) from fests where id = ?`, festID).Scan(&exists); err != nil {
-			return ratingRosterImportResult{}, err
-		}
-		if exists == 0 {
-			return ratingRosterImportResult{}, sql.ErrNoRows
-		}
-
-		existingByRating, maxSeenNumber, err := loadFestExistingTeams(ctx, tx, festID)
-		if err != nil {
-			return ratingRosterImportResult{}, err
-		}
+		// Loaded before the fest_players delete below — it joins fest_players, so
+		// reading it after the wipe would find nothing.
 		preservedOverrides, err := loadRatingPlayerTeamOverrides(ctx, tx, festID)
 		if err != nil {
 			return ratingRosterImportResult{}, err
 		}
-		assignFestNumbersForImport(teams, existingByRating, maxSeenNumber)
 
 		// Soft-delete fest_teams whose rating_id is not in the incoming roster.
 		// Their numbers stay in the row so they reappear if the team returns.
@@ -357,7 +393,7 @@ type existingFestTeam struct {
 // largest number ever assigned in this fest — new teams introduced by a
 // re-sync always receive numbers strictly greater than this, so already-printed
 // answer sheets keep referring to the right team.
-func loadFestExistingTeams(ctx context.Context, tx *sql.Tx, festID int64) (map[int64]existingFestTeam, int64, error) {
+func loadFestExistingTeams(ctx context.Context, tx dbQueryer, festID int64) (map[int64]existingFestTeam, int64, error) {
 	rows, err := tx.QueryContext(ctx, `
 select id, coalesce(rating_id, 0), coalesce(number, 0)
 from fest_teams
@@ -384,6 +420,94 @@ where fest_id = ?`, festID)
 		return nil, 0, err
 	}
 	return byRating, maxNum, nil
+}
+
+// loadFestActiveRoster loads the fest's current ACTIVE (non-deleted) teams and
+// their players in the same festRosterImportTeam shape as an incoming rating
+// roster, so the two can be diffed to detect a no-op re-import. Soft-deleted
+// teams are excluded: a re-import that re-adds one would flip its deleted flag,
+// which is a real change and must not be mistaken for "unchanged".
+func loadFestActiveRoster(ctx context.Context, q dbQueryer, festID int64) ([]festRosterImportTeam, error) {
+	type teamRow struct {
+		id       int64
+		ratingID int64
+		name     string
+		city     string
+		number   int64
+	}
+	teamRows, err := collectRows(ctx, q, `
+select id, coalesce(rating_id, 0), name, coalesce(city, ''), coalesce(number, 0)
+from fest_teams
+where fest_id = ? and deleted = 0
+order by position, id`, []any{festID}, func(rows *sql.Rows) (teamRow, error) {
+		var t teamRow
+		return t, rows.Scan(&t.id, &t.ratingID, &t.name, &t.city, &t.number)
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]festRosterImportTeam, 0, len(teamRows))
+	for _, t := range teamRows {
+		players, err := collectRows(ctx, q, `
+select coalesce(p.rating_id, 0), p.first_name, p.last_name
+from fest_team_players ftp
+join fest_players p on p.id = ftp.player_id
+where ftp.team_id = ?
+order by ftp.roster_order, p.id`, []any{t.id}, func(rows *sql.Rows) (festRosterImportPlayer, error) {
+			var p festRosterImportPlayer
+			return p, rows.Scan(&p.RatingID, &p.FirstName, &p.LastName)
+		})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, festRosterImportTeam{
+			RatingID: t.ratingID,
+			Name:     t.name,
+			City:     t.city,
+			Number:   t.number,
+			Players:  players,
+		})
+	}
+	return out, nil
+}
+
+// festRostersEqual reports whether two rosters are identical after canonical
+// sorting: the same teams (rating_id/name/city/number) in the same order, each
+// with the same players (rating_id/first/last) in the same order. When true a
+// re-import would rewrite every row to its current value and re-derive identical
+// game state, so the whole import can be skipped. Callers must pass both sides
+// through sortedFestRosterImportTeams first.
+func festRostersEqual(a, b []festRosterImportTeam) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].RatingID != b[i].RatingID || a[i].Name != b[i].Name ||
+			a[i].City != b[i].City || a[i].Number != b[i].Number ||
+			len(a[i].Players) != len(b[i].Players) {
+			return false
+		}
+		for j := range a[i].Players {
+			pa, pb := a[i].Players[j], b[i].Players[j]
+			if pa.RatingID != pb.RatingID || pa.FirstName != pb.FirstName || pa.LastName != pb.LastName {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// distinctPlayerCount counts unique players across an incoming roster the same
+// way the rebuild dedups them (by rosterPlayerKey), so the no-op fast path can
+// report an accurate player tally without touching the DB.
+func distinctPlayerCount(teams []festRosterImportTeam) int {
+	seen := make(map[string]struct{})
+	for _, team := range teams {
+		for _, player := range team.Players {
+			seen[rosterPlayerKey(player)] = struct{}{}
+		}
+	}
+	return len(seen)
 }
 
 // assignFestNumbersForImport mutates teams in place so that:
