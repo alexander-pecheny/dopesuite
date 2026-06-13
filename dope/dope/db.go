@@ -3025,14 +3025,13 @@ func (s *server) applyMatchUpdateUsing(
 	// Acquire the pooled connection BEFORE taking the lock: the pool wait is the
 	// one step that can block unbounded under connection starvation, so keep it
 	// off s.mu (see the 2026-06-13 site-wide freeze). ctx bounds the wait.
-	conn, err := s.db.Conn(ctx)
+	conn, err := s.acquireWriteConn(ctx, "match-update")
 	if err != nil {
 		return MatchView{}, nil, nil, err
 	}
 	defer conn.Close()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.lockWrite("match-update")()
 
 	// Capture the committed pre-image of this match under our exclusive lock,
 	// before the mutation commits, so the caller can broadcast a minimal delta
@@ -3421,14 +3420,13 @@ func (s *server) updateMatchVenueUsing(
 	// applyMatchUpdateUsing / the 2026-06-13 freeze).
 	ctx, cancel := auditDetachedContext(reqCtx, festID)
 	defer cancel()
-	conn, err := s.db.Conn(ctx)
+	conn, err := s.acquireWriteConn(ctx, "match-venue")
 	if err != nil {
 		return MatchView{}, nil, err
 	}
 	defer conn.Close()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.lockWrite("match-venue")()
 
 	// Pre-image under the exclusive lock for a minimal delta broadcast (see
 	// applyMatchUpdateUsing). Best-effort; empty → caller sends full state.
@@ -3483,14 +3481,13 @@ func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, t
 
 	ctx, cancel := auditDetachedContext(reqCtx, festID)
 	defer cancel()
-	conn, err := s.db.Conn(ctx)
+	conn, err := s.acquireWriteConn(ctx, "venue-rename")
 	if err != nil {
 		return nil, 0, err
 	}
 	defer conn.Close()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.lockWrite("venue-rename")()
 
 	tx, err := s.beginWriteTxConn(ctx, conn)
 	if err != nil {
