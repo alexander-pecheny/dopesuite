@@ -2445,7 +2445,8 @@ func (s *server) loadFestViewSnapshot(festID, gameID int64) (FestView, error) {
 // snapshot path can pass a read-only tx (one WAL snapshot, off the write lock)
 // and the locked path can pass s.db while holding s.mu.
 func (s *server) loadFestViewUsing(q dbQueryer, festID, gameID int64) (FestView, error) {
-	ctx := context.Background()
+	ctx, cancel := boundedReadContext()
+	defer cancel()
 	var view FestView
 	view.QuestionValues = questionValues
 	view.RegularThemeCount = themeCount
@@ -2638,7 +2639,9 @@ order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchTeamSummary,
 }
 
 func (s *server) loadVenuesLocked(festID int64) ([]VenueView, error) {
-	return loadVenues(context.Background(), s.db, festID)
+	ctx, cancel := boundedReadContext()
+	defer cancel()
+	return loadVenues(ctx, s.db, festID)
 }
 
 func loadVenues(ctx context.Context, q dbQueryer, festID int64) ([]VenueView, error) {
@@ -2658,7 +2661,9 @@ func (s *server) loadMatchViewLocked(festID int64, code string) (MatchView, erro
 	if s.db == nil {
 		return buildView(s.state), nil
 	}
-	match, err := loadDBMatchState(context.Background(), s.db, festID, code)
+	ctx, cancel := boundedReadContext()
+	defer cancel()
+	match, err := loadDBMatchState(ctx, s.db, festID, code)
 	if err != nil {
 		return MatchView{}, err
 	}
@@ -2675,7 +2680,9 @@ func (s *server) loadScopedMatchViewLocked(scope matchScope) (MatchView, error) 
 // loadScopedMatchViewUsing reads a match view via the given queryer, so callers
 // can supply a read-only snapshot tx (off the write lock) or s.db under s.mu.
 func (s *server) loadScopedMatchViewUsing(q dbQueryer, scope matchScope) (MatchView, error) {
-	match, err := loadDBMatchStateByScope(context.Background(), q, scope)
+	ctx, cancel := boundedReadContext()
+	defer cancel()
+	match, err := loadDBMatchStateByScope(ctx, q, scope)
 	if err != nil {
 		return MatchView{}, err
 	}
@@ -3138,7 +3145,9 @@ func (s *server) loadMatchViewByIDLocked(festID, gameID, matchID int64) (MatchVi
 	if s.db == nil {
 		return MatchView{}, nil
 	}
-	match, err := loadDBMatchStateWhere(context.Background(), s.db, `m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, festID, gameID)
+	ctx, cancel := boundedReadContext()
+	defer cancel()
+	match, err := loadDBMatchStateWhere(ctx, s.db, `m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, festID, gameID)
 	if err != nil {
 		return MatchView{}, err
 	}

@@ -125,6 +125,16 @@ func auditDetachedContext(src context.Context, festID int64) (context.Context, c
 	return ctx, cancel
 }
 
+// boundedReadContext bounds a DB read with writeTxTimeout so it can never hang
+// indefinitely waiting for a pooled connection. It matters most for the
+// post-commit view reloads in the *Locked loaders, which run while holding s.mu:
+// an unbounded wait there would re-create the 2026-06-13 lock-pinning freeze on
+// the read side. Harmless on the off-lock snapshot paths that share those
+// readers. Caller MUST defer cancel().
+func boundedReadContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), writeTxTimeout)
+}
+
 func actorFromContext(ctx context.Context) (int64, bool) {
 	if v, ok := ctx.Value(auditCtxKeyActor).(int64); ok && v != 0 {
 		return v, true
