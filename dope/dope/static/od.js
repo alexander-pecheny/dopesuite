@@ -2115,20 +2115,38 @@ function buildDetailedTable() {
   return wrapper;
 }
 
+// detailedQuestionHeadLabel stacks the number of teams that took the question
+// (muted, smaller) above the question number, mirroring how the yin-yang sits in
+// the free space above the active column on the Ввод page.
+function detailedQuestionHeadLabel(displayNumber, stat) {
+  const wrap = document.createElement("span");
+  wrap.className = "od-detailed-qhead";
+  const count = document.createElement("span");
+  count.className = "od-detailed-qcount";
+  // Once the question is entered (ticked on Ввод) show the team count even when
+  // it's 0; before that the slot stays empty.
+  count.textContent = stat?.completed ? String(stat.validCount || 0) : "";
+  const num = document.createElement("span");
+  num.className = "od-detailed-qnum";
+  num.textContent = String(displayNumber);
+  wrap.append(count, num);
+  return wrap;
+}
+
 function buildDetailedScoreTable() {
+  const stats = questionStats();
   const themes = [];
   let qNum = 1;
   tourLengths.forEach((tourSize, tourIndex) => {
     const questionLabels = [];
     for (let i = 0; i < tourSize; i++) {
-      questionLabels.push(qNum);
+      questionLabels.push(detailedQuestionHeadLabel(qNum, stats[qNum - 1]));
       qNum++;
     }
     themes.push({label: `Т${tourIndex + 1}`, questionLabels});
   });
   themes.push(...shootoutThemeHeaders());
 
-  const stats = questionStats();
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const placeMap = computePlaces(totals);
   const rows = detailedTeamOrder().map((teamIndex) => {

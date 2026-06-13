@@ -1517,6 +1517,26 @@ a.list-row:hover { background: var(--hover-bg); }
   min-width: var(--question-col);
 }
 
+/* Подробно question header: count of teams that took the question, muted and
+   smaller, stacked in the free space above the question number. */
+.match-table.od-detailed thead th.question-head:has(.od-detailed-qhead) {
+  vertical-align: bottom;
+  height: calc(var(--question-size) + 11px);
+}
+
+.od-detailed-qhead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.od-detailed-qcount {
+  font-size: 0.62em;
+  color: var(--muted);
+  min-height: 1em;
+}
+
 .theme-head,
 .theme-score {
   width: var(--theme-score-col);
