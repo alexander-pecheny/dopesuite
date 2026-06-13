@@ -251,6 +251,10 @@ func main() {
 		runCompactAudit(os.Args[2:])
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "import-ek-results" {
+		runEKImport(os.Args[2:])
+		return
+	}
 
 	srv, err := newServer()
 	if err != nil {
