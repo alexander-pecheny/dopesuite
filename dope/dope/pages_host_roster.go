@@ -634,6 +634,11 @@ func (s *server) handleHostImportRatingRoster(w http.ResponseWriter, r *http.Req
 		s.renderHostRatingImportPage(w, r, festID, err.Error(), "")
 		return
 	}
-	msg := fmt.Sprintf("Загружено команд: %d, игроков: %d. Обновлено игр ЧГК: %d, КСИ: %d.", result.TeamCount, result.PlayerCount, result.ODGameCount, result.KSIGameCount)
+	var msg string
+	if result.Unchanged {
+		msg = fmt.Sprintf("Списки уже совпадают с рейтингом — изменений нет. Команд: %d, игроков: %d.", result.TeamCount, result.PlayerCount)
+	} else {
+		msg = fmt.Sprintf("Загружено команд: %d, игроков: %d. Обновлено игр ЧГК: %d, КСИ: %d.", result.TeamCount, result.PlayerCount, result.ODGameCount, result.KSIGameCount)
+	}
 	s.renderHostRatingImportPage(w, r, festID, "", msg)
 }

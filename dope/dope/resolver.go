@@ -109,11 +109,17 @@ func calculateReseedStageSlotsTx(ctx context.Context, tx *sql.Tx, gameID int64, 
 }
 
 func (s *server) calculateScopedReseed(ctx context.Context, scope festScope, stageCode string) ([]byte, []MatchView, int64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	txCtx, cancel := auditDetachedContext(ctx, scope.FestID)
+	defer cancel()
+	conn, err := s.acquireWriteConn(txCtx, "reseed-calc")
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	defer conn.Close()
 
-	txCtx := auditDetachedContext(ctx, scope.FestID)
-	tx, err := s.beginWriteTx(txCtx)
+	defer s.lockWrite("reseed-calc")()
+
+	tx, err := s.beginWriteTxConn(txCtx, conn)
 	if err != nil {
 		return nil, nil, 0, err
 	}

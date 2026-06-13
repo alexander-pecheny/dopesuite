@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -807,6 +808,219 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 	if len(ksiState.Themes) != ksiThemeCount || len(ksiState.Themes[0].Answers) != 2 || len(ksiState.Themes[0].Answers[0]) != 5 {
 		t.Fatalf("ksi answers shape = %#v, want %dx2x5", ksiState.Themes, ksiThemeCount)
 	}
+}
+
+func TestImportFestRosterNoOpWhenUnchanged(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, _ := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
+
+	roster := []festRosterImportTeam{
+		{
+			RatingID: 101, Name: "Первая", City: "Москва",
+			Players: []festRosterImportPlayer{
+				{RatingID: 1002, FirstName: "Борис", LastName: "Второй"},
+				{RatingID: 1001, FirstName: "Анна", LastName: "Первая"},
+			},
+		},
+		{
+			RatingID: 102, Name: "Вторая", City: "Казань",
+			Players: []festRosterImportPlayer{
+				{RatingID: 1003, FirstName: "Вера", LastName: "Третья"},
+			},
+		},
+	}
+
+	// First import does the real work and bumps the fest revision.
+	first, err := srv.importFestRoster(t.Context(), festID, 13533, roster)
+	if err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	if first.Unchanged {
+		t.Fatalf("first import should not be a no-op: %#v", first)
+	}
+	var revAfterFirst int64
+	if err := db.QueryRow(`select revision from fests where id = ?`, festID).Scan(&revAfterFirst); err != nil {
+		t.Fatalf("revision after first: %v", err)
+	}
+
+	// Re-importing the identical roster must short-circuit: Unchanged, accurate
+	// counts, and crucially NO revision bump (proving no write tx ran).
+	second, err := srv.importFestRoster(t.Context(), festID, 13533, roster)
+	if err != nil {
+		t.Fatalf("second import: %v", err)
+	}
+	if !second.Unchanged {
+		t.Fatalf("identical re-import should be a no-op, got %#v", second)
+	}
+	if second.TeamCount != 2 || second.PlayerCount != 3 {
+		t.Fatalf("no-op counts = %d teams / %d players, want 2/3", second.TeamCount, second.PlayerCount)
+	}
+	if second.ODGameCount != 0 || second.KSIGameCount != 0 {
+		t.Fatalf("no-op must report 0 games rewritten, got od=%d ksi=%d", second.ODGameCount, second.KSIGameCount)
+	}
+	var revAfterSecond int64
+	if err := db.QueryRow(`select revision from fests where id = ?`, festID).Scan(&revAfterSecond); err != nil {
+		t.Fatalf("revision after second: %v", err)
+	}
+	if revAfterSecond != revAfterFirst {
+		t.Fatalf("no-op re-import bumped revision %d -> %d; should not write at all", revAfterFirst, revAfterSecond)
+	}
+
+	// A real change (added player) must fall through to the full rebuild again.
+	roster[1].Players = append(roster[1].Players, festRosterImportPlayer{RatingID: 1004, FirstName: "Глеб", LastName: "Четвёртый"})
+	third, err := srv.importFestRoster(t.Context(), festID, 13533, roster)
+	if err != nil {
+		t.Fatalf("third import: %v", err)
+	}
+	if third.Unchanged {
+		t.Fatalf("roster with an added player must not be treated as unchanged: %#v", third)
+	}
+	if third.PlayerCount != 4 {
+		t.Fatalf("after adding a player, PlayerCount = %d, want 4", third.PlayerCount)
+	}
+}
+
+func TestImportFestRosterIncrementalKeepsPlayerIDsStable(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, _, _ := createRosterPropagationFixture(t, db)
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
+
+	playerID := func(rating int64) (int64, bool) {
+		var id int64
+		err := db.QueryRow(`select id from fest_players where fest_id = ? and rating_id = ?`, festID, rating).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, false
+		}
+		if err != nil {
+			t.Fatalf("player id lookup rating=%d: %v", rating, err)
+		}
+		return id, true
+	}
+	teamPlayers := func(rating int64) []string {
+		names, err := collectRows(t.Context(), db, `
+select p.first_name from fest_team_players ftp
+join fest_teams tt on tt.id = ftp.team_id
+join fest_players p on p.id = ftp.player_id
+where tt.fest_id = ? and tt.rating_id = ? and tt.deleted = 0
+order by ftp.roster_order`, []any{festID, rating}, func(rows *sql.Rows) (string, error) {
+			var n string
+			return n, rows.Scan(&n)
+		})
+		if err != nil {
+			t.Fatalf("team players rating=%d: %v", rating, err)
+		}
+		return names
+	}
+
+	roster := []festRosterImportTeam{
+		{RatingID: 101, Name: "Первая", City: "Москва", Players: []festRosterImportPlayer{
+			{RatingID: 1002, FirstName: "Борис", LastName: "Второй"},
+			{RatingID: 1001, FirstName: "Анна", LastName: "Первая"},
+		}},
+		{RatingID: 102, Name: "Вторая", City: "Казань", Players: []festRosterImportPlayer{
+			{RatingID: 1003, FirstName: "Вера", LastName: "Третья"},
+		}},
+	}
+	if _, err := srv.importFestRoster(t.Context(), festID, 13533, roster); err != nil {
+		t.Fatalf("initial import: %v", err)
+	}
+	id1001, _ := playerID(1001)
+	id1002, _ := playerID(1002)
+	id1003, _ := playerID(1003)
+	team101ID, _ := festTeamID(t, db, festID, 101)
+
+	// Add a player to team 102; everyone else's row id must be untouched.
+	roster[1].Players = append(roster[1].Players, festRosterImportPlayer{RatingID: 1004, FirstName: "Глеб", LastName: "Четвёртый"})
+	if _, err := srv.importFestRoster(t.Context(), festID, 13533, roster); err != nil {
+		t.Fatalf("add-player import: %v", err)
+	}
+	if got, _ := playerID(1001); got != id1001 {
+		t.Fatalf("player 1001 id changed %d -> %d on add (must stay stable)", id1001, got)
+	}
+	if got, _ := playerID(1003); got != id1003 {
+		t.Fatalf("player 1003 id changed %d -> %d on add (must stay stable)", id1003, got)
+	}
+	if _, ok := playerID(1004); !ok {
+		t.Fatalf("added player 1004 not inserted")
+	}
+	if names := teamPlayers(102); len(names) != 2 {
+		t.Fatalf("team 102 players after add = %v, want 2", names)
+	}
+
+	// Remove a player from team 101; their fest_players row must be gone, the
+	// other kept stable, the team row id unchanged.
+	roster[0].Players = roster[0].Players[:1] // drop "Анна" (1001) — leaves "Борис" (1002)
+	if _, err := srv.importFestRoster(t.Context(), festID, 13533, roster); err != nil {
+		t.Fatalf("remove-player import: %v", err)
+	}
+	if _, ok := playerID(1001); ok {
+		t.Fatalf("removed player 1001 should be deleted from fest_players")
+	}
+	if got, _ := playerID(1002); got != id1002 {
+		t.Fatalf("player 1002 id changed %d -> %d on remove (must stay stable)", id1002, got)
+	}
+	if names := teamPlayers(101); len(names) != 1 || names[0] != "Борис" {
+		t.Fatalf("team 101 players after remove = %v, want [Борис]", names)
+	}
+
+	// Rename team 101; same fest_teams row id, new name.
+	roster[0].Name = "Первая-2"
+	if _, err := srv.importFestRoster(t.Context(), festID, 13533, roster); err != nil {
+		t.Fatalf("rename import: %v", err)
+	}
+	if got, _ := festTeamID(t, db, festID, 101); got != team101ID {
+		t.Fatalf("team 101 row id changed %d -> %d on rename (must stay stable)", team101ID, got)
+	}
+	var name101 string
+	if err := db.QueryRow(`select name from fest_teams where id = ?`, team101ID).Scan(&name101); err != nil {
+		t.Fatalf("name lookup: %v", err)
+	}
+	if name101 != "Первая-2" {
+		t.Fatalf("team 101 name = %q, want renamed", name101)
+	}
+
+	// Drop team 102 entirely: soft-deleted, roster links cleared.
+	roster = roster[:1]
+	if _, err := srv.importFestRoster(t.Context(), festID, 13533, roster); err != nil {
+		t.Fatalf("drop-team import: %v", err)
+	}
+	var deleted102, links102 int
+	if err := db.QueryRow(`select deleted from fest_teams where fest_id = ? and rating_id = 102`, festID).Scan(&deleted102); err != nil {
+		t.Fatalf("deleted lookup: %v", err)
+	}
+	if deleted102 != 1 {
+		t.Fatalf("team 102 deleted = %d, want soft-deleted (1)", deleted102)
+	}
+	if err := db.QueryRow(`select count(*) from fest_team_players ftp join fest_teams tt on tt.id = ftp.team_id where tt.fest_id = ? and tt.rating_id = 102`, festID).Scan(&links102); err != nil {
+		t.Fatalf("links lookup: %v", err)
+	}
+	if links102 != 0 {
+		t.Fatalf("soft-deleted team 102 still has %d roster links, want 0", links102)
+	}
+}
+
+func festTeamID(t *testing.T, db *sql.DB, festID, rating int64) (int64, bool) {
+	t.Helper()
+	var id int64
+	err := db.QueryRow(`select id from fest_teams where fest_id = ? and rating_id = ?`, festID, rating).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false
+	}
+	if err != nil {
+		t.Fatalf("team id lookup rating=%d: %v", rating, err)
+	}
+	return id, true
 }
 
 func TestImportFestRosterPreservesPlayerTeamOverrides(t *testing.T) {

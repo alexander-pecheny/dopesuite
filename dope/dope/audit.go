@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // auditedTables lists every table whose row-level mutations are recorded in
@@ -88,16 +89,28 @@ func withAuditFestID(ctx context.Context, festID int64) context.Context {
 	return context.WithValue(ctx, auditCtxKeyFestID, festID)
 }
 
-// auditDetachedContext returns a non-cancelable context carrying the audit
-// attribution (actor + request_id) copied from src, with fest_id stamped from
-// the explicit festID argument (falling back to whatever src carried). Write
-// helpers that run under the global write mutex and previously used a bare
-// context.Background() use this instead, so their mutations are still attributed
-// to the acting user/request/fest in audit_log without becoming abortable by a
-// client disconnect mid-write. Without it, those rows get a null fest_id and
-// never appear on the fest-scoped revert/audit page.
-func auditDetachedContext(src context.Context, festID int64) context.Context {
-	ctx := context.Background()
+// writeTxTimeout bounds how long a write transaction may run while holding the
+// global write mutex. A healthy commit here is sub-millisecond (synchronous=FULL
+// measured ~0.8 ms) and edits peak at ~10/s, so 5 s is a generous ceiling for any
+// legitimate write. Its real job is a safety valve: it caps the one operation that
+// can otherwise block unbounded — waiting for a connection from the shared pool —
+// so a starved pool can never pin s.mu and freeze the whole site (the write fails
+// and releases the lock instead). On 2026-06-13 a single match-update write hung
+// ~55 min on exactly this, jamming every other write behind it.
+const writeTxTimeout = 5 * time.Second
+
+// auditDetachedContext returns a context (with its CancelFunc — the caller MUST
+// defer cancel()) carrying the audit attribution (actor + request_id) copied from
+// src, with fest_id stamped from the explicit festID argument (falling back to
+// whatever src carried). Write helpers that run under the global write mutex use
+// this instead of the request context so their mutations stay attributed to the
+// acting user/request/fest in audit_log and are not aborted by a client
+// disconnect mid-write — but, unlike a bare context.Background(), it carries a
+// writeTxTimeout deadline so the write can never hold s.mu indefinitely. Without
+// the attribution, those rows get a null fest_id and never appear on the
+// fest-scoped revert/audit page.
+func auditDetachedContext(src context.Context, festID int64) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), writeTxTimeout)
 	if v, ok := actorFromContext(src); ok {
 		ctx = withAuditActor(ctx, v)
 	}
@@ -109,7 +122,17 @@ func auditDetachedContext(src context.Context, festID int64) context.Context {
 	} else if v, ok := auditFestIDFromContext(src); ok {
 		ctx = withAuditFestID(ctx, v)
 	}
-	return ctx
+	return ctx, cancel
+}
+
+// boundedReadContext bounds a DB read with writeTxTimeout so it can never hang
+// indefinitely waiting for a pooled connection. It matters most for the
+// post-commit view reloads in the *Locked loaders, which run while holding s.mu:
+// an unbounded wait there would re-create the 2026-06-13 lock-pinning freeze on
+// the read side. Harmless on the off-lock snapshot paths that share those
+// readers. Caller MUST defer cancel().
+func boundedReadContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), writeTxTimeout)
 }
 
 func actorFromContext(ctx context.Context) (int64, bool) {
@@ -232,6 +255,24 @@ func mayMutate(r *http.Request) bool {
 // upsert into audit_ctx is cheap.
 func (s *server) beginWriteTx(ctx context.Context) (*sql.Tx, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := seedAuditCtx(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	return tx, nil
+}
+
+// beginWriteTxConn is beginWriteTx on a caller-supplied dedicated connection.
+// Callers acquire conn via s.db.Conn(ctx) BEFORE taking s.mu, so the pool wait —
+// the one step that can block unbounded under connection starvation — happens
+// off-lock (and is bounded by ctx's writeTxTimeout). The transaction itself then
+// runs under the lock on an already-acquired connection, so s.mu is only ever
+// held for actual DB work, never for a pool wait. See the 2026-06-13 freeze.
+func (s *server) beginWriteTxConn(ctx context.Context, conn *sql.Conn) (*sql.Tx, error) {
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
