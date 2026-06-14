@@ -3368,7 +3368,25 @@ body:not(.embedded-match) .grid-match {
 }
 
 .entry-cell.entry-selected {
+  position: relative;
   background-color: var(--blue-tint);
+}
+
+/* Draw the selection frame on a pseudo-element rather than as a box-shadow on
+   the cell itself. End-of-tour cells carry a wide (14px) transparent right
+   border for the inter-tour gap; an inset box-shadow on the cell is measured
+   from the border box and would bleed the frame across that whole gap into the
+   free space. The pseudo is clamped to the normal --cell-gap on every side, so
+   the frame hugs the visible cell and never spills into the gap. Mirrors the
+   .answer-cell selection. */
+.entry-cell.entry-selected::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--cell-gap));
+  right: calc(-1 * var(--cell-gap));
+  pointer-events: none;
   box-shadow:
     var(--entry-selection-top, 0 0 0 0 transparent),
     var(--entry-selection-bottom, 0 0 0 0 transparent),
