@@ -30,7 +30,7 @@ func TestBuildODSheet(t *testing.T) {
 	}`
 	f := excelize.NewFile()
 	defer f.Close()
-	if err := buildODSheet(f, scheme, state); err != nil {
+	if err := buildODSheet(f, scheme, state, nil); err != nil {
 		t.Fatalf("buildODSheet: %v", err)
 	}
 	const sheet = "Worksheet"
