@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -20,7 +22,10 @@ import (
 // offline, including the EK relational tree (stages → matches → slots/themes/
 // answers/results) and the fest-level context (team/player names, venues).
 
-// gameArchive is the on-disk shape of the .json.gz download.
+// gameArchive is the on-disk shape of the .json.gz download. The export writes
+// it as a gameArchiveHead followed by a streamed "auditLog" array (see
+// handleScopedGameArchive); this type documents the full shape and is used by
+// tests to parse a downloaded archive.
 type gameArchive struct {
 	Format     string                      `json:"format"`
 	ExportedAt string                      `json:"exportedAt"`
@@ -29,6 +34,17 @@ type gameArchive struct {
 	Rows       map[string][]map[string]any `json:"rows,omitempty"`    // game-scoped relational rows (EK)
 	Context    map[string][]map[string]any `json:"context,omitempty"` // fest-level rows for name resolution
 	AuditLog   []gameArchiveAudit          `json:"auditLog"`
+}
+
+// gameArchiveHead is everything in the archive except the (potentially huge)
+// auditLog array, which is streamed separately so it never sits in memory whole.
+type gameArchiveHead struct {
+	Format     string                      `json:"format"`
+	ExportedAt string                      `json:"exportedAt"`
+	Game       gameArchiveGame             `json:"game"`
+	Fest       map[string]any              `json:"fest,omitempty"`
+	Rows       map[string][]map[string]any `json:"rows,omitempty"`
+	Context    map[string][]map[string]any `json:"context,omitempty"`
 }
 
 type gameArchiveGame struct {
@@ -171,32 +187,73 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	auditLog, err := s.loadGameAuditTrail(ctx, scope, anchors)
+	// The audit trail can be hundreds of MB once decompressed (the full
+	// state_json is snapshotted before+after on nearly every edit), enough to OOM
+	// a small VPS if buffered. Resolve only the row identities here, then stream
+	// the rows one at a time into the gzip response below. Everything else in the
+	// archive is bounded by fest size.
+	auditIDs, err := s.gameAuditIncludedIDs(ctx, scope, anchors)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	archive := gameArchive{
+	head := gameArchiveHead{
 		Format:     "dope.game-archive.v2",
 		ExportedAt: utcNow(),
 		Game:       game,
 		Fest:       festRow,
 		Rows:       rows,
 		Context:    festContext,
-		AuditLog:   auditLog,
+	}
+	headJSON, err := marshalNoHTMLEscape(head)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", contentDispositionAttachment(archiveFileName(game.Title, game.GameType)))
 	gz := gzip.NewWriter(w)
 	defer gz.Close()
-	enc := json.NewEncoder(gz)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(archive); err != nil {
-		// Headers/body may already be partially flushed; nothing useful to send.
+
+	// Splice the streamed "auditLog" array into the head object: write the head
+	// object minus its closing brace, then the array element-by-element, then close.
+	if _, err := gz.Write(headJSON[:len(headJSON)-1]); err != nil {
 		return
 	}
+	if _, err := io.WriteString(gz, `,"auditLog":[`); err != nil {
+		return
+	}
+	enc := json.NewEncoder(gz)
+	enc.SetEscapeHTML(false)
+	first := true
+	streamErr := s.streamGameAuditTrail(ctx, auditIDs, func(e *gameArchiveAudit) error {
+		if !first {
+			if _, err := io.WriteString(gz, ","); err != nil {
+				return err
+			}
+		}
+		first = false
+		return enc.Encode(e) // trailing newline is harmless whitespace inside the array
+	})
+	if streamErr != nil {
+		// Partial body already flushed; nothing useful to send.
+		return
+	}
+	_, _ = io.WriteString(gz, `]}`)
+}
+
+// marshalNoHTMLEscape JSON-encodes v without escaping <, >, & (matching the
+// archive's encoder settings) and strips the encoder's trailing newline.
+func marshalNoHTMLEscape(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 // loadGameRelationalRows loads the current rows of every game-scoped table for
@@ -245,19 +302,19 @@ func (s *server) loadGameArchiveContext(ctx context.Context, festID int64) (map[
 	return festRow, context, nil
 }
 
-// loadGameAuditTrail collects this game's edit history from the fest-scoped
-// audit_log, oldest first. A row is included when it is directly attributable to
-// the game (matches a current row identity, or carries the game_id, or is the
-// games row) or when it is a child-table row sharing a request with a directly
-// attributable row (cascade deletes). Snapshots are decompressed with dope_unz.
+// gameAuditIncludedIDs returns, oldest-first, the audit_log ids that make up
+// this game's edit history. A row belongs to the game when it is directly
+// attributable (matches a current row identity, carries the game_id, or is the
+// games row) or is a child-table row sharing a request with a directly
+// attributable row (cascade deletes).
 //
-// Decompression is the expensive part: on a busy fest the games-table history
-// alone is hundreds of MB once unzipped (the full ~19 KB state_json is snapshotted
-// before+after on nearly every edit). So we avoid touching before/after for any
-// row we don't need: pass 1 only decompresses the small game_id-bearing config
-// tables (attribution of everything else needs just table_name/row_pk/request_id),
-// and pass 2 decompresses only the rows actually emitted.
-func (s *server) loadGameAuditTrail(ctx context.Context, scope festScope, anchors map[string]bool) ([]gameArchiveAudit, error) {
+// This is the cheap half of the export: it scans the whole fest log but only
+// decompresses the small game_id-bearing config tables (needed for the game_id
+// fallback) — everything else is attributed by table_name/row_pk/request_id. The
+// heavy before/after snapshots (hundreds of MB once unzipped, dominated by the
+// per-edit games.state_json) are read later, one row at a time, by
+// streamGameAuditTrail.
+func (s *server) gameAuditIncludedIDs(ctx context.Context, scope festScope, anchors map[string]bool) ([]int64, error) {
 	gidStr := strconv.FormatInt(scope.GameID, 10)
 	directlyGame := func(table, rowPK string, before, after sql.NullString) bool {
 		if anchors[auditAnchorKey(table, rowPK)] {
@@ -274,10 +331,6 @@ func (s *server) loadGameAuditTrail(ctx context.Context, scope festScope, anchor
 		return false
 	}
 
-	// Pass 1: scan the whole fest log cheaply to find (a) every row directly
-	// attributable to the game and (b) the request_ids those rows belong to.
-	// before/after are decompressed only for gameIDAuditTables (needed for the
-	// game_id fallback); all other attribution uses table_name/row_pk/request_id.
 	gameRequests := map[string]bool{}
 	included := map[int64]bool{}
 	type childRef struct {
@@ -324,17 +377,19 @@ from audit_log where fest_id = ? order by id`, scope.FestID)
 			included[c.id] = true
 		}
 	}
-	if len(included) == 0 {
-		return nil, nil
-	}
 	ids := make([]int64, 0, len(included))
 	for id := range included {
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids, nil
+}
 
-	// Pass 2: decompress before/after only for the rows we emit, oldest first.
-	out := make([]gameArchiveAudit, 0, len(ids))
+// streamGameAuditTrail decompresses before/after for the given audit ids
+// (oldest-first) and invokes emit once per row, so the caller can write each
+// row straight to the response without ever holding the full trail in memory.
+// Rows are fetched in id-ordered batches to stay under SQLite's parameter limit.
+func (s *server) streamGameAuditTrail(ctx context.Context, ids []int64, emit func(*gameArchiveAudit) error) error {
 	const batch = 900 // stay well under SQLite's bound-parameter limit
 	for start := 0; start < len(ids); start += batch {
 		end := start + batch
@@ -348,7 +403,7 @@ from audit_log where fest_id = ? order by id`, scope.FestID)
 			ph[i] = "?"
 			args[i] = id
 		}
-		rows2, err := s.db.QueryContext(ctx, `
+		rows, err := s.db.QueryContext(ctx, `
 select a.id, a.ts, a.op, a.table_name, a.row_pk, coalesce(a.request_id, ''),
        coalesce(u.username, ''), dope_unz(a.before_json), dope_unz(a.after_json)
 from audit_log a
@@ -356,17 +411,17 @@ left join users u on u.id = a.actor_user_id
 where a.id in (`+strings.Join(ph, ",")+`)
 order by a.id`, args...)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		err = func() error {
-			defer rows2.Close()
-			for rows2.Next() {
+			defer rows.Close()
+			for rows.Next() {
 				var (
 					e      gameArchiveAudit
 					before sql.NullString
 					after  sql.NullString
 				)
-				if err := rows2.Scan(&e.ID, &e.Ts, &e.Op, &e.TableName, &e.RowPK,
+				if err := rows.Scan(&e.ID, &e.Ts, &e.Op, &e.TableName, &e.RowPK,
 					&e.RequestID, &e.Actor, &before, &after); err != nil {
 					return err
 				}
@@ -376,15 +431,17 @@ order by a.id`, args...)
 				if after.Valid {
 					e.After = rawJSONOrNull(after.String)
 				}
-				out = append(out, e)
+				if err := emit(&e); err != nil {
+					return err
+				}
 			}
-			return rows2.Err()
+			return rows.Err()
 		}()
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return out, nil
+	return nil
 }
 
 // archiveFileName derives the .json.gz download name from the game title,
