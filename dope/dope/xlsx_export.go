@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -50,7 +51,11 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).
 
 	switch gameType {
 	case "od":
-		err = buildODSheet(f, schemeJSON, stateJSON)
+		var ratingByNumber map[int64]int64
+		ratingByNumber, err = loadTeamRatingIDsByNumber(r.Context(), s.db, scope.FestID)
+		if err == nil {
+			err = buildODSheet(f, schemeJSON, stateJSON, ratingByNumber)
+		}
 	case "ksi", "si":
 		err = buildKSISheets(f, stateJSON)
 	case "ek":
@@ -122,7 +127,29 @@ type odExportState struct {
 	Completed []bool         `json:"completed"`
 }
 
-func buildODSheet(f *excelize.File, schemeJSON, stateJSON string) error {
+// loadTeamRatingIDsByNumber returns a map from team number to rating.chgk.info ID
+// for all non-deleted, numbered teams in the given fest. Teams without a rating_id
+// are omitted (caller falls back to the internal number).
+func loadTeamRatingIDsByNumber(ctx context.Context, db *sql.DB, festID int64) (map[int64]int64, error) {
+	rows, err := db.QueryContext(ctx,
+		`select number, rating_id from fest_teams where fest_id = ? and deleted = 0 and number is not null and rating_id is not null`,
+		festID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[int64]int64)
+	for rows.Next() {
+		var num, rid int64
+		if err := rows.Scan(&num, &rid); err != nil {
+			return nil, err
+		}
+		m[num] = rid
+	}
+	return m, rows.Err()
+}
+
+func buildODSheet(f *excelize.File, schemeJSON, stateJSON string, ratingByNumber map[int64]int64) error {
 	tours := parseTourComp(schemeJSON)
 	var state odExportState
 	if stateJSON != "" {
@@ -185,7 +212,11 @@ func buildODSheet(f *excelize.File, schemeJSON, stateJSON string) error {
 		}
 		row++
 		for teamIdx, team := range state.Teams {
-			cells := []interface{}{team.Number, team.Name, team.City, tourIdx + 1}
+			teamID := interface{}(team.Number)
+			if rid, ok := ratingByNumber[team.Number]; ok {
+				teamID = rid
+			}
+			cells := []interface{}{teamID, team.Name, team.City, tourIdx + 1}
 			for i := 0; i < tourSize; i++ {
 				q := qBase + i
 				v := 0
