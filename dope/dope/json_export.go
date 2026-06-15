@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -25,8 +26,8 @@ type gameArchive struct {
 	ExportedAt string                      `json:"exportedAt"`
 	Game       gameArchiveGame             `json:"game"`
 	Fest       map[string]any              `json:"fest,omitempty"`
-	Rows       map[string][]map[string]any `json:"rows,omitempty"`     // game-scoped relational rows (EK)
-	Context    map[string][]map[string]any `json:"context,omitempty"`  // fest-level rows for name resolution
+	Rows       map[string][]map[string]any `json:"rows,omitempty"`    // game-scoped relational rows (EK)
+	Context    map[string][]map[string]any `json:"context,omitempty"` // fest-level rows for name resolution
 	AuditLog   []gameArchiveAudit          `json:"auditLog"`
 }
 
@@ -92,6 +93,18 @@ var gameIDAuditTables = map[string]bool{
 	"game_teams": true, "game_players": true, "game_team_players": true,
 	"game_assignments": true, "game_player_team_overrides": true,
 }
+
+// gameIDAuditTablesSQL is the quoted, comma-joined list of gameIDAuditTables for
+// inlining into an IN (...) clause, so loadGameAuditTrail can decompress only
+// those rows during its first pass.
+var gameIDAuditTablesSQL = func() string {
+	parts := make([]string, 0, len(gameIDAuditTables))
+	for t := range gameIDAuditTables {
+		parts = append(parts, "'"+t+"'")
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
+}()
 
 // childAuditTables hang off a match/theme/stage and carry no game_id of their
 // own. They are attributed to a game by sharing a request_id with a row that
@@ -237,6 +250,13 @@ func (s *server) loadGameArchiveContext(ctx context.Context, festID int64) (map[
 // the game (matches a current row identity, or carries the game_id, or is the
 // games row) or when it is a child-table row sharing a request with a directly
 // attributable row (cascade deletes). Snapshots are decompressed with dope_unz.
+//
+// Decompression is the expensive part: on a busy fest the games-table history
+// alone is hundreds of MB once unzipped (the full ~19 KB state_json is snapshotted
+// before+after on nearly every edit). So we avoid touching before/after for any
+// row we don't need: pass 1 only decompresses the small game_id-bearing config
+// tables (attribution of everything else needs just table_name/row_pk/request_id),
+// and pass 2 decompresses only the rows actually emitted.
 func (s *server) loadGameAuditTrail(ctx context.Context, scope festScope, anchors map[string]bool) ([]gameArchiveAudit, error) {
 	gidStr := strconv.FormatInt(scope.GameID, 10)
 	directlyGame := func(table, rowPK string, before, after sql.NullString) bool {
@@ -254,10 +274,21 @@ func (s *server) loadGameAuditTrail(ctx context.Context, scope festScope, anchor
 		return false
 	}
 
-	// Pass 1: collect the request_ids that touch this game.
+	// Pass 1: scan the whole fest log cheaply to find (a) every row directly
+	// attributable to the game and (b) the request_ids those rows belong to.
+	// before/after are decompressed only for gameIDAuditTables (needed for the
+	// game_id fallback); all other attribution uses table_name/row_pk/request_id.
 	gameRequests := map[string]bool{}
+	included := map[int64]bool{}
+	type childRef struct {
+		id  int64
+		req string
+	}
+	var childRows []childRef
 	scan1, err := s.db.QueryContext(ctx, `
-select table_name, row_pk, coalesce(request_id, ''), dope_unz(before_json), dope_unz(after_json)
+select id, table_name, row_pk, coalesce(request_id, ''),
+       case when table_name in (`+gameIDAuditTablesSQL+`) then dope_unz(before_json) end,
+       case when table_name in (`+gameIDAuditTablesSQL+`) then dope_unz(after_json) end
 from audit_log where fest_id = ? order by id`, scope.FestID)
 	if err != nil {
 		return nil, err
@@ -265,13 +296,19 @@ from audit_log where fest_id = ? order by id`, scope.FestID)
 	func() {
 		defer scan1.Close()
 		for scan1.Next() {
+			var id int64
 			var table, rowPK, req string
 			var before, after sql.NullString
-			if err = scan1.Scan(&table, &rowPK, &req, &before, &after); err != nil {
+			if err = scan1.Scan(&id, &table, &rowPK, &req, &before, &after); err != nil {
 				return
 			}
-			if req != "" && directlyGame(table, rowPK, before, after) {
-				gameRequests[req] = true
+			if directlyGame(table, rowPK, before, after) {
+				included[id] = true
+				if req != "" {
+					gameRequests[req] = true
+				}
+			} else if req != "" && childAuditTables[table] {
+				childRows = append(childRows, childRef{id, req})
 			}
 		}
 		err = scan1.Err()
@@ -280,43 +317,74 @@ from audit_log where fest_id = ? order by id`, scope.FestID)
 		return nil, err
 	}
 
-	// Pass 2: emit every row attributable to the game.
-	scan2, err := s.db.QueryContext(ctx, `
+	// Child-table rows (no game_id of their own) join the game when they share a
+	// request with a directly-attributable row — this captures cascade deletes.
+	for _, c := range childRows {
+		if gameRequests[c.req] {
+			included[c.id] = true
+		}
+	}
+	if len(included) == 0 {
+		return nil, nil
+	}
+	ids := make([]int64, 0, len(included))
+	for id := range included {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	// Pass 2: decompress before/after only for the rows we emit, oldest first.
+	out := make([]gameArchiveAudit, 0, len(ids))
+	const batch = 900 // stay well under SQLite's bound-parameter limit
+	for start := 0; start < len(ids); start += batch {
+		end := start + batch
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunk := ids[start:end]
+		ph := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			ph[i] = "?"
+			args[i] = id
+		}
+		rows2, err := s.db.QueryContext(ctx, `
 select a.id, a.ts, a.op, a.table_name, a.row_pk, coalesce(a.request_id, ''),
        coalesce(u.username, ''), dope_unz(a.before_json), dope_unz(a.after_json)
 from audit_log a
 left join users u on u.id = a.actor_user_id
-where a.fest_id = ?
-order by a.id`, scope.FestID)
-	if err != nil {
-		return nil, err
-	}
-	defer scan2.Close()
-	var out []gameArchiveAudit
-	for scan2.Next() {
-		var (
-			e      gameArchiveAudit
-			before sql.NullString
-			after  sql.NullString
-		)
-		if err := scan2.Scan(&e.ID, &e.Ts, &e.Op, &e.TableName, &e.RowPK,
-			&e.RequestID, &e.Actor, &before, &after); err != nil {
+where a.id in (`+strings.Join(ph, ",")+`)
+order by a.id`, args...)
+		if err != nil {
 			return nil, err
 		}
-		include := directlyGame(e.TableName, e.RowPK, before, after) ||
-			(childAuditTables[e.TableName] && e.RequestID != "" && gameRequests[e.RequestID])
-		if !include {
-			continue
+		err = func() error {
+			defer rows2.Close()
+			for rows2.Next() {
+				var (
+					e      gameArchiveAudit
+					before sql.NullString
+					after  sql.NullString
+				)
+				if err := rows2.Scan(&e.ID, &e.Ts, &e.Op, &e.TableName, &e.RowPK,
+					&e.RequestID, &e.Actor, &before, &after); err != nil {
+					return err
+				}
+				if before.Valid {
+					e.Before = rawJSONOrNull(before.String)
+				}
+				if after.Valid {
+					e.After = rawJSONOrNull(after.String)
+				}
+				out = append(out, e)
+			}
+			return rows2.Err()
+		}()
+		if err != nil {
+			return nil, err
 		}
-		if before.Valid {
-			e.Before = rawJSONOrNull(before.String)
-		}
-		if after.Valid {
-			e.After = rawJSONOrNull(after.String)
-		}
-		out = append(out, e)
 	}
-	return out, scan2.Err()
+	return out, nil
 }
 
 // archiveFileName derives the .json.gz download name from the game title,
