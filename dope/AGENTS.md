@@ -10,6 +10,10 @@ Tournament/championship management system with real-time web UI and Telegram bot
 - **Build/run**: `justfile` (see commands below)
 - **Deploy**: `just deploy`, which calls `deploy.py` (SSH-based)
 
+## Note on git
+
+This project uses `gitbutler` for managing git. Use `gitbutler` skill to familiarize yourself with this tool. For merging a branch when told so by the user, use `~/scripts/but-quick-merge.py --pull`, like that: `python ~/scripts/but-quick-merge.py --pull ui`, where `ui` is the short `gitbutler` ID of the branch.
+
 ## Directory Structure
 ```
 dope/                    # Main Go package (~30K lines, 70 files)
@@ -38,6 +42,24 @@ deploy.py                # SSH deployment
 | `dope/slow_write.go` | — | Lock contention canary |
 
 All other `pages_*.go` files are HTTP handlers for specific UI pages.
+
+### Frontend (`dope/static/`)
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `styles.css` | 5531 | Design system: CSS vars for all colors/spacing/typography, layout grids, table styles, theme overrides (light/dark/high-contrast) |
+| `host.js` | 3153 | EK host editor — match score editing, undo/redo, stage tabs, SSE sync. Depends on `match-table.js` + `stage-cache.js` |
+| `od.js` | 3012 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync. Depends on `match-table.js` |
+| `match-table.js` | 2839 | **Core shared library** (`window.DopeTable`) — table builders, cell helpers, SSE parsing, state sync, floating popovers, virtual keypads, overflow controller. Used by all game pages |
+| `si.js` | 1464 | KSI (team jeopardy) page — question/answer tables, team/player rows, detailed/results/refusals tabs. Depends on `match-table.js` |
+| `viewer.js` | 1285 | Read-only spectator view — stages/venues/stats, floating popovers. Depends on `match-table.js` + `stage-cache.js` |
+| `fest-grid.js` | 489 | Festival grid visualization — renders multiple stages horizontally, reseed panels, truncated team names |
+| `menu.js` | 335 | Site-wide chrome (`window.dopeMenu`) — theme/contrast toggle, hamburger menu, account links. Loaded on every page |
+| `stage-cache.js` | 289 | Shared pane cache (`window.DopeStageCache`) for EK — per-stage match state, deduped prefetch, SSE routing. Used by `host.js` + `viewer.js` |
+| `login.js` | 170 | Multi-step auth UI — username → password/code branch, redirect on success |
+| `profile.js` | 49 | Password change form (new password vs change password modes) |
+
+**No module system**: files communicate via `window` globals (`DopeTable`, `DopeStageCache`, `dopeMenu`) and DOM events. Dependency order in page templates matters.
 
 ## How to Run / Build / Test
 ```bash
