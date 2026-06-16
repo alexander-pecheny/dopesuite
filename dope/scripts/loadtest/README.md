@@ -105,7 +105,7 @@ on exit.
 # prod (over SSH), 30–100 ramping viewers, 5 edits/s, 10 min
 VIEWERS=30-100 EPS=5 DURATION=600 scripts/loadtest/realtime_demo.sh
 
-# local repro: dedicated GOMAXPROCS=1 server on a throwaway tournament.db copy
+# local repro: dedicated GOMAXPROCS=1 server on a throwaway fest.db copy
 LOCAL=1 VIEWERS=30-100 scripts/loadtest/realtime_demo.sh
 ```
 
