@@ -6,7 +6,7 @@
 # Two targets:
 #   prod  (default) — operate on the VPS over SSH, edit https://dope.pecheny.me
 #   local (LOCAL=1) — spin up a dedicated single-CPU server on a throwaway copy
-#                     of tournament.db and drive it on http://localhost:PORT.
+#                     of fest.db and drive it on http://localhost:PORT.
 #                     This reproduces the 1-CPU VPS contention behaviour.
 #
 # Usage:
@@ -18,7 +18,7 @@
 #   LOCAL       0                        1 = local dedicated server instead of prod/SSH
 #   HOST        vps2day-ee               ssh host                       (prod)
 #   REMOTE_DB   /var/lib/dope/fest.db    live sqlite db on the VPS      (prod)
-#   SRC_DB      tournament.db            db copied for the local server (local)
+#   SRC_DB      fest.db            db copied for the local server (local)
 #   PORT        9690                     local server port              (local)
 #   GOMAXPROCS  1                        CPUs for the local server      (local)
 #   BASE        (derived)                public base URL
@@ -71,7 +71,7 @@ SRV_PID=""; TMP_DB=""; TMP_BIN=""
 # prov_setup / prov_teardown abstract over prod (SSH, remote DB) vs local
 # (dedicated server, throwaway DB) so the rest of the script is identical.
 if [[ "$LOCAL" == 1 ]]; then
-  SRC_DB=${SRC_DB:-tournament.db}
+  SRC_DB=${SRC_DB:-fest.db}
   PORT=${PORT:-9690}
   BASE=${BASE:-http://localhost:$PORT}
   PROFILE=${PROFILE:-0}                  # 1 = capture a CPU profile during the run

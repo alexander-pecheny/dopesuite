@@ -2,7 +2,7 @@
 """Fill a fest's game with random answers for end-to-end testing.
 
 Usage:
-    uv run python scripts/fill_data.py --db tournament.db --fest <slug> --game <od|ksi|ek> [--stage <code>]
+    uv run python scripts/fill_data.py --db fest.db --fest <slug> --game <od|ksi|ek> [--stage <code>]
 
 Per-cell randomization:
   - od (chgk-style):    "right" or blank ("")        i.e. 1 or 0
