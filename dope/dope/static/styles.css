@@ -3802,6 +3802,56 @@ body:not(.embedded-match) .grid-match {
 }
 
 /* Итог */
+/* Экран: projector scoreboard. Reuses the Итог (.results-table) styling; the
+   columns are laid out side by side and the whole board is scaled with `zoom`
+   by layoutScreen() so every team fits the screen. */
+.screen-wrapper {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: var(--space-2);
+  background: var(--structure);
+}
+
+.screen-cols {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+/* The board doesn't scroll, so the Итог frozen-column offsets are pointless —
+   drop them. Team names keep Итог's truncate/fade, but the column is narrower
+   than Итог's so short names don't waste width — that lets the font grow. Long
+   names fade out (acceptable for projection). */
+.screen-table.results-table .results-place,
+.screen-table.results-table .results-team,
+.screen-table.results-table .results-total,
+.screen-table.results-table thead th {
+  position: static;
+}
+
+.screen-table.od-results-table {
+  --results-team-col: 160px;
+}
+
+.screen-empty {
+  color: var(--muted);
+  font-size: var(--text-lg);
+}
+
+/* Fullscreen (projector) mode: drop the site chrome so only the board shows. */
+body.is-fullscreen .host-top {
+  display: none;
+}
+
+body.is-fullscreen.od-page .match-main {
+  height: 100vh;
+}
+
 .results-wrapper {
   display: flex;
   flex-direction: column;
