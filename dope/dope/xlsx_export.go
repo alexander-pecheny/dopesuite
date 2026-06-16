@@ -32,11 +32,13 @@ func (s *server) handleScopedGameExport(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	var gameType, title, schemeJSON, stateJSON string
+	var gameType, schemeJSON, stateJSON string
+	var gameSlug, festSlug sql.NullString
 	err := s.db.QueryRowContext(r.Context(), `
-select game_type, title, coalesce(scheme_json, ''), coalesce(state_json, '')
-from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).
-		Scan(&gameType, &title, &schemeJSON, &stateJSON)
+select g.game_type, g.slug, coalesce(g.scheme_json, ''), coalesce(g.state_json, ''), f.slug
+from games g join fests f on f.id = g.fest_id
+where g.fest_id = ? and g.id = ?`, scope.FestID, scope.GameID).
+		Scan(&gameType, &gameSlug, &schemeJSON, &stateJSON, &festSlug)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
 		return
@@ -78,27 +80,27 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).
 	}
 
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", contentDispositionAttachment(exportFileName(title, gameType)))
+	stem := exportFileStem(festSlug.String, scope.FestID, gameSlug.String, scope.GameID)
+	w.Header().Set("Content-Disposition", contentDispositionAttachment(stem+".xlsx"))
 	if err := f.Write(w); err != nil {
 		// Headers may already be flushed; nothing useful to send to the client.
 		return
 	}
 }
 
-// exportFileName derives a download name from the game title, falling back to
-// the game type when the title is empty or strips to nothing.
-func exportFileName(title, gameType string) string {
-	base := sanitizeFileName(title)
-	if base == "" {
-		base = gameType
+// exportFileStem returns "festPart-gamePart" for use as a download filename
+// stem. If slug is non-empty it is used verbatim; otherwise "fest"/"game" is
+// concatenated with the numeric ID as a stable fallback.
+func exportFileStem(festSlug string, festID int64, gameSlug string, gameID int64) string {
+	festPart := festSlug
+	if festPart == "" {
+		festPart = fmt.Sprintf("fest%d", festID)
 	}
-	return base + ".xlsx"
-}
-
-func sanitizeFileName(name string) string {
-	name = strings.TrimSpace(name)
-	replacer := strings.NewReplacer("/", "-", "\\", "-", ":", "-", "*", "", "?", "", "\"", "", "<", "", ">", "", "|", "")
-	return strings.TrimSpace(replacer.Replace(name))
+	gamePart := gameSlug
+	if gamePart == "" {
+		gamePart = fmt.Sprintf("game%d", gameID)
+	}
+	return festPart + "-" + gamePart
 }
 
 // contentDispositionAttachment builds an RFC 6266 header carrying both an ASCII

@@ -372,11 +372,14 @@ func TestFestRouterServesXLSX(t *testing.T) {
 }
 
 func TestExportFileNameAndDisposition(t *testing.T) {
-	if got := exportFileName("Финал / 2026", "ek"); got != "Финал - 2026.xlsx" {
-		t.Fatalf("exportFileName = %q", got)
+	if got := exportFileStem("мой-фест", 1, "финал-2026", 2); got != "мой-фест-финал-2026" {
+		t.Fatalf("exportFileStem with slugs = %q", got)
 	}
-	if got := exportFileName("   ", "ksi"); got != "ksi.xlsx" {
-		t.Fatalf("exportFileName empty = %q", got)
+	if got := exportFileStem("", 3, "", 7); got != "fest3-game7" {
+		t.Fatalf("exportFileStem fallback = %q", got)
+	}
+	if got := exportFileStem("фест", 3, "", 7); got != "фест-game7" {
+		t.Fatalf("exportFileStem mixed = %q", got)
 	}
 	cd := contentDispositionAttachment("Финал.xlsx")
 	if !strings.Contains(cd, "filename*=UTF-8''") || !strings.Contains(cd, "attachment;") {

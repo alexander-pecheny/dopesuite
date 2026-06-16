@@ -159,12 +159,13 @@ func (s *server) handleScopedGameArchive(w http.ResponseWriter, r *http.Request,
 
 	game := gameArchiveGame{FestID: scope.FestID, GameID: scope.GameID}
 	var schemeJSON, stateJSON string
+	var gameSlug sql.NullString
 	err := s.db.QueryRowContext(r.Context(), `
 select code, title, game_type, status, revision, created_at, updated_at,
-       coalesce(scheme_json, ''), coalesce(state_json, '')
+       coalesce(scheme_json, ''), coalesce(state_json, ''), slug
 from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).
 		Scan(&game.Code, &game.Title, &game.GameType, &game.Status, &game.Revision,
-			&game.CreatedAt, &game.UpdatedAt, &schemeJSON, &stateJSON)
+			&game.CreatedAt, &game.UpdatedAt, &schemeJSON, &stateJSON, &gameSlug)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
 		return
@@ -212,8 +213,13 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).
 		return
 	}
 
+	var festSlug string
+	if s, ok := festRow["slug"].(string); ok {
+		festSlug = s
+	}
 	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", contentDispositionAttachment(archiveFileName(game.Title, game.GameType)))
+	stem := exportFileStem(festSlug, scope.FestID, gameSlug.String, scope.GameID)
+	w.Header().Set("Content-Disposition", contentDispositionAttachment(stem+".json.gz"))
 	gz := gzip.NewWriter(w)
 	defer gz.Close()
 
@@ -444,15 +450,6 @@ order by a.id`, args...)
 	return nil
 }
 
-// archiveFileName derives the .json.gz download name from the game title,
-// falling back to the game type, mirroring exportFileName.
-func archiveFileName(title, gameType string) string {
-	base := sanitizeFileName(title)
-	if base == "" {
-		base = gameType
-	}
-	return base + ".json.gz"
-}
 
 // rawJSONOrNull returns s as raw JSON when it is non-empty, else JSON null, so
 // the archive embeds parsed objects instead of escaped strings.
