@@ -7,8 +7,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"log"
-	"math/rand/v2"
 	"sort"
 	"strings"
 )
@@ -77,17 +77,17 @@ const (
 // runs inside the write transaction after a match's results are recalculated,
 // and is responsible for the parts of the bracket that depend on other matches:
 //
-//   - reseed stages: update readiness and clear stale reseed_entries when their
-//     prerequisites are no longer complete. Live match edits do not create
-//     reseed_entries; an explicit calculate action does that.
+//   - reseed stages: update readiness. Held reseed_entries are not deleted when a
+//     source bout goes temporarily un-final (so untick/retick doesn't wipe them);
+//     live match edits do not create reseed_entries, an explicit calculate does.
 //   - from_match / reseed slots: fill match_slots.team_id once the upstream
 //     source is final, and (for EK) create that team's themes.
 //
-// It is idempotent: a slot is only rewritten when its resolved occupant
-// actually changes. When an occupant changes the previously assigned team's
-// themes/answers/results in that bout are dropped and the bout is reopened, so
-// a single forward pass (stages in position order) also invalidates anything
-// further downstream.
+// It is idempotent and non-destructive: a slot is only rewritten when its
+// resolved occupant changes to a different concrete team. A source that goes
+// temporarily unresolved (e.g. unticked for editing) holds its slot rather than
+// flushing it, and an occupant change reopens the bout without deleting the
+// previous occupant's protocol data. See applyResolvedSlotTx.
 // resolveGameSlotsTx resolves every from_match/reseed slot in the game and
 // returns the ids of matches whose slots actually changed — so a caller can
 // broadcast those downstream matches (a finished bout advances teams into the
@@ -311,24 +311,33 @@ where s.game_id = ? and s.code = ? and re.rank = ?`,
 	return teamID, err
 }
 
-// applyResolvedSlotTx writes a slot's resolved team when it changed. Replacing
-// an existing occupant drops that team's data in the bout and reopens it.
 // applyResolvedSlotTx writes a slot's resolved occupant and reports whether it
 // actually changed (so the caller can collect the affected match for broadcast).
+//
+// It is non-destructive: it never deletes a slot's protocol data (themes /
+// answers / results). Two cases matter:
+//
+//   - desired == 0: the upstream source is not currently final — e.g. a finished
+//     bout was unticked so it could be edited. We HOLD the current occupant and
+//     its data instead of flushing it; re-finishing the source restores the same
+//     slot with no churn, so untick→edit→retick loses nothing. (Genuine occupant
+//     changes still flow through, because those have desired != 0.)
+//   - desired != 0 and differs from current: a different team now occupies the
+//     slot. We move the occupant and reopen the bout (status='active') so its
+//     standings get re-reviewed against the new team — but we leave the previous
+//     occupant's rows in place rather than deleting them.
 func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, current, desired int64, gameType string) (bool, error) {
 	if desired == current {
 		return false, nil
 	}
+	if desired == 0 {
+		// Source temporarily unresolved (mid-edit). Hold, don't flush.
+		return false, nil
+	}
 	if current != 0 {
-		// The previous occupant's protocol and standing in this bout are no
-		// longer valid; drop them (answers cascade from themes) and reopen the
-		// bout so its results — and anything downstream — get recomputed.
-		if _, err := tx.ExecContext(ctx, `delete from themes where match_id = ? and team_id = ?`, matchID, current); err != nil {
-			return false, err
-		}
-		if _, err := tx.ExecContext(ctx, `delete from match_results where match_id = ? and team_id = ?`, matchID, current); err != nil {
-			return false, err
-		}
+		// A genuinely different team now occupies this slot. Reopen the bout so
+		// its standings are re-reviewed; the previous occupant's protocol stays
+		// in the DB (non-destructive — recoverable, never silently deleted).
 		if _, err := tx.ExecContext(ctx, `update matches set status = 'active' where id = ? and status = 'finished'`, matchID); err != nil {
 			return false, err
 		}
@@ -336,7 +345,7 @@ func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, curre
 	if _, err := tx.ExecContext(ctx, `update match_slots set team_id = ? where id = ?`, nullableInt64(desired), slotID); err != nil {
 		return false, err
 	}
-	if desired != 0 && gameType == "ek" {
+	if gameType == "ek" {
 		if err := ensureRegularThemes(ctx, tx, matchID, desired); err != nil {
 			return false, err
 		}
@@ -372,11 +381,13 @@ func syncReseedReadinessTx(ctx context.Context, tx *sql.Tx, stage resolverStage,
 		return err
 	}
 	if !state.Ready {
-		if _, err := tx.ExecContext(ctx, `delete from reseed_entries where stage_id = ?`, stage.id); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, `update stages set status = 'pending' where id = ? and status <> 'pending'`, stage.id)
-		return err
+		// HOLD: a source bout is temporarily un-final (e.g. unticked for editing).
+		// Keep the previously-calculated reseed_entries rather than deleting them,
+		// so untick→retick doesn't wipe the reseed. The next explicit calculate
+		// refreshes them if a correction genuinely changed who advances. (The view
+		// recomputes ReseedReady live from prerequisites, so the UI still shows the
+		// pending/ready state correctly without us downgrading stage status here.)
+		return nil
 	}
 	if stage.status == "pending" {
 		_, err := tx.ExecContext(ctx, `update stages set status = 'active' where id = ?`, stage.id)
@@ -554,15 +565,17 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 		rules = []reseedSortRule{{Metric: "place_sum", Dir: "asc"}}
 	}
 
-	// Persisted lots (Жребий) for teams that were tied on a previous recompute,
-	// so the lottery order stays stable as unrelated scores change.
-	prevDraw, err := loadReseedDraws(ctx, tx, stageID)
+	// Жребий lots are derived deterministically from the game's fixed random
+	// seed, so a tie always breaks the same way no matter how many times the
+	// reseed is recomputed — re-finishing an edited source bout can never
+	// reshuffle the lottery.
+	seed, err := gameRandomSeed(ctx, tx, gameID)
 	if err != nil {
 		return err
 	}
 
 	sortReseedEntries(entries, rules)
-	assignDrawLots(entries, rules, prevDraw)
+	assignDrawLots(entries, rules, seed)
 	sortReseedEntries(entries, rules) // re-order now that tied groups have lots
 
 	if err := clear(); err != nil {
@@ -620,10 +633,11 @@ func tiedOnEveryMetricButDraw(a, b reseedEntry, rules []reseedSortRule) bool {
 	return true
 }
 
-// assignDrawLots gives every team in a true tie group a Жребий lot. Lots already
-// drawn on a prior recompute are reused (so the order is stable); only teams
-// without one draw a fresh, distinct lot. Untied teams keep draw 0.
-func assignDrawLots(entries []reseedEntry, rules []reseedSortRule, prevDraw map[int64]float64) {
+// assignDrawLots gives every team in a true tie group a Жребий lot derived
+// deterministically from the game's fixed random seed, so the lottery order is
+// stable across recomputes (untick/retick or an unrelated score edit can never
+// reshuffle a tie). Untied teams keep draw 0.
+func assignDrawLots(entries []reseedEntry, rules []reseedSortRule, seed string) {
 	i := 0
 	for i < len(entries) {
 		j := i + 1
@@ -631,58 +645,37 @@ func assignDrawLots(entries []reseedEntry, rules []reseedSortRule, prevDraw map[
 			j++
 		}
 		if j-i >= 2 {
-			used := map[int64]bool{}
 			for k := i; k < j; k++ {
-				if lot := prevDraw[entries[k].teamID]; lot != 0 {
-					entries[k].metrics["draw"] = lot
-					used[int64(lot)] = true
-				}
-			}
-			for k := i; k < j; k++ {
-				if entries[k].metrics["draw"] == 0 {
-					lot := freshLot(used)
-					entries[k].metrics["draw"] = float64(lot)
-					used[lot] = true
-				}
+				entries[k].metrics["draw"] = float64(deterministicLot(seed, entries[k].teamID))
 			}
 		}
 		i = j
 	}
 }
 
-// freshLot returns a positive lot value not already used in its tie group.
-func freshLot(used map[int64]bool) int64 {
-	for {
-		lot := rand.Int64N(1_000_000) + 1
-		if !used[lot] {
-			return lot
-		}
-	}
+// deterministicLot derives a stable Жребий lot in [1, 1_000_000] for a team from
+// the game's fixed random seed. Same (seed, team) always yields the same lot, so
+// a reseed recomputes identically every time. A hash collision inside a tie group
+// is harmless: sortReseedEntries breaks any residual tie by team id.
+func deterministicLot(seed string, teamID int64) int64 {
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%s:%d", seed, teamID)
+	return int64(h.Sum64()%1_000_000) + 1
 }
 
-// loadReseedDraws reads the current draw (Жребий) lot per team for a stage, so
-// previously drawn lots survive a recompute.
-func loadReseedDraws(ctx context.Context, q dbQueryer, stageID int64) (map[int64]float64, error) {
-	draws := map[int64]float64{}
-	rows, err := q.QueryContext(ctx, `select team_id, metrics_json from reseed_entries where stage_id = ?`, stageID)
+// gameRandomSeed returns the game's fixed random seed (the basis for deterministic
+// reseed lots). Falls back to the game id when the column is empty so an unseeded
+// game is still deterministic.
+func gameRandomSeed(ctx context.Context, q dbQueryer, gameID int64) (string, error) {
+	var seed sql.NullString
+	err := q.QueryRowContext(ctx, `select random_seed from games where id = ?`, gameID).Scan(&seed)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var teamID int64
-		var raw string
-		if err := rows.Scan(&teamID, &raw); err != nil {
-			return nil, err
-		}
-		var parsed map[string]any
-		if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
-			if lot := numFromAny(parsed["draw"]); lot != 0 {
-				draws[teamID] = lot
-			}
-		}
+	if seed.Valid && seed.String != "" {
+		return seed.String, nil
 	}
-	return draws, rows.Err()
+	return fmt.Sprintf("game-%d", gameID), nil
 }
 
 // reseedSourceMatches returns the bout ids that contribute to a reseed and the
