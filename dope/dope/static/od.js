@@ -96,6 +96,7 @@ const TABS = [
   {key: "results", label: "Итог"},
   {key: "detailed", label: "Подробно"},
   {key: "input", label: "Ввод"},
+  {key: "screen", label: "Экран"},
 ];
 
 function tabFromHash() {
@@ -113,8 +114,32 @@ window.addEventListener("hashchange", () => {
 
 window.addEventListener("resize", () => {
   if (renderedTab === "detailed" || renderedTab === "results") teamNameOverflow.schedule();
+  if (renderedTab === "screen") scheduleScreenFit();
+  syncFullscreen();
   updateResultsScrollState();
 });
+
+// Fullscreen detection: when projecting, drop the site chrome so only the board
+// shows. Covers the Fullscreen API, installed-PWA fullscreen, and F11 browser
+// fullscreen (which the API can't observe) via a viewport-vs-screen heuristic.
+function isFullscreen() {
+  if (document.fullscreenElement) return true;
+  if (window.matchMedia?.("(display-mode: fullscreen)").matches) return true;
+  // F11 / OS fullscreen, which the API can't see: the window spans the whole
+  // screen AND carries no browser chrome. A merely-maximized window still has a
+  // toolbar (outerHeight - innerHeight is large), so it won't false-positive.
+  const noBrowserChrome = window.outerHeight - window.innerHeight <= 4;
+  const fillsScreen = Math.abs(window.outerHeight - screen.height) <= 2;
+  return noBrowserChrome && fillsScreen;
+}
+function syncFullscreen() {
+  const on = isFullscreen();
+  if (document.body.classList.contains("is-fullscreen") === on) return;
+  document.body.classList.toggle("is-fullscreen", on);
+  if (renderedTab === "screen") scheduleScreenFit();
+}
+document.addEventListener("fullscreenchange", syncFullscreen);
+syncFullscreen();
 document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
 async function loadAll() {
@@ -389,11 +414,11 @@ function invalidateAllCaches() {
 
 function invalidateScoreCaches() {
   questionStatsCache = null;
-  invalidateTabCache("detailed", "results");
+  invalidateTabCache("detailed", "results", "screen");
 }
 
 function invalidateShootoutCaches() {
-  invalidateTabCache("input", "detailed", "results");
+  invalidateTabCache("input", "detailed", "results", "screen");
 }
 
 function teamNumber(teamIndex) {
@@ -479,6 +504,7 @@ function render() {
   restoreTabScroll(activeTab);
   updateResultsScrollState();
   if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule(activePane);
+  if (activeTab === "screen") scheduleScreenFit();
   positionInvertOverlay();
   refreshPresence();
 }
@@ -489,6 +515,7 @@ function getTabPane(tab) {
   let node;
   if (tab === "input") node = buildInputView();
   else if (tab === "detailed") node = buildDetailedTable();
+  else if (tab === "screen") node = buildScreenView();
   else node = buildResultsTable();
   const pane = document.createElement("div");
   pane.className = "od-pane";
@@ -1684,7 +1711,7 @@ function handleEntryInput(event) {
     }
     if (!setShootoutEntryValue(roundIndex, questionIndex, rowIndex, parsed.value)) return;
     closeEntrySuggest();
-    invalidateTabCache("detailed", "results");
+    invalidateTabCache("detailed", "results", "screen");
     updateShootoutInputValidity(roundIndex, questionIndex);
     saveState(["shootoutRounds"], state.shootoutRounds);
     return;
@@ -2030,7 +2057,7 @@ function handleEntryChange(event) {
     const round = state.shootoutRounds[roundIndex];
     const value = shootoutCheckbox.checked ? round?.teams?.[rowIndex] || 0 : 0;
     if (!setShootoutEntryValue(roundIndex, questionIndex, rowIndex, value)) return;
-    invalidateTabCache("detailed", "results");
+    invalidateTabCache("detailed", "results", "screen");
     updateShootoutInputValidity(roundIndex, questionIndex);
     saveState(["shootoutRounds"], state.shootoutRounds);
     return;
@@ -2043,7 +2070,7 @@ function handleEntryChange(event) {
     const round = state.shootoutRounds[roundIndex];
     if (!round?.completed || !Number.isInteger(questionIndex)) return;
     round.completed[questionIndex] = cb.checked;
-    invalidateTabCache("detailed", "results");
+    invalidateTabCache("detailed", "results", "screen");
     saveState(["shootoutRounds"], state.shootoutRounds);
     return;
   }
@@ -2463,6 +2490,272 @@ function lastEnteredQuestion() {
   return 0;
 }
 
+// resultsTeamCell builds the .results-team cell (name + optional city + the
+// hover popover) shared by the Итог table and the Экран board.
+function resultsTeamCell(index) {
+  const team = state.teams[index];
+  const nameTd = document.createElement("td");
+  nameTd.className = "results-team";
+  const teamLabelText = team.name || `Команда ${index + 1}`;
+  const nameWrap = document.createElement("span");
+  nameWrap.className = "results-team-name-wrap";
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "results-team-name";
+  nameSpan.textContent = teamLabelText;
+  nameSpan.tabIndex = 0;
+  nameSpan.setAttribute("aria-label", teamLabelText);
+  nameWrap.appendChild(nameSpan);
+  if (team.city) {
+    const citySpan = document.createElement("span");
+    citySpan.className = "results-team-city";
+    citySpan.textContent = team.city;
+    nameWrap.appendChild(citySpan);
+  }
+  nameTd.appendChild(nameWrap);
+  const fullName = document.createElement("span");
+  fullName.className = "results-team-name-popover";
+  fullName.textContent = teamLabelText;
+  nameTd.appendChild(fullName);
+  return nameTd;
+}
+
+// === Экран (проекторное табло) ===
+//
+// A pared-down Итог for projection: it reuses the .results-table styling but
+// keeps only four columns (М, Команда, Σ, T{N}). Teams sharing a place are
+// glued into a group (rounded block) with a gap between groups, exactly like
+// Итог; the groups are packed column-major across as many columns as it takes
+// to maximise the font, then the whole board is scaled with `zoom` so it fills
+// the screen without scrolling.
+
+// currentTourIndex returns the 0-based tour that the last entered question
+// belongs to, or 0 before the game starts (so the board shows T1).
+function currentTourIndex() {
+  if (!tourLengths.length) return -1;
+  const lastQ = lastEnteredQuestion();
+  if (lastQ <= 0) return 0;
+  const starts = tourStartIndexes();
+  const qi = lastQ - 1;
+  let tour = 0;
+  for (let i = 0; i < starts.length; i++) {
+    if (qi >= starts[i]) tour = i;
+  }
+  return tour;
+}
+
+// makeScreenColumn builds one results-table holding the given row items. A gap
+// row is inserted between two consecutive rows that belong to different place
+// groups (so same-place teams stay glued and different places get breathing
+// room, like Итог). A group that doesn't fit a column simply continues in the
+// next one — the column break falls between rows with no gap.
+function makeScreenColumn(tourLabel, rowItems) {
+  const table = document.createElement("table");
+  table.className = "results-table od-results-table screen-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headRow.appendChild(th("М", "results-place-head"));
+  headRow.appendChild(th("Команда", "results-team-head"));
+  headRow.appendChild(th("Σ", "results-num-head results-total-head"));
+  headRow.appendChild(th(tourLabel, "results-num-head results-tour-head"));
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  rowItems.forEach((item, i) => {
+    if (i > 0 && item.group !== rowItems[i - 1].group) {
+      const gap = document.createElement("tr");
+      gap.className = "results-group-gap";
+      gap.appendChild(td("", "results-group-gap-cell", {colSpan: 4}));
+      tbody.appendChild(gap);
+    }
+    tbody.appendChild(item.tr);
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
+function buildScreenView() {
+  const wrapper = document.createElement("div");
+  wrapper.className = "screen-wrapper";
+  const cols = document.createElement("div");
+  cols.className = "screen-cols";
+  wrapper.appendChild(cols);
+
+  if (!state.teams.length) {
+    const empty = document.createElement("div");
+    empty.className = "screen-empty";
+    empty.textContent = "Команды не заданы";
+    cols.appendChild(empty);
+    wrapper._screenRows = [];
+    return wrapper;
+  }
+
+  const stats = questionStats();
+  const totals = state.teams.map((_, i) => sumRow(i, stats));
+  const tiebreaks = state.teams.map((_, i) => shootoutTiebreakForTeam(i));
+  const tourTotals = state.teams.map((_, i) => tourSumsForTeam(i, stats));
+  const tourIndex = currentTourIndex();
+  const tourStarted = tourIndex >= 0 && tourHasStarted(tourIndex);
+
+  const sortKeys = state.teams.map((_, i) => ({
+    index: i,
+    total: totals[i],
+    tiebreak: tiebreaks[i],
+  }));
+  sortKeys.sort((a, b) => {
+    if (b.total !== a.total) return b.total - a.total;
+    const cmp = compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
+    if (cmp !== 0) return cmp;
+    return a.index - b.index;
+  });
+
+  const placeMap = computePlaces(totals);
+
+  // Group consecutive teams that share a place, like buildResultsTableInner.
+  const placeGroups = [];
+  sortKeys.forEach((key) => {
+    const placeText = placeMap[key.index] || "—";
+    const last = placeGroups[placeGroups.length - 1];
+    if (last && last.placeText === placeText) last.keys.push(key);
+    else placeGroups.push({placeText, keys: [key]});
+  });
+
+  // Flatten into row items tagged with their group index, so the packer can wrap
+  // a group across columns when needed while keeping same-group rows glued.
+  const rowItems = [];
+  placeGroups.forEach(({placeText, keys}, groupIdx) => {
+    keys.forEach(({index, total}, rowIdx) => {
+      const tr = document.createElement("tr");
+      const classes = ["results-row"];
+      if (rowIdx === 0) classes.push("results-group-first");
+      if (rowIdx === keys.length - 1) classes.push("results-group-last");
+      tr.className = classes.join(" ");
+      tr.appendChild(td(placeText, "results-place"));
+      tr.appendChild(resultsTeamCell(index));
+      tr.appendChild(td(total, "results-num total-cell results-total"));
+      const tourValue = tourStarted ? tourTotals[index][tourIndex] : "·";
+      tr.appendChild(td(tourValue, "results-tour" + (tourStarted ? "" : " results-tour-pending")));
+      rowItems.push({tr, group: groupIdx});
+    });
+  });
+
+  const tourLabel = tourIndex >= 0 ? `T${tourIndex + 1}` : "T";
+  wrapper._screenRows = rowItems;
+  wrapper._screenTourLabel = tourLabel;
+  // Provisional single column; layoutScreen() rebalances once it can measure.
+  cols.appendChild(makeScreenColumn(tourLabel, rowItems));
+  return wrapper;
+}
+
+let screenFitRAF = 0;
+function scheduleScreenFit() {
+  if (screenFitRAF) cancelAnimationFrame(screenFitRAF);
+  screenFitRAF = requestAnimationFrame(() => {
+    screenFitRAF = 0;
+    const pane = tabCache.get("screen");
+    if (!pane || pane.hidden) return;
+    const wrapper = pane.querySelector(".screen-wrapper");
+    if (!wrapper) return;
+    layoutScreen(wrapper);
+    // Fade + popover for names too long for the (fixed-width) team column,
+    // reusing the Итог truncation primitive. Width is in logical px, so the
+    // decision is independent of the zoom applied by layoutScreen.
+    teamNameOverflow.schedule(pane);
+  });
+}
+
+// packRows greedily fills columns top-to-bottom (column-major), starting a new
+// column once the running body height would exceed maxBodyH. A gap is counted
+// before a row whose group differs from the previous row in the same column.
+// Returns the array of per-column rowItem lists.
+function packRows(rowItems, rowH, gapH, maxBodyH) {
+  const columns = [];
+  let current = [];
+  let bodyH = 0;
+  for (const item of rowItems) {
+    const needGap = current.length > 0 && item.group !== current[current.length - 1].group;
+    const addH = current.length === 0 ? rowH : bodyH + (needGap ? gapH : 0) + rowH;
+    if (current.length > 0 && addH > maxBodyH + 0.5) {
+      columns.push(current);
+      current = [];
+      bodyH = 0;
+    }
+    bodyH = current.length === 0
+      ? rowH
+      : bodyH + (item.group !== current[current.length - 1].group ? gapH : 0) + rowH;
+    current.push(item);
+  }
+  if (current.length) columns.push(current);
+  return columns;
+}
+
+// layoutScreen packs the rows into the column count that maximises the font,
+// then scales the board with `zoom` to fill the frame. For each candidate
+// column count it binary-searches the smallest column body height that still
+// packs into that many columns (a balanced split), which gives the tallest —
+// hence largest-zoom — layout.
+function layoutScreen(wrapper) {
+  const rowItems = wrapper._screenRows;
+  const cols = wrapper.querySelector(".screen-cols");
+  const frame = scrollFrame();
+  if (!cols || !frame || !rowItems || !rowItems.length) return;
+
+  const MARGIN = 16; // px of breathing room inside the frame
+  const MAX_ZOOM = 5; // cap so tiny tournaments don't get absurd text
+  const SAFETY = 0.98; // shrink a touch to absorb sub-pixel rounding
+
+  // Fill the frame so the board can center; the table-host is content-sized.
+  wrapper.style.height = `${frame.clientHeight}px`;
+  const availW = Math.max(1, frame.clientWidth - MARGIN);
+  const availH = Math.max(1, frame.clientHeight - MARGIN);
+  const gapPx = parseFloat(getComputedStyle(cols).columnGap) || 0;
+
+  // Measure one natural column holding every row (zoom reset so rects are CSS px).
+  cols.style.zoom = "1";
+  cols.replaceChildren(makeScreenColumn(wrapper._screenTourLabel, rowItems));
+  const probe = cols.firstChild;
+  const headH = probe.querySelector("thead").getBoundingClientRect().height;
+  const rowH = probe.querySelector("tbody tr.results-row").getBoundingClientRect().height;
+  const gapRow = probe.querySelector("tbody tr.results-group-gap");
+  const gapH = gapRow ? gapRow.getBoundingClientRect().height : 0;
+  const colW = probe.getBoundingClientRect().width;
+
+  const n = rowItems.length;
+  const groupCount = rowItems[n - 1].group + 1;
+  const totalBodyH = n * rowH + (groupCount - 1) * gapH;
+
+  const columnsNeeded = (maxBodyH) => packRows(rowItems, rowH, gapH, maxBodyH).length;
+
+  // For each column count, find the smallest body height that packs into it, and
+  // keep the count whose resulting zoom is largest (ties → more columns, so the
+  // board fills the width).
+  let best = {bodyH: totalBodyH, zoom: 0};
+  for (let c = 1; c <= n; c++) {
+    let bodyH;
+    if (columnsNeeded(rowH) <= c) {
+      bodyH = rowH; // a single row per column already suffices
+    } else {
+      let lo = rowH;
+      let hi = totalBodyH;
+      for (let it = 0; it < 40; it++) {
+        const mid = (lo + hi) / 2;
+        if (columnsNeeded(mid) <= c) hi = mid;
+        else lo = mid;
+      }
+      bodyH = hi;
+    }
+    const colHeight = headH + bodyH;
+    const totalWidth = c * colW + (c - 1) * gapPx;
+    const zoom = Math.min(availH / colHeight, availW / totalWidth);
+    if (zoom >= best.zoom) best = {bodyH, zoom};
+  }
+
+  const zoom = Math.min(best.zoom * SAFETY, MAX_ZOOM);
+  const parts = packRows(rowItems, rowH, gapH, best.bodyH)
+    .map((colRows) => makeScreenColumn(wrapper._screenTourLabel, colRows));
+  cols.replaceChildren(...parts);
+  cols.style.zoom = String(zoom);
+}
+
 function buildResultsTable() {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper";
@@ -2549,31 +2842,8 @@ function buildResultsTableInner() {
       if (rowIdx === 0) classes.push("results-group-first");
       if (rowIdx === group.rows.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
-      const team = state.teams[index];
       tr.appendChild(td(group.placeText, "results-place"));
-      const nameTd = document.createElement("td");
-      nameTd.className = "results-team";
-      const teamLabelText = team.name || `Команда ${index + 1}`;
-      const nameWrap = document.createElement("span");
-      nameWrap.className = "results-team-name-wrap";
-      const nameSpan = document.createElement("span");
-      nameSpan.className = "results-team-name";
-      nameSpan.textContent = teamLabelText;
-      nameSpan.tabIndex = 0;
-      nameSpan.setAttribute("aria-label", teamLabelText);
-      nameWrap.appendChild(nameSpan);
-      if (team.city) {
-        const citySpan = document.createElement("span");
-        citySpan.className = "results-team-city";
-        citySpan.textContent = team.city;
-        nameWrap.appendChild(citySpan);
-      }
-      nameTd.appendChild(nameWrap);
-      const fullName = document.createElement("span");
-      fullName.className = "results-team-name-popover";
-      fullName.textContent = teamLabelText;
-      nameTd.appendChild(fullName);
-      tr.appendChild(nameTd);
+      tr.appendChild(resultsTeamCell(index));
       tr.appendChild(td(total, "results-num total-cell results-total"));
       for (let t = 0; t < tourLengths.length; t++) {
         if (tourStarted[t]) tr.appendChild(td(tourTotals[index][t], "results-tour"));
@@ -2991,7 +3261,7 @@ function applyRemoteState(nextState) {
   if (editingInput || editingShootout) {
     questionStatsCache = null;
     numberToIndexCache = null;
-    invalidateTabCache("detailed", "results");
+    invalidateTabCache("detailed", "results", "screen");
     refreshPendingMarkers();
     return;
   }
