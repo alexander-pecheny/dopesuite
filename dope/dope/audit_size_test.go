@@ -64,9 +64,9 @@ values('sz','Size','',null,null,1,?,?,0)`, now, now)
 
 	// Measure.
 	type bucket struct {
-		op    string
-		count int
-		bytes int64
+		op          string
+		count       int
+		bytes       int64
 		beforeBytes int64
 		afterBytes  int64
 	}
@@ -104,7 +104,7 @@ group by op order by op`)
 			fullLen := int64(len(sampleAfter))
 			// Approximate diff: just pk + 1 changed col (id + name "Renamed").
 			diffLen := int64(len(`{"id":12345,"name":"Renamed"}`))
-			savedPerRow := 2*(fullLen-diffLen)
+			savedPerRow := 2 * (fullLen - diffLen)
 			t.Logf("        UPDATE diff estimate: full=%d, diff=%d, save/row=%d, save/op-total=%d",
 				fullLen, diffLen, savedPerRow, savedPerRow*int64(b.count))
 			totalChanged += savedPerRow * int64(b.count)

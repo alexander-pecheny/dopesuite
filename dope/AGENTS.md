@@ -9,6 +9,7 @@ Tournament/championship management system with real-time web UI and Telegram bot
 - **Frontend tests**: Deno (`dope/jstest/`)
 - **Build/run**: `justfile` (see commands below)
 - **Deploy**: `just deploy`, which calls `deploy.py` (SSH-based)
+- **Production** is at `ssh vps2day-ee`, use it to run commands on production server
 
 ## Note on git
 
@@ -101,3 +102,10 @@ Always reuse existing functions and classes before creating new ones
 
 ## Deployment Config
 Run `just deploy` to deploy, it already handles everything that's needed.
+
+## Production Server
+- **Access**: `ssh vps2day-ee` (login user is `ap`; host `vm46153`). Some paths need `sudo` (systemd hardening hides them).
+- **Live DB**: `/var/lib/dope/fest.db` (SQLite WAL mode; `-wal`/`-shm` sidecars alongside). This is the real prod DB — *not* `/home/ap/fest.db` (stale copy).
+- **Services** (systemd): `dope.service` (live match server, binary `/opt/dope/dope-server`, `WorkingDirectory=/var/lib/dope`, `PORT=8090`, `EnvironmentFile=-/etc/dope.env`, `ReadWritePaths=/var/lib/dope`) and `dope-bot.service` (Telegram bot). Inspect with `systemctl cat dope.service`; find the live DB via `sudo ls -l /proc/$(systemctl show -p MainPID --value dope.service)/fd | grep .db`.
+- **Backups**: ad-hoc `*.bak` snapshots live alongside the DB in `/var/lib/dope/` plus a `/var/lib/dope/backups/` dir.
+- **Consistent backup**: `sqlite3` CLI (3.45.1) is installed. The service holds the DB open, so snapshot online with `sqlite3 /var/lib/dope/fest.db ".backup '/var/lib/dope/fest.db.<label>-<ts>.bak'"` (or `VACUUM INTO`) — never a bare `cp` of the `.db` alone (would miss the WAL).
