@@ -1820,10 +1820,10 @@ func TestBackfillFestTeamNumbers(t *testing.T) {
 		}
 	}
 	ins := `insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted) values(?, ?, ?, '', ?, ?, ?)`
-	mustExec(ins, festID, 101, "A", 1, 5, 0)           // active, already numbered
-	mustExec(ins, festID, 102, "B", 2, nil, 0)         // active, unnumbered
-	mustExec(ins, festID, 103, "C", 3, nil, 0)         // active, unnumbered
-	mustExec(ins, festID, 104, "D", 4, 9, 1)           // soft-deleted, number 9 (counts toward maxSeen)
+	mustExec(ins, festID, 101, "A", 1, 5, 0)   // active, already numbered
+	mustExec(ins, festID, 102, "B", 2, nil, 0) // active, unnumbered
+	mustExec(ins, festID, 103, "C", 3, nil, 0) // active, unnumbered
+	mustExec(ins, festID, 104, "D", 4, 9, 1)   // soft-deleted, number 9 (counts toward maxSeen)
 
 	if err := backfillFestTeamNumbers(db); err != nil {
 		t.Fatalf("backfill: %v", err)
