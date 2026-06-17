@@ -38,7 +38,7 @@ var festAuditIndexTmpl = template.Must(template.New("fest-audit-index").Parse(`<
       <ul class="list">
         {{range .Games}}
         <li class="list-action-row">
-          <a class="list-row" href="/host/fest/{{$.FestID}}/game/{{.ID}}/journal">
+          <a class="list-row" href="/host/fest/{{$.FestID}}/audit/{{.ID}}">
             <span class="list-row-title">{{.Title}}</span>
             {{if .Code}}<span class="muted">{{.Code}}</span>{{end}}
           </a>

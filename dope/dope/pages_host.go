@@ -549,42 +549,45 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if len(parts) == 3 && parts[2] == "audit" {
+	// /host/fest/{id}/audit              → per-game history index
+	// /host/fest/{id}/audit/{gid}        → one game's edit history
+	// /host/fest/{id}/audit/{gid}/revert → per-game derived revert (POST)
+	if parts[2] == "audit" {
 		if !requireManageFest() {
 			return
 		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		s.renderHostFestAudit(w, r, id, "", "")
-		return
-	}
-	// /host/fest/{id}/game/{gid}/journal  → per-game edit history + revert
-	// /host/fest/{id}/game/{gid}/revert   → per-game derived revert (POST)
-	if len(parts) == 5 && parts[2] == "game" && parts[3] != "" && (parts[4] == "journal" || parts[4] == "revert") {
-		if !requireManageFest() {
-			return
-		}
-		gid, err := strconv.ParseInt(parts[3], 10, 64)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		if parts[4] == "revert" {
-			if r.Method != http.MethodPost {
+		switch {
+		case len(parts) == 3:
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 				return
 			}
-			s.handleGameRevert(w, r, id, gid)
+			s.renderHostFestAudit(w, r, id, "", "")
+			return
+		case len(parts) == 4 || (len(parts) == 5 && parts[4] == "revert"):
+			gid, err := strconv.ParseInt(parts[3], 10, 64)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			if len(parts) == 5 { // revert
+				if r.Method != http.MethodPost {
+					http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+					return
+				}
+				s.handleGameRevert(w, r, id, gid)
+				return
+			}
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			s.renderGameJournal(w, r, id, gid, "", "")
+			return
+		default:
+			http.NotFound(w, r)
 			return
 		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		s.renderGameJournal(w, r, id, gid, "", "")
-		return
 	}
 	// /host/fest/{id}/game/{gid}[/...] → serve host.html / od.html / si.html.
 	if !isHostGameSubPath(parts[2:]) {

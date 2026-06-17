@@ -678,7 +678,7 @@ var gameJournalTmpl = template.Must(template.New("game-journal").Parse(`<!doctyp
                 {{if .More}}<div class="muted">+ ещё {{.More}}</div>{{end}}
               </td>
               <td>
-                <form method="post" action="/host/fest/{{$.FestID}}/game/{{$.GameID}}/revert"
+                <form method="post" action="/host/fest/{{$.FestID}}/audit/{{$.GameID}}/revert"
                       onsubmit="return confirm('Откатить игру до состояния перед этим изменением? Все последующие изменения этой игры будут отменены.');">
                   <input type="hidden" name="target" value="{{.RevertTo}}">
                   <button class="btn danger" type="submit">откатить сюда</button>
