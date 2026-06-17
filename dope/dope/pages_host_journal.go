@@ -364,7 +364,7 @@ var gameJournalTmpl = template.Must(template.New("game-journal").Parse(`<!doctyp
 </head>
 <body class="public">
   <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.FestID}}/game/{{.GameID}}/">←</a>
+    <a class="public-back" href="/host/fest/{{.FestID}}/audit">←</a>
     <h1>История · {{.GameTitle}}</h1>
   </header>
   <main class="public-main">
