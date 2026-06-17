@@ -251,6 +251,10 @@ func main() {
 		runEKImport(os.Args[2:])
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "convert-history" {
+		runConvertHistory(os.Args[2:])
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "convert-audit" {
 		runConvertAudit(os.Args[2:])
 		return
