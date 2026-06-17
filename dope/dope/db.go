@@ -771,6 +771,18 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 	if _, err := db.Exec(`create index if not exists journal_game_seq on journal(game_id, seq)`); err != nil {
 		return err
 	}
+	// Backfill game_id on semantic event rows recorded before they were
+	// attributed, borrowing it from a row-op of the same request — so the
+	// per-game history shows those earlier edits with descriptions. Idempotent.
+	if _, err := db.Exec(`
+update journal set game_id = (
+  select j2.game_id from journal j2
+  where j2.request_id = journal.request_id and j2.game_id is not null limit 1)
+where game_id is null and request_id is not null
+  and exists (select 1 from journal j3
+    where j3.request_id = journal.request_id and j3.game_id is not null)`); err != nil {
+		return err
+	}
 	if !columnExists(db, "journal_checkpoint", "game_id") {
 		if _, err := db.Exec(`drop table if exists journal_checkpoint`); err != nil {
 			return err
