@@ -515,6 +515,14 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 			http.Error(w, "bad json", http.StatusBadRequest)
 			return
 		}
+		// Canonicalize so a wholesale PUT stores the same byte representation a
+		// PATCH would (Go marshals with sorted keys). This keeps the stored
+		// state, the SSE payload and the response identical regardless of which
+		// path produced them — a prerequisite for replay/diff to compare state
+		// without spurious whitespace/key-order differences.
+		if canon, err := canonicalJSON(raw); err == nil {
+			raw = canon
+		}
 		revision, err := s.replaceGameState(r.Context(), scope, raw)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)

@@ -560,15 +560,30 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		s.renderHostFestAudit(w, r, id, "", "")
 		return
 	}
-	if len(parts) == 4 && parts[2] == "audit" && parts[3] == "revert" {
+	// /host/fest/{id}/game/{gid}/journal  → per-game edit history + revert
+	// /host/fest/{id}/game/{gid}/revert   → per-game derived revert (POST)
+	if len(parts) == 5 && parts[2] == "game" && parts[3] != "" && (parts[4] == "journal" || parts[4] == "revert") {
 		if !requireManageFest() {
 			return
 		}
-		if r.Method != http.MethodPost {
+		gid, err := strconv.ParseInt(parts[3], 10, 64)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if parts[4] == "revert" {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			s.handleGameRevert(w, r, id, gid)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		s.handleHostFestAuditRevert(w, r, id)
+		s.renderGameJournal(w, r, id, gid, "", "")
 		return
 	}
 	// /host/fest/{id}/game/{gid}[/...] → serve host.html / od.html / si.html.

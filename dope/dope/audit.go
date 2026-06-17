@@ -3,51 +3,14 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
-
-// auditedTables lists every table whose row-level mutations are recorded in
-// audit_log via AFTER triggers. Skipped on purpose:
-//   - audit_log / audit_ctx / audit_trigger_state: the audit machinery itself
-//   - schema_versions: managed by migrateDB
-//   - sessions / telegram_login_codes: high-churn auth state with no undo value
-//   - events: already a higher-level fest revision log
-var auditedTables = []string{
-	"users",
-	"invites",
-	"schemes",
-	"fests",
-	"fest_organizers",
-	"fest_teams",
-	"fest_players",
-	"fest_team_players",
-	"game_player_team_overrides",
-	"teams",
-	"players",
-	"team_players",
-	"games",
-	"game_teams",
-	"game_players",
-	"game_team_players",
-	"game_assignments",
-	"venues",
-	"stages",
-	"matches",
-	"match_slots",
-	"themes",
-	"answers",
-	"match_results",
-	"reseed_entries",
-}
 
 type auditCtxKey string
 
@@ -56,15 +19,6 @@ const (
 	auditCtxKeyRequestID auditCtxKey = "audit.request_id"
 	auditCtxKeyFestID    auditCtxKey = "audit.fest_id"
 )
-
-// auditTriggerTemplateVersion is mixed into the trigger fingerprint so that a
-// change to the trigger SQL (e.g. adding the fest_id column) forces a rebuild on
-// the next startup, even when no audited table's shape changed.
-//
-// v3: snapshots are zstd-compressed via dope_z(); UPDATE snapshots keep only
-// PK + changed columns (see buildAuditTrigger).
-// v4: capture is skipped when audit_ctx.suppress is set (bulk import/reseed).
-const auditTriggerTemplateVersion = 4
 
 func withAuditActor(ctx context.Context, userID int64) context.Context {
 	if userID == 0 {
@@ -332,31 +286,12 @@ func (s *server) writeExec(ctx context.Context, query string, args ...any) (sql.
 	return res, nil
 }
 
-// installAuditSchema creates audit_log, audit_ctx, and audit_trigger_state.
-// Idempotent — safe to run on every startup.
+// installAuditSchema creates audit_ctx, the per-transaction context the row
+// triggers read to attribute each edit (actor/request/fest). The old audit_log
+// table + audit_trigger_state are retired — the journal (journal_triggers.go)
+// is now the durable edit log. Idempotent — safe to run on every startup.
 func installAuditSchema(db *sql.DB) error {
 	_, err := db.Exec(`
-create table if not exists audit_log(
-  id integer primary key autoincrement,
-  ts text not null default (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  table_name text not null,
-  row_pk text not null,
-  op text not null check (op in ('INSERT','UPDATE','DELETE')),
-  before_json text,
-  after_json text,
-  actor_user_id integer,
-  request_id text,
-  fest_id integer
-);
--- The only audit_log read paths (the fest audit page and revert) filter on
--- fest_id; pruning keys on id. table_pk_idx / request_idx served per-row-history
--- and request-scoped queries that don't exist, and ts_idx only sped the prune
--- (now reworked to key on id). They were ~38 MB of dead weight that also slowed
--- every audited write, so drop them. fest_idx is created below.
-drop index if exists audit_log_table_pk_idx;
-drop index if exists audit_log_ts_idx;
-drop index if exists audit_log_request_idx;
-
 create table if not exists audit_ctx(
   id integer primary key check(id = 1),
   actor_user_id integer,
@@ -365,31 +300,14 @@ create table if not exists audit_ctx(
   suppress integer not null default 0
 );
 insert or ignore into audit_ctx(id) values(1);
-
-create table if not exists audit_trigger_state(
-  id integer primary key check(id = 1),
-  fingerprint text not null default ''
-);
-insert or ignore into audit_trigger_state(id, fingerprint) values(1, '');
 `)
 	if err != nil {
-		return err
-	}
-	// fest_id was added after the initial release; backfill the column on
-	// databases that predate it so the CREATEs above stay no-ops.
-	if err := addColumnsIfMissing(db, "audit_log", []columnSpec{{Name: "fest_id", Type: "integer"}}); err != nil {
 		return err
 	}
 	if err := addColumnsIfMissing(db, "audit_ctx", []columnSpec{{Name: "fest_id", Type: "integer"}}); err != nil {
 		return err
 	}
-	// suppress lets a bulk operation (import/reseed) skip audit capture for its
-	// own structural churn; the triggers check it. Added after release, so
-	// backfill on older DBs. Default 0 = audit normally.
 	if err := addColumnsIfMissing(db, "audit_ctx", []columnSpec{{Name: "suppress", Type: "integer not null default 0"}}); err != nil {
-		return err
-	}
-	if _, err := db.Exec(`create index if not exists audit_log_fest_idx on audit_log(fest_id, id) where fest_id is not null`); err != nil {
 		return err
 	}
 	return nil
@@ -399,73 +317,33 @@ insert or ignore into audit_trigger_state(id, fingerprint) values(1, '');
 // schema fingerprint (columns + PK structure) differs from the cached one.
 // Adding a column via addColumnsIfMissing therefore picks up automatically on
 // the next startup.
-func ensureAuditTriggers(db *sql.DB) error {
-	type tableShape struct {
-		name string
-		cols []string
-		pks  []string
-	}
-	shapes := make([]tableShape, 0, len(auditedTables))
-	for _, t := range auditedTables {
-		cols, pks, err := auditTableShape(db, t)
-		if err != nil {
-			return fmt.Errorf("audit: read pragma %s: %w", t, err)
-		}
-		if len(cols) == 0 {
-			// Table missing from this DB (legacy/empty) — skip silently.
-			continue
-		}
-		shapes = append(shapes, tableShape{name: t, cols: cols, pks: pks})
-	}
-
-	h := sha256.New()
-	fmt.Fprintf(h, "template-version=%d\n", auditTriggerTemplateVersion)
-	for _, s := range shapes {
-		sortedCols := append([]string(nil), s.cols...)
-		sort.Strings(sortedCols)
-		sortedPks := append([]string(nil), s.pks...)
-		sort.Strings(sortedPks)
-		fmt.Fprintf(h, "%s|cols=%s|pks=%s\n",
-			s.name,
-			strings.Join(sortedCols, ","),
-			strings.Join(sortedPks, ","))
-	}
-	fingerprint := hex.EncodeToString(h.Sum(nil))
-
-	var existing string
-	err := db.QueryRow(`select fingerprint from audit_trigger_state where id = 1`).Scan(&existing)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	if existing == fingerprint {
-		return nil
-	}
-
-	tx, err := db.Begin()
+// dropLegacyAuditTriggers removes any leftover audit_log AFTER triggers from a
+// pre-journal database, so old DBs stop writing the retired audit_log. Forward
+// edit capture is handled by the journal row-op triggers (ensureJournalTriggers).
+func dropLegacyAuditTriggers(db *sql.DB) error {
+	rows, err := db.Query(`select name from sqlite_master where type='trigger' and name like 'audit\_%' escape '\'`)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-
-	for _, s := range shapes {
-		for _, op := range []string{"insert", "update", "delete"} {
-			name := fmt.Sprintf("audit_%s_%s", s.name, op)
-			if _, err := tx.Exec(`drop trigger if exists ` + name); err != nil {
-				return fmt.Errorf("drop trigger %s: %w", name, err)
-			}
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return err
 		}
-		for _, op := range []string{"insert", "update", "delete"} {
-			stmt := buildAuditTrigger(s.name, s.cols, s.pks, op)
-			if _, err := tx.Exec(stmt); err != nil {
-				return fmt.Errorf("create trigger audit_%s_%s: %w", s.name, op, err)
-			}
-		}
+		names = append(names, n)
 	}
-
-	if _, err := tx.Exec(`update audit_trigger_state set fingerprint = ? where id = 1`, fingerprint); err != nil {
+	rows.Close()
+	if err := rows.Err(); err != nil {
 		return err
 	}
-	return tx.Commit()
+	for _, n := range names {
+		if _, err := db.Exec(`drop trigger if exists ` + quoteIdent(n)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func auditTableShape(db *sql.DB, table string) (cols, pks []string, err error) {
@@ -499,108 +377,6 @@ func auditTableShape(db *sql.DB, table string) (cols, pks []string, err error) {
 		pks = append(pks, p.name)
 	}
 	return cols, pks, nil
-}
-
-func buildAuditTrigger(table string, cols, pks []string, op string) string {
-	if len(pks) == 0 {
-		// Tables without a declared PK fall back to rowid for row identity.
-		pks = []string{"rowid"}
-	}
-
-	rowJSON := func(prefix string) string {
-		parts := make([]string, 0, len(cols))
-		for _, c := range cols {
-			parts = append(parts, fmt.Sprintf("'%s', %s.%s", c, prefix, quoteIdent(c)))
-		}
-		return "json_object(" + strings.Join(parts, ", ") + ")"
-	}
-
-	// jsonPathLit renders a JSON path string literal for a column, e.g. `'$."x"'`.
-	jsonPathLit := func(c string) string {
-		return "'$.\"" + strings.ReplaceAll(c, `"`, `""`) + "\"'"
-	}
-
-	// changedRowJSON builds the row snapshot for an UPDATE keeping only the
-	// primary-key columns plus columns whose value actually changed. Unchanged
-	// non-PK columns are dropped via json_remove (a no-op sentinel path is passed
-	// when the column did change, so it survives). This collapses the common case
-	// — a single field edited on a wide row — from the full row down to a tiny
-	// diff, while staying fully revert-safe: reverseAuditEntry restores an UPDATE
-	// column-by-column from before_json keyed on the PK, so omitted (unchanged)
-	// columns are simply left untouched.
-	changedRowJSON := func(prefix string) string {
-		pkSet := make(map[string]bool, len(pks))
-		for _, p := range pks {
-			pkSet[p] = true
-		}
-		removals := make([]string, 0, len(cols))
-		for _, c := range cols {
-			if pkSet[c] {
-				continue
-			}
-			removals = append(removals, fmt.Sprintf(
-				"case when old.%s is new.%s then %s else '$.\"__dope_keep__\"' end",
-				quoteIdent(c), quoteIdent(c), jsonPathLit(c)))
-		}
-		if len(removals) == 0 {
-			return rowJSON(prefix)
-		}
-		return "json_remove(" + rowJSON(prefix) + ", " + strings.Join(removals, ", ") + ")"
-	}
-
-	// z wraps a JSON expression so the trigger stores it DEFLATE-compressed; see
-	// audit_compress.go. Read paths must unwrap with dope_unz(...).
-	z := func(expr string) string { return "dope_z(" + expr + ")" }
-	pkExpr := func(prefix string) string {
-		if len(pks) == 1 {
-			return fmt.Sprintf("cast(%s.%s as text)", prefix, quoteIdent(pks[0]))
-		}
-		parts := make([]string, 0, len(pks))
-		for _, p := range pks {
-			parts = append(parts, fmt.Sprintf("cast(%s.%s as text)", prefix, quoteIdent(p)))
-		}
-		return strings.Join(parts, " || ':' || ")
-	}
-
-	const actorSel = `(select actor_user_id from audit_ctx where id = 1)`
-	const reqSel = `(select request_id from audit_ctx where id = 1)`
-	const festSel = `(select fest_id from audit_ctx where id = 1)`
-	// Skip capture entirely when the current transaction set audit_ctx.suppress
-	// (a bulk import/reseed rebuilding structural rows). INSERT..SELECT..WHERE
-	// makes the whole audit row conditional on the flag.
-	const notSuppressed = `(select suppress from audit_ctx where id = 1) = 0`
-
-	name := fmt.Sprintf("audit_%s_%s", table, op)
-	switch op {
-	case "insert":
-		return fmt.Sprintf(`create trigger %s
-after insert on %s
-begin
-  insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id, fest_id)
-  select '%s', %s, 'INSERT', null, %s, %s, %s, %s where %s;
-end`,
-			name, table,
-			table, pkExpr("new"), z(rowJSON("new")), actorSel, reqSel, festSel, notSuppressed)
-	case "update":
-		return fmt.Sprintf(`create trigger %s
-after update on %s
-begin
-  insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id, fest_id)
-  select '%s', %s, 'UPDATE', %s, %s, %s, %s, %s where %s;
-end`,
-			name, table,
-			table, pkExpr("new"), z(changedRowJSON("old")), z(changedRowJSON("new")), actorSel, reqSel, festSel, notSuppressed)
-	case "delete":
-		return fmt.Sprintf(`create trigger %s
-after delete on %s
-begin
-  insert into audit_log(table_name, row_pk, op, before_json, after_json, actor_user_id, request_id, fest_id)
-  select '%s', %s, 'DELETE', %s, null, %s, %s, %s where %s;
-end`,
-			name, table,
-			table, pkExpr("old"), z(rowJSON("old")), actorSel, reqSel, festSel, notSuppressed)
-	}
-	return ""
 }
 
 func quoteIdent(s string) string {

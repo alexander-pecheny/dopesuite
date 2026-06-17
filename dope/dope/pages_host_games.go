@@ -558,6 +558,11 @@ func (s *server) createHostGame(ctx context.Context, festID int64, gameType stri
 	})); err != nil {
 		return 0, err
 	}
+	// Genesis checkpoint: anchor per-game derived revert at the freshly-created
+	// game so replay always has a checkpoint at or before any future edit.
+	if err := writeGameCheckpoint(ctx, tx, gameID, journalIDForSeqTx(ctx, tx)); err != nil {
+		return 0, err
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}

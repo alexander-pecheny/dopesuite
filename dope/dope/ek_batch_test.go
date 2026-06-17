@@ -103,21 +103,18 @@ func TestBatchMatchUpdateIsAtomic(t *testing.T) {
 	}
 }
 
-// TestScopedMatchUpdateStampsAudit guards the regression where match/stage table
-// edits were committed under a bare context.Background(), so their audit_log rows
-// carried a null fest_id and never showed on the fest-scoped audit/revert page —
-// only meta edits (fest_organizers etc.) did. The edit must record rows stamped
-// with the scope's fest_id and the acting user from the request context.
-func TestScopedMatchUpdateStampsAudit(t *testing.T) {
+// TestScopedMatchUpdateStampsJournal guards that match edits record journal
+// row-ops stamped with the scope's fest_id, the owning game_id, and the acting
+// user from the request context (the regression was edits committed under a bare
+// context.Background(), losing attribution).
+func TestScopedMatchUpdateStampsJournal(t *testing.T) {
 	srv, scope := newBatchTestServer(t)
 
 	var target int64
-	if err := srv.db.QueryRow(`select coalesce(max(id), 0) from audit_log`).Scan(&target); err != nil {
-		t.Fatalf("max audit id: %v", err)
+	if err := srv.db.QueryRow(`select coalesce(max(id), 0) from journal`).Scan(&target); err != nil {
+		t.Fatalf("max journal id: %v", err)
 	}
 
-	// Mimic auditContextMiddleware: the handler's request context carries the
-	// acting user. The fest is stamped from the scope inside the write helper.
 	const actor = int64(77)
 	ctx := withAuditActor(t.Context(), actor)
 	theme, answer := 0, 0
@@ -129,16 +126,17 @@ func TestScopedMatchUpdateStampsAudit(t *testing.T) {
 
 	var rows, mismatched int
 	if err := srv.db.QueryRow(
-		`select count(*), coalesce(sum(case when fest_id is ? and actor_user_id is ? then 0 else 1 end), 0)
-		   from audit_log where id > ?`, scope.FestID, actor, target).
+		`select count(*), coalesce(sum(case when fest_id is ? and game_id is ? and actor_user_id is ? then 0 else 1 end), 0)
+		   from journal where id > ? and op in (?, ?, ?)`,
+		scope.FestID, scope.GameID, actor, target, int(opRowIns), int(opRowSet), int(opRowDel)).
 		Scan(&rows, &mismatched); err != nil {
-		t.Fatalf("scan audit rows: %v", err)
+		t.Fatalf("scan journal rows: %v", err)
 	}
 	if rows == 0 {
-		t.Fatal("match edit recorded no audit_log rows")
+		t.Fatal("match edit recorded no journal row-ops")
 	}
 	if mismatched != 0 {
-		t.Fatalf("%d of %d new audit rows are not stamped with fest_id=%d actor=%d",
-			mismatched, rows, scope.FestID, actor)
+		t.Fatalf("%d of %d new journal rows are not stamped with fest_id=%d game_id=%d actor=%d",
+			mismatched, rows, scope.FestID, scope.GameID, actor)
 	}
 }

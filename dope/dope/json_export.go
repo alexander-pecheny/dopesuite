@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -178,22 +177,12 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).
 	game.State = rawJSONOrNull(stateJSON)
 
 	ctx := r.Context()
-	rows, anchors, err := s.loadGameRelationalRows(ctx, scope.GameID)
+	rows, _, err := s.loadGameRelationalRows(ctx, scope.GameID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	festRow, festContext, err := s.loadGameArchiveContext(ctx, scope.FestID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	// The audit trail can be hundreds of MB once decompressed (the full
-	// state_json is snapshotted before+after on nearly every edit), enough to OOM
-	// a small VPS if buffered. Resolve only the row identities here, then stream
-	// the rows one at a time into the gzip response below. Everything else in the
-	// archive is bounded by fest size.
-	auditIDs, err := s.gameAuditIncludedIDs(ctx, scope, anchors)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -223,31 +212,12 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).
 	gz := gzip.NewWriter(w)
 	defer gz.Close()
 
-	// Splice the streamed "auditLog" array into the head object: write the head
-	// object minus its closing brace, then the array element-by-element, then close.
-	if _, err := gz.Write(headJSON[:len(headJSON)-1]); err != nil {
+	// The archive captures the game's full current state. Edit history is no
+	// longer embedded here (the old before/after audit trail is retired); it now
+	// lives in the per-game journal (see pages_host_journal.go).
+	if _, err := gz.Write(headJSON); err != nil {
 		return
 	}
-	if _, err := io.WriteString(gz, `,"auditLog":[`); err != nil {
-		return
-	}
-	enc := json.NewEncoder(gz)
-	enc.SetEscapeHTML(false)
-	first := true
-	streamErr := s.streamGameAuditTrail(ctx, auditIDs, func(e *gameArchiveAudit) error {
-		if !first {
-			if _, err := io.WriteString(gz, ","); err != nil {
-				return err
-			}
-		}
-		first = false
-		return enc.Encode(e) // trailing newline is harmless whitespace inside the array
-	})
-	if streamErr != nil {
-		// Partial body already flushed; nothing useful to send.
-		return
-	}
-	_, _ = io.WriteString(gz, `]}`)
 }
 
 // marshalNoHTMLEscape JSON-encodes v without escaping <, >, & (matching the
