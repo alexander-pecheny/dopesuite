@@ -213,10 +213,16 @@ func appendJournalTx(ctx context.Context, tx *sql.Tx, festID, seq int64, eventTy
 	if r := requestIDFromContext(ctx); r != "" {
 		req = sql.NullString{String: r, Valid: true}
 	}
+	// Attribute the event to its game (from the scoped request path) so it shows
+	// in the per-game history alongside the row-ops it produced.
+	var gameID sql.NullInt64
+	if g, ok := gameIDFromContext(ctx); ok {
+		gameID = sql.NullInt64{Int64: g, Valid: true}
+	}
 	now := utcNow()
 	_, err := tx.ExecContext(ctx, `
-insert into journal(fest_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
-values(?, ?, ?, ?, ?, ?, ?, ?)`,
-		festID, seq, now, actor, req, int(op), payload, now)
+insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		festID, gameID, seq, now, actor, req, int(op), payload, now)
 	return err
 }

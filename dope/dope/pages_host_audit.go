@@ -17,24 +17,45 @@ type auditGameRow struct {
 }
 
 var festAuditIndexTmpl = template.Must(template.New("fest-audit-index").Parse(`<!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>История изменений</title><link rel="stylesheet" href="/static/styles.css"></head>
-<body><main class="container">
-<h1>История изменений</h1>
-<p>История и откат теперь ведутся отдельно по каждой игре.</p>
-<ul class="list">
-{{range .Games}}
-  <li><a class="list-row" href="/host/fest/{{$.FestID}}/game/{{.ID}}/journal">{{.Title}} <small>({{.Code}})</small></a></li>
-{{else}}
-  <li>в этом фестивале пока нет игр</li>
-{{end}}
-</ul>
-<p><a href="/host/fest/{{.FestID}}">← к фестивалю</a></p>
-</main></body></html>`))
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>История изменений</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+</head>
+<body class="public">
+  <header class="public-top">
+    <a class="public-back" href="/host/fest/{{.FestID}}">←</a>
+    <h1>История изменений</h1>
+  </header>
+  <main class="public-main">
+    <section class="section">
+      <p class="muted">История и откат ведутся отдельно по каждой игре.</p>
+      {{if .Games}}
+      <ul class="list">
+        {{range .Games}}
+        <li class="list-action-row">
+          <a class="list-row" href="/host/fest/{{$.FestID}}/game/{{.ID}}/journal">
+            <span class="list-row-title">{{.Title}}</span>
+            {{if .Code}}<span class="muted">{{.Code}}</span>{{end}}
+          </a>
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="empty">В этом фестивале пока нет игр.</p>
+      {{end}}
+    </section>
+  </main>
+</body>
+</html>`))
 
 func (s *server) renderHostFestAudit(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
 	rows, err := s.db.QueryContext(r.Context(),
-		`select id, code, coalesce(title, '') from games where fest_id = ? order by position, id`, festID)
+		`select id, code, coalesce(title, code) from games where fest_id = ? order by position, id`, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

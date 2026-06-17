@@ -18,7 +18,42 @@ const (
 	auditCtxKeyActor     auditCtxKey = "audit.actor_user_id"
 	auditCtxKeyRequestID auditCtxKey = "audit.request_id"
 	auditCtxKeyFestID    auditCtxKey = "audit.fest_id"
+	auditCtxKeyGameID    auditCtxKey = "audit.game_id"
 )
+
+func withAuditGameID(ctx context.Context, gameID int64) context.Context {
+	if gameID <= 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, auditCtxKeyGameID, gameID)
+}
+
+func gameIDFromContext(ctx context.Context) (int64, bool) {
+	if v, ok := ctx.Value(auditCtxKeyGameID).(int64); ok && v > 0 {
+		return v, true
+	}
+	return 0, false
+}
+
+// auditGameIDFromPath extracts the numeric game id from a scoped API path like
+// /api/fest/{tid}/games/{gid}/... (the live edit endpoints), so semantic event
+// ops can be attributed to their game for the per-game history view.
+func auditGameIDFromPath(path string) int64 {
+	const marker = "/games/"
+	i := strings.Index(path, marker)
+	if i < 0 {
+		return 0
+	}
+	rest := path[i+len(marker):]
+	if j := strings.IndexByte(rest, '/'); j >= 0 {
+		rest = rest[:j]
+	}
+	id, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil || id <= 0 {
+		return 0
+	}
+	return id
+}
 
 func withAuditActor(ctx context.Context, userID int64) context.Context {
 	if userID == 0 {
@@ -75,6 +110,9 @@ func auditDetachedContext(src context.Context, festID int64) (context.Context, c
 		ctx = withAuditFestID(ctx, festID)
 	} else if v, ok := auditFestIDFromContext(src); ok {
 		ctx = withAuditFestID(ctx, v)
+	}
+	if v, ok := gameIDFromContext(src); ok {
+		ctx = withAuditGameID(ctx, v)
 	}
 	return ctx, cancel
 }
@@ -145,6 +183,9 @@ func (s *server) auditContextMiddleware(next http.Handler) http.Handler {
 			}
 			if festID := s.auditFestIDFromPath(r.Context(), r.URL.Path); festID > 0 {
 				ctx = withAuditFestID(ctx, festID)
+			}
+			if gameID := auditGameIDFromPath(r.URL.Path); gameID > 0 {
+				ctx = withAuditGameID(ctx, gameID)
 			}
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
