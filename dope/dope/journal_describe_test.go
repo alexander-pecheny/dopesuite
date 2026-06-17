@@ -18,8 +18,14 @@ func TestDescribeMatchUpdate(t *testing.T) {
 }
 
 func TestDescribeStatePatch(t *testing.T) {
-	lines := describeStatePatch([]byte(`{"ops":[{"op":"set","path":["sheets",0,"rows",2],"value":50}]}`))
-	if len(lines) != 1 || lines[0] != "sheets · 0 · rows · 2 → 50" {
+	// OD/КВРМ answer grid: themes[t].answers[q][team] = mark.
+	lines := describeStatePatch([]byte(`{"ops":[{"op":"set","path":["themes",3,"answers",13,1],"value":"wrong"}]}`))
+	if len(lines) != 1 || lines[0] != "тема 4, вопрос 14, команда 2: неверно" {
 		t.Fatalf("got %#v", lines)
+	}
+	// Non-mark scalar falls back to "path → value".
+	score := describeStatePatch([]byte(`{"ops":[{"op":"set","path":["teams",0,"score"],"value":50}]}`))
+	if score[0] != "команда 1, score → 50" {
+		t.Fatalf("score got %#v", score)
 	}
 }

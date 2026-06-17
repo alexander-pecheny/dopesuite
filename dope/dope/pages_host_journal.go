@@ -261,10 +261,12 @@ func describeStatePatch(payload []byte) []string {
 	var lines []string
 	for _, op := range req.Ops {
 		path := renderPatchPath(op.Path)
-		val := renderPatchValue(op.Value)
-		switch op.Op {
-		case "remove":
-			lines = append(lines, path+": удалено")
+		raw, val := patchValue(op.Value)
+		switch {
+		case op.Op == "remove":
+			lines = append(lines, path+": снято")
+		case isMarkValue(raw):
+			lines = append(lines, path+": "+markLabel(raw)) // "…команда 2: неверно"
 		default:
 			lines = append(lines, path+" → "+val)
 		}
@@ -275,36 +277,89 @@ func describeStatePatch(payload []byte) []string {
 	return lines
 }
 
+// renderPatchPath turns a JSON-pointer path into a domain label. Index segments
+// take their meaning (1-based) from the preceding key: themes→тема,
+// answers/questions→вопрос; a bare trailing index after a question is the team.
 func renderPatchPath(path []json.RawMessage) string {
-	parts := make([]string, 0, len(path))
-	for _, seg := range path {
-		s := strings.TrimSpace(string(seg))
-		s = strings.Trim(s, `"`)
-		if s != "" {
-			parts = append(parts, s)
+	segs := make([]string, len(path))
+	nums := make([]int, len(path))
+	isNum := make([]bool, len(path))
+	for i, seg := range path {
+		s := strings.Trim(strings.TrimSpace(string(seg)), `"`)
+		segs[i] = s
+		if n, err := strconv.Atoi(s); err == nil {
+			nums[i], isNum[i] = n, true
 		}
 	}
-	return strings.Join(parts, " · ")
+	var parts []string
+	sawQuestion := false
+	for i := 0; i < len(segs); i++ {
+		if isNum[i] {
+			// Bare index not consumed by a key below — a team if it trails a question.
+			if sawQuestion {
+				parts = append(parts, fmt.Sprintf("команда %d", nums[i]+1))
+			} else {
+				parts = append(parts, fmt.Sprintf("#%d", nums[i]+1))
+			}
+			continue
+		}
+		label, isQuestion := patchKeyLabel(segs[i])
+		if i+1 < len(segs) && isNum[i+1] {
+			parts = append(parts, fmt.Sprintf("%s %d", label, nums[i+1]+1))
+			if isQuestion {
+				sawQuestion = true
+			}
+			i++
+			continue
+		}
+		parts = append(parts, label)
+	}
+	return strings.Join(parts, ", ")
 }
 
-func renderPatchValue(v json.RawMessage) string {
+// patchKeyLabel maps a state key to a Russian label; the bool marks question-ish
+// keys so a following bare index reads as a team.
+func patchKeyLabel(key string) (label string, question bool) {
+	switch key {
+	case "themes":
+		return "тема", false
+	case "tours":
+		return "тур", false
+	case "answers", "questions":
+		return "вопрос", true
+	case "teams":
+		return "команда", false
+	case "players", "roster":
+		return "игрок", false
+	default:
+		return key, false
+	}
+}
+
+func isMarkValue(raw string) bool {
+	return raw == "right" || raw == "wrong" || raw == ""
+}
+
+// patchValue returns (rawString, display). rawString is the unquoted scalar (for
+// mark detection); display is a short human rendering.
+func patchValue(v json.RawMessage) (raw, display string) {
 	s := strings.TrimSpace(string(v))
-	if s == "" {
-		return "∅"
+	if s == "" || s == "null" {
+		return "", "пусто"
 	}
 	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
 		var str string
 		if json.Unmarshal(v, &str) == nil {
 			if str == "" {
-				return "пусто"
+				return "", "пусто"
 			}
-			return str
+			return str, str
 		}
 	}
 	if len(s) > 60 {
-		return s[:57] + "…"
+		return s, s[:57] + "…"
 	}
-	return s
+	return s, s
 }
 
 func summarizeTables(tables map[string]int) string {
