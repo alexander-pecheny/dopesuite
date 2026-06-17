@@ -81,25 +81,11 @@ func TestScopedGameArchive(t *testing.T) {
 	if archive.Fest == nil {
 		t.Fatalf("archive fest context missing")
 	}
-	// The cell edit must surface in the game-scoped audit trail, including its
-	// cascade-attributed child rows (answers).
-	if len(archive.AuditLog) == 0 {
-		t.Fatalf("archive auditLog is empty after an audited edit")
-	}
-	var sawMatches, sawChild bool
-	for _, e := range archive.AuditLog {
-		if e.TableName == "matches" || e.TableName == "games" {
-			sawMatches = true
-		}
-		if childAuditTables[e.TableName] {
-			sawChild = true
-		}
-	}
-	if !sawMatches {
-		t.Fatalf("auditLog has no directly game-scoped row (matches/games)")
-	}
-	if !sawChild {
-		t.Fatalf("auditLog has no cascade-attributed child row (answers/match_results)")
+	// The edit must surface in the game's relational state (answers carry marks).
+	// The before/after audit trail is retired; edit history now lives in the
+	// per-game journal, not the archive.
+	if len(archive.Rows["answers"]) == 0 {
+		t.Fatalf("archive rows.answers is empty after an edit (rows keys: %v)", keysOf(archive.Rows))
 	}
 }
 

@@ -338,7 +338,11 @@ func openFestDB(path string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	if err := ensureAuditTriggers(db); err != nil {
+	if err := ensureJournalTriggers(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := backfillGameCheckpoints(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -369,6 +373,12 @@ limit 1`)
 
 func migrateDB(db *sql.DB) error {
 	if err := migrateLegacyFestSchema(db); err != nil {
+		return err
+	}
+	// Drop the legacy audit_log AFTER triggers FIRST: later migration steps write
+	// to audited tables (fests/users/organizers), and once audit_log is dropped
+	// below those stale triggers would fail with "no such table: audit_log".
+	if err := dropLegacyAuditTriggers(db); err != nil {
 		return err
 	}
 	_, err := db.Exec(`
@@ -643,13 +653,59 @@ create table if not exists reseed_entries(
   primary key(stage_id, rank)
 );
 
-create table if not exists events(
-  id integer primary key,
-  fest_id integer not null references fests(id) on delete cascade,
-  revision integer not null,
-  type text not null,
-  payload_json text not null,
-  created_at text not null
+-- journal is the single forward edit log: it is BOTH the durable, replayable
+-- record of every mutation AND the source of the events streamed to viewers
+-- (it replaces the old write-only "events" table). Each row is one edit, keyed
+-- by a per-fest monotonic seq (the fest revision at append time). op is a DSL
+-- opcode (see journal_dsl.go) and payload is the compact edit content, which is
+-- also what gets broadcast over SSE. Finished runs are folded into
+-- journal_segment (zstd) by the archiver; the hot table stays small and the log
+-- never expires. See journal_dsl.go / journal_replay.go / journal_archive.go.
+create table if not exists journal(
+  id            integer primary key,
+  fest_id       integer references fests(id) on delete cascade,
+  game_id       integer,
+  seq           integer not null,
+  ts            text not null,
+  actor_user_id integer,
+  request_id    text,
+  op            integer not null,
+  payload       blob not null default x'',
+  created_at    text not null
+);
+create index if not exists journal_fest_seq on journal(fest_id, seq);
+
+-- journal_dict interns table/column names and request-ids to small ids so cold
+-- segments stay compact (also used by the audit_log converter).
+create table if not exists journal_dict(
+  id  integer primary key,
+  str text not null unique
+);
+
+-- journal_segment holds contiguous runs of journal rows folded into one
+-- zstd-compressed DSL stream by the archiver. Append-only; never pruned.
+create table if not exists journal_segment(
+  id          integer primary key,
+  fest_id     integer not null,
+  seq_start   integer not null,
+  seq_end     integer not null,
+  dsl_version integer not null,
+  n_records   integer not null,
+  blob        blob not null,
+  created_at  text not null
+);
+
+-- journal_checkpoint stores sparse full-state snapshots of a single GAME so
+-- replay/revert never has to start from the literal beginning. Revert is
+-- per-game (games are independent units); the checkpoint at a game's first seq
+-- is its genesis. seq is the fest revision at capture time.
+create table if not exists journal_checkpoint(
+  game_id     integer not null,
+  seq         integer not null,
+  state_blob  blob not null,
+  dsl_version integer not null,
+  created_at  text not null,
+  primary key(game_id, seq)
 );
 
 create trigger if not exists team_players_max_9
@@ -684,6 +740,58 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 		{Name: "is_public", Type: "INTEGER NOT NULL DEFAULT 0"},
 	}); err != nil {
 		return err
+	}
+	// The old write-only "events" table is superseded by "journal" (created
+	// above). Nothing ever read events back, so it is dropped outright rather
+	// than migrated.
+	if _, err := db.Exec(`drop table if exists events`); err != nil {
+		return err
+	}
+	// The legacy before/after-snapshot audit_log + its support table are retired;
+	// the forward journal (with row-op triggers + per-game checkpoints) is now the
+	// durable edit log. Existing audit_log data can be archived first with the
+	// `convert-audit` subcommand; here we drop it so it stops consuming space.
+	if _, err := db.Exec(`drop table if exists audit_log`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`drop table if exists audit_trigger_state`); err != nil {
+		return err
+	}
+	// Early-adopter journal tables (created before per-game scoping) miss the
+	// game_id column / use the old per-fest checkpoint key. CREATE IF NOT EXISTS
+	// won't alter them, so reconcile here. The journal hot rows are preserved
+	// (game_id backfills as NULL for old semantic-event rows); the checkpoint
+	// cache is rebuilt by backfillGameCheckpoints, so dropping a stale-shaped one
+	// is safe.
+	if err := addColumnsIfMissing(db, "journal", []columnSpec{{Name: "game_id", Type: "integer"}}); err != nil {
+		return err
+	}
+	// Created after the game_id column exists (it indexes that column), so it
+	// can't run inside the CREATE block above on an early-adopter journal.
+	if _, err := db.Exec(`create index if not exists journal_game_seq on journal(game_id, seq)`); err != nil {
+		return err
+	}
+	// Backfill game_id on semantic event rows recorded before they were
+	// attributed, borrowing it from a row-op of the same request — so the
+	// per-game history shows those earlier edits with descriptions. Idempotent.
+	if _, err := db.Exec(`
+update journal set game_id = (
+  select j2.game_id from journal j2
+  where j2.request_id = journal.request_id and j2.game_id is not null limit 1)
+where game_id is null and request_id is not null
+  and exists (select 1 from journal j3
+    where j3.request_id = journal.request_id and j3.game_id is not null)`); err != nil {
+		return err
+	}
+	if !columnExists(db, "journal_checkpoint", "game_id") {
+		if _, err := db.Exec(`drop table if exists journal_checkpoint`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`create table if not exists journal_checkpoint(
+  game_id integer not null, seq integer not null, state_blob blob not null,
+  dsl_version integer not null, created_at text not null, primary key(game_id, seq))`); err != nil {
+			return err
+		}
 	}
 	if err := migrateFestOrganizerRoles(db); err != nil {
 		return err
@@ -1330,6 +1438,26 @@ func verifyForeignKeys(db *sql.DB) error {
 type columnSpec struct {
 	Name string
 	Type string
+}
+
+// columnExists reports whether a table has a column (false if the table is
+// absent). Used to decide whether an early-adopter table needs reshaping.
+func columnExists(db *sql.DB, table, column string) bool {
+	rows, err := db.Query(`select name from pragma_table_info(?)`, table)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return false
+		}
+		if name == column {
+			return true
+		}
+	}
+	return false
 }
 
 func addColumnsIfMissing(db *sql.DB, table string, columns []columnSpec) error {
@@ -2047,9 +2175,7 @@ values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableIn
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-insert into events(fest_id, revision, type, payload_json, created_at)
-values(?, 1, 'import', ?, ?)`, festID, string(schemaJSON), now); err != nil {
+	if err := appendJournalTx(ctx, tx, festID, 1, "import", schemaJSON); err != nil {
 		return FestView{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -2240,11 +2366,11 @@ values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableIn
 }
 
 // clearFestImportData drops all per-fest rows that an import would
-// recreate (games, stages, matches, venues, teams, players, events). The
+// recreate (games, stages, matches, venues, teams, players, journal). The
 // fest row and its organizers stay.
 func clearFestImportData(ctx context.Context, tx *sql.Tx, festID int64) error {
 	statements := []string{
-		`delete from events where fest_id = ?`,
+		`delete from journal where fest_id = ?`,
 		`delete from games where fest_id = ?`,
 		`delete from team_players where team_id in (select id from teams where fest_id = ?)`,
 		`delete from teams where fest_id = ?`,
@@ -2345,7 +2471,7 @@ func validateScheme(scheme festScheme) error {
 // schema_versions are intentionally untouched.
 func clearImportedData(ctx context.Context, tx *sql.Tx) error {
 	tables := []string{
-		"events",
+		"journal",
 		"reseed_entries",
 		"match_results",
 		"answers",
@@ -3404,10 +3530,10 @@ func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, festID, matchID int64,
 	if err := tx.QueryRowContext(ctx, `select revision from fests where id = ?`, festID).Scan(&revision); err != nil {
 		return 0, err
 	}
-	_, err := tx.ExecContext(ctx, `
-insert into events(fest_id, revision, type, payload_json, created_at)
-values(?, ?, ?, ?, ?)`, festID, revision, eventType, payload, now)
-	return revision, err
+	if err := appendJournalTx(ctx, tx, festID, revision, eventType, []byte(payload)); err != nil {
+		return 0, err
+	}
+	return revision, nil
 }
 
 func (s *server) updateMatchVenue(festID int64, code string, number int) (MatchView, []byte, error) {
@@ -3581,10 +3707,10 @@ func bumpFestRevisionTx(ctx context.Context, tx *sql.Tx, festID int64, eventType
 	if err := tx.QueryRowContext(ctx, `select revision from fests where id = ?`, festID).Scan(&revision); err != nil {
 		return 0, err
 	}
-	_, err := tx.ExecContext(ctx, `
-insert into events(fest_id, revision, type, payload_json, created_at)
-values(?, ?, ?, ?, ?)`, festID, revision, eventType, payload, now)
-	return revision, err
+	if err := appendJournalTx(ctx, tx, festID, revision, eventType, []byte(payload)); err != nil {
+		return 0, err
+	}
+	return revision, nil
 }
 
 // broadcastState fans out a full-state SNAPSHOT for a scope (initial load,

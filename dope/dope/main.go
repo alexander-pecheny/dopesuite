@@ -247,16 +247,12 @@ func main() {
 		runResolveBracket(os.Args[2:])
 		return
 	}
-	if len(os.Args) > 1 && os.Args[1] == "compact-audit" {
-		runCompactAudit(os.Args[2:])
-		return
-	}
 	if len(os.Args) > 1 && os.Args[1] == "import-ek-results" {
 		runEKImport(os.Args[2:])
 		return
 	}
-	if len(os.Args) > 1 && os.Args[1] == "revert-fest" {
-		runRevertFest(os.Args[2:])
+	if len(os.Args) > 1 && os.Args[1] == "convert-audit" {
+		runConvertAudit(os.Args[2:])
 		return
 	}
 
@@ -344,9 +340,9 @@ func main() {
 	// optional localhost-only control endpoint. See static_mode.go.
 	srv.initStaticMode()
 
-	// Audit-log retention sweep: bounds audit_log by age and on-disk size so it
-	// can't fill the disk. See audit_prune.go.
-	srv.initAuditPrune()
+	// Journal archiver: periodically folds settled hot journal rows into
+	// compact, never-expiring cold segments. See journal_archive.go.
+	srv.initJournalArchive()
 
 	// Edit-path instrumentation (off unless DOPE_EDIT_METRICS is set). See
 	// edit_metrics.go.
