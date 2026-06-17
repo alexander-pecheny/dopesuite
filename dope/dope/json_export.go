@@ -450,7 +450,6 @@ order by a.id`, args...)
 	return nil
 }
 
-
 // rawJSONOrNull returns s as raw JSON when it is non-empty, else JSON null, so
 // the archive embeds parsed objects instead of escaped strings.
 func rawJSONOrNull(s string) json.RawMessage {

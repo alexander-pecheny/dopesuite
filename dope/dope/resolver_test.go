@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -121,15 +123,34 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		t.Fatalf("resolved 1/4 team has %d regular themes, want %d", got, themeCount)
 	}
 
-	// Reopening the 1/16 invalidates the calculated reseed and everything
-	// downstream again.
+	// Reopening the 1/16 to edit it is NON-DESTRUCTIVE: the calculated reseed is
+	// held (not wiped), and the downstream 1/4 keeps its resolved teams and their
+	// protocol data — so an untick→edit→retick loses nothing. The reseed merely
+	// reports "not ready" (recomputed live) until the source is finished again.
 	finish("A", false)
-	if n := reseedEntryCount(t, db, gameID, "rs"); n != 0 {
-		t.Fatalf("reseed entries after reopening 1/16 = %d, want 0", n)
+	if n := reseedEntryCount(t, db, gameID, "rs"); n != 4 {
+		t.Fatalf("reseed entries held after reopening 1/16 = %d, want 4 (non-destructive)", n)
 	}
-	assertReseedState(t, loadReseedStageView(t, srv, festID, gameID, "rs"), false, []string{"A", "B"}, "Бои A, B не закончены")
-	if teams := slotTeams(t, db, gameID, "C"); !allZero(teams) {
-		t.Fatalf("1/4 slots still resolved after reopening 1/16: %v", teams)
+	// Only A is unfinished now (B stays finished and untouched — the old
+	// destructive cascade used to disturb B's branch too, reporting [A, B]).
+	assertReseedState(t, loadReseedStageView(t, srv, festID, gameID, "rs"), false, []string{"A"}, "Бой A не закончен")
+	if teams := slotTeams(t, db, gameID, "C"); allZero(teams) {
+		t.Fatalf("1/4 slots wrongly cleared after reopening 1/16: %v", teams)
+	}
+	if got := regularThemeCount(t, db, gameID, "C", cTeams[0]); got != themeCount {
+		t.Fatalf("downstream themes deleted after reopening 1/16: %d, want %d (non-destructive)", got, themeCount)
+	}
+
+	// Re-finishing restores the identical downstream state — a true no-op.
+	finish("A", true)
+	if n := reseedEntryCount(t, db, gameID, "rs"); n != 4 {
+		t.Fatalf("reseed entries after re-finishing 1/16 = %d, want 4", n)
+	}
+	reTeams := slotTeams(t, db, gameID, "C")
+	for i := range cTeams {
+		if reTeams[i] != cTeams[i] {
+			t.Fatalf("1/4 slot %d changed across untick/retick: %d != %d", i, reTeams[i], cTeams[i])
+		}
 	}
 }
 
@@ -209,9 +230,9 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 	}
 }
 
-// TestAssignDrawLots covers the Жребий lottery: only true ties draw lots, the
-// lots are distinct, and they persist across recomputes while untied teams stay
-// at draw 0.
+// TestAssignDrawLots covers the deterministic Жребий lottery: only true ties draw
+// lots, each team's lot is a stable function of the game seed, and recomputing
+// (in any input order) yields identical lots and order. Untied teams stay at 0.
 func TestAssignDrawLots(t *testing.T) {
 	rules := []reseedSortRule{
 		{Metric: "place_sum", Dir: "asc"},
@@ -221,11 +242,12 @@ func TestAssignDrawLots(t *testing.T) {
 	mk := func(team int64, place, total float64) reseedEntry {
 		return reseedEntry{teamID: team, metrics: map[string]float64{"place_sum": place, "total": total}}
 	}
+	const seed = "seed-abc123"
 	// Teams 1,2,3 tie completely; team 4 stands alone.
 	entries := []reseedEntry{mk(1, 3, 100), mk(2, 3, 100), mk(3, 3, 100), mk(4, 3, 90)}
 
 	sortReseedEntries(entries, rules)
-	assignDrawLots(entries, rules, map[int64]float64{})
+	assignDrawLots(entries, rules, seed)
 	sortReseedEntries(entries, rules)
 
 	draws := map[int64]float64{}
@@ -235,22 +257,20 @@ func TestAssignDrawLots(t *testing.T) {
 	if draws[4] != 0 {
 		t.Fatalf("untied team 4 got a lot %v, want 0", draws[4])
 	}
-	seen := map[float64]bool{}
 	for _, team := range []int64{1, 2, 3} {
-		lot := draws[team]
-		if lot == 0 {
+		if draws[team] == 0 {
 			t.Fatalf("tied team %d got no lot", team)
 		}
-		if seen[lot] {
-			t.Fatalf("tied teams share lot %v", lot)
+		if want := float64(deterministicLot(seed, team)); draws[team] != want {
+			t.Fatalf("team %d lot %v, want deterministic %v", team, draws[team], want)
 		}
-		seen[lot] = true
 	}
 
-	// Recompute with the prior lots persisted: order and lots must be unchanged.
+	// Recompute in a different input order with the SAME seed: order and lots must
+	// be byte-identical (this is what makes untick/retick a no-op for reseed).
 	next := []reseedEntry{mk(3, 3, 100), mk(1, 3, 100), mk(2, 3, 100), mk(4, 3, 90)}
 	sortReseedEntries(next, rules)
-	assignDrawLots(next, rules, draws)
+	assignDrawLots(next, rules, seed)
 	sortReseedEntries(next, rules)
 	for idx, e := range next {
 		if e.metrics["draw"] != draws[e.teamID] {
@@ -259,6 +279,20 @@ func TestAssignDrawLots(t *testing.T) {
 		if e.teamID != entries[idx].teamID {
 			t.Fatalf("order changed across recompute at %d: %d != %d", idx, e.teamID, entries[idx].teamID)
 		}
+	}
+
+	// A different seed produces a different lottery (so the seed actually matters).
+	other := []reseedEntry{mk(1, 3, 100), mk(2, 3, 100), mk(3, 3, 100)}
+	assignDrawLots(other, rules, "seed-xyz789")
+	allSame := true
+	for _, e := range other {
+		if e.metrics["draw"] != draws[e.teamID] {
+			allSame = false
+			break
+		}
+	}
+	if allSame {
+		t.Fatalf("different seed produced identical lots — seed not influencing lottery")
 	}
 }
 
@@ -378,6 +412,99 @@ where m.game_id = ? and m.code = ? and th.team_id = ? and th.kind = 'regular'`,
 		t.Fatalf("count themes: %v", err)
 	}
 	return count
+}
+
+// matchAnswerSnapshot returns a stable, comparable dump of every answer mark in a
+// match (joined through its themes), so a test can assert protocol data is
+// byte-identical before and after an operation.
+func matchAnswerSnapshot(t *testing.T, db *sql.DB, gameID int64, matchCode string) string {
+	t.Helper()
+	rows, err := db.QueryContext(context.Background(), `
+select th.team_id, th.kind, th.theme_index, a.answer_index, a.mark
+from answers a
+join themes th on th.id = a.theme_id
+join matches m on m.id = th.match_id
+where m.game_id = ? and m.code = ?
+order by th.team_id, th.kind, th.theme_index, a.answer_index`, gameID, matchCode)
+	if err != nil {
+		t.Fatalf("snapshot answers: %v", err)
+	}
+	defer rows.Close()
+	var b strings.Builder
+	for rows.Next() {
+		var team int64
+		var kind, mark string
+		var ti, ai int
+		if err := rows.Scan(&team, &kind, &ti, &ai, &mark); err != nil {
+			t.Fatalf("scan answer: %v", err)
+		}
+		fmt.Fprintf(&b, "%d/%s/%d/%d=%q\n", team, kind, ti, ai, mark)
+	}
+	return b.String()
+}
+
+// TestUntickEditRetickPreservesDownstream is the headline guarantee: with a
+// finished bracket, unticking an upstream bout to edit a score and re-ticking it
+// (without an explicit reseed recalculation — exactly the operator workflow that
+// triggered the original data loss) leaves every downstream bout's protocol data
+// untouched.
+func TestUntickEditRetickPreservesDownstream(t *testing.T) {
+	db, err := openFestDB(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	festID, gameID := createBracketFixture(t, db)
+	srv := &server{
+		db:              db,
+		subscribers:     make(map[int64]map[chan event]bool),
+		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+	}
+	scopeBase := festScope{FestID: festID, GameID: gameID}
+	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
+		t.Fatalf("import seeds: %v", err)
+	}
+
+	apply := func(code string, req updateRequest) {
+		t.Helper()
+		scope, err := srv.verifyMatchInScope(t.Context(), scopeBase, code)
+		if err != nil {
+			t.Fatalf("scope %s: %v", code, err)
+		}
+		if _, _, _, _, err := srv.applyScopedMatchUpdate(t.Context(), scope, []updateRequest{req}); err != nil {
+			t.Fatalf("apply %s: %v", code, err)
+		}
+	}
+	tr, fa := true, false
+	theme, ans, right, wrong := 0, 4, "right", "wrong"
+
+	// Finish both source bouts and calculate the reseed so the 1/4 (C) resolves.
+	apply("A", updateRequest{Team: 0, Theme: &theme, Answer: &ans, Mark: &right})
+	apply("A", updateRequest{Finished: &tr})
+	apply("B", updateRequest{Team: 0, Theme: &theme, Answer: &ans, Mark: &right})
+	apply("B", updateRequest{Finished: &tr})
+	if _, _, _, err := srv.calculateScopedReseed(t.Context(), scopeBase, "rs"); err != nil {
+		t.Fatalf("calculate reseed: %v", err)
+	}
+
+	// Enter protocol data into the downstream 1/4 bout C, then snapshot it.
+	apply("C", updateRequest{Team: 0, Theme: &theme, Answer: &ans, Mark: &right})
+	apply("C", updateRequest{Finished: &tr})
+	before := matchAnswerSnapshot(t, db, gameID, "C")
+	if before == "" {
+		t.Fatal("no downstream protocol data captured for C")
+	}
+
+	// The operator workflow: untick A, edit a score, re-tick A — no recalculation.
+	apply("A", updateRequest{Finished: &fa})
+	apply("A", updateRequest{Team: 1, Theme: &theme, Answer: &ans, Mark: &wrong})
+	apply("A", updateRequest{Finished: &tr})
+
+	after := matchAnswerSnapshot(t, db, gameID, "C")
+	if before != after {
+		t.Fatalf("downstream protocol data changed across untick/edit/retick:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
 }
 
 // createBracketFixture builds a fest with a KSI game (for seeding) and an EK

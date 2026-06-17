@@ -814,6 +814,40 @@ insert or ignore into schema_versions(version, applied_at) values(11, strftime('
 			return err
 		}
 	}
+	// v15: give each game a fixed random_seed. Reseed lots (Жребий) are now
+	// derived deterministically from this seed, so a reseed recomputes identically
+	// every time and an untick/retick (or any unrelated edit) can never reshuffle a
+	// tie. Backfill a distinct random seed for every existing game exactly once;
+	// new games get one at creation.
+	if err := addColumnsIfMissing(db, "games", []columnSpec{
+		{Name: "random_seed", Type: "TEXT NOT NULL DEFAULT ''"},
+	}); err != nil {
+		return err
+	}
+	// Seed every newly-created game once, regardless of which insert path made it
+	// (SQLite disallows a non-constant column default like randomblob, so a trigger
+	// fills it). The update doesn't re-fire this AFTER INSERT trigger, so no loop.
+	if _, err := db.Exec(`
+create trigger if not exists games_random_seed_default
+after insert on games
+when new.random_seed = ''
+begin
+  update games set random_seed = lower(hex(randomblob(16))) where id = new.id;
+end`); err != nil {
+		return err
+	}
+	var hasV15 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 15`).Scan(&hasV15); err != nil {
+		return err
+	}
+	if hasV15 == 0 {
+		if _, err := db.Exec(`update games set random_seed = lower(hex(randomblob(16))) where random_seed = ''`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(15, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
