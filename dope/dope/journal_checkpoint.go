@@ -182,6 +182,16 @@ func restoreGameCheckpoint(ctx context.Context, tx *sql.Tx, gameID int64, cp *ga
 // installed.
 func backfillGameCheckpoints(db *sql.DB) error {
 	ctx := context.Background()
+	// Genesis = current state at the current journal high-water mark. Keying the
+	// checkpoint at max(journal.id) (not 0) means any converted pre-genesis
+	// history has a lower seq, so revert-to-a-historical-point finds no
+	// checkpoint at-or-before it and declines rather than replaying historical
+	// row-ops onto the current state (which would corrupt it). New edits get
+	// higher ids and revert normally.
+	var hwm int64
+	if err := db.QueryRowContext(ctx, `select coalesce(max(id), 0) from journal`).Scan(&hwm); err != nil {
+		return err
+	}
 	rows, err := db.QueryContext(ctx, `
 select id from games where id not in (select game_id from journal_checkpoint)`)
 	if err != nil {
@@ -205,7 +215,7 @@ select id from games where id not in (select game_id from journal_checkpoint)`)
 		if err != nil {
 			return err
 		}
-		if err := writeGameCheckpoint(ctx, tx, id, 0); err != nil {
+		if err := writeGameCheckpoint(ctx, tx, id, hwm); err != nil {
 			_ = tx.Rollback()
 			return err
 		}
