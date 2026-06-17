@@ -1,31 +1,51 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
-func TestDescribeMatchUpdate(t *testing.T) {
-	lines := describeMatchUpdate([]byte(`[{"team":2,"theme":0,"answer":4,"mark":"right"}]`))
-	if len(lines) != 1 || lines[0] != "тема 1, вопрос 5, команда 3: верно" {
-		t.Fatalf("got %#v", lines)
+func mkPatchOp(t *testing.T, pathJSON, valueJSON string) gameStatePatchOp {
+	t.Helper()
+	var p []json.RawMessage
+	if err := json.Unmarshal([]byte(pathJSON), &p); err != nil {
+		t.Fatalf("bad path: %v", err)
 	}
-	fin := describeMatchUpdate([]byte(`[{"team":0,"finished":true}]`))
-	if len(fin) != 1 || fin[0] != "матч завершён" {
-		t.Fatalf("finish got %#v", fin)
+	return gameStatePatchOp{Op: "set", Path: p, Value: json.RawMessage(valueJSON)}
+}
+
+// KSI state shape: themes[t].answers[participant][question] = mark. The
+// participant index resolves to a name for display.
+func TestKSIPatchLineResolvesParticipant(t *testing.T) {
+	r := &nameResolver{gameType: "ksi", names: []string{"Аня", "Боря", "Витя"}}
+	got := r.ksiPatchLine(mkPatchOp(t, `["themes",3,"answers",1,2]`, `"wrong"`))
+	if got != "тема 4, Боря, вопрос 3: неверно" {
+		t.Fatalf("got %q", got)
 	}
-	pl := describeMatchUpdate([]byte(`[{"team":1,"place":2}]`))
-	if pl[0] != "команда 2: место 2" {
-		t.Fatalf("place got %#v", pl)
+	// Unknown participant falls back to a number.
+	got2 := r.ksiPatchLine(mkPatchOp(t, `["themes",0,"answers",9,0]`, `"right"`))
+	if got2 != "тема 1, участник 10, вопрос 1: верно" {
+		t.Fatalf("got %q", got2)
 	}
 }
 
-func TestDescribeStatePatch(t *testing.T) {
-	// OD/КВРМ answer grid: themes[t].answers[q][team] = mark.
-	lines := describeStatePatch([]byte(`{"ops":[{"op":"set","path":["themes",3,"answers",13,1],"value":"wrong"}]}`))
-	if len(lines) != 1 || lines[0] != "тема 4, вопрос 14, команда 2: неверно" {
-		t.Fatalf("got %#v", lines)
+// OD state shape: entries[question][teamRow] = value. The team row resolves to
+// a team name.
+func TestODPatchLineResolvesTeam(t *testing.T) {
+	r := &nameResolver{gameType: "od", names: []string{"Кратон", "Дятлы"}}
+	got := r.odPatchLine(mkPatchOp(t, `["entries",5,1]`, `"+50"`))
+	if got != "Дятлы, вопрос 6 → +50" {
+		t.Fatalf("got %q", got)
 	}
-	// Non-mark scalar falls back to "path → value".
-	score := describeStatePatch([]byte(`{"ops":[{"op":"set","path":["teams",0,"score"],"value":50}]}`))
-	if score[0] != "команда 1, score → 50" {
-		t.Fatalf("score got %#v", score)
+}
+
+func TestParticipantNamesFromState(t *testing.T) {
+	ksi := ksiParticipantNames(`{"participants":["Аня",{"name":"Боря"},""]}`)
+	if len(ksi) != 3 || ksi[0] != "Аня" || ksi[1] != "Боря" {
+		t.Fatalf("ksi names %#v", ksi)
+	}
+	od := odTeamNames(`{"teams":[{"name":"Кратон"},{"name":"Дятлы"}]}`)
+	if len(od) != 2 || od[1] != "Дятлы" {
+		t.Fatalf("od names %#v", od)
 	}
 }

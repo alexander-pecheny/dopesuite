@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -10,13 +11,19 @@ import (
 )
 
 // The per-game journal page lists a game's edits newest-first, each rendered as
-// a human-readable description of what changed (parsed from the semantic event
-// payload — answer marks, places, state-patch cells, …), with a "revert to
-// before here" action driving the per-game derived revert (checkpoint + replay).
-// Edits are grouped into the request that produced them so one host action is
-// one row.
+// a human-readable description of what changed, with a "revert to before here"
+// action driving the per-game derived revert (checkpoint + replay). Edits are
+// grouped into the request that produced them so one host action is one row.
+//
+// Descriptions resolve indices to NAMES for display only (the journal itself
+// stays index-based). The source differs by game type: KSI/OD read the state
+// patch + participant/team names from the game's state_json; EK reads the row
+// deltas and resolves the real team / match / theme from the DB.
 
-const journalPageGroups = 200
+const (
+	journalPageGroups = 200
+	journalMaxLines   = 16
+)
 
 type journalChange struct {
 	When     string
@@ -26,27 +33,32 @@ type journalChange struct {
 	RevertTo int64
 }
 
-const journalMaxLines = 16
+type journalOpRow struct {
+	op      journalOp
+	payload []byte
+}
 
-func (s *server) loadGameJournalGroups(gameID int64) ([]journalChange, error) {
-	rows, err := s.db.Query(`
+func (s *server) loadGameJournalGroups(ctx context.Context, gameID int64) ([]journalChange, error) {
+	var gameType, stateJSON string
+	_ = s.db.QueryRowContext(ctx, `select game_type, coalesce(state_json, '{}') from games where id = ?`, gameID).
+		Scan(&gameType, &stateJSON)
+
+	rows, err := s.db.QueryContext(ctx, `
 select j.id, j.ts, j.op, j.payload, coalesce(j.request_id, ''), coalesce(u.username, '')
 from journal j
 left join users u on u.id = j.actor_user_id
 where j.game_id = ?
-order by j.id desc
-limit 20000`, gameID)
+order by j.id`, gameID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	type acc struct {
-		minID  int64
-		when   string
-		actor  string
-		lines  []string
-		tables map[string]int
+		minID int64
+		when  string
+		actor string
+		ops   []journalOpRow
 	}
 	order := []string{}
 	groups := map[string]*acc{}
@@ -68,38 +80,39 @@ limit 20000`, gameID)
 		}
 		g := groups[key]
 		if g == nil {
-			g = &acc{minID: id, when: ts, actor: actor, tables: map[string]int{}}
+			g = &acc{minID: id}
 			groups[key] = g
 			order = append(order, key)
 		}
 		if id < g.minID {
 			g.minID = id
 		}
-		if actor != "" && g.actor == "" {
+		g.when = ts // ascending scan → last seen is the latest in the group
+		if actor != "" {
 			g.actor = actor
 		}
-		jop := journalOp(op)
-		if jop >= opEvImport {
-			g.lines = append(g.lines, describeEvent(jop, payload)...)
-		} else {
-			// Row-op: fall back to a table tally if no semantic line is present.
-			if table, _, err := decodeRowOpJSON(payload); err == nil {
-				g.tables[table]++
-			}
-		}
+		g.ops = append(g.ops, journalOpRow{op: journalOp(op), payload: append([]byte(nil), payload...)})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
+	res := s.newNameResolver(ctx, gameType, stateJSON)
+	if gameType == "ek" {
+		allOps := make([][]journalOpRow, 0, len(groups))
+		for _, g := range groups {
+			allOps = append(allOps, g.ops)
+		}
+		res.prepareEK(ctx, s.db, allOps)
+	}
+
 	out := make([]journalChange, 0, len(order))
-	for _, key := range order {
-		g := groups[key]
-		lines := g.lines
-		if len(lines) == 0 { // no semantic event — summarize the touched tables
-			if s := summarizeTables(g.tables); s != "" {
-				lines = []string{s}
-			}
+	// Newest-first: iterate the ascending-built order in reverse.
+	for i := len(order) - 1; i >= 0; i-- {
+		g := groups[order[i]]
+		lines := res.describeGroup(g.ops)
+		if len(lines) == 0 {
+			continue
 		}
 		more := 0
 		if len(lines) > journalMaxLines {
@@ -120,228 +133,382 @@ limit 20000`, gameID)
 	return out, nil
 }
 
-// formatJournalTime renders the stored ISO-8601 UTC timestamp compactly as
-// "YYYY-MM-DD HH:MM:SS", dropping the millisecond/zone noise.
-func formatJournalTime(ts string) string {
-	s := strings.Replace(ts, "T", " ", 1)
-	if i := strings.IndexAny(s, ".Z"); i >= 0 {
-		s = s[:i]
-	}
-	return s
+// --- name resolver ----------------------------------------------------------
+
+type ekCell struct {
+	match    string
+	team     string
+	theme    int
+	question int
+	ok       bool
 }
 
-// --- payload → human description --------------------------------------------
+type nameResolver struct {
+	gameType      string
+	names         []string         // KSI participants / OD team names by index
+	ekAnswer      map[int64]ekCell // answer id -> resolved cell
+	ekAnswerTeam  map[int64]int64  // answer id -> team_id (pre-name-resolution)
+	ekAnswerMatch map[int64]int64  // answer id -> match_id
+	ekTeam        map[int64]string // team_id -> name
+	ekMatch       map[int64]string // match_id -> code
+}
 
-func describeEvent(op journalOp, payload []byte) []string {
-	switch op {
-	case opEvMatchUpdate:
-		return describeMatchUpdate(payload)
-	case opEvGameStatePatch:
-		return describeStatePatch(payload)
-	case opEvGameState:
-		return []string{"состояние игры заменено целиком"}
-	case opEvMatchVenue:
-		return []string{"изменена площадка матча"}
-	case opEvVenuesUpdate:
-		return []string{"переименована площадка"}
-	case opEvFestNumbers:
-		return []string{"изменены номера команд"}
-	case opEvReseedCalculate:
-		return []string{"пересчёт посева этапа"}
-	case opEvRatingImport:
-		return []string{"импорт ростера из rating.chgk.info"}
-	case opEvSeedImportKSI:
-		return []string{"импорт посева из КСИ"}
-	case opEvSeedImportDecline:
-		return []string{"отказ команды от посева"}
-	case opEvGameCreate:
-		return []string{"игра создана"}
-	case opEvGameClear:
-		return []string{"игра очищена"}
-	case opEvGameDelete:
-		return []string{"игра удалена"}
-	case opEvPlayerOverride, opEvPlayerOverrideEdit:
-		return []string{"переопределение игрока в составе"}
-	case opEvFestAccess:
-		return []string{"изменение доступа"}
-	case opEvImport:
-		return []string{"импорт схемы"}
-	case opEvGameRevert:
-		return []string{"откат игры к более раннему состоянию"}
+func (s *server) newNameResolver(ctx context.Context, gameType, stateJSON string) *nameResolver {
+	r := &nameResolver{gameType: gameType}
+	switch gameType {
+	case "ksi":
+		r.names = ksiParticipantNames(stateJSON)
+	case "od":
+		r.names = odTeamNames(stateJSON)
+	case "ek":
+		r.ekAnswer = map[int64]ekCell{}
+		r.ekAnswerTeam = map[int64]int64{}
+		r.ekAnswerMatch = map[int64]int64{}
+		r.ekTeam = map[int64]string{}
+		r.ekMatch = map[int64]string{}
+	}
+	return r
+}
+
+func (r *nameResolver) name(i int) string {
+	if i >= 0 && i < len(r.names) && strings.TrimSpace(r.names[i]) != "" {
+		return strings.TrimSpace(r.names[i])
+	}
+	return ""
+}
+
+func ksiParticipantNames(stateJSON string) []string {
+	var st struct {
+		Participants []json.RawMessage `json:"participants"`
+	}
+	_ = json.Unmarshal([]byte(stateJSON), &st)
+	out := make([]string, 0, len(st.Participants))
+	for _, raw := range st.Participants {
+		s := strings.TrimSpace(string(raw))
+		if len(s) >= 2 && s[0] == '"' {
+			var name string
+			if json.Unmarshal(raw, &name) == nil {
+				out = append(out, name)
+				continue
+			}
+		}
+		var obj struct {
+			Name string `json:"name"`
+		}
+		if json.Unmarshal(raw, &obj) == nil {
+			out = append(out, obj.Name)
+		} else {
+			out = append(out, "")
+		}
+	}
+	return out
+}
+
+func odTeamNames(stateJSON string) []string {
+	var st struct {
+		Teams []struct {
+			Name string `json:"name"`
+		} `json:"teams"`
+	}
+	_ = json.Unmarshal([]byte(stateJSON), &st)
+	out := make([]string, len(st.Teams))
+	for i, t := range st.Teams {
+		out[i] = t.Name
+	}
+	return out
+}
+
+// prepareEK batch-resolves the answer / team / match identities referenced by a
+// game's row-ops, so EK descriptions can show real names without per-row queries.
+func (r *nameResolver) prepareEK(ctx context.Context, db rowQuerier, allOps [][]journalOpRow) {
+	answerIDs := map[int64]bool{}
+	teamIDs := map[int64]bool{}
+	matchIDs := map[int64]bool{}
+	for _, ops := range allOps {
+		for _, o := range ops {
+			if o.op > opRowDel {
+				continue
+			}
+			table, row, err := decodeRowOpJSON(o.payload)
+			if err != nil {
+				continue
+			}
+			switch table {
+			case "answers":
+				if id, ok := rowInt(row, "id"); ok {
+					answerIDs[id] = true
+				}
+			case "match_results":
+				if id, ok := rowInt(row, "team_id"); ok {
+					teamIDs[id] = true
+				}
+				if id, ok := rowInt(row, "match_id"); ok {
+					matchIDs[id] = true
+				}
+			case "matches":
+				if id, ok := rowInt(row, "id"); ok {
+					matchIDs[id] = true
+				}
+			}
+		}
+	}
+	// answers -> theme/team/match/indices
+	for _, batch := range chunkIDs(keysOfInt(answerIDs), 400) {
+		rows, err := db.QueryContext(ctx, `
+select a.id, t.team_id, t.theme_index, a.answer_index, t.match_id
+from answers a join themes t on a.theme_id = t.id
+where a.id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
+		if err != nil {
+			continue
+		}
+		for rows.Next() {
+			var aid, teamID, matchID int64
+			var theme, question int
+			if rows.Scan(&aid, &teamID, &theme, &question, &matchID) == nil {
+				r.ekAnswer[aid] = ekCell{theme: theme, question: question, ok: true}
+				r.ekAnswerTeam[aid] = teamID
+				r.ekAnswerMatch[aid] = matchID
+				teamIDs[teamID] = true
+				matchIDs[matchID] = true
+			}
+		}
+		rows.Close()
+	}
+	for _, batch := range chunkIDs(keysOfInt(teamIDs), 400) {
+		rows, err := db.QueryContext(ctx, `select id, name from teams where id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
+		if err != nil {
+			continue
+		}
+		for rows.Next() {
+			var id int64
+			var name string
+			if rows.Scan(&id, &name) == nil {
+				r.ekTeam[id] = name
+			}
+		}
+		rows.Close()
+	}
+	for _, batch := range chunkIDs(keysOfInt(matchIDs), 400) {
+		rows, err := db.QueryContext(ctx, `select id, code from matches where id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
+		if err != nil {
+			continue
+		}
+		for rows.Next() {
+			var id int64
+			var code string
+			if rows.Scan(&id, &code) == nil {
+				r.ekMatch[id] = code
+			}
+		}
+		rows.Close()
+	}
+	// Fill team/match names onto each answer cell.
+	for aid, cell := range r.ekAnswer {
+		cell.team = r.ekTeam[r.ekAnswerTeam[aid]]
+		cell.match = r.ekMatch[r.ekAnswerMatch[aid]]
+		r.ekAnswer[aid] = cell
+	}
+}
+
+// --- per-group description --------------------------------------------------
+
+func (r *nameResolver) describeGroup(ops []journalOpRow) []string {
+	switch r.gameType {
+	case "ek":
+		return r.describeEK(ops)
+	case "od":
+		return r.describeStatePatchGroup(ops, r.odPatchLine)
+	case "ksi":
+		return r.describeStatePatchGroup(ops, r.ksiPatchLine)
 	default:
-		return nil
+		var lines []string
+		for _, o := range ops {
+			if o.op >= opEvImport {
+				lines = append(lines, describeEvent(o.op, o.payload)...)
+			}
+		}
+		return lines
 	}
 }
 
-func markLabel(m string) string {
-	switch m {
-	case "right":
-		return "верно"
-	case "wrong":
-		return "неверно"
-	case "":
-		return "снято"
-	default:
-		return m
-	}
-}
-
-func describeMatchUpdate(payload []byte) []string {
-	var reqs []updateRequest
-	if err := json.Unmarshal(payload, &reqs); err != nil {
-		return []string{"редактирование матча"}
-	}
+// describeStatePatchGroup renders the group's game-state patch ops via lineFn,
+// and falls back to coarse event labels for non-patch events.
+func (r *nameResolver) describeStatePatchGroup(ops []journalOpRow, lineFn func(op gameStatePatchOp) string) []string {
 	var lines []string
-	var walk func(r updateRequest)
-	walk = func(r updateRequest) {
-		if len(r.Edits) > 0 {
-			for _, e := range r.Edits {
-				walk(e)
-			}
-			return
-		}
+	for _, o := range ops {
 		switch {
-		case r.Finished != nil:
-			if *r.Finished {
-				lines = append(lines, "матч завершён")
-			} else {
-				lines = append(lines, "финиш матча снят")
+		case o.op == opEvGameStatePatch:
+			var req gameStatePatchRequest
+			if json.Unmarshal(o.payload, &req) != nil {
+				lines = append(lines, "изменение состояния игры")
+				continue
 			}
-		case r.Action == actionAddShootoutTheme:
-			lines = append(lines, "добавлена тема перестрелки")
-		case r.Action == actionRemoveShootoutTheme:
-			lines = append(lines, "удалена тема перестрелки")
-		case r.Mark != nil:
-			lines = append(lines, cellRefLabel(r)+": "+markLabel(*r.Mark))
-		case r.Player != nil:
-			lines = append(lines, themeTeamLabel(r)+": игрок → "+*r.Player)
-		case r.Place != nil:
-			lines = append(lines, fmt.Sprintf("команда %d: место %s", r.Team+1, trimFloat(*r.Place)))
-		case r.Tiebreak != nil:
-			lines = append(lines, fmt.Sprintf("команда %d: добор %d", r.Team+1, *r.Tiebreak))
+			for _, p := range req.Ops {
+				if l := lineFn(p); l != "" {
+					lines = append(lines, l)
+				}
+			}
+		case o.op == opEvGameState:
+			lines = append(lines, "состояние игры заменено целиком")
+		case o.op >= opEvImport && o.op != opEvMatchUpdate:
+			lines = append(lines, describeEvent(o.op, o.payload)...)
 		}
-	}
-	for _, r := range reqs {
-		walk(r)
-	}
-	if len(lines) == 0 {
-		return []string{"редактирование матча"}
 	}
 	return lines
 }
 
-func cellRefLabel(r updateRequest) string {
-	var b strings.Builder
-	if r.Theme != nil {
-		fmt.Fprintf(&b, "тема %d, ", *r.Theme+1)
+// ksiPatchLine renders one KSI state-patch op. State shape:
+// themes[t].answers[player][question] = mark; participants[i] = name.
+func (r *nameResolver) ksiPatchLine(op gameStatePatchOp) string {
+	segs := patchSegs(op.Path)
+	switch {
+	case len(segs) == 5 && segs[0].s == "themes" && segs[2].s == "answers" &&
+		segs[1].num && segs[3].num && segs[4].num:
+		who := r.name(segs[3].n)
+		if who == "" {
+			who = fmt.Sprintf("участник %d", segs[3].n+1)
+		}
+		return fmt.Sprintf("тема %d, %s, вопрос %d: %s", segs[0+1].n+1, who, segs[4].n+1, patchMark(op.Value))
+	case len(segs) == 2 && segs[0].s == "participants" && segs[1].num:
+		_, name := patchValue(op.Value)
+		return fmt.Sprintf("переименование участника %d → %s", segs[1].n+1, name)
+	case len(segs) >= 1 && segs[0].s == "finished":
+		return "завершение матча"
+	case len(segs) >= 1 && segs[0].s == "declined":
+		return "отказ от участия"
+	default:
+		return genericPatchLine(op)
 	}
-	if r.Answer != nil {
-		fmt.Fprintf(&b, "вопрос %d, ", *r.Answer+1)
-	}
-	fmt.Fprintf(&b, "команда %d", r.Team+1)
-	return b.String()
 }
 
-func themeTeamLabel(r updateRequest) string {
-	if r.Theme != nil {
-		return fmt.Sprintf("тема %d, команда %d", *r.Theme+1, r.Team+1)
+// odPatchLine renders one OD state-patch op. State shape:
+// entries[question][teamRow] = value (or entries[question] = whole row).
+func (r *nameResolver) odPatchLine(op gameStatePatchOp) string {
+	segs := patchSegs(op.Path)
+	switch {
+	case len(segs) == 3 && segs[0].s == "entries" && segs[1].num && segs[2].num:
+		who := r.name(segs[2].n)
+		if who == "" {
+			who = fmt.Sprintf("команда %d", segs[2].n+1)
+		}
+		_, val := patchValue(op.Value)
+		return fmt.Sprintf("%s, вопрос %d → %s", who, segs[1].n+1, val)
+	case len(segs) == 2 && segs[0].s == "entries" && segs[1].num:
+		return fmt.Sprintf("вопрос %d изменён", segs[1].n+1)
+	case len(segs) == 1 && segs[0].s == "entries":
+		return "ответы изменены"
+	case len(segs) == 2 && segs[0].s == "completed" && segs[1].num:
+		_, val := patchValue(op.Value)
+		return fmt.Sprintf("вопрос %d: готовность → %s", segs[1].n+1, val)
+	case len(segs) >= 1 && segs[0].s == "shootoutRounds":
+		return "перестрелка"
+	default:
+		return genericPatchLine(op)
 	}
-	return fmt.Sprintf("команда %d", r.Team+1)
 }
 
-func trimFloat(f float64) string {
-	return strconv.FormatFloat(f, 'f', -1, 64)
-}
-
-func describeStatePatch(payload []byte) []string {
-	var req gameStatePatchRequest
-	if err := json.Unmarshal(payload, &req); err != nil {
-		return []string{"изменение состояния игры"}
-	}
+func (r *nameResolver) describeEK(ops []journalOpRow) []string {
 	var lines []string
-	for _, op := range req.Ops {
-		path := renderPatchPath(op.Path)
-		raw, val := patchValue(op.Value)
-		switch {
-		case op.Op == "remove":
-			lines = append(lines, path+": снято")
-		case isMarkValue(raw):
-			lines = append(lines, path+": "+markLabel(raw)) // "…команда 2: неверно"
-		default:
-			lines = append(lines, path+" → "+val)
+	for _, o := range ops {
+		if o.op > opRowDel {
+			continue
+		}
+		table, row, err := decodeRowOpJSON(o.payload)
+		if err != nil {
+			continue
+		}
+		switch table {
+		case "answers":
+			id, _ := rowInt(row, "id")
+			cell := r.ekAnswer[id]
+			mark := markLabel(rowStr(row, "mark"))
+			lines = append(lines, fmt.Sprintf("%s%s, тема %d, вопрос %d: %s",
+				matchPrefix(cell.match), teamOr(cell.team), cell.theme+1, cell.question+1, mark))
+		case "match_results":
+			teamID, _ := rowInt(row, "team_id")
+			matchID, _ := rowInt(row, "match_id")
+			if rank, ok := rowInt(row, "rank"); ok {
+				lines = append(lines, fmt.Sprintf("%s%s: место %d",
+					matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), rank))
+			}
+		case "themes":
+			lines = append(lines, "изменена тема / состав")
+		case "matches":
+			if st := rowStr(row, "status"); st != "" {
+				label := "матч открыт заново"
+				if st == "finished" {
+					label = "матч завершён"
+				}
+				lines = append(lines, matchPrefix(r.ekMatch[rowInt64(row, "id")])+label)
+			}
 		}
 	}
 	if len(lines) == 0 {
-		return []string{"изменение состояния игры"}
+		// No row-level detail (e.g. a coarse import/reseed) — use the event label.
+		for _, o := range ops {
+			if o.op >= opEvImport {
+				if l := describeEvent(o.op, o.payload); len(l) > 0 {
+					lines = append(lines, l...)
+				} else if o.op == opEvMatchUpdate {
+					lines = append(lines, "редактирование матча")
+				}
+			}
+		}
 	}
 	return lines
 }
 
-// renderPatchPath turns a JSON-pointer path into a domain label. Index segments
-// take their meaning (1-based) from the preceding key: themes→тема,
-// answers/questions→вопрос; a bare trailing index after a question is the team.
-func renderPatchPath(path []json.RawMessage) string {
-	segs := make([]string, len(path))
-	nums := make([]int, len(path))
-	isNum := make([]bool, len(path))
+func matchPrefix(code string) string {
+	if code == "" {
+		return ""
+	}
+	return "матч " + code + ", "
+}
+
+func teamOr(name string) string {
+	if name == "" {
+		return "команда"
+	}
+	return name
+}
+
+// --- patch helpers ----------------------------------------------------------
+
+type patchSeg struct {
+	s   string
+	n   int
+	num bool
+}
+
+func patchSegs(path []json.RawMessage) []patchSeg {
+	out := make([]patchSeg, len(path))
 	for i, seg := range path {
 		s := strings.Trim(strings.TrimSpace(string(seg)), `"`)
-		segs[i] = s
+		out[i].s = s
 		if n, err := strconv.Atoi(s); err == nil {
-			nums[i], isNum[i] = n, true
+			out[i].n, out[i].num = n, true
 		}
 	}
-	var parts []string
-	sawQuestion := false
-	for i := 0; i < len(segs); i++ {
-		if isNum[i] {
-			// Bare index not consumed by a key below — a team if it trails a question.
-			if sawQuestion {
-				parts = append(parts, fmt.Sprintf("команда %d", nums[i]+1))
-			} else {
-				parts = append(parts, fmt.Sprintf("#%d", nums[i]+1))
-			}
-			continue
-		}
-		label, isQuestion := patchKeyLabel(segs[i])
-		if i+1 < len(segs) && isNum[i+1] {
-			parts = append(parts, fmt.Sprintf("%s %d", label, nums[i+1]+1))
-			if isQuestion {
-				sawQuestion = true
-			}
-			i++
-			continue
-		}
-		parts = append(parts, label)
+	return out
+}
+
+func genericPatchLine(op gameStatePatchOp) string {
+	parts := make([]string, 0, len(op.Path))
+	for _, seg := range op.Path {
+		parts = append(parts, strings.Trim(strings.TrimSpace(string(seg)), `"`))
 	}
-	return strings.Join(parts, ", ")
-}
-
-// patchKeyLabel maps a state key to a Russian label; the bool marks question-ish
-// keys so a following bare index reads as a team.
-func patchKeyLabel(key string) (label string, question bool) {
-	switch key {
-	case "themes":
-		return "тема", false
-	case "tours":
-		return "тур", false
-	case "answers", "questions":
-		return "вопрос", true
-	case "teams":
-		return "команда", false
-	case "players", "roster":
-		return "игрок", false
-	default:
-		return key, false
+	_, val := patchValue(op.Value)
+	if op.Op == "remove" {
+		return strings.Join(parts, " · ") + ": снято"
 	}
+	return strings.Join(parts, " · ") + " → " + val
 }
 
-func isMarkValue(raw string) bool {
-	return raw == "right" || raw == "wrong" || raw == ""
+func patchMark(v json.RawMessage) string {
+	raw, _ := patchValue(v)
+	return markLabel(raw)
 }
 
-// patchValue returns (rawString, display). rawString is the unquoted scalar (for
-// mark detection); display is a short human rendering.
 func patchValue(v json.RawMessage) (raw, display string) {
 	s := strings.TrimSpace(string(v))
 	if s == "" || s == "null" {
@@ -362,50 +529,121 @@ func patchValue(v json.RawMessage) (raw, display string) {
 	return s, s
 }
 
-func summarizeTables(tables map[string]int) string {
-	if len(tables) == 0 {
-		return ""
-	}
-	names := make([]string, 0, len(tables))
-	for t := range tables {
-		names = append(names, t)
-	}
-	// stable: most-changed first, then name
-	for i := 1; i < len(names); i++ {
-		for j := i; j > 0 && (tables[names[j]] > tables[names[j-1]] ||
-			(tables[names[j]] == tables[names[j-1]] && names[j] < names[j-1])); j-- {
-			names[j], names[j-1] = names[j-1], names[j]
-		}
-	}
-	parts := make([]string, 0, len(names))
-	for _, t := range names {
-		parts = append(parts, fmt.Sprintf("%s ×%d", journalTableLabel(t), tables[t]))
-	}
-	return strings.Join(parts, ", ")
-}
-
-func journalTableLabel(t string) string {
-	switch t {
-	case "answers":
-		return "ответы"
-	case "match_results":
-		return "результаты"
-	case "matches":
-		return "матчи"
-	case "themes":
-		return "темы"
-	case "match_slots":
-		return "слоты"
-	case "reseed_entries":
-		return "пересев"
-	case "games":
-		return "состояние игры"
+func markLabel(m string) string {
+	switch m {
+	case "right":
+		return "верно"
+	case "wrong":
+		return "неверно"
+	case "":
+		return "снято"
 	default:
-		return t
+		return m
 	}
 }
 
-// --- rendering --------------------------------------------------------------
+// describeEvent renders coarse, non-game-typed events (imports, reseeds, etc.).
+func describeEvent(op journalOp, payload []byte) []string {
+	switch op {
+	case opEvReseedCalculate:
+		return []string{"пересчёт посева этапа"}
+	case opEvRatingImport:
+		return []string{"импорт ростера из rating.chgk.info"}
+	case opEvSeedImportKSI:
+		return []string{"импорт посева из КСИ"}
+	case opEvSeedImportDecline:
+		return []string{"отказ команды от посева"}
+	case opEvGameCreate:
+		return []string{"игра создана"}
+	case opEvGameClear:
+		return []string{"игра очищена"}
+	case opEvGameDelete:
+		return []string{"игра удалена"}
+	case opEvFestNumbers:
+		return []string{"изменены номера команд"}
+	case opEvVenuesUpdate, opEvMatchVenue:
+		return []string{"изменена площадка"}
+	case opEvPlayerOverride, opEvPlayerOverrideEdit:
+		return []string{"переопределение игрока в составе"}
+	case opEvFestAccess:
+		return []string{"изменение доступа"}
+	case opEvImport:
+		return []string{"импорт схемы"}
+	case opEvGameRevert:
+		return []string{"откат игры к более раннему состоянию"}
+	default:
+		return nil
+	}
+}
+
+// --- small row/id helpers ---------------------------------------------------
+
+func rowInt(m map[string]any, key string) (int64, bool) {
+	switch v := m[key].(type) {
+	case int64:
+		return v, true
+	case float64:
+		return int64(v), true
+	}
+	return 0, false
+}
+
+func rowInt64(m map[string]any, key string) int64 {
+	n, _ := rowInt(m, key)
+	return n
+}
+
+func rowStr(m map[string]any, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func keysOfInt(m map[int64]bool) []int64 {
+	out := make([]int64, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+func chunkIDs(ids []int64, size int) [][]int64 {
+	var out [][]int64
+	for i := 0; i < len(ids); i += size {
+		j := i + size
+		if j > len(ids) {
+			j = len(ids)
+		}
+		out = append(out, ids[i:j])
+	}
+	return out
+}
+
+func placeholders(n int) string {
+	if n == 0 {
+		return "null"
+	}
+	return strings.TrimRight(strings.Repeat("?,", n), ",")
+}
+
+func idArgs(ids []int64) []any {
+	out := make([]any, len(ids))
+	for i, id := range ids {
+		out[i] = id
+	}
+	return out
+}
+
+func formatJournalTime(ts string) string {
+	s := strings.Replace(ts, "T", " ", 1)
+	if i := strings.IndexAny(s, ".Z"); i >= 0 {
+		s = s[:i]
+	}
+	return s
+}
+
+// --- HTTP -------------------------------------------------------------------
 
 var gameJournalTmpl = template.Must(template.New("game-journal").Parse(`<!doctype html>
 <html lang="ru">
@@ -465,7 +703,7 @@ func (s *server) renderGameJournal(w http.ResponseWriter, r *http.Request, festI
 	if title == "" {
 		title = fmt.Sprintf("игра %d", gameID)
 	}
-	groups, err := s.loadGameJournalGroups(gameID)
+	groups, err := s.loadGameJournalGroups(r.Context(), gameID)
 	if err != nil {
 		http.Error(w, "journal: "+err.Error(), http.StatusInternalServerError)
 		return
