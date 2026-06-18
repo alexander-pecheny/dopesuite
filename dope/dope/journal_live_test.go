@@ -30,7 +30,7 @@ func TestJournalRecordsLiveEdits(t *testing.T) {
 	festID, ekGameID := createSeedImportFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]bool),
+		subscribers:     make(map[int64]map[chan event]subInfo),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}
 

@@ -33,7 +33,7 @@ func TestE2EUntickEditRetickRealDB(t *testing.T) {
 
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]bool),
+		subscribers:     make(map[int64]map[chan event]subInfo),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}
 	ctx := context.Background()

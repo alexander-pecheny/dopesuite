@@ -19,7 +19,7 @@ func TestScopedGameStateCarriesEpoch(t *testing.T) {
 	addAPITestOrganizer(t, srv, festID, organizerID)
 
 	ch := make(chan event, 8)
-	srv.addSubscriber(festID, ch, false)
+	srv.addSubscriber(festID, ch, false, 0)
 	defer srv.removeSubscriber(festID, ch)
 
 	path := fmt.Sprintf("/api/fest/%d/games/%d/state", festID, gameID)

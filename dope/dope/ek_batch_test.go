@@ -16,7 +16,7 @@ func newBatchTestServer(t *testing.T) (*server, matchScope) {
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]bool),
+		subscribers:     make(map[int64]map[chan event]subInfo),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
