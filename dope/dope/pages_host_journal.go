@@ -146,11 +146,13 @@ type ekCell struct {
 type nameResolver struct {
 	gameType      string
 	names         []string         // KSI participants / OD team names by index
+	odNum         map[int]string   // OD team number -> name (entries store numbers)
 	ekAnswer      map[int64]ekCell // answer id -> resolved cell
 	ekAnswerTeam  map[int64]int64  // answer id -> team_id (pre-name-resolution)
 	ekAnswerMatch map[int64]int64  // answer id -> match_id
 	ekTeam        map[int64]string // team_id -> name
 	ekMatch       map[int64]string // match_id -> code
+	ekPlayer      map[int64]string // player_id -> name
 }
 
 func (s *server) newNameResolver(ctx context.Context, gameType, stateJSON string) *nameResolver {
@@ -159,13 +161,14 @@ func (s *server) newNameResolver(ctx context.Context, gameType, stateJSON string
 	case "ksi":
 		r.names = ksiParticipantNames(stateJSON)
 	case "od":
-		r.names = odTeamNames(stateJSON)
+		r.names, r.odNum = odTeamNames(stateJSON)
 	case "ek":
 		r.ekAnswer = map[int64]ekCell{}
 		r.ekAnswerTeam = map[int64]int64{}
 		r.ekAnswerMatch = map[int64]int64{}
 		r.ekTeam = map[int64]string{}
 		r.ekMatch = map[int64]string{}
+		r.ekPlayer = map[int64]string{}
 	}
 	return r
 }
@@ -204,18 +207,26 @@ func ksiParticipantNames(stateJSON string) []string {
 	return out
 }
 
-func odTeamNames(stateJSON string) []string {
+// odTeamNames returns OD team names both by roster index and keyed by the team's
+// printed number. The number map matters because the OD entries grid stores team
+// NUMBERS as values (entries[question][slot] = number), not roster indices.
+func odTeamNames(stateJSON string) ([]string, map[int]string) {
 	var st struct {
 		Teams []struct {
-			Name string `json:"name"`
+			Name   string `json:"name"`
+			Number int    `json:"number"`
 		} `json:"teams"`
 	}
 	_ = json.Unmarshal([]byte(stateJSON), &st)
 	out := make([]string, len(st.Teams))
+	byNum := make(map[int]string, len(st.Teams))
 	for i, t := range st.Teams {
 		out[i] = t.Name
+		if t.Number != 0 {
+			byNum[t.Number] = t.Name
+		}
 	}
-	return out
+	return out, byNum
 }
 
 // prepareEK batch-resolves the answer / team / match identities referenced by a
@@ -224,6 +235,7 @@ func (r *nameResolver) prepareEK(ctx context.Context, db rowQuerier, allOps [][]
 	answerIDs := map[int64]bool{}
 	teamIDs := map[int64]bool{}
 	matchIDs := map[int64]bool{}
+	playerIDs := map[int64]bool{}
 	for _, ops := range allOps {
 		for _, o := range ops {
 			if o.op > opRowDel {
@@ -244,6 +256,16 @@ func (r *nameResolver) prepareEK(ctx context.Context, db rowQuerier, allOps [][]
 				}
 				if id, ok := rowInt(row, "match_id"); ok {
 					matchIDs[id] = true
+				}
+			case "themes":
+				if id, ok := rowInt(row, "team_id"); ok {
+					teamIDs[id] = true
+				}
+				if id, ok := rowInt(row, "match_id"); ok {
+					matchIDs[id] = true
+				}
+				if id, ok := rowInt(row, "player_id"); ok {
+					playerIDs[id] = true
 				}
 			case "matches":
 				if id, ok := rowInt(row, "id"); ok {
@@ -298,6 +320,20 @@ where a.id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 			var code string
 			if rows.Scan(&id, &code) == nil {
 				r.ekMatch[id] = code
+			}
+		}
+		rows.Close()
+	}
+	for _, batch := range chunkIDs(keysOfInt(playerIDs), 400) {
+		rows, err := db.QueryContext(ctx, `select id, trim(first_name || ' ' || last_name) from players where id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
+		if err != nil {
+			continue
+		}
+		for rows.Next() {
+			var id int64
+			var name string
+			if rows.Scan(&id, &name) == nil {
+				r.ekPlayer[id] = name
 			}
 		}
 		rows.Close()
@@ -382,17 +418,18 @@ func (r *nameResolver) ksiPatchLine(op gameStatePatchOp) string {
 }
 
 // odPatchLine renders one OD state-patch op. State shape:
-// entries[question][teamRow] = value (or entries[question] = whole row).
+// entries[question][slot] = teamNumber (0 = empty slot). The slot is just a grid
+// position; the team is identified by the VALUE (its printed number), so resolve
+// the team from the value, not from the slot index.
 func (r *nameResolver) odPatchLine(op gameStatePatchOp) string {
 	segs := patchSegs(op.Path)
 	switch {
 	case len(segs) == 3 && segs[0].s == "entries" && segs[1].num && segs[2].num:
-		who := r.name(segs[2].n)
-		if who == "" {
-			who = fmt.Sprintf("команда %d", segs[2].n+1)
+		num := patchInt(op.Value)
+		if num <= 0 {
+			return fmt.Sprintf("вопрос %d: отметка снята", segs[1].n+1)
 		}
-		_, val := patchValue(op.Value)
-		return fmt.Sprintf("%s, вопрос %d → %s", who, segs[1].n+1, val)
+		return fmt.Sprintf("вопрос %d: засчитана %s", segs[1].n+1, r.odTeamLabel(num))
 	case len(segs) == 2 && segs[0].s == "entries" && segs[1].num:
 		return fmt.Sprintf("вопрос %d изменён", segs[1].n+1)
 	case len(segs) == 1 && segs[0].s == "entries":
@@ -405,6 +442,15 @@ func (r *nameResolver) odPatchLine(op gameStatePatchOp) string {
 	default:
 		return genericPatchLine(op)
 	}
+}
+
+// odTeamLabel renders a team identified by its printed number, using its name
+// when known and falling back to the bare number.
+func (r *nameResolver) odTeamLabel(num int) string {
+	if name := strings.TrimSpace(r.odNum[num]); name != "" {
+		return fmt.Sprintf("«%s» (№%d)", name, num)
+	}
+	return fmt.Sprintf("команда №%d", num)
 }
 
 func (r *nameResolver) describeEK(ops []journalOpRow) []string {
@@ -432,7 +478,20 @@ func (r *nameResolver) describeEK(ops []journalOpRow) []string {
 					matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), rank))
 			}
 		case "themes":
-			lines = append(lines, "изменена тема / состав")
+			teamID, _ := rowInt(row, "team_id")
+			matchID, _ := rowInt(row, "match_id")
+			theme, _ := rowInt(row, "theme_index")
+			prefix := fmt.Sprintf("%s%s, тема %d: ",
+				matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), theme+1)
+			if playerID, ok := rowInt(row, "player_id"); ok && playerID != 0 {
+				if name := strings.TrimSpace(r.ekPlayer[playerID]); name != "" {
+					lines = append(lines, prefix+"играет "+name)
+				} else {
+					lines = append(lines, prefix+"назначен игрок")
+				}
+			} else {
+				lines = append(lines, prefix+"игрок снят")
+			}
 		case "matches":
 			if st := rowStr(row, "status"); st != "" {
 				label := "матч открыт заново"
@@ -502,6 +561,19 @@ func genericPatchLine(op gameStatePatchOp) string {
 		return strings.Join(parts, " · ") + ": снято"
 	}
 	return strings.Join(parts, " · ") + " → " + val
+}
+
+// patchInt reads a JSON patch value as an integer (OD entries store team
+// numbers). Returns 0 for null / non-numeric / empty.
+func patchInt(v json.RawMessage) int {
+	s := strings.TrimSpace(string(v))
+	if s == "" || s == "null" {
+		return 0
+	}
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	return 0
 }
 
 func patchMark(v json.RawMessage) string {
