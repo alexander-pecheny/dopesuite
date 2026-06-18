@@ -613,26 +613,17 @@ func (s *server) handleHostClearFestNumbers(w http.ResponseWriter, r *http.Reque
 // this fest. Used by the "assign numbers" and "clear" actions, which the host
 // has explicitly confirmed as destructive resets — archived numbers from teams
 // that left the roster must not block reuse of those numbers.
-func (s *server) purgeFestSoftDeletedTeams(ctx context.Context, festID int64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.writeExec(ctx, `delete from fest_teams where fest_id = ? and deleted = 1`, festID)
-	return err
+func (s *server) purgeFestSoftDeletedTeams(reqCtx context.Context, festID int64) error {
+	return s.withWriteTx(reqCtx, festID, "purge-soft-deleted-teams", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `delete from fest_teams where fest_id = ? and deleted = 1`, festID)
+		return err
+	})
 }
 
-func (s *server) saveFestNumbers(ctx context.Context, festID int64, assignments map[int64]int) error {
+func (s *server) saveFestNumbers(reqCtx context.Context, festID int64, assignments map[int64]int) error {
 	var updates []gameStateBroadcast
 	var revision int64
-	err := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-
-		tx, err := s.beginWriteTx(ctx)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-
+	err := s.withWriteTx(reqCtx, festID, "fest-numbers", func(ctx context.Context, tx *sql.Tx) error {
 		oldTeams, err := loadFestTeamsForNumbering(ctx, tx, festID)
 		if err != nil {
 			return err
@@ -682,11 +673,8 @@ func (s *server) saveFestNumbers(ctx context.Context, festID int64, assignments 
 			"assigned": len(assignments),
 			"remapped": len(entryRemap),
 		}))
-		if err != nil {
-			return err
-		}
-		return tx.Commit()
-	}()
+		return err
+	})
 	if err != nil {
 		return err
 	}

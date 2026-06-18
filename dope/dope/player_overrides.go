@@ -228,7 +228,7 @@ func containsInt64(values []int64, needle int64) bool {
 	return false
 }
 
-func (s *server) savePlayerTeamOverride(ctx context.Context, festID, playerID, overrideTeamID int64, gameIDs []int64) (int64, []int64, error) {
+func (s *server) savePlayerTeamOverride(reqCtx context.Context, festID, playerID, overrideTeamID int64, gameIDs []int64) (int64, []int64, error) {
 	if playerID <= 0 {
 		return 0, nil, errors.New("Выберите игрока из подсказки.")
 	}
@@ -239,179 +239,165 @@ func (s *server) savePlayerTeamOverride(ctx context.Context, festID, playerID, o
 		return 0, nil, errors.New("Выберите хотя бы одну игру.")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tx, err := s.beginWriteTx(ctx)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer tx.Rollback()
-
-	sourceTeamID, err := sourceTeamForFestPlayer(ctx, tx, festID, playerID)
-	if err != nil {
-		return 0, nil, err
-	}
-	if sourceTeamID == overrideTeamID {
-		return 0, nil, errors.New("Новая команда совпадает с командой игрока в рейтинге.")
-	}
-	if err := assertActiveFestTeam(ctx, tx, festID, overrideTeamID); err != nil {
-		return 0, nil, err
-	}
-
-	now := utcNow()
-	gameTypes := make(map[int64]string, len(gameIDs))
-	for _, gameID := range uniqueInt64s(gameIDs) {
-		gameType, err := overrideGameType(ctx, tx, festID, gameID)
+	var revision int64
+	var ekGameIDs []int64
+	err := s.withWriteTx(reqCtx, festID, "player-override-save", func(ctx context.Context, tx *sql.Tx) error {
+		sourceTeamID, err := sourceTeamForFestPlayer(ctx, tx, festID, playerID)
 		if err != nil {
-			return 0, nil, err
+			return err
 		}
-		gameTypes[gameID] = gameType
-		if _, err := tx.ExecContext(ctx, `
+		if sourceTeamID == overrideTeamID {
+			return errors.New("Новая команда совпадает с командой игрока в рейтинге.")
+		}
+		if err := assertActiveFestTeam(ctx, tx, festID, overrideTeamID); err != nil {
+			return err
+		}
+
+		now := utcNow()
+		gameTypes := make(map[int64]string, len(gameIDs))
+		for _, gameID := range uniqueInt64s(gameIDs) {
+			gameType, err := overrideGameType(ctx, tx, festID, gameID)
+			if err != nil {
+				return err
+			}
+			gameTypes[gameID] = gameType
+			if _, err := tx.ExecContext(ctx, `
 insert into game_player_team_overrides(fest_id, game_id, player_id, source_team_id, override_team_id, created_at, updated_at)
 values(?, ?, ?, ?, ?, ?, ?)
 on conflict(fest_id, game_id, player_id) do update set
   source_team_id = excluded.source_team_id,
   override_team_id = excluded.override_team_id,
   updated_at = excluded.updated_at`,
-			festID, gameID, playerID, sourceTeamID, overrideTeamID, now, now); err != nil {
-			return 0, nil, err
+				festID, gameID, playerID, sourceTeamID, overrideTeamID, now, now); err != nil {
+				return err
+			}
 		}
-	}
 
-	var ekGameIDs []int64
-	for gameID, gameType := range gameTypes {
-		if _, err := loadFestRosterWithGameOverrides(ctx, tx, festID, gameID); err != nil {
-			return 0, nil, err
+		ekGameIDs = nil
+		for gameID, gameType := range gameTypes {
+			if _, err := loadFestRosterWithGameOverrides(ctx, tx, festID, gameID); err != nil {
+				return err
+			}
+			if gameType != "ek" {
+				continue
+			}
+			if err := materializeGameRosterOverridesTx(ctx, tx, festID, gameID); err != nil {
+				return err
+			}
+			ekGameIDs = append(ekGameIDs, gameID)
 		}
-		if gameType != "ek" {
-			continue
-		}
-		if err := materializeGameRosterOverridesTx(ctx, tx, festID, gameID); err != nil {
-			return 0, nil, err
-		}
-		ekGameIDs = append(ekGameIDs, gameID)
-	}
-	sort.Slice(ekGameIDs, func(i, j int) bool { return ekGameIDs[i] < ekGameIDs[j] })
+		sort.Slice(ekGameIDs, func(i, j int) bool { return ekGameIDs[i] < ekGameIDs[j] })
 
-	revision, err := bumpFestRevisionTx(ctx, tx, festID, "roster:player-override", mustJSON(map[string]any{
-		"playerID":       playerID,
-		"sourceTeamID":   sourceTeamID,
-		"overrideTeamID": overrideTeamID,
-		"games":          len(gameTypes),
-	}))
+		revision, err = bumpFestRevisionTx(ctx, tx, festID, "roster:player-override", mustJSON(map[string]any{
+			"playerID":       playerID,
+			"sourceTeamID":   sourceTeamID,
+			"overrideTeamID": overrideTeamID,
+			"games":          len(gameTypes),
+		}))
+		return err
+	})
 	if err != nil {
-		return 0, nil, err
-	}
-	if err := tx.Commit(); err != nil {
 		return 0, nil, err
 	}
 	return revision, ekGameIDs, nil
 }
 
-func (s *server) replacePlayerTeamOverride(ctx context.Context, festID, playerID, sourceTeamID, overrideTeamID int64, gameIDs []int64) (int64, []int64, error) {
+func (s *server) replacePlayerTeamOverride(reqCtx context.Context, festID, playerID, sourceTeamID, overrideTeamID int64, gameIDs []int64) (int64, []int64, error) {
 	if playerID <= 0 || sourceTeamID <= 0 || overrideTeamID <= 0 {
 		return 0, nil, errors.New("Оверрайд не найден.")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	var revision int64
+	var ekGameIDs []int64
+	err := s.withWriteTx(reqCtx, festID, "player-override-replace", func(ctx context.Context, tx *sql.Tx) error {
+		currentSourceTeamID, err := sourceTeamForFestPlayer(ctx, tx, festID, playerID)
+		if err != nil {
+			return err
+		}
+		if err := assertActiveFestTeam(ctx, tx, festID, overrideTeamID); err != nil {
+			return err
+		}
 
-	tx, err := s.beginWriteTx(ctx)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer tx.Rollback()
-
-	currentSourceTeamID, err := sourceTeamForFestPlayer(ctx, tx, festID, playerID)
-	if err != nil {
-		return 0, nil, err
-	}
-	if err := assertActiveFestTeam(ctx, tx, festID, overrideTeamID); err != nil {
-		return 0, nil, err
-	}
-
-	affectedGameTypes := make(map[int64]string)
-	existingRows, err := tx.QueryContext(ctx, `
+		affectedGameTypes := make(map[int64]string)
+		existingRows, err := tx.QueryContext(ctx, `
 select o.game_id, g.game_type
 from game_player_team_overrides o
 join games g on g.id = o.game_id
 where o.fest_id = ? and o.player_id = ? and o.source_team_id = ? and o.override_team_id = ?`,
-		festID, playerID, sourceTeamID, overrideTeamID)
-	if err != nil {
-		return 0, nil, err
-	}
-	for existingRows.Next() {
-		var gameID int64
-		var gameType string
-		if err := existingRows.Scan(&gameID, &gameType); err != nil {
-			existingRows.Close()
-			return 0, nil, err
-		}
-		affectedGameTypes[gameID] = gameType
-	}
-	if err := existingRows.Close(); err != nil {
-		return 0, nil, err
-	}
-	if err := existingRows.Err(); err != nil {
-		return 0, nil, err
-	}
-	if len(affectedGameTypes) == 0 {
-		return 0, nil, errors.New("Оверрайд не найден.")
-	}
-
-	newGameTypes := make(map[int64]string)
-	for _, gameID := range uniqueInt64s(gameIDs) {
-		gameType, err := overrideGameType(ctx, tx, festID, gameID)
+			festID, playerID, sourceTeamID, overrideTeamID)
 		if err != nil {
-			return 0, nil, err
+			return err
 		}
-		newGameTypes[gameID] = gameType
-		affectedGameTypes[gameID] = gameType
-	}
+		for existingRows.Next() {
+			var gameID int64
+			var gameType string
+			if err := existingRows.Scan(&gameID, &gameType); err != nil {
+				existingRows.Close()
+				return err
+			}
+			affectedGameTypes[gameID] = gameType
+		}
+		if err := existingRows.Close(); err != nil {
+			return err
+		}
+		if err := existingRows.Err(); err != nil {
+			return err
+		}
+		if len(affectedGameTypes) == 0 {
+			return errors.New("Оверрайд не найден.")
+		}
 
-	if _, err := tx.ExecContext(ctx, `
+		newGameTypes := make(map[int64]string)
+		for _, gameID := range uniqueInt64s(gameIDs) {
+			gameType, err := overrideGameType(ctx, tx, festID, gameID)
+			if err != nil {
+				return err
+			}
+			newGameTypes[gameID] = gameType
+			affectedGameTypes[gameID] = gameType
+		}
+
+		if _, err := tx.ExecContext(ctx, `
 delete from game_player_team_overrides
 where fest_id = ? and player_id = ? and source_team_id = ? and override_team_id = ?`,
-		festID, playerID, sourceTeamID, overrideTeamID); err != nil {
-		return 0, nil, err
-	}
+			festID, playerID, sourceTeamID, overrideTeamID); err != nil {
+			return err
+		}
 
-	now := utcNow()
-	for gameID := range newGameTypes {
-		if _, err := tx.ExecContext(ctx, `
+		now := utcNow()
+		for gameID := range newGameTypes {
+			if _, err := tx.ExecContext(ctx, `
 insert into game_player_team_overrides(fest_id, game_id, player_id, source_team_id, override_team_id, created_at, updated_at)
 values(?, ?, ?, ?, ?, ?, ?)`,
-			festID, gameID, playerID, currentSourceTeamID, overrideTeamID, now, now); err != nil {
-			return 0, nil, err
+				festID, gameID, playerID, currentSourceTeamID, overrideTeamID, now, now); err != nil {
+				return err
+			}
 		}
-	}
 
-	var ekGameIDs []int64
-	for gameID, gameType := range affectedGameTypes {
-		if _, err := loadFestRosterWithGameOverrides(ctx, tx, festID, gameID); err != nil {
-			return 0, nil, err
+		ekGameIDs = nil
+		for gameID, gameType := range affectedGameTypes {
+			if _, err := loadFestRosterWithGameOverrides(ctx, tx, festID, gameID); err != nil {
+				return err
+			}
+			if gameType != "ek" {
+				continue
+			}
+			if err := materializeGameRosterOverridesTx(ctx, tx, festID, gameID); err != nil {
+				return err
+			}
+			ekGameIDs = append(ekGameIDs, gameID)
 		}
-		if gameType != "ek" {
-			continue
-		}
-		if err := materializeGameRosterOverridesTx(ctx, tx, festID, gameID); err != nil {
-			return 0, nil, err
-		}
-		ekGameIDs = append(ekGameIDs, gameID)
-	}
-	sort.Slice(ekGameIDs, func(i, j int) bool { return ekGameIDs[i] < ekGameIDs[j] })
+		sort.Slice(ekGameIDs, func(i, j int) bool { return ekGameIDs[i] < ekGameIDs[j] })
 
-	revision, err := bumpFestRevisionTx(ctx, tx, festID, "roster:player-override-edit", mustJSON(map[string]any{
-		"playerID":       playerID,
-		"sourceTeamID":   sourceTeamID,
-		"overrideTeamID": overrideTeamID,
-		"games":          len(newGameTypes),
-	}))
+		revision, err = bumpFestRevisionTx(ctx, tx, festID, "roster:player-override-edit", mustJSON(map[string]any{
+			"playerID":       playerID,
+			"sourceTeamID":   sourceTeamID,
+			"overrideTeamID": overrideTeamID,
+			"games":          len(newGameTypes),
+		}))
+		return err
+	})
 	if err != nil {
-		return 0, nil, err
-	}
-	if err := tx.Commit(); err != nil {
 		return 0, nil, err
 	}
 	return revision, ekGameIDs, nil

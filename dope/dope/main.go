@@ -794,8 +794,7 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	if _, ok := w.(http.Flusher); !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
@@ -804,8 +803,20 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	s.addHostSubscriber(festID, ch)
 	defer s.removeHostSubscriber(festID, ch)
 
-	fmt.Fprint(w, ": connected\n\n")
-	flusher.Flush()
+	// Bound each write so a dead/stuck host connection is reaped promptly instead
+	// of lingering in the presence set (mirrors handleEvents).
+	rc := http.NewResponseController(w)
+	writeWithDeadline := func(payload string) bool {
+		_ = rc.SetWriteDeadline(time.Now().Add(sseWriteTimeout))
+		if _, err := io.WriteString(w, payload); err != nil {
+			return false
+		}
+		return rc.Flush() == nil
+	}
+
+	if !writeWithDeadline(": connected\n\n") {
+		return
+	}
 
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
@@ -813,11 +824,13 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case ev := <-ch:
-			writeSSE(w, "presence", 0, ev.data)
-			flusher.Flush()
+			if !writeWithDeadline(formatSSE("presence", 0, ev.data)) {
+				return
+			}
 		case <-ticker.C:
-			fmt.Fprint(w, ": keepalive\n\n")
-			flusher.Flush()
+			if !writeWithDeadline(": keepalive\n\n") {
+				return
+			}
 		case <-r.Context().Done():
 			return
 		}

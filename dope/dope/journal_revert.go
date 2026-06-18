@@ -114,34 +114,23 @@ func reconstructGameStateAt(ctx context.Context, tx *sql.Tx, gameID, throughID i
 // revertGameToPoint reverts a game to journal point targetID. It reconstructs
 // the game's state at targetID and records the revert as a new journal entry.
 // Returns the new fest revision (seq).
-func (s *server) revertGameToPoint(ctx context.Context, festID, gameID, targetID int64) (int64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tx, err := s.beginWriteTx(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	if err := reconstructGameStateAt(ctx, tx, gameID, targetID); err != nil {
-		return 0, err
-	}
-
-	// Record the revert as a forward event and snapshot the reverted state so
-	// future reverts have a nearby checkpoint and never re-cross this point.
-	revision, err := bumpFestRevisionTx(ctx, tx, festID,
-		"game:revert", mustJSON(map[string]any{"gameID": gameID, "target": targetID}))
-	if err != nil {
-		return 0, err
-	}
-	if err := writeGameCheckpoint(ctx, tx, gameID, journalIDForSeqTx(ctx, tx)); err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return revision, nil
+func (s *server) revertGameToPoint(reqCtx context.Context, festID, gameID, targetID int64) (int64, error) {
+	var revision int64
+	err := s.withWriteTx(reqCtx, festID, "game-revert", func(ctx context.Context, tx *sql.Tx) error {
+		if err := reconstructGameStateAt(ctx, tx, gameID, targetID); err != nil {
+			return err
+		}
+		// Record the revert as a forward event and snapshot the reverted state so
+		// future reverts have a nearby checkpoint and never re-cross this point.
+		var err error
+		revision, err = bumpFestRevisionTx(ctx, tx, festID,
+			"game:revert", mustJSON(map[string]any{"gameID": gameID, "target": targetID}))
+		if err != nil {
+			return err
+		}
+		return writeGameCheckpoint(ctx, tx, gameID, journalIDForSeqTx(ctx, tx))
+	})
+	return revision, err
 }
 
 // journalIDForSeqTx returns the id the next journal row will get (max id so the

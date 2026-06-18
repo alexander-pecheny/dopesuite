@@ -237,10 +237,22 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 }
 
 func (s *server) handleHostDeleteGame(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// Acquire the pooled connection BEFORE the write lock and bound the whole
+	// write with writeTxTimeout, so a starved pool can never pin s.mu (the
+	// 2026-06-13 freeze). The lock is held across the post-commit active-game
+	// pointer update, which is why this uses the lower-level trio rather than
+	// withWriteTx.
+	ctx, cancel := auditDetachedContext(r.Context(), festID)
+	defer cancel()
+	conn, err := s.acquireWriteConn(ctx, "game-delete")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer conn.Close()
+	defer s.lockWrite("game-delete")()
 
-	tx, err := s.beginWriteTx(r.Context())
+	tx, err := s.beginWriteTxConn(ctx, conn)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -248,7 +260,7 @@ func (s *server) handleHostDeleteGame(w http.ResponseWriter, r *http.Request, fe
 	defer tx.Rollback()
 
 	var title string
-	if err := tx.QueryRowContext(r.Context(), `
+	if err := tx.QueryRowContext(ctx, `
 select title from games where id = ? and fest_id = ?`, gameID, festID).Scan(&title); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
@@ -257,13 +269,13 @@ select title from games where id = ? and fest_id = ?`, gameID, festID).Scan(&tit
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if _, err := tx.ExecContext(r.Context(), `delete from games where id = ? and fest_id = ?`, gameID, festID); err != nil {
+	if _, err := tx.ExecContext(ctx, `delete from games where id = ? and fest_id = ?`, gameID, festID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	var nextGameID sql.NullInt64
 	var nextMatchCode sql.NullString
-	if err := tx.QueryRowContext(r.Context(), `
+	if err := tx.QueryRowContext(ctx, `
 select g.id, coalesce((
   select m.code from matches m where m.game_id = g.id order by m.position, m.id limit 1
 ), '')
@@ -274,7 +286,7 @@ limit 1`, festID).Scan(&nextGameID, &nextMatchCode); err != nil && !errors.Is(er
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if _, err := bumpFestRevisionTx(r.Context(), tx, festID, "game:delete", mustJSON(map[string]any{
+	if _, err := bumpFestRevisionTx(ctx, tx, festID, "game:delete", mustJSON(map[string]any{
 		"gameID": gameID,
 		"title":  title,
 	})); err != nil {
@@ -487,86 +499,75 @@ func (s *server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, fe
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/game/%s/", s.festRefOrID(r.Context(), festID), s.gameRefOrID(r.Context(), gameID)), http.StatusSeeOther)
 }
 
-func (s *server) createHostGame(ctx context.Context, festID int64, gameType string, form url.Values) (int64, error) {
+func (s *server) createHostGame(reqCtx context.Context, festID int64, gameType string, form url.Values) (int64, error) {
 	if s.db == nil {
 		return 0, errors.New("sqlite is not enabled")
 	}
 	gameType = strings.TrimSpace(gameType)
-	if gameType != "od" && gameType != "ksi" && gameType != "ek" {
+	if gameType != games.OD && gameType != games.KSI && gameType != games.EK {
 		return 0, errors.New("выберите тип игры")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tx, err := s.beginWriteTx(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	var exists int
-	if err := tx.QueryRowContext(ctx, `select count(*) from fests where id = ?`, festID).Scan(&exists); err != nil {
-		return 0, err
-	}
-	if exists == 0 {
-		return 0, sql.ErrNoRows
-	}
-
 	var gameID int64
-	switch gameType {
-	case "od":
-		tours, err := parsePositiveFormInt(form, "od_tours", "Количество туров", 1, 20)
-		if err != nil {
-			return 0, err
+	err := s.withWriteTx(reqCtx, festID, "game-create", func(ctx context.Context, tx *sql.Tx) error {
+		var exists int
+		if err := tx.QueryRowContext(ctx, `select count(*) from fests where id = ?`, festID).Scan(&exists); err != nil {
+			return err
 		}
-		questions, err := parsePositiveFormInt(form, "od_questions", "Количество вопросов в туре", 1, 100)
-		if err != nil {
-			return 0, err
+		if exists == 0 {
+			return sql.ErrNoRows
 		}
-		gameID, err = createODGameTx(ctx, tx, festID, tours, questions)
-		if err != nil {
-			return 0, err
-		}
-	case "ksi":
-		themes, err := parsePositiveFormInt(form, "ksi_themes", "Количество тем", 1, 100)
-		if err != nil {
-			return 0, err
-		}
-		gameID, err = createKSIGameTx(ctx, tx, festID, themes)
-		if err != nil {
-			return 0, err
-		}
-	case "ek":
-		raw := strings.TrimSpace(form.Get("ek_scheme"))
-		if raw == "" {
-			return 0, errors.New("Вставьте JSON-схему ЭК")
-		}
-		var scheme festScheme
-		if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
-			return 0, fmt.Errorf("Не удалось разобрать JSON: %w", err)
-		}
-		gameID, err = createEKGameTx(ctx, tx, festID, scheme)
-		if err != nil {
-			return 0, err
-		}
-	}
 
-	if _, err := bumpFestRevisionTx(ctx, tx, festID, "game:create", mustJSON(map[string]any{
-		"gameID":   gameID,
-		"gameType": gameType,
-	})); err != nil {
-		return 0, err
-	}
-	// Genesis checkpoint: anchor per-game derived revert at the freshly-created
-	// game so replay always has a checkpoint at or before any future edit.
-	if err := writeGameCheckpoint(ctx, tx, gameID, journalIDForSeqTx(ctx, tx)); err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return gameID, nil
+		var err error
+		switch gameType {
+		case games.OD:
+			tours, err := parsePositiveFormInt(form, "od_tours", "Количество туров", 1, 20)
+			if err != nil {
+				return err
+			}
+			questions, err := parsePositiveFormInt(form, "od_questions", "Количество вопросов в туре", 1, 100)
+			if err != nil {
+				return err
+			}
+			gameID, err = createODGameTx(ctx, tx, festID, tours, questions)
+			if err != nil {
+				return err
+			}
+		case games.KSI:
+			themes, err := parsePositiveFormInt(form, "ksi_themes", "Количество тем", 1, 100)
+			if err != nil {
+				return err
+			}
+			gameID, err = createKSIGameTx(ctx, tx, festID, themes)
+			if err != nil {
+				return err
+			}
+		case games.EK:
+			raw := strings.TrimSpace(form.Get("ek_scheme"))
+			if raw == "" {
+				return errors.New("Вставьте JSON-схему ЭК")
+			}
+			var scheme festScheme
+			if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
+				return fmt.Errorf("Не удалось разобрать JSON: %w", err)
+			}
+			gameID, err = createEKGameTx(ctx, tx, festID, scheme)
+			if err != nil {
+				return err
+			}
+		}
+
+		if _, err = bumpFestRevisionTx(ctx, tx, festID, "game:create", mustJSON(map[string]any{
+			"gameID":   gameID,
+			"gameType": gameType,
+		})); err != nil {
+			return err
+		}
+		// Genesis checkpoint: anchor per-game derived revert at the freshly-created
+		// game so replay always has a checkpoint at or before any future edit.
+		return writeGameCheckpoint(ctx, tx, gameID, journalIDForSeqTx(ctx, tx))
+	})
+	return gameID, err
 }
 
 func nextGameIdentityTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, titleBase string) (gameIdentity, error) {

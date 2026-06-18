@@ -165,9 +165,14 @@ func (s *server) runJournalArchive(interval time.Duration) {
 	timer := time.NewTimer(10 * time.Minute)
 	defer timer.Stop()
 	for range timer.C {
+		// Bound the archive's DB work with writeTxTimeout so this background pass
+		// can never pin the global write lock indefinitely (e.g. on a starved
+		// connection pool) and freeze live edits — the 2026-06-13 failure mode.
+		ctx, cancel := context.WithTimeout(context.Background(), writeTxTimeout)
 		s.mu.Lock()
-		n, err := archiveStaleJournals(context.Background(), s.db)
+		n, err := archiveStaleJournals(ctx, s.db)
 		s.mu.Unlock()
+		cancel()
 		if err != nil {
 			log.Printf("journal archive: %v", err)
 		} else if n > 0 {
