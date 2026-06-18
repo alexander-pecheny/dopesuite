@@ -2,12 +2,13 @@ package dopeserver
 
 import (
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
-	"database/sql"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -19,11 +20,19 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"dope/dope/auditmw"
+	"dope/dope/core"
+	"dope/dope/editbatch"
+	"dope/dope/festaccess"
+	"dope/dope/imports"
+	"dope/dope/metrics"
+	"dope/dope/migrate"
 	"dope/dope/realtime"
+	"dope/dope/resolver"
 	"dope/dope/roles"
+	"dope/dope/session"
 	"dope/dope/store"
 )
 
@@ -32,100 +41,45 @@ var staticFiles embed.FS
 
 const (
 	stateFile                 = "match_state.json"
-	ksiThemeCount             = 20
 	actionAddShootoutTheme    = "addShootoutTheme"
 	actionRemoveShootoutTheme = "removeShootoutTheme"
 )
 
 type server struct {
-	mu              sync.RWMutex
-	db              *sql.DB
-	festID          int64
-	activeGameID    int64
-	activeMatchCode string
-	state           store.MatchState
-	// rt is the SSE publisher: the subscriber registry and broadcast fan-out,
-	// with its own locks (independent of mu) so DB writes never block fan-out.
-	// The server drives it — assigning per-scope seq, wrapping envelopes and
-	// coalescing deltas (below) — then calls rt.Broadcast* to route events.
-	rt           *realtime.Manager
-	assets       fs.FS
-	assetNoCache bool
-	// assetETags maps "/static/..." paths to their content-hash ETag. Used to
-	// stamp "?v=<hash>" cache-busters onto asset URLs in served HTML so a deploy
-	// is picked up immediately instead of after the cached copy's max-age. Nil
-	// in disk mode (assets served no-cache there).
-	assetETags   map[string]string
-	sendTelegram telegramSender
-	// botSecret gates the Telegram bridge endpoints (/api/telegram/*). The
-	// co-located bot sends it as X-Bot-Secret so only it can issue/consume login
-	// codes; empty disables the bridge. Set from DOPE_BOT_SECRET at startup.
-	botSecret string
-	// epoch is a per-process random token stamped on every SSE envelope, the
-	// GET /state header, and the page init. stateSeq resets to 0 on restart, so
-	// a long-lived client holding a high lastSeq would silently drop every
-	// post-restart delta (seq <= lastSeq) and diverge — the data-loss incident's
-	// amplifier. A changed epoch tells the client the seq space reset, so it
-	// resyncs instead of ignoring. Constant for a process's lifetime.
-	epoch string
-	// festViewCache holds JSON-marshaled FestView responses keyed by
-	// (festID, gameID). Invalidated wholesale per fest on broadcastState,
-	// since any of the data folded into FestView (venues, stages, matches)
-	// may have changed.
-	festViewMu    sync.RWMutex
-	festViewCache map[int64]map[int64][]byte
-	// stateSeq is a per-scope monotonic counter for the unified SSE protocol.
-	// Every broadcast on a scope bumps it; delta events carry (seq, prevSeq) so
-	// a client can tell whether it can apply ops in place or must resync. We use
-	// this rather than the fest revision because revision bumps for *all* scopes,
-	// so per-scope deltas wouldn't be contiguous. seqMu also serialises the
-	// seq-assign + fan-out so per-scope event order matches seq order.
-	seqMu    sync.Mutex
-	stateSeq map[string]uint64
-	// deltaBuf coalesces scoped delta broadcasts: rapid edits to one scope buffer
-	// their ops for deltaCoalesceWindow and fan out as ONE merged delta, so a
-	// fleet of viewers gets a single fan-out per window instead of one per edit.
-	// Guarded by seqMu (seq assignment and buffering are coupled). See
-	// broadcastStateDelta / flushDelta.
-	deltaBuf map[string]*pendingDelta
+	eng          core.Engine
+	SendTelegram telegramSender
 
-	// Static ("DDoS lockdown") mode — see static_mode.go. staticMode is the
-	// effective state; staticManual is the override (0=auto, 1=force-on,
-	// 2=force-off). The gauges feed the auto-trigger and the control endpoint:
-	// reqRate is the per-second request count (Swap(0) each tick), sseConns the
-	// current viewer /events connections, inFlight a live request gauge.
-	// liveFallthrough caps cookie-bearing requests on the live path under
-	// lockdown. The cache holds precomputed per-route HTML snapshots, with
-	// staticBuilds providing per-route singleflight on misses.
-	staticMode      atomic.Bool
-	staticManual    atomic.Int32
-	inFlight        atomic.Int64
-	reqRate         atomic.Int64
-	lastRate        atomic.Int64
-	sseConns        atomic.Int64
-	liveFallthrough atomic.Int64
-	staticMu        sync.RWMutex
-	staticCache     map[hostInitRoute]*staticEntry
-	staticBuilds    map[hostInitRoute]*staticBuildCall
-	staticCfg       staticConfig
+	// Static ("DDoS lockdown") mode cache — see static_mode.go. The gauges/state
+	// live on eng (StaticMode/ReqRate/…); staticMu guards the per-route HTML
+	// snapshot cache, with staticBuilds providing per-route singleflight on misses.
+	staticMu     sync.RWMutex
+	staticCache  map[hostInitRoute]*staticEntry
+	staticBuilds map[hostInitRoute]*staticBuildCall
+	staticCfg    staticConfig
 
-	// Edit-path instrumentation (DOPE_EDIT_METRICS). editMetricsOn gates all of
-	// it so prod pays nothing when off. writeWaiters is a live gauge of goroutines
-	// queued on (or just past) the global write mutex in the game-state PATCH
-	// path — the headline contention signal. festViewHits/Misses tally the
-	// FestView cache. editMu guards editWindow, the per-interval sample buffer the
-	// summary goroutine drains. See edit_metrics.go.
-	editMetricsOn  bool
-	writeWaiters   atomic.Int64
-	festViewHits   atomic.Int64
-	festViewMisses atomic.Int64
-	editMu         sync.Mutex
-	editWindow     []editSample
+	// Edit-path instrumentation (DOPE_EDIT_METRICS), inert unless enabled. Holds
+	// the contention gauges (write-mutex waiter depth, FestView cache hit/miss) and
+	// the per-edit sample buffer. See package metrics.
+	metrics metrics.Recorder
 
 	// editBatcher coalesces game-state PATCH edits per game into a single locked
 	// write transaction per editBatchWindow, so a fleet of concurrent editors
-	// drives ~6 commits/sec/game instead of one per keystroke. See edit_batch.go.
-	editBatcher editBatcher
+	// drives ~6 commits/sec/game instead of one per keystroke. See package
+	// editbatch. newServer wires it up; test-built servers get it lazily via
+	// editor() so a bare &server{} still handles edits.
+	editBatcher     *editbatch.Batcher
+	editBatcherOnce sync.Once
+}
+
+// editor returns the edit batcher, constructing it on first use against the
+// stable engine/metrics pointers if it was not wired up by newServer.
+func (s *server) editor() *editbatch.Batcher {
+	s.editBatcherOnce.Do(func() {
+		if s.editBatcher == nil {
+			s.editBatcher = editbatch.NewBatcher(&s.eng, &s.metrics)
+		}
+	})
+	return s.editBatcher
 }
 
 type updateRequest struct {
@@ -155,15 +109,15 @@ func Main() {
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "import-ek-results" {
-		runEKImport(os.Args[2:])
+		imports.RunEKImport(os.Args[2:], openFestDB)
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "convert-history" {
-		runConvertHistory(os.Args[2:])
+		migrate.RunConvertHistory(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "convert-audit" {
-		runConvertAudit(os.Args[2:])
+		migrate.RunConvertAudit(os.Args[2:])
 		return
 	}
 
@@ -173,8 +127,8 @@ func Main() {
 	}
 	assets, assetMode := staticSource()
 	noCacheAssets := assetMode == "disk"
-	srv.assets = assets
-	srv.assetNoCache = noCacheAssets
+	srv.eng.Assets = assets
+	srv.eng.AssetNoCache = noCacheAssets
 	// In embed mode the asset bytes change only on deploy, so precompute a
 	// content-hash ETag per file: it gives a strong validator (embed files
 	// have a zero ModTime, so without one a browser revalidation re-downloads
@@ -183,23 +137,23 @@ func Main() {
 	if !noCacheAssets {
 		assetETags = buildAssetETags(assets)
 	}
-	srv.assetETags = assetETags
+	srv.eng.AssetETags = assetETags
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", srv.handlePublicIndex)
 	mux.HandleFunc("/fest/", srv.handleFestRouter)
-	mux.HandleFunc("/register", srv.handleRegisterPage)
-	mux.HandleFunc("/register/invite", srv.handleRegisterInviteSubmit)
-	mux.HandleFunc("/register/username", srv.handleRegisterUsernameSubmit)
+	mux.HandleFunc("/register", srv.pageServer().HandleRegisterPage)
+	mux.HandleFunc("/register/invite", srv.pageServer().HandleRegisterInviteSubmit)
+	mux.HandleFunc("/register/username", srv.pageServer().HandleRegisterUsernameSubmit)
 	mux.HandleFunc("/login", srv.serveStaticPage(assets, "static/login.html"))
-	mux.HandleFunc("/profile", srv.handleProfilePage)
-	mux.HandleFunc("/profile/logout", srv.handleProfileLogout)
+	mux.HandleFunc("/profile", srv.hostPageServer().HandleProfilePage)
+	mux.HandleFunc("/profile/logout", srv.hostPageServer().HandleProfileLogout)
 	mux.HandleFunc("/api/import", srv.handleImport)
-	mux.HandleFunc("/host", srv.handleHostLanding)
-	mux.HandleFunc("/host/", srv.handleHostRouter)
-	mux.HandleFunc("/admin", srv.handleAdminLanding)
-	mux.HandleFunc("/admin/create_users", srv.handleAdminCreateUsers)
-	mux.HandleFunc("/admin/users", srv.handleAdminUsers)
+	mux.HandleFunc("/host", srv.hostPageServer().HandleHostLanding)
+	mux.HandleFunc("/host/", srv.hostPageServer().HandleHostRouter)
+	mux.HandleFunc("/admin", srv.pageServer().HandleAdminLanding)
+	mux.HandleFunc("/admin/create_users", srv.pageServer().HandleAdminCreateUsers)
+	mux.HandleFunc("/admin/users", srv.pageServer().HandleAdminUsers)
 	mux.HandleFunc("/api/fest/", srv.handleScopedAPI)
 	mux.HandleFunc("/api/auth/register/start", srv.handleAuthRegisterStart)
 	mux.HandleFunc("/api/auth/register/status", srv.handleAuthRegisterStatus)
@@ -212,8 +166,8 @@ func Main() {
 	mux.HandleFunc("/api/auth/password", srv.handleAuthPassword)
 	// Telegram bridge: the bot calls these (shared-secret gated) instead of
 	// opening fest.db itself — see telegram_bridge.go.
-	mux.HandleFunc("/api/telegram/register", srv.handleTelegramRegister)
-	mux.HandleFunc("/api/telegram/login", srv.handleTelegramLogin)
+	mux.HandleFunc("/api/telegram/register", srv.tgBridge().HandleTelegramRegister)
+	mux.HandleFunc("/api/telegram/login", srv.tgBridge().HandleTelegramLogin)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
 	mux.Handle("/static/", staticFileServer(assets, noCacheAssets, assetETags))
@@ -253,14 +207,14 @@ func Main() {
 
 	// Journal archiver: periodically folds settled hot journal rows into
 	// compact, never-expiring cold segments. See journal_archive.go.
-	srv.initJournalArchive()
+	srv.eng.InitJournalArchive()
 
 	// Edit-path instrumentation (off unless DOPE_EDIT_METRICS is set). See
 	// edit_metrics.go.
-	srv.initEditMetrics()
+	srv.metrics.Init()
 
 	httpSrv := &http.Server{
-		Handler:           srv.auditContextMiddleware(gzipMiddleware(mux)),
+		Handler:           auditmw.ContextMiddleware(&srv.eng, gzipMiddleware(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 		// No WriteTimeout: SSE responses are intentionally long-lived.
 		IdleTimeout: 120 * time.Second,
@@ -505,16 +459,21 @@ func newServer() (*server, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	return &server{
-		db:              db,
-		festID:          festID,
-		activeGameID:    gameID,
-		activeMatchCode: matchCode,
-		rt:              realtime.NewManager(),
-		botSecret:       os.Getenv("DOPE_BOT_SECRET"),
-		epoch:           epoch,
-		editBatcher:     editBatcher{pending: make(map[int64]*editBatch)},
-	}, nil
+	srv := &server{
+		eng: core.Engine{
+			DB:              db,
+			FestID:          festID,
+			ActiveGameID:    gameID,
+			ActiveMatchCode: matchCode,
+			RT:              realtime.NewManager(),
+			BotSecret:       os.Getenv("DOPE_BOT_SECRET"),
+			Epoch:           epoch,
+		},
+	}
+	// Constructed after srv exists so the batcher holds stable pointers to the
+	// heap-allocated engine and metrics recorder.
+	srv.editBatcher = editbatch.NewBatcher(&srv.eng, &srv.metrics)
+	return srv, nil
 }
 
 func loadState(path string) (store.MatchState, error) {
@@ -565,7 +524,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	festID, err := resolveFestID(r.Context(), s.db, strings.TrimSpace(r.URL.Query().Get("fest_id")))
+	festID, err := store.ResolveFestID(r.Context(), s.eng.DB, strings.TrimSpace(r.URL.Query().Get("fest_id")))
 	if err != nil || festID <= 0 {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
@@ -577,17 +536,17 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// so the concurrent-viewer tally is reported per game. Best-effort: an absent
 	// or unresolvable id leaves the connection unscoped (gameID 0) and counted in
 	// the fest's game-less bucket.
-	gameID, _ := resolveGameID(r.Context(), s.db, festID, strings.TrimSpace(r.URL.Query().Get("game_id")))
+	gameID, _ := resolveGameID(r.Context(), s.eng.DB, festID, strings.TrimSpace(r.URL.Query().Get("game_id")))
 
 	// Under static mode, shed anonymous viewers (the DDoS vector) but keep editors
 	// live so organizers can still run the event. The editor check only runs for
 	// cookie-bearing requests, so the anonymous flood is rejected without a DB
 	// session lookup.
 	editor := false
-	if hasSessionCookie(r) {
+	if session.HasCookie(r) {
 		editor = s.isFestEditor(r, festID)
 	}
-	if s.staticMode.Load() && !editor {
+	if s.eng.StaticMode.Load() && !editor {
 		http.Error(w, "static mode", http.StatusServiceUnavailable)
 		return
 	}
@@ -603,13 +562,13 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ch := make(chan realtime.Event, 8)
-	s.rt.AddSubscriber(festID, ch, editor, gameID)
-	s.sseConns.Add(1)
-	s.rt.ScheduleViewerCount(festID)
+	s.eng.RT.AddSubscriber(festID, ch, editor, gameID)
+	s.eng.SseConns.Add(1)
+	s.eng.RT.ScheduleViewerCount(festID)
 	defer func() {
-		s.rt.RemoveSubscriber(festID, ch)
-		s.sseConns.Add(-1)
-		s.rt.ScheduleViewerCount(festID)
+		s.eng.RT.RemoveSubscriber(festID, ch)
+		s.eng.SseConns.Add(-1)
+		s.eng.RT.ScheduleViewerCount(festID)
 	}()
 
 	// A write deadline turns a dead or wedged client into a prompt error instead
@@ -671,7 +630,7 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	festID, err := resolveFestID(r.Context(), s.db, strings.TrimSpace(r.URL.Query().Get("fest_id")))
+	festID, err := store.ResolveFestID(r.Context(), s.eng.DB, strings.TrimSpace(r.URL.Query().Get("fest_id")))
 	if err != nil || festID <= 0 {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
@@ -691,8 +650,8 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ch := make(chan realtime.HostPresenceEvent, 16)
-	s.rt.AddHostSubscriber(festID, ch)
-	defer s.rt.RemoveHostSubscriber(festID, ch)
+	s.eng.RT.AddHostSubscriber(festID, ch)
+	defer s.eng.RT.RemoveHostSubscriber(festID, ch)
 
 	// Bound each write so a dead/stuck host connection is reaped promptly instead
 	// of lingering in the presence set (mirrors handleEvents).
@@ -732,11 +691,11 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 // (table editor or higher). Best-effort: any lookup failure means "not an
 // editor", so the connection just receives the coalesced viewer stream.
 func (s *server) isFestEditor(r *http.Request, festID int64) bool {
-	user, ok := s.lookupSession(r)
+	user, ok := s.eng.LookupSession(r)
 	if !ok {
 		return false
 	}
-	role, err := s.festUserRole(r.Context(), festID, user.UserID)
+	role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, festID, user.UserID)
 	if err != nil {
 		return false
 	}
@@ -744,27 +703,27 @@ func (s *server) isFestEditor(r *http.Request, festID int64) bool {
 }
 
 func (s *server) applyUpdate(req updateRequest) (store.MatchView, []byte, error) {
-	if s.db != nil {
-		return s.applyMatchUpdate(s.festID, s.activeMatchCode, req)
+	if s.eng.DB != nil {
+		return s.applyMatchUpdate(s.eng.FestID, s.eng.ActiveMatchCode, req)
 	}
 	return s.applyLegacyUpdate(req)
 }
 
 func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.eng.Mu.Lock()
+	defer s.eng.Mu.Unlock()
 
 	if req.Finished != nil {
 		if hasMatchEdit(req) {
 			return store.MatchView{}, nil, errors.New("finished update must be standalone")
 		}
-		s.state.Finished = *req.Finished
+		s.eng.State.Finished = *req.Finished
 		if *req.Finished {
-			assignComputedPlaces(&s.state)
+			assignComputedPlaces(&s.eng.State)
 		}
 		return s.commitLocked()
 	}
-	if s.state.Finished {
+	if s.eng.State.Finished {
 		return store.MatchView{}, nil, errors.New("match is finished")
 	}
 
@@ -774,18 +733,18 @@ func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, 
 		}
 		switch req.Action {
 		case actionAddShootoutTheme:
-			for i := range s.state.Teams {
-				s.state.Teams[i].ShootoutThemes = append(s.state.Teams[i].ShootoutThemes, store.ThemeEntry{})
+			for i := range s.eng.State.Teams {
+				s.eng.State.Teams[i].ShootoutThemes = append(s.eng.State.Teams[i].ShootoutThemes, store.ThemeEntry{})
 			}
 			return s.commitLocked()
 		case actionRemoveShootoutTheme:
-			if len(s.state.Teams) == 0 || len(s.state.Teams[0].ShootoutThemes) == 0 {
+			if len(s.eng.State.Teams) == 0 || len(s.eng.State.Teams[0].ShootoutThemes) == 0 {
 				return store.MatchView{}, nil, errors.New("no shootout themes to remove")
 			}
-			for i := range s.state.Teams {
-				if len(s.state.Teams[i].ShootoutThemes) > 0 {
-					last := len(s.state.Teams[i].ShootoutThemes) - 1
-					s.state.Teams[i].ShootoutThemes = s.state.Teams[i].ShootoutThemes[:last]
+			for i := range s.eng.State.Teams {
+				if len(s.eng.State.Teams[i].ShootoutThemes) > 0 {
+					last := len(s.eng.State.Teams[i].ShootoutThemes) - 1
+					s.eng.State.Teams[i].ShootoutThemes = s.eng.State.Teams[i].ShootoutThemes[:last]
 				}
 			}
 			return s.commitLocked()
@@ -794,10 +753,10 @@ func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, 
 		}
 	}
 
-	if req.Team < 0 || req.Team >= len(s.state.Teams) {
+	if req.Team < 0 || req.Team >= len(s.eng.State.Teams) {
 		return store.MatchView{}, nil, errors.New("bad team index")
 	}
-	team := &s.state.Teams[req.Team]
+	team := &s.eng.State.Teams[req.Team]
 
 	if req.Tiebreak != nil {
 		return store.MatchView{}, nil, errors.New("shootout total is calculated")
@@ -846,14 +805,14 @@ func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, 
 }
 
 func (s *server) commitLocked() (store.MatchView, []byte, error) {
-	store.NormalizeState(&s.state)
-	s.state.Revision++
-	s.state.UpdatedAt = time.Now()
-	if err := saveState(stateFile, s.state); err != nil {
+	store.NormalizeState(&s.eng.State)
+	s.eng.State.Revision++
+	s.eng.State.UpdatedAt = time.Now()
+	if err := saveState(stateFile, s.eng.State); err != nil {
 		return store.MatchView{}, nil, err
 	}
 
-	view := store.BuildView(s.state)
+	view := store.BuildView(s.eng.State)
 	data, err := json.Marshal(view)
 	return view, data, err
 }
@@ -1022,4 +981,39 @@ func defaultMatch() store.MatchState {
 			},
 		},
 	}
+}
+
+// runResolveBracket is a maintenance entrypoint (`dope resolve-bracket --db ...
+// --game N`) that re-runs slot resolution for one game's bracket. It applies
+// the same logic the live write path uses, so it reconciles reseed_entries and
+// downstream slots after manual data edits, imports, or migrations.
+func runResolveBracket(args []string) {
+	fs := flag.NewFlagSet("resolve-bracket", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to the sqlite database")
+	gameID := fs.Int64("game", 0, "game id to reconcile")
+	_ = fs.Parse(args)
+	if *dbPath == "" || *gameID == 0 {
+		log.Fatal("resolve-bracket: --db and --game are required")
+	}
+
+	db, err := openFestDB(*dbPath)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	srv := &server{eng: core.Engine{DB: db}}
+	ctx := context.Background()
+	tx, err := srv.eng.BeginWriteTx(ctx)
+	if err != nil {
+		log.Fatalf("begin tx: %v", err)
+	}
+	defer tx.Rollback()
+	if _, err := resolver.ResolveGameSlotsAndReseedsTx(ctx, tx, *gameID); err != nil {
+		log.Fatalf("resolve game %d: %v", *gameID, err)
+	}
+	if err := tx.Commit(); err != nil {
+		log.Fatalf("commit: %v", err)
+	}
+	log.Printf("resolve-bracket: reconciled game %d in %s", *gameID, *dbPath)
 }

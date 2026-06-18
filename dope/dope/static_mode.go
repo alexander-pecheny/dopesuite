@@ -82,10 +82,10 @@ func (s *server) initStaticMode() {
 	}
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("DOPE_STATIC"))) {
 	case "on":
-		s.staticManual.Store(1)
-		s.staticMode.Store(true)
+		s.eng.StaticManual.Store(1)
+		s.eng.StaticMode.Store(true)
 	case "off":
-		s.staticManual.Store(2)
+		s.eng.StaticManual.Store(2)
 	}
 	go s.runStaticEval()
 	go s.runStaticRegen()
@@ -102,11 +102,11 @@ func (s *server) runStaticEval() {
 	defer ticker.Stop()
 	var overTicks, underTicks, dwell int
 	for range ticker.C {
-		rate := s.reqRate.Swap(0) // requests in the last second
-		s.lastRate.Store(rate)
-		sse := s.sseConns.Load()
+		rate := s.eng.ReqRate.Swap(0) // requests in the last second
+		s.eng.LastRate.Store(rate)
+		sse := s.eng.SseConns.Load()
 
-		switch s.staticManual.Load() {
+		switch s.eng.StaticManual.Load() {
 		case 1:
 			s.setStatic(true)
 			continue
@@ -115,7 +115,7 @@ func (s *server) runStaticEval() {
 			continue
 		}
 
-		if s.staticMode.Load() {
+		if s.eng.StaticMode.Load() {
 			dwell++
 			if rate < cfg.rateLow {
 				underTicks++
@@ -148,12 +148,12 @@ func (s *server) runStaticEval() {
 // setStatic flips the effective mode and, on entry, sheds connected viewers via
 // a lockdown sentinel. Logs every transition.
 func (s *server) setStatic(on bool) {
-	if s.staticMode.Swap(on) == on {
+	if s.eng.StaticMode.Swap(on) == on {
 		return // no change
 	}
 	if on {
-		log.Printf("static mode: ON (req/s=%d sse=%d)", s.lastRate.Load(), s.sseConns.Load())
-		s.rt.BroadcastLockdown()
+		log.Printf("static mode: ON (req/s=%d sse=%d)", s.eng.LastRate.Load(), s.eng.SseConns.Load())
+		s.eng.RT.BroadcastLockdown()
 	} else {
 		log.Printf("static mode: OFF")
 	}
@@ -206,7 +206,7 @@ func (s *server) runStaticRegen() {
 // splices into the shell, and precomputes both raw and gzipped bytes.
 func (s *server) buildStaticEntry(ctx context.Context, route hostInitRoute) (*staticEntry, error) {
 	var gameType string
-	_ = s.db.QueryRowContext(ctx, `select game_type from games where id = ? and fest_id = ?`, route.GameID, route.FestID).Scan(&gameType)
+	_ = s.eng.DB.QueryRowContext(ctx, `select game_type from games where id = ? and fest_id = ?`, route.GameID, route.FestID).Scan(&gameType)
 
 	var htmlPath, marker string
 	var data []byte
@@ -252,7 +252,7 @@ func (s *server) buildStaticEntry(ctx context.Context, route hostInitRoute) (*st
 // applies the asset cache-buster, returning the bytes (the no-ResponseWriter
 // twin of serveInjectedHTML, so snapshots can be cached).
 func (s *server) renderInjectedBytes(htmlPath, marker string, payload []byte) ([]byte, error) {
-	body, err := fs.ReadFile(s.assets, htmlPath)
+	body, err := fs.ReadFile(s.eng.Assets, htmlPath)
 	if err != nil {
 		return nil, err
 	}
@@ -358,19 +358,11 @@ func (s *server) serveStaticSnapshot(w http.ResponseWriter, r *http.Request, rou
 	_, _ = w.Write(body)
 }
 
-// hasSessionCookie reports whether a non-empty session cookie is present. Cheap
-// (no DB): used under static mode to fast-path the anonymous flood to the cache
-// without a session lookup.
-func hasSessionCookie(r *http.Request) bool {
-	c, err := r.Cookie(sessionCookieName)
-	return err == nil && c.Value != ""
-}
-
 // writeStaticStatus emits the current mode + load gauges as JSON for the control
 // endpoint.
 func (s *server) writeStaticStatus(w http.ResponseWriter) {
 	manual := "auto"
-	switch s.staticManual.Load() {
+	switch s.eng.StaticManual.Load() {
 	case 1:
 		manual = "on"
 	case 2:
@@ -380,12 +372,12 @@ func (s *server) writeStaticStatus(w http.ResponseWriter) {
 	cacheEntries := len(s.staticCache)
 	s.staticMu.RUnlock()
 	status := map[string]any{
-		"static":          s.staticMode.Load(),
+		"static":          s.eng.StaticMode.Load(),
 		"manual":          manual,
-		"reqRate":         s.lastRate.Load(),
-		"sseConns":        s.sseConns.Load(),
-		"inFlight":        s.inFlight.Load(),
-		"liveFallthrough": s.liveFallthrough.Load(),
+		"reqRate":         s.eng.LastRate.Load(),
+		"sseConns":        s.eng.SseConns.Load(),
+		"inFlight":        s.eng.InFlight.Load(),
+		"liveFallthrough": s.eng.LiveFallthrough.Load(),
 		"cacheEntries":    cacheEntries,
 		"config": map[string]any{
 			"rateHigh": s.staticCfg.rateHigh,
@@ -407,11 +399,11 @@ func (s *server) startStaticControl(addr string) {
 	mux.HandleFunc("/admin/static", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("mode") {
 		case "on":
-			s.staticManual.Store(1)
+			s.eng.StaticManual.Store(1)
 		case "off":
-			s.staticManual.Store(2)
+			s.eng.StaticManual.Store(2)
 		case "auto":
-			s.staticManual.Store(0)
+			s.eng.StaticManual.Store(0)
 		case "":
 			// status-only request
 		default:

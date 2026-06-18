@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"dope/dope/store"
+	"dope/dope/storeutil"
 )
 
 // Revert and replay are scoped per GAME, not per fest: games are independent
@@ -143,7 +143,7 @@ func DecodeGameCheckpoint(blob []byte) (*GameCheckpoint, error) {
 	for _, rows := range cp.Tables {
 		for _, m := range rows {
 			for k, val := range m {
-				m[k] = store.JSONToSQLValue(val)
+				m[k] = storeutil.JSONToSQLValue(val)
 			}
 		}
 	}
@@ -181,7 +181,7 @@ func RestoreGameCheckpoint(ctx context.Context, tx *sql.Tx, gameID int64, cp *Ga
 // insertRow inserts a column-map row into table (insert or ignore so a restore
 // that a cascade already recreated doesn't fail the whole restore).
 func insertRow(ctx context.Context, tx *sql.Tx, table string, row map[string]any) error {
-	cols := store.SortedKeys(row)
+	cols := storeutil.SortedKeys(row)
 	if len(cols) == 0 {
 		return errors.New("empty row")
 	}
@@ -189,7 +189,7 @@ func insertRow(ctx context.Context, tx *sql.Tx, table string, row map[string]any
 	args := make([]any, len(cols))
 	quoted := make([]string, len(cols))
 	for i, c := range cols {
-		quoted[i] = store.QuoteIdent(c)
+		quoted[i] = storeutil.QuoteIdent(c)
 		placeholders[i] = "?"
 		args[i] = row[c]
 	}

@@ -40,3 +40,26 @@ func InsertReturningID(ctx context.Context, tx *sql.Tx, query string, args ...an
 	}
 	return result.LastInsertId()
 }
+
+// InsertTheme inserts a theme row and its five answer marks for a team in a
+// match. A playerID of 0 leaves player_id null.
+func InsertTheme(ctx context.Context, tx *sql.Tx, matchID, teamID int64, kind string, themeIndex int, playerID int64, answers [5]string) error {
+	var player any
+	if playerID > 0 {
+		player = playerID
+	}
+	themeID, err := InsertReturningID(ctx, tx, `
+insert into themes(match_id, team_id, kind, theme_index, player_id)
+values(?, ?, ?, ?, ?)`, matchID, teamID, kind, themeIndex, player)
+	if err != nil {
+		return err
+	}
+	for answerIndex, mark := range answers {
+		if _, err := tx.ExecContext(ctx, `
+insert into answers(theme_id, answer_index, mark)
+values(?, ?, ?)`, themeID, answerIndex, NormalizeMark(mark)); err != nil {
+			return err
+		}
+	}
+	return nil
+}

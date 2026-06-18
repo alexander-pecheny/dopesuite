@@ -14,6 +14,14 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	// Blank-imported so its init() registers the dope_z/dope_unz scalar SQL
+	// functions (audit-log zstd compression) on the shared sqlite driver. The
+	// functions are invoked only from SQL (audit triggers), so this package has
+	// no Go-level dependency on sqlitez; the import exists purely to run that
+	// registration whenever the store package is used. sqlitez imports nothing
+	// from store, so there is no cycle.
+	_ "dope/dope/sqlitez"
 )
 
 // MaxOpenConns sizes the read connection pool. SQLite under WAL handles many

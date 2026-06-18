@@ -5,7 +5,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
+	"dope/dope/core"
+	"dope/dope/session"
 	"dope/dope/store"
+	"dope/dope/util"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,10 +24,7 @@ import (
 )
 
 const (
-	sessionCookieName     = "session"
 	trustedOriginHostsEnv = "DOPE_TRUSTED_ORIGIN_HOSTS"
-	usernameMaxLen        = 32
-	usernameMinLen        = 2
 	passwordMinLen        = 8
 	// bcrypt only hashes the first 72 bytes of its input and rejects longer
 	// passwords, so cap the new password at that boundary.
@@ -33,16 +33,6 @@ const (
 
 type startRegisterRequest struct {
 	InviteCode string `json:"invite_code"`
-}
-
-type startRegisterResponse struct {
-	Code      string `json:"code"`
-	ExpiresAt string `json:"expires_at"`
-}
-
-type registerStatusResponse struct {
-	Status   string  `json:"status"`
-	Username *string `json:"username,omitempty"`
 }
 
 type loginRequest struct {
@@ -81,14 +71,6 @@ type meResponse struct {
 	Telegram *string `json:"telegram,omitempty"`
 }
 
-type sessionUser struct {
-	SessionID int64
-	UserID    int64
-	Username  sql.NullString
-	Telegram  sql.NullString
-	IsSystem  bool
-}
-
 type telegramSender func(ctx context.Context, chatID int64, text string) error
 
 func (s *server) handleAuthRegisterStart(w http.ResponseWriter, r *http.Request) {
@@ -117,10 +99,10 @@ func (s *server) handleAuthRegisterStart(w http.ResponseWriter, r *http.Request)
 	writeJSONValue(w, resp)
 }
 
-func (s *server) startRegister(ctx context.Context, invite string) (startRegisterResponse, error) {
-	tx, err := s.beginWriteTx(ctx)
+func (s *server) startRegister(ctx context.Context, invite string) (session.StartRegisterResponse, error) {
+	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
-		return startRegisterResponse{}, err
+		return session.StartRegisterResponse{}, err
 	}
 	defer tx.Rollback()
 
@@ -131,39 +113,39 @@ func (s *server) startRegister(ctx context.Context, invite string) (startRegiste
 	err = tx.QueryRowContext(ctx, `
 select id, used_by, expires_at from invites where code = ?`, invite).Scan(&inviteID, &usedBy, &expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return startRegisterResponse{}, authError{code: http.StatusNotFound, msg: "invite not found"}
+		return session.StartRegisterResponse{}, authError{code: http.StatusNotFound, msg: "invite not found"}
 	}
 	if err != nil {
-		return startRegisterResponse{}, err
+		return session.StartRegisterResponse{}, err
 	}
 	if usedBy.Valid {
-		return startRegisterResponse{}, authError{code: http.StatusGone, msg: "invite already used"}
+		return session.StartRegisterResponse{}, authError{code: http.StatusGone, msg: "invite already used"}
 	}
 	expiry, err := time.Parse(time.RFC3339, expiresAt)
 	if err == nil && now.After(expiry) {
-		return startRegisterResponse{}, authError{code: http.StatusGone, msg: "invite expired"}
+		return session.StartRegisterResponse{}, authError{code: http.StatusGone, msg: "invite expired"}
 	}
 
-	expires := now.Add(telegramAuthLifetime)
+	expires := now.Add(session.TelegramAuthLifetime)
 	for attempt := 0; attempt < 3; attempt++ {
 		code, err := newTelegramAuthCode()
 		if err != nil {
-			return startRegisterResponse{}, err
+			return session.StartRegisterResponse{}, err
 		}
 		_, err = tx.ExecContext(ctx, `
 insert into telegram_login_codes(code, kind, invite_id, created_at, expires_at)
 values(?, 'register', ?, ?, ?)`, code, inviteID, now.Format(time.RFC3339), expires.Format(time.RFC3339))
 		if err == nil {
 			if err := tx.Commit(); err != nil {
-				return startRegisterResponse{}, err
+				return session.StartRegisterResponse{}, err
 			}
-			return startRegisterResponse{Code: code, ExpiresAt: expires.Format(time.RFC3339)}, nil
+			return session.StartRegisterResponse{Code: code, ExpiresAt: expires.Format(time.RFC3339)}, nil
 		}
-		if !isUniqueViolation(err) {
-			return startRegisterResponse{}, err
+		if !util.IsUniqueViolation(err) {
+			return session.StartRegisterResponse{}, err
 		}
 	}
-	return startRegisterResponse{}, errors.New("could not allocate register code")
+	return session.StartRegisterResponse{}, errors.New("could not allocate register code")
 }
 
 func (s *server) handleAuthRegisterStatus(w http.ResponseWriter, r *http.Request) {
@@ -183,15 +165,15 @@ func (s *server) handleAuthRegisterStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if token != "" {
-		setSessionCookie(w, token)
+		session.SetCookie(w, token)
 	}
 	writeJSONValue(w, resp)
 }
 
-func (s *server) finalizeRegister(ctx context.Context, code string) (registerStatusResponse, string, error) {
-	tx, err := s.beginWriteTx(ctx)
+func (s *server) finalizeRegister(ctx context.Context, code string) (session.RegisterStatusResponse, string, error) {
+	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
-		return registerStatusResponse{}, "", err
+		return session.RegisterStatusResponse{}, "", err
 	}
 	defer tx.Rollback()
 
@@ -211,33 +193,33 @@ select id, kind, invite_id, user_id, telegram_user_id, telegram_username, expire
 from telegram_login_codes where code = ?`, code).Scan(
 		&codeID, &kind, &inviteID, &userID, &tgUserID, &tgUsername, &expiresAt, &consumedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return registerStatusResponse{Status: "not_found"}, "", nil
+		return session.RegisterStatusResponse{Status: "not_found"}, "", nil
 	}
 	if err != nil {
-		return registerStatusResponse{}, "", err
+		return session.RegisterStatusResponse{}, "", err
 	}
 	if kind != "register" {
-		return registerStatusResponse{Status: "not_found"}, "", nil
+		return session.RegisterStatusResponse{Status: "not_found"}, "", nil
 	}
 	expiry, _ := time.Parse(time.RFC3339, expiresAt)
 	if !consumedAt.Valid {
 		if !expiry.IsZero() && now.After(expiry) {
-			return registerStatusResponse{Status: "expired"}, "", nil
+			return session.RegisterStatusResponse{Status: "expired"}, "", nil
 		}
-		return registerStatusResponse{Status: "pending"}, "", nil
+		return session.RegisterStatusResponse{Status: "pending"}, "", nil
 	}
 	if !tgUserID.Valid {
-		return registerStatusResponse{Status: "pending"}, "", nil
+		return session.RegisterStatusResponse{Status: "pending"}, "", nil
 	}
 	if !inviteID.Valid {
-		return registerStatusResponse{}, "", errors.New("register code missing invite")
+		return session.RegisterStatusResponse{}, "", errors.New("register code missing invite")
 	}
 
 	var inviteUsedBy sql.NullInt64
 	var inviteExpiresAt string
 	if err := tx.QueryRowContext(ctx, `
 select used_by, expires_at from invites where id = ?`, inviteID.Int64).Scan(&inviteUsedBy, &inviteExpiresAt); err != nil {
-		return registerStatusResponse{}, "", err
+		return session.RegisterStatusResponse{}, "", err
 	}
 
 	var resolvedUserID int64
@@ -250,47 +232,47 @@ select used_by, expires_at from invites where id = ?`, inviteID.Int64).Scan(&inv
 			resolvedUserID = existing
 			if _, err := tx.ExecContext(ctx, `
 update users set telegram_username = ?, updated_at = ? where id = ?`, tgUsername, now.Format(time.RFC3339), existing); err != nil {
-				return registerStatusResponse{}, "", err
+				return session.RegisterStatusResponse{}, "", err
 			}
 		} else if errors.Is(err, sql.ErrNoRows) {
 			id, err := store.InsertReturningID(ctx, tx, `
 insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
 values(?, ?, null, 0, ?, ?)`, tgUserID.Int64, tgUsername, now.Format(time.RFC3339), now.Format(time.RFC3339))
 			if err != nil {
-				return registerStatusResponse{}, "", err
+				return session.RegisterStatusResponse{}, "", err
 			}
 			resolvedUserID = id
 		} else {
-			return registerStatusResponse{}, "", err
+			return session.RegisterStatusResponse{}, "", err
 		}
 
 		if _, err := tx.ExecContext(ctx, `
 update telegram_login_codes set user_id = ? where id = ?`, resolvedUserID, codeID); err != nil {
-			return registerStatusResponse{}, "", err
+			return session.RegisterStatusResponse{}, "", err
 		}
 
 		if !inviteUsedBy.Valid {
 			if _, err := tx.ExecContext(ctx, `
 update invites set used_by = ?, used_at = ? where id = ? and used_by is null`,
 				resolvedUserID, now.Format(time.RFC3339), inviteID.Int64); err != nil {
-				return registerStatusResponse{}, "", err
+				return session.RegisterStatusResponse{}, "", err
 			}
 		}
 	}
 
 	token, err := createSessionTx(ctx, tx, resolvedUserID, now)
 	if err != nil {
-		return registerStatusResponse{}, "", err
+		return session.RegisterStatusResponse{}, "", err
 	}
 
 	var username sql.NullString
 	if err := tx.QueryRowContext(ctx, `select username from users where id = ?`, resolvedUserID).Scan(&username); err != nil {
-		return registerStatusResponse{}, "", err
+		return session.RegisterStatusResponse{}, "", err
 	}
 	if err := tx.Commit(); err != nil {
-		return registerStatusResponse{}, "", err
+		return session.RegisterStatusResponse{}, "", err
 	}
-	resp := registerStatusResponse{Status: "ready"}
+	resp := session.RegisterStatusResponse{Status: "ready"}
 	if username.Valid {
 		v := username.String
 		resp.Username = &v
@@ -320,7 +302,7 @@ func (s *server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, err)
 		return
 	}
-	setSessionCookie(w, token)
+	session.SetCookie(w, token)
 	writeJSONValue(w, meResponseFor(user))
 }
 
@@ -358,7 +340,7 @@ func (s *server) startLogin(ctx context.Context, username string, sendCode bool)
 		salt       sql.NullString
 		isSystem   int
 	)
-	err := s.db.QueryRowContext(ctx, `
+	err := s.eng.DB.QueryRowContext(ctx, `
 select id, telegram_user_id, telegram_username, password_hash, password_salt, is_system
 from users where username = ?`, username).Scan(&userID, &tgUserID, &tgUsername, &hash, &salt, &isSystem)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -389,7 +371,7 @@ from users where username = ?`, username).Scan(&userID, &tgUserID, &tgUsername, 
 		return loginStartResponse{}, err
 	}
 	if err := s.sendLoginCode(ctx, tgUserID.Int64, code); err != nil {
-		_, _ = s.db.ExecContext(ctx, `
+		_, _ = s.eng.DB.ExecContext(ctx, `
 delete from telegram_login_codes where code = ? and consumed_at is null`, code)
 		return loginStartResponse{}, authError{code: http.StatusServiceUnavailable, msg: "could not send telegram code"}
 	}
@@ -400,20 +382,20 @@ delete from telegram_login_codes where code = ? and consumed_at is null`, code)
 
 func (s *server) issueLoginCode(ctx context.Context, userID int64, tgUserID int64, tgUsername sql.NullString) (string, string, error) {
 	now := time.Now().UTC()
-	expires := now.Add(telegramAuthLifetime).Format(time.RFC3339)
+	expires := now.Add(session.TelegramAuthLifetime).Format(time.RFC3339)
 	createdAt := now.Format(time.RFC3339)
 	for attempt := 0; attempt < 3; attempt++ {
 		code, err := newTelegramLoginCode()
 		if err != nil {
 			return "", "", err
 		}
-		_, err = s.db.ExecContext(ctx, `
+		_, err = s.eng.DB.ExecContext(ctx, `
 insert into telegram_login_codes(code, kind, user_id, telegram_user_id, telegram_username, created_at, expires_at)
 values(?, 'login', ?, ?, ?, ?, ?)`, code, userID, tgUserID, tgUsername, createdAt, expires)
 		if err == nil {
 			return code, expires, nil
 		}
-		if !isUniqueViolation(err) {
+		if !util.IsUniqueViolation(err) {
 			return "", "", err
 		}
 	}
@@ -421,7 +403,7 @@ values(?, 'login', ?, ?, ?, ?, ?)`, code, userID, tgUserID, tgUsername, createdA
 }
 
 func (s *server) sendLoginCode(ctx context.Context, chatID int64, code string) error {
-	sender := s.sendTelegram
+	sender := s.SendTelegram
 	if sender == nil {
 		sender = sendTelegramMessageFromEnv
 	}
@@ -432,10 +414,10 @@ func loginCodeTelegramMessage(code string) string {
 	return "Твой код для входа:\n<code>" + code + "</code>\nВведи его на странице входа в течение минуты."
 }
 
-func (s *server) consumeLoginCode(ctx context.Context, code string) (string, sessionUser, error) {
-	tx, err := s.beginWriteTx(ctx)
+func (s *server) consumeLoginCode(ctx context.Context, code string) (string, session.User, error) {
+	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
-		return "", sessionUser{}, err
+		return "", session.User{}, err
 	}
 	defer tx.Rollback()
 
@@ -451,43 +433,43 @@ func (s *server) consumeLoginCode(ctx context.Context, code string) (string, ses
 select id, kind, user_id, expires_at, consumed_at from telegram_login_codes where code = ?`, code).Scan(
 		&codeID, &kind, &userID, &expiresAt, &consumedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", sessionUser{}, authError{code: http.StatusNotFound, msg: "code not found"}
+		return "", session.User{}, authError{code: http.StatusNotFound, msg: "code not found"}
 	}
 	if err != nil {
-		return "", sessionUser{}, err
+		return "", session.User{}, err
 	}
 	if kind != "login" {
-		return "", sessionUser{}, authError{code: http.StatusBadRequest, msg: "wrong code kind"}
+		return "", session.User{}, authError{code: http.StatusBadRequest, msg: "wrong code kind"}
 	}
 	if consumedAt.Valid {
-		return "", sessionUser{}, authError{code: http.StatusGone, msg: "code already used"}
+		return "", session.User{}, authError{code: http.StatusGone, msg: "code already used"}
 	}
 	expiry, _ := time.Parse(time.RFC3339, expiresAt)
 	if !expiry.IsZero() && now.After(expiry) {
-		return "", sessionUser{}, authError{code: http.StatusGone, msg: "code expired"}
+		return "", session.User{}, authError{code: http.StatusGone, msg: "code expired"}
 	}
 	if !userID.Valid {
-		return "", sessionUser{}, errors.New("login code missing user")
+		return "", session.User{}, errors.New("login code missing user")
 	}
 
 	if _, err := tx.ExecContext(ctx, `
 update telegram_login_codes set consumed_at = ? where id = ?`, now.Format(time.RFC3339), codeID); err != nil {
-		return "", sessionUser{}, err
+		return "", session.User{}, err
 	}
 
 	user, err := loadUserTx(ctx, tx, userID.Int64)
 	if err != nil {
-		return "", sessionUser{}, err
+		return "", session.User{}, err
 	}
 	if user.IsSystem {
-		return "", sessionUser{}, authError{code: http.StatusForbidden, msg: "system user cannot log in"}
+		return "", session.User{}, authError{code: http.StatusForbidden, msg: "system user cannot log in"}
 	}
 	token, err := createSessionTx(ctx, tx, user.UserID, now)
 	if err != nil {
-		return "", sessionUser{}, err
+		return "", session.User{}, err
 	}
 	if err := tx.Commit(); err != nil {
-		return "", sessionUser{}, err
+		return "", session.User{}, err
 	}
 	return token, user, nil
 }
@@ -511,7 +493,7 @@ func (s *server) handleAuthLoginPassword(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := r.Context()
-	tx, err := s.beginWriteTx(ctx)
+	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -553,7 +535,7 @@ select id, password_hash, password_salt, is_system from users where username = ?
 		// successful login so the weaker hash leaves the database.
 		if _, err := tx.ExecContext(ctx, `
 update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
-			upgraded, utcNow(), userID); err != nil {
+			upgraded, util.UtcNow(), userID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -574,7 +556,7 @@ update users set password_hash = ?, password_salt = null, updated_at = ? where i
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	setSessionCookie(w, token)
+	session.SetCookie(w, token)
 	writeJSONValue(w, meResponseFor(user))
 }
 
@@ -627,7 +609,7 @@ func (s *server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	user, ok := s.lookupSession(r)
+	user, ok := s.eng.LookupSession(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -640,18 +622,18 @@ func (s *server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !requireSameOriginUnsafe(w, r) {
+	if !RequireSameOriginUnsafe(w, r) {
 		return
 	}
 	s.logoutSession(r)
-	clearSessionCookie(w)
+	session.ClearCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) logoutSession(r *http.Request) {
-	if cookie, err := r.Cookie(sessionCookieName); err == nil {
-		hash := hashSessionToken(cookie.Value)
-		_, _ = s.db.ExecContext(r.Context(), `delete from sessions where token_hash = ?`, hash)
+	if cookie, err := r.Cookie(session.CookieName); err == nil {
+		hash := core.HashSessionToken(cookie.Value)
+		_, _ = s.eng.DB.ExecContext(r.Context(), `delete from sessions where token_hash = ?`, hash)
 	}
 }
 
@@ -660,11 +642,11 @@ func (s *server) handleAuthUsername(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !requireSameOriginUnsafe(w, r) {
+	if !RequireSameOriginUnsafe(w, r) {
 		return
 	}
 	defer r.Body.Close()
-	user, ok := s.lookupSession(r)
+	user, ok := s.eng.LookupSession(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -679,15 +661,15 @@ func (s *server) handleAuthUsername(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	username := strings.TrimSpace(req.Username)
-	if !validUsername(username) {
+	if !util.ValidUsername(username) {
 		http.Error(w, "bad username", http.StatusBadRequest)
 		return
 	}
-	res, err := s.writeExec(r.Context(), `
+	res, err := s.eng.WriteExec(r.Context(), `
 update users set username = ?, updated_at = ? where id = ? and username is null`,
-		username, utcNow(), user.UserID)
+		username, util.UtcNow(), user.UserID)
 	if err != nil {
-		if isUniqueViolation(err) {
+		if util.IsUniqueViolation(err) {
 			http.Error(w, "username taken", http.StatusConflict)
 			return
 		}
@@ -712,11 +694,11 @@ func (s *server) handleAuthPassword(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !requireSameOriginUnsafe(w, r) {
+	if !RequireSameOriginUnsafe(w, r) {
 		return
 	}
 	defer r.Body.Close()
-	user, ok := s.lookupSession(r)
+	user, ok := s.eng.LookupSession(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -736,7 +718,7 @@ func (s *server) handleAuthPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	tx, err := s.beginWriteTx(ctx)
+	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -771,7 +753,7 @@ select password_hash, password_salt from users where id = ?`, user.UserID).Scan(
 	}
 	if _, err := tx.ExecContext(ctx, `
 update users set password_hash = ?, password_salt = null, updated_at = ? where id = ?`,
-		hashed, utcNow(), user.UserID); err != nil {
+		hashed, util.UtcNow(), user.UserID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -782,78 +764,7 @@ update users set password_hash = ?, password_salt = null, updated_at = ? where i
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// sessionRefreshInterval is the minimum gap between sessions.last_seen_at
-// writes for a given session. Most authenticated requests can be served from
-// a single SELECT — only every ~minute do we round-trip another write to
-// extend the sliding session lifetime.
-const sessionRefreshInterval = time.Minute
-
-func (s *server) lookupSession(r *http.Request) (sessionUser, bool) {
-	if s.db == nil {
-		return sessionUser{}, false
-	}
-	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil || cookie.Value == "" {
-		return sessionUser{}, false
-	}
-	hash := hashSessionToken(cookie.Value)
-
-	ctx := r.Context()
-
-	var (
-		sessionID  int64
-		userID     int64
-		expiresAt  string
-		lastSeenAt string
-		username   sql.NullString
-		tgUser     sql.NullString
-		isSystem   int
-	)
-	err = s.db.QueryRowContext(ctx, `
-select s.id, s.user_id, s.expires_at, s.last_seen_at,
-       u.username, u.telegram_username, u.is_system
-from sessions s
-join users u on u.id = s.user_id
-where s.token_hash = ?`, hash).Scan(&sessionID, &userID, &expiresAt, &lastSeenAt, &username, &tgUser, &isSystem)
-	if err != nil {
-		return sessionUser{}, false
-	}
-	now := time.Now().UTC()
-	expiry, _ := time.Parse(time.RFC3339, expiresAt)
-	if !expiry.IsZero() && now.After(expiry) {
-		_, _ = s.db.ExecContext(ctx, `delete from sessions where id = ?`, sessionID)
-		return sessionUser{}, false
-	}
-
-	// Only bump last_seen_at if it has drifted enough to be worth a write.
-	// Without this, every authenticated request triggers a BEGIN / UPDATE /
-	// COMMIT against the sessions table. The expiry-window check still
-	// guarantees the sliding session lifetime when something (admin tool,
-	// migration, test) shortens expires_at independently of last_seen_at.
-	lastSeen, _ := time.Parse(time.RFC3339, lastSeenAt)
-	needsRefresh := lastSeen.IsZero() || now.Sub(lastSeen) >= sessionRefreshInterval
-	if !needsRefresh && !expiry.IsZero() && expiry.Sub(now) < sessionLifetime-sessionRefreshInterval {
-		needsRefresh = true
-	}
-	if needsRefresh {
-		newExpires := now.Add(sessionLifetime).Format(time.RFC3339)
-		if _, err := s.db.ExecContext(ctx, `
-update sessions set last_seen_at = ?, expires_at = ? where id = ?`,
-			now.Format(time.RFC3339), newExpires, sessionID); err != nil {
-			return sessionUser{}, false
-		}
-	}
-
-	return sessionUser{
-		UserID:    userID,
-		Username:  username,
-		Telegram:  tgUser,
-		IsSystem:  isSystem == 1,
-		SessionID: sessionID,
-	}, true
-}
-
-func loadUserTx(ctx context.Context, tx *sql.Tx, userID int64) (sessionUser, error) {
+func loadUserTx(ctx context.Context, tx *sql.Tx, userID int64) (session.User, error) {
 	var (
 		username sql.NullString
 		tgUser   sql.NullString
@@ -862,9 +773,9 @@ func loadUserTx(ctx context.Context, tx *sql.Tx, userID int64) (sessionUser, err
 	err := tx.QueryRowContext(ctx, `
 select username, telegram_username, is_system from users where id = ?`, userID).Scan(&username, &tgUser, &isSystem)
 	if err != nil {
-		return sessionUser{}, err
+		return session.User{}, err
 	}
-	return sessionUser{
+	return session.User{
 		UserID:   userID,
 		Username: username,
 		Telegram: tgUser,
@@ -878,8 +789,8 @@ func createSessionTx(ctx context.Context, tx *sql.Tx, userID int64, now time.Tim
 		if err != nil {
 			return "", err
 		}
-		hash := hashSessionToken(token)
-		expires := now.Add(sessionLifetime).Format(time.RFC3339)
+		hash := core.HashSessionToken(token)
+		expires := now.Add(session.Lifetime).Format(time.RFC3339)
 		nowStr := now.Format(time.RFC3339)
 		_, err = tx.ExecContext(ctx, `
 insert into sessions(user_id, token_hash, created_at, expires_at, last_seen_at)
@@ -887,14 +798,14 @@ values(?, ?, ?, ?, ?)`, userID, hash, nowStr, expires, nowStr)
 		if err == nil {
 			return token, nil
 		}
-		if !isUniqueViolation(err) {
+		if !util.IsUniqueViolation(err) {
 			return "", err
 		}
 	}
 	return "", errors.New("could not allocate session token")
 }
 
-func meResponseFor(user sessionUser) meResponse {
+func meResponseFor(user session.User) meResponse {
 	resp := meResponse{UserID: user.UserID}
 	if user.Username.Valid {
 		v := user.Username.String
@@ -905,61 +816,6 @@ func meResponseFor(user sessionUser) meResponse {
 		resp.Telegram = &v
 	}
 	return resp
-}
-
-func setSessionCookie(w http.ResponseWriter, token string) {
-	cookie := &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   isProdEnv(),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(sessionLifetime / time.Second),
-	}
-	http.SetCookie(w, cookie)
-}
-
-func clearSessionCookie(w http.ResponseWriter) {
-	cookie := &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   isProdEnv(),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	}
-	http.SetCookie(w, cookie)
-}
-
-func isProdEnv() bool {
-	return strings.EqualFold(os.Getenv("DOPE_ENV"), "production")
-}
-
-func validUsername(s string) bool {
-	if len(s) < usernameMinLen || len(s) > usernameMaxLen {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z':
-		case r >= 'A' && r <= 'Z':
-		case r >= '0' && r <= '9':
-		case r == '_' || r == '-' || r == '.':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-func isUniqueViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "unique") || strings.Contains(msg, "constraint")
 }
 
 type authError struct {
@@ -1011,7 +867,7 @@ func sendTelegramMessageFromEnv(ctx context.Context, chatID int64, text string) 
 	return nil
 }
 
-func requireSameOriginUnsafe(w http.ResponseWriter, r *http.Request) bool {
+func RequireSameOriginUnsafe(w http.ResponseWriter, r *http.Request) bool {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
 		return true
@@ -1070,7 +926,7 @@ values(?, ?, ?, ?)`, code, createdBy, now.Format(time.RFC3339), expires)
 		if err == nil {
 			return code, nil
 		}
-		if !isUniqueViolation(err) {
+		if !util.IsUniqueViolation(err) {
 			return "", err
 		}
 	}

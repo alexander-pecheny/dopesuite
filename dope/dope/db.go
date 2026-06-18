@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/base32"
 	"encoding/hex"
@@ -22,11 +21,21 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"dope/dope/auditmw"
+	"dope/dope/festaccess"
+	"dope/dope/festwrite"
 	"dope/dope/games"
+	"dope/dope/imports"
 	"dope/dope/journal"
+	"dope/dope/metrics"
+	"dope/dope/numbering"
 	"dope/dope/realtime"
+	"dope/dope/resolver"
 	"dope/dope/roles"
+	"dope/dope/roster"
 	"dope/dope/store"
+	"dope/dope/storeutil"
+	"dope/dope/util"
 )
 
 const (
@@ -100,7 +109,7 @@ func migrateDB(db *sql.DB) error {
 	// Drop the legacy audit_log AFTER triggers FIRST: later migration steps write
 	// to audited tables (fests/users/organizers), and once audit_log is dropped
 	// below those stale triggers would fail with "no such table: audit_log".
-	if err := dropLegacyAuditTriggers(db); err != nil {
+	if err := auditmw.DropLegacyAuditTriggers(db); err != nil {
 		return err
 	}
 	_, err := db.Exec(`
@@ -515,7 +524,7 @@ where game_id is null and request_id is not null
 			return err
 		}
 	}
-	if err := migrateFestOrganizerRoles(db); err != nil {
+	if err := festaccess.MigrateFestOrganizerRoles(db); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
@@ -596,7 +605,7 @@ insert or ignore into schema_versions(version, applied_at) values(11, strftime('
 `); err != nil {
 		return err
 	}
-	if err := installAuditSchema(db); err != nil {
+	if err := auditmw.InstallAuditSchema(db); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(12, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
@@ -722,7 +731,7 @@ func backfillEKTeamNumbers(db *sql.DB) error {
 				ftRows.Close()
 				return err
 			}
-			key := seedTeamNameKey(name)
+			key := roster.SeedTeamNameKey(name)
 			if _, seen := numByName[key]; seen {
 				ambiguous[key] = true
 			} else {
@@ -774,7 +783,7 @@ func backfillEKTeamNumbers(db *sql.DB) error {
 				teamRows.Close()
 				return err
 			}
-			num, ok := numByName[seedTeamNameKey(name)]
+			num, ok := numByName[roster.SeedTeamNameKey(name)]
 			if ok && !claimed[num] {
 				claimed[num] = true
 				assigns = append(assigns, pending{id: id, num: num})
@@ -1166,7 +1175,7 @@ func ensureSystemUser(ctx context.Context, tx *sql.Tx) (int64, error) {
 	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
 	}
-	now := utcNow()
+	now := util.UtcNow()
 	return store.InsertReturningID(ctx, tx, `
 insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
 values(null, null, ?, 1, ?, ?)`, systemUserUsername, now, now)
@@ -1178,54 +1187,8 @@ func defaultGameID(ctx context.Context, q store.Queryer, festID int64) (int64, e
 	return id, err
 }
 
-// validateSlug enforces the slug grammar: 1-64 chars of a-z, 0-9, hyphen;
+// util.ValidateSlug enforces the slug grammar: 1-64 chars of a-z, 0-9, hyphen;
 // the slug cannot be all digits (so it never collides with a numeric ID lookup).
-func validateSlug(slug string) error {
-	if len(slug) == 0 {
-		return errors.New("slug is empty")
-	}
-	if len(slug) > 64 {
-		return errors.New("slug is longer than 64 characters")
-	}
-	allDigit := true
-	for _, r := range slug {
-		switch {
-		case r >= 'a' && r <= 'z':
-			allDigit = false
-		case r == '-':
-			allDigit = false
-		case r >= '0' && r <= '9':
-			// ok
-		default:
-			return errors.New("slug may contain only a-z, 0-9 and hyphen")
-		}
-	}
-	if allDigit {
-		return errors.New("slug cannot be all digits")
-	}
-	return nil
-}
-
-// resolveFestID accepts either a positive integer (the fest id) or a slug and
-// returns the numeric fest id. Returns sql.ErrNoRows if no fest matches.
-func resolveFestID(ctx context.Context, q store.Queryer, ref string) (int64, error) {
-	ref = strings.TrimSpace(ref)
-	if ref == "" {
-		return 0, sql.ErrNoRows
-	}
-	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
-		var found int64
-		if err := q.QueryRowContext(ctx, `select id from fests where id = ?`, id).Scan(&found); err != nil {
-			return 0, err
-		}
-		return found, nil
-	}
-	var id int64
-	if err := q.QueryRowContext(ctx, `select id from fests where slug = ?`, ref).Scan(&id); err != nil {
-		return 0, err
-	}
-	return id, nil
-}
 
 // resolveGameID accepts either a positive integer (the game id) or a slug and
 // returns the numeric game id within the given fest.
@@ -1248,27 +1211,6 @@ func resolveGameID(ctx context.Context, q store.Queryer, festID int64, ref strin
 	return id, nil
 }
 
-func insertTheme(ctx context.Context, tx *sql.Tx, matchID, teamID int64, kind string, themeIndex int, playerID int64, answers [5]string) error {
-	var player any
-	if playerID > 0 {
-		player = playerID
-	}
-	themeID, err := store.InsertReturningID(ctx, tx, `
-insert into themes(match_id, team_id, kind, theme_index, player_id)
-values(?, ?, ?, ?, ?)`, matchID, teamID, kind, themeIndex, player)
-	if err != nil {
-		return err
-	}
-	for answerIndex, mark := range answers {
-		if _, err := tx.ExecContext(ctx, `
-insert into answers(theme_id, answer_index, mark)
-values(?, ?, ?)`, themeID, answerIndex, store.NormalizeMark(mark)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (s *server) serveViewerHTML(w http.ResponseWriter, r *http.Request) {
 	s.serveAppHTML(w, r, "static/viewer.html")
 }
@@ -1286,10 +1228,10 @@ const (
 )
 
 type hostInitPayload struct {
-	Route      hostInitRoute    `json:"route"`
-	Fest       json.RawMessage  `json:"fest,omitempty"`
-	Match      *store.MatchView `json:"match,omitempty"`
-	SeedImport *seedImportView  `json:"seedImport,omitempty"`
+	Route      hostInitRoute           `json:"route"`
+	Fest       json.RawMessage         `json:"fest,omitempty"`
+	Match      *store.MatchView        `json:"match,omitempty"`
+	SeedImport *imports.SeedImportView `json:"seedImport,omitempty"`
 	// TeamsUnnumbered mirrors gameInitPayload.TeamsUnnumbered for the EK host
 	// surface: editing is blocked server-side until every team has a number.
 	TeamsUnnumbered bool `json:"teamsUnnumbered,omitempty"`
@@ -1360,8 +1302,8 @@ func (s *server) serveHostHTMLWithInit(w http.ResponseWriter, r *http.Request, s
 		s.serveHostHTML(w, r)
 		return
 	}
-	if user, ok := s.lookupSession(r); ok {
-		if role, err := s.festUserRole(r.Context(), scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
+	if user, ok := s.eng.LookupSession(r); ok {
+		if role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
 			payload.CanEdit = true
 		}
 	}
@@ -1386,8 +1328,8 @@ func (s *server) serveGameHTMLWithInit(w http.ResponseWriter, r *http.Request, h
 		s.serveAppHTML(w, r, htmlPath)
 		return
 	}
-	if user, ok := s.lookupSession(r); ok {
-		if role, err := s.festUserRole(r.Context(), scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
+	if user, ok := s.eng.LookupSession(r); ok {
+		if role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
 			payload.CanEdit = true
 		}
 	}
@@ -1412,8 +1354,8 @@ func (s *server) serveViewerHTMLWithInit(w http.ResponseWriter, r *http.Request,
 		s.serveViewerHTML(w, r)
 		return
 	}
-	if user, ok := s.lookupSession(r); ok {
-		if role, err := s.festUserRole(r.Context(), scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
+	if user, ok := s.eng.LookupSession(r); ok {
+		if role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
 			payload.CanEdit = true
 		}
 	}
@@ -1437,13 +1379,13 @@ var assetRefRe = regexp.MustCompile(`(src|href)="(/static/[^"?]+\.(?:js|css))"`)
 // until its max-age expires. URLs whose asset has no known hash (disk/dev mode,
 // where assets are already served no-cache) are left untouched.
 func (s *server) versionAssetRefs(body []byte) []byte {
-	if len(s.assetETags) == 0 {
+	if len(s.eng.AssetETags) == 0 {
 		return body
 	}
 	return assetRefRe.ReplaceAllFunc(body, func(m []byte) []byte {
 		sub := assetRefRe.FindSubmatch(m)
 		path := string(sub[2])
-		tag := strings.Trim(s.assetETags[path], `"`)
+		tag := strings.Trim(s.eng.AssetETags[path], `"`)
 		if tag == "" {
 			return m
 		}
@@ -1472,7 +1414,7 @@ func (s *server) writeAppHTML(w http.ResponseWriter, r *http.Request, body []byt
 // present in the HTML. On any I/O or marker-mismatch error the function
 // silently falls back to serving the file unchanged.
 func (s *server) serveInjectedHTML(w http.ResponseWriter, r *http.Request, htmlPath, marker string, payload []byte) {
-	body, err := fs.ReadFile(s.assets, htmlPath)
+	body, err := fs.ReadFile(s.eng.Assets, htmlPath)
 	if err != nil {
 		s.serveAppHTML(w, r, htmlPath)
 		return
@@ -1493,7 +1435,7 @@ func (s *server) serveInjectedHTML(w http.ResponseWriter, r *http.Request, htmlP
 func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPayload, error) {
 	payload := gameInitPayload{FestID: scope.FestID, GameID: scope.GameID}
 	var schemeJSON, stateJSON string
-	if err := s.db.QueryRowContext(ctx, `
+	if err := s.eng.DB.QueryRowContext(ctx, `
 select coalesce(scheme_json, ''), coalesce(state_json, '')
 from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&schemeJSON, &stateJSON); err != nil {
 		return payload, err
@@ -1506,12 +1448,12 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&sche
 	}
 	payload.Scheme = json.RawMessage(schemeJSON)
 	payload.State = json.RawMessage(stateJSON)
-	payload.Seq = s.currentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
-	payload.Epoch = s.epoch
+	payload.Seq = s.eng.CurrentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
+	payload.Epoch = s.eng.Epoch
 	if festBytes, err := s.festViewBytes(scope.FestID, scope.GameID); err == nil {
 		payload.Fest = festBytes
 	}
-	if unnumbered, err := festHasUnnumberedTeams(ctx, s.db, scope.FestID); err == nil {
+	if unnumbered, err := numbering.HasUnnumbered(ctx, s.eng.DB, scope.FestID); err == nil {
 		payload.TeamsUnnumbered = unnumbered
 	}
 	return payload, nil
@@ -1580,7 +1522,7 @@ func (s *server) buildHostInit(ctx context.Context, route hostInitRoute) (hostIn
 		return payload, err
 	}
 	payload.Fest = festBytes
-	if unnumbered, err := festHasUnnumberedTeams(ctx, s.db, route.FestID); err == nil {
+	if unnumbered, err := numbering.HasUnnumbered(ctx, s.eng.DB, route.FestID); err == nil {
 		payload.TeamsUnnumbered = unnumbered
 	}
 
@@ -1596,7 +1538,7 @@ func (s *server) buildHostInit(ctx context.Context, route hostInitRoute) (hostIn
 		}
 		payload.Match = &match
 	case "seedImport":
-		view, err := s.loadSeedImportView(ctx, festScope{FestID: route.FestID, GameID: route.GameID})
+		view, err := imports.LoadSeedImportView(&s.eng, ctx, festScope{FestID: route.FestID, GameID: route.GameID})
 		if err != nil {
 			return payload, nil
 		}
@@ -1610,7 +1552,7 @@ func (s *server) serveAppHTML(w http.ResponseWriter, r *http.Request, path strin
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	body, err := fs.ReadFile(s.assets, path)
+	body, err := fs.ReadFile(s.eng.Assets, path)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -1623,7 +1565,7 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	festID, err := resolveFestID(r.Context(), s.db, strings.TrimSpace(r.URL.Query().Get("fest_id")))
+	festID, err := store.ResolveFestID(r.Context(), s.eng.DB, strings.TrimSpace(r.URL.Query().Get("fest_id")))
 	if err != nil || festID <= 0 {
 		http.Error(w, "missing fest_id", http.StatusBadRequest)
 		return
@@ -1643,7 +1585,7 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	gameID, err := defaultGameID(r.Context(), s.db, festID)
+	gameID, err := defaultGameID(r.Context(), s.eng.DB, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1654,15 +1596,15 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, _ := json.Marshal(view)
-	s.broadcastState(festID, "fest", view.Revision, data)
+	s.eng.BroadcastState(festID, "fest", view.Revision, data)
 	writeJSON(w, data)
 }
 
 func (s *server) importScheme(scheme store.FestScheme) (store.FestView, error) {
-	if s.db == nil {
+	if s.eng.DB == nil {
 		return store.FestView{}, errors.New("sqlite is not enabled")
 	}
-	if err := validateScheme(scheme); err != nil {
+	if err := storeutil.ValidateScheme(scheme); err != nil {
 		return store.FestView{}, err
 	}
 	schemaJSON, err := json.Marshal(scheme)
@@ -1670,11 +1612,11 @@ func (s *server) importScheme(scheme store.FestScheme) (store.FestView, error) {
 		return store.FestView{}, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.eng.Mu.Lock()
+	defer s.eng.Mu.Unlock()
 
 	ctx := context.Background()
-	tx, err := s.beginWriteTx(ctx)
+	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
 		return store.FestView{}, err
 	}
@@ -1683,7 +1625,7 @@ func (s *server) importScheme(scheme store.FestScheme) (store.FestView, error) {
 	// A full import wipes and rebuilds every structural row; that churn carries no
 	// incremental-undo value and is recorded as one 'import' event below, so skip
 	// per-row audit capture (import is a revert boundary).
-	if err := suppressAuditTx(ctx, tx); err != nil {
+	if err := festwrite.SuppressAuditTx(ctx, tx); err != nil {
 		return store.FestView{}, err
 	}
 
@@ -1691,14 +1633,14 @@ func (s *server) importScheme(scheme store.FestScheme) (store.FestView, error) {
 		return store.FestView{}, err
 	}
 
-	now := utcNow()
+	now := util.UtcNow()
 	systemID, err := ensureSystemUser(ctx, tx)
 	if err != nil {
 		return store.FestView{}, err
 	}
 	schemeID, err := store.InsertReturningID(ctx, tx, `
 insert into schemes(slug, title, version, schema_json, created_at)
-values(?, ?, ?, ?, ?)`, scheme.Slug, scheme.Title, maxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
+values(?, ?, ?, ?, ?)`, scheme.Slug, scheme.Title, util.MaxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
 	if err != nil {
 		return store.FestView{}, err
 	}
@@ -1776,7 +1718,7 @@ values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil
 		if position == 0 {
 			position = stageIndex + 1
 		}
-		configJSON := stageConfigJSON(stage)
+		configJSON := storeutil.StageConfigJSON(stage)
 		stageType := stage.StageType
 		if stageType == "" {
 			stageType = "matches"
@@ -1809,7 +1751,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Co
 				return store.FestView{}, err
 			}
 			for slotIndex, slot := range match.Slots {
-				sourceType, sourceRef := slotSource(slot)
+				sourceType, sourceRef := storeutil.SlotSource(slot)
 				var resolvedTeamID int64
 				if sourceType == "seed" && slot.Seed != nil {
 					number := slot.Seed.Number
@@ -1820,12 +1762,12 @@ values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Co
 				}
 				if _, err := tx.ExecContext(ctx, `
 insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
-values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableInt64(resolvedTeamID)); err != nil {
+values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, util.NullableInt64(resolvedTeamID)); err != nil {
 					return store.FestView{}, err
 				}
 				if resolvedTeamID > 0 {
 					for themeIndex := 0; themeIndex < store.ThemeCount; themeIndex++ {
-						if err := insertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
+						if err := store.InsertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
 							return store.FestView{}, err
 						}
 					}
@@ -1834,29 +1776,29 @@ values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableIn
 		}
 	}
 
-	if err := appendJournalTx(ctx, tx, festID, 1, "import", schemaJSON); err != nil {
+	if err := festwrite.AppendJournalTx(ctx, tx, festID, 1, "import", schemaJSON); err != nil {
 		return store.FestView{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return store.FestView{}, err
 	}
 
-	s.festID = festID
-	s.activeGameID = gameID
+	s.eng.FestID = festID
+	s.eng.ActiveGameID = gameID
 	if firstMatchCode != "" {
-		s.activeMatchCode = firstMatchCode
+		s.eng.ActiveMatchCode = firstMatchCode
 	}
-	return s.loadFestViewLocked(s.festID, s.activeGameID)
+	return s.loadFestViewLocked(s.eng.FestID, s.eng.ActiveGameID)
 }
 
 // importSchemeIntoFest wipes the fest's existing games (and
 // dependent rows) and creates a single new game from the supplied scheme.
 // The fest row itself stays intact.
 func (s *server) importSchemeIntoFest(ctx context.Context, festID int64, scheme store.FestScheme) error {
-	if s.db == nil {
+	if s.eng.DB == nil {
 		return errors.New("sqlite is not enabled")
 	}
-	if err := validateScheme(scheme); err != nil {
+	if err := storeutil.ValidateScheme(scheme); err != nil {
 		return err
 	}
 	if len(scheme.Teams) > 0 {
@@ -1867,18 +1809,18 @@ func (s *server) importSchemeIntoFest(ctx context.Context, festID int64, scheme 
 		return err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.eng.Mu.Lock()
+	defer s.eng.Mu.Unlock()
 
-	tx, err := s.beginWriteTx(ctx)
+	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
 	// Skip per-row audit churn for the wipe-and-rebuild; the import is recorded as
-	// one 'import' event below and acts as a revert boundary. See suppressAuditTx.
-	if err := suppressAuditTx(ctx, tx); err != nil {
+	// one 'import' event below and acts as a revert boundary. See festwrite.SuppressAuditTx.
+	if err := festwrite.SuppressAuditTx(ctx, tx); err != nil {
 		return err
 	}
 
@@ -1886,11 +1828,11 @@ func (s *server) importSchemeIntoFest(ctx context.Context, festID int64, scheme 
 		return err
 	}
 
-	now := utcNow()
+	now := util.UtcNow()
 	schemeSlug := scheme.Slug + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 	schemeID, err := store.InsertReturningID(ctx, tx, `
 insert into schemes(slug, title, version, schema_json, created_at)
-values(?, ?, ?, ?, ?)`, schemeSlug, scheme.Title, maxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
+values(?, ?, ?, ?, ?)`, schemeSlug, scheme.Title, util.MaxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
 	if err != nil {
 		return err
 	}
@@ -1960,7 +1902,7 @@ values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil
 		if position == 0 {
 			position = stageIndex + 1
 		}
-		configJSON := stageConfigJSON(stage)
+		configJSON := storeutil.StageConfigJSON(stage)
 		stageType := stage.StageType
 		if stageType == "" {
 			stageType = "matches"
@@ -1990,7 +1932,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Co
 				return err
 			}
 			for slotIndex, slot := range match.Slots {
-				sourceType, sourceRef := slotSource(slot)
+				sourceType, sourceRef := storeutil.SlotSource(slot)
 				var resolvedTeamID int64
 				if sourceType == "seed" && slot.Seed != nil {
 					number := slot.Seed.Number
@@ -2001,12 +1943,12 @@ values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Co
 				}
 				if _, err := tx.ExecContext(ctx, `
 insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
-values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableInt64(resolvedTeamID)); err != nil {
+values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, util.NullableInt64(resolvedTeamID)); err != nil {
 					return err
 				}
 				if resolvedTeamID > 0 && gameType == "ek" {
 					for themeIndex := 0; themeIndex < store.ThemeCount; themeIndex++ {
-						if err := insertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
+						if err := store.InsertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
 							return err
 						}
 					}
@@ -2015,7 +1957,7 @@ values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, nullableIn
 		}
 	}
 
-	if _, err := bumpFestRevisionTx(ctx, tx, festID, "import", string(schemaJSON)); err != nil {
+	if _, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "import", string(schemaJSON)); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -2040,87 +1982,6 @@ func clearFestImportData(ctx context.Context, tx *sql.Tx, festID int64) error {
 		if _, err := tx.ExecContext(ctx, sqlText, festID); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func validateScheme(scheme store.FestScheme) error {
-	if strings.TrimSpace(scheme.Slug) == "" {
-		return errors.New("schema slug is required")
-	}
-	if strings.TrimSpace(scheme.Title) == "" {
-		return errors.New("schema title is required")
-	}
-	gameType := scheme.GameType
-	if gameType == "" {
-		gameType = games.Default
-	}
-	if gameType == "ek" && len(scheme.Stages) == 0 {
-		return errors.New("schema stages are required")
-	}
-	stageCodes := make(map[string]struct{}, len(scheme.Stages))
-	matchCodes := make(map[string]struct{})
-	for _, stage := range scheme.Stages {
-		if strings.TrimSpace(stage.Code) == "" {
-			return errors.New("stage code is required")
-		}
-		if _, exists := stageCodes[stage.Code]; exists {
-			return fmt.Errorf("duplicate stage code %q", stage.Code)
-		}
-		stageCodes[stage.Code] = struct{}{}
-		stageType := stage.StageType
-		if stageType == "" {
-			stageType = "matches"
-		}
-		if stageType != "matches" && stageType != "reseed" {
-			return fmt.Errorf("bad stage_type %q", stage.StageType)
-		}
-		if stageType == "matches" && len(stage.Matches) == 0 {
-			return fmt.Errorf("stage %q has no matches", stage.Code)
-		}
-		for _, match := range stage.Matches {
-			if strings.TrimSpace(match.Code) == "" {
-				return fmt.Errorf("match code is required in stage %q", stage.Code)
-			}
-			if _, exists := matchCodes[match.Code]; exists {
-				return fmt.Errorf("duplicate match code %q", match.Code)
-			}
-			matchCodes[match.Code] = struct{}{}
-			if match.ParticipantCount > 0 && len(match.Slots) != match.ParticipantCount {
-				return fmt.Errorf("match %q participantCount does not match slots", match.Code)
-			}
-			for slotIndex, slot := range match.Slots {
-				if slot.Team != nil {
-					return fmt.Errorf("match %q slot %d uses removed source %q; use seed-N or seed{basket,number}; teams come from separate seed import", match.Code, slotIndex, "team")
-				}
-				if slot.Seed != nil {
-					number := slot.Seed.Number
-					if number == 0 {
-						number = slot.Seed.Position
-					}
-					if number <= 0 {
-						return fmt.Errorf("match %q slot %d has bad seed number", match.Code, slotIndex)
-					}
-					if slot.Seed.Basket < 0 {
-						return fmt.Errorf("match %q slot %d has bad seed basket", match.Code, slotIndex)
-					}
-				}
-			}
-		}
-	}
-	assignmentKeys := make(map[[2]int]string, len(scheme.Teams))
-	for index, team := range scheme.Teams {
-		if strings.TrimSpace(team.Name) == "" {
-			return fmt.Errorf("teams[%d].name is required", index)
-		}
-		if team.Basket <= 0 || team.Number <= 0 {
-			return fmt.Errorf("teams[%d] (%q) must have basket>=1 and number>=1", index, team.Name)
-		}
-		key := [2]int{team.Basket, team.Number}
-		if existing, ok := assignmentKeys[key]; ok {
-			return fmt.Errorf("teams[%d] (%q) collides with %q on basket %d / number %d", index, team.Name, existing, team.Basket, team.Number)
-		}
-		assignmentKeys[key] = team.Name
 	}
 	return nil
 }
@@ -2159,77 +2020,9 @@ func clearImportedData(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
-func stageConfigJSON(stage store.SchemeStage) string {
-	config := map[string]json.RawMessage{}
-	if len(stage.Teams) > 0 {
-		data, _ := json.Marshal(stage.Teams)
-		config["teams"] = data
-	}
-	if len(stage.Sources) > 0 {
-		data, _ := json.Marshal(stage.Sources)
-		config["sources"] = data
-	}
-	if len(stage.Sort) > 0 {
-		config["sort"] = stage.Sort
-	}
-	if len(stage.Config) > 0 {
-		config["config"] = stage.Config
-	}
-	if len(stage.Layout) > 0 {
-		config["layout"] = stage.Layout
-	}
-	return mustJSON(config)
-}
-
-func slotSource(slot store.SchemeSlot) (string, string) {
-	if slot.Seed != nil {
-		number := slot.Seed.Number
-		if number == 0 {
-			number = slot.Seed.Position
-		}
-		basket := slot.Seed.Basket
-		if basket <= 0 {
-			basket = 1
-		}
-		label := slot.Label
-		if label == "" && slot.Seed.Basket <= 0 {
-			label = fmt.Sprintf("Посев-%d", number)
-		}
-		return "seed", mustJSON(map[string]any{
-			"basket": basket,
-			"number": number,
-			"label":  label,
-		})
-	}
-	if slot.FromMatch != nil {
-		return "from_match", mustJSON(map[string]any{
-			"match": slot.FromMatch.Match,
-			"place": slot.FromMatch.Place,
-			"label": slot.Label,
-		})
-	}
-	if slot.Reseed != nil {
-		return "reseed", mustJSON(map[string]any{
-			"stage": slot.Reseed.Stage,
-			"rank":  slot.Reseed.Rank,
-			"label": slot.Label,
-		})
-	}
-	if slot.Placeholder != "" {
-		return "placeholder", mustJSON(map[string]string{
-			"placeholder": slot.Placeholder,
-			"label":       slot.Label,
-		})
-	}
-	if slot.Label != "" {
-		return "placeholder", mustJSON(map[string]string{"label": slot.Label})
-	}
-	return "placeholder", "{}"
-}
-
 func (s *server) loadFestViewLocked(festID, gameID int64) (store.FestView, error) {
-	if s.db == nil {
-		match := store.BuildView(s.state)
+	if s.eng.DB == nil {
+		match := store.BuildView(s.eng.State)
 		return store.FestView{
 			Slug:              "legacy",
 			Title:             match.Title,
@@ -2239,20 +2032,20 @@ func (s *server) loadFestViewLocked(festID, gameID int64) (store.FestView, error
 			RegularThemeCount: store.ThemeCount,
 		}, nil
 	}
-	return s.loadFestViewUsing(s.db, festID, gameID)
+	return s.loadFestViewUsing(s.eng.DB, festID, gameID)
 }
 
 // loadFestViewSnapshot builds the fest view on a read-only transaction WITHOUT
 // taking the global write mutex. WAL gives the read a consistent snapshot even
-// while a writer holds s.mu, so cross-game page loads / bracket fetches no longer
+// while a writer holds s.eng.Mu, so cross-game page loads / bracket fetches no longer
 // queue behind a busy editor — Go's RWMutex is writer-preferring, so a single
 // pending writer otherwise blocks every RLock reader. Falls back to the locked
 // path in legacy (no-DB) mode.
 func (s *server) loadFestViewSnapshot(festID, gameID int64) (store.FestView, error) {
-	if s.db == nil {
+	if s.eng.DB == nil {
 		return s.loadFestViewLocked(festID, gameID)
 	}
-	tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	tx, err := s.eng.DB.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return store.FestView{}, err
 	}
@@ -2262,9 +2055,9 @@ func (s *server) loadFestViewSnapshot(festID, gameID int64) (store.FestView, err
 
 // loadFestViewUsing runs every fest-view query against the given queryer, so the
 // snapshot path can pass a read-only tx (one WAL snapshot, off the write lock)
-// and the locked path can pass s.db while holding s.mu.
+// and the locked path can pass s.eng.DB while holding s.eng.Mu.
 func (s *server) loadFestViewUsing(q store.Queryer, festID, gameID int64) (store.FestView, error) {
-	ctx, cancel := boundedReadContext()
+	ctx, cancel := festwrite.BoundedReadContext()
 	defer cancel()
 	var view store.FestView
 	view.QuestionValues = store.QuestionValues
@@ -2336,14 +2129,14 @@ order by position, id`, stageArgs...)
 				return store.FestView{}, err
 			}
 			record.Stage.ReseedEntries = entries
-			state, err := reseedPrerequisites(ctx, q, record.Stage.Config, gameID)
+			state, err := resolver.ReseedPrerequisites(ctx, q, record.Stage.Config, gameID)
 			if err != nil {
 				return store.FestView{}, err
 			}
 			record.Stage.ReseedReady = state.Ready
 			record.Stage.ReseedPending = state.PendingMatches
 			if !state.Ready {
-				record.Stage.ReseedMessage = reseedNotReadyMessage(state.PendingMatches)
+				record.Stage.ReseedMessage = resolver.ReseedNotReadyMessage(state.PendingMatches)
 			}
 		} else {
 			matches, err := store.LoadFestMatches(ctx, q, record.ID)
@@ -2358,18 +2151,18 @@ order by position, id`, stageArgs...)
 }
 
 func (s *server) loadVenuesLocked(festID int64) ([]store.VenueView, error) {
-	ctx, cancel := boundedReadContext()
+	ctx, cancel := festwrite.BoundedReadContext()
 	defer cancel()
-	return store.LoadVenues(ctx, s.db, festID)
+	return store.LoadVenues(ctx, s.eng.DB, festID)
 }
 
 func (s *server) loadMatchViewLocked(festID int64, code string) (store.MatchView, error) {
-	if s.db == nil {
-		return store.BuildView(s.state), nil
+	if s.eng.DB == nil {
+		return store.BuildView(s.eng.State), nil
 	}
-	ctx, cancel := boundedReadContext()
+	ctx, cancel := festwrite.BoundedReadContext()
 	defer cancel()
-	match, err := store.LoadDBMatchState(ctx, s.db, festID, code)
+	match, err := store.LoadDBMatchState(ctx, s.eng.DB, festID, code)
 	if err != nil {
 		return store.MatchView{}, err
 	}
@@ -2377,16 +2170,16 @@ func (s *server) loadMatchViewLocked(festID int64, code string) (store.MatchView
 }
 
 func (s *server) loadScopedMatchViewLocked(scope matchScope) (store.MatchView, error) {
-	if s.db == nil {
-		return store.BuildView(s.state), nil
+	if s.eng.DB == nil {
+		return store.BuildView(s.eng.State), nil
 	}
-	return s.loadScopedMatchViewUsing(s.db, scope)
+	return s.loadScopedMatchViewUsing(s.eng.DB, scope)
 }
 
 // loadScopedMatchViewUsing reads a match view via the given queryer, so callers
-// can supply a read-only snapshot tx (off the write lock) or s.db under s.mu.
+// can supply a read-only snapshot tx (off the write lock) or s.eng.DB under s.eng.Mu.
 func (s *server) loadScopedMatchViewUsing(q store.Queryer, scope matchScope) (store.MatchView, error) {
-	ctx, cancel := boundedReadContext()
+	ctx, cancel := festwrite.BoundedReadContext()
 	defer cancel()
 	match, err := loadDBMatchStateByScope(ctx, q, scope)
 	if err != nil {
@@ -2399,10 +2192,10 @@ func (s *server) loadScopedMatchViewUsing(q store.Queryer, scope matchScope) (st
 // WITHOUT the global write mutex (see loadFestViewSnapshot) — so a viewer/host
 // reading match B doesn't stall behind an editor writing match A.
 func (s *server) loadScopedMatchViewSnapshot(scope matchScope) (store.MatchView, error) {
-	if s.db == nil {
+	if s.eng.DB == nil {
 		return s.loadScopedMatchViewLocked(scope)
 	}
-	tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	tx, err := s.eng.DB.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return store.MatchView{}, err
 	}
@@ -2424,7 +2217,7 @@ func matchViewFromDBState(match store.DBMatchState) store.MatchView {
 }
 
 func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) (store.MatchView, []byte, error) {
-	if s.db == nil {
+	if s.eng.DB == nil {
 		return s.applyLegacyUpdate(req)
 	}
 	// Legacy single-fest path: no SSE fan-out, so cascade + delta are discarded.
@@ -2442,7 +2235,7 @@ func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) 
 // the set-ops that turn the pre-edit view into the new one, when broadcasting
 // them is cheaper than the full view (else nil — caller broadcasts full state).
 func (s *server) applyScopedMatchUpdate(ctx context.Context, scope matchScope, reqs []updateRequest) (store.MatchView, []byte, []byte, []store.MatchView, error) {
-	if s.db == nil {
+	if s.eng.DB == nil {
 		var view store.MatchView
 		var data []byte
 		var err error
@@ -2484,19 +2277,19 @@ func (s *server) applyMatchUpdateUsing(
 	// Carry the request's audit attribution (actor/request/fest) into the write
 	// tx, detached from the request's cancellation, so this match edit is
 	// recorded in audit_log against the right user and fest. The ctx carries a
-	// writeTxTimeout so the write can never hold s.mu indefinitely.
-	ctx, cancel := auditDetachedContext(reqCtx, festID)
+	// festwrite.WriteTxTimeout so the write can never hold s.eng.Mu indefinitely.
+	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
 	defer cancel()
 	// Acquire the pooled connection BEFORE taking the lock: the pool wait is the
 	// one step that can block unbounded under connection starvation, so keep it
-	// off s.mu (see the 2026-06-13 site-wide freeze). ctx bounds the wait.
-	conn, err := s.acquireWriteConn(ctx, "match-update")
+	// off s.eng.Mu (see the 2026-06-13 site-wide freeze). ctx bounds the wait.
+	conn, err := s.eng.AcquireWriteConn(ctx, "match-update")
 	if err != nil {
 		return store.MatchView{}, nil, nil, err
 	}
 	defer conn.Close()
 
-	defer s.lockWrite("match-update")()
+	defer s.eng.LockWrite("match-update")()
 
 	// Capture the committed pre-image of this match under our exclusive lock,
 	// before the mutation commits, so the caller can broadcast a minimal delta
@@ -2509,7 +2302,7 @@ func (s *server) applyMatchUpdateUsing(
 		}
 	}
 
-	tx, err := s.beginWriteTxConn(ctx, conn)
+	tx, err := s.eng.BeginWriteTxConn(ctx, conn)
 	if err != nil {
 		return store.MatchView{}, nil, nil, err
 	}
@@ -2559,14 +2352,14 @@ func (s *server) applyMatchUpdateUsing(
 		}
 	}
 
-	if err := recalculateMatchResultsForStateTx(ctx, tx, match); err != nil {
+	if err := store.RecalculateMatchResultsForStateTx(ctx, tx, match); err != nil {
 		return store.MatchView{}, nil, nil, err
 	}
-	affected, err := resolveGameSlotsTx(ctx, tx, match.GameID)
+	affected, err := resolver.ResolveGameSlotsTx(ctx, tx, match.GameID)
 	if err != nil {
 		return store.MatchView{}, nil, nil, err
 	}
-	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:update", mustJSON(reqs))
+	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:update", util.MustJSON(reqs))
 	if err != nil {
 		return store.MatchView{}, nil, nil, err
 	}
@@ -2579,7 +2372,7 @@ func (s *server) applyMatchUpdateUsing(
 		return store.MatchView{}, nil, nil, err
 	}
 	if revision > 0 {
-		view.Revision = maxInt64(view.Revision, revision)
+		view.Revision = util.MaxInt64(view.Revision, revision)
 	}
 	data, err := json.Marshal(view)
 	if err != nil {
@@ -2604,14 +2397,14 @@ func (s *server) applyMatchUpdateUsing(
 }
 
 // loadMatchViewByIDLocked loads a match view by its numeric id (used to render
-// downstream matches touched by a bracket cascade). Caller holds s.mu.
+// downstream matches touched by a bracket cascade). Caller holds s.eng.Mu.
 func (s *server) loadMatchViewByIDLocked(festID, gameID, matchID int64) (store.MatchView, error) {
-	if s.db == nil {
+	if s.eng.DB == nil {
 		return store.MatchView{}, nil
 	}
-	ctx, cancel := boundedReadContext()
+	ctx, cancel := festwrite.BoundedReadContext()
 	defer cancel()
-	match, err := store.LoadDBMatchStateWhere(ctx, s.db, `m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, festID, gameID)
+	match, err := store.LoadDBMatchStateWhere(ctx, s.eng.DB, `m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, festID, gameID)
 	if err != nil {
 		return store.MatchView{}, err
 	}
@@ -2662,7 +2455,7 @@ on conflict(match_id, team_id) do update set place = excluded.place`, match.Matc
 		if req.Theme == nil || *req.Theme < 0 {
 			return errors.New("bad theme index")
 		}
-		themeID, err := lookupThemeID(ctx, tx, match.MatchID, teamID, kind, *req.Theme)
+		themeID, err := store.LookupThemeID(ctx, tx, match.MatchID, teamID, kind, *req.Theme)
 		if err != nil {
 			return err
 		}
@@ -2716,7 +2509,7 @@ where match_id = ? and kind = 'shootout'`, matchID).Scan(&next); err != nil {
 		if teamID == 0 {
 			continue
 		}
-		if err := insertTheme(ctx, tx, matchID, teamID, "shootout", themeIndex, 0, [5]string{}); err != nil {
+		if err := store.InsertTheme(ctx, tx, matchID, teamID, "shootout", themeIndex, 0, [5]string{}); err != nil {
 			return err
 		}
 	}
@@ -2744,17 +2537,6 @@ where theme_id in (
 delete from themes
 where match_id = ? and kind = 'shootout' and theme_index = ?`, matchID, themeIndex.Int64)
 	return err
-}
-
-func lookupThemeID(ctx context.Context, q store.Queryer, matchID, teamID int64, kind string, themeIndex int) (int64, error) {
-	var id int64
-	err := q.QueryRowContext(ctx, `
-select id from themes
-where match_id = ? and team_id = ? and kind = ? and theme_index = ?`, matchID, teamID, kind, themeIndex).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, errors.New("bad theme index")
-	}
-	return id, err
 }
 
 func lookupRosterPlayerID(ctx context.Context, q store.Queryer, gameID int64, rosterSource string, teamID int64, player string) (int64, error) {
@@ -2798,33 +2580,11 @@ func recalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, festID int64, co
 	if err != nil {
 		return err
 	}
-	return recalculateMatchResultsForStateTx(ctx, tx, match)
-}
-
-func recalculateMatchResultsForStateTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState) error {
-	view := store.BuildView(match.State)
-	for index, team := range view.Teams {
-		if index >= len(match.TeamIDs) || match.TeamIDs[index] == 0 {
-			continue
-		}
-		metrics := matchMetricsJSON(team)
-		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, team_id, place, total, plus, tiebreak, metrics_json)
-values(?, ?, ?, ?, ?, ?, ?)
-on conflict(match_id, team_id) do update set
-  place = excluded.place,
-  total = excluded.total,
-  plus = excluded.plus,
-  tiebreak = excluded.tiebreak,
-  metrics_json = excluded.metrics_json`, match.MatchID, match.TeamIDs[index], team.Place, team.Total, team.Plus, team.Tiebreak, metrics); err != nil {
-			return err
-		}
-	}
-	return nil
+	return store.RecalculateMatchResultsForStateTx(ctx, tx, match)
 }
 
 func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, festID, matchID int64, eventType, payload string) (int64, error) {
-	now := utcNow()
+	now := util.UtcNow()
 	if _, err := tx.ExecContext(ctx, `update matches set revision = revision + 1 where id = ?`, matchID); err != nil {
 		return 0, err
 	}
@@ -2835,7 +2595,7 @@ func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, festID, matchID int64,
 	if err := tx.QueryRowContext(ctx, `select revision from fests where id = ?`, festID).Scan(&revision); err != nil {
 		return 0, err
 	}
-	if err := appendJournalTx(ctx, tx, festID, revision, eventType, []byte(payload)); err != nil {
+	if err := festwrite.AppendJournalTx(ctx, tx, festID, revision, eventType, []byte(payload)); err != nil {
 		return 0, err
 	}
 	return revision, nil
@@ -2883,15 +2643,15 @@ func (s *server) updateMatchVenueUsing(
 	}
 	// Bounded, attributed write context + off-lock pool acquisition (see
 	// applyMatchUpdateUsing / the 2026-06-13 freeze).
-	ctx, cancel := auditDetachedContext(reqCtx, festID)
+	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
 	defer cancel()
-	conn, err := s.acquireWriteConn(ctx, "match-venue")
+	conn, err := s.eng.AcquireWriteConn(ctx, "match-venue")
 	if err != nil {
 		return store.MatchView{}, nil, err
 	}
 	defer conn.Close()
 
-	defer s.lockWrite("match-venue")()
+	defer s.eng.LockWrite("match-venue")()
 
 	// Pre-image under the exclusive lock for a minimal delta broadcast (see
 	// applyMatchUpdateUsing). Best-effort; empty → caller sends full state.
@@ -2901,7 +2661,7 @@ func (s *server) updateMatchVenueUsing(
 		}
 	}
 
-	tx, err := s.beginWriteTxConn(ctx, conn)
+	tx, err := s.eng.BeginWriteTxConn(ctx, conn)
 	if err != nil {
 		return store.MatchView{}, nil, err
 	}
@@ -2922,7 +2682,7 @@ select id from venues where fest_id = ? and number = ?`, festID, number).Scan(&v
 	if _, err := tx.ExecContext(ctx, `update matches set venue_id = ? where id = ?`, venueID, match.MatchID); err != nil {
 		return store.MatchView{}, nil, err
 	}
-	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:venue", mustJSON(map[string]any{"code": match.Code, "venue": number}))
+	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:venue", util.MustJSON(map[string]any{"code": match.Code, "venue": number}))
 	if err != nil {
 		return store.MatchView{}, nil, err
 	}
@@ -2933,7 +2693,7 @@ select id from venues where fest_id = ? and number = ?`, festID, number).Scan(&v
 	if err != nil {
 		return store.MatchView{}, nil, err
 	}
-	view.Revision = maxInt64(view.Revision, revision)
+	view.Revision = util.MaxInt64(view.Revision, revision)
 	data, err := json.Marshal(view)
 	return view, data, err
 }
@@ -2944,17 +2704,17 @@ func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, t
 		return nil, 0, errors.New("empty venue title")
 	}
 
-	ctx, cancel := auditDetachedContext(reqCtx, festID)
+	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
 	defer cancel()
-	conn, err := s.acquireWriteConn(ctx, "venue-rename")
+	conn, err := s.eng.AcquireWriteConn(ctx, "venue-rename")
 	if err != nil {
 		return nil, 0, err
 	}
 	defer conn.Close()
 
-	defer s.lockWrite("venue-rename")()
+	defer s.eng.LockWrite("venue-rename")()
 
-	tx, err := s.beginWriteTxConn(ctx, conn)
+	tx, err := s.eng.BeginWriteTxConn(ctx, conn)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -2962,7 +2722,7 @@ func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, t
 
 	result, err := tx.ExecContext(ctx, `
 update venues set title = ?, updated_at = ?
-where fest_id = ? and number = ?`, title, utcNow(), festID, number)
+where fest_id = ? and number = ?`, title, util.UtcNow(), festID, number)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -2973,7 +2733,7 @@ where fest_id = ? and number = ?`, title, utcNow(), festID, number)
 	if affected == 0 {
 		return nil, 0, errors.New("unknown venue")
 	}
-	revision, err := bumpFestRevisionTx(ctx, tx, festID, "venues:update", mustJSON(map[string]any{"number": number, "title": title}))
+	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "venues:update", util.MustJSON(map[string]any{"number": number, "title": title}))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -2988,12 +2748,12 @@ where fest_id = ? and number = ?`, title, utcNow(), festID, number)
 }
 
 func (s *server) bumpFestRevisionStandalone(ctx context.Context, festID int64, eventType, payload string) (int64, error) {
-	tx, err := s.beginWriteTx(ctx)
+	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
-	revision, err := bumpFestRevisionTx(ctx, tx, festID, eventType, payload)
+	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, eventType, payload)
 	if err != nil {
 		return 0, err
 	}
@@ -3001,66 +2761,6 @@ func (s *server) bumpFestRevisionStandalone(ctx context.Context, festID int64, e
 		return 0, err
 	}
 	return revision, nil
-}
-
-func bumpFestRevisionTx(ctx context.Context, tx *sql.Tx, festID int64, eventType, payload string) (int64, error) {
-	now := utcNow()
-	if _, err := tx.ExecContext(ctx, `update fests set revision = revision + 1, updated_at = ? where id = ?`, now, festID); err != nil {
-		return 0, err
-	}
-	var revision int64
-	if err := tx.QueryRowContext(ctx, `select revision from fests where id = ?`, festID).Scan(&revision); err != nil {
-		return 0, err
-	}
-	if err := appendJournalTx(ctx, tx, festID, revision, eventType, []byte(payload)); err != nil {
-		return 0, err
-	}
-	return revision, nil
-}
-
-// broadcastState fans out a full-state SNAPSHOT for a scope (initial load,
-// wholesale PUT, or any non-PATCH mutation). It still bumps the scope seq so the
-// counter stays uniform with broadcastStateDelta; clients adopt the snapshot and
-// set their lastSeq from it. Use broadcastStateDelta for in-place PATCH edits.
-// Returns the seq it assigned so a caller can echo it in its HTTP response,
-// keeping a client's locally-applied view in lockstep with the broadcast it
-// will also receive over SSE.
-func (s *server) broadcastState(festID int64, scope string, revision int64, payload []byte) uint64 {
-	s.invalidateFestViewCache(festID)
-	s.seqMu.Lock()
-	defer s.seqMu.Unlock()
-	// A snapshot supersedes any buffered deltas for this scope; flush them first
-	// (they carry lower seqs) so viewers never see the snapshot before them.
-	s.flushDeltaLocked(scope)
-	seq := s.bumpSeqLocked(scope)
-	if s.db != nil {
-		payload = realtime.EventSnapshotJSON(scope, s.epoch, revision, seq, payload)
-	}
-	s.rt.Broadcast(realtime.Event{FestID: festID, Revision: revision, Data: payload})
-	return seq
-}
-
-// deltaCoalesceWindow bounds how long delta ops for one scope buffer before they
-// fan out to VIEWERS as a single merged delta. Editors are exempt — they get
-// every delta immediately (see broadcastStateDelta) — so this adds latency only
-// to spectators, a trade the product accepts (viewers may lag; editors stay
-// current, both for their own edits and co-editors').
-const deltaCoalesceWindow = 150 * time.Millisecond
-
-// pendingDelta accumulates one scope's delta ops for the VIEWER fan-out within a
-// coalescing window. Each edit still bumps the per-scope seq immediately (so the
-// editor stream and HTTP responses carry per-edit seqs); the window's merged
-// viewer delta spans [prevSeq, lastSeq] and applies as one step. A viewer that
-// connected mid-window fetched state at the already-bumped seq, so the merged
-// delta's seq <= its lastSeq and the client ignores it (seq-monotonic guard)
-// instead of gap-resyncing.
-type pendingDelta struct {
-	festID   int64
-	prevSeq  uint64
-	lastSeq  uint64
-	revision int64
-	ops      [][]byte
-	timer    *time.Timer
 }
 
 // broadcastMatchView fans out a match-scope update as a minimal delta when ops
@@ -3071,129 +2771,15 @@ type pendingDelta struct {
 func (s *server) broadcastMatchView(festID int64, mscope matchScope, revision int64, deltaOps, data []byte) uint64 {
 	scope := matchScopeKey(mscope)
 	if len(deltaOps) > 0 {
-		return s.broadcastStateDelta(festID, scope, revision, deltaOps)
+		return s.eng.BroadcastStateDelta(festID, scope, revision, deltaOps)
 	}
-	return s.broadcastState(festID, scope, revision, data)
-}
-
-// broadcastStateDelta fans out a scoped DELTA (the ops that produced the new
-// state) instead of the whole state — the core fan-out win: every client gets a
-// ~100-byte op list rather than the full game blob. Editors receive the delta
-// IMMEDIATELY (there are only a handful, so the per-edit fan-out is cheap, and
-// they must always see co-editors' changes without delay); viewers receive a
-// single merged delta per coalescing window. Seq is bumped per edit under seqMu
-// so per-scope order matches seq order and HTTP responses can carry it.
-func (s *server) broadcastStateDelta(festID int64, scope string, revision int64, ops []byte) uint64 {
-	s.invalidateFestViewCache(festID)
-	s.seqMu.Lock()
-	defer s.seqMu.Unlock()
-	prev := s.stateSeqLocked(scope)
-	seq := s.bumpSeqLocked(scope)
-	// Editors: immediate, uncoalesced — chains per edit (prevSeq = seq-1).
-	s.rt.BroadcastTo(realtime.Event{FestID: festID, Revision: revision,
-		Data: realtime.EventDeltaJSON(scope, s.epoch, revision, seq, prev, ops)}, realtime.AudEditors)
-	// Viewers: buffer for a merged broadcast at window end.
-	if s.deltaBuf == nil {
-		s.deltaBuf = map[string]*pendingDelta{}
-	}
-	pd := s.deltaBuf[scope]
-	if pd == nil {
-		pd = &pendingDelta{festID: festID, prevSeq: prev}
-		s.deltaBuf[scope] = pd
-		sc := scope
-		// This fires in a detached timer goroutine with no net/http recover
-		// above it, so any panic here would crash the whole process. The
-		// close-race that caused exactly that is fixed in removeSubscriber, but
-		// keep a recover as defense-in-depth: a stray panic in the viewer
-		// fan-out must degrade to a dropped broadcast, never a server crash.
-		pd.timer = time.AfterFunc(deltaCoalesceWindow, func() {
-			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("recovered panic in delta flush for scope %s: %v", sc, r)
-				}
-			}()
-			s.flushDelta(sc)
-		})
-	}
-	pd.festID = festID
-	pd.revision = revision
-	pd.lastSeq = seq
-	pd.ops = append(pd.ops, ops)
-	return seq
-}
-
-// broadcastBatchedDelta fans out an editor-batched window's merged ops as ONE
-// delta to BOTH editors and viewers immediately. Unlike broadcastStateDelta,
-// which buffers a per-edit stream for viewers, the editor-side batcher
-// (edit_batch.go) already coalesced a whole window into these ops, so there is
-// nothing left to buffer — both audiences get the single merged delta at once.
-// Any stray viewer delta still buffered for the scope (from a non-batched path)
-// is flushed first so seqs stay ordered.
-func (s *server) broadcastBatchedDelta(festID int64, scope string, revision int64, ops []byte) uint64 {
-	s.invalidateFestViewCache(festID)
-	s.seqMu.Lock()
-	defer s.seqMu.Unlock()
-	s.flushDeltaLocked(scope)
-	prev := s.stateSeqLocked(scope)
-	seq := s.bumpSeqLocked(scope)
-	s.rt.BroadcastTo(realtime.Event{FestID: festID, Revision: revision,
-		Data: realtime.EventDeltaJSON(scope, s.epoch, revision, seq, prev, ops)}, realtime.AudAll)
-	return seq
-}
-
-// flushDelta emits a scope's buffered viewer delta as one merged broadcast.
-// Called from the coalescing timer.
-func (s *server) flushDelta(scope string) {
-	s.seqMu.Lock()
-	defer s.seqMu.Unlock()
-	s.flushDeltaLocked(scope)
-}
-
-// flushDeltaLocked fans the buffered window's merged ops out to VIEWERS as a
-// single delta spanning [prevSeq, lastSeq]. Caller holds seqMu. No-op if nothing
-// is buffered (a snapshot already flushed this window, or the timer raced one).
-func (s *server) flushDeltaLocked(scope string) {
-	pd := s.deltaBuf[scope]
-	if pd == nil {
-		return
-	}
-	delete(s.deltaBuf, scope)
-	if pd.timer != nil {
-		pd.timer.Stop()
-	}
-	payload := realtime.EventDeltaJSON(scope, s.epoch, pd.revision, pd.lastSeq, pd.prevSeq, realtime.MergeOpsArrays(pd.ops))
-	s.rt.BroadcastTo(realtime.Event{FestID: pd.festID, Revision: pd.revision, Data: payload}, realtime.AudViewers)
-}
-
-// bumpSeqLocked increments and returns the scope's seq. Caller holds seqMu.
-func (s *server) bumpSeqLocked(scope string) uint64 {
-	if s.stateSeq == nil {
-		s.stateSeq = map[string]uint64{}
-	}
-	s.stateSeq[scope]++
-	return s.stateSeq[scope]
-}
-
-// stateSeqLocked returns the scope's current seq. Caller holds seqMu.
-func (s *server) stateSeqLocked(scope string) uint64 {
-	if s.stateSeq == nil {
-		return 0
-	}
-	return s.stateSeq[scope]
-}
-
-// currentStateSeq returns the scope's current seq (for the GET /state resync
-// header). Safe to call without holding seqMu.
-func (s *server) currentStateSeq(scope string) uint64 {
-	s.seqMu.Lock()
-	defer s.seqMu.Unlock()
-	return s.stateSeqLocked(scope)
+	return s.eng.BroadcastState(festID, scope, revision, data)
 }
 
 func (s *server) cachedFestViewBytes(festID, gameID int64) ([]byte, bool) {
-	s.festViewMu.RLock()
-	defer s.festViewMu.RUnlock()
-	games, ok := s.festViewCache[festID]
+	s.eng.FestViewMu.RLock()
+	defer s.eng.FestViewMu.RUnlock()
+	games, ok := s.eng.FestViewCache[festID]
 	if !ok {
 		return nil, false
 	}
@@ -3202,23 +2788,17 @@ func (s *server) cachedFestViewBytes(festID, gameID int64) ([]byte, bool) {
 }
 
 func (s *server) storeFestViewBytes(festID, gameID int64, data []byte) {
-	s.festViewMu.Lock()
-	defer s.festViewMu.Unlock()
-	if s.festViewCache == nil {
-		s.festViewCache = map[int64]map[int64][]byte{}
+	s.eng.FestViewMu.Lock()
+	defer s.eng.FestViewMu.Unlock()
+	if s.eng.FestViewCache == nil {
+		s.eng.FestViewCache = map[int64]map[int64][]byte{}
 	}
-	games := s.festViewCache[festID]
+	games := s.eng.FestViewCache[festID]
 	if games == nil {
 		games = map[int64][]byte{}
-		s.festViewCache[festID] = games
+		s.eng.FestViewCache[festID] = games
 	}
 	games[gameID] = data
-}
-
-func (s *server) invalidateFestViewCache(festID int64) {
-	s.festViewMu.Lock()
-	defer s.festViewMu.Unlock()
-	delete(s.festViewCache, festID)
 }
 
 // festViewBytes returns the JSON-marshaled FestView for (festID, gameID),
@@ -3227,8 +2807,8 @@ func (s *server) invalidateFestViewCache(festID int64) {
 // broadcastState.
 func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
 	if data, ok := s.cachedFestViewBytes(festID, gameID); ok {
-		if s.editMetricsOn {
-			s.festViewHits.Add(1)
+		if s.metrics.On {
+			s.metrics.FestViewHits.Add(1)
 		}
 		return data, nil
 	}
@@ -3236,7 +2816,7 @@ func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
 	// (see invalidateFestViewCache), so under concurrent editing this rebuild can
 	// fire on every reader request — the suspected amplification. Time it so the
 	// live test shows whether it's actually costly.
-	tRebuild := nowIf(s.editMetricsOn)
+	tRebuild := metrics.NowIf(s.metrics.On)
 	view, err := s.loadFestViewSnapshot(festID, gameID)
 	if err != nil {
 		return nil, err
@@ -3246,10 +2826,10 @@ func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
 		return nil, err
 	}
 	s.storeFestViewBytes(festID, gameID, data)
-	if s.editMetricsOn {
-		s.festViewMisses.Add(1)
+	if s.metrics.On {
+		s.metrics.FestViewMisses.Add(1)
 		log.Printf("editmetric festview fest=%d game=%d rebuild_ms=%s bytes=%d",
-			festID, gameID, fmtMs(time.Since(tRebuild)), len(data))
+			festID, gameID, metrics.FmtMs(time.Since(tRebuild)), len(data))
 	}
 	return data, nil
 }
@@ -3261,26 +2841,6 @@ func writeJSONValue(w http.ResponseWriter, value any) {
 		return
 	}
 	writeJSON(w, data)
-}
-
-func matchMetricsJSON(team store.TeamView) string {
-	metrics := map[string]any{
-		"correctCounts": team.CorrectCounts,
-		"wrongCounts":   team.WrongCounts,
-	}
-	for index, value := range store.QuestionValues {
-		metrics[fmt.Sprintf("correct_%d", value)] = team.CorrectCounts[index]
-		metrics[fmt.Sprintf("wrong_%d", value)] = team.WrongCounts[index]
-	}
-	return mustJSON(metrics)
-}
-
-func mustJSON(value any) string {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return "{}"
-	}
-	return string(data)
 }
 
 func splitPlayerName(fullName string) (string, string) {
@@ -3309,31 +2869,6 @@ func placeholderName(sourceRef string) string {
 	return "Ожидает команды"
 }
 
-func utcNow() string {
-	return time.Now().UTC().Format(time.RFC3339)
-}
-
-func maxInt64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func nullableInt64(value int64) any {
-	if value == 0 {
-		return nil
-	}
-	return value
-}
-
 // Auth helpers. Codes must be unique enough not to collide between concurrent
 // users; we get that from crypto/rand.
 
@@ -3342,9 +2877,7 @@ const (
 	telegramAuthBytes    = 12
 	telegramLoginCodeLen = 8
 	sessionTokenBytes    = 32
-	telegramAuthLifetime = time.Minute
 	inviteLifetime       = 7 * 24 * time.Hour
-	sessionLifetime      = 30 * 24 * time.Hour
 )
 
 const telegramLoginCodeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -3384,9 +2917,4 @@ func newSessionToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
-}
-
-func hashSessionToken(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
 }

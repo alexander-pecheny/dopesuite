@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dope/dope/store"
+	"dope/dope/storeutil"
 )
 
 // The replay engine applies forward journal records to a database to
@@ -34,7 +34,7 @@ func DecodeRowOpJSON(payload []byte) (string, map[string]any, error) {
 	}
 	row := make(map[string]any, len(d.Row))
 	for k, v := range d.Row {
-		row[k] = store.JSONToSQLValue(v)
+		row[k] = storeutil.JSONToSQLValue(v)
 	}
 	return d.Table, row, nil
 }
@@ -210,7 +210,7 @@ func (rp *Replayer) ApplyAll(ctx context.Context, tx interface {
 }
 
 func replayInsert(ctx context.Context, tx execer, table string, row map[string]any) error {
-	cols := store.SortedKeys(row)
+	cols := storeutil.SortedKeys(row)
 	if len(cols) == 0 {
 		return fmt.Errorf("replay: empty insert row for %s", table)
 	}
@@ -218,7 +218,7 @@ func replayInsert(ctx context.Context, tx execer, table string, row map[string]a
 	ph := make([]string, len(cols))
 	args := make([]any, len(cols))
 	for i, c := range cols {
-		quoted[i] = store.QuoteIdent(c)
+		quoted[i] = storeutil.QuoteIdent(c)
 		ph[i] = "?"
 		args[i] = row[c]
 	}
@@ -239,17 +239,17 @@ func replayUpdate(ctx context.Context, tx execer, table string, pks []string, ro
 	}
 	setCols := make([]string, 0, len(row))
 	args := make([]any, 0, len(row)+len(pks))
-	for _, c := range store.SortedKeys(row) {
+	for _, c := range storeutil.SortedKeys(row) {
 		if pkSet[c] {
 			continue
 		}
-		setCols = append(setCols, store.QuoteIdent(c)+" = ?")
+		setCols = append(setCols, storeutil.QuoteIdent(c)+" = ?")
 		args = append(args, row[c])
 	}
 	if len(setCols) == 0 {
 		return nil // pk-only update is a no-op
 	}
-	where, whereArgs, err := store.PKWhere(pks, row)
+	where, whereArgs, err := storeutil.PKWhere(pks, row)
 	if err != nil {
 		return err
 	}
@@ -263,9 +263,9 @@ func replayDelete(ctx context.Context, tx execer, table string, pks []string, ro
 	// Prefer the declared primary key; fall back to all provided columns.
 	keyCols := pks
 	if len(keyCols) == 0 {
-		keyCols = store.SortedKeys(row)
+		keyCols = storeutil.SortedKeys(row)
 	}
-	where, whereArgs, err := store.PKWhere(keyCols, row)
+	where, whereArgs, err := storeutil.PKWhere(keyCols, row)
 	if err != nil {
 		return err
 	}
