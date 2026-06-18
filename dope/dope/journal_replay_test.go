@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"context"
@@ -31,18 +31,18 @@ func TestReplayRowOps(t *testing.T) {
 	rp := newJournalReplayer(dict)
 
 	ins := func(seq uint64, id int64, name string, score int64) journalRecord {
-		return journalRecord{Seq: seq, Op: opRowIns, Args: encodeRowArgs(rowArgs{tableID: 1, cols: []colVal{
-			{2, id}, {3, name}, {4, score}}})}
+		return journalRecord{Seq: seq, Op: opRowIns, Args: encodeRowArgs(rowArgs{TableID: 1, Cols: []colVal{
+			{NameID: 2, Val: id}, {NameID: 3, Val: name}, {NameID: 4, Val: score}}})}
 	}
 	recs := []journalRecord{
 		ins(1, 1, "a", 10),
 		ins(2, 2, "b", 20),
-		{Seq: 3, Op: opRowSet, Args: encodeRowArgs(rowArgs{tableID: 1, cols: []colVal{{2, int64(1)}, {4, int64(15)}}})},
-		{Seq: 4, Op: opRowDel, Args: encodeRowArgs(rowArgs{tableID: 1, cols: []colVal{{2, int64(2)}}})},
+		{Seq: 3, Op: opRowSet, Args: encodeRowArgs(rowArgs{TableID: 1, Cols: []colVal{{NameID: 2, Val: int64(1)}, {NameID: 4, Val: int64(15)}}})},
+		{Seq: 4, Op: opRowDel, Args: encodeRowArgs(rowArgs{TableID: 1, Cols: []colVal{{NameID: 2, Val: int64(2)}}})},
 	}
 
 	tx, _ := db.Begin()
-	if err := rp.applyAll(ctx, tx, recs); err != nil {
+	if err := rp.ApplyAll(ctx, tx, recs); err != nil {
 		t.Fatalf("applyAll: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -118,7 +118,7 @@ values(?, '2026-01-01T00:00:00.000Z', 'widgets', ?, ?, ?, ?, 7, 'req1', 1)`,
 	rp := newJournalReplayer(dict)
 	recs := decodeAllSegments(t, db)
 	tx, _ := db.Begin()
-	if err := rp.applyAll(ctx, tx, recs); err != nil {
+	if err := rp.ApplyAll(ctx, tx, recs); err != nil {
 		t.Fatalf("replay: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -221,7 +221,7 @@ func TestConvertReplayEquivalenceRealDB(t *testing.T) {
 		if !ok {
 			continue // skipped (null snapshot) — accounted for in the report
 		}
-		gotTable, gotRow, err := rp.rowFromArgs(rec)
+		gotTable, gotRow, err := rp.RowFromArgs(rec)
 		if err != nil {
 			t.Fatalf("seq %d decode: %v", id, err)
 		}

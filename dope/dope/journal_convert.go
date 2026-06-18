@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"database/sql"
@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"dope/dope/journal"
 )
 
 // runConvertAudit is a one-time / measurement subcommand: it reads the legacy
@@ -105,101 +107,19 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.2f %cB", float64(n)/float64(div), "KMGT"[exp])
 }
 
-// journalDict interns table names, column names and request-ids to small
-// integer ids, persisted in the journal_dict table. id 0 means "none". It
-// supports incremental use (load existing ids, intern new ones) so the live
-// archiver can extend the same dictionary the converter seeded.
-type journalDict struct {
-	ids     map[string]uint64
-	pending map[uint64]string // newly-interned ids not yet persisted
-	maxID   uint64
-}
+// The journal dictionary + table bootstrap live in the leaf package
+// dope/journal; these aliases/wrappers keep the converter terse.
+type journalDict = journal.Dict
 
-func newJournalDict() *journalDict {
-	return &journalDict{ids: map[string]uint64{}, pending: map[uint64]string{}}
-}
+func newJournalDict() *journalDict { return journal.NewDict() }
 
-// loadJournalDict reads the existing dictionary so new interns continue from the
-// current max id (ids already present are reused).
 func loadWritableJournalDict(db interface {
 	Query(string, ...any) (*sql.Rows, error)
 }) (*journalDict, error) {
-	d := newJournalDict()
-	rows, err := db.Query(`select id, str from journal_dict`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id uint64
-		var s string
-		if err := rows.Scan(&id, &s); err != nil {
-			return nil, err
-		}
-		d.ids[s] = id
-		if id > d.maxID {
-			d.maxID = id
-		}
-	}
-	return d, rows.Err()
+	return journal.LoadWritableDict(db)
 }
 
-func (d *journalDict) intern(s string) uint64 {
-	if s == "" {
-		return 0
-	}
-	if id, ok := d.ids[s]; ok {
-		return id
-	}
-	d.maxID++
-	id := d.maxID
-	d.ids[s] = id
-	d.pending[id] = s
-	return id
-}
-
-// persist writes the not-yet-persisted entries. Safe to call repeatedly.
-func (d *journalDict) persist(db interface {
-	Exec(string, ...any) (sql.Result, error)
-}) error {
-	for id, s := range d.pending {
-		if _, err := db.Exec(`insert or replace into journal_dict(id, str) values(?, ?)`, int64(id), s); err != nil {
-			return err
-		}
-	}
-	d.pending = map[uint64]string{}
-	return nil
-}
-
-// persistTx is persist within a transaction.
-func (d *journalDict) persistTx(tx *sql.Tx) error {
-	for id, s := range d.pending {
-		if _, err := tx.Exec(`insert or replace into journal_dict(id, str) values(?, ?)`, int64(id), s); err != nil {
-			return err
-		}
-	}
-	d.pending = map[uint64]string{}
-	return nil
-}
-
-func createJournalTables(db *sql.DB) error {
-	_, err := db.Exec(`
-create table if not exists journal_dict(
-  id  integer primary key,
-  str text not null unique
-);
-create table if not exists journal_segment(
-  id          integer primary key,
-  fest_id     integer not null,
-  seq_start   integer not null,
-  seq_end     integer not null,
-  dsl_version integer not null,
-  n_records   integer not null,
-  blob        blob not null,
-  created_at  text not null
-);`)
-	return err
-}
+func createJournalTables(db *sql.DB) error { return journal.CreateTables(db) }
 
 func convertAuditLog(db *sql.DB) (convertReport, error) {
 	var rep convertReport
@@ -287,7 +207,7 @@ order by id`)
 		return rep, err
 	}
 
-	if err := dict.persist(db); err != nil {
+	if err := dict.Persist(db); err != nil {
 		return rep, fmt.Errorf("persist dict: %w", err)
 	}
 
@@ -326,7 +246,7 @@ type auditShape struct {
 // buildRowRecord turns one audit_log row into a generic row-op journal record.
 // Returns ok=false when the row carries no usable snapshot (skipped).
 func buildRowRecord(dict *journalDict, table string, shape auditShape, op string, id int64, ts string, actor int64, requestID string, bj, aj sql.NullString) (journalRecord, bool, error) {
-	tableID := dict.intern(table)
+	tableID := dict.Intern(table)
 	var (
 		opCode journalOp
 		src    sql.NullString
@@ -359,7 +279,7 @@ func buildRowRecord(dict *journalDict, table string, shape auditShape, op string
 		// needs, and dropping the full before-row is a large part of the savings.
 		for _, pk := range shape.pks {
 			if v, ok := rowMap[pk]; ok {
-				cols = append(cols, colVal{nameID: dict.intern(pk), val: v})
+				cols = append(cols, colVal{NameID: dict.Intern(pk), Val: v})
 			}
 		}
 		if len(cols) == 0 {
@@ -375,8 +295,8 @@ func buildRowRecord(dict *journalDict, table string, shape auditShape, op string
 		Op:          opCode,
 		TSUnixMilli: parseTSMilli(ts),
 		ActorID:     actor,
-		RequestID:   dict.intern(requestID),
-		Args:        encodeRowArgs(rowArgs{tableID: tableID, cols: cols}),
+		RequestID:   dict.Intern(requestID),
+		Args:        encodeRowArgs(rowArgs{TableID: tableID, Cols: cols}),
 	}
 	return rec, true, nil
 }
@@ -389,7 +309,7 @@ func colsFromMap(dict *journalDict, m map[string]any) []colVal {
 	sort.Strings(keys) // deterministic column order
 	cols := make([]colVal, 0, len(keys))
 	for _, k := range keys {
-		cols = append(cols, colVal{nameID: dict.intern(k), val: m[k]})
+		cols = append(cols, colVal{NameID: dict.Intern(k), Val: m[k]})
 	}
 	return cols
 }
@@ -410,17 +330,7 @@ func decodeRowJSON(s string) (map[string]any, error) {
 	return out, nil
 }
 
-func parseTSMilli(ts string) int64 {
-	if ts == "" {
-		return 0
-	}
-	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05.999Z07:00"} {
-		if t, err := time.Parse(layout, ts); err == nil {
-			return t.UnixMilli()
-		}
-	}
-	return 0
-}
+func parseTSMilli(ts string) int64 { return journal.ParseTSMilli(ts) }
 
 // objectBytes returns the on-disk page bytes for a table or index (and any
 // auto-index) via dbstat.

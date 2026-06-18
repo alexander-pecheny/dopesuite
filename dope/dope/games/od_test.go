@@ -1,4 +1,4 @@
-package main
+package games
 
 import (
 	"testing"
@@ -20,7 +20,7 @@ func TestComputeODResults(t *testing.T) {
 		"completed":[true,true,true,false]
 	}`
 
-	res, err := computeODResults(scheme, state)
+	res, err := ComputeODResults(scheme, state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestComputeODResultsTiesAndEmpty(t *testing.T) {
 	scheme := `{"tourComp":[2]}`
 
 	// No question completed → blank places.
-	empty, err := computeODResults(scheme, `{
+	empty, err := ComputeODResults(scheme, `{
 		"teams":[{"name":"A","number":1},{"name":"B","number":2}],
 		"entries":[[1,2],[1]],
 		"completed":[false,false]
@@ -85,7 +85,7 @@ func TestComputeODResultsTiesAndEmpty(t *testing.T) {
 	}
 
 	// Two teams tied on total → shared "1–2" label.
-	tied, err := computeODResults(scheme, `{
+	tied, err := ComputeODResults(scheme, `{
 		"teams":[{"name":"A","number":1},{"name":"B","number":2},{"name":"C","number":3}],
 		"entries":[[1,2],[1,2]],
 		"completed":[true,true]

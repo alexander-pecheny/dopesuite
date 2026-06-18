@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"context"
@@ -6,10 +6,11 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"dope/dope/store"
 )
 
 type auditCtxKey string
@@ -423,38 +424,7 @@ func dropLegacyAuditTriggers(db *sql.DB) error {
 }
 
 func auditTableShape(db *sql.DB, table string) (cols, pks []string, err error) {
-	// table is from the hard-coded auditedTables whitelist; safe to interpolate.
-	rows, err := db.Query(`select name, pk from pragma_table_info('` + table + `') order by cid`)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer rows.Close()
-	type pkCol struct {
-		name string
-		rank int
-	}
-	var pkCols []pkCol
-	for rows.Next() {
-		var name string
-		var pk int
-		if err := rows.Scan(&name, &pk); err != nil {
-			return nil, nil, err
-		}
-		cols = append(cols, name)
-		if pk > 0 {
-			pkCols = append(pkCols, pkCol{name: name, rank: pk})
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
-	sort.SliceStable(pkCols, func(i, j int) bool { return pkCols[i].rank < pkCols[j].rank })
-	for _, p := range pkCols {
-		pks = append(pks, p.name)
-	}
-	return cols, pks, nil
+	return store.TableShape(db, table)
 }
 
-func quoteIdent(s string) string {
-	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
-}
+func quoteIdent(s string) string { return store.QuoteIdent(s) }

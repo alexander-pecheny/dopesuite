@@ -1,7 +1,8 @@
-package main
+package dopeserver
 
 import (
 	"bytes"
+	"dope/dope/realtime"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -290,9 +291,9 @@ func TestScopedGameStatePatchBroadcastsDelta(t *testing.T) {
 	addAPITestOrganizer(t, srv, festID, organizerID)
 
 	// Subscribe like an SSE viewer so we can read what the PATCH fans out.
-	ch := make(chan event, 8)
-	srv.addSubscriber(festID, ch, false, 0)
-	defer srv.removeSubscriber(festID, ch)
+	ch := make(chan realtime.Event, 8)
+	srv.rt.AddSubscriber(festID, ch, false, 0)
+	defer srv.rt.RemoveSubscriber(festID, ch)
 
 	path := fmt.Sprintf("/api/fest/%d/games/%d/state", festID, gameID)
 	patch := func(p []any, value any) map[string]any {
@@ -311,8 +312,8 @@ func TestScopedGameStatePatchBroadcastsDelta(t *testing.T) {
 		select {
 		case ev := <-ch:
 			var env envelope
-			if err := json.Unmarshal(ev.data, &env); err != nil {
-				t.Fatalf("decode envelope: %v (raw %s)", err, ev.data)
+			if err := json.Unmarshal(ev.Data, &env); err != nil {
+				t.Fatalf("decode envelope: %v (raw %s)", err, ev.Data)
 			}
 			return env
 		default:
@@ -373,9 +374,9 @@ func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
 	organizerID, token := createAPITestSession(t, srv, "seq-editor")
 	addAPITestOrganizer(t, srv, festID, organizerID)
 
-	ch := make(chan event, 8)
-	srv.addSubscriber(festID, ch, false, 0)
-	defer srv.removeSubscriber(festID, ch)
+	ch := make(chan realtime.Event, 8)
+	srv.rt.AddSubscriber(festID, ch, false, 0)
+	defer srv.rt.RemoveSubscriber(festID, ch)
 
 	type envelope struct {
 		Scope   string `json:"scope"`
@@ -387,8 +388,8 @@ func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
 		select {
 		case ev := <-ch:
 			var env envelope
-			if err := json.Unmarshal(ev.data, &env); err != nil {
-				t.Fatalf("decode envelope: %v (raw %s)", err, ev.data)
+			if err := json.Unmarshal(ev.Data, &env); err != nil {
+				t.Fatalf("decode envelope: %v (raw %s)", err, ev.Data)
 			}
 			return env
 		default:
@@ -448,7 +449,7 @@ func TestScopedGameStateRejectsRatingRosterEdits(t *testing.T) {
 	}
 	defer db.Close()
 	festID, chgkGameID, ksiGameID := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]subInfo)}
+	srv := &server{db: db, rt: realtime.NewManager()}
 	organizerID, token := createAPITestSession(t, srv, "roster-editor")
 	addAPITestOrganizer(t, srv, festID, organizerID)
 

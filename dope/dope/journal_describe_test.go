@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"encoding/json"

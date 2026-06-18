@@ -3,7 +3,7 @@ set dotenv-load := true
 default: dev
 
 dev-web-only:
-    go run ./dope
+    go run ./dope/cmd/dope-server
 
 bot:
     go run ./dope/cmd/telegram-bot
@@ -12,7 +12,7 @@ dev:
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'kill 0' EXIT INT TERM
-    go run ./dope &
+    go run ./dope/cmd/dope-server &
     go run ./dope/cmd/telegram-bot &
     wait
 

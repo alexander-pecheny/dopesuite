@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"context"
@@ -8,6 +8,9 @@ import (
 	"html/template"
 	"net/http"
 	"strings"
+
+	"dope/dope/games"
+	"dope/dope/markdown"
 )
 
 type publicFestSummary struct {
@@ -231,7 +234,7 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 			if err := s.db.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, id).Scan(&gameType); err == nil {
 				scope := festScope{FestID: id, GameID: gameID}
 				route := parseHostInitRoute(parts[1:], scope)
-				if gameType == "od" || gameType == "si" || gameType == "ksi" {
+				if games.IsChGK(gameType) {
 					// OD/SI viewers always render the whole game regardless of
 					// sub-route, so collapse to one snapshot cache key.
 					route = hostInitRoute{Mode: "grid", FestID: id, GameID: gameID}
@@ -369,7 +372,7 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 	if isPublic != 1 {
 		return publicFestDetail{}, sql.ErrNoRows
 	}
-	games, err := loadFestGames(ctx, s.db, id)
+	gameRows, err := loadFestGames(ctx, s.db, id)
 	if err != nil {
 		return publicFestDetail{}, err
 	}
@@ -377,14 +380,14 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 	if festRef == "" {
 		festRef = fmt.Sprintf("%d", id)
 	}
-	publicGames := make([]publicFestGame, len(games))
-	for i, g := range games {
+	publicGames := make([]publicFestGame, len(gameRows))
+	for i, g := range gameRows {
 		publicGames[i] = publicFestGame{
 			ID:    g.ID,
 			Slug:  g.Slug,
 			Code:  g.Code,
 			Title: g.Title,
-			Type:  gameTypeLabel(g.Type),
+			Type:  games.Label(g.Type),
 			URL:   fmt.Sprintf("/fest/%s/game/%s/", festRef, g.Ref()),
 		}
 	}
@@ -393,25 +396,10 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 		Slug:        slug,
 		Title:       title,
 		Dates:       formatFestDates(startDate.String, endDate.String),
-		Description: renderMarkdown(description),
+		Description: markdown.Render(description),
 		Games:       publicGames,
 	}
 	return detail, nil
-}
-
-func gameTypeLabel(gameType string) string {
-	switch gameType {
-	case "od":
-		return "ЧГК"
-	case "si":
-		return "СИ"
-	case "ksi":
-		return "КСИ"
-	case "ek":
-		return "ЭК"
-	default:
-		return gameType
-	}
 }
 
 func formatFestDates(start, end string) string {

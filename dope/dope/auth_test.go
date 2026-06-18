@@ -1,9 +1,10 @@
-package main
+package dopeserver
 
 import (
 	"bytes"
 	"context"
 	"database/sql"
+	"dope/dope/realtime"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -24,7 +25,7 @@ func newAuthTestServer(t *testing.T) *server {
 	}
 	t.Cleanup(func() { db.Close() })
 	createDefaultFestFixture(t, db, defaultMatch())
-	return &server{db: db, assets: staticFiles, subscribers: make(map[int64]map[chan event]subInfo)}
+	return &server{db: db, assets: staticFiles, rt: realtime.NewManager()}
 }
 
 func systemUserID(t *testing.T, db *sql.DB) int64 {

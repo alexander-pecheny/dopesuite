@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"context"
@@ -104,7 +104,7 @@ func reconstructGameStateAt(ctx context.Context, tx *sql.Tx, gameID, throughID i
 	}
 	rp := newJournalReplayer(nil)
 	for _, o := range ops {
-		if err := rp.applyRowMap(ctx, tx, o.op, o.table, o.row); err != nil {
+		if err := rp.ApplyRowMap(ctx, tx, o.op, o.table, o.row); err != nil {
 			return fmt.Errorf("replay row op %d (%s %s): %w", o.id, o.op, o.table, err)
 		}
 	}

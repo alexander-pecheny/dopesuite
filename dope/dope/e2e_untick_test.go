@@ -1,8 +1,9 @@
-package main
+package dopeserver
 
 import (
 	"context"
 	"database/sql"
+	"dope/dope/realtime"
 	"fmt"
 	"os"
 	"testing"
@@ -33,8 +34,7 @@ func TestE2EUntickEditRetickRealDB(t *testing.T) {
 
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 	ctx := context.Background()
 	scopeBase := festScope{FestID: festID, GameID: gameID}

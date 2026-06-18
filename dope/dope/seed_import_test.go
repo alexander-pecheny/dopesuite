@@ -1,8 +1,9 @@
-package main
+package dopeserver
 
 import (
 	"context"
 	"database/sql"
+	"dope/dope/realtime"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -18,8 +19,7 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 	festID, ekGameID := createSeedImportFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 	scope := festScope{FestID: festID, GameID: ekGameID}
 
@@ -81,8 +81,7 @@ func TestSeedImportFromKSIPropagatesDeclines(t *testing.T) {
 
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 	scope := festScope{FestID: festID, GameID: ekGameID}
 
@@ -141,7 +140,7 @@ func TestSeedLabelsShownBeforeImport(t *testing.T) {
 	defer db.Close()
 
 	festID, ekGameID := createSeedImportFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]subInfo)}
+	srv := &server{db: db, rt: realtime.NewManager()}
 	scope, err := srv.verifyMatchInScope(t.Context(), festScope{FestID: festID, GameID: ekGameID}, "A")
 	if err != nil {
 		t.Fatalf("match scope: %v", err)
@@ -165,8 +164,7 @@ func TestFinishAssignsPlaces(t *testing.T) {
 	festID, ekGameID := createSeedImportFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: ekGameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {

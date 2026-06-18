@@ -23,7 +23,7 @@ SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
 TARGETS: dict[str, dict[str, str]] = {
     "server": {
         "service": "dope.service",
-        "package": "./dope",
+        "package": "./dope/cmd/dope-server",
         "binary": "dope-server",
     },
     "bot": {

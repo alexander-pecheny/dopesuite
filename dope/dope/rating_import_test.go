@@ -1,7 +1,8 @@
-package main
+package dopeserver
 
 import (
 	"database/sql"
+	"dope/dope/realtime"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -22,8 +23,8 @@ func TestRemapAnswerMatrixFollowsTeams(t *testing.T) {
 		{"", "x", "", "", ""}, // B (#2)
 		{"", "", "", "y", ""}, // C (#3)
 	}
-	oldParts := parts(ksiParticipant{1, "A"}, ksiParticipant{2, "B"}, ksiParticipant{3, "C"})
-	newParts := parts(ksiParticipant{3, "C"}, ksiParticipant{2, "B"}, ksiParticipant{9, "D"}) // A removed, D added, reordered
+	oldParts := parts(ksiParticipant{Number: 1, Name: "A"}, ksiParticipant{Number: 2, Name: "B"}, ksiParticipant{Number: 3, Name: "C"})
+	newParts := parts(ksiParticipant{Number: 3, Name: "C"}, ksiParticipant{Number: 2, Name: "B"}, ksiParticipant{Number: 9, Name: "D"}) // A removed, D added, reordered
 
 	out := remapAnswerMatrix(old, oldParts, newParts, 5)
 	if len(out) != 3 {
@@ -50,8 +51,8 @@ func TestRemapAnswerMatrixDistinguishesDuplicateNamesByNumber(t *testing.T) {
 		{"a", "", "", "", ""}, // #7 "Дубль"
 		{"b", "", "", "", ""}, // #8 "Дубль"
 	}
-	oldParts := parts(ksiParticipant{7, "Дубль"}, ksiParticipant{8, "Дубль"})
-	newParts := parts(ksiParticipant{8, "Дубль"}, ksiParticipant{7, "Дубль"}) // swap order
+	oldParts := parts(ksiParticipant{Number: 7, Name: "Дубль"}, ksiParticipant{Number: 8, Name: "Дубль"})
+	newParts := parts(ksiParticipant{Number: 8, Name: "Дубль"}, ksiParticipant{Number: 7, Name: "Дубль"}) // swap order
 
 	out := remapAnswerMatrix(old, oldParts, newParts, 5)
 	if out[0][0] != "b" {
@@ -70,8 +71,8 @@ func TestRemapAnswerMatrixLegacyNameFallback(t *testing.T) {
 		{"x", "", "", "", ""}, // "A", no number (legacy)
 		{"y", "", "", "", ""}, // "B", no number (legacy)
 	}
-	oldParts := parts(ksiParticipant{0, "A"}, ksiParticipant{0, "B"})
-	newParts := parts(ksiParticipant{2, "B"}, ksiParticipant{1, "A"}) // now numbered, reordered
+	oldParts := parts(ksiParticipant{Number: 0, Name: "A"}, ksiParticipant{Number: 0, Name: "B"})
+	newParts := parts(ksiParticipant{Number: 2, Name: "B"}, ksiParticipant{Number: 1, Name: "A"}) // now numbered, reordered
 	out := remapAnswerMatrix(old, oldParts, newParts, 5)
 	if out[0][0] != "y" {
 		t.Fatalf("B should map by name to new index 0, got %q", out[0][0])
@@ -83,7 +84,7 @@ func TestRemapAnswerMatrixLegacyNameFallback(t *testing.T) {
 
 func TestRemapAnswerMatrixLegacyNoParticipantsResizesPositionally(t *testing.T) {
 	old := [][]string{{"a"}, {"b"}}
-	out := remapAnswerMatrix(old, nil, parts(ksiParticipant{0, "X"}, ksiParticipant{0, "Y"}, ksiParticipant{0, "Z"}), 2)
+	out := remapAnswerMatrix(old, nil, parts(ksiParticipant{Number: 0, Name: "X"}, ksiParticipant{Number: 0, Name: "Y"}, ksiParticipant{Number: 0, Name: "Z"}), 2)
 	if len(out) != 3 || out[0][0] != "a" || out[1][0] != "b" || out[2][0] != "" {
 		t.Fatalf("no old participants should resize positionally: %v", out)
 	}
@@ -101,7 +102,7 @@ func TestImportRatingRosterRemapsKSIScoresByTeam(t *testing.T) {
 	defer db.Close()
 
 	festID, _, ksiGameID := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]subInfo)}
+	srv := &server{db: db, rt: realtime.NewManager()}
 
 	initial := []festRosterImportTeam{
 		{RatingID: 2, Name: "Бета"},
