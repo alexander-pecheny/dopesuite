@@ -94,6 +94,27 @@ Server listens on port **9672** by default (override with `$PORT`). Database def
 ## Testing UI Changes
 Use `cdp.py` on port 9222 (Chrome DevTools Protocol). If there's nothing on the port, run `/Applications/Comet.app/Contents/MacOS/Comet --remote-debugging-port=9222`
 
+## Design System
+When building a new page or UI component, you MUST use the existing design
+system in `dope/static/styles.css` — its CSS variables (colors, spacing,
+typography), layout grids, table styles, and component classes — and the shared
+JS building blocks (`window.DopeTable` in `match-table.js`, `window.dopeMenu` in
+`menu.js`, etc.). Do not introduce bespoke one-off styles or hand-rolled widgets
+when a design-system equivalent exists.
+
+Order of preference, strictly:
+1. **Reuse** an existing variable / class / component as-is.
+2. If something is genuinely missing, **extend the design system** — add the new
+   variable/class/component to `styles.css` (or the relevant shared JS module) so
+   it is reusable — rather than inlining a local solution. New tokens follow the
+   existing naming and must themselves be built from existing variables where
+   possible.
+3. Only as a last resort, and with a comment explaining why, add page-local
+   styling — but first reconsider whether step 2 is the right call.
+
+This keeps every page visually consistent and themable (light/dark/high-contrast
+all derive from the shared variables).
+
 ## CSS Convention
 All CSS values must use variables — no static values on classes
 
