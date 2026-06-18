@@ -3,6 +3,7 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/realtime"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -263,7 +264,7 @@ func (s *server) applyEditBatch(batch *editBatch) {
 	if needSnapshot {
 		s.broadcastState(scope.FestID, scopeKey, lastRevision, finalNext)
 	} else {
-		s.broadcastBatchedDelta(scope.FestID, scopeKey, lastRevision, mergeOpsArrays(mergedOps))
+		s.broadcastBatchedDelta(scope.FestID, scopeKey, lastRevision, realtime.MergeOpsArrays(mergedOps))
 	}
 }
 

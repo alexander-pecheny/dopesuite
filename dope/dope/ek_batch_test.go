@@ -1,7 +1,9 @@
 package dopeserver
 
 import (
+	"dope/dope/journal"
 	"dope/dope/realtime"
+	"dope/dope/store"
 	"path/filepath"
 	"testing"
 )
@@ -16,8 +18,8 @@ func newBatchTestServer(t *testing.T) (*server, matchScope) {
 
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
@@ -58,7 +60,7 @@ func TestBatchMatchUpdateAppliesAllEdits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	for label, v := range map[string]MatchView{"returned": view, "reloaded": reloaded} {
+	for label, v := range map[string]store.MatchView{"returned": view, "reloaded": reloaded} {
 		if v.Teams[0].Themes[0].Answers[0] != "right" {
 			t.Fatalf("%s: team0 ans0 = %q, want right", label, v.Teams[0].Themes[0].Answers[0])
 		}
@@ -71,7 +73,7 @@ func TestBatchMatchUpdateAppliesAllEdits(t *testing.T) {
 		if v.Teams[2].Themes[0].Answers[0] != "wrong" {
 			t.Fatalf("%s: team2 ans0 = %q, want wrong", label, v.Teams[2].Themes[0].Answers[0])
 		}
-		if got, want := v.Teams[1].Total, questionValues[0]; got != want {
+		if got, want := v.Teams[1].Total, store.QuestionValues[0]; got != want {
 			t.Fatalf("%s: team1 total = %d, want %d", label, got, want)
 		}
 	}
@@ -128,7 +130,7 @@ func TestScopedMatchUpdateStampsJournal(t *testing.T) {
 	if err := srv.db.QueryRow(
 		`select count(*), coalesce(sum(case when fest_id is ? and game_id is ? and actor_user_id is ? then 0 else 1 end), 0)
 		   from journal where id > ? and op in (?, ?, ?)`,
-		scope.FestID, scope.GameID, actor, target, int(opRowIns), int(opRowSet), int(opRowDel)).
+		scope.FestID, scope.GameID, actor, target, int(journal.OpRowIns), int(journal.OpRowSet), int(journal.OpRowDel)).
 		Scan(&rows, &mismatched); err != nil {
 		t.Fatalf("scan journal rows: %v", err)
 	}

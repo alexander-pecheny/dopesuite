@@ -2,6 +2,8 @@ package dopeserver
 
 import (
 	"context"
+	"dope/dope/journal"
+	"dope/dope/store"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -34,7 +36,7 @@ type journalChange struct {
 }
 
 type journalOpRow struct {
-	op      journalOp
+	op      journal.Op
 	payload []byte
 }
 
@@ -91,7 +93,7 @@ order by j.id`, gameID)
 		if actor != "" {
 			g.actor = actor
 		}
-		g.ops = append(g.ops, journalOpRow{op: journalOp(op), payload: append([]byte(nil), payload...)})
+		g.ops = append(g.ops, journalOpRow{op: journal.Op(op), payload: append([]byte(nil), payload...)})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -231,17 +233,17 @@ func odTeamNames(stateJSON string) ([]string, map[int]string) {
 
 // prepareEK batch-resolves the answer / team / match identities referenced by a
 // game's row-ops, so EK descriptions can show real names without per-row queries.
-func (r *nameResolver) prepareEK(ctx context.Context, db rowQuerier, allOps [][]journalOpRow) {
+func (r *nameResolver) prepareEK(ctx context.Context, db store.Queryer, allOps [][]journalOpRow) {
 	answerIDs := map[int64]bool{}
 	teamIDs := map[int64]bool{}
 	matchIDs := map[int64]bool{}
 	playerIDs := map[int64]bool{}
 	for _, ops := range allOps {
 		for _, o := range ops {
-			if o.op > opRowDel {
+			if o.op > journal.OpRowDel {
 				continue
 			}
-			table, row, err := decodeRowOpJSON(o.payload)
+			table, row, err := journal.DecodeRowOpJSON(o.payload)
 			if err != nil {
 				continue
 			}
@@ -359,7 +361,7 @@ func (r *nameResolver) describeGroup(ops []journalOpRow) []string {
 	default:
 		var lines []string
 		for _, o := range ops {
-			if o.op >= opEvImport {
+			if o.op >= journal.OpEvImport {
 				lines = append(lines, describeEvent(o.op, o.payload)...)
 			}
 		}
@@ -373,7 +375,7 @@ func (r *nameResolver) describeStatePatchGroup(ops []journalOpRow, lineFn func(o
 	var lines []string
 	for _, o := range ops {
 		switch {
-		case o.op == opEvGameStatePatch:
+		case o.op == journal.OpEvGameStatePatch:
 			var req gameStatePatchRequest
 			if json.Unmarshal(o.payload, &req) != nil {
 				lines = append(lines, "изменение состояния игры")
@@ -384,9 +386,9 @@ func (r *nameResolver) describeStatePatchGroup(ops []journalOpRow, lineFn func(o
 					lines = append(lines, l)
 				}
 			}
-		case o.op == opEvGameState:
+		case o.op == journal.OpEvGameState:
 			lines = append(lines, "состояние игры заменено целиком")
-		case o.op >= opEvImport && o.op != opEvMatchUpdate:
+		case o.op >= journal.OpEvImport && o.op != journal.OpEvMatchUpdate:
 			lines = append(lines, describeEvent(o.op, o.payload)...)
 		}
 	}
@@ -456,10 +458,10 @@ func (r *nameResolver) odTeamLabel(num int) string {
 func (r *nameResolver) describeEK(ops []journalOpRow) []string {
 	var lines []string
 	for _, o := range ops {
-		if o.op > opRowDel {
+		if o.op > journal.OpRowDel {
 			continue
 		}
-		table, row, err := decodeRowOpJSON(o.payload)
+		table, row, err := journal.DecodeRowOpJSON(o.payload)
 		if err != nil {
 			continue
 		}
@@ -505,10 +507,10 @@ func (r *nameResolver) describeEK(ops []journalOpRow) []string {
 	if len(lines) == 0 {
 		// No row-level detail (e.g. a coarse import/reseed) — use the event label.
 		for _, o := range ops {
-			if o.op >= opEvImport {
+			if o.op >= journal.OpEvImport {
 				if l := describeEvent(o.op, o.payload); len(l) > 0 {
 					lines = append(lines, l...)
-				} else if o.op == opEvMatchUpdate {
+				} else if o.op == journal.OpEvMatchUpdate {
 					lines = append(lines, "редактирование матча")
 				}
 			}
@@ -615,33 +617,33 @@ func markLabel(m string) string {
 }
 
 // describeEvent renders coarse, non-game-typed events (imports, reseeds, etc.).
-func describeEvent(op journalOp, payload []byte) []string {
+func describeEvent(op journal.Op, payload []byte) []string {
 	switch op {
-	case opEvReseedCalculate:
+	case journal.OpEvReseedCalculate:
 		return []string{"пересчёт посева этапа"}
-	case opEvRatingImport:
+	case journal.OpEvRatingImport:
 		return []string{"импорт ростера из rating.chgk.info"}
-	case opEvSeedImportKSI:
+	case journal.OpEvSeedImportKSI:
 		return []string{"импорт посева из КСИ"}
-	case opEvSeedImportDecline:
+	case journal.OpEvSeedImportDecline:
 		return []string{"отказ команды от посева"}
-	case opEvGameCreate:
+	case journal.OpEvGameCreate:
 		return []string{"игра создана"}
-	case opEvGameClear:
+	case journal.OpEvGameClear:
 		return []string{"игра очищена"}
-	case opEvGameDelete:
+	case journal.OpEvGameDelete:
 		return []string{"игра удалена"}
-	case opEvFestNumbers:
+	case journal.OpEvFestNumbers:
 		return []string{"изменены номера команд"}
-	case opEvVenuesUpdate, opEvMatchVenue:
+	case journal.OpEvVenuesUpdate, journal.OpEvMatchVenue:
 		return []string{"изменена площадка"}
-	case opEvPlayerOverride, opEvPlayerOverrideEdit:
+	case journal.OpEvPlayerOverride, journal.OpEvPlayerOverrideEdit:
 		return []string{"переопределение игрока в составе"}
-	case opEvFestAccess:
+	case journal.OpEvFestAccess:
 		return []string{"изменение доступа"}
-	case opEvImport:
+	case journal.OpEvImport:
 		return []string{"импорт схемы"}
-	case opEvGameRevert:
+	case journal.OpEvGameRevert:
 		return []string{"откат игры к более раннему состоянию"}
 	default:
 		return nil

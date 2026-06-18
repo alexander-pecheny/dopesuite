@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"dope/dope/journal"
+	"dope/dope/store"
 )
 
 // runConvertAudit is a one-time / measurement subcommand: it reads the legacy
@@ -34,7 +35,7 @@ func runConvertAudit(args []string) {
 		log.Fatal("convert-audit: --db is required (use a COPY, not the live DB)")
 	}
 
-	db, err := sql.Open("sqlite", buildSqliteDSN(*dbPath))
+	db, err := sql.Open("sqlite", store.BuildDSN(*dbPath))
 	if err != nil {
 		log.Fatalf("convert-audit: open db: %v", err)
 	}
@@ -107,30 +108,22 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.2f %cB", float64(n)/float64(div), "KMGT"[exp])
 }
 
-// The journal dictionary + table bootstrap live in the leaf package
-// dope/journal; these aliases/wrappers keep the converter terse.
-type journalDict = journal.Dict
-
-func newJournalDict() *journalDict { return journal.NewDict() }
-
 func loadWritableJournalDict(db interface {
 	Query(string, ...any) (*sql.Rows, error)
-}) (*journalDict, error) {
+}) (*journal.Dict, error) {
 	return journal.LoadWritableDict(db)
 }
 
-func createJournalTables(db *sql.DB) error { return journal.CreateTables(db) }
-
 func convertAuditLog(db *sql.DB) (convertReport, error) {
 	var rep convertReport
-	if err := createJournalTables(db); err != nil {
+	if err := journal.CreateTables(db); err != nil {
 		return rep, fmt.Errorf("create journal tables: %w", err)
 	}
 
 	rep.auditBytes = objectBytes(db, "audit_log")
 	_ = db.QueryRow(`select count(*) from audit_log`).Scan(&rep.auditRows)
 
-	dict := newJournalDict()
+	dict := journal.NewDict()
 
 	// Pre-load every table's shape before opening the audit cursor: the pool is
 	// pinned to one connection, so issuing pragma_table_info queries while the
@@ -151,7 +144,7 @@ func convertAuditLog(db *sql.DB) (convertReport, error) {
 	}
 	tnRows.Close()
 	for _, t := range tableNames {
-		cols, pks, err := auditTableShape(db, t)
+		cols, pks, err := store.TableShape(db, t)
 		if err != nil {
 			return rep, fmt.Errorf("shape %s: %w", t, err)
 		}
@@ -173,7 +166,7 @@ order by id`)
 	defer rows.Close()
 
 	// Group records per fest bucket; each bucket becomes one cold segment.
-	buckets := map[int64][]journalRecord{}
+	buckets := map[int64][]journal.Record{}
 
 	for rows.Next() {
 		var (
@@ -222,13 +215,13 @@ order by id`)
 	for _, fid := range festIDs {
 		recs := buckets[fid]
 		sort.Slice(recs, func(i, j int) bool { return recs[i].Seq < recs[j].Seq })
-		raw := encodeSegment(recs)
+		raw := journal.EncodeSegment(recs)
 		rep.rawStreamBytes += int64(len(raw))
-		blob := zstdCompress(raw)
+		blob := journal.Compress(raw)
 		if _, err := db.Exec(`
 insert into journal_segment(fest_id, seq_start, seq_end, dsl_version, n_records, blob, created_at)
 values(?, ?, ?, ?, ?, ?, ?)`,
-			fid, recs[0].Seq, recs[len(recs)-1].Seq, journalDSLVersion, len(recs), blob, now); err != nil {
+			fid, recs[0].Seq, recs[len(recs)-1].Seq, journal.DSLVersion, len(recs), blob, now); err != nil {
 			return rep, fmt.Errorf("insert segment fest %d: %w", fid, err)
 		}
 		rep.segments++
@@ -245,41 +238,41 @@ type auditShape struct {
 
 // buildRowRecord turns one audit_log row into a generic row-op journal record.
 // Returns ok=false when the row carries no usable snapshot (skipped).
-func buildRowRecord(dict *journalDict, table string, shape auditShape, op string, id int64, ts string, actor int64, requestID string, bj, aj sql.NullString) (journalRecord, bool, error) {
+func buildRowRecord(dict *journal.Dict, table string, shape auditShape, op string, id int64, ts string, actor int64, requestID string, bj, aj sql.NullString) (journal.Record, bool, error) {
 	tableID := dict.Intern(table)
 	var (
-		opCode journalOp
+		opCode journal.Op
 		src    sql.NullString
 		pkOnly bool
 	)
 	switch op {
 	case "INSERT":
-		opCode, src = opRowIns, aj // full row
+		opCode, src = journal.OpRowIns, aj // full row
 	case "UPDATE":
-		opCode, src = opRowSet, aj // pk + changed cols
+		opCode, src = journal.OpRowSet, aj // pk + changed cols
 	case "DELETE":
-		opCode, src, pkOnly = opRowDel, bj, true // full row, keep pk only
+		opCode, src, pkOnly = journal.OpRowDel, bj, true // full row, keep pk only
 	default:
-		return journalRecord{}, false, fmt.Errorf("unknown op %q", op)
+		return journal.Record{}, false, fmt.Errorf("unknown op %q", op)
 	}
 	if !src.Valid || src.String == "" {
-		return journalRecord{}, false, nil
+		return journal.Record{}, false, nil
 	}
 	rowMap, err := decodeRowJSON(src.String)
 	if err != nil {
-		return journalRecord{}, false, err
+		return journal.Record{}, false, err
 	}
 	if len(rowMap) == 0 {
-		return journalRecord{}, false, nil
+		return journal.Record{}, false, nil
 	}
 
-	var cols []colVal
+	var cols []journal.ColVal
 	if pkOnly && len(shape.pks) > 0 {
 		// DELETE: keep only the primary-key columns — that's all forward replay
 		// needs, and dropping the full before-row is a large part of the savings.
 		for _, pk := range shape.pks {
 			if v, ok := rowMap[pk]; ok {
-				cols = append(cols, colVal{NameID: dict.Intern(pk), Val: v})
+				cols = append(cols, journal.ColVal{NameID: dict.Intern(pk), Val: v})
 			}
 		}
 		if len(cols) == 0 {
@@ -290,26 +283,26 @@ func buildRowRecord(dict *journalDict, table string, shape auditShape, op string
 		cols = colsFromMap(dict, rowMap)
 	}
 
-	rec := journalRecord{
+	rec := journal.Record{
 		Seq:         uint64(id),
 		Op:          opCode,
-		TSUnixMilli: parseTSMilli(ts),
+		TSUnixMilli: journal.ParseTSMilli(ts),
 		ActorID:     actor,
 		RequestID:   dict.Intern(requestID),
-		Args:        encodeRowArgs(rowArgs{TableID: tableID, Cols: cols}),
+		Args:        journal.EncodeRowArgs(journal.RowArgs{TableID: tableID, Cols: cols}),
 	}
 	return rec, true, nil
 }
 
-func colsFromMap(dict *journalDict, m map[string]any) []colVal {
+func colsFromMap(dict *journal.Dict, m map[string]any) []journal.ColVal {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys) // deterministic column order
-	cols := make([]colVal, 0, len(keys))
+	cols := make([]journal.ColVal, 0, len(keys))
 	for _, k := range keys {
-		cols = append(cols, colVal{NameID: dict.Intern(k), Val: m[k]})
+		cols = append(cols, journal.ColVal{NameID: dict.Intern(k), Val: m[k]})
 	}
 	return cols
 }
@@ -325,12 +318,10 @@ func decodeRowJSON(s string) (map[string]any, error) {
 	}
 	out := make(map[string]any, len(raw))
 	for k, v := range raw {
-		out[k] = jsonToSQLValue(v)
+		out[k] = store.JSONToSQLValue(v)
 	}
 	return out, nil
 }
-
-func parseTSMilli(ts string) int64 { return journal.ParseTSMilli(ts) }
 
 // objectBytes returns the on-disk page bytes for a table or index (and any
 // auto-index) via dbstat.

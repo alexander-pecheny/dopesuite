@@ -3,10 +3,12 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/games"
+	"dope/dope/store"
 	"testing"
 )
 
-func createDefaultFestFixture(t *testing.T, db *sql.DB, state MatchState) int64 {
+func createDefaultFestFixture(t *testing.T, db *sql.DB, state store.MatchState) int64 {
 	t.Helper()
 	ctx := t.Context()
 	tx, err := db.BeginTx(ctx, nil)
@@ -25,10 +27,10 @@ func createDefaultFestFixture(t *testing.T, db *sql.DB, state MatchState) int64 
 		"schemaVersion":     2,
 		"slug":              "fixture-ek",
 		"title":             "Fixture EK",
-		"gameType":          defaultGameType,
-		"questionValues":    questionValues,
-		"regularThemeCount": themeCount,
-		"venues":            []VenueView{{Number: 1, Title: defaultVenueTitle}},
+		"gameType":          games.Default,
+		"questionValues":    store.QuestionValues,
+		"regularThemeCount": store.ThemeCount,
+		"venues":            []store.VenueView{{Number: 1, Title: defaultVenueTitle}},
 		"stages": []map[string]any{
 			{
 				"code":       "r16",
@@ -42,13 +44,13 @@ func createDefaultFestFixture(t *testing.T, db *sql.DB, state MatchState) int64 
 		},
 	})
 
-	schemeID, err := insertReturningID(ctx, tx, `
+	schemeID, err := store.InsertReturningID(ctx, tx, `
 insert into schemes(slug, title, version, schema_json, created_at)
 values(?, ?, 2, ?, ?)`, "fixture-ek", "Fixture EK", schemaJSON, now)
 	if err != nil {
 		t.Fatalf("insert scheme: %v", err)
 	}
-	festID, err := insertReturningID(ctx, tx, `
+	festID, err := store.InsertReturningID(ctx, tx, `
 insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
 values(?, ?, ?, null, ?, ?, ?, ?, 1)`, "fixture-ek", "Fixture EK", "", systemID, maxInt64(state.Revision, 1), now, now)
 	if err != nil {
@@ -59,20 +61,20 @@ insert into fest_organizers(fest_id, user_id, role, added_at)
 values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 		t.Fatalf("insert organizer: %v", err)
 	}
-	gameID, err := insertReturningID(ctx, tx, `
+	gameID, err := store.InsertReturningID(ctx, tx, `
 insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, status, team_list_source, roster_source, revision, created_at, updated_at)
 values(?, ?, ?, ?, 1, ?, ?, 'active', 'fest', 'fest', 1, ?, ?)`,
-		festID, defaultGameCode, "Fixture EK", defaultGameType, schemeID, schemaJSON, now, now)
+		festID, defaultGameCode, "Fixture EK", games.Default, schemeID, schemaJSON, now, now)
 	if err != nil {
 		t.Fatalf("insert game: %v", err)
 	}
-	venueID, err := insertReturningID(ctx, tx, `
+	venueID, err := store.InsertReturningID(ctx, tx, `
 insert into venues(fest_id, number, title, created_at, updated_at)
 values(?, 1, ?, ?, ?)`, festID, defaultVenueTitle, now, now)
 	if err != nil {
 		t.Fatalf("insert venue: %v", err)
 	}
-	stageID, err := insertReturningID(ctx, tx, `
+	stageID, err := store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
 values(?, ?, 'r16', '1/16 финала', 'matches', 1, 'active', '{}')`, festID, gameID)
 	if err != nil {
@@ -82,7 +84,7 @@ values(?, ?, 'r16', '1/16 финала', 'matches', 1, 'active', '{}')`, festID,
 	if state.Finished {
 		status = "finished"
 	}
-	matchID, err := insertReturningID(ctx, tx, `
+	matchID, err := store.InsertReturningID(ctx, tx, `
 insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
 values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, festID, gameID, stageID, defaultMatchCode, state.Title, len(state.Teams), venueID, status, maxInt64(state.Revision, 1))
 	if err != nil {
@@ -90,7 +92,7 @@ values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, festID, gameID, stageID, defaultMatchCode
 	}
 
 	for teamIndex, team := range state.Teams {
-		teamID, err := insertReturningID(ctx, tx, `
+		teamID, err := store.InsertReturningID(ctx, tx, `
 insert into teams(fest_id, name, city)
 values(?, ?, '')`, festID, team.Name)
 		if err != nil {
@@ -112,7 +114,7 @@ values(?, ?, 'seed', ?, ?, 0)`, matchID, teamIndex, mustJSON(map[string]any{"bas
 		playerIDs := make(map[string]int64, len(team.Roster))
 		for rosterOrder, fullName := range team.Roster {
 			firstName, lastName := splitPlayerName(fullName)
-			playerID, err := insertReturningID(ctx, tx, `
+			playerID, err := store.InsertReturningID(ctx, tx, `
 insert into players(fest_id, first_name, last_name)
 values(?, ?, ?)`, festID, firstName, lastName)
 			if err != nil {
@@ -166,7 +168,7 @@ func createRosterPropagationFixture(t *testing.T, db *sql.DB) (int64, int64, int
 	if err != nil {
 		t.Fatalf("system user: %v", err)
 	}
-	festID, err := insertReturningID(ctx, tx, `
+	festID, err := store.InsertReturningID(ctx, tx, `
 insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
 values(?, ?, '', null, ?, 1, ?, ?, 1)`, "roster-fixture", "Roster fixture", ownerID, now, now)
 	if err != nil {
@@ -210,7 +212,7 @@ values(?, ?, 'creator', ?)`, festID, ownerID, now); err != nil {
 		t.Fatalf("insert ksi game: %v", err)
 	}
 	for _, name := range []string{"Команда A", "Команда B", "Команда C", "Команда D"} {
-		if _, err := insertReturningID(ctx, tx, `
+		if _, err := store.InsertReturningID(ctx, tx, `
 insert into teams(fest_id, name, city)
 values(?, ?, '')`, festID, name); err != nil {
 			t.Fatalf("insert existing team: %v", err)
@@ -226,13 +228,13 @@ func insertJSONGameFixture(ctx context.Context, tx *sql.Tx, festID int64, code, 
 	now := utcNow()
 	schemeJSON := mustJSON(scheme)
 	stateJSON := mustJSON(state)
-	schemeID, err := insertReturningID(ctx, tx, `
+	schemeID, err := store.InsertReturningID(ctx, tx, `
 insert into schemes(slug, title, version, schema_json, created_at)
 values(?, ?, 2, ?, ?)`, "fixture-"+code, title, schemeJSON, now)
 	if err != nil {
 		return 0, err
 	}
-	return insertReturningID(ctx, tx, `
+	return store.InsertReturningID(ctx, tx, `
 insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
 values(?, ?, ?, ?, ?, ?, ?, ?, 'active', 'game', 'game', 1, ?, ?)`,
 		festID, code, title, gameType, position, schemeID, schemeJSON, stateJSON, now, now)

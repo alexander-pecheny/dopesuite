@@ -381,10 +381,10 @@ insert or ignore into audit_ctx(id) values(1);
 	if err != nil {
 		return err
 	}
-	if err := addColumnsIfMissing(db, "audit_ctx", []columnSpec{{Name: "fest_id", Type: "integer"}}); err != nil {
+	if err := store.AddColumnsIfMissing(db, "audit_ctx", []store.ColumnSpec{{Name: "fest_id", Type: "integer"}}); err != nil {
 		return err
 	}
-	if err := addColumnsIfMissing(db, "audit_ctx", []columnSpec{{Name: "suppress", Type: "integer not null default 0"}}); err != nil {
+	if err := store.AddColumnsIfMissing(db, "audit_ctx", []store.ColumnSpec{{Name: "suppress", Type: "integer not null default 0"}}); err != nil {
 		return err
 	}
 	return nil
@@ -416,15 +416,9 @@ func dropLegacyAuditTriggers(db *sql.DB) error {
 		return err
 	}
 	for _, n := range names {
-		if _, err := db.Exec(`drop trigger if exists ` + quoteIdent(n)); err != nil {
+		if _, err := db.Exec(`drop trigger if exists ` + store.QuoteIdent(n)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
-
-func auditTableShape(db *sql.DB, table string) (cols, pks []string, err error) {
-	return store.TableShape(db, table)
-}
-
-func quoteIdent(s string) string { return store.QuoteIdent(s) }

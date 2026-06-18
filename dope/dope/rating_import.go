@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"dope/dope/games"
+	"dope/dope/store"
 )
 
 const ratingResultsURL = "https://api.rating.chgk.net/tournaments/%d/results.json?includeTeamMembers=1"
@@ -338,7 +339,7 @@ type existingFestTeam struct {
 // largest number ever assigned in this fest — new teams introduced by a
 // re-sync always receive numbers strictly greater than this, so already-printed
 // answer sheets keep referring to the right team.
-func loadFestExistingTeams(ctx context.Context, tx dbQueryer, festID int64) (map[int64]existingFestTeam, int64, error) {
+func loadFestExistingTeams(ctx context.Context, tx store.Queryer, festID int64) (map[int64]existingFestTeam, int64, error) {
 	rows, err := tx.QueryContext(ctx, `
 select id, coalesce(rating_id, 0), coalesce(number, 0)
 from fest_teams
@@ -372,7 +373,7 @@ where fest_id = ?`, festID)
 // roster, so the two can be diffed to detect a no-op re-import. Soft-deleted
 // teams are excluded: a re-import that re-adds one would flip its deleted flag,
 // which is a real change and must not be mistaken for "unchanged".
-func loadFestActiveRoster(ctx context.Context, q dbQueryer, festID int64) ([]festRosterImportTeam, error) {
+func loadFestActiveRoster(ctx context.Context, q store.Queryer, festID int64) ([]festRosterImportTeam, error) {
 	type teamRow struct {
 		id       int64
 		ratingID int64
@@ -380,7 +381,7 @@ func loadFestActiveRoster(ctx context.Context, q dbQueryer, festID int64) ([]fes
 		city     string
 		number   int64
 	}
-	teamRows, err := collectRows(ctx, q, `
+	teamRows, err := store.CollectRows(ctx, q, `
 select id, coalesce(rating_id, 0), name, coalesce(city, ''), coalesce(number, 0)
 from fest_teams
 where fest_id = ? and deleted = 0
@@ -393,7 +394,7 @@ order by position, id`, []any{festID}, func(rows *sql.Rows) (teamRow, error) {
 	}
 	out := make([]festRosterImportTeam, 0, len(teamRows))
 	for _, t := range teamRows {
-		players, err := collectRows(ctx, q, `
+		players, err := store.CollectRows(ctx, q, `
 select coalesce(p.rating_id, 0), p.first_name, p.last_name
 from fest_team_players ftp
 join fest_players p on p.id = ftp.player_id
@@ -526,7 +527,7 @@ update fest_teams set name = ?, city = ?, position = ?, number = ?, deleted = 0
 			}
 			teamIDs[i] = existing.ID
 		} else {
-			id, err := insertReturningID(ctx, tx, `
+			id, err := store.InsertReturningID(ctx, tx, `
 insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted)
 values(?, ?, ?, ?, ?, ?, 0)`, festID, nullableInt64(team.RatingID), team.Name, team.City, importOrder, numberParam)
 			if err != nil {
@@ -553,7 +554,7 @@ values(?, ?, ?, ?, ?, ?, 0)`, festID, nullableInt64(team.RatingID), team.Name, t
 		first, last string
 	}
 	curByKey := make(map[string]curPlayer)
-	cur, err := collectRows(ctx, tx, `
+	cur, err := store.CollectRows(ctx, tx, `
 select id, coalesce(rating_id, 0), first_name, last_name
 from fest_players where fest_id = ?`, []any{festID}, func(rows *sql.Rows) (curPlayer, error) {
 		var c curPlayer
@@ -590,7 +591,7 @@ update fest_players set rating_id = ?, first_name = ?, last_name = ? where id = 
 			}
 			continue
 		}
-		id, err := insertReturningID(ctx, tx, `
+		id, err := store.InsertReturningID(ctx, tx, `
 insert into fest_players(fest_id, rating_id, first_name, last_name) values(?, ?, ?, ?)`,
 			festID, nullableInt64(info.rating), info.first, info.last)
 		if err != nil {
@@ -610,7 +611,7 @@ insert into fest_players(fest_id, rating_id, first_name, last_name) values(?, ?,
 			playerID int64
 			order    int
 		}
-		curLinks, err := collectRows(ctx, tx, `
+		curLinks, err := store.CollectRows(ctx, tx, `
 select player_id, roster_order from fest_team_players where team_id = ?`, []any{teamID}, func(rows *sql.Rows) (link, error) {
 			var l link
 			return l, rows.Scan(&l.playerID, &l.order)
@@ -696,7 +697,7 @@ func sortedFestRosterImportTeams(teams []festRosterImportTeam) []festRosterImpor
 }
 
 func importPlayerName(player festRosterImportPlayer) string {
-	return joinPlayerName(player.FirstName, player.LastName)
+	return store.JoinPlayerName(player.FirstName, player.LastName)
 }
 
 func compareAlpha(a, b string) int {
@@ -727,7 +728,7 @@ func rosterPlayerKey(player festRosterImportPlayer) string {
 	if player.RatingID > 0 {
 		return "rating:" + strconv.FormatInt(player.RatingID, 10)
 	}
-	return "name:" + strings.ToLower(joinPlayerName(player.FirstName, player.LastName))
+	return "name:" + strings.ToLower(store.JoinPlayerName(player.FirstName, player.LastName))
 }
 
 func propagateRosterToChGKTx(ctx context.Context, tx *sql.Tx, festID int64, teams []festRosterImportTeam, entryRemap map[int]int) ([]gameStateBroadcast, error) {
@@ -999,7 +1000,7 @@ func applyRosterToKSIState(raw string, teams []festRosterImportTeam, targetTheme
 		if rawAnswers, ok := themes[i]["answers"]; ok && len(rawAnswers) > 0 {
 			_ = json.Unmarshal(rawAnswers, &answers)
 		}
-		answers = remapAnswerMatrix(answers, oldParticipants, participants, len(questionValues))
+		answers = remapAnswerMatrix(answers, oldParticipants, participants, len(store.QuestionValues))
 		answersJSON, err := json.Marshal(answers)
 		if err != nil {
 			return nil, err
@@ -1059,19 +1060,10 @@ func teamNamesFromRoster(teams []festRosterImportTeam) []string {
 	return out
 }
 
-// ksiParticipant is one row of a KSI game's participants list. Number is the
-// team's universal identity (the join key for the answer-grid remap); Name is
-// shown in the UI. Stored as objects [{number,name}]; legacy states stored a
-// bare name array and are read tolerantly via parseKSIParticipants.
-//
-// The shape lives in the leaf games package as the single source of truth; this
-// alias keeps the existing in-package references terse.
-type ksiParticipant = games.KSIParticipant
-
-func teamParticipantsFromRoster(teams []festRosterImportTeam) []ksiParticipant {
-	out := make([]ksiParticipant, 0, len(teams))
+func teamParticipantsFromRoster(teams []festRosterImportTeam) []games.KSIParticipant {
+	out := make([]games.KSIParticipant, 0, len(teams))
 	for _, team := range teams {
-		out = append(out, ksiParticipant{Number: int(team.Number), Name: team.Name})
+		out = append(out, games.KSIParticipant{Number: int(team.Number), Name: team.Name})
 	}
 	return out
 }
@@ -1079,42 +1071,27 @@ func teamParticipantsFromRoster(teams []festRosterImportTeam) []ksiParticipant {
 // parseKSIParticipants decodes a participants array tolerating both the current
 // [{number,name}] shape and the legacy ["name", ...] shape (so existing game
 // states keep loading during/after the migration).
-func parseKSIParticipants(raw json.RawMessage) []ksiParticipant {
+func parseKSIParticipants(raw json.RawMessage) []games.KSIParticipant {
 	if len(raw) == 0 {
 		return nil
 	}
-	var objs []ksiParticipant
+	var objs []games.KSIParticipant
 	if err := json.Unmarshal(raw, &objs); err == nil {
 		return objs
 	}
 	var names []string
 	if err := json.Unmarshal(raw, &names); err == nil {
-		out := make([]ksiParticipant, len(names))
+		out := make([]games.KSIParticipant, len(names))
 		for i, name := range names {
-			out[i] = ksiParticipant{Name: name}
+			out[i] = games.KSIParticipant{Name: name}
 		}
 		return out
 	}
 	return nil
 }
 
-// ksiDeclinedKey mirrors si.js declinedKey(): a team that refused to play is keyed by
-// its number when known (the stable identity that survives roster reorders/renames),
-// else by lowercased name for legacy number-less states. Returns "" when there is
-// nothing to key on. Must stay in sync with the frontend so KSI refusals propagate to
-// the server-side consumers (EK seed import, xlsx export).
-func ksiDeclinedKey(number int, name string) string {
-	return games.KSIDeclinedKey(number, name)
-}
-
-// ksiParticipantDeclined reports whether a participant is marked refused-to-play in the
-// given declined map (the KSI state's top-level "declined" object).
-func ksiParticipantDeclined(declined map[string]bool, p ksiParticipant) bool {
-	return games.KSIParticipantDeclined(declined, p)
-}
-
 // participantNames projects the name column out of a participants list.
-func participantNames(parts []ksiParticipant) []string {
+func participantNames(parts []games.KSIParticipant) []string {
 	out := make([]string, len(parts))
 	for i, p := range parts {
 		out[i] = p.Name
@@ -1141,12 +1118,12 @@ func resizeIntSlice(values []int, size int) []int {
 // (legacy state captured before numbers were stored). New teams get an empty
 // row; teams that dropped out lose their row. Each old row is claimed at most
 // once. With no old participants at all, a plain positional resize is used.
-func remapAnswerMatrix(values [][]string, oldParts, newParts []ksiParticipant, cols int) [][]string {
+func remapAnswerMatrix(values [][]string, oldParts, newParts []games.KSIParticipant, cols int) [][]string {
 	if len(oldParts) == 0 {
 		return resizeStringMatrix(values, len(newParts), cols)
 	}
 	consumed := make([]bool, len(oldParts))
-	claim := func(match func(ksiParticipant) bool) int {
+	claim := func(match func(games.KSIParticipant) bool) int {
 		for i, p := range oldParts {
 			if !consumed[i] && match(p) {
 				consumed[i] = true
@@ -1160,11 +1137,11 @@ func remapAnswerMatrix(values [][]string, oldParts, newParts []ksiParticipant, c
 		idx := -1
 		if p.Number > 0 {
 			num := p.Number
-			idx = claim(func(o ksiParticipant) bool { return o.Number == num })
+			idx = claim(func(o games.KSIParticipant) bool { return o.Number == num })
 		}
 		if idx < 0 && p.Name != "" {
 			name := p.Name
-			idx = claim(func(o ksiParticipant) bool { return o.Name == name })
+			idx = claim(func(o games.KSIParticipant) bool { return o.Name == name })
 		}
 		var srcRow []string
 		if idx >= 0 && idx < len(values) {

@@ -2,7 +2,9 @@ package dopeserver
 
 import (
 	"database/sql"
+	"dope/dope/games"
 	"dope/dope/realtime"
+	"dope/dope/store"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,7 +20,7 @@ import (
 
 func TestDefaultMatchScores(t *testing.T) {
 	state := defaultMatch()
-	view := buildView(state)
+	view := store.BuildView(state)
 
 	wantTotals := map[string]int{
 		"ВШЭстером":       120,
@@ -50,21 +52,21 @@ func TestDefaultMatchScores(t *testing.T) {
 }
 
 func TestShootoutScoresDoNotAffectBattleStats(t *testing.T) {
-	state := MatchState{
-		Teams: []TeamState{
+	state := store.MatchState{
+		Teams: []store.TeamState{
 			{
 				Name: "A",
-				Themes: []ThemeEntry{
+				Themes: []store.ThemeEntry{
 					{Answers: [5]string{"right", "", "", "", ""}},
 				},
-				ShootoutThemes: []ThemeEntry{
+				ShootoutThemes: []store.ThemeEntry{
 					{Answers: [5]string{"wrong", "", "", "", "right"}},
 				},
 			},
 		},
 	}
 
-	team := buildView(state).Teams[0]
+	team := store.BuildView(state).Teams[0]
 	if team.Total != 10 {
 		t.Fatalf("total = %d, want 10", team.Total)
 	}
@@ -131,7 +133,7 @@ func TestManualStandingsAllowsSplitPlace(t *testing.T) {
 	state.Teams[2].Place = 3.5
 	state.Teams[3].Place = 1
 
-	standings := buildView(state).Standings
+	standings := store.BuildView(state).Standings
 	want := []float64{1, 2, 3.5, 3.5}
 	for i, place := range want {
 		if standings[i].Place != place {
@@ -180,7 +182,7 @@ func TestNormalizeMark(t *testing.T) {
 	}
 
 	for input, want := range cases {
-		got := normalizeMark(input)
+		got := store.NormalizeMark(input)
 		if got != want {
 			t.Fatalf("normalizeMark(%q) = %q, want %q", input, got, want)
 		}
@@ -316,34 +318,34 @@ func TestImportMultiStageScheme(t *testing.T) {
 	}
 	defer db.Close()
 
-	scheme := festScheme{
+	scheme := store.FestScheme{
 		SchemaVersion:     2,
 		Slug:              "multi-stage",
 		Title:             "multi-stage",
 		GameType:          "ek",
-		RegularThemeCount: themeCount,
-		Venues:            []schemeVenue{{Number: 1, Title: "Main"}},
-		Teams: []schemeTeam{
+		RegularThemeCount: store.ThemeCount,
+		Venues:            []store.SchemeVenue{{Number: 1, Title: "Main"}},
+		Teams: []store.SchemeTeam{
 			{Name: "Alpha", Basket: 1, Number: 1},
 			{Name: "Beta", Basket: 1, Number: 2},
 			{Name: "Gamma", Basket: 1, Number: 3},
 			{Name: "Delta", Basket: 1, Number: 4},
 		},
-		Stages: []schemeStage{
+		Stages: []store.SchemeStage{
 			{
 				Code:      "r1",
 				Title:     "Round 1",
 				StageType: "matches",
 				Position:  1,
-				Matches: []schemeMatch{
+				Matches: []store.SchemeMatch{
 					{
 						Code:             "A",
 						Title:            "A",
 						Venue:            1,
 						ParticipantCount: 2,
-						Slots: []schemeSlot{
-							{Seed: &schemeSeedRef{Basket: 1, Number: 1}},
-							{Seed: &schemeSeedRef{Basket: 1, Number: 2}},
+						Slots: []store.SchemeSlot{
+							{Seed: &store.SchemeSeedRef{Basket: 1, Number: 1}},
+							{Seed: &store.SchemeSeedRef{Basket: 1, Number: 2}},
 						},
 					},
 					{
@@ -351,9 +353,9 @@ func TestImportMultiStageScheme(t *testing.T) {
 						Title:            "B",
 						Venue:            1,
 						ParticipantCount: 2,
-						Slots: []schemeSlot{
-							{Seed: &schemeSeedRef{Basket: 1, Number: 3}},
-							{Seed: &schemeSeedRef{Basket: 1, Number: 4}},
+						Slots: []store.SchemeSlot{
+							{Seed: &store.SchemeSeedRef{Basket: 1, Number: 3}},
+							{Seed: &store.SchemeSeedRef{Basket: 1, Number: 4}},
 						},
 					},
 				},
@@ -363,14 +365,14 @@ func TestImportMultiStageScheme(t *testing.T) {
 				Title:     "Final",
 				StageType: "matches",
 				Position:  2,
-				Matches: []schemeMatch{{
+				Matches: []store.SchemeMatch{{
 					Code:             "C",
 					Title:            "C",
 					Venue:            1,
 					ParticipantCount: 2,
-					Slots: []schemeSlot{
-						{FromMatch: &schemeFromMatchRef{Match: "A", Place: 1}},
-						{FromMatch: &schemeFromMatchRef{Match: "B", Place: 1}},
+					Slots: []store.SchemeSlot{
+						{FromMatch: &store.SchemeFromMatchRef{Match: "A", Place: 1}},
+						{FromMatch: &store.SchemeFromMatchRef{Match: "B", Place: 1}},
 					},
 				}},
 			},
@@ -508,21 +510,21 @@ func TestImportRejectsTeamSlot(t *testing.T) {
 	}
 	defer db.Close()
 	srv := &server{db: db, rt: realtime.NewManager()}
-	scheme := festScheme{
+	scheme := store.FestScheme{
 		SchemaVersion: 2,
 		Slug:          "with-team-slot",
 		Title:         "with team slot",
-		Stages: []schemeStage{{
+		Stages: []store.SchemeStage{{
 			Code:      "stage1",
 			Title:     "stage 1",
 			StageType: "matches",
 			Position:  1,
-			Matches: []schemeMatch{{
+			Matches: []store.SchemeMatch{{
 				Code:             "A",
 				Title:            "A",
 				ParticipantCount: 1,
-				Slots: []schemeSlot{{
-					Team: &schemeTeamRef{Name: "Inline"},
+				Slots: []store.SchemeSlot{{
+					Team: &store.SchemeTeamRef{Name: "Inline"},
 				}},
 			}},
 		}},
@@ -541,27 +543,27 @@ func TestImportSeedSlotsResolveViaAssignments(t *testing.T) {
 	}
 	defer db.Close()
 	srv := &server{db: db, rt: realtime.NewManager()}
-	scheme := festScheme{
+	scheme := store.FestScheme{
 		SchemaVersion: 2,
 		Slug:          "symbolic",
 		Title:         "symbolic",
 		GameType:      "ek",
-		Stages: []schemeStage{{
+		Stages: []store.SchemeStage{{
 			Code:      "r1",
 			Title:     "r1",
 			StageType: "matches",
 			Position:  1,
-			Matches: []schemeMatch{{
+			Matches: []store.SchemeMatch{{
 				Code:             "A",
 				Title:            "A",
 				ParticipantCount: 2,
-				Slots: []schemeSlot{
-					{Seed: &schemeSeedRef{Basket: 1, Number: 1}},
-					{Seed: &schemeSeedRef{Basket: 1, Number: 2}},
+				Slots: []store.SchemeSlot{
+					{Seed: &store.SchemeSeedRef{Basket: 1, Number: 1}},
+					{Seed: &store.SchemeSeedRef{Basket: 1, Number: 2}},
 				},
 			}},
 		}},
-		Teams: []schemeTeam{
+		Teams: []store.SchemeTeam{
 			{Name: "Alpha", Basket: 1, Number: 1},
 			{Name: "Beta", Basket: 1, Number: 2},
 		},
@@ -604,18 +606,18 @@ func TestSystemUserIsCreatedOnImport(t *testing.T) {
 	}
 	defer db.Close()
 	srv := &server{db: db, rt: realtime.NewManager()}
-	scheme := festScheme{
+	scheme := store.FestScheme{
 		SchemaVersion: 2,
 		Slug:          "minimal",
 		Title:         "minimal",
-		Stages: []schemeStage{{
+		Stages: []store.SchemeStage{{
 			Code:      "r1",
 			Title:     "r1",
 			StageType: "matches",
 			Position:  1,
-			Matches: []schemeMatch{{
+			Matches: []store.SchemeMatch{{
 				Code: "A", Title: "A", ParticipantCount: 0,
-				Slots: []schemeSlot{{Placeholder: "TBD"}},
+				Slots: []store.SchemeSlot{{Placeholder: "TBD"}},
 			}},
 		}},
 	}
@@ -677,7 +679,7 @@ func TestRatingResultsToFestRoster(t *testing.T) {
 	if teams[1].Name != "Beta Current" {
 		t.Fatalf("second team name = %q, want Beta Current", teams[1].Name)
 	}
-	if got := joinPlayerName(teams[1].Players[0].FirstName, teams[1].Players[0].LastName); got != "Иван Петров" {
+	if got := store.JoinPlayerName(teams[1].Players[0].FirstName, teams[1].Players[0].LastName); got != "Иван Петров" {
 		t.Fatalf("player name = %q, want name and surname only", got)
 	}
 }
@@ -781,9 +783,9 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 		t.Fatalf("load ksi json: %v", err)
 	}
 	var ksiScheme struct {
-		GameType     string           `json:"gameType"`
-		Participants []ksiParticipant `json:"participants"`
-		Themes       int              `json:"themes"`
+		GameType     string                 `json:"gameType"`
+		Participants []games.KSIParticipant `json:"participants"`
+		Themes       int                    `json:"themes"`
 	}
 	if err := json.Unmarshal([]byte(schemeJSON), &ksiScheme); err != nil {
 		t.Fatalf("decode ksi scheme: %v", err)
@@ -792,7 +794,7 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 		t.Fatalf("ksi scheme = %#v, want alphabetically sorted imported participants", ksiScheme)
 	}
 	var ksiState struct {
-		Participants []ksiParticipant `json:"participants"`
+		Participants []games.KSIParticipant `json:"participants"`
 		Themes       []struct {
 			Answers [][]string `json:"answers"`
 		} `json:"themes"`
@@ -909,7 +911,7 @@ func TestImportFestRosterIncrementalKeepsPlayerIDsStable(t *testing.T) {
 		return id, true
 	}
 	teamPlayers := func(rating int64) []string {
-		names, err := collectRows(t.Context(), db, `
+		names, err := store.CollectRows(t.Context(), db, `
 select p.first_name from fest_team_players ftp
 join fest_teams tt on tt.id = ftp.team_id
 join fest_players p on p.id = ftp.player_id
@@ -1577,7 +1579,7 @@ where id = ?`, `[["",""],["right",""],["",""]]`, ksiGameID); err != nil {
 		t.Fatalf("load ksi state: %v", err)
 	}
 	var got struct {
-		Participants []ksiParticipant `json:"participants"`
+		Participants []games.KSIParticipant `json:"participants"`
 		Themes       []struct {
 			Answers [][]string `json:"answers"`
 		} `json:"themes"`

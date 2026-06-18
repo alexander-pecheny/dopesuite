@@ -2,23 +2,11 @@ package dopeserver
 
 import (
 	"context"
-	"database/sql"
 	"log"
 	"time"
 
 	"dope/dope/journal"
 )
-
-// The hot->cold journal folding lives in the leaf package dope/journal; this
-// file keeps only the server-side scheduler that drives it under the write lock.
-// These thin wrappers keep the existing test call sites terse.
-func archiveFestJournal(ctx context.Context, db *sql.DB, festID, throughSeq int64) (int, error) {
-	return journal.ArchiveFest(ctx, db, festID, throughSeq)
-}
-
-func archiveStaleJournals(ctx context.Context, db *sql.DB) (int, error) {
-	return journal.ArchiveStale(ctx, db)
-}
 
 // initJournalArchive launches the periodic hot->cold folding. Call once from
 // Main() after the schema is installed. The archiver holds the global write

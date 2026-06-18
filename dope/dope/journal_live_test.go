@@ -3,6 +3,7 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/journal"
 	"dope/dope/realtime"
 	"path/filepath"
 	"testing"
@@ -30,8 +31,8 @@ func TestJournalRecordsLiveEdits(t *testing.T) {
 
 	festID, ekGameID := createSeedImportFixture(t, db)
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 
 	// Attribute the edit to a user via the audit context, as the middleware does.
@@ -52,12 +53,12 @@ func TestJournalRecordsLiveEdits(t *testing.T) {
 	err = db.QueryRow(`
 select op, seq, actor_user_id, request_id, payload
 from journal where fest_id = ? and op = ? order by seq desc limit 1`,
-		festID, int(opEvSeedImportKSI)).Scan(&op, &seq, &actor, &req, &payload)
+		festID, int(journal.OpEvSeedImportKSI)).Scan(&op, &seq, &actor, &req, &payload)
 	if err != nil {
 		t.Fatalf("expected seed-import journal row: %v", err)
 	}
-	if journalOp(op) != opEvSeedImportKSI {
-		t.Fatalf("op = %d, want %d", op, opEvSeedImportKSI)
+	if journal.Op(op) != journal.OpEvSeedImportKSI {
+		t.Fatalf("op = %d, want %d", op, journal.OpEvSeedImportKSI)
 	}
 	if seq <= 0 {
 		t.Fatalf("seq = %d, want > 0 (per-fest revision)", seq)
@@ -71,7 +72,7 @@ from journal where fest_id = ? and op = ? order by seq desc limit 1`,
 	if len(payload) == 0 {
 		t.Fatalf("payload should carry the edit content")
 	}
-	if eventTypeForOp(opEvSeedImportKSI) != "seed-import:ksi" {
+	if journal.EventTypeForOp(journal.OpEvSeedImportKSI) != "seed-import:ksi" {
 		t.Fatalf("event-type round-trip broken")
 	}
 
@@ -97,7 +98,7 @@ from journal where fest_id = ? and op = ? order by seq desc limit 1`,
 	// return the same edits (now read from the segment) — proving the single
 	// table feeds viewers across the hot/cold boundary.
 	lastSeq := evs[len(evs)-1].Seq
-	if _, err := archiveFestJournal(ctx, srv.db, festID, lastSeq); err != nil {
+	if _, err := journal.ArchiveFest(ctx, srv.db, festID, lastSeq); err != nil {
 		t.Fatalf("archive: %v", err)
 	}
 	var hot int

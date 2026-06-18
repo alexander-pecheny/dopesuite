@@ -11,6 +11,7 @@ import (
 
 	"dope/dope/games"
 	"dope/dope/markdown"
+	"dope/dope/store"
 )
 
 type publicFestSummary struct {
@@ -434,7 +435,7 @@ func (g festGameRow) Ref() string {
 	return fmt.Sprintf("%d", g.ID)
 }
 
-func loadFestGames(ctx context.Context, q dbQueryer, festID int64) ([]festGameRow, error) {
+func loadFestGames(ctx context.Context, q store.Queryer, festID int64) ([]festGameRow, error) {
 	rows, err := q.QueryContext(ctx, `
 select id, code, title, game_type, coalesce(slug, '')
 from games where fest_id = ?

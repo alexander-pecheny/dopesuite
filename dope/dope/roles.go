@@ -9,30 +9,8 @@ import (
 	"strings"
 
 	"dope/dope/roles"
+	"dope/dope/store"
 )
-
-// The role hierarchy and the pure permission predicates live in the leaf
-// package dope/roles. These aliases and thin wrappers keep the existing
-// in-package call sites terse while the access management below (the DB-backed
-// layer) stays in package main.
-const (
-	festRoleCreator = roles.Creator
-	festRoleAdmin   = roles.Admin
-	festRoleHost    = roles.Host
-)
-
-func normalizeFestRole(role string) string       { return roles.Normalize(role) }
-func festRoleCanManageFest(role string) bool     { return roles.CanManageFest(role) }
-func festRoleCanManageAccess(role string) bool   { return roles.CanManageAccess(role) }
-func festRoleCanDeleteFest(role string) bool     { return roles.CanDeleteFest(role) }
-func festRoleCanEditGameTables(role string) bool { return roles.CanEditGameTables(role) }
-func assignableFestRole(role string) bool        { return roles.Assignable(role) }
-
-type bulkFestAccessLine = roles.BulkAccessLine
-
-func parseFestAccessBulkLines(raw string) ([]bulkFestAccessLine, error) {
-	return roles.ParseBulkLines(raw)
-}
 
 type hostAccessMember struct {
 	UserID    int64
@@ -42,7 +20,7 @@ type hostAccessMember struct {
 }
 
 func migrateFestOrganizerRoles(db *sql.DB) error {
-	if err := addColumnsIfMissing(db, "fest_organizers", []columnSpec{
+	if err := store.AddColumnsIfMissing(db, "fest_organizers", []store.ColumnSpec{
 		{Name: "role", Type: "TEXT NOT NULL DEFAULT 'admin' CHECK (role in ('creator','admin','host'))"},
 	}); err != nil {
 		return err
@@ -90,7 +68,7 @@ func (s *server) festUserRole(ctx context.Context, festID, userID int64) (string
 	return festUserRoleFromQuery(ctx, s.db, festID, userID)
 }
 
-func festUserRoleFromQuery(ctx context.Context, q dbQueryer, festID, userID int64) (string, error) {
+func festUserRoleFromQuery(ctx context.Context, q store.Queryer, festID, userID int64) (string, error) {
 	var (
 		createdBy sql.NullInt64
 		role      sql.NullString
@@ -107,14 +85,14 @@ where f.id = ?`, userID, festID).Scan(&createdBy, &role)
 		return "", err
 	}
 	if createdBy.Valid && createdBy.Int64 == userID {
-		return festRoleCreator, nil
+		return roles.Creator, nil
 	}
 	if !role.Valid {
 		return "", nil
 	}
-	normalized := normalizeFestRole(role.String)
-	if normalized == festRoleCreator {
-		return festRoleAdmin, nil
+	normalized := roles.Normalize(role.String)
+	if normalized == roles.Creator {
+		return roles.Admin, nil
 	}
 	return normalized, nil
 }
@@ -148,8 +126,8 @@ order by case member.role when 'creator' then 0 when 'admin' then 1 else 2 end,
 		if err := rows.Scan(&member.UserID, &member.Nickname, &member.Role); err != nil {
 			return nil, err
 		}
-		member.Role = normalizeFestRole(member.Role)
-		member.IsCreator = member.Role == festRoleCreator
+		member.Role = roles.Normalize(member.Role)
+		member.IsCreator = member.Role == roles.Creator
 		out = append(out, member)
 	}
 	return out, rows.Err()
@@ -166,7 +144,7 @@ func (s *server) saveFestAccess(ctx context.Context, festID, actorID int64, form
 	if err != nil {
 		return err
 	}
-	if !festRoleCanManageAccess(actorRole) {
+	if !roles.CanManageAccess(actorRole) {
 		return errors.New("нет прав менять доступ")
 	}
 
@@ -184,7 +162,7 @@ func (s *server) saveFestAccess(ctx context.Context, festID, actorID int64, form
 	for userID, currentRole := range current {
 		roleField := fmt.Sprintf("role_%d", userID)
 		deleteField := fmt.Sprintf("delete_%d", userID)
-		nextRole := normalizeFestRole(form.Get(roleField))
+		nextRole := roles.Normalize(form.Get(roleField))
 		deleteMember := form.Get(deleteField) == "1"
 		if err := applyFestAccessMemberTx(ctx, tx, festID, creatorID, userID, currentRole, nextRole, deleteMember, now); err != nil {
 			return err
@@ -197,8 +175,8 @@ func (s *server) saveFestAccess(ctx context.Context, festID, actorID int64, form
 		return errors.New("введите никнейм")
 	}
 	if addClicked {
-		role := normalizeFestRole(form.Get("new_role"))
-		if !assignableFestRole(role) {
+		role := roles.Normalize(form.Get("new_role"))
+		if !roles.Assignable(role) {
 			return errors.New("для нового доступа выберите admin или host")
 		}
 		userID, err := lookupUserIDByNicknameTx(ctx, tx, nickname)
@@ -223,7 +201,7 @@ func (s *server) saveFestAccess(ctx context.Context, festID, actorID int64, form
 }
 
 func (s *server) saveFestAccessBulk(ctx context.Context, festID, actorID int64, raw string) (int, error) {
-	changes, err := parseFestAccessBulkLines(raw)
+	changes, err := roles.ParseBulkLines(raw)
 	if err != nil {
 		return 0, err
 	}
@@ -241,7 +219,7 @@ func (s *server) saveFestAccessBulk(ctx context.Context, festID, actorID int64, 
 	if err != nil {
 		return 0, err
 	}
-	if !festRoleCanManageAccess(actorRole) {
+	if !roles.CanManageAccess(actorRole) {
 		return 0, errors.New("нет прав менять доступ")
 	}
 
@@ -304,7 +282,7 @@ where o.fest_id = ?`, creatorID, creatorID, festID)
 		if err := rows.Scan(&userID, &role); err != nil {
 			return nil, err
 		}
-		current[userID] = normalizeFestRole(role)
+		current[userID] = roles.Normalize(role)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -313,8 +291,8 @@ where o.fest_id = ?`, creatorID, creatorID, festID)
 }
 
 func applyFestAccessMemberTx(ctx context.Context, tx *sql.Tx, festID, creatorID, userID int64, currentRole, nextRole string, deleteMember bool, now string) error {
-	if userID == creatorID || currentRole == festRoleCreator {
-		if deleteMember || (nextRole != "" && nextRole != festRoleCreator) {
+	if userID == creatorID || currentRole == roles.Creator {
+		if deleteMember || (nextRole != "" && nextRole != roles.Creator) {
 			return errors.New("создателя нельзя удалить или изменить")
 		}
 		_, err := tx.ExecContext(ctx, `
@@ -329,7 +307,7 @@ delete from fest_organizers where fest_id = ? and user_id = ?`, festID, userID)
 	if nextRole == "" {
 		nextRole = currentRole
 	}
-	if !assignableFestRole(nextRole) {
+	if !roles.Assignable(nextRole) {
 		return errors.New("роль должна быть admin или host")
 	}
 	_, err := tx.ExecContext(ctx, `

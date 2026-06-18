@@ -10,8 +10,8 @@ import (
 
 // The live write path into the unified journal lives in the leaf package
 // dope/journal (opcodes, append, viewer-event replay). This file keeps the
-// package-main facades — the opcode aliases the history/describe code uses, and
-// the wrappers that read attribution from the request's audit context.
+// server-side helpers that read attribution from the request's audit context
+// and bridge those calls into the journal leaf.
 
 // canonicalJSON re-marshals JSON so semantically-equal documents have identical
 // bytes (sorted object keys, normalized numbers/whitespace). Used so the
@@ -25,38 +25,9 @@ func canonicalJSON(raw []byte) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-// Live event-type opcode aliases (the canonical values live in dope/journal).
-const (
-	opEvImport             = journal.OpEvImport
-	opEvMatchUpdate        = journal.OpEvMatchUpdate
-	opEvMatchVenue         = journal.OpEvMatchVenue
-	opEvVenuesUpdate       = journal.OpEvVenuesUpdate
-	opEvFestNumbers        = journal.OpEvFestNumbers
-	opEvAuditRevert        = journal.OpEvAuditRevert
-	opEvPlayerOverride     = journal.OpEvPlayerOverride
-	opEvPlayerOverrideEdit = journal.OpEvPlayerOverrideEdit
-	opEvGameState          = journal.OpEvGameState
-	opEvGameStatePatch     = journal.OpEvGameStatePatch
-	opEvFestAccess         = journal.OpEvFestAccess
-	opEvGameDelete         = journal.OpEvGameDelete
-	opEvGameClear          = journal.OpEvGameClear
-	opEvGameCreate         = journal.OpEvGameCreate
-	opEvRatingImport       = journal.OpEvRatingImport
-	opEvReseedCalculate    = journal.OpEvReseedCalculate
-	opEvSeedImportKSI      = journal.OpEvSeedImportKSI
-	opEvSeedImportDecline  = journal.OpEvSeedImportDecline
-	opEvGameRevert         = journal.OpEvGameRevert
-	opEvGeneric            = journal.OpEvGeneric
-)
-
-type journalEvent = journal.LiveEvent
-
-func opForEventType(t string) journalOp  { return journal.OpForEventType(t) }
-func eventTypeForOp(op journalOp) string { return journal.EventTypeForOp(op) }
-
 // journalEventsSince returns every viewer event for a fest after sinceSeq,
 // reading hot rows and cold segments via the journal leaf.
-func (s *server) journalEventsSince(ctx context.Context, festID, sinceSeq int64) ([]journalEvent, error) {
+func (s *server) journalEventsSince(ctx context.Context, festID, sinceSeq int64) ([]journal.LiveEvent, error) {
 	return journal.EventsSince(ctx, s.db, festID, sinceSeq)
 }
 

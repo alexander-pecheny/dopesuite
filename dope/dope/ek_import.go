@@ -3,6 +3,7 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/store"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -116,7 +117,7 @@ func importEKMatch(ctx context.Context, tx *sql.Tx, plan ekPlan, code string) er
 	if !ok {
 		return fmt.Errorf("no plan for match %s", code)
 	}
-	match, err := loadDBMatchState(ctx, tx, plan.FestID, code)
+	match, err := store.LoadDBMatchState(ctx, tx, plan.FestID, code)
 	if err != nil {
 		return fmt.Errorf("load match: %w", err)
 	}
@@ -169,7 +170,7 @@ on conflict(match_id, team_id) do update set place = excluded.place`,
 				if _, err := tx.ExecContext(ctx, `
 insert into answers(theme_id, answer_index, mark) values(?, ?, ?)
 on conflict(theme_id, answer_index) do update set mark = excluded.mark`,
-					themeID, ai, normalizeMark(mark)); err != nil {
+					themeID, ai, store.NormalizeMark(mark)); err != nil {
 					return err
 				}
 			}
@@ -184,7 +185,7 @@ on conflict(theme_id, answer_index) do update set mark = excluded.mark`,
 
 	// Reload so the in-memory state reflects the written answers/place/finished,
 	// then recalc results and propagate to downstream slots.
-	match, err = loadDBMatchState(ctx, tx, plan.FestID, code)
+	match, err = store.LoadDBMatchState(ctx, tx, plan.FestID, code)
 	if err != nil {
 		return err
 	}

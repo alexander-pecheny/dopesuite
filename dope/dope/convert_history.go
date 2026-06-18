@@ -2,6 +2,8 @@ package dopeserver
 
 import (
 	"database/sql"
+	"dope/dope/journal"
+	"dope/dope/store"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -32,7 +34,7 @@ func runConvertHistory(args []string) {
 	if *dbPath == "" {
 		log.Fatal("convert-history: --db is required")
 	}
-	db, err := sql.Open("sqlite", buildSqliteDSN(*dbPath))
+	db, err := sql.Open("sqlite", store.BuildDSN(*dbPath))
 	if err != nil {
 		log.Fatalf("convert-history: open: %v", err)
 	}
@@ -183,7 +185,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		gt := gameType[gid]
 
 		var (
-			opcode  journalOp
+			opcode  journal.Op
 			payload []byte
 		)
 		switch {
@@ -195,9 +197,9 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 					continue
 				}
 				payload, _ = json.Marshal(map[string]any{"ops": ops})
-				opcode = opEvGameStatePatch
+				opcode = journal.OpEvGameStatePatch
 			} else if op == "INSERT" {
-				opcode = opEvGameState
+				opcode = journal.OpEvGameState
 				payload = []byte(jsonField(aj, "state_json"))
 			} else {
 				rep.skipped++
@@ -207,11 +209,11 @@ values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		case ekDetailTables[table]:
 			switch op {
 			case "INSERT":
-				opcode = opRowIns
+				opcode = journal.OpRowIns
 			case "UPDATE":
-				opcode = opRowSet
+				opcode = journal.OpRowSet
 			case "DELETE":
-				opcode = opRowDel
+				opcode = journal.OpRowDel
 			}
 			payload, _ = json.Marshal(map[string]any{"t": table, "r": row})
 			rep.rowOps++

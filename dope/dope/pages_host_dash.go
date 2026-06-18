@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"dope/dope/games"
+	"dope/dope/roles"
+	"dope/dope/store"
 )
 
 type hostFestDashData struct {
@@ -294,7 +296,7 @@ func (s *server) handleHostCreateFest(w http.ResponseWriter, r *http.Request, us
 		return
 	}
 	defer tx.Rollback()
-	festID, err := insertReturningID(r.Context(), tx, `
+	festID, err := store.InsertReturningID(r.Context(), tx, `
 insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public)
 values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
 		nil, title, description, ratingID, user.UserID, now, now,
@@ -501,9 +503,9 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 			return
 		}
 	}
-	canManageFest := festRoleCanManageFest(currentRole)
-	canManageAccess := festRoleCanManageAccess(currentRole)
-	canDeleteFest := festRoleCanDeleteFest(currentRole)
+	canManageFest := roles.CanManageFest(currentRole)
+	canManageAccess := roles.CanManageAccess(currentRole)
+	canDeleteFest := roles.CanDeleteFest(currentRole)
 	canManageGames := canManageFest
 	var access []hostAccessMember
 	if canManageAccess {
@@ -588,7 +590,7 @@ func (s *server) loadFestRatingID(ctx context.Context, festID int64) (int64, err
 }
 
 func (s *server) loadHostFests(ctx context.Context, userID int64) ([]hostMyFest, error) {
-	return collectRows(ctx, s.db, `
+	return store.CollectRows(ctx, s.db, `
 select t.id, coalesce(t.slug, ''), t.title, coalesce(t.start_date, ''), coalesce(t.end_date, ''), t.is_public
 from fests t
 join fest_organizers o on o.fest_id = t.id

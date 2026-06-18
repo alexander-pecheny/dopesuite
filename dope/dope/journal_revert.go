@@ -3,6 +3,8 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/journal"
+	"dope/dope/store"
 	"fmt"
 )
 
@@ -20,7 +22,7 @@ import (
 // gameRowOp is a decoded forward row-op for replay.
 type gameRowOp struct {
 	id    int64
-	op    journalOp
+	op    journal.Op
 	table string
 	row   map[string]any
 }
@@ -29,11 +31,11 @@ type gameRowOp struct {
 // ordered, decoded from the hot journal. (Cold segments are folded back by the
 // archiver only for settled history; a checkpoint always sits at or after the
 // last archived point, so revert never needs to read segments.)
-func loadGameRowOpsBetween(ctx context.Context, q rowQuerier, gameID, afterID, throughID int64) ([]gameRowOp, error) {
+func loadGameRowOpsBetween(ctx context.Context, q store.Queryer, gameID, afterID, throughID int64) ([]gameRowOp, error) {
 	rows, err := q.QueryContext(ctx, `
 select id, op, payload from journal
 where game_id = ? and id > ? and id <= ? and op in (?, ?, ?)
-order by id`, gameID, afterID, throughID, int(opRowIns), int(opRowSet), int(opRowDel))
+order by id`, gameID, afterID, throughID, int(journal.OpRowIns), int(journal.OpRowSet), int(journal.OpRowDel))
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +50,11 @@ order by id`, gameID, afterID, throughID, int(opRowIns), int(opRowSet), int(opRo
 		if err := rows.Scan(&id, &op, &payload); err != nil {
 			return nil, err
 		}
-		table, row, err := decodeRowOpJSON(payload)
+		table, row, err := journal.DecodeRowOpJSON(payload)
 		if err != nil {
 			return nil, fmt.Errorf("decode row op %d: %w", id, err)
 		}
-		out = append(out, gameRowOp{id: id, op: journalOp(op), table: table, row: row})
+		out = append(out, gameRowOp{id: id, op: journal.Op(op), table: table, row: row})
 	}
 	return out, rows.Err()
 }
@@ -60,7 +62,7 @@ order by id`, gameID, afterID, throughID, int(opRowIns), int(opRowSet), int(opRo
 // nearestCheckpointAtOrBefore returns the newest checkpoint for a game with
 // journal id <= throughID. The checkpoint's `seq` column stores the journal id
 // at capture time. Returns (nil, ok=false) if none.
-func nearestCheckpointAtOrBefore(ctx context.Context, q rowQuerier, gameID, throughID int64) (*gameCheckpoint, int64, bool, error) {
+func nearestCheckpointAtOrBefore(ctx context.Context, q store.Queryer, gameID, throughID int64) (*journal.GameCheckpoint, int64, bool, error) {
 	rows, err := q.QueryContext(ctx, `
 select seq, state_blob from journal_checkpoint
 where game_id = ? and seq <= ? order by seq desc limit 1`, gameID, throughID)
@@ -76,7 +78,7 @@ where game_id = ? and seq <= ? order by seq desc limit 1`, gameID, throughID)
 	if err := rows.Scan(&seq, &blob); err != nil {
 		return nil, 0, false, err
 	}
-	cp, err := decodeGameCheckpoint(blob)
+	cp, err := journal.DecodeGameCheckpoint(blob)
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -95,14 +97,14 @@ func reconstructGameStateAt(ctx context.Context, tx *sql.Tx, gameID, throughID i
 	if !ok {
 		return fmt.Errorf("no checkpoint at or before %d for game %d (cannot reconstruct)", throughID, gameID)
 	}
-	if err := restoreGameCheckpoint(ctx, tx, gameID, cp); err != nil {
+	if err := journal.RestoreGameCheckpoint(ctx, tx, gameID, cp); err != nil {
 		return fmt.Errorf("restore checkpoint: %w", err)
 	}
 	ops, err := loadGameRowOpsBetween(ctx, tx, gameID, cpID, throughID)
 	if err != nil {
 		return err
 	}
-	rp := newJournalReplayer(nil)
+	rp := journal.NewReplayer(nil)
 	for _, o := range ops {
 		if err := rp.ApplyRowMap(ctx, tx, o.op, o.table, o.row); err != nil {
 			return fmt.Errorf("replay row op %d (%s %s): %w", o.id, o.op, o.table, err)
@@ -128,7 +130,7 @@ func (s *server) revertGameToPoint(reqCtx context.Context, festID, gameID, targe
 		if err != nil {
 			return err
 		}
-		return writeGameCheckpoint(ctx, tx, gameID, journalIDForSeqTx(ctx, tx))
+		return journal.WriteGameCheckpoint(ctx, tx, gameID, journalIDForSeqTx(ctx, tx))
 	})
 	return revision, err
 }

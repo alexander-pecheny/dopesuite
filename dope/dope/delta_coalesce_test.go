@@ -8,25 +8,25 @@ import (
 )
 
 // drainOne returns the next buffered event on ch, or fails if none is queued.
-func drainOne(t *testing.T, ch chan realtime.Event) eventEnvelope {
+func drainOne(t *testing.T, ch chan realtime.Event) realtime.Envelope {
 	t.Helper()
 	select {
 	case ev := <-ch:
-		var env eventEnvelope
+		var env realtime.Envelope
 		if err := json.Unmarshal(ev.Data, &env); err != nil {
 			t.Fatalf("unmarshal event: %v (data=%s)", err, ev.Data)
 		}
 		return env
 	default:
 		t.Fatal("expected a buffered event")
-		return eventEnvelope{}
+		return realtime.Envelope{}
 	}
 }
 
 func TestMergeOpsArrays(t *testing.T) {
 	a := []byte(`[{"op":"set","path":["a"],"value":1}]`)
 	b := []byte(`[{"op":"set","path":["b"],"value":2},{"op":"set","path":["a"],"value":3}]`)
-	got := mergeOpsArrays([][]byte{a, b})
+	got := realtime.MergeOpsArrays([][]byte{a, b})
 	var ops []map[string]any
 	if err := json.Unmarshal(got, &ops); err != nil {
 		t.Fatalf("merged not valid JSON: %v (%s)", err, got)
@@ -35,7 +35,7 @@ func TestMergeOpsArrays(t *testing.T) {
 		t.Fatalf("merged op count = %d, want 3 (order preserved, no dedup)", len(ops))
 	}
 	// Single array passes through unchanged.
-	if got := string(mergeOpsArrays([][]byte{a})); got != string(a) {
+	if got := string(realtime.MergeOpsArrays([][]byte{a})); got != string(a) {
 		t.Fatalf("single array merge = %s, want %s", got, a)
 	}
 }

@@ -2,6 +2,7 @@ package dopeserver
 
 import (
 	"context"
+	"dope/dope/journal"
 	"testing"
 )
 
@@ -11,7 +12,7 @@ func TestArchiveFestJournal(t *testing.T) {
 	mustExec(t, db, `create table journal(
   id integer primary key, fest_id integer not null, seq integer not null, ts text not null,
   actor_user_id integer, request_id text, op integer not null, payload blob not null default x'', created_at text not null)`)
-	if err := createJournalTables(db); err != nil {
+	if err := journal.CreateTables(db); err != nil {
 		t.Fatal(err)
 	}
 
@@ -19,13 +20,13 @@ func TestArchiveFestJournal(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		mustExec(t, db, `insert into journal(fest_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
 values(1, ?, '2026-01-01T00:00:00.000Z', 7, 'r1', ?, ?, '2026-01-01T00:00:00.000Z')`,
-			i, int(opEvMatchUpdate), []byte("p"+string(rune('0'+i))))
+			i, int(journal.OpEvMatchUpdate), []byte("p"+string(rune('0'+i))))
 	}
 	mustExec(t, db, `insert into journal(fest_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
 values(2, 1, '2026-01-01T00:00:00.000Z', 7, 'r2', ?, ?, '2026-01-01T00:00:00.000Z')`,
-		int(opEvGameStatePatch), []byte("other-fest"))
+		int(journal.OpEvGameStatePatch), []byte("other-fest"))
 
-	n, err := archiveFestJournal(ctx, db, 1, 3)
+	n, err := journal.ArchiveFest(ctx, db, 1, 3)
 	if err != nil {
 		t.Fatalf("archive: %v", err)
 	}
@@ -50,7 +51,7 @@ values(2, 1, '2026-01-01T00:00:00.000Z', 7, 'r2', ?, ?, '2026-01-01T00:00:00.000
 		if r.Seq != uint64(i+1) {
 			t.Fatalf("record %d seq=%d", i, r.Seq)
 		}
-		if r.Op != opEvMatchUpdate {
+		if r.Op != journal.OpEvMatchUpdate {
 			t.Fatalf("record %d op=%v", i, r.Op)
 		}
 		want := "p" + string(rune('0'+i+1))
@@ -60,7 +61,7 @@ values(2, 1, '2026-01-01T00:00:00.000Z', 7, 'r2', ?, ?, '2026-01-01T00:00:00.000
 	}
 
 	// Re-archiving the same range is a no-op.
-	if n, err := archiveFestJournal(ctx, db, 1, 3); err != nil || n != 0 {
+	if n, err := journal.ArchiveFest(ctx, db, 1, 3); err != nil || n != 0 {
 		t.Fatalf("re-archive: n=%d err=%v, want 0/nil", n, err)
 	}
 }

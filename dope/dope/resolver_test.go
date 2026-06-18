@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/realtime"
+	"dope/dope/store"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,8 +27,8 @@ func TestResolverPropagatesBracket(t *testing.T) {
 
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
@@ -119,8 +120,8 @@ func TestResolverPropagatesBracket(t *testing.T) {
 	if cTeams[0] != entries[0].teamID {
 		t.Fatalf("1/4 first slot = team %d, want reseed rank 1 team %d", cTeams[0], entries[0].teamID)
 	}
-	if got := regularThemeCount(t, db, gameID, "C", cTeams[0]); got != themeCount {
-		t.Fatalf("resolved 1/4 team has %d regular themes, want %d", got, themeCount)
+	if got := regularThemeCount(t, db, gameID, "C", cTeams[0]); got != store.ThemeCount {
+		t.Fatalf("resolved 1/4 team has %d regular themes, want %d", got, store.ThemeCount)
 	}
 
 	// Reopening the 1/16 to edit it is NON-DESTRUCTIVE: the calculated reseed is
@@ -137,8 +138,8 @@ func TestResolverPropagatesBracket(t *testing.T) {
 	if teams := slotTeams(t, db, gameID, "C"); allZero(teams) {
 		t.Fatalf("1/4 slots wrongly cleared after reopening 1/16: %v", teams)
 	}
-	if got := regularThemeCount(t, db, gameID, "C", cTeams[0]); got != themeCount {
-		t.Fatalf("downstream themes deleted after reopening 1/16: %d, want %d (non-destructive)", got, themeCount)
+	if got := regularThemeCount(t, db, gameID, "C", cTeams[0]); got != store.ThemeCount {
+		t.Fatalf("downstream themes deleted after reopening 1/16: %d, want %d (non-destructive)", got, store.ThemeCount)
 	}
 
 	// Re-finishing restores the identical downstream state — a true no-op.
@@ -166,15 +167,15 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
 		t.Fatalf("import seeds: %v", err)
 	}
 
-	apply := func(code string, req updateRequest) []MatchView {
+	apply := func(code string, req updateRequest) []store.MatchView {
 		t.Helper()
 		scope, err := srv.verifyMatchInScope(t.Context(), scopeBase, code)
 		if err != nil {
@@ -211,7 +212,7 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 	if err != nil {
 		t.Fatalf("calculate reseed: %v", err)
 	}
-	var cView *MatchView
+	var cView *store.MatchView
 	for i := range cascaded {
 		if cascaded[i].Code == "C" {
 			cView = &cascaded[i]
@@ -346,7 +347,7 @@ func reseedEntryCount(t *testing.T, db *sql.DB, gameID int64, stageCode string) 
 	return len(reseedEntries(t, db, gameID, stageCode))
 }
 
-func loadReseedStageView(t *testing.T, srv *server, festID, gameID int64, code string) StageView {
+func loadReseedStageView(t *testing.T, srv *server, festID, gameID int64, code string) store.StageView {
 	t.Helper()
 	srv.mu.RLock()
 	view, err := srv.loadFestViewLocked(festID, gameID)
@@ -360,10 +361,10 @@ func loadReseedStageView(t *testing.T, srv *server, festID, gameID int64, code s
 		}
 	}
 	t.Fatalf("reseed stage %s not found", code)
-	return StageView{}
+	return store.StageView{}
 }
 
-func assertReseedState(t *testing.T, stage StageView, ready bool, pending []string, message string) {
+func assertReseedState(t *testing.T, stage store.StageView, ready bool, pending []string, message string) {
 	t.Helper()
 	if stage.ReseedReady != ready {
 		t.Fatalf("reseed ready = %v, want %v", stage.ReseedReady, ready)
@@ -456,8 +457,8 @@ func TestUntickEditRetickPreservesDownstream(t *testing.T) {
 
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
@@ -521,7 +522,7 @@ func createBracketFixture(t *testing.T, db *sql.DB) (int64, int64) {
 	if err != nil {
 		t.Fatalf("system user: %v", err)
 	}
-	festID, err := insertReturningID(ctx, tx, `
+	festID, err := store.InsertReturningID(ctx, tx, `
 insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
 values(null, 'Bracket fixture', '', null, ?, 1, ?, ?, 1)`, systemID, now, now)
 	if err != nil {
@@ -586,7 +587,7 @@ values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 	         {"reseed": {"stage": "rs", "rank": 4}}]}]}
 	  ]
 	}`
-	var scheme festScheme
+	var scheme store.FestScheme
 	if err := json.Unmarshal([]byte(rawScheme), &scheme); err != nil {
 		t.Fatalf("decode ek scheme: %v", err)
 	}

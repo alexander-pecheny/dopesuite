@@ -2,6 +2,7 @@ package dopeserver
 
 import (
 	"database/sql"
+	"dope/dope/roles"
 	"errors"
 	"fmt"
 	"html/template"
@@ -316,14 +317,14 @@ func (s *server) handleHostRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	requireManageFest := func() bool {
-		if festRoleCanManageFest(role) {
+		if roles.CanManageFest(role) {
 			return true
 		}
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return false
 	}
 	requireCreator := func() bool {
-		if festRoleCanDeleteFest(role) {
+		if roles.CanDeleteFest(role) {
 			return true
 		}
 		http.Error(w, "forbidden", http.StatusForbidden)

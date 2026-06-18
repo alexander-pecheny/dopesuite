@@ -3,7 +3,9 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/journal"
 	"dope/dope/realtime"
+	"dope/dope/store"
 	"encoding/json"
 	"path/filepath"
 	"sort"
@@ -23,8 +25,8 @@ func TestGameCheckpointRoundTrip(t *testing.T) {
 
 	_, ekGameID := createSeedImportFixture(t, db)
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 
 	cp0 := mustCapture(t, db, ekGameID)
@@ -41,7 +43,7 @@ func TestGameCheckpointRoundTrip(t *testing.T) {
 
 	// Restore the original snapshot.
 	tx, _ := db.Begin()
-	if err := restoreGameCheckpoint(ctx, tx, ekGameID, cp0); err != nil {
+	if err := journal.RestoreGameCheckpoint(ctx, tx, ekGameID, cp0); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -71,7 +73,7 @@ func TestBackfillGameCheckpoints(t *testing.T) {
 	var games int
 	db.QueryRow(`select count(*) from games`).Scan(&games)
 
-	if err := backfillGameCheckpoints(db); err != nil {
+	if err := journal.BackfillGameCheckpoints(db); err != nil {
 		t.Fatalf("backfill: %v", err)
 	}
 	var cps int
@@ -85,7 +87,7 @@ func TestBackfillGameCheckpoints(t *testing.T) {
 		t.Fatalf("game %d got no genesis checkpoint", gameID)
 	}
 	// Idempotent: re-running adds nothing.
-	if err := backfillGameCheckpoints(db); err != nil {
+	if err := journal.BackfillGameCheckpoints(db); err != nil {
 		t.Fatal(err)
 	}
 	var cps2 int
@@ -104,11 +106,11 @@ func TestGameCheckpointEncodeRoundTrip(t *testing.T) {
 	defer db.Close()
 	_, ekGameID := createSeedImportFixture(t, db)
 	cp := mustCapture(t, db, ekGameID)
-	blob, err := encodeGameCheckpoint(cp)
+	blob, err := journal.EncodeGameCheckpoint(cp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cp2, err := decodeGameCheckpoint(blob)
+	cp2, err := journal.DecodeGameCheckpoint(blob)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,9 +119,9 @@ func TestGameCheckpointEncodeRoundTrip(t *testing.T) {
 	}
 }
 
-func mustCapture(t *testing.T, q rowQuerier, gameID int64) *gameCheckpoint {
+func mustCapture(t *testing.T, q store.Queryer, gameID int64) *journal.GameCheckpoint {
 	t.Helper()
-	cp, err := captureGameCheckpoint(context.Background(), q, gameID)
+	cp, err := journal.CaptureGameCheckpoint(context.Background(), q, gameID)
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
@@ -137,7 +139,7 @@ func mustFestOfGame(t *testing.T, db *sql.DB, gameID int64) int64 {
 
 // checkpointKey produces an order-independent canonical string for comparison:
 // rows within each table are sorted by their JSON encoding.
-func checkpointKey(t *testing.T, cp *gameCheckpoint) string {
+func checkpointKey(t *testing.T, cp *journal.GameCheckpoint) string {
 	t.Helper()
 	type tbl struct {
 		Name string   `json:"n"`
