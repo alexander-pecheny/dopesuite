@@ -3,6 +3,7 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/store"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -336,8 +337,8 @@ var hostFestSchemeImportTemplate = template.Must(template.New("hostSchemeImport"
 </body>
 </html>`))
 
-func loadFestRosterImportTeamsTx(ctx context.Context, q dbQueryer, festID int64) ([]festRosterImportTeam, error) {
-	teams, err := collectRows(ctx, q, `
+func loadFestRosterImportTeamsTx(ctx context.Context, q store.Queryer, festID int64) ([]festRosterImportTeam, error) {
+	teams, err := store.CollectRows(ctx, q, `
 select coalesce(rating_id, 0), name, city, coalesce(number, 0)
 from fest_teams
 where fest_id = ? and deleted = 0
@@ -527,7 +528,7 @@ func (s *server) renderHostSchemeImportPage(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *server) loadHostFestTeams(ctx context.Context, festID int64) ([]hostFestTeam, error) {
-	teams, err := collectRows(ctx, s.db, `
+	teams, err := store.CollectRows(ctx, s.db, `
 select coalesce(tt.rating_id, 0), tt.name, tt.city, count(ttp.player_id)
 from fest_teams tt
 left join fest_team_players ttp on ttp.team_id = tt.id
@@ -556,7 +557,7 @@ order by tt.position, tt.id`, []any{festID}, func(rows *sql.Rows) (hostFestTeam,
 }
 
 func (s *server) loadHostFestPlayers(ctx context.Context, festID int64) ([]hostFestPlayer, error) {
-	players, err := collectRows(ctx, s.db, `
+	players, err := store.CollectRows(ctx, s.db, `
 select coalesce(p.rating_id, 0), p.first_name, p.last_name, tt.name
 from fest_team_players ttp
 join fest_players p on p.id = ttp.player_id
@@ -570,7 +571,7 @@ order by tt.position, tt.id, ttp.roster_order, p.id`, []any{festID}, func(rows *
 		}
 		return hostFestPlayer{
 			RatingID: ratingID,
-			Name:     joinPlayerName(firstName, lastName),
+			Name:     store.JoinPlayerName(firstName, lastName),
 			Team:     teamName,
 		}, nil
 	})
@@ -599,7 +600,7 @@ func (s *server) handleHostImportScheme(w http.ResponseWriter, r *http.Request, 
 		s.renderHostSchemeImportPage(w, r, festID, "Вставьте JSON схемы.", "")
 		return
 	}
-	var scheme festScheme
+	var scheme store.FestScheme
 	if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
 		s.renderHostSchemeImportPage(w, r, festID, "Не удалось разобрать JSON: "+err.Error(), "")
 		return

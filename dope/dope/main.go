@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"dope/dope/realtime"
+	"dope/dope/roles"
 	"dope/dope/store"
 )
 
@@ -31,27 +32,9 @@ var staticFiles embed.FS
 
 const (
 	stateFile                 = "match_state.json"
-	themeCount                = store.ThemeCount
 	ksiThemeCount             = 20
 	actionAddShootoutTheme    = "addShootoutTheme"
 	actionRemoveShootoutTheme = "removeShootoutTheme"
-)
-
-// questionValues is the EK/KSI per-answer point scale; the canonical value
-// lives in the store leaf as store.QuestionValues.
-var questionValues = store.QuestionValues
-
-// The match state and scored-view shapes live in the store leaf (package
-// dope/store); these aliases keep the package-main call sites — the scorer,
-// the API handlers, the xlsx export and the SSE broadcasts — terse.
-type (
-	ThemeEntry   = store.ThemeEntry
-	TeamState    = store.TeamState
-	MatchState   = store.MatchState
-	ThemeView    = store.ThemeView
-	TeamView     = store.TeamView
-	StandingView = store.StandingView
-	MatchView    = store.MatchView
 )
 
 type server struct {
@@ -60,7 +43,7 @@ type server struct {
 	festID          int64
 	activeGameID    int64
 	activeMatchCode string
-	state           MatchState
+	state           store.MatchState
 	// rt is the SSE publisher: the subscriber registry and broadcast fan-out,
 	// with its own locks (independent of mu) so DB writes never block fan-out.
 	// The server drives it — assigning per-scope seq, wrapping envelopes and
@@ -534,35 +517,31 @@ func newServer() (*server, error) {
 	}, nil
 }
 
-func loadState(path string) (MatchState, error) {
+func loadState(path string) (store.MatchState, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		state := defaultMatch()
-		normalizeState(&state)
+		store.NormalizeState(&state)
 		return state, nil
 	}
 	if err != nil {
-		return MatchState{}, err
+		return store.MatchState{}, err
 	}
-	var state MatchState
+	var state store.MatchState
 	if err := json.Unmarshal(data, &state); err != nil {
-		return MatchState{}, fmt.Errorf("read %s: %w", path, err)
+		return store.MatchState{}, fmt.Errorf("read %s: %w", path, err)
 	}
-	normalizeState(&state)
+	store.NormalizeState(&state)
 	return state, nil
 }
 
-func saveState(path string, state MatchState) error {
+func saveState(path string, state store.MatchState) error {
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
 }
-
-// normalizeState lives in the store leaf (package dope/store); this wrapper
-// keeps the package-main call sites terse.
-func normalizeState(state *MatchState) { store.NormalizeState(state) }
 
 func (s *server) serveStaticPage(source fs.FS, path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -761,23 +740,23 @@ func (s *server) isFestEditor(r *http.Request, festID int64) bool {
 	if err != nil {
 		return false
 	}
-	return festRoleCanEditGameTables(role)
+	return roles.CanEditGameTables(role)
 }
 
-func (s *server) applyUpdate(req updateRequest) (MatchView, []byte, error) {
+func (s *server) applyUpdate(req updateRequest) (store.MatchView, []byte, error) {
 	if s.db != nil {
 		return s.applyMatchUpdate(s.festID, s.activeMatchCode, req)
 	}
 	return s.applyLegacyUpdate(req)
 }
 
-func (s *server) applyLegacyUpdate(req updateRequest) (MatchView, []byte, error) {
+func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if req.Finished != nil {
 		if hasMatchEdit(req) {
-			return MatchView{}, nil, errors.New("finished update must be standalone")
+			return store.MatchView{}, nil, errors.New("finished update must be standalone")
 		}
 		s.state.Finished = *req.Finished
 		if *req.Finished {
@@ -786,22 +765,22 @@ func (s *server) applyLegacyUpdate(req updateRequest) (MatchView, []byte, error)
 		return s.commitLocked()
 	}
 	if s.state.Finished {
-		return MatchView{}, nil, errors.New("match is finished")
+		return store.MatchView{}, nil, errors.New("match is finished")
 	}
 
 	if req.Action != "" {
 		if hasTeamEdit(req) {
-			return MatchView{}, nil, errors.New("action update must be standalone")
+			return store.MatchView{}, nil, errors.New("action update must be standalone")
 		}
 		switch req.Action {
 		case actionAddShootoutTheme:
 			for i := range s.state.Teams {
-				s.state.Teams[i].ShootoutThemes = append(s.state.Teams[i].ShootoutThemes, ThemeEntry{})
+				s.state.Teams[i].ShootoutThemes = append(s.state.Teams[i].ShootoutThemes, store.ThemeEntry{})
 			}
 			return s.commitLocked()
 		case actionRemoveShootoutTheme:
 			if len(s.state.Teams) == 0 || len(s.state.Teams[0].ShootoutThemes) == 0 {
-				return MatchView{}, nil, errors.New("no shootout themes to remove")
+				return store.MatchView{}, nil, errors.New("no shootout themes to remove")
 			}
 			for i := range s.state.Teams {
 				if len(s.state.Teams[i].ShootoutThemes) > 0 {
@@ -811,21 +790,21 @@ func (s *server) applyLegacyUpdate(req updateRequest) (MatchView, []byte, error)
 			}
 			return s.commitLocked()
 		default:
-			return MatchView{}, nil, errors.New("bad action")
+			return store.MatchView{}, nil, errors.New("bad action")
 		}
 	}
 
 	if req.Team < 0 || req.Team >= len(s.state.Teams) {
-		return MatchView{}, nil, errors.New("bad team index")
+		return store.MatchView{}, nil, errors.New("bad team index")
 	}
 	team := &s.state.Teams[req.Team]
 
 	if req.Tiebreak != nil {
-		return MatchView{}, nil, errors.New("shootout total is calculated")
+		return store.MatchView{}, nil, errors.New("shootout total is calculated")
 	}
 	if req.Place != nil {
 		if *req.Place < 0 {
-			return MatchView{}, nil, errors.New("bad place")
+			return store.MatchView{}, nil, errors.New("bad place")
 		}
 		team.Place = *req.Place
 	}
@@ -837,7 +816,7 @@ func (s *server) applyLegacyUpdate(req updateRequest) (MatchView, []byte, error)
 			themeCount = len(team.ShootoutThemes)
 		}
 		if req.Theme == nil || *req.Theme < 0 || *req.Theme >= themeCount {
-			return MatchView{}, nil, errors.New("bad theme index")
+			return store.MatchView{}, nil, errors.New("bad theme index")
 		}
 		theme := &team.Themes[*req.Theme]
 		if isShootout {
@@ -847,34 +826,34 @@ func (s *server) applyLegacyUpdate(req updateRequest) (MatchView, []byte, error)
 		if req.Player != nil {
 			player := strings.TrimSpace(*req.Player)
 			if player != "" && !contains(team.Roster, player) {
-				return MatchView{}, nil, errors.New("player is not in roster")
+				return store.MatchView{}, nil, errors.New("player is not in roster")
 			}
 			theme.Player = player
 		}
 
 		if req.Answer != nil || req.Mark != nil {
 			if req.Answer == nil || *req.Answer < 0 || *req.Answer >= len(theme.Answers) {
-				return MatchView{}, nil, errors.New("bad answer index")
+				return store.MatchView{}, nil, errors.New("bad answer index")
 			}
 			if req.Mark == nil {
-				return MatchView{}, nil, errors.New("missing mark")
+				return store.MatchView{}, nil, errors.New("missing mark")
 			}
-			theme.Answers[*req.Answer] = normalizeMark(*req.Mark)
+			theme.Answers[*req.Answer] = store.NormalizeMark(*req.Mark)
 		}
 	}
 
 	return s.commitLocked()
 }
 
-func (s *server) commitLocked() (MatchView, []byte, error) {
-	normalizeState(&s.state)
+func (s *server) commitLocked() (store.MatchView, []byte, error) {
+	store.NormalizeState(&s.state)
 	s.state.Revision++
 	s.state.UpdatedAt = time.Now()
 	if err := saveState(stateFile, s.state); err != nil {
-		return MatchView{}, nil, err
+		return store.MatchView{}, nil, err
 	}
 
-	view := buildView(s.state)
+	view := store.BuildView(s.state)
 	data, err := json.Marshal(view)
 	return view, data, err
 }
@@ -900,20 +879,14 @@ func hasTeamEdit(req updateRequest) bool {
 		req.Place != nil
 }
 
-func buildView(state MatchState) MatchView { return store.BuildView(state) }
-
-// The match scorer lives in the store leaf (package dope/store); these thin
-// wrappers keep the package-main call sites terse.
-func scoreTeam(team TeamState) TeamView { return store.ScoreTeam(team) }
-
-func assignComputedPlaces(state *MatchState) {
+func assignComputedPlaces(state *store.MatchState) {
 	type rankedTeam struct {
 		index int
-		view  TeamView
+		view  store.TeamView
 	}
 	ranked := make([]rankedTeam, len(state.Teams))
 	for index, team := range state.Teams {
-		ranked[index] = rankedTeam{index: index, view: scoreTeam(team)}
+		ranked[index] = rankedTeam{index: index, view: store.ScoreTeam(team)}
 	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		return teamRanksHigher(ranked[i].view, ranked[j].view)
@@ -923,7 +896,7 @@ func assignComputedPlaces(state *MatchState) {
 	}
 }
 
-func teamRanksHigher(a, b TeamView) bool {
+func teamRanksHigher(a, b store.TeamView) bool {
 	if a.Total != b.Total {
 		return a.Total > b.Total
 	}
@@ -940,12 +913,6 @@ func teamRanksHigher(a, b TeamView) bool {
 	}
 	return false
 }
-
-func scoreTheme(theme ThemeEntry) ThemeView { return store.ScoreTheme(theme) }
-
-func manualStandings(teams []TeamView) []StandingView { return store.ManualStandings(teams) }
-
-func normalizeMark(mark string) string { return store.NormalizeMark(mark) }
 
 func contains(list []string, value string) bool {
 	for _, item := range list {
@@ -971,17 +938,17 @@ func writeSSE(w http.ResponseWriter, name string, revision int64, data []byte) {
 	_, _ = io.WriteString(w, formatSSE(name, revision, data))
 }
 
-func defaultMatch() MatchState {
-	return MatchState{
+func defaultMatch() store.MatchState {
+	return store.MatchState{
 		Title:     "Бой A",
 		Revision:  1,
 		UpdatedAt: time.Now(),
-		Teams: []TeamState{
+		Teams: []store.TeamState{
 			{
 				Name:   "ВШЭстером",
 				Roster: []string{"Юлия Лапшина", "Савелий Кардашин", "Мария Крамкова", "Дамир Хамидуллин", "Андрей Акимов", "Максим Бобровицкий", "Захар Куренков"},
 				Place:  3,
-				Themes: []ThemeEntry{
+				Themes: []store.ThemeEntry{
 					{Player: "Андрей Акимов", Answers: [5]string{"", "", "", "", ""}},
 					{Player: "Дамир Хамидуллин", Answers: [5]string{"", "", "", "right", ""}},
 					{Player: "Юлия Лапшина", Answers: [5]string{"right", "right", "", "", "wrong"}},
@@ -1000,7 +967,7 @@ func defaultMatch() MatchState {
 				Name:   "Тина Терияки",
 				Roster: []string{"Анна Гордеева", "Егор Абрамов", "Олег Шукаев", "Алексей Сазонов", "Кирилл Тищенко", "Андрей Кислуха"},
 				Place:  2,
-				Themes: []ThemeEntry{
+				Themes: []store.ThemeEntry{
 					{Player: "Олег Шукаев", Answers: [5]string{"", "right", "", "right", ""}},
 					{Player: "Алексей Сазонов", Answers: [5]string{"", "", "", "", ""}},
 					{Player: "Егор Абрамов", Answers: [5]string{"", "", "", "", ""}},
@@ -1019,7 +986,7 @@ func defaultMatch() MatchState {
 				Name:   "Вина России",
 				Roster: []string{"Илья Пикалов", "Павел Соколов", "Дмитрий Федоров", "Никита Мирошин", "Евгения Королева", "Елена Трифонова", "Ольга Антропова"},
 				Place:  4,
-				Themes: []ThemeEntry{
+				Themes: []store.ThemeEntry{
 					{Player: "Илья Пикалов", Answers: [5]string{"", "", "", "", ""}},
 					{Player: "Павел Соколов", Answers: [5]string{"", "", "", "", ""}},
 					{Player: "Евгения Королева", Answers: [5]string{"", "", "", "", ""}},
@@ -1038,7 +1005,7 @@ func defaultMatch() MatchState {
 				Name:   "Злая щитоспинка",
 				Roster: []string{"Егор Дементьев", "Таисия Кирпикова", "Денис Красюк", "Михаил Московченко", "Амгалан Цыбенов", "Анна Рябикина"},
 				Place:  1,
-				Themes: []ThemeEntry{
+				Themes: []store.ThemeEntry{
 					{Player: "Егор Дементьев", Answers: [5]string{"right", "", "right", "", ""}},
 					{Player: "Амгалан Цыбенов", Answers: [5]string{"", "", "", "", ""}},
 					{Player: "Михаил Московченко", Answers: [5]string{"", "", "", "", ""}},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/realtime"
+	"dope/dope/store"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -18,8 +19,8 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 
 	festID, ekGameID := createSeedImportFixture(t, db)
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 	scope := festScope{FestID: festID, GameID: ekGameID}
 
@@ -39,8 +40,8 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 	if got := seedImportSlotNames(t, db, ekGameID); !sameStrings(got, []string{"B", "A", "C", "D"}) {
 		t.Fatalf("slot names = %#v, want first 4 seeds", got)
 	}
-	if got := seedImportRegularThemeCount(t, db, ekGameID); got != 4*themeCount {
-		t.Fatalf("regular themes = %d, want %d", got, 4*themeCount)
+	if got := seedImportRegularThemeCount(t, db, ekGameID); got != 4*store.ThemeCount {
+		t.Fatalf("regular themes = %d, want %d", got, 4*store.ThemeCount)
 	}
 
 	view, _, _, err = srv.setSeedImportDeclined(t.Context(), scope, seedDeclineRequest{
@@ -59,8 +60,8 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 	if got := seedImportSlotNames(t, db, ekGameID); !sameStrings(got, []string{"A", "C", "D", "E"}) {
 		t.Fatalf("slot names after decline = %#v, want waitlist team promoted", got)
 	}
-	if got := seedImportRegularThemeCount(t, db, ekGameID); got != 4*themeCount {
-		t.Fatalf("regular themes after decline = %d, want %d", got, 4*themeCount)
+	if got := seedImportRegularThemeCount(t, db, ekGameID); got != 4*store.ThemeCount {
+		t.Fatalf("regular themes after decline = %d, want %d", got, 4*store.ThemeCount)
 	}
 	if got := seedImportExtraThemeCount(t, db, ekGameID); got != 0 {
 		t.Fatalf("extra themes after decline = %d, want 0", got)
@@ -80,8 +81,8 @@ func TestSeedImportFromKSIPropagatesDeclines(t *testing.T) {
 	declineKSIParticipant(t, db, festID, "sb")
 
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 	scope := festScope{FestID: festID, GameID: ekGameID}
 
@@ -163,8 +164,8 @@ func TestFinishAssignsPlaces(t *testing.T) {
 
 	festID, ekGameID := createSeedImportFixture(t, db)
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: ekGameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
@@ -198,7 +199,7 @@ func createSeedImportFixture(t *testing.T, db *sql.DB) (int64, int64) {
 	if err != nil {
 		t.Fatalf("system user: %v", err)
 	}
-	festID, err := insertReturningID(ctx, tx, `
+	festID, err := store.InsertReturningID(ctx, tx, `
 insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
 values(null, 'Seed fixture', '', null, ?, 1, ?, ?, 1)`, systemID, now, now)
 	if err != nil {
@@ -233,7 +234,7 @@ values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 		t.Fatalf("insert ksi: %v", err)
 	}
 
-	var scheme festScheme
+	var scheme store.FestScheme
 	rawScheme := `{
 	  "schemaVersion": 2,
 	  "slug": "seed-ek",
@@ -333,7 +334,7 @@ func seedImportRowNames(view seedImportView) []string {
 	return out
 }
 
-func matchTeamNames(view MatchView) []string {
+func matchTeamNames(view store.MatchView) []string {
 	out := make([]string, len(view.Teams))
 	for i, team := range view.Teams {
 		out[i] = team.Name
@@ -341,7 +342,7 @@ func matchTeamNames(view MatchView) []string {
 	return out
 }
 
-func matchTeamPlaces(view MatchView) []float64 {
+func matchTeamPlaces(view store.MatchView) []float64 {
 	out := make([]float64, len(view.Teams))
 	for i, team := range view.Teams {
 		out[i] = team.Place

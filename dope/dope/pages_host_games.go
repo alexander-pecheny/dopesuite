@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"dope/dope/games"
+	"dope/dope/journal"
+	"dope/dope/store"
 )
 
 type hostGameSettingsData struct {
@@ -420,7 +422,7 @@ select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and
 		}
 	case "ek":
 		status = "pending"
-		var scheme festScheme
+		var scheme store.FestScheme
 		if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
 			http.Error(w, fmt.Sprintf("не удалось разобрать схему ЭК: %v", err), http.StatusInternalServerError)
 			return
@@ -549,7 +551,7 @@ func (s *server) createHostGame(reqCtx context.Context, festID int64, gameType s
 			if raw == "" {
 				return errors.New("Вставьте JSON-схему ЭК")
 			}
-			var scheme festScheme
+			var scheme store.FestScheme
 			if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
 				return fmt.Errorf("Не удалось разобрать JSON: %w", err)
 			}
@@ -567,7 +569,7 @@ func (s *server) createHostGame(reqCtx context.Context, festID int64, gameType s
 		}
 		// Genesis checkpoint: anchor per-game derived revert at the freshly-created
 		// game so replay always has a checkpoint at or before any future edit.
-		return writeGameCheckpoint(ctx, tx, gameID, journalIDForSeqTx(ctx, tx))
+		return journal.WriteGameCheckpoint(ctx, tx, gameID, journalIDForSeqTx(ctx, tx))
 	})
 	return gameID, err
 }
@@ -649,23 +651,23 @@ func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount 
 
 func insertJSONGameTx(ctx context.Context, tx *sql.Tx, festID int64, identity gameIdentity, gameType string, schemeJSON, stateJSON []byte) (int64, error) {
 	now := utcNow()
-	schemeID, err := insertReturningID(ctx, tx, `
+	schemeID, err := store.InsertReturningID(ctx, tx, `
 insert into schemes(slug, title, version, schema_json, created_at)
 values(?, ?, 2, ?, ?)`, uniqueSchemeSlug(identity.Code), identity.Title, string(schemeJSON), now)
 	if err != nil {
 		return 0, err
 	}
-	return insertReturningID(ctx, tx, `
+	return store.InsertReturningID(ctx, tx, `
 insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
 values(?, ?, ?, ?, ?, ?, ?, ?, 'active', 'fest', 'fest', 1, ?, ?)`,
 		festID, identity.Code, identity.Title, gameType, identity.Position, schemeID, string(schemeJSON), string(stateJSON), now, now)
 }
 
-func createEKGameTx(ctx context.Context, tx *sql.Tx, festID int64, scheme festScheme) (int64, error) {
+func createEKGameTx(ctx context.Context, tx *sql.Tx, festID int64, scheme store.FestScheme) (int64, error) {
 	if scheme.GameType == "" {
-		scheme.GameType = defaultGameType
+		scheme.GameType = games.Default
 	}
-	if scheme.GameType != defaultGameType {
+	if scheme.GameType != games.Default {
 		return 0, errors.New("для ЭК нужна JSON-схема с gameType \"ek\"")
 	}
 	if err := validateScheme(scheme); err != nil {
@@ -689,16 +691,16 @@ func createEKGameTx(ctx context.Context, tx *sql.Tx, festID int64, scheme festSc
 	identity.Title = title
 
 	now := utcNow()
-	schemeID, err := insertReturningID(ctx, tx, `
+	schemeID, err := store.InsertReturningID(ctx, tx, `
 insert into schemes(slug, title, version, schema_json, created_at)
 values(?, ?, ?, ?, ?)`, uniqueSchemeSlug(scheme.Slug), title, maxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
 	if err != nil {
 		return 0, err
 	}
-	gameID, err := insertReturningID(ctx, tx, `
+	gameID, err := store.InsertReturningID(ctx, tx, `
 insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
 values(?, ?, ?, ?, ?, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
-		festID, identity.Code, title, defaultGameType, identity.Position, schemeID, string(schemaJSON), now, now)
+		festID, identity.Code, title, games.Default, identity.Position, schemeID, string(schemaJSON), now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -712,7 +714,7 @@ values(?, ?, ?, ?, ?, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
 // buildEKStructureTx materialises an EK game's bracket (venues, stages, matches
 // and their unresolved seed slots) from the scheme. Shared by game creation and
 // the "clear to pristine" path, which rebuilds the same empty bracket in place.
-func buildEKStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, scheme festScheme, now string) error {
+func buildEKStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, scheme store.FestScheme, now string) error {
 	venueIDs := make(map[int]int64, len(scheme.Venues))
 	for _, venue := range scheme.Venues {
 		venueID, err := upsertVenueTx(ctx, tx, festID, venue, now)
@@ -732,7 +734,7 @@ func buildEKStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, s
 		if stageType == "" {
 			stageType = "matches"
 		}
-		stageID, err := insertReturningID(ctx, tx, `
+		stageID, err := store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
 values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
 		if err != nil {
@@ -750,7 +752,7 @@ values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title
 			if id, ok := venueIDs[match.Venue]; ok {
 				venueID = id
 			}
-			matchID, err := insertReturningID(ctx, tx, `
+			matchID, err := store.InsertReturningID(ctx, tx, `
 insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
 values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
 			if err != nil {
@@ -769,7 +771,7 @@ values(?, ?, ?, ?, null, 0)`, matchID, slotIndex, sourceType, sourceRef); err !=
 	return nil
 }
 
-func upsertVenueTx(ctx context.Context, tx *sql.Tx, festID int64, venue schemeVenue, now string) (int64, error) {
+func upsertVenueTx(ctx context.Context, tx *sql.Tx, festID int64, venue store.SchemeVenue, now string) (int64, error) {
 	if _, err := tx.ExecContext(ctx, `
 insert into venues(fest_id, number, title, created_at, updated_at)
 values(?, ?, ?, ?, ?)

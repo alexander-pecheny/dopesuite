@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
+	"dope/dope/store"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -252,7 +253,7 @@ update users set telegram_username = ?, updated_at = ? where id = ?`, tgUsername
 				return registerStatusResponse{}, "", err
 			}
 		} else if errors.Is(err, sql.ErrNoRows) {
-			id, err := insertReturningID(ctx, tx, `
+			id, err := store.InsertReturningID(ctx, tx, `
 insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
 values(?, ?, null, 0, ?, ?)`, tgUserID.Int64, tgUsername, now.Format(time.RFC3339), now.Format(time.RFC3339))
 			if err != nil {

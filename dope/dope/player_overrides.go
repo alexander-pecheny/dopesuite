@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"dope/dope/games"
+	"dope/dope/store"
 )
 
 type hostPlayerOverrideOption struct {
@@ -91,8 +92,8 @@ func (s *server) loadHostPlayerOverrideOptions(ctx context.Context, festID int64
 	return players, teams, games, rows, nil
 }
 
-func loadHostPlayerOverridePlayerOptions(ctx context.Context, q dbQueryer, festID int64) ([]hostPlayerOverrideOption, error) {
-	return collectRows(ctx, q, `
+func loadHostPlayerOverridePlayerOptions(ctx context.Context, q store.Queryer, festID int64) ([]hostPlayerOverrideOption, error) {
+	return store.CollectRows(ctx, q, `
 select p.id, coalesce(p.rating_id, 0), p.first_name, p.last_name, tt.name
 from fest_team_players ttp
 join fest_players p on p.id = ttp.player_id
@@ -104,7 +105,7 @@ order by p.last_name, p.first_name, p.id`, []any{festID, festID}, func(rows *sql
 		if err := rows.Scan(&id, &ratingID, &firstName, &lastName, &teamName); err != nil {
 			return hostPlayerOverrideOption{}, err
 		}
-		name := joinPlayerName(firstName, lastName)
+		name := store.JoinPlayerName(firstName, lastName)
 		label := fmt.Sprintf("%s - %s", name, teamName)
 		if ratingID > 0 {
 			label = fmt.Sprintf("%s - %s - rating %d", name, teamName, ratingID)
@@ -113,8 +114,8 @@ order by p.last_name, p.first_name, p.id`, []any{festID, festID}, func(rows *sql
 	})
 }
 
-func loadHostPlayerOverrideTeamOptions(ctx context.Context, q dbQueryer, festID int64) ([]hostTeamOverrideOption, error) {
-	return collectRows(ctx, q, `
+func loadHostPlayerOverrideTeamOptions(ctx context.Context, q store.Queryer, festID int64) ([]hostTeamOverrideOption, error) {
+	return store.CollectRows(ctx, q, `
 select id, coalesce(rating_id, 0), name, city
 from fest_teams
 where fest_id = ? and deleted = 0
@@ -135,8 +136,8 @@ order by name, city, id`, []any{festID}, func(rows *sql.Rows) (hostTeamOverrideO
 	})
 }
 
-func loadHostPlayerOverrideGameOptions(ctx context.Context, q dbQueryer, festID int64) ([]hostGameOverrideOption, error) {
-	return collectRows(ctx, q, `
+func loadHostPlayerOverrideGameOptions(ctx context.Context, q store.Queryer, festID int64) ([]hostGameOverrideOption, error) {
+	return store.CollectRows(ctx, q, `
 select id, title, game_type
 from games
 where fest_id = ? and game_type in ('ksi', 'ek')
@@ -151,7 +152,7 @@ order by position, id`, []any{festID}, func(rows *sql.Rows) (hostGameOverrideOpt
 	})
 }
 
-func loadHostPlayerOverrideRows(ctx context.Context, q dbQueryer, festID int64) ([]hostPlayerOverrideRow, error) {
+func loadHostPlayerOverrideRows(ctx context.Context, q store.Queryer, festID int64) ([]hostPlayerOverrideRow, error) {
 	rows, err := q.QueryContext(ctx, `
 select p.id, p.first_name, p.last_name, source.id, source.name, target.id, target.name, g.id, g.title, g.game_type
 from game_player_team_overrides o
@@ -180,7 +181,7 @@ order by p.last_name, p.first_name, source.name, target.name, g.position, g.id`,
 		if err := rows.Scan(&playerID, &firstName, &lastName, &sourceID, &row.SourceTeam, &targetID, &row.OverrideTeam, &rowGameID, &gameTitle, &gameType); err != nil {
 			return nil, err
 		}
-		row.Player = joinPlayerName(firstName, lastName)
+		row.Player = store.JoinPlayerName(firstName, lastName)
 		key := groupKey{playerID: playerID, sourceID: sourceID, targetID: targetID}
 		i, ok := index[key]
 		if !ok {
@@ -441,7 +442,7 @@ func uniqueInt64s(values []int64) []int64 {
 	return out
 }
 
-func sourceTeamForFestPlayer(ctx context.Context, q dbQueryer, festID, playerID int64) (int64, error) {
+func sourceTeamForFestPlayer(ctx context.Context, q store.Queryer, festID, playerID int64) (int64, error) {
 	var teamID int64
 	err := q.QueryRowContext(ctx, `
 select ttp.team_id
@@ -457,7 +458,7 @@ limit 1`, playerID, festID, festID).Scan(&teamID)
 	return teamID, err
 }
 
-func assertActiveFestTeam(ctx context.Context, q dbQueryer, festID, teamID int64) error {
+func assertActiveFestTeam(ctx context.Context, q store.Queryer, festID, teamID int64) error {
 	var found int64
 	err := q.QueryRowContext(ctx, `
 select id from fest_teams where id = ? and fest_id = ? and deleted = 0`, teamID, festID).Scan(&found)
@@ -467,7 +468,7 @@ select id from fest_teams where id = ? and fest_id = ? and deleted = 0`, teamID,
 	return err
 }
 
-func overrideGameType(ctx context.Context, q dbQueryer, festID, gameID int64) (string, error) {
+func overrideGameType(ctx context.Context, q store.Queryer, festID, gameID int64) (string, error) {
 	var gameType string
 	err := q.QueryRowContext(ctx, `
 select game_type from games where id = ? and fest_id = ? and game_type in ('ksi', 'ek')`, gameID, festID).Scan(&gameType)
@@ -477,7 +478,7 @@ select game_type from games where id = ? and fest_id = ? and game_type in ('ksi'
 	return gameType, err
 }
 
-func gameHasPlayerOverridesTx(ctx context.Context, q dbQueryer, festID, gameID int64) (bool, error) {
+func gameHasPlayerOverridesTx(ctx context.Context, q store.Queryer, festID, gameID int64) (bool, error) {
 	var count int
 	if err := q.QueryRowContext(ctx, `
 select count(*) from game_player_team_overrides where fest_id = ? and game_id = ?`, festID, gameID).Scan(&count); err != nil {
@@ -486,7 +487,7 @@ select count(*) from game_player_team_overrides where fest_id = ? and game_id = 
 	return count > 0, nil
 }
 
-func loadFestRosterWithGameOverrides(ctx context.Context, q dbQueryer, festID, gameID int64) ([]rosterOverrideTeam, error) {
+func loadFestRosterWithGameOverrides(ctx context.Context, q store.Queryer, festID, gameID int64) ([]rosterOverrideTeam, error) {
 	teams, err := loadBaseFestRosterForOverride(ctx, q, festID)
 	if err != nil {
 		return nil, err
@@ -534,8 +535,8 @@ order by player_id`, festID, gameID)
 	return teams, nil
 }
 
-func loadBaseFestRosterForOverride(ctx context.Context, q dbQueryer, festID int64) ([]rosterOverrideTeam, error) {
-	teams, err := collectRows(ctx, q, `
+func loadBaseFestRosterForOverride(ctx context.Context, q store.Queryer, festID int64) ([]rosterOverrideTeam, error) {
+	teams, err := store.CollectRows(ctx, q, `
 select id, name, city
 from fest_teams
 where fest_id = ? and deleted = 0
@@ -559,8 +560,8 @@ order by position, id`, []any{festID}, func(rows *sql.Rows) (rosterOverrideTeam,
 	return teams, nil
 }
 
-func loadFestRosterOverridePlayers(ctx context.Context, q dbQueryer, festTeamID int64) ([]rosterOverridePlayer, error) {
-	return collectRows(ctx, q, `
+func loadFestRosterOverridePlayers(ctx context.Context, q store.Queryer, festTeamID int64) ([]rosterOverridePlayer, error) {
+	return store.CollectRows(ctx, q, `
 select p.id, p.first_name, p.last_name
 from fest_team_players ftp
 join fest_players p on p.id = ftp.player_id
@@ -628,7 +629,7 @@ values(?, ?, ?, ?)`, gameID, teamID, playerID, rosterOrder); err != nil {
 	return err
 }
 
-func loadRatingPlayerTeamOverrides(ctx context.Context, q dbQueryer, festID int64) ([]ratingPlayerTeamOverride, error) {
+func loadRatingPlayerTeamOverrides(ctx context.Context, q store.Queryer, festID int64) ([]ratingPlayerTeamOverride, error) {
 	rows, err := q.QueryContext(ctx, `
 select o.game_id, coalesce(p.rating_id, 0), coalesce(target.rating_id, 0)
 from game_player_team_overrides o
@@ -712,7 +713,7 @@ on conflict(fest_id, game_id, player_id) do update set
 	return out, nil
 }
 
-func festPlayerIDByRating(ctx context.Context, q dbQueryer, festID, ratingID int64) (int64, bool, error) {
+func festPlayerIDByRating(ctx context.Context, q store.Queryer, festID, ratingID int64) (int64, bool, error) {
 	var id int64
 	err := q.QueryRowContext(ctx, `
 select id from fest_players
@@ -725,7 +726,7 @@ limit 1`, festID, ratingID).Scan(&id)
 	return id, err == nil, err
 }
 
-func activeFestTeamIDByRating(ctx context.Context, q dbQueryer, festID, ratingID int64) (int64, bool, error) {
+func activeFestTeamIDByRating(ctx context.Context, q store.Queryer, festID, ratingID int64) (int64, bool, error) {
 	var id int64
 	err := q.QueryRowContext(ctx, `
 select id from fest_teams

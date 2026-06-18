@@ -3,6 +3,8 @@ package dopeserver
 import (
 	"bytes"
 	"dope/dope/realtime"
+	"dope/dope/roles"
+	"dope/dope/store"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -33,7 +35,7 @@ func createAPITestSession(t *testing.T, srv *server, username string) (int64, st
 	}
 	defer tx.Rollback()
 	now := utcNow()
-	userID, err := insertReturningID(t.Context(), tx, `
+	userID, err := store.InsertReturningID(t.Context(), tx, `
 insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
 values(null, null, ?, 0, ?, ?)`, username, now, now)
 	if err != nil {
@@ -51,7 +53,7 @@ values(null, null, ?, 0, ?, ?)`, username, now, now)
 
 func addAPITestOrganizer(t *testing.T, srv *server, festID, userID int64) {
 	t.Helper()
-	addAPITestRole(t, srv, festID, userID, festRoleAdmin)
+	addAPITestRole(t, srv, festID, userID, roles.Admin)
 }
 
 func addAPITestRole(t *testing.T, srv *server, festID, userID int64, role string) {
@@ -143,7 +145,7 @@ func TestHostRoleCanEditGameTablesOnly(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, gameID := scopedAPITestIDs(t, srv)
 	hostID, hostToken := createAPITestSession(t, srv, "table-host")
-	addAPITestRole(t, srv, festID, hostID, festRoleHost)
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
 
 	theme := 0
 	answer := 0
@@ -164,7 +166,7 @@ func TestHostRoleCanEditGameTablesOnly(t *testing.T) {
 		t.Fatalf("host venue title update status = %d, body %s", venueResp.Code, venueResp.Body.String())
 	}
 
-	scheme := festScheme{SchemaVersion: 2, Slug: "host-import", Title: "Host import", GameType: "ek"}
+	scheme := store.FestScheme{SchemaVersion: 2, Slug: "host-import", Title: "Host import", GameType: "ek"}
 	body, _ := json.Marshal(scheme)
 	importReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/import?fest_id=%d", festID), bytes.NewReader(body))
 	importReq.Header.Set("Content-Type", "application/json")
@@ -179,22 +181,22 @@ func TestHostRoleCanEditGameTablesOnly(t *testing.T) {
 func TestScopedAPIImportRequiresFestOrganizer(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
-	scheme := festScheme{
+	scheme := store.FestScheme{
 		SchemaVersion: 2,
 		Slug:          "authz-import",
 		Title:         "authz import",
 		GameType:      "ek",
-		Stages: []schemeStage{{
+		Stages: []store.SchemeStage{{
 			Code:      "r1",
 			Title:     "r1",
 			StageType: "matches",
 			Position:  1,
-			Matches: []schemeMatch{{
+			Matches: []store.SchemeMatch{{
 				Code:             defaultMatchCode,
 				Title:            "A",
 				ParticipantCount: 1,
-				Slots: []schemeSlot{{
-					Seed: &schemeSeedRef{Basket: 1, Number: 1},
+				Slots: []store.SchemeSlot{{
+					Seed: &store.SchemeSeedRef{Basket: 1, Number: 1},
 				}},
 			}},
 		}},
@@ -232,7 +234,7 @@ func TestScopedAPIImportRequiresFestOrganizer(t *testing.T) {
 		t.Fatalf("organizer import status = %d, body %s", organizerResp.Code, organizerResp.Body.String())
 	}
 
-	scheme.Teams = []schemeTeam{{Name: "Manual", Basket: 1, Number: 1}}
+	scheme.Teams = []store.SchemeTeam{{Name: "Manual", Basket: 1, Number: 1}}
 	body, _ = json.Marshal(scheme)
 	manualTeamsReq := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
 	manualTeamsReq.Header.Set("Content-Type", "application/json")
@@ -401,14 +403,14 @@ func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
 	theme := 0
 	mark := "right"
 	updatePath := fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/update", festID, gameID, defaultMatchCode)
-	edit := func(ans int) MatchView {
+	edit := func(ans int) store.MatchView {
 		t.Helper()
 		a := ans
 		resp := scopedAPIRequest(t, srv, http.MethodPost, updatePath, updateRequest{Team: 0, Theme: &theme, Answer: &a, Mark: &mark}, token)
 		if resp.Code != http.StatusOK {
 			t.Fatalf("update status = %d, body %s", resp.Code, resp.Body.String())
 		}
-		var view MatchView
+		var view store.MatchView
 		if err := json.Unmarshal(resp.Body.Bytes(), &view); err != nil {
 			t.Fatalf("decode update response: %v", err)
 		}

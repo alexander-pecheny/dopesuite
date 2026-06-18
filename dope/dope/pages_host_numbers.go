@@ -3,6 +3,7 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/store"
 	"errors"
 	"fmt"
 	"html/template"
@@ -698,8 +699,8 @@ func teamDisplayName(team festNumberingTeam) string {
 	return fmt.Sprintf("%s (%s)", team.Name, team.City)
 }
 
-func loadFestTeamsForNumbering(ctx context.Context, q dbQueryer, festID int64) ([]festNumberingTeam, error) {
-	return collectRows(ctx, q, `
+func loadFestTeamsForNumbering(ctx context.Context, q store.Queryer, festID int64) ([]festNumberingTeam, error) {
+	return store.CollectRows(ctx, q, `
 select id, name, city, coalesce(number, 0)
 from fest_teams
 where fest_id = ? and deleted = 0
@@ -712,7 +713,7 @@ order by position, id`, []any{festID}, func(rows *sql.Rows) (festNumberingTeam, 
 	})
 }
 
-func festTeamsAllNumbered(ctx context.Context, q dbQueryer, festID int64) (bool, int, error) {
+func festTeamsAllNumbered(ctx context.Context, q store.Queryer, festID int64) (bool, int, error) {
 	var total, numbered int
 	if err := q.QueryRowContext(ctx, `
 select count(*), coalesce(sum(case when number is not null then 1 else 0 end), 0)
@@ -729,7 +730,7 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&total, &number
 // lack a number — the precondition that blocks game editing (see
 // requireNumberedTeams). A fest with no teams at all returns false: there is
 // nothing to number yet, so editing (e.g. player-mode KSI) is not blocked.
-func festHasUnnumberedTeams(ctx context.Context, q dbQueryer, festID int64) (bool, error) {
+func festHasUnnumberedTeams(ctx context.Context, q store.Queryer, festID int64) (bool, error) {
 	allNumbered, total, err := festTeamsAllNumbered(ctx, q, festID)
 	if err != nil {
 		return false, err

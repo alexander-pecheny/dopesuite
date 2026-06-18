@@ -11,6 +11,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
+	"dope/dope/store"
 	"dope/dope/xlsxexport"
 )
 
@@ -60,7 +61,7 @@ where g.fest_id = ? and g.id = ?`, scope.FestID, scope.GameID).
 	case "ksi", "si":
 		err = xlsxexport.BuildKSISheets(f, stateJSON)
 	case "ek":
-		var stages []stageMatches
+		var stages []store.StageMatches
 		if stages, err = s.loadAllStageMatchViews(r.Context(), scope); err == nil {
 			err = xlsxexport.BuildEKSheets(f, stages)
 		}

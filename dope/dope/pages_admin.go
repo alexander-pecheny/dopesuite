@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"dope/dope/store"
 	"errors"
 	"html/template"
 	"math/big"
@@ -242,7 +243,7 @@ func (s *server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) loadAdminUsers(ctx context.Context) ([]adminUserRow, error) {
-	return collectRows(ctx, s.db, `
+	return store.CollectRows(ctx, s.db, `
 select id, coalesce(username, ''), coalesce(telegram_username, ''), is_system, created_at
 from users
 order by created_at desc, id desc`, nil, func(rows *sql.Rows) (adminUserRow, error) {

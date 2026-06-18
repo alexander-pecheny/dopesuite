@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/realtime"
+	"dope/dope/roles"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -398,8 +399,8 @@ func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 	bulkHostID, _ := createAPITestSession(t, srv, "bulk-host")
 	bulkAdminID, _ := createAPITestSession(t, srv, "bulk-admin")
 	bulkRemoveID, _ := createAPITestSession(t, srv, "bulk-remove")
-	addAPITestRole(t, srv, festID, adminID, festRoleAdmin)
-	addAPITestRole(t, srv, festID, bulkRemoveID, festRoleHost)
+	addAPITestRole(t, srv, festID, adminID, roles.Admin)
+	addAPITestRole(t, srv, festID, bulkRemoveID, roles.Host)
 
 	creatorDashboardReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/host/fest/%d", festID), nil)
 	creatorDashboardReq.AddCookie(&http.Cookie{Name: sessionCookieName, Value: creatorToken})
@@ -421,7 +422,7 @@ func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 	if addHostResp.Code != http.StatusOK {
 		t.Fatalf("add host access status = %d, body %s", addHostResp.Code, addHostResp.Body.String())
 	}
-	if role, err := srv.festUserRole(t.Context(), festID, hostID); err != nil || role != festRoleHost {
+	if role, err := srv.festUserRole(t.Context(), festID, hostID); err != nil || role != roles.Host {
 		t.Fatalf("host role = %q, err %v; want host", role, err)
 	}
 
@@ -493,9 +494,9 @@ func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 		userID int64
 		want   string
 	}{
-		{name: "changed host", userID: hostID, want: festRoleAdmin},
-		{name: "added host", userID: bulkHostID, want: festRoleHost},
-		{name: "added admin", userID: bulkAdminID, want: festRoleAdmin},
+		{name: "changed host", userID: hostID, want: roles.Admin},
+		{name: "added host", userID: bulkHostID, want: roles.Host},
+		{name: "added admin", userID: bulkAdminID, want: roles.Admin},
 		{name: "removed", userID: bulkRemoveID, want: ""},
 	} {
 		if role, err := srv.festUserRole(t.Context(), festID, tc.userID); err != nil || role != tc.want {
@@ -525,7 +526,7 @@ func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 	if !strings.Contains(adminAccessResp.Body.String(), "создателя нельзя") {
 		t.Fatalf("admin access response missing creator error: %s", adminAccessResp.Body.String())
 	}
-	if creatorRole, err := srv.festUserRole(t.Context(), festID, creatorID); err != nil || creatorRole != festRoleCreator {
+	if creatorRole, err := srv.festUserRole(t.Context(), festID, creatorID); err != nil || creatorRole != roles.Creator {
 		t.Fatalf("creator role = %q, err %v; want creator", creatorRole, err)
 	}
 }

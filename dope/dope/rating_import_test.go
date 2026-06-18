@@ -2,6 +2,7 @@ package dopeserver
 
 import (
 	"database/sql"
+	"dope/dope/games"
 	"dope/dope/realtime"
 	"encoding/json"
 	"path/filepath"
@@ -9,13 +10,13 @@ import (
 )
 
 type ksiTestState struct {
-	Participants []ksiParticipant `json:"participants"`
+	Participants []games.KSIParticipant `json:"participants"`
 	Themes       []struct {
 		Answers [][]string `json:"answers"`
 	} `json:"themes"`
 }
 
-func parts(specs ...ksiParticipant) []ksiParticipant { return specs }
+func parts(specs ...games.KSIParticipant) []games.KSIParticipant { return specs }
 
 func TestRemapAnswerMatrixFollowsTeams(t *testing.T) {
 	old := [][]string{
@@ -23,8 +24,8 @@ func TestRemapAnswerMatrixFollowsTeams(t *testing.T) {
 		{"", "x", "", "", ""}, // B (#2)
 		{"", "", "", "y", ""}, // C (#3)
 	}
-	oldParts := parts(ksiParticipant{Number: 1, Name: "A"}, ksiParticipant{Number: 2, Name: "B"}, ksiParticipant{Number: 3, Name: "C"})
-	newParts := parts(ksiParticipant{Number: 3, Name: "C"}, ksiParticipant{Number: 2, Name: "B"}, ksiParticipant{Number: 9, Name: "D"}) // A removed, D added, reordered
+	oldParts := parts(games.KSIParticipant{Number: 1, Name: "A"}, games.KSIParticipant{Number: 2, Name: "B"}, games.KSIParticipant{Number: 3, Name: "C"})
+	newParts := parts(games.KSIParticipant{Number: 3, Name: "C"}, games.KSIParticipant{Number: 2, Name: "B"}, games.KSIParticipant{Number: 9, Name: "D"}) // A removed, D added, reordered
 
 	out := remapAnswerMatrix(old, oldParts, newParts, 5)
 	if len(out) != 3 {
@@ -51,8 +52,8 @@ func TestRemapAnswerMatrixDistinguishesDuplicateNamesByNumber(t *testing.T) {
 		{"a", "", "", "", ""}, // #7 "Дубль"
 		{"b", "", "", "", ""}, // #8 "Дубль"
 	}
-	oldParts := parts(ksiParticipant{Number: 7, Name: "Дубль"}, ksiParticipant{Number: 8, Name: "Дубль"})
-	newParts := parts(ksiParticipant{Number: 8, Name: "Дубль"}, ksiParticipant{Number: 7, Name: "Дубль"}) // swap order
+	oldParts := parts(games.KSIParticipant{Number: 7, Name: "Дубль"}, games.KSIParticipant{Number: 8, Name: "Дубль"})
+	newParts := parts(games.KSIParticipant{Number: 8, Name: "Дубль"}, games.KSIParticipant{Number: 7, Name: "Дубль"}) // swap order
 
 	out := remapAnswerMatrix(old, oldParts, newParts, 5)
 	if out[0][0] != "b" {
@@ -71,8 +72,8 @@ func TestRemapAnswerMatrixLegacyNameFallback(t *testing.T) {
 		{"x", "", "", "", ""}, // "A", no number (legacy)
 		{"y", "", "", "", ""}, // "B", no number (legacy)
 	}
-	oldParts := parts(ksiParticipant{Number: 0, Name: "A"}, ksiParticipant{Number: 0, Name: "B"})
-	newParts := parts(ksiParticipant{Number: 2, Name: "B"}, ksiParticipant{Number: 1, Name: "A"}) // now numbered, reordered
+	oldParts := parts(games.KSIParticipant{Number: 0, Name: "A"}, games.KSIParticipant{Number: 0, Name: "B"})
+	newParts := parts(games.KSIParticipant{Number: 2, Name: "B"}, games.KSIParticipant{Number: 1, Name: "A"}) // now numbered, reordered
 	out := remapAnswerMatrix(old, oldParts, newParts, 5)
 	if out[0][0] != "y" {
 		t.Fatalf("B should map by name to new index 0, got %q", out[0][0])
@@ -84,7 +85,7 @@ func TestRemapAnswerMatrixLegacyNameFallback(t *testing.T) {
 
 func TestRemapAnswerMatrixLegacyNoParticipantsResizesPositionally(t *testing.T) {
 	old := [][]string{{"a"}, {"b"}}
-	out := remapAnswerMatrix(old, nil, parts(ksiParticipant{Number: 0, Name: "X"}, ksiParticipant{Number: 0, Name: "Y"}, ksiParticipant{Number: 0, Name: "Z"}), 2)
+	out := remapAnswerMatrix(old, nil, parts(games.KSIParticipant{Number: 0, Name: "X"}, games.KSIParticipant{Number: 0, Name: "Y"}, games.KSIParticipant{Number: 0, Name: "Z"}), 2)
 	if len(out) != 3 || out[0][0] != "a" || out[1][0] != "b" || out[2][0] != "" {
 		t.Fatalf("no old participants should resize positionally: %v", out)
 	}
@@ -178,7 +179,7 @@ func loadKSIState(t *testing.T, db *sql.DB, gameID int64) ksiTestState {
 	return st
 }
 
-func nameIndex(participants []ksiParticipant) map[string]int {
+func nameIndex(participants []games.KSIParticipant) map[string]int {
 	idx := make(map[string]int, len(participants))
 	for i, p := range participants {
 		idx[p.Name] = i

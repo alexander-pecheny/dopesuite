@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"database/sql"
+	"dope/dope/store"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -488,7 +489,7 @@ func snapshotInt(before, after sql.NullString, field string) (int64, bool) {
 // queryRowMaps runs a query and returns each row as a column→value map. Text
 // columns whose name ends in "_json" are embedded as raw JSON when valid, so the
 // archive stays browsable rather than double-escaped.
-func queryRowMaps(ctx context.Context, q dbQueryer, query string, args ...any) ([]map[string]any, error) {
+func queryRowMaps(ctx context.Context, q store.Queryer, query string, args ...any) ([]map[string]any, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err

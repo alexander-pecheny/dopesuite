@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"dope/dope/realtime"
+	"dope/dope/roles"
 	"dope/dope/store"
 )
 
@@ -93,7 +94,7 @@ func (s *server) broadcastFestView(scope festScope, revision int64) {
 // broadcastMatchCascade fans out the views of downstream matches whose slots
 // changed when an edit resolved the bracket, so spectators on those matches (or
 // the grid) see advancing teams live instead of only on reload.
-func (s *server) broadcastMatchCascade(festID, gameID int64, cascaded []MatchView) {
+func (s *server) broadcastMatchCascade(festID, gameID int64, cascaded []store.MatchView) {
 	for _, cv := range cascaded {
 		data, err := json.Marshal(cv)
 		if err != nil {
@@ -184,17 +185,17 @@ func (s *server) authorizeFestRead(w http.ResponseWriter, r *http.Request, festI
 }
 
 func (s *server) requireFestOrganizer(w http.ResponseWriter, r *http.Request, festID int64) (sessionUser, bool) {
-	user, _, ok := s.requireFestRole(w, r, festID, festRoleCanEditGameTables)
+	user, _, ok := s.requireFestRole(w, r, festID, roles.CanEditGameTables)
 	return user, ok
 }
 
 func (s *server) requireFestAdmin(w http.ResponseWriter, r *http.Request, festID int64) (sessionUser, bool) {
-	user, _, ok := s.requireFestRole(w, r, festID, festRoleCanManageFest)
+	user, _, ok := s.requireFestRole(w, r, festID, roles.CanManageFest)
 	return user, ok
 }
 
 func (s *server) requireFestTableEditor(w http.ResponseWriter, r *http.Request, festID int64) (sessionUser, bool) {
-	user, _, ok := s.requireFestRole(w, r, festID, festRoleCanEditGameTables)
+	user, _, ok := s.requireFestRole(w, r, festID, roles.CanEditGameTables)
 	return user, ok
 }
 
@@ -258,7 +259,7 @@ func (s *server) authorizeHostPresence(w http.ResponseWriter, r *http.Request, f
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return false
 	}
-	if festRoleCanEditGameTables(role) {
+	if roles.CanEditGameTables(role) {
 		return true
 	}
 	exists, _, err := s.festVisibility(r.Context(), festID)
@@ -883,10 +884,6 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, fest
 	writeJSON(w, data)
 }
 
-// stageMatches is one stage's full match views in the bulk all-stages response;
-// the shape lives in the store leaf as store.StageMatches.
-type stageMatches = store.StageMatches
-
 // handleScopedStages routes /api/fest/{tid}/games/{gid}/stages/...
 //
 //	/stages/{code}/matches → every full MatchView for one stage (a batch
@@ -969,7 +966,7 @@ func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scop
 // loadAllStageMatchViews returns every stage's full match views for the game in
 // one pass, stages ordered by position, matches ordered within each. Empty
 // stages (e.g. reseed) are omitted. Takes the read lock once for the whole set.
-func (s *server) loadAllStageMatchViews(ctx context.Context, scope festScope) ([]stageMatches, error) {
+func (s *server) loadAllStageMatchViews(ctx context.Context, scope festScope) ([]store.StageMatches, error) {
 	rows, err := s.db.QueryContext(ctx, `
 select st.code, m.code
 from matches m
@@ -992,7 +989,7 @@ order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
 	if err := rows.Close(); err != nil {
 		return nil, err
 	}
-	out := make([]stageMatches, 0)
+	out := make([]store.StageMatches, 0)
 	byCode := map[string]int{} // stage code -> index in out, preserving order
 	// Read every match view on ONE read-only snapshot, off the write lock: the
 	// whole bracket is a consistent point-in-time and a busy editor never stalls
@@ -1019,14 +1016,14 @@ order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
 		if !ok {
 			idx = len(out)
 			byCode[p.stageCode] = idx
-			out = append(out, stageMatches{Code: p.stageCode})
+			out = append(out, store.StageMatches{Code: p.stageCode})
 		}
 		out[idx].Matches = append(out[idx].Matches, view)
 	}
 	return out, nil
 }
 
-func (s *server) loadStageMatchViews(ctx context.Context, scope festScope, stageCode string) ([]MatchView, error) {
+func (s *server) loadStageMatchViews(ctx context.Context, scope festScope, stageCode string) ([]store.MatchView, error) {
 	rows, err := s.db.QueryContext(ctx, `
 select m.code
 from matches m
@@ -1052,9 +1049,9 @@ order by m.position, m.id`, scope.FestID, scope.GameID, stageCode)
 		// Empty stage or unknown stage code; let the caller distinguish via
 		// the more specific error from verifyMatchInScope if needed. An empty
 		// result is fine: client renders no tables.
-		return []MatchView{}, nil
+		return []store.MatchView{}, nil
 	}
-	views := make([]MatchView, 0, len(codes))
+	views := make([]store.MatchView, 0, len(codes))
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err

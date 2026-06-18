@@ -21,11 +21,26 @@ this code.
 
 ## Current packages
 
+The leaf extraction below is **complete**. The server package is `dopeserver`
+(under `cmd/dope-server`) and consumes the leaf packages **directly** — there are
+no re-export shims: call sites write `store.MatchView`, `journal.Op`,
+`realtime.Envelope`, `roles.Normalize`, etc. rather than going through
+package-local aliases or thin wrapper functions.
+
 ```
 dope/                      module root (go.mod: module "dope")
-  dope/                    main server package (package main) — HTTP, DB, SSE, handlers
-    games/                 package games  — game-type registry + per-game pure domain logic
-    markdown/              package markdown — host-authored markdown → safe HTML
+  dope/                    package dopeserver — service/orchestration/UI:
+                           the write-tx layer, FestView builder, bracket
+                           resolver, history rendering, HTTP handlers, SSE
+                           driving. Imports the leaves below directly.
+    games/                 game-type registry + per-game pure domain logic
+    store/                 SQLite schema, queries and shared view/scheme types
+    journal/               forward-journal codec, replay, checkpoints, archive
+    realtime/              SSE envelopes, delta coalescing, subscriber manager
+    roles/                 role hierarchy + pure permission predicates
+    xlsxexport/            per-game xlsx sheet builders
+    markdown/              host-authored markdown → safe HTML
+    cmd/dope-server/       thin main() entry point → dopeserver.Main()
     cmd/telegram-bot/      standalone Telegram bot (bridges to the server)
     static/               embedded frontend assets
     jstest/               Deno frontend tests
@@ -46,45 +61,33 @@ server code consults the registry here instead of switching on raw strings:
 
 This is the home for **pure** per-game domain logic. Logic that needs a DB
 transaction or the server (game creation, roster propagation, journal rendering)
-stays in `package main` for now and calls into `games` for the type metadata —
-see the roadmap below.
+stays in `dopeserver` and calls into `games` for the type metadata.
 
-### `markdown` (leaf)
+### Other leaves
 
-Wraps goldmark to render host-authored markdown (fest descriptions) to safe
-HTML, including the custom `:::details` disclosure block, with raw-HTML
-passthrough deliberately disabled. Entry point: `markdown.Render`.
+- **`store`** — SQLite schema, query helpers, and the shared view/scheme types
+  (`MatchView`, `FestView`, `FestScheme`, …) plus pure scoring (`BuildView`,
+  `ScoreTeam`, `ManualStandings`). Almost everything depends on it.
+- **`journal`** — the forward-journal subsystem: the on-disk codec (opcodes,
+  row-args, segments), replay/checkpoint engines, hot→cold archiver, and the
+  live append/read path. `dopeserver` keeps only the server-side scheduler and
+  the attribution-aware append facade (`journal_live.go`, `journal_archive.go`).
+- **`realtime`** — SSE envelopes (`EventSnapshotJSON`/`EventDeltaJSON`), delta
+  merging, and the subscriber `Manager` (broadcast fan-out behind its own locks).
+- **`roles`** — the role hierarchy and the pure permission predicates
+  (`Normalize`, `CanManageAccess`, …) plus bulk-line parsing. The DB-backed
+  access management stays in `dopeserver` (`roles.go`) on top of the leaf.
+- **`xlsxexport`** — per-game xlsx sheet builders (OD/KSI/EK).
+- **`markdown`** — goldmark wrapper rendering host markdown to safe HTML
+  (custom `:::details` block, raw-HTML passthrough disabled). Entry: `Render`.
 
-## Roadmap — further submodules
+## Status
 
-These are the natural seams for continued decomposition. They are **not** done
-yet because they touch the tightly-coupled core (the `server` god-struct and the
-shared types in `db.go`); doing them well means first untangling that coupling,
-which is too risky to land immediately before a live fest. They are listed here
-so the direction is explicit and the next change has a target to aim at.
-
-Roughly in increasing order of effort:
-
-1. **`games/ek`, `games/od`, `games/ksi`** — promote the remaining per-game
-   domain (empty-state builders, KSI/EK state shapes, EK bracket helpers,
-   xlsx sheet builders) into per-format subpackages behind a small interface, so
-   adding a format is "add a package + register it" rather than editing a dozen
-   shared files.
-2. **`authz` (or `roles`)** — the permission model (role hierarchy, the
-   `festRoleCan*` predicates, `normalizeFestRole`). The pure predicates are a
-   clean leaf; the DB-backed access management splits off as a thin layer on top.
-3. **`journal`** — the forward-journal / audit subsystem (the `journal_*.go`
-   cluster, ~12 files). Largely self-contained conceptually but currently
-   reaches into `db.go` helpers; extract once those helpers are package-scoped.
-4. **`realtime` (SSE)** — subscriber registry, delta coalescing and broadcast
-   fan-out, currently methods on `*server`. Extract behind a small publisher
-   interface.
-5. **`store`** — the SQLite schema, queries and shared view types from `db.go`.
-   The biggest and last step, because almost everything depends on it; it forces
-   the shared types out of `package main` and breaks the remaining cycles.
-6. **`cmd/dope-server`** — once the above land, the root `package main` becomes a
-   thin entry point wiring the packages together, moved under `cmd/` to match
-   `cmd/telegram-bot`.
+All the seams originally listed as roadmap (per-game domain, `roles`, `journal`,
+`realtime`, `store`, `cmd/dope-server`) have been extracted, and the re-export
+shims that bridged them back into the server during the transition (type
+aliases, op-code constants and one-line delegating wrappers) have been removed —
+call sites now reference the leaf packages directly.
 
 ### Guiding principles
 

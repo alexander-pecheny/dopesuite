@@ -3,6 +3,8 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/games"
+	"dope/dope/store"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -315,7 +317,7 @@ func (s *server) setSeedImportDeclined(ctx context.Context, scope festScope, req
 	return view, revision, stateJSON, nil
 }
 
-func loadEKGameStateForSeedImport(ctx context.Context, q dbQueryer, scope festScope) (string, error) {
+func loadEKGameStateForSeedImport(ctx context.Context, q store.Queryer, scope festScope) (string, error) {
 	var rawState string
 	err := q.QueryRowContext(ctx, `
 select coalesce(state_json, '{}')
@@ -469,7 +471,7 @@ func resolveSeedSlots(ctx context.Context, tx *sql.Tx, gameID int64, assignments
 		MatchID   int64
 		SourceRef string
 	}
-	slots, err := collectRows(ctx, tx, `
+	slots, err := store.CollectRows(ctx, tx, `
 select ms.id, ms.match_id, ms.source_ref_json
 from match_slots ms
 join matches m on m.id = ms.match_id
@@ -532,7 +534,7 @@ where match_id = ?
 }
 
 func ensureRegularThemes(ctx context.Context, tx *sql.Tx, matchID, teamID int64) error {
-	for themeIndex := 0; themeIndex < themeCount; themeIndex++ {
+	for themeIndex := 0; themeIndex < store.ThemeCount; themeIndex++ {
 		var exists int
 		if err := tx.QueryRowContext(ctx, `
 select count(*) from themes
@@ -550,7 +552,7 @@ where match_id = ? and team_id = ? and kind = 'regular' and theme_index = ?`,
 	return nil
 }
 
-func maxSeedNumber(ctx context.Context, q dbQueryer, gameID int64) (int, error) {
+func maxSeedNumber(ctx context.Context, q store.Queryer, gameID int64) (int, error) {
 	rows, err := q.QueryContext(ctx, `
 select ms.source_ref_json
 from match_slots ms
@@ -577,18 +579,18 @@ where m.game_id = ? and ms.source_type = 'seed'`, gameID)
 func seedRefKey(sourceRef string) (int, int) {
 	var ref map[string]any
 	_ = json.Unmarshal([]byte(sourceRef), &ref)
-	basket := intFromMap(ref, "basket")
+	basket := store.IntFromMap(ref, "basket")
 	if basket <= 0 {
 		basket = 1
 	}
-	number := intFromMap(ref, "number")
+	number := store.IntFromMap(ref, "number")
 	if number == 0 {
-		number = intFromMap(ref, "position")
+		number = store.IntFromMap(ref, "position")
 	}
 	return basket, number
 }
 
-func loadKSISeedCandidates(ctx context.Context, q dbQueryer, festID int64) (int64, []ksiSeedCandidate, error) {
+func loadKSISeedCandidates(ctx context.Context, q store.Queryer, festID int64) (int64, []ksiSeedCandidate, error) {
 	var sourceGameID int64
 	var schemeJSON, stateJSON string
 	if err := q.QueryRowContext(ctx, `
@@ -620,7 +622,7 @@ limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
 			SourceIndex: index,
 			Name:        name,
 			Number:      p.Number,
-			Declined:    ksiParticipantDeclined(declined, p),
+			Declined:    games.KSIParticipantDeclined(declined, p),
 			Metrics:     ksiMetricsForParticipant(themes, index),
 		})
 	}
@@ -633,7 +635,7 @@ limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
 	return sourceGameID, candidates, nil
 }
 
-func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]ksiParticipant, [][][]string, map[string]bool, error) {
+func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]games.KSIParticipant, [][][]string, map[string]bool, error) {
 	var state struct {
 		Participants json.RawMessage `json:"participants"`
 		Declined     map[string]bool `json:"declined"`
@@ -670,11 +672,11 @@ func ksiMetricsForParticipant(themes [][][]string, participantIndex int) ksiSeed
 		}
 		row := answers[participantIndex]
 		for answerIndex, mark := range row {
-			if answerIndex >= len(questionValues) {
+			if answerIndex >= len(store.QuestionValues) {
 				break
 			}
-			value := questionValues[answerIndex]
-			switch normalizeMark(mark) {
+			value := store.QuestionValues[answerIndex]
+			switch store.NormalizeMark(mark) {
 			case "right":
 				metrics.Total += value
 				metrics.Plus += value
@@ -694,7 +696,7 @@ func compareKSISeedCandidates(a, b ksiSeedCandidate) int {
 	if a.Metrics.Plus != b.Metrics.Plus {
 		return b.Metrics.Plus - a.Metrics.Plus
 	}
-	for index := len(questionValues) - 1; index >= 0; index-- {
+	for index := len(store.QuestionValues) - 1; index >= 0; index-- {
 		if a.Metrics.Correct[index] != b.Metrics.Correct[index] {
 			return b.Metrics.Correct[index] - a.Metrics.Correct[index]
 		}
@@ -705,7 +707,7 @@ func compareKSISeedCandidates(a, b ksiSeedCandidate) int {
 	return a.SourceIndex - b.SourceIndex
 }
 
-func loadSeedRosterTeams(ctx context.Context, q dbQueryer, festID int64) ([]seedRosterTeam, error) {
+func loadSeedRosterTeams(ctx context.Context, q store.Queryer, festID int64) ([]seedRosterTeam, error) {
 	rows, err := q.QueryContext(ctx, `
 select id, coalesce(number, 0), name, city
 from fest_teams
@@ -748,8 +750,8 @@ order by position, id`, festID)
 	return out, nil
 }
 
-func loadSeedRosterPlayers(ctx context.Context, q dbQueryer, festTeamID int64) ([]seedRosterPlayer, error) {
-	return collectRows(ctx, q, `
+func loadSeedRosterPlayers(ctx context.Context, q store.Queryer, festTeamID int64) ([]seedRosterPlayer, error) {
+	return store.CollectRows(ctx, q, `
 select p.first_name, p.last_name
 from fest_team_players ftp
 join fest_players p on p.id = ftp.player_id
@@ -779,7 +781,7 @@ where fest_id = ? and name = ?
 order by case when city = ? then 0 when city = '' then 1 else 2 end, id
 limit 1`, festID, name, city).Scan(&teamID, &existingCity)
 	if errors.Is(err, sql.ErrNoRows) {
-		teamID, err = insertReturningID(ctx, tx, `
+		teamID, err = store.InsertReturningID(ctx, tx, `
 insert into teams(fest_id, name, city)
 values(?, ?, ?)`, festID, name, city)
 		if err != nil {
@@ -822,7 +824,7 @@ func ensureSeedTeamByNumber(ctx context.Context, tx *sql.Tx, festID, number int6
 	err := tx.QueryRowContext(ctx, `
 select id, name, city from teams where fest_id = ? and number = ? limit 1`, festID, number).Scan(&teamID, &existingName, &existingCity)
 	if errors.Is(err, sql.ErrNoRows) {
-		teamID, err = insertReturningID(ctx, tx, `
+		teamID, err = store.InsertReturningID(ctx, tx, `
 insert into teams(fest_id, name, city, number) values(?, ?, ?, ?)`, festID, name, city, number)
 		if err != nil {
 			return 0, "", err
@@ -885,7 +887,7 @@ where fest_id = ? and first_name = ? and last_name = ?
 order by id
 limit 1`, festID, firstName, lastName).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return insertReturningID(ctx, tx, `
+		return store.InsertReturningID(ctx, tx, `
 insert into players(fest_id, first_name, last_name)
 values(?, ?, ?)`, festID, firstName, lastName)
 	}

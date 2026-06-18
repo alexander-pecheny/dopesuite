@@ -2,6 +2,7 @@ package dopeserver
 
 import (
 	"context"
+	"dope/dope/journal"
 	"dope/dope/realtime"
 	"path/filepath"
 	"testing"
@@ -22,8 +23,8 @@ func TestDerivedRevertReproducesGameState(t *testing.T) {
 
 	festID, gameID := createSeedImportFixture(t, db)
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(ctx, scopeBase); err != nil {
@@ -39,7 +40,7 @@ func TestDerivedRevertReproducesGameState(t *testing.T) {
 	}
 	g0 := maxID()
 	tx0, _ := db.Begin()
-	if err := writeGameCheckpoint(ctx, tx0, gameID, g0); err != nil {
+	if err := journal.WriteGameCheckpoint(ctx, tx0, gameID, g0); err != nil {
 		t.Fatalf("genesis checkpoint: %v", err)
 	}
 	tx0.Commit()
@@ -76,14 +77,14 @@ func TestDerivedRevertReproducesGameState(t *testing.T) {
 	}
 
 	// Reconstruct the state at p1 (after edit 1) and compare to truth1.
-	assertReconstruct := func(point int64, want *gameCheckpoint, label string) {
+	assertReconstruct := func(point int64, want *journal.GameCheckpoint, label string) {
 		t.Helper()
 		tx, _ := db.Begin()
 		defer tx.Rollback()
 		if err := reconstructGameStateAt(ctx, tx, gameID, point); err != nil {
 			t.Fatalf("%s: reconstruct: %v", label, err)
 		}
-		got, err := captureGameCheckpoint(ctx, tx, gameID)
+		got, err := journal.CaptureGameCheckpoint(ctx, tx, gameID)
 		if err != nil {
 			t.Fatalf("%s: capture: %v", label, err)
 		}
@@ -104,7 +105,7 @@ func TestDerivedRevertReproducesGameState(t *testing.T) {
 		t.Fatalf("live state after revert != state at p1")
 	}
 	var reverts int
-	db.QueryRow(`select count(*) from journal where op = ?`, int(opEvGameRevert)).Scan(&reverts)
+	db.QueryRow(`select count(*) from journal where op = ?`, int(journal.OpEvGameRevert)).Scan(&reverts)
 	if reverts == 0 {
 		t.Fatalf("revert was not recorded in the journal")
 	}

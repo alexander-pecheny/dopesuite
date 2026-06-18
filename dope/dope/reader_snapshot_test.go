@@ -21,8 +21,8 @@ func TestSnapshotReadsDecoupledFromWriteLock(t *testing.T) {
 
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 	scope := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scope); err != nil {

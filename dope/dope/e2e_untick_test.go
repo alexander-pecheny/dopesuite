@@ -33,8 +33,8 @@ func TestE2EUntickEditRetickRealDB(t *testing.T) {
 	defer db.Close()
 
 	srv := &server{
-		db:              db,
-		rt:              realtime.NewManager(),
+		db: db,
+		rt: realtime.NewManager(),
 	}
 	ctx := context.Background()
 	scopeBase := festScope{FestID: festID, GameID: gameID}

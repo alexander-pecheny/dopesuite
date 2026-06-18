@@ -3,6 +3,8 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/journal"
+	"dope/dope/store"
 	"fmt"
 	"os"
 	"testing"
@@ -28,17 +30,17 @@ func TestReplayRowOps(t *testing.T) {
 		t.Fatal(err)
 	}
 	dict := map[uint64]string{1: "t", 2: "id", 3: "name", 4: "score"}
-	rp := newJournalReplayer(dict)
+	rp := journal.NewReplayer(dict)
 
-	ins := func(seq uint64, id int64, name string, score int64) journalRecord {
-		return journalRecord{Seq: seq, Op: opRowIns, Args: encodeRowArgs(rowArgs{TableID: 1, Cols: []colVal{
+	ins := func(seq uint64, id int64, name string, score int64) journal.Record {
+		return journal.Record{Seq: seq, Op: journal.OpRowIns, Args: journal.EncodeRowArgs(journal.RowArgs{TableID: 1, Cols: []journal.ColVal{
 			{NameID: 2, Val: id}, {NameID: 3, Val: name}, {NameID: 4, Val: score}}})}
 	}
-	recs := []journalRecord{
+	recs := []journal.Record{
 		ins(1, 1, "a", 10),
 		ins(2, 2, "b", 20),
-		{Seq: 3, Op: opRowSet, Args: encodeRowArgs(rowArgs{TableID: 1, Cols: []colVal{{NameID: 2, Val: int64(1)}, {NameID: 4, Val: int64(15)}}})},
-		{Seq: 4, Op: opRowDel, Args: encodeRowArgs(rowArgs{TableID: 1, Cols: []colVal{{NameID: 2, Val: int64(2)}}})},
+		{Seq: 3, Op: journal.OpRowSet, Args: journal.EncodeRowArgs(journal.RowArgs{TableID: 1, Cols: []journal.ColVal{{NameID: 2, Val: int64(1)}, {NameID: 4, Val: int64(15)}}})},
+		{Seq: 4, Op: journal.OpRowDel, Args: journal.EncodeRowArgs(journal.RowArgs{TableID: 1, Cols: []journal.ColVal{{NameID: 2, Val: int64(2)}}})},
 	}
 
 	tx, _ := db.Begin()
@@ -111,11 +113,11 @@ values(?, '2026-01-01T00:00:00.000Z', 'widgets', ?, ?, ?, ?, 7, 'req1', 1)`,
 
 	// Replay segments into a fresh widgets table (genesis = empty).
 	mustExec(t, db, `delete from widgets`)
-	dict, err := loadJournalDict(ctx, db)
+	dict, err := journal.LoadDict(ctx, db)
 	if err != nil {
 		t.Fatalf("load dict: %v", err)
 	}
-	rp := newJournalReplayer(dict)
+	rp := journal.NewReplayer(dict)
 	recs := decodeAllSegments(t, db)
 	tx, _ := db.Begin()
 	if err := rp.ApplyAll(ctx, tx, recs); err != nil {
@@ -140,24 +142,24 @@ values(?, '2026-01-01T00:00:00.000Z', 'widgets', ?, ?, ?, ?, 7, 'req1', 1)`,
 	}
 }
 
-func decodeAllSegments(t *testing.T, db *sql.DB) []journalRecord {
+func decodeAllSegments(t *testing.T, db *sql.DB) []journal.Record {
 	t.Helper()
 	rows, err := db.Query(`select blob from journal_segment order by fest_id, seq_start`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	var all []journalRecord
+	var all []journal.Record
 	for rows.Next() {
 		var blob []byte
 		if err := rows.Scan(&blob); err != nil {
 			t.Fatal(err)
 		}
-		raw, err := zstdDecompress(blob)
+		raw, err := journal.Decompress(blob)
 		if err != nil {
 			t.Fatal(err)
 		}
-		recs, err := decodeSegment(raw)
+		recs, err := journal.DecodeSegment(raw)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -182,7 +184,7 @@ func TestConvertReplayEquivalenceRealDB(t *testing.T) {
 	if path == "" {
 		t.Skip("set DOPE_JOURNAL_TEST_DB to a fest DB copy to run the real-data canary")
 	}
-	db, err := sql.Open("sqlite", buildSqliteDSN(path))
+	db, err := sql.Open("sqlite", store.BuildDSN(path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,13 +195,13 @@ func TestConvertReplayEquivalenceRealDB(t *testing.T) {
 	if _, err := convertAuditLog(db); err != nil {
 		t.Fatalf("convert: %v", err)
 	}
-	dict, err := loadJournalDict(ctx, db)
+	dict, err := journal.LoadDict(ctx, db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rp := newJournalReplayer(dict)
+	rp := journal.NewReplayer(dict)
 	recs := decodeAllSegments(t, db)
-	bySeq := map[uint64]journalRecord{}
+	bySeq := map[uint64]journal.Record{}
 	for _, r := range recs {
 		bySeq[r.Seq] = r
 	}
