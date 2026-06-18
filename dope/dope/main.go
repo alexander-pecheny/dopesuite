@@ -227,6 +227,11 @@ type server struct {
 	festViewMisses atomic.Int64
 	editMu         sync.Mutex
 	editWindow     []editSample
+
+	// editBatcher coalesces game-state PATCH edits per game into a single locked
+	// write transaction per editBatchWindow, so a fleet of concurrent editors
+	// drives ~6 commits/sec/game instead of one per keystroke. See edit_batch.go.
+	editBatcher editBatcher
 }
 
 // viewerCountInterval bounds how often the concurrent-viewer tally is fanned
@@ -617,6 +622,7 @@ func newServer() (*server, error) {
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 		botSecret:       os.Getenv("DOPE_BOT_SECRET"),
 		epoch:           epoch,
+		editBatcher:     editBatcher{pending: make(map[int64]*editBatch)},
 	}, nil
 }
 

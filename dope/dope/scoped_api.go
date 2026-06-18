@@ -561,7 +561,15 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 			http.Error(w, "bad json", http.StatusBadRequest)
 			return
 		}
-		next, revision, err := s.patchGameState(r.Context(), scope, req, string(raw), &sample)
+		if len(req.Ops) == 0 {
+			http.Error(w, "missing patch ops", http.StatusBadRequest)
+			return
+		}
+		// Edits are coalesced per game into a 150ms window and applied together in
+		// one locked transaction (edit_batch.go). submitEdit blocks until that
+		// window commits — and this editor's own ops applied — then returns the
+		// committed state; the merged delta is broadcast once by the flusher.
+		next, _, err := s.submitEdit(r.Context(), scope, req, string(raw), &sample)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -570,20 +578,9 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		// Broadcast the ops we just applied as a scoped delta — viewers apply
-		// them in place instead of receiving the whole state blob. If marshalling
-		// the ops fails, fall back to a full-state snapshot so viewers still sync.
-		scopeKey := fmt.Sprintf("game-state:%d", scope.GameID)
-		tBroadcast := nowIf(s.editMetricsOn)
-		if opsJSON, mErr := json.Marshal(req.Ops); mErr == nil {
-			s.broadcastStateDelta(scope.FestID, scopeKey, revision, opsJSON)
-		} else {
-			s.broadcastState(scope.FestID, scopeKey, revision, next)
-		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write(next)
 		if s.editMetricsOn {
-			sample.broadcast = time.Since(tBroadcast)
 			sample.e2e = time.Since(tE2E)
 			s.recordEdit(sample)
 		}
@@ -622,120 +619,6 @@ update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
 		return err
 	})
 	return revision, err
-}
-
-func (s *server) patchGameState(ctx context.Context, scope festScope, req gameStatePatchRequest, payload string, sample *editSample) ([]byte, int64, error) {
-	if len(req.Ops) == 0 {
-		return nil, 0, errors.New("missing patch ops")
-	}
-
-	// Lock-contention instrumentation (gated; see edit_metrics.go). writeWaiters
-	// counts goroutines queued on the global write mutex in this path, so a high
-	// gauge under concurrent editors localizes the bottleneck to the lock itself
-	// rather than the work it serializes. wait is time blocked on Lock (captures
-	// stalls behind ANY writer, not just other patches); hold is the critical
-	// section. Both measured only when on, so prod adds no time.Now() calls.
-	metrics := s.editMetricsOn && sample != nil
-	var tWait time.Time
-	if metrics {
-		sample.fest, sample.game = scope.FestID, scope.GameID
-		sample.ops = len(req.Ops)
-		sample.waiters = s.writeWaiters.Add(1)
-		tWait = time.Now()
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var tHold time.Time
-	if metrics {
-		sample.wait = time.Since(tWait)
-		s.writeWaiters.Add(-1)
-		tHold = time.Now()
-	}
-
-	tx, err := s.beginWriteTx(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer tx.Rollback()
-
-	var gameType, stateJSON string
-	if err := tx.QueryRowContext(ctx, `
-select game_type, state_json from games where fest_id = ? and id = ?`,
-		scope.FestID, scope.GameID).Scan(&gameType, &stateJSON); err != nil {
-		return nil, 0, err
-	}
-	if stateJSON == "" {
-		stateJSON = "{}"
-	}
-
-	var root any
-	tUnmarshal := nowIf(metrics)
-	if err := json.Unmarshal([]byte(stateJSON), &root); err != nil {
-		return nil, 0, fmt.Errorf("stored game state is invalid json: %w", err)
-	}
-	if metrics {
-		sample.unmarshal = time.Since(tUnmarshal)
-	}
-	if root == nil {
-		root = map[string]any{}
-	}
-
-	for _, op := range req.Ops {
-		if op.Op != "" && op.Op != "set" {
-			return nil, 0, fmt.Errorf("unsupported patch op %q", op.Op)
-		}
-		path, err := parseJSONPatchPath(op.Path)
-		if err != nil {
-			return nil, 0, err
-		}
-		if patchPathTouchesRatingRoster(gameType, path) {
-			return nil, 0, errRatingRosterImmutable
-		}
-		value, err := decodePatchValue(op.Value)
-		if err != nil {
-			return nil, 0, err
-		}
-		root, err = applyJSONSet(root, path, value)
-		if err != nil {
-			return nil, 0, err
-		}
-	}
-
-	tMarshal := nowIf(metrics)
-	next, err := json.Marshal(root)
-	if err != nil {
-		return nil, 0, err
-	}
-	tDB := nowIf(metrics)
-	if metrics {
-		sample.marshal = tDB.Sub(tMarshal)
-	}
-	result, err := tx.ExecContext(ctx, `
-update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
-		string(next), utcNow(), scope.FestID, scope.GameID)
-	if err != nil {
-		return nil, 0, err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return nil, 0, err
-	}
-	if n == 0 {
-		return nil, 0, sql.ErrNoRows
-	}
-	revision, err := bumpFestRevisionTx(ctx, tx, scope.FestID, "game:state-patch", payload)
-	if err != nil {
-		return nil, 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, 0, err
-	}
-	if metrics {
-		sample.db = time.Since(tDB)
-		sample.bytes = len(next)
-		sample.hold = time.Since(tHold)
-	}
-	return next, revision, nil
 }
 
 func patchPathTouchesRatingRoster(gameType string, path []jsonPathSegment) bool {
