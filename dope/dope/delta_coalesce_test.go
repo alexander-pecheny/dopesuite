@@ -45,8 +45,8 @@ func TestBroadcastStateDeltaCoalescesForViewersImmediateForEditors(t *testing.T)
 	srv := &server{}
 	editor := make(chan event, 8)
 	viewer := make(chan event, 8)
-	srv.addSubscriber(1, editor, true)
-	srv.addSubscriber(1, viewer, false)
+	srv.addSubscriber(1, editor, true, 0)
+	srv.addSubscriber(1, viewer, false, 0)
 
 	scope := "game-state:5"
 	seq1 := srv.broadcastStateDelta(1, scope, 10, []byte(`[{"op":"set","path":["x"],"value":1}]`))
@@ -96,7 +96,7 @@ func TestBroadcastStateDeltaCoalescesForViewersImmediateForEditors(t *testing.T)
 func TestBroadcastStateFlushesBufferedDeltasFirst(t *testing.T) {
 	srv := &server{}
 	ch := make(chan event, 8) // a viewer, so it sees the coalesced delta + snapshot
-	srv.addSubscriber(1, ch, false)
+	srv.addSubscriber(1, ch, false, 0)
 	scope := "game-state:5"
 
 	srv.broadcastStateDelta(1, scope, 10, []byte(`[{"op":"set","path":["x"],"value":1}]`))

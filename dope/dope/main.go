@@ -121,6 +121,15 @@ type hostPresenceEvent struct {
 	data   []byte
 }
 
+// subInfo is what the subscriber map records per SSE connection: whether it is
+// an editor (organizer) vs a spectator, and which game it is watching (0 when
+// the connection is not scoped to a specific game). gameID partitions the
+// concurrent-viewer tally so each game reports only its own spectators.
+type subInfo struct {
+	editor bool
+	gameID int64
+}
+
 type server struct {
 	mu              sync.RWMutex
 	db              *sql.DB
@@ -131,11 +140,12 @@ type server struct {
 	// subMu guards the SSE subscriber maps independently of mu so that
 	// DB write transactions (which take mu) don't block event fan-out.
 	subMu sync.RWMutex
-	// subscribers maps fest -> SSE channel -> isEditor. Editors (fest organizers)
+	// subscribers maps fest -> SSE channel -> subInfo. Editors (fest organizers)
 	// get every state delta immediately; viewers get coalesced merged deltas (see
 	// broadcastStateDelta). There are only a handful of editors, so the per-edit
-	// fan-out to them is cheap.
-	subscribers     map[int64]map[chan event]bool
+	// fan-out to them is cheap. subInfo also records which game the connection is
+	// watching so the concurrent-viewer tally can be reported per game.
+	subscribers     map[int64]map[chan event]subInfo
 	hostSubscribers map[int64]map[chan hostPresenceEvent]struct{}
 	assets          fs.FS
 	assetNoCache    bool
@@ -603,7 +613,7 @@ func newServer() (*server, error) {
 		festID:          festID,
 		activeGameID:    gameID,
 		activeMatchCode: matchCode,
-		subscribers:     make(map[int64]map[chan event]bool),
+		subscribers:     make(map[int64]map[chan event]subInfo),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 		botSecret:       os.Getenv("DOPE_BOT_SECRET"),
 		epoch:           epoch,
@@ -708,6 +718,11 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if !s.authorizeFestRead(w, r, festID) {
 		return
 	}
+	// game_id (optional) scopes this connection to the game the viewer is watching
+	// so the concurrent-viewer tally is reported per game. Best-effort: an absent
+	// or unresolvable id leaves the connection unscoped (gameID 0) and counted in
+	// the fest's game-less bucket.
+	gameID, _ := resolveGameID(r.Context(), s.db, festID, strings.TrimSpace(r.URL.Query().Get("game_id")))
 
 	// Under static mode, shed anonymous viewers (the DDoS vector) but keep editors
 	// live so organizers can still run the event. The editor check only runs for
@@ -727,14 +742,13 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	if _, ok := w.(http.Flusher); !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
 
 	ch := make(chan event, 8)
-	s.addSubscriber(festID, ch, editor)
+	s.addSubscriber(festID, ch, editor, gameID)
 	s.sseConns.Add(1)
 	s.scheduleViewerCount(festID)
 	defer func() {
@@ -743,8 +757,23 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		s.scheduleViewerCount(festID)
 	}()
 
-	fmt.Fprint(w, ": connected\n\n")
-	flusher.Flush()
+	// A write deadline turns a dead or wedged client into a prompt error instead
+	// of a connection that lingers (still counted as a "viewer") until the OS TCP
+	// timeout hours later. Every event and keepalive write is bounded by
+	// sseWriteTimeout; on failure we return, which runs removeSubscriber so the
+	// tally reflects only live connections.
+	rc := http.NewResponseController(w)
+	writeWithDeadline := func(payload string) bool {
+		_ = rc.SetWriteDeadline(time.Now().Add(sseWriteTimeout))
+		if _, err := io.WriteString(w, payload); err != nil {
+			return false
+		}
+		return rc.Flush() == nil
+	}
+
+	if !writeWithDeadline(": connected\n\n") {
+		return
+	}
 
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
@@ -764,16 +793,23 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			if name == "" {
 				name = "state"
 			}
-			writeSSE(w, name, ev.revision, ev.data)
-			flusher.Flush()
+			if !writeWithDeadline(formatSSE(name, ev.revision, ev.data)) {
+				return
+			}
 		case <-ticker.C:
-			fmt.Fprint(w, ": keepalive\n\n")
-			flusher.Flush()
+			if !writeWithDeadline(": keepalive\n\n") {
+				return
+			}
 		case <-r.Context().Done():
 			return
 		}
 	}
 }
+
+// sseWriteTimeout bounds a single SSE write/flush. A live client drains the
+// stream in microseconds; anything slower is a dead or stuck connection we want
+// to reap rather than keep counted as an active viewer.
+const sseWriteTimeout = 10 * time.Second
 
 func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -852,18 +888,18 @@ func (s *server) isFestEditor(r *http.Request, festID int64) bool {
 	return festRoleCanEditGameTables(role)
 }
 
-func (s *server) addSubscriber(festID int64, ch chan event, isEditor bool) {
+func (s *server) addSubscriber(festID int64, ch chan event, isEditor bool, gameID int64) {
 	s.subMu.Lock()
 	defer s.subMu.Unlock()
 	if s.subscribers == nil {
-		s.subscribers = make(map[int64]map[chan event]bool)
+		s.subscribers = make(map[int64]map[chan event]subInfo)
 	}
 	bucket, ok := s.subscribers[festID]
 	if !ok {
-		bucket = make(map[chan event]bool)
+		bucket = make(map[chan event]subInfo)
 		s.subscribers[festID] = bucket
 	}
-	bucket[ch] = isEditor
+	bucket[ch] = subInfo{editor: isEditor, gameID: gameID}
 }
 
 func (s *server) removeSubscriber(festID int64, ch chan event) {
@@ -934,9 +970,26 @@ func (s *server) broadcastViewerCount(festID int64) {
 	s.subMu.RLock()
 	defer s.subMu.RUnlock()
 	bucket := s.subscribers[festID]
-	data := []byte(fmt.Sprintf(`{"count":%d}`, len(bucket)))
-	ev := event{festID: festID, name: "viewers", data: data}
-	for ch := range bucket {
+	// Tally spectators PER GAME (editors are participants, not spectators, so they
+	// are excluded from the count — but they still receive the event so a host can
+	// see how many people are watching their game).
+	counts := make(map[int64]int, len(bucket))
+	for _, info := range bucket {
+		if info.editor {
+			continue
+		}
+		counts[info.gameID]++
+	}
+	// Cache one payload per distinct game so a fest-wide fan-out marshals each
+	// count once, not once per channel.
+	payloads := make(map[int64][]byte, len(counts))
+	for ch, info := range bucket {
+		data, ok := payloads[info.gameID]
+		if !ok {
+			data = []byte(fmt.Sprintf(`{"count":%d}`, counts[info.gameID]))
+			payloads[info.gameID] = data
+		}
+		ev := event{festID: festID, name: "viewers", data: data}
 		select {
 		case ch <- ev:
 		default:
@@ -971,14 +1024,14 @@ func (s *server) broadcastTo(ev event, aud audience) {
 	s.subMu.RLock()
 	if bucket, ok := s.subscribers[ev.festID]; ok && len(bucket) > 0 {
 		chs = make([]chan event, 0, len(bucket))
-		for ch, isEditor := range bucket {
+		for ch, info := range bucket {
 			switch aud {
 			case audEditors:
-				if !isEditor {
+				if !info.editor {
 					continue
 				}
 			case audViewers:
-				if isEditor {
+				if info.editor {
 					continue
 				}
 			}
@@ -1365,8 +1418,14 @@ func writeJSON(w http.ResponseWriter, data []byte) {
 	_, _ = w.Write(data)
 }
 
+// formatSSE renders one SSE frame. Split from writeSSE so callers that need to
+// bound the write with a deadline (handleEvents) can build the bytes first.
+func formatSSE(name string, revision int64, data []byte) string {
+	return fmt.Sprintf("event: %s\nid: %d\ndata: %s\n\n", name, revision, data)
+}
+
 func writeSSE(w http.ResponseWriter, name string, revision int64, data []byte) {
-	fmt.Fprintf(w, "event: %s\nid: %d\ndata: %s\n\n", name, revision, data)
+	_, _ = io.WriteString(w, formatSSE(name, revision, data))
 }
 
 func defaultMatch() MatchState {

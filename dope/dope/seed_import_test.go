@@ -18,7 +18,7 @@ func TestSeedImportFromKSIResolvesGenericSeedsAndDeclines(t *testing.T) {
 	festID, ekGameID := createSeedImportFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]bool),
+		subscribers:     make(map[int64]map[chan event]subInfo),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}
 	scope := festScope{FestID: festID, GameID: ekGameID}
@@ -81,7 +81,7 @@ func TestSeedImportFromKSIPropagatesDeclines(t *testing.T) {
 
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]bool),
+		subscribers:     make(map[int64]map[chan event]subInfo),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}
 	scope := festScope{FestID: festID, GameID: ekGameID}
@@ -141,7 +141,7 @@ func TestSeedLabelsShownBeforeImport(t *testing.T) {
 	defer db.Close()
 
 	festID, ekGameID := createSeedImportFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]subInfo)}
 	scope, err := srv.verifyMatchInScope(t.Context(), festScope{FestID: festID, GameID: ekGameID}, "A")
 	if err != nil {
 		t.Fatalf("match scope: %v", err)
@@ -165,7 +165,7 @@ func TestFinishAssignsPlaces(t *testing.T) {
 	festID, ekGameID := createSeedImportFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]bool),
+		subscribers:     make(map[int64]map[chan event]subInfo),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}
 	scopeBase := festScope{FestID: festID, GameID: ekGameID}

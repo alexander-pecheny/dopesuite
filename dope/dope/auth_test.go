@@ -24,7 +24,7 @@ func newAuthTestServer(t *testing.T) *server {
 	}
 	t.Cleanup(func() { db.Close() })
 	createDefaultFestFixture(t, db, defaultMatch())
-	return &server{db: db, assets: staticFiles, subscribers: make(map[int64]map[chan event]bool)}
+	return &server{db: db, assets: staticFiles, subscribers: make(map[int64]map[chan event]subInfo)}
 }
 
 func systemUserID(t *testing.T, db *sql.DB) int64 {

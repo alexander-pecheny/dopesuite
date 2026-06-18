@@ -101,7 +101,7 @@ func TestImportRatingRosterRemapsKSIScoresByTeam(t *testing.T) {
 	defer db.Close()
 
 	festID, _, ksiGameID := createRosterPropagationFixture(t, db)
-	srv := &server{db: db, subscribers: make(map[int64]map[chan event]bool)}
+	srv := &server{db: db, subscribers: make(map[int64]map[chan event]subInfo)}
 
 	initial := []festRosterImportTeam{
 		{RatingID: 2, Name: "Бета"},

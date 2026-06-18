@@ -3166,7 +3166,7 @@ function syncState() {
   stateSync = gameTable.createStateSync({
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
-    eventsURL: `/events?fest_id=${encodeURIComponent(route.festID)}`,
+    eventsURL: `/events?fest_id=${encodeURIComponent(route.festID)}${route.gameID ? "&game_id=" + encodeURIComponent(route.gameID) : ""}`,
     scope: `game-state:${scopeGameID}`,
     getState: () => state,
     getInitialSeq: () => initialStateSeq,

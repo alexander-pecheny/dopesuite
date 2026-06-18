@@ -392,7 +392,7 @@ function connectEvents() {
   if (events) {
     try { events.close(); } catch (_err) { /* already closed */ }
   }
-  events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
+  events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}${route.gameID ? "&game_id=" + encodeURIComponent(route.gameID) : ""}`);
   events.addEventListener("state", (event) => {
     const message = parseEventData(event.data);
     // A changed server epoch means a restart reset the seq space; reload to

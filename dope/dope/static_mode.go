@@ -168,8 +168,8 @@ func (s *server) broadcastLockdown() {
 	defer s.subMu.RUnlock()
 	ev := event{name: "lockdown"}
 	for _, bucket := range s.subscribers {
-		for ch, isEditor := range bucket {
-			if isEditor {
+		for ch, info := range bucket {
+			if info.editor {
 				continue
 			}
 			select {

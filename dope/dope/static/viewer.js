@@ -387,7 +387,7 @@ function connectEvents() {
   if (events) {
     try { events.close(); } catch (_err) { /* already closed */ }
   }
-  events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}`);
+  events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}${route.gameID ? "&game_id=" + encodeURIComponent(route.gameID) : ""}`);
   events.addEventListener("lockdown", () => {
     // Server entered static mode: drop the stream and reload into the static
     // page (otherwise native EventSource would just auto-reconnect).

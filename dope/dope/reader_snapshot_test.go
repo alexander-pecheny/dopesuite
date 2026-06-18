@@ -21,7 +21,7 @@ func TestSnapshotReadsDecoupledFromWriteLock(t *testing.T) {
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]bool),
+		subscribers:     make(map[int64]map[chan event]subInfo),
 		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
 	}
 	scope := festScope{FestID: festID, GameID: gameID}
