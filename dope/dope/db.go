@@ -3817,6 +3817,25 @@ func (s *server) broadcastStateDelta(festID int64, scope string, revision int64,
 	return seq
 }
 
+// broadcastBatchedDelta fans out an editor-batched window's merged ops as ONE
+// delta to BOTH editors and viewers immediately. Unlike broadcastStateDelta,
+// which buffers a per-edit stream for viewers, the editor-side batcher
+// (edit_batch.go) already coalesced a whole window into these ops, so there is
+// nothing left to buffer — both audiences get the single merged delta at once.
+// Any stray viewer delta still buffered for the scope (from a non-batched path)
+// is flushed first so seqs stay ordered.
+func (s *server) broadcastBatchedDelta(festID int64, scope string, revision int64, ops []byte) uint64 {
+	s.invalidateFestViewCache(festID)
+	s.seqMu.Lock()
+	defer s.seqMu.Unlock()
+	s.flushDeltaLocked(scope)
+	prev := s.stateSeqLocked(scope)
+	seq := s.bumpSeqLocked(scope)
+	s.broadcastTo(event{festID: festID, revision: revision,
+		data: eventDeltaJSON(scope, s.epoch, revision, seq, prev, ops)}, audAll)
+	return seq
+}
+
 // flushDelta emits a scope's buffered viewer delta as one merged broadcast.
 // Called from the coalescing timer.
 func (s *server) flushDelta(scope string) {
