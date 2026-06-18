@@ -592,47 +592,36 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 	}
 }
 
-func (s *server) replaceGameState(ctx context.Context, scope festScope, raw []byte) (int64, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tx, err := s.beginWriteTx(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	var gameType, stateJSON string
-	if err := tx.QueryRowContext(ctx, `
+func (s *server) replaceGameState(reqCtx context.Context, scope festScope, raw []byte) (int64, error) {
+	var revision int64
+	err := s.withWriteTx(reqCtx, scope.FestID, "game-state-put", func(ctx context.Context, tx *sql.Tx) error {
+		var gameType, stateJSON string
+		if err := tx.QueryRowContext(ctx, `
 select game_type, state_json from games where fest_id = ? and id = ?`,
-		scope.FestID, scope.GameID).Scan(&gameType, &stateJSON); err != nil {
-		return 0, err
-	}
-	if err := validateImmutableRatingRosterState(gameType, []byte(stateJSON), raw); err != nil {
-		return 0, err
-	}
+			scope.FestID, scope.GameID).Scan(&gameType, &stateJSON); err != nil {
+			return err
+		}
+		if err := validateImmutableRatingRosterState(gameType, []byte(stateJSON), raw); err != nil {
+			return err
+		}
 
-	result, err := tx.ExecContext(ctx, `
+		result, err := tx.ExecContext(ctx, `
 update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
-		string(raw), utcNow(), scope.FestID, scope.GameID)
-	if err != nil {
-		return 0, err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-	if n == 0 {
-		return 0, sql.ErrNoRows
-	}
-	revision, err := bumpFestRevisionTx(ctx, tx, scope.FestID, "game:state", string(raw))
-	if err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return revision, nil
+			string(raw), utcNow(), scope.FestID, scope.GameID)
+		if err != nil {
+			return err
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return sql.ErrNoRows
+		}
+		revision, err = bumpFestRevisionTx(ctx, tx, scope.FestID, "game:state", string(raw))
+		return err
+	})
+	return revision, err
 }
 
 func (s *server) patchGameState(ctx context.Context, scope festScope, req gameStatePatchRequest, payload string, sample *editSample) ([]byte, int64, error) {

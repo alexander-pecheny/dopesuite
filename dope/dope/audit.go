@@ -278,6 +278,41 @@ func (s *server) beginWriteTxConn(ctx context.Context, conn *sql.Conn) (*sql.Tx,
 	return tx, nil
 }
 
+// withWriteTx runs fn inside a write transaction using the hardened pattern that
+// prevents the 2026-06-13 site-wide freeze:
+//
+//   - the pooled connection is acquired BEFORE the global write lock, so the one
+//     step that can block unbounded under pool starvation never pins s.mu;
+//   - the whole operation is bounded by writeTxTimeout (via auditDetachedContext),
+//     so a write can never hold s.mu indefinitely even off-lock;
+//   - the lock is held only for fn + commit; fn must NOT commit or roll back.
+//
+// fn returns nil to commit, or an error to roll back (the error is returned
+// verbatim, so callers can still match sentinels like sql.ErrNoRows). reqCtx
+// supplies the audit attribution (actor/request/fest). This is the preferred
+// way to write; reach for the lower-level acquireWriteConn/lockWrite/
+// beginWriteTxConn trio only when a path needs work between lock and tx (e.g.
+// capturing a pre-image) that does not fit this shape.
+func (s *server) withWriteTx(reqCtx context.Context, festID int64, label string, fn func(ctx context.Context, tx *sql.Tx) error) error {
+	ctx, cancel := auditDetachedContext(reqCtx, festID)
+	defer cancel()
+	conn, err := s.acquireWriteConn(ctx, label)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	defer s.lockWrite(label)()
+	tx, err := s.beginWriteTxConn(ctx, conn)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := fn(ctx, tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func seedAuditCtx(ctx context.Context, tx *sql.Tx) error {
 	var actor any
 	if v, ok := actorFromContext(ctx); ok {
