@@ -1,18 +1,20 @@
-package main
+package dopeserver
 
 import (
 	"encoding/json"
 	"testing"
+
+	"dope/dope/realtime"
 )
 
 // drainOne returns the next buffered event on ch, or fails if none is queued.
-func drainOne(t *testing.T, ch chan event) eventEnvelope {
+func drainOne(t *testing.T, ch chan realtime.Event) eventEnvelope {
 	t.Helper()
 	select {
 	case ev := <-ch:
 		var env eventEnvelope
-		if err := json.Unmarshal(ev.data, &env); err != nil {
-			t.Fatalf("unmarshal event: %v (data=%s)", err, ev.data)
+		if err := json.Unmarshal(ev.Data, &env); err != nil {
+			t.Fatalf("unmarshal event: %v (data=%s)", err, ev.Data)
 		}
 		return env
 	default:
@@ -42,11 +44,11 @@ func TestMergeOpsArrays(t *testing.T) {
 // delta per window. Seqs are per-edit (not collapsed), and the merged viewer
 // delta spans [prevSeq, lastSeq].
 func TestBroadcastStateDeltaCoalescesForViewersImmediateForEditors(t *testing.T) {
-	srv := &server{}
-	editor := make(chan event, 8)
-	viewer := make(chan event, 8)
-	srv.addSubscriber(1, editor, true, 0)
-	srv.addSubscriber(1, viewer, false, 0)
+	srv := &server{rt: realtime.NewManager()}
+	editor := make(chan realtime.Event, 8)
+	viewer := make(chan realtime.Event, 8)
+	srv.rt.AddSubscriber(1, editor, true, 0)
+	srv.rt.AddSubscriber(1, viewer, false, 0)
 
 	scope := "game-state:5"
 	seq1 := srv.broadcastStateDelta(1, scope, 10, []byte(`[{"op":"set","path":["x"],"value":1}]`))
@@ -69,7 +71,7 @@ func TestBroadcastStateDeltaCoalescesForViewersImmediateForEditors(t *testing.T)
 	// Viewer saw nothing yet — buffered until flush.
 	select {
 	case ev := <-viewer:
-		t.Fatalf("expected no viewer broadcast before flush, got %s", ev.data)
+		t.Fatalf("expected no viewer broadcast before flush, got %s", ev.Data)
 	default:
 	}
 
@@ -85,7 +87,7 @@ func TestBroadcastStateDeltaCoalescesForViewersImmediateForEditors(t *testing.T)
 	// Editor must NOT also receive the merged viewer delta.
 	select {
 	case ev := <-editor:
-		t.Fatalf("editor unexpectedly got the coalesced viewer delta: %s", ev.data)
+		t.Fatalf("editor unexpectedly got the coalesced viewer delta: %s", ev.Data)
 	default:
 	}
 }
@@ -94,9 +96,9 @@ func TestBroadcastStateDeltaCoalescesForViewersImmediateForEditors(t *testing.T)
 // next seq, so viewers never receive the snapshot ahead of the deltas it
 // supersedes.
 func TestBroadcastStateFlushesBufferedDeltasFirst(t *testing.T) {
-	srv := &server{}
-	ch := make(chan event, 8) // a viewer, so it sees the coalesced delta + snapshot
-	srv.addSubscriber(1, ch, false, 0)
+	srv := &server{rt: realtime.NewManager()}
+	ch := make(chan realtime.Event, 8) // a viewer, so it sees the coalesced delta + snapshot
+	srv.rt.AddSubscriber(1, ch, false, 0)
 	scope := "game-state:5"
 
 	srv.broadcastStateDelta(1, scope, 10, []byte(`[{"op":"set","path":["x"],"value":1}]`))
@@ -115,8 +117,8 @@ func TestBroadcastStateFlushesBufferedDeltasFirst(t *testing.T) {
 	// emits the raw payload rather than an envelope — assert on the raw bytes.)
 	select {
 	case ev := <-ch:
-		if string(ev.data) != `{"full":true}` {
-			t.Fatalf("second event = %s, want the raw snapshot payload", ev.data)
+		if string(ev.Data) != `{"full":true}` {
+			t.Fatalf("second event = %s, want the raw snapshot payload", ev.Data)
 		}
 	default:
 		t.Fatal("expected the snapshot event after the flushed delta")

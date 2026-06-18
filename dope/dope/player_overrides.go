@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"dope/dope/games"
 )
 
 type hostPlayerOverrideOption struct {
@@ -203,7 +205,7 @@ order by p.last_name, p.first_name, source.name, target.name, g.position, g.id`,
 
 func overrideGameLabel(title, gameType string) string {
 	title = strings.TrimSpace(title)
-	typeLabel := gameTypeLabel(gameType)
+	typeLabel := games.Label(gameType)
 	if title == "" || strings.EqualFold(title, typeLabel) {
 		return typeLabel
 	}

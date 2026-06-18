@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"bytes"
@@ -16,6 +16,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"dope/dope/games"
 )
 
 // Static mode ("DDoS lockdown") is a degradation layer for public viewer pages.
@@ -151,40 +153,9 @@ func (s *server) setStatic(on bool) {
 	}
 	if on {
 		log.Printf("static mode: ON (req/s=%d sse=%d)", s.lastRate.Load(), s.sseConns.Load())
-		s.broadcastLockdown()
+		s.rt.BroadcastLockdown()
 	} else {
 		log.Printf("static mode: OFF")
-	}
-}
-
-// broadcastLockdown tells connected VIEWERS (not editors) to drop their SSE and
-// reload into the static page. Without this, a browser's native EventSource
-// auto-reconnects every ~3s and would re-flood /events despite the server-side
-// shed. Editors are skipped so organizers keep their live stream. Holds subMu for
-// the whole non-blocking fan-out so no channel is closed mid-send (mirrors
-// broadcastViewerCount).
-func (s *server) broadcastLockdown() {
-	s.subMu.RLock()
-	defer s.subMu.RUnlock()
-	ev := event{name: "lockdown"}
-	for _, bucket := range s.subscribers {
-		for ch, info := range bucket {
-			if info.editor {
-				continue
-			}
-			select {
-			case ch <- ev:
-			default:
-				select {
-				case <-ch:
-				default:
-				}
-				select {
-				case ch <- ev:
-				default:
-				}
-			}
-		}
 	}
 }
 
@@ -239,10 +210,9 @@ func (s *server) buildStaticEntry(ctx context.Context, route hostInitRoute) (*st
 
 	var htmlPath, marker string
 	var data []byte
-	switch gameType {
-	case "od", "si", "ksi":
+	if games.IsChGK(gameType) {
 		htmlPath, marker = "static/od.html", gameInitMarker
-		if gameType != "od" {
+		if gameType != games.OD {
 			htmlPath = "static/si.html"
 		}
 		payload, err := s.buildGameInit(ctx, festScope{FestID: route.FestID, GameID: route.GameID})
@@ -256,7 +226,7 @@ func (s *server) buildStaticEntry(ctx context.Context, route hostInitRoute) (*st
 			return nil, err
 		}
 		data = b
-	default:
+	} else {
 		htmlPath, marker = "static/viewer.html", viewerInitMarker
 		payload, err := s.buildViewerInit(ctx, route)
 		if err != nil {

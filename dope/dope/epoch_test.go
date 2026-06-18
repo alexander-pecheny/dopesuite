@@ -1,6 +1,7 @@
-package main
+package dopeserver
 
 import (
+	"dope/dope/realtime"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -18,9 +19,9 @@ func TestScopedGameStateCarriesEpoch(t *testing.T) {
 	organizerID, token := createAPITestSession(t, srv, "epoch-editor")
 	addAPITestOrganizer(t, srv, festID, organizerID)
 
-	ch := make(chan event, 8)
-	srv.addSubscriber(festID, ch, false, 0)
-	defer srv.removeSubscriber(festID, ch)
+	ch := make(chan realtime.Event, 8)
+	srv.rt.AddSubscriber(festID, ch, false, 0)
+	defer srv.rt.RemoveSubscriber(festID, ch)
 
 	path := fmt.Sprintf("/api/fest/%d/games/%d/state", festID, gameID)
 	body := map[string]any{"ops": []map[string]any{{"op": "set", "path": []any{"entries", 0, 0}, "value": 1}}}
@@ -36,14 +37,14 @@ func TestScopedGameStateCarriesEpoch(t *testing.T) {
 			Epoch string          `json:"epoch"`
 			Ops   json.RawMessage `json:"ops"`
 		}
-		if err := json.Unmarshal(ev.data, &env); err != nil {
-			t.Fatalf("decode envelope: %v (raw %s)", err, ev.data)
+		if err := json.Unmarshal(ev.Data, &env); err != nil {
+			t.Fatalf("decode envelope: %v (raw %s)", err, ev.Data)
 		}
 		if env.Epoch != "ep-test-123" {
 			t.Fatalf("delta envelope epoch = %q, want ep-test-123", env.Epoch)
 		}
 		if len(env.Ops) == 0 {
-			t.Fatalf("expected a delta with ops, got %s", ev.data)
+			t.Fatalf("expected a delta with ops, got %s", ev.Data)
 		}
 	default:
 		t.Fatal("expected a broadcast event, got none")

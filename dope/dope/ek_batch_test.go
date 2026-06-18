@@ -1,6 +1,7 @@
-package main
+package dopeserver
 
 import (
+	"dope/dope/realtime"
 	"path/filepath"
 	"testing"
 )
@@ -16,8 +17,7 @@ func newBatchTestServer(t *testing.T) (*server, matchScope) {
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {

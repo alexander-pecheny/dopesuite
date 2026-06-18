@@ -1,4 +1,4 @@
-package main
+package realtime
 
 import (
 	"encoding/json"
@@ -9,9 +9,9 @@ import (
 
 // applySetOpsGo mirrors the client's applySetPatch (static/match-table.js): it
 // applies "set" ops to a decoded JSON value and returns the result. The test
-// uses it to prove that ops produced by matchDeltaOps reconstruct newJSON
+// uses it to prove that ops produced by MatchDeltaOps reconstruct newJSON
 // exactly when applied to oldJSON — the invariant the client relies on.
-func applySetOpsGo(root any, ops []matchDeltaSetOp) any {
+func applySetOpsGo(root any, ops []setOp) any {
 	for _, op := range ops {
 		if op.Op != "" && op.Op != "set" {
 			continue
@@ -56,9 +56,9 @@ func setAtPath(root any, path []any, value any) any {
 // gate), then applies the ops to oldJSON and checks the result deep-equals
 // newJSON. This proves the diff is correct; the gate is tested separately.
 // Path segments re-decode through JSON so numeric indices arrive as float64.
-func roundTrip(t *testing.T, oldJSON, newJSON string) []matchDeltaSetOp {
+func roundTrip(t *testing.T, oldJSON, newJSON string) []setOp {
 	t.Helper()
-	var ops []matchDeltaSetOp
+	var ops []setOp
 	diffJSONInto(nil, json.RawMessage(oldJSON), json.RawMessage(newJSON), &ops)
 	// Re-encode/decode the ops so numeric path segments become float64, exactly
 	// as they arrive on the client after JSON transport.
@@ -66,7 +66,7 @@ func roundTrip(t *testing.T, oldJSON, newJSON string) []matchDeltaSetOp {
 	if err != nil {
 		t.Fatalf("marshal ops: %v", err)
 	}
-	var wireOps []matchDeltaSetOp
+	var wireOps []setOp
 	if err := json.Unmarshal(opsJSON, &wireOps); err != nil {
 		t.Fatalf("unmarshal ops: %v", err)
 	}
@@ -85,7 +85,7 @@ func roundTrip(t *testing.T, oldJSON, newJSON string) []matchDeltaSetOp {
 }
 
 func TestMatchDeltaOps_Identical(t *testing.T) {
-	if _, ok := matchDeltaOps([]byte(`{"a":1}`), []byte(`{"a":1}`)); ok {
+	if _, ok := MatchDeltaOps([]byte(`{"a":1}`), []byte(`{"a":1}`)); ok {
 		t.Fatal("identical inputs should not produce a delta")
 	}
 }
@@ -110,10 +110,10 @@ func TestMatchDeltaOps_RemovedKeyBecomesNull(t *testing.T) {
 	// Removed key encodes as set-null; round-trip yields null (renders as absent).
 	old := `{"venue":{"number":3},"finished":true}`
 	neu := `{"finished":true}`
-	var ops []matchDeltaSetOp
+	var ops []setOp
 	diffJSONInto(nil, json.RawMessage(old), json.RawMessage(neu), &ops)
 	opsJSON, _ := json.Marshal(ops)
-	var wireOps []matchDeltaSetOp
+	var wireOps []setOp
 	_ = json.Unmarshal(opsJSON, &wireOps)
 	var oldV any
 	_ = json.Unmarshal([]byte(old), &oldV)
@@ -145,7 +145,7 @@ func TestMatchDeltaOps_GateAcceptsSmallChangeInLargeState(t *testing.T) {
 	}
 	old := pad(3)
 	neu := pad(4) // every team's total flips 3->4: 4 small ops vs a ~600B state
-	opsJSON, ok := matchDeltaOps([]byte(old), []byte(neu))
+	opsJSON, ok := MatchDeltaOps([]byte(old), []byte(neu))
 	if !ok {
 		t.Fatalf("expected delta accepted for small change in large state (ops=%s, statelen=%d)", opsJSON, len(neu))
 	}
@@ -156,16 +156,16 @@ func TestMatchDeltaOps_FallbackWhenNotSmaller(t *testing.T) {
 	// would be as big as just resending state.
 	old := `{"a":"xxxxxxxxxx","b":"yyyyyyyyyy","c":"zzzzzzzzzz"}`
 	neu := `{"a":"AAAAAAAAAA","b":"BBBBBBBBBB","c":"CCCCCCCCCC"}`
-	if _, ok := matchDeltaOps([]byte(old), []byte(neu)); ok {
+	if _, ok := MatchDeltaOps([]byte(old), []byte(neu)); ok {
 		t.Fatal("wholesale change should fall back to full state")
 	}
 }
 
 func TestMatchDeltaOps_EmptyInputs(t *testing.T) {
-	if _, ok := matchDeltaOps(nil, []byte(`{"a":1}`)); ok {
+	if _, ok := MatchDeltaOps(nil, []byte(`{"a":1}`)); ok {
 		t.Fatal("empty old should not delta")
 	}
-	if _, ok := matchDeltaOps([]byte(`{"a":1}`), nil); ok {
+	if _, ok := MatchDeltaOps([]byte(`{"a":1}`), nil); ok {
 		t.Fatal("empty new should not delta")
 	}
 }

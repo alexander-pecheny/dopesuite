@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"context"
@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"dope/dope/games"
 )
 
 const ratingResultsURL = "https://api.rating.chgk.net/tournaments/%d/results.json?includeTeamMembers=1"
@@ -1061,10 +1063,10 @@ func teamNamesFromRoster(teams []festRosterImportTeam) []string {
 // team's universal identity (the join key for the answer-grid remap); Name is
 // shown in the UI. Stored as objects [{number,name}]; legacy states stored a
 // bare name array and are read tolerantly via parseKSIParticipants.
-type ksiParticipant struct {
-	Number int    `json:"number"`
-	Name   string `json:"name"`
-}
+//
+// The shape lives in the leaf games package as the single source of truth; this
+// alias keeps the existing in-package references terse.
+type ksiParticipant = games.KSIParticipant
 
 func teamParticipantsFromRoster(teams []festRosterImportTeam) []ksiParticipant {
 	out := make([]ksiParticipant, 0, len(teams))
@@ -1102,24 +1104,13 @@ func parseKSIParticipants(raw json.RawMessage) []ksiParticipant {
 // nothing to key on. Must stay in sync with the frontend so KSI refusals propagate to
 // the server-side consumers (EK seed import, xlsx export).
 func ksiDeclinedKey(number int, name string) string {
-	if number > 0 {
-		return fmt.Sprintf("n%d", number)
-	}
-	name = strings.ToLower(strings.TrimSpace(name))
-	if name == "" {
-		return ""
-	}
-	return "s" + name
+	return games.KSIDeclinedKey(number, name)
 }
 
 // ksiParticipantDeclined reports whether a participant is marked refused-to-play in the
 // given declined map (the KSI state's top-level "declined" object).
 func ksiParticipantDeclined(declined map[string]bool, p ksiParticipant) bool {
-	if len(declined) == 0 {
-		return false
-	}
-	key := ksiDeclinedKey(p.Number, p.Name)
-	return key != "" && declined[key]
+	return games.KSIParticipantDeclined(declined, p)
 }
 
 // participantNames projects the name column out of a participants list.

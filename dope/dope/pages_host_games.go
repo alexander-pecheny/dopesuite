@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"dope/dope/games"
 )
 
 type hostGameSettingsData struct {
@@ -186,7 +188,7 @@ select code, title, game_type, slug from games where id = ? and fest_id = ?`, ga
 			Slug:  slug.String,
 			Code:  code,
 			Title: title,
-			Type:  gameTypeLabel(gameType),
+			Type:  games.Label(gameType),
 		},
 		Slug:  slug.String,
 		Error: errMsg,
@@ -372,11 +374,11 @@ select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and
 
 	switch gameType {
 	case "od":
-		tourComp := parseTourComp(schemeJSON)
+		tourComp := games.ParseTourComp(schemeJSON)
 		if len(tourComp) == 0 {
 			tourComp = []int{15}
 		}
-		newScheme, newState = odEmptyGameJSON(meta.Slug, meta.Title, tourComp)
+		newScheme, newState = games.ODEmptyGameJSON(meta.Slug, meta.Title, tourComp)
 		teams, err := loadFestRosterImportTeamsTx(r.Context(), tx, festID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -400,7 +402,7 @@ select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and
 		if sc.Themes <= 0 {
 			sc.Themes = 20
 		}
-		newScheme, newState = ksiEmptyGameJSON(meta.Slug, meta.Title, sc.Themes)
+		newScheme, newState = games.KSIEmptyGameJSON(meta.Slug, meta.Title, sc.Themes)
 		teams, err := loadFestRosterImportTeamsTx(r.Context(), tx, festID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -595,58 +597,6 @@ func nextGameIdentityTx(ctx context.Context, tx *sql.Tx, festID int64, gameType,
 	}
 }
 
-// odEmptyGameJSON builds the pristine scheme/state for an OD game (no teams, no
-// entries). Shared by creation and the clear-to-pristine path so they can't drift.
-func odEmptyGameJSON(slug, title string, tourComp []int) ([]byte, []byte) {
-	totalQuestions := 0
-	for _, n := range tourComp {
-		totalQuestions += n
-	}
-	entries := make([][]int, totalQuestions)
-	for i := range entries {
-		entries[i] = []int{}
-	}
-	schemeJSON := []byte(mustJSON(map[string]any{
-		"schemaVersion": 2,
-		"slug":          slug,
-		"title":         title,
-		"gameType":      "od",
-		"tourComp":      tourComp,
-		"nTeams":        0,
-		"teams":         []chgkTeamJSON{},
-	}))
-	stateJSON := []byte(mustJSON(map[string]any{
-		"teams":          []chgkTeamJSON{},
-		"entries":        entries,
-		"completed":      make([]bool, totalQuestions),
-		"shootoutRounds": []any{},
-	}))
-	return schemeJSON, stateJSON
-}
-
-// ksiEmptyGameJSON builds the pristine scheme/state for a KSI game. Shared by
-// creation and the clear-to-pristine path.
-func ksiEmptyGameJSON(slug, title string, themesCount int) ([]byte, []byte) {
-	themes := make([]map[string]any, themesCount)
-	for i := range themes {
-		themes[i] = map[string]any{"answers": [][]string{}}
-	}
-	schemeJSON := []byte(mustJSON(map[string]any{
-		"schemaVersion": 2,
-		"slug":          slug,
-		"title":         title,
-		"gameType":      "ksi",
-		"participants":  []string{},
-		"themes":        themesCount,
-	}))
-	stateJSON := []byte(mustJSON(map[string]any{
-		"participants": []string{},
-		"themes":       themes,
-		"finished":     false,
-	}))
-	return schemeJSON, stateJSON
-}
-
 func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questions int) (int64, error) {
 	identity, err := nextGameIdentityTx(ctx, tx, festID, "od", "ОД")
 	if err != nil {
@@ -656,7 +606,7 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 	for i := range tourComp {
 		tourComp[i] = questions
 	}
-	schemeJSON, stateJSON := odEmptyGameJSON(identity.Code, identity.Title, tourComp)
+	schemeJSON, stateJSON := games.ODEmptyGameJSON(identity.Code, identity.Title, tourComp)
 	teams, err := loadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
 		return 0, err
@@ -679,7 +629,7 @@ func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount 
 	if err != nil {
 		return 0, err
 	}
-	schemeJSON, stateJSON := ksiEmptyGameJSON(identity.Code, identity.Title, themesCount)
+	schemeJSON, stateJSON := games.KSIEmptyGameJSON(identity.Code, identity.Title, themesCount)
 	teams, err := loadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
 		return 0, err

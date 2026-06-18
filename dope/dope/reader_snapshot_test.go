@@ -1,6 +1,7 @@
-package main
+package dopeserver
 
 import (
+	"dope/dope/realtime"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -21,8 +22,7 @@ func TestSnapshotReadsDecoupledFromWriteLock(t *testing.T) {
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 	scope := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scope); err != nil {

@@ -1,7 +1,8 @@
-package main
+package dopeserver
 
 import (
 	"context"
+	"dope/dope/realtime"
 	"path/filepath"
 	"testing"
 )
@@ -22,8 +23,7 @@ func TestDerivedRevertReproducesGameState(t *testing.T) {
 	festID, gameID := createSeedImportFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(ctx, scopeBase); err != nil {

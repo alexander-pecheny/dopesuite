@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"compress/gzip"
@@ -21,6 +21,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"dope/dope/realtime"
+	"dope/dope/store"
 )
 
 //go:embed static/*
@@ -28,107 +31,28 @@ var staticFiles embed.FS
 
 const (
 	stateFile                 = "match_state.json"
-	themeCount                = 12
+	themeCount                = store.ThemeCount
 	ksiThemeCount             = 20
 	actionAddShootoutTheme    = "addShootoutTheme"
 	actionRemoveShootoutTheme = "removeShootoutTheme"
 )
 
-var questionValues = [5]int{10, 20, 30, 40, 50}
+// questionValues is the EK/KSI per-answer point scale; the canonical value
+// lives in the store leaf as store.QuestionValues.
+var questionValues = store.QuestionValues
 
-type ThemeEntry struct {
-	Player  string    `json:"player"`
-	Answers [5]string `json:"answers"`
-}
-
-type TeamState struct {
-	Name           string       `json:"name"`
-	Roster         []string     `json:"roster"`
-	Themes         []ThemeEntry `json:"themes"`
-	ShootoutThemes []ThemeEntry `json:"shootoutThemes,omitempty"`
-	Tiebreak       int          `json:"tiebreak"`
-	Place          float64      `json:"place"`
-}
-
-type MatchState struct {
-	Title     string      `json:"title"`
-	Finished  bool        `json:"finished"`
-	Revision  int64       `json:"revision"`
-	UpdatedAt time.Time   `json:"updatedAt"`
-	Teams     []TeamState `json:"teams"`
-}
-
-type ThemeView struct {
-	Player  string    `json:"player"`
-	Answers [5]string `json:"answers"`
-	Score   int       `json:"score"`
-}
-
-type TeamView struct {
-	Name           string      `json:"name"`
-	Roster         []string    `json:"roster"`
-	Themes         []ThemeView `json:"themes"`
-	ShootoutThemes []ThemeView `json:"shootoutThemes"`
-	Total          int         `json:"total"`
-	Place          float64     `json:"place"`
-	Plus           int         `json:"plus"`
-	ShootoutTotal  int         `json:"shootoutTotal"`
-	Tiebreak       int         `json:"tiebreak"`
-	CorrectCounts  [5]int      `json:"correctCounts"`
-	WrongCounts    [5]int      `json:"wrongCounts"`
-}
-
-type StandingView struct {
-	Name     string  `json:"name"`
-	Place    float64 `json:"place"`
-	Total    int     `json:"total"`
-	Plus     int     `json:"plus"`
-	Tiebreak int     `json:"tiebreak"`
-}
-
-type MatchView struct {
-	Title          string         `json:"title"`
-	Code           string         `json:"code,omitempty"`
-	StageCode      string         `json:"stageCode,omitempty"`
-	StageTitle     string         `json:"stageTitle,omitempty"`
-	Venue          *VenueView     `json:"venue,omitempty"`
-	Finished       bool           `json:"finished"`
-	Revision       int64          `json:"revision"`
-	UpdatedAt      string         `json:"updatedAt"`
-	QuestionValues [5]int         `json:"questionValues"`
-	Teams          []TeamView     `json:"teams"`
-	Standings      []StandingView `json:"standings"`
-	// Seq is the match scope's current SSE sequence. GET responses carry the
-	// seq at fetch time, and mutating responses (update/finish/venue) carry the
-	// seq their own broadcast assigned — so the editor that issued the edit can
-	// keep its locally-applied view in lockstep with the delta it will also
-	// receive over SSE and chain onto subsequent deltas. It is never set on
-	// broadcast payloads themselves (so the delta diff ignores it).
-	Seq uint64 `json:"seq,omitempty"`
-}
-
-type event struct {
-	festID   int64
-	revision int64
-	data     []byte
-	// name is the SSE event name. Empty means "state" (the common case); the
-	// concurrent-viewer tally uses "viewers".
-	name string
-}
-
-type hostPresenceEvent struct {
-	festID int64
-	data   []byte
-}
-
-// subInfo is what the subscriber map records per SSE connection: whether it is
-// an editor (organizer) vs a spectator, and which game it is watching (0 when
-// the connection is not scoped to a specific game). gameID partitions the
-// concurrent-viewer tally so each game reports only its own spectators.
-type subInfo struct {
-	editor bool
-	gameID int64
-}
+// The match state and scored-view shapes live in the store leaf (package
+// dope/store); these aliases keep the package-main call sites — the scorer,
+// the API handlers, the xlsx export and the SSE broadcasts — terse.
+type (
+	ThemeEntry   = store.ThemeEntry
+	TeamState    = store.TeamState
+	MatchState   = store.MatchState
+	ThemeView    = store.ThemeView
+	TeamView     = store.TeamView
+	StandingView = store.StandingView
+	MatchView    = store.MatchView
+)
 
 type server struct {
 	mu              sync.RWMutex
@@ -137,18 +61,13 @@ type server struct {
 	activeGameID    int64
 	activeMatchCode string
 	state           MatchState
-	// subMu guards the SSE subscriber maps independently of mu so that
-	// DB write transactions (which take mu) don't block event fan-out.
-	subMu sync.RWMutex
-	// subscribers maps fest -> SSE channel -> subInfo. Editors (fest organizers)
-	// get every state delta immediately; viewers get coalesced merged deltas (see
-	// broadcastStateDelta). There are only a handful of editors, so the per-edit
-	// fan-out to them is cheap. subInfo also records which game the connection is
-	// watching so the concurrent-viewer tally can be reported per game.
-	subscribers     map[int64]map[chan event]subInfo
-	hostSubscribers map[int64]map[chan hostPresenceEvent]struct{}
-	assets          fs.FS
-	assetNoCache    bool
+	// rt is the SSE publisher: the subscriber registry and broadcast fan-out,
+	// with its own locks (independent of mu) so DB writes never block fan-out.
+	// The server drives it — assigning per-scope seq, wrapping envelopes and
+	// coalescing deltas (below) — then calls rt.Broadcast* to route events.
+	rt           *realtime.Manager
+	assets       fs.FS
+	assetNoCache bool
 	// assetETags maps "/static/..." paths to their content-hash ETag. Used to
 	// stamp "?v=<hash>" cache-busters onto asset URLs in served HTML so a deploy
 	// is picked up immediately instead of after the cached copy's max-age. Nil
@@ -186,14 +105,6 @@ type server struct {
 	// Guarded by seqMu (seq assignment and buffering are coupled). See
 	// broadcastStateDelta / flushDelta.
 	deltaBuf map[string]*pendingDelta
-	// viewerCount* throttle the "viewers" tally fan-out. A viewer ramp can
-	// open/close hundreds of SSE connections a second, and each connect/
-	// disconnect would otherwise trigger a full O(viewers) fan-out — enough to
-	// peg a single CPU and starve editor requests. scheduleViewerCount collapses
-	// the churn into at most one broadcast per fest per viewerCountInterval.
-	viewerCountMu    sync.Mutex
-	viewerCountAt    map[int64]time.Time
-	viewerCountTimer map[int64]*time.Timer
 
 	// Static ("DDoS lockdown") mode — see static_mode.go. staticMode is the
 	// effective state; staticManual is the override (0=auto, 1=force-on,
@@ -234,11 +145,6 @@ type server struct {
 	editBatcher editBatcher
 }
 
-// viewerCountInterval bounds how often the concurrent-viewer tally is fanned
-// out. A tally a few seconds stale is fine; freeing the CPU during connection
-// churn is not.
-const viewerCountInterval = 10 * time.Second
-
 type updateRequest struct {
 	Team     int      `json:"team"`
 	Action   string   `json:"action,omitempty"`
@@ -257,7 +163,10 @@ type updateRequest struct {
 	Edits []updateRequest `json:"edits,omitempty"`
 }
 
-func main() {
+// Main is the dope server entry point, invoked by cmd/dope-server. It also
+// dispatches the maintenance subcommands (resolve-bracket, import-ek-results,
+// convert-history, convert-audit) before starting the HTTP server.
+func Main() {
 	if len(os.Args) > 1 && os.Args[1] == "resolve-bracket" {
 		runResolveBracket(os.Args[2:])
 		return
@@ -618,8 +527,7 @@ func newServer() (*server, error) {
 		festID:          festID,
 		activeGameID:    gameID,
 		activeMatchCode: matchCode,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 		botSecret:       os.Getenv("DOPE_BOT_SECRET"),
 		epoch:           epoch,
 		editBatcher:     editBatcher{pending: make(map[int64]*editBatch)},
@@ -652,47 +560,9 @@ func saveState(path string, state MatchState) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-func normalizeState(state *MatchState) {
-	if state.Title == "" {
-		state.Title = "Бой A"
-	}
-	if state.Revision == 0 {
-		state.Revision = 1
-	}
-	if state.UpdatedAt.IsZero() {
-		state.UpdatedAt = time.Now()
-	}
-	shootoutThemeCount := 0
-	for i := range state.Teams {
-		if len(state.Teams[i].ShootoutThemes) > shootoutThemeCount {
-			shootoutThemeCount = len(state.Teams[i].ShootoutThemes)
-		}
-	}
-	for i := range state.Teams {
-		state.Teams[i].Tiebreak = 0
-		if len(state.Teams[i].Themes) < themeCount {
-			missing := themeCount - len(state.Teams[i].Themes)
-			state.Teams[i].Themes = append(state.Teams[i].Themes, make([]ThemeEntry, missing)...)
-		}
-		if len(state.Teams[i].Themes) > themeCount {
-			state.Teams[i].Themes = state.Teams[i].Themes[:themeCount]
-		}
-		for t := range state.Teams[i].Themes {
-			for a := range state.Teams[i].Themes[t].Answers {
-				state.Teams[i].Themes[t].Answers[a] = normalizeMark(state.Teams[i].Themes[t].Answers[a])
-			}
-		}
-		if len(state.Teams[i].ShootoutThemes) < shootoutThemeCount {
-			missing := shootoutThemeCount - len(state.Teams[i].ShootoutThemes)
-			state.Teams[i].ShootoutThemes = append(state.Teams[i].ShootoutThemes, make([]ThemeEntry, missing)...)
-		}
-		for t := range state.Teams[i].ShootoutThemes {
-			for a := range state.Teams[i].ShootoutThemes[t].Answers {
-				state.Teams[i].ShootoutThemes[t].Answers[a] = normalizeMark(state.Teams[i].ShootoutThemes[t].Answers[a])
-			}
-		}
-	}
-}
+// normalizeState lives in the store leaf (package dope/store); this wrapper
+// keeps the package-main call sites terse.
+func normalizeState(state *MatchState) { store.NormalizeState(state) }
 
 func (s *server) serveStaticPage(source fs.FS, path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -753,14 +623,14 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ch := make(chan event, 8)
-	s.addSubscriber(festID, ch, editor, gameID)
+	ch := make(chan realtime.Event, 8)
+	s.rt.AddSubscriber(festID, ch, editor, gameID)
 	s.sseConns.Add(1)
-	s.scheduleViewerCount(festID)
+	s.rt.ScheduleViewerCount(festID)
 	defer func() {
-		s.removeSubscriber(festID, ch)
+		s.rt.RemoveSubscriber(festID, ch)
 		s.sseConns.Add(-1)
-		s.scheduleViewerCount(festID)
+		s.rt.ScheduleViewerCount(festID)
 	}()
 
 	// A write deadline turns a dead or wedged client into a prompt error instead
@@ -792,14 +662,14 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			// browser's native EventSource would just auto-reconnect. Returning
 			// runs the deferred removeSubscriber, which removes ch from the
 			// subscriber map (it does not close ch — see removeSubscriber).
-			if ev.name == "lockdown" {
+			if ev.Name == "lockdown" {
 				return
 			}
-			name := ev.name
+			name := ev.Name
 			if name == "" {
 				name = "state"
 			}
-			if !writeWithDeadline(formatSSE(name, ev.revision, ev.data)) {
+			if !writeWithDeadline(formatSSE(name, ev.Revision, ev.Data)) {
 				return
 			}
 		case <-ticker.C:
@@ -841,9 +711,9 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ch := make(chan hostPresenceEvent, 16)
-	s.addHostSubscriber(festID, ch)
-	defer s.removeHostSubscriber(festID, ch)
+	ch := make(chan realtime.HostPresenceEvent, 16)
+	s.rt.AddHostSubscriber(festID, ch)
+	defer s.rt.RemoveHostSubscriber(festID, ch)
 
 	// Bound each write so a dead/stuck host connection is reaped promptly instead
 	// of lingering in the presence set (mirrors handleEvents).
@@ -866,7 +736,7 @@ func (s *server) handleHostEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case ev := <-ch:
-			if !writeWithDeadline(formatSSE("presence", 0, ev.data)) {
+			if !writeWithDeadline(formatSSE("presence", 0, ev.Data)) {
 				return
 			}
 		case <-ticker.C:
@@ -892,227 +762,6 @@ func (s *server) isFestEditor(r *http.Request, festID int64) bool {
 		return false
 	}
 	return festRoleCanEditGameTables(role)
-}
-
-func (s *server) addSubscriber(festID int64, ch chan event, isEditor bool, gameID int64) {
-	s.subMu.Lock()
-	defer s.subMu.Unlock()
-	if s.subscribers == nil {
-		s.subscribers = make(map[int64]map[chan event]subInfo)
-	}
-	bucket, ok := s.subscribers[festID]
-	if !ok {
-		bucket = make(map[chan event]subInfo)
-		s.subscribers[festID] = bucket
-	}
-	bucket[ch] = subInfo{editor: isEditor, gameID: gameID}
-}
-
-func (s *server) removeSubscriber(festID int64, ch chan event) {
-	s.subMu.Lock()
-	if bucket, ok := s.subscribers[festID]; ok {
-		delete(bucket, ch)
-		if len(bucket) == 0 {
-			delete(s.subscribers, festID)
-		}
-	}
-	s.subMu.Unlock()
-	// Deliberately do NOT close(ch). broadcastTo snapshots the channel list
-	// under subMu.RLock and then sends AFTER releasing the lock; closing here
-	// would race that send and panic ("send on closed channel"), which —
-	// because broadcasts also run from the detached delta-coalescing timer
-	// goroutine (no net/http recover above it) — crashes the whole process.
-	// Removal from the map is enough: future broadcasts won't see ch, and an
-	// in-flight broadcast that already snapshotted it just sends into the
-	// buffered channel (cap-8, drop-oldest) that nobody reads; ch is then GC'd
-	// once the broadcaster's snapshot is gone. The reader goroutine exits on
-	// ctx.Done()/lockdown and never relies on close as a signal.
-}
-
-// scheduleViewerCount fans out the viewer tally at most once per fest per
-// viewerCountInterval. The first change after a quiet period broadcasts
-// immediately (leading edge) so the count stays fresh when things are calm;
-// changes during the cooldown collapse into a single trailing broadcast at the
-// end of the window, so a connect/disconnect storm costs one fan-out per
-// interval instead of one per connection. Eventual consistency is guaranteed:
-// the trailing timer always sends the final count.
-func (s *server) scheduleViewerCount(festID int64) {
-	s.viewerCountMu.Lock()
-	defer s.viewerCountMu.Unlock()
-	if s.viewerCountAt == nil {
-		s.viewerCountAt = make(map[int64]time.Time)
-		s.viewerCountTimer = make(map[int64]*time.Timer)
-	}
-	now := time.Now()
-	if since := now.Sub(s.viewerCountAt[festID]); since >= viewerCountInterval {
-		s.viewerCountAt[festID] = now
-		go s.broadcastViewerCount(festID) // off-lock: fan-out must not hold viewerCountMu
-		return
-	}
-	if s.viewerCountTimer[festID] != nil {
-		return // a trailing broadcast is already pending
-	}
-	delay := viewerCountInterval - now.Sub(s.viewerCountAt[festID])
-	s.viewerCountTimer[festID] = time.AfterFunc(delay, func() {
-		s.viewerCountMu.Lock()
-		s.viewerCountAt[festID] = time.Now()
-		s.viewerCountTimer[festID] = nil
-		s.viewerCountMu.Unlock()
-		s.broadcastViewerCount(festID)
-	})
-}
-
-// broadcastViewerCount fans out the current /events subscriber count for a fest
-// as a "viewers" SSE event, so every connected client shows a live
-// concurrent-viewer tally. Throttled via scheduleViewerCount (see there).
-//
-// Unlike broadcast(), it holds subMu.RLock for the whole fan-out. The sends are
-// all non-blocking (buffered channel + select/default), so this never stalls,
-// and holding the read lock guarantees no subscriber is removed — and its
-// channel closed — mid-send, which would panic. That race is benign in
-// broadcast() (state events rarely coincide with churn) but viewer-count events
-// fire exactly when subscribers churn, so it must be excluded here.
-func (s *server) broadcastViewerCount(festID int64) {
-	s.subMu.RLock()
-	defer s.subMu.RUnlock()
-	bucket := s.subscribers[festID]
-	// Tally spectators PER GAME (editors are participants, not spectators, so they
-	// are excluded from the count — but they still receive the event so a host can
-	// see how many people are watching their game).
-	counts := make(map[int64]int, len(bucket))
-	for _, info := range bucket {
-		if info.editor {
-			continue
-		}
-		counts[info.gameID]++
-	}
-	// Cache one payload per distinct game so a fest-wide fan-out marshals each
-	// count once, not once per channel.
-	payloads := make(map[int64][]byte, len(counts))
-	for ch, info := range bucket {
-		data, ok := payloads[info.gameID]
-		if !ok {
-			data = []byte(fmt.Sprintf(`{"count":%d}`, counts[info.gameID]))
-			payloads[info.gameID] = data
-		}
-		ev := event{festID: festID, name: "viewers", data: data}
-		select {
-		case ch <- ev:
-		default:
-			select {
-			case <-ch:
-			default:
-			}
-			select {
-			case ch <- ev:
-			default:
-			}
-		}
-	}
-}
-
-// audience selects which SSE subscribers a broadcast reaches.
-type audience int
-
-const (
-	audAll     audience = iota // editors + viewers (snapshots, fest-wide events)
-	audEditors                 // organizers only — immediate, uncoalesced deltas
-	audViewers                 // spectators only — coalesced merged deltas
-)
-
-func (s *server) broadcast(ev event) { s.broadcastTo(ev, audAll) }
-
-func (s *server) broadcastTo(ev event, aud audience) {
-	// Snapshot the channel list under the read lock so the slow send
-	// path runs without keeping other broadcasts or subscriber churn
-	// blocked.
-	var chs []chan event
-	s.subMu.RLock()
-	if bucket, ok := s.subscribers[ev.festID]; ok && len(bucket) > 0 {
-		chs = make([]chan event, 0, len(bucket))
-		for ch, info := range bucket {
-			switch aud {
-			case audEditors:
-				if !info.editor {
-					continue
-				}
-			case audViewers:
-				if info.editor {
-					continue
-				}
-			}
-			chs = append(chs, ch)
-		}
-	}
-	s.subMu.RUnlock()
-	for _, ch := range chs {
-		select {
-		case ch <- ev:
-		default:
-			// Buffer is full; drop the oldest entry and try again so
-			// late subscribers always see the latest state.
-			select {
-			case <-ch:
-			default:
-			}
-			select {
-			case ch <- ev:
-			default:
-			}
-		}
-	}
-}
-
-func (s *server) addHostSubscriber(festID int64, ch chan hostPresenceEvent) {
-	s.subMu.Lock()
-	defer s.subMu.Unlock()
-	if s.hostSubscribers == nil {
-		s.hostSubscribers = make(map[int64]map[chan hostPresenceEvent]struct{})
-	}
-	bucket, ok := s.hostSubscribers[festID]
-	if !ok {
-		bucket = make(map[chan hostPresenceEvent]struct{})
-		s.hostSubscribers[festID] = bucket
-	}
-	bucket[ch] = struct{}{}
-}
-
-func (s *server) removeHostSubscriber(festID int64, ch chan hostPresenceEvent) {
-	s.subMu.Lock()
-	if bucket, ok := s.hostSubscribers[festID]; ok {
-		delete(bucket, ch)
-		if len(bucket) == 0 {
-			delete(s.hostSubscribers, festID)
-		}
-	}
-	s.subMu.Unlock()
-	close(ch)
-}
-
-func (s *server) broadcastHostPresence(ev hostPresenceEvent) {
-	var chs []chan hostPresenceEvent
-	s.subMu.RLock()
-	if bucket, ok := s.hostSubscribers[ev.festID]; ok && len(bucket) > 0 {
-		chs = make([]chan hostPresenceEvent, 0, len(bucket))
-		for ch := range bucket {
-			chs = append(chs, ch)
-		}
-	}
-	s.subMu.RUnlock()
-	for _, ch := range chs {
-		select {
-		case ch <- ev:
-		default:
-			select {
-			case <-ch:
-			default:
-			}
-			select {
-			case ch <- ev:
-			default:
-			}
-		}
-	}
 }
 
 func (s *server) applyUpdate(req updateRequest) (MatchView, []byte, error) {
@@ -1251,72 +900,11 @@ func hasTeamEdit(req updateRequest) bool {
 		req.Place != nil
 }
 
-func buildView(state MatchState) MatchView {
-	teams := make([]TeamView, len(state.Teams))
-	for i, team := range state.Teams {
-		teams[i] = scoreTeam(team)
-	}
+func buildView(state MatchState) MatchView { return store.BuildView(state) }
 
-	standings := manualStandings(teams)
-	for i := range standings {
-		standing := standings[i]
-		for teamIndex := range teams {
-			if teams[teamIndex].Name == standing.Name {
-				teams[teamIndex].Place = standing.Place
-				break
-			}
-		}
-	}
-
-	return MatchView{
-		Title:          state.Title,
-		Finished:       state.Finished,
-		Revision:       state.Revision,
-		UpdatedAt:      state.UpdatedAt.Format(time.RFC3339),
-		QuestionValues: questionValues,
-		Teams:          teams,
-		Standings:      standings,
-	}
-}
-
-func scoreTeam(team TeamState) TeamView {
-	view := TeamView{
-		Name:           team.Name,
-		Roster:         append([]string(nil), team.Roster...),
-		Themes:         make([]ThemeView, len(team.Themes)),
-		ShootoutThemes: make([]ThemeView, len(team.ShootoutThemes)),
-		Place:          team.Place,
-	}
-
-	for i, theme := range team.Themes {
-		tv := ThemeView{
-			Player:  theme.Player,
-			Answers: theme.Answers,
-		}
-		for answerIndex, mark := range theme.Answers {
-			value := questionValues[answerIndex]
-			switch normalizeMark(mark) {
-			case "right":
-				tv.Score += value
-				view.Total += value
-				view.Plus += value
-				view.CorrectCounts[answerIndex]++
-			case "wrong":
-				tv.Score -= value
-				view.Total -= value
-				view.WrongCounts[answerIndex]++
-			}
-		}
-		view.Themes[i] = tv
-	}
-	for i, theme := range team.ShootoutThemes {
-		tv := scoreTheme(theme)
-		view.ShootoutThemes[i] = tv
-		view.ShootoutTotal += tv.Score
-	}
-	view.Tiebreak = view.ShootoutTotal
-	return view
-}
+// The match scorer lives in the store leaf (package dope/store); these thin
+// wrappers keep the package-main call sites terse.
+func scoreTeam(team TeamState) TeamView { return store.ScoreTeam(team) }
 
 func assignComputedPlaces(state *MatchState) {
 	type rankedTeam struct {
@@ -1353,62 +941,11 @@ func teamRanksHigher(a, b TeamView) bool {
 	return false
 }
 
-func scoreTheme(theme ThemeEntry) ThemeView {
-	view := ThemeView{
-		Player:  theme.Player,
-		Answers: theme.Answers,
-	}
-	for answerIndex, mark := range theme.Answers {
-		value := questionValues[answerIndex]
-		switch normalizeMark(mark) {
-		case "right":
-			view.Score += value
-		case "wrong":
-			view.Score -= value
-		}
-	}
-	return view
-}
+func scoreTheme(theme ThemeEntry) ThemeView { return store.ScoreTheme(theme) }
 
-func manualStandings(teams []TeamView) []StandingView {
-	placed := make([]TeamView, 0, len(teams))
-	unplaced := make([]TeamView, 0)
-	for _, team := range teams {
-		if team.Place > 0 {
-			placed = append(placed, team)
-		} else {
-			unplaced = append(unplaced, team)
-		}
-	}
-	for i := 1; i < len(placed); i++ {
-		for j := i; j > 0 && placed[j-1].Place > placed[j].Place; j-- {
-			placed[j-1], placed[j] = placed[j], placed[j-1]
-		}
-	}
+func manualStandings(teams []TeamView) []StandingView { return store.ManualStandings(teams) }
 
-	result := make([]StandingView, 0, len(teams))
-	for _, team := range append(placed, unplaced...) {
-		result = append(result, StandingView{
-			Name:     team.Name,
-			Place:    team.Place,
-			Total:    team.Total,
-			Plus:     team.Plus,
-			Tiebreak: team.Tiebreak,
-		})
-	}
-	return result
-}
-
-func normalizeMark(mark string) string {
-	switch strings.ToLower(strings.TrimSpace(mark)) {
-	case "right", "q", "й", "1", "+":
-		return "right"
-	case "wrong", "w", "ц", "-1", "-", "−1", "−":
-		return "wrong"
-	default:
-		return ""
-	}
-}
+func normalizeMark(mark string) string { return store.NormalizeMark(mark) }
 
 func contains(list []string, value string) bool {
 	for _, item := range list {

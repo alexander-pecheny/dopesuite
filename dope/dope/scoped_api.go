@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"bytes"
@@ -12,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"dope/dope/realtime"
+	"dope/dope/store"
 )
 
 type festScope struct {
@@ -439,7 +442,7 @@ func (s *server) handleHostPresence(w http.ResponseWriter, r *http.Request, fest
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.broadcastHostPresence(hostPresenceEvent{festID: festID, data: data})
+	s.rt.BroadcastHostPresence(realtime.HostPresenceEvent{FestID: festID, Data: data})
 	writeJSON(w, data)
 }
 
@@ -880,11 +883,9 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, fest
 	writeJSON(w, data)
 }
 
-// stageMatches is one stage's full match views in the bulk all-stages response.
-type stageMatches struct {
-	Code    string      `json:"code"`
-	Matches []MatchView `json:"matches"`
-}
+// stageMatches is one stage's full match views in the bulk all-stages response;
+// the shape lives in the store leaf as store.StageMatches.
+type stageMatches = store.StageMatches
 
 // handleScopedStages routes /api/fest/{tid}/games/{gid}/stages/...
 //

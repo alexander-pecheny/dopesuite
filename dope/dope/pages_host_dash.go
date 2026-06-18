@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"html/template"
 	"net/http"
 	"strings"
+
+	"dope/dope/games"
 )
 
 type hostFestDashData struct {
@@ -459,7 +461,7 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	games, err := loadFestGames(r.Context(), s.db, festID)
+	gameRows, err := loadFestGames(r.Context(), s.db, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -468,14 +470,14 @@ from fests where id = ?`, festID).Scan(&title, &slug, &description, &startDate, 
 	if festRef == "" {
 		festRef = fmt.Sprintf("%d", festID)
 	}
-	hostGames := make([]publicFestGame, len(games))
-	for i, g := range games {
+	hostGames := make([]publicFestGame, len(gameRows))
+	for i, g := range gameRows {
 		hostGames[i] = publicFestGame{
 			ID:    g.ID,
 			Slug:  g.Slug,
 			Code:  g.Code,
 			Title: g.Title,
-			Type:  gameTypeLabel(g.Type),
+			Type:  games.Label(g.Type),
 			URL:   fmt.Sprintf("/host/fest/%s/game/%s/", festRef, g.Ref()),
 		}
 	}

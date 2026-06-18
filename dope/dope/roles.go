@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"context"
@@ -7,26 +7,38 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"dope/dope/roles"
 )
 
+// The role hierarchy and the pure permission predicates live in the leaf
+// package dope/roles. These aliases and thin wrappers keep the existing
+// in-package call sites terse while the access management below (the DB-backed
+// layer) stays in package main.
 const (
-	festRoleCreator = "creator"
-	festRoleAdmin   = "admin"
-	festRoleHost    = "host"
+	festRoleCreator = roles.Creator
+	festRoleAdmin   = roles.Admin
+	festRoleHost    = roles.Host
 )
+
+func normalizeFestRole(role string) string       { return roles.Normalize(role) }
+func festRoleCanManageFest(role string) bool     { return roles.CanManageFest(role) }
+func festRoleCanManageAccess(role string) bool   { return roles.CanManageAccess(role) }
+func festRoleCanDeleteFest(role string) bool     { return roles.CanDeleteFest(role) }
+func festRoleCanEditGameTables(role string) bool { return roles.CanEditGameTables(role) }
+func assignableFestRole(role string) bool        { return roles.Assignable(role) }
+
+type bulkFestAccessLine = roles.BulkAccessLine
+
+func parseFestAccessBulkLines(raw string) ([]bulkFestAccessLine, error) {
+	return roles.ParseBulkLines(raw)
+}
 
 type hostAccessMember struct {
 	UserID    int64
 	Nickname  string
 	Role      string
 	IsCreator bool
-}
-
-type bulkFestAccessLine struct {
-	Line     int
-	Nickname string
-	Role     string
-	Delete   bool
 }
 
 func migrateFestOrganizerRoles(db *sql.DB) error {
@@ -72,41 +84,6 @@ values(11, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
 	}
 	return tx.Commit()
-}
-
-func normalizeFestRole(role string) string {
-	switch strings.TrimSpace(role) {
-	case festRoleCreator:
-		return festRoleCreator
-	case festRoleAdmin:
-		return festRoleAdmin
-	case festRoleHost:
-		return festRoleHost
-	default:
-		return ""
-	}
-}
-
-func festRoleCanManageFest(role string) bool {
-	role = normalizeFestRole(role)
-	return role == festRoleCreator || role == festRoleAdmin
-}
-
-func festRoleCanManageAccess(role string) bool {
-	return festRoleCanManageFest(role)
-}
-
-func festRoleCanDeleteFest(role string) bool {
-	return normalizeFestRole(role) == festRoleCreator
-}
-
-func festRoleCanEditGameTables(role string) bool {
-	return normalizeFestRole(role) != ""
-}
-
-func assignableFestRole(role string) bool {
-	role = normalizeFestRole(role)
-	return role == festRoleAdmin || role == festRoleHost
 }
 
 func (s *server) festUserRole(ctx context.Context, festID, userID int64) (string, error) {
@@ -303,37 +280,6 @@ func (s *server) saveFestAccessBulk(ctx context.Context, festID, actorID int64, 
 		return 0, err
 	}
 	return len(changes), nil
-}
-
-func parseFestAccessBulkLines(raw string) ([]bulkFestAccessLine, error) {
-	var out []bulkFestAccessLine
-	for idx, line := range strings.Split(raw, "\n") {
-		lineNo := idx + 1
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		nickname, action, ok := strings.Cut(line, ":")
-		if !ok {
-			return nil, fmt.Errorf("строка %d: нужен формат username:role", lineNo)
-		}
-		nickname = strings.TrimSpace(nickname)
-		action = strings.ToLower(strings.TrimSpace(action))
-		if nickname == "" || action == "" {
-			return nil, fmt.Errorf("строка %d: нужен формат username:role", lineNo)
-		}
-		change := bulkFestAccessLine{Line: lineNo, Nickname: nickname}
-		switch action {
-		case festRoleAdmin, festRoleHost:
-			change.Role = action
-		case "remove":
-			change.Delete = true
-		default:
-			return nil, fmt.Errorf("строка %d: действие должно быть host, admin или remove", lineNo)
-		}
-		out = append(out, change)
-	}
-	return out, nil
 }
 
 func loadFestAccessRoleMapTx(ctx context.Context, tx *sql.Tx, festID, creatorID int64) (map[int64]string, error) {

@@ -1,8 +1,9 @@
-package main
+package dopeserver
 
 import (
 	"context"
 	"database/sql"
+	"dope/dope/realtime"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,8 +27,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
@@ -167,8 +167,7 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {
@@ -458,8 +457,7 @@ func TestUntickEditRetickPreservesDownstream(t *testing.T) {
 	festID, gameID := createBracketFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 	scopeBase := festScope{FestID: festID, GameID: gameID}
 	if _, _, _, err := srv.importSeedsFromKSI(t.Context(), scopeBase); err != nil {

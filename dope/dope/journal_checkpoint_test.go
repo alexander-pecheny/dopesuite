@@ -1,8 +1,9 @@
-package main
+package dopeserver
 
 import (
 	"context"
 	"database/sql"
+	"dope/dope/realtime"
 	"encoding/json"
 	"path/filepath"
 	"sort"
@@ -23,8 +24,7 @@ func TestGameCheckpointRoundTrip(t *testing.T) {
 	_, ekGameID := createSeedImportFixture(t, db)
 	srv := &server{
 		db:              db,
-		subscribers:     make(map[int64]map[chan event]subInfo),
-		hostSubscribers: make(map[int64]map[chan hostPresenceEvent]struct{}),
+		rt:              realtime.NewManager(),
 	}
 
 	cp0 := mustCapture(t, db, ekGameID)

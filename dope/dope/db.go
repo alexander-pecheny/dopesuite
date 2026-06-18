@@ -1,4 +1,4 @@
-package main
+package dopeserver
 
 import (
 	"bytes"
@@ -21,76 +21,33 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"dope/dope/games"
+	"dope/dope/realtime"
+	"dope/dope/store"
 )
 
 const (
-	dbFile             = "fest.db"
-	defaultMatchCode   = "A"
-	defaultVenueTitle  = "Москва-1"
-	defaultGameCode    = "default"
-	defaultGameType    = "ek"
+	dbFile            = "fest.db"
+	defaultMatchCode  = "A"
+	defaultVenueTitle = "Москва-1"
+	defaultGameCode   = "default"
+	// defaultGameType mirrors the games package default so the registry remains
+	// the single source of truth for game-type knowledge.
+	defaultGameType    = games.Default
 	systemUserUsername = "system"
 )
 
-type VenueView struct {
-	Number int    `json:"number"`
-	Title  string `json:"title"`
-}
-
-type FestView struct {
-	Slug              string      `json:"slug"`
-	Title             string      `json:"title"`
-	GameName          string      `json:"gameName,omitempty"`
-	Revision          int64       `json:"revision"`
-	UpdatedAt         string      `json:"updatedAt"`
-	SchemaJSON        string      `json:"schemaJson,omitempty"`
-	QuestionValues    [5]int      `json:"questionValues"`
-	RegularThemeCount int         `json:"regularThemeCount"`
-	Venues            []VenueView `json:"venues"`
-	Stages            []StageView `json:"stages"`
-}
-
-type StageView struct {
-	Code          string            `json:"code"`
-	Title         string            `json:"title"`
-	Type          string            `json:"stage_type"`
-	Position      int               `json:"position"`
-	Status        string            `json:"status"`
-	Config        json.RawMessage   `json:"config,omitempty"`
-	ReseedReady   bool              `json:"reseedReady,omitempty"`
-	ReseedPending []string          `json:"reseedPendingMatches,omitempty"`
-	ReseedMessage string            `json:"reseedBlockedMessage,omitempty"`
-	Matches       []FestMatchView   `json:"matches,omitempty"`
-	ReseedEntries []ReseedEntryView `json:"reseedEntries,omitempty"`
-}
-
-type ReseedEntryView struct {
-	Rank    int             `json:"rank"`
-	TeamID  int64           `json:"teamID"`
-	Name    string          `json:"name"`
-	Metrics json.RawMessage `json:"metrics,omitempty"`
-}
-
-type FestMatchView struct {
-	Code             string             `json:"code"`
-	Title            string             `json:"title"`
-	Position         int                `json:"position"`
-	ParticipantCount int                `json:"participantCount"`
-	Status           string             `json:"status"`
-	Revision         int64              `json:"revision"`
-	Venue            *VenueView         `json:"venue,omitempty"`
-	Teams            []MatchTeamSummary `json:"teams"`
-}
-
-type MatchTeamSummary struct {
-	Name       string  `json:"name"`
-	Source     string  `json:"source,omitempty"`
-	SourceType string  `json:"sourceType,omitempty"`
-	Place      float64 `json:"place"`
-	Total      int     `json:"total"`
-	Plus       int     `json:"plus"`
-	Tiebreak   int     `json:"tiebreak"`
-}
+// The fest-wide view cluster lives in the store leaf (package dope/store);
+// these aliases keep the dashboard/SSE call sites terse.
+type (
+	VenueView        = store.VenueView
+	FestView         = store.FestView
+	StageView        = store.StageView
+	ReseedEntryView  = store.ReseedEntryView
+	FestMatchView    = store.FestMatchView
+	MatchTeamSummary = store.MatchTeamSummary
+)
 
 type venueUpdateRequest struct {
 	Title string `json:"title"`
@@ -101,228 +58,47 @@ type matchVenueRequest struct {
 	VenueNumber int `json:"venueNumber"`
 }
 
-// eventEnvelope is the unified SSE payload for every scope. Exactly one of Data
-// (a full-state snapshot — initial/resync/wholesale-replace) or Ops (a scoped
-// delta to apply in place) is set. Seq is the per-scope monotonic position;
-// PrevSeq (delta only) is the seq the ops apply on top of, so a client with a
-// gap (dropped/late event) knows to resync instead of misapplying.
-type eventEnvelope struct {
-	Scope    string `json:"scope"`
-	Revision int64  `json:"revision"`
-	Seq      uint64 `json:"seq,omitempty"`
-	PrevSeq  uint64 `json:"prevSeq,omitempty"`
-	// Epoch is the server's per-process token. It changes on restart (when the
-	// per-scope seq counter resets to 0), so a client that sees a new epoch
-	// knows its lastSeq belongs to a dead seq space and must resync rather than
-	// silently dropping the lower-numbered deltas. See server.epoch.
-	Epoch string          `json:"epoch,omitempty"`
-	Ops   json.RawMessage `json:"ops,omitempty"`
-	Data  json.RawMessage `json:"data,omitempty"`
-	// EmitMs is the server's unix-millis emit time, stamped on deltas so a client
-	// can log the server→render delivery leg (Date.now()-EmitMs). Cross-machine,
-	// so it carries client/server clock skew — a rough delivery gauge, not exact.
-	EmitMs int64 `json:"emitMs,omitempty"`
-}
+// eventEnvelope is the unified SSE payload for every scope; the shape lives in
+// the realtime leaf (package dope/realtime) as Envelope. Exactly one of Data
+// (a full-state snapshot) or Ops (a scoped delta) is set.
+type eventEnvelope = realtime.Envelope
 
-type festScheme struct {
-	SchemaVersion     int             `json:"schemaVersion"`
-	Slug              string          `json:"slug"`
-	Title             string          `json:"title"`
-	GameType          string          `json:"gameType"`
-	QuestionValues    []int           `json:"questionValues"`
-	RegularThemeCount int             `json:"regularThemeCount"`
-	Venues            []schemeVenue   `json:"venues"`
-	Stages            []schemeStage   `json:"stages"`
-	Teams             []schemeTeam    `json:"teams"`
-	TourComp          json.RawMessage `json:"tourComp,omitempty"`
-	NTeams            int             `json:"nTeams,omitempty"`
-	Themes            int             `json:"themes,omitempty"`
-	Participants      []string        `json:"participants,omitempty"`
-}
+// The fest scheme shapes live in the store leaf (package dope/store); these
+// aliases keep the package-main call sites (EK build, resolver, seed import)
+// terse. SchemeSlot carries the custom string-or-object UnmarshalJSON.
+type (
+	festScheme         = store.FestScheme
+	schemeTeam         = store.SchemeTeam
+	schemeVenue        = store.SchemeVenue
+	schemeStage        = store.SchemeStage
+	schemeMatch        = store.SchemeMatch
+	schemeSlot         = store.SchemeSlot
+	schemeSeedRef      = store.SchemeSeedRef
+	schemeFromMatchRef = store.SchemeFromMatchRef
+	schemeReseedRef    = store.SchemeReseedRef
+	schemeTeamRef      = store.SchemeTeamRef
+)
 
-type schemeTeam struct {
-	Name    string   `json:"name"`
-	City    string   `json:"city"`
-	Basket  int      `json:"basket"`
-	Number  int      `json:"number"`
-	Players []string `json:"players"`
-}
-
-type schemeVenue struct {
-	Number int    `json:"number"`
-	Title  string `json:"title"`
-}
-
-type schemeStage struct {
-	Code      string          `json:"code"`
-	Title     string          `json:"title"`
-	StageType string          `json:"stage_type"`
-	Position  int             `json:"position"`
-	Matches   []schemeMatch   `json:"matches"`
-	Teams     []schemeSlot    `json:"teams"`
-	Sources   []string        `json:"sources"`
-	Sort      json.RawMessage `json:"sort"`
-	Config    json.RawMessage `json:"config"`
-	Layout    json.RawMessage `json:"layout"`
-}
-
-type schemeMatch struct {
-	Code             string       `json:"code"`
-	Title            string       `json:"title"`
-	Venue            int          `json:"venue"`
-	ParticipantCount int          `json:"participantCount"`
-	Slots            []schemeSlot `json:"slots"`
-}
-
-type schemeSlot struct {
-	Seed        *schemeSeedRef      `json:"seed,omitempty"`
-	FromMatch   *schemeFromMatchRef `json:"fromMatch,omitempty"`
-	Reseed      *schemeReseedRef    `json:"reseed,omitempty"`
-	Team        *schemeTeamRef      `json:"team,omitempty"`
-	Placeholder string              `json:"placeholder,omitempty"`
-	Label       string              `json:"label,omitempty"`
-}
-
-type schemeSeedRef struct {
-	Basket   int `json:"basket,omitempty"`
-	Number   int `json:"number,omitempty"`
-	Position int `json:"position,omitempty"`
-}
-
-type schemeFromMatchRef struct {
-	Match string `json:"match"`
-	Place int    `json:"place"`
-}
-
-type schemeReseedRef struct {
-	Stage string `json:"stage"`
-	Rank  int    `json:"rank"`
-}
-
-type schemeTeamRef struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
-	City    string   `json:"city"`
-	Label   string   `json:"label"`
-	Players []string `json:"players"`
-}
-
-func (slot *schemeSlot) UnmarshalJSON(data []byte) error {
-	var token string
-	if err := json.Unmarshal(data, &token); err == nil {
-		if number, ok := parseSeedToken(token); ok {
-			slot.Seed = &schemeSeedRef{Number: number}
-			slot.Label = token
-			return nil
-		}
-		slot.Placeholder = token
-		slot.Label = token
-		return nil
-	}
-
-	type schemeSlotAlias schemeSlot
-	var parsed schemeSlotAlias
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return err
-	}
-	*slot = schemeSlot(parsed)
-	return nil
-}
-
-func parseSeedToken(token string) (int, bool) {
-	token = strings.TrimSpace(token)
-	rest, ok := strings.CutPrefix(token, "seed-")
-	if !ok {
-		return 0, false
-	}
-	number, err := strconv.Atoi(strings.TrimSpace(rest))
-	if err != nil || number <= 0 {
-		return 0, false
-	}
-	return number, true
-}
-
-type dbQueryer interface {
-	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
-	QueryRowContext(context.Context, string, ...any) *sql.Row
-}
+// dbQueryer is the read surface shared by *sql.DB and *sql.Tx; the canonical
+// definition lives in the store leaf as store.Queryer.
+type dbQueryer = store.Queryer
 
 // collectRows runs query against q and assembles a slice by calling scan on each row.
 // scan should populate one T from the current row via sql.Rows.Scan and any local conversions.
+// collectRows / insertReturningID delegate to the store leaf; these wrappers
+// keep the many package-main call sites terse.
 func collectRows[T any](ctx context.Context, q dbQueryer, query string, args []any, scan func(*sql.Rows) (T, error)) ([]T, error) {
-	rows, err := q.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []T
-	for rows.Next() {
-		item, err := scan(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return store.CollectRows(ctx, q, query, args, scan)
 }
 
-type dbMatchState struct {
-	MatchID      int64
-	GameID       int64
-	Code         string
-	Title        string
-	Status       string
-	Revision     int64
-	FestRevision int64
-	UpdatedAt    time.Time
-	StageCode    string
-	StageTitle   string
-	Venue        *VenueView
-	State        MatchState
-	TeamIDs      []int64
-	RosterSource string
-}
+type dbMatchState = store.DBMatchState
 
-// sqliteMaxOpenConns sizes the read connection pool. SQLite under WAL handles
-// many concurrent readers against a single writer; bumping this lets viewer
-// GETs and SSE bootstraps proceed in parallel with host edits.
-const sqliteMaxOpenConns = 8
+// Connection plumbing and the additive schema helper live in the store leaf
+// (package dope/store); these aliases/wrappers keep the package-main call sites
+// (openFestDB, migrateDB, the convert tools) terse.
+const sqliteMaxOpenConns = store.MaxOpenConns
 
-// buildSqliteDSN turns a bare file path into a URI that ships
-// per-connection pragmas with every new pool connection. journal_mode is
-// database-wide and only takes effect once, but resetting it on each
-// connection is harmless and lets a freshly-deleted/recreated DB land in WAL
-// without a separate Exec call.
-func buildSqliteDSN(path string) string {
-	pragmas := []string{
-		"_pragma=busy_timeout(5000)",
-		"_pragma=foreign_keys(1)",
-		"_pragma=journal_mode(WAL)",
-		// synchronous=FULL fsyncs the WAL on every commit, so an acknowledged
-		// (200 OK) edit can never be rolled back by a crash or restart — WAL +
-		// NORMAL only guarantees durability across an app crash in theory, and a
-		// crash-loop here once silently reverted ~3 min of committed edits to the
-		// last checkpoint. Measured cost on prod's disk is ~0.8 ms/commit (~1160
-		// commits/s ceiling) vs an observed peak of ~10 edits/s, i.e. negligible.
-		"_pragma=synchronous(FULL)",
-		// Cap the WAL file so it's truncated back down after a checkpoint instead
-		// of growing without bound (prod's WAL had ballooned past 500 MB — a
-		// long-lived second connection from the bot kept pinning it; that's gone
-		// now, but bound it regardless). 64 MB comfortably spans a write burst.
-		"_pragma=journal_size_limit(67108864)",
-		"_pragma=cache_size(-65536)",
-		"_pragma=temp_store(MEMORY)",
-	}
-	params := strings.Join(pragmas, "&")
-	if strings.HasPrefix(path, "file:") {
-		sep := "?"
-		if strings.Contains(path, "?") {
-			sep = "&"
-		}
-		return path + sep + params
-	}
-	return "file:" + path + "?" + params
-}
+func buildSqliteDSN(path string) string { return store.BuildDSN(path) }
 
 func openFestDB(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", buildSqliteDSN(path))
@@ -1435,59 +1211,14 @@ func verifyForeignKeys(db *sql.DB) error {
 	return rows.Err()
 }
 
-type columnSpec struct {
-	Name string
-	Type string
-}
+type columnSpec = store.ColumnSpec
 
-// columnExists reports whether a table has a column (false if the table is
-// absent). Used to decide whether an early-adopter table needs reshaping.
 func columnExists(db *sql.DB, table, column string) bool {
-	rows, err := db.Query(`select name from pragma_table_info(?)`, table)
-	if err != nil {
-		return false
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return false
-		}
-		if name == column {
-			return true
-		}
-	}
-	return false
+	return store.ColumnExists(db, table, column)
 }
 
 func addColumnsIfMissing(db *sql.DB, table string, columns []columnSpec) error {
-	rows, err := db.Query(`select name from pragma_table_info(?)`, table)
-	if err != nil {
-		return err
-	}
-	existing := make(map[string]bool)
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			rows.Close()
-			return err
-		}
-		existing[name] = true
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return err
-	}
-	rows.Close()
-	for _, col := range columns {
-		if existing[col.Name] {
-			continue
-		}
-		if _, err := db.Exec(fmt.Sprintf("alter table %s add column %s %s", table, col.Name, col.Type)); err != nil {
-			return err
-		}
-	}
-	return nil
+	return store.AddColumnsIfMissing(db, table, columns)
 }
 
 func ensureSystemUser(ctx context.Context, tx *sql.Tx) (int64, error) {
@@ -1603,11 +1334,7 @@ values(?, ?, ?)`, themeID, answerIndex, normalizeMark(mark)); err != nil {
 }
 
 func insertReturningID(ctx context.Context, tx *sql.Tx, query string, args ...any) (int64, error) {
-	result, err := tx.ExecContext(ctx, query, args...)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
+	return store.InsertReturningID(ctx, tx, query, args...)
 }
 
 func (s *server) serveViewerHTML(w http.ResponseWriter, r *http.Request) {
@@ -2698,104 +2425,20 @@ order by position, id`, stageArgs...)
 	return view, nil
 }
 
-func loadReseedEntries(ctx context.Context, q dbQueryer, stageID int64) ([]ReseedEntryView, error) {
-	return collectRows(ctx, q, `
-select re.rank, re.team_id, coalesce(t.name, ''), re.metrics_json
-from reseed_entries re
-left join teams t on t.id = re.team_id
-where re.stage_id = ?
-order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error) {
-		var entry ReseedEntryView
-		var metricsJSON string
-		if err := rows.Scan(&entry.Rank, &entry.TeamID, &entry.Name, &metricsJSON); err != nil {
-			return entry, err
-		}
-		entry.Metrics = json.RawMessage(nonEmptyJSON(metricsJSON))
-		return entry, nil
-	})
-}
+// The fest-view read queries live in the store leaf (package dope/store);
+// these wrappers keep the FestView builder's call sites terse.
+func nonEmptyJSON(value string) string { return store.NonEmptyJSON(value) }
 
-func nonEmptyJSON(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "{}"
-	}
-	return value
+func loadReseedEntries(ctx context.Context, q dbQueryer, stageID int64) ([]ReseedEntryView, error) {
+	return store.LoadReseedEntries(ctx, q, stageID)
 }
 
 func loadFestMatches(ctx context.Context, q dbQueryer, stageID int64) ([]FestMatchView, error) {
-	rows, err := q.QueryContext(ctx, `
-select m.id, m.code, m.title, m.position, m.participant_count, m.status, m.revision,
-       v.number, v.title
-from matches m
-left join venues v on v.id = m.venue_id
-where m.stage_id = ?
-order by m.position, m.id`, stageID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	type matchRecord struct {
-		ID    int64
-		Match FestMatchView
-	}
-	var records []matchRecord
-	for rows.Next() {
-		var matchID int64
-		var match FestMatchView
-		var venueNumber sql.NullInt64
-		var venueTitle sql.NullString
-		if err := rows.Scan(&matchID, &match.Code, &match.Title, &match.Position, &match.ParticipantCount, &match.Status, &match.Revision, &venueNumber, &venueTitle); err != nil {
-			return nil, err
-		}
-		if venueNumber.Valid {
-			match.Venue = &VenueView{Number: int(venueNumber.Int64), Title: venueTitle.String}
-		}
-		records = append(records, matchRecord{ID: matchID, Match: match})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-
-	var matches []FestMatchView
-	for _, record := range records {
-		teams, err := loadMatchSummaries(ctx, q, record.ID)
-		if err != nil {
-			return nil, err
-		}
-		record.Match.Teams = teams
-		matches = append(matches, record.Match)
-	}
-	return matches, nil
+	return store.LoadFestMatches(ctx, q, stageID)
 }
 
 func loadMatchSummaries(ctx context.Context, q dbQueryer, matchID int64) ([]MatchTeamSummary, error) {
-	return collectRows(ctx, q, `
-select t.name, ms.source_type, ms.source_ref_json, coalesce(r.place, 0), coalesce(r.total, 0),
-       coalesce(r.plus, 0), coalesce(r.tiebreak, 0)
-from match_slots ms
-left join teams t on t.id = ms.team_id
-left join match_results r on r.match_id = ms.match_id and r.team_id = ms.team_id
-where ms.match_id = ?
-order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchTeamSummary, error) {
-		var team MatchTeamSummary
-		var name sql.NullString
-		var sourceRef string
-		if err := rows.Scan(&name, &team.SourceType, &sourceRef, &team.Place, &team.Total, &team.Plus, &team.Tiebreak); err != nil {
-			return team, err
-		}
-		team.Source = slotSourceLabel(team.SourceType, sourceRef)
-		if name.Valid && name.String != "" {
-			team.Name = name.String
-		} else {
-			team.Name = team.Source
-		}
-		return team, nil
-	})
+	return store.LoadMatchSummaries(ctx, q, matchID)
 }
 
 func (s *server) loadVenuesLocked(festID int64) ([]VenueView, error) {
@@ -2805,16 +2448,7 @@ func (s *server) loadVenuesLocked(festID int64) ([]VenueView, error) {
 }
 
 func loadVenues(ctx context.Context, q dbQueryer, festID int64) ([]VenueView, error) {
-	return collectRows(ctx, q, `
-select number, title from venues
-where fest_id = ?
-order by number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
-		var venue VenueView
-		if err := rows.Scan(&venue.Number, &venue.Title); err != nil {
-			return venue, err
-		}
-		return venue, nil
-	})
+	return store.LoadVenues(ctx, q, festID)
 }
 
 func (s *server) loadMatchViewLocked(festID int64, code string) (MatchView, error) {
@@ -2865,248 +2499,17 @@ func (s *server) loadScopedMatchViewSnapshot(scope matchScope) (MatchView, error
 }
 
 func loadDBMatchState(ctx context.Context, q dbQueryer, festID int64, code string) (dbMatchState, error) {
-	return loadDBMatchStateWhere(ctx, q, `m.fest_id = ? and m.code = ?`, festID, code)
+	return store.LoadDBMatchState(ctx, q, festID, code)
 }
 
 func loadDBMatchStateByScope(ctx context.Context, q dbQueryer, scope matchScope) (dbMatchState, error) {
-	return loadDBMatchStateWhere(ctx, q, `m.id = ? and m.fest_id = ? and m.game_id = ?`, scope.MatchID, scope.FestID, scope.GameID)
+	return store.LoadDBMatchStateWhere(ctx, q, `m.id = ? and m.fest_id = ? and m.game_id = ?`, scope.MatchID, scope.FestID, scope.GameID)
 }
 
+// The match-state read queries live in the store leaf (package dope/store);
+// this wrapper keeps the remaining package-main caller terse.
 func loadDBMatchStateWhere(ctx context.Context, q dbQueryer, where string, args ...any) (dbMatchState, error) {
-	var match dbMatchState
-	var updatedAt string
-	var venueNumber sql.NullInt64
-	var venueTitle sql.NullString
-	if err := q.QueryRowContext(ctx, `
-select m.id, m.game_id, m.code, m.title, m.status, m.revision,
-       t.revision, t.updated_at, s.code, s.title, v.number, v.title, g.roster_source
-from matches m
-join fests t on t.id = m.fest_id
-join games g on g.id = m.game_id
-join stages s on s.id = m.stage_id
-left join venues v on v.id = m.venue_id
-where `+where, args...).
-		Scan(&match.MatchID, &match.GameID, &match.Code, &match.Title, &match.Status, &match.Revision,
-			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle, &match.RosterSource); err != nil {
-		return dbMatchState{}, err
-	}
-	match.UpdatedAt = parseDBTime(updatedAt)
-	if venueNumber.Valid {
-		match.Venue = &VenueView{Number: int(venueNumber.Int64), Title: venueTitle.String}
-	}
-	match.State = MatchState{
-		Title:     match.Title,
-		Finished:  match.Status == "finished",
-		Revision:  match.Revision,
-		UpdatedAt: match.UpdatedAt,
-	}
-
-	slotRows, err := q.QueryContext(ctx, `
-select ms.slot_index, ms.team_id, coalesce(t.name, ''), coalesce(r.place, 0), ms.source_type, ms.source_ref_json
-from match_slots ms
-left join teams t on t.id = ms.team_id
-left join match_results r on r.match_id = ms.match_id and r.team_id = ms.team_id
-where ms.match_id = ?
-order by ms.slot_index`, match.MatchID)
-	if err != nil {
-		return dbMatchState{}, err
-	}
-	defer slotRows.Close()
-
-	type slotRecord struct {
-		Index      int
-		TeamID     sql.NullInt64
-		Name       string
-		Place      float64
-		SourceType string
-		SourceRef  string
-	}
-	var slots []slotRecord
-	for slotRows.Next() {
-		var slotIndex int
-		var teamID sql.NullInt64
-		var name string
-		var place float64
-		var sourceType string
-		var sourceRef string
-		if err := slotRows.Scan(&slotIndex, &teamID, &name, &place, &sourceType, &sourceRef); err != nil {
-			return dbMatchState{}, err
-		}
-		slots = append(slots, slotRecord{
-			Index:      slotIndex,
-			TeamID:     teamID,
-			Name:       name,
-			Place:      place,
-			SourceType: sourceType,
-			SourceRef:  sourceRef,
-		})
-	}
-	if err := slotRows.Err(); err != nil {
-		return dbMatchState{}, err
-	}
-	if err := slotRows.Close(); err != nil {
-		return dbMatchState{}, err
-	}
-	for _, slot := range slots {
-		for len(match.State.Teams) <= slot.Index {
-			match.State.Teams = append(match.State.Teams, TeamState{})
-			match.TeamIDs = append(match.TeamIDs, 0)
-		}
-		if !slot.TeamID.Valid {
-			match.State.Teams[slot.Index] = TeamState{
-				Name:   slotSourceLabel(slot.SourceType, slot.SourceRef),
-				Themes: make([]ThemeEntry, themeCount),
-			}
-			continue
-		}
-		team, err := loadTeamState(ctx, q, match.GameID, match.RosterSource, match.MatchID, slot.TeamID.Int64, slot.Name, slot.Place)
-		if err != nil {
-			return dbMatchState{}, err
-		}
-		match.State.Teams[slot.Index] = team
-		match.TeamIDs[slot.Index] = slot.TeamID.Int64
-	}
-	normalizeState(&match.State)
-	return match, nil
-}
-
-func loadTeamState(ctx context.Context, q dbQueryer, gameID int64, rosterSource string, matchID, teamID int64, name string, place float64) (TeamState, error) {
-	team := TeamState{
-		Name:   name,
-		Place:  place,
-		Themes: make([]ThemeEntry, themeCount),
-	}
-
-	rosterQuery := `
-select p.first_name, p.last_name
-from team_players tp
-join players p on p.id = tp.player_id
-where tp.team_id = ?
-order by tp.roster_order`
-	rosterArgs := []any{teamID}
-	if rosterSource == "game" {
-		rosterQuery = `
-select p.first_name, p.last_name
-from game_team_players gtp
-join players p on p.id = gtp.player_id
-where gtp.game_id = ? and gtp.team_id = ?
-order by gtp.roster_order`
-		rosterArgs = []any{gameID, teamID}
-	}
-	rosterRows, err := q.QueryContext(ctx, rosterQuery, rosterArgs...)
-	if err != nil {
-		return TeamState{}, err
-	}
-	for rosterRows.Next() {
-		var firstName, lastName string
-		if err := rosterRows.Scan(&firstName, &lastName); err != nil {
-			_ = rosterRows.Close()
-			return TeamState{}, err
-		}
-		team.Roster = append(team.Roster, joinPlayerName(firstName, lastName))
-	}
-	if err := rosterRows.Close(); err != nil {
-		return TeamState{}, err
-	}
-
-	themeRows, err := q.QueryContext(ctx, `
-select th.id, th.kind, th.theme_index, coalesce(p.first_name, ''), coalesce(p.last_name, '')
-from themes th
-left join players p on p.id = th.player_id
-where th.match_id = ? and th.team_id = ?
-order by case th.kind when 'regular' then 0 else 1 end, th.theme_index`, matchID, teamID)
-	if err != nil {
-		return TeamState{}, err
-	}
-	defer themeRows.Close()
-
-	type themeRecord struct {
-		ID        int64
-		Kind      string
-		Index     int
-		FirstName string
-		LastName  string
-	}
-	var themeRecords []themeRecord
-	for themeRows.Next() {
-		var themeID int64
-		var kind string
-		var themeIndex int
-		var firstName, lastName string
-		if err := themeRows.Scan(&themeID, &kind, &themeIndex, &firstName, &lastName); err != nil {
-			return TeamState{}, err
-		}
-		themeRecords = append(themeRecords, themeRecord{
-			ID:        themeID,
-			Kind:      kind,
-			Index:     themeIndex,
-			FirstName: firstName,
-			LastName:  lastName,
-		})
-	}
-	if err := themeRows.Err(); err != nil {
-		return TeamState{}, err
-	}
-	if err := themeRows.Close(); err != nil {
-		return TeamState{}, err
-	}
-
-	shootout := make(map[int]ThemeEntry)
-	maxShootout := -1
-	for _, record := range themeRecords {
-		entry := ThemeEntry{
-			Player:  joinPlayerName(record.FirstName, record.LastName),
-			Answers: [5]string{},
-		}
-		answers, err := loadThemeAnswers(ctx, q, record.ID)
-		if err != nil {
-			return TeamState{}, err
-		}
-		entry.Answers = answers
-		switch record.Kind {
-		case "regular":
-			if record.Index >= 0 && record.Index < len(team.Themes) {
-				team.Themes[record.Index] = entry
-			}
-		case "shootout":
-			if record.Index >= 0 {
-				shootout[record.Index] = entry
-				if record.Index > maxShootout {
-					maxShootout = record.Index
-				}
-			}
-		}
-	}
-	if maxShootout >= 0 {
-		team.ShootoutThemes = make([]ThemeEntry, maxShootout+1)
-		for index, entry := range shootout {
-			team.ShootoutThemes[index] = entry
-		}
-	}
-	return team, nil
-}
-
-func loadThemeAnswers(ctx context.Context, q dbQueryer, themeID int64) ([5]string, error) {
-	var answers [5]string
-	rows, err := q.QueryContext(ctx, `
-select answer_index, mark from answers
-where theme_id = ?
-order by answer_index`, themeID)
-	if err != nil {
-		return answers, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var index int
-		var mark string
-		if err := rows.Scan(&index, &mark); err != nil {
-			return answers, err
-		}
-		if index >= 0 && index < len(answers) {
-			answers[index] = normalizeMark(mark)
-		}
-	}
-	return answers, rows.Err()
+	return store.LoadDBMatchStateWhere(ctx, q, where, args...)
 }
 
 func matchViewFromDBState(match dbMatchState) MatchView {
@@ -3731,7 +3134,7 @@ func (s *server) broadcastState(festID int64, scope string, revision int64, payl
 	if s.db != nil {
 		payload = eventSnapshotJSON(scope, s.epoch, revision, seq, payload)
 	}
-	s.broadcast(event{festID: festID, revision: revision, data: payload})
+	s.rt.Broadcast(realtime.Event{FestID: festID, Revision: revision, Data: payload})
 	return seq
 }
 
@@ -3785,8 +3188,8 @@ func (s *server) broadcastStateDelta(festID int64, scope string, revision int64,
 	prev := s.stateSeqLocked(scope)
 	seq := s.bumpSeqLocked(scope)
 	// Editors: immediate, uncoalesced — chains per edit (prevSeq = seq-1).
-	s.broadcastTo(event{festID: festID, revision: revision,
-		data: eventDeltaJSON(scope, s.epoch, revision, seq, prev, ops)}, audEditors)
+	s.rt.BroadcastTo(realtime.Event{FestID: festID, Revision: revision,
+		Data: eventDeltaJSON(scope, s.epoch, revision, seq, prev, ops)}, realtime.AudEditors)
 	// Viewers: buffer for a merged broadcast at window end.
 	if s.deltaBuf == nil {
 		s.deltaBuf = map[string]*pendingDelta{}
@@ -3831,8 +3234,8 @@ func (s *server) broadcastBatchedDelta(festID int64, scope string, revision int6
 	s.flushDeltaLocked(scope)
 	prev := s.stateSeqLocked(scope)
 	seq := s.bumpSeqLocked(scope)
-	s.broadcastTo(event{festID: festID, revision: revision,
-		data: eventDeltaJSON(scope, s.epoch, revision, seq, prev, ops)}, audAll)
+	s.rt.BroadcastTo(realtime.Event{FestID: festID, Revision: revision,
+		Data: eventDeltaJSON(scope, s.epoch, revision, seq, prev, ops)}, realtime.AudAll)
 	return seq
 }
 
@@ -3857,29 +3260,10 @@ func (s *server) flushDeltaLocked(scope string) {
 		pd.timer.Stop()
 	}
 	payload := eventDeltaJSON(scope, s.epoch, pd.revision, pd.lastSeq, pd.prevSeq, mergeOpsArrays(pd.ops))
-	s.broadcastTo(event{festID: pd.festID, revision: pd.revision, data: payload}, audViewers)
+	s.rt.BroadcastTo(realtime.Event{FestID: pd.festID, Revision: pd.revision, Data: payload}, realtime.AudViewers)
 }
 
-// mergeOpsArrays concatenates several JSON op-arrays into one, preserving order
-// (later ops override earlier for the same path when the client applies them).
-func mergeOpsArrays(arrays [][]byte) []byte {
-	if len(arrays) == 1 {
-		return arrays[0]
-	}
-	merged := make([]json.RawMessage, 0, len(arrays))
-	for _, a := range arrays {
-		var ops []json.RawMessage
-		if err := json.Unmarshal(a, &ops); err != nil {
-			continue
-		}
-		merged = append(merged, ops...)
-	}
-	out, err := json.Marshal(merged)
-	if err != nil {
-		return arrays[len(arrays)-1]
-	}
-	return out
-}
+func mergeOpsArrays(arrays [][]byte) []byte { return realtime.MergeOpsArrays(arrays) }
 
 // bumpSeqLocked increments and returns the scope's seq. Caller holds seqMu.
 func (s *server) bumpSeqLocked(scope string) uint64 {
@@ -3970,36 +3354,14 @@ func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
 	return data, nil
 }
 
-// eventSnapshotJSON wraps a full-state payload as a snapshot envelope.
+// eventSnapshotJSON / eventDeltaJSON wrap a payload as an SSE envelope; the
+// encoding lives in the realtime leaf (package dope/realtime).
 func eventSnapshotJSON(scope, epoch string, revision int64, seq uint64, payload []byte) []byte {
-	data, err := json.Marshal(eventEnvelope{
-		Scope:    scope,
-		Revision: revision,
-		Seq:      seq,
-		Epoch:    epoch,
-		Data:     json.RawMessage(payload),
-	})
-	if err != nil {
-		return payload
-	}
-	return data
+	return realtime.EventSnapshotJSON(scope, epoch, revision, seq, payload)
 }
 
-// eventDeltaJSON wraps an ops array as a delta envelope carrying (seq, prevSeq).
 func eventDeltaJSON(scope, epoch string, revision int64, seq, prevSeq uint64, ops []byte) []byte {
-	data, err := json.Marshal(eventEnvelope{
-		Scope:    scope,
-		Revision: revision,
-		Seq:      seq,
-		PrevSeq:  prevSeq,
-		Epoch:    epoch,
-		Ops:      json.RawMessage(ops),
-		EmitMs:   time.Now().UnixMilli(),
-	})
-	if err != nil {
-		return ops
-	}
-	return data
+	return realtime.EventDeltaJSON(scope, epoch, revision, seq, prevSeq, ops)
 }
 
 func writeJSONValue(w http.ResponseWriter, value any) {
@@ -4044,7 +3406,7 @@ func splitPlayerName(fullName string) (string, string) {
 }
 
 func joinPlayerName(firstName, lastName string) string {
-	return strings.TrimSpace(strings.TrimSpace(firstName) + " " + strings.TrimSpace(lastName))
+	return store.JoinPlayerName(firstName, lastName)
 }
 
 func placeholderName(sourceRef string) string {
@@ -4061,63 +3423,18 @@ func placeholderName(sourceRef string) string {
 	return "Ожидает команды"
 }
 
+// slotSourceLabel and the map readers live in the store leaf; these wrappers
+// keep the resolver/seed-import call sites terse.
 func slotSourceLabel(sourceType, sourceRef string) string {
-	var ref map[string]any
-	_ = json.Unmarshal([]byte(sourceRef), &ref)
-	if label, ok := ref["label"].(string); ok && label != "" {
-		// Legacy schemes baked the English token "seed-N" as the display label;
-		// surface the Russian "Посев-N" without a data migration.
-		if rest, found := strings.CutPrefix(label, "seed-"); found {
-			return "Посев-" + rest
-		}
-		return label
-	}
-	switch sourceType {
-	case "seed":
-		number := intFromMap(ref, "number")
-		if number == 0 {
-			number = intFromMap(ref, "position")
-		}
-		return fmt.Sprintf("К%d-%d", intFromMap(ref, "basket"), number)
-	case "from_match":
-		return fmt.Sprintf("%s%d", stringFromMap(ref, "match"), intFromMap(ref, "place"))
-	case "reseed":
-		return fmt.Sprintf("Пересев-%d", intFromMap(ref, "rank"))
-	case "placeholder":
-		if placeholder := stringFromMap(ref, "placeholder"); placeholder != "" {
-			return placeholder
-		}
-	}
-	return "Ожидает команды"
+	return store.SlotSourceLabel(sourceType, sourceRef)
 }
 
 func stringFromMap(values map[string]any, key string) string {
-	if value, ok := values[key].(string); ok {
-		return value
-	}
-	return ""
+	return store.StringFromMap(values, key)
 }
 
 func intFromMap(values map[string]any, key string) int {
-	switch value := values[key].(type) {
-	case float64:
-		return int(value)
-	case int:
-		return value
-	case json.Number:
-		number, _ := value.Int64()
-		return int(number)
-	default:
-		return 0
-	}
-}
-
-func parseDBTime(value string) time.Time {
-	parsed, err := time.Parse(time.RFC3339, value)
-	if err != nil {
-		return time.Now()
-	}
-	return parsed
+	return store.IntFromMap(values, key)
 }
 
 func utcNow() string {
