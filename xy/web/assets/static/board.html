@@ -47,35 +47,35 @@
       <textarea class="card-desc" id="cardDesc" spellcheck="false"></textarea>
       <div class="auth-actions">
         <button class="btn" id="cardSave" type="button">Сохранить</button>
-        <button class="btn btn-ghost" id="cardDelete" type="button">Удалить карточку</button>
+        <button class="btn btn-ghost" id="cardDelete" type="button" data-edit-only>Удалить карточку</button>
       </div>
 
-      <label class="card-section-label">Метки</label>
-      <div class="label-picker" id="labelPicker"></div>
-      <form id="newLabelForm" class="label-create">
+      <label class="card-section-label" data-edit-only>Метки</label>
+      <div class="label-picker" id="labelPicker" data-edit-only></div>
+      <form id="newLabelForm" class="label-create" data-edit-only>
         <input class="input" id="newLabelName" type="text" placeholder="Новая метка">
         <input type="color" id="newLabelColor" value="#4477aa" class="label-color-input">
         <button class="btn btn-small" type="submit">+</button>
       </form>
 
-      <label class="card-section-label">Вложения</label>
-      <div class="attachments" id="attachments"></div>
-      <div class="attach-add">
+      <label class="card-section-label" data-edit-only>Вложения</label>
+      <div class="attachments" id="attachments" data-edit-only></div>
+      <div class="attach-add" data-edit-only>
         <input type="file" id="attachFile" class="input">
         <label class="attach-lossless"><input type="checkbox" id="attachLossless"> без потерь</label>
         <button class="btn btn-small" id="attachUpload" type="button">Загрузить</button>
       </div>
 
-      <label class="card-section-label">Переместить / копировать на другую доску</label>
-      <div class="card-move">
+      <label class="card-section-label" data-edit-only>Переместить / копировать на другую доску</label>
+      <div class="card-move" data-edit-only>
         <select id="moveTarget" class="input"></select>
         <button class="btn btn-small" id="copyBtn" type="button">Копировать</button>
         <button class="btn btn-small btn-ghost" id="moveBtn" type="button">Переместить</button>
       </div>
 
-      <label class="card-section-label">Лента</label>
-      <div class="timeline" id="timeline"></div>
-      <form id="commentForm" class="comment-form">
+      <label class="card-section-label" data-edit-only>Лента</label>
+      <div class="timeline" id="timeline" data-edit-only></div>
+      <form id="commentForm" class="comment-form" data-edit-only>
         <textarea class="card-desc comment-input" id="commentInput" placeholder="Комментарий…" spellcheck="false"></textarea>
         <button class="btn btn-small" type="submit">Отправить</button>
       </form>

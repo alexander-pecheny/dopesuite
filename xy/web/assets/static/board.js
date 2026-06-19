@@ -210,18 +210,19 @@ function renderAddList() {
   return wrap;
 }
 
-async function addCard(list) {
+// addCard opens the card detail in "create mode" — only the description editor
+// is shown (the card isn't persisted until you save a description, so we never
+// create empty cards). Labels/attachments/move/timeline appear only when editing
+// an existing card.
+function addCard(list) {
   if (list.type === "test") return addTestCard(list);
-  const existing = cardsOf(list.id);
-  const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
-  try {
-    const descEnc = await xyCrypto.encField(dk, "");
-    const res = await jpost(`/api/lists/${list.id}/cards`, { description_enc: descEnc, rank });
-    const card = { id: res.id, listId: list.id, kind: "normal", rank, desc: "" };
-    state.cards.push(card);
-    render();
-    openCard(card);
-  } catch (err) { setStatus("error"); }
+  pendingList = list;
+  openCardId = null;
+  document.getElementById("cardDesc").value = "";
+  document.getElementById("cardMessage").textContent = "";
+  document.querySelector(".card-detail").classList.add("creating");
+  cardOverlay.hidden = false;
+  document.getElementById("cardDesc").focus();
 }
 
 // addTestCard: a test card's "description" is JSON {datetime, players:[ids]}.
@@ -288,10 +289,13 @@ async function commitCardMove(cardId, targetListId, body) {
 
 // ---- card detail ----
 let openCardId = null;
+let pendingList = null; // set while composing a brand-new (unsaved) card
 const cardOverlay = document.getElementById("cardOverlay");
 
 async function openCard(card) {
+  pendingList = null;
   openCardId = card.id;
+  document.querySelector(".card-detail").classList.remove("creating");
   document.getElementById("cardDesc").value = card.desc;
   document.getElementById("cardMessage").textContent = "";
   cardOverlay.hidden = false;
@@ -388,10 +392,29 @@ async function copyCardTo(targetId, remove) {
 document.getElementById("copyBtn").addEventListener("click", () => copyCardTo(Number(document.getElementById("moveTarget").value), false));
 document.getElementById("moveBtn").addEventListener("click", () => copyCardTo(Number(document.getElementById("moveTarget").value), true));
 
-document.getElementById("cardClose").addEventListener("click", () => { cardOverlay.hidden = true; openCardId = null; });
-cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) { cardOverlay.hidden = true; openCardId = null; } });
+function closeCard() { cardOverlay.hidden = true; openCardId = null; pendingList = null; }
+document.getElementById("cardClose").addEventListener("click", closeCard);
+cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) closeCard(); });
 
 document.getElementById("cardSave").addEventListener("click", async () => {
+  // create mode: persist a new card with the typed description, then switch to
+  // the full edit view.
+  if (pendingList) {
+    const text = document.getElementById("cardDesc").value;
+    const msg = document.getElementById("cardMessage");
+    if (!text.trim()) { msg.textContent = "Введите описание."; return; }
+    const list = pendingList;
+    const existing = cardsOf(list.id);
+    const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
+    try {
+      const res = await jpost(`/api/lists/${list.id}/cards`, { description_enc: await xyCrypto.encField(dk, text), rank });
+      const card = { id: res.id, listId: list.id, kind: "normal", rank, desc: text };
+      state.cards.push(card);
+      render();
+      await openCard(card);
+    } catch (err) { msg.textContent = err.message; }
+    return;
+  }
   const card = state.cards.find((c) => c.id === openCardId);
   if (!card) return;
   const newDesc = document.getElementById("cardDesc").value;
