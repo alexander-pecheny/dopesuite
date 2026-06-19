@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Мои доски · xy</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+  <script type="module" src="/static/index.js"></script>
+</head>
+<body class="host">
+  <header class="host-top">
+    <h1>Доски</h1>
+    <div class="host-actions">
+      <span class="sync-status" id="status" data-state="saved" aria-label="Готово" title="Готово"></span>
+      <button class="action-icon" id="newBoardBtn" aria-label="Новая доска" title="Новая доска">+</button>
+    </div>
+  </header>
+
+  <main class="match-main">
+    <div id="boardList" class="board-grid"></div>
+    <pre id="message" class="import-message"></pre>
+  </main>
+
+  <!-- create-board dialog -->
+  <div class="appearance-modal-overlay" id="createOverlay" hidden>
+    <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Новая доска">
+      <h2 class="appearance-modal-title">Новая доска</h2>
+      <form id="createForm" class="auth-form auth-form-stack">
+        <input class="input" id="boardName" type="text" placeholder="Название доски" required>
+        <input class="input" id="boardPass" type="password" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required>
+        <p class="auth-hint">Пароль шифрует все данные доски на вашем устройстве. Запомните его — восстановить нельзя. Делитесь им с соавторами вне xy.</p>
+        <div class="auth-actions">
+          <button class="btn" type="submit">Создать</button>
+          <button class="btn btn-ghost" type="button" id="createCancel">Отмена</button>
+        </div>
+      </form>
+      <pre id="createMessage" class="import-message"></pre>
+    </div>
+  </div>
+</body>
+</html>

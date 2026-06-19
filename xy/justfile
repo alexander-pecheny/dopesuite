@@ -1,0 +1,53 @@
+set dotenv-load := true
+
+default: dev
+
+# Server only (hot-reloads assets from disk). Use this unless testing the bot.
+dev-web-only:
+    go run ./cmd/xy-server
+
+bot:
+    go run ./cmd/telegram-bot
+
+# Run server + bot concurrently.
+dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill 0' EXIT INT TERM
+    go run ./cmd/xy-server &
+    go run ./cmd/telegram-bot &
+    wait
+
+fmt:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(find cmd internal -type f -name '*.go')
+    ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
+
+vet:
+    go vet ./...
+
+tidy-check:
+    go mod tidy -diff
+
+# Go tests + frontend (node) tests.
+test:
+    go test ./...
+    node --test jstest/*.test.js
+
+# Frontend unit tests only.
+test-js:
+    node --test jstest/*.test.js
+
+pre-commit:
+    just fmt
+    just vet
+    just tidy-check
+    just test
+
+# Mint a one-shot registration invite and print it. Usage: just invite [days]
+invite days='7':
+    go run ./cmd/xy-server invite {{days}}
+
+deploy *args:
+    python3 deploy.py {{args}}

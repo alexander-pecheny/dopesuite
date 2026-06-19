@@ -1,0 +1,10 @@
+/xy.db
+/xy.db-wal
+/xy.db-shm
+*.db
+*.db-wal
+*.db-shm
+/blobs/
+.env
+/xy-server
+/telegram-bot

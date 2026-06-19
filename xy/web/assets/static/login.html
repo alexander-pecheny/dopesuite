@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход · Фест</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+  <script defer src="/static/login.js"></script>
+</head>
+<body class="host import-page">
+  <header class="host-top">
+    <h1>Вход</h1>
+    <div class="host-actions">
+      <span class="sync-status" id="status" data-state="saved" aria-label="Готово" title="Готово"></span>
+      <a class="action-icon" href="/register" aria-label="Регистрация" title="Регистрация">→</a>
+    </div>
+  </header>
+
+  <main class="match-main">
+    <div class="sheet-frame import-frame">
+      <section id="step-username" class="auth-step">
+        <p class="auth-hint">Введите логин.</p>
+        <form id="usernameForm" class="auth-form" autocomplete="on">
+          <input class="input" id="loginUsername" name="username" type="text" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required autofocus>
+          <button class="btn" type="submit">Дальше</button>
+        </form>
+        <pre id="usernameMessage" class="import-message"></pre>
+      </section>
+
+      <section id="step-password" class="auth-step" hidden>
+        <p class="auth-hint">Вход для <strong id="passwordLogin"></strong>.</p>
+        <form id="passwordForm" class="auth-form auth-form-stack" autocomplete="on">
+          <input class="input" id="passwordValue" name="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+          <div class="auth-actions">
+            <button class="btn" type="submit">Войти по паролю</button>
+            <button class="btn" id="requestCodeButton" type="button">Получить код в телеграм</button>
+          </div>
+        </form>
+        <pre id="passwordMessage" class="import-message"></pre>
+      </section>
+
+      <section id="step-code" class="auth-step" hidden>
+        <p class="auth-hint">Код отправлен в Telegram для <strong id="codeLogin"></strong>.</p>
+        <form id="codeForm" class="auth-form" autocomplete="on">
+          <input class="input" id="loginCode" name="code" type="text" placeholder="Код из Telegram" autocomplete="one-time-code" spellcheck="false" autocapitalize="characters" required>
+          <button class="btn" type="submit">Войти</button>
+        </form>
+        <pre id="loginMessage" class="import-message"></pre>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

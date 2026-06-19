@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Профиль · xy</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+  <script type="module" src="/static/profile.js"></script>
+</head>
+<body class="host import-page">
+  <header class="host-top">
+    <h1>Профиль</h1>
+    <div class="host-actions">
+      <span class="sync-status" id="status" data-state="saved"></span>
+      <a class="action-icon" href="/" aria-label="Доски" title="Доски">←</a>
+    </div>
+  </header>
+
+  <main class="match-main">
+    <div class="sheet-frame import-frame">
+      <section class="auth-step">
+        <p class="auth-hint">Вы вошли как <strong id="whoami">…</strong>.</p>
+      </section>
+
+      <section class="auth-step" id="usernameSection" hidden>
+        <p class="auth-hint">Задайте логин (один раз).</p>
+        <form id="usernameForm" class="auth-form">
+          <input class="input" id="usernameValue" type="text" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required>
+          <button class="btn" type="submit">Сохранить</button>
+        </form>
+        <pre id="usernameMessage" class="import-message"></pre>
+      </section>
+
+      <section class="auth-step">
+        <p class="auth-hint">Пароль для входа на сайт.</p>
+        <form id="passwordForm" class="auth-form auth-form-stack">
+          <input class="input" id="currentPassword" type="password" placeholder="Текущий пароль (если установлен)" autocomplete="current-password">
+          <input class="input" id="newPassword" type="password" placeholder="Новый пароль" autocomplete="new-password" required>
+          <input class="input" id="confirmPassword" type="password" placeholder="Повторите пароль" autocomplete="new-password" required>
+          <button class="btn" type="submit">Сохранить пароль</button>
+        </form>
+        <pre id="passwordMessage" class="import-message"></pre>
+      </section>
+
+      <section class="auth-step">
+        <button class="btn btn-ghost" id="logoutBtn" type="button">Выйти</button>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

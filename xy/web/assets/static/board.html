@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Доска · xy</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+  <script type="module" src="/static/board.js"></script>
+</head>
+<body class="host board-page">
+  <header class="host-top">
+    <h1 id="boardTitle">Доска</h1>
+    <div class="host-actions">
+      <span class="sync-status" id="status" data-state="saved"></span>
+      <button class="action-icon" id="lockBtn" title="Забыть пароль на этом устройстве" aria-label="Заблокировать">🔒</button>
+      <a class="action-icon" href="/" aria-label="Все доски" title="Все доски">←</a>
+    </div>
+  </header>
+
+  <main class="board-main">
+    <div id="kanban" class="kanban" hidden></div>
+  </main>
+
+  <!-- unlock overlay -->
+  <div class="appearance-modal-overlay" id="unlockOverlay" hidden>
+    <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Пароль доски">
+      <h2 class="appearance-modal-title">Пароль доски</h2>
+      <form id="unlockForm" class="auth-form auth-form-stack">
+        <input class="input" id="unlockPass" type="password" placeholder="Пароль доски" autocomplete="off" required autofocus>
+        <button class="btn" type="submit">Открыть</button>
+      </form>
+      <pre id="unlockMessage" class="import-message"></pre>
+    </div>
+  </div>
+
+  <!-- card detail overlay -->
+  <div class="card-overlay" id="cardOverlay" hidden>
+    <div class="card-detail" role="dialog" aria-modal="true">
+      <div class="card-detail-head">
+        <div class="card-labels" id="cardLabels"></div>
+        <button class="action-icon" id="cardClose" aria-label="Закрыть">×</button>
+      </div>
+
+      <label class="card-section-label">Описание</label>
+      <textarea class="card-desc" id="cardDesc" spellcheck="false"></textarea>
+      <div class="auth-actions">
+        <button class="btn" id="cardSave" type="button">Сохранить</button>
+        <button class="btn btn-ghost" id="cardDelete" type="button">Удалить карточку</button>
+      </div>
+
+      <label class="card-section-label">Метки</label>
+      <div class="label-picker" id="labelPicker"></div>
+      <form id="newLabelForm" class="label-create">
+        <input class="input" id="newLabelName" type="text" placeholder="Новая метка">
+        <input type="color" id="newLabelColor" value="#4477aa" class="label-color-input">
+        <button class="btn btn-small" type="submit">+</button>
+      </form>
+
+      <label class="card-section-label">Вложения</label>
+      <div class="attachments" id="attachments"></div>
+      <div class="attach-add">
+        <input type="file" id="attachFile" class="input">
+        <label class="attach-lossless"><input type="checkbox" id="attachLossless"> без потерь</label>
+        <button class="btn btn-small" id="attachUpload" type="button">Загрузить</button>
+      </div>
+
+      <label class="card-section-label">Переместить / копировать на другую доску</label>
+      <div class="card-move">
+        <select id="moveTarget" class="input"></select>
+        <button class="btn btn-small" id="copyBtn" type="button">Копировать</button>
+        <button class="btn btn-small btn-ghost" id="moveBtn" type="button">Переместить</button>
+      </div>
+
+      <label class="card-section-label">Лента</label>
+      <div class="timeline" id="timeline"></div>
+      <form id="commentForm" class="comment-form">
+        <textarea class="card-desc comment-input" id="commentInput" placeholder="Комментарий…" spellcheck="false"></textarea>
+        <button class="btn btn-small" type="submit">Отправить</button>
+      </form>
+      <pre id="cardMessage" class="import-message"></pre>
+    </div>
+  </div>
+</body>
+</html>

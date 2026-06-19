@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Регистрация · xy</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+  <script type="module" src="/static/register.js"></script>
+</head>
+<body class="host import-page">
+  <header class="host-top">
+    <h1>Регистрация</h1>
+    <div class="host-actions">
+      <span class="sync-status" id="status" data-state="saved"></span>
+      <a class="action-icon" href="/login" aria-label="Вход" title="Вход">←</a>
+    </div>
+  </header>
+
+  <main class="match-main">
+    <div class="sheet-frame import-frame">
+      <section id="step-invite" class="auth-step">
+        <p class="auth-hint">Введите код-приглашение.</p>
+        <form id="inviteForm" class="auth-form">
+          <input class="input" id="inviteCode" type="text" placeholder="Код-приглашение" autocapitalize="characters" spellcheck="false" required autofocus>
+          <button class="btn" type="submit">Дальше</button>
+        </form>
+        <pre id="inviteMessage" class="import-message"></pre>
+      </section>
+
+      <section id="step-code" class="auth-step" hidden>
+        <p class="auth-hint">Отправьте этот код боту в Telegram:</p>
+        <p class="register-code" id="regCode"></p>
+        <p class="auth-hint">Ждём подтверждения от бота…</p>
+        <pre id="codeMessage" class="import-message"></pre>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

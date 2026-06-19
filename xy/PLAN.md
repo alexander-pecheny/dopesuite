@@ -24,21 +24,36 @@ This plan reflects four decisions made up front:
 
 ## 1. Architecture overview
 
+> **Note (2026-06-19):** `~/dope` was refactored from a flat `package main` into
+> seven semantic groups under `dope/dope/` (cmd, server, web, domain, storage,
+> export, platform — see `~/dope/ARCHITECTURE.md`). xy does **not** import dope;
+> it is its own `module xy` that reuses dope's *patterns* and copies the needed
+> frontend assets. xy is much smaller than dope, so it uses a flatter layout
+> (not dope's seven groups) while keeping the same idioms (write-tx discipline,
+> `BuildDSN` pragmas, `//go:embed static`, `window`-globals frontend).
+
 ```
 xy/                         module root (go.mod: module "xy")
-  xy/                       package xyserver — HTTP server, routing, SSE, handlers
-    cmd/xy-server/          thin main()
-    cmd/telegram-bot/       login-code bot (ported from dope)
-    session/               cookie + session.User (ported)
-    store/                 SQLite schema, migrations, query helpers, write-tx
-    blobstore/             encrypted attachment storage (new)
-    static/                embedded frontend assets
-      crypto.js            WebCrypto + scrypt (noble) envelope layer (new)
-      board.js             kanban board UI (new)
-      card.js              card detail + timeline UI (new)
-      styles.css           design system (ported from dope, trimmed)
-      menu.js / login.*    chrome + auth UI (ported)
-    jstest/                Deno frontend tests (crypto round-trips, ranks)
+  cmd/xy-server/            thin main() → server.Main()
+  cmd/telegram-bot/         login-code bot (pattern from dope, own token)
+  internal/server/          HTTP server, routing, handlers, auth
+    main.go                 mux wiring, gzip, ETag, dev disk-read
+    db.go                   open DB, DSN/WAL pragmas, migration runner, write-tx
+    auth.go                 sessions, login/register, password, telegram bridge
+    boards.go               boards/members/keymeta endpoints
+    lists_cards.go          lists/cards/labels/timeline endpoints
+    attachments.go          encrypted attachment endpoints
+  internal/session/         cookie + session.User (ported from dope/platform/session)
+  internal/blobstore/       encrypted attachment storage (new)
+  web/assets/               //go:embed static  (package assets)
+    static/
+      crypto.js             WebCrypto + scrypt (noble) envelope layer (new)
+      board.js              kanban board UI (new)
+      card.js               card detail + timeline UI (new)
+      styles.css            design system (ported from dope, trimmed)
+      menu.js / login.*     chrome + auth UI (ported)
+      vendor/noble-hashes.js  pinned, SRI'd single JS dependency
+  jstest/                   Deno frontend tests (crypto round-trips, ranks)
   justfile, deploy.py       (ported patterns)
 ```
 
@@ -243,7 +258,7 @@ can be revisited later only if poll latency proves annoying.)
    handlers, session middleware, `session` package, design-system assets,
    `login`/`menu`/`profile`. Port the Telegram bot (`cmd/telegram-bot` +
    bridge) with its own token.
-3. **Crypto foundation.** `crypto.js` (Argon2id WASM + AES-GCM envelope), board
+3. **Crypto foundation.** `crypto.js` (scrypt via @noble/hashes + AES-GCM envelope), board
    create (generate DK, wrap, verify token), unlock UI, IndexedDB key cache,
    strict CSP + SRI. Deno round-trip tests.
 4. **Data model + API.** boards/members/lists/cards/labels/card_labels/timeline/
