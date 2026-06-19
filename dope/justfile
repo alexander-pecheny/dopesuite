@@ -24,11 +24,11 @@ fmt:
 
 test:
     go test ./...
-    deno test --allow-read dope/jstest/
+    deno test --allow-read dope/web/jstest/
 
-# Frontend unit tests only (Deno's built-in runner; reads dope/static/*.js).
+# Frontend unit tests only (Deno's built-in runner; reads dope/web/assets/static/*.js).
 test-js:
-    deno test --allow-read dope/jstest/
+    deno test --allow-read dope/web/jstest/
 
 vet:
     go vet ./...

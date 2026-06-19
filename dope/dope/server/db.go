@@ -1,0 +1,2920 @@
+package dopeserver
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/base32"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"log"
+	"math/big"
+	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	_ "modernc.org/sqlite"
+
+	"dope/dope/domain/games"
+	"dope/dope/domain/imports"
+	"dope/dope/domain/numbering"
+	"dope/dope/domain/resolver"
+	"dope/dope/domain/roster"
+	"dope/dope/platform/metrics"
+	"dope/dope/platform/realtime"
+	"dope/dope/platform/roles"
+	"dope/dope/platform/util"
+	"dope/dope/storage/auditmw"
+	"dope/dope/storage/festaccess"
+	"dope/dope/storage/festwrite"
+	"dope/dope/storage/journal"
+	"dope/dope/storage/store"
+	"dope/dope/storage/storeutil"
+)
+
+const (
+	dbFile             = "fest.db"
+	defaultMatchCode   = "A"
+	defaultVenueTitle  = "Москва-1"
+	defaultGameCode    = "default"
+	systemUserUsername = "system"
+)
+
+type venueUpdateRequest struct {
+	Title string `json:"title"`
+}
+
+type matchVenueRequest struct {
+	Number      int `json:"number"`
+	VenueNumber int `json:"venueNumber"`
+}
+
+func openFestDB(path string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", store.BuildDSN(path))
+	if err != nil {
+		return nil, err
+	}
+	// Migrations toggle PRAGMA foreign_keys and run multi-statement
+	// schema rewrites; those need to land on a single connection.
+	// We pin the pool to 1 connection while migrating, then open it up
+	// for runtime concurrency.
+	db.SetMaxOpenConns(1)
+	if err := migrateDB(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := journal.EnsureTriggers(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := journal.BackfillGameCheckpoints(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	db.SetMaxOpenConns(store.MaxOpenConns)
+	db.SetMaxIdleConns(store.MaxOpenConns)
+	db.SetConnMaxIdleTime(30 * time.Minute)
+	return db, nil
+}
+
+// loadActiveContext picks an arbitrary fest/game/first-match to drive the
+// transitional single-context handlers. Returns zero values (no error) when the
+// DB has no fest yet — that's the default empty state.
+func loadActiveContext(db *sql.DB) (festID, gameID int64, matchCode string, err error) {
+	row := db.QueryRow(`
+select t.id, g.id, coalesce((select m.code from matches m where m.game_id = g.id order by m.position, m.id limit 1), '')
+from fests t
+join games g on g.fest_id = t.id
+order by t.id, g.position, g.id
+limit 1`)
+	if err = row.Scan(&festID, &gameID, &matchCode); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, "", nil
+		}
+		return 0, 0, "", err
+	}
+	return festID, gameID, matchCode, nil
+}
+
+func migrateDB(db *sql.DB) error {
+	if err := migrateLegacyFestSchema(db); err != nil {
+		return err
+	}
+	// Drop the legacy audit_log AFTER triggers FIRST: later migration steps write
+	// to audited tables (fests/users/organizers), and once audit_log is dropped
+	// below those stale triggers would fail with "no such table: audit_log".
+	if err := auditmw.DropLegacyAuditTriggers(db); err != nil {
+		return err
+	}
+	_, err := db.Exec(`
+create table if not exists schema_versions(
+  version integer primary key,
+  applied_at text not null
+);
+
+create table if not exists users(
+  id integer primary key,
+  telegram_user_id integer unique,
+  telegram_username text,
+  username text unique,
+  is_system integer not null default 0,
+  created_at text not null,
+  updated_at text not null
+);
+
+create table if not exists invites(
+  id integer primary key,
+  code text not null unique,
+  created_by integer not null references users(id),
+  used_by integer references users(id),
+  used_at text,
+  created_at text not null,
+  expires_at text not null
+);
+
+create table if not exists telegram_login_codes(
+  id integer primary key,
+  code text not null unique,
+  kind text not null check (kind in ('register','login')),
+  invite_id integer references invites(id),
+  user_id integer references users(id),
+  telegram_user_id integer,
+  telegram_username text,
+  created_at text not null,
+  expires_at text not null,
+  consumed_at text
+);
+
+create table if not exists sessions(
+  id integer primary key,
+  user_id integer not null references users(id) on delete cascade,
+  token_hash text not null unique,
+  created_at text not null,
+  expires_at text not null,
+  last_seen_at text not null
+);
+
+create table if not exists schemes(
+  id integer primary key,
+  slug text not null unique,
+  title text not null,
+  version integer not null,
+  schema_json text not null,
+  created_at text not null
+);
+
+create table if not exists fests(
+  id integer primary key,
+  slug text not null unique,
+  title text not null,
+  description text not null default '',
+  rating_id integer,
+  created_by integer references users(id),
+  revision integer not null default 1,
+  created_at text not null,
+  updated_at text not null
+);
+
+create table if not exists fest_organizers(
+  fest_id integer not null references fests(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  role text not null default 'admin' check (role in ('creator','admin','host')),
+  added_at text not null,
+  primary key(fest_id, user_id)
+);
+
+create table if not exists fest_teams(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  rating_id integer,
+  name text not null,
+  city text not null default '',
+  position real not null,
+  number integer,
+  deleted integer not null default 0
+);
+
+create table if not exists fest_players(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  rating_id integer,
+  first_name text not null,
+  last_name text not null default ''
+);
+
+create table if not exists fest_team_players(
+  team_id integer not null references fest_teams(id) on delete cascade,
+  player_id integer not null references fest_players(id) on delete cascade,
+  roster_order integer not null,
+  primary key(team_id, player_id)
+);
+
+create table if not exists game_player_team_overrides(
+  fest_id integer not null references fests(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
+  player_id integer not null references fest_players(id) on delete cascade,
+  source_team_id integer not null references fest_teams(id) on delete cascade,
+  override_team_id integer not null references fest_teams(id) on delete cascade,
+  created_at text not null,
+  updated_at text not null,
+  primary key(fest_id, game_id, player_id)
+);
+
+create table if not exists teams(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  name text not null,
+  city text not null default ''
+);
+
+create table if not exists players(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  first_name text not null,
+  last_name text not null default ''
+);
+
+create table if not exists team_players(
+  team_id integer not null references teams(id) on delete cascade,
+  player_id integer not null references players(id) on delete cascade,
+  roster_order integer not null,
+  primary key(team_id, player_id)
+);
+
+create table if not exists games(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  code text not null,
+  title text not null,
+  game_type text not null,
+  position integer not null,
+  scheme_id integer references schemes(id),
+  scheme_json text not null default '{}',
+  status text not null default 'pending',
+  team_list_source text not null default 'fest' check (team_list_source in ('fest','game')),
+  roster_source text not null default 'fest' check (roster_source in ('fest','game')),
+  revision integer not null default 1,
+  created_at text not null,
+  updated_at text not null,
+  unique(fest_id, code)
+);
+
+create table if not exists game_teams(
+  game_id integer not null references games(id) on delete cascade,
+  team_id integer not null references teams(id) on delete cascade,
+  position integer not null,
+  primary key(game_id, team_id)
+);
+
+create table if not exists game_players(
+  game_id integer not null references games(id) on delete cascade,
+  player_id integer not null references players(id) on delete cascade,
+  position integer not null,
+  primary key(game_id, player_id)
+);
+
+create table if not exists game_team_players(
+  game_id integer not null references games(id) on delete cascade,
+  team_id integer not null references teams(id) on delete cascade,
+  player_id integer not null references players(id) on delete cascade,
+  roster_order integer not null,
+  primary key(game_id, team_id, player_id)
+);
+
+create table if not exists game_assignments(
+  game_id integer not null references games(id) on delete cascade,
+  basket integer not null,
+  number integer not null,
+  team_id integer references teams(id),
+  player_id integer references players(id),
+  primary key(game_id, basket, number),
+  check ((team_id is not null) <> (player_id is not null))
+);
+
+create table if not exists venues(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  number integer not null,
+  title text not null,
+  created_at text not null,
+  updated_at text not null,
+  unique(fest_id, number)
+);
+
+create table if not exists stages(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
+  code text not null,
+  title text not null,
+  stage_type text not null,
+  position integer not null,
+  status text not null default 'active',
+  config_json text not null default '{}',
+  unique(game_id, code)
+);
+
+create table if not exists matches(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
+  stage_id integer not null references stages(id) on delete cascade,
+  code text not null,
+  title text not null,
+  position integer not null,
+  participant_count integer not null,
+  venue_id integer references venues(id),
+  status text not null default 'active',
+  revision integer not null default 1,
+  unique(game_id, code)
+);
+
+create table if not exists match_slots(
+  id integer primary key,
+  match_id integer not null references matches(id) on delete cascade,
+  slot_index integer not null,
+  source_type text not null check (source_type in ('seed','from_match','reseed','placeholder')),
+  source_ref_json text not null default '{}',
+  team_id integer references teams(id),
+  player_id integer references players(id),
+  locked integer not null default 0,
+  unique(match_id, slot_index)
+);
+
+create table if not exists themes(
+  id integer primary key,
+  match_id integer not null references matches(id) on delete cascade,
+  team_id integer not null references teams(id) on delete cascade,
+  kind text not null,
+  theme_index integer not null,
+  player_id integer references players(id),
+  unique(match_id, team_id, kind, theme_index)
+);
+
+create table if not exists answers(
+  id integer primary key,
+  theme_id integer not null references themes(id) on delete cascade,
+  answer_index integer not null,
+  mark text not null default '',
+  unique(theme_id, answer_index)
+);
+
+create table if not exists match_results(
+  match_id integer not null references matches(id) on delete cascade,
+  team_id integer not null references teams(id) on delete cascade,
+  place real not null default 0,
+  total integer not null default 0,
+  plus integer not null default 0,
+  tiebreak integer not null default 0,
+  metrics_json text not null default '{}',
+  primary key(match_id, team_id)
+);
+
+create table if not exists reseed_entries(
+  stage_id integer not null references stages(id) on delete cascade,
+  rank integer not null,
+  team_id integer not null references teams(id) on delete cascade,
+  metrics_json text not null,
+  primary key(stage_id, rank)
+);
+
+-- journal is the single forward edit log: it is BOTH the durable, replayable
+-- record of every mutation AND the source of the events streamed to viewers
+-- (it replaces the old write-only "events" table). Each row is one edit, keyed
+-- by a per-fest monotonic seq (the fest revision at append time). op is a DSL
+-- opcode (see journal_dsl.go) and payload is the compact edit content, which is
+-- also what gets broadcast over SSE. Finished runs are folded into
+-- journal_segment (zstd) by the archiver; the hot table stays small and the log
+-- never expires. See journal_dsl.go / journal_replay.go / journal_archive.go.
+create table if not exists journal(
+  id            integer primary key,
+  fest_id       integer references fests(id) on delete cascade,
+  game_id       integer,
+  seq           integer not null,
+  ts            text not null,
+  actor_user_id integer,
+  request_id    text,
+  op            integer not null,
+  payload       blob not null default x'',
+  created_at    text not null
+);
+create index if not exists journal_fest_seq on journal(fest_id, seq);
+
+-- journal_dict interns table/column names and request-ids to small ids so cold
+-- segments stay compact (also used by the audit_log converter).
+create table if not exists journal_dict(
+  id  integer primary key,
+  str text not null unique
+);
+
+-- journal_segment holds contiguous runs of journal rows folded into one
+-- zstd-compressed DSL stream by the archiver. Append-only; never pruned.
+create table if not exists journal_segment(
+  id          integer primary key,
+  fest_id     integer not null,
+  seq_start   integer not null,
+  seq_end     integer not null,
+  dsl_version integer not null,
+  n_records   integer not null,
+  blob        blob not null,
+  created_at  text not null
+);
+
+-- journal_checkpoint stores sparse full-state snapshots of a single GAME so
+-- replay/revert never has to start from the literal beginning. Revert is
+-- per-game (games are independent units); the checkpoint at a game's first seq
+-- is its genesis. seq is the fest revision at capture time.
+create table if not exists journal_checkpoint(
+  game_id     integer not null,
+  seq         integer not null,
+  state_blob  blob not null,
+  dsl_version integer not null,
+  created_at  text not null,
+  primary key(game_id, seq)
+);
+
+create trigger if not exists team_players_max_9
+before insert on team_players
+when (select count(*) from team_players where team_id = new.team_id) >= 9
+begin
+  select raise(abort, 'team roster is limited to 9 players');
+end;
+
+create trigger if not exists game_team_players_max_9
+before insert on game_team_players
+when (select count(*) from game_team_players where game_id = new.game_id and team_id = new.team_id) >= 9
+begin
+  select raise(abort, 'team roster is limited to 9 players');
+end;
+
+create trigger if not exists fest_team_players_max_9
+before insert on fest_team_players
+when (select count(*) from fest_team_players where team_id = new.team_id) >= 9
+begin
+  select raise(abort, 'team roster is limited to 9 players');
+end;
+
+insert or ignore into schema_versions(version, applied_at) values(2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	if err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "fests", []store.ColumnSpec{
+		{Name: "start_date", Type: "TEXT"},
+		{Name: "end_date", Type: "TEXT"},
+		{Name: "is_public", Type: "INTEGER NOT NULL DEFAULT 0"},
+	}); err != nil {
+		return err
+	}
+	// The old write-only "events" table is superseded by "journal" (created
+	// above). Nothing ever read events back, so it is dropped outright rather
+	// than migrated.
+	if _, err := db.Exec(`drop table if exists events`); err != nil {
+		return err
+	}
+	// The legacy before/after-snapshot audit_log + its support table are retired;
+	// the forward journal (with row-op triggers + per-game checkpoints) is now the
+	// durable edit log. Existing audit_log data can be archived first with the
+	// `convert-audit` subcommand; here we drop it so it stops consuming space.
+	if _, err := db.Exec(`drop table if exists audit_log`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`drop table if exists audit_trigger_state`); err != nil {
+		return err
+	}
+	// Early-adopter journal tables (created before per-game scoping) miss the
+	// game_id column / use the old per-fest checkpoint key. CREATE IF NOT EXISTS
+	// won't alter them, so reconcile here. The journal hot rows are preserved
+	// (game_id backfills as NULL for old semantic-event rows); the checkpoint
+	// cache is rebuilt by backfillGameCheckpoints, so dropping a stale-shaped one
+	// is safe.
+	if err := store.AddColumnsIfMissing(db, "journal", []store.ColumnSpec{{Name: "game_id", Type: "integer"}}); err != nil {
+		return err
+	}
+	// Created after the game_id column exists (it indexes that column), so it
+	// can't run inside the CREATE block above on an early-adopter journal.
+	if _, err := db.Exec(`create index if not exists journal_game_seq on journal(game_id, seq)`); err != nil {
+		return err
+	}
+	// Backfill game_id on semantic event rows recorded before they were
+	// attributed, borrowing it from a row-op of the same request — so the
+	// per-game history shows those earlier edits with descriptions. Idempotent.
+	if _, err := db.Exec(`
+update journal set game_id = (
+  select j2.game_id from journal j2
+  where j2.request_id = journal.request_id and j2.game_id is not null limit 1)
+where game_id is null and request_id is not null
+  and exists (select 1 from journal j3
+    where j3.request_id = journal.request_id and j3.game_id is not null)`); err != nil {
+		return err
+	}
+	if !store.ColumnExists(db, "journal_checkpoint", "game_id") {
+		if _, err := db.Exec(`drop table if exists journal_checkpoint`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`create table if not exists journal_checkpoint(
+  game_id integer not null, seq integer not null, state_blob blob not null,
+  dsl_version integer not null, created_at text not null, primary key(game_id, seq))`); err != nil {
+			return err
+		}
+	}
+	if err := festaccess.MigrateFestOrganizerRoles(db); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{
+		{Name: "state_json", Type: "TEXT NOT NULL DEFAULT '{}'"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "users", []store.ColumnSpec{
+		{Name: "password_hash", Type: "TEXT"},
+		{Name: "password_salt", Type: "TEXT"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(5, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(6, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(7, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "fest_teams", []store.ColumnSpec{
+		{Name: "number", Type: "INTEGER"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`create unique index if not exists fest_teams_fest_number_idx on fest_teams(fest_id, number) where number is not null`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "fest_teams", []store.ColumnSpec{
+		{Name: "deleted", Type: "INTEGER NOT NULL DEFAULT 0"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(9, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{
+		{Name: "slug", Type: "TEXT"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`create unique index if not exists games_fest_slug_idx on games(fest_id, slug) where slug is not null`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(9, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if err := relaxFestSlugNotNull(db); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(10, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`
+create table if not exists game_player_team_overrides(
+  fest_id integer not null references fests(id) on delete cascade,
+  game_id integer not null references games(id) on delete cascade,
+  player_id integer not null references fest_players(id) on delete cascade,
+  source_team_id integer not null references fest_teams(id) on delete cascade,
+  override_team_id integer not null references fest_teams(id) on delete cascade,
+  created_at text not null,
+  updated_at text not null,
+  primary key(fest_id, game_id, player_id)
+);
+create index if not exists game_player_team_overrides_game_idx on game_player_team_overrides(game_id);
+insert or ignore into schema_versions(version, applied_at) values(11, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`); err != nil {
+		return err
+	}
+	if err := auditmw.InstallAuditSchema(db); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(12, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	// v13: backfill team numbers so every active fest_team has one. Team number
+	// is the universal team identity across game formats; an editing guard
+	// blocks play until teams are numbered, and this backfill makes existing
+	// fests editable without a manual re-number. Gated on the version row so it
+	// runs exactly once and does not undo an intentional later "clear numbers".
+	var hasV13 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 13`).Scan(&hasV13); err != nil {
+		return err
+	}
+	if hasV13 == 0 {
+		if err := backfillFestTeamNumbers(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(13, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
+	// v14: give the EK game-scoped `teams` table a `number` natural key (the same
+	// universal team identity OD/KSI use). teams.id stays the physical FK for
+	// gameplay rows (ON DELETE CASCADE preserved); number drives seed matching so
+	// re-seeding follows teams by identity and same-named teams stay distinct.
+	// Nullable: scheme-defined teams without a printed number keep working.
+	if err := store.AddColumnsIfMissing(db, "teams", []store.ColumnSpec{
+		{Name: "number", Type: "INTEGER"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`create unique index if not exists teams_fest_number_idx on teams(fest_id, number) where number is not null`); err != nil {
+		return err
+	}
+	var hasV14 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 14`).Scan(&hasV14); err != nil {
+		return err
+	}
+	if hasV14 == 0 {
+		if err := backfillEKTeamNumbers(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(14, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
+	// v15: give each game a fixed random_seed. Reseed lots (Жребий) are now
+	// derived deterministically from this seed, so a reseed recomputes identically
+	// every time and an untick/retick (or any unrelated edit) can never reshuffle a
+	// tie. Backfill a distinct random seed for every existing game exactly once;
+	// new games get one at creation.
+	if err := store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{
+		{Name: "random_seed", Type: "TEXT NOT NULL DEFAULT ''"},
+	}); err != nil {
+		return err
+	}
+	// Seed every newly-created game once, regardless of which insert path made it
+	// (SQLite disallows a non-constant column default like randomblob, so a trigger
+	// fills it). The update doesn't re-fire this AFTER INSERT trigger, so no loop.
+	if _, err := db.Exec(`
+create trigger if not exists games_random_seed_default
+after insert on games
+when new.random_seed = ''
+begin
+  update games set random_seed = lower(hex(randomblob(16))) where id = new.id;
+end`); err != nil {
+		return err
+	}
+	var hasV15 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 15`).Scan(&hasV15); err != nil {
+		return err
+	}
+	if hasV15 == 0 {
+		if _, err := db.Exec(`update games set random_seed = lower(hex(randomblob(16))) where random_seed = ''`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(15, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// backfillEKTeamNumbers gives existing EK `teams` rows a number, matched to
+// fest_teams by name, so re-seeding finds them by identity instead of creating
+// duplicates. Best-effort and conflict-free: ambiguous (duplicate) names are
+// skipped, and a number already claimed by another teams row in the fest is not
+// reused — those rows stay null (the unresolvable legacy ambiguity this whole
+// change exists to prevent going forward). Gated by the caller to run once.
+func backfillEKTeamNumbers(db *sql.DB) error {
+	festRows, err := db.Query(`select distinct fest_id from teams where number is null`)
+	if err != nil {
+		return err
+	}
+	var festIDs []int64
+	for festRows.Next() {
+		var id int64
+		if err := festRows.Scan(&id); err != nil {
+			festRows.Close()
+			return err
+		}
+		festIDs = append(festIDs, id)
+	}
+	if err := festRows.Err(); err != nil {
+		festRows.Close()
+		return err
+	}
+	festRows.Close()
+
+	for _, festID := range festIDs {
+		// fest_teams name -> number, dropping ambiguous duplicate names.
+		numByName := map[string]int64{}
+		ambiguous := map[string]bool{}
+		ftRows, err := db.Query(`select name, number from fest_teams where fest_id = ? and deleted = 0 and number is not null`, festID)
+		if err != nil {
+			return err
+		}
+		for ftRows.Next() {
+			var name string
+			var number int64
+			if err := ftRows.Scan(&name, &number); err != nil {
+				ftRows.Close()
+				return err
+			}
+			key := roster.SeedTeamNameKey(name)
+			if _, seen := numByName[key]; seen {
+				ambiguous[key] = true
+			} else {
+				numByName[key] = number
+			}
+		}
+		if err := ftRows.Err(); err != nil {
+			ftRows.Close()
+			return err
+		}
+		ftRows.Close()
+		for key := range ambiguous {
+			delete(numByName, key)
+		}
+
+		// Numbers already claimed by teams rows in this fest.
+		claimed := map[int64]bool{}
+		clRows, err := db.Query(`select number from teams where fest_id = ? and number is not null`, festID)
+		if err != nil {
+			return err
+		}
+		for clRows.Next() {
+			var n int64
+			if err := clRows.Scan(&n); err != nil {
+				clRows.Close()
+				return err
+			}
+			claimed[n] = true
+		}
+		if err := clRows.Err(); err != nil {
+			clRows.Close()
+			return err
+		}
+		clRows.Close()
+
+		teamRows, err := db.Query(`select id, name from teams where fest_id = ? and number is null order by id`, festID)
+		if err != nil {
+			return err
+		}
+		type pending struct {
+			id  int64
+			num int64
+		}
+		var assigns []pending
+		for teamRows.Next() {
+			var id int64
+			var name string
+			if err := teamRows.Scan(&id, &name); err != nil {
+				teamRows.Close()
+				return err
+			}
+			num, ok := numByName[roster.SeedTeamNameKey(name)]
+			if ok && !claimed[num] {
+				claimed[num] = true
+				assigns = append(assigns, pending{id: id, num: num})
+			}
+		}
+		if err := teamRows.Err(); err != nil {
+			teamRows.Close()
+			return err
+		}
+		teamRows.Close()
+		for _, a := range assigns {
+			if _, err := db.Exec(`update teams set number = ? where id = ?`, a.num, a.id); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// backfillFestTeamNumbers assigns a number to every active (non-deleted)
+// fest_team that lacks one, per fest, continuing past the largest number ever
+// used in that fest (soft-deleted rows included, so a returning team can't
+// collide). Deterministic order (position, id) matches the import/auto-assign
+// ordering. Idempotent and a no-op once every active team is numbered; the
+// caller gates it on the v13 version row so a later host "clear numbers" is not
+// silently undone on the next startup.
+func backfillFestTeamNumbers(db *sql.DB) error {
+	rows, err := db.Query(`select distinct fest_id from fest_teams where deleted = 0 and number is null`)
+	if err != nil {
+		return err
+	}
+	var festIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		festIDs = append(festIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	for _, festID := range festIDs {
+		var maxNum sql.NullInt64
+		if err := db.QueryRow(`select max(number) from fest_teams where fest_id = ?`, festID).Scan(&maxNum); err != nil {
+			return err
+		}
+		next := maxNum.Int64 + 1 // NullInt64 zero value is 0, so this is 1 when no numbers exist
+		idRows, err := db.Query(`select id from fest_teams where fest_id = ? and deleted = 0 and number is null order by position, id`, festID)
+		if err != nil {
+			return err
+		}
+		var ids []int64
+		for idRows.Next() {
+			var id int64
+			if err := idRows.Scan(&id); err != nil {
+				idRows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		if err := idRows.Err(); err != nil {
+			idRows.Close()
+			return err
+		}
+		idRows.Close()
+		for _, id := range ids {
+			if _, err := db.Exec(`update fest_teams set number = ? where id = ?`, next, id); err != nil {
+				return err
+			}
+			next++
+		}
+	}
+	return nil
+}
+
+// relaxFestSlugNotNull rebuilds the fests table so slug is nullable. The
+// original create-table set slug to NOT NULL UNIQUE; we want slug to be
+// optional — set only when the user picks one. SQLite can't ALTER a column's
+// nullability, so we copy the table.
+func relaxFestSlugNotNull(db *sql.DB) error {
+	var notNull int
+	if err := db.QueryRow(`select "notnull" from pragma_table_info('fests') where name = 'slug'`).Scan(&notNull); err != nil {
+		return err
+	}
+	if notNull == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	fkOff := true
+	defer func() {
+		if fkOff {
+			_, _ = db.Exec(`PRAGMA foreign_keys = ON`)
+		}
+	}()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// legacy_alter_table = ON keeps RENAME TO from rewriting fest_id FK
+	// references in other tables — we'll point them back at the new fests
+	// table just by creating one with the original name.
+	if _, err := tx.ExecContext(ctx, `PRAGMA legacy_alter_table = ON`); err != nil {
+		return err
+	}
+	legacyOn := true
+	defer func() {
+		if legacyOn {
+			_, _ = tx.ExecContext(ctx, `PRAGMA legacy_alter_table = OFF`)
+		}
+	}()
+	if _, err := tx.ExecContext(ctx, `alter table fests rename to fests_slug_migration_old`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+create table fests(
+  id integer primary key,
+  slug text unique,
+  title text not null,
+  description text not null default '',
+  rating_id integer,
+  created_by integer references users(id),
+  revision integer not null default 1,
+  created_at text not null,
+  updated_at text not null,
+  start_date text,
+  end_date text,
+  is_public integer not null default 0
+)`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+insert into fests(id, slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public)
+select id, slug, title, description, rating_id, created_by, revision, created_at, updated_at, start_date, end_date, is_public
+from fests_slug_migration_old`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `drop table fests_slug_migration_old`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `PRAGMA legacy_alter_table = OFF`); err != nil {
+		return err
+	}
+	legacyOn = false
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		return err
+	}
+	fkOff = false
+	return verifyForeignKeys(db)
+}
+
+func migrateLegacyFestSchema(db *sql.DB) error {
+	ctx := context.Background()
+	hasLegacy, err := sqliteTableExists(ctx, db, "tournaments")
+	if err != nil || !hasLegacy {
+		return err
+	}
+	hasFests, err := sqliteTableExists(ctx, db, "fests")
+	if err != nil {
+		return err
+	}
+	if hasFests {
+		return errors.New("cannot migrate legacy fest schema: both tournaments and fests tables exist")
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	foreignKeysOff := true
+	defer func() {
+		if foreignKeysOff {
+			_, _ = db.Exec(`PRAGMA foreign_keys = ON`)
+		}
+	}()
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `drop trigger if exists tournament_team_players_max_9`); err != nil {
+		return err
+	}
+	tableRenames := []struct {
+		Old string
+		New string
+	}{
+		{"tournaments", "fests"},
+		{"tournament_organizers", "fest_organizers"},
+		{"tournament_teams", "fest_teams"},
+		{"tournament_players", "fest_players"},
+		{"tournament_team_players", "fest_team_players"},
+	}
+	for _, rename := range tableRenames {
+		if err := renameTableIfExists(ctx, tx, rename.Old, rename.New); err != nil {
+			return err
+		}
+	}
+	for _, table := range []string{
+		"fest_organizers",
+		"fest_teams",
+		"fest_players",
+		"teams",
+		"players",
+		"games",
+		"venues",
+		"stages",
+		"matches",
+		"events",
+	} {
+		if err := renameColumnIfExists(ctx, tx, table, "tournament_id", "fest_id"); err != nil {
+			return err
+		}
+	}
+	if err := rebuildLegacyGamesTable(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		return err
+	}
+	foreignKeysOff = false
+	return verifyForeignKeys(db)
+}
+
+func renameTableIfExists(ctx context.Context, tx *sql.Tx, oldName, newName string) error {
+	oldExists, err := sqliteTableExists(ctx, tx, oldName)
+	if err != nil || !oldExists {
+		return err
+	}
+	newExists, err := sqliteTableExists(ctx, tx, newName)
+	if err != nil {
+		return err
+	}
+	if newExists {
+		return fmt.Errorf("cannot rename %s to %s: target table exists", oldName, newName)
+	}
+	_, err = tx.ExecContext(ctx, fmt.Sprintf("alter table %s rename to %s", oldName, newName))
+	return err
+}
+
+func renameColumnIfExists(ctx context.Context, tx *sql.Tx, table, oldName, newName string) error {
+	tableExists, err := sqliteTableExists(ctx, tx, table)
+	if err != nil || !tableExists {
+		return err
+	}
+	oldExists, err := sqliteColumnExists(ctx, tx, table, oldName)
+	if err != nil || !oldExists {
+		return err
+	}
+	newExists, err := sqliteColumnExists(ctx, tx, table, newName)
+	if err != nil {
+		return err
+	}
+	if newExists {
+		return fmt.Errorf("cannot rename %s.%s to %s: target column exists", table, oldName, newName)
+	}
+	_, err = tx.ExecContext(ctx, fmt.Sprintf("alter table %s rename column %s to %s", table, oldName, newName))
+	return err
+}
+
+func rebuildLegacyGamesTable(ctx context.Context, tx *sql.Tx) error {
+	exists, err := sqliteTableExists(ctx, tx, "games")
+	if err != nil || !exists {
+		return err
+	}
+	hasStateJSON, err := sqliteColumnExists(ctx, tx, "games", "state_json")
+	if err != nil {
+		return err
+	}
+	stateJSONExpr := "'{}'"
+	if hasStateJSON {
+		stateJSONExpr = "coalesce(state_json, '{}')"
+	}
+	if _, err := tx.ExecContext(ctx, `PRAGMA legacy_alter_table = ON`); err != nil {
+		return err
+	}
+	legacyAlterTableOn := true
+	defer func() {
+		if legacyAlterTableOn {
+			_, _ = tx.ExecContext(ctx, `PRAGMA legacy_alter_table = OFF`)
+		}
+	}()
+	if _, err := tx.ExecContext(ctx, `alter table games rename to games_fest_migration_old`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+create table games(
+  id integer primary key,
+  fest_id integer not null references fests(id) on delete cascade,
+  code text not null,
+  title text not null,
+  game_type text not null,
+  position integer not null,
+  scheme_id integer references schemes(id),
+  scheme_json text not null default '{}',
+  state_json text not null default '{}',
+  status text not null default 'pending',
+  team_list_source text not null default 'fest' check (team_list_source in ('fest','game')),
+  roster_source text not null default 'fest' check (roster_source in ('fest','game')),
+  revision integer not null default 1,
+  created_at text not null,
+  updated_at text not null,
+  unique(fest_id, code)
+)`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
+insert into games(id, fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+select id, fest_id, code, title, game_type, position, scheme_id, scheme_json, %s, status,
+       case team_list_source when 'tournament' then 'fest' else team_list_source end,
+       case roster_source when 'tournament' then 'fest' else roster_source end,
+       revision, created_at, updated_at
+from games_fest_migration_old`, stateJSONExpr)); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `drop table games_fest_migration_old`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `PRAGMA legacy_alter_table = OFF`); err != nil {
+		return err
+	}
+	legacyAlterTableOn = false
+	return nil
+}
+
+func sqliteTableExists(ctx context.Context, q store.Queryer, name string) (bool, error) {
+	var count int
+	if err := q.QueryRowContext(ctx, `select count(*) from sqlite_master where type = 'table' and name = ?`, name).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func sqliteColumnExists(ctx context.Context, q store.Queryer, table, column string) (bool, error) {
+	rows, err := q.QueryContext(ctx, `select name from pragma_table_info(?)`, table)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+func verifyForeignKeys(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA foreign_key_check`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var table string
+		var rowID, parent, fkID any
+		if err := rows.Scan(&table, &rowID, &parent, &fkID); err != nil {
+			return err
+		}
+		return fmt.Errorf("foreign key check failed after legacy fest migration: table=%s rowid=%v parent=%v fkid=%v", table, rowID, parent, fkID)
+	}
+	return rows.Err()
+}
+
+func ensureSystemUser(ctx context.Context, tx *sql.Tx) (int64, error) {
+	var id int64
+	err := tx.QueryRowContext(ctx, `select id from users where is_system = 1 limit 1`).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	now := util.UtcNow()
+	return store.InsertReturningID(ctx, tx, `
+insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
+values(null, null, ?, 1, ?, ?)`, systemUserUsername, now, now)
+}
+
+func defaultGameID(ctx context.Context, q store.Queryer, festID int64) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx, `select id from games where fest_id = ? order by position, id limit 1`, festID).Scan(&id)
+	return id, err
+}
+
+// util.ValidateSlug enforces the slug grammar: 1-64 chars of a-z, 0-9, hyphen;
+// the slug cannot be all digits (so it never collides with a numeric ID lookup).
+
+// resolveGameID accepts either a positive integer (the game id) or a slug and
+// returns the numeric game id within the given fest.
+func resolveGameID(ctx context.Context, q store.Queryer, festID int64, ref string) (int64, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return 0, sql.ErrNoRows
+	}
+	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+		var found int64
+		if err := q.QueryRowContext(ctx, `select id from games where id = ? and fest_id = ?`, id, festID).Scan(&found); err != nil {
+			return 0, err
+		}
+		return found, nil
+	}
+	var id int64
+	if err := q.QueryRowContext(ctx, `select id from games where fest_id = ? and slug = ?`, festID, ref).Scan(&id); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (s *server) serveViewerHTML(w http.ResponseWriter, r *http.Request) {
+	s.serveAppHTML(w, r, "static/viewer.html")
+}
+
+func (s *server) serveHostHTML(w http.ResponseWriter, r *http.Request) {
+	s.serveAppHTML(w, r, "static/host.html")
+}
+
+// hostInitMarker is the placeholder string inside static/host.html that is
+// replaced with the actual init JSON. Keep in sync with the file.
+const (
+	hostInitMarker   = "null;/*__HOST_INIT__*/"
+	viewerInitMarker = "null;/*__VIEWER_INIT__*/"
+	gameInitMarker   = "null;/*__GAME_INIT__*/"
+)
+
+type hostInitPayload struct {
+	Route      hostInitRoute           `json:"route"`
+	Fest       json.RawMessage         `json:"fest,omitempty"`
+	Match      *store.MatchView        `json:"match,omitempty"`
+	SeedImport *imports.SeedImportView `json:"seedImport,omitempty"`
+	// TeamsUnnumbered mirrors gameInitPayload.TeamsUnnumbered for the EK host
+	// surface: editing is blocked server-side until every team has a number.
+	TeamsUnnumbered bool `json:"teamsUnnumbered,omitempty"`
+	// CanEdit reflects table-editor rights, so the page can show host-only
+	// actions (e.g. the .json.gz archive download) without a probe round trip.
+	CanEdit bool `json:"canEdit,omitempty"`
+}
+
+type gameInitPayload struct {
+	// FestID/GameID are the resolved numeric ids. The client needs the numeric
+	// game id to build the SSE scope (`game-state:<id>`); the URL only carries
+	// the slug, which does not match the numeric scope the server broadcasts.
+	FestID int64           `json:"festID,omitempty"`
+	GameID int64           `json:"gameID,omitempty"`
+	Scheme json.RawMessage `json:"scheme,omitempty"`
+	State  json.RawMessage `json:"state,omitempty"`
+	Fest   json.RawMessage `json:"fest,omitempty"`
+	// Seq is the game-state scope's seq at render time, so the SSE client seeds
+	// its lastSeq to exactly the state it was handed. Without it every viewer
+	// would start at 0 and the first remote edit would gap-resync them all at
+	// once (a thundering-herd full-state refetch — the very thing deltas avoid).
+	Seq uint64 `json:"seq"`
+	// Epoch seeds the SSE client's epoch so it can detect a later server restart
+	// (seq reset) and resync instead of silently dropping post-restart deltas.
+	Epoch   string `json:"epoch,omitempty"`
+	CanEdit bool   `json:"canEdit,omitempty"`
+	// TeamsUnnumbered is true when the fest has active teams that lack a number.
+	// Team number is the universal team identity, so editing is blocked server-
+	// side (see requireNumberedTeams); the client uses this to show a banner
+	// pointing the host at the numbers page.
+	TeamsUnnumbered bool `json:"teamsUnnumbered,omitempty"`
+	// Static marks a snapshot served in static (lockdown) mode: the client skips
+	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
+	Static bool `json:"static,omitempty"`
+}
+
+type viewerInitPayload struct {
+	Route   hostInitRoute    `json:"route"`
+	Fest    json.RawMessage  `json:"fest,omitempty"`
+	Match   *store.MatchView `json:"match,omitempty"`
+	Venues  json.RawMessage  `json:"venues,omitempty"`
+	CanEdit bool             `json:"canEdit,omitempty"`
+	// Static marks a snapshot served in static (lockdown) mode: the client skips
+	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
+	Static bool `json:"static,omitempty"`
+}
+
+type hostInitRoute struct {
+	Mode      string `json:"mode"`
+	FestID    int64  `json:"festID"`
+	GameID    int64  `json:"gameID"`
+	StageCode string `json:"stageCode,omitempty"`
+	MatchCode string `json:"matchCode,omitempty"`
+}
+
+// serveHostHTMLWithInit renders static/host.html with window.__HOST_INIT__
+// pre-populated for the current route, eliminating the cold API round trips
+// the SPA would otherwise make immediately after parsing host.js. Falls back
+// to plain serveHostHTML on any error so a payload bug never breaks the page.
+func (s *server) serveHostHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	route := parseHostInitRoute(parts, scope)
+	payload, err := s.buildHostInit(r.Context(), route)
+	if err != nil {
+		s.serveHostHTML(w, r)
+		return
+	}
+	if user, ok := s.eng.LookupSession(r); ok {
+		if role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
+			payload.CanEdit = true
+		}
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.serveHostHTML(w, r)
+		return
+	}
+	s.serveInjectedHTML(w, r, "static/host.html", hostInitMarker, data)
+}
+
+// serveGameHTMLWithInit serves od.html or si.html with window.__GAME_INIT__
+// populated with scheme/state/fest, sparing the JS three cold API round trips
+// on first load. Falls back to the plain HTML on any error.
+func (s *server) serveGameHTMLWithInit(w http.ResponseWriter, r *http.Request, htmlPath string, scope festScope) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	payload, err := s.buildGameInit(r.Context(), scope)
+	if err != nil {
+		s.serveAppHTML(w, r, htmlPath)
+		return
+	}
+	if user, ok := s.eng.LookupSession(r); ok {
+		if role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
+			payload.CanEdit = true
+		}
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.serveAppHTML(w, r, htmlPath)
+		return
+	}
+	s.serveInjectedHTML(w, r, htmlPath, gameInitMarker, data)
+}
+
+// serveViewerHTMLWithInit serves static/viewer.html with the relevant
+// per-route data already populated.
+func (s *server) serveViewerHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	route := parseHostInitRoute(parts, scope)
+	payload, err := s.buildViewerInit(r.Context(), route)
+	if err != nil {
+		s.serveViewerHTML(w, r)
+		return
+	}
+	if user, ok := s.eng.LookupSession(r); ok {
+		if role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
+			payload.CanEdit = true
+		}
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.serveViewerHTML(w, r)
+		return
+	}
+	s.serveInjectedHTML(w, r, "static/viewer.html", viewerInitMarker, data)
+}
+
+// assetRefRe matches a local /static .js/.css reference in an HTML attribute
+// (src=/href=), capturing the attribute name and the path. The [^"?]+ guard
+// skips URLs that already carry a query string.
+var assetRefRe = regexp.MustCompile(`(src|href)="(/static/[^"?]+\.(?:js|css))"`)
+
+// versionAssetRefs appends a "?v=<content-hash>" cache-buster to every local
+// /static .js/.css URL in an HTML body. The hash changes when the file's bytes
+// change, so a deploy busts the browser cache the instant the (no-cache) HTML
+// shell is re-fetched — without it the stable URL keeps serving the cached copy
+// until its max-age expires. URLs whose asset has no known hash (disk/dev mode,
+// where assets are already served no-cache) are left untouched.
+func (s *server) versionAssetRefs(body []byte) []byte {
+	if len(s.eng.AssetETags) == 0 {
+		return body
+	}
+	return assetRefRe.ReplaceAllFunc(body, func(m []byte) []byte {
+		sub := assetRefRe.FindSubmatch(m)
+		path := string(sub[2])
+		tag := strings.Trim(s.eng.AssetETags[path], `"`)
+		if tag == "" {
+			return m
+		}
+		return []byte(fmt.Sprintf(`%s="%s?v=%s"`, sub[1], path, tag))
+	})
+}
+
+// writeAppHTML cache-busts the body's asset URLs, marks the shell no-cache (it
+// embeds per-request init JSON and deploy-specific version pointers, so it must
+// never be served stale), and writes it. HEAD returns headers only.
+func (s *server) writeAppHTML(w http.ResponseWriter, r *http.Request, body []byte) {
+	body = s.versionAssetRefs(body)
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	_, _ = w.Write(body)
+}
+
+// serveInjectedHTML reads an HTML file from the embedded asset FS, splices
+// the JSON payload over the marker token, and writes it as the response. The
+// caller is responsible for pre-marshaling and for ensuring the marker is
+// present in the HTML. On any I/O or marker-mismatch error the function
+// silently falls back to serving the file unchanged.
+func (s *server) serveInjectedHTML(w http.ResponseWriter, r *http.Request, htmlPath, marker string, payload []byte) {
+	body, err := fs.ReadFile(s.eng.Assets, htmlPath)
+	if err != nil {
+		s.serveAppHTML(w, r, htmlPath)
+		return
+	}
+	markerBytes := []byte(marker)
+	idx := bytes.Index(body, markerBytes)
+	if idx < 0 {
+		s.serveAppHTML(w, r, htmlPath)
+		return
+	}
+	out := make([]byte, 0, len(body)+len(payload))
+	out = append(out, body[:idx]...)
+	out = append(out, payload...)
+	out = append(out, body[idx+len(markerBytes):]...)
+	s.writeAppHTML(w, r, out)
+}
+
+func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPayload, error) {
+	payload := gameInitPayload{FestID: scope.FestID, GameID: scope.GameID}
+	var schemeJSON, stateJSON string
+	if err := s.eng.DB.QueryRowContext(ctx, `
+select coalesce(scheme_json, ''), coalesce(state_json, '')
+from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&schemeJSON, &stateJSON); err != nil {
+		return payload, err
+	}
+	if schemeJSON == "" {
+		schemeJSON = "{}"
+	}
+	if stateJSON == "" {
+		stateJSON = "{}"
+	}
+	payload.Scheme = json.RawMessage(schemeJSON)
+	payload.State = json.RawMessage(stateJSON)
+	payload.Seq = s.eng.CurrentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
+	payload.Epoch = s.eng.Epoch
+	if festBytes, err := s.festViewBytes(scope.FestID, scope.GameID); err == nil {
+		payload.Fest = festBytes
+	}
+	if unnumbered, err := numbering.HasUnnumbered(ctx, s.eng.DB, scope.FestID); err == nil {
+		payload.TeamsUnnumbered = unnumbered
+	}
+	return payload, nil
+}
+
+func (s *server) buildViewerInit(ctx context.Context, route hostInitRoute) (viewerInitPayload, error) {
+	payload := viewerInitPayload{Route: route}
+
+	festBytes, err := s.festViewBytes(route.FestID, route.GameID)
+	if err != nil {
+		return payload, err
+	}
+	payload.Fest = festBytes
+
+	switch route.Mode {
+	case "match":
+		mscope, err := s.verifyMatchInScope(ctx, festScope{FestID: route.FestID, GameID: route.GameID}, route.MatchCode)
+		if err != nil {
+			return payload, nil
+		}
+		match, err := s.loadScopedMatchViewSnapshot(mscope)
+		if err != nil {
+			return payload, nil
+		}
+		payload.Match = &match
+	case "venues":
+		venues, err := s.loadVenuesLocked(route.FestID)
+		if err == nil {
+			if venuesBytes, err := json.Marshal(venues); err == nil {
+				payload.Venues = venuesBytes
+			}
+		}
+	}
+	return payload, nil
+}
+
+func parseHostInitRoute(parts []string, scope festScope) hostInitRoute {
+	route := hostInitRoute{Mode: "grid", FestID: scope.FestID, GameID: scope.GameID}
+	if len(parts) <= 2 {
+		return route
+	}
+	switch parts[2] {
+	case "venues":
+		route.Mode = "venues"
+	case "seed-import":
+		route.Mode = "seedImport"
+	case "matches":
+		if len(parts) >= 4 {
+			route.Mode = "match"
+			route.MatchCode = parts[3]
+		}
+	case "stage":
+		if len(parts) >= 4 {
+			route.Mode = "stage"
+			route.StageCode = parts[3]
+		}
+	}
+	return route
+}
+
+func (s *server) buildHostInit(ctx context.Context, route hostInitRoute) (hostInitPayload, error) {
+	payload := hostInitPayload{Route: route}
+
+	festBytes, err := s.festViewBytes(route.FestID, route.GameID)
+	if err != nil {
+		return payload, err
+	}
+	payload.Fest = festBytes
+	if unnumbered, err := numbering.HasUnnumbered(ctx, s.eng.DB, route.FestID); err == nil {
+		payload.TeamsUnnumbered = unnumbered
+	}
+
+	switch route.Mode {
+	case "match":
+		mscope, err := s.verifyMatchInScope(ctx, festScope{FestID: route.FestID, GameID: route.GameID}, route.MatchCode)
+		if err != nil {
+			return payload, nil
+		}
+		match, err := s.loadScopedMatchViewSnapshot(mscope)
+		if err != nil {
+			return payload, nil
+		}
+		payload.Match = &match
+	case "seedImport":
+		view, err := imports.LoadSeedImportView(&s.eng, ctx, festScope{FestID: route.FestID, GameID: route.GameID})
+		if err != nil {
+			return payload, nil
+		}
+		payload.SeedImport = &view
+	}
+	return payload, nil
+}
+
+func (s *server) serveAppHTML(w http.ResponseWriter, r *http.Request, path string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	body, err := fs.ReadFile(s.eng.Assets, path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	s.writeAppHTML(w, r, body)
+}
+
+func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	festID, err := store.ResolveFestID(r.Context(), s.eng.DB, strings.TrimSpace(r.URL.Query().Get("fest_id")))
+	if err != nil || festID <= 0 {
+		http.Error(w, "missing fest_id", http.StatusBadRequest)
+		return
+	}
+	if _, ok := s.requireFestAdmin(w, r, festID); !ok {
+		return
+	}
+	defer r.Body.Close()
+
+	var scheme store.FestScheme
+	if err := json.NewDecoder(r.Body).Decode(&scheme); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.importSchemeIntoFest(r.Context(), festID, scheme); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	gameID, err := defaultGameID(r.Context(), s.eng.DB, festID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	view, err := s.loadFestViewSnapshot(festID, gameID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	data, _ := json.Marshal(view)
+	s.eng.BroadcastState(festID, "fest", view.Revision, data)
+	writeJSON(w, data)
+}
+
+func (s *server) importScheme(scheme store.FestScheme) (store.FestView, error) {
+	if s.eng.DB == nil {
+		return store.FestView{}, errors.New("sqlite is not enabled")
+	}
+	if err := storeutil.ValidateScheme(scheme); err != nil {
+		return store.FestView{}, err
+	}
+	schemaJSON, err := json.Marshal(scheme)
+	if err != nil {
+		return store.FestView{}, err
+	}
+
+	s.eng.Mu.Lock()
+	defer s.eng.Mu.Unlock()
+
+	ctx := context.Background()
+	tx, err := s.eng.BeginWriteTx(ctx)
+	if err != nil {
+		return store.FestView{}, err
+	}
+	defer tx.Rollback()
+
+	// A full import wipes and rebuilds every structural row; that churn carries no
+	// incremental-undo value and is recorded as one 'import' event below, so skip
+	// per-row audit capture (import is a revert boundary).
+	if err := festwrite.SuppressAuditTx(ctx, tx); err != nil {
+		return store.FestView{}, err
+	}
+
+	if err := clearImportedData(ctx, tx); err != nil {
+		return store.FestView{}, err
+	}
+
+	now := util.UtcNow()
+	systemID, err := ensureSystemUser(ctx, tx)
+	if err != nil {
+		return store.FestView{}, err
+	}
+	schemeID, err := store.InsertReturningID(ctx, tx, `
+insert into schemes(slug, title, version, schema_json, created_at)
+values(?, ?, ?, ?, ?)`, scheme.Slug, scheme.Title, util.MaxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
+	if err != nil {
+		return store.FestView{}, err
+	}
+	festID, err := store.InsertReturningID(ctx, tx, `
+insert into fests(slug, title, description, rating_id, created_by, revision, created_at, updated_at, is_public)
+values(?, ?, '', null, ?, 1, ?, ?, 1)`, scheme.Slug, scheme.Title, systemID, now, now)
+	if err != nil {
+		return store.FestView{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+insert into fest_organizers(fest_id, user_id, role, added_at)
+values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
+		return store.FestView{}, err
+	}
+	gameType := scheme.GameType
+	if gameType == "" {
+		gameType = games.Default
+	}
+	gameID, err := store.InsertReturningID(ctx, tx, `
+insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, ?, ?, ?, 1, ?, ?, 'pending', 'fest', 'fest', 1, ?, ?)`,
+		festID, defaultGameCode, scheme.Title, gameType, schemeID, string(schemaJSON), now, now)
+	if err != nil {
+		return store.FestView{}, err
+	}
+
+	venueIDs := make(map[int]int64, len(scheme.Venues))
+	for _, venue := range scheme.Venues {
+		venueID, err := store.InsertReturningID(ctx, tx, `
+insert into venues(fest_id, number, title, created_at, updated_at)
+values(?, ?, ?, ?, ?)`, festID, venue.Number, venue.Title, now, now)
+		if err != nil {
+			return store.FestView{}, err
+		}
+		venueIDs[venue.Number] = venueID
+	}
+
+	assignmentTeams := make(map[[2]int]int64, len(scheme.Teams))
+	for _, team := range scheme.Teams {
+		teamID, err := store.InsertReturningID(ctx, tx, `
+insert into teams(fest_id, name, city)
+values(?, ?, ?)`, festID, team.Name, team.City)
+		if err != nil {
+			return store.FestView{}, err
+		}
+		for rosterOrder, fullName := range team.Players {
+			fullName = strings.TrimSpace(fullName)
+			if fullName == "" {
+				continue
+			}
+			firstName, lastName := splitPlayerName(fullName)
+			playerID, err := store.InsertReturningID(ctx, tx, `
+insert into players(fest_id, first_name, last_name)
+values(?, ?, ?)`, festID, firstName, lastName)
+			if err != nil {
+				return store.FestView{}, err
+			}
+			if _, err := tx.ExecContext(ctx, `
+insert into team_players(team_id, player_id, roster_order)
+values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
+				return store.FestView{}, err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `
+insert into game_assignments(game_id, basket, number, team_id, player_id)
+values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil {
+			return store.FestView{}, err
+		}
+		assignmentTeams[[2]int{team.Basket, team.Number}] = teamID
+	}
+
+	firstMatchCode := ""
+	for stageIndex, stage := range scheme.Stages {
+		position := stage.Position
+		if position == 0 {
+			position = stageIndex + 1
+		}
+		configJSON := storeutil.StageConfigJSON(stage)
+		stageType := stage.StageType
+		if stageType == "" {
+			stageType = "matches"
+		}
+		stageID, err := store.InsertReturningID(ctx, tx, `
+insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
+values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
+		if err != nil {
+			return store.FestView{}, err
+		}
+		if stageType != "matches" {
+			continue
+		}
+		for matchIndex, match := range stage.Matches {
+			if firstMatchCode == "" {
+				firstMatchCode = match.Code
+			}
+			participantCount := match.ParticipantCount
+			if participantCount == 0 {
+				participantCount = len(match.Slots)
+			}
+			var venueID any
+			if id, ok := venueIDs[match.Venue]; ok {
+				venueID = id
+			}
+			matchID, err := store.InsertReturningID(ctx, tx, `
+insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
+			if err != nil {
+				return store.FestView{}, err
+			}
+			for slotIndex, slot := range match.Slots {
+				sourceType, sourceRef := storeutil.SlotSource(slot)
+				var resolvedTeamID int64
+				if sourceType == "seed" && slot.Seed != nil {
+					number := slot.Seed.Number
+					if number == 0 {
+						number = slot.Seed.Position
+					}
+					resolvedTeamID = assignmentTeams[[2]int{slot.Seed.Basket, number}]
+				}
+				if _, err := tx.ExecContext(ctx, `
+insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
+values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, util.NullableInt64(resolvedTeamID)); err != nil {
+					return store.FestView{}, err
+				}
+				if resolvedTeamID > 0 {
+					for themeIndex := 0; themeIndex < store.ThemeCount; themeIndex++ {
+						if err := store.InsertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
+							return store.FestView{}, err
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if err := festwrite.AppendJournalTx(ctx, tx, festID, 1, "import", schemaJSON); err != nil {
+		return store.FestView{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return store.FestView{}, err
+	}
+
+	s.eng.FestID = festID
+	s.eng.ActiveGameID = gameID
+	if firstMatchCode != "" {
+		s.eng.ActiveMatchCode = firstMatchCode
+	}
+	return s.loadFestViewLocked(s.eng.FestID, s.eng.ActiveGameID)
+}
+
+// importSchemeIntoFest wipes the fest's existing games (and
+// dependent rows) and creates a single new game from the supplied scheme.
+// The fest row itself stays intact.
+func (s *server) importSchemeIntoFest(ctx context.Context, festID int64, scheme store.FestScheme) error {
+	if s.eng.DB == nil {
+		return errors.New("sqlite is not enabled")
+	}
+	if err := storeutil.ValidateScheme(scheme); err != nil {
+		return err
+	}
+	if len(scheme.Teams) > 0 {
+		return errors.New("команды загружаются отдельным импортом посева; уберите teams из JSON-схемы")
+	}
+	schemaJSON, err := json.Marshal(scheme)
+	if err != nil {
+		return err
+	}
+
+	s.eng.Mu.Lock()
+	defer s.eng.Mu.Unlock()
+
+	tx, err := s.eng.BeginWriteTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Skip per-row audit churn for the wipe-and-rebuild; the import is recorded as
+	// one 'import' event below and acts as a revert boundary. See festwrite.SuppressAuditTx.
+	if err := festwrite.SuppressAuditTx(ctx, tx); err != nil {
+		return err
+	}
+
+	if err := clearFestImportData(ctx, tx, festID); err != nil {
+		return err
+	}
+
+	now := util.UtcNow()
+	schemeSlug := scheme.Slug + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	schemeID, err := store.InsertReturningID(ctx, tx, `
+insert into schemes(slug, title, version, schema_json, created_at)
+values(?, ?, ?, ?, ?)`, schemeSlug, scheme.Title, util.MaxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
+	if err != nil {
+		return err
+	}
+	gameType := scheme.GameType
+	if gameType == "" {
+		gameType = games.Default
+	}
+	gameTitle := scheme.Title
+	if strings.TrimSpace(gameTitle) == "" {
+		gameTitle = "Игра"
+	}
+	gameID, err := store.InsertReturningID(ctx, tx, `
+insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, ?, ?, ?, 1, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
+		festID, defaultGameCode, gameTitle, gameType, schemeID, string(schemaJSON), now, now)
+	if err != nil {
+		return err
+	}
+
+	venueIDs := make(map[int]int64, len(scheme.Venues))
+	for _, venue := range scheme.Venues {
+		venueID, err := store.InsertReturningID(ctx, tx, `
+insert into venues(fest_id, number, title, created_at, updated_at)
+values(?, ?, ?, ?, ?)`, festID, venue.Number, venue.Title, now, now)
+		if err != nil {
+			return err
+		}
+		venueIDs[venue.Number] = venueID
+	}
+
+	assignmentTeams := make(map[[2]int]int64, len(scheme.Teams))
+	for _, team := range scheme.Teams {
+		teamID, err := store.InsertReturningID(ctx, tx, `
+insert into teams(fest_id, name, city)
+values(?, ?, ?)`, festID, team.Name, team.City)
+		if err != nil {
+			return err
+		}
+		for rosterOrder, fullName := range team.Players {
+			fullName = strings.TrimSpace(fullName)
+			if fullName == "" {
+				continue
+			}
+			firstName, lastName := splitPlayerName(fullName)
+			playerID, err := store.InsertReturningID(ctx, tx, `
+insert into players(fest_id, first_name, last_name)
+values(?, ?, ?)`, festID, firstName, lastName)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `
+insert into team_players(team_id, player_id, roster_order)
+values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `
+insert into game_assignments(game_id, basket, number, team_id, player_id)
+values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil {
+			return err
+		}
+		assignmentTeams[[2]int{team.Basket, team.Number}] = teamID
+	}
+
+	for stageIndex, stage := range scheme.Stages {
+		position := stage.Position
+		if position == 0 {
+			position = stageIndex + 1
+		}
+		configJSON := storeutil.StageConfigJSON(stage)
+		stageType := stage.StageType
+		if stageType == "" {
+			stageType = "matches"
+		}
+		stageID, err := store.InsertReturningID(ctx, tx, `
+insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
+values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
+		if err != nil {
+			return err
+		}
+		if stageType != "matches" {
+			continue
+		}
+		for matchIndex, match := range stage.Matches {
+			participantCount := match.ParticipantCount
+			if participantCount == 0 {
+				participantCount = len(match.Slots)
+			}
+			var venueID any
+			if id, ok := venueIDs[match.Venue]; ok {
+				venueID = id
+			}
+			matchID, err := store.InsertReturningID(ctx, tx, `
+insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
+			if err != nil {
+				return err
+			}
+			for slotIndex, slot := range match.Slots {
+				sourceType, sourceRef := storeutil.SlotSource(slot)
+				var resolvedTeamID int64
+				if sourceType == "seed" && slot.Seed != nil {
+					number := slot.Seed.Number
+					if number == 0 {
+						number = slot.Seed.Position
+					}
+					resolvedTeamID = assignmentTeams[[2]int{slot.Seed.Basket, number}]
+				}
+				if _, err := tx.ExecContext(ctx, `
+insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
+values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, util.NullableInt64(resolvedTeamID)); err != nil {
+					return err
+				}
+				if resolvedTeamID > 0 && gameType == "ek" {
+					for themeIndex := 0; themeIndex < store.ThemeCount; themeIndex++ {
+						if err := store.InsertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if _, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "import", string(schemaJSON)); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// clearFestImportData drops all per-fest rows that an import would
+// recreate (games, stages, matches, venues, teams, players, journal). The
+// fest row and its organizers stay.
+func clearFestImportData(ctx context.Context, tx *sql.Tx, festID int64) error {
+	statements := []string{
+		`delete from journal where fest_id = ?`,
+		`delete from games where fest_id = ?`,
+		`delete from team_players where team_id in (select id from teams where fest_id = ?)`,
+		`delete from teams where fest_id = ?`,
+		`delete from players where fest_id = ?`,
+		`delete from venues where fest_id = ?`,
+	}
+	for _, sqlText := range statements {
+		if _, err := tx.ExecContext(ctx, sqlText, festID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// clearImportedData wipes fest-scoped data so importScheme can recreate
+// the world. Auth tables (users, invites, telegram_login_codes, sessions) and
+// schema_versions are intentionally untouched.
+func clearImportedData(ctx context.Context, tx *sql.Tx) error {
+	tables := []string{
+		"journal",
+		"reseed_entries",
+		"match_results",
+		"answers",
+		"themes",
+		"match_slots",
+		"matches",
+		"stages",
+		"game_assignments",
+		"game_team_players",
+		"game_players",
+		"game_teams",
+		"games",
+		"team_players",
+		"players",
+		"teams",
+		"venues",
+		"fest_organizers",
+		"fests",
+		"schemes",
+	}
+	for _, table := range tables {
+		if _, err := tx.ExecContext(ctx, "delete from "+table); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *server) loadFestViewLocked(festID, gameID int64) (store.FestView, error) {
+	if s.eng.DB == nil {
+		match := store.BuildView(s.eng.State)
+		return store.FestView{
+			Slug:              "legacy",
+			Title:             match.Title,
+			Revision:          match.Revision,
+			UpdatedAt:         match.UpdatedAt,
+			QuestionValues:    store.QuestionValues,
+			RegularThemeCount: store.ThemeCount,
+		}, nil
+	}
+	return s.loadFestViewUsing(s.eng.DB, festID, gameID)
+}
+
+// loadFestViewSnapshot builds the fest view on a read-only transaction WITHOUT
+// taking the global write mutex. WAL gives the read a consistent snapshot even
+// while a writer holds s.eng.Mu, so cross-game page loads / bracket fetches no longer
+// queue behind a busy editor — Go's RWMutex is writer-preferring, so a single
+// pending writer otherwise blocks every RLock reader. Falls back to the locked
+// path in legacy (no-DB) mode.
+func (s *server) loadFestViewSnapshot(festID, gameID int64) (store.FestView, error) {
+	if s.eng.DB == nil {
+		return s.loadFestViewLocked(festID, gameID)
+	}
+	tx, err := s.eng.DB.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return store.FestView{}, err
+	}
+	defer tx.Rollback()
+	return s.loadFestViewUsing(tx, festID, gameID)
+}
+
+// loadFestViewUsing runs every fest-view query against the given queryer, so the
+// snapshot path can pass a read-only tx (one WAL snapshot, off the write lock)
+// and the locked path can pass s.eng.DB while holding s.eng.Mu.
+func (s *server) loadFestViewUsing(q store.Queryer, festID, gameID int64) (store.FestView, error) {
+	ctx, cancel := festwrite.BoundedReadContext()
+	defer cancel()
+	var view store.FestView
+	view.QuestionValues = store.QuestionValues
+	view.RegularThemeCount = store.ThemeCount
+	if festID == 0 {
+		view.Slug = ""
+		view.Title = ""
+		view.UpdatedAt = ""
+		return view, nil
+	}
+	var updatedAt string
+	if err := q.QueryRowContext(ctx, `
+select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, ''), coalesce(g.title, '')
+from fests t
+left join games g on g.fest_id = t.id and g.id = ?
+where t.id = ?`, gameID, festID).
+		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON, &view.GameName); err != nil {
+		return store.FestView{}, err
+	}
+	view.UpdatedAt = updatedAt
+
+	venues, err := store.LoadVenues(ctx, q, festID)
+	if err != nil {
+		return store.FestView{}, err
+	}
+	view.Venues = venues
+
+	stageWhere := "fest_id = ?"
+	stageArgs := []any{festID}
+	if gameID > 0 {
+		stageWhere += " and game_id = ?"
+		stageArgs = append(stageArgs, gameID)
+	}
+	stageRows, err := q.QueryContext(ctx, `
+select id, code, title, stage_type, position, status, config_json
+from stages
+where `+stageWhere+`
+order by position, id`, stageArgs...)
+	if err != nil {
+		return store.FestView{}, err
+	}
+	defer stageRows.Close()
+
+	type stageRecord struct {
+		ID    int64
+		Stage store.StageView
+	}
+	var stageRecords []stageRecord
+	for stageRows.Next() {
+		var stageID int64
+		var stage store.StageView
+		var configJSON string
+		if err := stageRows.Scan(&stageID, &stage.Code, &stage.Title, &stage.Type, &stage.Position, &stage.Status, &configJSON); err != nil {
+			return store.FestView{}, err
+		}
+		stage.Config = json.RawMessage(store.NonEmptyJSON(configJSON))
+		stageRecords = append(stageRecords, stageRecord{ID: stageID, Stage: stage})
+	}
+	if err := stageRows.Err(); err != nil {
+		return store.FestView{}, err
+	}
+	if err := stageRows.Close(); err != nil {
+		return store.FestView{}, err
+	}
+	for _, record := range stageRecords {
+		if record.Stage.Type == "reseed" {
+			entries, err := store.LoadReseedEntries(ctx, q, record.ID)
+			if err != nil {
+				return store.FestView{}, err
+			}
+			record.Stage.ReseedEntries = entries
+			state, err := resolver.ReseedPrerequisites(ctx, q, record.Stage.Config, gameID)
+			if err != nil {
+				return store.FestView{}, err
+			}
+			record.Stage.ReseedReady = state.Ready
+			record.Stage.ReseedPending = state.PendingMatches
+			if !state.Ready {
+				record.Stage.ReseedMessage = resolver.ReseedNotReadyMessage(state.PendingMatches)
+			}
+		} else {
+			matches, err := store.LoadFestMatches(ctx, q, record.ID)
+			if err != nil {
+				return store.FestView{}, err
+			}
+			record.Stage.Matches = matches
+		}
+		view.Stages = append(view.Stages, record.Stage)
+	}
+	return view, nil
+}
+
+func (s *server) loadVenuesLocked(festID int64) ([]store.VenueView, error) {
+	ctx, cancel := festwrite.BoundedReadContext()
+	defer cancel()
+	return store.LoadVenues(ctx, s.eng.DB, festID)
+}
+
+func (s *server) loadMatchViewLocked(festID int64, code string) (store.MatchView, error) {
+	if s.eng.DB == nil {
+		return store.BuildView(s.eng.State), nil
+	}
+	ctx, cancel := festwrite.BoundedReadContext()
+	defer cancel()
+	match, err := store.LoadDBMatchState(ctx, s.eng.DB, festID, code)
+	if err != nil {
+		return store.MatchView{}, err
+	}
+	return matchViewFromDBState(match), nil
+}
+
+func (s *server) loadScopedMatchViewLocked(scope matchScope) (store.MatchView, error) {
+	if s.eng.DB == nil {
+		return store.BuildView(s.eng.State), nil
+	}
+	return s.loadScopedMatchViewUsing(s.eng.DB, scope)
+}
+
+// loadScopedMatchViewUsing reads a match view via the given queryer, so callers
+// can supply a read-only snapshot tx (off the write lock) or s.eng.DB under s.eng.Mu.
+func (s *server) loadScopedMatchViewUsing(q store.Queryer, scope matchScope) (store.MatchView, error) {
+	ctx, cancel := festwrite.BoundedReadContext()
+	defer cancel()
+	match, err := loadDBMatchStateByScope(ctx, q, scope)
+	if err != nil {
+		return store.MatchView{}, err
+	}
+	return matchViewFromDBState(match), nil
+}
+
+// loadScopedMatchViewSnapshot reads a match view on a read-only transaction
+// WITHOUT the global write mutex (see loadFestViewSnapshot) — so a viewer/host
+// reading match B doesn't stall behind an editor writing match A.
+func (s *server) loadScopedMatchViewSnapshot(scope matchScope) (store.MatchView, error) {
+	if s.eng.DB == nil {
+		return s.loadScopedMatchViewLocked(scope)
+	}
+	tx, err := s.eng.DB.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return store.MatchView{}, err
+	}
+	defer tx.Rollback()
+	return s.loadScopedMatchViewUsing(tx, scope)
+}
+
+func loadDBMatchStateByScope(ctx context.Context, q store.Queryer, scope matchScope) (store.DBMatchState, error) {
+	return store.LoadDBMatchStateWhere(ctx, q, `m.id = ? and m.fest_id = ? and m.game_id = ?`, scope.MatchID, scope.FestID, scope.GameID)
+}
+
+func matchViewFromDBState(match store.DBMatchState) store.MatchView {
+	view := store.BuildView(match.State)
+	view.Code = match.Code
+	view.StageCode = match.StageCode
+	view.StageTitle = match.StageTitle
+	view.Venue = match.Venue
+	return view
+}
+
+func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) (store.MatchView, []byte, error) {
+	if s.eng.DB == nil {
+		return s.applyLegacyUpdate(req)
+	}
+	// Legacy single-fest path: no SSE fan-out, so cascade + delta are discarded.
+	view, data, _, err := s.applyMatchUpdateUsing(context.Background(), festID, []updateRequest{req},
+		func(ctx context.Context, q store.Queryer) (store.DBMatchState, error) {
+			return store.LoadDBMatchState(ctx, q, festID, code)
+		},
+		func() (store.MatchView, error) {
+			return s.loadMatchViewLocked(festID, code)
+		}, nil)
+	return view, data, err
+}
+
+// applyScopedMatchUpdate applies a match edit and additionally returns deltaOps:
+// the set-ops that turn the pre-edit view into the new one, when broadcasting
+// them is cheaper than the full view (else nil — caller broadcasts full state).
+func (s *server) applyScopedMatchUpdate(ctx context.Context, scope matchScope, reqs []updateRequest) (store.MatchView, []byte, []byte, []store.MatchView, error) {
+	if s.eng.DB == nil {
+		var view store.MatchView
+		var data []byte
+		var err error
+		for _, req := range reqs {
+			if view, data, err = s.applyLegacyUpdate(req); err != nil {
+				return view, data, nil, nil, err
+			}
+		}
+		return view, data, nil, nil, err
+	}
+	var oldData []byte
+	view, data, cascaded, err := s.applyMatchUpdateUsing(ctx, scope.FestID, reqs,
+		func(ctx context.Context, q store.Queryer) (store.DBMatchState, error) {
+			return loadDBMatchStateByScope(ctx, q, scope)
+		},
+		func() (store.MatchView, error) {
+			return s.loadScopedMatchViewLocked(scope)
+		}, &oldData)
+	if err != nil {
+		return view, data, nil, cascaded, err
+	}
+	deltaOps, _ := realtime.MatchDeltaOps(oldData, data)
+	return view, data, deltaOps, cascaded, nil
+}
+
+// applyMatchUpdateUsing applies one match edit and returns the edited match's
+// view plus `cascaded`: the views of any OTHER matches whose slots changed when
+// the edit resolved the bracket (e.g. finishing a bout advances teams into the
+// next round). The handler broadcasts those too, so spectators see downstream
+// matches update live instead of only on reload.
+func (s *server) applyMatchUpdateUsing(
+	reqCtx context.Context,
+	festID int64,
+	reqs []updateRequest,
+	loadMatch func(context.Context, store.Queryer) (store.DBMatchState, error),
+	loadView func() (store.MatchView, error),
+	oldDataOut *[]byte,
+) (store.MatchView, []byte, []store.MatchView, error) {
+	// Carry the request's audit attribution (actor/request/fest) into the write
+	// tx, detached from the request's cancellation, so this match edit is
+	// recorded in audit_log against the right user and fest. The ctx carries a
+	// festwrite.WriteTxTimeout so the write can never hold s.eng.Mu indefinitely.
+	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
+	defer cancel()
+	// Acquire the pooled connection BEFORE taking the lock: the pool wait is the
+	// one step that can block unbounded under connection starvation, so keep it
+	// off s.eng.Mu (see the 2026-06-13 site-wide freeze). ctx bounds the wait.
+	conn, err := s.eng.AcquireWriteConn(ctx, "match-update")
+	if err != nil {
+		return store.MatchView{}, nil, nil, err
+	}
+	defer conn.Close()
+
+	defer s.eng.LockWrite("match-update")()
+
+	// Capture the committed pre-image of this match under our exclusive lock,
+	// before the mutation commits, so the caller can broadcast a minimal delta
+	// against it. Atomic with the mutation (same lock hold) — no TOCTOU window.
+	// Best-effort: on any failure oldDataOut stays empty and the caller falls
+	// back to a full-state broadcast.
+	if oldDataOut != nil {
+		if oldView, oerr := loadView(); oerr == nil {
+			*oldDataOut, _ = json.Marshal(oldView)
+		}
+	}
+
+	tx, err := s.eng.BeginWriteTxConn(ctx, conn)
+	if err != nil {
+		return store.MatchView{}, nil, nil, err
+	}
+	defer tx.Rollback()
+
+	match, err := loadMatch(ctx, tx)
+	if err != nil {
+		return store.MatchView{}, nil, nil, err
+	}
+
+	dataEdited := false
+	for _, req := range reqs {
+		if req.Finished != nil {
+			if len(reqs) > 1 || hasMatchEdit(req) {
+				return store.MatchView{}, nil, nil, errors.New("finished update must be standalone")
+			}
+			status := "active"
+			if *req.Finished {
+				status = "finished"
+			}
+			if _, err := tx.ExecContext(ctx, `update matches set status = ? where id = ?`, status, match.MatchID); err != nil {
+				return store.MatchView{}, nil, nil, err
+			}
+			if *req.Finished {
+				assignComputedPlaces(&match.State)
+			}
+			continue
+		}
+		if match.State.Finished {
+			return store.MatchView{}, nil, nil, errors.New("match is finished")
+		}
+		if err := applyMatchEditTx(ctx, tx, match, req); err != nil {
+			return store.MatchView{}, nil, nil, err
+		}
+		dataEdited = true
+	}
+
+	// applyMatchEditTx writes answer/theme rows, not the in-memory match.State,
+	// so reload before recalc/slot resolution to compute results from the edited
+	// rows — otherwise a batch would persist results that lag every edit. The
+	// finished branch instead computes places into match.State in memory and
+	// relies on the recalc to persist them, so it must keep the in-memory state.
+	if dataEdited {
+		match, err = loadMatch(ctx, tx)
+		if err != nil {
+			return store.MatchView{}, nil, nil, err
+		}
+	}
+
+	if err := store.RecalculateMatchResultsForStateTx(ctx, tx, match); err != nil {
+		return store.MatchView{}, nil, nil, err
+	}
+	affected, err := resolver.ResolveGameSlotsTx(ctx, tx, match.GameID)
+	if err != nil {
+		return store.MatchView{}, nil, nil, err
+	}
+	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:update", util.MustJSON(reqs))
+	if err != nil {
+		return store.MatchView{}, nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return store.MatchView{}, nil, nil, err
+	}
+
+	view, err := loadView()
+	if err != nil {
+		return store.MatchView{}, nil, nil, err
+	}
+	if revision > 0 {
+		view.Revision = util.MaxInt64(view.Revision, revision)
+	}
+	data, err := json.Marshal(view)
+	if err != nil {
+		return store.MatchView{}, nil, nil, err
+	}
+
+	// Load the views of downstream matches that changed, skipping the edited
+	// match itself (already returned as `view`). Failures here are non-fatal —
+	// the edit is committed; a missed cascade broadcast just costs a reload.
+	var cascaded []store.MatchView
+	for _, mid := range affected {
+		if mid == match.MatchID {
+			continue
+		}
+		cv, err := s.loadMatchViewByIDLocked(festID, match.GameID, mid)
+		if err != nil || cv.Code == "" {
+			continue
+		}
+		cascaded = append(cascaded, cv)
+	}
+	return view, data, cascaded, nil
+}
+
+// loadMatchViewByIDLocked loads a match view by its numeric id (used to render
+// downstream matches touched by a bracket cascade). Caller holds s.eng.Mu.
+func (s *server) loadMatchViewByIDLocked(festID, gameID, matchID int64) (store.MatchView, error) {
+	if s.eng.DB == nil {
+		return store.MatchView{}, nil
+	}
+	ctx, cancel := festwrite.BoundedReadContext()
+	defer cancel()
+	match, err := store.LoadDBMatchStateWhere(ctx, s.eng.DB, `m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, festID, gameID)
+	if err != nil {
+		return store.MatchView{}, err
+	}
+	return matchViewFromDBState(match), nil
+}
+
+func applyMatchEditTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState, req updateRequest) error {
+	if req.Action != "" {
+		if hasTeamEdit(req) {
+			return errors.New("action update must be standalone")
+		}
+		switch req.Action {
+		case actionAddShootoutTheme:
+			return addShootoutThemeTx(ctx, tx, match.MatchID, match.TeamIDs)
+		case actionRemoveShootoutTheme:
+			return removeShootoutThemeTx(ctx, tx, match.MatchID)
+		default:
+			return errors.New("bad action")
+		}
+	}
+
+	if req.Team < 0 || req.Team >= len(match.TeamIDs) || match.TeamIDs[req.Team] == 0 {
+		return errors.New("bad team index")
+	}
+	teamID := match.TeamIDs[req.Team]
+
+	if req.Tiebreak != nil {
+		return errors.New("shootout total is calculated")
+	}
+	if req.Place != nil {
+		if *req.Place < 0 {
+			return errors.New("bad place")
+		}
+		if _, err := tx.ExecContext(ctx, `
+insert into match_results(match_id, team_id, place)
+values(?, ?, ?)
+on conflict(match_id, team_id) do update set place = excluded.place`, match.MatchID, teamID, *req.Place); err != nil {
+			return err
+		}
+	}
+
+	if req.Theme != nil || req.Player != nil || req.Answer != nil || req.Mark != nil || req.Shootout != nil {
+		isShootout := req.Shootout != nil && *req.Shootout
+		kind := "regular"
+		if isShootout {
+			kind = "shootout"
+		}
+		if req.Theme == nil || *req.Theme < 0 {
+			return errors.New("bad theme index")
+		}
+		themeID, err := store.LookupThemeID(ctx, tx, match.MatchID, teamID, kind, *req.Theme)
+		if err != nil {
+			return err
+		}
+
+		if req.Player != nil {
+			player := strings.TrimSpace(*req.Player)
+			var playerID any
+			if player != "" {
+				id, err := lookupRosterPlayerID(ctx, tx, match.GameID, match.RosterSource, teamID, player)
+				if err != nil {
+					return err
+				}
+				playerID = id
+			}
+			if _, err := tx.ExecContext(ctx, `update themes set player_id = ? where id = ?`, playerID, themeID); err != nil {
+				return err
+			}
+		}
+
+		if req.Answer != nil || req.Mark != nil {
+			if req.Answer == nil || *req.Answer < 0 || *req.Answer >= len(store.QuestionValues) {
+				return errors.New("bad answer index")
+			}
+			if req.Mark == nil {
+				return errors.New("missing mark")
+			}
+			if _, err := tx.ExecContext(ctx, `
+insert into answers(theme_id, answer_index, mark)
+values(?, ?, ?)
+on conflict(theme_id, answer_index) do update set mark = excluded.mark`, themeID, *req.Answer, store.NormalizeMark(*req.Mark)); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func addShootoutThemeTx(ctx context.Context, tx *sql.Tx, matchID int64, teamIDs []int64) error {
+	var next sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `
+select max(theme_index) + 1 from themes
+where match_id = ? and kind = 'shootout'`, matchID).Scan(&next); err != nil {
+		return err
+	}
+	themeIndex := 0
+	if next.Valid {
+		themeIndex = int(next.Int64)
+	}
+	for _, teamID := range teamIDs {
+		if teamID == 0 {
+			continue
+		}
+		if err := store.InsertTheme(ctx, tx, matchID, teamID, "shootout", themeIndex, 0, [5]string{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func removeShootoutThemeTx(ctx context.Context, tx *sql.Tx, matchID int64) error {
+	var themeIndex sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `
+select max(theme_index) from themes
+where match_id = ? and kind = 'shootout'`, matchID).Scan(&themeIndex); err != nil {
+		return err
+	}
+	if !themeIndex.Valid {
+		return errors.New("no shootout themes to remove")
+	}
+	if _, err := tx.ExecContext(ctx, `
+delete from answers
+where theme_id in (
+  select id from themes where match_id = ? and kind = 'shootout' and theme_index = ?
+)`, matchID, themeIndex.Int64); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `
+delete from themes
+where match_id = ? and kind = 'shootout' and theme_index = ?`, matchID, themeIndex.Int64)
+	return err
+}
+
+func lookupRosterPlayerID(ctx context.Context, q store.Queryer, gameID int64, rosterSource string, teamID int64, player string) (int64, error) {
+	rosterQuery := `
+select p.id, p.first_name, p.last_name
+from team_players tp
+join players p on p.id = tp.player_id
+where tp.team_id = ?`
+	rosterArgs := []any{teamID}
+	if rosterSource == "game" {
+		rosterQuery = `
+select p.id, p.first_name, p.last_name
+from game_team_players gtp
+join players p on p.id = gtp.player_id
+where gtp.game_id = ? and gtp.team_id = ?`
+		rosterArgs = []any{gameID, teamID}
+	}
+	rows, err := q.QueryContext(ctx, rosterQuery, rosterArgs...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var firstName, lastName string
+		if err := rows.Scan(&id, &firstName, &lastName); err != nil {
+			return 0, err
+		}
+		if store.JoinPlayerName(firstName, lastName) == player {
+			return id, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	return 0, errors.New("player is not in roster")
+}
+
+func recalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, festID int64, code string) error {
+	match, err := store.LoadDBMatchState(ctx, tx, festID, code)
+	if err != nil {
+		return err
+	}
+	return store.RecalculateMatchResultsForStateTx(ctx, tx, match)
+}
+
+func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, festID, matchID int64, eventType, payload string) (int64, error) {
+	now := util.UtcNow()
+	if _, err := tx.ExecContext(ctx, `update matches set revision = revision + 1 where id = ?`, matchID); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `update fests set revision = revision + 1, updated_at = ? where id = ?`, now, festID); err != nil {
+		return 0, err
+	}
+	var revision int64
+	if err := tx.QueryRowContext(ctx, `select revision from fests where id = ?`, festID).Scan(&revision); err != nil {
+		return 0, err
+	}
+	if err := festwrite.AppendJournalTx(ctx, tx, festID, revision, eventType, []byte(payload)); err != nil {
+		return 0, err
+	}
+	return revision, nil
+}
+
+func (s *server) updateMatchVenue(festID int64, code string, number int) (store.MatchView, []byte, error) {
+	return s.updateMatchVenueUsing(context.Background(), festID, number,
+		func(ctx context.Context, q store.Queryer) (store.DBMatchState, error) {
+			return store.LoadDBMatchState(ctx, q, festID, code)
+		},
+		func() (store.MatchView, error) {
+			return s.loadMatchViewLocked(festID, code)
+		}, nil)
+}
+
+// updateScopedMatchVenue updates a match's venue and additionally returns
+// deltaOps (set-ops vs the pre-edit view) when a delta broadcast beats the full
+// view; nil otherwise.
+func (s *server) updateScopedMatchVenue(ctx context.Context, scope matchScope, number int) (store.MatchView, []byte, []byte, error) {
+	var oldData []byte
+	view, data, err := s.updateMatchVenueUsing(ctx, scope.FestID, number,
+		func(ctx context.Context, q store.Queryer) (store.DBMatchState, error) {
+			return loadDBMatchStateByScope(ctx, q, scope)
+		},
+		func() (store.MatchView, error) {
+			return s.loadScopedMatchViewLocked(scope)
+		}, &oldData)
+	if err != nil {
+		return view, data, nil, err
+	}
+	deltaOps, _ := realtime.MatchDeltaOps(oldData, data)
+	return view, data, deltaOps, nil
+}
+
+func (s *server) updateMatchVenueUsing(
+	reqCtx context.Context,
+	festID int64,
+	number int,
+	loadMatch func(context.Context, store.Queryer) (store.DBMatchState, error),
+	loadView func() (store.MatchView, error),
+	oldDataOut *[]byte,
+) (store.MatchView, []byte, error) {
+	if number <= 0 {
+		return store.MatchView{}, nil, errors.New("bad venue number")
+	}
+	// Bounded, attributed write context + off-lock pool acquisition (see
+	// applyMatchUpdateUsing / the 2026-06-13 freeze).
+	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
+	defer cancel()
+	conn, err := s.eng.AcquireWriteConn(ctx, "match-venue")
+	if err != nil {
+		return store.MatchView{}, nil, err
+	}
+	defer conn.Close()
+
+	defer s.eng.LockWrite("match-venue")()
+
+	// Pre-image under the exclusive lock for a minimal delta broadcast (see
+	// applyMatchUpdateUsing). Best-effort; empty → caller sends full state.
+	if oldDataOut != nil {
+		if oldView, oerr := loadView(); oerr == nil {
+			*oldDataOut, _ = json.Marshal(oldView)
+		}
+	}
+
+	tx, err := s.eng.BeginWriteTxConn(ctx, conn)
+	if err != nil {
+		return store.MatchView{}, nil, err
+	}
+	defer tx.Rollback()
+
+	match, err := loadMatch(ctx, tx)
+	if err != nil {
+		return store.MatchView{}, nil, err
+	}
+	var venueID int64
+	if err := tx.QueryRowContext(ctx, `
+select id from venues where fest_id = ? and number = ?`, festID, number).Scan(&venueID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return store.MatchView{}, nil, errors.New("unknown venue")
+		}
+		return store.MatchView{}, nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `update matches set venue_id = ? where id = ?`, venueID, match.MatchID); err != nil {
+		return store.MatchView{}, nil, err
+	}
+	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:venue", util.MustJSON(map[string]any{"code": match.Code, "venue": number}))
+	if err != nil {
+		return store.MatchView{}, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return store.MatchView{}, nil, err
+	}
+	view, err := loadView()
+	if err != nil {
+		return store.MatchView{}, nil, err
+	}
+	view.Revision = util.MaxInt64(view.Revision, revision)
+	data, err := json.Marshal(view)
+	return view, data, err
+}
+
+func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, title string) ([]store.VenueView, int64, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return nil, 0, errors.New("empty venue title")
+	}
+
+	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
+	defer cancel()
+	conn, err := s.eng.AcquireWriteConn(ctx, "venue-rename")
+	if err != nil {
+		return nil, 0, err
+	}
+	defer conn.Close()
+
+	defer s.eng.LockWrite("venue-rename")()
+
+	tx, err := s.eng.BeginWriteTxConn(ctx, conn)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer tx.Rollback()
+
+	result, err := tx.ExecContext(ctx, `
+update venues set title = ?, updated_at = ?
+where fest_id = ? and number = ?`, title, util.UtcNow(), festID, number)
+	if err != nil {
+		return nil, 0, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return nil, 0, err
+	}
+	if affected == 0 {
+		return nil, 0, errors.New("unknown venue")
+	}
+	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, "venues:update", util.MustJSON(map[string]any{"number": number, "title": title}))
+	if err != nil {
+		return nil, 0, err
+	}
+	venues, err := store.LoadVenues(ctx, tx, festID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, 0, err
+	}
+	return venues, revision, nil
+}
+
+func (s *server) bumpFestRevisionStandalone(ctx context.Context, festID int64, eventType, payload string) (int64, error) {
+	tx, err := s.eng.BeginWriteTx(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, eventType, payload)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return revision, nil
+}
+
+// broadcastMatchView fans out a match-scope update as a minimal delta when ops
+// are available (cheaper than the full view) and as a full-state snapshot
+// otherwise. Centralizes the delta-or-snapshot choice for the match handlers.
+// Returns the seq assigned to the broadcast so the handler can stamp it on the
+// HTTP response.
+func (s *server) broadcastMatchView(festID int64, mscope matchScope, revision int64, deltaOps, data []byte) uint64 {
+	scope := matchScopeKey(mscope)
+	if len(deltaOps) > 0 {
+		return s.eng.BroadcastStateDelta(festID, scope, revision, deltaOps)
+	}
+	return s.eng.BroadcastState(festID, scope, revision, data)
+}
+
+func (s *server) cachedFestViewBytes(festID, gameID int64) ([]byte, bool) {
+	s.eng.FestViewMu.RLock()
+	defer s.eng.FestViewMu.RUnlock()
+	games, ok := s.eng.FestViewCache[festID]
+	if !ok {
+		return nil, false
+	}
+	data, ok := games[gameID]
+	return data, ok
+}
+
+func (s *server) storeFestViewBytes(festID, gameID int64, data []byte) {
+	s.eng.FestViewMu.Lock()
+	defer s.eng.FestViewMu.Unlock()
+	if s.eng.FestViewCache == nil {
+		s.eng.FestViewCache = map[int64]map[int64][]byte{}
+	}
+	games := s.eng.FestViewCache[festID]
+	if games == nil {
+		games = map[int64][]byte{}
+		s.eng.FestViewCache[festID] = games
+	}
+	games[gameID] = data
+}
+
+// festViewBytes returns the JSON-marshaled FestView for (festID, gameID),
+// using the in-memory cache when fresh. Cache misses run the same DB queries
+// as the original handler and store the result. Invalidation is driven by
+// broadcastState.
+func (s *server) festViewBytes(festID, gameID int64) ([]byte, error) {
+	if data, ok := s.cachedFestViewBytes(festID, gameID); ok {
+		if s.metrics.On {
+			s.metrics.FestViewHits.Add(1)
+		}
+		return data, nil
+	}
+	// Cache miss: rebuild from the DB. Edits invalidate the whole fest's cache
+	// (see invalidateFestViewCache), so under concurrent editing this rebuild can
+	// fire on every reader request — the suspected amplification. Time it so the
+	// live test shows whether it's actually costly.
+	tRebuild := metrics.NowIf(s.metrics.On)
+	view, err := s.loadFestViewSnapshot(festID, gameID)
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(view)
+	if err != nil {
+		return nil, err
+	}
+	s.storeFestViewBytes(festID, gameID, data)
+	if s.metrics.On {
+		s.metrics.FestViewMisses.Add(1)
+		log.Printf("editmetric festview fest=%d game=%d rebuild_ms=%s bytes=%d",
+			festID, gameID, metrics.FmtMs(time.Since(tRebuild)), len(data))
+	}
+	return data, nil
+}
+
+func writeJSONValue(w http.ResponseWriter, value any) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, data)
+}
+
+func splitPlayerName(fullName string) (string, string) {
+	fullName = strings.TrimSpace(fullName)
+	if fullName == "" {
+		return "", ""
+	}
+	parts := strings.Fields(fullName)
+	if len(parts) == 1 {
+		return parts[0], ""
+	}
+	return parts[0], strings.Join(parts[1:], " ")
+}
+
+func placeholderName(sourceRef string) string {
+	var ref map[string]any
+	if err := json.Unmarshal([]byte(sourceRef), &ref); err != nil {
+		return "Ожидает команды"
+	}
+	if value, ok := ref["placeholder"].(string); ok && value != "" {
+		return value
+	}
+	if value, ok := ref["name"].(string); ok && value != "" {
+		return value
+	}
+	return "Ожидает команды"
+}
+
+// Auth helpers. Codes must be unique enough not to collide between concurrent
+// users; we get that from crypto/rand.
+
+const (
+	inviteCodeBytes      = 12
+	telegramAuthBytes    = 12
+	telegramLoginCodeLen = 8
+	sessionTokenBytes    = 32
+	inviteLifetime       = 7 * 24 * time.Hour
+)
+
+const telegramLoginCodeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func randomBase32(bytesLen int) (string, error) {
+	buf := make([]byte, bytesLen)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return strings.ToUpper(strings.TrimRight(base32.StdEncoding.EncodeToString(buf), "=")), nil
+}
+
+func newInviteCode() (string, error) {
+	return randomBase32(inviteCodeBytes)
+}
+
+func newTelegramAuthCode() (string, error) {
+	return randomBase32(telegramAuthBytes)
+}
+
+func newTelegramLoginCode() (string, error) {
+	buf := make([]byte, telegramLoginCodeLen)
+	max := big.NewInt(int64(len(telegramLoginCodeAlphabet)))
+	for i := range buf {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", err
+		}
+		buf[i] = telegramLoginCodeAlphabet[n.Int64()]
+	}
+	return string(buf), nil
+}
+
+func newSessionToken() (string, error) {
+	buf := make([]byte, sessionTokenBytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
