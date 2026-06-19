@@ -5735,6 +5735,9 @@ body.is-fullscreen.od-page .match-main {
   cursor: var(--cursor-action);
 }
 .label-pick.is-on { border-color: var(--text); font-weight: var(--fw-bold); }
+.label-empty { font-size: var(--text-xs); color: var(--muted); }
+.label-add-row { display: flex; gap: var(--space-2); align-items: center; }
+.label-add-row .input { flex: 1; }
 .label-create { display: flex; gap: var(--space-2); align-items: center; }
 .label-color-input { width: 38px; height: 34px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
 

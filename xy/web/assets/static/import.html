@@ -22,14 +22,15 @@
     <form id="importForm" class="auth-form auth-form-stack import-form">
       <p class="auth-hint">
         Экспортируйте доску из Trello (меню доски → «Печать, экспорт и общий доступ» →
-        «Экспортировать как JSON»), затем вставьте содержимое файла ниже. Списки,
-        оканчивающиеся на <code>_tests</code>, импортируются как тест-списки; зелёные и
-        красные метки тест-карточек распознаются автоматически.
+        «Экспортировать как JSON»), затем выберите сохранённый <code>.json</code>-файл ниже.
+        Списки, оканчивающиеся на <code>_tests</code>, импортируются как тест-списки; зелёные
+        и красные метки тест-карточек распознаются автоматически.
       </p>
       <input class="input" id="boardName" type="text" placeholder="Название доски (по умолчанию — из Trello)">
       <input class="input" id="boardPass" type="password" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required>
       <p class="auth-hint">Пароль шифрует все данные доски. Запомните его — восстановить нельзя.</p>
-      <textarea class="card-desc" id="trelloJson" placeholder="Вставьте сюда JSON, экспортированный из Trello…" spellcheck="false" required></textarea>
+      <label class="card-section-label" for="trelloFile">Файл доски Trello (.json)</label>
+      <input class="input" id="trelloFile" type="file" accept=".json,application/json" required>
       <div class="auth-actions">
         <button class="btn" type="submit" id="importBtn">Импортировать</button>
         <a class="btn btn-ghost" href="/">Отмена</a>

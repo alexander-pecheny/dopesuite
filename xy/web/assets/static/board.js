@@ -471,20 +471,44 @@ function renderCardLabels(card) {
   paintLabels();
 }
 
+// renderLabelPicker shows only the labels actually assigned to this card (each
+// removable on click). Boards can have dozens of labels (e.g. one green/red pair
+// per test session), so the rest live behind an "add label" dropdown rather than
+// being dumped on screen.
 function renderLabelPicker(card) {
   const picker = document.getElementById("labelPicker");
   picker.replaceChildren();
-  const assigned = new Set(state.cardLabels[card.id] || []);
-  for (const lbl of state.labels) {
-    const pick = el("button", {
-      class: "label-pick" + (assigned.has(lbl.id) ? " is-on" : ""),
-      type: "button", dataset: { c: lbl.color }, text: lbl.name,
+  const assigned = state.cardLabels[card.id] || [];
+  const assignedSet = new Set(assigned);
+  for (const id of assigned) {
+    const lbl = labelById(id);
+    if (!lbl) continue;
+    picker.append(el("button", {
+      class: "label-pick is-on", type: "button", dataset: { c: lbl.color },
+      title: "Снять метку", text: lbl.name + " ×",
       onclick: () => toggleLabel(card, lbl),
-    });
-    picker.append(pick);
+    }));
   }
+  if (!assigned.length) picker.append(el("span", { class: "label-empty", text: "меток нет" }));
+
+  // dropdown of the remaining (unassigned) labels
+  const sel = document.getElementById("labelAdd");
+  sel.replaceChildren(el("option", { value: "", text: "+ добавить метку…" }));
+  const unassigned = state.labels
+    .filter((l) => !assignedSet.has(l.id))
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  for (const lbl of unassigned) sel.append(el("option", { value: String(lbl.id), text: lbl.name }));
   paintLabels();
 }
+
+document.getElementById("labelAdd").addEventListener("change", (e) => {
+  const id = Number(e.target.value);
+  e.target.value = "";
+  if (!id) return;
+  const card = state.cards.find((c) => c.id === openCardId);
+  const lbl = labelById(id);
+  if (card && lbl) toggleLabel(card, lbl);
+});
 
 async function toggleLabel(card, lbl) {
   const cur = new Set(state.cardLabels[card.id] || []);

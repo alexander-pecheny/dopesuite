@@ -193,10 +193,14 @@ form.addEventListener("submit", async (e) => {
   log("");
   const pass = document.getElementById("boardPass").value;
   const name = document.getElementById("boardName").value.trim();
-  const raw = document.getElementById("trelloJson").value;
+  const file = document.getElementById("trelloFile").files[0];
+  if (!file) {
+    log("Выберите JSON-файл, экспортированный из Trello.");
+    return;
+  }
   let board;
   try {
-    board = JSON.parse(raw);
+    board = JSON.parse(await file.text());
   } catch (err) {
     log("Не удалось разобрать JSON: " + err.message);
     return;
