@@ -9,9 +9,13 @@ import (
 	"net/http"
 	"strings"
 
+	"dope/dope/gameexport"
 	"dope/dope/games"
+	"dope/dope/hostpages"
 	"dope/dope/markdown"
+	"dope/dope/session"
 	"dope/dope/store"
+	"dope/dope/util"
 )
 
 type publicFestSummary struct {
@@ -31,29 +35,13 @@ func (s publicFestSummary) Ref() string {
 	return fmt.Sprintf("%d", s.ID)
 }
 
-type publicFestGame struct {
-	ID    int64
-	Slug  string
-	Code  string
-	Title string
-	Type  string
-	URL   string
-}
-
-func (g publicFestGame) Ref() string {
-	if g.Slug != "" {
-		return g.Slug
-	}
-	return fmt.Sprintf("%d", g.ID)
-}
-
 type publicFestDetail struct {
 	ID          int64
 	Slug        string
 	Title       string
 	Dates       string
 	Description template.HTML
-	Games       []publicFestGame
+	Games       []hostpages.PublicFestGame
 }
 
 func (d publicFestDetail) Ref() string {
@@ -177,7 +165,7 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 		forceStatic = true
 		parts = parts[:len(parts)-1]
 	}
-	id, err := resolveFestID(r.Context(), s.db, parts[0])
+	id, err := store.ResolveFestID(r.Context(), s.eng.DB, parts[0])
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
@@ -195,7 +183,7 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 	// download too; it deliberately skips the assertFestPublic check below.
 	if len(parts) == 3 && parts[1] == "game" && strings.HasSuffix(parts[2], ".xlsx") {
 		gameRef := strings.TrimSuffix(parts[2], ".xlsx")
-		gameID, err := resolveGameID(r.Context(), s.db, id, gameRef)
+		gameID, err := resolveGameID(r.Context(), s.eng.DB, id, gameRef)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				http.NotFound(w, r)
@@ -208,7 +196,7 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		s.handleScopedGameExport(w, r, festScope{FestID: id, GameID: gameID})
+		gameexport.HandleScopedGameExport(s, w, r, id, gameID)
 		return
 	}
 	if len(parts) == 1 {
@@ -229,10 +217,10 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 	}
 	// Public viewer pages mirror host pages: OD/SI get their own viewer.
 	if len(parts) >= 3 {
-		gameID, err := resolveGameID(r.Context(), s.db, id, parts[2])
+		gameID, err := resolveGameID(r.Context(), s.eng.DB, id, parts[2])
 		if err == nil && gameID > 0 {
 			var gameType string
-			if err := s.db.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, id).Scan(&gameType); err == nil {
+			if err := s.eng.DB.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, id).Scan(&gameType); err == nil {
 				scope := festScope{FestID: id, GameID: gameID}
 				route := parseHostInitRoute(parts[1:], scope)
 				if games.IsChGK(gameType) {
@@ -246,12 +234,12 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 				// concurrency budget, so a flood of forged session cookies can't
 				// pierce the shield.
 				serveStatic := forceStatic
-				if !serveStatic && s.staticMode.Load() {
-					if hasSessionCookie(r) {
-						if s.liveFallthrough.Add(1) > liveFallthroughCap {
+				if !serveStatic && s.eng.StaticMode.Load() {
+					if session.HasCookie(r) {
+						if s.eng.LiveFallthrough.Add(1) > liveFallthroughCap {
 							serveStatic = true
 						}
-						defer s.liveFallthrough.Add(-1)
+						defer s.eng.LiveFallthrough.Add(-1)
 					} else {
 						serveStatic = true
 					}
@@ -295,7 +283,7 @@ func (s *server) renderPublicFestPage(w http.ResponseWriter, r *http.Request, id
 
 func (s *server) assertFestPublic(ctx context.Context, festID int64) error {
 	var isPublic int
-	if err := s.db.QueryRowContext(ctx, `select is_public from fests where id = ?`, festID).Scan(&isPublic); err != nil {
+	if err := s.eng.DB.QueryRowContext(ctx, `select is_public from fests where id = ?`, festID).Scan(&isPublic); err != nil {
 		return err
 	}
 	if isPublic != 1 {
@@ -327,10 +315,10 @@ func isViewerSubPath(parts []string) bool {
 }
 
 func (s *server) loadPublicFestSummaries(ctx context.Context) ([]publicFestSummary, error) {
-	if s.db == nil {
+	if s.eng.DB == nil {
 		return nil, nil
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.eng.DB.QueryContext(ctx, `
 select id, coalesce(slug, ''), title, coalesce(start_date, ''), coalesce(end_date, '')
 from fests
 where is_public = 1
@@ -347,14 +335,14 @@ order by case when start_date is null or start_date = '' then 1 else 0 end,
 		if err := rows.Scan(&s.ID, &s.Slug, &s.Title, &s.StartDate, &s.EndDate); err != nil {
 			return nil, err
 		}
-		s.Dates = formatFestDates(s.StartDate, s.EndDate)
+		s.Dates = util.FormatFestDates(s.StartDate, s.EndDate)
 		out = append(out, s)
 	}
 	return out, rows.Err()
 }
 
 func (s *server) loadPublicFestDetail(ctx context.Context, id int64) (publicFestDetail, error) {
-	if s.db == nil {
+	if s.eng.DB == nil {
 		return publicFestDetail{}, sql.ErrNoRows
 	}
 	var (
@@ -365,7 +353,7 @@ func (s *server) loadPublicFestDetail(ctx context.Context, id int64) (publicFest
 		endDate     sql.NullString
 		isPublic    int
 	)
-	if err := s.db.QueryRowContext(ctx, `
+	if err := s.eng.DB.QueryRowContext(ctx, `
 select coalesce(slug, ''), title, description, start_date, end_date, is_public
 from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &endDate, &isPublic); err != nil {
 		return publicFestDetail{}, err
@@ -373,7 +361,7 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 	if isPublic != 1 {
 		return publicFestDetail{}, sql.ErrNoRows
 	}
-	gameRows, err := loadFestGames(ctx, s.db, id)
+	gameRows, err := hostpages.LoadFestGames(ctx, s.eng.DB, id)
 	if err != nil {
 		return publicFestDetail{}, err
 	}
@@ -381,9 +369,9 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 	if festRef == "" {
 		festRef = fmt.Sprintf("%d", id)
 	}
-	publicGames := make([]publicFestGame, len(gameRows))
+	publicGames := make([]hostpages.PublicFestGame, len(gameRows))
 	for i, g := range gameRows {
-		publicGames[i] = publicFestGame{
+		publicGames[i] = hostpages.PublicFestGame{
 			ID:    g.ID,
 			Slug:  g.Slug,
 			Code:  g.Code,
@@ -396,61 +384,9 @@ from fests where id = ?`, id).Scan(&slug, &title, &description, &startDate, &end
 		ID:          id,
 		Slug:        slug,
 		Title:       title,
-		Dates:       formatFestDates(startDate.String, endDate.String),
+		Dates:       util.FormatFestDates(startDate.String, endDate.String),
 		Description: markdown.Render(description),
 		Games:       publicGames,
 	}
 	return detail, nil
-}
-
-func formatFestDates(start, end string) string {
-	start = strings.TrimSpace(start)
-	end = strings.TrimSpace(end)
-	switch {
-	case start == "" && end == "":
-		return ""
-	case start != "" && end != "" && start != end:
-		return start + " — " + end
-	case start != "":
-		return start
-	default:
-		return end
-	}
-}
-
-type festGameRow struct {
-	ID    int64
-	Code  string
-	Title string
-	Type  string
-	Slug  string
-}
-
-// Ref returns the game's slug if set, otherwise the stringified id. Use for
-// building public URLs.
-func (g festGameRow) Ref() string {
-	if g.Slug != "" {
-		return g.Slug
-	}
-	return fmt.Sprintf("%d", g.ID)
-}
-
-func loadFestGames(ctx context.Context, q store.Queryer, festID int64) ([]festGameRow, error) {
-	rows, err := q.QueryContext(ctx, `
-select id, code, title, game_type, coalesce(slug, '')
-from games where fest_id = ?
-order by position, id`, festID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []festGameRow
-	for rows.Next() {
-		var g festGameRow
-		if err := rows.Scan(&g.ID, &g.Code, &g.Title, &g.Type, &g.Slug); err != nil {
-			return nil, err
-		}
-		out = append(out, g)
-	}
-	return out, rows.Err()
 }

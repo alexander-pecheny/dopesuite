@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"dope/dope/store"
+	"dope/dope/storeutil"
 )
 
 // Journal row-op triggers capture the FORWARD row delta of every fine edit to a
@@ -77,14 +78,14 @@ func buildJournalRowTrigger(table string, cols, pks []string, op string, gameVia
 	rowJSON := func(prefix string) string {
 		parts := make([]string, 0, len(cols))
 		for _, c := range cols {
-			parts = append(parts, fmt.Sprintf("'%s', %s.%s", c, prefix, store.QuoteIdent(c)))
+			parts = append(parts, fmt.Sprintf("'%s', %s.%s", c, prefix, storeutil.QuoteIdent(c)))
 		}
 		return "json_object(" + strings.Join(parts, ", ") + ")"
 	}
 	pkJSON := func(prefix string) string {
 		parts := make([]string, 0, len(pks))
 		for _, c := range pks {
-			parts = append(parts, fmt.Sprintf("'%s', %s.%s", c, prefix, store.QuoteIdent(c)))
+			parts = append(parts, fmt.Sprintf("'%s', %s.%s", c, prefix, storeutil.QuoteIdent(c)))
 		}
 		return "json_object(" + strings.Join(parts, ", ") + ")"
 	}
@@ -101,7 +102,7 @@ func buildJournalRowTrigger(table string, cols, pks []string, op string, gameVia
 				continue
 			}
 			removals = append(removals, fmt.Sprintf("case when old.%s is new.%s then %s else '$.\"__dope_keep__\"' end",
-				store.QuoteIdent(c), store.QuoteIdent(c), jsonPathLit(c)))
+				storeutil.QuoteIdent(c), storeutil.QuoteIdent(c), jsonPathLit(c)))
 		}
 		if len(removals) == 0 {
 			return rowJSON(prefix)
@@ -201,7 +202,7 @@ func EnsureTriggers(db *sql.DB) error {
 	}
 	rows.Close()
 	for _, n := range drop {
-		if _, err := db.Exec(`drop trigger if exists ` + store.QuoteIdent(n)); err != nil {
+		if _, err := db.Exec(`drop trigger if exists ` + storeutil.QuoteIdent(n)); err != nil {
 			return err
 		}
 	}

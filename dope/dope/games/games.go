@@ -80,3 +80,6 @@ func mustJSON(value any) string {
 	}
 	return string(data)
 }
+
+// KSIThemeCount is the fixed number of themes in a KSI (team jeopardy) game.
+const KSIThemeCount = 20

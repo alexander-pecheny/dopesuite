@@ -13,15 +13,26 @@ import (
 	"strings"
 	"time"
 
+	"dope/dope/core"
+	"dope/dope/edit"
+	"dope/dope/festaccess"
+	"dope/dope/festwrite"
+	"dope/dope/gameexport"
+	"dope/dope/imports"
+	"dope/dope/metrics"
+	"dope/dope/numbering"
 	"dope/dope/realtime"
+	"dope/dope/resolver"
 	"dope/dope/roles"
+	"dope/dope/session"
 	"dope/dope/store"
+	"dope/dope/util"
 )
 
-type festScope struct {
-	FestID int64
-	GameID int64
-}
+// festScope is a local alias for core.FestScope so the existing dopeserver code
+// (and leaf packages) name the same type; logic that moved into leaf packages
+// uses core.FestScope directly.
+type festScope = core.FestScope
 
 func parseScopedPath(path, prefix string) (festScope, string, bool) {
 	rest := strings.TrimPrefix(path, prefix)
@@ -55,7 +66,7 @@ func parseScopedPath(path, prefix string) (festScope, string, bool) {
 }
 
 func (s *server) verifyMatchInScope(ctx context.Context, scope festScope, code string) (matchScope, error) {
-	row := s.db.QueryRowContext(ctx, `
+	row := s.eng.DB.QueryRowContext(ctx, `
 select id from matches where fest_id = ? and game_id = ? and code = ?`,
 		scope.FestID, scope.GameID, code)
 	var matchID int64
@@ -83,12 +94,12 @@ func festViewScopeKey(scope festScope) string {
 }
 
 func (s *server) broadcastFestView(scope festScope, revision int64) {
-	s.invalidateFestViewCache(scope.FestID)
+	s.eng.InvalidateFestViewCache(scope.FestID)
 	data, err := s.festViewBytes(scope.FestID, scope.GameID)
 	if err != nil {
 		return
 	}
-	s.broadcastState(scope.FestID, festViewScopeKey(scope), revision, data)
+	s.eng.BroadcastState(scope.FestID, festViewScopeKey(scope), revision, data)
 }
 
 // broadcastMatchCascade fans out the views of downstream matches whose slots
@@ -101,23 +112,12 @@ func (s *server) broadcastMatchCascade(festID, gameID int64, cascaded []store.Ma
 			continue
 		}
 		scopeKey := matchScopeKey(matchScope{festScope: festScope{FestID: festID, GameID: gameID}, Code: cv.Code})
-		s.broadcastState(festID, scopeKey, cv.Revision, data)
+		s.eng.BroadcastState(festID, scopeKey, cv.Revision, data)
 	}
 }
 
 var errMatchNotFound = errors.New("match not found in this game")
-var errRatingRosterImmutable = errors.New("команды загружаются из rating.chgk.info; чтобы изменить список, переимпортируйте участников")
 var errTeamsUnnumbered = errors.New("сначала присвойте номера всем командам — без номеров результаты нельзя редактировать")
-
-type gameStatePatchRequest struct {
-	Ops []gameStatePatchOp `json:"ops"`
-}
-
-type gameStatePatchOp struct {
-	Op    string            `json:"op,omitempty"`
-	Path  []json.RawMessage `json:"path"`
-	Value json.RawMessage   `json:"value"`
-}
 
 type hostPresenceRequest struct {
 	Active *bool           `json:"active,omitempty"`
@@ -133,18 +133,12 @@ type hostPresenceMessage struct {
 	UpdatedAt string          `json:"updatedAt"`
 }
 
-type jsonPathSegment struct {
-	key     string
-	index   int
-	isIndex bool
-}
-
 func (s *server) festVisibility(ctx context.Context, festID int64) (bool, bool, error) {
-	if s.db == nil {
+	if s.eng.DB == nil {
 		return false, false, nil
 	}
 	var isPublic int
-	err := s.db.QueryRowContext(ctx, `select is_public from fests where id = ?`, festID).Scan(&isPublic)
+	err := s.eng.DB.QueryRowContext(ctx, `select is_public from fests where id = ?`, festID).Scan(&isPublic)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, false, nil
 	}
@@ -167,12 +161,12 @@ func (s *server) authorizeFestRead(w http.ResponseWriter, r *http.Request, festI
 	if public {
 		return true
 	}
-	user, ok := s.lookupSession(r)
+	user, ok := s.eng.LookupSession(r)
 	if !ok {
 		http.NotFound(w, r)
 		return false
 	}
-	role, err := s.festUserRole(r.Context(), festID, user.UserID)
+	role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, festID, user.UserID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return false
@@ -184,17 +178,17 @@ func (s *server) authorizeFestRead(w http.ResponseWriter, r *http.Request, festI
 	return true
 }
 
-func (s *server) requireFestOrganizer(w http.ResponseWriter, r *http.Request, festID int64) (sessionUser, bool) {
+func (s *server) requireFestOrganizer(w http.ResponseWriter, r *http.Request, festID int64) (session.User, bool) {
 	user, _, ok := s.requireFestRole(w, r, festID, roles.CanEditGameTables)
 	return user, ok
 }
 
-func (s *server) requireFestAdmin(w http.ResponseWriter, r *http.Request, festID int64) (sessionUser, bool) {
+func (s *server) requireFestAdmin(w http.ResponseWriter, r *http.Request, festID int64) (session.User, bool) {
 	user, _, ok := s.requireFestRole(w, r, festID, roles.CanManageFest)
 	return user, ok
 }
 
-func (s *server) requireFestTableEditor(w http.ResponseWriter, r *http.Request, festID int64) (sessionUser, bool) {
+func (s *server) requireFestTableEditor(w http.ResponseWriter, r *http.Request, festID int64) (session.User, bool) {
 	user, _, ok := s.requireFestRole(w, r, festID, roles.CanEditGameTables)
 	return user, ok
 }
@@ -206,7 +200,7 @@ func (s *server) requireFestTableEditor(w http.ResponseWriter, r *http.Request, 
 // A fest with no teams at all is not blocked (nothing to number yet). Called at
 // the write gates right after requireFestTableEditor.
 func (s *server) requireNumberedTeams(w http.ResponseWriter, r *http.Request, festID int64) bool {
-	blocked, err := festHasUnnumberedTeams(r.Context(), s.db, festID)
+	blocked, err := numbering.HasUnnumbered(r.Context(), s.eng.DB, festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return false
@@ -218,19 +212,19 @@ func (s *server) requireNumberedTeams(w http.ResponseWriter, r *http.Request, fe
 	return true
 }
 
-func (s *server) requireFestRole(w http.ResponseWriter, r *http.Request, festID int64, allowed func(string) bool) (sessionUser, string, bool) {
-	if !requireSameOriginUnsafe(w, r) {
-		return sessionUser{}, "", false
+func (s *server) requireFestRole(w http.ResponseWriter, r *http.Request, festID int64, allowed func(string) bool) (session.User, string, bool) {
+	if !RequireSameOriginUnsafe(w, r) {
+		return session.User{}, "", false
 	}
-	user, ok := s.lookupSession(r)
+	user, ok := s.eng.LookupSession(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return sessionUser{}, "", false
+		return session.User{}, "", false
 	}
-	role, err := s.festUserRole(r.Context(), festID, user.UserID)
+	role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, festID, user.UserID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return sessionUser{}, "", false
+		return session.User{}, "", false
 	}
 	if allowed(role) {
 		return user, role, true
@@ -238,23 +232,23 @@ func (s *server) requireFestRole(w http.ResponseWriter, r *http.Request, festID 
 	exists, _, err := s.festVisibility(r.Context(), festID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return sessionUser{}, "", false
+		return session.User{}, "", false
 	}
 	if !exists {
 		http.NotFound(w, r)
-		return sessionUser{}, "", false
+		return session.User{}, "", false
 	}
 	http.Error(w, "forbidden", http.StatusForbidden)
-	return sessionUser{}, "", false
+	return session.User{}, "", false
 }
 
 func (s *server) authorizeHostPresence(w http.ResponseWriter, r *http.Request, festID int64) bool {
-	user, ok := s.lookupSession(r)
+	user, ok := s.eng.LookupSession(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return false
 	}
-	role, err := s.festUserRole(r.Context(), festID, user.UserID)
+	role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, festID, user.UserID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return false
@@ -295,7 +289,7 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	tid, err := resolveFestID(r.Context(), s.db, parts[0])
+	tid, err := store.ResolveFestID(r.Context(), s.eng.DB, parts[0])
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
@@ -330,7 +324,7 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		gid, err := resolveGameID(r.Context(), s.db, tid, parts[2])
+		gid, err := resolveGameID(r.Context(), s.eng.DB, tid, parts[2])
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				http.NotFound(w, r)
@@ -374,7 +368,7 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 				http.NotFound(w, r)
 				return
 			}
-			s.handleScopedGameResults(w, r, scope)
+			gameexport.HandleScopedGameResults(s, w, r, scope.FestID, scope.GameID)
 			return
 		case "seed-import":
 			s.handleScopedSeedImport(w, r, scope, parts[4:])
@@ -384,14 +378,14 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 				http.NotFound(w, r)
 				return
 			}
-			s.handleScopedGameExport(w, r, scope)
+			gameexport.HandleScopedGameExport(s, w, r, scope.FestID, scope.GameID)
 			return
 		case "export.json.gz":
 			if len(parts) != 4 {
 				http.NotFound(w, r)
 				return
 			}
-			s.handleScopedGameArchive(w, r, scope)
+			gameexport.HandleScopedGameArchive(s, w, r, scope.FestID, scope.GameID)
 			return
 		}
 	}
@@ -436,14 +430,14 @@ func (s *server) handleHostPresence(w http.ResponseWriter, r *http.Request, fest
 		Color:     hostPresenceColor(user.UserID),
 		Active:    active,
 		Cursor:    req.Cursor,
-		UpdatedAt: utcNow(),
+		UpdatedAt: util.UtcNow(),
 	}
 	data, err := json.Marshal(msg)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.rt.BroadcastHostPresence(realtime.HostPresenceEvent{FestID: festID, Data: data})
+	s.eng.RT.BroadcastHostPresence(realtime.HostPresenceEvent{FestID: festID, Data: data})
 	writeJSON(w, data)
 }
 
@@ -470,7 +464,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 			return
 		}
 		// Read the scope's seq BEFORE the state, not after. A write commits the
-		// new state_json (under s.mu) and only then bumps the seq (under seqMu),
+		// new state_json (under s.eng.Mu) and only then bumps the seq (under seqMu),
 		// so reading seq first guarantees the state we read next is at least as
 		// new as that seq — i.e. the returned X-State-Seq is never AHEAD of the
 		// returned body. Reading it after (the old order) could observe a seq
@@ -478,9 +472,9 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		// client a lastSeq past its actual state; it would then silently skip the
 		// next delta and diverge permanently. Erring low instead means at worst a
 		// already-applied delta re-applies (idempotent) or one extra resync.
-		seq := s.currentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
+		seq := s.eng.CurrentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
 		var stateJSON string
-		err := s.db.QueryRowContext(r.Context(), `
+		err := s.eng.DB.QueryRowContext(r.Context(), `
 	select state_json from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&stateJSON)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
@@ -499,7 +493,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		// X-State-Epoch pairs with the seq: if it differs from what the client
 		// last saw, the server restarted and the seq space reset, so the client
 		// adopts this epoch+seq instead of treating low post-restart seqs as stale.
-		w.Header().Set("X-State-Epoch", s.epoch)
+		w.Header().Set("X-State-Epoch", s.eng.Epoch)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write([]byte(stateJSON))
 	case http.MethodPut:
@@ -524,7 +518,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		// state, the SSE payload and the response identical regardless of which
 		// path produced them — a prerequisite for replay/diff to compare state
 		// without spurious whitespace/key-order differences.
-		if canon, err := canonicalJSON(raw); err == nil {
+		if canon, err := core.CanonicalJSON(raw); err == nil {
 			raw = canon
 		}
 		revision, err := s.replaceGameState(r.Context(), scope, raw)
@@ -532,7 +526,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 			http.NotFound(w, r)
 			return
 		}
-		if errors.Is(err, errRatingRosterImmutable) {
+		if errors.Is(err, edit.ErrRatingRosterImmutable) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -540,7 +534,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		s.broadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, raw)
+		s.eng.BroadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, raw)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write(raw)
 	case http.MethodPatch:
@@ -552,15 +546,15 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		}
 		// Edit-path timing: tE2E marks request-in; we stamp e2e at response-out so
 		// the per-edit line spans the whole handler, not just the locked section.
-		var sample editSample
-		tE2E := nowIf(s.editMetricsOn)
+		var sample metrics.Sample
+		tE2E := metrics.NowIf(s.metrics.On)
 		defer r.Body.Close()
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		var req gameStatePatchRequest
+		var req edit.PatchRequest
 		if err := json.Unmarshal(raw, &req); err != nil {
 			http.Error(w, "bad json", http.StatusBadRequest)
 			return
@@ -573,7 +567,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		// one locked transaction (edit_batch.go). submitEdit blocks until that
 		// window commits — and this editor's own ops applied — then returns the
 		// committed state; the merged delta is broadcast once by the flusher.
-		next, _, err := s.submitEdit(r.Context(), scope, req, string(raw), &sample)
+		next, _, err := s.editor().SubmitEdit(r.Context(), scope, req, string(raw), &sample)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -584,9 +578,9 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write(next)
-		if s.editMetricsOn {
-			sample.e2e = time.Since(tE2E)
-			s.recordEdit(sample)
+		if s.metrics.On {
+			sample.E2E = time.Since(tE2E)
+			s.metrics.RecordEdit(sample)
 		}
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -595,7 +589,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 
 func (s *server) replaceGameState(reqCtx context.Context, scope festScope, raw []byte) (int64, error) {
 	var revision int64
-	err := s.withWriteTx(reqCtx, scope.FestID, "game-state-put", func(ctx context.Context, tx *sql.Tx) error {
+	err := s.eng.WithWriteTx(reqCtx, scope.FestID, "game-state-put", func(ctx context.Context, tx *sql.Tx) error {
 		var gameType, stateJSON string
 		if err := tx.QueryRowContext(ctx, `
 select game_type, state_json from games where fest_id = ? and id = ?`,
@@ -608,7 +602,7 @@ select game_type, state_json from games where fest_id = ? and id = ?`,
 
 		result, err := tx.ExecContext(ctx, `
 update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
-			string(raw), utcNow(), scope.FestID, scope.GameID)
+			string(raw), util.UtcNow(), scope.FestID, scope.GameID)
 		if err != nil {
 			return err
 		}
@@ -619,19 +613,14 @@ update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
 		if n == 0 {
 			return sql.ErrNoRows
 		}
-		revision, err = bumpFestRevisionTx(ctx, tx, scope.FestID, "game:state", string(raw))
+		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, "game:state", string(raw))
 		return err
 	})
 	return revision, err
 }
 
-func patchPathTouchesRatingRoster(gameType string, path []jsonPathSegment) bool {
-	key, ok := immutableRatingRosterStateKey(gameType)
-	return ok && len(path) > 0 && !path[0].isIndex && path[0].key == key
-}
-
 func validateImmutableRatingRosterState(gameType string, previousRaw, nextRaw []byte) error {
-	key, ok := immutableRatingRosterStateKey(gameType)
+	key, ok := edit.ImmutableRatingRosterStateKey(gameType)
 	if !ok {
 		return nil
 	}
@@ -644,20 +633,9 @@ func validateImmutableRatingRosterState(gameType string, previousRaw, nextRaw []
 		return err
 	}
 	if previousOK != nextOK || !bytes.Equal(previous, next) {
-		return errRatingRosterImmutable
+		return edit.ErrRatingRosterImmutable
 	}
 	return nil
-}
-
-func immutableRatingRosterStateKey(gameType string) (string, bool) {
-	switch gameType {
-	case "od":
-		return "teams", true
-	case "ksi":
-		return "participants", true
-	default:
-		return "", false
-	}
 }
 
 func topLevelCanonicalJSON(raw []byte, key string) ([]byte, bool, error) {
@@ -683,94 +661,6 @@ func topLevelCanonicalJSON(raw []byte, key string) ([]byte, bool, error) {
 	return canonical, true, nil
 }
 
-const maxPatchArrayIndex = 4096
-
-func parseJSONPatchPath(parts []json.RawMessage) ([]jsonPathSegment, error) {
-	if len(parts) == 0 {
-		return nil, errors.New("empty patch path")
-	}
-	path := make([]jsonPathSegment, 0, len(parts))
-	for _, raw := range parts {
-		var key string
-		if err := json.Unmarshal(raw, &key); err == nil {
-			if key == "" {
-				return nil, errors.New("empty patch path key")
-			}
-			path = append(path, jsonPathSegment{key: key})
-			continue
-		}
-
-		var number json.Number
-		if err := json.Unmarshal(raw, &number); err != nil {
-			return nil, errors.New("patch path segment must be string or non-negative integer")
-		}
-		index64, err := strconv.ParseInt(number.String(), 10, 0)
-		if err != nil || index64 < 0 {
-			return nil, errors.New("patch path index must be a non-negative integer")
-		}
-		if index64 > maxPatchArrayIndex {
-			return nil, fmt.Errorf("patch path index exceeds limit (%d)", maxPatchArrayIndex)
-		}
-		path = append(path, jsonPathSegment{index: int(index64), isIndex: true})
-	}
-	return path, nil
-}
-
-func decodePatchValue(raw json.RawMessage) (any, error) {
-	if len(raw) == 0 {
-		return nil, errors.New("missing patch value")
-	}
-	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return nil, err
-	}
-	return value, nil
-}
-
-func applyJSONSet(root any, path []jsonPathSegment, value any) (any, error) {
-	if len(path) == 0 {
-		return value, nil
-	}
-
-	seg := path[0]
-	if seg.isIndex {
-		var arr []any
-		switch current := root.(type) {
-		case nil:
-			arr = []any{}
-		case []any:
-			arr = current
-		default:
-			return nil, errors.New("patch path crosses non-array value")
-		}
-		for len(arr) <= seg.index {
-			arr = append(arr, nil)
-		}
-		next, err := applyJSONSet(arr[seg.index], path[1:], value)
-		if err != nil {
-			return nil, err
-		}
-		arr[seg.index] = next
-		return arr, nil
-	}
-
-	var obj map[string]any
-	switch current := root.(type) {
-	case nil:
-		obj = map[string]any{}
-	case map[string]any:
-		obj = current
-	default:
-		return nil, errors.New("patch path crosses non-object value")
-	}
-	next, err := applyJSONSet(obj[seg.key], path[1:], value)
-	if err != nil {
-		return nil, err
-	}
-	obj[seg.key] = next
-	return obj, nil
-}
-
 func (s *server) handleScopedGameScheme(w http.ResponseWriter, r *http.Request, scope festScope) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -780,7 +670,7 @@ func (s *server) handleScopedGameScheme(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	var schemeJSON string
-	err := s.db.QueryRowContext(r.Context(), `
+	err := s.eng.DB.QueryRowContext(r.Context(), `
 	select scheme_json from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&schemeJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)
@@ -805,7 +695,7 @@ func (s *server) handleScopedFest(w http.ResponseWriter, r *http.Request, festID
 	if !s.authorizeFestRead(w, r, festID) {
 		return
 	}
-	gameID, err := defaultGameID(r.Context(), s.db, festID)
+	gameID, err := defaultGameID(r.Context(), s.eng.DB, festID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -880,7 +770,7 @@ func (s *server) handleScopedVenues(w http.ResponseWriter, r *http.Request, fest
 		return
 	}
 	data, _ := json.Marshal(venues)
-	s.broadcastState(festID, fmt.Sprintf("venues:%d", festID), revision, data)
+	s.eng.BroadcastState(festID, fmt.Sprintf("venues:%d", festID), revision, data)
 	writeJSON(w, data)
 }
 
@@ -922,11 +812,11 @@ func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scop
 			return
 		}
 		data, cascaded, revision, err := s.calculateScopedReseed(r.Context(), scope, sub[0])
-		if errors.Is(err, errReseedStageNotFound) {
+		if errors.Is(err, resolver.ErrReseedStageNotFound) {
 			http.NotFound(w, r)
 			return
 		}
-		if errors.Is(err, errReseedNotReady) {
+		if errors.Is(err, resolver.ErrReseedNotReady) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -935,7 +825,7 @@ func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scop
 			return
 		}
 		s.broadcastMatchCascade(scope.FestID, scope.GameID, cascaded)
-		s.broadcastState(scope.FestID, festViewScopeKey(scope), revision, data)
+		s.eng.BroadcastState(scope.FestID, festViewScopeKey(scope), revision, data)
 		writeJSON(w, data)
 		return
 	}
@@ -967,7 +857,7 @@ func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scop
 // one pass, stages ordered by position, matches ordered within each. Empty
 // stages (e.g. reseed) are omitted. Takes the read lock once for the whole set.
 func (s *server) loadAllStageMatchViews(ctx context.Context, scope festScope) ([]store.StageMatches, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.eng.DB.QueryContext(ctx, `
 select st.code, m.code
 from matches m
 join stages st on st.id = m.stage_id
@@ -994,7 +884,7 @@ order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
 	// Read every match view on ONE read-only snapshot, off the write lock: the
 	// whole bracket is a consistent point-in-time and a busy editor never stalls
 	// this fetch (the old global RLock queued behind any pending writer).
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.eng.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
@@ -1011,7 +901,7 @@ order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
 		if err != nil {
 			return nil, err
 		}
-		view.Seq = s.currentStateSeq(matchScopeKey(mscope))
+		view.Seq = s.eng.CurrentStateSeq(matchScopeKey(mscope))
 		idx, ok := byCode[p.stageCode]
 		if !ok {
 			idx = len(out)
@@ -1024,7 +914,7 @@ order by st.position, st.id, m.position, m.id`, scope.FestID, scope.GameID)
 }
 
 func (s *server) loadStageMatchViews(ctx context.Context, scope festScope, stageCode string) ([]store.MatchView, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.eng.DB.QueryContext(ctx, `
 select m.code
 from matches m
 join stages st on st.id = m.stage_id
@@ -1052,7 +942,7 @@ order by m.position, m.id`, scope.FestID, scope.GameID, stageCode)
 		return []store.MatchView{}, nil
 	}
 	views := make([]store.MatchView, 0, len(codes))
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.eng.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err
 	}
@@ -1069,7 +959,7 @@ order by m.position, m.id`, scope.FestID, scope.GameID, stageCode)
 		if err != nil {
 			return nil, err
 		}
-		view.Seq = s.currentStateSeq(matchScopeKey(mscope))
+		view.Seq = s.eng.CurrentStateSeq(matchScopeKey(mscope))
 		views = append(views, view)
 	}
 	return views, nil
@@ -1112,7 +1002,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		view.Seq = s.currentStateSeq(matchScopeKey(mscope))
+		view.Seq = s.eng.CurrentStateSeq(matchScopeKey(mscope))
 		writeJSONValue(w, view)
 	case "update":
 		if r.Method != http.MethodPost {
@@ -1226,6 +1116,123 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			return
 		}
 		view.Seq = s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
+		writeJSONValue(w, view)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (s *server) calculateScopedReseed(ctx context.Context, scope festScope, stageCode string) ([]byte, []store.MatchView, int64, error) {
+	txCtx, cancel := festwrite.AuditDetachedContext(ctx, scope.FestID)
+	defer cancel()
+	conn, err := s.eng.AcquireWriteConn(txCtx, "reseed-calc")
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	defer conn.Close()
+
+	defer s.eng.LockWrite("reseed-calc")()
+
+	tx, err := s.eng.BeginWriteTxConn(txCtx, conn)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	defer tx.Rollback()
+
+	affected, err := resolver.CalculateReseedStageSlotsTx(txCtx, tx, scope.GameID, stageCode)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	revision, err := festwrite.BumpFestRevisionTx(txCtx, tx, scope.FestID, "reseed:calculate", util.MustJSON(map[string]any{
+		"gameID": scope.GameID,
+		"stage":  stageCode,
+	}))
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, 0, err
+	}
+
+	view, err := s.loadFestViewLocked(scope.FestID, scope.GameID)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	view.Revision = util.MaxInt64(view.Revision, revision)
+	data, err := json.Marshal(view)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	var cascaded []store.MatchView
+	for _, mid := range affected {
+		cv, err := s.loadMatchViewByIDLocked(scope.FestID, scope.GameID, mid)
+		if err != nil || cv.Code == "" {
+			continue
+		}
+		cascaded = append(cascaded, cv)
+	}
+	return data, cascaded, revision, nil
+}
+
+func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, scope festScope, sub []string) {
+	if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
+		return
+	}
+	if len(sub) == 0 {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		view, err := imports.LoadSeedImportView(&s.eng, r.Context(), scope)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSONValue(w, view)
+		return
+	}
+	if len(sub) != 1 {
+		http.NotFound(w, r)
+		return
+	}
+	switch sub[0] {
+	case "ksi":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !s.requireNumberedTeams(w, r, scope.FestID) {
+			return
+		}
+		view, revision, stateJSON, err := imports.ImportSeedsFromKSI(&s.eng, r.Context(), scope)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.eng.BroadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, stateJSON)
+		writeJSONValue(w, view)
+	case "decline":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		defer r.Body.Close()
+		var req imports.SeedDeclineRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		view, revision, stateJSON, err := imports.SetSeedImportDeclined(&s.eng, r.Context(), scope, req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.eng.BroadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, stateJSON)
 		writeJSONValue(w, view)
 	default:
 		http.NotFound(w, r)
