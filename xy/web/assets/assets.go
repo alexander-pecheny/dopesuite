@@ -5,5 +5,9 @@ package assets
 
 import "embed"
 
-//go:embed static
+// Note: the `all:` prefix is required — a bare `//go:embed static` silently
+// excludes files whose names begin with `_` or `.` (e.g. the vendored
+// `_assert.js` / `_md.js`), which then 404 in production embed mode.
+//
+//go:embed all:static
 var FS embed.FS
