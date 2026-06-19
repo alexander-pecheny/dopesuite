@@ -32,7 +32,7 @@ const viewer = Boolean(route.viewer);
 // numeric id from __GAME_INIT__ so the scope matches and remote edits apply.
 let scopeGameID = route.gameID;
 // staticMode: served as a precomputed snapshot under DDoS lockdown. Skip the SSE
-// connection and refresh by reloading on a jitter. Captured before consumeGameInit
+// connection and refresh by reloading on a jitter. Captured before the loader
 // nulls window.__GAME_INIT__.
 const staticMode = Boolean(window.__GAME_INIT__?.static);
 const canEdit = Boolean(window.__GAME_INIT__?.canEdit);
@@ -142,114 +142,43 @@ document.addEventListener("fullscreenchange", syncFullscreen);
 syncFullscreen();
 document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
-async function loadAll() {
-  if (consumeGameInit()) {
-    revalidateAll().catch((error) => console.error(error));
-    return;
-  }
-  if (hydrateFromCache()) {
-    revalidateAll().catch((error) => console.error(error));
-    return;
-  }
-  await fetchAll();
-}
+const gameLoader = gameTable.createGameDataLoader({
+  route,
+  cachePrefix: "od",
+  adopt: adoptGameSnapshot,
+  revalidate: revalidateAll,
+});
 
-// consumeGameInit hydrates scheme/state/fest from the server-inlined
-// window.__GAME_INIT__ payload, skipping the three cold API round trips that
-// loadAll would otherwise make. Returns true on success.
-function consumeGameInit() {
-  const init = window.__GAME_INIT__;
-  if (!init || !init.scheme || !init.state) return false;
-  window.__GAME_INIT__ = null;
-  if (init.gameID != null) scopeGameID = String(init.gameID);
-  if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
-  if (init.epoch != null) initialStateEpoch = String(init.epoch);
-  if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
-  scheme = init.scheme;
-  state = init.state;
-  fest = init.fest || null;
+// adoptGameSnapshot assigns the page's scheme/state/fest from a loader snapshot
+// and renders the first frame. On the "init" path the snapshot also carries the
+// raw __GAME_INIT__ payload, the only source with the SSE seq/epoch baseline and
+// the unnumbered-teams flag.
+function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}) {
+  if (init) {
+    if (init.gameID != null) scopeGameID = String(init.gameID);
+    if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
+    if (init.epoch != null) initialStateEpoch = String(init.epoch);
+    if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
+  }
+  scheme = nextScheme;
+  state = nextState;
+  fest = nextFest || null;
   initFromScheme();
   ensureState();
   invalidateAllCaches();
   render();
-  writeGameCache();
-  return true;
-}
-
-function gameCacheKey() {
-  return `od:game:${route.festID || ""}:${route.gameID || ""}`;
-}
-
-function readGameCache() {
-  try {
-    const raw = localStorage.getItem(gameCacheKey());
-    return raw ? JSON.parse(raw) : null;
-  } catch (_err) {
-    return null;
-  }
-}
-
-function writeGameCache() {
-  if (!scheme || !state) return;
-  try {
-    localStorage.setItem(gameCacheKey(), JSON.stringify({scheme, state, fest}));
-  } catch (_err) {
-    // ignore quota / disabled
-  }
-}
-
-function hydrateFromCache() {
-  const cached = readGameCache();
-  if (!cached || !cached.scheme || !cached.state) return false;
-  scheme = cached.scheme;
-  state = cached.state;
-  fest = cached.fest || null;
-  initFromScheme();
-  ensureState();
-  invalidateAllCaches();
-  render();
-  return true;
-}
-
-async function fetchAll() {
-  const data = await fetchAllRaw();
-  scheme = data.scheme;
-  state = data.state;
-  fest = data.fest;
-  initFromScheme();
-  ensureState();
-  invalidateAllCaches();
-  render();
-  writeGameCache();
-}
-
-async function fetchAllRaw() {
-  const festURL = route.apiBase || (route.festID ? `/api/fest/${route.festID}` : "");
-  const [schemeResp, stateResp, festResp] = await Promise.all([
-    fetch(`${route.apiBase}/scheme`),
-    fetch(`${route.apiBase}/state`),
-    festURL ? fetch(festURL) : Promise.resolve(null),
-  ]);
-  if (!schemeResp.ok) throw new Error(await schemeResp.text());
-  if (!stateResp.ok) throw new Error(await stateResp.text());
-  if (festResp && !festResp.ok) throw new Error(await festResp.text());
-  return {
-    scheme: await schemeResp.json(),
-    state: await stateResp.json(),
-    fest: festResp ? await festResp.json() : null,
-  };
 }
 
 async function revalidateAll() {
   const prevSchemeJSON = JSON.stringify(scheme);
   const prevStateJSON = JSON.stringify(state);
-  const fresh = await fetchAllRaw();
+  const fresh = await gameTable.fetchGameData(route);
   const freshSchemeJSON = JSON.stringify(fresh.scheme);
   const freshStateJSON = JSON.stringify(fresh.state);
   scheme = fresh.scheme;
   state = fresh.state;
   fest = fresh.fest;
-  writeGameCache();
+  gameLoader.writeSnapshot(fresh);
   if (freshSchemeJSON === prevSchemeJSON && freshStateJSON === prevStateJSON) return;
   initFromScheme();
   ensureState();
@@ -2596,17 +2525,7 @@ function buildScreenView() {
   const tourIndex = currentTourIndex();
   const tourStarted = tourIndex >= 0 && tourHasStarted(tourIndex);
 
-  const sortKeys = state.teams.map((_, i) => ({
-    index: i,
-    total: totals[i],
-    tiebreak: tiebreaks[i],
-  }));
-  sortKeys.sort((a, b) => {
-    if (b.total !== a.total) return b.total - a.total;
-    const cmp = compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
-    if (cmp !== 0) return cmp;
-    return a.index - b.index;
-  });
+  const sortKeys = rankedTeamOrder(totals, tiebreaks);
 
   const placeMap = computePlaces(totals);
 
@@ -2775,17 +2694,7 @@ function buildResultsTableInner() {
   const tourStarted = tourLengths.map((_, tourIndex) => tourHasStarted(tourIndex));
   const shootoutRoundCount = state.shootoutRounds.length;
 
-  const sortKeys = state.teams.map((_, i) => ({
-    index: i,
-    total: totals[i],
-    tiebreak: tiebreaks[i],
-  }));
-  sortKeys.sort((a, b) => {
-    if (b.total !== a.total) return b.total - a.total;
-    const cmp = compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
-    if (cmp !== 0) return cmp;
-    return a.index - b.index;
-  });
+  const sortKeys = rankedTeamOrder(totals, tiebreaks);
 
   const placeMap = computePlaces(totals);
 
@@ -3032,6 +2941,21 @@ function compareShootoutTiebreaks(a, b) {
   return 0;
 }
 
+// rankedTeamOrder sorts team indices into final standings: by game total, then
+// the shootout tiebreak, then original index as a stable fallback. Shared by the
+// «Итог» and «Экран» sheets so their row order always matches (the place LABELS
+// come from computePlaces; this is just the row ordering).
+function rankedTeamOrder(totals, tiebreaks) {
+  return state.teams
+    .map((_, index) => ({index, total: totals[index], tiebreak: tiebreaks[index]}))
+    .sort((a, b) => {
+      if (b.total !== a.total) return b.total - a.total;
+      const cmp = compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
+      if (cmp !== 0) return cmp;
+      return a.index - b.index;
+    });
+}
+
 function shootoutRoundTotalForTeam(teamIndex, roundIndex) {
   const number = teamNumber(teamIndex);
   if (!number) return null;
@@ -3070,31 +2994,13 @@ function anyQuestionCompleted(stats = questionStats()) {
   return false;
 }
 
+// OD ranks on game total, breaking ties on the shootout result. Before any
+// question or shootout is marked there's nothing to rank, so the board stays
+// blank; otherwise defer to the shared placer with the shootout tiebreak.
 function computePlaces(totals) {
-  const places = new Array(totals.length).fill("");
-  if (!anyQuestionCompleted() && !anyShootoutMarked()) return places;
+  if (!anyQuestionCompleted() && !anyShootoutMarked()) return new Array(totals.length).fill("");
   const tiebreaks = state.teams.map((_, index) => shootoutTiebreakForTeam(index));
-  const sorted = totals
-    .map((total, index) => ({total, tiebreak: tiebreaks[index], index}))
-    .sort((a, b) => {
-      if (b.total !== a.total) return b.total - a.total;
-      return compareShootoutTiebreaks(a.tiebreak, b.tiebreak);
-    });
-  let i = 0;
-  while (i < sorted.length) {
-    let j = i;
-    while (
-      j + 1 < sorted.length &&
-      sorted[j + 1].total === sorted[i].total &&
-      compareShootoutTiebreaks(sorted[j + 1].tiebreak, sorted[i].tiebreak) === 0
-    ) j++;
-    const label = i === j ? String(i + 1) : `${i + 1}–${j + 1}`;
-    for (let k = i; k <= j; k++) {
-      places[sorted[k].index] = label;
-    }
-    i = j + 1;
-  }
-  return places;
+  return gameTable.computePlaces(totals, {tiebreaks, compareTiebreak: compareShootoutTiebreaks});
 }
 
 // === persistence ===
@@ -3142,15 +3048,9 @@ function renderGameBreadcrumbs(gameTitle) {
   });
 }
 
-// scheduleStaticReload reloads the page after ~5s (jittered 4-7s) so a fleet of
-// static viewers spreads its reloads across the window instead of stampeding.
-function scheduleStaticReload() {
-  window.setTimeout(() => window.location.reload(), 4000 + Math.floor(Math.random() * 3000));
-}
-
 function connectEvents() {
   if (staticMode) {
-    scheduleStaticReload();
+    gameTable.scheduleStaticReload();
     return;
   }
   syncState().connect();
@@ -3166,7 +3066,7 @@ function syncState() {
   stateSync = gameTable.createStateSync({
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
-    eventsURL: `/events?fest_id=${encodeURIComponent(route.festID)}${route.gameID ? "&game_id=" + encodeURIComponent(route.gameID) : ""}`,
+    eventsURL: gameTable.gameEventsURL(route.festID, route.gameID),
     scope: `game-state:${scopeGameID}`,
     getState: () => state,
     getInitialSeq: () => initialStateSeq,
@@ -3174,7 +3074,7 @@ function syncState() {
     setStatus,
     onRemoteState: applyRemoteState,
     onViewers: (count) => viewerCounter.setCount(count),
-    onLockdown: scheduleStaticReload,
+    onLockdown: gameTable.scheduleStaticReload,
     recorder,
     onWriteError: (info) => recorder?.event("write-rejected", info),
   });
@@ -3270,7 +3170,7 @@ function applyRemoteState(nextState) {
   refreshPendingMarkers();
 }
 
-loadAll()
+gameLoader.load()
   .then(() => {
     setStatus("saved");
     connectEvents();

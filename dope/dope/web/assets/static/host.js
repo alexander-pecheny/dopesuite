@@ -148,27 +148,11 @@ async function loadCurrent() {
 // on every navigation, then revalidate against the server in the background.
 // Skips the cache silently when localStorage is unavailable (private mode,
 // quota, disabled cookies).
-function festCacheKey() {
-  return `host:fest:${route.festID}:${route.gameID}`;
-}
-
-function readFestCache() {
-  try {
-    const raw = localStorage.getItem(festCacheKey());
-    return raw ? JSON.parse(raw) : null;
-  } catch (_err) {
-    return null;
-  }
-}
-
-function writeFestCache(view) {
-  if (!view) return;
-  try {
-    localStorage.setItem(festCacheKey(), JSON.stringify(view));
-  } catch (_err) {
-    // ignore (quota / disabled)
-  }
-}
+// The cache slot is keyed off the current route, which changes as the host
+// navigates between games client-side, so resolve it lazily per call.
+const festCache = () => gameTable.createLocalCache(`host:fest:${route.festID}:${route.gameID}`);
+const readFestCache = () => festCache().read();
+const writeFestCache = (view) => festCache().write(view);
 
 function adoptFestView(view) {
   fest = view;
@@ -357,47 +341,34 @@ async function loadSeedImportPage() {
   renderSeedImport();
 }
 
-// lastEpoch tracks the server's per-process token (see server.epoch). The
-// per-scope seq resets to 0 on a server restart, so cached MatchViews keep a
-// high seq the new seq space will never reach — every post-restart delta would
-// read as "seq <= base.seq" (applyMatchDelta) and be silently dropped, leaving
-// the editor diverged. A changed epoch means the seq space reset; the cleanest
-// recovery (given the stage cache's monotonic-by-seq merge) is a full reload,
-// which re-seeds everything. Un-acked edits survive via durable pending storage.
-let lastEpoch = "";
+// The epoch tracker spots a server restart (the seq space resets to 0; cached
+// MatchViews keep a high seq the new space never reaches, so every post-restart
+// delta would read as "seq <= base.seq" and be silently dropped, leaving the
+// editor diverged). On a changed epoch the cleanest recovery — given the stage
+// cache's monotonic-by-seq merge — is a full reload, which re-seeds everything.
+// Un-acked edits survive via durable pending storage.
+const epochTracker = gameTable.createEpochTracker();
 let epochReloadScheduled = false;
-
-// epochChanged adopts the first epoch seen as the baseline and reports a genuine
-// change. An empty epoch (older server build) is ignored.
-function epochChanged(message) {
-  const epoch = message?.epoch ? String(message.epoch) : "";
-  if (!epoch) return false;
-  if (lastEpoch === "") {
-    lastEpoch = epoch;
-    return false;
-  }
-  return epoch !== lastEpoch;
-}
 
 function scheduleEpochReload() {
   if (epochReloadScheduled) return;
   epochReloadScheduled = true;
-  recorder?.event("epoch-reload", {mode: route.mode, from: lastEpoch});
+  recorder?.event("epoch-reload", {mode: route.mode, from: epochTracker.epoch});
   // Jittered so a fleet of editors doesn't reload the cold post-restart server
-  // in lockstep.
-  window.setTimeout(() => window.location.reload(), 2000 + Math.floor(Math.random() * 3000));
+  // in lockstep (same spread the viewer page uses).
+  gameTable.scheduleStaticReload();
 }
 
 function connectEvents() {
   if (events) {
     try { events.close(); } catch (_err) { /* already closed */ }
   }
-  events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}${route.gameID ? "&game_id=" + encodeURIComponent(route.gameID) : ""}`);
+  events = new EventSource(gameTable.gameEventsURL(route.festID, route.gameID));
   events.addEventListener("state", (event) => {
-    const message = parseEventData(event.data);
+    const message = gameTable.parseScopedEvent(event.data);
     // A changed server epoch means a restart reset the seq space; reload to
     // re-seed instead of silently dropping every post-restart delta by seq.
-    if (epochChanged(message)) {
+    if (epochTracker.changed(message)) {
       scheduleEpochReload();
       return;
     }
@@ -691,10 +662,6 @@ function scheduleStatsResync() {
       })
       .catch((error) => console.error(error));
   }, 400);
-}
-
-function parseEventData(raw) {
-  return gameTable.parseScopedEvent(raw);
 }
 
 function matchScopeFor(matchCode) {
@@ -1123,7 +1090,7 @@ function render() {
   attachMatchSelection(table, state, state.code || route.matchCode);
   if (embedded) {
     hostRoot.replaceChildren(table);
-    notifyEmbeddedResize();
+    gameTable.notifyEmbeddedResize(embedded);
   } else {
     hostRoot.replaceChildren(table);
   }
@@ -1236,15 +1203,11 @@ function scheduleGridNameOverflowUpdate(root = hostRoot) {
 }
 
 function updateGridNameOverflow(root = hostRoot) {
-  const cells = root.querySelectorAll(".grid-slot-team");
-  const readings = new Array(cells.length);
-  for (let i = 0; i < cells.length; i++) {
-    const name = cells[i].querySelector(".grid-slot-team-name");
-    readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-  }
-  for (let i = 0; i < cells.length; i++) {
-    cells[i].classList.toggle("grid-slot-team-truncated", readings[i]);
-  }
+  gameTable.markNameOverflow(root, {
+    cellSelector: ".grid-slot-team",
+    nameSelector: ".grid-slot-team-name",
+    truncatedClass: "grid-slot-team-truncated",
+  });
 }
 
 function scheduleEKTeamNameOverflowUpdate(root = hostRoot) {
@@ -1383,15 +1346,11 @@ function scheduleResultsTeamNameOverflowUpdate(root = hostRoot) {
 }
 
 function updateResultsTeamNameOverflow(root = hostRoot) {
-  const cells = root.querySelectorAll(".results-team");
-  const readings = new Array(cells.length);
-  for (let i = 0; i < cells.length; i++) {
-    const name = cells[i].querySelector(".results-team-name");
-    readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-  }
-  for (let i = 0; i < cells.length; i++) {
-    cells[i].classList.toggle("results-team-truncated", readings[i]);
-  }
+  gameTable.markNameOverflow(root, {
+    cellSelector: ".results-team",
+    nameSelector: ".results-team-name",
+    truncatedClass: "results-team-truncated",
+  });
 }
 
 function buildSeedImportPanel() {
@@ -3008,16 +2967,6 @@ function pageTitle(primary = "") {
 function currentGameTitle() {
   const scheme = parseScheme(fest?.schemaJson);
   return String(scheme?.title || "").trim();
-}
-
-function notifyEmbeddedResize() {
-  if (!embedded || window.parent === window) return;
-  window.requestAnimationFrame(() => {
-    window.parent.postMessage({
-      type: "dope:resize",
-      height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
-    }, window.location.origin);
-  });
 }
 
 function matchTitle(matchState = state) {

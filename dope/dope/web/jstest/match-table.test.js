@@ -287,3 +287,130 @@ Deno.test("computeEKPlayerStats team-share zeroes out non-helpers", () => {
     return T.computeEKPlayerStats(s).map((r) => [r.player, r.share]);
   }
 });
+
+Deno.test("createLocalCache round-trips JSON and degrades safely", () => {
+  const win = loadStaticModule("match-table.js");
+  const T = win.DopeTable;
+  win.localStorage = fakeLocalStorage();
+  const cache = T.createLocalCache("slot");
+  assert.equal(cache.read(), null, "empty slot reads as null");
+  cache.write({a: 1});
+  assert.deepEqual(cache.read(), {a: 1});
+  cache.write(null); // null is a no-op, must not clobber the stored value
+  assert.deepEqual(cache.read(), {a: 1});
+  win.localStorage.setItem("slot", "{not json");
+  assert.equal(cache.read(), null, "corrupt JSON reads as null, not a throw");
+});
+
+Deno.test("gameEventsURL includes game_id only when present, encoded", () => {
+  const T = loadStaticModule("match-table.js").DopeTable;
+  assert.equal(T.gameEventsURL("f1"), "/events?fest_id=f1");
+  assert.equal(T.gameEventsURL("f 1", "g/2"), "/events?fest_id=f%201&game_id=g%2F2");
+});
+
+Deno.test("createGameDataLoader hydrates from __GAME_INIT__, caches it, and revalidates", async () => {
+  const win = loadStaticModule("match-table.js");
+  const T = win.DopeTable;
+  win.localStorage = fakeLocalStorage();
+  win.__GAME_INIT__ = {scheme: {s: 1}, state: {t: 2}, fest: {f: 3}, seq: 5};
+  const adopted = [];
+  let revalidated = 0;
+  const loader = T.createGameDataLoader({
+    route: {festID: "f", gameID: "g", apiBase: "/api"},
+    cachePrefix: "od",
+    adopt: (snap, source) => adopted.push({snap, source}),
+    revalidate: () => revalidated++,
+  });
+  await loader.load();
+  assert.equal(adopted.length, 1);
+  assert.equal(adopted[0].source, "init");
+  assert.equal(adopted[0].snap.init.seq, 5, "raw init payload forwarded on the init path");
+  assert.equal(win.__GAME_INIT__, null, "init payload consumed");
+  assert.deepEqual(loader.cache.read(), {scheme: {s: 1}, state: {t: 2}, fest: {f: 3}}, "snapshot cached without the init envelope");
+  for (let i = 0; i < 3; i++) await Promise.resolve(); // flush the detached revalidation
+  assert.equal(revalidated, 1);
+});
+
+Deno.test("createGameDataLoader falls back to the localStorage snapshot", async () => {
+  const win = loadStaticModule("match-table.js");
+  const T = win.DopeTable;
+  win.localStorage = fakeLocalStorage();
+  win.__GAME_INIT__ = null;
+  const route = {festID: "f", gameID: "g", apiBase: "/api"};
+  T.createGameDataLoader({route, cachePrefix: "si", adopt: () => {}, revalidate: () => {}})
+    .cache.write({scheme: {s: 1}, state: {t: 2}, fest: null});
+  const seen = [];
+  let revalidated = 0;
+  const loader = T.createGameDataLoader({
+    route,
+    cachePrefix: "si",
+    adopt: (_snap, source) => seen.push(source),
+    revalidate: () => revalidated++,
+  });
+  await loader.load();
+  assert.deepEqual(seen, ["cache"]);
+  for (let i = 0; i < 3; i++) await Promise.resolve();
+  assert.equal(revalidated, 1, "cache hit still kicks a background revalidation");
+});
+
+Deno.test("markNameOverflow flags only cells whose name is clipped", () => {
+  const T = loadStaticModule("match-table.js").DopeTable;
+  function cell(scrollWidth, clientWidth) {
+    const classes = new Set();
+    return {
+      classList: {toggle: (c, on) => (on ? classes.add(c) : classes.delete(c))},
+      has: (c) => classes.has(c),
+      querySelector: () => ({scrollWidth, clientWidth}),
+    };
+  }
+  const clipped = cell(100, 50);
+  const fits = cell(40, 50);
+  const root = {querySelectorAll: () => [clipped, fits]};
+  T.markNameOverflow(root, {cellSelector: ".c", nameSelector: ".n", truncatedClass: "trunc"});
+  assert.ok(clipped.has("trunc"), "name wider than its cell is flagged");
+  assert.ok(!fits.has("trunc"), "name within 1px is not flagged");
+});
+
+Deno.test("computePlaces ranks by total with shared-rank ranges", () => {
+  const T = loadStaticModule("match-table.js").DopeTable;
+  // 30, 20, 20, 10 -> "1", "2–3", "2–3", "4"
+  assert.deepEqual(T.computePlaces([10, 20, 30, 20]), ["4", "2–3", "1", "2–3"]);
+});
+
+Deno.test("computePlaces breaks ties with the supplied comparator", () => {
+  const T = loadStaticModule("match-table.js").DopeTable;
+  // Equal totals (20,20) split by tiebreak: lower tiebreak ranks higher.
+  // compareTiebreak(a,b) > 0 means a ranks below b.
+  const places = T.computePlaces([20, 20, 10], {
+    tiebreaks: [2, 1, 0],
+    compareTiebreak: (a, b) => b - a, // bigger tiebreak wins
+  });
+  assert.deepEqual(places, ["1", "2", "3"], "tiebreak separates the equal totals");
+  // When tiebreaks also match, teams stay tied.
+  const tied = T.computePlaces([20, 20], {tiebreaks: [5, 5], compareTiebreak: (a, b) => b - a});
+  assert.deepEqual(tied, ["1–2", "1–2"]);
+});
+
+Deno.test("createEpochTracker baselines the first epoch and flags real changes", () => {
+  const T = loadStaticModule("match-table.js").DopeTable;
+  const tracker = T.createEpochTracker();
+  assert.equal(tracker.changed({epoch: ""}), false, "empty epoch ignored");
+  assert.equal(tracker.changed({epoch: "a"}), false, "first epoch becomes baseline");
+  assert.equal(tracker.epoch, "a");
+  assert.equal(tracker.changed({epoch: "a"}), false, "same epoch is not a change");
+  assert.equal(tracker.changed({}), false, "missing epoch ignored");
+  assert.equal(tracker.changed({epoch: "b"}), true, "new epoch is a change");
+});
+
+Deno.test("notifyEmbeddedResize stays a no-op outside an embed", () => {
+  const win = loadStaticModule("match-table.js");
+  const T = win.DopeTable;
+  let posted = 0;
+  win.requestAnimationFrame = (cb) => cb();
+  win.parent = {postMessage: () => posted++}; // a distinct parent frame...
+  T.notifyEmbeddedResize(false); // ...but the page isn't the embed view
+  assert.equal(posted, 0, "not embedded -> no postMessage");
+  win.parent = win; // embed flag set, but there is no outer frame to message
+  T.notifyEmbeddedResize(true);
+  assert.equal(posted, 0, "no parent frame -> no postMessage");
+});

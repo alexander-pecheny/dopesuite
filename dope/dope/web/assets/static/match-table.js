@@ -270,13 +270,27 @@
     return table;
   }
 
-  function computePlaces(totals) {
-    const sorted = totals.map((total, index) => ({total, index})).sort((a, b) => b.total - a.total);
+  // computePlaces ranks teams by descending total, labeling ties with a "lo–hi"
+  // range (e.g. two teams sharing 2nd both read "2–3"). Pass opts.tiebreaks (a
+  // parallel array) plus opts.compareTiebreak(a, b) — returning >0 when `a` ranks
+  // below `b` — to split equal totals, as OD does with its shootout result: two
+  // teams stay tied only when both total AND tiebreak match. With no comparator
+  // it degrades to a pure total-based ranking (EK/KSI).
+  function computePlaces(totals, opts = {}) {
+    const {tiebreaks = null, compareTiebreak = null} = opts;
+    const tiebreakOf = (index) => (tiebreaks ? tiebreaks[index] : null);
+    const tied = (a, b) => !compareTiebreak || compareTiebreak(tiebreakOf(a), tiebreakOf(b)) === 0;
+    const sorted = totals
+      .map((total, index) => ({total, index}))
+      .sort((a, b) => {
+        if (b.total !== a.total) return b.total - a.total;
+        return compareTiebreak ? compareTiebreak(tiebreakOf(a.index), tiebreakOf(b.index)) : 0;
+      });
     const places = new Array(totals.length).fill("");
     let i = 0;
     while (i < sorted.length) {
       let j = i;
-      while (j + 1 < sorted.length && sorted[j + 1].total === sorted[i].total) j++;
+      while (j + 1 < sorted.length && sorted[j + 1].total === sorted[i].total && tied(sorted[j + 1].index, sorted[i].index)) j++;
       const label = i === j ? String(i + 1) : `${i + 1}–${j + 1}`;
       for (let k = i; k <= j; k++) places[sorted[k].index] = label;
       i = j + 1;
@@ -2019,29 +2033,174 @@
     return {};
   }
 
-  function createTeamNameOverflowController({root, detailed, results}) {
-    function updateFor(targetRoot, cfg) {
-      const cells = targetRoot.querySelectorAll(cfg.cellSelector);
-      const readings = new Array(cells.length);
-      for (let i = 0; i < cells.length; i++) {
-        const cell = cells[i];
-        const name = cell.querySelector(cfg.nameSelector);
-        readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-      }
-      for (let i = 0; i < cells.length; i++) {
-        const cell = cells[i];
-        cell.classList.toggle(cfg.truncatedClass, readings[i]);
-        if (cfg.citySelector && cfg.cityTruncatedClass) {
-          const city = cell.querySelector(cfg.citySelector);
-          city?.classList.toggle(cfg.cityTruncatedClass, city.scrollWidth > city.clientWidth + 1);
+  // createLocalCache wraps one localStorage slot in the read/write-with-try/catch
+  // discipline every page used to copy verbatim: reads degrade to null and writes
+  // are silently dropped when storage is unavailable (private mode, quota, disabled
+  // cookies). The page owns the key string and what JSON shape it stores.
+  function createLocalCache(key) {
+    return {
+      key,
+      read() {
+        try {
+          const raw = window.localStorage.getItem(key);
+          return raw ? JSON.parse(raw) : null;
+        } catch (_err) {
+          return null;
         }
+      },
+      write(value) {
+        if (value == null) return;
+        try {
+          window.localStorage.setItem(key, JSON.stringify(value));
+        } catch (_err) {
+          // ignore (quota / disabled / private mode)
+        }
+      },
+    };
+  }
+
+  // createEpochTracker follows the server's per-process epoch token (see
+  // server.epoch). The per-scope seq resets to 0 on a restart, so cached
+  // MatchViews keep a high seq the new space never reaches and every post-restart
+  // delta would be silently dropped as "already applied" — the page freezes. The
+  // first non-empty epoch becomes the baseline; thereafter changed() reports true
+  // once the token flips (the cue to reload and re-seed, since the stage cache
+  // merges monotonically by seq and can't adopt the lower fresh seqs). Empty
+  // epochs (older server builds) are ignored.
+  function createEpochTracker() {
+    let lastEpoch = "";
+    return {
+      changed(message) {
+        const epoch = message?.epoch ? String(message.epoch) : "";
+        if (!epoch) return false;
+        if (lastEpoch === "") {
+          lastEpoch = epoch;
+          return false;
+        }
+        return epoch !== lastEpoch;
+      },
+      get epoch() {
+        return lastEpoch;
+      },
+    };
+  }
+
+  // notifyEmbeddedResize posts the current document height to the parent frame so
+  // an embedding host can size its iframe to the content. A no-op outside an
+  // embed (no parent, or not the ?embed=1 view).
+  function notifyEmbeddedResize(embedded) {
+    if (!embedded || window.parent === window) return;
+    window.requestAnimationFrame(() => {
+      window.parent.postMessage({
+        type: "dope:resize",
+        height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+      }, window.location.origin);
+    });
+  }
+
+  // gameEventsURL builds the SSE endpoint for a fest/game scope. The game id is
+  // optional: fest-level pages omit it so the server streams the whole fest.
+  function gameEventsURL(festID, gameID) {
+    const fest = `fest_id=${encodeURIComponent(festID)}`;
+    const game = gameID ? `&game_id=${encodeURIComponent(gameID)}` : "";
+    return `/events?${fest}${game}`;
+  }
+
+  // scheduleStaticReload reloads the page after ~5s (jittered 4-7s) so a fleet of
+  // static viewers spreads its reloads across the window instead of stampeding the
+  // server the instant lockdown lifts.
+  function scheduleStaticReload() {
+    window.setTimeout(() => window.location.reload(), 4000 + Math.floor(Math.random() * 3000));
+  }
+
+  // fetchGameData loads the three cold payloads a game page needs — scheme, state,
+  // and (when the route is fest-scoped) the fest view — in parallel, throwing the
+  // server's error text on any non-OK response. The fest fetch is skipped when the
+  // route carries neither an apiBase nor a festID.
+  async function fetchGameData(route) {
+    const festURL = route.apiBase || (route.festID ? `/api/fest/${route.festID}` : "");
+    const [schemeResp, stateResp, festResp] = await Promise.all([
+      fetch(`${route.apiBase}/scheme`),
+      fetch(`${route.apiBase}/state`),
+      festURL ? fetch(festURL) : Promise.resolve(null),
+    ]);
+    if (!schemeResp.ok) throw new Error(await schemeResp.text());
+    if (!stateResp.ok) throw new Error(await stateResp.text());
+    if (festResp && !festResp.ok) throw new Error(await festResp.text());
+    return {
+      scheme: await schemeResp.json(),
+      state: await stateResp.json(),
+      fest: festResp ? await festResp.json() : null,
+    };
+  }
+
+  // createGameDataLoader centralizes the stale-while-revalidate hydration flow the
+  // OD and KSI pages share: render instantly from the server-inlined __GAME_INIT__
+  // payload, else from the localStorage snapshot, else from a cold parallel fetch;
+  // and in the first two cases kick a background revalidation. The page supplies
+  // `adopt(snapshot, source)` — which assigns its own scheme/state/fest closures and
+  // renders — and an optional `revalidate()`. `source` is "init" | "cache" | "fetch";
+  // on "init" the snapshot also carries the raw `init` payload for seq/epoch/banner
+  // wiring that only the inlined path has. Returns {load, cache} where `load()`
+  // mirrors the old loadAll(): it resolves synchronously off init/cache (revalidation
+  // runs detached) and awaits the network only on a cold start.
+  function createGameDataLoader({route, cachePrefix, adopt, revalidate}) {
+    const cache = createLocalCache(`${cachePrefix}:game:${route.festID || ""}:${route.gameID || ""}`);
+    function writeSnapshot(snap) {
+      if (snap && snap.scheme && snap.state) cache.write({scheme: snap.scheme, state: snap.state, fest: snap.fest ?? null});
+    }
+    function kickRevalidate() {
+      if (revalidate) Promise.resolve().then(revalidate).catch((error) => console.error(error));
+    }
+    async function load() {
+      const init = window.__GAME_INIT__;
+      if (init && init.scheme && init.state) {
+        window.__GAME_INIT__ = null;
+        const snap = {scheme: init.scheme, state: init.state, fest: init.fest || null};
+        adopt({...snap, init}, "init");
+        writeSnapshot(snap);
+        kickRevalidate();
+        return;
+      }
+      const cached = cache.read();
+      if (cached && cached.scheme && cached.state) {
+        adopt({scheme: cached.scheme, state: cached.state, fest: cached.fest || null}, "cache");
+        kickRevalidate();
+        return;
+      }
+      const fresh = await fetchGameData(route);
+      adopt(fresh, "fetch");
+      writeSnapshot(fresh);
+    }
+    return {load, cache, writeSnapshot};
+  }
+
+  // markNameOverflow flags every cell under `root` whose inner name (and optional
+  // city) is clipped, so the page can show a fade + popover. Reads are batched
+  // ahead of writes so the measure loop never triggers a reflow mid-pass.
+  function markNameOverflow(root, cfg) {
+    if (!root) return;
+    const cells = root.querySelectorAll(cfg.cellSelector);
+    const readings = new Array(cells.length);
+    for (let i = 0; i < cells.length; i++) {
+      const name = cells[i].querySelector(cfg.nameSelector);
+      readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    }
+    for (let i = 0; i < cells.length; i++) {
+      cells[i].classList.toggle(cfg.truncatedClass, readings[i]);
+      if (cfg.citySelector && cfg.cityTruncatedClass) {
+        const city = cells[i].querySelector(cfg.citySelector);
+        city?.classList.toggle(cfg.cityTruncatedClass, city.scrollWidth > city.clientWidth + 1);
       }
     }
+  }
+
+  function createTeamNameOverflowController({root, detailed, results}) {
     function updateDetailed(targetRoot = root) {
-      updateFor(targetRoot, detailed);
+      markNameOverflow(targetRoot, detailed);
     }
     function updateResults(targetRoot = root) {
-      updateFor(targetRoot, results);
+      markNameOverflow(targetRoot, results);
     }
     let frame = 0;
     function schedule(targetRoot = root) {
@@ -2830,6 +2989,14 @@
     mountUnnumberedBanner,
     mountGameDownloads,
     parseGameRoute,
+    markNameOverflow,
+    createLocalCache,
+    gameEventsURL,
+    createEpochTracker,
+    notifyEmbeddedResize,
+    scheduleStaticReload,
+    fetchGameData,
+    createGameDataLoader,
     createTeamNameOverflowController,
     fitEKStageTeamName,
     createCellRangeSelection,

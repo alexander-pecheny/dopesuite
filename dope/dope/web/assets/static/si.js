@@ -37,7 +37,7 @@ const viewer = Boolean(route.viewer);
 // numeric id from __GAME_INIT__ so the scope matches and remote edits apply.
 let scopeGameID = route.gameID;
 // staticMode: served as a precomputed snapshot under DDoS lockdown. Skip the SSE
-// connection and refresh by reloading on a jitter. Captured before consumeGameInit
+// connection and refresh by reloading on a jitter. Captured before the loader
 // nulls window.__GAME_INIT__.
 const staticMode = Boolean(window.__GAME_INIT__?.static);
 const canEdit = Boolean(window.__GAME_INIT__?.canEdit);
@@ -101,112 +101,44 @@ window.addEventListener("resize", () => {
 });
 document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
-async function loadAll() {
-  if (consumeGameInit()) {
-    revalidateAll().catch((error) => console.error(error));
-    return;
-  }
-  if (hydrateFromCache()) {
-    revalidateAll().catch((error) => console.error(error));
-    return;
-  }
-  await fetchAll();
-}
+const gameLoader = gameTable.createGameDataLoader({
+  route,
+  cachePrefix: "si",
+  adopt: adoptGameSnapshot,
+  revalidate: revalidateAll,
+});
 
-// consumeGameInit hydrates scheme/state/fest from window.__GAME_INIT__ so the
-// first frame renders without any API round trips. Returns true on success.
-function consumeGameInit() {
-  const init = window.__GAME_INIT__;
-  if (!init || !init.scheme || !init.state) return false;
-  window.__GAME_INIT__ = null;
-  if (init.gameID != null) scopeGameID = String(init.gameID);
-  if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
-  if (init.epoch != null) initialStateEpoch = String(init.epoch);
-  if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
-  scheme = init.scheme;
-  state = init.state;
-  fest = init.fest || null;
+// adoptGameSnapshot assigns the page's scheme/state/fest from a loader snapshot
+// and renders the first frame. On the "init" path the snapshot also carries the
+// raw __GAME_INIT__ payload, the only source with the SSE seq/epoch baseline and
+// the unnumbered-teams flag.
+function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}) {
+  if (init) {
+    if (init.gameID != null) scopeGameID = String(init.gameID);
+    if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
+    if (init.epoch != null) initialStateEpoch = String(init.epoch);
+    if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
+  }
+  scheme = nextScheme;
+  state = nextState;
+  fest = nextFest || null;
   initFromScheme();
   ensureState();
   render();
-  writeGameCache();
-  return true;
-}
-
-function gameCacheKey() {
-  return `si:game:${route.festID || ""}:${route.gameID || ""}`;
-}
-
-function readGameCache() {
-  try {
-    const raw = localStorage.getItem(gameCacheKey());
-    return raw ? JSON.parse(raw) : null;
-  } catch (_err) {
-    return null;
-  }
-}
-
-function writeGameCache() {
-  if (!scheme || !state) return;
-  try {
-    localStorage.setItem(gameCacheKey(), JSON.stringify({scheme, state, fest}));
-  } catch (_err) {
-    // ignore
-  }
-}
-
-function hydrateFromCache() {
-  const cached = readGameCache();
-  if (!cached || !cached.scheme || !cached.state) return false;
-  scheme = cached.scheme;
-  state = cached.state;
-  fest = cached.fest || null;
-  initFromScheme();
-  ensureState();
-  render();
-  return true;
-}
-
-async function fetchAll() {
-  const fresh = await fetchAllRaw();
-  scheme = fresh.scheme;
-  state = fresh.state;
-  fest = fresh.fest;
-  initFromScheme();
-  ensureState();
-  render();
-  writeGameCache();
-}
-
-async function fetchAllRaw() {
-  const festURL = route.apiBase || (route.festID ? `/api/fest/${route.festID}` : "");
-  const [schemeResp, stateResp, festResp] = await Promise.all([
-    fetch(`${route.apiBase}/scheme`),
-    fetch(`${route.apiBase}/state`),
-    festURL ? fetch(festURL) : Promise.resolve(null),
-  ]);
-  if (!schemeResp.ok) throw new Error(await schemeResp.text());
-  if (!stateResp.ok) throw new Error(await stateResp.text());
-  if (festResp && !festResp.ok) throw new Error(await festResp.text());
-  return {
-    scheme: await schemeResp.json(),
-    state: await stateResp.json(),
-    fest: festResp ? await festResp.json() : null,
-  };
 }
 
 async function revalidateAll() {
   const prevSchemeJSON = JSON.stringify(scheme);
   const prevStateJSON = JSON.stringify(state);
   const prevFestJSON = JSON.stringify(fest);
-  const fresh = await fetchAllRaw();
+  const fresh = await gameTable.fetchGameData(route);
   const freshSchemeJSON = JSON.stringify(fresh.scheme);
   const freshStateJSON = JSON.stringify(fresh.state);
   const freshFestJSON = JSON.stringify(fresh.fest);
   scheme = fresh.scheme;
   state = fresh.state;
   fest = fresh.fest;
-  writeGameCache();
+  gameLoader.writeSnapshot(fresh);
   if (freshSchemeJSON === prevSchemeJSON && freshStateJSON === prevStateJSON && freshFestJSON === prevFestJSON) return;
   initFromScheme();
   ensureState();
@@ -1328,15 +1260,9 @@ function renderGameBreadcrumbs(gameTitle) {
   });
 }
 
-// scheduleStaticReload reloads the page after ~5s (jittered 4-7s) so a fleet of
-// static viewers spreads its reloads across the window instead of stampeding.
-function scheduleStaticReload() {
-  window.setTimeout(() => window.location.reload(), 4000 + Math.floor(Math.random() * 3000));
-}
-
 function connectEvents() {
   if (staticMode) {
-    scheduleStaticReload();
+    gameTable.scheduleStaticReload();
     return;
   }
   syncState().connect();
@@ -1354,7 +1280,7 @@ function syncState() {
   stateSync = gameTable.createStateSync({
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
-    eventsURL: `/events?fest_id=${encodeURIComponent(route.festID)}${route.gameID ? "&game_id=" + encodeURIComponent(route.gameID) : ""}`,
+    eventsURL: gameTable.gameEventsURL(route.festID, route.gameID),
     scope: `game-state:${scopeGameID}`,
     getState: () => state,
     getInitialSeq: () => initialStateSeq,
@@ -1362,7 +1288,7 @@ function syncState() {
     setStatus,
     onRemoteState: applyRemoteState,
     onViewers: (count) => viewerCounter.setCount(count),
-    onLockdown: scheduleStaticReload,
+    onLockdown: gameTable.scheduleStaticReload,
     recorder,
     onWriteError: (info) => recorder?.event("write-rejected", info),
   });
@@ -1452,7 +1378,7 @@ function applyRemoteState(nextState) {
 
 document.addEventListener("keydown", handleKeydown);
 
-loadAll()
+gameLoader.load()
   .then(() => {
     setStatus("saved");
     connectEvents();

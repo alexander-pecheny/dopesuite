@@ -150,27 +150,11 @@ function consumeViewerInit() {
   return true;
 }
 
-function festCacheKey() {
-  return `viewer:fest:${route.festID || ""}:${route.gameID || ""}`;
-}
-
-function readFestCache() {
-  try {
-    const raw = localStorage.getItem(festCacheKey());
-    return raw ? JSON.parse(raw) : null;
-  } catch (_err) {
-    return null;
-  }
-}
-
-function writeFestCache(view) {
-  if (!view) return;
-  try {
-    localStorage.setItem(festCacheKey(), JSON.stringify(view));
-  } catch (_err) {
-    // ignore
-  }
-}
+// The cache slot is keyed off the current route, which changes as the viewer
+// navigates between games client-side, so resolve it lazily per call.
+const festCache = () => gameTable.createLocalCache(`viewer:fest:${route.festID || ""}:${route.gameID || ""}`);
+const readFestCache = () => festCache().read();
+const writeFestCache = (view) => festCache().write(view);
 
 function adoptFestView(view) {
   fest = view;
@@ -353,55 +337,37 @@ function rerenderStatsTable() {
   scheduleReadonlyNameOverflowUpdate();
 }
 
-// scheduleStaticReload reloads the whole page after ~5s (jittered 4-7s). The
-// jitter spreads a fleet of static viewers across the window so their reloads
-// don't all land on the same second (a self-inflicted thundering herd).
-function scheduleStaticReload() {
-  window.setTimeout(() => window.location.reload(), 4000 + Math.floor(Math.random() * 3000));
-}
-
-// lastEpoch tracks the server's per-process token (see server.epoch). On a
-// server restart the per-scope seq resets to 0, so cached MatchViews keep a high
-// seq the new space never reaches and every post-restart delta is silently
-// dropped as "already applied" — the bracket freezes. A changed epoch means the
-// seq space reset; reload to re-seed (the stage cache merges monotonically by
-// seq, so an in-place resync can't adopt the lower fresh seqs).
-let lastEpoch = "";
+// The epoch tracker spots a server restart (the per-scope seq resets to 0, so
+// cached MatchViews keep a high seq the new space never reaches and every
+// post-restart delta is silently dropped as "already applied" — the bracket
+// freezes). On a changed epoch, reload to re-seed: the stage cache merges
+// monotonically by seq, so an in-place resync can't adopt the lower fresh seqs.
+const epochTracker = gameTable.createEpochTracker();
 let epochReloadScheduled = false;
-
-function epochChanged(message) {
-  const epoch = message?.epoch ? String(message.epoch) : "";
-  if (!epoch) return false;
-  if (lastEpoch === "") {
-    lastEpoch = epoch;
-    return false;
-  }
-  return epoch !== lastEpoch;
-}
 
 function connectEvents() {
   if (staticMode) {
-    scheduleStaticReload();
+    gameTable.scheduleStaticReload();
     return;
   }
   if (events) {
     try { events.close(); } catch (_err) { /* already closed */ }
   }
-  events = new EventSource(`/events?fest_id=${encodeURIComponent(route.festID)}${route.gameID ? "&game_id=" + encodeURIComponent(route.gameID) : ""}`);
+  events = new EventSource(gameTable.gameEventsURL(route.festID, route.gameID));
   events.addEventListener("lockdown", () => {
     // Server entered static mode: drop the stream and reload into the static
     // page (otherwise native EventSource would just auto-reconnect).
     events.close();
-    scheduleStaticReload();
+    gameTable.scheduleStaticReload();
   });
   events.addEventListener("state", (event) => {
-    const message = parseEventData(event.data);
+    const message = gameTable.parseScopedEvent(event.data);
     // A changed server epoch means a restart reset the seq space; reload to
     // re-seed rather than silently dropping every post-restart delta by seq.
-    if (epochChanged(message) && !epochReloadScheduled) {
+    if (epochTracker.changed(message) && !epochReloadScheduled) {
       epochReloadScheduled = true;
       recorder?.event("epoch-reload", {mode: route.mode});
-      scheduleStaticReload();
+      gameTable.scheduleStaticReload();
       return;
     }
     // On the stats page, fold match edits into the cache in place and recompute
@@ -636,10 +602,6 @@ function scheduleStatsResync() {
   }, 400);
 }
 
-function parseEventData(raw) {
-  return gameTable.parseScopedEvent(raw);
-}
-
 function setLive(ok) {
   setStatus(ok ? "saved" : "error");
 }
@@ -689,7 +651,7 @@ function render() {
   readonlyTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
   if (embedded) {
     viewerRoot.replaceChildren(table);
-    notifyEmbeddedResize();
+    gameTable.notifyEmbeddedResize(embedded);
   } else {
     viewerRoot.replaceChildren(table);
   }
@@ -987,17 +949,16 @@ function updateReadonlyNameOverflow(root = viewerRoot) {
     const truncated = gameTable.fitEKStageTeamName(cell, name);
     cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
   }
-  const playerCells = root.querySelectorAll(".readonly-player");
-  for (const cell of playerCells) {
-    const text = cell.querySelector(".readonly-player-text");
-    const truncated = Boolean(text && text.scrollWidth > text.clientWidth + 1);
-    cell.classList.toggle("readonly-player-cell-truncated", truncated);
-  }
-  const resultsCells = root.querySelectorAll(".results-team");
-  for (const cell of resultsCells) {
-    const name = cell.querySelector(".results-team-name");
-    cell.classList.toggle("results-team-truncated", Boolean(name && name.scrollWidth > name.clientWidth + 1));
-  }
+  gameTable.markNameOverflow(root, {
+    cellSelector: ".readonly-player",
+    nameSelector: ".readonly-player-text",
+    truncatedClass: "readonly-player-cell-truncated",
+  });
+  gameTable.markNameOverflow(root, {
+    cellSelector: ".results-team",
+    nameSelector: ".results-team-name",
+    truncatedClass: "results-team-truncated",
+  });
 }
 
 function readonlyThemeHeaders() {
@@ -1217,16 +1178,6 @@ function pageTitle(primary = "") {
 function currentGameTitle() {
   const scheme = parseScheme(fest?.schemaJson);
   return String(scheme?.title || "").trim();
-}
-
-function notifyEmbeddedResize() {
-  if (!embedded || window.parent === window) return;
-  window.requestAnimationFrame(() => {
-    window.parent.postMessage({
-      type: "dope:resize",
-      height: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
-    }, window.location.origin);
-  });
 }
 
 function readonlyBattleTitleNode(matchState) {
