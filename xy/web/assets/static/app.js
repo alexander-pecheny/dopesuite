@@ -58,12 +58,15 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-// deriveTitle turns a card's plain-text description into a short title (first
-// line, trimmed to a word boundary) — like dope's faded table cells.
+// deriveTitle turns a card's plain-text description into a short preview: all
+// whitespace (incl. line breaks) collapsed to single spaces, then trimmed to a
+// word boundary at `max` chars. Flowing across lines — rather than stopping at
+// the first line — keeps the preview useful for questions whose first line is
+// uninformative (handout "Раздаточный материал:", duplet/blitz lead-ins).
 function deriveTitle(desc, max = 80) {
-  const firstLine = (desc || "").split("\n").find((l) => l.trim()) || "";
-  const t = firstLine.trim();
-  if (t.length <= max) return t || "(пусто)";
+  const t = (desc || "").replace(/\s+/g, " ").trim();
+  if (!t) return "(пусто)";
+  if (t.length <= max) return t;
   const cut = t.slice(0, max);
   const sp = cut.lastIndexOf(" ");
   return (sp > max * 0.5 ? cut.slice(0, sp) : cut) + "…";
