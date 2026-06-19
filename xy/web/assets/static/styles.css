@@ -5617,8 +5617,12 @@ body.is-fullscreen.od-page .match-main {
 .board-card-name { font-weight: var(--fw-bold); font-size: var(--text-lg); }
 .board-card-role { font-size: var(--text-xs); color: var(--muted); }
 
+/* trello import */
+.import-form { max-width: 760px; margin: 0 auto; }
+.import-form .card-desc { min-height: 320px; }
+
 /* kanban */
-.board-main { padding: 0 var(--page-pad-x) var(--space-6); }
+.board-main { padding: var(--space-4) var(--page-pad-x) var(--space-6); }
 .kanban {
   display: flex;
   gap: var(--space-3);
@@ -5662,6 +5666,10 @@ body.is-fullscreen.od-page .match-main {
 .kcard.dragging { opacity: 0.4; }
 .kcard-title { font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; }
 .kcard-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
+/* heading cards read as list dividers; meta cards as muted notes */
+.kcard-heading { background: var(--structure); border-style: dashed; }
+.kcard-heading .kcard-title { font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.02em; }
+.kcard-meta .kcard-title { color: var(--muted); font-style: italic; }
 .klist-add { background: transparent; border-style: dashed; }
 .kadd-form { width: 100%; }
 
@@ -5756,5 +5764,6 @@ body.is-fullscreen.od-page .match-main {
 .card-move .input { flex: 1; min-width: 120px; }
 
 
-/* card create mode: show only the description editor */
+/* card create mode: show only the type chooser + description editor */
 .card-detail.creating [data-edit-only] { display: none !important; }
+.card-detail:not(.creating) [data-create-only] { display: none !important; }

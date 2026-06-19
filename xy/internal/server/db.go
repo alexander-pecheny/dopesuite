@@ -95,7 +95,7 @@ create table if not exists cards(
   id integer primary key,
   board_id integer not null references boards(id) on delete cascade,
   list_id integer not null references lists(id) on delete cascade,
-  kind text not null check (kind in ('normal','test')) default 'normal',
+  kind text not null check (kind in ('normal','question','test','meta','heading','other')) default 'normal',
   description_enc blob not null,
   rank text not null,
   created_at text not null,
@@ -163,5 +163,46 @@ insert or ignore into schema_versions(version, applied_at)
 `); err != nil {
 		return err
 	}
+	if err := migrateV2(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV2 widens the cards.kind CHECK constraint to the chgksuite card kinds
+// (question/meta/heading/other) introduced after M1. SQLite can't ALTER a CHECK
+// in place, so we rebuild the table (the standard 12-step dance) with foreign
+// keys disabled for the swap. Gated on schema_versions so it runs once.
+func migrateV2(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 2`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+pragma foreign_keys=off;
+create table cards_new(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  list_id integer not null references lists(id) on delete cascade,
+  kind text not null check (kind in ('normal','question','test','meta','heading','other')) default 'normal',
+  description_enc blob not null,
+  rank text not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text
+);
+insert into cards_new(id, board_id, list_id, kind, description_enc, rank, created_at, updated_at, deleted_at)
+  select id, board_id, list_id, kind, description_enc, rank, created_at, updated_at, deleted_at from cards;
+drop table cards;
+alter table cards_new rename to cards;
+create index if not exists idx_cards_list on cards(list_id);
+create index if not exists idx_cards_board on cards(board_id);
+pragma foreign_keys=on;
+insert or ignore into schema_versions(version, applied_at)
+  values(2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }

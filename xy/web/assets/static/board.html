@@ -43,6 +43,14 @@
         <button class="action-icon" id="cardClose" aria-label="Закрыть">×</button>
       </div>
 
+      <label class="card-section-label" data-create-only>Тип карточки</label>
+      <select class="input" id="cardKind" data-create-only>
+        <option value="question">Вопрос</option>
+        <option value="meta">Метаинформация</option>
+        <option value="heading">Заголовок</option>
+        <option value="other">Другое</option>
+      </select>
+
       <label class="card-section-label">Описание</label>
       <textarea class="card-desc" id="cardDesc" spellcheck="false"></textarea>
       <div class="auth-actions">

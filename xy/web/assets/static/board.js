@@ -3,6 +3,7 @@
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
+import { xyChgk } from "./chgk.js";
 
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle } = xyApp;
 const { keyBetween } = xyRank;
@@ -102,6 +103,7 @@ function render() {
     kanban.append(renderList(list));
   }
   kanban.append(renderAddList());
+  paintLabels();
 }
 
 function renderList(list) {
@@ -111,7 +113,9 @@ function renderList(list) {
     el("button", { class: "kadd", title: "Добавить карточку", text: "+", onclick: () => addCard(list) }),
   ));
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
-  for (const card of cardsOf(list.id)) body.append(renderCard(card));
+  const cards = cardsOf(list.id);
+  const numbers = list.type === "test" ? [] : xyChgk.numberQuestionCards(cards);
+  cards.forEach((card, i) => body.append(renderCard(card, numbers[i])));
   col.append(body);
 
   // list drag
@@ -141,16 +145,26 @@ function renderList(list) {
   return col;
 }
 
-function renderCard(card) {
-  const node = el("div", { class: "kcard", draggable: "true", dataset: { cardId: card.id }, onclick: () => openCard(card) });
+// cardTitle derives the short preview shown on a kanban card. Question cards are
+// prefixed with their (parsed or auto-assigned) number and stripped of the "? "
+// marker; meta/heading cards show their parsed text; test cards show the session.
+function cardTitle(card, number) {
+  if (card.kind === "test") return testTitle(card.desc);
+  const text = xyChgk.previewText(card.kind, card.desc);
+  const body = deriveTitle(text);
+  if (card.kind === "question" && number) return `${number}. ${body}`;
+  return body;
+}
+
+function renderCard(card, number) {
+  const node = el("div", { class: "kcard kcard-" + (card.kind || "normal"), draggable: "true", dataset: { cardId: card.id }, onclick: () => openCard(card) });
   const labelRow = el("div", { class: "kcard-labels" });
   for (const lid of state.cardLabels[card.id] || []) {
     const lbl = labelById(lid);
     if (lbl) labelRow.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
   }
   if (labelRow.children.length) node.append(labelRow);
-  const title = card.kind === "test" ? testTitle(card.desc) : deriveTitle(card.desc);
-  node.append(el("div", { class: "kcard-title", text: title }));
+  node.append(el("div", { class: "kcard-title", text: cardTitle(card, number) }));
   node.addEventListener("dragstart", (e) => {
     e.stopPropagation();
     e.dataTransfer.setData("text/xy-card", String(card.id));
@@ -219,6 +233,7 @@ function addCard(list) {
   pendingList = list;
   openCardId = null;
   document.getElementById("cardDesc").value = "";
+  document.getElementById("cardKind").value = "question";
   document.getElementById("cardMessage").textContent = "";
   document.querySelector(".card-detail").classList.add("creating");
   cardOverlay.hidden = false;
@@ -404,11 +419,12 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     const msg = document.getElementById("cardMessage");
     if (!text.trim()) { msg.textContent = "Введите описание."; return; }
     const list = pendingList;
+    const kind = document.getElementById("cardKind").value || "question";
     const existing = cardsOf(list.id);
     const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
     try {
-      const res = await jpost(`/api/lists/${list.id}/cards`, { description_enc: await xyCrypto.encField(dk, text), rank });
-      const card = { id: res.id, listId: list.id, kind: "normal", rank, desc: text };
+      const res = await jpost(`/api/lists/${list.id}/cards`, { description_enc: await xyCrypto.encField(dk, text), rank, kind });
+      const card = { id: res.id, listId: list.id, kind, rank, desc: text };
       state.cards.push(card);
       render();
       await openCard(card);

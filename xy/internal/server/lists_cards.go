@@ -245,6 +245,16 @@ type createCardRequest struct {
 	Kind    string `json:"kind"`
 }
 
+// validCardKind allowlists the card kinds the client may set (mirrors the
+// cards.kind CHECK constraint).
+func validCardKind(kind string) bool {
+	switch kind {
+	case "normal", "question", "test", "meta", "heading", "other":
+		return true
+	}
+	return false
+}
+
 func (s *server) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 	// path param is the list id
 	u, authed := s.requireUser(w, r)
@@ -274,6 +284,10 @@ func (s *server) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 	kind := req.Kind
 	if kind == "" {
 		kind = "normal"
+	}
+	if !validCardKind(kind) {
+		httpError(w, http.StatusBadRequest, "bad card kind")
+		return
 	}
 	now := time.Now()
 	var id int64

@@ -41,6 +41,7 @@ func Main() {
 	mux.HandleFunc("GET /register", srv.servePage("static/register.html"))
 	mux.HandleFunc("GET /profile", srv.servePage("static/profile.html"))
 	mux.HandleFunc("GET /board/{id}", srv.servePage("static/board.html"))
+	mux.HandleFunc("GET /import", srv.servePage("static/import.html"))
 
 	// ---- auth API ----
 	mux.HandleFunc("POST /api/auth/register/start", srv.handleRegisterStart)
