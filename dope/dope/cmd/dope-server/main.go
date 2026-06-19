@@ -3,7 +3,7 @@
 // and handlers), matching the cmd/telegram-bot layout.
 package main
 
-import dopeserver "dope/dope"
+import dopeserver "dope/dope/server"
 
 func main() {
 	dopeserver.Main()

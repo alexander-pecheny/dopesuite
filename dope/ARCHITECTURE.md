@@ -1,103 +1,142 @@
 # Architecture & package layout
 
-This document describes how the Go code is organised and the intended direction
-for further modularisation. It complements the file-by-file map in `AGENTS.md`.
+This document describes how the Go code is organised. It complements the
+file-by-file map in `AGENTS.md`.
 
 ## Why this exists
 
-The server started life as a single flat `package main` (~70 files, ~32K lines).
-That makes it hard to see the seams: game-specific logic, the persistence layer,
-the realtime/SSE layer and the HTTP handlers all live side by side, and
-game-type knowledge (`"ek"`/`"od"`/`"ksi"`/`"si"` literals and `switch gameType`
-blocks) is scattered across a dozen files. With more game formats coming
-(10–15 expected), that sprawl only gets worse.
+The server started life as a single flat `package main` (~70 files, ~32K lines):
+game-specific logic, persistence, the realtime/SSE layer and the HTTP handlers
+all lived side by side, and game-type knowledge (`"ek"`/`"od"`/`"ksi"`/`"si"`
+literals and `switch gameType` blocks) was scattered across a dozen files. With
+more game formats coming (10–15 expected), that sprawl only got worse.
 
-The refactor introduces real package boundaries, starting with the parts that
-can be extracted **safely and without behaviour change** — leaf packages that
-depend only on the standard library / third-party code, never on the server,
-database or HTTP layers. Leaf-first keeps the change low-risk (no import cycles,
-fully compiler- and test-verified) which matters because live tournaments run on
-this code.
+The code was first decomposed into ~30 leaf packages, then those packages were
+grouped into **seven semantic top-level directories** so the tree is navigable
+at a glance. The inner `dope/` directory now contains **no loose `.go` files** —
+every file lives in a package, and every package lives in one of the seven
+groups.
 
-## Current packages
+## Layout
 
-The leaf extraction below is **complete**. The server package is `dopeserver`
-(under `cmd/dope-server`) and consumes the leaf packages **directly** — there are
-no re-export shims: call sites write `store.MatchView`, `journal.Op`,
-`realtime.Envelope`, `roles.Normalize`, etc. rather than going through
-package-local aliases or thin wrapper functions.
+Module root is the repo root (`go.mod: module "dope"`); the server tree lives
+under the inner `dope/` directory, so packages resolve as `dope/dope/<group>/<pkg>`.
 
 ```
-dope/                      module root (go.mod: module "dope")
-  dope/                    package dopeserver — service/orchestration/UI:
-                           the write-tx layer, FestView builder, bracket
-                           resolver, history rendering, HTTP handlers, SSE
-                           driving. Imports the leaves below directly.
-    games/                 game-type registry + per-game pure domain logic
-    store/                 SQLite schema, queries and shared view/scheme types
-    journal/               forward-journal codec, replay, checkpoints, archive
-    realtime/              SSE envelopes, delta coalescing, subscriber manager
-    roles/                 role hierarchy + pure permission predicates
-    xlsxexport/            per-game xlsx sheet builders
-    markdown/              host-authored markdown → safe HTML
-    cmd/dope-server/       thin main() entry point → dopeserver.Main()
-    cmd/telegram-bot/      standalone Telegram bot (bridges to the server)
-    static/               embedded frontend assets
-    jstest/               Deno frontend tests
+dope/                       module root (go.mod: module "dope")
+  dope/                     server tree — seven semantic groups, no loose files:
+    cmd/                    entry points
+      dope-server/          thin main() → dopeserver.Main()
+      telegram-bot/         standalone Telegram bot (bridges to the server)
+    server/                 package dopeserver — orchestration / the trunk
+      tests/                black-box integration tests (package tests)
+    web/                    HTTP / UI layer
+    domain/                 game + festival domain logic
+    storage/                persistence
+    export/                 output generation (xlsx / json / archive)
+    platform/               cross-cutting leaves (stdlib-only or near it)
 ```
 
-### `games` (leaf)
+### `server/` — the orchestration trunk (package `dopeserver`)
 
-The single source of truth for game-type knowledge. Generic, type-agnostic
-server code consults the registry here instead of switching on raw strings:
+The one package that wires everything together: the HTTP mux, the write-tx
+discipline, SSE driving, and the request handlers that don't belong to a leaf.
+It imports the groups below directly (no re-export shims). Split into cohesive
+files, each owning one concern:
 
-- `games.go` — canonical type codes (`EK`, `OD`, `KSI`, `SI`), the `Default`,
-  the `Definition` registry, and helpers (`Label`, `IsKnown`, `IsChGK`,
-  `Lookup`). Add a new format by registering a `Definition`.
-- `od.go` — pure OD (ЧГК) domain: the persisted-state shapes (`ODState`,
-  `ODTeam`), tour-composition parsing (`ParseTourComp`) and standings scoring
-  (`ComputeODResults`), shared by the xlsx export and the server-side results
-  view so the two scoring paths can't drift.
+| File | Concern |
+|------|---------|
+| `main.go` | entry point, mux wiring, HTTP server, SSE event handlers |
+| `db.go` | DB bootstrap, schema migration/backfill, id resolution |
+| `serve_html.go` | host/viewer/game HTML init payloads + asset versioning |
+| `import_scheme.go` | fest-scheme import handlers |
+| `matchview.go` | fest/match view loading + match-update application |
+| `scoped_api.go` | tournament-scoped API endpoints |
+| `auth.go` | sessions, auth, Telegram login bridge |
+| `credentials.go` | invite/session/Telegram code + name helpers |
+| `pages_public.go` | public viewer-page routing |
+| `static_mode.go` | "DDoS lockdown" static-snapshot degradation layer |
+| `host_accessors.go` | **dependency-inversion adapter** — see below |
+| `testapi.go` | the single exported test seam for `server/tests/` |
 
-This is the home for **pure** per-game domain logic. Logic that needs a DB
-transaction or the server (game creation, roster propagation, journal rendering)
-stays in `dopeserver` and calls into `games` for the type metadata.
+**Dependency inversion (`host_accessors.go`).** Handler/leaf packages
+(`web/pages`, `web/hostpages`, `web/telegrambridge`, `export/gameexport`,
+`domain/overrides`) declare narrow `Host` interfaces describing what they need
+from the server. `*server` satisfies them through thin accessors collected in
+`host_accessors.go` (`var _ gameexport.Host = (*server)(nil)`, …). This keeps
+those packages cycle-free leaves while preserving server encapsulation — and it
+is what made the decomposition possible without import cycles.
 
-### Other leaves
+### `web/` — HTTP / UI layer
 
-- **`store`** — SQLite schema, query helpers, and the shared view/scheme types
+- `pages` — public + admin page handlers (register, admin, host journal/numbers).
+- `hostpages` — host editor page handlers (dashboard, roster, numbers, games).
+- `editbatch` — coalesces per-game PATCH edits into one locked write tx per window.
+- `telegrambridge` — shared-secret endpoints the bot calls instead of opening the DB.
+- `assets` — the `//go:embed static` package; the FS keeps the `static/` prefix.
+  Frontend source lives under `web/assets/static/`; Deno tests under `web/jstest/`.
+
+### `domain/` — game + festival domain logic
+
+The home for **pure** per-game and festival logic. Logic that needs a DB
+transaction or the server stays in `dopeserver` and calls into here for type
+metadata.
+
+- `games` — the single source of truth for game-type knowledge: canonical codes
+  (`EK`, `OD`, `KSI`, `SI`), the `Definition` registry, and the pure OD (ЧГК)
+  domain (state shapes, tour-composition parsing, standings scoring). Add a new
+  format by registering a `Definition` — not by adding another `switch gameType`.
+- `core` — the `Engine`: shared in-memory state, write-tx plumbing, journal
+  service, broadcast, revert. Embedded by `*server`.
+- `resolver` — bracket/reseed resolution. `roster` — roster + seeding.
+- `overrides` — player-name overrides. `imports` — EK/seed/rating bulk import.
+- `numbering` — team-number assignment. `edit` — match-edit value types.
+- `view` — shared presentation DTOs (e.g. `HostFest`) kept in a leaf so the
+  server and the web handlers can name them without importing each other.
+
+### `storage/` — persistence
+
+- `store` — SQLite schema, query helpers, and the shared view/scheme types
   (`MatchView`, `FestView`, `FestScheme`, …) plus pure scoring (`BuildView`,
   `ScoreTeam`, `ManualStandings`). Almost everything depends on it.
-- **`journal`** — the forward-journal subsystem: the on-disk codec (opcodes,
-  row-args, segments), replay/checkpoint engines, hot→cold archiver, and the
-  live append/read path. `dopeserver` keeps only the server-side scheduler and
-  the attribution-aware append facade (`journal_live.go`, `journal_archive.go`).
-- **`realtime`** — SSE envelopes (`EventSnapshotJSON`/`EventDeltaJSON`), delta
-  merging, and the subscriber `Manager` (broadcast fan-out behind its own locks).
-- **`roles`** — the role hierarchy and the pure permission predicates
-  (`Normalize`, `CanManageAccess`, …) plus bulk-line parsing. The DB-backed
-  access management stays in `dopeserver` (`roles.go`) on top of the leaf.
-- **`xlsxexport`** — per-game xlsx sheet builders (OD/KSI/EK).
-- **`markdown`** — goldmark wrapper rendering host markdown to safe HTML
-  (custom `:::details` block, raw-HTML passthrough disabled). Entry: `Render`.
+- `journal` — the forward-journal subsystem: on-disk codec, replay/checkpoint
+  engines, hot→cold archiver, live append/read path.
+- `migrate` — audit/history *data* conversion + maintenance subcommands.
+- `festwrite` — the attribution-aware write/append facade.
+- `festaccess` — per-fest access/role persistence (DB-backed authz).
+- `auditmw` — audit-log write middleware. `storeutil` — scheme/query helpers.
+- `sqlitez` — low-level SQLite helpers.
 
-## Status
+### `export/` — output generation
 
-All the seams originally listed as roadmap (per-game domain, `roles`, `journal`,
-`realtime`, `store`, `cmd/dope-server`) have been extracted, and the re-export
-shims that bridged them back into the server during the transition (type
-aliases, op-code constants and one-line delegating wrappers) have been removed —
-call sites now reference the leaf packages directly.
+- `xlsxexport` — per-game xlsx sheet builders (OD/KSI/EK).
+- `gameexport` — game export orchestration (xlsx / json / results archive).
 
-### Guiding principles
+### `platform/` — cross-cutting leaves
 
-- **Leaf-first, no cycles.** A new package must not import `package main`. If it
-  needs something from the core, that something moves down with it or is passed
-  in as a parameter/interface.
-- **Behaviour-preserving.** Refactors are verified by the existing test suite
+Stdlib-only or near-it utilities with no domain knowledge:
+
+- `realtime` — SSE envelopes, delta merging, the subscriber `Manager`.
+- `roles` — role hierarchy + pure permission predicates.
+- `markdown` — goldmark wrapper rendering host markdown to safe HTML.
+- `session` — session-token types. `metrics` — edit-path instrumentation.
+- `util` — small shared helpers.
+
+## Guiding principles
+
+- **Leaf-first, no cycles.** A package must not import `server` (`package
+  dopeserver`). If it needs something from the trunk, that something moves down
+  with it, or is passed in via a narrow `Host` interface (see
+  `host_accessors.go`).
+- **Strict downward layering.** Edges flow
+  `cmd → server → web → domain/storage/platform`, and within the lower groups
+  `domain → storage → platform`. Nothing in `domain/`, `storage/`, `platform/`,
+  `export/` imports `web/` or `server/`. `platform/` imports no internal package
+  upward of itself.
+- **Registry over switches.** New game-type behaviour is registered in
+  `domain/games`, not added as another `switch gameType` in a handler.
+- **Behaviour-preserving refactors.** Verified by the existing test suite
   (`just test`) plus `just vet`; no functional change rides along.
-- **Registry over switches.** New game-type behaviour is registered in `games`,
-  not added as another `switch gameType` in a handler.
 
 ## Concurrency & outage hardening
 
@@ -127,7 +166,7 @@ pattern (conn off-lock → `lockWrite` → `beginWriteTxConn` → commit). Reach
 the lower-level `acquireWriteConn` / `lockWrite` / `beginWriteTxConn` trio only
 when a path needs work between lock and tx, or post-commit under the lock (e.g.
 updating the in-memory active-game pointer). The hot, continuously-exercised
-write paths all follow this: game-state edits (batched, `edit_batch.go`), match
+write paths all follow this: game-state edits (batched, `web/editbatch`), match
 edits, game-state PUT, journal revert/undo, player overrides, fest numbering,
 game create/delete, roster/reseed/rating import. The periodic journal archiver
 bounds its background pass the same way.
@@ -144,4 +183,4 @@ rarely, or off the viewer-load path, so the freeze window barely applies:
 `handleHostClearGame` and `handleHostDeleteFest` (destructive, not run mid-play),
 `importScheme` / `importSchemeIntoFest` / `importSeedsFromKSI` /
 `setSeedImportDeclined` (pre-fest seeding, no concurrent viewer load), and the
-`telegram_bridge` login/register writes (tiny single statements on the bot path).
+telegram-bridge login/register writes (tiny single statements on the bot path).
