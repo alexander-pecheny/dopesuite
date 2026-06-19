@@ -51,15 +51,6 @@ var journalGameTables = []struct {
 	{"game_player_team_overrides", func(p string) string { return p + ".game_id" }},
 }
 
-func isJournalGameTable(name string) bool {
-	for _, t := range journalGameTables {
-		if t.table == name {
-			return true
-		}
-	}
-	return false
-}
-
 // buildJournalRowTrigger emits an AFTER trigger that records a forward row-op.
 func buildJournalRowTrigger(table string, cols, pks []string, op string, gameVia func(string) string) string {
 	if len(pks) == 0 {

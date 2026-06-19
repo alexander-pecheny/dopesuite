@@ -473,24 +473,6 @@ func newServer() (*server, error) {
 	return srv, nil
 }
 
-func loadState(path string) (store.MatchState, error) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		state := defaultMatch()
-		store.NormalizeState(&state)
-		return state, nil
-	}
-	if err != nil {
-		return store.MatchState{}, err
-	}
-	var state store.MatchState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return store.MatchState{}, fmt.Errorf("read %s: %w", path, err)
-	}
-	store.NormalizeState(&state)
-	return state, nil
-}
-
 func saveState(path string, state store.MatchState) error {
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
@@ -884,14 +866,10 @@ func writeJSON(w http.ResponseWriter, data []byte) {
 	_, _ = w.Write(data)
 }
 
-// formatSSE renders one SSE frame. Split from writeSSE so callers that need to
-// bound the write with a deadline (handleEvents) can build the bytes first.
+// formatSSE renders one SSE frame. Callers that need to bound the write with a
+// deadline (handleEvents) build the bytes first, then write them.
 func formatSSE(name string, revision int64, data []byte) string {
 	return fmt.Sprintf("event: %s\nid: %d\ndata: %s\n\n", name, revision, data)
-}
-
-func writeSSE(w http.ResponseWriter, name string, revision int64, data []byte) {
-	_, _ = io.WriteString(w, formatSSE(name, revision, data))
 }
 
 func defaultMatch() store.MatchState {

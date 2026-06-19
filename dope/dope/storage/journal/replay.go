@@ -43,9 +43,6 @@ func DecodeRowOpJSON(payload []byte) (string, map[string]any, error) {
 type Replayer struct {
 	dict  map[uint64]string   // dictionary id -> string (table/column names)
 	pksBy map[string][]string // table -> primary-key columns (cached from schema)
-	db    interface {
-		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
-	}
 }
 
 // NewReplayer returns a Replayer over the given id->string dictionary.

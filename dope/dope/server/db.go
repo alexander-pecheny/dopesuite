@@ -2601,16 +2601,6 @@ func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, festID, matchID int64,
 	return revision, nil
 }
 
-func (s *server) updateMatchVenue(festID int64, code string, number int) (store.MatchView, []byte, error) {
-	return s.updateMatchVenueUsing(context.Background(), festID, number,
-		func(ctx context.Context, q store.Queryer) (store.DBMatchState, error) {
-			return store.LoadDBMatchState(ctx, q, festID, code)
-		},
-		func() (store.MatchView, error) {
-			return s.loadMatchViewLocked(festID, code)
-		}, nil)
-}
-
 // updateScopedMatchVenue updates a match's venue and additionally returns
 // deltaOps (set-ops vs the pre-edit view) when a delta broadcast beats the full
 // view; nil otherwise.
@@ -2747,22 +2737,6 @@ where fest_id = ? and number = ?`, title, util.UtcNow(), festID, number)
 	return venues, revision, nil
 }
 
-func (s *server) bumpFestRevisionStandalone(ctx context.Context, festID int64, eventType, payload string) (int64, error) {
-	tx, err := s.eng.BeginWriteTx(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, festID, eventType, payload)
-	if err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return revision, nil
-}
-
 // broadcastMatchView fans out a match-scope update as a minimal delta when ops
 // are available (cheaper than the full view) and as a full-state snapshot
 // otherwise. Centralizes the delta-or-snapshot choice for the match handlers.
@@ -2853,20 +2827,6 @@ func splitPlayerName(fullName string) (string, string) {
 		return parts[0], ""
 	}
 	return parts[0], strings.Join(parts[1:], " ")
-}
-
-func placeholderName(sourceRef string) string {
-	var ref map[string]any
-	if err := json.Unmarshal([]byte(sourceRef), &ref); err != nil {
-		return "Ожидает команды"
-	}
-	if value, ok := ref["placeholder"].(string); ok && value != "" {
-		return value
-	}
-	if value, ok := ref["name"].(string); ok && value != "" {
-		return value
-	}
-	return "Ожидает команды"
 }
 
 // Auth helpers. Codes must be unique enough not to collide between concurrent

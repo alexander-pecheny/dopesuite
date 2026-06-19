@@ -34,37 +34,6 @@ import (
 // uses core.FestScope directly.
 type festScope = core.FestScope
 
-func parseScopedPath(path, prefix string) (festScope, string, bool) {
-	rest := strings.TrimPrefix(path, prefix)
-	if rest == path {
-		return festScope{}, "", false
-	}
-	rest = strings.TrimPrefix(rest, "/")
-	parts := strings.SplitN(rest, "/", 4)
-	if len(parts) < 2 {
-		return festScope{}, "", false
-	}
-	tid, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil || tid <= 0 {
-		return festScope{}, "", false
-	}
-	if parts[1] != "games" {
-		return festScope{}, "", false
-	}
-	if len(parts) < 3 {
-		return festScope{FestID: tid}, "", true
-	}
-	gid, err := strconv.ParseInt(parts[2], 10, 64)
-	if err != nil || gid <= 0 {
-		return festScope{}, "", false
-	}
-	scope := festScope{FestID: tid, GameID: gid}
-	if len(parts) < 4 {
-		return scope, "", true
-	}
-	return scope, parts[3], true
-}
-
 func (s *server) verifyMatchInScope(ctx context.Context, scope festScope, code string) (matchScope, error) {
 	row := s.eng.DB.QueryRowContext(ctx, `
 select id from matches where fest_id = ? and game_id = ? and code = ?`,
@@ -176,11 +145,6 @@ func (s *server) authorizeFestRead(w http.ResponseWriter, r *http.Request, festI
 		return false
 	}
 	return true
-}
-
-func (s *server) requireFestOrganizer(w http.ResponseWriter, r *http.Request, festID int64) (session.User, bool) {
-	user, _, ok := s.requireFestRole(w, r, festID, roles.CanEditGameTables)
-	return user, ok
 }
 
 func (s *server) requireFestAdmin(w http.ResponseWriter, r *http.Request, festID int64) (session.User, bool) {

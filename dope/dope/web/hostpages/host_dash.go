@@ -600,14 +600,6 @@ order by case when t.start_date is null or t.start_date = '' then 1 else 0 end,
 	})
 }
 
-func (s *Server) isOrganizer(ctx context.Context, festID, userID int64) (bool, error) {
-	role, err := festaccess.FestUserRoleFromQuery(ctx, s.h.Engine().DB, festID, userID)
-	if err != nil {
-		return false, err
-	}
-	return role != "", nil
-}
-
 func (s *Server) isFestCreator(ctx context.Context, festID, userID int64) (bool, error) {
 	var n int
 	err := s.h.Engine().DB.QueryRowContext(ctx, `

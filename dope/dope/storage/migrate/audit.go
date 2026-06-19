@@ -109,12 +109,6 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.2f %cB", float64(n)/float64(div), "KMGT"[exp])
 }
 
-func loadWritableJournalDict(db interface {
-	Query(string, ...any) (*sql.Rows, error)
-}) (*journal.Dict, error) {
-	return journal.LoadWritableDict(db)
-}
-
 func ConvertAuditLog(db *sql.DB) (ConvertReport, error) {
 	var rep ConvertReport
 	if err := journal.CreateTables(db); err != nil {

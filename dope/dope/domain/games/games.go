@@ -43,12 +43,6 @@ var registry = map[string]Definition{
 	SI:  {Code: SI, Label: "СИ", ChGK: true},
 }
 
-// Lookup returns the Definition for a game type and whether it is registered.
-func Lookup(code string) (Definition, bool) {
-	d, ok := registry[code]
-	return d, ok
-}
-
 // Label returns the short display label for a game type, falling back to the
 // raw code for unknown types (matching the previous gameTypeLabel behaviour).
 func Label(code string) string {
@@ -56,12 +50,6 @@ func Label(code string) string {
 		return d.Label
 	}
 	return code
-}
-
-// IsKnown reports whether code is a registered game type.
-func IsKnown(code string) bool {
-	_, ok := registry[code]
-	return ok
 }
 
 // IsChGK reports whether code is a ЧГК-family flat-grid game (OD, KSI, SI).

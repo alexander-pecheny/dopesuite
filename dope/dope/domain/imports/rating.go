@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"dope/dope/domain/core"
-	"dope/dope/domain/games"
 	"dope/dope/domain/overrides"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
@@ -653,21 +652,4 @@ func rosterPlayerKey(player roster.FestRosterImportPlayer) string {
 		return "rating:" + strconv.FormatInt(player.RatingID, 10)
 	}
 	return "name:" + strings.ToLower(store.JoinPlayerName(player.FirstName, player.LastName))
-}
-
-func teamNamesFromRoster(teams []roster.FestRosterImportTeam) []string {
-	out := make([]string, 0, len(teams))
-	for _, team := range teams {
-		out = append(out, team.Name)
-	}
-	return out
-}
-
-// participantNames projects the name column out of a participants list.
-func participantNames(parts []games.KSIParticipant) []string {
-	out := make([]string, len(parts))
-	for i, p := range parts {
-		out[i] = p.Name
-	}
-	return out
 }

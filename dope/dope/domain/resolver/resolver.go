@@ -381,11 +381,6 @@ type reseedPrerequisiteState struct {
 	PendingMatches []string
 }
 
-func reseedPrerequisitesReady(ctx context.Context, q store.Queryer, config []byte, gameID int64) (bool, error) {
-	state, err := ReseedPrerequisites(ctx, q, config, gameID)
-	return state.Ready, err
-}
-
 // ReseedPrerequisites reports whether a reseed stage's source bouts are all
 // finished, listing the source bout ids and the codes of any still-pending ones.
 func ReseedPrerequisites(ctx context.Context, q store.Queryer, config []byte, gameID int64) (reseedPrerequisiteState, error) {
