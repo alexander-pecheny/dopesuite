@@ -11,7 +11,7 @@
 //   - other static: stale-while-revalidate.
 //   - everything else (/api/…): straight to network, untouched.
 
-const CACHE = "xy-shell-v1";
+const CACHE = "xy-shell-v2";
 
 // App shell precache: entry modules, styles, fonts, vendored crypto, icons, and
 // the static page routes. Unversioned URLs; versioned requests are cached
@@ -85,9 +85,21 @@ async function cacheFirst(request) {
   const cache = await caches.open(CACHE);
   const cached = await cache.match(request);
   if (cached) return cached;
-  const resp = await fetch(request);
-  if (resp && resp.ok) cache.put(request, resp.clone());
-  return resp;
+  try {
+    const resp = await fetch(request);
+    if (resp && resp.ok) cache.put(request, resp.clone());
+    return resp;
+  } catch (err) {
+    // Offline and this exact ?v=<hash> URL was never fetched online: fall back to
+    // any cached copy of the same path. The precache stores assets unversioned
+    // (the hashes aren't known at author time), so the versioned request would
+    // otherwise miss and the app shell wouldn't load on the first offline visit.
+    // This fallback only runs after the network fails, so online deploys still
+    // fetch the fresh hashed asset rather than a stale precached one.
+    const loose = await cache.match(request, { ignoreSearch: true });
+    if (loose) return loose;
+    throw err;
+  }
 }
 
 async function staleWhileRevalidate(request) {
