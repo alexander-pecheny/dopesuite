@@ -43,8 +43,8 @@
         <button class="action-icon" id="cardClose" aria-label="Закрыть">×</button>
       </div>
 
-      <label class="card-section-label" data-create-only>Тип карточки</label>
-      <select class="input" id="cardKind" data-create-only>
+      <label class="card-section-label" id="cardKindLabel">Тип карточки</label>
+      <select class="input" id="cardKind">
         <option value="question">Вопрос</option>
         <option value="meta">Метаинформация</option>
         <option value="heading">Заголовок</option>
@@ -77,9 +77,13 @@
         <button class="btn btn-small" id="attachUpload" type="button">Загрузить</button>
       </div>
 
-      <label class="card-section-label" data-edit-only>Переместить / копировать на другую доску</label>
+      <label class="card-section-label" data-edit-only>Переместить / копировать</label>
       <div class="card-move" data-edit-only>
-        <select id="moveTarget" class="input"></select>
+        <select id="moveBoard" class="input" title="Доска"></select>
+        <select id="moveList" class="input" title="Список"></select>
+        <select id="movePos" class="input" title="Позиция"></select>
+      </div>
+      <div class="card-move-actions" data-edit-only>
         <button class="btn btn-small" id="copyBtn" type="button">Копировать</button>
         <button class="btn btn-small btn-ghost" id="moveBtn" type="button">Переместить</button>
       </div>

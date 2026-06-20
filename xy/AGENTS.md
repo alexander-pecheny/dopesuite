@@ -32,6 +32,7 @@ internal/server/       package server — the whole HTTP server
   boards.go            boards CRUD, keymeta (passphrase re-wrap), members, ACL helpers
   lists_cards.go       lists/cards/labels/timeline handlers + DTOs/scanners
   invite.go            invite minting (subcommand)
+  export.go            POST /api/export/docx — shells out to chgksuite (XY_CHGKSUITE_CMD)
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
 internal/session/      cookie + session.User (ported from dope/platform/session)
 web/assets/            //go:embed static (package assets)
@@ -39,8 +40,10 @@ web/assets/            //go:embed static (package assets)
     crypto.js          envelope format + board key lifecycle + IndexedDB key cache
     rank.js            fractional indexing (LexoRank-style keyBetween)
     app.js             shared fetch/DOM helpers, derived card titles
+    diff.js            word-level token diff for desc_edit timeline highlighting
     index.js/.html     board list + create-board (passphrase) flow
-    board.js/.html     kanban: unlock, drag-reorder, card detail, timeline, labels
+    board.js/.html     kanban: unlock, drag-reorder, card detail, timeline, labels,
+                       move/copy (by board name + list + position), list ⋯ menu, docx export
     login/register/profile  auth UI (login/menu ported from dope)
     styles.css         dope design system (copied) + xy board/card section at the end
     vendor/            self-hosted @noble/hashes (scrypt + deps), WebCrypto shim

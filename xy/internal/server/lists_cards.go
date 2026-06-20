@@ -311,6 +311,7 @@ type patchCardRequest struct {
 	DescEnc      *string `json:"description_enc"`
 	Rank         *string `json:"rank"`
 	ListID       *int64  `json:"list_id"`
+	Kind         *string `json:"kind"`           // optional kind change (feature: change card type after creation)
 	DescEventEnc *string `json:"desc_event_enc"` // optional desc_edit timeline payload
 }
 
@@ -341,6 +342,14 @@ func (s *server) handlePatchCard(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Rank != nil {
 			if _, err := tx.ExecContext(ctx, `update cards set rank = ?, updated_at = ? where id = ?`, *req.Rank, now, cardID); err != nil {
+				return err
+			}
+		}
+		if req.Kind != nil {
+			if !validCardKind(*req.Kind) {
+				return errBadRequest("bad card kind")
+			}
+			if _, err := tx.ExecContext(ctx, `update cards set kind = ?, updated_at = ? where id = ?`, *req.Kind, now, cardID); err != nil {
 				return err
 			}
 		}

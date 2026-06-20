@@ -5746,9 +5746,6 @@ body.is-fullscreen.od-page .match-main {
 .tl-event { padding: var(--space-2) var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--page); }
 .tl-meta { font-size: var(--text-2xs); color: var(--muted); }
 .tl-comment { white-space: pre-wrap; font-size: var(--text-sm); margin-top: var(--space-1); }
-.tl-diff { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-1); font-family: var(--font-mono); font-size: var(--text-2xs); }
-.tl-before { padding: var(--space-2); background: var(--red-soft); border-radius: var(--radius-xs); white-space: pre-wrap; }
-.tl-after { padding: var(--space-2); background: var(--green-soft, var(--accent-soft)); border-radius: var(--radius-xs); white-space: pre-wrap; }
 
 /* register code */
 .register-code { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: var(--fw-bold); letter-spacing: 0.08em; text-align: center; padding: var(--space-3); border: 1px dashed var(--border); border-radius: var(--radius-md); }
@@ -5764,7 +5761,23 @@ body.is-fullscreen.od-page .match-main {
 .attach-add { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .attach-lossless { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); color: var(--muted); }
 .card-move { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
-.card-move .input { flex: 1; min-width: 120px; }
+.card-move .input { flex: 1; min-width: 110px; }
+.card-move-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+
+/* per-list "⋯" menu: anchor the shared .menu-dropdown under the trigger */
+.klist-menu-wrap { position: relative; display: inline-flex; }
+
+/* inline word-level diff (timeline desc_edit) */
+.tl-diff-inline {
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+.tl-ins { background: var(--green-soft, var(--accent-soft)); text-decoration: none; border-radius: var(--radius-xs); }
+.tl-del { background: var(--red-soft); text-decoration: line-through; border-radius: var(--radius-xs); }
 
 
 /* card create mode: show only the type chooser + description editor */

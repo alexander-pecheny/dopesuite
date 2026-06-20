@@ -87,6 +87,9 @@ func Main() {
 	mux.HandleFunc("GET /api/cards/{id}/timeline", srv.handleGetTimeline)
 	mux.HandleFunc("POST /api/cards/{id}/comments", srv.handleAddComment)
 
+	// ---- export (chgksuite docx) ----
+	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
+
 	// ---- attachments ----
 	mux.HandleFunc("GET /api/cards/{id}/attachments", srv.handleListAttachments)
 	mux.HandleFunc("POST /api/cards/{id}/attachments", srv.handleCreateAttachment)

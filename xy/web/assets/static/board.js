@@ -4,6 +4,7 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
+import { xyDiff } from "./diff.js";
 
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle } = xyApp;
 const { keyBetween } = xyRank;
@@ -108,9 +109,20 @@ function render() {
 
 function renderList(list) {
   const col = el("div", { class: "klist", draggable: "true", dataset: { listId: list.id } });
+  const menuWrap = el("div", { class: "klist-menu-wrap" });
+  const menuBtn = el("button", { class: "kadd", title: "Меню списка", text: "⋯", "aria-haspopup": "true" });
+  menuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    popupMenu(menuWrap, [
+      { label: "➕ Добавить карточку", onClick: () => addCard(list) },
+      { label: "↔ Переместить список…", onClick: () => moveListToPosition(list) },
+      { label: "📄 Экспорт в docx", onClick: () => exportList(list) },
+    ]);
+  });
+  menuWrap.append(menuBtn);
   col.append(el("div", { class: "klist-head" },
     el("span", { class: "klist-title", text: list.title || "(без названия)" }),
-    el("button", { class: "kadd", title: "Добавить карточку", text: "+", onclick: () => addCard(list) }),
+    menuWrap,
   ));
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
   const cards = cardsOf(list.id);
@@ -224,6 +236,118 @@ function renderAddList() {
   return wrap;
 }
 
+// ---- list menu (popup) ----
+
+// popupMenu mounts a small dropdown (dope .menu-dropdown styling) inside a
+// position:relative anchor, closing on outside click / Escape / item choice.
+// Reused by the per-list "⋯" menu.
+function popupMenu(anchor, items) {
+  const existing = anchor.querySelector(".menu-dropdown");
+  if (existing) { existing.remove(); return; } // toggle off
+  const menu = el("div", { class: "menu-dropdown", role: "menu" });
+  for (const it of items) {
+    menu.append(el("button", {
+      class: "menu-item", type: "button", role: "menuitem", text: it.label,
+      onclick: () => { close(); it.onClick(); },
+    }));
+  }
+  function close() {
+    menu.remove();
+    document.removeEventListener("pointerdown", onOutside, true);
+    document.removeEventListener("keydown", onKey);
+  }
+  function onOutside(e) { if (!anchor.contains(e.target)) close(); }
+  function onKey(e) { if (e.key === "Escape") close(); }
+  anchor.append(menu);
+  document.addEventListener("pointerdown", onOutside, true);
+  document.addEventListener("keydown", onKey);
+}
+
+// moveListToPosition re-ranks a list to a 1-based slot chosen via prompt. Handy
+// for long boards where dragging a column across the viewport is awkward.
+async function moveListToPosition(list) {
+  const ordered = [...state.lists].sort(byRank);
+  const n = ordered.length;
+  const cur = ordered.findIndex((l) => l.id === list.id) + 1;
+  const raw = prompt(`Переместить список на позицию (1–${n}):`, String(cur));
+  if (raw == null) return;
+  let pos = parseInt(raw, 10);
+  if (Number.isNaN(pos)) return;
+  pos = Math.max(1, Math.min(n, pos));
+  const others = ordered.filter((l) => l.id !== list.id);
+  const prev = pos >= 2 ? others[pos - 2] : null;
+  const next = pos - 1 < others.length ? others[pos - 1] : null;
+  let rank;
+  try { rank = keyBetween(prev ? prev.rank : null, next ? next.rank : null); }
+  catch (_) { rank = keyBetween(prev ? prev.rank : null, null); }
+  list.rank = rank;
+  setStatus("saving");
+  try {
+    await jpatch(`/api/lists/${list.id}`, { rank });
+    setStatus("saved");
+    render();
+  } catch (err) { setStatus("error"); load(); }
+}
+
+// ---- export a list to .docx via chgksuite (PLAN §8) ----
+// Concatenate the list's card descriptions (in board order) into a chgksuite
+// "4s" document, gather any images referenced by `(img ...)` directives from the
+// cards' attachments, and hand both to the server, which composes the docx and
+// wipes the plaintext scratch files. See internal/server/export.go.
+async function exportList(list) {
+  const cards = cardsOf(list.id);
+  if (!cards.length) { alert("В списке нет карточек."); return; }
+  setStatus("saving");
+  try {
+    const source = cards.map((c) => c.desc.trim()).filter(Boolean).join("\n\n") + "\n";
+    // collect (img NAME ...) references
+    const wanted = new Set();
+    for (const m of source.matchAll(/\(img\s+([^\s)]+)/g)) wanted.add(m[1]);
+
+    const fd = new FormData();
+    fd.append("source", source);
+    fd.append("filename", list.title || "export");
+
+    // resolve referenced images from the cards' attachments (decrypt + attach)
+    if (wanted.size) {
+      const seen = new Set();
+      for (const card of cards) {
+        let atts;
+        try { atts = await fetchJSON(`/api/cards/${card.id}/attachments`); } catch (_) { continue; }
+        for (const att of atts) {
+          let name = "";
+          try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) { continue; }
+          if (!wanted.has(name) || seen.has(name)) continue;
+          seen.add(name);
+          const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
+          if (!res.ok) continue;
+          const plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
+          fd.append("img", new Blob([plain], { type: att.mime }), name);
+        }
+      }
+      const missing = [...wanted].filter((n) => !seen.has(n));
+      if (missing.length && !confirm(`Не найдены изображения: ${missing.join(", ")}. Продолжить?`)) {
+        setStatus("saved");
+        return;
+      }
+    }
+
+    const res = await fetch("/api/export/docx", { method: "POST", credentials: "same-origin", body: fd });
+    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = el("a", { href: url, download: (list.title || "export") + ".docx" });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setStatus("saved");
+  } catch (err) {
+    setStatus("error");
+    alert("Экспорт не удался: " + err.message);
+  }
+}
+
 // addCard opens the card detail in "create mode" — only the description editor
 // is shown (the card isn't persisted until you save a description, so we never
 // create empty cards). Labels/attachments/move/timeline appear only when editing
@@ -233,6 +357,8 @@ function addCard(list) {
   pendingList = list;
   openCardId = null;
   document.getElementById("cardDesc").value = "";
+  document.getElementById("cardKindLabel").hidden = false;
+  document.getElementById("cardKind").hidden = false;
   document.getElementById("cardKind").value = "question";
   document.getElementById("cardMessage").textContent = "";
   document.querySelector(".card-detail").classList.add("creating");
@@ -249,10 +375,14 @@ async function addTestCard(list) {
   const def = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const dt = prompt("Дата и время тест-сессии (ГГГГ-ММ-ДД ЧЧ:ММ):", def);
   if (!dt) return;
+  // Optional human label to tell sessions apart at a glance (e.g. "Алиев и др.").
+  // Folded into the card preview and the auto-created green/red label names.
+  const title = (prompt("Название тест-сессии (необязательно, напр. «Алиев и др.»):", "") || "").trim();
+  const tag = title ? `${dt} ${title}` : dt;
   const existing = cardsOf(list.id);
   const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
   try {
-    const desc = JSON.stringify({ datetime: dt, players: [] });
+    const desc = JSON.stringify({ datetime: dt, players: [], title });
     const res = await jpost(`/api/lists/${list.id}/cards`, {
       description_enc: await xyCrypto.encField(dk, desc), rank, kind: "test",
     });
@@ -260,11 +390,11 @@ async function addTestCard(list) {
     // auto labels
     for (const [suffix, color, kind] of [["взяли", "#3aa657", "test_taken"], ["не взяли", "#dd3322", "test_missed"]]) {
       const lr = await jpost(`/api/boards/${boardId}/labels`, {
-        name_enc: await xyCrypto.encField(dk, `${dt} ${suffix}`),
+        name_enc: await xyCrypto.encField(dk, `${tag} ${suffix}`),
         color_enc: await xyCrypto.encField(dk, color),
         kind,
       });
-      state.labels.push({ id: lr.id, kind, name: `${dt} ${suffix}`, color });
+      state.labels.push({ id: lr.id, kind, name: `${tag} ${suffix}`, color });
     }
     render();
   } catch (err) { setStatus("error"); }
@@ -275,7 +405,8 @@ function testTitle(desc) {
   try {
     const m = JSON.parse(desc);
     const n = (m.players || []).length;
-    return `🗓 ${m.datetime}${n ? ` · ${n} игроков` : ""}`;
+    const head = m.title ? `${m.title} · ${m.datetime}` : m.datetime;
+    return `🗓 ${head}${n ? ` · ${n} игроков` : ""}`;
   } catch (_) { return "тест-сессия"; }
 }
 
@@ -313,27 +444,29 @@ async function openCard(card) {
   document.querySelector(".card-detail").classList.remove("creating");
   document.getElementById("cardDesc").value = card.desc;
   document.getElementById("cardMessage").textContent = "";
+  // Kind selector: editable for ordinary cards, hidden for test cards (their
+  // "kind" is fixed and their description is JSON, not 4s markup).
+  const isTest = card.kind === "test";
+  document.getElementById("cardKindLabel").hidden = isTest;
+  const kindSel = document.getElementById("cardKind");
+  kindSel.hidden = isTest;
+  if (!isTest) kindSel.value = card.kind || "question";
   cardOverlay.hidden = false;
   renderLabelPicker(card);
   renderCardLabels(card);
   await loadAttachments(card.id);
   await loadTimeline(card.id);
-  await populateMoveTargets();
+  await populateMoveBoards();
   paintLabels();
 }
 
-// ---- cross-board copy / move (client-side re-encryption, PLAN §6) ----
-async function populateMoveTargets() {
-  const sel = document.getElementById("moveTarget");
-  sel.replaceChildren();
-  let boards = [];
-  try { boards = await fetchJSON("/api/boards"); } catch (_) {}
-  for (const b of boards) {
-    if (b.id === boardId) continue;
-    sel.append(el("option", { value: b.id, text: "доска #" + b.id }));
-  }
-  if (!sel.children.length) sel.append(el("option", { value: "", text: "нет других досок" }));
-}
+// ---- move / copy a card (same board → relocate/duplicate; other board →
+// client-side re-encryption, PLAN §6). Boards are chosen by (decrypted) name and
+// the destination list + position are selectable. ----
+
+// moveCtx caches the currently-selected destination board: its DK, lists (with
+// titles) and cards-per-list (for computing the insertion rank).
+let moveCtx = null;
 
 // ensureDK returns a usable DK for a board, unlocking via passphrase if needed.
 async function ensureDK(bid) {
@@ -348,64 +481,181 @@ async function ensureDK(bid) {
   return d;
 }
 
-async function copyCardTo(targetId, remove) {
-  const card = state.cards.find((c) => c.id === openCardId);
-  if (!card || !targetId) return;
-  const msg = document.getElementById("cardMessage");
-  msg.textContent = "Перешифровка…";
-  try {
-    const tdk = await ensureDK(targetId);
-    const snap = await fetchJSON(`/api/boards/${targetId}`);
-    // pick a destination list (first by rank) or create one
-    let listId;
-    const tlists = (snap.lists || []).slice().sort((a, b) => (a.rank < b.rank ? -1 : 1));
-    if (tlists.length) listId = tlists[0].id;
+// populateMoveBoards fills the board <select> with decrypted board names (the
+// current board first/default), then loads its lists.
+async function populateMoveBoards() {
+  const sel = document.getElementById("moveBoard");
+  sel.replaceChildren();
+  let boards = [];
+  try { boards = await fetchJSON("/api/boards"); } catch (_) {}
+  for (const b of boards) {
+    let label = "доска #" + b.id;
+    if (b.id === boardId) label = (state.name || label) + " (эта доска)";
     else {
-      const lr = await jpost(`/api/boards/${targetId}/lists`, {
-        title_enc: await xyCrypto.encField(tdk, "Импортировано"), rank: keyBetween(null, null),
-      });
-      listId = lr.id;
+      try { const cdk = await xyCrypto.loadCachedDK(b.id); if (cdk) label = await xyCrypto.decField(cdk, b.name_enc); }
+      catch (_) {}
     }
-    // re-encrypt description under the target key
-    const tcards = (snap.cards || []).filter((c) => c.list_id === listId).map((c) => c.rank).sort();
-    const rank = keyBetween(tcards.length ? tcards[tcards.length - 1] : null, null);
-    const res = await jpost(`/api/lists/${listId}/cards`, {
-      description_enc: await xyCrypto.encField(tdk, card.desc), rank, kind: card.kind,
-    });
-    // reconcile labels by decrypted name+color
-    const srcIds = state.cardLabels[card.id] || [];
-    if (srcIds.length) {
-      const tLabels = await Promise.all((snap.labels || []).map(async (l) => ({
-        id: l.id, name: await xyCrypto.decField(tdk, l.name_enc), color: await xyCrypto.decField(tdk, l.color_enc),
-      })));
-      const targetIds = [];
-      for (const sid of srcIds) {
-        const sl = labelById(sid);
-        if (!sl) continue;
-        let match = tLabels.find((t) => t.name === sl.name && t.color === sl.color);
-        if (!match) {
-          const lr = await jpost(`/api/boards/${targetId}/labels`, {
-            name_enc: await xyCrypto.encField(tdk, sl.name), color_enc: await xyCrypto.encField(tdk, sl.color), kind: sl.kind,
-          });
-          match = { id: lr.id, name: sl.name, color: sl.color };
-          tLabels.push(match);
-        }
-        targetIds.push(match.id);
+    sel.append(el("option", { value: b.id, text: label }));
+  }
+  sel.value = String(boardId);
+  await onMoveBoardChange();
+}
+
+// loadMoveBoard returns a ctx {boardId, dk, lists, cardsByList, labels} for the
+// given board — from in-memory state for the current board, otherwise by
+// fetching + decrypting its snapshot.
+async function loadMoveBoard(bid) {
+  if (bid === boardId) {
+    const lists = [...state.lists].sort(byRank).map((l) => ({ id: l.id, title: l.title, rank: l.rank }));
+    const cardsByList = new Map();
+    for (const l of lists) cardsByList.set(l.id, cardsOf(l.id).map((c) => ({ id: c.id, rank: c.rank })));
+    return { boardId: bid, dk, lists, cardsByList, labels: state.labels };
+  }
+  const tdk = await ensureDK(bid);
+  const snap = await fetchJSON(`/api/boards/${bid}`);
+  const lists = await Promise.all((snap.lists || []).map(async (l) => ({
+    id: l.id, rank: l.rank, title: await xyCrypto.decField(tdk, l.title_enc),
+  })));
+  lists.sort(byRank);
+  const cardsByList = new Map();
+  for (const l of lists) {
+    cardsByList.set(l.id, (snap.cards || []).filter((c) => c.list_id === l.id).map((c) => ({ id: c.id, rank: c.rank })).sort(byRank));
+  }
+  const labels = await Promise.all((snap.labels || []).map(async (l) => ({
+    id: l.id, kind: l.kind, name: await xyCrypto.decField(tdk, l.name_enc), color: await xyCrypto.decField(tdk, l.color_enc),
+  })));
+  return { boardId: bid, dk: tdk, lists, cardsByList, labels };
+}
+
+async function onMoveBoardChange() {
+  const listSel = document.getElementById("moveList");
+  const bid = Number(document.getElementById("moveBoard").value);
+  listSel.replaceChildren(el("option", { value: "", text: "загрузка…" }));
+  try { moveCtx = await loadMoveBoard(bid); }
+  catch (err) {
+    moveCtx = null;
+    listSel.replaceChildren(el("option", { value: "", text: err.message }));
+    document.getElementById("movePos").replaceChildren();
+    return;
+  }
+  listSel.replaceChildren();
+  for (const l of moveCtx.lists) listSel.append(el("option", { value: l.id, text: l.title || "(без названия)" }));
+  if (!moveCtx.lists.length) listSel.append(el("option", { value: "", text: "нет списков" }));
+  onMoveListChange();
+}
+
+// onMoveListChange fills the position <select> with "в конец" + one slot per
+// existing card (the card being moved is excluded when staying on its board).
+function onMoveListChange() {
+  const posSel = document.getElementById("movePos");
+  posSel.replaceChildren();
+  if (!moveCtx) return;
+  const listId = Number(document.getElementById("moveList").value);
+  const cards = (moveCtx.cardsByList.get(listId) || []).filter((c) => !(moveCtx.boardId === boardId && c.id === openCardId));
+  posSel.append(el("option", { value: "end", text: "в конец" }));
+  for (let i = 1; i <= cards.length; i++) posSel.append(el("option", { value: String(i), text: `позиция ${i}` }));
+  posSel.value = "end";
+}
+
+// rankForSlot computes a fractional rank for inserting into `cards` at a 1-based
+// slot ("end" appends). excludeId drops the moving card from the neighbour set.
+function rankForSlot(cards, posValue, excludeId) {
+  const arr = cards.filter((c) => c.id !== excludeId).sort(byRank);
+  let prev = null, next = null;
+  if (posValue === "end" || posValue === "") {
+    prev = arr.length ? arr[arr.length - 1] : null;
+  } else {
+    const k = parseInt(posValue, 10);
+    prev = k >= 2 ? arr[k - 2] : null;
+    next = k - 1 < arr.length ? arr[k - 1] : null;
+  }
+  try { return keyBetween(prev ? prev.rank : null, next ? next.rank : null); }
+  catch (_) { return keyBetween(prev ? prev.rank : null, null); }
+}
+
+async function doMoveCopy(remove) {
+  const card = state.cards.find((c) => c.id === openCardId);
+  if (!card || !moveCtx) return;
+  const targetBid = moveCtx.boardId;
+  const targetListId = Number(document.getElementById("moveList").value);
+  if (!targetListId) return;
+  const msg = document.getElementById("cardMessage");
+  const listCards = moveCtx.cardsByList.get(targetListId) || [];
+  const sameBoard = targetBid === boardId;
+  const rank = rankForSlot(listCards, document.getElementById("movePos").value, sameBoard && remove ? card.id : null);
+  msg.textContent = sameBoard ? "Сохранение…" : "Перешифровка…";
+  try {
+    if (sameBoard) {
+      if (remove) {
+        await jpatch(`/api/cards/${card.id}`, { list_id: targetListId, rank });
+        card.listId = targetListId;
+        card.rank = rank;
+      } else {
+        const res = await jpost(`/api/lists/${targetListId}/cards`, {
+          description_enc: await xyCrypto.encField(dk, card.desc), rank, kind: card.kind,
+        });
+        state.cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc });
+        const ids = state.cardLabels[card.id] || [];
+        if (ids.length) { await jput(`/api/cards/${res.id}/labels`, { label_ids: ids }); state.cardLabels[res.id] = ids.slice(); }
       }
-      if (targetIds.length) await jput(`/api/cards/${res.id}/labels`, { label_ids: targetIds });
+    } else {
+      const tdk = moveCtx.dk;
+      const res = await jpost(`/api/lists/${targetListId}/cards`, {
+        description_enc: await xyCrypto.encField(tdk, card.desc), rank, kind: card.kind,
+      });
+      // reconcile labels by decrypted name+color
+      const srcIds = state.cardLabels[card.id] || [];
+      if (srcIds.length) {
+        const tLabels = moveCtx.labels.slice();
+        const targetIds = [];
+        for (const sid of srcIds) {
+          const sl = labelById(sid);
+          if (!sl) continue;
+          let match = tLabels.find((t) => t.name === sl.name && t.color === sl.color);
+          if (!match) {
+            const lr = await jpost(`/api/boards/${targetBid}/labels`, {
+              name_enc: await xyCrypto.encField(tdk, sl.name), color_enc: await xyCrypto.encField(tdk, sl.color), kind: sl.kind,
+            });
+            match = { id: lr.id, name: sl.name, color: sl.color };
+            tLabels.push(match);
+          }
+          targetIds.push(match.id);
+        }
+        if (targetIds.length) await jput(`/api/cards/${res.id}/labels`, { label_ids: targetIds });
+      }
+      if (remove) {
+        await jdelete(`/api/cards/${card.id}`);
+        state.cards = state.cards.filter((c) => c.id !== card.id);
+        cardOverlay.hidden = true;
+      }
     }
-    if (remove) {
-      await jdelete(`/api/cards/${card.id}`);
-      state.cards = state.cards.filter((c) => c.id !== card.id);
-      cardOverlay.hidden = true;
-      render();
-    }
+    render();
+    if (sameBoard && remove) { await populateMoveBoards(); } // refresh positions
     msg.textContent = remove ? "Перемещено." : "Скопировано.";
   } catch (err) { msg.textContent = err.message; }
 }
 
-document.getElementById("copyBtn").addEventListener("click", () => copyCardTo(Number(document.getElementById("moveTarget").value), false));
-document.getElementById("moveBtn").addEventListener("click", () => copyCardTo(Number(document.getElementById("moveTarget").value), true));
+document.getElementById("moveBoard").addEventListener("change", onMoveBoardChange);
+document.getElementById("moveList").addEventListener("change", onMoveListChange);
+document.getElementById("copyBtn").addEventListener("click", () => doMoveCopy(false));
+document.getElementById("moveBtn").addEventListener("click", () => doMoveCopy(true));
+
+// Change card kind after creation (edit mode only; create mode uses the same
+// selector but the value is applied on first save). Test cards never reach here
+// (their selector is hidden in openCard).
+document.getElementById("cardKind").addEventListener("change", async (e) => {
+  if (pendingList || openCardId == null) return; // create mode → no-op here
+  const card = state.cards.find((c) => c.id === openCardId);
+  if (!card) return;
+  const kind = e.target.value;
+  const msg = document.getElementById("cardMessage");
+  try {
+    await jpatch(`/api/cards/${card.id}`, { kind });
+    card.kind = kind;
+    render();
+    msg.textContent = "Тип изменён.";
+  } catch (err) { msg.textContent = err.message; }
+});
 
 function closeCard() { cardOverlay.hidden = true; openCardId = null; pendingList = null; }
 document.getElementById("cardClose").addEventListener("click", closeCard);
@@ -567,10 +817,15 @@ function renderEvent(ev, payload) {
   } else if (ev.type === "desc_edit") {
     let diff = {};
     try { diff = JSON.parse(payload); } catch (_) {}
-    wrap.append(el("div", { class: "tl-meta", text: "правка описания · " + when }),
-      el("div", { class: "tl-diff" },
-        el("div", { class: "tl-before", text: diff.before || "" }),
-        el("div", { class: "tl-after", text: diff.after || "" })));
+    // Inline word-level diff: deletions struck through (red), insertions
+    // underlined (green), unchanged text plain.
+    const inline = el("div", { class: "tl-diff-inline" });
+    for (const op of xyDiff.diffTokens(diff.before || "", diff.after || "")) {
+      if (op.type === "add") inline.append(el("ins", { class: "tl-ins", text: op.text }));
+      else if (op.type === "del") inline.append(el("del", { class: "tl-del", text: op.text }));
+      else inline.append(document.createTextNode(op.text));
+    }
+    wrap.append(el("div", { class: "tl-meta", text: "правка описания · " + when }), inline);
   } else {
     let info = {};
     try { info = JSON.parse(payload); } catch (_) {}

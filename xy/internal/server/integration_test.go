@@ -58,6 +58,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("DELETE /api/attachments/{id}", srv.handleDeleteAttachment)
 	mux.HandleFunc("GET /api/boards/{id}/player-map", srv.handleGetPlayerMap)
 	mux.HandleFunc("PUT /api/boards/{id}/player-map", srv.handlePutPlayerMap)
+	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
 
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
