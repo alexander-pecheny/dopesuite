@@ -94,7 +94,7 @@ func TestBuildKSISheets(t *testing.T) {
 	}`
 	f := excelize.NewFile()
 	defer f.Close()
-	if err := BuildKSISheets(f, state); err != nil {
+	if err := BuildKSISheets(f, "", state); err != nil {
 		t.Fatalf("BuildKSISheets: %v", err)
 	}
 	sheets := f.GetSheetList()
@@ -163,6 +163,82 @@ func TestBuildKSISheets(t *testing.T) {
 	}
 }
 
+func TestBuildKSISheetsStickers(t *testing.T) {
+	// KSI-with-stickers: one team, four themes, values [10,20,30,40,50].
+	// theme0 ×2:        right(10)+wrong(20) → +20-40 = -20
+	// theme1 без минуса: right(10)+wrong(20) → +10+0  =  10
+	// theme2 пустой=минус: all empty         → -150
+	// theme3 без стикера: right(10)           → unscored, excluded
+	// Σ = -20 + 10 - 150 = -160.
+	scheme := `{"gameType":"ksi","themes":4,"stickers":{"types":[
+		{"id":"neutral","label":"Обычный","color":"#8a8f98"},
+		{"id":"x2","label":"×2","color":"#e0a100","max":2},
+		{"id":"nowrong","label":"Без минуса","color":"#2e9e5b","max":1},
+		{"id":"emptywrong","label":"Пустой = минус","color":"#3a7afe","max":1}
+	]}}`
+	state := `{
+		"participants":[{"number":1,"name":"Альфа"}],
+		"stickers":[["x2"],["nowrong"],["emptywrong"],[""]],
+		"themes":[
+			{"answers":[["right","wrong","","",""]]},
+			{"answers":[["right","wrong","","",""]]},
+			{"answers":[["","","","",""]]},
+			{"answers":[["right","","","",""]]}
+		]
+	}`
+	f := excelize.NewFile()
+	defer f.Close()
+	if err := BuildKSISheets(f, scheme, state); err != nil {
+		t.Fatalf("BuildKSISheets: %v", err)
+	}
+
+	const det = "Подробно"
+	// theme0 (×2): C=+20, D=-40, H(score)=-20.
+	if got := cell(t, f, det, "C3"); got != "20" {
+		t.Fatalf("det C3 = %q, want 20 (right×2)", got)
+	}
+	if got := cell(t, f, det, "D3"); got != "-40" {
+		t.Fatalf("det D3 = %q, want -40 (wrong×2)", got)
+	}
+	if got := cell(t, f, det, "H3"); got != "-20" {
+		t.Fatalf("det H3 theme score = %q, want -20", got)
+	}
+	// theme1 (без минуса): I=10, J=0 (wrong scores 0), N(score)=10.
+	if got := cell(t, f, det, "J3"); got != "0" {
+		t.Fatalf("det J3 = %q, want 0 (wrong→0)", got)
+	}
+	if got := cell(t, f, det, "N3"); got != "10" {
+		t.Fatalf("det N3 theme score = %q, want 10", got)
+	}
+	// theme2 (пустой=минус): O=-10 (empty penalised), T(score)=-150.
+	if got := cell(t, f, det, "O3"); got != "-10" {
+		t.Fatalf("det O3 = %q, want -10 (empty=wrong)", got)
+	}
+	if got := cell(t, f, det, "T3"); got != "-150" {
+		t.Fatalf("det T3 theme score = %q, want -150", got)
+	}
+	// theme3 (no sticker): unscored — cells and score blank.
+	if got := cell(t, f, det, "U3"); got != "" {
+		t.Fatalf("det U3 = %q, want empty (no sticker)", got)
+	}
+	if got := cell(t, f, det, "Z3"); got != "" {
+		t.Fatalf("det Z3 theme score = %q, want empty (no sticker)", got)
+	}
+	// Σ excludes the unscored theme.
+	if got := cell(t, f, det, "B3"); got != "-160" {
+		t.Fatalf("det B3 total = %q, want -160", got)
+	}
+
+	// Итог: total -160, plus = 20 (×2 right) + 10 (nowrong right) = 30.
+	const res = "Итог"
+	if got := cell(t, f, res, "C2"); got != "-160" {
+		t.Fatalf("res C2 total = %q, want -160", got)
+	}
+	if got := cell(t, f, res, "D2"); got != "30" {
+		t.Fatalf("res D2 plus = %q, want 30", got)
+	}
+}
+
 func TestBuildKSISheetsExcludesDeclined(t *testing.T) {
 	// Дельта (number 8) refused to play → excluded from both sheets; Гамма remains.
 	state := `{
@@ -175,7 +251,7 @@ func TestBuildKSISheetsExcludesDeclined(t *testing.T) {
 	}`
 	f := excelize.NewFile()
 	defer f.Close()
-	if err := BuildKSISheets(f, state); err != nil {
+	if err := BuildKSISheets(f, "", state); err != nil {
 		t.Fatalf("BuildKSISheets: %v", err)
 	}
 	// Подробно: Гамма is the only data row (row 3); Дельта's row is gone.

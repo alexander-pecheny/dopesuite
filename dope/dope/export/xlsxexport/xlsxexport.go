@@ -118,23 +118,44 @@ func BuildODSheet(f *excelize.File, schemeJSON, stateJSON string, ratingByNumber
 type ksiExportState struct {
 	Participants []games.KSIParticipant `json:"participants"`
 	Declined     map[string]bool        `json:"declined"`
+	Stickers     [][]string             `json:"stickers"`
 	Themes       []struct {
 		Answers [][]string `json:"answers"`
 	} `json:"themes"`
+	// stickersMode is derived from the scheme: when true, a theme's value is
+	// scored under the per-(team,theme) sticker and is excluded entirely until a
+	// sticker is chosen.
+	stickersMode bool
 }
 
-// BuildKSISheets writes the KSI "Подробно" (detailed) and "Итог" (results) sheets.
-func BuildKSISheets(f *excelize.File, stateJSON string) error {
+// BuildKSISheets writes the KSI "Подробно" (detailed) and "Итог" (results)
+// sheets. schemeJSON is consulted only to detect the "KSI with stickers"
+// variant (its `stickers` config); plain KSI games score exactly as before.
+func BuildKSISheets(f *excelize.File, schemeJSON, stateJSON string) error {
 	var state ksiExportState
 	if stateJSON != "" {
 		if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
 			return fmt.Errorf("parse KSI state: %w", err)
 		}
 	}
+	state.stickersMode = ksiSchemeHasStickers(schemeJSON)
 	if err := buildKSIDetailedSheet(f, &state); err != nil {
 		return err
 	}
 	return buildKSIResultsSheet(f, &state)
+}
+
+func ksiSchemeHasStickers(schemeJSON string) bool {
+	if strings.TrimSpace(schemeJSON) == "" {
+		return false
+	}
+	var scheme struct {
+		Stickers games.KSIStickerConfig `json:"stickers"`
+	}
+	if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
+		return false
+	}
+	return len(scheme.Stickers.Types) > 0
 }
 
 func ksiMark(state *ksiExportState, theme, player, answer int) string {
@@ -146,6 +167,21 @@ func ksiMark(state *ksiExportState, theme, player, answer int) string {
 		return ""
 	}
 	return answers[player][answer]
+}
+
+// ksiThemeSticker returns the sticker scoring a (theme, player) and whether the
+// theme is scored at all. Plain KSI games always score every theme under the
+// neutral rules; stickers games leave a theme unscored until its sticker is set.
+func ksiThemeSticker(state *ksiExportState, theme, player int) (string, bool) {
+	if !state.stickersMode {
+		return games.KSIStickerNeutral, true
+	}
+	if theme < len(state.Stickers) && player < len(state.Stickers[theme]) {
+		if id := state.Stickers[theme][player]; id != "" {
+			return id, true
+		}
+	}
+	return "", false
 }
 
 func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
@@ -186,16 +222,27 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 		total := 0
 		rowCells := []interface{}{participantExportName(state.Participants, p), nil}
 		for t := 0; t < themesCount; t++ {
+			sticker, scored := ksiThemeSticker(state, t, p)
 			themeScore := 0
 			for a := 0; a < nv; a++ {
-				cell := signedMarkValue(ksiMark(state, t, p, a), store.QuestionValues[a])
-				if cell != nil {
-					themeScore += cell.(int)
+				var cell interface{}
+				if scored {
+					mark := ksiMark(state, t, p, a)
+					cv := games.KSIStickerMarkValue(sticker, mark, store.QuestionValues[a])
+					if mark == "right" || mark == "wrong" || cv != 0 {
+						cell = cv
+						themeScore += cv
+					}
 				}
 				rowCells = append(rowCells, cell)
 			}
-			total += themeScore
-			rowCells = append(rowCells, themeScore)
+			if scored {
+				total += themeScore
+				rowCells = append(rowCells, themeScore)
+			} else {
+				// Unscored theme (stickers game, no sticker yet): leave Σ blank.
+				rowCells = append(rowCells, nil)
+			}
 		}
 		rowCells[1] = total
 		if err := setRow(f, sheet, r, rowCells); err != nil {
@@ -241,15 +288,20 @@ func buildKSIResultsSheet(f *excelize.File, state *ksiExportState) error {
 		}
 		m := metrics{index: p, name: participantExportName(state.Participants, p), correct: map[int]int{}}
 		for t := 0; t < len(state.Themes); t++ {
+			sticker, scored := ksiThemeSticker(state, t, p)
+			if !scored {
+				continue
+			}
 			for a := 0; a < len(store.QuestionValues); a++ {
 				v := store.QuestionValues[a]
-				switch ksiMark(state, t, p, a) {
-				case "right":
-					m.total += v
-					m.plus += v
+				mark := ksiMark(state, t, p, a)
+				cv := games.KSIStickerMarkValue(sticker, mark, v)
+				m.total += cv
+				if cv > 0 {
+					m.plus += cv
+				}
+				if mark == "right" {
 					m.correct[v]++
-				case "wrong":
-					m.total -= v
 				}
 			}
 		}

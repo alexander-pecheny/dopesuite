@@ -71,6 +71,10 @@ var hostGameCreateTemplate = template.Must(template.New("hostGameCreate").Parse(
           <span>КСИ</span>
         </label>
         <label class="checkbox">
+          <input type="radio" name="game_type" value="ksi_stickers" {{if eq .SelectedType "ksi_stickers"}}checked{{end}}>
+          <span>КСИ со стикерами</span>
+        </label>
+        <label class="checkbox">
           <input type="radio" name="game_type" value="ek" {{if eq .SelectedType "ek"}}checked{{end}}>
           <span>ЭК</span>
         </label>
@@ -92,6 +96,34 @@ var hostGameCreateTemplate = template.Must(template.New("hostGameCreate").Parse(
           <span>Количество тем</span>
           <input name="ksi_themes" inputmode="numeric" value="20">
         </label>
+      </section>
+
+      <section class="stack game-create-settings" data-game-settings="ksi_stickers" {{if ne .SelectedType "ksi_stickers"}}hidden{{end}}>
+        <label class="field">
+          <span>Количество тем</span>
+          <input name="ksis_themes" inputmode="numeric" value="20">
+        </label>
+        <p class="hint">Для каждого стикера задайте, сколько штук есть у команды (0 — стикер не используется) и цвет для подсветки. «Обычный» стикер работает как стандартная тема КСИ.</p>
+        <div class="field">
+          <span>Обычный</span>
+          <label class="sticker-max">Макс. <input name="ksis_neutral_max" inputmode="numeric" value="20"></label>
+          <label class="sticker-color">Цвет <input type="color" name="ksis_neutral_color" value="#8a8f98"></label>
+        </div>
+        <div class="field">
+          <span>×2 (правильные и неправильные удваиваются)</span>
+          <label class="sticker-max">Макс. <input name="ksis_x2_max" inputmode="numeric" value="2"></label>
+          <label class="sticker-color">Цвет <input type="color" name="ksis_x2_color" value="#e0a100"></label>
+        </div>
+        <div class="field">
+          <span>Без минуса (неправильные = 0)</span>
+          <label class="sticker-max">Макс. <input name="ksis_nowrong_max" inputmode="numeric" value="1"></label>
+          <label class="sticker-color">Цвет <input type="color" name="ksis_nowrong_color" value="#2e9e5b"></label>
+        </div>
+        <div class="field">
+          <span>Пустой = минус (пустые = −номинал)</span>
+          <label class="sticker-max">Макс. <input name="ksis_emptywrong_max" inputmode="numeric" value="1"></label>
+          <label class="sticker-color">Цвет <input type="color" name="ksis_emptywrong_color" value="#e03030"></label>
+        </div>
       </section>
 
       <section class="stack game-create-settings" data-game-settings="ek" {{if ne .SelectedType "ek"}}hidden{{end}}>
@@ -404,13 +436,16 @@ select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and
 		}
 	case "ksi":
 		var sc struct {
-			Themes int `json:"themes"`
+			Themes   int             `json:"themes"`
+			Stickers json.RawMessage `json:"stickers"`
 		}
 		_ = json.Unmarshal([]byte(schemeJSON), &sc)
 		if sc.Themes <= 0 {
 			sc.Themes = 20
 		}
-		newScheme, newState = games.KSIEmptyGameJSON(meta.Slug, meta.Title, sc.Themes)
+		// Preserve the sticker configuration across a clear-to-pristine so a
+		// stickers game stays a stickers game (only the answers/choices reset).
+		newScheme, newState = games.KSIStickersEmptyGameJSON(meta.Slug, meta.Title, sc.Themes, sc.Stickers)
 		teams, err := roster.LoadFestRosterImportTeamsTx(r.Context(), tx, festID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -514,7 +549,7 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 		return 0, errors.New("sqlite is not enabled")
 	}
 	gameType = strings.TrimSpace(gameType)
-	if gameType != games.OD && gameType != games.KSI && gameType != games.EK {
+	if gameType != games.OD && gameType != games.KSI && gameType != games.EK && gameType != ksiStickersGameType {
 		return 0, errors.New("выберите тип игры")
 	}
 
@@ -548,7 +583,20 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 			if err != nil {
 				return err
 			}
-			gameID, err = createKSIGameTx(ctx, tx, festID, themes)
+			gameID, err = createKSIGameTx(ctx, tx, festID, themes, nil)
+			if err != nil {
+				return err
+			}
+		case ksiStickersGameType:
+			themes, err := parsePositiveFormInt(form, "ksis_themes", "Количество тем", 1, 100)
+			if err != nil {
+				return err
+			}
+			stickers, err := ksiStickerConfigFromForm(form)
+			if err != nil {
+				return err
+			}
+			gameID, err = createKSIGameTx(ctx, tx, festID, themes, stickers)
 			if err != nil {
 				return err
 			}
@@ -632,12 +680,72 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 	return insertJSONGameTx(ctx, tx, festID, identity, "od", schemeJSON, stateJSON)
 }
 
-func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount int) (int64, error) {
+// ksiStickersGameType is the creation-form value for the "KSI with stickers"
+// variant. It produces an ordinary KSI game (game_type "ksi") whose scheme
+// carries a `stickers` block, so all serve/seed/roster paths keep working.
+const ksiStickersGameType = "ksi_stickers"
+
+// ksiStickerConfigFromForm reads the per-sticker colour and max-count inputs of
+// the stickers creation form into a scheme `stickers` block. Each sticker is
+// included only when its max is > 0.
+func ksiStickerConfigFromForm(form url.Values) (json.RawMessage, error) {
+	all := []struct {
+		id, label, colorField, maxField, defColor string
+	}{
+		{games.KSIStickerNeutral, "Обычный", "ksis_neutral_color", "ksis_neutral_max", "#8a8f98"},
+		{games.KSIStickerX2, "×2", "ksis_x2_color", "ksis_x2_max", "#e0a100"},
+		{games.KSIStickerNoWrong, "Без минуса", "ksis_nowrong_color", "ksis_nowrong_max", "#2e9e5b"},
+		{games.KSIStickerEmptyWrong, "Пустой = минус", "ksis_emptywrong_color", "ksis_emptywrong_max", "#e03030"},
+	}
+	cfg := games.KSIStickerConfig{}
+	for _, s := range all {
+		max, err := parseNonNegativeFormInt(form, s.maxField, "Максимум стикеров", 0, 100)
+		if err != nil {
+			return nil, err
+		}
+		if max <= 0 {
+			continue
+		}
+		maxCopy := max
+		cfg.Types = append(cfg.Types, games.KSIStickerType{
+			ID:    s.id,
+			Label: s.label,
+			Color: stickerColorFromForm(form, s.colorField, s.defColor),
+			Max:   &maxCopy,
+		})
+	}
+	return json.Marshal(cfg)
+}
+
+func stickerColorFromForm(form url.Values, field, fallback string) string {
+	value := strings.TrimSpace(form.Get(field))
+	if !isHexColor(value) {
+		return fallback
+	}
+	return value
+}
+
+func isHexColor(value string) bool {
+	if len(value) != 4 && len(value) != 7 {
+		return false
+	}
+	if value[0] != '#' {
+		return false
+	}
+	for _, c := range value[1:] {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount int, stickers json.RawMessage) (int64, error) {
 	identity, err := nextGameIdentityTx(ctx, tx, festID, "ksi", "КСИ")
 	if err != nil {
 		return 0, err
 	}
-	schemeJSON, stateJSON := games.KSIEmptyGameJSON(identity.Code, identity.Title, themesCount)
+	schemeJSON, stateJSON := games.KSIStickersEmptyGameJSON(identity.Code, identity.Title, themesCount, stickers)
 	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
 		return 0, err

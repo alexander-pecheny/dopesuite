@@ -67,6 +67,7 @@
   --theme-score-col: 34px;
   --theme-gap-col: 20px;
   --shootout-control-col: 44px;
+  --ksi-sticker-col: 36px;
   --narrow-col: 30px;
   --sheet-corner-col: 56px;
   --sheet-corner-row: 32px;
@@ -4348,6 +4349,83 @@ body.is-fullscreen.od-page .match-main {
   --team-col: var(--od-detailed-name-col);
   --total-col: 58px;
   --theme-score-col: 40px;
+}
+
+/* KSI-with-stickers: the per-(team, theme) sticker dropdown lives in the theme's
+   spacer column, so that gap widens to hold the control. */
+.match-table.ksi-detailed .ksi-sticker-cell {
+  width: var(--ksi-sticker-col);
+  min-width: var(--ksi-sticker-col);
+  max-width: var(--ksi-sticker-col);
+  overflow: visible;
+  padding: 0;
+  background: var(--cell-fill);
+  border-color: var(--structure);
+  vertical-align: middle;
+}
+.ksi-sticker-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 24px;
+}
+.ksi-sticker-icon {
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ksi-sticker-icon svg {
+  width: 28px;
+  height: 28px;
+}
+/* Transparent select overlay covers the whole cell for interaction. */
+.ksi-sticker-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.ksi-sticker-select:disabled {
+  cursor: default;
+}
+/* Unselected: subtle chevron placeholder. */
+.ksi-sticker-wrap:not(.has-sticker)::after {
+  content: "▾";
+  font-size: var(--text-xs);
+  color: var(--muted);
+  pointer-events: none;
+}
+/* Over the allowed count: thick red inset border on the cell. */
+.match-table.ksi-detailed .ksi-sticker-cell.ksi-sticker-over {
+  box-shadow: inset 0 0 0 3px var(--danger);
+}
+.ksi-sticker-cell.ksi-sticker-over .ksi-sticker-icon {
+  color: var(--danger-text) !important;
+}
+
+/* Small muted helper text under a form section. */
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* Sticker creation form: max-count and colour inputs sit inline per sticker. */
+.sticker-max,
+.sticker-color {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-right: var(--space-3);
+  font-size: var(--text-sm);
+}
+.sticker-max input {
+  width: 4em;
 }
 .match-table.od-detailed .sticky-name {
   width: var(--team-col);

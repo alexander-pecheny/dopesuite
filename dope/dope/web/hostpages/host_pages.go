@@ -644,3 +644,18 @@ func parsePositiveFormInt(form url.Values, key, label string, min, max int) (int
 	}
 	return value, nil
 }
+
+// parseNonNegativeFormInt is like parsePositiveFormInt but treats an empty field
+// as min (used for the sticker max-count inputs, where a blank or 0 means "the
+// team has none of this sticker").
+func parseNonNegativeFormInt(form url.Values, key, label string, min, max int) (int, error) {
+	raw := strings.TrimSpace(form.Get(key))
+	if raw == "" {
+		return min, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < min || value > max {
+		return 0, fmt.Errorf("%s должно быть от %d до %d", label, min, max)
+	}
+	return value, nil
+}

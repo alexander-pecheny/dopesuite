@@ -25,6 +25,7 @@ type FestScheme struct {
 	NTeams            int             `json:"nTeams,omitempty"`
 	Themes            int             `json:"themes,omitempty"`
 	Participants      []string        `json:"participants,omitempty"`
+	Stickers          json.RawMessage `json:"stickers,omitempty"`
 }
 
 type SchemeTeam struct {

@@ -522,7 +522,7 @@ limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
 		return 0, nil, err
 	}
 
-	participants, themes, declined, err := decodeKSIStateForSeed(schemeJSON, stateJSON)
+	participants, ksiState, declined, err := decodeKSIStateForSeed(schemeJSON, stateJSON)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -540,7 +540,7 @@ limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
 			Name:        name,
 			Number:      p.Number,
 			Declined:    games.KSIParticipantDeclined(declined, p),
-			Metrics:     ksiMetricsForParticipant(themes, index),
+			Metrics:     ksiMetricsForParticipant(ksiState, index),
 		})
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
@@ -552,25 +552,37 @@ limit 1`, festID).Scan(&sourceGameID, &schemeJSON, &stateJSON); err != nil {
 	return sourceGameID, candidates, nil
 }
 
-func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]games.KSIParticipant, [][][]string, map[string]bool, error) {
+// ksiSeedState bundles the per-theme answer grid with the optional sticker grid
+// (and a flag for the stickers variant) so seed scoring can apply the sticker
+// rules consistently with the UI and the xlsx export.
+type ksiSeedState struct {
+	themes       [][][]string
+	stickers     [][]string
+	stickersMode bool
+}
+
+func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]games.KSIParticipant, ksiSeedState, map[string]bool, error) {
 	var state struct {
 		Participants json.RawMessage `json:"participants"`
 		Declined     map[string]bool `json:"declined"`
+		Stickers     [][]string      `json:"stickers"`
 		Themes       []struct {
 			Answers [][]string `json:"answers"`
 		} `json:"themes"`
 	}
 	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
-		return nil, nil, nil, fmt.Errorf("не удалось разобрать состояние КСИ: %w", err)
+		return nil, ksiSeedState{}, nil, fmt.Errorf("не удалось разобрать состояние КСИ: %w", err)
 	}
 	// Participants may be the current [{number,name}] objects or legacy names.
 	participants := rosterpkg.ParseKSIParticipants(state.Participants)
+	var scheme struct {
+		Participants json.RawMessage        `json:"participants"`
+		Stickers     games.KSIStickerConfig `json:"stickers"`
+	}
+	schemeErr := json.Unmarshal([]byte(schemeJSON), &scheme)
 	if len(participants) == 0 {
-		var scheme struct {
-			Participants json.RawMessage `json:"participants"`
-		}
-		if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
-			return nil, nil, nil, fmt.Errorf("не удалось разобрать схему КСИ: %w", err)
+		if schemeErr != nil {
+			return nil, ksiSeedState{}, nil, fmt.Errorf("не удалось разобрать схему КСИ: %w", schemeErr)
 		}
 		participants = rosterpkg.ParseKSIParticipants(scheme.Participants)
 	}
@@ -578,13 +590,22 @@ func decodeKSIStateForSeed(schemeJSON, stateJSON string) ([]games.KSIParticipant
 	for _, theme := range state.Themes {
 		themes = append(themes, theme.Answers)
 	}
-	return participants, themes, state.Declined, nil
+	seedState := ksiSeedState{
+		themes:       themes,
+		stickers:     state.Stickers,
+		stickersMode: schemeErr == nil && len(scheme.Stickers.Types) > 0,
+	}
+	return participants, seedState, state.Declined, nil
 }
 
-func ksiMetricsForParticipant(themes [][][]string, participantIndex int) ksiSeedMetrics {
+func ksiMetricsForParticipant(state ksiSeedState, participantIndex int) ksiSeedMetrics {
 	var metrics ksiSeedMetrics
-	for _, answers := range themes {
+	for themeIndex, answers := range state.themes {
 		if participantIndex >= len(answers) {
+			continue
+		}
+		sticker, scored := ksiSeedThemeSticker(state, themeIndex, participantIndex)
+		if !scored {
 			continue
 		}
 		row := answers[participantIndex]
@@ -593,17 +614,33 @@ func ksiMetricsForParticipant(themes [][][]string, participantIndex int) ksiSeed
 				break
 			}
 			value := store.QuestionValues[answerIndex]
-			switch store.NormalizeMark(mark) {
-			case "right":
-				metrics.Total += value
-				metrics.Plus += value
+			mark = store.NormalizeMark(mark)
+			cv := games.KSIStickerMarkValue(sticker, mark, value)
+			metrics.Total += cv
+			if cv > 0 {
+				metrics.Plus += cv
+			}
+			if mark == "right" {
 				metrics.Correct[answerIndex]++
-			case "wrong":
-				metrics.Total -= value
 			}
 		}
 	}
 	return metrics
+}
+
+// ksiSeedThemeSticker mirrors the export's ksiThemeSticker: plain KSI games score
+// every theme under neutral rules; stickers games leave a theme unscored until
+// its (team, theme) sticker is set.
+func ksiSeedThemeSticker(state ksiSeedState, theme, player int) (string, bool) {
+	if !state.stickersMode {
+		return games.KSIStickerNeutral, true
+	}
+	if theme < len(state.stickers) && player < len(state.stickers[theme]) {
+		if id := state.stickers[theme][player]; id != "" {
+			return id, true
+		}
+	}
+	return "", false
 }
 
 func compareKSISeedCandidates(a, b ksiSeedCandidate) int {
