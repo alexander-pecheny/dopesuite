@@ -42,7 +42,38 @@ type gameIdentity struct {
 	Position int
 }
 
-var hostGameCreateTemplate = template.Must(template.New("hostGameCreate").Parse(`<!doctype html>
+// stickerPaletteColors is the fixed set of colours an organizer may assign to a
+// sticker. Each entry pairs the CSS variable that draws the swatch (defined in
+// styles.css) with the hex submitted as the form value — keep both in sync.
+var stickerPaletteColors = []struct{ Var, Hex string }{
+	{"--sticker-c-white", "#ffffff"},
+	{"--sticker-c-yellow", "#fdf66f"},
+	{"--sticker-c-green", "#aded87"},
+	{"--sticker-c-red", "#ff7a6b"},
+	{"--sticker-c-blue", "#68caff"},
+	{"--sticker-c-pink", "#f4a8ff"},
+	{"--sticker-c-orange", "#ffae37"},
+}
+
+// stickerPaletteHTML renders the swatch radio group for one sticker colour field.
+func stickerPaletteHTML(name, selected string) template.HTML {
+	var b strings.Builder
+	b.WriteString(`<div class="sticker-palette" role="radiogroup" aria-label="Цвет"><span>Цвет</span>`)
+	for _, s := range stickerPaletteColors {
+		checked := ""
+		if strings.EqualFold(s.Hex, selected) {
+			checked = " checked"
+		}
+		fmt.Fprintf(&b, `<label class="swatch" title="%s"><input type="radio" name="%s" value="%s"%s><span class="swatch-dot" style="--swatch:var(%s)"></span></label>`,
+			s.Hex, name, s.Hex, checked, s.Var)
+	}
+	b.WriteString(`</div>`)
+	return template.HTML(b.String())
+}
+
+var hostGameCreateTemplate = template.Must(template.New("hostGameCreate").Funcs(template.FuncMap{
+	"stickerPalette": stickerPaletteHTML,
+}).Parse(`<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
@@ -107,22 +138,22 @@ var hostGameCreateTemplate = template.Must(template.New("hostGameCreate").Parse(
         <div class="field">
           <span>Обычный</span>
           <label class="sticker-max">Макс. <input name="ksis_neutral_max" inputmode="numeric" value="20"></label>
-          <label class="sticker-color">Цвет <input type="color" name="ksis_neutral_color" value="#8a8f98"></label>
+          {{stickerPalette "ksis_neutral_color" "#ffffff"}}
         </div>
         <div class="field">
           <span>×2 (правильные и неправильные удваиваются)</span>
           <label class="sticker-max">Макс. <input name="ksis_x2_max" inputmode="numeric" value="2"></label>
-          <label class="sticker-color">Цвет <input type="color" name="ksis_x2_color" value="#e0a100"></label>
+          {{stickerPalette "ksis_x2_color" "#fdf66f"}}
         </div>
         <div class="field">
           <span>Без минуса (неправильные = 0)</span>
           <label class="sticker-max">Макс. <input name="ksis_nowrong_max" inputmode="numeric" value="1"></label>
-          <label class="sticker-color">Цвет <input type="color" name="ksis_nowrong_color" value="#2e9e5b"></label>
+          {{stickerPalette "ksis_nowrong_color" "#aded87"}}
         </div>
         <div class="field">
           <span>Пустой = минус (пустые = −номинал)</span>
           <label class="sticker-max">Макс. <input name="ksis_emptywrong_max" inputmode="numeric" value="1"></label>
-          <label class="sticker-color">Цвет <input type="color" name="ksis_emptywrong_color" value="#e03030"></label>
+          {{stickerPalette "ksis_emptywrong_color" "#ff7a6b"}}
         </div>
       </section>
 
@@ -692,10 +723,10 @@ func ksiStickerConfigFromForm(form url.Values) (json.RawMessage, error) {
 	all := []struct {
 		id, label, colorField, maxField, defColor string
 	}{
-		{games.KSIStickerNeutral, "Обычный", "ksis_neutral_color", "ksis_neutral_max", "#8a8f98"},
-		{games.KSIStickerX2, "×2", "ksis_x2_color", "ksis_x2_max", "#e0a100"},
-		{games.KSIStickerNoWrong, "Без минуса", "ksis_nowrong_color", "ksis_nowrong_max", "#2e9e5b"},
-		{games.KSIStickerEmptyWrong, "Пустой = минус", "ksis_emptywrong_color", "ksis_emptywrong_max", "#e03030"},
+		{games.KSIStickerNeutral, "Обычный", "ksis_neutral_color", "ksis_neutral_max", "#ffffff"},
+		{games.KSIStickerX2, "×2", "ksis_x2_color", "ksis_x2_max", "#fdf66f"},
+		{games.KSIStickerNoWrong, "Без минуса", "ksis_nowrong_color", "ksis_nowrong_max", "#aded87"},
+		{games.KSIStickerEmptyWrong, "Пустой = минус", "ksis_emptywrong_color", "ksis_emptywrong_max", "#ff7a6b"},
 	}
 	cfg := games.KSIStickerConfig{}
 	for _, s := range all {

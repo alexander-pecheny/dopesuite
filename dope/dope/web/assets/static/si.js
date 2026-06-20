@@ -35,22 +35,17 @@ const STICKER_NEUTRAL = "neutral";
 // transparent, giving the peeled-corner sticker silhouette.
 const STICKER_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" aria-hidden="true"><g transform="matrix(1.36133 0 0 1.36133-1132.27-679.3)"><path fill-rule="evenodd" fill="#f5c030" d="m831.8 501.31v30.909c0 0 .292 1.723 2.045 1.723h13c11.65-2.057 18.553-8.41 20.08-19.625v-13.376c.084-1.866-1.563-1.952-1.563-1.952l-31.397.11c-2.337-.161-2.167 2.21-2.167 2.21"/><path fill-rule="evenodd" fill="#c47a10" opacity=".75" d="m846.07 534.25c6.656-1.385 10.159-5.085 12.416-9.509 5.994-1.741 7.526-6.272 8.402-11.214.128 12.622-9.624 18.834-20.819 20.723"/></g></svg>';
 
-// Returns a CSS filter string that shifts the yellow-base sticker SVG to the
-// target hex colour. Near-grays get saturate(0); others get hue-rotate.
-function stickerHueFilter(hex) {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-  if (d < 0.01) return "saturate(0)";
-  const l = (max + min) / 2;
-  const s = d / (l < 0.5 ? max + min : 2 - max - min);
-  if (s < 0.15) return "saturate(0)";
-  let h;
-  if (max === r)      h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
-  else if (max === g) h = ((b - r) / d + 2) * 60;
-  else                h = ((r - g) / d + 4) * 60;
-  return `hue-rotate(${Math.round(h - 44)}deg)`;
+// Peel-corner darkness: the curl is the sticker colour multiplied this much
+// darker than the main face.
+const STICKER_PEEL_FACTOR = 0.78;
+
+// Returns the sticker colour a shade darker for the peel corner. The main face
+// keeps the exact picked hex, so what an organizer picks is what renders.
+function darkenHex(hex, factor) {
+  const ch = (i) => Math.max(0, Math.min(255,
+    Math.round(parseInt(hex.slice(i, i + 2), 16) * factor)));
+  const h = (n) => n.toString(16).padStart(2, "0");
+  return "#" + h(ch(1)) + h(ch(3)) + h(ch(5));
 }
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 const KSI_TABS = [
@@ -918,7 +913,15 @@ function applyStickerColor(select, stickerId) {
   const icon = wrap?.querySelector(".ksi-sticker-icon");
   const svg = icon?.querySelector("svg");
   if (type && type.color) {
-    if (svg) svg.style.filter = stickerHueFilter(type.color);
+    if (svg) {
+      // Main face = exact picked colour; peel corner = a shade darker.
+      const paths = svg.querySelectorAll("path");
+      if (paths[0]) paths[0].setAttribute("fill", type.color);
+      if (paths[1]) {
+        paths[1].setAttribute("fill", darkenHex(type.color, STICKER_PEEL_FACTOR));
+        paths[1].setAttribute("opacity", "1");
+      }
+    }
     if (icon) icon.hidden = false;
     wrap?.classList.add("has-sticker");
   } else {

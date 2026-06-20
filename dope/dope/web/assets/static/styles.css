@@ -4354,14 +4354,20 @@ body.is-fullscreen.od-page .match-main {
 /* KSI-with-stickers: the per-(team, theme) sticker dropdown lives in the theme's
    spacer column, so that gap widens to hold the control. */
 .match-table.ksi-detailed .ksi-sticker-cell {
-  width: var(--ksi-sticker-col);
-  min-width: var(--ksi-sticker-col);
-  max-width: var(--ksi-sticker-col);
+  /* Cell footprint = sticker column + an empty strip after it (border-box, so
+     the gap is added to the width rather than eaten out of the sticker area).
+     The strip groups the sticker with the theme on its left, not the next one
+     — same separation as the inter-theme gap in plain KSI. */
+  width: calc(var(--ksi-sticker-col) + var(--theme-gap-col));
+  min-width: calc(var(--ksi-sticker-col) + var(--theme-gap-col));
+  max-width: calc(var(--ksi-sticker-col) + var(--theme-gap-col));
   overflow: visible;
   padding: 0;
   background: var(--cell-fill);
   border-color: var(--structure);
   vertical-align: middle;
+  border-right: var(--theme-gap-col) solid transparent;
+  background-clip: padding-box;
 }
 .ksi-sticker-wrap {
   position: relative;
@@ -4377,6 +4383,9 @@ body.is-fullscreen.od-page .match-main {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Composes with the SVG's inline colorize filter; dark theme dims stickers
+     a shade so they don't read as over-contrasty on the dark background. */
+  filter: var(--ksi-sticker-dim, none);
 }
 .ksi-sticker-icon svg {
   width: 28px;
@@ -4426,6 +4435,54 @@ body.is-fullscreen.od-page .match-main {
 }
 .sticker-max input {
   width: 4em;
+}
+/* The fixed sticker colour palette — the only colours an organizer may pick.
+   Hex values mirror stickerPaletteColors in host_games.go; keep the two in
+   sync. Each swatch is a hidden radio over a coloured dot. */
+:root {
+  --sticker-c-white: #ffffff;
+  --sticker-c-yellow: #fdf66f;
+  --sticker-c-green: #aded87;
+  --sticker-c-red: #ff7a6b;
+  --sticker-c-blue: #68caff;
+  --sticker-c-pink: #f4a8ff;
+  --sticker-c-orange: #ffae37;
+}
+.sticker-palette {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-right: var(--space-3);
+}
+.sticker-palette > span {
+  font-size: var(--text-sm);
+}
+.sticker-palette .swatch {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  cursor: pointer;
+}
+.sticker-palette .swatch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.sticker-palette .swatch-dot {
+  display: inline-block;
+  width: var(--space-5);
+  height: var(--space-5);
+  border-radius: var(--radius-sm);
+  background: var(--swatch);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+}
+.sticker-palette .swatch input:checked + .swatch-dot,
+.sticker-palette .swatch input:focus-visible + .swatch-dot {
+  outline: var(--space-0-5) solid var(--blue-bright);
+  outline-offset: var(--space-0-5);
 }
 .match-table.od-detailed .sticky-name {
   width: var(--team-col);
@@ -5373,6 +5430,9 @@ body.is-fullscreen.od-page .match-main {
 
 /* ── Dark theme ─────────────────────────────────────────────────────────── */
 :root[data-theme="dark"] {
+  /* Dim KSI stickers a shade on dark theme — full-bright colors read as
+     over-contrasty against the dark cells. */
+  --ksi-sticker-dim: brightness(0.85);
   /* neutral surfaces — base (page) darkest, paper/cards lifted, structure/
      header/hover progressively lighter to read as elevation */
   --page: #14161b;
