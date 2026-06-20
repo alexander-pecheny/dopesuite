@@ -23,6 +23,35 @@ const teamNameOverflow = gameTable.createTeamNameOverflowController({
 const QUESTION_VALUES = [10, 20, 30, 40, 50];
 const RESULT_VALUES = QUESTION_VALUES.slice().reverse();
 const KSI_THEMES = 20;
+// Sticker type id whose rules match a regular KSI theme; the implicit sticker
+// for plain (non-stickers) KSI games and the fallback for unknown ids.
+const STICKER_NEUTRAL = "neutral";
+// Antu accessories-notes SVG: tick removed, solid fills (no gradient IDs so
+// multiple copies on the same page don't collide). CSS hue-rotate() on the SVG
+// element shifts all shades together, preserving the note's depth and texture.
+// Darker fills so the note is visible against light backgrounds; hue-rotate
+// shifts all shades together. Base hue ~44° (amber-yellow).
+// No <rect> behind the main face — the face path's dog-ear cutout stays
+// transparent, giving the peeled-corner sticker silhouette.
+const STICKER_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" aria-hidden="true"><g transform="matrix(1.36133 0 0 1.36133-1132.27-679.3)"><path fill-rule="evenodd" fill="#f5c030" d="m831.8 501.31v30.909c0 0 .292 1.723 2.045 1.723h13c11.65-2.057 18.553-8.41 20.08-19.625v-13.376c.084-1.866-1.563-1.952-1.563-1.952l-31.397.11c-2.337-.161-2.167 2.21-2.167 2.21"/><path fill-rule="evenodd" fill="#c47a10" opacity=".75" d="m846.07 534.25c6.656-1.385 10.159-5.085 12.416-9.509 5.994-1.741 7.526-6.272 8.402-11.214.128 12.622-9.624 18.834-20.819 20.723"/></g></svg>';
+
+// Returns a CSS filter string that shifts the yellow-base sticker SVG to the
+// target hex colour. Near-grays get saturate(0); others get hue-rotate.
+function stickerHueFilter(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  if (d < 0.01) return "saturate(0)";
+  const l = (max + min) / 2;
+  const s = d / (l < 0.5 ? max + min : 2 - max - min);
+  if (s < 0.15) return "saturate(0)";
+  let h;
+  if (max === r)      h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+  else if (max === g) h = ((b - r) / d + 2) * 60;
+  else                h = ((r - g) / d + 4) * 60;
+  return `hue-rotate(${Math.round(h - 44)}deg)`;
+}
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
 const KSI_TABS = [
   {key: "detailed", label: "Подробно"},
@@ -55,6 +84,10 @@ let initialStateSeq = 0; // game-state scope seq at page render; seeds the SSE c
 let initialStateEpoch = ""; // server epoch at page render; seeds the SSE client's epoch baseline
 let participants = [];
 let themesCount = 8;
+// Sticker configuration for the "KSI with stickers" variant, parsed from
+// scheme.stickers. Empty for plain KSI/SI games (stickersEnabled() is false).
+let stickerTypes = [];
+let stickerById = new Map();
 let activeCell = {player: 0, theme: 0, answer: 0};
 let renderedTable = null;
 let renderedTab = null;
@@ -148,6 +181,36 @@ async function revalidateAll() {
 function initFromScheme() {
   participants = schemeParticipants();
   themesCount = Number(scheme.themes) > 0 ? Number(scheme.themes) : (isTeamMode() ? KSI_THEMES : 8);
+  initStickers();
+}
+
+function initStickers() {
+  stickerTypes = [];
+  stickerById = new Map();
+  const types = scheme?.stickers && Array.isArray(scheme.stickers.types) ? scheme.stickers.types : [];
+  for (const raw of types) {
+    if (!raw || typeof raw.id !== "string" || !raw.id) continue;
+    const type = {
+      id: raw.id,
+      label: typeof raw.label === "string" && raw.label ? raw.label : raw.id,
+      color: typeof raw.color === "string" ? raw.color : "",
+      // Max count a team may use; null = unlimited (the neutral sticker).
+      max: typeof raw.max === "number" && Number.isFinite(raw.max) ? raw.max : null,
+    };
+    stickerTypes.push(type);
+    stickerById.set(type.id, type);
+  }
+}
+
+// stickersEnabled gates the whole sticker UI/scoring path: only KSI team games
+// that actually carry a sticker configuration.
+function stickersEnabled() {
+  return isTeamMode() && stickerTypes.length > 0;
+}
+
+function stickerValue(player, theme) {
+  const id = state.stickers?.[theme]?.[player];
+  return typeof id === "string" ? id : "";
 }
 
 function schemeParticipants() {
@@ -186,8 +249,28 @@ function ensureState() {
   if (!state.declined || typeof state.declined !== "object" || Array.isArray(state.declined)) {
     state.declined = {};
   }
+  ensureStickerGrid();
   invalidateScores();
   invalidateDetailedOrder();
+}
+
+// ensureStickerGrid normalises state.stickers to a themesCount × participants
+// grid of sticker ids (""=unset). Only meaningful for stickers games; left
+// untouched otherwise.
+function ensureStickerGrid() {
+  if (!stickersEnabled()) return;
+  const grid = Array.isArray(state.stickers) ? state.stickers : [];
+  const next = [];
+  for (let t = 0; t < themesCount; t++) {
+    const row = Array.isArray(grid[t]) ? grid[t] : [];
+    const padded = [];
+    for (let p = 0; p < state.participants.length; p++) {
+      const id = row[p];
+      padded.push(typeof id === "string" && stickerById.has(id) ? id : "");
+    }
+    next.push(padded);
+  }
+  state.stickers = next;
 }
 
 function render(options = {}) {
@@ -212,6 +295,7 @@ function render(options = {}) {
     restoreTabScroll(activeTab);
     updateResultsScrollState();
     if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule();
+    if (activeTab === "detailed") refreshAllStickerLimits();
   } else {
     renderTabs();
     const frame = scrollFrame();
@@ -249,10 +333,13 @@ function buildTable() {
         return answerCell(playerIndex, themeIndex, answerIndex, mark);
       }),
       scoreCell: indexedCell(
-        scores.themeScores[playerIndex][themeIndex],
+        themeScoreDisplay(scores, playerIndex, themeIndex),
         "number theme-score theme-block theme-block-score",
         {player: playerIndex, theme: themeIndex},
       ),
+      // In a stickers game the per-theme spacer carries the team's sticker
+      // dropdown for that theme; plain KSI leaves it as the usual empty gap.
+      gapCell: stickersEnabled() ? stickerSelectCell(playerIndex, themeIndex) : undefined,
     })),
   }));
 
@@ -366,7 +453,7 @@ function applyKSIEdits(edits) {
     if (previousMark === mark) continue;
     getScoreCache();
     row[answer] = mark;
-    applyScoreDelta(player, theme, answer, previousMark, mark);
+    recomputeTheme(player, theme);
     updateAnswerCell(player, theme, answer, mark);
     refreshChangedScores(player, theme);
     saveState(["themes", theme, "answers", player, answer], mark);
@@ -549,17 +636,19 @@ function resultMetrics(playerIndex) {
   let total = 0;
   let plus = 0;
   for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
+    let stickerId = STICKER_NEUTRAL;
+    if (stickersEnabled()) {
+      stickerId = stickerValue(playerIndex, themeIndex);
+      if (!stickerId) continue; // unscored theme excluded from the ranking
+    }
     const row = state.themes[themeIndex]?.answers?.[playerIndex] || [];
     for (let answerIndex = 0; answerIndex < QUESTION_VALUES.length; answerIndex++) {
       const value = QUESTION_VALUES[answerIndex];
       const mark = row[answerIndex];
-      if (mark === "right") {
-        total += value;
-        plus += value;
-        correct[value] += 1;
-      } else if (mark === "wrong") {
-        total -= value;
-      }
+      const contribution = markContribution(stickerId, mark, answerIndex);
+      total += contribution;
+      if (contribution > 0) plus += contribution;
+      if (mark === "right") correct[value] += 1;
     }
   }
   return {total, plus, correct};
@@ -779,6 +868,119 @@ function answerCell(playerIndex, themeIndex, answerIndex, mark) {
   return cell;
 }
 
+// stickerSelectCell builds the per-(team, theme) sticker picker that sits in
+// the theme's spacer column. Unselected: plain chevron. Selected: SVG icon in
+// sticker colour. A transparent <select> overlay handles interaction.
+function stickerSelectCell(playerIndex, themeIndex) {
+  const cell = document.createElement("td");
+  cell.className = "gap ksi-sticker-cell";
+  cell.dataset.player = String(playerIndex);
+  cell.dataset.theme = String(themeIndex);
+
+  const wrap = document.createElement("div");
+  wrap.className = "ksi-sticker-wrap";
+
+  const icon = document.createElement("span");
+  icon.className = "ksi-sticker-icon";
+  icon.innerHTML = STICKER_ICON_SVG;
+  icon.hidden = true;
+
+  const select = document.createElement("select");
+  select.className = "ksi-sticker-select";
+  select.dataset.player = String(playerIndex);
+  select.dataset.theme = String(themeIndex);
+  select.disabled = state.finished || viewer;
+  select.title = `${participantLabel(playerIndex)}, Т${themeIndex + 1}: стикер`;
+
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = "—";
+  select.appendChild(blank);
+  for (const type of stickerTypes) {
+    const opt = document.createElement("option");
+    opt.value = type.id;
+    opt.textContent = type.label;
+    select.appendChild(opt);
+  }
+
+  const current = stickerValue(playerIndex, themeIndex);
+  select.value = current;
+  wrap.appendChild(icon);
+  wrap.appendChild(select);
+  cell.appendChild(wrap);
+  applyStickerColor(select, current);
+  return cell;
+}
+
+function applyStickerColor(select, stickerId) {
+  const type = stickerId ? stickerById.get(stickerId) : null;
+  const wrap = select.closest(".ksi-sticker-wrap");
+  const icon = wrap?.querySelector(".ksi-sticker-icon");
+  const svg = icon?.querySelector("svg");
+  if (type && type.color) {
+    if (svg) svg.style.filter = stickerHueFilter(type.color);
+    if (icon) icon.hidden = false;
+    wrap?.classList.add("has-sticker");
+  } else {
+    if (icon) icon.hidden = true;
+    wrap?.classList.remove("has-sticker");
+  }
+}
+
+function setSticker(player, theme, rawId) {
+  if (!stickersEnabled() || state.finished || viewer) return;
+  const id = stickerById.has(rawId) ? rawId : "";
+  if (!Array.isArray(state.stickers[theme])) return;
+  if (state.stickers[theme][player] === id) return;
+  state.stickers[theme][player] = id;
+  recomputeTheme(player, theme);
+  const scores = getScoreCache();
+  gameTable.setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
+  gameTable.setNodeText(scoreNode("total", {player}), scores.totals[player]);
+  refreshPlaces(scores.places);
+  const select = stickerSelectNode(player, theme);
+  if (select) {
+    select.value = id;
+    applyStickerColor(select, id);
+  }
+  refreshStickerLimits(player);
+  saveState(["stickers", theme, player], id);
+}
+
+function stickerCellNode(player, theme) {
+  return siRoot.querySelector(
+    `.ksi-sticker-cell[data-player="${gameTable.cssEscape(player)}"][data-theme="${gameTable.cssEscape(theme)}"]`,
+  );
+}
+
+function stickerSelectNode(player, theme) {
+  return siRoot.querySelector(
+    `.ksi-sticker-select[data-player="${gameTable.cssEscape(player)}"][data-theme="${gameTable.cssEscape(theme)}"]`,
+  );
+}
+
+// refreshStickerLimits flags a team's themes whose sticker type is used more
+// than the configured max, so organizers can spot a miscounted sheet.
+function refreshStickerLimits(player) {
+  if (!stickersEnabled()) return;
+  const counts = {};
+  for (let theme = 0; theme < themesCount; theme++) {
+    const id = stickerValue(player, theme);
+    if (id) counts[id] = (counts[id] || 0) + 1;
+  }
+  for (let theme = 0; theme < themesCount; theme++) {
+    const id = stickerValue(player, theme);
+    const type = id ? stickerById.get(id) : null;
+    const over = Boolean(type && type.max != null && counts[id] > type.max);
+    stickerCellNode(player, theme)?.classList.toggle("ksi-sticker-over", over);
+  }
+}
+
+function refreshAllStickerLimits() {
+  if (!stickersEnabled()) return;
+  state.participants.forEach((_, player) => refreshStickerLimits(player));
+}
+
 function battleHeader() {
   if (isTeamMode()) {
     const node = document.createElement("th");
@@ -850,6 +1052,14 @@ function handleTableFocusIn(event) {
 
 function handleTableChange(event) {
   const target = event.target;
+  if (target instanceof HTMLSelectElement && target.classList.contains("ksi-sticker-select")) {
+    if (viewer || state.finished) return;
+    const player = Number(target.dataset.player);
+    const theme = Number(target.dataset.theme);
+    if (!Number.isInteger(player) || !Number.isInteger(theme)) return;
+    setSticker(player, theme, target.value);
+    return;
+  }
   if (target instanceof HTMLInputElement && target.classList.contains("finish-toggle")) {
     if (viewer) return;
     state.finished = target.checked;
@@ -880,19 +1090,20 @@ function selectCellFromNode(cell, options = {}) {
 function getScoreCache() {
   if (scoreCache) return scoreCache;
   const themeScores = state.participants.map(() => Array(themesCount).fill(0));
+  // themeScored tracks whether a theme counts yet: in a stickers game a theme is
+  // not scored until its (team, theme) sticker is chosen, so it stays blank and
+  // is excluded from the total.
+  const themeScored = state.participants.map(() => Array(themesCount).fill(true));
   const totals = state.participants.map(() => 0);
   for (let playerIndex = 0; playerIndex < state.participants.length; playerIndex++) {
     for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
-      const row = state.themes[themeIndex]?.answers?.[playerIndex] || [];
-      let score = 0;
-      for (let answerIndex = 0; answerIndex < QUESTION_VALUES.length; answerIndex++) {
-        score += scoreContribution(row[answerIndex], answerIndex);
-      }
-      themeScores[playerIndex][themeIndex] = score;
-      totals[playerIndex] += score;
+      const {value, scored} = computeThemeValue(playerIndex, themeIndex);
+      themeScores[playerIndex][themeIndex] = value;
+      themeScored[playerIndex][themeIndex] = scored;
+      if (scored) totals[playerIndex] += value;
     }
   }
-  scoreCache = {themeScores, totals, places: gameTable.computePlaces(totals)};
+  scoreCache = {themeScores, themeScored, totals, places: gameTable.computePlaces(totals)};
   return scoreCache;
 }
 
@@ -910,20 +1121,61 @@ function resetTableIndex() {
   clearActivePlayerRows();
 }
 
-function scoreContribution(mark, answerIndex) {
+// markContribution is the signed value of one answer mark under a sticker. It
+// mirrors games.KSIStickerMarkValue on the server so client and server scoring
+// can't drift.
+function markContribution(stickerId, mark, answerIndex) {
   const value = QUESTION_VALUES[answerIndex];
-  if (mark === "right") return value;
-  if (mark === "wrong") return -value;
-  return 0;
+  switch (stickerId) {
+    case "x2":
+      return mark === "right" ? 2 * value : mark === "wrong" ? -2 * value : 0;
+    case "nowrong":
+      return mark === "right" ? value : 0;
+    case "emptywrong":
+      return mark === "right" ? value : -value; // wrong or empty → -value
+    default: // neutral, and any unknown id
+      return mark === "right" ? value : mark === "wrong" ? -value : 0;
+  }
 }
 
-function applyScoreDelta(player, theme, answer, previousMark, nextMark) {
+// computeThemeValue returns one team's value for one theme and whether it is
+// scored. Plain KSI scores every theme under neutral rules; a stickers game
+// leaves a theme unscored (scored=false) until its sticker is selected.
+function computeThemeValue(player, theme) {
+  const row = state.themes[theme]?.answers?.[player] || [];
+  let stickerId = STICKER_NEUTRAL;
+  if (stickersEnabled()) {
+    stickerId = stickerValue(player, theme);
+    if (!stickerId) return {value: 0, scored: false};
+  }
+  let value = 0;
+  for (let answerIndex = 0; answerIndex < QUESTION_VALUES.length; answerIndex++) {
+    value += markContribution(stickerId, row[answerIndex], answerIndex);
+  }
+  return {value, scored: true};
+}
+
+// recomputeTheme recomputes a single (player, theme) value in place and adjusts
+// that player's total/places — used after a mark or sticker change. Sticker
+// scoring isn't a simple per-cell delta (e.g. "empty = wrong"), so the whole
+// theme is recomputed rather than diffed.
+function recomputeTheme(player, theme) {
   const scores = getScoreCache();
-  const delta = scoreContribution(nextMark, answer) - scoreContribution(previousMark, answer);
-  if (!delta) return;
-  scores.themeScores[player][theme] += delta;
-  scores.totals[player] += delta;
-  scores.places = gameTable.computePlaces(scores.totals);
+  const prevContribution = scores.themeScored[player][theme] ? scores.themeScores[player][theme] : 0;
+  const {value, scored} = computeThemeValue(player, theme);
+  scores.themeScores[player][theme] = value;
+  scores.themeScored[player][theme] = scored;
+  const contribution = scored ? value : 0;
+  if (contribution !== prevContribution) {
+    scores.totals[player] += contribution - prevContribution;
+    scores.places = gameTable.computePlaces(scores.totals);
+  }
+}
+
+// themeScoreDisplay is the text shown in a theme's score cell: the value, or
+// blank for an unscored (sticker not yet chosen) theme.
+function themeScoreDisplay(scores, player, theme) {
+  return scores.themeScored[player][theme] ? scores.themeScores[player][theme] : "";
 }
 
 function selectCell(player, theme, answer, options = {}) {
@@ -990,7 +1242,7 @@ function setMark(mark) {
   if (previousMark === mark) return;
   getScoreCache();
   row[activeCell.answer] = mark;
-  applyScoreDelta(activeCell.player, activeCell.theme, activeCell.answer, previousMark, mark);
+  recomputeTheme(activeCell.player, activeCell.theme);
   updateAnswerCell(activeCell.player, activeCell.theme, activeCell.answer, mark);
   refreshChangedScores(activeCell.player, activeCell.theme);
   saveState(["themes", activeCell.theme, "answers", activeCell.player, activeCell.answer], mark);
@@ -1013,7 +1265,7 @@ function refreshScores() {
     for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
       gameTable.setNodeText(
         scoreNode("themeScore", {player: playerIndex, theme: themeIndex}),
-        scores.themeScores[playerIndex][themeIndex],
+        themeScoreDisplay(scores, playerIndex, themeIndex),
       );
     }
   });
@@ -1022,7 +1274,7 @@ function refreshScores() {
 function refreshChangedScores(player, theme) {
   const scores = getScoreCache();
   gameTable.setNodeText(scoreNode("total", {player}), scores.totals[player]);
-  gameTable.setNodeText(scoreNode("themeScore", {player, theme}), scores.themeScores[player][theme]);
+  gameTable.setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
   refreshPlaces(scores.places);
 }
 
@@ -1032,7 +1284,7 @@ function refreshChangedScoreSet(changedThemes) {
   for (const [player, themes] of changedThemes.entries()) {
     gameTable.setNodeText(scoreNode("total", {player}), scores.totals[player]);
     for (const theme of themes) {
-      gameTable.setNodeText(scoreNode("themeScore", {player, theme}), scores.themeScores[player][theme]);
+      gameTable.setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
     }
   }
   refreshPlaces(scores.places);
@@ -1089,6 +1341,9 @@ function rememberChangedTheme(changedThemes, player, theme) {
 function canPatchState(previous, next) {
   if (!renderedTable || !previous || !next) return false;
   if (previous.finished !== next.finished) return false;
+  // A sticker change re-scores whole themes and re-selects dropdowns; rebuild
+  // the sheet rather than try to patch it cell by cell.
+  if (stickersEnabled() && JSON.stringify(previous.stickers || []) !== JSON.stringify(next.stickers || [])) return false;
   // A refusal toggle adds/removes a team from the «Подробно» sheet and «Итог» ranking
   // but leaves participants/themes untouched, so force a full re-render to reflect it.
   if (JSON.stringify(previous.declined || {}) !== JSON.stringify(next.declined || {})) return false;

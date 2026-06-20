@@ -59,7 +59,7 @@ where g.fest_id = ? and g.id = ?`, festID, gameID).
 			err = xlsxexport.BuildODSheet(f, schemeJSON, stateJSON, ratingByNumber)
 		}
 	case "ksi", "si":
-		err = xlsxexport.BuildKSISheets(f, stateJSON)
+		err = xlsxexport.BuildKSISheets(f, schemeJSON, stateJSON)
 	case "ek":
 		var stages []store.StageMatches
 		if stages, err = s.LoadAllStageMatchViews(r.Context(), festID, gameID); err == nil {
