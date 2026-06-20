@@ -57,10 +57,16 @@ document.getElementById("unlockForm").addEventListener("submit", async (e) => {
   }
 });
 
-document.getElementById("lockBtn").addEventListener("click", async () => {
-  await xyCrypto.forgetDK(boardId);
-  location.reload();
-});
+// "Forget board password" lives in the burger (☰) menu — rarely needed, so it
+// doesn't warrant a header button. dopeMenu.setExtras renders it as an action.
+window.dopeMenu?.setExtras([{
+  label: "🔒 Забыть пароль доски",
+  title: "Забыть пароль доски на этом устройстве",
+  onClick: async () => {
+    await xyCrypto.forgetDK(boardId);
+    location.reload();
+  },
+}]);
 
 // ---- load + decrypt snapshot ----
 async function load() {

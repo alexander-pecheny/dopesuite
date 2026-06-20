@@ -167,15 +167,21 @@
       }
 
       for (const item of extras) {
-        const link = document.createElement("a");
-        link.className = "menu-item";
-        link.setAttribute("role", "menuitem");
-        link.href = item.href;
-        link.textContent = item.label;
-        if (item.title) link.title = item.title;
-        if (item.download) link.setAttribute("download", "");
-        link.addEventListener("click", closeMenu);
-        dropdown.appendChild(link);
+        // Action items (with onClick) render as a <button>; link items as an <a>.
+        const node = document.createElement(item.onClick ? "button" : "a");
+        node.className = "menu-item";
+        node.setAttribute("role", "menuitem");
+        if (item.onClick) {
+          node.type = "button";
+          node.addEventListener("click", () => { closeMenu(); item.onClick(); });
+        } else {
+          node.href = item.href;
+          if (item.download) node.setAttribute("download", "");
+          node.addEventListener("click", closeMenu);
+        }
+        node.textContent = item.label;
+        if (item.title) node.title = item.title;
+        dropdown.appendChild(node);
       }
 
       if (account) {
