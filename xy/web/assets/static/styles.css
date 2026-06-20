@@ -5767,17 +5767,15 @@ body.is-fullscreen.od-page .match-main {
 /* per-list "⋯" menu: anchor the shared .menu-dropdown under the trigger */
 .klist-menu-wrap { position: relative; display: inline-flex; }
 
-/* inline word-level diff (timeline desc_edit) */
-.tl-diff-inline {
-  margin-top: var(--space-1);
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.5;
-}
-.tl-ins { background: var(--green-soft, var(--accent-soft)); text-decoration: none; border-radius: var(--radius-xs); }
-.tl-del { background: var(--red-soft); text-decoration: line-through; border-radius: var(--radius-xs); }
+/* two-pane before/after diff (timeline desc_edit), with the word-level changes
+   highlighted inside each pane */
+.tl-diff { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-1); font-family: var(--font-mono); font-size: var(--text-2xs); }
+.tl-before, .tl-after { padding: var(--space-2); border-radius: var(--radius-xs); white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.tl-before { background: var(--red-soft); }
+.tl-after { background: var(--green-soft, var(--accent-soft)); }
+.tl-chg { border-radius: var(--radius-xs); color: #fff; padding: 0 1px; }
+.tl-before .tl-chg { background: var(--red); text-decoration: line-through; }
+.tl-after .tl-chg { background: var(--green); text-decoration: none; }
 
 
 /* card create mode: show only the type chooser + description editor */

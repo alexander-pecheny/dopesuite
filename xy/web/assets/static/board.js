@@ -808,7 +808,8 @@ async function loadTimeline(cardId) {
   tl.replaceChildren();
   let events;
   try { events = await fetchJSON(`/api/cards/${cardId}/timeline`); } catch (_) { return; }
-  for (const ev of events) {
+  // Newest first: the API returns events oldest→newest (by id); show them reversed.
+  for (const ev of [...events].reverse()) {
     let payload = "";
     try { payload = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) {}
     tl.append(renderEvent(ev, payload));
@@ -823,15 +824,23 @@ function renderEvent(ev, payload) {
   } else if (ev.type === "desc_edit") {
     let diff = {};
     try { diff = JSON.parse(payload); } catch (_) {}
-    // Inline word-level diff: deletions struck through (red), insertions
-    // underlined (green), unchanged text plain.
-    const inline = el("div", { class: "tl-diff-inline" });
+    // Two-pane before/after, with the word-level changes highlighted within each
+    // pane: removed tokens struck through in the "before" pane, added tokens
+    // highlighted in the "after" pane; unchanged text plain in both.
+    const before = el("div", { class: "tl-before" });
+    const after = el("div", { class: "tl-after" });
     for (const op of xyDiff.diffTokens(diff.before || "", diff.after || "")) {
-      if (op.type === "add") inline.append(el("ins", { class: "tl-ins", text: op.text }));
-      else if (op.type === "del") inline.append(el("del", { class: "tl-del", text: op.text }));
-      else inline.append(document.createTextNode(op.text));
+      if (op.type === "eq") {
+        before.append(document.createTextNode(op.text));
+        after.append(document.createTextNode(op.text));
+      } else if (op.type === "del") {
+        before.append(el("del", { class: "tl-chg", text: op.text }));
+      } else {
+        after.append(el("ins", { class: "tl-chg", text: op.text }));
+      }
     }
-    wrap.append(el("div", { class: "tl-meta", text: "правка описания · " + when }), inline);
+    wrap.append(el("div", { class: "tl-meta", text: "правка описания · " + when }),
+      el("div", { class: "tl-diff" }, before, after));
   } else {
     let info = {};
     try { info = JSON.parse(payload); } catch (_) {}
