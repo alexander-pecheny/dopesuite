@@ -38,17 +38,43 @@ internal/session/      cookie + session.User (ported from dope/platform/session)
 web/assets/            //go:embed static (package assets)
   static/
     crypto.js          envelope format + board key lifecycle + IndexedDB key cache
+    store.js           offline IndexedDB layer: snapshot/timeline/attachment mirror,
+                       mutation outbox, temp-id↔real-id map (DB "xy-offline")
+    sync.js            offline engine: mutate()/flush() outbox replay with negative
+                       temp-id remapping, snapshot apply, pending-timeline synthesis,
+                       online/offline status events (PWA resync)
+    sw.js              service worker — app-shell caching (served at root, scope '/')
+    manifest.webmanifest  PWA manifest (served at root); icons icon-*.png/apple-touch-icon
     rank.js            fractional indexing (LexoRank-style keyBetween)
-    app.js             shared fetch/DOM helpers, derived card titles
+    app.js             shared fetch/DOM helpers, derived titles, offline-tolerant requireLogin
     diff.js            word-level token diff for desc_edit timeline highlighting
-    index.js/.html     board list + create-board (passphrase) flow
+    index.js/.html     board list + create-board (passphrase) flow; offline board-list cache
     board.js/.html     kanban: unlock, drag-reorder, card detail, timeline, labels,
-                       move/copy (by board name + list + position), list ⋯ menu, docx export
+                       move/copy (by board name + list + position), list ⋯ menu, docx export;
+                       all mutations routed through sync.js (offline-capable)
+    menu.js            theme boot + ☰ menu; also injects PWA <head> tags + registers sw.js
     login/register/profile  auth UI (login/menu ported from dope)
     styles.css         dope design system (copied) + xy board/card section at the end
     vendor/            self-hosted @noble/hashes (scrypt + deps), WebCrypto shim
-jstest/                node --test: crypto round-trips, rank ordering
+jstest/                node --test: crypto round-trips, rank ordering, offline sync engine
 ```
+
+## Offline / PWA (PLAN §8)
+The app is an installable PWA that works offline and resyncs on reconnect.
+- **App shell**: `sw.js` (served at `/sw.js`, scope `/`) precaches the static
+  assets + page routes; navigations are network-first→cache, versioned `?v=`
+  assets cache-first, others stale-while-revalidate. `/api/*` is never SW-cached.
+- **Data mirror**: `store.js` keeps a per-board ciphertext snapshot, per-card
+  timelines, the board list and downloaded attachment bytes in IndexedDB
+  (DB `xy-offline`). Everything stored is ciphertext (same as the server); the
+  cached DK in `xy-keys` is what decrypts it. No plaintext is persisted.
+- **Outbox + resync**: every board mutation flows through `sync.js#mutate`. Online
+  with an empty queue it's sent immediately; otherwise it's queued. Entities
+  created offline get **negative temp ids** (which flow transparently through the
+  numeric-id code in board.js); on `flush` each create's response yields temp→real,
+  and later ops have their temp-id references (URL path + JSON body) rewritten
+  before sending. After a board's queue drains, the UI reloads a fresh snapshot.
+  Cross-board copy/move, board creation, and attachment upload/delete stay online-only.
 
 ## Crypto model (see PLAN §2)
 Each board has a random 32-byte data key (DK). The passphrase derives a KEK
@@ -100,10 +126,14 @@ Test coverage: Go integration tests (`internal/server/*_test.go`) cover the full
 register→board→card→label→timeline→attachment→player-map flow + ACL rejection;
 node tests (`jstest/`) cover crypto round-trips/tamper/rewrap and rank ordering.
 
-**Not yet browser-E2E tested** (no headless browser in the build env): the JS
-modules are syntax-checked and the crypto/rank logic is unit-tested, but the
-full board/card UI flows should be click-tested in a browser before release.
+node tests also cover the offline sync engine (temp-id remapping, snapshot apply,
+and a full offline→online resync against an in-memory IndexedDB).
 
-**Later phases** (PLAN §8): offline/PWA, encrypted client-side search, Trello
-API compatibility, chgksuite import/export.
+**Not yet browser-E2E tested** (no headless browser in the build env): the JS
+modules are syntax-checked and the crypto/rank/sync logic is unit-tested, but the
+full board/card UI flows + service-worker install/offline behaviour should be
+click-tested in a real browser before release.
+
+**Later phases** (PLAN §8): ~~offline/PWA~~ (done — see "Offline / PWA" above),
+encrypted client-side search, Trello API compatibility, chgksuite import/export.
 ```

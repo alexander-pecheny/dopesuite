@@ -338,4 +338,28 @@
   } else {
     build();
   }
+
+  // ---- PWA wiring (runs on every page since menu.js loads everywhere) ----
+  // Inject the manifest + install/theme meta into <head> (keeps the HTML files
+  // free of per-page boilerplate), then register the service worker. The worker
+  // is served from the site root so its scope covers the whole app.
+  function injectHeadTag(tag, attrs) {
+    for (const sel of attrs.dedupe || []) { if (document.head.querySelector(sel)) return; }
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs.props || {})) node.setAttribute(k, v);
+    document.head.appendChild(node);
+  }
+  try {
+    injectHeadTag("link", { dedupe: ['link[rel="manifest"]'], props: { rel: "manifest", href: "/manifest.webmanifest" } });
+    injectHeadTag("meta", { dedupe: ['meta[name="theme-color"]'], props: { name: "theme-color", content: "#4477aa" } });
+    injectHeadTag("meta", { dedupe: ['meta[name="apple-mobile-web-app-capable"]'], props: { name: "apple-mobile-web-app-capable", content: "yes" } });
+    injectHeadTag("meta", { dedupe: ['meta[name="apple-mobile-web-app-status-bar-style"]'], props: { name: "apple-mobile-web-app-status-bar-style", content: "default" } });
+    injectHeadTag("meta", { dedupe: ['meta[name="apple-mobile-web-app-title"]'], props: { name: "apple-mobile-web-app-title", content: "xy" } });
+    injectHeadTag("link", { dedupe: ['link[rel="apple-touch-icon"]'], props: { rel: "apple-touch-icon", href: "/static/apple-touch-icon.png" } });
+  } catch (_) {}
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    });
+  }
 })();

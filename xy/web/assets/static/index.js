@@ -1,6 +1,7 @@
 // index.js — board list + create-board flow.
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import { xySync } from "./sync.js";
 
 const { fetchJSON, jpost, el, escapeHtml } = xyApp;
 
@@ -11,14 +12,24 @@ const overlay = document.getElementById("createOverlay");
 const createForm = document.getElementById("createForm");
 const createMessage = document.getElementById("createMessage");
 
-function setStatus(state) {
-  const labels = { saved: "Готово", saving: "Подождите", error: "Ошибка" };
+let lastOp = "saved";
+let syncState = { online: true, pending: 0, syncing: false };
+function refreshBadge() {
+  let state, title;
+  if (!syncState.online) { state = "offline"; title = syncState.pending ? `Офлайн · ${syncState.pending} изм. ждут отправки` : "Офлайн"; }
+  else if (syncState.syncing || syncState.pending > 0) { state = "pending"; title = syncState.pending ? `Синхронизация · осталось ${syncState.pending}` : "Синхронизация…"; }
+  else if (lastOp === "error") { state = "error"; title = "Ошибка"; }
+  else if (lastOp === "saving") { state = "saving"; title = "Подождите"; }
+  else { state = "saved"; title = "Готово"; }
   statusNode.dataset.state = state;
-  statusNode.title = labels[state] || labels.saved;
+  statusNode.title = title;
 }
+function setStatus(state) { lastOp = state; refreshBadge(); }
 
 async function boot() {
   if (!(await xyApp.requireLogin())) return;
+  xySync.start();
+  xySync.onStatus((st) => { syncState = st; refreshBadge(); });
   await refresh();
 }
 
@@ -26,11 +37,19 @@ async function refresh() {
   setStatus("saving");
   try {
     const boards = await fetchJSON("/api/boards");
+    await xySync.putBoardList(boards);
     renderBoards(boards);
     setStatus("saved");
   } catch (e) {
-    message.textContent = e.message;
-    setStatus("error");
+    // Offline (or the server is unreachable): fall back to the cached board list.
+    const cached = await xySync.getBoardList().catch(() => null);
+    if (cached) {
+      renderBoards(cached);
+      setStatus("saved");
+    } else {
+      message.textContent = e.message;
+      setStatus("error");
+    }
   }
 }
 
@@ -79,6 +98,7 @@ createForm.addEventListener("submit", async (e) => {
   const name = document.getElementById("boardName").value.trim();
   const pass = document.getElementById("boardPass").value;
   if (!name || !pass) return;
+  if (!xySync.isOnline()) { createMessage.textContent = "Создание доски доступно только онлайн."; return; }
   try {
     const { keymeta, dk } = await xyCrypto.createBoardKeys(pass);
     const nameEnc = await xyCrypto.encField(dk, name);

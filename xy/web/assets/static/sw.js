@@ -1,0 +1,118 @@
+// sw.js — xy's service worker: caches the app shell so the PWA loads and runs
+// with no network. Data offline is handled in app code (sync.js + IndexedDB);
+// the worker only deals with static assets and HTML navigations. It never caches
+// /api responses — those carry encrypted, user- and session-specific data and
+// are handled (with their own offline fallback) by the app's sync layer.
+//
+// Strategy:
+//   - navigations (HTML pages): network-first, fall back to the cached page,
+//     then to the cached board/home shell — so deep links work offline.
+//   - versioned static (?v=<hash>): cache-first (content-addressed → immutable).
+//   - other static: stale-while-revalidate.
+//   - everything else (/api/…): straight to network, untouched.
+
+const CACHE = "xy-shell-v1";
+
+// App shell precache: entry modules, styles, fonts, vendored crypto, icons, and
+// the static page routes. Unversioned URLs; versioned requests are cached
+// per-URL at runtime. Failures here don't abort install (allSettled).
+const PRECACHE = [
+  "/",
+  "/login", "/register", "/profile", "/import",
+  "/manifest.webmanifest",
+  "/static/styles.css",
+  "/static/app.js", "/static/crypto.js", "/static/rank.js", "/static/chgk.js",
+  "/static/diff.js", "/static/board.js", "/static/index.js", "/static/menu.js",
+  "/static/login.js", "/static/profile.js", "/static/register.js", "/static/import.js",
+  "/static/store.js", "/static/sync.js",
+  "/static/vendor/scrypt.js", "/static/vendor/_assert.js", "/static/vendor/_md.js",
+  "/static/vendor/hmac.js", "/static/vendor/pbkdf2.js", "/static/vendor/sha256.js",
+  "/static/vendor/utils.js", "/static/vendor/crypto.js",
+  "/static/fonts/noto-sans-400.woff2", "/static/fonts/noto-sans-700.woff2",
+  "/static/icon-192.png", "/static/icon-512.png", "/static/icon-maskable.png",
+  "/static/apple-touch-icon.png",
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await Promise.allSettled(PRECACHE.map((u) => cache.add(new Request(u, { cache: "reload" }))));
+      await self.skipWaiting();
+    })()
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(names.filter((n) => n !== CACHE).map((n) => caches.delete(n)));
+      await self.clients.claim();
+    })()
+  );
+});
+
+function isStatic(url) {
+  return url.pathname.startsWith("/static/") ||
+    url.pathname === "/manifest.webmanifest";
+}
+
+async function networkFirstNavigation(request) {
+  const cache = await caches.open(CACHE);
+  try {
+    const resp = await fetch(request);
+    if (resp && resp.ok) cache.put(request, resp.clone());
+    return resp;
+  } catch (_) {
+    const cached = await cache.match(request, { ignoreSearch: true });
+    if (cached) return cached;
+    // Deep-link fallback: every /board/{id} page is the same shell (board.js reads
+    // the id from the URL), so any cached board page serves for a new board id.
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/board/")) {
+      const keys = await cache.keys();
+      const boardKey = keys.find((req) => new URL(req.url).pathname.startsWith("/board/"));
+      if (boardKey) { const r = await cache.match(boardKey); if (r) return r; }
+    }
+    const home = await cache.match("/");
+    if (home) return home;
+    return new Response("Офлайн", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  }
+}
+
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const resp = await fetch(request);
+  if (resp && resp.ok) cache.put(request, resp.clone());
+  return resp;
+}
+
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(request, { ignoreSearch: true });
+  const network = fetch(request)
+    .then((resp) => { if (resp && resp.ok) cache.put(request, resp.clone()); return resp; })
+    .catch(() => null);
+  return cached || (await network) || new Response("", { status: 504 });
+}
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (request.mode === "navigate") {
+    event.respondWith(networkFirstNavigation(request));
+    return;
+  }
+  if (isStatic(url)) {
+    if (url.searchParams.has("v")) event.respondWith(cacheFirst(request));
+    else event.respondWith(staleWhileRevalidate(request));
+    return;
+  }
+  // /api/* and anything else: let it hit the network (app handles offline).
+});

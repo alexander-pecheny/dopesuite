@@ -43,6 +43,14 @@ func Main() {
 	mux.HandleFunc("GET /board/{id}", srv.servePage("static/board.html"))
 	mux.HandleFunc("GET /import", srv.servePage("static/import.html"))
 
+	// ---- PWA: service worker + manifest at the site root (scope '/') ----
+	mux.HandleFunc("GET /sw.js", srv.serveRootAsset(
+		"static/sw.js", "text/javascript; charset=utf-8", "no-cache",
+		map[string]string{"Service-Worker-Allowed": "/"}))
+	mux.HandleFunc("GET /manifest.webmanifest", srv.serveRootAsset(
+		"static/manifest.webmanifest", "application/manifest+json; charset=utf-8",
+		"public, max-age=3600", nil))
+
 	// ---- auth API ----
 	mux.HandleFunc("POST /api/auth/register/start", srv.handleRegisterStart)
 	mux.HandleFunc("GET /api/auth/register/status", srv.handleRegisterStatus)

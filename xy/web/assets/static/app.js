@@ -76,7 +76,14 @@ async function requireLogin() {
   try {
     const me = await fetchJSON("/api/auth/me");
     if (me && me.user_id) return me;
-  } catch (_) {}
+  } catch (e) {
+    // A network failure (offline) throws TypeError; an HTTP error (e.g. 401)
+    // throws a plain Error. Only bounce to /login for the latter — offline, we
+    // let the page boot and render from the cached mirror.
+    if (e instanceof TypeError || (typeof navigator !== "undefined" && navigator.onLine === false)) {
+      return { offline: true };
+    }
+  }
   window.location.replace("/login");
   return null;
 }

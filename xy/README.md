@@ -10,6 +10,11 @@ ciphertext plus the structural metadata needed to order, sync, and authorize.
   embedded in the binary.
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, no WASM) +
   AES-256-GCM via WebCrypto.
+- **Offline / PWA**: installable, works offline and resyncs on reconnect. A
+  service worker caches the app shell; board ciphertext, timelines and the board
+  list are mirrored in IndexedDB; offline edits queue in an outbox (entities get
+  temporary ids remapped to real server ids on sync). See the *Offline / PWA*
+  section in [`AGENTS.md`](AGENTS.md).
 
 See [`AGENTS.md`](AGENTS.md) for the codebase map and [`PLAN.md`](PLAN.md) /
 [`OVERVIEW.md`](OVERVIEW.md) for the design.

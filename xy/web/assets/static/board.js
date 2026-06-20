@@ -5,9 +5,20 @@ import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
 import { xyDiff } from "./diff.js";
+import { xySync } from "./sync.js";
 
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle } = xyApp;
 const { keyBetween } = xyRank;
+
+// Mutation wrappers — every board mutation flows through the sync engine, which
+// sends it immediately when online or queues it (returning a negative temp id
+// for creates) when offline, reconciling on reconnect. `create` mints an id;
+// the rest return { id: null }. See sync.js.
+const create = (kind, path, body) => xySync.mutate({ kind, method: "POST", path, body, board: boardId, mint: true });
+const post = (kind, path, body) => xySync.mutate({ kind, method: "POST", path, body, board: boardId });
+const patch = (kind, path, body) => xySync.mutate({ kind, method: "PATCH", path, body, board: boardId });
+const put = (kind, path, body) => xySync.mutate({ kind, method: "PUT", path, body, board: boardId });
+const del = (kind, path) => xySync.mutate({ kind, method: "DELETE", path, board: boardId });
 
 const boardId = Number(location.pathname.split("/").pop());
 
@@ -18,15 +29,39 @@ const titleNode = document.getElementById("boardTitle");
 const state = { role: "editor", name: "", lists: [], cards: [], labels: [], cardLabels: {} };
 let dk = null;
 
-function setStatus(s) {
-  const labels = { saved: "Готово", saving: "Подождите", error: "Ошибка" };
-  statusNode.dataset.state = s;
-  statusNode.title = labels[s] || labels.saved;
+// The header badge combines a transient per-action state (saving/error) with the
+// persistent sync state (offline / queued edits), the latter taking precedence.
+let lastOp = "saved"; // saved | saving | error
+let syncState = { online: true, pending: 0, syncing: false };
+
+function refreshBadge() {
+  let state, title;
+  if (!syncState.online) {
+    state = "offline";
+    title = syncState.pending ? `Офлайн · ${syncState.pending} изм. ждут отправки` : "Офлайн";
+  } else if (syncState.syncing || syncState.pending > 0) {
+    state = "pending";
+    title = syncState.pending ? `Синхронизация · осталось ${syncState.pending}` : "Синхронизация…";
+  } else if (lastOp === "error") {
+    state = "error"; title = "Ошибка";
+  } else if (lastOp === "saving") {
+    state = "saving"; title = "Подождите";
+  } else {
+    state = "saved"; title = "Готово";
+  }
+  statusNode.dataset.state = state;
+  statusNode.title = title;
 }
+function setStatus(s) { lastOp = s; refreshBadge(); }
 
 // ---- boot + unlock ----
 async function boot() {
   if (!(await xyApp.requireLogin())) return;
+  xySync.start();
+  xySync.onStatus((st) => { syncState = st; refreshBadge(); });
+  // When a board's queued edits fully reconcile with the server, reload so the
+  // temp ids in view are replaced by the authoritative server ids.
+  xySync.onBoardSynced((b) => { if (b === boardId) load(); });
   try {
     dk = await xyCrypto.loadCachedDK(boardId);
   } catch (_) {}
@@ -69,11 +104,37 @@ window.dopeMenu?.setExtras([{
 }]);
 
 // ---- load + decrypt snapshot ----
+// Source of truth: when online with an empty outbox, fetch the authoritative
+// snapshot and refresh the mirror. With local edits queued (or offline), render
+// the mirror, which the sync engine keeps current (server snapshot + applied
+// pending ops). After the queue drains, onBoardSynced reloads with real ids.
 async function load() {
   setStatus("saving");
   try {
-    const snap = await fetchJSON(`/api/boards/${boardId}`);
-    state.role = snap.role;
+    let snap;
+    const pending = await xySync.pendingCountForBoard(boardId);
+    if (xySync.isOnline() && pending === 0) {
+      try {
+        snap = await fetchJSON(`/api/boards/${boardId}`);
+        await xySync.saveSnapshot(boardId, snap);
+      } catch (_) {
+        snap = await xySync.loadSnapshot(boardId);
+      }
+    } else {
+      snap = await xySync.loadSnapshot(boardId);
+      if (!snap && xySync.isOnline()) {
+        snap = await fetchJSON(`/api/boards/${boardId}`);
+        await xySync.saveSnapshot(boardId, snap);
+      }
+    }
+    if (!snap) {
+      kanban.hidden = true;
+      titleNode.textContent = "Доска недоступна офлайн";
+      setStatus("error");
+      statusNode.title = "Нет сохранённой копии — откройте доску при подключении";
+      return;
+    }
+    state.role = snap.role || "editor";
     state.cardLabels = snap.card_labels || {};
     state.name = await xyCrypto.decField(dk, snap.name_enc);
     titleNode.textContent = state.name;
@@ -231,7 +292,7 @@ function renderAddList() {
     const rank = keyBetween(ranks.length ? ranks[ranks.length - 1].rank : null, null);
     try {
       const titleEnc = await xyCrypto.encField(dk, title);
-      const res = await jpost(`/api/boards/${boardId}/lists`, { title_enc: titleEnc, rank, type });
+      const res = await create("createList", `/api/boards/${boardId}/lists`, { title_enc: titleEnc, rank, type });
       state.lists.push({ id: res.id, type, rank, title });
       input.value = "";
       typeRow.querySelector("input").checked = false;
@@ -289,7 +350,7 @@ async function moveListToPosition(list) {
   list.rank = rank;
   setStatus("saving");
   try {
-    await jpatch(`/api/lists/${list.id}`, { rank });
+    await patch("patchList", `/api/lists/${list.id}`, { rank });
     setStatus("saved");
     render();
   } catch (err) { setStatus("error"); load(); }
@@ -303,6 +364,7 @@ async function moveListToPosition(list) {
 async function exportList(list) {
   const cards = cardsOf(list.id);
   if (!cards.length) { alert("В списке нет карточек."); return; }
+  if (!xySync.isOnline()) { alert("Экспорт в docx доступен только онлайн."); return; }
   setStatus("saving");
   try {
     const source = cards.map((c) => c.desc.trim()).filter(Boolean).join("\n\n") + "\n";
@@ -389,13 +451,13 @@ async function addTestCard(list) {
   const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
   try {
     const desc = JSON.stringify({ datetime: dt, players: [], title });
-    const res = await jpost(`/api/lists/${list.id}/cards`, {
+    const res = await create("createCard", `/api/lists/${list.id}/cards`, {
       description_enc: await xyCrypto.encField(dk, desc), rank, kind: "test",
     });
     state.cards.push({ id: res.id, listId: list.id, kind: "test", rank, desc });
     // auto labels
     for (const [suffix, color, kind] of [["взяли", "#3aa657", "test_taken"], ["не взяли", "#dd3322", "test_missed"]]) {
-      const lr = await jpost(`/api/boards/${boardId}/labels`, {
+      const lr = await create("createLabel", `/api/boards/${boardId}/labels`, {
         name_enc: await xyCrypto.encField(dk, `${tag} ${suffix}`),
         color_enc: await xyCrypto.encField(dk, color),
         kind,
@@ -433,7 +495,7 @@ async function commitCardMove(cardId, targetListId, body) {
   card.rank = rank;
   setStatus("saving");
   try {
-    await jpatch(`/api/cards/${cardId}`, { list_id: targetListId, rank });
+    await patch("patchCard", `/api/cards/${cardId}`, { list_id: targetListId, rank });
     setStatus("saved");
     render();
   } catch (err) { setStatus("error"); load(); }
@@ -494,6 +556,9 @@ async function populateMoveBoards() {
   sel.replaceChildren();
   let boards = [];
   try { boards = await fetchJSON("/api/boards"); } catch (_) {}
+  // Always offer the current board (so the move UI works — and never prompts for
+  // another board's password — even when offline and the board list is unfetched).
+  if (!boards.some((b) => b.id === boardId)) boards.unshift({ id: boardId, name_enc: null });
   for (const b of boards) {
     let label = "доска #" + b.id;
     if (b.id === boardId) label = (state.name || label) + " (эта доска)";
@@ -593,18 +658,21 @@ async function doMoveCopy(remove) {
   try {
     if (sameBoard) {
       if (remove) {
-        await jpatch(`/api/cards/${card.id}`, { list_id: targetListId, rank });
+        await patch("patchCard", `/api/cards/${card.id}`, { list_id: targetListId, rank });
         card.listId = targetListId;
         card.rank = rank;
       } else {
-        const res = await jpost(`/api/lists/${targetListId}/cards`, {
+        const res = await create("createCard", `/api/lists/${targetListId}/cards`, {
           description_enc: await xyCrypto.encField(dk, card.desc), rank, kind: card.kind,
         });
         state.cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc });
         const ids = state.cardLabels[card.id] || [];
-        if (ids.length) { await jput(`/api/cards/${res.id}/labels`, { label_ids: ids }); state.cardLabels[res.id] = ids.slice(); }
+        if (ids.length) { await put("setCardLabels", `/api/cards/${res.id}/labels`, { label_ids: ids }); state.cardLabels[res.id] = ids.slice(); }
       }
     } else {
+      // Cross-board copy/move re-encrypts under the target board's key and touches
+      // a second board's structure — inherently an online operation.
+      if (!xySync.isOnline()) { msg.textContent = "Перенос между досками доступен только онлайн."; return; }
       const tdk = moveCtx.dk;
       const res = await jpost(`/api/lists/${targetListId}/cards`, {
         description_enc: await xyCrypto.encField(tdk, card.desc), rank, kind: card.kind,
@@ -656,7 +724,7 @@ document.getElementById("cardKind").addEventListener("change", async (e) => {
   const kind = e.target.value;
   const msg = document.getElementById("cardMessage");
   try {
-    await jpatch(`/api/cards/${card.id}`, { kind });
+    await patch("patchCard", `/api/cards/${card.id}`, { kind });
     card.kind = kind;
     render();
     msg.textContent = "Тип изменён.";
@@ -679,7 +747,7 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     const existing = cardsOf(list.id);
     const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
     try {
-      const res = await jpost(`/api/lists/${list.id}/cards`, { description_enc: await xyCrypto.encField(dk, text), rank, kind });
+      const res = await create("createCard", `/api/lists/${list.id}/cards`, { description_enc: await xyCrypto.encField(dk, text), rank, kind });
       const card = { id: res.id, listId: list.id, kind, rank, desc: text };
       state.cards.push(card);
       render();
@@ -697,7 +765,7 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     if (newDesc !== card.desc) {
       body.desc_event_enc = await xyCrypto.encField(dk, JSON.stringify({ before: card.desc, after: newDesc }));
     }
-    await jpatch(`/api/cards/${card.id}`, body);
+    await patch("patchCard", `/api/cards/${card.id}`, body);
     card.desc = newDesc;
     render();
     await loadTimeline(card.id);
@@ -709,7 +777,7 @@ document.getElementById("cardDelete").addEventListener("click", async () => {
   const card = state.cards.find((c) => c.id === openCardId);
   if (!card || !confirm("Удалить карточку?")) return;
   try {
-    await jdelete(`/api/cards/${card.id}`);
+    await del("deleteCard", `/api/cards/${card.id}`);
     state.cards = state.cards.filter((c) => c.id !== card.id);
     cardOverlay.hidden = true;
     render();
@@ -776,7 +844,7 @@ async function toggleLabel(card, lbl) {
       type: adding ? "label_add" : "label_remove",
       payload_enc: await xyCrypto.encField(dk, JSON.stringify({ label: lbl.name })),
     }];
-    await jput(`/api/cards/${card.id}/labels`, { label_ids: ids, events });
+    await put("setCardLabels", `/api/cards/${card.id}/labels`, { label_ids: ids, events });
     state.cardLabels[card.id] = ids;
     renderLabelPicker(card);
     renderCardLabels(card);
@@ -791,7 +859,7 @@ document.getElementById("newLabelForm").addEventListener("submit", async (e) => 
   const color = document.getElementById("newLabelColor").value;
   if (!name) return;
   try {
-    const res = await jpost(`/api/boards/${boardId}/labels`, {
+    const res = await create("createLabel", `/api/boards/${boardId}/labels`, {
       name_enc: await xyCrypto.encField(dk, name),
       color_enc: await xyCrypto.encField(dk, color),
     });
@@ -806,9 +874,14 @@ document.getElementById("newLabelForm").addEventListener("submit", async (e) => 
 async function loadTimeline(cardId) {
   const tl = document.getElementById("timeline");
   tl.replaceChildren();
-  let events;
-  try { events = await fetchJSON(`/api/cards/${cardId}/timeline`); } catch (_) { return; }
-  // Newest first: the API returns events oldest→newest (by id); show them reversed.
+  // Refresh the cached server timeline when online, then merge any pending
+  // (un-synced) events synthesized from the outbox so offline edits/comments show.
+  if (xySync.isOnline()) {
+    try { const ev = await fetchJSON(`/api/cards/${cardId}/timeline`); await xySync.cacheTimeline(cardId, ev); } catch (_) {}
+  }
+  let events = [];
+  try { events = await xySync.timelineFor(cardId); } catch (_) {}
+  // Newest first: events are oldest→newest (by id); show them reversed.
   for (const ev of [...events].reverse()) {
     let payload = "";
     try { payload = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) {}
@@ -861,7 +934,7 @@ document.getElementById("commentForm").addEventListener("submit", async (e) => {
   const text = input.value.trim();
   if (!text || !openCardId) return;
   try {
-    await jpost(`/api/cards/${openCardId}/comments`, { payload_enc: await xyCrypto.encField(dk, text) });
+    await post("comment", `/api/cards/${openCardId}/comments`, { payload_enc: await xyCrypto.encField(dk, text) });
     input.value = "";
     await loadTimeline(openCardId);
   } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
@@ -908,6 +981,7 @@ document.getElementById("attachUpload").addEventListener("click", async () => {
   const input = document.getElementById("attachFile");
   const file = input.files[0];
   if (!file || !openCardId) return;
+  if (!xySync.isOnline()) { document.getElementById("cardMessage").textContent = "Загрузка вложений доступна только онлайн."; return; }
   const lossless = document.getElementById("attachLossless").checked;
   const msg = document.getElementById("cardMessage");
   msg.textContent = "Шифрование…";
@@ -935,9 +1009,18 @@ document.getElementById("attachUpload").addEventListener("click", async () => {
 
 async function download(att, name) {
   try {
-    const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
-    if (!res.ok) throw new Error("не удалось скачать");
-    const cipher = new Uint8Array(await res.arrayBuffer());
+    // Prefer the network; fall back to a previously-cached copy when offline.
+    let cipher;
+    try {
+      const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
+      if (!res.ok) throw new Error("не удалось скачать");
+      cipher = new Uint8Array(await res.arrayBuffer());
+      try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher }); } catch (_) {}
+    } catch (netErr) {
+      const cached = await xySync.getAttachment(att.id);
+      if (!cached) throw new Error("вложение недоступно офлайн");
+      cipher = cached.bytes instanceof Uint8Array ? cached.bytes : new Uint8Array(cached.bytes);
+    }
     const plain = await xyCrypto.decBytes(dk, cipher);
     const url = URL.createObjectURL(new Blob([plain], { type: att.mime }));
     const a = el("a", { href: url, download: name });
@@ -950,6 +1033,7 @@ async function download(att, name) {
 
 async function removeAttachment(att, name) {
   if (!confirm(`Удалить вложение «${name}»?`)) return;
+  if (!xySync.isOnline()) { document.getElementById("cardMessage").textContent = "Удаление вложений доступно только онлайн."; return; }
   try {
     const ev = await xyCrypto.encField(dk, JSON.stringify({ file: name }));
     await jdelete(`/api/attachments/${att.id}?event_payload_enc=${encodeURIComponent(ev)}`);

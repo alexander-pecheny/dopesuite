@@ -121,16 +121,45 @@ func (s *server) servePage(name string) http.HandlerFunc {
 
 // contentSecurityPolicy locks the page to same-origin scripts only: no inline
 // scripts, no eval, no wasm, no third-party origins. This is the real defense
-// for client-side crypto (see PLAN §1).
+// for client-side crypto (see PLAN §1). worker-src/manifest-src keep the PWA's
+// service worker and web manifest same-origin too.
 const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self'; " +
 	"style-src 'self'; " +
 	"img-src 'self' data: blob:; " +
 	"font-src 'self'; " +
 	"connect-src 'self'; " +
+	"worker-src 'self'; " +
+	"manifest-src 'self'; " +
 	"object-src 'none'; " +
 	"base-uri 'none'; " +
 	"frame-ancestors 'none'"
+
+// serveRootAsset serves a single embedded static file at a root path (used for
+// the PWA service worker and web manifest, which must live at the site root so
+// the worker's scope covers the whole app). extra headers are applied verbatim.
+func (s *server) serveRootAsset(name, contentType, cacheControl string, extra map[string]string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, err := fs.ReadFile(s.assetSource, name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if cacheControl != "" {
+			w.Header().Set("Cache-Control", cacheControl)
+		}
+		for k, v := range extra {
+			w.Header().Set(k, v)
+		}
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		_, _ = w.Write(body)
+	}
+}
 
 // ---- gzip middleware (ported from dope) ----
 

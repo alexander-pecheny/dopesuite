@@ -1160,6 +1160,28 @@ a.list-row:hover { background: var(--hover-bg); }
   transform: translateY(-2px) rotate(-45deg);
 }
 
+/* Offline (no connection) and pending (queued offline edits) are steady states,
+   not spinners — override the generic non-saved spinner. */
+.sync-status[data-state="offline"]::before,
+.sync-status[data-state="pending"]::before {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--action-border);
+  border-radius: var(--radius-full);
+  animation: none;
+  transform: none;
+}
+.sync-status[data-state="offline"] {
+  color: var(--text-muted, #888);
+}
+.sync-status[data-state="pending"] {
+  color: var(--orange-dark, #c47f00);
+}
+.sync-status[data-state="pending"]::before {
+  background: currentColor;
+  border-color: currentColor;
+}
+
 @keyframes sync-spin {
   to {
     transform: rotate(360deg);
@@ -5584,6 +5606,14 @@ body.is-fullscreen.od-page .match-main {
    xy — board / card / kanban (built on the shared design tokens)
    ============================================================ */
 
+/* Kanban depth is carried by fill, not borders: a column is a panel lifted off
+   the canvas, and a card is lifted again off the column. The two surface tokens
+   sit in opposite luminance order per theme (light: surface=white is brightest;
+   dark: structure is brighter than surface), so map them per theme to keep the
+   card reading brighter (= raised) than its column in both. */
+:root { --kanban-col: var(--structure); --kanban-card: var(--surface); }
+:root[data-theme="dark"] { --kanban-col: var(--surface); --kanban-card: var(--structure); }
+
 .btn-ghost {
   background: transparent;
   border-color: var(--border);
@@ -5606,14 +5636,13 @@ body.is-fullscreen.od-page .match-main {
   gap: var(--space-2);
   min-height: 90px;
   padding: var(--space-4);
-  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-card);
   text-decoration: none;
   color: var(--text);
 }
-.board-card:hover { border-color: var(--text); }
+.board-card:hover { background: var(--hover-bg); }
 .board-card-name { font-weight: var(--fw-bold); font-size: var(--text-lg); }
 .board-card-role { font-size: var(--text-xs); color: var(--muted); }
 
@@ -5637,9 +5666,8 @@ body.is-fullscreen.od-page .match-main {
   gap: var(--space-2);
   max-height: calc(100vh - 120px);
   padding: var(--space-2);
-  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--page);
+  background: var(--kanban-col);
 }
 .klist.dragging { opacity: 0.5; }
 .klist-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-2); }
@@ -5656,21 +5684,22 @@ body.is-fullscreen.od-page .match-main {
 .kcards { display: flex; flex-direction: column; gap: var(--space-2); overflow-y: auto; min-height: var(--space-6); padding: var(--space-1); }
 .kcard {
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
+  background: var(--kanban-card);
   cursor: pointer;
 }
-.kcard:hover { border-color: var(--text); }
+.kcard:hover { background: var(--hover-bg); }
 .kcard.dragging { opacity: 0.4; }
 .kcard-title { font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; }
 .kcard-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
-/* heading cards read as list dividers; meta cards as muted notes */
-.kcard-heading { background: var(--structure); border-style: dashed; }
-.kcard-heading .kcard-title { font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.02em; }
+/* heading cards read as list dividers (no tile), meta cards as muted notes */
+.kcard-heading { background: transparent; padding-bottom: var(--space-1); }
+.kcard-heading:hover { background: transparent; }
+.kcard-heading .kcard-title { font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted); }
 .kcard-meta .kcard-title { color: var(--muted); font-style: italic; }
-.klist-add { background: transparent; border-style: dashed; }
+.klist-add { background: transparent; }
+.klist-add .kadd-form { color: var(--muted); }
+.klist-add:hover .kadd-form { color: var(--text); }
 .kadd-form { width: 100%; }
 
 /* labels */
@@ -5737,7 +5766,10 @@ body.is-fullscreen.od-page .match-main {
 .label-pick.is-on { border-color: var(--text); font-weight: var(--fw-bold); }
 .label-empty { font-size: var(--text-xs); color: var(--muted); }
 .label-add-row { display: flex; gap: var(--space-2); align-items: center; }
-.label-add-row .input { flex: 1; }
+/* min-width:0 lets the select shrink below its longest <option>; without it the
+   flex item keeps min-content width and a long label name overflows the modal
+   (and the page) horizontally on mobile. */
+.label-add-row .input { flex: 1; min-width: 0; }
 .label-create { display: flex; gap: var(--space-2); align-items: center; }
 .label-color-input { width: 38px; height: 34px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
 
@@ -5761,7 +5793,9 @@ body.is-fullscreen.od-page .match-main {
 .attach-add { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .attach-lossless { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); color: var(--muted); }
 .card-move { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
-.card-move .input { flex: 1; min-width: 110px; }
+.card-move .input { flex: 1 1 110px; min-width: 0; }
+/* selects must never push past their container on narrow screens */
+.card-detail select.input { max-width: 100%; }
 .card-move-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
 
 /* per-list "⋯" menu: anchor the shared .menu-dropdown under the trigger */
