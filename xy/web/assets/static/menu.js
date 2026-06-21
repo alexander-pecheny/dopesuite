@@ -358,8 +358,25 @@
     injectHeadTag("link", { dedupe: ['link[rel="apple-touch-icon"]'], props: { rel: "apple-touch-icon", href: "/static/apple-touch-icon.png" } });
   } catch (_) {}
   if ("serviceWorker" in navigator) {
+    // When a freshly-deployed worker activates and claims the page, reload once so
+    // the new app shell (and unversioned modules) take effect immediately instead
+    // of on some later visit. Only when a worker was *already* controlling this
+    // page (a real update) — never on the first-ever install — and guarded against
+    // a reload loop.
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloading || !hadController) return;
+      reloading = true;
+      location.reload();
+    });
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.register("/sw.js").then((reg) => {
+        // Proactively check for a new worker on every load (cheap; the browser
+        // byte-compares sw.js), so updates land without waiting for the periodic
+        // 24h check.
+        reg.update().catch(() => {});
+      }).catch(() => {});
     });
   }
 

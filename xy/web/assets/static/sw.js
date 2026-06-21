@@ -8,10 +8,14 @@
 //   - navigations (HTML pages): network-first, fall back to the cached page,
 //     then to the cached board/home shell — so deep links work offline.
 //   - versioned static (?v=<hash>): cache-first (content-addressed → immutable).
-//   - other static: stale-while-revalidate.
+//   - other static (unversioned JS/CSS — e.g. board.js's bare module imports):
+//     network-first, falling back to cache offline. These have no ?v= hash to
+//     bust, so cache-first/stale-while-revalidate would serve a stale module for
+//     a whole extra load after every deploy; network-first keeps them fresh
+//     online while staying offline-capable.
 //   - everything else (/api/…): straight to network, untouched.
 
-const CACHE = "xy-shell-v2";
+const CACHE = "xy-shell-v3";
 
 // App shell precache: entry modules, styles, fonts, vendored crypto, icons, and
 // the static page routes. Unversioned URLs; versioned requests are cached
@@ -102,13 +106,19 @@ async function cacheFirst(request) {
   }
 }
 
-async function staleWhileRevalidate(request) {
+// networkFirstStatic keeps unversioned modules fresh online (so a deploy lands on
+// the next load, not the one after) while still serving the precached copy when
+// the network is unavailable.
+async function networkFirstStatic(request) {
   const cache = await caches.open(CACHE);
-  const cached = await cache.match(request, { ignoreSearch: true });
-  const network = fetch(request)
-    .then((resp) => { if (resp && resp.ok) cache.put(request, resp.clone()); return resp; })
-    .catch(() => null);
-  return cached || (await network) || new Response("", { status: 504 });
+  try {
+    const resp = await fetch(request);
+    if (resp && resp.ok) cache.put(request, resp.clone());
+    return resp;
+  } catch (_) {
+    const cached = await cache.match(request, { ignoreSearch: true });
+    return cached || new Response("", { status: 504 });
+  }
 }
 
 self.addEventListener("fetch", (event) => {
@@ -123,7 +133,7 @@ self.addEventListener("fetch", (event) => {
   }
   if (isStatic(url)) {
     if (url.searchParams.has("v")) event.respondWith(cacheFirst(request));
-    else event.respondWith(staleWhileRevalidate(request));
+    else event.respondWith(networkFirstStatic(request));
     return;
   }
   // /api/* and anything else: let it hit the network (app handles offline).

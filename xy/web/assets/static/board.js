@@ -523,6 +523,7 @@ async function openCard(card) {
   // The "copy for testing" action only makes sense for question cards (it shares
   // the numbered, screen-mode question text); hide it otherwise.
   document.getElementById("cardCopy").hidden = card.kind !== "question";
+  document.getElementById("cardCopyMsg").hidden = true;
   cardOverlay.hidden = false;
   renderLabelPicker(card);
   renderCardLabels(card);
@@ -765,15 +766,26 @@ async function copyText(text) {
   if (!ok) throw new Error("буфер обмена недоступен");
 }
 
+// showCopyMsg flashes the copy result right under the button (auto-hiding) so the
+// feedback is next to the action, not buried at the bottom of the panel.
+let copyMsgTimer = null;
+function showCopyMsg(text, isErr) {
+  const node = document.getElementById("cardCopyMsg");
+  node.textContent = text;
+  if (isErr) node.setAttribute("data-err", ""); else node.removeAttribute("data-err");
+  node.hidden = false;
+  clearTimeout(copyMsgTimer);
+  copyMsgTimer = setTimeout(() => { node.hidden = true; }, 2500);
+}
+
 document.getElementById("cardCopy").addEventListener("click", async () => {
   const card = state.cards.find((c) => c.id === openCardId);
   if (!card) return;
-  const msg = document.getElementById("cardMessage");
   try {
     await copyText(xyChgk.shareText(card.desc, questionNumberFor(card)));
-    msg.textContent = "Скопировано для теста.";
+    showCopyMsg("Скопировано для теста", false);
   } catch (err) {
-    msg.textContent = "Не удалось скопировать: " + err.message;
+    showCopyMsg("Не удалось скопировать: " + err.message, true);
   }
 });
 
