@@ -430,6 +430,7 @@ function addCard(list) {
   document.getElementById("cardKind").value = "question";
   document.getElementById("cardMessage").textContent = "";
   document.querySelector(".card-detail").classList.add("creating");
+  document.getElementById("cardCopy").hidden = true; // no number/desc yet
   cardOverlay.hidden = false;
   document.getElementById("cardDesc").focus();
 }
@@ -519,6 +520,9 @@ async function openCard(card) {
   const kindSel = document.getElementById("cardKind");
   kindSel.hidden = isTest;
   if (!isTest) kindSel.value = card.kind || "question";
+  // The "copy for testing" action only makes sense for question cards (it shares
+  // the numbered, screen-mode question text); hide it otherwise.
+  document.getElementById("cardCopy").hidden = card.kind !== "question";
   cardOverlay.hidden = false;
   renderLabelPicker(card);
   renderCardLabels(card);
@@ -729,6 +733,48 @@ document.getElementById("cardKind").addEventListener("change", async (e) => {
     render();
     msg.textContent = "Тип изменён.";
   } catch (err) { msg.textContent = err.message; }
+});
+
+// ---- copy a question to the clipboard for a test session ----
+// questionNumberFor returns the display number this question card would show on
+// the board (auto-assigned or directive-driven), matching the kanban preview.
+function questionNumberFor(card) {
+  if (!card || card.kind !== "question") return null;
+  const cards = cardsOf(card.listId);
+  const numbers = xyChgk.numberQuestionCards(cards);
+  const idx = cards.findIndex((c) => c.id === card.id);
+  return idx >= 0 ? numbers[idx] : null;
+}
+
+// copyText writes to the clipboard, falling back to a hidden textarea +
+// execCommand on insecure contexts / older browsers without the async API.
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const ta = el("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.append(ta);
+  ta.focus();
+  ta.select();
+  const ok = document.execCommand("copy");
+  ta.remove();
+  if (!ok) throw new Error("буфер обмена недоступен");
+}
+
+document.getElementById("cardCopy").addEventListener("click", async () => {
+  const card = state.cards.find((c) => c.id === openCardId);
+  if (!card) return;
+  const msg = document.getElementById("cardMessage");
+  try {
+    await copyText(xyChgk.shareText(card.desc, questionNumberFor(card)));
+    msg.textContent = "Скопировано для теста.";
+  } catch (err) {
+    msg.textContent = "Не удалось скопировать: " + err.message;
+  }
 });
 
 function closeCard() { cardOverlay.hidden = true; openCardId = null; pendingList = null; }

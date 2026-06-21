@@ -325,6 +325,13 @@ body {
   min-height: 100%;
   font-family: var(--font-sans);
   color: var(--text);
+  /* Don't let iOS bump font sizes on rotate, and don't rubber-band/zoom: the app
+     is a fixed shell whose inner sections scroll, not the page (see menu.js for
+     the matching gesture/double-tap zoom guards). */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior: none;
+  touch-action: manipulation;
 }
 
 button,
@@ -884,6 +891,9 @@ a.list-row:hover { background: var(--hover-bg); }
 .host {
   overflow: hidden;
   background: var(--structure);
+  /* Header height, kept in a variable so the board's fixed lower section and the
+     modals that cover it stay in sync (see .board-main / .card-overlay). */
+  --xy-header-h: 64px;
 }
 
 .host-top {
@@ -2694,6 +2704,10 @@ body:not(.embedded-match) .grid-match {
 }
 
 @media (max-width: 760px) {
+  .host {
+    --xy-header-h: 56px;
+  }
+
   .host-top {
     height: 56px;
     gap: 8px;
@@ -5650,21 +5664,31 @@ body.is-fullscreen.od-page .match-main {
 .import-form { max-width: 760px; margin: 0 auto; }
 .import-form .card-desc { min-height: 320px; }
 
-/* kanban */
+/* kanban — the board is an SPA: the header is fixed and never scrolls, the
+   lower section (.board-main) fills the rest of the viewport and only scrolls
+   *inside* itself (the kanban scrolls horizontally, each list vertically), so
+   the page as a whole never scrolls or rubber-bands. */
+.board-page .board-main {
+  height: calc(100dvh - var(--xy-header-h));
+  overflow: hidden;
+  padding: var(--space-4) var(--page-pad-x);
+}
+/* import & other .board-main pages keep their natural padding + page scroll */
 .board-main { padding: var(--space-4) var(--page-pad-x) var(--space-6); }
 .kanban {
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
+  height: 100%;
   overflow-x: auto;
-  padding-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
 }
 .klist {
   flex: 0 0 280px;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  max-height: calc(100vh - 120px);
+  max-height: 100%;
   padding: var(--space-2);
   border-radius: var(--radius-md);
   background: var(--kanban-col);
@@ -5712,29 +5736,43 @@ body.is-fullscreen.od-page .match-main {
 }
 .label-chip-lg { width: auto; height: auto; padding: var(--space-0-5) var(--space-2); color: #fff; font-size: var(--text-xs); }
 
-/* card detail overlay */
+/* card detail overlay — occupies the whole lower section (below the fixed
+   header), fully obscuring the kanban; the panel itself scrolls internally so
+   the page never scrolls. */
 .card-overlay {
   position: fixed;
-  inset: 0;
+  top: var(--xy-header-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: center;
-  padding: var(--space-6) var(--space-3);
   background: var(--backdrop);
-  overflow-y: auto;
+  overflow: hidden;
   z-index: 50;
 }
 .card-detail {
   width: min(680px, 100%);
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-5);
-  border-radius: var(--radius-lg);
+  overflow-y: auto;
   background: var(--surface);
   box-shadow: var(--shadow-modal);
 }
 .card-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.card-head-actions { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; }
+/* Flat card view: the only borders are on buttons. Inputs/selects, the editor,
+   timeline events and the colour swatch read as fills, not boxed fields. */
+.card-detail .input,
+.card-detail .card-desc,
+.card-detail .label-color-input { border-color: transparent; background: var(--page); }
+.card-detail .input:focus,
+.card-detail .card-desc:focus { border-color: var(--blue); }
+.card-detail .tl-event { border-color: transparent; }
 .card-section-label { font-size: var(--text-xs); font-weight: var(--fw-bold); color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: var(--space-3); }
 .card-desc {
   width: 100%;
@@ -5815,3 +5853,18 @@ body.is-fullscreen.od-page .match-main {
 /* card create mode: show only the type chooser + description editor */
 .card-detail.creating [data-edit-only] { display: none !important; }
 .card-detail:not(.creating) [data-create-only] { display: none !important; }
+
+/* Touch / small screens: shrink the type to fit more questions on screen (the
+   same densification ~/dope applies on mobile). */
+@media (max-width: 760px) {
+  .board-main { padding: var(--space-2) var(--space-2); }
+  .klist { flex-basis: 86vw; max-width: 320px; }
+  .klist-title { font-size: var(--text-sm); }
+  .kcard { padding: var(--space-1) var(--space-2); }
+  .kcard-title { font-size: var(--text-xs); }
+  .card-detail { padding: var(--space-4) var(--space-3); }
+  .card-desc { font-size: var(--text-xs-plus); min-height: 200px; }
+  .card-section-label { margin-top: var(--space-2); }
+  .tl-comment { font-size: var(--text-xs-plus); }
+  .label-pick, .label-chip-lg { font-size: var(--text-2xs); }
+}

@@ -362,4 +362,25 @@
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     });
   }
+
+  // ---- disable page zoom (every page) ----
+  // The app is a fixed-shell SPA; accidental pinch/double-tap zoom (easy to
+  // trigger on touch, tedious to undo) just breaks the layout. The viewport meta
+  // (maximum-scale=1, user-scalable=no) covers Android/Chrome, but iOS Safari
+  // ignores it, so we also cancel the gesture* events and the double-tap and
+  // multi-touch pinch it still honours. Single-finger scrolling is untouched.
+  try {
+    for (const type of ["gesturestart", "gesturechange", "gestureend"]) {
+      document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+    }
+    document.addEventListener("touchmove", (e) => {
+      if (e.touches && e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
+    let lastTouchEnd = 0;
+    document.addEventListener("touchend", (e) => {
+      const now = e.timeStamp || 0;
+      if (now - lastTouchEnd <= 300) e.preventDefault(); // double-tap zoom
+      lastTouchEnd = now;
+    }, { passive: false });
+  } catch (_) {}
 })();

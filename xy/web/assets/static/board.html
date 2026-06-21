@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Доска · xy</title>
   <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
@@ -39,7 +39,10 @@
     <div class="card-detail" role="dialog" aria-modal="true">
       <div class="card-detail-head">
         <div class="card-labels" id="cardLabels"></div>
-        <button class="action-icon" id="cardClose" aria-label="Закрыть">×</button>
+        <div class="card-head-actions">
+          <button class="btn btn-small" id="cardCopy" type="button" title="Скопировать текст вопроса для тест-сессии (экранный режим)" hidden>📋 Для теста</button>
+          <button class="action-icon" id="cardClose" aria-label="Закрыть">×</button>
+        </div>
       </div>
 
       <label class="card-section-label" id="cardKindLabel">Тип карточки</label>

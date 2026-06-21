@@ -143,8 +143,109 @@ function numberQuestionCards(cards) {
   return out;
 }
 
+// ── "screen mode" transforms (ported from chgksuite composer_common.py) ──────
+// chgksuite's screen export strips two things that are meant for the host but not
+// the players: combining stress accents (́) and the contents of square
+// brackets (reading instructions). Square brackets whose body starts with
+// "Раздат…" are *handout* markers — players DO see those, so they (and accents
+// inside them) are preserved. Used by the "copy for testing" action.
+
+// handout_short regex from chgksuite (regexes_ru.json): a bracket body that
+// begins with "Раздат" (in any letter case) is a handout, not a host note.
+const HANDOUT_SHORT = /^Р[Аа][Зз][Дд][Аа][Тт]/;
+
+function isEscapedBracket(s, i) {
+  return s[i] === "\\" && i + 1 < s.length && (s[i + 1] === "[" || s[i + 1] === "]");
+}
+
+// findMatchingBracket returns the index of the "]" closing the "[" at `i`
+// (respecting nesting and escaped brackets), or -1 if unbalanced.
+function findMatchingBracket(s, i) {
+  if (i >= s.length || s[i] !== "[") return -1;
+  let depth = 0;
+  while (i < s.length) {
+    if (isEscapedBracket(s, i)) { i += 2; continue; }
+    if (s[i] === "[") depth++;
+    else if (s[i] === "]") { depth--; if (depth === 0) return i; }
+    i++;
+  }
+  return -1;
+}
+
+// bracketSpans yields [start, endExclusive, body] for each top-level "[...]"
+// span, skipping escaped brackets (\[ \]).
+function* bracketSpans(s) {
+  let i = 0;
+  while (i < s.length) {
+    if (isEscapedBracket(s, i)) { i += 2; continue; }
+    if (s[i] !== "[") { i++; continue; }
+    const end = findMatchingBracket(s, i);
+    if (end === -1) { i++; continue; }
+    yield [i, end + 1, s.slice(i + 1, end)];
+    i = end + 1;
+  }
+}
+
+const isHandoutBody = (body) => HANDOUT_SHORT.test(body);
+
+// removeAccents strips combining stress marks everywhere except inside handout
+// brackets (which are shown verbatim to players).
+function removeAccents(s) {
+  let result = "", prev = 0;
+  for (const [start, end] of bracketSpans(s)) {
+    if (!isHandoutBody(s.slice(start + 1, end - 1))) continue;
+    result += s.slice(prev, start).replace(/\u0301/g, "");
+    result += s.slice(start, end); // keep the handout span verbatim
+    prev = end;
+  }
+  result += s.slice(prev).replace(/\u0301/g, "");
+  return result;
+}
+
+// removeSquareBrackets drops host-only "[...]" notes; handout brackets are kept,
+// escaped brackets (\[ \]) are unescaped to literal brackets.
+function removeSquareBrackets(s) {
+  let result = "", i = 0, removed = false;
+  while (i < s.length) {
+    if (isEscapedBracket(s, i)) { result += s.slice(i, i + 2); i += 2; continue; }
+    if (s[i] !== "[") { result += s[i]; i++; continue; }
+    const end = findMatchingBracket(s, i);
+    if (end === -1) { result += s[i]; i++; continue; }
+    if (isHandoutBody(s.slice(i + 1, end))) {
+      result += s.slice(i, end + 1); // keep the handout (brackets included)
+    } else {
+      while (result.endsWith(" ")) result = result.slice(0, -1);
+      removed = true;
+    }
+    i = end + 1;
+  }
+  if (removed) result = result.trim();
+  return result.replace(/\\\[/g, "[").replace(/\\\]/g, "]");
+}
+
+// screenText applies both screen-mode transforms (accents first, then brackets,
+// matching chgksuite's order).
+function screenText(s) {
+  return removeSquareBrackets(removeAccents(s || ""));
+}
+
+// shareText builds the plain text handed to testers over chat: the screen-mode
+// question (prefixed "Вопрос N.") plus any handout block, so what the players
+// would see is reproduced. `number` comes from numberQuestionCards.
+function shareText(desc, number) {
+  const blocks = parseBlocks(desc);
+  const parts = [];
+  for (const b of blocks) {
+    if (b.type === "handout") parts.push("Раздаточный материал:\n" + screenText(b.text));
+  }
+  const q = screenText(questionText(desc));
+  parts.push((number ? `Вопрос ${number}. ` : "") + q);
+  return parts.join("\n\n");
+}
+
 export const xyChgk = {
   parseBlocks, numberDirective, questionText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
+  removeAccents, removeSquareBrackets, screenText, shareText,
 };
 if (typeof window !== "undefined") window.xyChgk = xyChgk;

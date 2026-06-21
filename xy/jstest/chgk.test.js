@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { xyChgk } from "../web/assets/static/chgk.js";
 
-const { questionText, blockText, numberQuestionCards, parseBlocks, numberDirective } = xyChgk;
+const { questionText, blockText, numberQuestionCards, parseBlocks, numberDirective,
+  removeAccents, removeSquareBrackets, screenText, shareText } = xyChgk;
 
 test("question text strips the leading '? ' marker", () => {
   const desc = "? В каком году?\n! 1799\n^ источник";
@@ -64,4 +65,49 @@ test("explicit № overrides but a zero number does not advance the counter", ()
     { kind: "question", desc: "? eight" },
   ];
   assert.deepEqual(numberQuestionCards(cards), ["0", "1", "7", "8"]);
+});
+
+// ── screen-mode transforms ──────────────────────────────────────────────────
+test("removeAccents strips U+0301 stress marks", () => {
+  assert.equal(removeAccents("при́вет мо́ре"), "привет море");
+});
+
+test("removeAccents keeps accents inside handout brackets", () => {
+  assert.equal(
+    removeAccents("сло́во [Раздаточный материал: за́мок]"),
+    "слово [Раздаточный материал: за́мок]",
+  );
+});
+
+test("removeSquareBrackets drops host notes but keeps handouts", () => {
+  assert.equal(
+    removeSquareBrackets("текст [пауза для ведущего] дальше"),
+    "текст дальше",
+  );
+  assert.equal(
+    removeSquareBrackets("вопрос [Раздаточный материал: фото] и всё"),
+    "вопрос [Раздаточный материал: фото] и всё",
+  );
+});
+
+test("removeSquareBrackets unescapes literal brackets", () => {
+  assert.equal(removeSquareBrackets("массив a\\[i\\]"), "массив a[i]");
+});
+
+test("screenText applies both transforms", () => {
+  assert.equal(
+    screenText("Назови́те [для ведущего: не торопясь] го́род."),
+    "Назовите город.",
+  );
+});
+
+test("shareText prefixes the question number and reproduces handouts", () => {
+  const desc = "? Что э́то? [прочитать дважды]\n! ответ\n^ источник";
+  assert.equal(shareText(desc, "5"), "Вопрос 5. Что это?");
+
+  const withHandout = "> Схема ме́тро\n? Что на схеме?\n! круг";
+  assert.equal(
+    shareText(withHandout, "3"),
+    "Раздаточный материал:\nСхема метро\n\nВопрос 3. Что на схеме?",
+  );
 });
