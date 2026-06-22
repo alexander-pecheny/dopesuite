@@ -1034,35 +1034,109 @@ async function recompressToWebp(file) {
   return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: "image/webp" };
 }
 
+// uploadAttachment encrypts `file` under the saved name and POSTs it to the open
+// card. When lossless is false the bytes are re-encoded to WebP q70 first (the
+// same recompression the default file-picker upload applies). Online-only —
+// callers must gate on xySync.isOnline(). Refreshes the attachment list+timeline.
+async function uploadAttachment(file, lossless, name) {
+  if (!file || !openCardId) return;
+  const msg = document.getElementById("cardMessage");
+  msg.textContent = "Шифрование…";
+  let bytes, mime;
+  if (lossless) { bytes = new Uint8Array(await file.arrayBuffer()); mime = file.type || "application/octet-stream"; }
+  else ({ bytes, mime } = await recompressToWebp(file));
+  const cipher = await xyCrypto.encBytes(dk, bytes);
+  const fd = new FormData();
+  fd.append("meta", JSON.stringify({
+    filename_enc: await xyCrypto.encField(dk, name),
+    mime, lossless,
+    event_payload_enc: await xyCrypto.encField(dk, JSON.stringify({ file: name })),
+  }));
+  fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
+  const res = await fetch(`/api/cards/${openCardId}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
+  if (!res.ok) throw new Error((await res.text()) || "ошибка загрузки");
+  msg.textContent = "";
+  await loadAttachments(openCardId);
+  await loadTimeline(openCardId);
+}
+
 document.getElementById("attachUpload").addEventListener("click", async () => {
   const input = document.getElementById("attachFile");
   const file = input.files[0];
   if (!file || !openCardId) return;
   if (!xySync.isOnline()) { document.getElementById("cardMessage").textContent = "Загрузка вложений доступна только онлайн."; return; }
   const lossless = document.getElementById("attachLossless").checked;
-  const msg = document.getElementById("cardMessage");
-  msg.textContent = "Шифрование…";
   try {
-    let bytes, mime;
-    if (lossless) { bytes = new Uint8Array(await file.arrayBuffer()); mime = file.type || "application/octet-stream"; }
-    else ({ bytes, mime } = await recompressToWebp(file));
-    const cipher = await xyCrypto.encBytes(dk, bytes);
-    const fd = new FormData();
-    fd.append("meta", JSON.stringify({
-      filename_enc: await xyCrypto.encField(dk, file.name),
-      mime, lossless,
-      event_payload_enc: await xyCrypto.encField(dk, JSON.stringify({ file: file.name })),
-    }));
-    fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
-    const res = await fetch(`/api/cards/${openCardId}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
-    if (!res.ok) throw new Error((await res.text()) || "ошибка загрузки");
+    await uploadAttachment(file, lossless, file.name);
     input.value = "";
     document.getElementById("attachLossless").checked = false;
-    msg.textContent = "";
-    await loadAttachments(openCardId);
-    await loadTimeline(openCardId);
+  } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
+});
+
+// ---- paste-to-attach ----
+// Pasting an image while a saved card is open captures it, then asks for a
+// filename + whether to WebP-compress (matching the default-upload checkbox)
+// before encrypting and uploading it as an attachment.
+let pastedFile = null;
+const pasteOverlay = document.getElementById("pasteOverlay");
+
+function extFromMime(m) {
+  const map = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/bmp": "bmp", "image/svg+xml": "svg" };
+  if (map[m]) return map[m];
+  const sub = (m || "").split("/")[1];
+  return sub ? sub.replace(/[^a-z0-9]+/gi, "") : "png";
+}
+
+// withExt drops any extension the user typed and forces the one that matches the
+// stored format (webp when compressing, else the source image's type), so the
+// filename never claims a type the bytes aren't.
+function withExt(name, ext) {
+  const base = name.replace(/\.[^./\\]+$/, "").trim();
+  return `${base || "вставка"}.${ext}`;
+}
+
+function closePasteModal() { pasteOverlay.hidden = true; pastedFile = null; }
+
+document.addEventListener("paste", (e) => {
+  // Only intercept image pastes while a persisted card is open (attachments need
+  // a real card id); leave plain-text paste into the editor/comment box alone.
+  if (openCardId == null || cardOverlay.hidden) return;
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  let file = null;
+  for (const it of items) {
+    if (it.kind === "file" && it.type.startsWith("image/")) { file = it.getAsFile(); break; }
+  }
+  if (!file) return;
+  e.preventDefault();
+  pastedFile = file;
+  const nameInput = document.getElementById("pasteName");
+  // Clipboard images usually arrive as the generic "image.png"; offer a friendlier
+  // default the user can overwrite.
+  nameInput.value = (file.name && file.name !== "image.png") ? file.name : `вставка.${extFromMime(file.type)}`;
+  document.getElementById("pasteCompress").checked = true;
+  pasteOverlay.hidden = false;
+  nameInput.focus();
+  nameInput.select();
+});
+
+document.getElementById("pasteForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!pastedFile) return;
+  const msg = document.getElementById("cardMessage");
+  const file = pastedFile;
+  const compress = document.getElementById("pasteCompress").checked;
+  const name = withExt(document.getElementById("pasteName").value, compress ? "webp" : extFromMime(file.type));
+  closePasteModal();
+  if (!xySync.isOnline()) { msg.textContent = "Загрузка вложений доступна только онлайн."; return; }
+  try {
+    await uploadAttachment(file, !compress, name);
   } catch (err) { msg.textContent = err.message; }
 });
+
+document.getElementById("pasteCancel").addEventListener("click", closePasteModal);
+pasteOverlay.addEventListener("pointerdown", (e) => { if (e.target === pasteOverlay) closePasteModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pasteOverlay.hidden) closePasteModal(); });
 
 async function download(att, name) {
   try {
