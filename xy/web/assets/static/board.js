@@ -272,7 +272,7 @@ function paintLabels() {
   for (const chip of document.querySelectorAll(".label-chip[data-c]")) {
     chip.style.backgroundColor = chip.dataset.c;
   }
-  for (const sw of document.querySelectorAll(".label-pick[data-c]")) {
+  for (const sw of document.querySelectorAll(".label-pick[data-c], .label-swatch[data-c]")) {
     sw.style.backgroundColor = sw.dataset.c;
   }
 }
@@ -540,7 +540,6 @@ async function openCard(card) {
   document.getElementById("cardCopy").hidden = card.kind !== "question";
   document.getElementById("cardCopyMsg").hidden = true;
   cardOverlay.hidden = false;
-  document.getElementById("labelFilter").value = "";
   renderLabelPicker(card);
   await loadAttachments(card.id);
   await loadTimeline(card.id);
@@ -891,23 +890,10 @@ function sortLabels(labels) {
   });
 }
 
-// Unassigned labels for the currently open card, pre-sorted; the dropdown is
-// (re)populated from this list, narrowed by the filter input.
-let labelPickerPool = [];
-
-function fillLabelOptions() {
-  const sel = document.getElementById("labelAdd");
-  const q = (document.getElementById("labelFilter").value || "").trim().toLowerCase();
-  sel.replaceChildren(el("option", { value: "", text: "+ добавить метку…" }));
-  const list = q ? labelPickerPool.filter((l) => l.name.toLowerCase().includes(q)) : labelPickerPool;
-  for (const lbl of list) sel.append(el("option", { value: String(lbl.id), text: lbl.name }));
-}
-
 function renderLabelPicker(card) {
   const picker = document.getElementById("labelPicker");
   picker.replaceChildren();
   const assigned = state.cardLabels[card.id] || [];
-  const assignedSet = new Set(assigned);
   for (const id of assigned) {
     const lbl = labelById(id);
     if (!lbl) continue;
@@ -918,23 +904,68 @@ function renderLabelPicker(card) {
     }));
   }
   if (!assigned.length) picker.append(el("span", { class: "label-empty", text: "меток нет" }));
-
-  // dropdown of the remaining (unassigned) labels, filterable via #labelFilter
-  labelPickerPool = sortLabels(state.labels.filter((l) => !assignedSet.has(l.id)));
-  fillLabelOptions();
+  closeLabelAddPopup();
   paintLabels();
 }
 
-document.getElementById("labelFilter").addEventListener("input", fillLabelOptions);
+function closeLabelAddPopup() {
+  const popup = document.querySelector("#labelAddRow .label-add-popup");
+  if (popup) popup.remove();
+}
 
-document.getElementById("labelAdd").addEventListener("change", (e) => {
-  const id = Number(e.target.value);
-  e.target.value = "";
-  if (!id) return;
+// openLabelAddPopup mounts a custom dropdown under the "+ добавить метку" button:
+// a filter field above a scrollable list of the unassigned labels, sorted by last
+// usage (sortLabels). A native <select> can't host a search box, hence the
+// hand-rolled popup (shares the .menu-dropdown styling of the list "⋯" menu).
+function openLabelAddPopup() {
   const card = state.cards.find((c) => c.id === openCardId);
-  const lbl = labelById(id);
-  if (card && lbl) toggleLabel(card, lbl);
-});
+  if (!card) return;
+  const anchor = document.getElementById("labelAddRow");
+  if (anchor.querySelector(".label-add-popup")) { closeLabelAddPopup(); return; } // toggle off
+
+  const assignedSet = new Set(state.cardLabels[card.id] || []);
+  const pool = sortLabels(state.labels.filter((l) => !assignedSet.has(l.id)));
+
+  const filter = el("input", {
+    class: "input label-add-filter", type: "text",
+    placeholder: "Фильтр меток…", autocomplete: "off",
+  });
+  const listBox = el("div", { class: "label-add-list" });
+  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, filter, listBox);
+
+  function fill() {
+    const q = filter.value.trim().toLowerCase();
+    const items = q ? pool.filter((l) => l.name.toLowerCase().includes(q)) : pool;
+    listBox.replaceChildren();
+    if (!items.length) { listBox.append(el("span", { class: "label-empty", text: "ничего не найдено" })); return; }
+    for (const lbl of items) {
+      listBox.append(el("button", {
+        class: "menu-item label-add-item", type: "button", role: "menuitem",
+        onclick: () => { close(); toggleLabel(card, lbl); },
+      },
+        el("span", { class: "label-swatch", dataset: { c: lbl.color } }),
+        el("span", { class: "label-add-name", text: lbl.name }),
+      ));
+    }
+    paintLabels();
+  }
+  function close() {
+    popup.remove();
+    document.removeEventListener("pointerdown", onOutside, true);
+    document.removeEventListener("keydown", onKey);
+  }
+  function onOutside(e) { if (!anchor.contains(e.target)) close(); }
+  function onKey(e) { if (e.key === "Escape") { close(); document.getElementById("labelAddBtn").focus(); } }
+
+  filter.addEventListener("input", fill);
+  anchor.append(popup);
+  document.addEventListener("pointerdown", onOutside, true);
+  document.addEventListener("keydown", onKey);
+  fill();
+  filter.focus();
+}
+
+document.getElementById("labelAddBtn").addEventListener("click", openLabelAddPopup);
 
 async function toggleLabel(card, lbl) {
   const cur = new Set(state.cardLabels[card.id] || []);

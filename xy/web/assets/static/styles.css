@@ -5822,12 +5822,22 @@ body.is-fullscreen.od-page .match-main {
   cursor: var(--cursor-action);
 }
 .label-pick.is-on { font-weight: var(--fw-bold); }
-.label-empty { font-size: var(--text-xs); color: var(--muted); }
-.label-add-row { display: flex; gap: var(--space-2); align-items: center; }
-/* min-width:0 lets the select shrink below its longest <option>; without it the
-   flex item keeps min-content width and a long label name overflows the modal
-   (and the page) horizontally on mobile. */
+.label-empty { font-size: var(--text-xs); color: var(--muted); padding: var(--space-1) var(--space-2); }
+/* position:relative anchors the custom add-label popup (.menu-dropdown) below
+   the trigger button. */
+.label-add-row { position: relative; display: flex; gap: var(--space-2); align-items: center; }
 .label-add-row .input { flex: 1; min-width: 0; }
+/* trigger looks like the old <select> but is a plain button (it opens a custom
+   filterable list rather than a native dropdown). */
+.label-add-btn { text-align: left; color: var(--muted); cursor: var(--cursor-action); }
+
+/* custom add-label popup: filter field over a scrollable, sorted label list */
+.label-add-popup { left: 0; right: 0; min-width: 0; gap: var(--space-1); }
+.label-add-filter { margin-bottom: var(--space-1); }
+.label-add-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+.label-add-item { display: flex; align-items: center; gap: var(--space-2); }
+.label-swatch { flex: none; width: 12px; height: 12px; border-radius: var(--radius-sm); background: var(--muted); }
+.label-add-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .label-create { display: flex; gap: var(--space-2); align-items: center; }
 .label-color-input { width: 38px; height: 34px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
 
