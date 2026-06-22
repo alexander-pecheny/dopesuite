@@ -113,32 +113,41 @@ function isZeroNumber(value) {
 
 // numberQuestionCards assigns a display number to each card in list order.
 // Question cards auto-number 1,2,3…; a "№ N" sets an explicit number and a
-// "№№ N" resets the running base (matching chgksuite). Non-question cards get
-// null and don't consume a number. Returns an array aligned with `cards`.
+// "№№ N" resets the running base (matching chgksuite). Heading and meta cards
+// carry no number of their own, but a standalone "№№ N" on them resets the base
+// for the questions that follow (chgksuite's setcounter). "Other" and test cards
+// are ignored entirely. Returns an array aligned with `cards`.
 function numberQuestionCards(cards) {
   let next = 1;
   const out = [];
   for (const c of cards) {
-    if (c.kind !== "question") {
-      out.push(null);
+    if (c.kind === "question") {
+      const dir = numberDirective(parseBlocks(c.desc));
+      let num;
+      if (dir && dir.value !== "") {
+        const n = parseInt(dir.value, 10);
+        if (dir.base) {
+          if (!Number.isNaN(n)) { num = String(n); next = n + 1; }
+          else num = dir.value;
+        } else {
+          num = dir.value;
+          if (!isZeroNumber(dir.value)) next = n + 1;
+        }
+      } else {
+        num = String(next);
+        next++;
+      }
+      out.push(num);
       continue;
     }
-    const dir = numberDirective(parseBlocks(c.desc));
-    let num;
-    if (dir && dir.value !== "") {
-      const n = parseInt(dir.value, 10);
-      if (dir.base) {
-        if (!Number.isNaN(n)) { num = String(n); next = n + 1; }
-        else num = dir.value;
-      } else {
-        num = dir.value;
-        if (!isZeroNumber(dir.value)) next = n + 1;
+    if (c.kind === "heading" || c.kind === "meta") {
+      const dir = numberDirective(parseBlocks(c.desc));
+      if (dir && dir.base && dir.value !== "") {
+        const n = parseInt(dir.value, 10);
+        if (!Number.isNaN(n)) next = n;
       }
-    } else {
-      num = String(next);
-      next++;
     }
-    out.push(num);
+    out.push(null);
   }
   return out;
 }
@@ -223,10 +232,230 @@ function removeSquareBrackets(s) {
   return result.replace(/\\\[/g, "[").replace(/\\\]/g, "]");
 }
 
-// screenText applies both screen-mode transforms (accents first, then brackets,
-// matching chgksuite's order).
+// ── inline 4s directive parser (ported from chgksuite composer_common
+// `_parse_4s_elem` + `backtick_replace`) ─────────────────────────────────────
+// Splits a single 4s text element into [type, value] runs so the directives that
+// aren't just leading-line markers — (LINEBREAK), (PAGEBREAK), (screen a|b),
+// (img …), (sc …), _italic_/**bold**/~strike~, hyperlinks, %-encoding, \_ \. and
+// backtick stress — are handled when composing the "copy for testing" text,
+// instead of leaking through verbatim. value is a string except for "screen"
+// runs, which carry {for_print, for_screen}.
+
+const UNDERSCORE_PLACEHOLDER = "UNDERSCORE";
+const TILDE_PLACEHOLDER = "TILDE";
+
+// backtickReplace: a backtick before a Cyrillic letter is shorthand for a
+// combining stress accent on that letter (chgksuite `backtick_replace`).
+function backtickReplace(el) {
+  while (el.includes("`")) {
+    const idx = el.indexOf("`");
+    if (idx + 1 >= el.length) { el = el.replace("`", ""); continue; }
+    const ch = el[idx + 1];
+    if (/[а-яё]/.test(ch)) {
+      el = el.slice(0, idx) + ch + "́" + el.slice(idx + 2);
+    } else if (/[А-ЯЁ]/.test(ch)) {
+      el = el.slice(0, idx) + ch + "́" + el.slice(idx + 2);
+    } else {
+      el = el.slice(0, idx) + el.slice(idx + 1);
+    }
+  }
+  return el;
+}
+
+// iterHttpUrlSpans yields [start, end) spans of bare http(s) URLs, so their
+// underscores aren't mistaken for italic markers (chgksuite `_iter_http_url_spans`).
+function* iterHttpUrlSpans(s) {
+  let i = 0;
+  while (i < s.length) {
+    if (s.startsWith("http://", i) || s.startsWith("https://", i)) {
+      let j = i + 1, bracketLevel = 0;
+      while (j < s.length && !(/\s/.test(s[j]) || (s[j] === ")" && bracketLevel === 0))) {
+        if (s[j] === "(") bracketLevel++;
+        else if (s[j] === ")" && bracketLevel > 0) bracketLevel--;
+        j++;
+      }
+      const end = [",", ".", ";"].includes(s[j - 1]) ? j - 1 : j;
+      yield [i, end];
+      i = j;
+    } else i++;
+  }
+}
+
+// findMatchingClosingBracket: index of the ")" closing the bracket at `index`.
+function findMatchingClosingBracket(s, index) {
+  const ob = s[index];
+  const cb = ob === "(" ? ")" : ob === "[" ? "]" : ob === "{" ? "}" : null;
+  if (cb === null) return null;
+  let counter = 0;
+  for (let i = index; i < s.length; i++) {
+    if (s[i] === ob) counter++;
+    if (s[i] === cb) { counter--; if (counter === 0) return i; }
+  }
+  return null;
+}
+
+function findNextUnescaped(ss, index, length) {
+  let j = index + length;
+  while (j < ss.length) {
+    if (ss[j] === "\\" && j + 2 < ss.length) j += 2;
+    if (ss.slice(j, j + length) === ss.slice(index, index + length)) return j;
+    j++;
+  }
+  return -1;
+}
+
+function partition(s, indices) {
+  const bounds = [0, ...indices, s.length];
+  const out = [];
+  for (let k = 0; k < bounds.length - 1; k++) out.push(s.slice(bounds[k], bounds[k + 1]));
+  return out;
+}
+
+function parse4sElem(s) {
+  s = s.replace(/\\_/g, UNDERSCORE_PLACEHOLDER).replace(/\\~/g, TILDE_PLACEHOLDER);
+
+  // protect underscores/tildes inside URLs
+  {
+    let res = "", last = 0;
+    for (const [start, end] of iterHttpUrlSpans(s)) {
+      res += s.slice(last, start);
+      res += s.slice(start, end).replace(/_/g, UNDERSCORE_PLACEHOLDER).replace(/~/g, TILDE_PLACEHOLDER);
+      last = end;
+    }
+    res += s.slice(last);
+    s = res;
+  }
+
+  // percent-decode (longest matches first so a short one can't split a long one)
+  const grs = [...new Set(s.match(/(%[0-9a-fA-F]{2})+/g) || [])].sort((a, b) => b.length - a.length);
+  for (const gr of grs) {
+    try { s = s.split(gr).join(decodeURIComponent(gr)); } catch (_) { /* leave as-is */ }
+  }
+
+  let i = 0;
+  const topart = [];
+  while (i < s.length) {
+    if (s[i] === "_" || s[i] === "~") {
+      let j = i + 1;
+      while (j < s.length && s[j] === s[i]) j++;
+      const length = j - i;
+      topart.push(i);
+      const nxt = findNextUnescaped(s, i, length);
+      if (nxt !== -1) {
+        topart.push(nxt + length);
+        i = nxt + length + 1;
+        continue;
+      }
+    }
+    if (s[i] === "(" && s.startsWith("(img", i)) {
+      topart.push(i);
+      const close = findMatchingClosingBracket(s, i);
+      if (close !== null) { topart.push(close + 1); i = close; }
+    }
+    if (s[i] === "(" && s.startsWith("(screen", i)) {
+      topart.push(i);
+      const close = findMatchingClosingBracket(s, i);
+      if (close !== null) { topart.push(close + 1); i = close; }
+    }
+    if (s.startsWith("(PAGEBREAK)", i)) {
+      topart.push(i);
+      topart.push(i + "(PAGEBREAK)".length);
+    }
+    if (s.startsWith("(LINEBREAK)", i)) {
+      topart.push(i);
+      topart.push(i + "(LINEBREAK)".length);
+    }
+    if (s.startsWith("http://", i) || s.startsWith("https://", i)) {
+      topart.push(i);
+      let j = i + 1, bracketLevel = 0;
+      while (j < s.length && !(/\s/.test(s[j]) || (s[j] === ")" && bracketLevel === 0))) {
+        if (s[j] === "(") bracketLevel++;
+        else if (s[j] === ")" && bracketLevel > 0) bracketLevel--;
+        j++;
+      }
+      if ([",", ".", ";"].includes(s[j - 1])) topart.push(j - 1);
+      else topart.push(j);
+      i = j;
+    }
+    i++;
+  }
+
+  topart.sort((a, b) => a - b);
+  const parts = partition(s, topart).map((x) => ["", x.replace(/敥/g, "")]);
+
+  const process = (str) => String(str)
+    .replace(/\\_/g, "_")
+    .replace(/\\\./g, ".")
+    .split(UNDERSCORE_PLACEHOLDER).join("_")
+    .split(TILDE_PLACEHOLDER).join("~");
+
+  for (const part of parts) {
+    if (!part[1]) continue;
+    try {
+      if (part[1].startsWith("_") && part[1].endsWith("_")) {
+        let j = 1;
+        while (j < part[1].length && part[1][j] === "_" && part[1][part[1].length - j - 1] === "_") j++;
+        part[1] = part[1].slice(j, part[1].length - j);
+        if (j === 1) part[0] = "italic";
+        else if (j === 2) part[0] = "bold";
+        else if (j === 3) part[0] = "underline";
+        else if (j === 4) part[0] = "italicbold";
+        else if (j === 5) part[0] = "boldunderline";
+        else if (j >= 6) part[0] = "italicboldunderline";
+      }
+      if (part[1].startsWith("~") && part[1].endsWith("~")) {
+        part[0] = "strike";
+        part[1] = part[1].slice(1, -1);
+      }
+      if (part[1] === "(PAGEBREAK)") { part[0] = "pagebreak"; part[1] = ""; }
+      if (part[1] === "(LINEBREAK)") { part[0] = "linebreak"; part[1] = ""; }
+      if (part[1].length > 4 && part[1].slice(0, 4) === "(img") {
+        if (part[1][part[1].length - 1] !== ")") part[1] += ")";
+        part[1] = part[1].slice(4, -1);
+        part[0] = "img";
+      }
+      if (part[1].length > 7 && part[1].slice(0, 7) === "(screen") {
+        if (part[1][part[1].length - 1] !== ")") part[1] += ")";
+        const [forPrint, forScreen] = part[1].slice(8, -1).split("|");
+        part[1] = { for_print: process(forPrint), for_screen: process(forScreen) };
+        part[0] = "screen";
+        continue;
+      }
+      if (part[1].startsWith("http://") || part[1].startsWith("https://")) part[0] = "hyperlink";
+      if (part[1].length > 3 && part[1].slice(0, 4) === "(sc") {
+        if (part[1][part[1].length - 1] !== ")") part[1] += ")";
+        part[1] = part[1].slice(3, -1);
+        part[0] = "sc";
+      }
+      part[1] = process(part[1]);
+    } catch (_) { /* leave the run as plain text */ }
+  }
+
+  return parts;
+}
+
+// renderRunsForScreen flattens parsed runs to the plain text players see (screen
+// mode): the for_screen side of (screen …), (LINEBREAK) → newline, images and
+// page breaks dropped, all other runs as their stripped text (chgksuite docx
+// screen-mode `token_text`).
+function renderRunsForScreen(runs) {
+  let res = "";
+  for (const [type, val] of runs) {
+    if (type === "linebreak") res += "\n";
+    else if (type === "pagebreak" || type === "img") continue;
+    else if (type === "screen") res += val.for_screen;
+    else res += val;
+  }
+  return res;
+}
+
+// screenText applies the screen-mode transforms (accents first, then brackets,
+// matching chgksuite's order), resolves backtick stress, then parses inline
+// directives and composes the player-facing plain text.
 function screenText(s) {
-  return removeSquareBrackets(removeAccents(s || ""));
+  s = removeSquareBrackets(removeAccents(s || ""));
+  s = backtickReplace(s);
+  return renderRunsForScreen(parse4sElem(s));
 }
 
 // shareText builds the plain text handed to testers over chat: the screen-mode
@@ -246,6 +475,6 @@ function shareText(desc, number) {
 export const xyChgk = {
   parseBlocks, numberDirective, questionText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
-  removeAccents, removeSquareBrackets, screenText, shareText,
+  removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem,
 };
 if (typeof window !== "undefined") window.xyChgk = xyChgk;

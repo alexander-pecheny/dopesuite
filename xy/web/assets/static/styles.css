@@ -15,6 +15,7 @@
 }
 
 :root {
+  color-scheme: light;
   --grid: #dfe3e8;
   --grid-dark: #c9ced6;
   --toolbar: #f1f4f9;
@@ -5331,6 +5332,10 @@ body.is-fullscreen.od-page .match-main {
 
 /* ── Dark theme ─────────────────────────────────────────────────────────── */
 :root[data-theme="dark"] {
+  /* let native controls (select dropdown arrows, scrollbars, the date picker)
+     render with the dark UA palette — otherwise the <select> arrows stay black
+     and vanish against dark fills */
+  color-scheme: dark;
   /* neutral surfaces — base (page) darkest, paper/cards lifted, structure/
      header/hover progressively lighter to read as elevation */
   --page: #14161b;
@@ -5719,6 +5724,8 @@ body.is-fullscreen.od-page .match-main {
 .kcard:hover { background: var(--hover-bg); }
 .kcard.dragging { opacity: 0.4; }
 .kcard-title { font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; }
+/* auto/directive question number reads as scaffolding, not content */
+.kcard-num { color: var(--muted); }
 .kcard-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
 /* heading cards read as list dividers (no tile), meta cards as muted notes */
 .kcard-heading { background: transparent; padding-bottom: var(--space-1); }
@@ -5738,7 +5745,6 @@ body.is-fullscreen.od-page .match-main {
   border-radius: var(--radius-pill);
   background: var(--muted);
 }
-.label-chip-lg { width: auto; height: auto; padding: var(--space-0-5) var(--space-2); color: #fff; font-size: var(--text-xs); }
 
 /* card detail overlay — occupies the whole lower section (below the fixed
    header), fully obscuring the kanban; the panel itself scrolls internally so
@@ -5771,8 +5777,10 @@ body.is-fullscreen.od-page .match-main {
    natural size (flex: none) so nothing is compressed — iOS WebKit otherwise
    shrinks native <select>s below their min-height and clips the value text. */
 .card-detail > * { flex: none; }
-.card-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
-.card-head-actions { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; }
+/* type selector, copy button and close × share one line */
+.card-detail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.card-kind-select { flex: 0 1 auto; width: auto; min-width: 0; }
+.card-head-actions { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; margin-left: auto; }
 /* Copy-for-test feedback sits right under the button (top-right of the panel). */
 .card-copy-msg { align-self: flex-end; margin-top: calc(var(--space-1) * -1); font-size: var(--text-xs); color: var(--green, var(--accent)); }
 .card-copy-msg[data-err] { color: var(--red, var(--danger)); }
@@ -5802,17 +5810,18 @@ body.is-fullscreen.od-page .match-main {
 
 /* label picker */
 .label-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* Assigned labels render as filled colour pills (the colour is set via the CSSOM
+   in paintLabels); the trailing "×" stays as the remove affordance. */
 .label-pick {
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--muted);
-  border-radius: var(--radius-sm);
-  background: var(--page);
-  color: var(--text);
+  padding: var(--space-0-5) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--muted);
+  color: #fff;
   font-size: var(--text-xs);
   cursor: var(--cursor-action);
 }
-.label-pick.is-on { border-color: var(--text); font-weight: var(--fw-bold); }
+.label-pick.is-on { font-weight: var(--fw-bold); }
 .label-empty { font-size: var(--text-xs); color: var(--muted); }
 .label-add-row { display: flex; gap: var(--space-2); align-items: center; }
 /* min-width:0 lets the select shrink below its longest <option>; without it the
@@ -5877,5 +5886,5 @@ body.is-fullscreen.od-page .match-main {
   .card-desc { font-size: var(--text-xs-plus); min-height: 200px; }
   .card-section-label { margin-top: var(--space-2); }
   .tl-comment { font-size: var(--text-xs-plus); }
-  .label-pick, .label-chip-lg { font-size: var(--text-2xs); }
+  .label-pick { font-size: var(--text-2xs); }
 }

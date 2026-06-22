@@ -38,21 +38,18 @@
   <div class="card-overlay" id="cardOverlay" hidden>
     <div class="card-detail" role="dialog" aria-modal="true">
       <div class="card-detail-head">
-        <div class="card-labels" id="cardLabels"></div>
+        <select class="input card-kind-select" id="cardKind" aria-label="Тип карточки">
+          <option value="question">Вопрос</option>
+          <option value="meta">Метаинформация</option>
+          <option value="heading">Заголовок</option>
+          <option value="other">Другое</option>
+        </select>
         <div class="card-head-actions">
           <button class="btn btn-small" id="cardCopy" type="button" title="Скопировать текст вопроса для тест-сессии (экранный режим)" hidden>📋 Для теста</button>
           <button class="action-icon" id="cardClose" aria-label="Закрыть">×</button>
         </div>
       </div>
       <div class="card-copy-msg" id="cardCopyMsg" hidden></div>
-
-      <label class="card-section-label" id="cardKindLabel">Тип карточки</label>
-      <select class="input" id="cardKind">
-        <option value="question">Вопрос</option>
-        <option value="meta">Метаинформация</option>
-        <option value="heading">Заголовок</option>
-        <option value="other">Другое</option>
-      </select>
 
       <label class="card-section-label">Описание</label>
       <textarea class="card-desc" id="cardDesc" spellcheck="false"></textarea>

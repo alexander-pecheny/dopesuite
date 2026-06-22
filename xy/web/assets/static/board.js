@@ -235,6 +235,19 @@ function cardTitle(card, number) {
   return body;
 }
 
+// renderCardTitle builds the title node. For numbered question cards the auto/
+// directive number is rendered in a muted span so it reads as scaffolding,
+// visually distinct from the question content itself.
+function renderCardTitle(card, number) {
+  if (card.kind === "question" && number) {
+    const body = deriveTitle(xyChgk.previewText(card.kind, card.desc));
+    return el("div", { class: "kcard-title" },
+      el("span", { class: "kcard-num", text: `${number}. ` }),
+      body);
+  }
+  return el("div", { class: "kcard-title", text: cardTitle(card, number) });
+}
+
 function renderCard(card, number) {
   const node = el("div", { class: "kcard kcard-" + (card.kind || "normal"), draggable: "true", dataset: { cardId: card.id }, onclick: () => openCard(card) });
   const labelRow = el("div", { class: "kcard-labels" });
@@ -243,7 +256,7 @@ function renderCard(card, number) {
     if (lbl) labelRow.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
   }
   if (labelRow.children.length) node.append(labelRow);
-  node.append(el("div", { class: "kcard-title", text: cardTitle(card, number) }));
+  node.append(renderCardTitle(card, number));
   node.addEventListener("dragstart", (e) => {
     e.stopPropagation();
     e.dataTransfer.setData("text/xy-card", String(card.id));
@@ -260,7 +273,7 @@ function paintLabels() {
     chip.style.backgroundColor = chip.dataset.c;
   }
   for (const sw of document.querySelectorAll(".label-pick[data-c]")) {
-    sw.style.borderLeftColor = sw.dataset.c;
+    sw.style.backgroundColor = sw.dataset.c;
   }
 }
 
@@ -425,7 +438,6 @@ function addCard(list) {
   pendingList = list;
   openCardId = null;
   document.getElementById("cardDesc").value = "";
-  document.getElementById("cardKindLabel").hidden = false;
   document.getElementById("cardKind").hidden = false;
   document.getElementById("cardKind").value = "question";
   document.getElementById("cardMessage").textContent = "";
@@ -516,7 +528,6 @@ async function openCard(card) {
   // Kind selector: editable for ordinary cards, hidden for test cards (their
   // "kind" is fixed and their description is JSON, not 4s markup).
   const isTest = card.kind === "test";
-  document.getElementById("cardKindLabel").hidden = isTest;
   const kindSel = document.getElementById("cardKind");
   kindSel.hidden = isTest;
   if (!isTest) kindSel.value = card.kind || "question";
@@ -526,7 +537,6 @@ async function openCard(card) {
   document.getElementById("cardCopyMsg").hidden = true;
   cardOverlay.hidden = false;
   renderLabelPicker(card);
-  renderCardLabels(card);
   await loadAttachments(card.id);
   await loadTimeline(card.id);
   await populateMoveBoards();
@@ -843,16 +853,6 @@ document.getElementById("cardDelete").addEventListener("click", async () => {
 });
 
 // ---- labels ----
-function renderCardLabels(card) {
-  const box = document.getElementById("cardLabels");
-  box.replaceChildren();
-  for (const lid of state.cardLabels[card.id] || []) {
-    const lbl = labelById(lid);
-    if (lbl) box.append(el("span", { class: "label-chip label-chip-lg", title: lbl.name, dataset: { c: lbl.color }, text: lbl.name }));
-  }
-  paintLabels();
-}
-
 // renderLabelPicker shows only the labels actually assigned to this card (each
 // removable on click). Boards can have dozens of labels (e.g. one green/red pair
 // per test session), so the rest live behind an "add label" dropdown rather than
@@ -905,7 +905,6 @@ async function toggleLabel(card, lbl) {
     await put("setCardLabels", `/api/cards/${card.id}/labels`, { label_ids: ids, events });
     state.cardLabels[card.id] = ids;
     renderLabelPicker(card);
-    renderCardLabels(card);
     render();
     await loadTimeline(card.id);
   } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
