@@ -468,7 +468,8 @@ async function addTestCard(list) {
       description_enc: await xyCrypto.encField(dk, desc), rank, kind: "test",
     });
     state.cards.push({ id: res.id, listId: list.id, kind: "test", rank, desc });
-    // auto labels
+    // auto labels, then assign both to the new card
+    const autoIds = [];
     for (const [suffix, color, kind] of [["взяли", "#3aa657", "test_taken"], ["не взяли", "#dd3322", "test_missed"]]) {
       const lr = await create("createLabel", `/api/boards/${boardId}/labels`, {
         name_enc: await xyCrypto.encField(dk, `${tag} ${suffix}`),
@@ -476,7 +477,10 @@ async function addTestCard(list) {
         kind,
       });
       state.labels.push({ id: lr.id, kind, name: `${tag} ${suffix}`, color });
+      autoIds.push(lr.id);
     }
+    await put("setCardLabels", `/api/cards/${res.id}/labels`, { label_ids: autoIds });
+    state.cardLabels[res.id] = autoIds.slice();
     render();
   } catch (err) { setStatus("error"); }
 }
@@ -536,6 +540,7 @@ async function openCard(card) {
   document.getElementById("cardCopy").hidden = card.kind !== "question";
   document.getElementById("cardCopyMsg").hidden = true;
   cardOverlay.hidden = false;
+  document.getElementById("labelFilter").value = "";
   renderLabelPicker(card);
   await loadAttachments(card.id);
   await loadTimeline(card.id);
@@ -857,6 +862,47 @@ document.getElementById("cardDelete").addEventListener("click", async () => {
 // removable on click). Boards can have dozens of labels (e.g. one green/red pair
 // per test session), so the rest live behind an "add label" dropdown rather than
 // being dumped on screen.
+// labelLastUsage maps label id → the highest card id currently carrying it.
+// Card ids grow monotonically, so the max id is a recency proxy for "last used"
+// without scanning per-card timelines. Labels absent from the map were never
+// used (or imported with no assignments).
+function labelLastUsage() {
+  const usage = new Map();
+  for (const [cardId, ids] of Object.entries(state.cardLabels)) {
+    const cid = Number(cardId);
+    for (const id of ids || []) {
+      const prev = usage.get(id);
+      if (prev === undefined || cid > prev) usage.set(id, cid);
+    }
+  }
+  return usage;
+}
+
+// sortLabels orders by last usage descending; labels with no usage data fall to
+// the bottom, ordered alphabetically descending.
+function sortLabels(labels) {
+  const usage = labelLastUsage();
+  return labels.slice().sort((a, b) => {
+    const ua = usage.get(a.id), ub = usage.get(b.id);
+    const ha = ua !== undefined, hb = ub !== undefined;
+    if (ha && hb) return ub - ua;
+    if (ha !== hb) return ha ? -1 : 1;
+    return b.name.localeCompare(a.name, "ru");
+  });
+}
+
+// Unassigned labels for the currently open card, pre-sorted; the dropdown is
+// (re)populated from this list, narrowed by the filter input.
+let labelPickerPool = [];
+
+function fillLabelOptions() {
+  const sel = document.getElementById("labelAdd");
+  const q = (document.getElementById("labelFilter").value || "").trim().toLowerCase();
+  sel.replaceChildren(el("option", { value: "", text: "+ добавить метку…" }));
+  const list = q ? labelPickerPool.filter((l) => l.name.toLowerCase().includes(q)) : labelPickerPool;
+  for (const lbl of list) sel.append(el("option", { value: String(lbl.id), text: lbl.name }));
+}
+
 function renderLabelPicker(card) {
   const picker = document.getElementById("labelPicker");
   picker.replaceChildren();
@@ -873,15 +919,13 @@ function renderLabelPicker(card) {
   }
   if (!assigned.length) picker.append(el("span", { class: "label-empty", text: "меток нет" }));
 
-  // dropdown of the remaining (unassigned) labels
-  const sel = document.getElementById("labelAdd");
-  sel.replaceChildren(el("option", { value: "", text: "+ добавить метку…" }));
-  const unassigned = state.labels
-    .filter((l) => !assignedSet.has(l.id))
-    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
-  for (const lbl of unassigned) sel.append(el("option", { value: String(lbl.id), text: lbl.name }));
+  // dropdown of the remaining (unassigned) labels, filterable via #labelFilter
+  labelPickerPool = sortLabels(state.labels.filter((l) => !assignedSet.has(l.id)));
+  fillLabelOptions();
   paintLabels();
 }
+
+document.getElementById("labelFilter").addEventListener("input", fillLabelOptions);
 
 document.getElementById("labelAdd").addEventListener("change", (e) => {
   const id = Number(e.target.value);
