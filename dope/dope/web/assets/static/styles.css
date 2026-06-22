@@ -47,6 +47,12 @@
   --paper: #ffffff;
   --paper-transparent: rgba(255, 255, 255, 0);
   --structure: #eef1f4;
+  /* Экран (projector board) defaults. Theme-independent on purpose: a projector
+     board is white/black regardless of the host's UI theme. The host can
+     override each via the Экран settings panel (stored per game). */
+  --screen-bg-default: #ffffff;
+  --screen-fg-default: #000000;
+  --screen-muted-default: #5f6b7a;
   --accent-soft: #eef3fa;
   --slate: #64748b;
   --slate-strong: #334155;
@@ -159,6 +165,7 @@
   --shadow-focus-success: 0 0 0 3px rgba(22, 163, 74, 0.12);
   --shadow-focus-danger: 0 0 0 3px rgba(220, 38, 38, 0.12);
   --shadow-scroll-inset: inset -24px 0 18px -22px rgba(32, 33, 36, 0.45);
+  --transition-fast: 120ms ease;
   --focus-ring-none: 0;
   --focus-outline-offset-tight: calc(var(--space-0-5) * -1);
 
@@ -3807,27 +3814,35 @@ body:not(.embedded-match) .grid-match {
    columns are laid out side by side and the whole board is scaled with `zoom`
    by layoutScreen() so every team fits the screen. */
 .screen-wrapper {
+  /* Host-overridable projector palette; JS sets the --screen-* vars inline from
+     the saved settings, falling back to the theme-independent defaults. */
+  --screen-bg: var(--screen-bg-default);
+  --screen-fg: var(--screen-fg-default);
+  --screen-muted: var(--screen-muted-default);
+  --screen-border: color-mix(in srgb, var(--screen-fg) 16%, transparent);
+  --screen-team-col: 160px;
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  padding: var(--space-2);
-  background: var(--structure);
+  overflow: auto;
+  background: var(--screen-bg);
+  color: var(--screen-fg);
 }
 
 .screen-cols {
+  /* margin:auto centres on both axes AND, unlike justify-content, never clips
+     the start edge when the (font-scaled) board overflows — so the host can
+     scroll to it. */
+  margin: auto;
   display: flex;
   align-items: flex-start;
-  justify-content: center;
   gap: var(--space-4);
 }
 
-/* The board doesn't scroll, so the Итог frozen-column offsets are pointless —
-   drop them. Team names keep Итог's truncate/fade, but the column is narrower
-   than Итог's so short names don't waste width — that lets the font grow. Long
-   names fade out (acceptable for projection). */
+/* The board doesn't use the Итог frozen-column offsets — drop them. Team names
+   keep Итог's truncate/fade. The team column width is driven by --screen-team-col
+   so layoutScreen() can widen it to spend leftover horizontal space. */
 .screen-table.results-table .results-place,
 .screen-table.results-table .results-team,
 .screen-table.results-table .results-total,
@@ -3836,15 +3851,119 @@ body:not(.embedded-match) .grid-match {
 }
 
 .screen-table.od-results-table {
-  --results-team-col: 160px;
+  --results-team-col: var(--screen-team-col);
+}
+
+/* Recolour the board from the host palette: cells/headers take the chosen
+   background and text colour, city sub-labels the muted colour, and the
+   group separators a faint line derived from the text colour. */
+.screen-table.results-table th,
+.screen-table.results-table td,
+.screen-table.results-table .results-place,
+.screen-table.results-table .results-team,
+.screen-table.results-table .results-total,
+.screen-table.results-table thead th {
+  background: var(--screen-bg);
+  color: var(--screen-fg);
+}
+
+.screen-table.results-table thead th {
+  border-bottom: 1px solid var(--screen-border);
+}
+
+.screen-table.results-table .results-team-city {
+  color: var(--screen-muted);
+}
+
+.screen-table.results-table .results-group-gap td {
+  background: var(--screen-bg);
+}
+
+.screen-table.results-table .results-row:not(.results-group-first) td {
+  border-top-color: var(--screen-border);
 }
 
 .screen-empty {
-  color: var(--muted);
+  color: var(--screen-muted);
   font-size: var(--text-lg);
 }
 
-/* Fullscreen (projector) mode: drop the site chrome so only the board shows. */
+/* Floating host controls + settings panel over the board. Visible while
+   configuring and while projecting (so the host can restore the chrome). */
+.screen-controls {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--z-dropdown);
+  display: flex;
+  gap: var(--space-2);
+  transition: opacity var(--transition-fast);
+}
+
+/* While projecting (chrome hidden) the controls fade out so they don't show on
+   the screen, then reappear when the host moves the cursor over the board. */
+body.is-fullscreen .screen-controls {
+  opacity: 0;
+}
+
+body.is-fullscreen .screen-wrapper:hover .screen-controls,
+body.is-fullscreen .screen-controls:focus-within {
+  opacity: 1;
+}
+
+.screen-btn {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.screen-panel {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(280px, calc(100vw - var(--space-6)));
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-modal);
+}
+
+.screen-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.screen-field > input[type="color"] {
+  width: 48px;
+  min-height: 32px;
+  padding: 2px;
+  cursor: var(--cursor-action);
+}
+
+.screen-field > input[type="range"] {
+  flex: 1;
+}
+
+.screen-field > input[type="number"] {
+  width: 72px;
+}
+
+.screen-check {
+  font-size: var(--text-base);
+}
+
+.screen-reset {
+  align-self: flex-start;
+}
+
+/* Chrome-hidden (projector) mode: drop the site chrome so only the board shows. */
 body.is-fullscreen .host-top {
   display: none;
 }

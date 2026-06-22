@@ -327,6 +327,13 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			s.handleScopedGameScheme(w, r, scope)
 			return
+		case "screen-settings":
+			if len(parts) != 4 {
+				http.NotFound(w, r)
+				return
+			}
+			s.handleScopedGameScreenSettings(w, r, scope)
+			return
 		case "results":
 			if len(parts) != 4 {
 				http.NotFound(w, r)
@@ -649,6 +656,85 @@ func (s *server) handleScopedGameScheme(w http.ResponseWriter, r *http.Request, 
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write([]byte(schemeJSON))
+}
+
+// handleScopedGameScreenSettings reads (GET) or replaces (PUT) the per-game
+// "Экран" projector-board configuration. The blob is opaque to the server —
+// the client owns its shape — so the handler only validates that the body is
+// JSON. Reads follow the fest's read visibility; writes require table-editor
+// rights, matching the rest of the scoped game API.
+func (s *server) handleScopedGameScreenSettings(w http.ResponseWriter, r *http.Request, scope festScope) {
+	switch r.Method {
+	case http.MethodGet:
+		if !s.authorizeFestRead(w, r, scope.FestID) {
+			return
+		}
+		var settingsJSON string
+		err := s.eng.DB.QueryRowContext(r.Context(), `
+	select coalesce(screen_settings_json, '') from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&settingsJSON)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if settingsJSON == "" {
+			settingsJSON = "{}"
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write([]byte(settingsJSON))
+	case http.MethodPut:
+		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
+			return
+		}
+		defer r.Body.Close()
+		raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(bytes.TrimSpace(raw)) == 0 {
+			raw = []byte("{}")
+		}
+		if !json.Valid(raw) {
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		if err := s.updateGameScreenSettings(r.Context(), scope, raw); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write(raw)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *server) updateGameScreenSettings(reqCtx context.Context, scope festScope, raw []byte) error {
+	return s.eng.WithWriteTx(reqCtx, scope.FestID, "game-screen-settings-put", func(ctx context.Context, tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `
+update games set screen_settings_json = ?, updated_at = ? where fest_id = ? and id = ?`,
+			string(raw), util.UtcNow(), scope.FestID, scope.GameID)
+		if err != nil {
+			return err
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return sql.ErrNoRows
+		}
+		_, err = festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, "game:screen-settings", string(raw))
+		return err
+	})
 }
 
 func (s *server) handleScopedFest(w http.ResponseWriter, r *http.Request, festID int64) {

@@ -36,6 +36,12 @@ let scopeGameID = route.gameID;
 // nulls window.__GAME_INIT__.
 const staticMode = Boolean(window.__GAME_INIT__?.static);
 const canEdit = Boolean(window.__GAME_INIT__?.canEdit);
+// Экран (projector board) settings ship in the init payload (shared per game so
+// every host sees the same board). Capture before the loader nulls __GAME_INIT__.
+const initScreenSettings = (window.__GAME_INIT__?.screenSettings &&
+  typeof window.__GAME_INIT__.screenSettings === "object")
+  ? window.__GAME_INIT__.screenSettings
+  : {};
 document.body.classList.toggle("viewer-readonly", viewer);
 if (viewer) {
   if (canEdit) gameTable.mountEditorLink(statusNode);
@@ -96,7 +102,11 @@ const TABS = [
   {key: "results", label: "Итог"},
   {key: "detailed", label: "Подробно"},
   {key: "input", label: "Ввод"},
-  {key: "screen", label: "Экран"},
+  // Экран (проекторное табло) is a host-only tool. Viewers never get the tab —
+  // they only ever see the board when a host projects it on an actual screen.
+  // (tabFromHash() filters against TABS, so #screen also can't be reached by a
+  // viewer via the URL hash.)
+  ...(viewer ? [] : [{key: "screen", label: "Экран"}]),
 ];
 
 function tabFromHash() {
@@ -115,31 +125,45 @@ window.addEventListener("hashchange", () => {
 window.addEventListener("resize", () => {
   if (renderedTab === "detailed" || renderedTab === "results") teamNameOverflow.schedule();
   if (renderedTab === "screen") scheduleScreenFit();
-  syncFullscreen();
   updateResultsScrollState();
 });
 
-// Fullscreen detection: when projecting, drop the site chrome so only the board
-// shows. Covers the Fullscreen API, installed-PWA fullscreen, and F11 browser
-// fullscreen (which the API can't observe) via a viewport-vs-screen heuristic.
-function isFullscreen() {
-  if (document.fullscreenElement) return true;
-  if (window.matchMedia?.("(display-mode: fullscreen)").matches) return true;
-  // F11 / OS fullscreen, which the API can't see: the window spans the whole
-  // screen AND carries no browser chrome. A merely-maximized window still has a
-  // toolbar (outerHeight - innerHeight is large), so it won't false-positive.
-  const noBrowserChrome = window.outerHeight - window.innerHeight <= 4;
-  const fillsScreen = Math.abs(window.outerHeight - screen.height) <= 2;
-  return noBrowserChrome && fillsScreen;
-}
-function syncFullscreen() {
-  const on = isFullscreen();
-  if (document.body.classList.contains("is-fullscreen") === on) return;
+// Chrome-hide ("Скрыть оформление"): the host explicitly drops the site chrome
+// so only the board shows, and we request native fullscreen for maximum space.
+// (Replaces the old auto-detect-fullscreen heuristic — projection is now an
+// intentional toggle, not something inferred from window geometry.)
+let chromeHidden = false;
+function setChromeHidden(on) {
+  chromeHidden = on;
   document.body.classList.toggle("is-fullscreen", on);
-  if (renderedTab === "screen") scheduleScreenFit();
+  if (renderedTab === "screen") {
+    scheduleScreenFit();
+    updateScreenControls();
+  }
 }
-document.addEventListener("fullscreenchange", syncFullscreen);
-syncFullscreen();
+async function toggleChrome() {
+  if (!chromeHidden) {
+    setChromeHidden(true);
+    try {
+      await document.documentElement.requestFullscreen?.();
+    } catch {
+      // Fullscreen may be denied (no user gesture / unsupported); chrome is
+      // still hidden, which is the part that matters for projection.
+    }
+  } else {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen?.();
+    } catch {
+      // ignore — we clear the hidden state regardless below
+    }
+    setChromeHidden(false);
+  }
+}
+// Leaving native fullscreen (e.g. Esc) while chrome is hidden should bring the
+// chrome back, so the host is never stranded without the controls.
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && chromeHidden) setChromeHidden(false);
+});
 document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
 const gameLoader = gameTable.createGameDataLoader({
@@ -2420,21 +2444,27 @@ function lastEnteredQuestion() {
 }
 
 // resultsTeamCell builds the .results-team cell (name + optional city + the
-// hover popover) shared by the Итог table and the Экран board.
-function resultsTeamCell(index) {
+// hover popover) shared by the Итог table and the Экран board. opts lets the
+// Экран board tailor it: opts.showCity=false drops the city line, opts.flag
+// prepends a country flag (or globe) emoji to the name. Defaults keep the Итог
+// behaviour untouched.
+function resultsTeamCell(index, opts = {}) {
+  const showCity = opts.showCity !== false;
+  const flag = opts.flag || "";
   const team = state.teams[index];
   const nameTd = document.createElement("td");
   nameTd.className = "results-team";
   const teamLabelText = team.name || `Команда ${index + 1}`;
+  const displayText = flag ? `${flag} ${teamLabelText}` : teamLabelText;
   const nameWrap = document.createElement("span");
   nameWrap.className = "results-team-name-wrap";
   const nameSpan = document.createElement("span");
   nameSpan.className = "results-team-name";
-  nameSpan.textContent = teamLabelText;
+  nameSpan.textContent = displayText;
   nameSpan.tabIndex = 0;
   nameSpan.setAttribute("aria-label", teamLabelText);
   nameWrap.appendChild(nameSpan);
-  if (team.city) {
+  if (showCity && team.city) {
     const citySpan = document.createElement("span");
     citySpan.className = "results-team-city";
     citySpan.textContent = team.city;
@@ -2443,7 +2473,7 @@ function resultsTeamCell(index) {
   nameTd.appendChild(nameWrap);
   const fullName = document.createElement("span");
   fullName.className = "results-team-name-popover";
-  fullName.textContent = teamLabelText;
+  fullName.textContent = displayText;
   nameTd.appendChild(fullName);
   return nameTd;
 }
@@ -2455,7 +2485,273 @@ function resultsTeamCell(index) {
 // glued into a group (rounded block) with a gap between groups, exactly like
 // Итог; the groups are packed column-major across as many columns as it takes
 // to maximise the font, then the whole board is scaled with `zoom` so it fills
-// the screen without scrolling.
+// the screen. The board is host-customisable (colours, font scale, column count,
+// city/country toggles); settings are shared per game (saved server-side).
+
+const SCREEN_DEFAULTS = {
+  bg: "#ffffff", // background colour
+  fg: "#000000", // primary text colour
+  muted: "#5f6b7a", // secondary (city) text colour
+  fontScale: 1, // multiplier on the auto-fit zoom; 1 = fill the screen
+  columns: 0, // 0 = auto-pick the column count, >0 = force that many
+  showCity: true,
+  showCountry: false,
+};
+
+function normalizeScreenSettings(raw) {
+  const s = {...SCREEN_DEFAULTS};
+  if (raw && typeof raw === "object") {
+    if (typeof raw.bg === "string") s.bg = raw.bg;
+    if (typeof raw.fg === "string") s.fg = raw.fg;
+    if (typeof raw.muted === "string") s.muted = raw.muted;
+    if (Number.isFinite(raw.fontScale)) s.fontScale = Math.min(Math.max(raw.fontScale, 0.4), 2);
+    if (Number.isFinite(raw.columns)) s.columns = Math.max(0, Math.round(raw.columns));
+    if (typeof raw.showCity === "boolean") s.showCity = raw.showCity;
+    if (typeof raw.showCountry === "boolean") s.showCountry = raw.showCountry;
+  }
+  return s;
+}
+
+let screenSettings = normalizeScreenSettings(initScreenSettings);
+let screenPanelOpen = false;
+
+// City → ISO-3166 alpha-2 lookup for the country-flag option. Russian-domain
+// tournaments are mostly RU/CIS with the occasional international team; unknown
+// cities simply get no flag (and a team whose name/city mentions "сборная" gets
+// a globe instead — see teamFlagEmoji). Extend freely as new cities appear.
+const CITY_COUNTRY = {
+  "москва": "RU", "мск": "RU", "санкт-петербург": "RU", "спб": "RU", "петербург": "RU",
+  "питер": "RU", "новосибирск": "RU", "екатеринбург": "RU", "казань": "RU",
+  "нижний новгород": "RU", "челябинск": "RU", "самара": "RU", "омск": "RU",
+  "ростов-на-дону": "RU", "уфа": "RU", "красноярск": "RU", "пермь": "RU",
+  "воронеж": "RU", "волгоград": "RU", "краснодар": "RU", "саратов": "RU",
+  "тюмень": "RU", "тольятти": "RU", "ижевск": "RU", "барнаул": "RU",
+  "ульяновск": "RU", "иркутск": "RU", "хабаровск": "RU", "ярославль": "RU",
+  "владивосток": "RU", "махачкала": "RU", "томск": "RU", "оренбург": "RU",
+  "кемерово": "RU", "новокузнецк": "RU", "рязань": "RU", "астрахань": "RU",
+  "пенза": "RU", "липецк": "RU", "тула": "RU", "киров": "RU", "чебоксары": "RU",
+  "калининград": "RU", "брянск": "RU", "курск": "RU", "иваново": "RU",
+  "магнитогорск": "RU", "тверь": "RU", "ставрополь": "RU", "белгород": "RU",
+  "сочи": "RU", "сургут": "RU", "владимир": "RU", "чита": "RU", "симферополь": "RU",
+  "севастополь": "RU", "калуга": "RU", "смоленск": "RU", "вологда": "RU",
+  "мурманск": "RU", "саранск": "RU", "тамбов": "RU", "грозный": "RU",
+  "якутск": "RU", "кострома": "RU", "петрозаводск": "RU", "нальчик": "RU",
+  "орёл": "RU", "орел": "RU", "новороссийск": "RU", "великий новгород": "RU",
+  "псков": "RU", "обнинск": "RU", "дубна": "RU", "зеленоград": "RU",
+  "минск": "BY", "гомель": "BY", "могилёв": "BY", "могилев": "BY", "витебск": "BY",
+  "гродно": "BY", "брест": "BY", "бобруйск": "BY", "барановичи": "BY",
+  "киев": "UA", "харьков": "UA", "одесса": "UA", "днепр": "UA", "днепропетровск": "UA",
+  "львов": "UA", "запорожье": "UA", "кривой рог": "UA", "николаев": "UA",
+  "винница": "UA", "херсон": "UA", "чернигов": "UA", "полтава": "UA",
+  "черкассы": "UA", "житомир": "UA", "сумы": "UA", "хмельницкий": "UA",
+  "черновцы": "UA", "ровно": "UA", "ивано-франковск": "UA", "тернополь": "UA",
+  "луцк": "UA", "ужгород": "UA",
+  "алматы": "KZ", "астана": "KZ", "нур-султан": "KZ", "нурсултан": "KZ",
+  "шымкент": "KZ", "караганда": "KZ", "актобе": "KZ", "тараз": "KZ",
+  "павлодар": "KZ", "усть-каменогорск": "KZ", "семей": "KZ", "атырау": "KZ",
+  "костанай": "KZ", "кызылорда": "KZ", "уральск": "KZ", "петропавловск": "KZ",
+  "тель-авив": "IL", "иерусалим": "IL", "хайфа": "IL", "беэр-шева": "IL",
+  "нетания": "IL", "ашдод": "IL", "ашкелон": "IL", "ришон-ле-цион": "IL",
+  "бат-ям": "IL", "петах-тиква": "IL",
+  "ташкент": "UZ", "самарканд": "UZ", "бухара": "UZ",
+  "бишкек": "KG", "ош": "KG", "душанбе": "TJ", "ашхабад": "TM",
+  "тбилиси": "GE", "батуми": "GE", "ереван": "AM", "баку": "AZ",
+  "кишинёв": "MD", "кишинев": "MD",
+  "таллин": "EE", "таллинн": "EE", "тарту": "EE", "рига": "LV",
+  "вильнюс": "LT", "каунас": "LT", "хельсинки": "FI",
+  "берлин": "DE", "мюнхен": "DE", "гамбург": "DE", "франкфурт": "DE",
+  "кёльн": "DE", "кельн": "DE", "дюссельдорф": "DE", "штутгарт": "DE",
+  "лондон": "GB", "манчестер": "GB", "прага": "CZ", "брно": "CZ",
+  "варшава": "PL", "краков": "PL", "вроцлав": "PL", "гданьск": "PL",
+  "париж": "FR", "амстердам": "NL", "мадрид": "ES", "барселона": "ES",
+  "рим": "IT", "милан": "IT", "вена": "AT", "цюрих": "CH", "женева": "CH",
+  "стокгольм": "SE", "осло": "NO",
+  "нью-йорк": "US", "нью йорк": "US", "бостон": "US", "чикаго": "US",
+  "сан-франциско": "US", "лос-анджелес": "US", "вашингтон": "US", "сиэтл": "US",
+  "торонто": "CA", "монреаль": "CA", "ванкувер": "CA",
+  "сидней": "AU", "мельбурн": "AU", "дубай": "AE", "абу-даби": "AE",
+};
+
+// flagEmoji turns a 2-letter ISO country code into its regional-indicator flag.
+function flagEmoji(cc) {
+  return cc.toUpperCase().replace(/[A-Z]/g, (c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+// teamFlagEmoji returns the leading emoji for a team when "Показывать страну" is
+// on: a globe for a "сборная" (national/all-star side), otherwise the flag of
+// the team's city's country, or "" when the city is unknown.
+function teamFlagEmoji(index) {
+  const team = state.teams[index] || {};
+  const hay = `${team.name || ""} ${team.city || ""}`.toLowerCase();
+  if (hay.includes("сборн")) return "🌐";
+  const cc = CITY_COUNTRY[String(team.city || "").trim().toLowerCase()];
+  return cc ? flagEmoji(cc) : "";
+}
+
+// saveScreenSettings persists the current settings to the server (shared per
+// game) on a short debounce, so dragging a colour/slider doesn't spam writes.
+let screenSaveTimer = 0;
+function saveScreenSettings() {
+  if (viewer) return;
+  if (screenSaveTimer) clearTimeout(screenSaveTimer);
+  screenSaveTimer = setTimeout(() => {
+    screenSaveTimer = 0;
+    fetch(`${route.apiBase}/screen-settings`, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(screenSettings),
+    }).catch(() => {});
+  }, 400);
+}
+
+// applyScreenColors pushes the palette onto the wrapper as inline CSS vars; the
+// .screen-table rules read them (with the theme-independent defaults as fallback).
+function applyScreenColors(wrapper) {
+  wrapper.style.setProperty("--screen-bg", screenSettings.bg || SCREEN_DEFAULTS.bg);
+  wrapper.style.setProperty("--screen-fg", screenSettings.fg || SCREEN_DEFAULTS.fg);
+  wrapper.style.setProperty("--screen-muted", screenSettings.muted || SCREEN_DEFAULTS.muted);
+}
+
+// updateScreenControls syncs the floating controls/panel with the current state
+// (panel open/closed, chrome-hide button label).
+function updateScreenControls() {
+  const pane = tabCache.get("screen");
+  const wrapper = pane?.querySelector(".screen-wrapper");
+  if (!wrapper) return;
+  const panel = wrapper.querySelector(".screen-panel");
+  if (panel) panel.hidden = !screenPanelOpen;
+  if (wrapper._screenSettingsBtn) {
+    wrapper._screenSettingsBtn.setAttribute("aria-expanded", screenPanelOpen ? "true" : "false");
+  }
+  if (wrapper._screenChromeBtn) {
+    wrapper._screenChromeBtn.textContent = chromeHidden ? "Показать оформление" : "Скрыть оформление";
+  }
+}
+
+function buildScreenControls(wrapper) {
+  const bar = document.createElement("div");
+  bar.className = "screen-controls";
+  const settingsBtn = document.createElement("button");
+  settingsBtn.type = "button";
+  settingsBtn.className = "btn screen-btn";
+  settingsBtn.textContent = "⚙ Настройки";
+  settingsBtn.setAttribute("aria-expanded", screenPanelOpen ? "true" : "false");
+  settingsBtn.addEventListener("click", () => {
+    screenPanelOpen = !screenPanelOpen;
+    updateScreenControls();
+  });
+  const chromeBtn = document.createElement("button");
+  chromeBtn.type = "button";
+  chromeBtn.className = "btn screen-btn screen-chrome-btn";
+  chromeBtn.textContent = chromeHidden ? "Показать оформление" : "Скрыть оформление";
+  chromeBtn.addEventListener("click", toggleChrome);
+  bar.append(settingsBtn, chromeBtn);
+  wrapper._screenSettingsBtn = settingsBtn;
+  wrapper._screenChromeBtn = chromeBtn;
+  return bar;
+}
+
+function buildScreenPanel(wrapper) {
+  const panel = document.createElement("div");
+  panel.className = "screen-panel";
+  panel.hidden = !screenPanelOpen;
+  const s = screenSettings;
+
+  const colorField = (label, key) => {
+    const f = document.createElement("label");
+    f.className = "field screen-field";
+    const span = document.createElement("span");
+    span.textContent = label;
+    const input = document.createElement("input");
+    input.type = "color";
+    input.value = s[key] || SCREEN_DEFAULTS[key];
+    input.addEventListener("input", () => {
+      s[key] = input.value;
+      applyScreenColors(wrapper);
+      saveScreenSettings();
+    });
+    f.append(span, input);
+    return f;
+  };
+  panel.append(
+    colorField("Цвет фона", "bg"),
+    colorField("Цвет текста", "fg"),
+    colorField("Цвет подписей", "muted"),
+  );
+
+  const fontField = document.createElement("label");
+  fontField.className = "field screen-field";
+  const fontSpan = document.createElement("span");
+  fontSpan.textContent = "Размер шрифта";
+  const fontInput = document.createElement("input");
+  fontInput.type = "range";
+  fontInput.min = "0.4";
+  fontInput.max = "2";
+  fontInput.step = "0.05";
+  fontInput.value = String(s.fontScale);
+  fontInput.addEventListener("input", () => {
+    s.fontScale = Math.min(Math.max(parseFloat(fontInput.value) || 1, 0.4), 2);
+    scheduleScreenFit();
+    saveScreenSettings();
+  });
+  fontField.append(fontSpan, fontInput);
+  panel.appendChild(fontField);
+
+  const colField = document.createElement("label");
+  colField.className = "field screen-field";
+  const colSpan = document.createElement("span");
+  colSpan.textContent = "Столбцы (0 — авто)";
+  const colInput = document.createElement("input");
+  colInput.type = "number";
+  colInput.min = "0";
+  colInput.max = "20";
+  colInput.step = "1";
+  colInput.className = "input";
+  colInput.value = String(s.columns);
+  colInput.addEventListener("change", () => {
+    s.columns = Math.max(0, Math.round(parseFloat(colInput.value) || 0));
+    colInput.value = String(s.columns);
+    scheduleScreenFit();
+    saveScreenSettings();
+  });
+  colField.append(colSpan, colInput);
+  panel.appendChild(colField);
+
+  const checkbox = (label, key, onToggle) => {
+    const l = document.createElement("label");
+    l.className = "checkbox screen-check";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = Boolean(s[key]);
+    input.addEventListener("change", () => {
+      s[key] = input.checked;
+      onToggle();
+      saveScreenSettings();
+    });
+    const span = document.createElement("span");
+    span.textContent = label;
+    l.append(input, span);
+    return l;
+  };
+  panel.append(
+    checkbox("Показывать город", "showCity", refreshScreen),
+    checkbox("Показывать страну", "showCountry", refreshScreen),
+  );
+
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "btn screen-reset";
+  reset.textContent = "Сбросить";
+  reset.addEventListener("click", () => {
+    screenSettings = {...SCREEN_DEFAULTS};
+    saveScreenSettings();
+    invalidateTabCache("screen");
+    render();
+  });
+  panel.appendChild(reset);
+
+  return panel;
+}
 
 // currentTourIndex returns the 0-based tour that the last entered question
 // belongs to, or 0 before the game starts (so the board shows T1).
@@ -2502,20 +2798,22 @@ function makeScreenColumn(tourLabel, rowItems) {
   return table;
 }
 
-function buildScreenView() {
-  const wrapper = document.createElement("div");
-  wrapper.className = "screen-wrapper";
-  const cols = document.createElement("div");
-  cols.className = "screen-cols";
-  wrapper.appendChild(cols);
+// populateScreenRows (re)builds the board's rows from the current state and
+// settings into wrapper._screenRows and lays out a provisional single column;
+// layoutScreen() rebalances once it can measure. Split out from buildScreenView
+// so toggles that change row content (city/country) can refresh without
+// rebuilding the floating controls/panel.
+function populateScreenRows(wrapper) {
+  const cols = wrapper.querySelector(".screen-cols");
+  applyScreenColors(wrapper);
 
   if (!state.teams.length) {
     const empty = document.createElement("div");
     empty.className = "screen-empty";
     empty.textContent = "Команды не заданы";
-    cols.appendChild(empty);
+    cols.replaceChildren(empty);
     wrapper._screenRows = [];
-    return wrapper;
+    return;
   }
 
   const stats = questionStats();
@@ -2549,7 +2847,10 @@ function buildScreenView() {
       if (rowIdx === keys.length - 1) classes.push("results-group-last");
       tr.className = classes.join(" ");
       tr.appendChild(td(placeText, "results-place"));
-      tr.appendChild(resultsTeamCell(index));
+      tr.appendChild(resultsTeamCell(index, {
+        showCity: screenSettings.showCity,
+        flag: screenSettings.showCountry ? teamFlagEmoji(index) : "",
+      }));
       tr.appendChild(td(total, "results-num total-cell results-total"));
       const tourValue = tourStarted ? tourTotals[index][tourIndex] : "·";
       tr.appendChild(td(tourValue, "results-tour" + (tourStarted ? "" : " results-tour-pending")));
@@ -2561,8 +2862,32 @@ function buildScreenView() {
   wrapper._screenRows = rowItems;
   wrapper._screenTourLabel = tourLabel;
   // Provisional single column; layoutScreen() rebalances once it can measure.
-  cols.appendChild(makeScreenColumn(tourLabel, rowItems));
+  cols.replaceChildren(makeScreenColumn(tourLabel, rowItems));
+}
+
+function buildScreenView() {
+  const wrapper = document.createElement("div");
+  wrapper.className = "screen-wrapper";
+  // The board is a host-only tool; only hosts get the configure/project controls.
+  if (!viewer) {
+    wrapper.appendChild(buildScreenPanel(wrapper));
+    wrapper.appendChild(buildScreenControls(wrapper));
+  }
+  const cols = document.createElement("div");
+  cols.className = "screen-cols";
+  wrapper.appendChild(cols);
+  populateScreenRows(wrapper);
   return wrapper;
+}
+
+// refreshScreen rebuilds the rows in place (settings that change row content)
+// and relays out, leaving the floating controls/panel untouched.
+function refreshScreen() {
+  const pane = tabCache.get("screen");
+  const wrapper = pane?.querySelector(".screen-wrapper");
+  if (!wrapper) return;
+  populateScreenRows(wrapper);
+  scheduleScreenFit();
 }
 
 let screenFitRAF = 0;
@@ -2607,26 +2932,34 @@ function packRows(rowItems, rowH, gapH, maxBodyH) {
   return columns;
 }
 
-// layoutScreen packs the rows into the column count that maximises the font,
-// then scales the board with `zoom` to fill the frame. For each candidate
-// column count it binary-searches the smallest column body height that still
-// packs into that many columns (a balanced split), which gives the tallest —
-// hence largest-zoom — layout.
+// layoutScreen packs the rows into columns and scales the board with `zoom` to
+// fill the frame. Auto mode picks the column count that maximises the font; a
+// host override (screenSettings.columns) forces a specific count. For a given
+// count it binary-searches the smallest column body height that still packs into
+// it (a balanced split), giving the tallest — hence largest-zoom — layout. Any
+// leftover horizontal space (height-bound layouts) is then spent by widening the
+// team-name column, and screenSettings.fontScale finally scales the result.
+const SCREEN_BASE_TEAM_COL = 160; // px; matches --screen-team-col default in styles.css
 function layoutScreen(wrapper) {
   const rowItems = wrapper._screenRows;
   const cols = wrapper.querySelector(".screen-cols");
   const frame = scrollFrame();
   if (!cols || !frame || !rowItems || !rowItems.length) return;
 
-  const MARGIN = 16; // px of breathing room inside the frame
-  const MAX_ZOOM = 5; // cap so tiny tournaments don't get absurd text
-  const SAFETY = 0.98; // shrink a touch to absorb sub-pixel rounding
+  const MARGIN = 6; // px of breathing room inside the frame (kept small to use all space)
+  const MAX_ZOOM = 6; // cap so tiny tournaments don't get absurd text
+  const SAFETY = 0.985; // shrink a touch to absorb sub-pixel rounding
+  const fontScale = screenSettings.fontScale || 1;
+  const forcedCols = screenSettings.columns > 0 ? screenSettings.columns : 0;
 
   // Fill the frame so the board can center; the table-host is content-sized.
   wrapper.style.height = `${frame.clientHeight}px`;
   const availW = Math.max(1, frame.clientWidth - MARGIN);
   const availH = Math.max(1, frame.clientHeight - MARGIN);
   const gapPx = parseFloat(getComputedStyle(cols).columnGap) || 0;
+
+  // Reset any prior width-fill so the natural (base) column width is measured.
+  cols.style.removeProperty("--screen-team-col");
 
   // Measure one natural column holding every row (zoom reset so rects are CSS px).
   cols.style.zoom = "1";
@@ -2643,36 +2976,57 @@ function layoutScreen(wrapper) {
   const totalBodyH = n * rowH + (groupCount - 1) * gapH;
 
   const columnsNeeded = (maxBodyH) => packRows(rowItems, rowH, gapH, maxBodyH).length;
-
-  // For each column count, find the smallest body height that packs into it, and
-  // keep the count whose resulting zoom is largest (ties → more columns, so the
-  // board fills the width).
-  let best = {bodyH: totalBodyH, zoom: 0};
-  for (let c = 1; c <= n; c++) {
-    let bodyH;
-    if (columnsNeeded(rowH) <= c) {
-      bodyH = rowH; // a single row per column already suffices
-    } else {
-      let lo = rowH;
-      let hi = totalBodyH;
-      for (let it = 0; it < 40; it++) {
-        const mid = (lo + hi) / 2;
-        if (columnsNeeded(mid) <= c) hi = mid;
-        else lo = mid;
-      }
-      bodyH = hi;
+  // bodyHForColumns: smallest column body height that still packs into c columns.
+  const bodyHForColumns = (c) => {
+    if (columnsNeeded(rowH) <= c) return rowH; // a single row per column suffices
+    let lo = rowH;
+    let hi = totalBodyH;
+    for (let it = 0; it < 40; it++) {
+      const mid = (lo + hi) / 2;
+      if (columnsNeeded(mid) <= c) hi = mid;
+      else lo = mid;
     }
-    const colHeight = headH + bodyH;
-    const totalWidth = c * colW + (c - 1) * gapPx;
-    const zoom = Math.min(availH / colHeight, availW / totalWidth);
-    if (zoom >= best.zoom) best = {bodyH, zoom};
+    return hi;
+  };
+
+  let chosen;
+  if (forcedCols) {
+    const c = Math.min(Math.max(1, forcedCols), n);
+    chosen = {c, bodyH: bodyHForColumns(c)};
+  } else {
+    // Keep the column count whose resulting zoom is largest (ties → more columns,
+    // so the board fills the width).
+    let best = {c: 1, bodyH: totalBodyH, zoom: 0};
+    for (let c = 1; c <= n; c++) {
+      const bodyH = bodyHForColumns(c);
+      const colHeight = headH + bodyH;
+      const totalWidth = c * colW + (c - 1) * gapPx;
+      const zoom = Math.min(availH / colHeight, availW / totalWidth);
+      if (zoom >= best.zoom) best = {c, bodyH, zoom};
+    }
+    chosen = best;
   }
 
-  const zoom = Math.min(best.zoom * SAFETY, MAX_ZOOM);
-  const parts = packRows(rowItems, rowH, gapH, best.bodyH)
+  const c = chosen.c;
+  const colHeight = headH + chosen.bodyH;
+  const totalWidth = c * colW + (c - 1) * gapPx;
+  const zoom = Math.min(availH / colHeight, availW / totalWidth);
+
+  // Width-fill: a height-bound layout leaves leftover horizontal space (the
+  // classic wasted margin). Widen the team-name column to spend it, so the board
+  // uses the whole screen instead of sitting in a narrow centred strip.
+  const renderedWidth = totalWidth * zoom;
+  if (renderedWidth > 0 && availW / renderedWidth > 1.02) {
+    const extraPerCol = (availW / zoom - totalWidth) / c; // CSS px to add per column
+    const newTeamCol = Math.min(SCREEN_BASE_TEAM_COL + extraPerCol, SCREEN_BASE_TEAM_COL * 4);
+    cols.style.setProperty("--screen-team-col", `${Math.round(newTeamCol)}px`);
+  }
+
+  const finalZoom = Math.min(zoom * SAFETY * fontScale, MAX_ZOOM);
+  const parts = packRows(rowItems, rowH, gapH, chosen.bodyH)
     .map((colRows) => makeScreenColumn(wrapper._screenTourLabel, colRows));
   cols.replaceChildren(...parts);
-  cols.style.zoom = String(zoom);
+  cols.style.zoom = String(finalZoom);
 }
 
 function buildResultsTable() {

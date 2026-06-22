@@ -55,6 +55,10 @@ type gameInitPayload struct {
 	Scheme json.RawMessage `json:"scheme,omitempty"`
 	State  json.RawMessage `json:"state,omitempty"`
 	Fest   json.RawMessage `json:"fest,omitempty"`
+	// ScreenSettings is the per-game "Экран" projector-board configuration
+	// (colours, font scale, columns, city/country toggles). Shared by all hosts
+	// of the game; the client seeds its settings panel from it on load.
+	ScreenSettings json.RawMessage `json:"screenSettings,omitempty"`
 	// Seq is the game-state scope's seq at render time, so the SSE client seeds
 	// its lastSeq to exactly the state it was handed. Without it every viewer
 	// would start at 0 and the first remote edit would gap-resync them all at
@@ -240,10 +244,10 @@ func (s *server) serveInjectedHTML(w http.ResponseWriter, r *http.Request, htmlP
 
 func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPayload, error) {
 	payload := gameInitPayload{FestID: scope.FestID, GameID: scope.GameID}
-	var schemeJSON, stateJSON string
+	var schemeJSON, stateJSON, screenSettingsJSON string
 	if err := s.eng.DB.QueryRowContext(ctx, `
-select coalesce(scheme_json, ''), coalesce(state_json, '')
-from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&schemeJSON, &stateJSON); err != nil {
+select coalesce(scheme_json, ''), coalesce(state_json, ''), coalesce(screen_settings_json, '')
+from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&schemeJSON, &stateJSON, &screenSettingsJSON); err != nil {
 		return payload, err
 	}
 	if schemeJSON == "" {
@@ -252,8 +256,12 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&sche
 	if stateJSON == "" {
 		stateJSON = "{}"
 	}
+	if screenSettingsJSON == "" {
+		screenSettingsJSON = "{}"
+	}
 	payload.Scheme = json.RawMessage(schemeJSON)
 	payload.State = json.RawMessage(stateJSON)
+	payload.ScreenSettings = json.RawMessage(screenSettingsJSON)
 	payload.Seq = s.eng.CurrentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
 	payload.Epoch = s.eng.Epoch
 	if festBytes, err := s.festViewBytes(scope.FestID, scope.GameID); err == nil {
