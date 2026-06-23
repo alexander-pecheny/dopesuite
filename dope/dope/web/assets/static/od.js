@@ -454,6 +454,9 @@ function render() {
   for (const pane of tabCache.values()) pane.hidden = pane !== activePane;
   if (!activePane.isConnected) odRoot.appendChild(activePane);
   renderedTab = activeTab;
+  // The Экран tab is a projection surface: hide the page-global diagnostic
+  // "Скачать лог" chip (and anything else corner-pinned) while it is showing.
+  document.body.classList.toggle("od-screen-active", activeTab === "screen");
   restoreTabScroll(activeTab);
   updateResultsScrollState();
   if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule(activePane);

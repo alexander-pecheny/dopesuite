@@ -3987,6 +3987,11 @@ body.is-fullscreen.od-page .match-main {
   height: 100vh;
 }
 
+/* The diagnostic "Скачать лог" chip must never show on the projected board. */
+body.od-screen-active .dope-rec-btn {
+  display: none;
+}
+
 .results-wrapper {
   display: flex;
   flex-direction: column;
