@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"sort"
 	"strings"
+	"time"
 
 	"dope/dope/domain/games"
 	"dope/dope/export/gameexport"
@@ -67,16 +69,21 @@ var publicListTemplate = template.Must(template.New("publicList").Parse(`<!docty
   </header>
   <main class="public-main">
     {{if .}}
-    <ul class="list">
-      {{range .}}
-      <li>
-        <a class="list-row" href="/fest/{{.Ref}}">
-          <span class="list-row-title">{{.Title}}</span>
-          {{if .Dates}}<span class="muted">{{.Dates}}</span>{{end}}
-        </a>
-      </li>
-      {{end}}
-    </ul>
+    {{range .}}
+    <details class="fest-group" open>
+      <summary class="fest-group-title">{{.Title}}</summary>
+      <ul class="list fest-list">
+        {{range .Fests}}
+        <li>
+          <a class="list-row fest-row" href="/fest/{{.Ref}}">
+            <span class="fest-row-title">{{.Title}}</span>
+            {{if .Dates}}<span class="fest-row-dates">{{.Dates}}</span>{{end}}
+          </a>
+        </li>
+        {{end}}
+      </ul>
+    </details>
+    {{end}}
     {{else}}
     <p class="empty">Нет публичных фестов.</p>
     {{end}}
@@ -137,10 +144,58 @@ func (s *server) handlePublicIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	groups := groupPublicFests(summaries, time.Now().Format("2006-01-02"))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := publicListTemplate.Execute(w, summaries); err != nil {
+	if err := publicListTemplate.Execute(w, groups); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// publicFestGroup is one collapsible bucket on the public index.
+type publicFestGroup struct {
+	Title string
+	Fests []publicFestSummary
+}
+
+// groupPublicFests partitions fests into Текущие/Будущие/Прошедшие relative to
+// today ("YYYY-MM-DD"), sorts each bucket by start date descending (then title
+// ascending), and drops empty buckets. Fests without an effective start date
+// land in Прошедшие.
+func groupPublicFests(fests []publicFestSummary, today string) []publicFestGroup {
+	var current, future, past []publicFestSummary
+	for _, f := range fests {
+		switch util.ClassifyFestDate(f.StartDate, f.EndDate, today) {
+		case util.FestCurrent:
+			current = append(current, f)
+		case util.FestFuture:
+			future = append(future, f)
+		default:
+			past = append(past, f)
+		}
+	}
+	sortPublicFests(current)
+	sortPublicFests(future)
+	sortPublicFests(past)
+	groups := make([]publicFestGroup, 0, 3)
+	for _, g := range []publicFestGroup{
+		{Title: "Текущие", Fests: current},
+		{Title: "Будущие", Fests: future},
+		{Title: "Прошедшие", Fests: past},
+	} {
+		if len(g.Fests) > 0 {
+			groups = append(groups, g)
+		}
+	}
+	return groups
+}
+
+func sortPublicFests(fests []publicFestSummary) {
+	sort.SliceStable(fests, func(i, j int) bool {
+		if fests[i].StartDate != fests[j].StartDate {
+			return fests[i].StartDate > fests[j].StartDate // descending
+		}
+		return fests[i].Title < fests[j].Title
+	})
 }
 
 func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
@@ -335,7 +390,7 @@ order by case when start_date is null or start_date = '' then 1 else 0 end,
 		if err := rows.Scan(&s.ID, &s.Slug, &s.Title, &s.StartDate, &s.EndDate); err != nil {
 			return nil, err
 		}
-		s.Dates = util.FormatFestDates(s.StartDate, s.EndDate)
+		s.Dates = util.HumanizeFestDates(s.StartDate, s.EndDate, time.Now().Year())
 		out = append(out, s)
 	}
 	return out, rows.Err()
