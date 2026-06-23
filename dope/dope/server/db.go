@@ -659,6 +659,15 @@ end`); err != nil {
 			return err
 		}
 	}
+	// v16: per-game "Экран" (projector board) display settings — colours, font
+	// scale, column-count override, city/country toggles. Stored as an opaque
+	// JSON blob so all hosts of a game share one configuration (the screen is a
+	// shared projector, not a per-browser preference).
+	if err := store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{
+		{Name: "screen_settings_json", Type: "TEXT NOT NULL DEFAULT '{}'"},
+	}); err != nil {
+		return err
+	}
 	return nil
 }
 

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -142,6 +143,61 @@ func TestScopedAPIRequiresOrganizerForPrivateReadsAndWrites(t *testing.T) {
 	organizerWrite := scopedAPIRequest(t, srv, http.MethodPost, updatePath, payload, organizerToken)
 	if organizerWrite.Code != http.StatusOK {
 		t.Fatalf("organizer write status = %d, body %s", organizerWrite.Code, organizerWrite.Body.String())
+	}
+}
+
+func TestScopedGameScreenSettings(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, gameID := scopedAPITestIDs(t, srv)
+	path := fmt.Sprintf("/api/fest/%d/games/%d/screen-settings", festID, gameID)
+
+	// Default (never written) reads back as an empty object on a public fest.
+	def := scopedAPIRequest(t, srv, http.MethodGet, path, nil, "")
+	if def.Code != http.StatusOK {
+		t.Fatalf("default read status = %d, body %s", def.Code, def.Body.String())
+	}
+	if got := strings.TrimSpace(def.Body.String()); got != "{}" {
+		t.Fatalf("default settings = %q, want {}", got)
+	}
+
+	settings := map[string]any{"bg": "#101010", "fg": "#fafafa", "columns": 3, "showCountry": true}
+
+	// Anonymous and non-editor writes are rejected.
+	if anon := scopedAPIRequest(t, srv, http.MethodPut, path, settings, ""); anon.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous write status = %d, want 401", anon.Code)
+	}
+	_, readerToken := createAPITestSession(t, srv, "screen-reader")
+	if nonEditor := scopedAPIRequest(t, srv, http.MethodPut, path, settings, readerToken); nonEditor.Code != http.StatusForbidden {
+		t.Fatalf("non-editor write status = %d, want 403", nonEditor.Code)
+	}
+
+	// A host (CanEditGameTables) may write, and the value round-trips.
+	hostID, hostToken := createAPITestSession(t, srv, "screen-host")
+	addAPITestRole(t, srv, festID, hostID, roles.Host)
+	put := scopedAPIRequest(t, srv, http.MethodPut, path, settings, hostToken)
+	if put.Code != http.StatusOK {
+		t.Fatalf("host write status = %d, body %s", put.Code, put.Body.String())
+	}
+	readBack := scopedAPIRequest(t, srv, http.MethodGet, path, nil, "")
+	if readBack.Code != http.StatusOK {
+		t.Fatalf("read-back status = %d, body %s", readBack.Code, readBack.Body.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(readBack.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode read-back: %v", err)
+	}
+	if got["bg"] != "#101010" || got["showCountry"] != true {
+		t.Fatalf("round-tripped settings = %#v, want bg/showCountry preserved", got)
+	}
+
+	// Malformed JSON is rejected.
+	badReq := httptest.NewRequest(http.MethodPut, path, bytes.NewReader([]byte("{not json")))
+	badReq.Header.Set("Content-Type", "application/json")
+	badReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: hostToken})
+	badResp := httptest.NewRecorder()
+	srv.HandleScopedAPI(badResp, badReq)
+	if badResp.Code != http.StatusBadRequest {
+		t.Fatalf("malformed write status = %d, want 400", badResp.Code)
 	}
 }
 
