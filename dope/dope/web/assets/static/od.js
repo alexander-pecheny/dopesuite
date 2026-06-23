@@ -2561,7 +2561,10 @@ const CITY_COUNTRY = {
   "вильнюс": "LT", "каунас": "LT", "хельсинки": "FI",
   "берлин": "DE", "мюнхен": "DE", "гамбург": "DE", "франкфурт": "DE",
   "кёльн": "DE", "кельн": "DE", "дюссельдорф": "DE", "штутгарт": "DE",
-  "лондон": "GB", "манчестер": "GB", "прага": "CZ", "брно": "CZ",
+  "дрезден": "DE", "лейпциг": "DE", "нюрнберг": "DE", "ганновер": "DE",
+  "бремен": "DE", "дортмунд": "DE", "эссен": "DE", "бонн": "DE",
+  "мёрфельден-вальдорф": "DE", "мёрфельден": "DE",
+  "будапешт": "HU", "лондон": "GB", "манчестер": "GB", "прага": "CZ", "брно": "CZ",
   "варшава": "PL", "краков": "PL", "вроцлав": "PL", "гданьск": "PL",
   "париж": "FR", "амстердам": "NL", "мадрид": "ES", "барселона": "ES",
   "рим": "IT", "милан": "IT", "вена": "AT", "цюрих": "CH", "женева": "CH",
@@ -2578,12 +2581,13 @@ function flagEmoji(cc) {
 }
 
 // teamFlagEmoji returns the leading emoji for a team when "Показывать страну" is
-// on: a globe for a "сборная" (national/all-star side), otherwise the flag of
-// the team's city's country, or "" when the city is unknown.
+// on: a globe for a "сборная" (national/all-star side — rating.chgk gives such
+// teams the town "сборная"), otherwise the flag of the team's city's country,
+// or "" when the city is unknown.
 function teamFlagEmoji(index) {
   const team = state.teams[index] || {};
   const hay = `${team.name || ""} ${team.city || ""}`.toLowerCase();
-  if (hay.includes("сборн")) return "🌐";
+  if (hay.includes("сборн")) return "🌍";
   const cc = CITY_COUNTRY[String(team.city || "").trim().toLowerCase()];
   return cc ? flagEmoji(cc) : "";
 }
@@ -2612,8 +2616,22 @@ function applyScreenColors(wrapper) {
   wrapper.style.setProperty("--screen-muted", screenSettings.muted || SCREEN_DEFAULTS.muted);
 }
 
+// The floating overlay (settings + hide-chrome) reveals only when the pointer is
+// in the top-right ninth of the board (a 3×3 grid), so it never sits on the
+// projection — except while the settings panel is open, when it stays put so the
+// host can keep interacting with it.
+function screenPointerInCorner(wrapper, e) {
+  const r = wrapper.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  return x >= r.width * (2 / 3) && x <= r.width && y >= 0 && y <= r.height / 3;
+}
+function setScreenOverlayActive(wrapper, corner) {
+  wrapper.classList.toggle("screen-overlay-active", corner || screenPanelOpen);
+}
+
 // updateScreenControls syncs the floating controls/panel with the current state
-// (panel open/closed, chrome-hide button label).
+// (panel open/closed, chrome-hide button label, overlay visibility).
 function updateScreenControls() {
   const pane = tabCache.get("screen");
   const wrapper = pane?.querySelector(".screen-wrapper");
@@ -2626,9 +2644,17 @@ function updateScreenControls() {
   if (wrapper._screenChromeBtn) {
     wrapper._screenChromeBtn.textContent = chromeHidden ? "Показать оформление" : "Скрыть оформление";
   }
+  // Opening the panel pins the overlay visible; closing lets the next pointer
+  // move out of the corner hide it.
+  if (screenPanelOpen) wrapper.classList.add("screen-overlay-active");
 }
 
-function buildScreenControls(wrapper) {
+// buildScreenOverlay stacks the controls bar above the (collapsible) settings
+// panel in one top-right container, so they never overlap.
+function buildScreenOverlay(wrapper) {
+  const overlay = document.createElement("div");
+  overlay.className = "screen-overlay";
+
   const bar = document.createElement("div");
   bar.className = "screen-controls";
   const settingsBtn = document.createElement("button");
@@ -2648,7 +2674,9 @@ function buildScreenControls(wrapper) {
   bar.append(settingsBtn, chromeBtn);
   wrapper._screenSettingsBtn = settingsBtn;
   wrapper._screenChromeBtn = chromeBtn;
-  return bar;
+
+  overlay.append(bar, buildScreenPanel(wrapper));
+  return overlay;
 }
 
 function buildScreenPanel(wrapper) {
@@ -2870,8 +2898,9 @@ function buildScreenView() {
   wrapper.className = "screen-wrapper";
   // The board is a host-only tool; only hosts get the configure/project controls.
   if (!viewer) {
-    wrapper.appendChild(buildScreenPanel(wrapper));
-    wrapper.appendChild(buildScreenControls(wrapper));
+    wrapper.appendChild(buildScreenOverlay(wrapper));
+    wrapper.addEventListener("mousemove", (e) => setScreenOverlayActive(wrapper, screenPointerInCorner(wrapper, e)));
+    wrapper.addEventListener("mouseleave", () => setScreenOverlayActive(wrapper, false));
   }
   const cols = document.createElement("div");
   cols.className = "screen-cols";
