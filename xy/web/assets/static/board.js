@@ -28,6 +28,10 @@ const titleNode = document.getElementById("boardTitle");
 
 const state = { role: "editor", name: "", lists: [], cards: [], labels: [], cardLabels: {} };
 let dk = null;
+// One-shot guard per card-drag gesture: set true the moment a drop commits the
+// move, so a stray duplicate drop is ignored and dragend can tell an aborted
+// gesture (which must re-render to undo `dragover`'s DOM relocation) from a real one.
+let cardDragCommitted = false;
 
 // The header badge combines a transient per-action state (saving/error) with the
 // persistent sync state (offline / queued edits), the latter taking precedence.
@@ -218,6 +222,8 @@ function renderList(list) {
   body.addEventListener("drop", (e) => {
     if (!e.dataTransfer.types.includes("text/xy-card")) return;
     e.preventDefault();
+    if (cardDragCommitted) return; // ignore a stray second drop from the same gesture
+    cardDragCommitted = true;
     const cardId = Number(e.dataTransfer.getData("text/xy-card"));
     commitCardMove(cardId, list.id, body);
   });
@@ -261,8 +267,17 @@ function renderCard(card, number) {
     e.stopPropagation();
     e.dataTransfer.setData("text/xy-card", String(card.id));
     node.classList.add("dragging");
+    cardDragCommitted = false;
   });
-  node.addEventListener("dragend", () => node.classList.remove("dragging"));
+  // On dragend, if no drop committed the move, the gesture was aborted (common on
+  // mobile, where native DnD is flaky / unsupported): `dragover` may have already
+  // relocated this node into another list's DOM without a patch to back it. Re-render
+  // from state so the DOM matches the source of truth — otherwise the orphaned,
+  // uncommitted node reads as a duplicate. See the duplication bug investigation.
+  node.addEventListener("dragend", () => {
+    node.classList.remove("dragging");
+    if (!cardDragCommitted) render();
+  });
   // color the chips via inline style is disallowed by CSP? inline style attr is allowed (style-src governs <style>/<link>, not the style attribute under CSP3 'unsafe-inline' for attributes? Actually attribute styles need style-src 'unsafe-inline'). Use dataset + a post-pass with CSSOM:
   return node;
 }
