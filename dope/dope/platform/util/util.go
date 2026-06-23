@@ -8,6 +8,7 @@ package util
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -168,6 +169,103 @@ func FormatFestDates(start, end string) string {
 		return start
 	default:
 		return end
+	}
+}
+
+var festMonthsGenitive = [...]string{
+	"января", "февраля", "марта", "апреля", "мая", "июня",
+	"июля", "августа", "сентября", "октября", "ноября", "декабря",
+}
+
+// parseFestYMD parses a "YYYY-MM-DD" date, returning the components and whether
+// it is a valid in-range calendar date.
+func parseFestYMD(s string) (year, month, day int, ok bool) {
+	s = strings.TrimSpace(s)
+	if len(s) < 10 || s[4] != '-' || s[7] != '-' {
+		return 0, 0, 0, false
+	}
+	y, err1 := strconv.Atoi(s[0:4])
+	m, err2 := strconv.Atoi(s[5:7])
+	d, err3 := strconv.Atoi(s[8:10])
+	if err1 != nil || err2 != nil || err3 != nil || m < 1 || m > 12 || d < 1 || d > 31 {
+		return 0, 0, 0, false
+	}
+	return y, m, d, true
+}
+
+// HumanizeFestDates renders a fest's start/end as a Russian human-readable date
+// range, e.g. "13–14 июня", "31 июля — 1 августа", or "5 марта". The year is
+// appended only when it differs from currentYear (e.g. "5 марта 2025"). Dates
+// must be "YYYY-MM-DD"; on a parse failure it falls back to FormatFestDates.
+func HumanizeFestDates(start, end string, currentYear int) string {
+	sy, sm, sd, sok := parseFestYMD(start)
+	ey, em, ed, eok := parseFestYMD(end)
+	switch {
+	case !sok && !eok:
+		return FormatFestDates(start, end)
+	case sok && !eok:
+		ey, em, ed, eok = sy, sm, sd, true
+	case !sok && eok:
+		sy, sm, sd, sok = ey, em, ed, true
+	}
+
+	day := func(y, m, d int, withYear bool) string {
+		out := fmt.Sprintf("%d %s", d, festMonthsGenitive[m-1])
+		if withYear {
+			out += fmt.Sprintf(" %d", y)
+		}
+		return out
+	}
+
+	// Single date.
+	if sy == ey && sm == em && sd == ed {
+		return day(sy, sm, sd, sy != currentYear)
+	}
+	// Cross-year range: spell the year on both sides.
+	if sy != ey {
+		return day(sy, sm, sd, true) + " — " + day(ey, em, ed, true)
+	}
+	yearSuffix := ""
+	if sy != currentYear {
+		yearSuffix = fmt.Sprintf(" %d", sy)
+	}
+	// Same month: "13–14 июня".
+	if sm == em {
+		return fmt.Sprintf("%d–%d %s%s", sd, ed, festMonthsGenitive[sm-1], yearSuffix)
+	}
+	// Same year, different month: "31 июля — 1 августа".
+	return day(sy, sm, sd, false) + " — " + day(ey, em, ed, false) + yearSuffix
+}
+
+// Fest date buckets returned by ClassifyFestDate.
+const (
+	FestCurrent = iota
+	FestFuture
+	FestPast
+)
+
+// ClassifyFestDate buckets a fest by its start/end ("YYYY-MM-DD") relative to
+// today: FestCurrent when start <= today <= end, FestFuture when it starts
+// after today, otherwise FestPast (including fests with no usable date). An
+// empty start falls back to end and vice-versa.
+func ClassifyFestDate(start, end, today string) int {
+	start = strings.TrimSpace(start)
+	end = strings.TrimSpace(end)
+	if start == "" {
+		start = end
+	}
+	if end == "" {
+		end = start
+	}
+	switch {
+	case start == "":
+		return FestPast
+	case start <= today && today <= end:
+		return FestCurrent
+	case start > today:
+		return FestFuture
+	default:
+		return FestPast
 	}
 }
 

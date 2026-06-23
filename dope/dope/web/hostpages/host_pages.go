@@ -3,7 +3,6 @@ package hostpages
 import (
 	"database/sql"
 	"dope/dope/domain/core"
-	"dope/dope/domain/view"
 	"dope/dope/platform/roles"
 	"dope/dope/platform/session"
 	"dope/dope/storage/festaccess"
@@ -15,12 +14,13 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type hostLandingData struct {
 	LoggedIn bool
 	Username string
-	Fests    []view.HostFest
+	Groups   []hostFestGroup
 	Error    string
 }
 
@@ -64,17 +64,22 @@ var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!docty
   </header>
   <main class="public-main">
     {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    {{if .Fests}}
-    <ul class="list">
-      {{range .Fests}}
-      <li>
-        <a class="list-row" href="/host/fest/{{.Ref}}">
-          <span class="list-row-title">{{.Title}}{{if not .IsPublic}} · непубличный{{end}}</span>
-          {{if .Dates}}<span class="muted">{{.Dates}}</span>{{end}}
-        </a>
-      </li>
-      {{end}}
-    </ul>
+    {{if .Groups}}
+    {{range .Groups}}
+    <details class="fest-group" open>
+      <summary class="fest-group-title">{{.Title}}</summary>
+      <ul class="list fest-list">
+        {{range .Fests}}
+        <li>
+          <a class="list-row fest-row" href="/host/fest/{{.Ref}}">
+            <span class="fest-row-title">{{.Title}}{{if not .IsPublic}} · непубличный{{end}}</span>
+            {{if .Dates}}<span class="fest-row-dates">{{.Dates}}</span>{{end}}
+          </a>
+        </li>
+        {{end}}
+      </ul>
+    </details>
+    {{end}}
     {{else}}
     <p class="empty">Фестов пока нет.</p>
     {{end}}
@@ -193,7 +198,7 @@ func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMs
 	_ = hostLoggedInTemplate.Execute(w, hostLandingData{
 		LoggedIn: true,
 		Username: username,
-		Fests:    fests,
+		Groups:   groupHostFests(fests, time.Now().Format("2006-01-02")),
 		Error:    errMsg,
 	})
 }

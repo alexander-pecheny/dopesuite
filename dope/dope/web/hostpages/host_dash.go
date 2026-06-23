@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"sort"
 	"strings"
+	"time"
 
 	"dope/dope/domain/games"
 	"dope/dope/domain/view"
@@ -595,8 +597,54 @@ order by case when t.start_date is null or t.start_date = '' then 1 else 0 end,
 			return t, err
 		}
 		t.IsPublic = pub == 1
-		t.Dates = util.FormatFestDates(t.StartDate, t.EndDate)
+		t.Dates = util.HumanizeFestDates(t.StartDate, t.EndDate, time.Now().Year())
 		return t, nil
+	})
+}
+
+// hostFestGroup is one collapsible bucket on the host landing page.
+type hostFestGroup struct {
+	Title string
+	Fests []view.HostFest
+}
+
+// groupHostFests partitions the host's fests into Текущие/Будущие/Прошедшие
+// relative to today ("YYYY-MM-DD"), sorts each bucket by start date descending
+// (then title ascending), and drops empty buckets.
+func groupHostFests(fests []view.HostFest, today string) []hostFestGroup {
+	var current, future, past []view.HostFest
+	for _, f := range fests {
+		switch util.ClassifyFestDate(f.StartDate, f.EndDate, today) {
+		case util.FestCurrent:
+			current = append(current, f)
+		case util.FestFuture:
+			future = append(future, f)
+		default:
+			past = append(past, f)
+		}
+	}
+	sortHostFests(current)
+	sortHostFests(future)
+	sortHostFests(past)
+	groups := make([]hostFestGroup, 0, 3)
+	for _, g := range []hostFestGroup{
+		{Title: "Текущие", Fests: current},
+		{Title: "Будущие", Fests: future},
+		{Title: "Прошедшие", Fests: past},
+	} {
+		if len(g.Fests) > 0 {
+			groups = append(groups, g)
+		}
+	}
+	return groups
+}
+
+func sortHostFests(fests []view.HostFest) {
+	sort.SliceStable(fests, func(i, j int) bool {
+		if fests[i].StartDate != fests[j].StartDate {
+			return fests[i].StartDate > fests[j].StartDate // descending
+		}
+		return fests[i].Title < fests[j].Title
 	})
 }
 
