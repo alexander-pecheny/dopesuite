@@ -33,11 +33,52 @@ Server listens on `$PORT` (default 9673); DB at `$XY_DB` (default `xy.db`).
 Config via `.env` (copy from [`.env.example`](.env.example)). Telegram
 register/login needs `XY_BOT_SECRET` set on both server and bot.
 
+### Browser testing
+
+There is no `playwright`/`puppeteer` npm package, but Playwright's Chromium
+binaries are cached under `~/.cache/ms-playwright/`. Drive them over CDP with
+Node's built-in `WebSocket` (Node 24, no deps): launch `chrome-headless-shell`
+with `--remote-debugging-port=9222 --user-data-dir=…`, `fetch` a tab from
+`http://127.0.0.1:9222/json/new?<url>`, then issue `Page.navigate`,
+`Runtime.evaluate` (with `awaitPromise` for async page code) and
+`Page.captureScreenshot`. Run the **built binary from `/tmp`** (not the repo dir)
+so `staticSource()` falls back to embed mode with `?v=` asset versioning and
+ETags, matching production. The `/profile/tokens` UI and the token→Trello-API
+flow were verified this way.
+
 Bootstrap a password account (registration is otherwise telegram-only):
 
 ```sh
 printf '<password>' | XY_DB=… xy-server adduser <username>   # password via stdin
 ```
+
+## Trello-compatible API (chgksuite)
+
+[`chgksuite`](https://pypi.org/project/chgksuite/) can read from and write to a
+Trello board (`chgksuite trello download` / `upload`). xy exposes the exact
+slice of the Trello v1 API those commands use, so chgksuite can treat an xy board
+as a Trello board:
+
+- `GET /1/boards/{id}` — board with inline `lists[]`, `cards[]`, `labels[]`;
+- `GET /1/boards/{id}/lists` — the board's lists;
+- `POST /1/lists/{id}/cards` — create a card (form fields `name`, `desc`).
+
+Requests authenticate with `key` + `token` query/form params, mirroring Trello.
+The `key` is ignored; the `token` is an **xy API token** minted at
+**`/profile/tokens`** (account menu → API-токены). Tokens are valid for one month
+and can be revoked at any time; only a salted hash is stored, and the raw value
+is shown once.
+
+Because the board is end-to-end encrypted, every text field (board/list/card/
+label name and card `desc`) is returned as the **base64 ciphertext envelope** —
+the same bytes the web client gets — and is decrypted locally with the board
+passphrase (the `crypto.js` envelope format). Uploads are symmetric: `desc` must
+already be such an envelope (a plaintext `desc` is rejected), so the server never
+sees plaintext. Board/list/card ids are xy's numeric ids as strings.
+
+To point chgksuite at xy, set its Trello API base (the `API` constant in
+`chgksuite/trello.py`) to `https://xy.pecheny.me/1`, paste the token when prompted,
+and give it a numeric xy board id (the `/board/{id}` path segment).
 
 ## docx export (chgksuite)
 

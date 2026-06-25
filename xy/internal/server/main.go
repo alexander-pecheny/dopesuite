@@ -40,6 +40,7 @@ func Main() {
 	mux.HandleFunc("GET /login", srv.servePage("static/login.html"))
 	mux.HandleFunc("GET /register", srv.servePage("static/register.html"))
 	mux.HandleFunc("GET /profile", srv.servePage("static/profile.html"))
+	mux.HandleFunc("GET /profile/tokens", srv.servePage("static/tokens.html"))
 	mux.HandleFunc("GET /board/{id}", srv.servePage("static/board.html"))
 	mux.HandleFunc("GET /import", srv.servePage("static/import.html"))
 
@@ -61,6 +62,16 @@ func Main() {
 	mux.HandleFunc("GET /api/auth/me", srv.handleMe)
 	mux.HandleFunc("POST /api/auth/username", srv.handleSetUsername)
 	mux.HandleFunc("POST /api/auth/password", srv.handleSetPassword)
+
+	// ---- API tokens (Trello-compatible API credentials) ----
+	mux.HandleFunc("GET /api/tokens", srv.handleListTokens)
+	mux.HandleFunc("POST /api/tokens", srv.handleCreateToken)
+	mux.HandleFunc("DELETE /api/tokens/{id}", srv.handleRevokeToken)
+
+	// ---- Trello-compatible API (token-authed via key+token params) ----
+	mux.HandleFunc("GET /1/boards/{id}", srv.handleTrelloGetBoard)
+	mux.HandleFunc("GET /1/boards/{id}/lists", srv.handleTrelloGetLists)
+	mux.HandleFunc("POST /1/lists/{id}/cards", srv.handleTrelloCreateCard)
 
 	// ---- telegram bridge (shared-secret) ----
 	mux.HandleFunc("POST /api/telegram/register", srv.handleTelegramRegister)

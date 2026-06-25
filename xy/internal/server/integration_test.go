@@ -59,6 +59,12 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("GET /api/boards/{id}/player-map", srv.handleGetPlayerMap)
 	mux.HandleFunc("PUT /api/boards/{id}/player-map", srv.handlePutPlayerMap)
 	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
+	mux.HandleFunc("GET /api/tokens", srv.handleListTokens)
+	mux.HandleFunc("POST /api/tokens", srv.handleCreateToken)
+	mux.HandleFunc("DELETE /api/tokens/{id}", srv.handleRevokeToken)
+	mux.HandleFunc("GET /1/boards/{id}", srv.handleTrelloGetBoard)
+	mux.HandleFunc("GET /1/boards/{id}/lists", srv.handleTrelloGetLists)
+	mux.HandleFunc("POST /1/lists/{id}/cards", srv.handleTrelloCreateCard)
 
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)

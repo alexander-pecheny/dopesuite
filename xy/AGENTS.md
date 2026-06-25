@@ -31,6 +31,9 @@ internal/server/       package server — the whole HTTP server
   auth.go              sessions, login/register/password, telegram bridge
   boards.go            boards CRUD, keymeta (passphrase re-wrap), members, ACL helpers
   lists_cards.go       lists/cards/labels/timeline handlers + DTOs/scanners
+  tokens.go            API tokens: month-lived bearer creds (manage at /profile/tokens)
+  trello_compat.go     Trello-compatible API for chgksuite (token-authed via key+token)
+  rank.go              server-side fractional-index keyAfter (Trello card upload)
   invite.go            invite minting (subcommand)
   export.go            POST /api/export/docx — shells out to chgksuite (XY_CHGKSUITE_CMD)
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
@@ -54,6 +57,7 @@ web/assets/            //go:embed static (package assets)
                        all mutations routed through sync.js (offline-capable)
     menu.js            theme boot + ☰ menu; also injects PWA <head> tags + registers sw.js
     login/register/profile  auth UI (login/menu ported from dope)
+    tokens.js/.html    /profile/tokens — create/revoke API tokens for the Trello API
     styles.css         dope design system (copied) + xy board/card section at the end
     vendor/            self-hosted @noble/hashes (scrypt + deps), WebCrypto shim
 jstest/                node --test: crypto round-trips, rank ordering, offline sync engine
@@ -129,11 +133,31 @@ node tests (`jstest/`) cover crypto round-trips/tamper/rewrap and rank ordering.
 node tests also cover the offline sync engine (temp-id remapping, snapshot apply,
 and a full offline→online resync against an in-memory IndexedDB).
 
-**Not yet browser-E2E tested** (no headless browser in the build env): the JS
-modules are syntax-checked and the crypto/rank/sync logic is unit-tested, but the
-full board/card UI flows + service-worker install/offline behaviour should be
-click-tested in a real browser before release.
+**Browser testing**: a headless browser *is* available — Playwright's Chromium
+binaries are cached under `~/.cache/ms-playwright/` (no `playwright`/`puppeteer`
+npm package). Drive it over CDP with Node's built-in `WebSocket` (no deps): launch
+`chrome-headless-shell` with `--remote-debugging-port`, `fetch` a tab from
+`/json/new?<url>`, then `Page.navigate`/`Runtime.evaluate`/`Page.captureScreenshot`.
+Run the built binary from `/tmp` (not the repo dir) to get embed mode + `?v=`
+asset versioning. The `/profile/tokens` page + token→Trello-API flow were verified
+this way. Still worth a manual pass before release: the full board/card UI flows
+and service-worker install/offline behaviour.
 
 **Later phases** (PLAN §8): ~~offline/PWA~~ (done — see "Offline / PWA" above),
-encrypted client-side search, Trello API compatibility, chgksuite import/export.
+~~Trello API compatibility~~ (done — see `trello_compat.go`: the read+upload
+surface chgksuite's `trello.py` uses, token-authed; text fields return as the
+base64 ciphertext envelope, decrypted locally with the board passphrase),
+encrypted client-side search, chgksuite import/export.
+
+## Trello-compatible API (chgksuite integration)
+`trello_compat.go` serves the three Trello calls chgksuite makes, authed by
+`key`+`token` query/form params (`key` ignored; `token` is an xy API token):
+- `GET /1/boards/{id}` → board with inline `lists[]`/`cards[]`/`labels[]`;
+- `GET /1/boards/{id}/lists`;
+- `POST /1/lists/{id}/cards` (form `name`,`desc`; `desc` must be a base64
+  envelope — symmetric with the download path; `name` ignored as titles derive
+  from the description). ids are xy's numeric ids as strings.
+Tokens are minted/revoked at `/profile/tokens` (`tokens.go`, `api_tokens` table,
+30-day expiry, sha256-hashed like sessions). To point chgksuite at xy, set its
+`API` base to `https://xy.pecheny.me/1` and paste the token + a numeric board id.
 ```

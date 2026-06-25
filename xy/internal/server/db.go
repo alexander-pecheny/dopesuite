@@ -166,7 +166,39 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV2(db); err != nil {
 		return err
 	}
+	if err := migrateV3(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV3 adds api_tokens: month-lived bearer tokens that authorize the
+// Trello-compatible read/write API (chgksuite integration). Tokens are stored
+// as a sha256 hash (like sessions); the raw value is shown to the user once.
+func migrateV3(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 3`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+create table if not exists api_tokens(
+  id integer primary key,
+  user_id integer not null references users(id) on delete cascade,
+  token_hash text not null unique,
+  label text,
+  created_at text not null,
+  expires_at text not null,
+  revoked_at text,
+  last_used_at text
+);
+create index if not exists idx_api_tokens_user on api_tokens(user_id);
+insert or ignore into schema_versions(version, applied_at)
+  values(3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV2 widens the cards.kind CHECK constraint to the chgksuite card kinds

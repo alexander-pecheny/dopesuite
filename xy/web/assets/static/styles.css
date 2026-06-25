@@ -5947,3 +5947,67 @@ body.is-fullscreen.od-page .match-main {
   .timer-overlay { right: var(--space-2); bottom: var(--space-2); width: 200px; }
   .timer-time { font-size: 48px; }
 }
+
+/* API tokens page (tokens.html) — built on the auth/sheet layout above. */
+.auth-subhead {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--fw-bold);
+  color: var(--text-strong);
+}
+.token-reveal {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.token-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-sm);
+  word-break: break-all;
+  user-select: all;
+}
+.token-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.token-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.token-row-inactive { opacity: 0.55; }
+.token-row-main {
+  grid-column: 1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.token-row-label { font-weight: var(--fw-bold); color: var(--text-strong); }
+.token-row-status { font-size: var(--text-xs); color: var(--muted); }
+.token-row-meta {
+  grid-column: 1;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.token-revoke {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  white-space: nowrap;
+}
