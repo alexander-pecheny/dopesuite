@@ -26,6 +26,10 @@ import (
 
 const exportTimeout = 60 * time.Second
 
+// maxExportRequest bounds the whole multipart export upload (4s source + images)
+// so a single request can't exhaust memory/temp disk during parsing.
+const maxExportRequest = 64 << 20
+
 // chgksuiteCommand returns the configured compose command tokens.
 func chgksuiteCommand() []string {
 	raw := strings.TrimSpace(os.Getenv("XY_CHGKSUITE_CMD"))
@@ -46,10 +50,23 @@ func safeImageName(name string) string {
 	return name
 }
 
+// headerSafeName strips characters that could break out of the quoted-string
+// value of a Content-Disposition header (quotes, backslashes, control bytes).
+// safeImageName has already removed path separators.
+func headerSafeName(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || r == '"' || r == '\\' {
+			return -1
+		}
+		return r
+	}, name)
+}
+
 func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireUser(w, r); !ok {
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
 	if err := r.ParseMultipartForm(16 << 20); err != nil {
 		httpError(w, http.StatusBadRequest, "bad multipart form")
 		return
@@ -59,7 +76,7 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "empty source")
 		return
 	}
-	outName := safeImageName(r.FormValue("filename"))
+	outName := headerSafeName(safeImageName(r.FormValue("filename")))
 	if outName == "" {
 		outName = "export"
 	}

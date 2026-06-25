@@ -544,6 +544,10 @@ func (s *server) handleSetUsername(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "логин слишком короткий")
 		return
 	}
+	if len(uname) > 64 {
+		httpError(w, http.StatusBadRequest, "логин слишком длинный")
+		return
+	}
 	err := s.withWriteTx(r.Context(), "set-username", func(ctx context.Context, tx *sql.Tx) error {
 		var existing sql.NullString
 		if err := tx.QueryRowContext(ctx, `select username from users where id = ?`, u.UserID).Scan(&existing); err != nil {
