@@ -458,6 +458,17 @@ function screenText(s) {
   return renderRunsForScreen(parse4sElem(s));
 }
 
+// printRuns prepares a 4s text element for *print / host* rendering — the default
+// docx mode that keeps host-only square-bracket notes and stress accents (unlike
+// screenText, which strips them). Mirrors format_docx_element's non-screen path:
+// unescape \[ \], resolve backtick stress, then split into inline directive runs.
+// Used by the in-app list preview (docx-style HTML render).
+function printRuns(text) {
+  let s = (text || "").replace(/\\\[/g, "[").replace(/\\\]/g, "]");
+  s = backtickReplace(s);
+  return parse4sElem(s);
+}
+
 // shareText builds the plain text handed to testers over chat: the screen-mode
 // question (prefixed "Вопрос N.") plus any handout block, so what the players
 // would see is reproduced. `number` comes from numberQuestionCards.
@@ -475,6 +486,6 @@ function shareText(desc, number) {
 export const xyChgk = {
   parseBlocks, numberDirective, questionText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
-  removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem,
+  removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem, printRuns,
 };
 if (typeof window !== "undefined") window.xyChgk = xyChgk;

@@ -100,6 +100,17 @@
     </div>
   </div>
 
+  <!-- list preview overlay (docx-style render, JS-only) -->
+  <div class="card-overlay preview-overlay" id="previewOverlay" hidden>
+    <div class="preview-doc" role="dialog" aria-modal="true" aria-label="Предпросмотр списка">
+      <div class="preview-head">
+        <h2 class="preview-title" id="previewTitle">Предпросмотр</h2>
+        <button class="action-icon" id="previewClose" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div class="preview-body" id="previewBody"></div>
+    </div>
+  </div>
+
   <!-- members / sharing overlay -->
   <div class="appearance-modal-overlay" id="membersOverlay" hidden>
     <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Участники доски">
