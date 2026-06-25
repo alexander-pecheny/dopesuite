@@ -100,6 +100,20 @@
     </div>
   </div>
 
+  <!-- members / sharing overlay -->
+  <div class="appearance-modal-overlay" id="membersOverlay" hidden>
+    <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Участники доски">
+      <h2 class="appearance-modal-title">Участники доски</h2>
+      <div class="members-list" id="membersList"></div>
+      <form id="addMemberForm" class="member-add" hidden>
+        <input class="input" id="addMemberName" type="text" placeholder="Имя пользователя" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+        <button class="btn btn-small" type="submit">Добавить</button>
+      </form>
+      <pre id="membersMessage" class="import-message"></pre>
+      <button class="appearance-modal-done" id="membersClose" type="button">Готово</button>
+    </div>
+  </div>
+
   <!-- paste-image overlay -->
   <div class="appearance-modal-overlay" id="pasteOverlay" hidden>
     <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Вставить изображение">

@@ -399,7 +399,9 @@ func (s *server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.QueryContext(r.Context(), `
-select m.user_id, m.role, u.username from board_members m join users u on u.id = m.user_id where m.board_id = ?`, bid)
+select m.user_id, m.role, coalesce(nullif(u.username, ''), u.telegram_username)
+from board_members m join users u on u.id = m.user_id where m.board_id = ?
+order by case m.role when 'owner' then 0 else 1 end, u.username`, bid)
 	if handleErr(w, err) {
 		return
 	}

@@ -26,7 +26,7 @@ const statusNode = document.getElementById("status");
 const kanban = document.getElementById("kanban");
 const titleNode = document.getElementById("boardTitle");
 
-const state = { role: "editor", name: "", lists: [], cards: [], labels: [], cardLabels: {} };
+const state = { role: "editor", name: "", lists: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null };
 let dk = null;
 // One-shot guard per card-drag gesture: set true the moment a drop commits the
 // move, so a stray duplicate drop is ignored and dragend can tell an aborted
@@ -96,9 +96,14 @@ document.getElementById("unlockForm").addEventListener("submit", async (e) => {
   }
 });
 
-// "Forget board password" lives in the burger (☰) menu — rarely needed, so it
-// doesn't warrant a header button. dopeMenu.setExtras renders it as an action.
+// Board-level actions live in the burger (☰) menu — sharing (rarely opened) and
+// "forget password" (rarely needed) don't warrant header buttons.
+// dopeMenu.setExtras renders them as actions.
 window.dopeMenu?.setExtras([{
+  label: "👥 Участники доски",
+  title: "Поделиться доской: добавить или убрать участников",
+  onClick: () => openMembers(),
+}, {
   label: "🔒 Забыть пароль доски",
   title: "Забыть пароль доски на этом устройстве",
   onClick: async () => {
@@ -106,6 +111,96 @@ window.dopeMenu?.setExtras([{
     location.reload();
   },
 }]);
+
+// ---- members / sharing ----
+// Membership is plaintext server-side metadata (not board-encrypted), so the
+// sharing modal works without the data key. Owners can add/remove editors;
+// everyone else sees a read-only roster. The roster also feeds author names into
+// the card timeline (member user_id → username), so we cache it on board load.
+async function fetchMembers() {
+  const members = await fetchJSON(`/api/boards/${boardId}/members`);
+  state.members = members;
+  state.memberNames = {};
+  for (const m of members) state.memberNames[m.user_id] = m.username || `#${m.user_id}`;
+  return members;
+}
+
+async function loadMembers() {
+  if (!xySync.isOnline()) return;
+  try { await fetchMembers(); } catch (_) {}
+  if (!state.me) {
+    try { state.me = await fetchJSON(`/api/auth/me`); } catch (_) {}
+  }
+}
+
+function openMembers() {
+  document.getElementById("membersMessage").textContent = "";
+  document.getElementById("membersOverlay").hidden = false;
+  renderMembers();
+}
+
+function closeMembers() { document.getElementById("membersOverlay").hidden = true; }
+
+async function renderMembers() {
+  const listNode = document.getElementById("membersList");
+  const addForm = document.getElementById("addMemberForm");
+  const msg = document.getElementById("membersMessage");
+  listNode.replaceChildren();
+  let members;
+  try {
+    members = await fetchMembers();
+  } catch (_) {
+    msg.textContent = "Не удалось загрузить участников — нужно подключение к сети.";
+    addForm.hidden = true;
+    return;
+  }
+  const isOwner = state.role === "owner";
+  addForm.hidden = !isOwner;
+  for (const m of members) {
+    const row = el("div", { class: "member-row" },
+      el("span", { class: "member-name", text: m.username || `#${m.user_id}` }),
+      el("span", { class: "member-role", text: m.role === "owner" ? "владелец" : "редактор" }),
+    );
+    if (isOwner && m.role !== "owner") {
+      row.append(el("button", {
+        class: "attach-del member-del", type: "button", title: "Убрать из доски", text: "×",
+        onclick: () => removeMember(m),
+      }));
+    }
+    listNode.append(row);
+  }
+}
+
+async function removeMember(m) {
+  if (!confirm(`Убрать ${m.username || "участника"} из доски?`)) return;
+  try {
+    await jdelete(`/api/boards/${boardId}/members/${m.user_id}`);
+    await renderMembers();
+  } catch (e) {
+    document.getElementById("membersMessage").textContent = e.message;
+  }
+}
+
+document.getElementById("addMemberForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = document.getElementById("addMemberName");
+  const msg = document.getElementById("membersMessage");
+  const name = input.value.trim();
+  msg.textContent = "";
+  if (!name) return;
+  try {
+    await jpost(`/api/boards/${boardId}/members`, { username: name });
+    input.value = "";
+    await renderMembers();
+  } catch (e) {
+    msg.textContent = e.message;
+  }
+});
+
+document.getElementById("membersClose").addEventListener("click", closeMembers);
+document.getElementById("membersOverlay").addEventListener("pointerdown", (e) => {
+  if (e.target.id === "membersOverlay") closeMembers();
+});
 
 // ---- load + decrypt snapshot ----
 // Source of truth: when online with an empty outbox, fetch the authoritative
@@ -157,6 +252,7 @@ async function load() {
     })));
     render();
     setStatus("saved");
+    loadMembers(); // best-effort: populate the author-name map for timelines (online only)
   } catch (e) {
     setStatus("error");
     console.error(e);
@@ -1036,11 +1132,25 @@ async function loadTimeline(cardId) {
   }
 }
 
+// eventAuthor resolves a timeline event's author to a display name. Pending
+// (offline, un-synced) events carry no author_user_id yet — they're authored by
+// the current user, so fall back to "me".
+function eventAuthor(ev) {
+  let uid = ev.author_user_id;
+  if (uid == null && state.me) uid = state.me.user_id;
+  if (uid == null) return "";
+  if (state.memberNames[uid]) return state.memberNames[uid];
+  if (state.me && state.me.user_id === uid && state.me.username) return state.me.username;
+  return `#${uid}`;
+}
+
 function renderEvent(ev, payload) {
   const when = new Date(ev.created_at).toLocaleString("ru-RU");
+  const author = eventAuthor(ev);
+  const meta = (rest) => (author ? `${author} · ${rest}` : rest);
   const wrap = el("div", { class: "tl-event tl-" + ev.type });
   if (ev.type === "comment") {
-    wrap.append(el("div", { class: "tl-meta", text: when }), el("div", { class: "tl-comment", text: payload }));
+    wrap.append(el("div", { class: "tl-meta", text: meta(when) }), el("div", { class: "tl-comment", text: payload }));
   } else if (ev.type === "desc_edit") {
     let diff = {};
     try { diff = JSON.parse(payload); } catch (_) {}
@@ -1059,7 +1169,7 @@ function renderEvent(ev, payload) {
         after.append(el("ins", { class: "tl-chg", text: op.text }));
       }
     }
-    wrap.append(el("div", { class: "tl-meta", text: "правка описания · " + when }),
+    wrap.append(el("div", { class: "tl-meta", text: meta("правка описания · " + when) }),
       el("div", { class: "tl-diff" }, before, after));
   } else {
     let info = {};
@@ -1070,7 +1180,7 @@ function renderEvent(ev, payload) {
     };
     const verb = verbs[ev.type] || ev.type;
     const detail = info.label || info.file || "";
-    wrap.append(el("div", { class: "tl-meta", text: `${verb}${detail ? ": " + detail : ""} · ${when}` }));
+    wrap.append(el("div", { class: "tl-meta", text: meta(`${verb}${detail ? ": " + detail : ""} · ${when}`) }));
   }
   return wrap;
 }
