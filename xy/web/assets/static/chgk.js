@@ -458,15 +458,62 @@ function screenText(s) {
   return renderRunsForScreen(parse4sElem(s));
 }
 
-// printRuns prepares a 4s text element for *print / host* rendering — the default
-// docx mode that keeps host-only square-bracket notes and stress accents (unlike
-// screenText, which strips them). Mirrors format_docx_element's non-screen path:
-// unescape \[ \], resolve backtick stress, then split into inline directive runs.
-// Used by the in-app list preview (docx-style HTML render).
-function printRuns(text) {
-  let s = (text || "").replace(/\\\[/g, "[").replace(/\\\]/g, "]");
+// applyOverride detects a chgksuite "!!Label " override at the start of a field
+// value: if the first space-separated token begins with "!!", that token (minus
+// the "!!", with "~" → space) replaces the field's printed label, and is stripped
+// from the value. Mirrors chgksuite_parser's OVERRIDE_PREFIX handling (applies to
+// question/answer/zachet/nezachet/comment/source/author). Returns {label, text}
+// with label === null when there is no override.
+function applyOverride(text) {
+  const s = text || "";
+  const idx = s.indexOf(" ");
+  if (idx === -1) return { label: null, text: s };
+  const first = s.slice(0, idx);
+  if (!first.startsWith("!!")) return { label: null, text: s };
+  return { label: first.slice(2).replace(/~/g, " "), text: s.slice(idx + 1) };
+}
+
+// renderRuns prepares a 4s text element for HTML rendering and returns its inline
+// directive runs. Mirrors format_docx_element's preamble: optionally strip stress
+// accents and/or host-only square brackets (screen mode), else unescape \[ \]
+// (replace_escaped), then resolve backtick stress and parse. opts.accents /
+// opts.brackets follow the per-field screen-mode rules (e.g. answers/zachet keep
+// brackets even on screen). Used by the in-app list preview.
+function renderRuns(text, opts = {}) {
+  let s = text || "";
+  if (opts.accents) s = removeAccents(s);
+  if (opts.brackets) s = removeSquareBrackets(s);
+  else s = s.replace(/\\\[/g, "[").replace(/\\\]/g, "]"); // replace_escaped
   s = backtickReplace(s);
   return parse4sElem(s);
+}
+
+// printRuns is the host/print-mode shorthand (keeps accents and host brackets).
+function printRuns(text) {
+  return renderRuns(text, { accents: false, brackets: false });
+}
+
+// splitList ports chgksuite's process_list: lines beginning with "-" become list
+// items (rendered as a numbered 1./2./… list); any text before the first "-" is a
+// preamble. A lone "-" item is NOT a list (the marker is just stripped). Returns
+// { preamble, items } with items === null when there is no multi-item list.
+function splitList(text) {
+  const s = text || "";
+  if (!s.includes("-")) return { preamble: s, items: null };
+  const sp = s.split("\n");
+  const markers = [];
+  for (let i = 0; i < sp.length; i++) if (sp[i].startsWith("-")) markers.push(i);
+  if (!markers.length) return { preamble: s, items: null };
+  const items = [];
+  for (let n = 0; n < markers.length; n++) {
+    const end = n + 1 < markers.length ? markers[n + 1] : sp.length;
+    // drop the leading "-" then any spaces after it (chgksuite slices [1:] + rew)
+    items.push(sp.slice(markers[n], end).join("\n").slice(1).replace(/^ +/, ""));
+  }
+  if (items.length === 1) {
+    return { preamble: s.replace(/(^|\n)- +/g, "$1"), items: null };
+  }
+  return { preamble: sp.slice(0, markers[0]).join("\n"), items };
 }
 
 // shareText builds the plain text handed to testers over chat: the screen-mode
@@ -486,6 +533,7 @@ function shareText(desc, number) {
 export const xyChgk = {
   parseBlocks, numberDirective, questionText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
-  removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem, printRuns,
+  removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem,
+  printRuns, renderRuns, splitList, applyOverride,
 };
 if (typeof window !== "undefined") window.xyChgk = xyChgk;

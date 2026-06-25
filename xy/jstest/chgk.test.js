@@ -190,3 +190,47 @@ test("printRuns tags an (img …) run with its filename as the last token", () =
   assert.ok(img, "img run present");
   assert.equal(String(img[1]).trim().split(/\s+/).pop(), "cat.jpg");
 });
+
+test("applyOverride peels a !!Label override (~ → space) off a field value", () => {
+  assert.deepEqual(xyChgk.applyOverride("!!Авторка Арина Далецкая"),
+    { label: "Авторка", text: "Арина Далецкая" });
+  assert.deepEqual(xyChgk.applyOverride("!!Верный~ответ Москва"),
+    { label: "Верный ответ", text: "Москва" });
+});
+
+test("applyOverride leaves a normal value untouched", () => {
+  assert.deepEqual(xyChgk.applyOverride("Арина Далецкая"), { label: null, text: "Арина Далецкая" });
+  assert.deepEqual(xyChgk.applyOverride("- один\n- два"), { label: null, text: "- один\n- два" });
+});
+
+test("splitList turns '- ' lines into numbered items (with preamble)", () => {
+  assert.deepEqual(xyChgk.splitList("см.:\n- источник один\n- источник два"),
+    { preamble: "см.:", items: ["источник один", "источник два"] });
+});
+
+test("splitList: a single '- ' item is not a list (marker stripped)", () => {
+  assert.deepEqual(xyChgk.splitList("- единственный"), { preamble: "единственный", items: null });
+});
+
+test("splitList: no dash → plain text", () => {
+  assert.deepEqual(xyChgk.splitList("обычный текст"), { preamble: "обычный текст", items: null });
+});
+
+test("splitList handles a blitz question (no preamble, multiple items)", () => {
+  const r = xyChgk.splitList("- Первый вопрос?\n- Второй вопрос?\n- Третий вопрос?");
+  assert.equal(r.preamble, "");
+  assert.deepEqual(r.items, ["Первый вопрос?", "Второй вопрос?", "Третий вопрос?"]);
+});
+
+test("renderRuns screen mode strips host brackets and accents", () => {
+  const runs = xyChgk.renderRuns("текст [ведущему] сл́ово", { accents: true, brackets: true });
+  const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
+  assert.ok(!flat.includes("["), "host brackets removed");
+  assert.ok(!flat.includes("́"), "accent removed");
+});
+
+test("renderRuns answer-style (accents only) keeps brackets", () => {
+  const runs = xyChgk.renderRuns("Москва [и область]", { accents: true, brackets: false });
+  const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
+  assert.ok(flat.includes("[и область]"), "brackets kept for answer/zachet");
+});
