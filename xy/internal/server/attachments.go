@@ -16,6 +16,10 @@ import (
 // size in the clear (accepted metadata leakage, PLAN §1).
 
 const maxAttachmentBytes = 50 << 20 // 50 MiB ciphertext cap
+// maxAttachmentRequest bounds the whole multipart upload (ciphertext + meta +
+// boundary overhead) so a single request can't exhaust memory/temp disk. It
+// sits comfortably above maxAttachmentBytes; over-cap requests fail the parse.
+const maxAttachmentRequest = maxAttachmentBytes + 8<<20
 
 type attachmentDTO struct {
 	ID          int64  `json:"id"`
@@ -61,6 +65,7 @@ func (s *server) handleCreateAttachment(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentRequest)
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		httpError(w, http.StatusBadRequest, "bad multipart form")
 		return
@@ -163,6 +168,7 @@ func (s *server) handleGetAttachment(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	// Bytes are ciphertext; the client decrypts. Serve as opaque octet-stream.
 	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, no-store")
 	if st, err := f.Stat(); err == nil {
 		w.Header().Set("Content-Length", strconv.FormatInt(st.Size(), 10))

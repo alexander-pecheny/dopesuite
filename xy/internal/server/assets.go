@@ -133,6 +133,7 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"manifest-src 'self'; " +
 	"object-src 'none'; " +
 	"base-uri 'none'; " +
+	"form-action 'self'; " +
 	"frame-ancestors 'none'"
 
 // serveRootAsset serves a single embedded static file at a root path (used for
