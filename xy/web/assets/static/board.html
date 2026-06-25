@@ -105,7 +105,12 @@
     <div class="preview-doc" role="dialog" aria-modal="true" aria-label="Предпросмотр списка">
       <div class="preview-head">
         <h2 class="preview-title" id="previewTitle">Предпросмотр</h2>
-        <button class="action-icon" id="previewClose" type="button" aria-label="Закрыть">×</button>
+        <div class="preview-head-actions">
+          <label class="attach-lossless preview-screen-toggle" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения">
+            <input type="checkbox" id="previewScreen"> для экрана
+          </label>
+          <button class="action-icon" id="previewClose" type="button" aria-label="Закрыть">×</button>
+        </div>
       </div>
       <div class="preview-body" id="previewBody"></div>
     </div>

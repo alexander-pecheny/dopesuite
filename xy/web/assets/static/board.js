@@ -605,13 +605,28 @@ async function resolveImages(cards, wanted) {
   return map;
 }
 
-// renderRich turns a 4s text element into DOM, mirroring the docx print render:
-// inline bold/italic/underline/strike/small-caps, links, (screen …) host side,
-// explicit (LINEBREAK)/(PAGEBREAK), and (img …) handouts (shown inline). Styling
-// is applied via the CSSOM (.style.*) to stay within the strict CSP.
-function renderRich(text, imgMap) {
+// Fields that accept a "!!Label " label override (chgksuite OVERRIDE_PREFIX).
+const PV_OVERRIDABLE = new Set(["question", "answer", "zachet", "nezachet", "comment", "source", "author"]);
+
+// fieldOpts returns the {accents, brackets} render options for a field given the
+// screen-mode toggle. Screen mode strips stress accents everywhere and host-only
+// [ … ] notes — except answers and zachet, which keep their brackets (matching
+// chgksuite docx screen mode). Meta/headings are never screen-transformed.
+function fieldOpts(field, screen) {
+  if (!screen) return { accents: false, brackets: false };
+  const keepBrackets = field === "answer" || field === "zachet";
+  return { accents: true, brackets: !keepBrackets };
+}
+
+// renderRich turns a 4s text element into DOM, mirroring the docx render: inline
+// bold/italic/underline/strike/small-caps, links, (screen …), explicit
+// (LINEBREAK)/(PAGEBREAK), and (img …) handouts (shown inline). opts.{accents,
+// brackets} select print vs. screen mode. Styling is applied via the CSSOM
+// (.style.*) to stay within the strict CSP.
+function renderRich(text, imgMap, opts = {}) {
+  const screenSide = !!(opts.accents || opts.brackets);
   const frag = document.createDocumentFragment();
-  for (const [type, val] of xyChgk.printRuns(text)) {
+  for (const [type, val] of xyChgk.renderRuns(text, opts)) {
     if (type === "linebreak") { frag.append(el("br")); continue; }
     if (type === "pagebreak") { frag.append(el("hr", { class: "pv-pagebreak" })); continue; }
     if (type === "img") {
@@ -621,7 +636,7 @@ function renderRich(text, imgMap) {
       else frag.append(el("span", { class: "pv-img-missing", text: `[изображение: ${name}]` }));
       continue;
     }
-    if (type === "screen") { frag.append(document.createTextNode(val.for_print || "")); continue; }
+    if (type === "screen") { frag.append(document.createTextNode((screenSide ? val.for_screen : val.for_print) || "")); continue; }
     if (type === "hyperlink") {
       frag.append(el("a", { class: "pv-link", href: val, target: "_blank", rel: "noopener noreferrer", text: val }));
       continue;
@@ -638,18 +653,45 @@ function renderRich(text, imgMap) {
   return frag;
 }
 
-// pvField renders a "Label: value" line (bold label + rich value).
-function pvField(label, text, imgMap, cls) {
+// renderFieldBody renders a field value, turning a chgksuite "- …" list into a
+// numbered 1./2./… list (with an optional preamble) — this is also how blitz /
+// duplet questions and multi-part answers render. Otherwise a plain rich run.
+// Works for every field (question, answer, source, comment, …), not just sources.
+function renderFieldBody(text, imgMap, opts) {
+  const frag = document.createDocumentFragment();
+  const lst = xyChgk.splitList(text);
+  if (lst.items) {
+    if (lst.preamble.trim()) frag.append(renderRich(lst.preamble, imgMap, opts));
+    const box = el("div", { class: "pv-list" });
+    lst.items.forEach((it, i) => {
+      const li = el("div", { class: "pv-list-item" }, el("span", { class: "pv-list-num", text: `${i + 1}. ` }));
+      li.append(renderRich(it, imgMap, opts));
+      box.append(li);
+    });
+    frag.append(box);
+  } else {
+    frag.append(renderRich(lst.preamble, imgMap, opts));
+  }
+  return frag;
+}
+
+// pvField renders a "Label: value" line: peels a "!!Label" override, numbers any
+// "- …" list, and (for sources that became a list) uses the plural label.
+function pvField(field, defaultLabel, text, imgMap, screen, cls) {
+  const ov = PV_OVERRIDABLE.has(field) ? xyChgk.applyOverride(text) : { label: null, text };
+  const lst = xyChgk.splitList(ov.text);
+  let label = ov.label || defaultLabel;
+  if (!ov.label && field === "source" && lst.items) label = "Источники";
   const node = el("div", { class: "pv-field" + (cls ? " " + cls : "") },
     el("strong", { class: "pv-label", text: label + ": " }));
-  node.append(renderRich(text, imgMap));
+  node.append(renderFieldBody(ov.text, imgMap, fieldOpts(field, screen)));
   return node;
 }
 
 // renderPreviewCard renders one card the way the docx export would: a question
 // card becomes a numbered question with its answer/zachet/etc.; meta/heading/
 // section/editor/date cards become their corresponding paragraphs/headings.
-function renderPreviewCard(card, number, imgMap) {
+function renderPreviewCard(card, number, imgMap, screen) {
   if (card.kind === "test") {
     return el("p", { class: "pv-meta pv-test", text: testTitle(card.desc) });
   }
@@ -659,25 +701,23 @@ function renderPreviewCard(card, number, imgMap) {
   if (card.kind === "question" || find("question")) {
     const wrap = el("article", { class: "pv-q" });
     const handout = find("handout");
-    if (handout) {
-      const h = el("div", { class: "pv-field pv-handout" },
-        el("strong", { class: "pv-label", text: PV_LABELS.handout + ": " }));
-      h.append(renderRich(handout.text, imgMap));
-      wrap.append(h);
-    }
-    // Question line: bold "Вопрос N." label + the question text.
+    if (handout) wrap.append(pvField("handout", PV_LABELS.handout, handout.text, imgMap, screen, "pv-handout"));
+    // Question line: bold "Вопрос N." label (overridable) + question text (which
+    // may itself be a blitz/duplet list).
+    const qov = xyChgk.applyOverride(xyChgk.questionText(card.desc));
+    const qLabel = qov.label || "Вопрос";
     const qline = el("div", { class: "pv-q-text" },
-      el("strong", { class: "pv-label", text: number ? `Вопрос ${number}. ` : "Вопрос. " }));
-    qline.append(renderRich(xyChgk.questionText(card.desc), imgMap));
+      el("strong", { class: "pv-label", text: `${qLabel}${number ? " " + number : ""}. ` }));
+    qline.append(renderFieldBody(qov.text, imgMap, fieldOpts("question", screen)));
     wrap.append(qline);
     for (const f of ["answer", "zachet", "nezachet", "comment", "source", "author"]) {
       const b = find(f);
-      if (b) wrap.append(pvField(PV_LABELS[f], b.text, imgMap));
+      if (b) wrap.append(pvField(f, PV_LABELS[f], b.text, imgMap, screen));
     }
     return wrap;
   }
 
-  // Non-question card: render each block by type.
+  // Non-question card: render each block by type (never screen-transformed).
   const wrap = el("div", { class: "pv-block" });
   for (const b of blocks) {
     if (b.type === "num" || b.type === "numnum") continue; // numbering directive only
@@ -690,7 +730,7 @@ function renderPreviewCard(card, number, imgMap) {
       h.append(renderRich(b.text, imgMap));
       wrap.append(h);
     } else if (PV_LABELS[b.type]) {
-      wrap.append(pvField(PV_LABELS[b.type], b.text, imgMap));
+      wrap.append(pvField(b.type, PV_LABELS[b.type], b.text, imgMap, false));
     } else {
       const p = el("p", { class: "pv-meta" });
       p.append(renderRich(b.text, imgMap));
@@ -700,10 +740,23 @@ function renderPreviewCard(card, number, imgMap) {
   return wrap;
 }
 
+// previewCtx holds the resolved cards/numbers/images for the open preview so the
+// screen-mode toggle can re-render without refetching attachments.
+let previewCtx = null;
+
+function renderPreviewBody(screen) {
+  const body = document.getElementById("previewBody");
+  body.replaceChildren();
+  if (!previewCtx) return;
+  const { cards, numbers, imgMap } = previewCtx;
+  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], imgMap, screen)));
+}
+
 function closePreview() {
   previewOverlay.hidden = true;
   for (const u of previewUrls) URL.revokeObjectURL(u);
   previewUrls = [];
+  previewCtx = null;
   document.getElementById("previewBody").replaceChildren();
 }
 
@@ -714,6 +767,7 @@ async function previewList(list) {
   document.getElementById("previewTitle").textContent = list.title || "Предпросмотр";
   const body = document.getElementById("previewBody");
   body.replaceChildren();
+  previewCtx = null;
   previewOverlay.hidden = false;
   if (!cards.length) {
     body.append(el("p", { class: "pv-empty", text: "В списке нет карточек." }));
@@ -723,10 +777,11 @@ async function previewList(list) {
   const imgMap = await resolveImages(cards, imageRefs(cards));
   // Guard against a close (or another open) during the await.
   if (previewOverlay.hidden) { for (const u of previewUrls) URL.revokeObjectURL(u); previewUrls = []; return; }
-  body.replaceChildren();
-  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], imgMap)));
+  previewCtx = { cards, numbers, imgMap };
+  renderPreviewBody(document.getElementById("previewScreen").checked);
 }
 
+document.getElementById("previewScreen").addEventListener("change", (e) => renderPreviewBody(e.target.checked));
 document.getElementById("previewClose").addEventListener("click", closePreview);
 previewOverlay.addEventListener("pointerdown", (e) => { if (e.target === previewOverlay) closePreview(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !previewOverlay.hidden) closePreview(); });
