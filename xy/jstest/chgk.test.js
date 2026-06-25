@@ -170,3 +170,23 @@ test("parse4sElem tags the inline directives", () => {
   const screenRun = runs.find((r) => r[0] === "screen");
   assert.deepEqual(screenRun[1], { for_print: "p", for_screen: "s" });
 });
+
+test("printRuns keeps host-only square brackets and accents (print mode)", () => {
+  const runs = xyChgk.printRuns("текст [реплика ведущего] сл`ово");
+  const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
+  assert.ok(flat.includes("[реплика ведущего]"), "host brackets preserved");
+  assert.ok(flat.includes("сло́во"), "backtick stress resolved");
+});
+
+test("printRuns unescapes \\[ and \\] to literal brackets", () => {
+  const runs = xyChgk.printRuns("\\[не директива\\]");
+  const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
+  assert.equal(flat, "[не директива]");
+});
+
+test("printRuns tags an (img …) run with its filename as the last token", () => {
+  const runs = xyChgk.printRuns("(img w=300 cat.jpg)");
+  const img = runs.find((r) => r[0] === "img");
+  assert.ok(img, "img run present");
+  assert.equal(String(img[1]).trim().split(/\s+/).pop(), "cat.jpg");
+});

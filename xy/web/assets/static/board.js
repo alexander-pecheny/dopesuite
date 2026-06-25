@@ -282,6 +282,7 @@ function renderList(list) {
     e.stopPropagation();
     popupMenu(menuWrap, [
       { label: "➕ Добавить карточку", onClick: () => addCard(list) },
+      { label: "🔍 Предпросмотр", onClick: () => previewList(list) },
       { label: "↔ Переместить список…", onClick: () => moveListToPosition(list) },
       { label: "📄 Экспорт в docx", onClick: () => exportList(list) },
     ]);
@@ -539,6 +540,196 @@ async function exportList(list) {
     alert("Экспорт не удался: " + err.message);
   }
 }
+
+// ---- list preview (docx-style HTML render, entirely client-side) ----
+// Renders a whole list the way chgksuite's docx export would — questions with
+// numbered labels and Ответ/Зачёт/Комментарий/etc. fields, plus meta, headings
+// and handouts — but in the browser, so it's instant. Inline 4s markup
+// (bold/italic/links/(img …)/(screen …)) is parsed via xyChgk; referenced image
+// handouts are resolved from the cards' attachments (decrypted + object-URL'd).
+
+// Field labels mirror chgksuite/resources/labels_ru.toml (question_labels).
+const PV_LABELS = {
+  answer: "Ответ", zachet: "Зачёт", nezachet: "Незачёт",
+  comment: "Комментарий", source: "Источник", author: "Автор",
+  handout: "Раздаточный материал", editor: "Редактор", date: "Дата",
+};
+// Object URLs minted for the current preview, revoked when it closes.
+let previewUrls = [];
+const previewOverlay = document.getElementById("previewOverlay");
+
+// imgName extracts the referenced filename from an (img …) run value: like
+// chgksuite's parseimg, the filename is the last whitespace token (the rest are
+// w=/h=/big/inline options).
+function imgName(val) {
+  const toks = String(val).trim().split(/\s+/).filter(Boolean);
+  return toks.length ? toks[toks.length - 1] : "";
+}
+
+// imageRefs collects every (img …) filename referenced across the list's cards.
+function imageRefs(cards) {
+  const wanted = new Set();
+  for (const c of cards) {
+    for (const m of (c.desc || "").matchAll(/\(img\b([^)]*)\)/g)) {
+      const name = imgName(m[1]);
+      if (name) wanted.add(name);
+    }
+  }
+  return wanted;
+}
+
+// resolveImages maps each wanted image name → a decrypted object URL by scanning
+// the cards' attachments (online only — mirrors the docx export's image
+// gathering). Missing names simply render as a placeholder in renderRich.
+async function resolveImages(cards, wanted) {
+  const map = new Map();
+  if (!wanted.size || !xySync.isOnline()) return map;
+  for (const card of cards) {
+    if (map.size >= wanted.size) break;
+    let atts;
+    try { atts = await fetchJSON(`/api/cards/${card.id}/attachments`); } catch (_) { continue; }
+    for (const att of atts) {
+      let name = "";
+      try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) { continue; }
+      if (!wanted.has(name) || map.has(name)) continue;
+      try {
+        const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
+        if (!res.ok) continue;
+        const plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
+        const url = URL.createObjectURL(new Blob([plain], { type: att.mime }));
+        previewUrls.push(url);
+        map.set(name, url);
+      } catch (_) {}
+    }
+  }
+  return map;
+}
+
+// renderRich turns a 4s text element into DOM, mirroring the docx print render:
+// inline bold/italic/underline/strike/small-caps, links, (screen …) host side,
+// explicit (LINEBREAK)/(PAGEBREAK), and (img …) handouts (shown inline). Styling
+// is applied via the CSSOM (.style.*) to stay within the strict CSP.
+function renderRich(text, imgMap) {
+  const frag = document.createDocumentFragment();
+  for (const [type, val] of xyChgk.printRuns(text)) {
+    if (type === "linebreak") { frag.append(el("br")); continue; }
+    if (type === "pagebreak") { frag.append(el("hr", { class: "pv-pagebreak" })); continue; }
+    if (type === "img") {
+      const name = imgName(val);
+      const url = imgMap.get(name);
+      if (url) frag.append(el("img", { class: "pv-img", src: url, alt: name }));
+      else frag.append(el("span", { class: "pv-img-missing", text: `[изображение: ${name}]` }));
+      continue;
+    }
+    if (type === "screen") { frag.append(document.createTextNode(val.for_print || "")); continue; }
+    if (type === "hyperlink") {
+      frag.append(el("a", { class: "pv-link", href: val, target: "_blank", rel: "noopener noreferrer", text: val }));
+      continue;
+    }
+    if (!type) { frag.append(document.createTextNode(val)); continue; }
+    const span = el("span", { text: val });
+    if (type.includes("italic")) span.style.fontStyle = "italic";
+    if (type.includes("bold")) span.style.fontWeight = "bold";
+    if (type.includes("underline")) span.style.textDecoration = "underline";
+    if (type === "strike") span.style.textDecoration = "line-through";
+    if (type === "sc") span.classList.add("pv-sc");
+    frag.append(span);
+  }
+  return frag;
+}
+
+// pvField renders a "Label: value" line (bold label + rich value).
+function pvField(label, text, imgMap, cls) {
+  const node = el("div", { class: "pv-field" + (cls ? " " + cls : "") },
+    el("strong", { class: "pv-label", text: label + ": " }));
+  node.append(renderRich(text, imgMap));
+  return node;
+}
+
+// renderPreviewCard renders one card the way the docx export would: a question
+// card becomes a numbered question with its answer/zachet/etc.; meta/heading/
+// section/editor/date cards become their corresponding paragraphs/headings.
+function renderPreviewCard(card, number, imgMap) {
+  if (card.kind === "test") {
+    return el("p", { class: "pv-meta pv-test", text: testTitle(card.desc) });
+  }
+  const blocks = xyChgk.parseBlocks(card.desc);
+  const find = (t) => blocks.find((b) => b.type === t);
+
+  if (card.kind === "question" || find("question")) {
+    const wrap = el("article", { class: "pv-q" });
+    const handout = find("handout");
+    if (handout) {
+      const h = el("div", { class: "pv-field pv-handout" },
+        el("strong", { class: "pv-label", text: PV_LABELS.handout + ": " }));
+      h.append(renderRich(handout.text, imgMap));
+      wrap.append(h);
+    }
+    // Question line: bold "Вопрос N." label + the question text.
+    const qline = el("div", { class: "pv-q-text" },
+      el("strong", { class: "pv-label", text: number ? `Вопрос ${number}. ` : "Вопрос. " }));
+    qline.append(renderRich(xyChgk.questionText(card.desc), imgMap));
+    wrap.append(qline);
+    for (const f of ["answer", "zachet", "nezachet", "comment", "source", "author"]) {
+      const b = find(f);
+      if (b) wrap.append(pvField(PV_LABELS[f], b.text, imgMap));
+    }
+    return wrap;
+  }
+
+  // Non-question card: render each block by type.
+  const wrap = el("div", { class: "pv-block" });
+  for (const b of blocks) {
+    if (b.type === "num" || b.type === "numnum") continue; // numbering directive only
+    if (b.type === "heading" || b.type === "ljheading") {
+      const h = el("h2", { class: "pv-heading" });
+      h.append(renderRich(b.text, imgMap));
+      wrap.append(h);
+    } else if (b.type === "section") {
+      const h = el("h3", { class: "pv-section" });
+      h.append(renderRich(b.text, imgMap));
+      wrap.append(h);
+    } else if (PV_LABELS[b.type]) {
+      wrap.append(pvField(PV_LABELS[b.type], b.text, imgMap));
+    } else {
+      const p = el("p", { class: "pv-meta" });
+      p.append(renderRich(b.text, imgMap));
+      wrap.append(p);
+    }
+  }
+  return wrap;
+}
+
+function closePreview() {
+  previewOverlay.hidden = true;
+  for (const u of previewUrls) URL.revokeObjectURL(u);
+  previewUrls = [];
+  document.getElementById("previewBody").replaceChildren();
+}
+
+// previewList opens the preview modal and renders the whole list. Text renders
+// instantly; image handouts are resolved from attachments and filled in after.
+async function previewList(list) {
+  const cards = cardsOf(list.id);
+  document.getElementById("previewTitle").textContent = list.title || "Предпросмотр";
+  const body = document.getElementById("previewBody");
+  body.replaceChildren();
+  previewOverlay.hidden = false;
+  if (!cards.length) {
+    body.append(el("p", { class: "pv-empty", text: "В списке нет карточек." }));
+    return;
+  }
+  const numbers = list.type === "test" ? cards.map(() => null) : xyChgk.numberQuestionCards(cards);
+  const imgMap = await resolveImages(cards, imageRefs(cards));
+  // Guard against a close (or another open) during the await.
+  if (previewOverlay.hidden) { for (const u of previewUrls) URL.revokeObjectURL(u); previewUrls = []; return; }
+  body.replaceChildren();
+  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], imgMap)));
+}
+
+document.getElementById("previewClose").addEventListener("click", closePreview);
+previewOverlay.addEventListener("pointerdown", (e) => { if (e.target === previewOverlay) closePreview(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !previewOverlay.hidden) closePreview(); });
 
 // addCard opens the card detail in "create mode" — only the description editor
 // is shown (the card isn't persisted until you save a description, so we never

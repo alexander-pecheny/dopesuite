@@ -5893,6 +5893,65 @@ body.is-fullscreen.od-page .match-main {
 .card-detail.creating [data-edit-only] { display: none !important; }
 .card-detail:not(.creating) [data-create-only] { display: none !important; }
 
+/* list preview ("à la docx export", rendered client-side) — a wide, scrollable
+   reading view layered over the board like the card detail. */
+.preview-doc {
+  width: min(820px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  box-shadow: var(--shadow-modal);
+}
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex: none;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.preview-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--text);
+}
+.preview-body > * { margin: 0 0 var(--space-3); }
+.pv-q { margin-bottom: var(--space-5); }
+/* preserve authored line breaks inside multi-line question/answer/meta text */
+.pv-q-text, .pv-field, .pv-meta { white-space: pre-wrap; }
+.pv-q-text { margin-bottom: var(--space-2); }
+.pv-field { margin-bottom: var(--space-1); }
+.pv-label { font-weight: var(--fw-bold); }
+.pv-handout { color: var(--muted); }
+.pv-heading { font-size: var(--text-xl); font-weight: var(--fw-bold); margin: var(--space-5) 0 var(--space-3); }
+.pv-section { font-size: var(--text-lg); font-weight: var(--fw-semibold); margin: var(--space-4) 0 var(--space-2); }
+.pv-test { color: var(--muted); font-style: italic; }
+.pv-empty { color: var(--muted); }
+.pv-link { color: var(--blue, var(--text)); }
+.pv-sc { font-variant: small-caps; }
+.pv-pagebreak { border: 0; border-top: 1px dashed var(--border); margin: var(--space-4) 0; }
+.pv-img {
+  display: block;
+  max-width: min(100%, 480px);
+  height: auto;
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-sm);
+}
+.pv-img-missing { color: var(--muted); font-style: italic; }
+
 /* Touch / small screens: shrink the type to fit more questions on screen (the
    same densification ~/dope applies on mobile). */
 @media (max-width: 760px) {
@@ -5902,6 +5961,8 @@ body.is-fullscreen.od-page .match-main {
   .kcard { padding: var(--space-1) var(--space-2); }
   .kcard-title { font-size: var(--text-xs); }
   .card-detail { padding: var(--space-4) var(--space-3); }
+  .preview-head { padding: var(--space-3) var(--space-4); }
+  .preview-body { padding: var(--space-4) var(--space-4); font-size: var(--text-sm); }
   .card-desc { font-size: var(--text-xs-plus); min-height: 200px; }
   .card-section-label { margin-top: var(--space-2); }
   .tl-comment { font-size: var(--text-xs-plus); }
