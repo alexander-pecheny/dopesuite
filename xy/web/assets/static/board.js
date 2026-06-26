@@ -608,23 +608,27 @@ async function resolveImages(cards, wanted) {
 // Fields that accept a "!!Label " label override (chgksuite OVERRIDE_PREFIX).
 const PV_OVERRIDABLE = new Set(["question", "answer", "zachet", "nezachet", "comment", "source", "author"]);
 
-// fieldOpts returns the {accents, brackets} render options for a field given the
-// screen-mode toggle. Screen mode strips stress accents everywhere and host-only
-// [ … ] notes — except answers and zachet, which keep their brackets (matching
-// chgksuite docx screen mode). Meta/headings are never screen-transformed.
+// fieldOpts returns the render options for a field given the screen-mode toggle.
+// Screen mode strips stress accents everywhere and host-only [ … ] notes — except
+// answers and zachet, which keep their brackets (matching chgksuite docx screen
+// mode). Meta/headings are never screen-transformed. `nbsp` (non-breaking
+// spaces/hyphens) applies everywhere except sources and handouts, like docx.
 function fieldOpts(field, screen) {
-  if (!screen) return { accents: false, brackets: false };
+  const nbsp = field !== "source" && field !== "handout";
+  if (!screen) return { accents: false, brackets: false, nbsp };
   const keepBrackets = field === "answer" || field === "zachet";
-  return { accents: true, brackets: !keepBrackets };
+  return { accents: true, brackets: !keepBrackets, nbsp };
 }
 
 // renderRich turns a 4s text element into DOM, mirroring the docx render: inline
 // bold/italic/underline/strike/small-caps, links, (screen …), explicit
 // (LINEBREAK)/(PAGEBREAK), and (img …) handouts (shown inline). opts.{accents,
-// brackets} select print vs. screen mode. Styling is applied via the CSSOM
-// (.style.*) to stay within the strict CSP.
+// brackets} select print vs. screen mode; opts.nbsp glues non-breaking
+// spaces/hyphens into plain text. Styling is applied via the CSSOM (.style.*) to
+// stay within the strict CSP.
 function renderRich(text, imgMap, opts = {}) {
   const screenSide = !!(opts.accents || opts.brackets);
+  const nb = (t) => (opts.nbsp ? xyChgk.replaceNoBreak(t) : t);
   const frag = document.createDocumentFragment();
   for (const [type, val] of xyChgk.renderRuns(text, opts)) {
     if (type === "linebreak") { frag.append(el("br")); continue; }
@@ -636,13 +640,13 @@ function renderRich(text, imgMap, opts = {}) {
       else frag.append(el("span", { class: "pv-img-missing", text: `[изображение: ${name}]` }));
       continue;
     }
-    if (type === "screen") { frag.append(document.createTextNode((screenSide ? val.for_screen : val.for_print) || "")); continue; }
+    if (type === "screen") { frag.append(document.createTextNode(nb((screenSide ? val.for_screen : val.for_print) || ""))); continue; }
     if (type === "hyperlink") {
       frag.append(el("a", { class: "pv-link", href: val, target: "_blank", rel: "noopener noreferrer", text: val }));
       continue;
     }
-    if (!type) { frag.append(document.createTextNode(val)); continue; }
-    const span = el("span", { text: val });
+    if (!type) { frag.append(document.createTextNode(nb(val))); continue; }
+    const span = el("span", { text: nb(val) });
     if (type.includes("italic")) span.style.fontStyle = "italic";
     if (type.includes("bold")) span.style.fontWeight = "bold";
     if (type.includes("underline")) span.style.textDecoration = "underline";
@@ -723,17 +727,17 @@ function renderPreviewCard(card, number, imgMap, screen) {
     if (b.type === "num" || b.type === "numnum") continue; // numbering directive only
     if (b.type === "heading" || b.type === "ljheading") {
       const h = el("h2", { class: "pv-heading" });
-      h.append(renderRich(b.text, imgMap));
+      h.append(renderRich(b.text, imgMap, { nbsp: true }));
       wrap.append(h);
     } else if (b.type === "section") {
       const h = el("h3", { class: "pv-section" });
-      h.append(renderRich(b.text, imgMap));
+      h.append(renderRich(b.text, imgMap, { nbsp: true }));
       wrap.append(h);
     } else if (PV_LABELS[b.type]) {
       wrap.append(pvField(b.type, PV_LABELS[b.type], b.text, imgMap, false));
     } else {
       const p = el("p", { class: "pv-meta" });
-      p.append(renderRich(b.text, imgMap));
+      p.append(renderRich(b.text, imgMap, { nbsp: true }));
       wrap.append(p);
     }
   }
