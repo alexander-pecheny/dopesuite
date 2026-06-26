@@ -234,3 +234,19 @@ test("renderRuns answer-style (accents only) keeps brackets", () => {
   const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
   assert.ok(flat.includes("[и область]"), "brackets kept for answer/zachet");
 });
+
+test("replaceNoBreak glues short prepositions and particles with NBSP", () => {
+  assert.equal(xyChgk.replaceNoBreak("в лесу"), "в лесу");
+  assert.equal(xyChgk.replaceNoBreak("сделал бы"), "сделал бы");
+  assert.equal(xyChgk.replaceNoBreak("то да сё"), "то да сё");
+});
+
+test("replaceNoBreak uses a non-breaking hyphen in short hyphenated words", () => {
+  assert.equal(xyChgk.replaceNoBreak("из-за"), "из‑за");
+  // a stray spaced hyphen must NOT turn every hyphen non-breaking
+  assert.equal(xyChgk.replaceNoBreak("кто - то"), "кто - то");
+});
+
+test("replaceNoBreak leaves URLs untouched", () => {
+  assert.equal(xyChgk.replaceNoBreak("см. http://a.com/x_y и тут"), "см. http://a.com/x_y и тут");
+});

@@ -493,6 +493,59 @@ function printRuns(text) {
   return renderRuns(text, { accents: false, brackets: false });
 }
 
+// ── non-breaking spaces / hyphens (port of typotools.replace_no_break) ───────
+// Glues short prepositions/conjunctions to the following word, trailing particles
+// and dashes to the preceding word (→ U+00A0), and hyphenates short hyphenated
+// words with a non-breaking hyphen (→ U+2011) — so lines never break in ugly
+// places. URLs are skipped. Applied to question/answer/comment/etc. text (not
+// sources, which carry links/citations).
+const NBSP = " ";
+const NB_HYPHEN = "‑";
+const NB_RIGHT = ["а", "без", "в", "во", "где", "для", "же", "за", "и", "или", "из", "из-за",
+  "к", "как", "на", "над", "не", "ни", "но", "о", "от", "по", "под", "при", "с", "со", "то", "у", "что", "перед"];
+const NB_LEFT = ["бы", "ли", "же", "—", "–"];
+
+function reEscape(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+function capFirst(w) { return w ? w.charAt(0).toUpperCase() + w.slice(1) : w; }
+
+function nbSegment(s) {
+  for (const w of NB_RIGHT) {
+    for (const v of new Set([w, capFirst(w)])) {
+      s = s.replace(new RegExp("(^|[ \\u00a0])" + reEscape(v) + " ", "g"), "$1" + v + NBSP);
+    }
+  }
+  for (const w of NB_LEFT) {
+    for (const v of new Set([w, capFirst(w)])) {
+      s = s.replace(new RegExp(" " + reEscape(v) + "([ \\u00a0]|$)", "g"), NBSP + v + "$1");
+    }
+  }
+  // short hyphenated words (из-за, что-то, кто-то…): require a letter on each side
+  // so a stray spaced "-" can't turn every hyphen non-breaking.
+  const re = /(^|[^а-яё])([а-яё]{1,3}-[а-яё]{1,3})([^а-яё]|$)/i;
+  let m;
+  while ((m = re.exec(s))) {
+    const word = m[2];
+    s = s.split(word).join(word.replace(/-/g, NB_HYPHEN));
+  }
+  return s;
+}
+
+// replaceNoBreak applies nbSegment to every non-URL span of the text.
+function replaceNoBreak(text) {
+  const s = text || "";
+  const spans = [...iterHttpUrlSpans(s)];
+  if (!spans.length) return nbSegment(s);
+  let out = "", pos = 0;
+  for (const [start, end] of spans) {
+    if (start < pos) continue;
+    out += nbSegment(s.slice(pos, start));
+    out += s.slice(start, end);
+    pos = end;
+  }
+  out += nbSegment(s.slice(pos));
+  return out;
+}
+
 // splitList ports chgksuite's process_list: lines beginning with "-" become list
 // items (rendered as a numbered 1./2./… list); any text before the first "-" is a
 // preamble. A lone "-" item is NOT a list (the marker is just stripped). Returns
@@ -534,6 +587,6 @@ export const xyChgk = {
   parseBlocks, numberDirective, questionText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem,
-  printRuns, renderRuns, splitList, applyOverride,
+  printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
 };
 if (typeof window !== "undefined") window.xyChgk = xyChgk;

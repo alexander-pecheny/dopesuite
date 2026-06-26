@@ -13,6 +13,11 @@ func writeJSON(w http.ResponseWriter, v any) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	// API payloads are dynamic, per-session, and read-your-writes sensitive (e.g.
+	// the board snapshot must never lag a just-saved card edit). Without an explicit
+	// directive a browser may heuristically cache these GETs and replay a stale
+	// snapshot, so forbid all caching.
+	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(data)
 }
 
