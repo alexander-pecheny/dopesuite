@@ -5952,12 +5952,16 @@ body.is-fullscreen.od-page .match-main {
 .pv-section { font-size: var(--text-lg); font-weight: var(--fw-semibold); margin: var(--space-4) 0 var(--space-2); }
 .pv-test { color: var(--muted); font-style: italic; }
 .pv-empty { color: var(--muted); }
-.pv-link { color: var(--blue, var(--text)); }
+/* break long URLs at any character so they never force horizontal scroll on
+   narrow screens (links are often unbreakable runs with no spaces). */
+.pv-link { color: var(--blue, var(--text)); overflow-wrap: anywhere; word-break: break-word; }
 .pv-sc { font-variant: small-caps; }
 .pv-pagebreak { border: 0; border-top: 1px dashed var(--border); margin: var(--space-4) 0; }
 .pv-img {
   display: block;
   max-width: min(100%, 480px);
+  max-height: 5em;
+  width: auto;
   height: auto;
   margin: var(--space-2) 0;
   border-radius: var(--radius-sm);
