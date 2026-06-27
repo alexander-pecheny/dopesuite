@@ -493,6 +493,16 @@ where game_id is null and request_id is not null
     where j3.request_id = journal.request_id and j3.game_id is not null)`); err != nil {
 		return err
 	}
+	// Backfill fest_id on journal rows where the row-op trigger could not resolve
+	// the owning fest at write time (it stored NULL), borrowing it from the game.
+	// A single NULL fest_id used to abort every archiver pass, so these rows would
+	// otherwise pin the hot tail and grow the DB without bound. Idempotent.
+	if _, err := db.Exec(`
+update journal set fest_id = (select g.fest_id from games g where g.id = journal.game_id)
+where fest_id is null and game_id is not null
+  and exists (select 1 from games g where g.id = journal.game_id and g.fest_id is not null)`); err != nil {
+		return err
+	}
 	if !store.ColumnExists(db, "journal_checkpoint", "game_id") {
 		if _, err := db.Exec(`drop table if exists journal_checkpoint`); err != nil {
 			return err

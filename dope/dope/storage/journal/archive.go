@@ -25,6 +25,12 @@ const ArchiveKeepRecent = 200
 // ArchiveInterval controls how often the background archiver runs.
 const ArchiveInterval = 6 * time.Hour
 
+// ArchiveQuiesce is how long a fest must be free of edits before its hot tail is
+// eligible for folding. A fest being actively edited (a live event) is left
+// entirely in the hot tail until it goes quiet, so the archiver never folds —
+// and so never contends on the write path for — a fest mid-match.
+const ArchiveQuiesce = 2 * time.Hour
+
 // ArchiveFest folds all hot journal rows for festID with seq <= throughSeq into
 // one cold segment, then deletes them. Returns the number of rows archived.
 // Idempotent-ish: re-running with the same throughSeq archives nothing.
@@ -109,8 +115,18 @@ values(?, ?, ?, ?, ?, ?, ?)`,
 // ArchiveStale archives every fest's settled hot rows, leaving the newest
 // ArchiveKeepRecent rows per fest uncompressed. Safe to call periodically.
 func ArchiveStale(ctx context.Context, db *sql.DB) (int, error) {
+	// Only consider fests that are over the keep-recent threshold AND have been
+	// quiet for ArchiveQuiesce. Rows with a NULL fest_id (the trigger could not
+	// resolve the owning fest at write time) are skipped: a single NULL group
+	// used to abort the whole pass (scanning NULL into int64 fails), so nothing
+	// ever archived and the hot tail grew without bound. migrateDB backfills the
+	// resolvable ones from their game; any residual orphans stay out of the way.
+	cutoff := time.Now().UTC().Add(-ArchiveQuiesce).Format("2006-01-02T15:04:05Z")
 	rows, err := db.QueryContext(ctx, `
-select fest_id, max(seq) from journal group by fest_id having count(*) > ?`, ArchiveKeepRecent)
+select fest_id, max(seq) from journal
+where fest_id is not null
+group by fest_id
+having count(*) > ? and max(unixepoch(ts)) < unixepoch(?)`, ArchiveKeepRecent, cutoff)
 	if err != nil {
 		return 0, err
 	}
