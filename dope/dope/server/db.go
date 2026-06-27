@@ -474,6 +474,13 @@ insert or ignore into schema_versions(version, applied_at) values(2, strftime('%
 	if _, err := db.Exec(`create index if not exists journal_game_seq on journal(game_id, seq)`); err != nil {
 		return err
 	}
+	// The backfill below correlates journal rows by request_id; without an index
+	// it degrades to a full table scan per candidate row (O(n²)), which on a
+	// large prod journal pegs a CPU core for minutes and blocks startup (the
+	// HTTP server only binds after migrateDB returns). Create it first.
+	if _, err := db.Exec(`create index if not exists journal_request_id on journal(request_id)`); err != nil {
+		return err
+	}
 	// Backfill game_id on semantic event rows recorded before they were
 	// attributed, borrowing it from a row-op of the same request — so the
 	// per-game history shows those earlier edits with descriptions. Idempotent.
