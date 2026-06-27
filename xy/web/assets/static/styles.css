@@ -5874,6 +5874,10 @@ body.is-fullscreen.od-page .match-main {
 /* selects must never push past their container on narrow screens */
 .card-detail select.input { max-width: 100%; }
 .card-move-actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+/* stacked variant for the move-list modal: each label sits above its select */
+.card-move-stack { flex-direction: column; align-items: stretch; }
+.card-move-stack .input { flex: none; width: 100%; }
+.card-move-stack .card-section-label { margin-top: var(--space-2); }
 
 /* per-list "⋯" menu: anchor the shared .menu-dropdown under the trigger */
 .klist-menu-wrap { position: relative; display: inline-flex; }
@@ -5971,11 +5975,19 @@ body.is-fullscreen.od-page .match-main {
 /* Touch / small screens: shrink the type to fit more questions on screen (the
    same densification ~/dope applies on mobile). */
 @media (max-width: 760px) {
+  /* tighter board header so more of the board is visible on phones */
+  .board-page { --xy-header-h: 48px; }
+  .board-page .host-top { height: 48px; padding: 6px 10px; gap: 6px; }
+  .board-page h1 { font-size: var(--text-lg); }
+  .board-page .action-icon { width: 30px; height: 30px; font-size: 15px; }
+
   .board-main { padding: var(--space-2) var(--space-2); }
   .klist { flex-basis: 86vw; max-width: 320px; }
   .klist-title { font-size: var(--text-sm); }
   .kcard { padding: var(--space-1) var(--space-2); }
   .kcard-title { font-size: var(--text-xs); }
+  /* keep the label pills off the card's top edge */
+  .kcard-labels { margin-top: var(--space-1); }
   .card-detail { padding: var(--space-4) var(--space-3); }
   .preview-head { padding: var(--space-3) var(--space-4); }
   .preview-body { padding: var(--space-4) var(--space-4); font-size: var(--text-sm); }
@@ -6030,8 +6042,13 @@ body.is-fullscreen.od-page .match-main {
 .timer-actions .btn { flex: 1; }
 
 @media (max-width: 760px) {
-  .timer-overlay { right: var(--space-2); bottom: var(--space-2); width: 200px; }
-  .timer-time { font-size: 48px; }
+  .timer-overlay { right: var(--space-2); bottom: var(--space-2); width: min(220px, calc(100vw - 2 * var(--space-2))); padding: var(--space-2); }
+  .timer-time { font-size: 44px; }
+  .timer-display { padding: var(--space-1) 0; }
+  /* let the three control buttons shrink to share the row instead of overflowing
+     the box (flex items default to min-width:auto = their text width) */
+  .timer-actions { gap: var(--space-1); }
+  .timer-actions .btn { min-width: 0; padding-left: var(--space-2); padding-right: var(--space-2); }
 }
 
 /* API tokens page (tokens.html) — built on the auth/sheet layout above. */

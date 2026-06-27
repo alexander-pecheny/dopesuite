@@ -104,6 +104,10 @@ window.dopeMenu?.setExtras([{
   title: "Поделиться доской: добавить или убрать участников",
   onClick: () => openMembers(),
 }, {
+  label: "🧹 Исправить оформление Trello",
+  title: "Убрать артефакты Trello (двойные переносы, экранирование, смарт-ссылки) во всех карточках",
+  onClick: () => fixTrelloFormattingBoard(),
+}, {
   label: "🔒 Забыть пароль доски",
   title: "Забыть пароль доски на этом устройстве",
   onClick: async () => {
@@ -111,6 +115,39 @@ window.dopeMenu?.setExtras([{
     location.reload();
   },
 }]);
+
+// fixTrelloFormattingBoard re-applies chgksuite's Trello clean-up (the same fix
+// the importer runs) to every already-imported card whose description still
+// carries Trello artefacts. Each changed card is re-encrypted and patched with a
+// desc_edit timeline entry, so the change is auditable and reversible.
+async function fixTrelloFormattingBoard() {
+  const changes = [];
+  for (const c of state.cards) {
+    if (c.kind === "test") continue; // test cards hold JSON, not 4s markup
+    const fixed = xyChgk.fixTrelloFormatting(c.desc);
+    if (fixed !== c.desc) changes.push({ card: c, desc: fixed });
+  }
+  if (!changes.length) { alert("Нечего исправлять — оформление уже в порядке."); return; }
+  if (!confirm(`Исправить оформление Trello в ${changes.length} карточк(ах)? Описания будут изменены.`)) return;
+  setStatus("saving");
+  let done = 0;
+  try {
+    for (const ch of changes) {
+      await patch("patchCard", `/api/cards/${ch.card.id}`, {
+        description_enc: await xyCrypto.encField(dk, ch.desc),
+        desc_event_enc: await xyCrypto.encField(dk, JSON.stringify({ before: ch.card.desc, after: ch.desc })),
+      });
+      ch.card.desc = ch.desc;
+      done++;
+    }
+    setStatus("saved");
+    render();
+    alert(`Исправлено карточек: ${done}.`);
+  } catch (err) {
+    setStatus("error");
+    alert("Ошибка при исправлении: " + err.message);
+  }
+}
 
 // ---- members / sharing ----
 // Membership is plaintext server-side metadata (not board-encrypted), so the
@@ -283,7 +320,7 @@ function renderList(list) {
     popupMenu(menuWrap, [
       { label: "➕ Добавить карточку", onClick: () => addCard(list) },
       { label: "🔍 Предпросмотр", onClick: () => previewList(list) },
-      { label: "↔ Переместить список…", onClick: () => moveListToPosition(list) },
+      { label: "↔ Переместить список…", onClick: () => openMoveList(list) },
       { label: "📄 Экспорт в docx", onClick: () => exportList(list) },
     ]);
   });
@@ -455,31 +492,152 @@ function popupMenu(anchor, items) {
   document.addEventListener("keydown", onKey);
 }
 
-// moveListToPosition re-ranks a list to a 1-based slot chosen via prompt. Handy
-// for long boards where dragging a column across the viewport is awkward.
-async function moveListToPosition(list) {
-  const ordered = [...state.lists].sort(byRank);
-  const n = ordered.length;
-  const cur = ordered.findIndex((l) => l.id === list.id) + 1;
-  const raw = prompt(`Переместить список на позицию (1–${n}):`, String(cur));
-  if (raw == null) return;
-  let pos = parseInt(raw, 10);
-  if (Number.isNaN(pos)) return;
-  pos = Math.max(1, Math.min(n, pos));
-  const others = ordered.filter((l) => l.id !== list.id);
-  const prev = pos >= 2 ? others[pos - 2] : null;
-  const next = pos - 1 < others.length ? others[pos - 1] : null;
-  let rank;
-  try { rank = keyBetween(prev ? prev.rank : null, next ? next.rank : null); }
-  catch (_) { rank = keyBetween(prev ? prev.rank : null, null); }
-  list.rank = rank;
-  setStatus("saving");
-  try {
-    await patch("patchList", `/api/lists/${list.id}`, { rank });
-    setStatus("saved");
-    render();
-  } catch (err) { setStatus("error"); load(); }
+// ---- move / copy a whole list (within board → re-rank/duplicate; other board →
+// client-side re-encryption of the list title + every card + label reconcile,
+// mirroring the per-card move/copy below). The destination board is chosen by its
+// (decrypted) name and the insertion position among its lists is selectable. ----
+
+let listMoveSrc = null;  // the list being moved/copied
+let listMoveCtx = null;  // destination board ctx (from loadMoveBoard)
+
+function openMoveList(list) {
+  listMoveSrc = list;
+  document.getElementById("moveListMessage").textContent = "";
+  document.getElementById("moveListOverlay").hidden = false;
+  populateMoveListBoards();
 }
+function closeMoveList() { document.getElementById("moveListOverlay").hidden = true; }
+
+// populateMoveListBoards fills the board <select> with decrypted board names
+// (current board first/default), then loads the chosen board's list positions.
+async function populateMoveListBoards() {
+  const sel = document.getElementById("moveListBoard");
+  sel.replaceChildren();
+  let boards = [];
+  try { boards = await fetchJSON("/api/boards"); } catch (_) {}
+  if (!boards.some((b) => b.id === boardId)) boards.unshift({ id: boardId, name_enc: null });
+  for (const b of boards) {
+    let label = "доска #" + b.id;
+    if (b.id === boardId) label = (state.name || label) + " (эта доска)";
+    else {
+      try { const cdk = await xyCrypto.loadCachedDK(b.id); if (cdk) label = await xyCrypto.decField(cdk, b.name_enc); }
+      catch (_) {}
+    }
+    sel.append(el("option", { value: b.id, text: label }));
+  }
+  sel.value = String(boardId);
+  await onMoveListBoardChange();
+}
+
+// onMoveListBoardChange loads the destination board (prompting for its password
+// when it isn't unlocked — see loadMoveBoard→ensureDK) and rebuilds the position
+// <select> with one slot per existing list ("в конец" appends).
+async function onMoveListBoardChange() {
+  const posSel = document.getElementById("moveListPos");
+  const bid = Number(document.getElementById("moveListBoard").value);
+  posSel.replaceChildren(el("option", { value: "", text: "загрузка…" }));
+  try { listMoveCtx = await loadMoveBoard(bid); }
+  catch (err) {
+    listMoveCtx = null;
+    posSel.replaceChildren(el("option", { value: "", text: err.message }));
+    return;
+  }
+  const lists = listMoveCtx.lists.filter((l) => !(listMoveCtx.boardId === boardId && l.id === listMoveSrc.id));
+  posSel.replaceChildren(el("option", { value: "end", text: "в конец" }));
+  for (let i = 1; i <= lists.length; i++) posSel.append(el("option", { value: String(i), text: `позиция ${i}` }));
+  posSel.value = "end";
+}
+
+async function doMoveListCopy(remove) {
+  if (!listMoveSrc || !listMoveCtx) return;
+  const targetBid = listMoveCtx.boardId;
+  const sameBoard = targetBid === boardId;
+  const msg = document.getElementById("moveListMessage");
+  const rank = rankForSlot(listMoveCtx.lists, document.getElementById("moveListPos").value, sameBoard ? listMoveSrc.id : null);
+  const srcCards = cardsOf(listMoveSrc.id);
+  const type = listMoveSrc.type || "normal";
+
+  // Same-board move is just a re-rank (no re-encryption needed).
+  if (sameBoard && remove) {
+    listMoveSrc.rank = rank;
+    setStatus("saving");
+    try {
+      await patch("patchList", `/api/lists/${listMoveSrc.id}`, { rank });
+      setStatus("saved"); render(); closeMoveList();
+    } catch (err) { setStatus("error"); msg.textContent = err.message; load(); }
+    return;
+  }
+
+  msg.textContent = sameBoard ? "Копирование…" : "Перешифровка…";
+  try {
+    if (sameBoard) {
+      // Duplicate the list and its cards on this board (offline-capable via sync).
+      const lres = await create("createList", `/api/boards/${boardId}/lists`, {
+        title_enc: await xyCrypto.encField(dk, listMoveSrc.title), rank, type,
+      });
+      state.lists.push({ id: lres.id, type, rank, title: listMoveSrc.title });
+      let cr = null;
+      for (const c of srcCards) {
+        cr = keyBetween(cr, null);
+        const cres = await create("createCard", `/api/lists/${lres.id}/cards`, {
+          description_enc: await xyCrypto.encField(dk, c.desc), rank: cr, kind: c.kind,
+        });
+        state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc });
+        const ids = state.cardLabels[c.id] || [];
+        if (ids.length) { await put("setCardLabels", `/api/cards/${cres.id}/labels`, { label_ids: ids }); state.cardLabels[cres.id] = ids.slice(); }
+      }
+    } else {
+      // Cross-board: re-encrypt under the target board's key, reconcile labels by
+      // decrypted name+color (same as the per-card path). Inherently online.
+      if (!xySync.isOnline()) { msg.textContent = "Перенос между досками доступен только онлайн."; return; }
+      const tdk = listMoveCtx.dk;
+      const tLabels = listMoveCtx.labels.slice();
+      const lres = await jpost(`/api/boards/${targetBid}/lists`, {
+        title_enc: await xyCrypto.encField(tdk, listMoveSrc.title), rank, type,
+      });
+      let cr = null;
+      for (const c of srcCards) {
+        cr = keyBetween(cr, null);
+        const cres = await jpost(`/api/lists/${lres.id}/cards`, {
+          description_enc: await xyCrypto.encField(tdk, c.desc), rank: cr, kind: c.kind,
+        });
+        const srcIds = state.cardLabels[c.id] || [];
+        if (!srcIds.length) continue;
+        const targetIds = [];
+        for (const sid of srcIds) {
+          const sl = labelById(sid);
+          if (!sl) continue;
+          let match = tLabels.find((t) => t.name === sl.name && t.color === sl.color);
+          if (!match) {
+            const labres = await jpost(`/api/boards/${targetBid}/labels`, {
+              name_enc: await xyCrypto.encField(tdk, sl.name), color_enc: await xyCrypto.encField(tdk, sl.color), kind: sl.kind,
+            });
+            match = { id: labres.id, name: sl.name, color: sl.color };
+            tLabels.push(match);
+          }
+          targetIds.push(match.id);
+        }
+        if (targetIds.length) await jput(`/api/cards/${cres.id}/labels`, { label_ids: targetIds });
+      }
+      if (remove) {
+        await jdelete(`/api/lists/${listMoveSrc.id}`);
+        state.lists = state.lists.filter((l) => l.id !== listMoveSrc.id);
+        state.cards = state.cards.filter((c) => c.listId !== listMoveSrc.id);
+      }
+    }
+    render();
+    msg.textContent = remove ? "Перемещено." : "Скопировано.";
+    setTimeout(closeMoveList, 700);
+  } catch (err) { msg.textContent = err.message; }
+}
+
+document.getElementById("moveListBoard").addEventListener("change", onMoveListBoardChange);
+document.getElementById("moveListCopyBtn").addEventListener("click", () => doMoveListCopy(false));
+document.getElementById("moveListMoveBtn").addEventListener("click", () => doMoveListCopy(true));
+document.getElementById("moveListClose").addEventListener("click", closeMoveList);
+document.getElementById("moveListOverlay").addEventListener("pointerdown", (e) => {
+  if (e.target.id === "moveListOverlay") closeMoveList();
+});
 
 // ---- export a list to .docx via chgksuite (PLAN §8) ----
 // Concatenate the list's card descriptions (in board order) into a chgksuite

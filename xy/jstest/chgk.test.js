@@ -250,3 +250,23 @@ test("replaceNoBreak uses a non-breaking hyphen in short hyphenated words", () =
 test("replaceNoBreak leaves URLs untouched", () => {
   assert.equal(xyChgk.replaceNoBreak("см. http://a.com/x_y и тут"), "см. http://a.com/x_y и тут");
 });
+
+test("fixTrelloFormatting collapses double line breaks and unescapes markers", () => {
+  const raw = "\\### Тур 1\n\n? Вопрос\n\n\\@ Автор\n\n  отступ\n\\- пункт";
+  const out = xyChgk.fixTrelloFormatting(raw);
+  assert.equal(out, "### Тур 1\n? Вопрос\n@ Автор\nотступ\n- пункт");
+});
+
+test("fixTrelloFormatting collapses Trello smart-link [url](url) to a bare url", () => {
+  const raw = "см. [https://example.com/a_b](https://example.com/a_b) тут";
+  assert.equal(xyChgk.fixTrelloFormatting(raw), "см. https://example.com/a_b тут");
+});
+
+test("fixTrelloFormatting keeps real markdown links (text != url) intact", () => {
+  const raw = "[пример](https://example.com)";
+  assert.equal(xyChgk.fixTrelloFormatting(raw), "[пример](https://example.com)");
+});
+
+test("fixTrelloFormatting strips code fences", () => {
+  assert.equal(xyChgk.fixTrelloFormatting("```\n? q\n```"), "\n? q\n");
+});

@@ -141,7 +141,7 @@ async function runImport(board, name, pass) {
 // importNormalCard: classify by chgksuite markup, store the question/heading/meta
 // text as the card description, assign its labels.
 async function importNormalCard(boardId, listId, c, rank, enc, labelMap) {
-  const desc = cleanDesc((c.desc && c.desc.trim()) ? c.desc : (c.name || ""));
+  const desc = xyChgk.fixTrelloFormatting((c.desc && c.desc.trim()) ? c.desc : (c.name || ""));
   const kind = detectKind(desc);
   const res = await jpost(`/api/lists/${listId}/cards`, {
     description_enc: await enc(desc), rank, kind,
@@ -167,17 +167,6 @@ async function importTestCard(boardId, listId, c, rank, enc, labelMap) {
 async function assignLabels(cardId, c, labelMap) {
   const ids = (c.labels || []).map((l) => labelMap.get(l.id)).filter((x) => x != null);
   if (ids.length) await jput(`/api/cards/${cardId}/labels`, { label_ids: ids });
-}
-
-// cleanDesc undoes Trello's new-editor markdown escaping (\#, \@, \-, \`) so the
-// chgksuite markers survive — otherwise headings arrive as "\### …" and author
-// lines as "\@ …". Mirrors chgksuite's fix_trello_new_editor cleanup.
-function cleanDesc(s) {
-  return (s || "")
-    .replace(/\\@/g, "@")
-    .replace(/\\#/g, "#")
-    .replace(/\\`/g, "`")
-    .replace(/(^|\n)\\-/g, "$1-");
 }
 
 // detectKind picks the xy card kind from the leading chgksuite marker.
