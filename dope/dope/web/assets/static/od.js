@@ -863,19 +863,22 @@ function clearSelectedEntryCells() {
   const selection = normalizedEntrySelection();
   if (!selection || viewer) return;
   closeEntryEditor();
-  let changed = false;
+  const cleared = [];
   for (let q = selection.qStart; q <= selection.qEnd; q++) {
     for (let row = selection.rowStart; row <= selection.rowEnd; row++) {
       if (state.entries[q]?.[row]) {
         state.entries[q][row] = 0;
-        changed = true;
+        cleared.push([q, row]);
       }
     }
   }
-  if (!changed) return;
+  if (cleared.length === 0) return;
   invalidateScoreCaches();
   invalidateTabCache("input");
-  saveState(["entries"], state.entries);
+  // Patch each cleared cell individually rather than the whole ["entries"] array:
+  // a coarse whole-array patch marks every cell pending (isPending is
+  // ancestor-aware), flashing the spinner across the entire grid.
+  for (const [q, row] of cleared) saveState(["entries", q, row], 0);
   render();
   focusEntrySelection();
 }
@@ -920,7 +923,7 @@ function pasteEntryClipboard(text) {
   closeEntryEditor();
   const startQ = selection.qStart;
   const startRow = selection.rowStart;
-  let changed = false;
+  const changedCells = [];
   let lastQ = startQ;
   let lastRow = startRow;
   for (let rowOffset = 0; rowOffset < rows.length; rowOffset++) {
@@ -933,17 +936,19 @@ function pasteEntryClipboard(text) {
       const value = clipboardValueToEntry(cols[colOffset]);
       if (state.entries[qIndex][rowIndex] !== value) {
         state.entries[qIndex][rowIndex] = value;
-        changed = true;
+        changedCells.push([qIndex, rowIndex, value]);
       }
       lastQ = qIndex;
       lastRow = rowIndex;
     }
   }
-  if (!changed) return;
+  if (changedCells.length === 0) return;
   setEntrySelection(startQ, startRow, lastQ, lastRow, {focus: false});
   invalidateScoreCaches();
   invalidateTabCache("input");
-  saveState(["entries"], state.entries);
+  // Patch per cell so only the pasted cells show the pending spinner, not the
+  // whole grid (a coarse ["entries"] patch marks every descendant pending).
+  for (const [q, row, value] of changedCells) saveState(["entries", q, row], value);
   render();
   focusEntrySelection();
 }
@@ -1039,6 +1044,8 @@ function handleEntryCellKeydown(event, cell) {
     moveEntrySelection(0, 1, event.shiftKey);
   } else if (event.key === "ArrowUp") {
     event.preventDefault();
+    const pos = entryCellPosition(cell);
+    if (pos && pos.row === 0 && !event.shiftKey && focusLockCheckbox(pos.q)) return;
     moveEntrySelection(-1, 0, event.shiftKey);
   } else if (event.key === "ArrowDown") {
     event.preventDefault();
@@ -1060,10 +1067,32 @@ function handleEntryCellKeydown(event, cell) {
 
 // entryQuestionHeadCell renders a question-number header tagged with its column
 // index, which the floating invert button (positionInvertOverlay) targets.
-function entryQuestionHeadCell(qIndex, displayNumber, className) {
-  const cell = th(displayNumber, className);
+function entryQuestionHeadCell(qIndex, displayNumber, className, stat) {
+  const cell = th("", className);
   cell.dataset.q = String(qIndex);
+  applyEntryQuestionHeadContent(cell, displayNumber, stat);
   return cell;
+}
+
+// applyEntryQuestionHeadContent stacks the number of teams that took the
+// question above the question number once it's ticked (completed) — mirroring
+// the Подробно page's column headers. Before it's ticked, just the number shows.
+function applyEntryQuestionHeadContent(cell, displayNumber, stat) {
+  cell.textContent = "";
+  if (stat?.completed) {
+    cell.appendChild(detailedQuestionHeadLabel(displayNumber, stat));
+  } else {
+    cell.textContent = String(displayNumber);
+  }
+}
+
+// refreshEntryQuestionHead re-renders one Ввод column header in place (the input
+// pane is cached and not rebuilt when a column is ticked or its entries change).
+function refreshEntryQuestionHead(qIndex) {
+  if (!Number.isInteger(qIndex)) return;
+  const cell = odRoot.querySelector(`.entry-q-head[data-q="${gameTable.cssEscape(qIndex)}"]`);
+  if (!cell) return;
+  applyEntryQuestionHeadContent(cell, qIndex + 1, questionStats()[qIndex]);
 }
 
 function buildInputTable() {
@@ -1103,13 +1132,14 @@ function buildInputTable() {
   }
   table.appendChild(colgroup);
 
+  const stats = questionStats();
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
   let q = 1;
   tourLengths.forEach((tourSize, tourIndex) => {
     for (let i = 0; i < tourSize; i++) {
       const cls = "entry-q-head" + (i === tourSize - 1 && tourIndex < tourLengths.length - 1 ? " entry-tour-end" : "");
-      head.appendChild(entryQuestionHeadCell(q - 1, q, cls));
+      head.appendChild(entryQuestionHeadCell(q - 1, q, cls, stats[q - 1]));
       q++;
     }
   });
@@ -1684,11 +1714,16 @@ function handleEntryInput(event) {
   invalidateScoreCaches();
   updateInputValidity(qIndex);
   refreshEntryColumnCoffin(qIndex);
+  if (state.completed[qIndex]) refreshEntryQuestionHead(qIndex);
   saveState(["entries", qIndex, rowIndex], parsed.value);
 }
 
 function handleEntryKeydown(event) {
   const input = event.target;
+  if (input instanceof HTMLInputElement && input.classList.contains("entry-lock-checkbox")) {
+    handleEntryLockKeydown(event, input);
+    return;
+  }
   const cell = event.target.closest?.(".entry-cell");
   if (!(input instanceof HTMLInputElement) && cell) {
     handleEntryCellKeydown(event, cell);
@@ -1696,6 +1731,14 @@ function handleEntryKeydown(event) {
   }
   if (!(input instanceof HTMLInputElement) || !input.classList.contains("entry-input")) return;
   if (handleEntrySuggestKeydown(event, input)) return;
+  // Escape leaves edit mode: drop the inline input and return to the cell's
+  // (non-editing) selected state. The value is already committed live on input.
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeEntryEditor();
+    cell?.focus({preventScroll: true});
+    return;
+  }
   if (input.dataset.entryKind === "shootout") {
     const roundIndex = Number(input.dataset.round);
     const questionIndex = Number(input.dataset.question);
@@ -1717,12 +1760,26 @@ function handleEntryKeydown(event) {
   }
   const qIndex = Number(input.dataset.q);
   const rowIndex = Number(input.dataset.row);
-  if (event.key === "Enter" || event.key === "ArrowDown") {
+  if (event.key === "Tab") {
+    // Move the cursor one column over (single selection, no editor) instead of
+    // letting the browser tab-focus the next cell on top of the lingering one.
+    event.preventDefault();
+    closeEntryEditor();
+    const nextQ = gameTable.clamp(qIndex + (event.shiftKey ? -1 : 1), 0, totalQuestions - 1);
+    setEntrySelection(nextQ, rowIndex, nextQ, rowIndex);
+  } else if (event.key === "Enter" || event.key === "ArrowDown") {
     event.preventDefault();
     focusInput(qIndex, rowIndex + 1);
   } else if (event.key === "ArrowUp") {
     event.preventDefault();
-    focusInput(qIndex, rowIndex - 1);
+    // From the top row, step up to the column's lock (tickbox) so the operator
+    // can confirm the column from the keyboard.
+    if (rowIndex === 0) {
+      closeEntryEditor();
+      focusLockCheckbox(qIndex);
+    } else {
+      focusInput(qIndex, rowIndex - 1);
+    }
   } else if (event.key === "ArrowLeft" && input.selectionStart === 0 && input.selectionEnd === 0) {
     event.preventDefault();
     focusInput(qIndex - 1, rowIndex);
@@ -1730,6 +1787,37 @@ function handleEntryKeydown(event) {
     event.preventDefault();
     focusInput(qIndex + 1, rowIndex);
   }
+}
+
+// handleEntryLockKeydown drives the column lock (tickbox) from the keyboard:
+// Space toggles it natively; Enter toggles too (native checkboxes ignore Enter);
+// ArrowDown drops back into the column's top entry cell.
+function handleEntryLockKeydown(event, checkbox) {
+  if (viewer) return;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    checkbox.checked = !checkbox.checked;
+    checkbox.dispatchEvent(new Event("change", {bubbles: true}));
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    if (checkbox.dataset.entryKind === "shootout") {
+      focusShootoutInput(Number(checkbox.dataset.round), Number(checkbox.dataset.question), 0);
+    } else {
+      const qIndex = Number(checkbox.dataset.q);
+      if (Number.isInteger(qIndex)) setEntrySelection(qIndex, 0, qIndex, 0);
+    }
+  }
+}
+
+// focusLockCheckbox moves keyboard focus to a (non-shootout) column's tickbox.
+function focusLockCheckbox(qIndex) {
+  const cb = odRoot.querySelector(
+    `.entry-lock-checkbox[data-q="${gameTable.cssEscape(qIndex)}"]:not([data-entry-kind="shootout"])`);
+  if (!cb) return false;
+  cb.focus();
+  return true;
 }
 
 function handleEntryDocumentKeydown(event) {
@@ -2036,6 +2124,7 @@ function handleEntryChange(event) {
   invalidateScoreCaches();
   updateHeaderProgress();
   refreshEntryColumnCoffin(qIndex);
+  refreshEntryQuestionHead(qIndex);
   saveState(["completed", qIndex], cb.checked);
 }
 
