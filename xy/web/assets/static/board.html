@@ -116,6 +116,26 @@
     </div>
   </div>
 
+  <!-- move / copy list overlay (within board → re-rank; other board →
+       client-side re-encryption of the list + its cards) -->
+  <div class="appearance-modal-overlay" id="moveListOverlay" hidden>
+    <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Переместить список">
+      <h2 class="appearance-modal-title">Переместить список</h2>
+      <div class="card-move card-move-stack">
+        <label class="card-section-label" for="moveListBoard">Доска</label>
+        <select id="moveListBoard" class="input" title="Доска"></select>
+        <label class="card-section-label" for="moveListPos">Позиция</label>
+        <select id="moveListPos" class="input" title="Позиция"></select>
+      </div>
+      <div class="card-move-actions">
+        <button class="btn btn-small" id="moveListCopyBtn" type="button">Копировать</button>
+        <button class="btn btn-small btn-ghost" id="moveListMoveBtn" type="button">Переместить</button>
+      </div>
+      <pre id="moveListMessage" class="import-message"></pre>
+      <button class="appearance-modal-done" id="moveListClose" type="button">Закрыть</button>
+    </div>
+  </div>
+
   <!-- members / sharing overlay -->
   <div class="appearance-modal-overlay" id="membersOverlay" hidden>
     <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Участники доски">

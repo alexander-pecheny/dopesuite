@@ -569,6 +569,69 @@ function splitList(text) {
   return { preamble: sp.slice(0, markers[0]).join("\n"), items };
 }
 
+// ---- Trello import clean-up -------------------------------------------------
+// Trello's new editor litters exported card descriptions with artefacts: double
+// line breaks between every paragraph, markdown-escaped chgksuite markers
+// (\#, \@, \-, \`), stray ``` fences and "smart link" cards that serialise as
+// `[https://…](https://… )`. fixTrelloFormatting undoes all of this, mirroring
+// chgksuite's `fix_trello_new_editor` cleanup (chgksuite/trello.py) so the
+// chgksuite markers survive and smart links collapse to plain URLs.
+function fixTrelloFormatting(s) {
+  s = String(s || "");
+  s = s.replace(/\n\n/g, "\n").replace(/\\@/g, "@");
+  s = s.replace(/\n +/g, "\n");
+  s = s.replace(/\n\\-/g, "\n-");
+  s = s.replace(/\\#/g, "#");
+  s = s.replace(/```/g, "");
+  s = s.replace(/\\`/g, "`");
+  return fixTrelloLinks(s);
+}
+
+// parseTrelloLink locates the `[text](target)` span whose `](` is at index i,
+// walking out to the matching `[` and `)` (bracket-aware, like chgksuite's
+// find_and_parse_link). Returns the span bounds + the bare URL when both the
+// text and the target start with "http" (a Trello smart-link), else null link.
+function parseTrelloLink(s, i) {
+  let mvr = i, level = 0, found = false;
+  while (mvr > 0) {
+    mvr -= 1;
+    if (s[mvr] === "]") level += 1;
+    else if (s[mvr] === "[") { if (level) level -= 1; else { found = true; break; } }
+  }
+  if (!found || s[mvr] !== "[") return null;
+  const start = mvr;
+  const firstPart = s.slice(start, i + 1); // "[ … ]"
+  let j = i + 1, lvl = 0; found = false;
+  while (j < s.length - 1) {
+    j += 1;
+    if (s[j] === "(") lvl += 1;
+    else if (s[j] === ")") { if (lvl) lvl -= 1; else { found = true; break; } }
+  }
+  if (!found || s[j] !== ")") return null;
+  const secondPart = s.slice(i + 1, j + 1); // "( … )"
+  const link = (firstPart.slice(1, 5) === "http" && secondPart.slice(1, 5) === "http")
+    ? firstPart.slice(1, -1) : null;
+  return { start, end: j, link };
+}
+
+// fixTrelloLinks collapses every Trello smart-link `[url](url)` to the bare url.
+function fixTrelloLinks(desc) {
+  let result = "";
+  let idx = desc.indexOf("](");
+  while (idx !== -1) {
+    const parsed = parseTrelloLink(desc, idx);
+    if (parsed && parsed.link) {
+      result += desc.slice(0, parsed.start) + parsed.link;
+      desc = desc.slice(parsed.end + 1);
+    } else {
+      result += desc.slice(0, idx + 2);
+      desc = desc.slice(idx + 2);
+    }
+    idx = desc.indexOf("](");
+  }
+  return result + desc;
+}
+
 // shareText builds the plain text handed to testers over chat: the screen-mode
 // question (prefixed "Вопрос N.") plus any handout block, so what the players
 // would see is reproduced. `number` comes from numberQuestionCards.
@@ -588,5 +651,6 @@ export const xyChgk = {
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
+  fixTrelloFormatting,
 };
 if (typeof window !== "undefined") window.xyChgk = xyChgk;
