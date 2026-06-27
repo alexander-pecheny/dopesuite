@@ -1050,6 +1050,19 @@ function handleEntryCellKeydown(event, cell) {
   } else if (event.key === "ArrowDown") {
     event.preventDefault();
     moveEntrySelection(1, 0, event.shiftKey);
+  } else if (event.key === "Tab") {
+    // Move the cursor one column over (collapsing the selection) instead of
+    // letting the browser tab-focus the next cell while the highlight lingers.
+    event.preventDefault();
+    moveEntrySelection(0, event.shiftKey ? -1 : 1, false);
+  } else if (event.key === "Home") {
+    // Jump to the top cell of the current column (scrolling into view).
+    event.preventDefault();
+    moveEntrySelection(-state.teams.length, 0, event.shiftKey);
+  } else if (event.key === "End") {
+    // Jump to the bottom cell of the current column (scrolling into view).
+    event.preventDefault();
+    moveEntrySelection(state.teams.length, 0, event.shiftKey);
   } else if (event.key === "Enter" || event.key === "F2") {
     event.preventDefault();
     openEntryEditor(cell);
