@@ -142,6 +142,7 @@ var profileTemplate = template.Must(template.New("profile").Parse(`<!doctype htm
     <h1>Профиль</h1>
   </header>
   <main class="public-main">
+    <a class="list-row" href="/host"><span class="list-row-title">← Назад к списку турниров</span></a>
     <section class="auth-step">
       <p class="auth-hint">{{if .HasPassword}}Сменить пароль{{else}}Установить пароль{{end}}</p>
       <form id="passwordForm" class="auth-form auth-form-stack" autocomplete="off" data-has-password="{{if .HasPassword}}1{{else}}0{{end}}">
