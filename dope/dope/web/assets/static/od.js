@@ -1816,6 +1816,11 @@ function focusLockCheckbox(qIndex) {
   const cb = odRoot.querySelector(
     `.entry-lock-checkbox[data-q="${gameTable.cssEscape(qIndex)}"]:not([data-entry-kind="shootout"])`);
   if (!cb) return false;
+  // Moving onto the tickbox is a move, not a copy: drop the cell cursor so it
+  // doesn't stay highlighted on the row below.
+  entrySelection = null;
+  updateEntrySelectionUI();
+  clearActiveEntryRows();
   cb.focus();
   return true;
 }
@@ -3626,14 +3631,23 @@ function findODPresenceTarget(cursor) {
 function applyRemoteState(nextState) {
   const active = document.activeElement;
   const editingInput = active && active.classList.contains("entry-input");
+  const focusedLock = Boolean(active && active.classList.contains("entry-lock-checkbox"));
   const editingShootout = active && (
     active.classList.contains("shootout-entry-checkbox") ||
-    active.classList.contains("entry-lock-checkbox") && active.dataset.entryKind === "shootout"
+    (focusedLock && active.dataset.entryKind === "shootout")
   );
+  // A focused (non-shootout) column tickbox must keep focus across a remote
+  // update — otherwise the echo of the operator's own toggle rebuilds the table
+  // and the cursor vanishes, so a second Space/Enter can't untick it.
+  const focusedLockCol = focusedLock && active.dataset.entryKind !== "shootout";
+  // A selected entry cell should keep keyboard focus too: the re-render below
+  // replaces its node, so re-focus the cursor afterwards (else arrow keys, which
+  // are handled on the focused cell, stop working after a remote update).
+  const focusedCell = Boolean(active && active.classList.contains("entry-cell") && !isShootoutEntryCell(active));
   state = nextState;
   ensureState();
   updateHeaderProgress();
-  if (editingInput || editingShootout) {
+  if (editingInput || editingShootout || focusedLockCol) {
     questionStatsCache = null;
     numberToIndexCache = null;
     invalidateTabCache("detailed", "results", "screen");
@@ -3643,6 +3657,7 @@ function applyRemoteState(nextState) {
   invalidateAllCaches();
   render();
   refreshPendingMarkers();
+  if (focusedCell) focusEntrySelection();
 }
 
 gameLoader.load()
