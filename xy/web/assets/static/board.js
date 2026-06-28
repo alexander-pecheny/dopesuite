@@ -1245,7 +1245,6 @@ function setCardView(view) {
   tabBtn("preview").hidden = !!pendingList;
   document.getElementById("cardViewTabs").hidden = isTestCard();
   document.getElementById("cardSave").hidden = view === "preview";
-  document.querySelector(".card-detail").classList.toggle("previewing", view === "preview");
   if (view === "text") document.getElementById("cardDesc").value = cardDraft;
   else if (view === "fields") renderCardFields();
   else if (view === "preview") renderCardPreview();

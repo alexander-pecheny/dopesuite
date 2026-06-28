@@ -6150,8 +6150,6 @@ body.is-fullscreen.od-page .match-main {
   cursor: text;
 }
 .card-preview-body > * { max-width: none; }
-/* hide edit-only chrome while previewing (mirrors create mode) */
-.card-detail.previewing [data-edit-only] { display: none !important; }
 
 /* ── structured fields (Поля) ─────────────────────────────────────────────── */
 .card-fields { display: flex; flex-direction: column; gap: var(--space-2); }
