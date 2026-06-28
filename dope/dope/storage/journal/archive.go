@@ -52,26 +52,81 @@ func GloballyQuiet(ctx context.Context, db *sql.DB, within time.Duration) (bool,
 	return lastEdit.Int64 < time.Now().UTC().Add(-within).Unix(), nil
 }
 
-// ArchiveFest folds all hot journal rows for festID with seq <= throughSeq into
-// one cold segment, then deletes them. Returns the number of rows archived.
-// Idempotent-ish: re-running with the same throughSeq archives nothing.
+// archiveChunkBytes bounds the raw payload pulled into memory per cold segment.
+// A fest's whole backlog can be hundreds of MB (op=ROWSET full state_json
+// snapshots), and folding it in a single segment OOM-killed the process on the
+// 1GB prod box. So fold in bounded chunks: peak memory stays ~chunk-sized
+// regardless of backlog size, and a large backlog simply drains as several
+// append-only segments (replayed in order, so multiple segments are transparent).
+// A var, not a const, only so tests can lower it to force multi-chunk folds.
+var archiveChunkBytes = 16 << 20
+
+// ArchiveFest folds hot journal rows for festID with seq <= throughSeq into one
+// or more cold segments (each holding up to ~archiveChunkBytes of raw payload),
+// deleting the rows as it goes. Returns the number of rows archived.
+// Idempotent-ish: re-running with the same throughSeq archives nothing. Chunk
+// boundaries always fall between seqs, so the delete never drops a row that
+// wasn't archived into a segment first.
 func ArchiveFest(ctx context.Context, db *sql.DB, festID, throughSeq int64) (int, error) {
 	dict, err := LoadWritableDict(db)
 	if err != nil {
 		return 0, fmt.Errorf("load dict: %w", err)
 	}
 
+	total := 0
+	afterSeq := int64(-1) // seq is a non-negative fest revision; -1 is below any row
+	for {
+		records, seqStart, seqEnd, err := readArchiveChunk(ctx, db, dict, festID, afterSeq, throughSeq)
+		if err != nil {
+			return total, err
+		}
+		if len(records) == 0 {
+			return total, nil
+		}
+
+		blob := Compress(EncodeSegment(records))
+
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			return total, err
+		}
+		if err := dict.PersistTx(tx); err != nil {
+			tx.Rollback()
+			return total, err
+		}
+		if _, err := tx.ExecContext(ctx, `
+insert into journal_segment(fest_id, seq_start, seq_end, dsl_version, n_records, blob, created_at)
+values(?, ?, ?, ?, ?, ?, ?)`,
+			festID, seqStart, seqEnd, DSLVersion, len(records), blob, time.Now().UTC().Format(time.RFC3339)); err != nil {
+			tx.Rollback()
+			return total, err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`delete from journal where fest_id = ? and seq > ? and seq <= ?`, festID, afterSeq, seqEnd); err != nil {
+			tx.Rollback()
+			return total, err
+		}
+		if err := tx.Commit(); err != nil {
+			return total, err
+		}
+		total += len(records)
+		afterSeq = seqEnd
+	}
+}
+
+// readArchiveChunk reads the next run of rows (seq in (afterSeq, throughSeq]) up
+// to ~archiveChunkBytes of raw payload, always stopping on a seq boundary so a
+// single seq is never split across two segments (the delete keys on seq). The
+// row that trips the budget is left unread for the next chunk's query to pick up.
+func readArchiveChunk(ctx context.Context, db *sql.DB, dict *Dict, festID, afterSeq, throughSeq int64) (recs []Record, seqStart, seqEnd int64, err error) {
 	rows, err := db.QueryContext(ctx, `
 select seq, ts, coalesce(actor_user_id, 0), coalesce(request_id, ''), op, payload
-from journal where fest_id = ? and seq <= ? order by seq`, festID, throughSeq)
+from journal where fest_id = ? and seq > ? and seq <= ? order by seq`, festID, afterSeq, throughSeq)
 	if err != nil {
-		return 0, err
+		return nil, 0, 0, err
 	}
-	var (
-		records  []Record
-		seqStart int64
-		seqEnd   int64
-	)
+	defer rows.Close()
+	var nbytes int
 	for rows.Next() {
 		var (
 			seq     int64
@@ -82,14 +137,17 @@ from journal where fest_id = ? and seq <= ? order by seq`, festID, throughSeq)
 			payload []byte
 		)
 		if err := rows.Scan(&seq, &ts, &actor, &reqID, &op, &payload); err != nil {
-			rows.Close()
-			return 0, err
+			return nil, 0, 0, err
 		}
-		if len(records) == 0 {
+		if len(recs) > 0 && nbytes >= archiveChunkBytes && seq != seqEnd {
+			break // over budget and at a seq boundary
+		}
+		if len(recs) == 0 {
 			seqStart = seq
 		}
 		seqEnd = seq
-		records = append(records, Record{
+		nbytes += len(payload)
+		recs = append(recs, Record{
 			Seq:         uint64(seq),
 			Op:          Op(op),
 			TSUnixMilli: ParseTSMilli(ts),
@@ -99,38 +157,9 @@ from journal where fest_id = ? and seq <= ? order by seq`, festID, throughSeq)
 		})
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
-		return 0, err
+		return nil, 0, 0, err
 	}
-	rows.Close()
-	if len(records) == 0 {
-		return 0, nil
-	}
-
-	// Compress off-lock.
-	blob := Compress(EncodeSegment(records))
-
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-	if err := dict.PersistTx(tx); err != nil {
-		return 0, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-insert into journal_segment(fest_id, seq_start, seq_end, dsl_version, n_records, blob, created_at)
-values(?, ?, ?, ?, ?, ?, ?)`,
-		festID, seqStart, seqEnd, DSLVersion, len(records), blob, time.Now().UTC().Format(time.RFC3339)); err != nil {
-		return 0, err
-	}
-	if _, err := tx.ExecContext(ctx, `delete from journal where fest_id = ? and seq <= ?`, festID, throughSeq); err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return len(records), nil
+	return recs, seqStart, seqEnd, nil
 }
 
 // ArchiveStale archives every fest's settled hot rows, leaving the newest
