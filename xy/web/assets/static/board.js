@@ -1433,9 +1433,10 @@ async function renderCardPreview() {
   const c = openCardCard();
   const card = { id: c ? c.id : 0, kind: draftKind(), desc: cardDraft, listId: c ? c.listId : (pendingList ? pendingList.id : 0) };
   const number = card.kind === "question" ? questionNumberFor(card) : null;
+  const reqId = openCardId;
   body.replaceChildren(el("p", { class: "pv-empty", text: "…" }));
   const imgMap = await resolveImages([card], imageRefs([card]), cardPreviewUrls);
-  if (cardView !== "preview") return; // switched away during the await
+  if (cardView !== "preview" || openCardId !== reqId) return; // switched view/card during the await
   const screen = document.getElementById("cardPreviewScreen").checked;
   body.replaceChildren(renderPreviewCard(card, number, imgMap, screen));
 }
@@ -1467,12 +1468,14 @@ async function openCard(card) {
   document.getElementById("cardCopyMsg").hidden = true;
   cardOverlay.hidden = false;
   renderLabelPicker(card);
-  await loadAttachments(card.id);
-  await loadTimeline(card.id);
-  await populateMoveBoards();
   paintLabels();
   lastEditView = fieldsAvailable() ? "fields" : "text";
+  // Render the chosen view straight away so reopening a card never flashes the
+  // previously-open card's content. The preview resolves its own images, so it
+  // doesn't wait on the per-card loads below — which run in parallel, not
+  // sequentially, to cut the total round-trip.
   setCardView(isTest ? "text" : "preview");
+  await Promise.all([loadAttachments(card.id), loadTimeline(card.id), populateMoveBoards()]);
 }
 
 // ---- move / copy a card (same board → relocate/duplicate; other board →
