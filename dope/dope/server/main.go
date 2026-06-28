@@ -30,6 +30,7 @@ import (
 	"dope/dope/platform/session"
 	"dope/dope/storage/auditmw"
 	"dope/dope/storage/festaccess"
+	"dope/dope/storage/journal"
 	"dope/dope/storage/migrate"
 	"dope/dope/storage/store"
 	"dope/dope/web/assets"
@@ -115,6 +116,10 @@ func Main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "convert-audit" {
 		migrate.RunConvertAudit(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "archive-journal" {
+		runArchiveJournal(os.Args[2:])
 		return
 	}
 
@@ -991,4 +996,33 @@ func runResolveBracket(args []string) {
 		log.Fatalf("commit: %v", err)
 	}
 	log.Printf("resolve-bracket: reconciled game %d in %s", *gameID, *dbPath)
+}
+
+// runArchiveJournal folds settled hot journal rows into cold segments offline.
+// The in-process archiver runs under the 5s write-tx timeout, which is fine for
+// steady-state tails but too tight to fold a large backlog (e.g. a fest that
+// accumulated months of edits) in one transaction. Run this with the service
+// stopped to compact such a backlog without the timeout or write contention.
+func runArchiveJournal(args []string) {
+	fs := flag.NewFlagSet("archive-journal", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to the sqlite database")
+	timeout := fs.Duration("timeout", 10*time.Minute, "max wall-clock for the archive pass")
+	_ = fs.Parse(args)
+	if *dbPath == "" {
+		log.Fatal("archive-journal: --db is required")
+	}
+
+	db, err := openFestDB(*dbPath)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+	n, err := journal.ArchiveStale(ctx, db)
+	if err != nil {
+		log.Fatalf("archive-journal: %v", err)
+	}
+	log.Printf("archive-journal: folded %d hot rows into cold segments in %s", n, *dbPath)
 }

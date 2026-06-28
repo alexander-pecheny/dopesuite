@@ -6,7 +6,6 @@ import (
 	"log"
 	"time"
 
-	"dope/dope/storage/festwrite"
 	"dope/dope/storage/journal"
 )
 
@@ -42,16 +41,36 @@ func (e *Engine) runJournalArchive(interval time.Duration) {
 	timer := time.NewTimer(10 * time.Minute)
 	defer timer.Stop()
 	for range timer.C {
-		ctx, cancel := context.WithTimeout(context.Background(), festwrite.WriteTxTimeout)
-		e.Mu.Lock()
-		n, err := journal.ArchiveStale(ctx, e.DB)
-		e.Mu.Unlock()
-		cancel()
-		if err != nil {
+		if err := e.archiveIfQuiet(); err != nil {
 			log.Printf("journal archive: %v", err)
-		} else if n > 0 {
-			log.Printf("journal archive: folded %d hot rows into cold segments", n)
 		}
 		timer.Reset(interval)
 	}
+}
+
+// archiveIfQuiet folds settled hot rows into cold segments, but only when the
+// whole system has been edit-free for journal.ArchiveQuiesce. Gating on global
+// (not per-fest) quiescence is what lets the fold hold the write lock past the
+// live 5s budget: if nothing has been edited anywhere for two hours, almost
+// certainly nothing is mid-match, so a longer hold won't stall play. The
+// quiescence check runs under the same lock as the fold so a write can't slip in
+// between them; if not quiet it returns immediately, holding the lock only for
+// the one cheap query.
+func (e *Engine) archiveIfQuiet() error {
+	ctx, cancel := context.WithTimeout(context.Background(), journal.ArchiveMaxHold)
+	defer cancel()
+	e.Mu.Lock()
+	defer e.Mu.Unlock()
+	quiet, err := journal.GloballyQuiet(ctx, e.DB, journal.ArchiveQuiesce)
+	if err != nil || !quiet {
+		return err
+	}
+	n, err := journal.ArchiveStale(ctx, e.DB)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		log.Printf("journal archive: folded %d hot rows into cold segments", n)
+	}
+	return nil
 }

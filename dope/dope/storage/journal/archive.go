@@ -25,11 +25,32 @@ const ArchiveKeepRecent = 200
 // ArchiveInterval controls how often the background archiver runs.
 const ArchiveInterval = 6 * time.Hour
 
-// ArchiveQuiesce is how long a fest must be free of edits before its hot tail is
-// eligible for folding. A fest being actively edited (a live event) is left
-// entirely in the hot tail until it goes quiet, so the archiver never folds —
-// and so never contends on the write path for — a fest mid-match.
+// ArchiveQuiesce is how long the WHOLE system must be free of edits before the
+// background archiver will fold. Gating on global (not per-fest) quiescence lets
+// the fold hold the write lock past the live 5s budget without risking a stall:
+// if nothing anywhere has been edited for this long, nothing is mid-match.
 const ArchiveQuiesce = 2 * time.Hour
+
+// ArchiveMaxHold caps how long one background fold may hold the write lock after
+// confirming global quiescence. Far above the 5s live-edit budget because, the
+// system being quiet, a longer hold won't stall a match; still bounded so a
+// stray edit arriving mid-fold waits at most this long.
+const ArchiveMaxHold = 2 * time.Minute
+
+// GloballyQuiet reports whether no journal row has been written within the last
+// `within` — i.e. the entire system has been edit-free for that long. The
+// background archiver gates on this so a long fold only ever runs when nothing
+// is mid-match.
+func GloballyQuiet(ctx context.Context, db *sql.DB, within time.Duration) (bool, error) {
+	var lastEdit sql.NullInt64
+	if err := db.QueryRowContext(ctx, `select max(unixepoch(ts)) from journal`).Scan(&lastEdit); err != nil {
+		return false, err
+	}
+	if !lastEdit.Valid {
+		return true, nil // empty journal
+	}
+	return lastEdit.Int64 < time.Now().UTC().Add(-within).Unix(), nil
+}
 
 // ArchiveFest folds all hot journal rows for festID with seq <= throughSeq into
 // one cold segment, then deletes them. Returns the number of rows archived.
@@ -115,18 +136,20 @@ values(?, ?, ?, ?, ?, ?, ?)`,
 // ArchiveStale archives every fest's settled hot rows, leaving the newest
 // ArchiveKeepRecent rows per fest uncompressed. Safe to call periodically.
 func ArchiveStale(ctx context.Context, db *sql.DB) (int, error) {
-	// Only consider fests that are over the keep-recent threshold AND have been
-	// quiet for ArchiveQuiesce. Rows with a NULL fest_id (the trigger could not
-	// resolve the owning fest at write time) are skipped: a single NULL group
-	// used to abort the whole pass (scanning NULL into int64 fails), so nothing
-	// ever archived and the hot tail grew without bound. migrateDB backfills the
-	// resolvable ones from their game; any residual orphans stay out of the way.
-	cutoff := time.Now().UTC().Add(-ArchiveQuiesce).Format("2006-01-02T15:04:05Z")
+	// Rows with a NULL fest_id (the trigger could not resolve the owning fest at
+	// write time) are skipped: a single NULL group used to abort the whole pass
+	// (scanning NULL into int64 fails), so nothing ever archived and the hot tail
+	// grew without bound. migrateDB backfills the resolvable ones from their game;
+	// any residual orphans stay out of the way.
+	//
+	// This folds every eligible fest unconditionally — deciding WHEN it is safe to
+	// run (so a large fold can't stall a live match) is the caller's job: the
+	// background archiver gates on GloballyQuiet; the archive-journal subcommand is
+	// run by an operator with the service stopped.
 	rows, err := db.QueryContext(ctx, `
 select fest_id, max(seq) from journal
 where fest_id is not null
-group by fest_id
-having count(*) > ? and max(unixepoch(ts)) < unixepoch(?)`, ArchiveKeepRecent, cutoff)
+group by fest_id having count(*) > ?`, ArchiveKeepRecent)
 	if err != nil {
 		return 0, err
 	}
