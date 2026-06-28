@@ -47,14 +47,38 @@
           <option value="other">Другое</option>
         </select>
         <div class="card-head-actions">
-          <button class="btn btn-small" id="cardCopy" type="button" title="Скопировать текст вопроса для тест-сессии (экранный режим)" hidden>📋 Для теста</button>
+          <button class="btn btn-small" id="cardCopy" type="button" title="Скопировать текст вопроса для тест-сессии (экранный режим)" hidden>📋 Копировать</button>
           <button class="action-icon" id="cardClose" aria-label="Закрыть">×</button>
         </div>
       </div>
       <div class="card-copy-msg" id="cardCopyMsg" hidden></div>
 
-      <label class="card-section-label">Описание</label>
-      <textarea class="card-desc" id="cardDesc" spellcheck="false"></textarea>
+      <!-- view switch: preview (read-only) / structured fields / raw 4s text -->
+      <div class="card-view-tabs" id="cardViewTabs" role="tablist">
+        <button class="card-view-tab" id="cardTabPreview" type="button" role="tab" data-view="preview">Просмотр</button>
+        <button class="card-view-tab" id="cardTabFields" type="button" role="tab" data-view="fields">Поля</button>
+        <button class="card-view-tab" id="cardTabText" type="button" role="tab" data-view="text">Текст</button>
+      </div>
+
+      <!-- Просмотр: single-card docx-style render (read-only) -->
+      <div class="card-view" id="cardViewPreview" hidden>
+        <label class="attach-lossless card-preview-screen" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения">
+          <input type="checkbox" id="cardPreviewScreen"> для экрана
+        </label>
+        <div class="preview-body card-preview-body" id="cardPreviewBody" title="Двойной клик — редактировать"></div>
+      </div>
+
+      <!-- Поля: structured field editor (question cards) -->
+      <div class="card-view" id="cardViewFields" hidden>
+        <div class="card-fields" id="cardFields"></div>
+      </div>
+
+      <!-- Текст: raw 4s editor -->
+      <div class="card-view" id="cardViewText" hidden>
+        <label class="card-section-label">Описание</label>
+        <textarea class="card-desc" id="cardDesc" spellcheck="false"></textarea>
+      </div>
+
       <div class="auth-actions">
         <button class="btn" id="cardSave" type="button">Сохранить</button>
         <button class="btn btn-ghost" id="cardDelete" type="button" data-edit-only>Удалить карточку</button>
@@ -113,6 +137,36 @@
         </div>
       </div>
       <div class="preview-body" id="previewBody"></div>
+    </div>
+  </div>
+
+  <!-- handouts generation overlay: edit the chgksuite .hndt source (left) and
+       render it to a PDF via the server (right). The PDF is ephemeral. -->
+  <div class="card-overlay preview-overlay" id="handoutsOverlay" hidden>
+    <div class="preview-doc handouts-doc" role="dialog" aria-modal="true" aria-label="Генерация раздаток">
+      <div class="preview-head">
+        <h2 class="preview-title">Генерация раздаток</h2>
+        <div class="preview-head-actions">
+          <button class="action-icon" id="handoutsClose" type="button" aria-label="Закрыть">×</button>
+        </div>
+      </div>
+      <div class="handouts-body">
+        <div class="handouts-pane handouts-src">
+          <label class="card-section-label">Источник (.hndt)</label>
+          <textarea class="card-desc handouts-textarea" id="handoutsSource" spellcheck="false"></textarea>
+          <div class="card-move-actions">
+            <button class="btn btn-small" id="handoutsGenerate" type="button">Сгенерировать PDF</button>
+          </div>
+          <pre id="handoutsMessage" class="import-message"></pre>
+        </div>
+        <div class="handouts-pane handouts-preview">
+          <div class="handouts-preview-head">
+            <label class="card-section-label">PDF</label>
+            <a class="btn btn-small" id="handoutsDownload" hidden download>Скачать</a>
+          </div>
+          <div class="handouts-pdf" id="handoutsPdf"></div>
+        </div>
+      </div>
     </div>
   </div>
 

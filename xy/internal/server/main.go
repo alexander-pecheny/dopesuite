@@ -109,6 +109,9 @@ func Main() {
 	// ---- export (chgksuite docx) ----
 	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
 
+	// ---- handouts (chgksuite hndt2pdf) ----
+	mux.HandleFunc("POST /api/handouts/pdf", srv.handleHandoutsPDF)
+
 	// ---- attachments ----
 	mux.HandleFunc("GET /api/cards/{id}/attachments", srv.handleListAttachments)
 	mux.HandleFunc("POST /api/cards/{id}/attachments", srv.handleCreateAttachment)

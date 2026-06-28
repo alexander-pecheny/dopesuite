@@ -127,6 +127,7 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self'; " +
 	"style-src 'self'; " +
 	"img-src 'self' data: blob:; " +
+	"frame-src 'self' blob:; " + // handout PDF preview is an in-memory blob: iframe
 	"font-src 'self'; " +
 	"connect-src 'self'; " +
 	"worker-src 'self'; " +

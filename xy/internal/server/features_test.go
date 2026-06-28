@@ -158,6 +158,127 @@ func TestExportDocxRealChgksuite(t *testing.T) {
 	}
 }
 
+// TestHandoutsPDF drives the handout-PDF endpoint with a fake chgksuite that
+// asserts the scratch dir holds source.hndt + the referenced image and the
+// hndt2pdf argv, then emits a result.pdf.
+func TestHandoutsPDF(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fake not portable to windows")
+	}
+	ts, srv := newTestServer(t)
+	c := registerUser(t, srv, ts, 770500, "hndt")
+
+	dir := t.TempDir()
+	script := filepath.Join(dir, "fake-chgksuite")
+	body := "#!/bin/sh\n" +
+		"set -e\n" +
+		"[ \"$1\" = handouts ] || { echo 'not handouts' >&2; exit 1; }\n" +
+		"[ \"$2\" = hndt2pdf ] || { echo 'not hndt2pdf' >&2; exit 1; }\n" +
+		"[ -f source.hndt ] || { echo 'no source' >&2; exit 1; }\n" +
+		"[ -f pic.jpg ] || { echo 'no image' >&2; exit 1; }\n" +
+		"grep -q 'for_question: 1' source.hndt || { echo 'bad source' >&2; exit 1; }\n" +
+		"printf '%%PDF-fake' > result.pdf\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XY_CHGKSUITE_CMD", script)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	_ = mw.WriteField("source", "for_question: 1\ncolumns: 3\n\nimage: pic.jpg\n")
+	_ = mw.WriteField("filename", "Тур 1")
+	fw, _ := mw.CreateFormFile("img", "pic.jpg")
+	fw.Write([]byte("\xff\xd8\xff fake jpeg bytes"))
+	mw.Close()
+
+	req, _ := http.NewRequest("POST", ts.URL+"/api/handouts/pdf", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	for _, ck := range c.jar {
+		req.AddCookie(ck)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustStatus(t, resp, 200)
+	defer resp.Body.Close()
+	if ct := resp.Header.Get("Content-Type"); ct != "application/pdf" {
+		t.Fatalf("content-type = %q", ct)
+	}
+	out := new(bytes.Buffer)
+	out.ReadFrom(resp.Body)
+	if out.String() != "%PDF-fake" {
+		t.Fatalf("body = %q", out.String())
+	}
+}
+
+// TestHandoutsPDFRejectsEmpty checks the empty-source guard.
+func TestHandoutsPDFRejectsEmpty(t *testing.T) {
+	ts, srv := newTestServer(t)
+	c := registerUser(t, srv, ts, 770600, "hndt2")
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	_ = mw.WriteField("source", "  ")
+	mw.Close()
+	req, _ := http.NewRequest("POST", ts.URL+"/api/handouts/pdf", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	for _, ck := range c.jar {
+		req.AddCookie(ck)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustStatus(t, resp, 400)
+}
+
+// TestHandoutMetaRoundTrip covers create-with-meta, patch-set, patch-clear and
+// snapshot exposure of cards.handout_meta_enc.
+func TestHandoutMetaRoundTrip(t *testing.T) {
+	c, boardID, listID := boardWithList(t)
+
+	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{
+		"description_enc": enc("? q"), "rank": "m", "kind": "question",
+		"handout_meta_enc": enc("columns: 2"),
+	})
+	mustStatus(t, resp, 200)
+	var card struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &card)
+	cardID := itoa(card.ID)
+
+	snap := getSnapshotFor(t, c, boardID)
+	if len(snap.Cards) != 1 || snap.Cards[0].HandoutMetaEnc == nil || *snap.Cards[0].HandoutMetaEnc != enc("columns: 2") {
+		t.Fatalf("handout_meta not persisted on create: %+v", snap.Cards)
+	}
+
+	// patch to a new value
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"handout_meta_enc": enc("columns: 4\nrows: 2")})
+	mustStatus(t, resp, 204)
+	snap = getSnapshotFor(t, c, boardID)
+	if snap.Cards[0].HandoutMetaEnc == nil || *snap.Cards[0].HandoutMetaEnc != enc("columns: 4\nrows: 2") {
+		t.Fatalf("handout_meta not updated: %+v", snap.Cards[0])
+	}
+
+	// clear with empty string
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"handout_meta_enc": ""})
+	mustStatus(t, resp, 204)
+	snap = getSnapshotFor(t, c, boardID)
+	if snap.Cards[0].HandoutMetaEnc != nil {
+		t.Fatalf("handout_meta not cleared: %+v", snap.Cards[0])
+	}
+}
+
+func getSnapshotFor(t *testing.T, c *apiClient, boardID string) boardSnapshot {
+	t.Helper()
+	resp := c.do("GET", "/api/boards/"+boardID, nil)
+	mustStatus(t, resp, 200)
+	var snap boardSnapshot
+	c.decode(resp, &snap)
+	return snap
+}
+
 // TestExportDocxRejectsEmpty checks the empty-source guard.
 func TestExportDocxRejectsEmpty(t *testing.T) {
 	ts, srv := newTestServer(t)
