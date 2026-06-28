@@ -86,6 +86,7 @@ function applyOpToSnapshot(snap, op, resultId) {
       snap.cards.push({
         id: resultId, list_id: ids[0], kind: body.kind || "normal",
         description_enc: body.description_enc, rank: body.rank,
+        ...(body.handout_meta_enc ? { handout_meta_enc: body.handout_meta_enc } : {}),
       });
       break;
     case "patchCard": {
@@ -95,6 +96,10 @@ function applyOpToSnapshot(snap, op, resultId) {
         if (body.rank != null) c.rank = body.rank;
         if (body.list_id != null) c.list_id = body.list_id;
         if (body.kind != null) c.kind = body.kind;
+        if (body.handout_meta_enc != null) {
+          if (body.handout_meta_enc === "") delete c.handout_meta_enc;
+          else c.handout_meta_enc = body.handout_meta_enc;
+        }
       }
       break;
     }

@@ -646,11 +646,243 @@ function shareText(desc, number) {
   return parts.join("\n\n");
 }
 
+// ── structured fields (semi-WYSIWYG) ────────────────────────────────────────
+// splitFields/composeFields convert between a raw 4s question description and a
+// flat field record so the card editor can offer one input per field while the
+// stored form stays the 4s source. Each field is `null` when its marker is
+// ABSENT and a value (possibly "") when the marker is PRESENT but empty — the UI
+// renders the absent state as a "+" pill and the present state as an input.
+
+// Reverse of MARKERS: block type → its leading marker (first/most-specific win).
+const TYPE_MARKER = (() => {
+  const m = {};
+  for (const [marker, type] of MARKERS) if (!(type in m)) m[type] = marker;
+  return m;
+})();
+
+// Block types that, when they precede the question, are "pre-markup" (numbering
+// directives / meta / headings hosted before the question — field #1).
+const PRE_TYPES = new Set(["numnum", "num", "meta", "section", "heading", "ljheading", "editor", "date"]);
+
+// rawLine reconstructs the 4s source of a parsed block (marker + text). A block's
+// continuation lines are plain, so a multi-line text round-trips verbatim.
+function rawLine(b) {
+  const marker = TYPE_MARKER[b.type];
+  if (!marker) return b.text;
+  return b.text ? marker + " " + b.text : marker;
+}
+
+// imgInText returns the (img …) filename referenced in a string, or null.
+function imgInText(s) {
+  const m = /\(img\b([^)]*)\)/.exec(s || "");
+  if (!m) return null;
+  const toks = m[1].trim().split(/\s+/).filter(Boolean);
+  return toks.length ? toks[toks.length - 1] : "";
+}
+
+// parseHandoutBlock classifies a "> …" handout block as an image (a single
+// (img …) directive) or free text.
+function parseHandoutBlock(text) {
+  const name = imgInText(text);
+  if (name) return { kind: "image", name };
+  return { kind: "text", text: text || "" };
+}
+
+// sourcesFromBlock splits a "^" source block into individual source lines,
+// stripping any "- " list markers. An empty block yields [""] (present-empty).
+function sourcesFromBlock(text) {
+  const t = (text || "").trim();
+  if (t === "") return [""];
+  const lines = t.split("\n").map((l) => l.replace(/^-\s*/, "").trim()).filter((l) => l !== "");
+  return lines.length ? lines : [t];
+}
+
+// authorsFromText splits an "@" author block into individual names on commas
+// (the conventional separator), so the tag UI can manage them.
+function authorsFromText(text) {
+  return (text || "").split(",").map((s) => s.trim()).filter((s) => s !== "");
+}
+
+function splitFields(desc) {
+  const blocks = parseBlocks(desc);
+  const res = {
+    preMarkup: null, handout: null, question: null, answer: null, zachet: null,
+    nezachet: null, comment: null, sources: null, authors: null, extra: null,
+  };
+  const preLines = [], extraLines = [], authorList = [];
+  let seenQuestion = false, sawAuthor = false;
+  for (const b of blocks) {
+    const t = b.type;
+    if (t === "handout" && res.handout === null) { res.handout = parseHandoutBlock(b.text); continue; }
+    if ((t === "question" || t === "pre") && !seenQuestion) { res.question = b.text; seenQuestion = true; continue; }
+    if ((t === "answer" || t === "zachet" || t === "nezachet" || t === "comment") && res[t] === null) { res[t] = b.text; continue; }
+    if (t === "source" && res.sources === null) { res.sources = sourcesFromBlock(b.text); continue; }
+    if (t === "author") { sawAuthor = true; authorList.push(...authorsFromText(b.text)); continue; }
+    if (!seenQuestion && PRE_TYPES.has(t)) { preLines.push(rawLine(b)); continue; }
+    extraLines.push(rawLine(b));
+  }
+  if (sawAuthor) res.authors = authorList;
+  if (preLines.length) res.preMarkup = preLines.join("\n");
+  if (extraLines.length) res.extra = extraLines.join("\n");
+  return res;
+}
+
+// composeHandout renders a handout field back to its "> …" 4s block.
+function composeHandout(h) {
+  if (!h) return null;
+  if (h.kind === "image") return h.name ? `> (img ${h.name})` : ">";
+  return h.text ? `> ${h.text}` : ">";
+}
+
+// composeSources renders the source field: a single "^ x", or a "^" list of
+// "- x" items when there are several, or a bare "^" when present-empty.
+function composeSources(arr) {
+  const items = (arr || []).map((s) => s.trim()).filter((s) => s !== "");
+  if (items.length === 0) return "^";
+  if (items.length === 1) return `^ ${items[0]}`;
+  return "^\n" + items.map((s) => `- ${s}`).join("\n");
+}
+
+// composeFields rebuilds a 4s description from a field record in canonical order.
+// Fields whose value is null are omitted; present-but-empty fields keep their
+// bare marker. Unrecognized content captured in `extra` is appended verbatim so
+// the round-trip is lossless for anything the structured editor doesn't model.
+function composeFields(f) {
+  const out = [];
+  const marker = (m, v) => out.push(v ? `${m} ${v}` : m);
+  if (f.preMarkup && f.preMarkup.trim()) out.push(f.preMarkup.trim());
+  if (f.handout) out.push(composeHandout(f.handout));
+  if (f.question !== null && f.question !== undefined) marker("?", f.question);
+  if (f.answer !== null && f.answer !== undefined) marker("!", f.answer);
+  if (f.zachet !== null && f.zachet !== undefined) marker("=", f.zachet);
+  if (f.nezachet !== null && f.nezachet !== undefined) marker("!=", f.nezachet);
+  if (f.comment !== null && f.comment !== undefined) marker("/", f.comment);
+  if (f.sources !== null && f.sources !== undefined) out.push(composeSources(f.sources));
+  if (f.authors !== null && f.authors !== undefined) {
+    const names = f.authors.map((s) => s.trim()).filter((s) => s !== "");
+    out.push(names.length ? `@ ${names.join(", ")}` : "@");
+  }
+  if (f.extra && f.extra.trim()) out.push(f.extra.trim());
+  return out.join("\n");
+}
+
+// ── handout (.hndt) generation — port of chgksuite handouts 4s2hndt ──────────
+// chgksuite/handouter/utils.RESERVED_WORDS: keys treated as block settings (vs
+// free handout text) in the .hndt format.
+const HNDT_RESERVED = new Set([
+  "image", "for_question", "columns", "rows", "resize_image", "font_size",
+  "font_family", "no_center", "raw_tex", "color", "handouts_per_team",
+  "grouping", "rotate", "tikz_mm", "hspace", "vspace", "max_width",
+]);
+const HNDT_DEFAULT_META = "columns: 3";
+
+function postprocessHandout(s) {
+  return (s || "").replace(/\\_/g, "_");
+}
+
+// handoutForCard extracts a question card's handout: the "> …" block (preferred,
+// xy-native) or a legacy inline "[Раздаточный материал: …]" bracket in the
+// question (chgksuite-native, what 4s2hndt scans). Returns {kind:'image',name} |
+// {kind:'text',text} | null.
+function handoutForCard(desc) {
+  const blocks = parseBlocks(desc);
+  const h = blocks.find((b) => b.type === "handout");
+  if (h) {
+    const name = imgInText(h.text);
+    if (name) return { kind: "image", name };
+    return { kind: "text", text: postprocessHandout(h.text) };
+  }
+  const q = questionText(desc);
+  for (const [s, e, body] of bracketSpans(q)) {
+    void s; void e;
+    if (!isHandoutBody(body)) continue;
+    const idx = body.indexOf(":");
+    const text = idx >= 0 ? body.slice(idx + 1).trim() : body;
+    const name = imgInText(text);
+    if (name) return { kind: "image", name };
+    return { kind: "text", text: postprocessHandout(text) };
+  }
+  return null;
+}
+
+// hndtBlock formats one .hndt block: a for_question header, the saved per-question
+// settings (or the default), a blank line, then the live handout content (text or
+// an `image: file` line).
+function hndtBlock(number, handout, metaText) {
+  const meta = (metaText && metaText.trim()) ? metaText.trim() : HNDT_DEFAULT_META;
+  const header = `for_question: ${number}\n${meta}`;
+  const content = handout.kind === "image" ? `image: ${handout.name}` : handout.text;
+  return `${header}\n\n${content}`;
+}
+
+// generateHndt builds the full .hndt document for a list. `cards` are the list's
+// cards in order, `numbers` the parallel display numbers (numberQuestionCards),
+// `metas` a map cardId → saved handout settings text. Only question cards that
+// actually carry a handout produce a block; blocks are joined with "\n---\n"
+// (chgksuite's delimiter).
+function generateHndt(cards, numbers, metas = {}) {
+  const blocks = [];
+  cards.forEach((c, i) => {
+    if (c.kind !== "question") return;
+    const handout = handoutForCard(c.desc);
+    if (!handout) return;
+    const number = numbers[i] != null ? numbers[i] : i + 1;
+    blocks.push(hndtBlock(number, handout, metas[c.id]));
+  });
+  return blocks.join("\n---\n");
+}
+
+// splitHndtBlocks splits a .hndt document on lines that are exactly "---"
+// (chgksuite split_blocks).
+function splitHndtBlocks(text) {
+  const parts = [];
+  let cur = [];
+  for (const line of String(text || "").split(/\r?\n/)) {
+    if (line.trim() === "---") { parts.push(cur.join("\n")); cur = []; }
+    else cur.push(line);
+  }
+  parts.push(cur.join("\n"));
+  return parts;
+}
+
+// parseHndtBlock pulls {forQuestion, meta} out of one .hndt block: the
+// for_question target plus the persistable settings (reserved keys other than
+// for_question and the image content line), as `key: value` lines.
+function parseHndtBlock(blockText) {
+  let forQuestion = null;
+  const meta = [];
+  for (const line of String(blockText || "").split("\n")) {
+    const i = line.indexOf(":");
+    if (i < 0) continue;
+    const key = line.slice(0, i).trim();
+    if (!HNDT_RESERVED.has(key)) continue;
+    const val = line.slice(i + 1).trim();
+    if (key === "for_question") { forQuestion = val; continue; }
+    if (key === "image") continue; // content, derived from the card
+    meta.push(`${key}: ${val}`);
+  }
+  return { forQuestion, meta: meta.join("\n") };
+}
+
+// parseHndtMetaByQuestion maps each block's for_question number → its settings
+// text, so the modal can persist edited settings back onto the matching cards.
+function parseHndtMetaByQuestion(text) {
+  const out = {};
+  for (const block of splitHndtBlocks(text)) {
+    if (!block.trim()) continue;
+    const { forQuestion, meta } = parseHndtBlock(block);
+    if (forQuestion != null && forQuestion !== "") out[forQuestion] = meta;
+  }
+  return out;
+}
+
 export const xyChgk = {
   parseBlocks, numberDirective, questionText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,
+  splitFields, composeFields, parseHandoutBlock, composeHandout,
+  generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
 };
 if (typeof window !== "undefined") window.xyChgk = xyChgk;

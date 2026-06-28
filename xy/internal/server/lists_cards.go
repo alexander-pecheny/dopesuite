@@ -18,11 +18,12 @@ type listDTO struct {
 }
 
 type cardDTO struct {
-	ID      int64  `json:"id"`
-	ListID  int64  `json:"list_id"`
-	Kind    string `json:"kind"`
-	DescEnc string `json:"description_enc"`
-	Rank    string `json:"rank"`
+	ID             int64   `json:"id"`
+	ListID         int64   `json:"list_id"`
+	Kind           string  `json:"kind"`
+	DescEnc        string  `json:"description_enc"`
+	Rank           string  `json:"rank"`
+	HandoutMetaEnc *string `json:"handout_meta_enc,omitempty"` // nil = no saved handout settings
 }
 
 type labelDTO struct {
@@ -54,7 +55,7 @@ select id, type, title_enc, rank from lists where board_id = ? and deleted_at is
 
 func scanCards(ctx context.Context, q querier, boardID int64) ([]cardDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, list_id, kind, description_enc, rank from cards where board_id = ? and deleted_at is null order by rank`, boardID)
+select id, list_id, kind, description_enc, rank, handout_meta_enc from cards where board_id = ? and deleted_at is null order by rank`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +63,15 @@ select id, list_id, kind, description_enc, rank from cards where board_id = ? an
 	out := []cardDTO{}
 	for rows.Next() {
 		var c cardDTO
-		var descEnc []byte
-		if err := rows.Scan(&c.ID, &c.ListID, &c.Kind, &descEnc, &c.Rank); err != nil {
+		var descEnc, metaEnc []byte
+		if err := rows.Scan(&c.ID, &c.ListID, &c.Kind, &descEnc, &c.Rank, &metaEnc); err != nil {
 			return nil, err
 		}
 		c.DescEnc = b64(descEnc)
+		if metaEnc != nil {
+			s := b64(metaEnc)
+			c.HandoutMetaEnc = &s
+		}
 		out = append(out, c)
 	}
 	return out, rows.Err()
@@ -240,9 +245,10 @@ func (s *server) handleDeleteList(w http.ResponseWriter, r *http.Request) {
 // ---- cards ----
 
 type createCardRequest struct {
-	DescEnc string `json:"description_enc"`
-	Rank    string `json:"rank"`
-	Kind    string `json:"kind"`
+	DescEnc        string  `json:"description_enc"`
+	Rank           string  `json:"rank"`
+	Kind           string  `json:"kind"`
+	HandoutMetaEnc *string `json:"handout_meta_enc"` // optional handout-gen settings
 }
 
 // validCardKind allowlists the card kinds the client may set (mirrors the
@@ -289,12 +295,17 @@ func (s *server) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "bad card kind")
 		return
 	}
+	metaEnc, err := optBlob(req.HandoutMetaEnc)
+	if err != nil {
+		httpError(w, http.StatusBadRequest, "invalid handout_meta_enc")
+		return
+	}
 	now := time.Now()
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-card", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
-insert into cards(board_id, list_id, kind, description_enc, rank, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?)`,
-			bid, listID, kind, descEnc, req.Rank, rfc3339(now), rfc3339(now))
+insert into cards(board_id, list_id, kind, description_enc, rank, handout_meta_enc, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?, ?)`,
+			bid, listID, kind, descEnc, req.Rank, metaEnc, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -308,11 +319,21 @@ insert into cards(board_id, list_id, kind, description_enc, rank, created_at, up
 }
 
 type patchCardRequest struct {
-	DescEnc      *string `json:"description_enc"`
-	Rank         *string `json:"rank"`
-	ListID       *int64  `json:"list_id"`
-	Kind         *string `json:"kind"`           // optional kind change (feature: change card type after creation)
-	DescEventEnc *string `json:"desc_event_enc"` // optional desc_edit timeline payload
+	DescEnc        *string `json:"description_enc"`
+	Rank           *string `json:"rank"`
+	ListID         *int64  `json:"list_id"`
+	Kind           *string `json:"kind"`             // optional kind change (feature: change card type after creation)
+	DescEventEnc   *string `json:"desc_event_enc"`   // optional desc_edit timeline payload
+	HandoutMetaEnc *string `json:"handout_meta_enc"` // optional handout-gen settings; "" clears (sets NULL)
+}
+
+// optBlob maps an optional base64 field to nullable blob bytes: nil pointer or
+// empty string → NULL; otherwise the decoded envelope.
+func optBlob(b64v *string) ([]byte, error) {
+	if b64v == nil || *b64v == "" {
+		return nil, nil
+	}
+	return unb64(*b64v)
 }
 
 func (s *server) handlePatchCard(w http.ResponseWriter, r *http.Request) {
@@ -338,6 +359,15 @@ func (s *server) handlePatchCard(w http.ResponseWriter, r *http.Request) {
 				if err := appendEvent(ctx, tx, bid, cardID, "desc_edit", uid, *req.DescEventEnc); err != nil {
 					return err
 				}
+			}
+		}
+		if req.HandoutMetaEnc != nil {
+			metaEnc, err := optBlob(req.HandoutMetaEnc)
+			if err != nil {
+				return errBadRequest("invalid handout_meta_enc")
+			}
+			if _, err := tx.ExecContext(ctx, `update cards set handout_meta_enc = ?, updated_at = ? where id = ?`, metaEnc, now, cardID); err != nil {
+				return err
 			}
 		}
 		if req.Rank != nil {

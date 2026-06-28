@@ -169,7 +169,30 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV3(db); err != nil {
 		return err
 	}
+	if err := migrateV4(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV4 adds cards.handout_meta_enc: an optional encrypted blob holding the
+// per-question handout-generation settings (the .hndt block minus the live
+// handout text — columns/rows/grouping/etc.), edited on the card or round-tripped
+// through the "Генерация раздаток" modal. NULL means "no saved settings".
+func migrateV4(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 4`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+alter table cards add column handout_meta_enc blob;
+insert or ignore into schema_versions(version, applied_at)
+  values(4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV3 adds api_tokens: month-lived bearer tokens that authorize the

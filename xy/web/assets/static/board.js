@@ -281,6 +281,7 @@ async function load() {
     state.cards = await Promise.all(snap.cards.map(async (c) => ({
       id: c.id, listId: c.list_id, kind: c.kind, rank: c.rank,
       desc: await xyCrypto.decField(dk, c.description_enc),
+      handoutMeta: c.handout_meta_enc ? await xyCrypto.decField(dk, c.handout_meta_enc) : null,
     })));
     state.labels = await Promise.all(snap.labels.map(async (l) => ({
       id: l.id, kind: l.kind,
@@ -322,6 +323,7 @@ function renderList(list) {
       { label: "🔍 Предпросмотр", onClick: () => previewList(list) },
       { label: "↔ Переместить список…", onClick: () => openMoveList(list) },
       { label: "📄 Экспорт в docx", onClick: () => exportList(list) },
+      { label: "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
     ]);
   });
   menuWrap.append(menuBtn);
@@ -699,6 +701,136 @@ async function exportList(list) {
   }
 }
 
+// ---- handouts generation (chgksuite .hndt → PDF, PLAN §8) ----
+// "Генерация раздаток": port of `chgksuite handouts 4s2hndt` (in chgk.js) builds
+// an editable .hndt source from the list's questions, merging each question's
+// saved layout settings (handout_meta) with its live handout text. "Сгенерировать
+// PDF" posts the source + referenced images to the server, which runs
+// `chgksuite handouts hndt2pdf` (tectonic) and streams an ephemeral PDF. On close
+// the per-question settings (everything but the handout text) are persisted back.
+const handoutsOverlay = document.getElementById("handoutsOverlay");
+let handoutsCtx = null;   // { list, cards, numbers }
+let handoutsPdfUrl = null;
+
+function openHandouts(list) {
+  const cards = cardsOf(list.id);
+  const numbers = list.type === "test" ? cards.map(() => null) : xyChgk.numberQuestionCards(cards);
+  const metas = {};
+  for (const c of cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
+  const source = xyChgk.generateHndt(cards, numbers, metas);
+  handoutsCtx = { list, cards, numbers };
+  document.getElementById("handoutsSource").value = source;
+  document.getElementById("handoutsMessage").textContent = source.trim() ? "" : "В списке нет вопросов с раздаточным материалом.";
+  clearHandoutsPdf();
+  handoutsOverlay.hidden = false;
+}
+
+function clearHandoutsPdf() {
+  const pane = document.getElementById("handoutsPdf");
+  pane.replaceChildren();
+  const dl = document.getElementById("handoutsDownload");
+  dl.hidden = true;
+  if (handoutsPdfUrl) { URL.revokeObjectURL(handoutsPdfUrl); handoutsPdfUrl = null; }
+}
+
+// persistHandoutMeta writes the edited per-question settings back onto the cards
+// (everything in each .hndt block except the live handout text/image), so the
+// layout is restored next time the modal opens.
+async function persistHandoutMeta() {
+  if (!handoutsCtx) return;
+  const source = document.getElementById("handoutsSource").value;
+  const byNumber = xyChgk.parseHndtMetaByQuestion(source);
+  const { cards, numbers } = handoutsCtx;
+  for (let i = 0; i < cards.length; i++) {
+    const c = cards[i];
+    if (c.kind !== "question") continue;
+    const num = numbers[i];
+    if (num == null || !(String(num) in byNumber)) continue;
+    const meta = byNumber[String(num)] || null;
+    const norm = meta && meta.trim() ? meta : null;
+    if (norm === (c.handoutMeta || null)) continue;
+    try {
+      const body = { handout_meta_enc: norm ? await xyCrypto.encField(dk, norm) : "" };
+      await patch("patchCard", `/api/cards/${c.id}`, body);
+      c.handoutMeta = norm;
+    } catch (_) { /* best-effort: keep editing even if a write fails */ }
+  }
+}
+
+async function closeHandouts() {
+  handoutsOverlay.hidden = true;
+  await persistHandoutMeta();
+  clearHandoutsPdf();
+  handoutsCtx = null;
+}
+
+async function generateHandoutsPdf() {
+  if (!handoutsCtx) return;
+  if (!xySync.isOnline()) { document.getElementById("handoutsMessage").textContent = "Генерация PDF доступна только онлайн."; return; }
+  const source = document.getElementById("handoutsSource").value;
+  const msg = document.getElementById("handoutsMessage");
+  if (!source.trim()) { msg.textContent = "Пустой источник."; return; }
+  const btn = document.getElementById("handoutsGenerate");
+  btn.disabled = true;
+  msg.textContent = "Генерация…";
+  clearHandoutsPdf();
+  try {
+    // images referenced as "image: NAME" (or inline "(img NAME)") in the source
+    const wanted = new Set();
+    for (const m of source.matchAll(/^\s*image:\s*(.+?)\s*$/gm)) wanted.add(m[1]);
+    for (const m of source.matchAll(/\(img\s+([^\s)]+)/g)) wanted.add(m[1]);
+
+    const fd = new FormData();
+    fd.append("source", source);
+    fd.append("filename", handoutsCtx.list.title || "handouts");
+
+    if (wanted.size) {
+      const seen = new Set();
+      for (const card of handoutsCtx.cards) {
+        let atts;
+        try { atts = await fetchJSON(`/api/cards/${card.id}/attachments`); } catch (_) { continue; }
+        for (const att of atts) {
+          let name = "";
+          try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) { continue; }
+          if (!wanted.has(name) || seen.has(name)) continue;
+          seen.add(name);
+          const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
+          if (!res.ok) continue;
+          const plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
+          fd.append("img", new Blob([plain], { type: att.mime }), name);
+        }
+      }
+      const missing = [...wanted].filter((n) => !seen.has(n));
+      if (missing.length && !confirm(`Не найдены изображения: ${missing.join(", ")}. Продолжить?`)) {
+        msg.textContent = "";
+        btn.disabled = false;
+        return;
+      }
+    }
+
+    const res = await fetch("/api/handouts/pdf", { method: "POST", credentials: "same-origin", body: fd });
+    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+    const blob = await res.blob();
+    handoutsPdfUrl = URL.createObjectURL(blob);
+    const embed = el("iframe", { class: "handouts-pdf-frame", src: handoutsPdfUrl, title: "PDF" });
+    document.getElementById("handoutsPdf").replaceChildren(embed);
+    const dl = document.getElementById("handoutsDownload");
+    dl.href = handoutsPdfUrl;
+    dl.setAttribute("download", (handoutsCtx.list.title || "handouts") + ".pdf");
+    dl.hidden = false;
+    msg.textContent = "Готово.";
+  } catch (err) {
+    msg.textContent = "Не удалось сгенерировать: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("handoutsGenerate").addEventListener("click", generateHandoutsPdf);
+document.getElementById("handoutsClose").addEventListener("click", closeHandouts);
+handoutsOverlay.addEventListener("pointerdown", (e) => { if (e.target === handoutsOverlay) closeHandouts(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !handoutsOverlay.hidden) closeHandouts(); });
+
 // ---- list preview (docx-style HTML render, entirely client-side) ----
 // Renders a whole list the way chgksuite's docx export would — questions with
 // numbered labels and Ответ/Зачёт/Комментарий/etc. fields, plus meta, headings
@@ -739,7 +871,7 @@ function imageRefs(cards) {
 // resolveImages maps each wanted image name → a decrypted object URL by scanning
 // the cards' attachments (online only — mirrors the docx export's image
 // gathering). Missing names simply render as a placeholder in renderRich.
-async function resolveImages(cards, wanted) {
+async function resolveImages(cards, wanted, urls = previewUrls) {
   const map = new Map();
   if (!wanted.size || !xySync.isOnline()) return map;
   for (const card of cards) {
@@ -755,7 +887,7 @@ async function resolveImages(cards, wanted) {
         if (!res.ok) continue;
         const plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
         const url = URL.createObjectURL(new Blob([plain], { type: att.mime }));
-        previewUrls.push(url);
+        urls.push(url);
         map.set(name, url);
       } catch (_) {}
     }
@@ -956,6 +1088,11 @@ function addCard(list) {
   if (list.type === "test") return addTestCard(list);
   pendingList = list;
   openCardId = null;
+  cardView = "";
+  cardFieldReaders = null;
+  cardDraft = "";
+  cardDraftMeta = null;
+  cardImageNames = [];
   document.getElementById("cardDesc").value = "";
   document.getElementById("cardKind").hidden = false;
   document.getElementById("cardKind").value = "question";
@@ -963,6 +1100,9 @@ function addCard(list) {
   document.querySelector(".card-detail").classList.add("creating");
   document.getElementById("cardCopy").hidden = true; // no number/desc yet
   cardOverlay.hidden = false;
+  // New card: no preview yet — open straight into the structured editor.
+  lastEditView = "fields";
+  setCardView("fields");
   document.getElementById("cardDesc").focus();
 }
 
@@ -1042,9 +1182,277 @@ let openCardId = null;
 let pendingList = null; // set while composing a brand-new (unsaved) card
 const cardOverlay = document.getElementById("cardOverlay");
 
+// ---- card detail views: Просмотр (preview) / Поля (fields) / Текст (raw 4s) ----
+// The open card carries a working draft of its 4s description (and handout
+// settings) that flows between the three views without persisting; Save commits
+// the draft. cardView is the active view; lastEditView is the edit tab restored
+// when the user clicks ✎ / double-clicks the preview.
+let cardView = "";
+let lastEditView = "fields";
+let cardDraft = "";          // unsaved working 4s description
+let cardDraftMeta = null;    // unsaved handout-generation settings (string|null)
+let cardFieldReaders = null; // per-field read() closures for the Поля view
+let cardFieldsExtra = null;  // unmodelled blocks preserved across a Поля recompose
+let cardPreviewUrls = [];    // object URLs minted for the single-card preview
+
+const CARD_TABS = ["preview", "fields", "text"];
+const tabBtn = (v) => document.getElementById("cardTab" + v[0].toUpperCase() + v.slice(1));
+
+function openCardCard() { return state.cards.find((c) => c.id === openCardId); }
+
+function draftKind() {
+  if (pendingList) return document.getElementById("cardKind").value || "question";
+  const c = openCardCard();
+  return c ? c.kind : "question";
+}
+function fieldsAvailable() { return draftKind() === "question"; }
+function isTestCard() { return draftKind() === "test"; }
+
+// boardAuthors collects author names already used across the board's question
+// cards (deduped, sorted) — the autocomplete suggestions for the Автор field.
+function boardAuthors() {
+  const set = new Set();
+  for (const c of state.cards) {
+    if (c.kind !== "question") continue;
+    const f = xyChgk.splitFields(c.desc);
+    for (const a of f.authors || []) set.add(a);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, "ru"));
+}
+
+// captureDraft folds the currently-visible view's edits back into the draft so
+// switching views never loses unsaved input.
+function captureDraft() {
+  if (cardView === "text") cardDraft = document.getElementById("cardDesc").value;
+  else if (cardView === "fields" && cardFieldReaders) {
+    const r = readCardFields();
+    cardDraft = r.desc;
+    cardDraftMeta = r.meta;
+  }
+}
+
+function setCardView(view) {
+  captureDraft();
+  if (isTestCard()) view = "text";
+  if (view === "fields" && !fieldsAvailable()) view = "text";
+  cardView = view;
+  if (view !== "preview") lastEditView = view;
+  document.getElementById("cardViewPreview").hidden = view !== "preview";
+  document.getElementById("cardViewFields").hidden = view !== "fields";
+  document.getElementById("cardViewText").hidden = view !== "text";
+  for (const t of CARD_TABS) tabBtn(t).classList.toggle("active", t === view);
+  tabBtn("fields").hidden = !fieldsAvailable();
+  tabBtn("preview").hidden = !!pendingList;
+  document.getElementById("cardViewTabs").hidden = isTestCard();
+  document.getElementById("cardSave").hidden = view === "preview";
+  document.querySelector(".card-detail").classList.toggle("previewing", view === "preview");
+  if (view === "text") document.getElementById("cardDesc").value = cardDraft;
+  else if (view === "fields") renderCardFields();
+  else if (view === "preview") renderCardPreview();
+}
+
+// ensureOption adds a <select> option for `name` if it isn't already present (so
+// an image referenced by the handout but not currently attached still shows).
+function ensureOption(sel, name) {
+  if (name && ![...sel.options].some((o) => o.value === name)) sel.append(el("option", { value: name, text: name }));
+}
+
+// buildField is the generic absent/present field control: a "+ label" pill when
+// absent, a labelled input with a "×" (back to absent) when present.
+function buildField(label, kind, initial, opts = {}) {
+  const wrap = el("div", { class: "fld" + (opts.muted ? " fld-muted" : "") });
+  const addBtn = el("button", { class: "fld-add", type: "button", text: "+ " + label, title: "Добавить поле" });
+  const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
+  const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: label }), rmBtn);
+  const input = kind === "area"
+    ? el("textarea", { class: "card-desc fld-input", spellcheck: "false" })
+    : el("input", { class: "input fld-input", type: "text" });
+  const body = el("div", { class: "fld-body" }, input);
+  let present = initial !== null && initial !== undefined;
+  if (present) input.value = initial;
+  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; };
+  addBtn.addEventListener("click", () => { present = true; sync(); input.focus(); });
+  rmBtn.addEventListener("click", () => { present = false; sync(); });
+  wrap.append(addBtn, head, body);
+  sync();
+  return { node: wrap, read: () => (present ? input.value : null) };
+}
+
+// buildHandoutField: the "Раздаточный материал" field with a текст/картинка
+// toggle. Image mode picks among the card's attached images.
+function buildHandoutField(initial) {
+  const wrap = el("div", { class: "fld" });
+  const addBtn = el("button", { class: "fld-add", type: "button", text: "+ Раздаточный материал", title: "Добавить поле" });
+  const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
+  const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Раздаточный материал" }), rmBtn);
+  const modeText = el("button", { class: "seg-btn", type: "button", text: "текст" });
+  const modeImg = el("button", { class: "seg-btn", type: "button", text: "картинка" });
+  const toggle = el("div", { class: "seg-toggle" }, modeText, modeImg);
+  const ta = el("textarea", { class: "card-desc fld-input", spellcheck: "false" });
+  const sel = el("select", { class: "input fld-input" });
+  for (const n of cardImageNames) sel.append(el("option", { value: n, text: n }));
+  const body = el("div", { class: "fld-body" }, toggle, ta, sel);
+  let mode = initial && initial.kind === "image" ? "image" : "text";
+  if (initial) {
+    if (initial.kind === "image") { ensureOption(sel, initial.name); sel.value = initial.name || ""; }
+    else ta.value = initial.text || "";
+  }
+  if (!cardImageNames.length) ensureOption(sel, "");
+  const syncMode = () => {
+    modeText.classList.toggle("active", mode === "text");
+    modeImg.classList.toggle("active", mode === "image");
+    ta.hidden = mode !== "text";
+    sel.hidden = mode !== "image";
+  };
+  modeText.addEventListener("click", () => { mode = "text"; syncMode(); });
+  modeImg.addEventListener("click", () => { mode = "image"; syncMode(); });
+  let present = !!initial;
+  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; };
+  addBtn.addEventListener("click", () => { present = true; sync(); });
+  rmBtn.addEventListener("click", () => { present = false; sync(); });
+  wrap.append(addBtn, head, body);
+  sync(); syncMode();
+  return {
+    node: wrap,
+    read: () => (present ? (mode === "image" ? { kind: "image", name: sel.value } : { kind: "text", text: ta.value }) : null),
+  };
+}
+
+// buildSourcesField: the multi-line "Источник" field (one input per source line,
+// add/remove rows).
+function buildSourcesField(initial) {
+  const wrap = el("div", { class: "fld" });
+  const addBtn = el("button", { class: "fld-add", type: "button", text: "+ Источник", title: "Добавить поле" });
+  const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
+  const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Источник" }), rmBtn);
+  const rows = el("div", { class: "fld-rows" });
+  const addRow = (val) => {
+    const inp = el("input", { class: "input fld-row-input", type: "text", value: val || "" });
+    const rrm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: "Удалить строку" });
+    const row = el("div", { class: "fld-row" }, inp, rrm);
+    rrm.addEventListener("click", () => row.remove());
+    rows.append(row);
+    return inp;
+  };
+  const rowAdd = el("button", { class: "input fld-add-row", type: "button", text: "+ строка" });
+  rowAdd.addEventListener("click", () => addRow("").focus());
+  const body = el("div", { class: "fld-body" }, rows, rowAdd);
+  let present = initial !== null && initial !== undefined;
+  (present ? (initial.length ? initial : [""]) : []).forEach((s) => addRow(s));
+  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; };
+  addBtn.addEventListener("click", () => { present = true; if (!rows.children.length) addRow(""); sync(); });
+  rmBtn.addEventListener("click", () => { present = false; sync(); });
+  wrap.append(addBtn, head, body);
+  sync();
+  return { node: wrap, read: () => (present ? [...rows.querySelectorAll(".fld-row-input")].map((i) => i.value) : null) };
+}
+
+// buildAuthorsField: a tag input (like labels) seeded with autocomplete from the
+// board's existing authors; free text adds a new author.
+function buildAuthorsField(initial, suggestions) {
+  const wrap = el("div", { class: "fld" });
+  const addBtn = el("button", { class: "fld-add", type: "button", text: "+ Автор", title: "Добавить поле" });
+  const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
+  const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Автор" }), rmBtn);
+  const tags = el("div", { class: "fld-tags" });
+  const tagSet = [];
+  let dl = document.getElementById("authorsDatalist");
+  if (!dl) { dl = el("datalist", { id: "authorsDatalist" }); document.body.append(dl); }
+  dl.replaceChildren(...suggestions.map((s) => el("option", { value: s })));
+  const inp = el("input", { class: "input fld-tag-input", type: "text", placeholder: "имя автора…" });
+  inp.setAttribute("list", "authorsDatalist");
+  const renderTags = () => {
+    tags.replaceChildren(...tagSet.map((t, i) => {
+      const rm = el("button", { class: "fld-tag-rm", type: "button", text: "×" });
+      rm.addEventListener("click", () => { tagSet.splice(i, 1); renderTags(); });
+      return el("span", { class: "fld-tag" }, document.createTextNode(t), rm);
+    }));
+  };
+  const commit = () => { const v = inp.value.trim(); if (v) { tagSet.push(v); inp.value = ""; renderTags(); } };
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); commit(); } });
+  inp.addEventListener("blur", commit);
+  const body = el("div", { class: "fld-body" }, tags, inp);
+  let present = initial !== null && initial !== undefined;
+  if (present) initial.forEach((t) => tagSet.push(t));
+  renderTags();
+  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; };
+  addBtn.addEventListener("click", () => { present = true; sync(); inp.focus(); });
+  rmBtn.addEventListener("click", () => { present = false; sync(); });
+  wrap.append(addBtn, head, body);
+  sync();
+  return { node: wrap, read: () => { commit(); return present ? tagSet.slice() : null; } };
+}
+
+// renderCardFields rebuilds the Поля editor from the current draft (and handout
+// settings). Field #10 (handout-gen markup) binds to cardDraftMeta, not the 4s.
+function renderCardFields() {
+  const f = xyChgk.splitFields(cardDraft);
+  cardFieldsExtra = f.extra;
+  const box = document.getElementById("cardFields");
+  box.replaceChildren();
+  const R = {};
+  R.preMarkup = buildField("Доп. разметка перед вопросом", "area", f.preMarkup, { muted: true });
+  R.handout = buildHandoutField(f.handout);
+  R.question = buildField("Текст вопроса", "area", f.question);
+  R.answer = buildField("Ответ", "area", f.answer);
+  R.zachet = buildField("Зачёт", "input", f.zachet);
+  R.nezachet = buildField("Незачёт", "input", f.nezachet);
+  R.comment = buildField("Комментарий", "area", f.comment);
+  R.sources = buildSourcesField(f.sources);
+  R.authors = buildAuthorsField(f.authors, boardAuthors());
+  R.hndt = buildField("Доп. разметка для генерации раздаток", "area", cardDraftMeta, { muted: true });
+  for (const k of ["preMarkup", "handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"]) box.append(R[k].node);
+  cardFieldReaders = R;
+}
+
+// readCardFields collapses the Поля editor back into a 4s description + handout
+// settings, preserving any unmodelled blocks captured at render time.
+function readCardFields() {
+  const R = cardFieldReaders;
+  const rec = {
+    preMarkup: R.preMarkup.read(),
+    handout: R.handout.read(),
+    question: R.question.read(),
+    answer: R.answer.read(),
+    zachet: R.zachet.read(),
+    nezachet: R.nezachet.read(),
+    comment: R.comment.read(),
+    sources: R.sources.read(),
+    authors: R.authors.read(),
+    extra: cardFieldsExtra,
+  };
+  return { desc: xyChgk.composeFields(rec), meta: R.hndt.read() };
+}
+
+// renderCardPreview renders the open card's draft the docx way (single-card
+// version of the list preview). Read-only; double-click jumps back to editing.
+async function renderCardPreview() {
+  const body = document.getElementById("cardPreviewBody");
+  for (const u of cardPreviewUrls) URL.revokeObjectURL(u);
+  cardPreviewUrls = [];
+  if (!cardDraft.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: "Пусто." })); return; }
+  const c = openCardCard();
+  const card = { id: c ? c.id : 0, kind: draftKind(), desc: cardDraft, listId: c ? c.listId : (pendingList ? pendingList.id : 0) };
+  const number = card.kind === "question" ? questionNumberFor(card) : null;
+  body.replaceChildren(el("p", { class: "pv-empty", text: "…" }));
+  const imgMap = await resolveImages([card], imageRefs([card]), cardPreviewUrls);
+  if (cardView !== "preview") return; // switched away during the await
+  const screen = document.getElementById("cardPreviewScreen").checked;
+  body.replaceChildren(renderPreviewCard(card, number, imgMap, screen));
+}
+
+// Tab clicks + the preview screen toggle + double-click-to-edit.
+for (const v of CARD_TABS) tabBtn(v).addEventListener("click", () => setCardView(v));
+document.getElementById("cardPreviewScreen").addEventListener("change", () => { if (cardView === "preview") renderCardPreview(); });
+document.getElementById("cardPreviewBody").addEventListener("dblclick", () => setCardView(lastEditView));
+
 async function openCard(card) {
   pendingList = null;
   openCardId = card.id;
+  cardView = "";
+  cardFieldReaders = null;
+  cardDraft = card.desc;
+  cardDraftMeta = card.handoutMeta != null ? card.handoutMeta : null;
   document.querySelector(".card-detail").classList.remove("creating");
   document.getElementById("cardDesc").value = card.desc;
   document.getElementById("cardMessage").textContent = "";
@@ -1064,6 +1472,8 @@ async function openCard(card) {
   await loadTimeline(card.id);
   await populateMoveBoards();
   paintLabels();
+  lastEditView = fieldsAvailable() ? "fields" : "text";
+  setCardView(isTest ? "text" : "preview");
 }
 
 // ---- move / copy a card (same board → relocate/duplicate; other board →
@@ -1256,7 +1666,8 @@ document.getElementById("moveBtn").addEventListener("click", () => doMoveCopy(tr
 // selector but the value is applied on first save). Test cards never reach here
 // (their selector is hidden in openCard).
 document.getElementById("cardKind").addEventListener("change", async (e) => {
-  if (pendingList || openCardId == null) return; // create mode → no-op here
+  if (pendingList) { setCardView(fieldsAvailable() ? "fields" : "text"); return; } // create mode: re-eval tabs
+  if (openCardId == null) return;
   const card = state.cards.find((c) => c.id === openCardId);
   if (!card) return;
   const kind = e.target.value;
@@ -1265,6 +1676,7 @@ document.getElementById("cardKind").addEventListener("change", async (e) => {
     await patch("patchCard", `/api/cards/${card.id}`, { kind });
     card.kind = kind;
     render();
+    setCardView(cardView || "text"); // re-eval tab availability (Поля is question-only)
     msg.textContent = "Тип изменён.";
   } catch (err) { msg.textContent = err.message; }
 });
@@ -1322,24 +1734,36 @@ document.getElementById("cardCopy").addEventListener("click", async () => {
   }
 });
 
-function closeCard() { cardOverlay.hidden = true; openCardId = null; pendingList = null; }
+function closeCard() {
+  cardOverlay.hidden = true;
+  openCardId = null;
+  pendingList = null;
+  cardView = "";
+  cardFieldReaders = null;
+  for (const u of cardPreviewUrls) URL.revokeObjectURL(u);
+  cardPreviewUrls = [];
+}
 document.getElementById("cardClose").addEventListener("click", closeCard);
 cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) closeCard(); });
 
 document.getElementById("cardSave").addEventListener("click", async () => {
-  // create mode: persist a new card with the typed description, then switch to
+  captureDraft(); // fold the active view's edits into cardDraft / cardDraftMeta
+  const msg = document.getElementById("cardMessage");
+  // create mode: persist a new card with the composed description, then switch to
   // the full edit view.
   if (pendingList) {
-    const text = document.getElementById("cardDesc").value;
-    const msg = document.getElementById("cardMessage");
+    const text = cardDraft;
     if (!text.trim()) { msg.textContent = "Введите описание."; return; }
     const list = pendingList;
     const kind = document.getElementById("cardKind").value || "question";
     const existing = cardsOf(list.id);
     const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
+    const meta = cardDraftMeta && cardDraftMeta.trim() ? cardDraftMeta : null;
     try {
-      const res = await create("createCard", `/api/lists/${list.id}/cards`, { description_enc: await xyCrypto.encField(dk, text), rank, kind });
-      const card = { id: res.id, listId: list.id, kind, rank, desc: text };
+      const reqBody = { description_enc: await xyCrypto.encField(dk, text), rank, kind };
+      if (meta) reqBody.handout_meta_enc = await xyCrypto.encField(dk, meta);
+      const res = await create("createCard", `/api/lists/${list.id}/cards`, reqBody);
+      const card = { id: res.id, listId: list.id, kind, rank, desc: text, handoutMeta: meta };
       state.cards.push(card);
       render();
       await openCard(card);
@@ -1348,21 +1772,40 @@ document.getElementById("cardSave").addEventListener("click", async () => {
   }
   const card = state.cards.find((c) => c.id === openCardId);
   if (!card) return;
-  const newDesc = document.getElementById("cardDesc").value;
-  const msg = document.getElementById("cardMessage");
+  const newDesc = cardDraft;
+  const newMeta = cardDraftMeta && cardDraftMeta.trim() ? cardDraftMeta : null;
   msg.textContent = "";
   try {
     const body = { description_enc: await xyCrypto.encField(dk, newDesc) };
     if (newDesc !== card.desc) {
       body.desc_event_enc = await xyCrypto.encField(dk, JSON.stringify({ before: card.desc, after: newDesc }));
     }
+    // Persist handout-gen settings (field #10) when they changed: "" clears them.
+    if (newMeta !== (card.handoutMeta || null)) {
+      body.handout_meta_enc = newMeta ? await xyCrypto.encField(dk, newMeta) : "";
+    }
     await patch("patchCard", `/api/cards/${card.id}`, body);
     card.desc = newDesc;
+    card.handoutMeta = newMeta;
     render();
     await loadTimeline(card.id);
+    // Reflect the saved/normalized desc back into the editor views.
+    document.getElementById("cardDesc").value = newDesc;
+    if (cardView === "fields") renderCardFields();
+    else if (cardView === "preview") renderCardPreview();
     msg.textContent = "Сохранено.";
   } catch (err) { msg.textContent = err.message; }
 });
+
+// Cmd/Ctrl-Enter saves from either edit view (textarea or structured fields).
+function saveOnCmdEnter(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+    e.preventDefault();
+    document.getElementById("cardSave").click();
+  }
+}
+document.getElementById("cardDesc").addEventListener("keydown", saveOnCmdEnter);
+document.getElementById("cardFields").addEventListener("keydown", saveOnCmdEnter);
 
 document.getElementById("cardDelete").addEventListener("click", async () => {
   const card = state.cards.find((c) => c.id === openCardId);
@@ -1606,14 +2049,20 @@ document.getElementById("commentForm").addEventListener("submit", async (e) => {
 });
 
 // ---- attachments ----
+// cardImageNames holds the decrypted filenames of the open card's image
+// attachments — the choices offered by the handout image picker (Поля view).
+let cardImageNames = [];
+
 async function loadAttachments(cardId) {
   const box = document.getElementById("attachments");
   box.replaceChildren();
+  cardImageNames = [];
   let list;
   try { list = await fetchJSON(`/api/cards/${cardId}/attachments`); } catch (_) { return; }
   for (const att of list) {
     let name = "файл";
     try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) {}
+    if ((att.mime || "").startsWith("image/")) cardImageNames.push(name);
     const row = el("div", { class: "attach-row" },
       el("button", { class: "attach-name", type: "button", text: `📎 ${name}`, onclick: () => download(att, name) }),
       el("span", { class: "attach-size", text: humanSize(att.size) }),
