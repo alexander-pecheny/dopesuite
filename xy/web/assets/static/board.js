@@ -1198,6 +1198,25 @@ let cardPreviewUrls = [];    // object URLs minted for the single-card preview
 const CARD_TABS = ["preview", "fields", "text"];
 const tabBtn = (v) => document.getElementById("cardTab" + v[0].toUpperCase() + v.slice(1));
 
+// fitTextarea grows a textarea to fit its content so the user never scrolls
+// inside it (CSS min-height still sets the floor). scrollHeight is 0 while the
+// element is display:none, so callers fit on render / when a field is revealed.
+function fitTextarea(ta) {
+  ta.style.height = "auto";
+  // box-sizing is border-box, so the height must include the borders that
+  // scrollHeight (content + padding only) omits, else the last line is clipped.
+  const border = ta.offsetHeight - ta.clientHeight;
+  ta.style.height = ta.scrollHeight + border + "px";
+}
+// autoGrow makes a textarea self-sizing: no inner scrollbar or resize handle,
+// and it regrows on every input.
+function autoGrow(ta) {
+  ta.style.overflowY = "hidden";
+  ta.style.resize = "none";
+  ta.addEventListener("input", () => fitTextarea(ta));
+}
+autoGrow(document.getElementById("cardDesc"));
+
 function openCardCard() { return state.cards.find((c) => c.id === openCardId); }
 
 function draftKind() {
@@ -1245,7 +1264,7 @@ function setCardView(view) {
   tabBtn("preview").hidden = !!pendingList;
   document.getElementById("cardViewTabs").hidden = isTestCard();
   document.getElementById("cardSave").hidden = view === "preview";
-  if (view === "text") document.getElementById("cardDesc").value = cardDraft;
+  if (view === "text") { const ta = document.getElementById("cardDesc"); ta.value = cardDraft; fitTextarea(ta); }
   else if (view === "fields") renderCardFields();
   else if (view === "preview") renderCardPreview();
 }
@@ -1267,9 +1286,10 @@ function buildField(label, kind, initial, opts = {}) {
     ? el("textarea", { class: "card-desc fld-input", spellcheck: "false" })
     : el("input", { class: "input fld-input", type: "text" });
   const body = el("div", { class: "fld-body" }, input);
+  if (kind === "area") autoGrow(input);
   let present = initial !== null && initial !== undefined;
   if (present) input.value = initial;
-  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; };
+  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; if (present && kind === "area") fitTextarea(input); };
   addBtn.addEventListener("click", () => { present = true; sync(); input.focus(); });
   rmBtn.addEventListener("click", () => { present = false; sync(); });
   wrap.append(addBtn, head, body);
@@ -1288,6 +1308,7 @@ function buildHandoutField(initial) {
   const modeImg = el("button", { class: "seg-btn", type: "button", text: "картинка" });
   const toggle = el("div", { class: "seg-toggle" }, modeText, modeImg);
   const ta = el("textarea", { class: "card-desc fld-input", spellcheck: "false" });
+  autoGrow(ta);
   const sel = el("select", { class: "input fld-input" });
   for (const n of cardImageNames) sel.append(el("option", { value: n, text: n }));
   const body = el("div", { class: "fld-body" }, toggle, ta, sel);
@@ -1302,11 +1323,12 @@ function buildHandoutField(initial) {
     modeImg.classList.toggle("active", mode === "image");
     ta.hidden = mode !== "text";
     sel.hidden = mode !== "image";
+    if (mode === "text" && present) fitTextarea(ta);
   };
   modeText.addEventListener("click", () => { mode = "text"; syncMode(); });
   modeImg.addEventListener("click", () => { mode = "image"; syncMode(); });
   let present = !!initial;
-  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; };
+  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; if (present && mode === "text") fitTextarea(ta); };
   addBtn.addEventListener("click", () => { present = true; sync(); });
   rmBtn.addEventListener("click", () => { present = false; sync(); });
   wrap.append(addBtn, head, body);
@@ -1401,6 +1423,9 @@ function renderCardFields() {
   R.authors = buildAuthorsField(f.authors, boardAuthors());
   R.hndt = buildField("Доп. разметка для генерации раздаток", "area", cardDraftMeta, { muted: true });
   for (const k of ["preMarkup", "handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"]) box.append(R[k].node);
+  // Size pre-filled fields now they're in the live DOM (scrollHeight is 0 while
+  // detached, so the fit during buildField is a no-op for visible content).
+  for (const ta of box.querySelectorAll("textarea")) fitTextarea(ta);
   cardFieldReaders = R;
 }
 
@@ -1793,6 +1818,7 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     await loadTimeline(card.id);
     // Reflect the saved/normalized desc back into the editor views.
     document.getElementById("cardDesc").value = newDesc;
+    if (cardView === "text") fitTextarea(document.getElementById("cardDesc"));
     if (cardView === "fields") renderCardFields();
     else if (cardView === "preview") renderCardPreview();
     msg.textContent = "Сохранено.";
