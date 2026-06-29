@@ -1161,6 +1161,15 @@ function testTitle(desc) {
   } catch (_) { return "тест-сессия"; }
 }
 
+// setTestDetailTitle shows the test session's "datetime · title" heading above
+// the Поля/Текст switcher (test cards have no kind selector to fill that slot).
+function setTestDetailTitle(card) {
+  const node = document.getElementById("cardDetailTitle");
+  const m = xyChgk.parseTestCard(card.desc);
+  node.textContent = m.title ? `${m.datetime} · ${m.title}` : m.datetime;
+  node.hidden = false;
+}
+
 // copyTesterList gathers the testers from every test card in the list and copies
 // the shareable "Вопросы тестировали: …" line to the clipboard (players sorted
 // by surname, teams alphabetically, both deduped — see chgk.js testerCopyText).
@@ -1171,9 +1180,8 @@ async function copyTesterList(list) {
     all.push(...xyChgk.parseTestCard(c.desc).testers);
   }
   const text = xyChgk.testerCopyText(all);
-  if (!text) { alert("В этом списке пока нет тестеров."); return; }
-  try { await copyText(text); alert("Скопировано:\n\n" + text); }
-  catch (_) { prompt("Скопируйте вручную:", text); }
+  if (!text) return;
+  try { await copyText(text + "."); } catch (_) {}
 }
 
 // ---- commit card move (rank recompute from DOM order) ----
@@ -1565,6 +1573,9 @@ async function openCard(card) {
   const kindSel = document.getElementById("cardKind");
   kindSel.hidden = isTest;
   if (!isTest) kindSel.value = card.kind || "question";
+  // Test cards show their session heading in place of the (hidden) kind selector.
+  if (isTest) setTestDetailTitle(card);
+  else document.getElementById("cardDetailTitle").hidden = true;
   // The "copy for testing" action only makes sense for question cards (it shares
   // the numbered, screen-mode question text); hide it otherwise.
   document.getElementById("cardCopy").hidden = card.kind !== "question";
@@ -1894,11 +1905,18 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     card.handoutMeta = newMeta;
     render();
     await loadTimeline(card.id);
-    // Reflect the saved/normalized desc back into the editor views.
-    document.getElementById("cardDesc").value = newDesc;
-    if (cardView === "text") fitTextarea(document.getElementById("cardDesc"));
-    if (cardView === "fields") renderCardFields();
-    else if (cardView === "preview") renderCardPreview();
+    // Reflect the saved/normalized desc back into the editor views (test cards
+    // re-render their own tester editor, not the question fields).
+    if (isTestCard()) {
+      setTestDetailTitle(card);
+      if (cardView === "fields") renderTesterFields();
+      else if (cardView === "text") { const ta = document.getElementById("cardDesc"); ta.value = xyChgk.testersToText(xyChgk.parseTestCard(newDesc).testers); fitTextarea(ta); }
+    } else {
+      document.getElementById("cardDesc").value = newDesc;
+      if (cardView === "text") fitTextarea(document.getElementById("cardDesc"));
+      if (cardView === "fields") renderCardFields();
+      else if (cardView === "preview") renderCardPreview();
+    }
     msg.textContent = "Сохранено.";
   } catch (err) { msg.textContent = err.message; }
 });
