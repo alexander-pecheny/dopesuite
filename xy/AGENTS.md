@@ -36,7 +36,12 @@ internal/server/       package server — the whole HTTP server
   rank.go              server-side fractional-index keyAfter (Trello card upload)
   invite.go            invite minting (subcommand)
   admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny")
-  export.go            POST /api/export/docx — shells out to chgksuite (XY_CHGKSUITE_CMD)
+  export.go            POST /api/export/docx — Go docx in-process (chgk/docx); falls back to chgksuite (XY_CHGKSUITE_CMD) only when the source has (img …)
+  handouts.go          POST /api/handouts/pdf — Go handout render in-process (chgk/handout + typst, XY_TYPST_CMD)
+internal/chgk/         Go port of chgksuite's core (xy no longer shells out to Python for docx/handouts)
+  fsource/             the "4s" parser (parse_4s parity; oracle-tested vs chgksuite --debug)
+  handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans
+  docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; text-parity tested. No image embedding yet (→ chgksuite fallback)
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
 internal/session/      cookie + session.User (ported from dope/platform/session)
 web/assets/            //go:embed static (package assets)
