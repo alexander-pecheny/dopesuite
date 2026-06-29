@@ -37,13 +37,13 @@ internal/server/       package server — the whole HTTP server
   invite.go            invite minting (subcommand)
   admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny")
   export.go            POST /api/export/docx — Go docx fully in-process (chgk/docx), images included; no Python
-  handouts.go          POST /api/handouts/pdf — Go handout render in-process (chgk/handout + typst, XY_TYPST_CMD);
-                       POST /api/handouts/split_fit — shells out to `chgksuite handouts split_fit` (XY_CHGKSUITE_CMD), zips the per-question PDFs. Both normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
+  handouts.go          POST /api/handouts/{pdf,split_fit} — both fully in-process Go (chgk/handout + typst, XY_TYPST_CMD), no Python. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
   staging.go           handout image staging: /api/handouts/{stage,heartbeat,DELETE stage} — client uploads referenced images once on modal open; pdf/split_fit reuse them via a session id (reaped after ~1min of no heartbeat) instead of re-uploading each generate
   debug.go             [timing] logs on export/handout endpoints, gated by XY_DEBUG_TIMING
 internal/chgk/         Go port of chgksuite's core (xy no longer shells out to Python for docx/handouts)
   fsource/             the "4s" parser (parse_4s parity; oracle-tested vs chgksuite --debug)
-  handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans
+  handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans.
+                       splitfit.go: `handouts split_fit` port — per-block binary-search row fit using typst's own pagination (typst query page count, not pypdf), per-question + all-q PDFs, pdfcpu compress; ~12× faster, row counts match chgksuite. (image-shrink refinement not yet ported)
   docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; text-parity tested.
                        (img …) images are decoded (incl. WebP via x/image), re-encoded to PNG and embedded (images.go)
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
