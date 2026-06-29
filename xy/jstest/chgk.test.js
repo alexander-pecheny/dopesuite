@@ -354,3 +354,69 @@ test("parseHndtMetaByQuestion strips content, keeps settings by question", () =>
   assert.equal(m["1"], "columns: 2\nrows: 3");
   assert.equal(m["4"], "columns: 3");
 });
+
+// ---- test cards: tester lists ----
+const { parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText } = xyChgk;
+
+test("parseTestCard reads the new {testers} shape", () => {
+  const desc = JSON.stringify({ datetime: "2026-06-29 12:00", title: "Алиев", testers: [
+    { text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }] });
+  const m = parseTestCard(desc);
+  assert.equal(m.datetime, "2026-06-29 12:00");
+  assert.equal(m.title, "Алиев");
+  assert.deepEqual(m.testers, [
+    { text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }]);
+});
+
+test("parseTestCard migrates legacy {players:[ids]} to player strings", () => {
+  const m = parseTestCard(JSON.stringify({ datetime: "d", players: [12, 34] }));
+  assert.deepEqual(m.testers, [
+    { text: "12", type: "player" }, { text: "34", type: "player" }]);
+});
+
+test("parseTestCard tolerates garbage and bad types", () => {
+  assert.deepEqual(parseTestCard("not json").testers, []);
+  const m = parseTestCard(JSON.stringify({ testers: [{ text: "X", type: "weird" }, null, { text: 5 }] }));
+  assert.deepEqual(m.testers, [{ text: "X", type: "player" }, { text: "5", type: "player" }]);
+});
+
+test("testersToText / testersFromText round-trip", () => {
+  const testers = [{ text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }];
+  assert.equal(testersToText(testers), "- Александр Иванов\n-T Ромашка");
+  assert.deepEqual(testersFromText("- Александр Иванов\n-T Ромашка"), testers);
+});
+
+test("testersFromText skips blank lines and trims, tolerates missing space", () => {
+  assert.deepEqual(testersFromText("\n-  Имя  \n\n-T  Тим \n"), [
+    { text: "Имя", type: "player" }, { text: "Тим", type: "team" }]);
+  // a name starting with T is still a player (the -T marker needs no inner letter)
+  assert.deepEqual(testersFromText("- Tom"), [{ text: "Tom", type: "player" }]);
+});
+
+test("serializeTestCard drops blank rows and keeps datetime/title", () => {
+  const json = serializeTestCard({ datetime: "d", title: "t", testers: [
+    { text: " A ", type: "player" }, { text: "", type: "team" }] });
+  assert.deepEqual(JSON.parse(json), { datetime: "d", title: "t", testers: [{ text: "A", type: "player" }] });
+});
+
+test("testerCopyText sorts players by surname then given, teams alphabetically", () => {
+  const testers = [
+    { text: "Борис Иванов", type: "player" },
+    { text: "Александр Иванов", type: "player" },
+    { text: "Яна Архипова", type: "player" },
+    { text: "Ромашка", type: "team" },
+    { text: "Авангард", type: "team" },
+  ];
+  assert.equal(testerCopyText(testers),
+    "Вопросы тестировали: Яна Архипова, Александр Иванов, Борис Иванов" +
+    " а также команды: Авангард, Ромашка");
+});
+
+test("testerCopyText dedupes and handles players-only / teams-only / empty", () => {
+  assert.equal(testerCopyText([
+    { text: "Иван Иванов", type: "player" }, { text: "Иван Иванов", type: "player" }]),
+    "Вопросы тестировали: Иван Иванов");
+  assert.equal(testerCopyText([{ text: "Альфа", type: "team" }]),
+    "Вопросы тестировали команды: Альфа");
+  assert.equal(testerCopyText([]), "");
+});

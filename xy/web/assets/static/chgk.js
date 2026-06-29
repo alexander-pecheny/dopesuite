@@ -876,6 +876,98 @@ function parseHndtMetaByQuestion(text) {
   return out;
 }
 
+// ---- test cards: tester lists (players / teams) ----
+// A test card's description is JSON {datetime, title, testers:[{text,type}]},
+// where type is "player" or "team". The first iteration stored {players:[ids]}
+// (integer rating.chgk.info ids that were never resolvable client-side);
+// parseTestCard folds that legacy shape forward, turning each id into a
+// player-typed string so nothing is silently dropped on migration.
+
+// parseTestCard: JSON desc → {datetime, title, testers:[{text,type}]}.
+function parseTestCard(desc) {
+  let m;
+  try {
+    m = JSON.parse(desc);
+  } catch (_) {
+    m = null;
+  }
+  if (!m || typeof m !== "object") m = {};
+  let testers = Array.isArray(m.testers) ? m.testers : null;
+  if (!testers) {
+    // legacy {players:[ids]} → player-typed strings (see note above).
+    const legacy = Array.isArray(m.players) ? m.players : [];
+    testers = legacy.map((p) => ({ text: String(p == null ? "" : p), type: "player" }));
+  }
+  testers = testers
+    .filter((t) => t && typeof t === "object")
+    .map((t) => ({ text: String(t.text == null ? "" : t.text), type: t.type === "team" ? "team" : "player" }));
+  return { datetime: m.datetime || "", title: m.title || "", testers };
+}
+
+// serializeTestCard: {datetime, title, testers} → JSON desc, dropping blank rows.
+function serializeTestCard(m) {
+  const testers = (m.testers || [])
+    .map((t) => ({ text: (t.text || "").trim(), type: t.type === "team" ? "team" : "player" }))
+    .filter((t) => t.text);
+  return JSON.stringify({ datetime: m.datetime || "", title: m.title || "", testers });
+}
+
+// testersToText: testers[] → plaintext, "- name" (player) / "-T name" (team).
+function testersToText(testers) {
+  return (testers || []).map((t) => (t.type === "team" ? "-T " : "- ") + (t.text || "")).join("\n");
+}
+
+// testersFromText: plaintext → testers[]. A "-T" prefix (Latin or Cyrillic T,
+// followed by whitespace) marks a team; any other leading dash marks a player.
+function testersFromText(text) {
+  const out = [];
+  for (const raw of String(text == null ? "" : text).split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    let type = "player", body = line;
+    if (/^-[TtТт](?=\s|$)/.test(line)) { type = "team"; body = line.slice(2); }
+    else if (line[0] === "-") { body = line.slice(1); }
+    body = body.trim();
+    if (body) out.push({ text: body, type });
+  }
+  return out;
+}
+
+// testerSortKey returns the [surname, given] comparison key for a player name:
+// the last whitespace-separated word is the surname, the rest the given name(s),
+// so "Александр Иванов" sorts under "Иванов", then "Александр".
+function testerSortKey(name) {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return ["", ""];
+  const surname = words[words.length - 1];
+  return [surname, words.slice(0, -1).join(" ")];
+}
+
+// testerCopyText flattens testers (across all cards in a test list) into the
+// shareable line: players sorted by surname-then-given, teams alphabetically,
+// each list deduped. Returns "" when there are no testers.
+function testerCopyText(testers) {
+  const seen = { player: new Set(), team: new Set() };
+  const players = [], teams = [];
+  for (const t of testers || []) {
+    const text = (t && t.text || "").trim();
+    if (!text) continue;
+    const type = t.type === "team" ? "team" : "player";
+    if (seen[type].has(text)) continue;
+    seen[type].add(text);
+    (type === "team" ? teams : players).push(text);
+  }
+  players.sort((a, b) => {
+    const ka = testerSortKey(a), kb = testerSortKey(b);
+    return ka[0].localeCompare(kb[0], "ru") || ka[1].localeCompare(kb[1], "ru");
+  });
+  teams.sort((a, b) => a.localeCompare(b, "ru"));
+  let s = "";
+  if (players.length) s = "Вопросы тестировали: " + players.join(", ");
+  if (teams.length) s += (s ? " а также команды: " : "Вопросы тестировали команды: ") + teams.join(", ");
+  return s;
+}
+
 export const xyChgk = {
   parseBlocks, numberDirective, questionText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
@@ -884,5 +976,6 @@ export const xyChgk = {
   fixTrelloFormatting,
   splitFields, composeFields, parseHandoutBlock, composeHandout,
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
+  parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText,
 };
 if (typeof window !== "undefined") window.xyChgk = xyChgk;

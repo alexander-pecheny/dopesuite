@@ -318,13 +318,15 @@ function renderList(list) {
   const menuBtn = el("button", { class: "kadd", title: "Меню списка", text: "⋯", "aria-haspopup": "true" });
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    popupMenu(menuWrap, [
+    const items = [
       { label: "➕ Добавить карточку", onClick: () => addCard(list) },
       { label: "🔍 Предпросмотр", onClick: () => previewList(list) },
       { label: "↔ Переместить список…", onClick: () => openMoveList(list) },
       { label: "📄 Экспорт в docx", onClick: () => exportList(list) },
       { label: "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
-    ]);
+    ];
+    if (list.type === "test") items.splice(1, 0, { label: "👥 Копировать список тестеров", onClick: () => copyTesterList(list) });
+    popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
   col.append(el("div", { class: "klist-head" },
@@ -1106,9 +1108,10 @@ function addCard(list) {
   document.getElementById("cardDesc").focus();
 }
 
-// addTestCard: a test card's "description" is JSON {datetime, players:[ids]}.
-// Creating it also auto-creates two board labels ("{dt} взяли" green / "не
-// взяли" red) for the user to assign to questions later (OVERVIEW / PLAN §6).
+// addTestCard: a test card's "description" is JSON {datetime, title, testers}
+// (see chgk.js parseTestCard). Creating it also auto-creates two board labels
+// ("{dt} взяли" green / "не взяли" red) for the user to assign to questions
+// later (OVERVIEW / PLAN §6); the tester list is edited in the card detail.
 async function addTestCard(list) {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -1122,7 +1125,7 @@ async function addTestCard(list) {
   const existing = cardsOf(list.id);
   const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
   try {
-    const desc = JSON.stringify({ datetime: dt, players: [], title });
+    const desc = JSON.stringify({ datetime: dt, title, testers: [] });
     const res = await create("createCard", `/api/lists/${list.id}/cards`, {
       description_enc: await xyCrypto.encField(dk, desc), rank, kind: "test",
     });
@@ -1147,11 +1150,30 @@ async function addTestCard(list) {
 // testTitle renders a test card's derived title from its JSON description.
 function testTitle(desc) {
   try {
-    const m = JSON.parse(desc);
-    const n = (m.players || []).length;
+    const m = xyChgk.parseTestCard(desc);
     const head = m.title ? `${m.title} · ${m.datetime}` : m.datetime;
-    return `🗓 ${head}${n ? ` · ${n} игроков` : ""}`;
+    const players = m.testers.filter((t) => t.type === "player").length;
+    const teams = m.testers.filter((t) => t.type === "team").length;
+    const parts = [];
+    if (players) parts.push(`${players} игр.`);
+    if (teams) parts.push(`${teams} ком.`);
+    return `🗓 ${head}${parts.length ? " · " + parts.join(", ") : ""}`;
   } catch (_) { return "тест-сессия"; }
+}
+
+// copyTesterList gathers the testers from every test card in the list and copies
+// the shareable "Вопросы тестировали: …" line to the clipboard (players sorted
+// by surname, teams alphabetically, both deduped — see chgk.js testerCopyText).
+async function copyTesterList(list) {
+  const all = [];
+  for (const c of cardsOf(list.id)) {
+    if (c.kind !== "test") continue;
+    all.push(...xyChgk.parseTestCard(c.desc).testers);
+  }
+  const text = xyChgk.testerCopyText(all);
+  if (!text) { alert("В этом списке пока нет тестеров."); return; }
+  try { await copyText(text); alert("Скопировано:\n\n" + text); }
+  catch (_) { prompt("Скопируйте вручную:", text); }
 }
 
 // ---- commit card move (rank recompute from DOM order) ----
@@ -1242,6 +1264,17 @@ function boardAuthors() {
 // captureDraft folds the currently-visible view's edits back into the draft so
 // switching views never loses unsaved input.
 function captureDraft() {
+  if (isTestCard()) {
+    // Test cards keep their canonical JSON ({datetime,title,testers}) in
+    // cardDraft; both views edit only the testers list (datetime/title are set
+    // at creation), so re-read them from cardDraft and fold the rows back in.
+    const cur = xyChgk.parseTestCard(cardDraft);
+    let testers = null;
+    if (cardView === "text") testers = xyChgk.testersFromText(document.getElementById("cardDesc").value);
+    else if (cardView === "fields" && testerReaders) testers = readTesterRows();
+    if (testers) cardDraft = xyChgk.serializeTestCard({ datetime: cur.datetime, title: cur.title, testers });
+    return;
+  }
   if (cardView === "text") cardDraft = document.getElementById("cardDesc").value;
   else if (cardView === "fields" && cardFieldReaders) {
     const r = readCardFields();
@@ -1252,20 +1285,27 @@ function captureDraft() {
 
 function setCardView(view) {
   captureDraft();
-  if (isTestCard()) view = "text";
-  if (view === "fields" && !fieldsAvailable()) view = "text";
+  const test = isTestCard();
+  // Test cards offer Поля (tester rows) + Текст (plaintext) but no Просмотр;
+  // other non-question cards have no Поля, so they fall back to Текст.
+  if (test && view === "preview") view = lastEditView === "text" ? "text" : "fields";
+  else if (view === "fields" && !fieldsAvailable() && !test) view = "text";
   cardView = view;
   if (view !== "preview") lastEditView = view;
   document.getElementById("cardViewPreview").hidden = view !== "preview";
   document.getElementById("cardViewFields").hidden = view !== "fields";
   document.getElementById("cardViewText").hidden = view !== "text";
   for (const t of CARD_TABS) tabBtn(t).classList.toggle("active", t === view);
-  tabBtn("fields").hidden = !fieldsAvailable();
-  tabBtn("preview").hidden = !!pendingList;
-  document.getElementById("cardViewTabs").hidden = isTestCard();
+  tabBtn("fields").hidden = !fieldsAvailable() && !test;
+  tabBtn("preview").hidden = !!pendingList || test;
+  document.getElementById("cardViewTabs").hidden = false;
   document.getElementById("cardSave").hidden = view === "preview";
-  if (view === "text") { const ta = document.getElementById("cardDesc"); ta.value = cardDraft; fitTextarea(ta); }
-  else if (view === "fields") renderCardFields();
+  document.getElementById("cardDescLabel").textContent = test ? "Тестировали (- игрок, -T команда)" : "Описание";
+  if (view === "text") {
+    const ta = document.getElementById("cardDesc");
+    ta.value = test ? xyChgk.testersToText(xyChgk.parseTestCard(cardDraft).testers) : cardDraft;
+    fitTextarea(ta);
+  } else if (view === "fields") { if (test) renderTesterFields(); else renderCardFields(); }
   else if (view === "preview") renderCardPreview();
 }
 
@@ -1448,6 +1488,44 @@ function readCardFields() {
   return { desc: xyChgk.composeFields(rec), meta: R.hndt.read() };
 }
 
+// ---- test card "Поля" editor: one row per tester, each a name input + a
+// игрок/команда toggle (wysiwyg-style; the Текст view is the plaintext mirror).
+let testerReaders = null; // () => [{text,type}] for the current tester rows
+
+function renderTesterFields() {
+  const box = document.getElementById("cardFields");
+  box.replaceChildren();
+  const m = xyChgk.parseTestCard(cardDraft);
+  const wrap = el("div", { class: "fld" });
+  const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Тестировали" }));
+  const rows = el("div", { class: "fld-rows" });
+  const addRow = (t) => {
+    const seg = el("div", { class: "seg-toggle tester-seg" });
+    const bP = el("button", { class: "seg-btn", type: "button", text: "игрок" });
+    const bT = el("button", { class: "seg-btn", type: "button", text: "команда" });
+    let type = t && t.type === "team" ? "team" : "player";
+    const syncSeg = () => { bP.classList.toggle("active", type === "player"); bT.classList.toggle("active", type === "team"); };
+    bP.addEventListener("click", () => { type = "player"; syncSeg(); });
+    bT.addEventListener("click", () => { type = "team"; syncSeg(); });
+    seg.append(bP, bT); syncSeg();
+    const inp = el("input", { class: "input fld-row-input", type: "text", value: (t && t.text) || "", placeholder: "имя…" });
+    const rrm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: "Удалить строку" });
+    const row = el("div", { class: "fld-row tester-row" }, seg, inp, rrm);
+    rrm.addEventListener("click", () => row.remove());
+    row._read = () => ({ text: inp.value, type });
+    rows.append(row);
+    return inp;
+  };
+  (m.testers.length ? m.testers : [{ text: "", type: "player" }]).forEach((t) => addRow(t));
+  const rowAdd = el("button", { class: "input fld-add-row", type: "button", text: "+ тестер" });
+  rowAdd.addEventListener("click", () => addRow({ text: "", type: "player" }).focus());
+  wrap.append(head, rows, rowAdd);
+  box.append(wrap);
+  testerReaders = () => [...rows.querySelectorAll(".tester-row")].map((r) => r._read());
+}
+
+function readTesterRows() { return testerReaders ? testerReaders() : []; }
+
 // renderCardPreview renders the open card's draft the docx way (single-card
 // version of the list preview). Read-only; double-click jumps back to editing.
 async function renderCardPreview() {
@@ -1494,12 +1572,12 @@ async function openCard(card) {
   cardOverlay.hidden = false;
   renderLabelPicker(card);
   paintLabels();
-  lastEditView = fieldsAvailable() ? "fields" : "text";
+  lastEditView = (isTest || fieldsAvailable()) ? "fields" : "text";
   // Render the chosen view straight away so reopening a card never flashes the
   // previously-open card's content. The preview resolves its own images, so it
   // doesn't wait on the per-card loads below — which run in parallel, not
   // sequentially, to cut the total round-trip.
-  setCardView(isTest ? "text" : "preview");
+  setCardView(isTest ? "fields" : "preview");
   await Promise.all([loadAttachments(card.id), loadTimeline(card.id), populateMoveBoards()]);
 }
 
