@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -33,7 +32,6 @@ func typstCommand() string {
 }
 
 func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
-	defer timed("handouts.pdf total")()
 	u, ok := s.requireUser(w, r)
 	if !ok {
 		return
@@ -75,14 +73,9 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if timingOn() {
-		log.Printf("[timing] handouts.pdf: source=%dB images=%d", len(source), len(images))
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), handoutTimeout)
 	defer cancel()
-	renderDone := timed("handouts.pdf render+typst")
 	pdf, err := handout.Render(ctx, source, images, handout.DefaultArgs(), typstCommand())
-	renderDone()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "typst timed out")
@@ -117,7 +110,6 @@ func readUpload(fh *multipart.FileHeader) ([]byte, error) {
 const splitFitTimeout = 300 * time.Second
 
 func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) {
-	defer timed("handouts.split_fit total")()
 	u, ok := s.requireUser(w, r)
 	if !ok {
 		return
@@ -158,14 +150,9 @@ func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if timingOn() {
-		log.Printf("[timing] split_fit: source=%dB images=%d", len(source), len(images))
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), splitFitTimeout)
 	defer cancel()
-	fitDone := timed("split_fit Go fit+render")
 	zipped, err := handout.SplitFit(ctx, source, images, handout.DefaultArgs(), typstCommand())
-	fitDone()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "split_fit timed out")
