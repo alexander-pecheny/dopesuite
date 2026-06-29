@@ -409,7 +409,7 @@ test("testerCopyText sorts players by surname then given, teams alphabetically",
   ];
   assert.equal(testerCopyText(testers),
     "Вопросы тестировали: Яна Архипова, Александр Иванов, Борис Иванов" +
-    " а также команды: Авангард, Ромашка");
+    ", а также команды: Авангард, Ромашка");
 });
 
 test("testerCopyText dedupes and handles players-only / teams-only / empty", () => {

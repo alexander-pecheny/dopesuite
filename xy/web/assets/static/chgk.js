@@ -964,7 +964,7 @@ function testerCopyText(testers) {
   teams.sort((a, b) => a.localeCompare(b, "ru"));
   let s = "";
   if (players.length) s = "Вопросы тестировали: " + players.join(", ");
-  if (teams.length) s += (s ? " а также команды: " : "Вопросы тестировали команды: ") + teams.join(", ");
+  if (teams.length) s += (s ? ", а также команды: " : "Вопросы тестировали команды: ") + teams.join(", ");
   return s;
 }
 

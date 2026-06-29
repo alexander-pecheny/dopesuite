@@ -5957,6 +5957,7 @@ body.is-fullscreen.od-page .match-main {
 .pv-heading { font-size: var(--text-xl); font-weight: var(--fw-bold); margin: var(--space-5) 0 var(--space-3); }
 .pv-section { font-size: var(--text-lg); font-weight: var(--fw-semibold); margin: var(--space-4) 0 var(--space-2); }
 .pv-test { color: var(--muted); font-style: italic; }
+.pv-testers { white-space: pre-wrap; line-height: 1.7; font-size: var(--text-base); }
 .pv-empty { color: var(--muted); }
 /* break long URLs at any character so they never force horizontal scroll on
    narrow screens (links are often unbreakable runs with no spaces). */
