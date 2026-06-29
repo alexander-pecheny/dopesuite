@@ -44,7 +44,7 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
   fsource/             the "4s" parser (parse_4s parity; oracle-tested vs chgksuite --debug)
   handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans.
                        splitfit.go: `handouts split_fit` port — per-block binary-search row fit using typst's own pagination (typst query page count, not pypdf), per-question + all-q PDFs, pdfcpu compress; ~12× faster, row counts match chgksuite. (image-shrink refinement not yet ported)
-  docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; text-parity tested.
+  docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite.
                        (img …) images are decoded (incl. WebP via x/image), re-encoded to PNG and embedded (images.go)
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
 internal/session/      cookie + session.User (ported from dope/platform/session)
