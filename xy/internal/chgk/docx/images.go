@@ -81,7 +81,9 @@ func (e *exporter) embedImage(arg string) string {
 	idx := len(e.media) + 1
 	relID := fmt.Sprintf("rId%d", e.nextRel)
 	e.nextRel++
-	e.media = append(e.media, mediaItem{relID: relID, partName: fmt.Sprintf("media/image%d.png", idx), data: pngData})
+	partName := fmt.Sprintf("media/image%d.png", idx)
+	e.media = append(e.media, mediaItem{relID: relID, partName: partName, data: pngData})
+	e.rels = append(e.rels, relItem{id: relID, typ: imageRelType, target: partName})
 	docID := e.nextDoc
 	e.nextDoc++
 
