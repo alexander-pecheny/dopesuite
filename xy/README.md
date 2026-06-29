@@ -80,45 +80,28 @@ To point chgksuite at xy, set its Trello API base (the `API` constant in
 `chgksuite/trello.py`) to `https://xy.pecheny.me/1`, paste the token when prompted,
 and give it a numeric xy board id (the `/board/{id}` path segment).
 
-## docx export (chgksuite)
+## docx export & handout PDFs
 
 The "export list to docx" action (list `⋯` menu → **Экспорт в docx**) posts the
 list's decrypted card descriptions — plus any images referenced by `(img …)`
-directives — to `POST /api/export/docx`. The server composes a `.docx` with the
-external [`chgksuite`](https://pypi.org/project/chgksuite/) tool in a scratch
-dir, returns it, and wipes the plaintext immediately (the one place plaintext
-briefly reaches the server — a tolerated risk, see `PLAN`).
+directives — to `POST /api/export/docx`. The server composes the `.docx`
+**in-process** with the Go port of chgksuite's core (`internal/chgk/docx`,
+output byte-for-byte equal to chgksuite's), returns it, and wipes the plaintext
+immediately (the one place plaintext briefly reaches the server — a tolerated
+risk, see `PLAN`). No external tool is involved, so there is nothing to install.
 
-The compose command is configurable via **`XY_CHGKSUITE_CMD`** (space-separated,
-default `chgksuite`); the server appends `compose docx --ignore_missing_images
-source.4s`. chgksuite must be installed for the feature to work — without it the
-endpoint returns a 500 carrying the tool's stderr.
-
-Install it in an isolated venv (example using [`uv`](https://docs.astral.sh/uv/)):
-
-```sh
-uv venv /opt/xy/.venv --python 3.12
-uv pip install --python /opt/xy/.venv/bin/python chgksuite
-# then point the server at it:
-#   XY_CHGKSUITE_CMD=/opt/xy/.venv/bin/chgksuite
-```
-
-### On the production host (xy.pecheny.me)
-
-Prod runs `xy.service` (systemd) as the locked-down `xy` user
-(`ProtectHome=true`, `ProtectSystem=strict`, `PrivateTmp=true`). For the venv to
-be executable under that sandbox it must live outside `/home` and be
-world-readable:
+Handout PDFs (**генерация раздаток**, `POST /api/handouts/{pdf,split_fit}`) are
+also produced in-process: the `.hndt` source is rendered to `.typ` by
+`internal/chgk/handout` and typeset with [**typst**](https://typst.app/). typst
+is the only external runtime dependency; the font and template assets are
+embedded in the binary. Point the server at the binary with **`XY_TYPST_CMD`**
+(default `typst`):
 
 ```sh
-# uv-managed CPython in a shared, world-readable dir (xy user can't read /root):
-sudo env UV_PYTHON_INSTALL_DIR=/opt/xy/pythons uv python install 3.12
-sudo env UV_PYTHON_INSTALL_DIR=/opt/xy/pythons uv venv /opt/xy/.venv --python 3.12
-sudo uv pip install --python /opt/xy/.venv/bin/python chgksuite
-sudo chmod -R a+rX /opt/xy/pythons /opt/xy/.venv
+# download a standalone typst release and:
+#   XY_TYPST_CMD=/path/to/typst
 ```
 
-`XY_CHGKSUITE_CMD=/opt/xy/.venv/bin/chgksuite` is set in `/etc/xy.env`. Upgrade
-later with `sudo uv pip install --python /opt/xy/.venv/bin/python -U chgksuite`.
-chgksuite writes nothing outside the scratch dir, so the `PrivateTmp` sandbox and
-`/var/lib/xy` HOME are sufficient (no extra `ReadWritePaths` needed).
+On the production host (xy.pecheny.me) `XY_TYPST_CMD` is set in `/etc/xy.env` to a
+standalone typst binary under `/var/lib/xy`. xy is otherwise fully self-contained
+(pure Go, no Python) — see [`AGENTS.md`](AGENTS.md).
