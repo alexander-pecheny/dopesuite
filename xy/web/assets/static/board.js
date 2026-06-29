@@ -318,19 +318,25 @@ function renderList(list) {
   const menuBtn = el("button", { class: "kadd", title: "Меню списка", text: "⋯", "aria-haspopup": "true" });
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const items = [
-      { label: "➕ Добавить карточку", onClick: () => addCard(list) },
+    const items = [{ label: "➕ Добавить карточку", onClick: () => addCard(list) }];
+    if (list.type === "test") items.push({ label: "👥 Копировать список тестеров", onClick: () => copyTesterList(list) });
+    items.push(
       { label: "🔍 Предпросмотр", onClick: () => previewList(list) },
       { label: "↔ Переместить список…", onClick: () => openMoveList(list) },
+    );
+    // docx export / handout generation are question-list features; skip them for
+    // test lists (whose cards hold tester sessions, not 4s questions).
+    if (list.type !== "test") items.push(
       { label: "📄 Экспорт в docx", onClick: () => exportList(list) },
       { label: "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
-    ];
-    if (list.type === "test") items.splice(1, 0, { label: "👥 Копировать список тестеров", onClick: () => copyTesterList(list) });
+    );
     popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
+  // Test lists get a 🧪 prefix so they stand out from ordinary question lists.
+  const titleText = (list.type === "test" ? "🧪 " : "") + (list.title || "(без названия)");
   col.append(el("div", { class: "klist-head" },
-    el("span", { class: "klist-title", text: list.title || "(без названия)" }),
+    el("span", { class: "klist-title", text: titleText }),
     menuWrap,
   ));
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
@@ -1039,6 +1045,7 @@ function renderPreviewCard(card, number, imgMap, screen) {
 // previewCtx holds the resolved cards/numbers/images for the open preview so the
 // screen-mode toggle can re-render without refetching attachments.
 let previewCtx = null;
+let previewListRef = null; // the list currently shown in the preview overlay
 
 function renderPreviewBody(screen) {
   const body = document.getElementById("previewBody");
@@ -1053,29 +1060,53 @@ function closePreview() {
   for (const u of previewUrls) URL.revokeObjectURL(u);
   previewUrls = [];
   previewCtx = null;
+  previewListRef = null;
   document.getElementById("previewBody").replaceChildren();
 }
 
-// previewList opens the preview modal and renders the whole list. Text renders
-// instantly; image handouts are resolved from attachments and filled in after.
+// previewList opens the preview modal and renders the whole list. Test lists show
+// their tester summary (the same line the copy action produces); question lists
+// render docx-style — text instantly, image handouts resolved + filled in after.
 async function previewList(list) {
   const cards = cardsOf(list.id);
-  document.getElementById("previewTitle").textContent = list.title || "Предпросмотр";
+  document.getElementById("previewTitle").textContent = (list.type === "test" ? "🧪 " : "") + (list.title || "Предпросмотр");
   const body = document.getElementById("previewBody");
   body.replaceChildren();
   previewCtx = null;
+  previewListRef = list;
+  // Screen-mode toggle + tester-copy button are mutually exclusive per list kind.
+  const isTest = list.type === "test";
+  document.querySelector(".preview-screen-toggle").hidden = isTest;
+  document.getElementById("previewCopyTesters").hidden = !isTest;
   previewOverlay.hidden = false;
+  if (isTest) {
+    const text = testerSummary(list);
+    body.replaceChildren(text
+      ? el("p", { class: "pv-testers", text })
+      : el("p", { class: "pv-empty", text: "В этом списке пока нет тестеров." }));
+    return;
+  }
   if (!cards.length) {
     body.append(el("p", { class: "pv-empty", text: "В списке нет карточек." }));
     return;
   }
-  const numbers = list.type === "test" ? cards.map(() => null) : xyChgk.numberQuestionCards(cards);
+  const numbers = xyChgk.numberQuestionCards(cards);
   const imgMap = await resolveImages(cards, imageRefs(cards));
   // Guard against a close (or another open) during the await.
   if (previewOverlay.hidden) { for (const u of previewUrls) URL.revokeObjectURL(u); previewUrls = []; return; }
   previewCtx = { cards, numbers, imgMap };
   renderPreviewBody(document.getElementById("previewScreen").checked);
 }
+
+// Copy the previewed test list's tester summary; brief inline confirmation.
+document.getElementById("previewCopyTesters").addEventListener("click", async (e) => {
+  if (!previewListRef) return;
+  const btn = e.currentTarget; // capture before await (currentTarget clears after dispatch)
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+  await copyTesterList(previewListRef);
+  btn.textContent = "Скопировано ✓";
+  setTimeout(() => { btn.textContent = btn.dataset.label; }, 1500);
+});
 
 document.getElementById("previewScreen").addEventListener("change", (e) => renderPreviewBody(e.target.checked));
 document.getElementById("previewClose").addEventListener("click", closePreview);
@@ -1170,18 +1201,29 @@ function setTestDetailTitle(card) {
   node.hidden = false;
 }
 
-// copyTesterList gathers the testers from every test card in the list and copies
-// the shareable "Вопросы тестировали: …" line to the clipboard (players sorted
-// by surname, teams alphabetically, both deduped — see chgk.js testerCopyText).
-async function copyTesterList(list) {
+// listTesters gathers the testers from every test card in a list (flattened).
+function listTesters(list) {
   const all = [];
   for (const c of cardsOf(list.id)) {
     if (c.kind !== "test") continue;
     all.push(...xyChgk.parseTestCard(c.desc).testers);
   }
-  const text = xyChgk.testerCopyText(all);
+  return all;
+}
+
+// testerSummary is the shareable "Вопросы тестировали: …" line for a test list —
+// players sorted by surname, teams alphabetically, both deduped (chgk.js
+// testerCopyText), terminated with a period. "" when the list has no testers.
+function testerSummary(list) {
+  const t = xyChgk.testerCopyText(listTesters(list));
+  return t ? t + "." : "";
+}
+
+// copyTesterList copies the test list's tester summary to the clipboard silently.
+async function copyTesterList(list) {
+  const text = testerSummary(list);
   if (!text) return;
-  try { await copyText(text + "."); } catch (_) {}
+  try { await copyText(text); } catch (_) {}
 }
 
 // ---- commit card move (rank recompute from DOM order) ----
