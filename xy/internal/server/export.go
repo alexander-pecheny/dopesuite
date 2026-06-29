@@ -8,9 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"xy/internal/chgk/docx"
+	"xy/internal/chgk/fsource"
 )
 
 // Export turns a list of (already-decrypted, client-supplied) chgksuite "4s"
@@ -62,6 +66,10 @@ func headerSafeName(name string) string {
 	}, name)
 }
 
+// reImgRef detects an (img …) directive — docx with images still goes through
+// chgksuite (the Go docx exporter doesn't embed images yet).
+var reImgRef = regexp.MustCompile(`\(img\b`)
+
 func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireUser(w, r); !ok {
 		return
@@ -81,6 +89,21 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 		outName = "export"
 	}
 	outName = strings.TrimSuffix(outName, ".docx")
+
+	// Fast path: no images → render the .docx in-process (Go, no Python).
+	if !reImgRef.MatchString(source) {
+		b, err := docx.Export(fsource.Parse(source, "chgk"))
+		if err != nil {
+			httpError(w, http.StatusInternalServerError, "docx export failed: "+err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+outName+".docx\"")
+		w.Header().Set("Cache-Control", "private, no-store")
+		w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+		_, _ = w.Write(b)
+		return
+	}
 
 	dir, err := os.MkdirTemp("", "xy-export-*")
 	if err != nil {

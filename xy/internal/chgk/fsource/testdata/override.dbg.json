@@ -1,0 +1,16 @@
+[
+  [
+    "Question",
+    {
+      "question": "Что это?",
+      "answer": "Ответ",
+      "zachet": "синоним",
+      "author": "Сидоров",
+      "number": 1,
+      "overrides": {
+        "question": "Вопрос для разминки",
+        "zachet": "Также принимается"
+      }
+    }
+  ]
+]

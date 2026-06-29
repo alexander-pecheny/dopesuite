@@ -244,9 +244,9 @@ func TestExportDocxRealChgksuite(t *testing.T) {
 	}
 }
 
-// TestHandoutsPDF drives the handout-PDF endpoint with a fake chgksuite that
-// asserts the scratch dir holds source.hndt + the referenced image and the
-// hndt2pdf argv, then emits a result.pdf.
+// TestHandoutsPDF drives the handout-PDF endpoint with a fake typst that writes
+// a PDF to its output argument, verifying the in-process Go render wiring (the
+// .typ generation itself is covered by the handout package's TypParity test).
 func TestHandoutsPDF(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell fake not portable to windows")
@@ -255,19 +255,18 @@ func TestHandoutsPDF(t *testing.T) {
 	c := registerUser(t, srv, ts, 770500, "hndt")
 
 	dir := t.TempDir()
-	script := filepath.Join(dir, "fake-chgksuite")
+	script := filepath.Join(dir, "fake-typst")
+	// typst is invoked as: compile --root / --font-path <fonts> source.typ source.pdf
+	// (cwd = render scratch dir). Write a fake PDF to the last argument.
 	body := "#!/bin/sh\n" +
 		"set -e\n" +
-		"[ \"$1\" = handouts ] || { echo 'not handouts' >&2; exit 1; }\n" +
-		"[ \"$2\" = hndt2pdf ] || { echo 'not hndt2pdf' >&2; exit 1; }\n" +
-		"[ -f source.hndt ] || { echo 'no source' >&2; exit 1; }\n" +
-		"[ -f pic.jpg ] || { echo 'no image' >&2; exit 1; }\n" +
-		"grep -q 'for_question: 1' source.hndt || { echo 'bad source' >&2; exit 1; }\n" +
-		"printf '%%PDF-fake' > result.pdf\n"
+		"[ \"$1\" = compile ] || { echo 'not compile' >&2; exit 1; }\n" +
+		"eval \"out=\\${$#}\"\n" +
+		"printf '%%PDF-fake' > \"$out\"\n"
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("XY_CHGKSUITE_CMD", script)
+	t.Setenv("XY_TYPST_CMD", script)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
