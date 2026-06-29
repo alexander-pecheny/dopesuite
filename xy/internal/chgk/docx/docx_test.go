@@ -47,6 +47,42 @@ func unescapeXML(s string) string {
 	return s
 }
 
+// documentXML returns the word/document.xml part of a .docx.
+func documentXML(t *testing.T, docx []byte) string {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(docx), int64(len(docx)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range zr.File {
+		if f.Name != "word/document.xml" {
+			continue
+		}
+		rc, _ := f.Open()
+		data, _ := io.ReadAll(rc)
+		rc.Close()
+		return string(data)
+	}
+	t.Fatal("no document.xml")
+	return ""
+}
+
+// bodyXML extracts the <w:body>…</w:body> inner content (the part we generate),
+// dropping the closing <w:sectPr> which we copy verbatim from the template.
+func bodyXML(s string) string {
+	open := strings.Index(s, "<w:body")
+	if open < 0 {
+		return s
+	}
+	open = strings.IndexByte(s[open:], '>') + open + 1
+	close := strings.LastIndex(s, "</w:body>")
+	inner := s[open:close]
+	if sect := strings.LastIndex(inner, "<w:sectPr"); sect >= 0 {
+		inner = inner[:sect]
+	}
+	return inner
+}
+
 // TestDocxTextParity compares the visible text of our .docx to chgksuite's own
 // `compose docx` output (testdata/*.docx) for the same 4s source. Verifies the
 // rendered text content + order + numbering + labels + nbsp match.
@@ -75,6 +111,36 @@ func TestDocxTextParity(t *testing.T) {
 			got := docText(t, mine)
 			if want != got {
 				t.Errorf("text mismatch for %s\n--- chgksuite ---\n%q\n--- go ---\n%q", name, want, got)
+			}
+		})
+	}
+}
+
+// TestDocxBodyParity compares the generated <w:body> XML byte-for-byte against
+// chgksuite's, which locks in paragraph spacing (keepLines/keepNext/spacing),
+// run boundaries (python-docx's br-inside-run + conditional xml:space), and
+// hyperlink markup — the formatting the text-only parity test can't see.
+func TestDocxBodyParity(t *testing.T) {
+	files, _ := filepath.Glob("testdata/*.4s")
+	for _, f := range files {
+		name := strings.TrimSuffix(filepath.Base(f), ".4s")
+		t.Run(name, func(t *testing.T) {
+			oracle, err := os.ReadFile(filepath.Join("testdata", name+".docx"))
+			if err != nil {
+				t.Skipf("no oracle: %v", err)
+			}
+			src, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mine, err := Export(fsource.Parse(string(src), "chgk"), nil)
+			if err != nil {
+				t.Fatalf("export: %v", err)
+			}
+			want := bodyXML(documentXML(t, oracle))
+			got := bodyXML(documentXML(t, mine))
+			if want != got {
+				t.Errorf("body XML mismatch for %s\n--- chgksuite ---\n%s\n--- go ---\n%s", name, want, got)
 			}
 		})
 	}
