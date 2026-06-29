@@ -163,6 +163,7 @@ type boardSnapshot struct {
 	NameEnc    string             `json:"name_enc"`
 	Role       string             `json:"role"`
 	Lists      []listDTO          `json:"lists"`
+	Groups     []groupDTO         `json:"groups"`
 	Cards      []cardDTO          `json:"cards"`
 	Labels     []labelDTO         `json:"labels"`
 	CardLabels map[string][]int64 `json:"card_labels"`
@@ -175,7 +176,7 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = uid
 	ctx := r.Context()
-	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, CardLabels: map[string][]int64{}}
+	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, CardLabels: map[string][]int64{}}
 
 	var nameEnc []byte
 	if err := s.db.QueryRowContext(ctx, `select name_enc from boards where id = ?`, bid).Scan(&nameEnc); handleErr(w, err) {
@@ -188,6 +189,12 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	snap.Lists = lists
+
+	groups, err := scanListGroups(ctx, s.db, bid)
+	if handleErr(w, err) {
+		return
+	}
+	snap.Groups = groups
 
 	cards, err := scanCards(ctx, s.db, bid)
 	if handleErr(w, err) {

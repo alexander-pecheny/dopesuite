@@ -192,6 +192,27 @@
     </div>
   </div>
 
+  <!-- lists management overlay: reorder lists (drag / position), select several
+       and move them together, and link consecutive lists into a group
+       (list_of_lists) with shared numbering + combined export. -->
+  <div class="appearance-modal-overlay" id="listsManageOverlay" hidden>
+    <div class="appearance-modal lists-manage" role="dialog" aria-modal="true" aria-label="Управление списками">
+      <h2 class="appearance-modal-title">Управление списками</h2>
+      <div class="lists-manage-toolbar">
+        <button class="btn btn-small" id="listsLinkBtn" type="button" disabled
+          title="Выберите подряд идущие списки и свяжите их в группу">🔗 Связать списки</button>
+        <div class="lists-manage-moverow">
+          <input class="input lists-move-pos" id="listsMovePos" type="number" min="1" placeholder="№">
+          <button class="btn btn-small btn-ghost" id="listsMoveBtn" type="button" disabled
+            title="Переместить выбранные на указанную позицию">Переместить выбранные</button>
+        </div>
+      </div>
+      <div class="lists-manage-rows" id="listsManageRows"></div>
+      <pre id="listsManageMessage" class="import-message"></pre>
+      <button class="appearance-modal-done" id="listsManageClose" type="button">Готово</button>
+    </div>
+  </div>
+
   <!-- members / sharing overlay -->
   <div class="appearance-modal-overlay" id="membersOverlay" hidden>
     <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Участники доски">

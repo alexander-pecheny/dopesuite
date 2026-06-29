@@ -26,7 +26,7 @@ const statusNode = document.getElementById("status");
 const kanban = document.getElementById("kanban");
 const titleNode = document.getElementById("boardTitle");
 
-const state = { role: "editor", name: "", lists: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null };
+const state = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null };
 let dk = null;
 // One-shot guard per card-drag gesture: set true the moment a drop commits the
 // move, so a stray duplicate drop is ignored and dragend can tell an aborted
@@ -100,6 +100,10 @@ document.getElementById("unlockForm").addEventListener("submit", async (e) => {
 // "forget password" (rarely needed) don't warrant header buttons.
 // dopeMenu.setExtras renders them as actions.
 window.dopeMenu?.setExtras([{
+  label: "📋 Управление списками",
+  title: "Переупорядочить списки и связать их в группы (списки списков)",
+  onClick: () => openListsManage(),
+}, {
   label: "👥 Участники доски",
   title: "Поделиться доской: добавить или убрать участников",
   onClick: () => openMembers(),
@@ -276,7 +280,11 @@ async function load() {
     titleNode.textContent = state.name;
     document.title = state.name + " · xy";
     state.lists = await Promise.all(snap.lists.map(async (l) => ({
-      id: l.id, type: l.type, rank: l.rank, title: await xyCrypto.decField(dk, l.title_enc),
+      id: l.id, type: l.type, rank: l.rank, groupId: l.group_id != null ? l.group_id : null,
+      title: await xyCrypto.decField(dk, l.title_enc),
+    })));
+    state.groups = await Promise.all((snap.groups || []).map(async (g) => ({
+      id: g.id, name: await xyCrypto.decField(dk, g.name_enc),
     })));
     state.cards = await Promise.all(snap.cards.map(async (c) => ({
       id: c.id, listId: c.list_id, kind: c.kind, rank: c.rank,
@@ -302,17 +310,64 @@ const cardsOf = (listId) => state.cards.filter((c) => c.listId === listId).sort(
 const labelById = (id) => state.labels.find((l) => l.id === id);
 
 // ---- render ----
+const groupById = (id) => state.groups.find((g) => g.id === id);
+
+// listsInGroup returns a group's member lists in board (rank) order.
+function listsInGroup(groupId) {
+  return state.lists.filter((l) => l.groupId === groupId).sort(byRank);
+}
+
+// groupNumbering computes question numbers continuously across a group's lists:
+// the cards of every member list are concatenated in order, numbered as one run
+// (so list 2 picks up where list 1 left off, № / №№ directives included), then
+// sliced back per list. Returns Map(listId → numbers[]).
+function groupNumbering(lists) {
+  const arrays = lists.map((l) => cardsOf(l.id));
+  const numbers = xyChgk.numberQuestionCards(arrays.flat());
+  const map = new Map();
+  let off = 0;
+  arrays.forEach((arr, i) => { map.set(lists[i].id, numbers.slice(off, off + arr.length)); off += arr.length; });
+  return map;
+}
+
 function render() {
   kanban.hidden = false;
   kanban.replaceChildren();
-  for (const list of [...state.lists].sort(byRank)) {
-    kanban.append(renderList(list));
+  const sorted = [...state.lists].sort(byRank);
+  // Walk the lists in board order; a maximal run of consecutive lists sharing a
+  // group_id renders inside one bordered group box with a single header.
+  let i = 0;
+  while (i < sorted.length) {
+    const l = sorted[i];
+    if (l.groupId != null) {
+      const run = [];
+      while (i < sorted.length && sorted[i].groupId === l.groupId) { run.push(sorted[i]); i++; }
+      kanban.append(renderGroup(l.groupId, run));
+    } else {
+      kanban.append(renderList(l));
+      i++;
+    }
   }
   kanban.append(renderAddList());
   paintLabels();
 }
 
-function renderList(list) {
+// renderGroup wraps a run of grouped lists in a labelled container so it's clear
+// at a glance which lists belong together. Question numbering flows across the
+// member lists (groupNumbering).
+function renderGroup(groupId, lists) {
+  const g = groupById(groupId);
+  const box = el("div", { class: "kgroup", dataset: { groupId } });
+  box.append(el("div", { class: "kgroup-head" },
+    el("span", { class: "kgroup-title", text: "🔗 " + ((g && g.name) || "Связанные списки") })));
+  const numbering = groupNumbering(lists);
+  const row = el("div", { class: "kgroup-lists" });
+  for (const list of lists) row.append(renderList(list, numbering.get(list.id)));
+  box.append(row);
+  return box;
+}
+
+function renderList(list, precomputedNumbers) {
   const col = el("div", { class: "klist", draggable: "true", dataset: { listId: list.id } });
   const menuWrap = el("div", { class: "klist-menu-wrap" });
   const menuBtn = el("button", { class: "kadd", title: "Меню списка", text: "⋯", "aria-haspopup": "true" });
@@ -326,10 +381,13 @@ function renderList(list) {
     );
     // docx export / handout generation are question-list features; skip them for
     // test lists (whose cards hold tester sessions, not 4s questions).
-    if (list.type !== "test") items.push(
-      { label: "📄 Экспорт в docx", onClick: () => exportList(list) },
-      { label: "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
-    );
+    if (list.type !== "test") {
+      const grouped = list.groupId != null;
+      items.push(
+        { label: grouped ? "📄 Экспорт группы в docx" : "📄 Экспорт в docx", onClick: () => exportList(list) },
+        { label: grouped ? "🧩 Генерация раздаток (вся группа)" : "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
+      );
+    }
     popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
@@ -341,7 +399,9 @@ function renderList(list) {
   ));
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
   const cards = cardsOf(list.id);
-  const numbers = list.type === "test" ? [] : xyChgk.numberQuestionCards(cards);
+  // Grouped lists carry continuous numbering computed across the whole group;
+  // standalone lists number from 1.
+  const numbers = list.type === "test" ? [] : (precomputedNumbers || xyChgk.numberQuestionCards(cards));
   cards.forEach((card, i) => body.append(renderCard(card, numbers[i])));
   col.append(body);
 
@@ -567,6 +627,14 @@ async function doMoveListCopy(remove) {
   const srcCards = cardsOf(listMoveSrc.id);
   const type = listMoveSrc.type || "normal";
 
+  // A grouped list must stay consecutive with its group, so reordering it on the
+  // same board goes through «Управление списками» (which moves the whole group as
+  // a unit). Copying it, or moving it to another board, is still fine.
+  if (sameBoard && remove && listMoveSrc.groupId != null) {
+    msg.textContent = "Список входит в группу — измените порядок через «Управление списками».";
+    return;
+  }
+
   // Same-board move is just a re-rank (no re-encryption needed).
   if (sameBoard && remove) {
     listMoveSrc.rank = rank;
@@ -649,13 +717,269 @@ document.getElementById("moveListOverlay").addEventListener("pointerdown", (e) =
   if (e.target.id === "moveListOverlay") closeMoveList();
 });
 
+// ---- lists management (reorder + group into list_of_lists) ----
+// The «Управление списками» modal shows one row per list (and a bordered block
+// per group). Lists can be reordered by dragging a row or by entering a target
+// position; checking several rows lets you move them together or — when the
+// checked rows are consecutive, ungrouped lists — link them into a group.
+// Orderable units are standalone lists and whole groups; a group always moves as
+// one block, keeping its members consecutive (the invariant the board relies on).
+const listsManageOverlay = document.getElementById("listsManageOverlay");
+const listsManageRows = document.getElementById("listsManageRows");
+let manageSelected = new Set();       // selected unit keys ("l"+listId / "g"+groupId)
+let manageUnitByKey = new Map();      // key → unit (rebuilt each render)
+let manageDragKey = null;
+let manageDragCommitted = false;
+
+// computeUnits walks the rank-sorted lists, folding each maximal run of lists
+// sharing a group_id into one group unit; ungrouped lists are singleton units.
+function computeUnits() {
+  const sorted = [...state.lists].sort(byRank);
+  const units = [];
+  let i = 0;
+  while (i < sorted.length) {
+    const l = sorted[i];
+    if (l.groupId != null) {
+      const gid = l.groupId, run = [];
+      while (i < sorted.length && sorted[i].groupId === gid) { run.push(sorted[i]); i++; }
+      units.push({ kind: "group", id: gid, key: "g" + gid, lists: run });
+    } else {
+      units.push({ kind: "list", id: l.id, key: "l" + l.id, lists: [l] });
+      i++;
+    }
+  }
+  return units;
+}
+
+function openListsManage() {
+  manageSelected = new Set();
+  document.getElementById("listsManageMessage").textContent = "";
+  document.getElementById("listsMovePos").value = "";
+  listsManageOverlay.hidden = false;
+  renderManage();
+}
+function closeListsManage() { listsManageOverlay.hidden = true; }
+
+function renderManage() {
+  const units = computeUnits();
+  manageUnitByKey = new Map(units.map((u) => [u.key, u]));
+  // Drop selections whose units no longer exist (e.g. after a group dissolved).
+  for (const k of [...manageSelected]) if (!manageUnitByKey.has(k)) manageSelected.delete(k);
+  listsManageRows.replaceChildren();
+  units.forEach((u, idx) => listsManageRows.append(renderManageUnit(u, idx + 1)));
+  updateManageToolbar(units);
+}
+
+function manageCheckbox(unit) {
+  const cb = el("input", { type: "checkbox" });
+  cb.checked = manageSelected.has(unit.key);
+  cb.addEventListener("change", () => {
+    if (cb.checked) manageSelected.add(unit.key); else manageSelected.delete(unit.key);
+    updateManageToolbar(computeUnits());
+  });
+  return el("label", { class: "lm-check" }, cb);
+}
+
+function manageMoveControl(unit) {
+  const inp = el("input", { class: "input lm-move-pos", type: "number", min: "1", placeholder: "№" });
+  const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", text: "↕", title: "Переместить на эту позицию" });
+  const go = () => { const n = parseInt(inp.value, 10); if (n >= 1) moveUnitsTo(new Set([unit.key]), n); };
+  btn.addEventListener("click", go);
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
+  return el("div", { class: "lm-move" }, inp, btn);
+}
+
+function manageTitle(list) {
+  return (list.type === "test" ? "🧪 " : "") + (list.title || "(без названия)");
+}
+
+function renderManageUnit(unit, pos) {
+  const node = el("div", { class: "lm-unit lm-" + unit.kind, draggable: "true", dataset: { unitKey: unit.key } });
+  if (unit.kind === "group") {
+    const g = groupById(unit.id);
+    node.append(el("div", { class: "lm-row lm-grouphead" },
+      manageCheckbox(unit),
+      el("span", { class: "lm-pos", text: "#" + pos }),
+      el("span", { class: "lm-handle", text: "≡", title: "Перетащить" }),
+      el("span", { class: "lm-title lm-group-title", text: "🔗 " + ((g && g.name) || "Связанные списки") }),
+      el("button", { class: "lm-icon", type: "button", text: "✎", title: "Переименовать группу", onclick: () => renameGroup(unit.id) }),
+      el("button", { class: "lm-icon", type: "button", text: "✕🔗", title: "Разъединить группу", onclick: () => unlinkGroup(unit.id) }),
+      manageMoveControl(unit),
+    ));
+    const members = el("div", { class: "lm-members" });
+    for (const l of unit.lists) members.append(el("div", { class: "lm-member" }, el("span", { class: "lm-title", text: manageTitle(l) })));
+    node.append(members);
+  } else {
+    node.append(el("div", { class: "lm-row" },
+      manageCheckbox(unit),
+      el("span", { class: "lm-pos", text: "#" + pos }),
+      el("span", { class: "lm-handle", text: "≡", title: "Перетащить" }),
+      el("span", { class: "lm-title", text: manageTitle(unit.lists[0]) }),
+      manageMoveControl(unit),
+    ));
+  }
+  node.addEventListener("dragstart", (e) => {
+    manageDragKey = unit.key;
+    manageDragCommitted = false;
+    node.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", unit.key); } catch (_) {}
+  });
+  node.addEventListener("dragend", () => {
+    node.classList.remove("dragging");
+    manageDragKey = null;
+    if (!manageDragCommitted) renderManage(); // aborted drag — resync DOM from state
+  });
+  return node;
+}
+
+function manageDragAfter(y) {
+  const els = [...listsManageRows.querySelectorAll(".lm-unit:not(.dragging)")];
+  let closest = null, closestOffset = -Infinity;
+  for (const c of els) {
+    const box = c.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closestOffset) { closestOffset = offset; closest = c; }
+  }
+  return closest;
+}
+
+listsManageRows.addEventListener("dragover", (e) => {
+  if (manageDragKey == null) return;
+  e.preventDefault();
+  const dragging = listsManageRows.querySelector(".lm-unit.dragging");
+  if (!dragging) return;
+  const after = manageDragAfter(e.clientY);
+  if (after == null) listsManageRows.append(dragging);
+  else listsManageRows.insertBefore(dragging, after);
+});
+listsManageRows.addEventListener("drop", (e) => {
+  if (manageDragKey == null) return;
+  e.preventDefault();
+  manageDragCommitted = true;
+  const order = [...listsManageRows.querySelectorAll(".lm-unit")].map((n) => manageUnitByKey.get(n.dataset.unitKey)).filter(Boolean);
+  applyUnitOrder(order);
+});
+
+function updateManageToolbar(units) {
+  const linkBtn = document.getElementById("listsLinkBtn");
+  const moveBtn = document.getElementById("listsMoveBtn");
+  const selected = units.filter((u) => manageSelected.has(u.key));
+  moveBtn.disabled = selected.length === 0;
+  // Linking needs ≥2 selected, all ungrouped single lists, consecutive in order.
+  let canLink = selected.length >= 2 && selected.every((u) => u.kind === "list");
+  if (canLink) {
+    const idxs = selected.map((u) => units.indexOf(u)).sort((a, b) => a - b);
+    canLink = idxs.every((v, i) => i === 0 || v === idxs[i - 1] + 1);
+  }
+  linkBtn.disabled = !canLink;
+}
+
+// applyUnitOrder rewrites list ranks to match the given unit order (groups stay
+// contiguous because their member lists are emitted together). Only changed
+// ranks are patched. Offline-capable (rank patches flow through the sync engine).
+async function applyUnitOrder(orderedUnits) {
+  const msg = document.getElementById("listsManageMessage");
+  const flat = orderedUnits.flatMap((u) => u.lists);
+  let r = null;
+  const patches = [];
+  for (const l of flat) { r = keyBetween(r, null); if (l.rank !== r) patches.push([l, r]); }
+  if (!patches.length) { renderManage(); return; }
+  setStatus("saving");
+  try {
+    for (const [l, rank] of patches) { l.rank = rank; await patch("patchList", `/api/lists/${l.id}`, { rank }); }
+    setStatus("saved");
+    render();
+    renderManage();
+  } catch (err) { setStatus("error"); msg.textContent = err.message; load(); }
+}
+
+// moveUnitsTo relocates the selected units, preserving their relative order, so
+// the first lands at 1-based position posN among all units.
+function moveUnitsTo(keys, posN) {
+  const units = computeUnits();
+  const selected = units.filter((u) => keys.has(u.key));
+  if (!selected.length) return Promise.resolve();
+  const remaining = units.filter((u) => !keys.has(u.key));
+  const idx = Math.max(0, Math.min(posN - 1, remaining.length));
+  remaining.splice(idx, 0, ...selected);
+  return applyUnitOrder(remaining);
+}
+
+async function linkSelected() {
+  const units = computeUnits();
+  const selected = units.filter((u) => manageSelected.has(u.key));
+  if (selected.length < 2 || selected.some((u) => u.kind !== "list")) return;
+  const msg = document.getElementById("listsManageMessage");
+  if (!xySync.isOnline()) { msg.textContent = "Связывание списков доступно только онлайн."; return; }
+  const name = (prompt("Название списка списков:", "") || "").trim();
+  if (!name) return;
+  // Preserve board order (units are rank-sorted).
+  const listIds = selected.sort((a, b) => units.indexOf(a) - units.indexOf(b)).flatMap((u) => u.lists.map((l) => l.id));
+  try {
+    await jpost(`/api/boards/${boardId}/list-groups`, { name_enc: await xyCrypto.encField(dk, name), list_ids: listIds });
+    manageSelected = new Set();
+    await load();
+    renderManage();
+  } catch (err) { msg.textContent = err.message; }
+}
+
+async function renameGroup(gid) {
+  const g = groupById(gid);
+  const name = (prompt("Новое название группы:", g ? g.name : "") || "").trim();
+  if (!name) return;
+  const msg = document.getElementById("listsManageMessage");
+  if (!xySync.isOnline()) { msg.textContent = "Переименование доступно только онлайн."; return; }
+  try {
+    await jpatch(`/api/list-groups/${gid}`, { name_enc: await xyCrypto.encField(dk, name) });
+    await load();
+    renderManage();
+  } catch (err) { msg.textContent = err.message; }
+}
+
+async function unlinkGroup(gid) {
+  if (!confirm("Разъединить группу? Списки останутся, но нумерация снова станет раздельной.")) return;
+  const msg = document.getElementById("listsManageMessage");
+  if (!xySync.isOnline()) { msg.textContent = "Разъединение доступно только онлайн."; return; }
+  try {
+    await jdelete(`/api/list-groups/${gid}`);
+    await load();
+    renderManage();
+  } catch (err) { msg.textContent = err.message; }
+}
+
+document.getElementById("listsLinkBtn").addEventListener("click", linkSelected);
+document.getElementById("listsMoveBtn").addEventListener("click", () => {
+  const n = parseInt(document.getElementById("listsMovePos").value, 10);
+  if (!(n >= 1)) { document.getElementById("listsManageMessage").textContent = "Укажите позицию."; return; }
+  moveUnitsTo(new Set(manageSelected), n);
+});
+document.getElementById("listsManageClose").addEventListener("click", closeListsManage);
+listsManageOverlay.addEventListener("pointerdown", (e) => { if (e.target === listsManageOverlay) closeListsManage(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !listsManageOverlay.hidden) closeListsManage(); });
+
 // ---- export a list to .docx via chgksuite (PLAN §8) ----
 // Concatenate the list's card descriptions (in board order) into a chgksuite
 // "4s" document, gather any images referenced by `(img ...)` directives from the
 // cards' attachments, and hand both to the server, which composes the docx and
 // wipes the plaintext scratch files. See internal/server/export.go.
+// exportScope resolves which lists a per-list action (export / handouts) covers:
+// a standalone list is just itself; a grouped list pulls in every (non-test) list
+// of its group, in board order, so the whole list_of_lists exports as one file.
+// Returns { cards (concatenated, in order), title }.
+function exportScope(list) {
+  let lists = [list], title = list.title || "export";
+  if (list.groupId != null) {
+    lists = listsInGroup(list.groupId).filter((l) => l.type !== "test");
+    const g = groupById(list.groupId);
+    if (g && g.name) title = g.name;
+  }
+  return { cards: lists.flatMap((l) => cardsOf(l.id)), title };
+}
+
 async function exportList(list) {
-  const cards = cardsOf(list.id);
+  const scope = exportScope(list);
+  const cards = scope.cards;
   if (!cards.length) { alert("В списке нет карточек."); return; }
   if (!xySync.isOnline()) { alert("Экспорт в docx доступен только онлайн."); return; }
   setStatus("saving");
@@ -667,7 +991,7 @@ async function exportList(list) {
 
     const fd = new FormData();
     fd.append("source", source);
-    fd.append("filename", list.title || "export");
+    fd.append("filename", scope.title);
 
     // resolve referenced images from the cards' attachments (decrypt + attach)
     if (wanted.size) {
@@ -697,7 +1021,7 @@ async function exportList(list) {
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const a = el("a", { href: url, download: (list.title || "export") + ".docx" });
+    const a = el("a", { href: url, download: scope.title + ".docx" });
     document.body.append(a);
     a.click();
     a.remove();
@@ -721,12 +1045,16 @@ let handoutsCtx = null;   // { list, cards, numbers }
 let handoutsPdfUrl = null;
 
 function openHandouts(list) {
-  const cards = cardsOf(list.id);
-  const numbers = list.type === "test" ? cards.map(() => null) : xyChgk.numberQuestionCards(cards);
+  // Grouped lists generate one set of handouts for the whole list_of_lists, with
+  // question numbers continuous across the group (numberQuestionCards over the
+  // concatenated cards), matching the board + docx export.
+  const scope = exportScope(list);
+  const cards = scope.cards;
+  const numbers = xyChgk.numberQuestionCards(cards);
   const metas = {};
   for (const c of cards) if (c.handoutMeta) metas[c.id] = c.handoutMeta;
   const source = xyChgk.generateHndt(cards, numbers, metas);
-  handoutsCtx = { list, cards, numbers };
+  handoutsCtx = { list, cards, numbers, title: scope.title };
   document.getElementById("handoutsSource").value = source;
   document.getElementById("handoutsMessage").textContent = source.trim() ? "" : "В списке нет вопросов с раздаточным материалом.";
   clearHandoutsPdf();
@@ -790,7 +1118,7 @@ async function generateHandoutsPdf() {
 
     const fd = new FormData();
     fd.append("source", source);
-    fd.append("filename", handoutsCtx.list.title || "handouts");
+    fd.append("filename", handoutsCtx.title || handoutsCtx.list.title || "handouts");
 
     if (wanted.size) {
       const seen = new Set();
@@ -824,7 +1152,7 @@ async function generateHandoutsPdf() {
     document.getElementById("handoutsPdf").replaceChildren(embed);
     const dl = document.getElementById("handoutsDownload");
     dl.href = handoutsPdfUrl;
-    dl.setAttribute("download", (handoutsCtx.list.title || "handouts") + ".pdf");
+    dl.setAttribute("download", (handoutsCtx.title || handoutsCtx.list.title || "handouts") + ".pdf");
     dl.hidden = false;
     msg.textContent = "Готово.";
   } catch (err) {
@@ -1844,6 +2172,13 @@ document.getElementById("cardKind").addEventListener("change", async (e) => {
 // the board (auto-assigned or directive-driven), matching the kanban preview.
 function questionNumberFor(card) {
   if (!card || card.kind !== "question") return null;
+  const list = state.lists.find((l) => l.id === card.listId);
+  // Match the board: a grouped list numbers continuously across its group.
+  if (list && list.groupId != null) {
+    const nums = groupNumbering(listsInGroup(list.groupId)).get(list.id) || [];
+    const idx = cardsOf(card.listId).findIndex((c) => c.id === card.id);
+    return idx >= 0 ? nums[idx] : null;
+  }
   const cards = cardsOf(card.listId);
   const numbers = xyChgk.numberQuestionCards(cards);
   const idx = cards.findIndex((c) => c.id === card.id);

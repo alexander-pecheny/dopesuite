@@ -44,6 +44,11 @@ func Main() {
 	mux.HandleFunc("GET /board/{id}", srv.servePage("static/board.html"))
 	mux.HandleFunc("GET /import", srv.servePage("static/import.html"))
 
+	// ---- admin tooling (gated on the configured admin username) ----
+	mux.HandleFunc("GET /admin", srv.HandleAdminLanding)
+	mux.HandleFunc("GET /admin/create_users", srv.HandleAdminCreateUsers)
+	mux.HandleFunc("POST /admin/create_users", srv.HandleAdminCreateUsers)
+
 	// ---- PWA: service worker + manifest at the site root (scope '/') ----
 	mux.HandleFunc("GET /sw.js", srv.serveRootAsset(
 		"static/sw.js", "text/javascript; charset=utf-8", "no-cache",
@@ -93,6 +98,9 @@ func Main() {
 	mux.HandleFunc("POST /api/boards/{id}/lists", srv.handleCreateList)
 	mux.HandleFunc("PATCH /api/lists/{id}", srv.handlePatchList)
 	mux.HandleFunc("DELETE /api/lists/{id}", srv.handleDeleteList)
+	mux.HandleFunc("POST /api/boards/{id}/list-groups", srv.handleCreateListGroup)
+	mux.HandleFunc("PATCH /api/list-groups/{id}", srv.handlePatchListGroup)
+	mux.HandleFunc("DELETE /api/list-groups/{id}", srv.handleDeleteListGroup)
 	mux.HandleFunc("POST /api/lists/{id}/cards", srv.handleCreateCard)
 	mux.HandleFunc("PATCH /api/cards/{id}", srv.handlePatchCard)
 	mux.HandleFunc("DELETE /api/cards/{id}", srv.handleDeleteCard)

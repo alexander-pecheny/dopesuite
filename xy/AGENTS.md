@@ -30,11 +30,12 @@ internal/server/       package server — the whole HTTP server
   errors.go            appError → status mapping
   auth.go              sessions, login/register/password, telegram bridge
   boards.go            boards CRUD, keymeta (passphrase re-wrap), members, ACL helpers
-  lists_cards.go       lists/cards/labels/timeline handlers + DTOs/scanners
+  lists_cards.go       lists/cards/labels/timeline + list-group handlers, DTOs/scanners
   tokens.go            API tokens: month-lived bearer creds (manage at /profile/tokens)
   trello_compat.go     Trello-compatible API for chgksuite (token-authed via key+token)
   rank.go              server-side fractional-index keyAfter (Trello card upload)
   invite.go            invite minting (subcommand)
+  admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny")
   export.go            POST /api/export/docx — shells out to chgksuite (XY_CHGKSUITE_CMD)
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
 internal/session/      cookie + session.User (ported from dope/platform/session)
@@ -54,7 +55,8 @@ web/assets/            //go:embed static (package assets)
     index.js/.html     board list + create-board (passphrase) flow; offline board-list cache
     board.js/.html     kanban: unlock, drag-reorder, card detail, timeline, labels,
                        move/copy (by board name + list + position), list ⋯ menu, docx export;
-                       all mutations routed through sync.js (offline-capable)
+                       «Управление списками» modal groups consecutive lists into a
+                       list_of_lists (☰ menu); all mutations via sync.js (offline-capable)
     menu.js            theme boot + ☰ menu; also injects PWA <head> tags + registers sw.js
     login/register/profile  auth UI (login/menu ported from dope)
     tokens.js/.html    /profile/tokens — create/revoke API tokens for the Trello API
@@ -148,6 +150,24 @@ and service-worker install/offline behaviour.
 surface chgksuite's `trello.py` uses, token-authed; text fields return as the
 base64 ciphertext envelope, decrypted locally with the board passphrase),
 encrypted client-side search, chgksuite import/export.
+
+## List groups (list_of_lists)
+A named, ordered run of **consecutive** lists, sharing one question-numbering
+sequence and a combined export. Schema: `list_groups(name_enc)` + nullable
+`lists.group_id` (migrateV6); the board snapshot adds a `groups[]` array and each
+list carries `group_id`. Endpoints: `POST /api/boards/{id}/list-groups`
+{name_enc, list_ids} (≥2 lists, folds them in), `PATCH /api/list-groups/{id}`
+(rename), `DELETE` (dissolve → members released to group_id NULL). The
+«Управление списками» modal (☰ menu, `board.js`) is the editing surface: one row
+per list, drag / position-input reorder, multi-select move-together, and
+🔗 Связать when the checked rows are consecutive ungrouped lists. Orderable units
+are standalone lists and whole groups (a group always moves as one block, keeping
+its members consecutive — the invariant the board render relies on; the
+single-list move modal refuses to reorder a grouped list on the same board).
+On the board a group renders inside one bordered `.kgroup` box with a single
+header; numbering flows across the group (`numberQuestionCards` over the
+concatenated cards), and per-list docx export / handout generation cover the
+whole group when invoked on any member (`exportScope`).
 
 ## Trello-compatible API (chgksuite integration)
 `trello_compat.go` serves the three Trello calls chgksuite makes, authed by
