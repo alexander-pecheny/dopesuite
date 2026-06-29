@@ -118,6 +118,9 @@ func Main() {
 	// ---- handouts ----
 	mux.HandleFunc("POST /api/handouts/pdf", srv.handleHandoutsPDF)
 	mux.HandleFunc("POST /api/handouts/split_fit", srv.handleHandoutsSplitFit)
+	mux.HandleFunc("POST /api/handouts/stage", srv.handleHandoutsStage)
+	mux.HandleFunc("POST /api/handouts/heartbeat", srv.handleHandoutsHeartbeat)
+	mux.HandleFunc("DELETE /api/handouts/stage", srv.handleHandoutsUnstage)
 
 	// ---- attachments ----
 	mux.HandleFunc("GET /api/cards/{id}/attachments", srv.handleListAttachments)

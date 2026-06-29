@@ -35,6 +35,8 @@ type server struct {
 	assetSource  assetFS
 	assetNoCache bool
 	assetETags   map[string]string
+
+	staging *handoutStaging // staged handout images (see staging.go)
 }
 
 // buildDSN assembles a modernc.org/sqlite DSN with WAL + durability pragmas,
@@ -95,7 +97,7 @@ func newServer() (*server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &server{db: db, blobs: blobs}, nil
+	return &server{db: db, blobs: blobs, staging: newHandoutStaging()}, nil
 }
 
 // withWriteTx runs fn in a bounded, serialized write transaction. It pulls a

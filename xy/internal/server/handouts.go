@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -36,7 +37,9 @@ func typstCommand() string {
 }
 
 func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.requireUser(w, r); !ok {
+	defer timed("handouts.pdf total")()
+	u, ok := s.requireUser(w, r)
+	if !ok {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
@@ -55,8 +58,12 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 	}
 	outName = strings.TrimSuffix(outName, ".pdf")
 
-	// Referenced images (multipart "img" parts), keyed by base name.
+	// Referenced images: any inline "img" parts, plus the user's staged session
+	// (the common case — the client uploaded them once when the modal opened).
 	images := map[string][]byte{}
+	for name, data := range s.stagedImages(r, u.UserID) {
+		images[name] = data
+	}
 	if r.MultipartForm != nil {
 		for _, fh := range r.MultipartForm.File["img"] {
 			base := safeImageName(fh.Filename)
@@ -72,9 +79,14 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if timingOn() {
+		log.Printf("[timing] handouts.pdf: source=%dB images=%d", len(source), len(images))
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), handoutTimeout)
 	defer cancel()
+	renderDone := timed("handouts.pdf render+typst")
 	pdf, err := handout.Render(ctx, source, images, handout.DefaultArgs(), typstCommand())
+	renderDone()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "typst timed out")
@@ -120,7 +132,9 @@ func chgksuiteCommand() []string {
 }
 
 func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.requireUser(w, r); !ok {
+	defer timed("handouts.split_fit total")()
+	u, ok := s.requireUser(w, r)
+	if !ok {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
@@ -146,7 +160,14 @@ func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) 
 	}
 	defer os.RemoveAll(dir) // brief plaintext exposure — wiped on return
 
-	// Referenced images by base name (split_fit needs them alongside the source).
+	// Referenced images by base name (split_fit needs them alongside the source):
+	// staged session images + any inline "img" parts.
+	for name, data := range s.stagedImages(r, u.UserID) {
+		if err := os.WriteFile(filepath.Join(dir, safeImageName(name)), data, 0o600); err != nil {
+			handleErr(w, err)
+			return
+		}
+	}
 	if r.MultipartForm != nil {
 		for _, fh := range r.MultipartForm.File["img"] {
 			base := safeImageName(fh.Filename)
@@ -176,7 +197,17 @@ func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) 
 	// service env already provides it.
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
-	if combined, runErr := cmd.CombinedOutput(); runErr != nil {
+	if timingOn() {
+		log.Printf("[timing] split_fit: running %v (source=%dB)", argv, len(source))
+	}
+	cmdDone := timed("split_fit chgksuite subprocess")
+	combined, runErr := cmd.CombinedOutput()
+	cmdDone()
+	if timingOn() {
+		// chgksuite prints per-block fitting progress + sizes here.
+		log.Printf("[timing] split_fit chgksuite output:\n%s", strings.TrimSpace(string(combined)))
+	}
+	if runErr != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "split_fit timed out")
 			return

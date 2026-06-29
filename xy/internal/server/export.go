@@ -52,6 +52,7 @@ func headerSafeName(name string) string {
 }
 
 func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
+	defer timed("export.docx total")()
 	if _, ok := s.requireUser(w, r); !ok {
 		return
 	}
@@ -89,7 +90,9 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	exportDone := timed("export.docx parse+render")
 	b, err := docx.Export(fsource.Parse(source, "chgk"), images)
+	exportDone()
 	if err != nil {
 		httpError(w, http.StatusInternalServerError, "docx export failed: "+err.Error())
 		return
