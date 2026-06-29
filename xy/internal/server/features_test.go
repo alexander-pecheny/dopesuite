@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 )
 
@@ -33,6 +34,91 @@ func boardWithList(t *testing.T) (c *apiClient, boardID, listID string) {
 	}
 	c.decode(resp, &l)
 	return c, boardID, itoa(l.ID)
+}
+
+// TestListGroups covers the list_of_lists lifecycle: link several lists into a
+// group, see group_id + the group reflected in the snapshot, rename it, and
+// dissolve it (members released, group gone).
+func TestListGroups(t *testing.T) {
+	c, boardID, listID1 := boardWithList(t)
+	mkList := func(rank string) int64 {
+		resp := c.do("POST", "/api/boards/"+boardID+"/lists", map[string]string{"title_enc": enc("L" + rank), "rank": rank})
+		mustStatus(t, resp, 200)
+		var l struct {
+			ID int64 `json:"id"`
+		}
+		c.decode(resp, &l)
+		return l.ID
+	}
+	// listID1 has rank "m"; add two more so we have three consecutive lists.
+	id1 := mustAtoi(t, listID1)
+	id2 := mkList("n")
+	id3 := mkList("o")
+
+	// Reject a single-list group.
+	resp := c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name_enc": enc("solo"), "list_ids": []int64{id1}})
+	mustStatus(t, resp, 400)
+
+	// Link the three into a group.
+	resp = c.do("POST", "/api/boards/"+boardID+"/list-groups", map[string]any{"name_enc": enc("Тур 1"), "list_ids": []int64{id1, id2, id3}})
+	mustStatus(t, resp, 200)
+	var grp struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &grp)
+	if grp.ID == 0 {
+		t.Fatal("no group id")
+	}
+
+	// Snapshot: every list carries group_id, and the group is listed by name.
+	snap := getSnap(t, c, boardID)
+	if len(snap.Groups) != 1 || dec(snap.Groups[0].NameEnc) != "Тур 1" {
+		t.Fatalf("groups = %+v", snap.Groups)
+	}
+	for _, l := range snap.Lists {
+		if l.GroupID == nil || *l.GroupID != grp.ID {
+			t.Fatalf("list %d not in group: %+v", l.ID, l)
+		}
+	}
+
+	// Rename.
+	resp = c.do("PATCH", "/api/list-groups/"+itoa(grp.ID), map[string]string{"name_enc": enc("Тур I")})
+	mustStatus(t, resp, 204)
+	snap = getSnap(t, c, boardID)
+	if dec(snap.Groups[0].NameEnc) != "Тур I" {
+		t.Fatalf("rename not applied: %q", dec(snap.Groups[0].NameEnc))
+	}
+
+	// Dissolve: members released, group gone.
+	resp = c.do("DELETE", "/api/list-groups/"+itoa(grp.ID), nil)
+	mustStatus(t, resp, 204)
+	snap = getSnap(t, c, boardID)
+	if len(snap.Groups) != 0 {
+		t.Fatalf("group still present: %+v", snap.Groups)
+	}
+	for _, l := range snap.Lists {
+		if l.GroupID != nil {
+			t.Fatalf("list %d still grouped after dissolve", l.ID)
+		}
+	}
+}
+
+func getSnap(t *testing.T, c *apiClient, boardID string) boardSnapshot {
+	t.Helper()
+	resp := c.do("GET", "/api/boards/"+boardID, nil)
+	mustStatus(t, resp, 200)
+	var snap boardSnapshot
+	c.decode(resp, &snap)
+	return snap
+}
+
+func mustAtoi(t *testing.T, s string) int64 {
+	t.Helper()
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 // TestPatchCardKind covers changing a card's kind after creation (and rejecting

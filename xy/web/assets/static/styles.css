@@ -5737,6 +5737,28 @@ body.is-fullscreen.od-page .match-main {
 .klist-add:hover .kadd-form { color: var(--text); }
 .kadd-form { width: 100%; }
 
+/* list group (list_of_lists): a bordered region whose single header spans its
+   member lists, so it reads as one unit on the board. */
+.kgroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-self: stretch;
+  max-height: 100%;
+  padding: var(--space-2);
+  border: 2px solid var(--blue-strong);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+}
+.kgroup-head {
+  padding: var(--space-1) var(--space-2);
+  font-weight: var(--fw-bold);
+  color: var(--blue-strong);
+}
+.kgroup-title { white-space: nowrap; }
+.kgroup-lists { display: flex; gap: var(--space-3); align-items: flex-start; overflow: hidden; min-height: 0; }
+.kgroup-lists .klist { background: var(--kanban-col); }
+
 /* labels */
 .label-chip {
   display: inline-block;
@@ -6219,3 +6241,37 @@ textarea.fld-input { min-height: 3em; }
   .handouts-src { border-right: none; border-bottom: 1px solid var(--border); }
   .card-preview-body { max-height: 40vh; }
 }
+
+/* ── lists management modal ────────────────────────────────────────────────── */
+.lists-manage { width: min(560px, 100%); text-align: left; }
+.lists-manage-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--space-2); margin-bottom: var(--space-3);
+}
+.lists-manage-moverow { display: flex; align-items: center; gap: var(--space-2); }
+.lists-move-pos { width: 4.5rem; }
+.lists-manage-rows {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  max-height: 55vh; overflow-y: auto; padding: var(--space-1);
+}
+.lm-unit { border-radius: var(--radius-md); background: var(--structure); }
+.lm-unit.dragging { opacity: 0.5; }
+.lm-group { border: 2px solid var(--blue-strong); background: var(--accent-soft); padding: var(--space-1); }
+.lm-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); }
+.lm-check { display: inline-flex; align-items: center; }
+.lm-pos { color: var(--muted); font-size: var(--text-sm); min-width: 2.2rem; }
+.lm-handle { color: var(--muted); cursor: grab; font-size: var(--text-lg); line-height: 1; }
+.lm-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-group-title { font-weight: var(--fw-bold); color: var(--blue-strong); white-space: normal; }
+.lm-icon {
+  border: none; background: transparent; color: var(--muted);
+  cursor: var(--cursor-action); font-size: var(--text-sm); padding: 0 var(--space-1);
+}
+.lm-icon:hover { color: var(--text); }
+.lm-move { display: flex; align-items: center; gap: var(--space-1); }
+.lm-move-pos { width: 3.5rem; }
+.lm-members {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-2) calc(var(--space-5) + var(--space-2));
+}
+.lm-member { display: flex; align-items: center; padding: var(--space-0-5) var(--space-2); border-left: 2px solid var(--blue-strong); }

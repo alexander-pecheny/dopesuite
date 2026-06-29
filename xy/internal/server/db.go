@@ -169,7 +169,41 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV5(db); err != nil {
 		return err
 	}
+	if err := migrateV6(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV6 adds list grouping ("list_of_lists"): a named, ordered run of
+// consecutive lists that share a single question-numbering sequence and export
+// as one document. `list_groups` holds the encrypted group name; `lists.group_id`
+// is a nullable back-reference. Group membership + position are otherwise plain
+// structural metadata (the client keeps a group's lists consecutive by rank).
+func migrateV6(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 6`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+create table if not exists list_groups(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  name_enc blob not null,
+  created_at text not null,
+  updated_at text not null,
+  deleted_at text
+);
+alter table lists add column group_id integer references list_groups(id);
+create index if not exists idx_list_groups_board on list_groups(board_id);
+create index if not exists idx_lists_group on lists(group_id);
+insert or ignore into schema_versions(version, applied_at)
+  values(6, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV5 drops the unused board_player_map table. It backed the abandoned
