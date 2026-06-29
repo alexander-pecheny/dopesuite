@@ -10,15 +10,6 @@ import { xySync } from "./sync.js";
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle } = xyApp;
 const { keyBetween } = xyRank;
 
-// ---- light client-side profiling (opt-in) ----
-// Set localStorage["xy-timing"] = "1" in the browser console, then watch the
-// console while exporting / generating handouts to see where the time goes
-// (image gathering vs the server call vs rendering). Off by default.
-function perfNow() { try { return performance.now(); } catch (_) { return Date.now(); } }
-let xyTimingOn = false;
-try { xyTimingOn = !!localStorage.getItem("xy-timing"); } catch (_) {}
-function xyTiming(label, t0) { if (xyTimingOn) console.log(`[xy-timing] ${label}: ${Math.round(perfNow() - t0)}ms`); }
-
 // Mutation wrappers — every board mutation flows through the sync engine, which
 // sends it immediately when online or queues it (returning a negative temp id
 // for creates) when offline, reconciling on reconnect. `create` mints an id;
@@ -1004,19 +995,15 @@ async function exportList(list) {
     fd.append("filename", scope.title);
 
     // resolve referenced images from the cards' attachments (decrypt + attach)
-    const tGather = perfNow();
     const found = await appendImages(fd, cards, wanted);
-    xyTiming("docx export: gather images", tGather);
     const missing = [...wanted].filter((n) => !found.has(n));
     if (missing.length && !confirm(`Не найдены изображения: ${missing.join(", ")}. Продолжить?`)) {
       setStatus("saved");
       return;
     }
-    const tServer = perfNow();
     const res = await fetch("/api/export/docx", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
-    xyTiming("docx export: server render + download", tServer);
     const url = URL.createObjectURL(blob);
     const a = el("a", { href: url, download: scope.title + ".docx" });
     document.body.append(a);
@@ -1042,7 +1029,6 @@ let handoutsCtx = null;   // { list, cards, numbers }
 let handoutsPdfUrl = null;
 
 function openHandouts(list) {
-  const tOpen = perfNow();
   // Grouped lists generate one set of handouts for the whole list_of_lists, with
   // question numbers continuous across the group (numberQuestionCards over the
   // concatenated cards), matching the board + docx export.
@@ -1061,7 +1047,6 @@ function openHandouts(list) {
   // split_fit generation doesn't pay the gather+upload, and start heartbeating.
   ensureStaged(source).catch(() => {});
   startHandoutHeartbeat();
-  xyTiming("handouts modal open (generateHndt)", tOpen);
 }
 
 function clearHandoutsPdf() {
@@ -1115,15 +1100,10 @@ async function generateHandoutsPdf() {
   msg.textContent = "Генерация…";
   clearHandoutsPdf();
   try {
-    const tStage = perfNow();
     const fd = await handoutsBody(source);
-    xyTiming("handout pdf: ensure staged images", tStage);
-    const tServer = perfNow();
     const res = await fetch("/api/handouts/pdf", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
-    xyTiming("handout pdf: server render + download", tServer);
-    const tEmbed = perfNow();
     handoutsPdfUrl = URL.createObjectURL(blob);
     const embed = el("iframe", { class: "handouts-pdf-frame", src: handoutsPdfUrl, title: "PDF" });
     document.getElementById("handoutsPdf").replaceChildren(embed);
@@ -1131,7 +1111,6 @@ async function generateHandoutsPdf() {
     dl.href = handoutsPdfUrl;
     dl.setAttribute("download", (handoutsCtx.title || handoutsCtx.list.title || "handouts") + ".pdf");
     dl.hidden = false;
-    xyTiming("handout pdf: embed iframe", tEmbed);
     msg.textContent = "Готово.";
   } catch (err) {
     msg.textContent = "Не удалось сгенерировать: " + err.message;
@@ -1276,14 +1255,10 @@ async function generateSplitFitZip() {
   btn.disabled = true;
   msg.textContent = "Split-fit… (подбор раскладки может занять время)";
   try {
-    const tStage = perfNow();
     const fd = await handoutsBody(source);
-    xyTiming("split_fit: ensure staged images", tStage);
-    const tServer = perfNow();
     const res = await fetch("/api/handouts/split_fit", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
-    xyTiming("split_fit: server (chgksuite split_fit) + download", tServer);
     const url = URL.createObjectURL(blob);
     const a = el("a", { href: url, download: (handoutsCtx.title || handoutsCtx.list.title || "handouts") + ".zip" });
     document.body.append(a);
