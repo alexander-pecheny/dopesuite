@@ -985,9 +985,10 @@ async function exportList(list) {
   setStatus("saving");
   try {
     const source = cards.map((c) => c.desc.trim()).filter(Boolean).join("\n\n") + "\n";
-    // collect (img NAME ...) references
+    // collect (img …) references — the filename is the LAST token (the rest are
+    // w=/h=/big/inline options), so use imgName, not the first token.
     const wanted = new Set();
-    for (const m of source.matchAll(/\(img\s+([^\s)]+)/g)) wanted.add(m[1]);
+    for (const m of source.matchAll(/\(img\b([^)]*)\)/g)) { const n = imgName(m[1]); if (n) wanted.add(n); }
 
     const fd = new FormData();
     fd.append("source", source);
@@ -1111,39 +1112,8 @@ async function generateHandoutsPdf() {
   msg.textContent = "Генерация…";
   clearHandoutsPdf();
   try {
-    // images referenced as "image: NAME" (or inline "(img NAME)") in the source
-    const wanted = new Set();
-    for (const m of source.matchAll(/^\s*image:\s*(.+?)\s*$/gm)) wanted.add(m[1]);
-    for (const m of source.matchAll(/\(img\s+([^\s)]+)/g)) wanted.add(m[1]);
-
-    const fd = new FormData();
-    fd.append("source", source);
-    fd.append("filename", handoutsCtx.title || handoutsCtx.list.title || "handouts");
-
-    if (wanted.size) {
-      const seen = new Set();
-      for (const card of handoutsCtx.cards) {
-        let atts;
-        try { atts = await fetchJSON(`/api/cards/${card.id}/attachments`); } catch (_) { continue; }
-        for (const att of atts) {
-          let name = "";
-          try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) { continue; }
-          if (!wanted.has(name) || seen.has(name)) continue;
-          seen.add(name);
-          const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
-          if (!res.ok) continue;
-          const plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
-          fd.append("img", new Blob([plain], { type: att.mime }), name);
-        }
-      }
-      const missing = [...wanted].filter((n) => !seen.has(n));
-      if (missing.length && !confirm(`Не найдены изображения: ${missing.join(", ")}. Продолжить?`)) {
-        msg.textContent = "";
-        btn.disabled = false;
-        return;
-      }
-    }
-
+    const fd = await handoutsFormData(source);
+    if (!fd) { msg.textContent = ""; return; }
     const res = await fetch("/api/handouts/pdf", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
@@ -1162,7 +1132,75 @@ async function generateHandoutsPdf() {
   }
 }
 
+// handoutsFormData builds the multipart body shared by the PDF and split_fit
+// endpoints: the .hndt source + every referenced image (resolved + decrypted
+// from the cards' attachments; filename is the (img …) last token / "image:"
+// value). Returns null if the user cancels at the missing-images prompt.
+async function handoutsFormData(source) {
+  const wanted = new Set();
+  for (const m of source.matchAll(/^\s*image:\s*(.+?)\s*$/gm)) wanted.add(m[1]);
+  for (const m of source.matchAll(/\(img\b([^)]*)\)/g)) { const n = imgName(m[1]); if (n) wanted.add(n); }
+
+  const fd = new FormData();
+  fd.append("source", source);
+  fd.append("filename", handoutsCtx.title || handoutsCtx.list.title || "handouts");
+
+  if (wanted.size) {
+    const seen = new Set();
+    for (const card of handoutsCtx.cards) {
+      let atts;
+      try { atts = await fetchJSON(`/api/cards/${card.id}/attachments`); } catch (_) { continue; }
+      for (const att of atts) {
+        let name = "";
+        try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) { continue; }
+        if (!wanted.has(name) || seen.has(name)) continue;
+        seen.add(name);
+        const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
+        if (!res.ok) continue;
+        const plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
+        fd.append("img", new Blob([plain], { type: att.mime }), name);
+      }
+    }
+    const missing = [...wanted].filter((n) => !seen.has(n));
+    if (missing.length && !confirm(`Не найдены изображения: ${missing.join(", ")}. Продолжить?`)) return null;
+  }
+  return fd;
+}
+
+// generateSplitFitZip runs chgksuite's split_fit on the current .hndt (pages each
+// handout to fit, one fitted PDF per question + an all-questions PDF) and hands
+// the user a zip of all the PDFs. Online-only (shells out server-side).
+async function generateSplitFitZip() {
+  if (!handoutsCtx) return;
+  const msg = document.getElementById("handoutsMessage");
+  if (!xySync.isOnline()) { msg.textContent = "Split-fit доступен только онлайн."; return; }
+  const source = document.getElementById("handoutsSource").value;
+  if (!source.trim()) { msg.textContent = "Пустой источник."; return; }
+  const btn = document.getElementById("handoutsSplitFit");
+  btn.disabled = true;
+  msg.textContent = "Split-fit… (подбор раскладки может занять время)";
+  try {
+    const fd = await handoutsFormData(source);
+    if (!fd) { msg.textContent = ""; return; }
+    const res = await fetch("/api/handouts/split_fit", { method: "POST", credentials: "same-origin", body: fd });
+    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = el("a", { href: url, download: (handoutsCtx.title || handoutsCtx.list.title || "handouts") + ".zip" });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    msg.textContent = "Готово — zip со всеми PDF скачан.";
+  } catch (err) {
+    msg.textContent = "Split-fit не удался: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 document.getElementById("handoutsGenerate").addEventListener("click", generateHandoutsPdf);
+document.getElementById("handoutsSplitFit").addEventListener("click", generateSplitFitZip);
 document.getElementById("handoutsClose").addEventListener("click", closeHandouts);
 handoutsOverlay.addEventListener("pointerdown", (e) => { if (e.target === handoutsOverlay) closeHandouts(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !handoutsOverlay.hidden) closeHandouts(); });
