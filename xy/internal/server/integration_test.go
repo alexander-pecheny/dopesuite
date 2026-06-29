@@ -27,7 +27,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	if err != nil {
 		t.Fatalf("blobstore: %v", err)
 	}
-	srv := &server{db: db, blobs: blobs}
+	srv := &server{db: db, blobs: blobs, staging: newHandoutStaging()}
 	srv.assetSource, _ = staticSource()
 
 	mux := http.NewServeMux()
@@ -62,6 +62,9 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("DELETE /api/attachments/{id}", srv.handleDeleteAttachment)
 	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
 	mux.HandleFunc("POST /api/handouts/pdf", srv.handleHandoutsPDF)
+	mux.HandleFunc("POST /api/handouts/stage", srv.handleHandoutsStage)
+	mux.HandleFunc("POST /api/handouts/heartbeat", srv.handleHandoutsHeartbeat)
+	mux.HandleFunc("DELETE /api/handouts/stage", srv.handleHandoutsUnstage)
 	mux.HandleFunc("GET /api/tokens", srv.handleListTokens)
 	mux.HandleFunc("POST /api/tokens", srv.handleCreateToken)
 	mux.HandleFunc("DELETE /api/tokens/{id}", srv.handleRevokeToken)

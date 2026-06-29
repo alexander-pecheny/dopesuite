@@ -39,6 +39,8 @@ internal/server/       package server — the whole HTTP server
   export.go            POST /api/export/docx — Go docx fully in-process (chgk/docx), images included; no Python
   handouts.go          POST /api/handouts/pdf — Go handout render in-process (chgk/handout + typst, XY_TYPST_CMD);
                        POST /api/handouts/split_fit — shells out to `chgksuite handouts split_fit` (XY_CHGKSUITE_CMD), zips the per-question PDFs. Both normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
+  staging.go           handout image staging: /api/handouts/{stage,heartbeat,DELETE stage} — client uploads referenced images once on modal open; pdf/split_fit reuse them via a session id (reaped after ~1min of no heartbeat) instead of re-uploading each generate
+  debug.go             [timing] logs on export/handout endpoints, gated by XY_DEBUG_TIMING
 internal/chgk/         Go port of chgksuite's core (xy no longer shells out to Python for docx/handouts)
   fsource/             the "4s" parser (parse_4s parity; oracle-tested vs chgksuite --debug)
   handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans

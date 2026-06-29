@@ -10,6 +10,15 @@ import { xySync } from "./sync.js";
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle } = xyApp;
 const { keyBetween } = xyRank;
 
+// ---- light client-side profiling (opt-in) ----
+// Set localStorage["xy-timing"] = "1" in the browser console, then watch the
+// console while exporting / generating handouts to see where the time goes
+// (image gathering vs the server call vs rendering). Off by default.
+function perfNow() { try { return performance.now(); } catch (_) { return Date.now(); } }
+let xyTimingOn = false;
+try { xyTimingOn = !!localStorage.getItem("xy-timing"); } catch (_) {}
+function xyTiming(label, t0) { if (xyTimingOn) console.log(`[xy-timing] ${label}: ${Math.round(perfNow() - t0)}ms`); }
+
 // Mutation wrappers — every board mutation flows through the sync engine, which
 // sends it immediately when online or queues it (returning a negative temp id
 // for creates) when offline, reconciling on reconnect. `create` mints an id;
@@ -995,32 +1004,19 @@ async function exportList(list) {
     fd.append("filename", scope.title);
 
     // resolve referenced images from the cards' attachments (decrypt + attach)
-    if (wanted.size) {
-      const seen = new Set();
-      for (const card of cards) {
-        let atts;
-        try { atts = await fetchJSON(`/api/cards/${card.id}/attachments`); } catch (_) { continue; }
-        for (const att of atts) {
-          let name = "";
-          try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) { continue; }
-          if (!wanted.has(name) || seen.has(name)) continue;
-          seen.add(name);
-          const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
-          if (!res.ok) continue;
-          const plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
-          fd.append("img", new Blob([plain], { type: att.mime }), name);
-        }
-      }
-      const missing = [...wanted].filter((n) => !seen.has(n));
-      if (missing.length && !confirm(`Не найдены изображения: ${missing.join(", ")}. Продолжить?`)) {
-        setStatus("saved");
-        return;
-      }
+    const tGather = perfNow();
+    const found = await appendImages(fd, cards, wanted);
+    xyTiming("docx export: gather images", tGather);
+    const missing = [...wanted].filter((n) => !found.has(n));
+    if (missing.length && !confirm(`Не найдены изображения: ${missing.join(", ")}. Продолжить?`)) {
+      setStatus("saved");
+      return;
     }
-
+    const tServer = perfNow();
     const res = await fetch("/api/export/docx", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
+    xyTiming("docx export: server render + download", tServer);
     const url = URL.createObjectURL(blob);
     const a = el("a", { href: url, download: scope.title + ".docx" });
     document.body.append(a);
@@ -1046,6 +1042,7 @@ let handoutsCtx = null;   // { list, cards, numbers }
 let handoutsPdfUrl = null;
 
 function openHandouts(list) {
+  const tOpen = perfNow();
   // Grouped lists generate one set of handouts for the whole list_of_lists, with
   // question numbers continuous across the group (numberQuestionCards over the
   // concatenated cards), matching the board + docx export.
@@ -1060,6 +1057,11 @@ function openHandouts(list) {
   document.getElementById("handoutsMessage").textContent = source.trim() ? "" : "В списке нет вопросов с раздаточным материалом.";
   clearHandoutsPdf();
   handoutsOverlay.hidden = false;
+  // Pre-stage the referenced images now (in the background) so the first PDF /
+  // split_fit generation doesn't pay the gather+upload, and start heartbeating.
+  ensureStaged(source).catch(() => {});
+  startHandoutHeartbeat();
+  xyTiming("handouts modal open (generateHndt)", tOpen);
 }
 
 function clearHandoutsPdf() {
@@ -1096,6 +1098,7 @@ async function persistHandoutMeta() {
 
 async function closeHandouts() {
   handoutsOverlay.hidden = true;
+  unstageHandouts(); // stop heartbeat + delete the staged images server-side
   await persistHandoutMeta();
   clearHandoutsPdf();
   handoutsCtx = null;
@@ -1112,11 +1115,15 @@ async function generateHandoutsPdf() {
   msg.textContent = "Генерация…";
   clearHandoutsPdf();
   try {
-    const fd = await handoutsFormData(source);
-    if (!fd) { msg.textContent = ""; return; }
+    const tStage = perfNow();
+    const fd = await handoutsBody(source);
+    xyTiming("handout pdf: ensure staged images", tStage);
+    const tServer = perfNow();
     const res = await fetch("/api/handouts/pdf", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
+    xyTiming("handout pdf: server render + download", tServer);
+    const tEmbed = perfNow();
     handoutsPdfUrl = URL.createObjectURL(blob);
     const embed = el("iframe", { class: "handouts-pdf-frame", src: handoutsPdfUrl, title: "PDF" });
     document.getElementById("handoutsPdf").replaceChildren(embed);
@@ -1124,6 +1131,7 @@ async function generateHandoutsPdf() {
     dl.href = handoutsPdfUrl;
     dl.setAttribute("download", (handoutsCtx.title || handoutsCtx.list.title || "handouts") + ".pdf");
     dl.hidden = false;
+    xyTiming("handout pdf: embed iframe", tEmbed);
     msg.textContent = "Готово.";
   } catch (err) {
     msg.textContent = "Не удалось сгенерировать: " + err.message;
@@ -1132,39 +1140,127 @@ async function generateHandoutsPdf() {
   }
 }
 
-// handoutsFormData builds the multipart body shared by the PDF and split_fit
-// endpoints: the .hndt source + every referenced image (resolved + decrypted
-// from the cards' attachments; filename is the (img …) last token / "image:"
-// value). Returns null if the user cancels at the missing-images prompt.
-async function handoutsFormData(source) {
+// ---- handout image staging (server-side cache) ----
+// Opening the modal uploads the referenced images to the server once; every PDF
+// / split_fit generation then just references the session id, so the images
+// aren't re-decrypted + re-uploaded each time (which dominated the latency). A 5s
+// heartbeat keeps the session alive; the server reaps it after ~1 min of silence
+// (tab closed / backgrounded), and we re-stage on demand if it lapsed.
+const handoutsStage = { sessionId: null, names: null, inflight: null, heartbeat: null };
+
+function wantedImages(source) {
   const wanted = new Set();
   for (const m of source.matchAll(/^\s*image:\s*(.+?)\s*$/gm)) wanted.add(m[1]);
   for (const m of source.matchAll(/\(img\b([^)]*)\)/g)) { const n = imgName(m[1]); if (n) wanted.add(n); }
+  return wanted;
+}
 
+// stageImages gathers + decrypts the referenced images and uploads them to a new
+// server session, returning its id (null when there are none / on error).
+async function stageImages(source) {
+  const wanted = wantedImages(source);
+  if (!wanted.size) { handoutsStage.sessionId = null; handoutsStage.names = new Set(); return null; }
+  const fd = new FormData();
+  const found = await appendImages(fd, handoutsCtx.cards, wanted);
+  try {
+    const res = await fetch("/api/handouts/stage", { method: "POST", credentials: "same-origin", body: fd });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { session } = await res.json();
+    handoutsStage.sessionId = session;
+    handoutsStage.names = found;
+    return session;
+  } catch (_) { handoutsStage.sessionId = null; return null; }
+}
+
+// ensureStaged returns a session id whose staged images cover the source's
+// references, staging once if needed (deduped). null when the source has none.
+async function ensureStaged(source) {
+  const wanted = wantedImages(source);
+  if (!wanted.size) return null;
+  if (handoutsStage.sessionId && handoutsStage.names && [...wanted].every((n) => handoutsStage.names.has(n))) {
+    return handoutsStage.sessionId;
+  }
+  if (handoutsStage.inflight) return handoutsStage.inflight;
+  handoutsStage.inflight = stageImages(source).finally(() => { handoutsStage.inflight = null; });
+  return handoutsStage.inflight;
+}
+
+// sendHeartbeat pings the session; returns false (and clears it) when the server
+// reaped it, so the next ensureStaged re-stages.
+async function sendHeartbeat() {
+  if (!handoutsStage.sessionId) return false;
+  try {
+    const fd = new FormData();
+    fd.append("session", handoutsStage.sessionId);
+    const res = await fetch("/api/handouts/heartbeat", { method: "POST", credentials: "same-origin", body: fd });
+    if (res.ok) return true;
+    handoutsStage.sessionId = null;
+    return false;
+  } catch (_) { return false; }
+}
+
+function startHandoutHeartbeat() {
+  stopHandoutHeartbeat();
+  handoutsStage.heartbeat = setInterval(sendHeartbeat, 5000);
+}
+function stopHandoutHeartbeat() {
+  if (handoutsStage.heartbeat) { clearInterval(handoutsStage.heartbeat); handoutsStage.heartbeat = null; }
+}
+async function unstageHandouts() {
+  stopHandoutHeartbeat();
+  const sid = handoutsStage.sessionId;
+  handoutsStage.sessionId = null;
+  handoutsStage.names = null;
+  if (sid) { try { await fetch(`/api/handouts/stage?session=${encodeURIComponent(sid)}`, { method: "DELETE", credentials: "same-origin" }); } catch (_) {} }
+}
+
+// handoutsBody builds the generate request body: the source + (when there are
+// images) the staged session id, so images aren't re-sent each generate.
+async function handoutsBody(source) {
   const fd = new FormData();
   fd.append("source", source);
   fd.append("filename", handoutsCtx.title || handoutsCtx.list.title || "handouts");
-
-  if (wanted.size) {
-    const seen = new Set();
-    for (const card of handoutsCtx.cards) {
-      let atts;
-      try { atts = await fetchJSON(`/api/cards/${card.id}/attachments`); } catch (_) { continue; }
-      for (const att of atts) {
-        let name = "";
-        try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) { continue; }
-        if (!wanted.has(name) || seen.has(name)) continue;
-        seen.add(name);
-        const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
-        if (!res.ok) continue;
-        const plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
-        fd.append("img", new Blob([plain], { type: att.mime }), name);
-      }
-    }
-    const missing = [...wanted].filter((n) => !seen.has(n));
-    if (missing.length && !confirm(`Не найдены изображения: ${missing.join(", ")}. Продолжить?`)) return null;
-  }
+  const sid = await ensureStaged(source);
+  if (sid) fd.append("session", sid);
   return fd;
+}
+
+// Revive the staged session when the user returns to a backgrounded tab (its
+// heartbeats may have lapsed and the server reaped it).
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState !== "visible" || handoutsOverlay.hidden || !handoutsCtx) return;
+  if (!(await sendHeartbeat())) ensureStaged(document.getElementById("handoutsSource").value).catch(() => {});
+});
+
+// appendImages resolves each wanted image to its decrypted bytes and appends it
+// to fd as an "img" part. The cards' attachment lists are fetched in parallel
+// (the old per-card sequential scan dominated handout/export latency), and the
+// matched image bodies are fetched in parallel too. Returns the set of resolved
+// names so the caller can prompt about any still missing.
+async function appendImages(fd, cards, wanted) {
+  const found = new Set();
+  if (!wanted.size) return found;
+  const lists = await Promise.all(cards.map((c) =>
+    fetchJSON(`/api/cards/${c.id}/attachments`).catch(() => [])));
+  const targets = new Map(); // name → attachment (first match wins)
+  for (const atts of lists) {
+    for (const att of atts) {
+      let name = "";
+      try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) { continue; }
+      if (wanted.has(name) && !targets.has(name)) targets.set(name, att);
+    }
+    if (targets.size >= wanted.size) break;
+  }
+  await Promise.all([...targets].map(async ([name, att]) => {
+    try {
+      const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
+      if (!res.ok) return;
+      const plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
+      fd.append("img", new Blob([plain], { type: att.mime }), name);
+      found.add(name);
+    } catch (_) {}
+  }));
+  return found;
 }
 
 // generateSplitFitZip runs chgksuite's split_fit on the current .hndt (pages each
@@ -1180,11 +1276,14 @@ async function generateSplitFitZip() {
   btn.disabled = true;
   msg.textContent = "Split-fit… (подбор раскладки может занять время)";
   try {
-    const fd = await handoutsFormData(source);
-    if (!fd) { msg.textContent = ""; return; }
+    const tStage = perfNow();
+    const fd = await handoutsBody(source);
+    xyTiming("split_fit: ensure staged images", tStage);
+    const tServer = perfNow();
     const res = await fetch("/api/handouts/split_fit", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
+    xyTiming("split_fit: server (chgksuite split_fit) + download", tServer);
     const url = URL.createObjectURL(blob);
     const a = el("a", { href: url, download: (handoutsCtx.title || handoutsCtx.list.title || "handouts") + ".zip" });
     document.body.append(a);

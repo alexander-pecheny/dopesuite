@@ -81,7 +81,9 @@ func Render(ctx context.Context, hndt string, images map[string][]byte, a Args, 
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, typstPath, "compile", "--root", "/", "--font-path", fonts, "source.typ", "source.pdf")
+	// --ignore-system-fonts: we bundle the only font we use (Noto Sans), so skip
+	// scanning the OS font dirs on every invocation.
+	cmd := exec.CommandContext(ctx, typstPath, "compile", "--root", "/", "--font-path", fonts, "--ignore-system-fonts", "source.typ", "source.pdf")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		msg := strings.TrimSpace(string(out))
