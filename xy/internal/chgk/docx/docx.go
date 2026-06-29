@@ -3,12 +3,11 @@
 // to a .docx by generating word/document.xml and repackaging chgksuite's
 // template.docx (reused verbatim for its named styles / page setup). Inline 4s
 // markup and the non-breaking-space gluing are ported from the validated xy
-// client logic (chgk.js). See docx_test.go for text-parity checks against
+// client logic (chgk.js). Images referenced by (img …) are re-encoded to PNG and
+// embedded (see images.go). See docx_test.go for text-parity checks against
 // chgksuite's own `compose docx` output.
 //
-// Not yet ported: image embedding ((img …) runs render no text, like a missing
-// image), screen-mode versions, and PDF/size optimization. xy routes
-// image-bearing exports accordingly (see the server handler).
+// Not ported (rare for xy): screen-mode versions and PDF/size optimization.
 package docx
 
 import (
@@ -33,69 +32,74 @@ var labels = map[string]string{
 	"author": "Автор", "handout": "Раздаточный материал",
 }
 
-// Export renders the parsed structure to .docx bytes.
-func Export(doc fsource.Doc) ([]byte, error) {
-	body := renderBody(doc)
-	return repackage(body)
+// exporter holds the per-export image collector. Image relationship and docPr
+// ids start high to avoid colliding with the template's existing rIds (1–6).
+type exporter struct {
+	images  map[string][]byte // referenced image name → bytes (any format)
+	media   []mediaItem       // collected, written into the docx
+	nextRel int
+	nextDoc int
+}
+
+// Export renders the parsed structure to .docx bytes. images maps the names used
+// in (img …) directives to their bytes (any format; re-encoded to PNG).
+func Export(doc fsource.Doc, images map[string][]byte) ([]byte, error) {
+	e := &exporter{images: images, nextRel: 1000, nextDoc: 1000}
+	body := e.renderBody(doc)
+	return e.repackage(body)
 }
 
 // ── document body generation (DocxExporter.export loop, chgk/non-screen) ──
 
-func renderBody(doc fsource.Doc) string {
+func (e *exporter) renderBody(doc fsource.Doc) string {
 	var b strings.Builder
-	firstHeading := true
 	firstTour := true
-	for i, p := range doc {
+	for _, p := range doc {
 		switch p.Type {
 		case "meta":
-			b.WriteString(para("", renderValue(p.Content, true)))
+			b.WriteString(para("", e.renderValue(p.Content, true)))
 			b.WriteString("<w:p/>") // chgksuite adds a trailing empty paragraph
 		case "heading", "ljheading":
 			style := ""
 			if p.Type == "heading" {
 				style = "Heading1"
 			}
-			_ = firstHeading
-			firstHeading = false
-			b.WriteString(para(style, renderValue(p.Content, true)+brk()))
+			b.WriteString(para(style, e.renderValue(p.Content, true)+brk()))
 		case "section":
 			pb := !firstTour
 			firstTour = false
-			b.WriteString(paraEx("Heading2", renderValue(p.Content, true)+brk(), pb))
+			b.WriteString(paraEx("Heading2", e.renderValue(p.Content, true)+brk(), pb))
 		case "editor", "date":
-			b.WriteString(para("", renderValue(p.Content, true)+brk()))
+			b.WriteString(para("", e.renderValue(p.Content, true)+brk()))
 		case "Question":
 			if q, ok := p.Content.(*fsource.Question); ok {
-				b.WriteString(renderQuestion(q))
+				b.WriteString(e.renderQuestion(q))
 			}
 		default:
 			// battle/round/theme/number/setcounter etc. — not used by xy exports
 		}
-		_ = i
 	}
 	return b.String()
 }
 
-func renderQuestion(q *fsource.Question) string {
+func (e *exporter) renderQuestion(q *fsource.Question) string {
 	var p1 strings.Builder
-	// "Вопрос N. " (bold)
 	p1.WriteString(boldRun(questionLabel(q) + ". "))
 	if h := q.Get("handout"); h != nil {
 		p1.WriteString(brk())
 		p1.WriteString(plainRun("[" + labelFor(q, "handout") + ": "))
-		p1.WriteString(renderValue(h, false))
+		p1.WriteString(e.renderValue(h, false))
 		p1.WriteString(brk())
 		p1.WriteString(plainRun("]"))
 	}
 	p1.WriteString(brk())
-	p1.WriteString(renderValue(q.Get("question"), true))
+	p1.WriteString(e.renderValue(q.Get("question"), true))
 
 	out := para("", p1.String())
 
-	// answer paragraph
 	var p2 strings.Builder
 	p2.WriteString(boldRun(labelFor(q, "answer") + ": "))
-	p2.WriteString(renderValue(q.Get("answer"), true))
+	p2.WriteString(e.renderValue(q.Get("answer"), true))
 
 	srcPara := "" // source starts a fresh paragraph
 	for _, field := range []string{"zachet", "nezachet", "comment", "source", "author"} {
@@ -104,7 +108,7 @@ func renderQuestion(q *fsource.Question) string {
 			continue
 		}
 		nbsp := field != "source"
-		seg := boldRun(labelFor(q, field)+": ") + renderValue(v, nbsp)
+		seg := boldRun(labelFor(q, field)+": ") + e.renderValue(v, nbsp)
 		if field == "source" {
 			srcPara = seg
 		} else if srcPara != "" {
@@ -146,12 +150,11 @@ func labelFor(q *fsource.Question, field string) string {
 	return labels[field]
 }
 
-// renderValue renders a field value (string or list) to run XML. nbsp applies
-// the non-breaking-space gluing (everything but sources).
-func renderValue(v any, nbsp bool) string {
+// renderValue renders a field value (string or list) to run XML.
+func (e *exporter) renderValue(v any, nbsp bool) string {
 	switch val := v.(type) {
 	case string:
-		return renderRuns(val, nbsp)
+		return e.renderRuns(val, nbsp)
 	case []any:
 		preamble := ""
 		var items []any
@@ -166,12 +169,12 @@ func renderValue(v any, nbsp bool) string {
 		}
 		var b strings.Builder
 		if preamble != "" {
-			b.WriteString(renderRuns(preamble, nbsp))
+			b.WriteString(e.renderRuns(preamble, nbsp))
 		}
 		for i, it := range items {
 			b.WriteString(brk())
 			b.WriteString(plainRun(fmt.Sprintf("%d. ", i+1)))
-			b.WriteString(renderRuns(fmt.Sprintf("%v", it), nbsp))
+			b.WriteString(e.renderRuns(fmt.Sprintf("%v", it), nbsp))
 		}
 		return b.String()
 	}
@@ -179,7 +182,7 @@ func renderValue(v any, nbsp bool) string {
 }
 
 // renderRuns tokenizes inline 4s markup and emits run XML.
-func renderRuns(text string, nbsp bool) string {
+func (e *exporter) renderRuns(text string, nbsp bool) string {
 	var b strings.Builder
 	for _, r := range parse4sElem(text) {
 		switch r.Kind {
@@ -188,7 +191,7 @@ func renderRuns(text string, nbsp bool) string {
 		case "pagebreak":
 			b.WriteString(`<w:r><w:br w:type="page"/></w:r>`)
 		case "img":
-			// not embedded yet — render nothing (like a missing image)
+			b.WriteString(e.embedImage(r.Text))
 		case "screen":
 			b.WriteString(emitText(r.ForPrint, nbsp, ""))
 		case "hyperlink":
@@ -285,11 +288,11 @@ func xmlEscape(s string) string {
 	return s
 }
 
-// ── repackage template.docx with the generated body ──
+// ── repackage template.docx with the generated body + embedded images ──
 
 var reBodyOpen = regexp.MustCompile(`<w:body[^>]*>`)
 
-func repackage(body string) ([]byte, error) {
+func (e *exporter) repackage(body string) ([]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(templateDocx), int64(len(templateDocx)))
 	if err != nil {
 		return nil, err
@@ -297,10 +300,6 @@ func repackage(body string) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	for _, f := range zr.File {
-		w, err := zw.Create(f.Name)
-		if err != nil {
-			return nil, err
-		}
 		rc, err := f.Open()
 		if err != nil {
 			return nil, err
@@ -310,10 +309,33 @@ func repackage(body string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if f.Name == "word/document.xml" {
+		switch f.Name {
+		case "word/document.xml":
 			data = []byte(injectBody(string(data), body))
+		case "word/_rels/document.xml.rels":
+			if len(e.media) > 0 {
+				data = []byte(injectRels(string(data), e.media))
+			}
+		case "[Content_Types].xml":
+			if len(e.media) > 0 {
+				data = []byte(injectPNGContentType(string(data)))
+			}
+		}
+		w, err := zw.Create(f.Name)
+		if err != nil {
+			return nil, err
 		}
 		if _, err := w.Write(data); err != nil {
+			return nil, err
+		}
+	}
+	// add the media parts
+	for _, m := range e.media {
+		w, err := zw.Create("word/" + m.partName)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := w.Write(m.data); err != nil {
 			return nil, err
 		}
 	}
@@ -334,11 +356,27 @@ func injectBody(docXML, body string) string {
 	inner := docXML[openLoc[1]:closeIdx]
 	sect := ""
 	if s := strings.LastIndex(inner, "<w:sectPr"); s >= 0 {
-		if e := strings.Index(inner[s:], "</w:sectPr>"); e >= 0 {
-			sect = inner[s : s+e+len("</w:sectPr>")]
+		if end := strings.Index(inner[s:], "</w:sectPr>"); end >= 0 {
+			sect = inner[s : s+end+len("</w:sectPr>")]
 		} else {
-			sect = inner[s:] // self-closing or trailing
+			sect = inner[s:]
 		}
 	}
 	return docXML[:openLoc[1]] + body + sect + docXML[closeIdx:]
+}
+
+func injectRels(rels string, media []mediaItem) string {
+	const imgType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+	var add strings.Builder
+	for _, m := range media {
+		add.WriteString(fmt.Sprintf(`<Relationship Id="%s" Type="%s" Target="%s"/>`, m.relID, imgType, m.partName))
+	}
+	return strings.Replace(rels, "</Relationships>", add.String()+"</Relationships>", 1)
+}
+
+func injectPNGContentType(ct string) string {
+	if strings.Contains(ct, `Extension="png"`) {
+		return ct
+	}
+	return strings.Replace(ct, "</Types>", `<Default Extension="png" ContentType="image/png"/></Types>`, 1)
 }

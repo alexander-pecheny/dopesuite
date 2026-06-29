@@ -1,13 +1,19 @@
 package server
 
 import (
+	"archive/zip"
 	"bytes"
+	"image"
+	"image/color"
+	"image/png"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -151,36 +157,20 @@ func TestPatchCardKind(t *testing.T) {
 	}
 }
 
-// TestExportDocx drives the export endpoint with a fake chgksuite that asserts
-// the scratch dir holds source.4s + the referenced image, then writes a .docx.
+// TestExportDocx drives the export endpoint with a real PNG and verifies the Go
+// exporter embeds it: the response is a valid docx zip carrying a word/media
+// image part and a <w:drawing> referencing it. (Image-bearing docx used to fall
+// back to chgksuite; it's now pure Go.)
 func TestExportDocx(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell fake not portable to windows")
-	}
 	ts, srv := newTestServer(t)
 	c := registerUser(t, srv, ts, 770200, "exp")
 
-	// fake chgksuite: verifies the inputs landed, emits result.docx.
-	dir := t.TempDir()
-	script := filepath.Join(dir, "fake-chgksuite")
-	body := "#!/bin/sh\n" +
-		"set -e\n" +
-		"[ -f source.4s ] || { echo 'no source' >&2; exit 1; }\n" +
-		"[ -f pic.jpg ] || { echo 'no image' >&2; exit 1; }\n" +
-		"grep -q 'img pic.jpg' source.4s || { echo 'source missing img directive' >&2; exit 1; }\n" +
-		"printf 'PK-fake-docx' > result.docx\n"
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XY_CHGKSUITE_CMD", script)
-
-	// multipart: source + one image part named "img".
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
-	_ = mw.WriteField("source", "? Что на картинке?\n(img pic.jpg)\n! кот\n")
+	_ = mw.WriteField("source", "? Что на картинке? (img pic.png)\n! кот\n@ Автор\n")
 	_ = mw.WriteField("filename", "Тур 1")
-	fw, _ := mw.CreateFormFile("img", "pic.jpg")
-	fw.Write([]byte("\xff\xd8\xff fake jpeg bytes"))
+	fw, _ := mw.CreateFormFile("img", "pic.png")
+	fw.Write(tinyPNG(t))
 	mw.Close()
 
 	req, _ := http.NewRequest("POST", ts.URL+"/api/export/docx", &buf)
@@ -194,14 +184,46 @@ func TestExportDocx(t *testing.T) {
 	}
 	mustStatus(t, resp, 200)
 	defer resp.Body.Close()
-	if ct := resp.Header.Get("Content-Type"); ct != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
-		t.Fatalf("content-type = %q", ct)
-	}
 	out := new(bytes.Buffer)
 	out.ReadFrom(resp.Body)
-	if out.String() != "PK-fake-docx" {
-		t.Fatalf("body = %q", out.String())
+	b := out.Bytes()
+
+	zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		t.Fatalf("response is not a docx zip: %v", err)
 	}
+	var hasMedia, hasDrawing bool
+	for _, f := range zr.File {
+		if strings.HasPrefix(f.Name, "word/media/image") {
+			hasMedia = true
+		}
+		if f.Name == "word/document.xml" {
+			rc, _ := f.Open()
+			d, _ := io.ReadAll(rc)
+			rc.Close()
+			if strings.Contains(string(d), "<w:drawing>") && strings.Contains(string(d), "r:embed=") {
+				hasDrawing = true
+			}
+		}
+	}
+	if !hasMedia {
+		t.Error("docx has no embedded image part")
+	}
+	if !hasDrawing {
+		t.Error("document.xml has no <w:drawing> referencing the image")
+	}
+}
+
+// tinyPNG returns a minimal valid PNG for image-embedding tests.
+func tinyPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 3, 2))
+	img.Set(0, 0, color.RGBA{255, 0, 0, 255})
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
 }
 
 // TestExportDocxRealChgksuite drives the endpoint through the actual chgksuite
