@@ -20,6 +20,15 @@ import (
 // so a single request can't exhaust memory during parsing.
 const maxExportRequest = 64 << 20
 
+// normalizeNewlines collapses CRLF/CR to LF. Browsers normalize textarea/text
+// field values to CRLF in multipart/form-data, which would otherwise leave a
+// stray \r on every line — breaking the 4s parser and the .hndt "---" block
+// separators (server parsers split on \n).
+func normalizeNewlines(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.ReplaceAll(s, "\r", "\n")
+}
+
 // safeImageName reduces a client-supplied filename to a path-free base name,
 // rejecting empties and traversal attempts. Images in the 4s source are
 // referenced by base name, so this is what the (img …) directives look for.
@@ -51,7 +60,7 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "bad multipart form")
 		return
 	}
-	source := r.FormValue("source")
+	source := normalizeNewlines(r.FormValue("source"))
 	if strings.TrimSpace(source) == "" {
 		httpError(w, http.StatusBadRequest, "empty source")
 		return

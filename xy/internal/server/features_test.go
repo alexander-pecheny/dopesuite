@@ -319,6 +319,50 @@ func TestHandoutsPDF(t *testing.T) {
 	}
 }
 
+// TestHandoutsPDFMultiBlockCRLF guards the CRLF regression: browsers send
+// textarea values as CRLF in multipart, which used to collapse the "---"-
+// separated .hndt blocks into one. The fake typst asserts 3 #handout blocks
+// survived into the generated source.typ.
+func TestHandoutsPDFMultiBlockCRLF(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fake not portable to windows")
+	}
+	ts, srv := newTestServer(t)
+	c := registerUser(t, srv, ts, 770550, "hndtm")
+
+	dir := t.TempDir()
+	script := filepath.Join(dir, "fake-typst")
+	body := "#!/bin/sh\n" +
+		"set -e\n" +
+		"n=$(grep -c '#handout(' source.typ || true)\n" +
+		"[ \"$n\" = 3 ] || { echo \"expected 3 blocks, got $n\" >&2; exit 1; }\n" +
+		"eval \"out=\\${$#}\"\n" +
+		"printf '%%PDF-fake' > \"$out\"\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XY_TYPST_CMD", script)
+
+	// CRLF line endings, как их шлёт браузер.
+	src := "for_question: 2\r\ncolumns: 3\r\n\r\nПервый\r\n---\r\nfor_question: 7\r\ncolumns: 3\r\n\r\nВторой\r\n---\r\nfor_question: 13\r\ncolumns: 3\r\n\r\nТретий\r\n"
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	_ = mw.WriteField("source", src)
+	mw.Close()
+
+	req, _ := http.NewRequest("POST", ts.URL+"/api/handouts/pdf", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	for _, ck := range c.jar {
+		req.AddCookie(ck)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustStatus(t, resp, 200)
+	resp.Body.Close()
+}
+
 // TestHandoutsPDFRejectsEmpty checks the empty-source guard.
 func TestHandoutsPDFRejectsEmpty(t *testing.T) {
 	ts, srv := newTestServer(t)
