@@ -335,56 +335,6 @@ func (s *server) handlePutKeymeta(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---- player map (test lists: rating.chgk.info id → name, encrypted blob) ----
-
-func (s *server) handleGetPlayerMap(w http.ResponseWriter, r *http.Request) {
-	_, bid, _, ok := s.requireBoard(w, r, "id")
-	if !ok {
-		return
-	}
-	var payload []byte
-	err := s.db.QueryRowContext(r.Context(), `select payload_enc from board_player_map where board_id = ?`, bid).Scan(&payload)
-	if errors.Is(err, sql.ErrNoRows) {
-		writeJSON(w, map[string]any{"payload_enc": nil})
-		return
-	}
-	if handleErr(w, err) {
-		return
-	}
-	writeJSON(w, map[string]any{"payload_enc": b64(payload)})
-}
-
-type putPlayerMapRequest struct {
-	PayloadEnc string `json:"payload_enc"`
-}
-
-func (s *server) handlePutPlayerMap(w http.ResponseWriter, r *http.Request) {
-	_, bid, _, ok := s.requireBoard(w, r, "id")
-	if !ok {
-		return
-	}
-	var req putPlayerMapRequest
-	if !readJSON(w, r, &req) {
-		return
-	}
-	payload, err := unb64(req.PayloadEnc)
-	if err != nil {
-		httpError(w, http.StatusBadRequest, "invalid payload_enc")
-		return
-	}
-	err = s.withWriteTx(r.Context(), "put-player-map", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `
-insert into board_player_map(board_id, payload_enc, updated_at) values(?, ?, ?)
-on conflict(board_id) do update set payload_enc = excluded.payload_enc, updated_at = excluded.updated_at`,
-			bid, payload, rfc3339(time.Now()))
-		return err
-	})
-	if handleErr(w, err) {
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 // ---- members ----
 
 type memberDTO struct {

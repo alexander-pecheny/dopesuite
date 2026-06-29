@@ -144,12 +144,6 @@ create table if not exists attachments(
   deleted_at text
 );
 
-create table if not exists board_player_map(
-  board_id integer primary key references boards(id) on delete cascade,
-  payload_enc blob not null,
-  updated_at text not null
-);
-
 create index if not exists idx_lists_board on lists(board_id);
 create index if not exists idx_cards_list on cards(list_id);
 create index if not exists idx_cards_board on cards(board_id);
@@ -172,7 +166,30 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV4(db); err != nil {
 		return err
 	}
+	if err := migrateV5(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV5 drops the unused board_player_map table. It backed the abandoned
+// "integer player ids → name" model for test cards; testers are now stored as
+// plaintext strings inside each test card's encrypted description, so the table
+// never held data worth keeping.
+func migrateV5(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 5`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+drop table if exists board_player_map;
+insert or ignore into schema_versions(version, applied_at)
+  values(5, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV4 adds cards.handout_meta_enc: an optional encrypted blob holding the

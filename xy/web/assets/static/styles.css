@@ -6191,6 +6191,8 @@ textarea.fld-input { min-height: 3em; }
   border-radius: var(--radius-sm); cursor: var(--cursor-action);
 }
 .seg-btn.active { background: var(--surface); color: var(--text-strong); box-shadow: var(--shadow-sm); }
+/* test-card tester rows: игрок/команда toggle sits inline with the name input */
+.tester-seg { margin-bottom: 0; flex: none; }
 /* author tags */
 .fld-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
 .fld-tag {

@@ -117,17 +117,17 @@ Config via `.env` (see `.env.example`). Telegram register/login needs
 **Functionally complete.** Built & tested:
 - scaffold, auth (password + telegram bridge + bot binary), session middleware;
 - client crypto (`crypto.js`) + IndexedDB key cache; fractional ranks (`rank.js`);
-- full API: boards/members/keymeta/lists/cards/labels/timeline/attachments/
-  player-map, all behind write-tx + ACL; encrypted blob store;
+- full API: boards/members/keymeta/lists/cards/labels/timeline/attachments,
+  all behind write-tx + ACL; encrypted blob store;
 - kanban UI: unlock, drag-reorder, derived titles, optimistic updates;
 - card detail: monospace editor, desc diffs, labels, comments, attachments
   (WebP q70 recompress + encrypt + upload/download/delete);
-- test lists/cards (datetime title, player-id description, auto green/red labels);
+- test lists/cards (datetime title, tester list — players/teams, auto green/red labels);
 - cross-board copy/move with client-side re-encryption + label reconcile;
 - `deploy.py` SSH template.
 
 Test coverage: Go integration tests (`internal/server/*_test.go`) cover the full
-register→board→card→label→timeline→attachment→player-map flow + ACL rejection;
+register→board→card→label→timeline→attachment flow + ACL rejection;
 node tests (`jstest/`) cover crypto round-trips/tamper/rewrap and rank ordering.
 
 node tests also cover the offline sync engine (temp-id remapping, snapshot apply,

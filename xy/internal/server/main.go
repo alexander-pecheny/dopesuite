@@ -85,8 +85,6 @@ func Main() {
 	mux.HandleFunc("DELETE /api/boards/{id}", srv.handleDeleteBoard)
 	mux.HandleFunc("GET /api/boards/{id}/keymeta", srv.handleGetKeymeta)
 	mux.HandleFunc("PUT /api/boards/{id}/keymeta", srv.handlePutKeymeta)
-	mux.HandleFunc("GET /api/boards/{id}/player-map", srv.handleGetPlayerMap)
-	mux.HandleFunc("PUT /api/boards/{id}/player-map", srv.handlePutPlayerMap)
 	mux.HandleFunc("GET /api/boards/{id}/members", srv.handleListMembers)
 	mux.HandleFunc("POST /api/boards/{id}/members", srv.handleAddMember)
 	mux.HandleFunc("DELETE /api/boards/{id}/members/{userId}", srv.handleRemoveMember)

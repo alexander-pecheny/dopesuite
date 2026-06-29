@@ -8,9 +8,8 @@ import (
 	"testing"
 )
 
-// TestAttachmentsAndPlayerMap exercises the attachment upload/download/delete
-// round-trip and the encrypted player-map endpoints.
-func TestAttachmentsAndPlayerMap(t *testing.T) {
+// TestAttachments exercises the attachment upload/download/delete round-trip.
+func TestAttachments(t *testing.T) {
 	ts, srv := newTestServer(t)
 	c := registerUser(t, srv, ts, 556001, "att-user")
 
@@ -96,17 +95,4 @@ func TestAttachmentsAndPlayerMap(t *testing.T) {
 	mustStatus(t, resp, 204)
 	dresp = c.do("GET", "/api/attachments/"+itoa(att.ID), nil)
 	mustStatus(t, dresp, 404)
-
-	// player map round-trips
-	resp = c.do("PUT", "/api/boards/"+itoa(b.ID)+"/player-map", map[string]string{"payload_enc": enc(`{"123":"Иванов"}`)})
-	mustStatus(t, resp, 204)
-	resp = c.do("GET", "/api/boards/"+itoa(b.ID)+"/player-map", nil)
-	mustStatus(t, resp, 200)
-	var pm struct {
-		PayloadEnc string `json:"payload_enc"`
-	}
-	c.decode(resp, &pm)
-	if dec(pm.PayloadEnc) != `{"123":"Иванов"}` {
-		t.Fatalf("player map = %q", dec(pm.PayloadEnc))
-	}
 }
