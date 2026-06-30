@@ -100,6 +100,10 @@ document.getElementById("unlockForm").addEventListener("submit", async (e) => {
 // "forget password" (rarely needed) don't warrant header buttons.
 // dopeMenu.setExtras renders them as actions.
 window.dopeMenu?.setExtras([{
+  label: "✏️ Переименовать доску",
+  title: "Изменить название доски",
+  onClick: () => renameBoard(),
+}, {
   label: "📋 Управление списками",
   title: "Переупорядочить списки и связать их в группы (списки списков)",
   onClick: () => openListsManage(),
@@ -118,7 +122,41 @@ window.dopeMenu?.setExtras([{
     await xyCrypto.forgetDK(boardId);
     location.reload();
   },
+}, {
+  label: "🗑 Удалить доску",
+  title: "Удалить доску со всеми списками и карточками (только владелец)",
+  onClick: () => deleteBoard(),
 }]);
+
+// renameBoard / deleteBoard touch board-level metadata, which isn't part of the
+// per-board sync outbox (lists/cards) — so both are online-only. The server soft-
+// deletes the board (owner-only) and excludes it from the board list thereafter.
+async function renameBoard() {
+  const name = prompt("Новое название доски:", state.name || "");
+  if (name == null) return;
+  const t = name.trim();
+  if (!t || t === state.name) return;
+  if (!xySync.isOnline()) { alert("Переименование доски доступно только онлайн."); return; }
+  setStatus("saving");
+  try {
+    await jpatch(`/api/boards/${boardId}`, { name_enc: await xyCrypto.encField(dk, t) });
+    state.name = t;
+    titleNode.textContent = t;
+    document.title = t + " · xy";
+    setStatus("saved");
+  } catch (err) { setStatus("error"); alert("Не удалось переименовать: " + err.message); }
+}
+
+async function deleteBoard() {
+  if (state.role !== "owner") { alert("Удалить доску может только её владелец."); return; }
+  if (!confirm(`Удалить доску «${state.name || ""}» со всеми списками и карточками? Это действие необратимо.`)) return;
+  if (!xySync.isOnline()) { alert("Удаление доски доступно только онлайн."); return; }
+  try {
+    await jdelete(`/api/boards/${boardId}`);
+    try { await xyCrypto.forgetDK(boardId); } catch (_) {}
+    location.href = "/";
+  } catch (err) { alert("Не удалось удалить: " + err.message); }
+}
 
 // fixTrelloFormattingBoard re-applies chgksuite's Trello clean-up (the same fix
 // the importer runs) to every already-imported card whose description still
@@ -299,6 +337,7 @@ async function load() {
     render();
     setStatus("saved");
     loadMembers(); // best-effort: populate the author-name map for timelines (online only)
+    maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
   } catch (e) {
     setStatus("error");
     console.error(e);
@@ -378,6 +417,7 @@ function renderList(list, precomputedNumbers) {
     items.push(
       { label: "🔍 Предпросмотр", onClick: () => previewList(list) },
       { label: "↔ Переместить список…", onClick: () => openMoveList(list) },
+      { label: "✏️ Переименовать список", onClick: () => renameList(list) },
     );
     // docx export / handout generation are question-list features; skip them for
     // test lists (whose cards hold tester sessions, not 4s questions).
@@ -388,6 +428,7 @@ function renderList(list, precomputedNumbers) {
         { label: grouped ? "🧩 Генерация раздаток (вся группа)" : "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
       );
     }
+    items.push({ label: "🗑 Удалить список", onClick: () => deleteList(list) });
     popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
@@ -432,6 +473,39 @@ function renderList(list, precomputedNumbers) {
     commitCardMove(cardId, list.id, body);
   });
   return col;
+}
+
+// renameList re-encrypts a new title under the board key and patches the list
+// (offline-capable via the sync outbox).
+async function renameList(list) {
+  const name = prompt("Новое название списка:", list.title || "");
+  if (name == null) return;
+  const t = name.trim();
+  if (!t || t === list.title) return;
+  setStatus("saving");
+  try {
+    await patch("patchList", `/api/lists/${list.id}`, { title_enc: await xyCrypto.encField(dk, t) });
+    list.title = t;
+    setStatus("saved");
+    render();
+  } catch (err) { setStatus("error"); alert("Не удалось переименовать: " + err.message); }
+}
+
+// deleteList soft-deletes the list and its cards (server cascades the cards),
+// offline-capable via the sync outbox.
+async function deleteList(list) {
+  const n = cardsOf(list.id).length;
+  const tail = n ? ` и ${n} карточк(и) в нём` : "";
+  if (!confirm(`Удалить список «${list.title || "без названия"}»${tail}? Это действие необратимо.`)) return;
+  setStatus("saving");
+  try {
+    await del("deleteList", `/api/lists/${list.id}`);
+    state.lists = state.lists.filter((l) => l.id !== list.id);
+    state.cards = state.cards.filter((c) => c.listId !== list.id);
+    if (openCardId != null && !state.cards.some((c) => c.id === openCardId)) closeCard();
+    setStatus("saved");
+    render();
+  } catch (err) { setStatus("error"); alert("Не удалось удалить: " + err.message); }
 }
 
 // cardTitle derives the short preview shown on a kanban card. Question cards are
@@ -646,28 +720,29 @@ async function doMoveListCopy(remove) {
     return;
   }
 
+  // Copying a list (it carries every card's comments/attachments) and any
+  // cross-board op are online-only; only the intra-board move above works offline.
+  if (!xySync.isOnline()) { msg.textContent = "Копирование и перенос между досками доступны только онлайн."; return; }
   msg.textContent = sameBoard ? "Копирование…" : "Перешифровка…";
   try {
     if (sameBoard) {
-      // Duplicate the list and its cards on this board (offline-capable via sync).
-      const lres = await create("createList", `/api/boards/${boardId}/lists`, {
+      // Duplicate the list and its cards on this board.
+      const lres = await jpost(`/api/boards/${boardId}/lists`, {
         title_enc: await xyCrypto.encField(dk, listMoveSrc.title), rank, type,
       });
       state.lists.push({ id: lres.id, type, rank, title: listMoveSrc.title });
       let cr = null;
       for (const c of srcCards) {
         cr = keyBetween(cr, null);
-        const cres = await create("createCard", `/api/lists/${lres.id}/cards`, {
-          description_enc: await xyCrypto.encField(dk, c.desc), rank: cr, kind: c.kind,
-        });
-        state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc });
+        const cres = await jpost(`/api/lists/${lres.id}/cards`, await cardCopyBody(c, cr, dk));
+        state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc, handoutMeta: c.handoutMeta || null });
         const ids = state.cardLabels[c.id] || [];
-        if (ids.length) { await put("setCardLabels", `/api/cards/${cres.id}/labels`, { label_ids: ids }); state.cardLabels[cres.id] = ids.slice(); }
+        if (ids.length) { await jput(`/api/cards/${cres.id}/labels`, { label_ids: ids }); state.cardLabels[cres.id] = ids.slice(); }
+        await copyCardExtras(c.id, dk, cres.id);
       }
     } else {
       // Cross-board: re-encrypt under the target board's key, reconcile labels by
-      // decrypted name+color (same as the per-card path). Inherently online.
-      if (!xySync.isOnline()) { msg.textContent = "Перенос между досками доступен только онлайн."; return; }
+      // decrypted name+color (same as the per-card path).
       const tdk = listMoveCtx.dk;
       const tLabels = listMoveCtx.labels.slice();
       const lres = await jpost(`/api/boards/${targetBid}/lists`, {
@@ -676,26 +751,26 @@ async function doMoveListCopy(remove) {
       let cr = null;
       for (const c of srcCards) {
         cr = keyBetween(cr, null);
-        const cres = await jpost(`/api/lists/${lres.id}/cards`, {
-          description_enc: await xyCrypto.encField(tdk, c.desc), rank: cr, kind: c.kind,
-        });
+        const cres = await jpost(`/api/lists/${lres.id}/cards`, await cardCopyBody(c, cr, tdk));
         const srcIds = state.cardLabels[c.id] || [];
-        if (!srcIds.length) continue;
-        const targetIds = [];
-        for (const sid of srcIds) {
-          const sl = labelById(sid);
-          if (!sl) continue;
-          let match = tLabels.find((t) => t.name === sl.name && t.color === sl.color);
-          if (!match) {
-            const labres = await jpost(`/api/boards/${targetBid}/labels`, {
-              name_enc: await xyCrypto.encField(tdk, sl.name), color_enc: await xyCrypto.encField(tdk, sl.color), kind: sl.kind,
-            });
-            match = { id: labres.id, name: sl.name, color: sl.color };
-            tLabels.push(match);
+        if (srcIds.length) {
+          const targetIds = [];
+          for (const sid of srcIds) {
+            const sl = labelById(sid);
+            if (!sl) continue;
+            let match = tLabels.find((t) => t.name === sl.name && t.color === sl.color);
+            if (!match) {
+              const labres = await jpost(`/api/boards/${targetBid}/labels`, {
+                name_enc: await xyCrypto.encField(tdk, sl.name), color_enc: await xyCrypto.encField(tdk, sl.color), kind: sl.kind,
+              });
+              match = { id: labres.id, name: sl.name, color: sl.color };
+              tLabels.push(match);
+            }
+            targetIds.push(match.id);
           }
-          targetIds.push(match.id);
+          if (targetIds.length) await jput(`/api/cards/${cres.id}/labels`, { label_ids: targetIds });
         }
-        if (targetIds.length) await jput(`/api/cards/${cres.id}/labels`, { label_ids: targetIds });
+        await copyCardExtras(c.id, tdk, cres.id);
       }
       if (remove) {
         await jdelete(`/api/lists/${listMoveSrc.id}`);
@@ -2039,9 +2114,61 @@ for (const v of CARD_TABS) tabBtn(v).addEventListener("click", () => setCardView
 document.getElementById("cardPreviewScreen").addEventListener("change", () => { if (cardView === "preview") renderCardPreview(); });
 document.getElementById("cardPreviewBody").addEventListener("dblclick", () => setCardView(lastEditView));
 
+// ---- direct links (shareable URLs for a card and a comment) ----
+// A card link is /board/{id}?card={cardId}; a comment link adds &comment={eventId}
+// (the timeline event id). Opening such a URL deep-links straight to the card and,
+// for a comment link, scrolls to and flashes that comment.
+function cardUrl(cardId) { return `${location.origin}${location.pathname}?card=${cardId}`; }
+function commentUrl(cardId, eventId) { return `${cardUrl(cardId)}&comment=${eventId}`; }
+
+// reflectCardInUrl keeps the address bar in sync with the open card (replaceState,
+// so it doesn't pollute history) — a refresh or copied address reopens the card.
+function reflectCardInUrl(cardId) {
+  history.replaceState(null, "", cardId ? cardUrl(cardId) : location.pathname);
+}
+
+// maybeOpenDeepLink runs once after the first successful board load: if the URL
+// names a card (and optionally a comment), open it.
+let deepLinkDone = false;
+function maybeOpenDeepLink() {
+  if (deepLinkDone) return;
+  deepLinkDone = true;
+  const params = new URLSearchParams(location.search);
+  const cardId = Number(params.get("card"));
+  if (!cardId) return;
+  const card = state.cards.find((c) => c.id === cardId);
+  if (!card) return;
+  const commentId = Number(params.get("comment")) || null;
+  openCard(card).then(() => { if (commentId) highlightComment(commentId); }).catch(() => {});
+}
+
+// highlightComment scrolls a comment into view and flashes it. The timeline is
+// rendered newest-first inside the card detail; the event node carries id
+// "tlev-{eventId}".
+function highlightComment(eventId) {
+  const node = document.getElementById("tlev-" + eventId);
+  if (!node) return;
+  node.scrollIntoView({ block: "center" });
+  node.classList.add("tl-highlight");
+  setTimeout(() => node.classList.remove("tl-highlight"), 2500);
+}
+
+async function copyCardLink() {
+  if (openCardId == null) return;
+  try { await copyText(cardUrl(openCardId)); showCopyMsg("Ссылка на карточку скопирована", false); }
+  catch (err) { showCopyMsg("Не удалось скопировать: " + err.message, true); }
+}
+
+async function copyCommentLink(eventId) {
+  if (openCardId == null) return;
+  try { await copyText(commentUrl(openCardId, eventId)); showCopyMsg("Ссылка на комментарий скопирована", false); }
+  catch (err) { showCopyMsg("Не удалось скопировать: " + err.message, true); }
+}
+
 async function openCard(card) {
   pendingList = null;
   openCardId = card.id;
+  reflectCardInUrl(card.id);
   cardView = "";
   cardFieldReaders = null;
   cardDraft = card.desc;
@@ -2190,6 +2317,70 @@ function rankForSlot(cards, posValue, excludeId) {
   catch (_) { return keyBetween(prev ? prev.rank : null, null); }
 }
 
+// cardCopyBody builds the create-card payload for a copy: it re-encrypts the
+// description and — when set — the handout-generation settings (field #10,
+// handout_meta_enc) under `key` (the destination board's data key). kind carries
+// over verbatim. Keeping handout meta here (not in copyCardExtras) means it copies
+// offline too, like the description.
+async function cardCopyBody(src, rank, key) {
+  const body = { description_enc: await xyCrypto.encField(key, src.desc), rank, kind: src.kind };
+  if (src.handoutMeta) body.handout_meta_enc = await xyCrypto.encField(key, src.handoutMeta);
+  return body;
+}
+
+// copyCardExtras carries a source card's comments and attachments onto a freshly
+// created destination card (labels are reconciled separately by the callers). The
+// source card is always on the current board, so its content is read under `dk`
+// and re-encrypted under the destination key `targetDk`. Comments are imported
+// preserving their original author + timestamp (the bulk /comments/import
+// endpoint); attachments are downloaded, decrypted, re-encrypted and re-uploaded
+// (preserving mime + lossless flag). Copy/move is an online-only operation, so
+// this runs straight against the API (no sync outbox / temp ids).
+async function copyCardExtras(srcCardId, targetDk, newCardId) {
+  if (!xySync.isOnline() || !newCardId) return;
+  // Comments, oldest→newest so the copy keeps the original order, re-encrypted
+  // under the destination key but carrying the source author + created_at.
+  let events = [];
+  try { events = await fetchJSON(`/api/cards/${srcCardId}/timeline`); } catch (_) { events = []; }
+  const comments = [];
+  for (const ev of events) {
+    if (ev.type !== "comment") continue;
+    let text;
+    try { text = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) { continue; }
+    comments.push({
+      author_user_id: ev.author_user_id != null ? ev.author_user_id : null,
+      created_at: ev.created_at,
+      payload_enc: await xyCrypto.encField(targetDk, text),
+    });
+  }
+  if (comments.length) {
+    try { await jpost(`/api/cards/${newCardId}/comments/import`, { comments }); } catch (_) {}
+  }
+  // Attachments: re-encrypt the ciphertext bytes under the destination key.
+  let atts = [];
+  try { atts = await fetchJSON(`/api/cards/${srcCardId}/attachments`); } catch (_) { atts = []; }
+  for (const att of atts) {
+    let name = "файл";
+    try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) {}
+    let plain;
+    try {
+      const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
+      if (!res.ok) continue;
+      plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
+    } catch (_) { continue; }
+    let recipher;
+    try { recipher = await xyCrypto.encBytes(targetDk, plain); } catch (_) { continue; }
+    const fd = new FormData();
+    fd.append("meta", JSON.stringify({
+      filename_enc: await xyCrypto.encField(targetDk, name),
+      mime: att.mime, lossless: !!att.lossless,
+      event_payload_enc: await xyCrypto.encField(targetDk, JSON.stringify({ file: name })),
+    }));
+    fd.append("blob", new Blob([recipher], { type: "application/octet-stream" }), "blob");
+    try { await fetch(`/api/cards/${newCardId}/attachments`, { method: "POST", credentials: "same-origin", body: fd }); } catch (_) {}
+  }
+}
+
 async function doMoveCopy(remove) {
   const card = state.cards.find((c) => c.id === openCardId);
   if (!card || !moveCtx) return;
@@ -2200,6 +2391,11 @@ async function doMoveCopy(remove) {
   const listCards = moveCtx.cardsByList.get(targetListId) || [];
   const sameBoard = targetBid === boardId;
   const rank = rankForSlot(listCards, document.getElementById("movePos").value, sameBoard && remove ? card.id : null);
+  // The only offline-capable case is an intra-board move (just a re-parent/re-rank).
+  // Copying — and anything touching another board — carries comments/attachments
+  // and re-encrypts, so it's online-only.
+  const intraBoardMove = sameBoard && remove;
+  if (!intraBoardMove && !xySync.isOnline()) { msg.textContent = "Копирование и перенос между досками доступны только онлайн."; return; }
   msg.textContent = sameBoard ? "Сохранение…" : "Перешифровка…";
   try {
     if (sameBoard) {
@@ -2208,21 +2404,15 @@ async function doMoveCopy(remove) {
         card.listId = targetListId;
         card.rank = rank;
       } else {
-        const res = await create("createCard", `/api/lists/${targetListId}/cards`, {
-          description_enc: await xyCrypto.encField(dk, card.desc), rank, kind: card.kind,
-        });
-        state.cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc });
+        const res = await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, dk));
+        state.cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc, handoutMeta: card.handoutMeta || null });
         const ids = state.cardLabels[card.id] || [];
-        if (ids.length) { await put("setCardLabels", `/api/cards/${res.id}/labels`, { label_ids: ids }); state.cardLabels[res.id] = ids.slice(); }
+        if (ids.length) { await jput(`/api/cards/${res.id}/labels`, { label_ids: ids }); state.cardLabels[res.id] = ids.slice(); }
+        await copyCardExtras(card.id, dk, res.id);
       }
     } else {
-      // Cross-board copy/move re-encrypts under the target board's key and touches
-      // a second board's structure — inherently an online operation.
-      if (!xySync.isOnline()) { msg.textContent = "Перенос между досками доступен только онлайн."; return; }
       const tdk = moveCtx.dk;
-      const res = await jpost(`/api/lists/${targetListId}/cards`, {
-        description_enc: await xyCrypto.encField(tdk, card.desc), rank, kind: card.kind,
-      });
+      const res = await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, tdk));
       // reconcile labels by decrypted name+color
       const srcIds = state.cardLabels[card.id] || [];
       if (srcIds.length) {
@@ -2243,6 +2433,7 @@ async function doMoveCopy(remove) {
         }
         if (targetIds.length) await jput(`/api/cards/${res.id}/labels`, { label_ids: targetIds });
       }
+      await copyCardExtras(card.id, tdk, res.id);
       if (remove) {
         await jdelete(`/api/cards/${card.id}`);
         state.cards = state.cards.filter((c) => c.id !== card.id);
@@ -2341,6 +2532,7 @@ document.getElementById("cardCopy").addEventListener("click", async () => {
 
 function closeCard() {
   cardOverlay.hidden = true;
+  reflectCardInUrl(null);
   openCardId = null;
   pendingList = null;
   cardView = "";
@@ -2349,6 +2541,7 @@ function closeCard() {
   cardPreviewUrls = [];
 }
 document.getElementById("cardClose").addEventListener("click", closeCard);
+document.getElementById("cardLink").addEventListener("click", copyCardLink);
 cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) closeCard(); });
 
 document.getElementById("cardSave").addEventListener("click", async () => {
@@ -2614,7 +2807,17 @@ function renderEvent(ev, payload) {
   const meta = (rest) => (author ? `${author} · ${rest}` : rest);
   const wrap = el("div", { class: "tl-event tl-" + ev.type });
   if (ev.type === "comment") {
-    wrap.append(el("div", { class: "tl-meta", text: meta(when) }), el("div", { class: "tl-comment", text: payload }));
+    const metaRow = el("div", { class: "tl-meta" }, meta(when));
+    // Synced comments have a stable event id → offer a copyable direct link and
+    // make the node an anchor target. Pending (offline) comments have no id yet.
+    if (ev.id) {
+      wrap.id = "tlev-" + ev.id;
+      metaRow.append(el("button", {
+        class: "tl-link", type: "button", title: "Копировать ссылку на комментарий",
+        text: "🔗", onclick: () => copyCommentLink(ev.id),
+      }));
+    }
+    wrap.append(metaRow, el("div", { class: "tl-comment", text: payload }));
   } else if (ev.type === "desc_edit") {
     let diff = {};
     try { diff = JSON.parse(payload); } catch (_) {}

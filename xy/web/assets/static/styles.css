@@ -5868,8 +5868,17 @@ body.is-fullscreen.od-page .match-main {
 /* timeline */
 .timeline { display: flex; flex-direction: column; gap: var(--space-2); max-height: 320px; overflow-y: auto; }
 .tl-event { padding: var(--space-2) var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--page); }
-.tl-meta { font-size: var(--text-2xs); color: var(--muted); }
+.tl-meta { font-size: var(--text-2xs); color: var(--muted); display: flex; align-items: center; gap: var(--space-1); }
 .tl-comment { white-space: pre-wrap; font-size: var(--text-sm); margin-top: var(--space-1); }
+/* copy-link affordance on a comment; revealed on hover/focus to stay quiet */
+.tl-link { border: none; background: none; cursor: pointer; padding: 0; font-size: var(--text-2xs); line-height: 1; opacity: 0; transition: opacity 0.1s; }
+.tl-event:hover .tl-link, .tl-link:focus-visible { opacity: 0.7; }
+.tl-link:hover { opacity: 1; }
+/* touch devices have no hover — keep the link visible there */
+@media (hover: none) { .tl-link { opacity: 0.55; } }
+/* flash a comment when arrived at via a direct link */
+.tl-event.tl-highlight { animation: tl-flash 2.5s ease-out; }
+@keyframes tl-flash { 0%, 40% { background: var(--accent-soft, var(--green-soft)); border-color: var(--accent); } 100% { background: var(--page); } }
 
 /* members / sharing modal */
 .members-list { display: flex; flex-direction: column; gap: var(--space-1); max-height: 320px; overflow-y: auto; }
@@ -5989,7 +5998,7 @@ body.is-fullscreen.od-page .match-main {
 .pv-img {
   display: block;
   max-width: min(100%, 480px);
-  max-height: 5em;
+  max-height: 12em;
   width: auto;
   height: auto;
   margin: var(--space-2) 0;

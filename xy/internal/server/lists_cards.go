@@ -828,6 +828,59 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type importCommentsRequest struct {
+	Comments []importedComment `json:"comments"`
+}
+
+type importedComment struct {
+	AuthorUserID *int64 `json:"author_user_id"`
+	CreatedAt    string `json:"created_at"`
+	PayloadEnc   string `json:"payload_enc"`
+}
+
+// handleImportComments bulk-inserts comment events while preserving their
+// original author + timestamp — used by the copy/move path so a duplicated card
+// keeps its discussion intact instead of re-stamping every comment to the copier
+// and "now". Authorship here is advisory display metadata (the same trust model
+// as the rest of the board: any editor can already write arbitrary encrypted
+// content); author_user_id, when present, must reference a real user (FK).
+func (s *server) handleImportComments(w http.ResponseWriter, r *http.Request) {
+	_, cardID, bid, ok := s.requireChildAccess(w, r, boardOfCard)
+	if !ok {
+		return
+	}
+	var req importCommentsRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	err := s.withWriteTx(r.Context(), "import-comments", func(ctx context.Context, tx *sql.Tx) error {
+		for _, c := range req.Comments {
+			payload, err := unb64(c.PayloadEnc)
+			if err != nil {
+				return errBadRequest("invalid payload_enc")
+			}
+			created := c.CreatedAt
+			if _, perr := time.Parse(time.RFC3339, created); perr != nil {
+				created = rfc3339(time.Now()) // fall back on a missing/garbled timestamp
+			}
+			var author any
+			if c.AuthorUserID != nil {
+				author = *c.AuthorUserID
+			}
+			if _, err := tx.ExecContext(ctx, `
+insert into timeline_events(board_id, card_id, type, author_user_id, created_at, payload_enc)
+values(?, ?, 'comment', ?, ?, ?)`, bid, cardID, author, created, payload); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // appendEvent inserts a timeline event with a base64 payload envelope.
 func appendEvent(ctx context.Context, tx *sql.Tx, boardID, cardID int64, typ string, authorID int64, payloadB64 string) error {
 	payload, err := unb64(payloadB64)
