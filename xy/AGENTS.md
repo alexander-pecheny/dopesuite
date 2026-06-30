@@ -63,7 +63,12 @@ web/assets/            //go:embed static (package assets)
     diff.js            word-level token diff for desc_edit timeline highlighting
     index.js/.html     board list + create-board (passphrase) flow; offline board-list cache
     board.js/.html     kanban: unlock, drag-reorder, card detail, timeline, labels,
-                       move/copy (by board name + list + position), list ⋯ menu, docx export;
+                       move/copy (by board name + list + position; a copy/cross-board
+                       move carries the card's labels + comments + attachments via
+                       copyCardExtras — online-only for the extras), list ⋯ menu
+                       (incl. rename/delete list), board ☰ menu (incl. rename/delete
+                       board, owner-only delete), docx export; direct links to a card
+                       (?card=) and a comment (&comment=, copied from the timeline 🔗);
                        «Управление списками» modal groups consecutive lists into a
                        list_of_lists (☰ menu); all mutations via sync.js (offline-capable)
     menu.js            theme boot + ☰ menu; also injects PWA <head> tags + registers sw.js

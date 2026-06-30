@@ -449,3 +449,58 @@ func TestExportDocxRejectsEmpty(t *testing.T) {
 	}
 	mustStatus(t, resp, 400)
 }
+
+// TestImportCommentsPreservesAuthorAndTime covers the bulk comment-import path
+// used by copy/move: it keeps each comment's original author + created_at instead
+// of re-stamping them to the caller + now.
+func TestImportCommentsPreservesAuthorAndTime(t *testing.T) {
+	c, _, listID := boardWithList(t)
+
+	resp := c.do("GET", "/api/auth/me", nil)
+	mustStatus(t, resp, 200)
+	var me meResponse
+	c.decode(resp, &me)
+
+	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description_enc": enc("q"), "rank": "m"})
+	mustStatus(t, resp, 200)
+	var card struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &card)
+	cardID := itoa(card.ID)
+
+	const t0, t1 = "2021-01-02T03:04:05Z", "2022-06-07T08:09:10Z"
+	resp = c.do("POST", "/api/cards/"+cardID+"/comments/import", map[string]any{
+		"comments": []map[string]any{
+			{"author_user_id": me.UserID, "created_at": t0, "payload_enc": enc("first")},
+			{"author_user_id": nil, "created_at": t1, "payload_enc": enc("second")},
+		},
+	})
+	mustStatus(t, resp, 204)
+
+	resp = c.do("GET", "/api/cards/"+cardID+"/timeline", nil)
+	mustStatus(t, resp, 200)
+	var tl []timelineEventDTO
+	c.decode(resp, &tl)
+	if len(tl) != 2 {
+		t.Fatalf("timeline len = %d, want 2", len(tl))
+	}
+	if tl[0].Type != "comment" || tl[0].CreatedAt != t0 || dec(tl[0].PayloadEnc) != "first" {
+		t.Fatalf("event0 = %+v, want comment %q @ %s", tl[0], "first", t0)
+	}
+	if tl[0].AuthorID == nil || *tl[0].AuthorID != me.UserID {
+		t.Fatalf("event0 author = %v, want %d", tl[0].AuthorID, me.UserID)
+	}
+	if tl[1].CreatedAt != t1 || dec(tl[1].PayloadEnc) != "second" {
+		t.Fatalf("event1 = %+v, want %q @ %s", tl[1], "second", t1)
+	}
+	if tl[1].AuthorID != nil {
+		t.Fatalf("event1 author = %v, want nil (null preserved)", *tl[1].AuthorID)
+	}
+
+	// A garbled timestamp falls back to a server stamp rather than being rejected.
+	resp = c.do("POST", "/api/cards/"+cardID+"/comments/import", map[string]any{
+		"comments": []map[string]any{{"author_user_id": me.UserID, "created_at": "not-a-time", "payload_enc": enc("third")}},
+	})
+	mustStatus(t, resp, 204)
+}
