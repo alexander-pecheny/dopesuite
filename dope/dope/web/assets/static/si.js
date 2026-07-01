@@ -51,8 +51,8 @@ const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "b
 const KSI_TABS = [
   {key: "detailed", label: "Подробно"},
   {key: "results", label: "Итог"},
-  {key: "roster", label: "Составы"},
   {key: "refusals", label: "Отказы"},
+  {key: "roster", label: "Составы"},
 ];
 
 const route = gameTable.parseGameRoute();

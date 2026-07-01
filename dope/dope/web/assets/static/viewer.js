@@ -809,7 +809,6 @@ function viewerTabItems() {
   const items = [
     {href: route.base + "/", label: "Сетка", key: "grid"},
     {href: route.base + "/venues", label: "Площадки", key: "venues"},
-    {href: route.base + "/roster", label: "Составы", key: "roster"},
   ];
   viewerStages().forEach((stage) => {
     items.push({
@@ -818,8 +817,9 @@ function viewerTabItems() {
       key: `stage:${stage.code}`,
     });
   });
-  // Статистика sits at the very end, after all stage tabs.
+  // Статистика and Составы sit at the very end, after all stage tabs.
   items.push({href: route.base + "/stats", label: "Статистика", key: "stats"});
+  items.push({href: route.base + "/roster", label: "Составы", key: "roster"});
   return items;
 }
 
