@@ -4402,11 +4402,10 @@ body.od-screen-active .dope-rec-btn {
   width: var(--results-team-col);
 }
 
+/* The team name reuses .results-team-name (clip + fade + popover from the shared
+   results-table styling); we only add the roster's bold weight on top. */
 .roster-team-name {
-  display: block;
   font-weight: var(--fw-semibold);
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .roster-team-city {
@@ -4415,8 +4414,10 @@ body.od-screen-active .dope-rec-btn {
   font-size: var(--text-xs);
 }
 
-.roster-players-head,
-.roster-players-cell {
+/* Left-align the Игроки header (the shared thead th centers by default, and its
+   `.results-table thead th` selector out-specifies a bare class). */
+.roster-results-table .roster-players-head,
+.roster-results-table .roster-players-cell {
   text-align: left;
 }
 
@@ -4439,9 +4440,11 @@ body.od-screen-active .dope-rec-btn {
   color: var(--muted);
 }
 
-/* Team/player names link to rating.chgk.info when a rating id is known. */
+/* Team/player names link to rating.chgk.info when a rating id is known. Keep the
+   regular text colour (blue everywhere is too loud); a hover underline is the
+   only affordance. */
 .roster-link {
-  color: var(--blue);
+  color: inherit;
   text-decoration: none;
 }
 
