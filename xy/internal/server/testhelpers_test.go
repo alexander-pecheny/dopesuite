@@ -27,6 +27,23 @@ where code = ? and kind = 'register' and consumed_at is null and expires_at > ?`
 	})
 }
 
+// addBoardMember grants a user editor access to a board directly (bypassing
+// the owner-only /members endpoint, which isn't wired into every test mux) —
+// used by tests that need two users sharing a board.
+func addBoardMember(t *testing.T, srv *server, boardID, userID int64) {
+	t.Helper()
+	ctx := context.Background()
+	err := srv.withWriteTx(ctx, "test-add-member", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+insert into board_members(board_id, user_id, role) values(?, ?, 'editor')
+on conflict(board_id, user_id) do nothing`, boardID, userID)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // registerUser provisions a fresh logged-in client via an invite + simulated bot.
 func registerUser(t *testing.T, srv *server, ts *httptest.Server, tgUserID int64, name string) *apiClient {
 	t.Helper()
