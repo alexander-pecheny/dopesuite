@@ -1565,6 +1565,127 @@
     return wrapper;
   }
 
+  // Roster ("Составы") — the fest-level team→players list, shared by every game
+  // page (EK/OD/KSI, host and viewer). The data is the same for all games in a
+  // fest, so it is fetched once per festID and cached for the page's lifetime.
+  const rosterCache = new Map();
+
+  function fetchFestRoster(festID) {
+    if (!festID) return Promise.resolve([]);
+    if (rosterCache.has(festID)) return rosterCache.get(festID);
+    const promise = fetch(`/api/fest/${encodeURIComponent(festID)}/roster`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`roster ${response.status}`);
+        return response.json();
+      })
+      .then((data) => (data && Array.isArray(data.teams) ? data.teams : []))
+      .catch((err) => {
+        // Don't cache a failure — let a later render retry the fetch.
+        rosterCache.delete(festID);
+        throw err;
+      });
+    rosterCache.set(festID, promise);
+    return promise;
+  }
+
+  // buildRosterTable renders the team→players table using the shared results-table
+  // design-system styling. One row per team: number, name (+ city), player list.
+  function buildRosterTable(teams) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "results-wrapper roster-results-wrapper";
+    const list = teams || [];
+    if (list.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "roster-empty";
+      empty.textContent = "Составы пока не заданы.";
+      wrapper.appendChild(empty);
+      return wrapper;
+    }
+
+    const hasNumbers = list.some((team) => Number(team.number) > 0);
+    const table = document.createElement("table");
+    table.className = "results-table roster-results-table";
+
+    const thead = document.createElement("thead");
+    const header = document.createElement("tr");
+    if (hasNumbers) header.appendChild(th("№", "results-place-head"));
+    header.appendChild(th("Команда", "results-team-head"));
+    header.appendChild(th("Игроки", "roster-players-head"));
+    thead.appendChild(header);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    list.forEach((team, index) => {
+      const row = document.createElement("tr");
+      row.className = "results-row";
+      if (index === 0) row.classList.add("results-group-first");
+      if (index === list.length - 1) row.classList.add("results-group-last");
+
+      if (hasNumbers) {
+        row.appendChild(td(Number(team.number) > 0 ? team.number : "", "results-place"));
+      }
+
+      const teamCell = document.createElement("td");
+      teamCell.className = "results-team roster-team-cell";
+      const name = document.createElement("span");
+      name.className = "roster-team-name";
+      name.textContent = team.name || "";
+      teamCell.appendChild(name);
+      if (team.city) {
+        const city = document.createElement("span");
+        city.className = "roster-team-city";
+        city.textContent = team.city;
+        teamCell.appendChild(city);
+      }
+      row.appendChild(teamCell);
+
+      const playersCell = document.createElement("td");
+      playersCell.className = "roster-players-cell";
+      const players = Array.isArray(team.players) ? team.players : [];
+      if (players.length === 0) {
+        playersCell.classList.add("roster-players-empty");
+        playersCell.textContent = "—";
+      } else {
+        players.forEach((player) => {
+          const chip = document.createElement("span");
+          chip.className = "roster-player";
+          chip.textContent = player;
+          playersCell.appendChild(chip);
+        });
+      }
+      row.appendChild(playersCell);
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    return wrapper;
+  }
+
+  // buildRosterView returns a container node for the "Составы" tab that fills
+  // itself asynchronously: it shows a loading line, fetches the fest roster, then
+  // swaps in the table (or an error line on failure). Safe to drop straight into
+  // a tab pane by any page — no roster data needs to be threaded through.
+  function buildRosterView(festID) {
+    const container = document.createElement("div");
+    container.className = "roster-view";
+    const loading = document.createElement("p");
+    loading.className = "roster-loading";
+    loading.textContent = "Загрузка составов…";
+    container.appendChild(loading);
+
+    fetchFestRoster(festID)
+      .then((teams) => {
+        container.replaceChildren(buildRosterTable(teams));
+      })
+      .catch(() => {
+        const error = document.createElement("p");
+        error.className = "roster-empty";
+        error.textContent = "Не удалось загрузить составы.";
+        container.replaceChildren(error);
+      });
+    return container;
+  }
+
   // installCellNavBar mounts a floating ↑/↓ bar pinned just above the on-screen
   // keyboard for advancing between editable cells. Mobile numeric keypads
   // (inputmode=numeric/decimal) have no Return key on iOS, so this is the only
@@ -2980,6 +3101,9 @@
     stageTabLabel,
     teamListCell,
     buildVenuesTable,
+    fetchFestRoster,
+    buildRosterTable,
+    buildRosterView,
     createFloatingPopover,
     installCellNavBar,
     installVirtualKeypad,

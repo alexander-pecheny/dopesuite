@@ -101,6 +101,7 @@ const ENTRY_SELECTION_CLASSES = [
 const TABS = [
   {key: "results", label: "Итог"},
   {key: "detailed", label: "Подробно"},
+  {key: "roster", label: "Составы"},
   {key: "input", label: "Ввод"},
   // Экран (проекторное табло) is a host-only tool. Viewers never get the tab —
   // they only ever see the board when a host projects it on an actual screen.
@@ -471,6 +472,7 @@ function getTabPane(tab) {
   let node;
   if (tab === "input") node = buildInputView();
   else if (tab === "detailed") node = buildDetailedTable();
+  else if (tab === "roster") node = gameTable.buildRosterView(route.festID);
   else if (tab === "screen") node = buildScreenView();
   else node = buildResultsTable();
   const pane = document.createElement("div");

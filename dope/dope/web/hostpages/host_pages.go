@@ -634,7 +634,7 @@ func isHostGameSubPath(parts []string) bool {
 		return true
 	}
 	switch parts[2] {
-	case "venues", "seed-import", "stats":
+	case "venues", "seed-import", "stats", "roster":
 		return len(parts) == 3
 	case "matches", "stage":
 		return len(parts) == 4 && parts[3] != ""
