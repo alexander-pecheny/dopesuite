@@ -2360,10 +2360,12 @@ function stopReadTracking() {
   if (commentsObserver) { commentsObserver.disconnect(); commentsObserver = null; }
 }
 
-// armReadTracking shows/clears the in-card unread dots and arms the two
-// independent read triggers: a 10s content-dwell timer, and a short dwell
-// after #timeline first scrolls into view (via IntersectionObserver) for
-// comments. Each bucket clears independently.
+// armReadTracking shows/clears the in-card unread dots and arms the read
+// triggers. Both content edits (desc_edit) and comments are recorded as entries
+// in the timeline (лента) — that's where a reader actually sees *what* changed —
+// so viewing the timeline clears whichever buckets are unread. Content also
+// clears after a 10s dwell on the card body itself (a secondary trigger, for the
+// reader who studies the question text without scrolling down to the лента).
 function armReadTracking(card) {
   const u = state.unread[card.id] || {};
   const contentDot = document.getElementById("contentUnreadDot");
@@ -2378,7 +2380,7 @@ function armReadTracking(card) {
     }, 10000);
   }
 
-  if (u.comments) {
+  if (u.content || u.comments) {
     const timeline = document.getElementById("timeline");
     let dwellTimer = null;
     commentsObserver = new IntersectionObserver((entries) => {
@@ -2386,7 +2388,7 @@ function armReadTracking(card) {
         if (entry.isIntersecting && entry.intersectionRatio > 0) {
           if (!dwellTimer) {
             dwellTimer = setTimeout(() => {
-              if (openCardId === card.id) markCardRead(card.id, { comments: true });
+              if (openCardId === card.id) markCardRead(card.id, { content: !!u.content, comments: !!u.comments });
             }, 2000);
           }
         } else if (dwellTimer) {
