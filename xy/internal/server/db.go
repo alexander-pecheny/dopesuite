@@ -175,7 +175,30 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV7(db); err != nil {
 		return err
 	}
+	if err := migrateV8(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV8 adds board_members.last_visited_at: a per-user, per-board timestamp
+// stamped when the user opens a board (POST /api/boards/{id}/visit). The board
+// list orders by it (most-recently-visited first) so returning to an active
+// board is one tap. NULL = never visited on record (sorts after visited boards).
+func migrateV8(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 8`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+alter table board_members add column last_visited_at text;
+insert or ignore into schema_versions(version, applied_at)
+  values(8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV7 adds card_reads: per-(user, card) read watermarks used for the blue

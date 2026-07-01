@@ -144,3 +144,85 @@ func TestReadMarkers(t *testing.T) {
 		t.Fatalf("unread after read-all = %v, want empty", snap.Unread)
 	}
 }
+
+// TestBoardListVisitOrdering covers the board-list additions (migrateV8): the
+// list orders by the caller's own last visit (most recent first, never-visited
+// last) and flags a board `unread` when another member has an unread change.
+func TestBoardListVisitOrdering(t *testing.T) {
+	ts, srv := newTestServer(t)
+
+	a := registerUser(t, srv, ts, 991001, "visitor-a")
+	b := registerUser(t, srv, ts, 991002, "visitor-b")
+	var meB meResponse
+	b.decode(b.do("GET", "/api/auth/me", nil), &meB)
+
+	newBoard := func(name string) string {
+		resp := a.do("POST", "/api/boards", map[string]string{
+			"name_enc": enc(name), "kdf_salt": enc("salt"),
+			"kdf_params":  `{"kdf":"scrypt","N":32768,"r":8,"p":1}`,
+			"wrapped_key": enc("wrapped"), "verify_token": enc("verify"),
+		})
+		mustStatus(t, resp, 200)
+		var created struct {
+			ID int64 `json:"id"`
+		}
+		a.decode(resp, &created)
+		return itoa(created.ID)
+	}
+	list := func() []boardSummary {
+		var out []boardSummary
+		a.decode(a.do("GET", "/api/boards", nil), &out)
+		return out
+	}
+
+	board1 := newBoard("board one")
+	board2 := newBoard("board two")
+
+	// Never visited: both present, nothing unread, no recorded visit. (The exact
+	// order among never-visited boards is updated_at desc, which ties here — the
+	// visit-based ordering below is the behavior under test.)
+	got := list()
+	if len(got) != 2 {
+		t.Fatalf("board list len = %d, want 2", len(got))
+	}
+	for _, bs := range got {
+		if bs.Unread || bs.LastVisitedAt != nil {
+			t.Fatalf("board %d fresh state = %+v, want no unread / no visit", bs.ID, bs)
+		}
+	}
+
+	// A visits board1 → it sorts to the front (visited beats never-visited).
+	mustStatus(t, a.do("POST", "/api/boards/"+board1+"/visit", nil), 204)
+	got = list()
+	if itoa(got[0].ID) != board1 {
+		t.Fatalf("after visiting board1, front = %d, want board1", got[0].ID)
+	}
+	if got[0].LastVisitedAt == nil {
+		t.Fatalf("board1 last_visited_at not stamped")
+	}
+
+	// B (a member) comments on a card in board2 → board2 flags unread for A.
+	addBoardMember(t, srv, mustAtoi(t, board2), meB.UserID)
+	resp := a.do("POST", "/api/boards/"+board2+"/lists", map[string]string{"title_enc": enc("l"), "rank": "m"})
+	mustStatus(t, resp, 200)
+	var lc struct {
+		ID int64 `json:"id"`
+	}
+	a.decode(resp, &lc)
+	resp = a.do("POST", "/api/lists/"+itoa(lc.ID)+"/cards", map[string]string{"description_enc": enc("q"), "rank": "m"})
+	mustStatus(t, resp, 200)
+	var cc struct {
+		ID int64 `json:"id"`
+	}
+	a.decode(resp, &cc)
+	mustStatus(t, b.do("POST", "/api/cards/"+itoa(cc.ID)+"/comments", map[string]string{"payload_enc": enc("hi")}), 204)
+
+	for _, bs := range list() {
+		if itoa(bs.ID) == board2 && !bs.Unread {
+			t.Fatalf("board2 not flagged unread after B's comment")
+		}
+		if itoa(bs.ID) == board1 && bs.Unread {
+			t.Fatalf("board1 flagged unread with no foreign events")
+		}
+	}
+}

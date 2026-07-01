@@ -75,11 +75,13 @@ func (s *server) requireBoard(w http.ResponseWriter, r *http.Request, paramName 
 // ---- wire types ----
 
 type boardSummary struct {
-	ID        int64  `json:"id"`
-	NameEnc   string `json:"name_enc"`
-	Role      string `json:"role"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID            int64   `json:"id"`
+	NameEnc       string  `json:"name_enc"`
+	Role          string  `json:"role"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+	LastVisitedAt *string `json:"last_visited_at"` // nil = never visited on record
+	Unread        bool    `json:"unread"`          // any card has an unread change by another member
 }
 
 func (s *server) handleListBoards(w http.ResponseWriter, r *http.Request) {
@@ -87,11 +89,22 @@ func (s *server) handleListBoards(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Order by the caller's own last visit (most recent first; never-visited
+	// boards fall back to update time). `unread` aggregates the per-card unread
+	// predicate (see the board snapshot / activity feed) across the whole board.
 	rows, err := s.db.QueryContext(r.Context(), `
-select b.id, b.name_enc, m.role, b.created_at, b.updated_at
+select b.id, b.name_enc, m.role, b.created_at, b.updated_at, m.last_visited_at,
+  exists(
+    select 1 from timeline_events e
+    join cards c on c.id = e.card_id and c.deleted_at is null
+    left join card_reads cr on cr.card_id = e.card_id and cr.user_id = m.user_id
+    where e.board_id = b.id and e.author_user_id is not null and e.author_user_id <> m.user_id
+      and ((e.type =  'comment' and e.id > coalesce(cr.comment_read_id,0))
+        or (e.type <> 'comment' and e.id > coalesce(cr.content_read_id,0)))
+  ) as unread
 from boards b join board_members m on m.board_id = b.id
 where m.user_id = ? and b.deleted_at is null
-order by b.updated_at desc`, u.UserID)
+order by m.last_visited_at is null, m.last_visited_at desc, b.updated_at desc`, u.UserID)
 	if handleErr(w, err) {
 		return
 	}
@@ -100,13 +113,38 @@ order by b.updated_at desc`, u.UserID)
 	for rows.Next() {
 		var b boardSummary
 		var nameEnc []byte
-		if err := rows.Scan(&b.ID, &nameEnc, &b.Role, &b.CreatedAt, &b.UpdatedAt); handleErr(w, err) {
+		var lastVisited sql.NullString
+		var unread int
+		if err := rows.Scan(&b.ID, &nameEnc, &b.Role, &b.CreatedAt, &b.UpdatedAt, &lastVisited, &unread); handleErr(w, err) {
 			return
 		}
 		b.NameEnc = b64(nameEnc)
+		if lastVisited.Valid {
+			b.LastVisitedAt = &lastVisited.String
+		}
+		b.Unread = unread == 1
 		out = append(out, b)
 	}
 	writeJSON(w, out)
+}
+
+// handleBoardVisit stamps the caller's last-visit time for a board (used to
+// order the board list). Fire-and-forget from the client on board open;
+// online-only best-effort, like read-marking.
+func (s *server) handleBoardVisit(w http.ResponseWriter, r *http.Request) {
+	uid, bid, _, ok := s.requireBoard(w, r, "id")
+	if !ok {
+		return
+	}
+	err := s.withWriteTx(r.Context(), "board-visit", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update board_members set last_visited_at = ? where board_id = ? and user_id = ?`,
+			rfc3339(time.Now()), bid, uid)
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type createBoardRequest struct {
