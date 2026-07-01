@@ -465,10 +465,20 @@ async function load() {
     setStatus("saved");
     loadMembers(); // best-effort: populate the author-name map for timelines (online only)
     maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
+    pingVisit(); // stamp last-visit so the board list can order by it (online-only, once)
   } catch (e) {
     setStatus("error");
     console.error(e);
   }
+}
+
+// pingVisit stamps this board as most-recently-visited (for the board-list
+// ordering). Online-only best-effort, fired once per page session.
+let visitPinged = false;
+function pingVisit() {
+  if (visitPinged || !xySync.isOnline()) return;
+  visitPinged = true;
+  jpost(`/api/boards/${boardId}/visit`, {}).catch(() => {});
 }
 
 const byRank = (a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0);

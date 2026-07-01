@@ -5663,8 +5663,19 @@ body.is-fullscreen.od-page .match-main {
   color: var(--text);
 }
 .board-card:hover { background: var(--hover-bg); }
+.board-card.has-unread { position: relative; }
 .board-card-name { font-weight: var(--fw-bold); font-size: var(--text-lg); }
 .board-card-role { font-size: var(--text-xs); color: var(--muted); }
+/* blue "unread" dot — a board has changes by another member the user hasn't read */
+.board-card-unread {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--blue, #2f6fed);
+}
 
 /* trello import */
 .import-form { max-width: 760px; margin: 0 auto; }

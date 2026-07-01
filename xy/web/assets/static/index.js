@@ -59,11 +59,16 @@ function renderBoards(boards) {
     listNode.append(el("p", { class: "auth-hint", text: "Пока нет досок. Нажмите + чтобы создать." }));
     return;
   }
+  // Boards arrive already ordered by the caller's last visit (server-side).
   for (const b of boards) {
     const card = el("a", { class: "board-card", href: `/board/${b.id}` },
       el("span", { class: "board-card-name", text: "🔒 доска #" + b.id }),
       el("span", { class: "board-card-role", text: b.role === "owner" ? "владелец" : "редактор" }),
     );
+    if (b.unread) {
+      card.classList.add("has-unread");
+      card.append(el("span", { class: "board-card-unread", title: "Есть непрочитанные изменения" }));
+    }
     // Decrypt the name lazily if we have the cached key.
     decryptName(b).then((name) => {
       if (name) card.querySelector(".board-card-name").textContent = name;
