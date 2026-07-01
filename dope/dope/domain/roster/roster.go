@@ -447,24 +447,34 @@ func RemapAnswerMatrix(values [][]string, oldParts, newParts []games.KSIParticip
 	return out
 }
 
-// FestRosterTeamView is one team with its ordered player names, for the
-// read-only "Составы" roster view shown to every visitor of a fest. Sourced from
-// the canonical fest roster tables (fest_teams/fest_players/fest_team_players) so
-// all game types (EK/OD/KSI) surface the same "who plays for what team" list.
-type FestRosterTeamView struct {
-	Number  int64    `json:"number,omitempty"`
-	Name    string   `json:"name"`
-	City    string   `json:"city,omitempty"`
-	Players []string `json:"players"`
+// FestRosterPlayerView is one player in a team's roster line. RatingID (when
+// present) links to the player's rating.chgk.info page in the Составы view.
+type FestRosterPlayerView struct {
+	Name     string `json:"name"`
+	RatingID int64  `json:"ratingID,omitempty"`
 }
 
-// LoadFestRosterView loads every active team of a fest with its ordered player
-// names, for the public Составы view. Teams keep their roster position order;
-// players keep their roster_order within each team.
+// FestRosterTeamView is one team with its ordered players, for the read-only
+// "Составы" roster view shown to every visitor of a fest. Sourced from the
+// canonical fest roster tables (fest_teams/fest_players/fest_team_players) so all
+// game types (EK/OD/KSI) surface the same "who plays for what team" list. The
+// team's and each player's RatingID (when present) link to their respective
+// rating.chgk.info pages.
+type FestRosterTeamView struct {
+	Number   int64                  `json:"number,omitempty"`
+	Name     string                 `json:"name"`
+	City     string                 `json:"city,omitempty"`
+	RatingID int64                  `json:"ratingID,omitempty"`
+	Players  []FestRosterPlayerView `json:"players"`
+}
+
+// LoadFestRosterView loads every active team of a fest with its ordered players,
+// for the public Составы view. Teams keep their roster position order; players
+// keep their roster_order within each team.
 func LoadFestRosterView(ctx context.Context, q store.Queryer, festID int64) ([]FestRosterTeamView, error) {
 	rows, err := q.QueryContext(ctx, `
-select tt.id, coalesce(tt.number, 0), tt.name, tt.city,
-       coalesce(p.first_name, ''), coalesce(p.last_name, '')
+select tt.id, coalesce(tt.number, 0), tt.name, tt.city, coalesce(tt.rating_id, 0),
+       coalesce(p.first_name, ''), coalesce(p.last_name, ''), coalesce(p.rating_id, 0)
 from fest_teams tt
 left join fest_team_players ttp on ttp.team_id = tt.id
 left join fest_players p on p.id = ttp.player_id
@@ -478,19 +488,19 @@ order by tt.position, tt.id, ttp.roster_order, p.id`, festID)
 	var teams []FestRosterTeamView
 	byID := make(map[int64]int)
 	for rows.Next() {
-		var teamID, number int64
+		var teamID, number, teamRatingID, playerRatingID int64
 		var name, city, firstName, lastName string
-		if err := rows.Scan(&teamID, &number, &name, &city, &firstName, &lastName); err != nil {
+		if err := rows.Scan(&teamID, &number, &name, &city, &teamRatingID, &firstName, &lastName, &playerRatingID); err != nil {
 			return nil, err
 		}
 		idx, ok := byID[teamID]
 		if !ok {
-			teams = append(teams, FestRosterTeamView{Number: number, Name: name, City: city})
+			teams = append(teams, FestRosterTeamView{Number: number, Name: name, City: city, RatingID: teamRatingID})
 			idx = len(teams) - 1
 			byID[teamID] = idx
 		}
 		if player := store.JoinPlayerName(firstName, lastName); player != "" {
-			teams[idx].Players = append(teams[idx].Players, player)
+			teams[idx].Players = append(teams[idx].Players, FestRosterPlayerView{Name: player, RatingID: playerRatingID})
 		}
 	}
 	if err := rows.Err(); err != nil {
