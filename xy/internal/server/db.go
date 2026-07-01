@@ -172,7 +172,40 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV6(db); err != nil {
 		return err
 	}
+	if err := migrateV7(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV7 adds card_reads: per-(user, card) read watermarks used for the blue
+// "unread" dots. Two independent watermarks per card — content_read_id (the
+// highest timeline_events.id read among desc_edit/label_*/attach_* events) and
+// comment_read_id (same, for `comment` events) — let a user clear either bucket
+// independently. An event is unread for a user iff its id exceeds the relevant
+// watermark and it wasn't authored by that same user (own edits never count).
+func migrateV7(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 7`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+create table if not exists card_reads(
+  user_id integer not null references users(id) on delete cascade,
+  card_id integer not null references cards(id) on delete cascade,
+  content_read_id integer not null default 0,
+  comment_read_id integer not null default 0,
+  updated_at text not null,
+  primary key (user_id, card_id)
+);
+create index if not exists idx_card_reads_user on card_reads(user_id);
+insert or ignore into schema_versions(version, applied_at)
+  values(7, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV6 adds list grouping ("list_of_lists"): a named, ordered run of

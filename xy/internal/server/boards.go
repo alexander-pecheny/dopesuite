@@ -159,14 +159,23 @@ values(?, ?, ?, ?, ?, ?, ?, ?)`,
 
 // boardSnapshot is the single-fetch board payload the UI bootstraps from.
 type boardSnapshot struct {
-	ID         int64              `json:"id"`
-	NameEnc    string             `json:"name_enc"`
-	Role       string             `json:"role"`
-	Lists      []listDTO          `json:"lists"`
-	Groups     []groupDTO         `json:"groups"`
-	Cards      []cardDTO          `json:"cards"`
-	Labels     []labelDTO         `json:"labels"`
-	CardLabels map[string][]int64 `json:"card_labels"`
+	ID         int64                `json:"id"`
+	NameEnc    string               `json:"name_enc"`
+	Role       string               `json:"role"`
+	Lists      []listDTO            `json:"lists"`
+	Groups     []groupDTO           `json:"groups"`
+	Cards      []cardDTO            `json:"cards"`
+	Labels     []labelDTO           `json:"labels"`
+	CardLabels map[string][]int64   `json:"card_labels"`
+	Unread     map[string]unreadDTO `json:"unread"`
+}
+
+// unreadDTO flags, per card, whether the caller has unread events in either
+// bucket (see migrateV7 / card_reads). Only cards with at least one true flag
+// are included in the snapshot's Unread map.
+type unreadDTO struct {
+	Content  bool `json:"content"`
+	Comments bool `json:"comments"`
 }
 
 func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
@@ -174,9 +183,8 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_ = uid
 	ctx := r.Context()
-	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, CardLabels: map[string][]int64{}}
+	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, CardLabels: map[string][]int64{}, Unread: map[string]unreadDTO{}}
 
 	var nameEnc []byte
 	if err := s.db.QueryRowContext(ctx, `select name_enc from boards where id = ?`, bid).Scan(&nameEnc); handleErr(w, err) {
@@ -223,6 +231,36 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 		}
 		key := strconv.FormatInt(cardID, 10)
 		snap.CardLabels[key] = append(snap.CardLabels[key], labelID)
+	}
+
+	// Unread map: one row per card that has at least one event, authored by
+	// someone else, past the caller's read watermark for that bucket. All-false
+	// cards are omitted entirely to keep the payload small.
+	unreadRows, err := s.db.QueryContext(ctx, `
+select e.card_id,
+  max(case when e.type =  'comment' and e.id > coalesce(cr.comment_read_id,0) then 1 else 0 end),
+  max(case when e.type <> 'comment' and e.id > coalesce(cr.content_read_id,0) then 1 else 0 end)
+from timeline_events e
+join cards c on c.id = e.card_id and c.deleted_at is null
+left join card_reads cr on cr.card_id = e.card_id and cr.user_id = ?
+where e.board_id = ? and e.author_user_id is not null and e.author_user_id <> ?
+group by e.card_id`, uid, bid, uid)
+	if handleErr(w, err) {
+		return
+	}
+	defer unreadRows.Close()
+	for unreadRows.Next() {
+		var cardID int64
+		var commentsUnread, contentUnread int
+		if err := unreadRows.Scan(&cardID, &commentsUnread, &contentUnread); handleErr(w, err) {
+			return
+		}
+		if commentsUnread == 1 || contentUnread == 1 {
+			snap.Unread[strconv.FormatInt(cardID, 10)] = unreadDTO{Content: contentUnread == 1, Comments: commentsUnread == 1}
+		}
+	}
+	if err := unreadRows.Err(); handleErr(w, err) {
+		return
 	}
 	writeJSON(w, snap)
 }

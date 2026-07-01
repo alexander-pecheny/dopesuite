@@ -1002,6 +1002,7 @@ a.list-row:hover { background: var(--hover-bg); }
   flex: 0 0 auto;
   align-items: center;
   gap: var(--space-2);
+  position: relative; /* anchors .notif-panel under the 🔔 bell */
 }
 
 .sheet-shell {
@@ -5682,6 +5683,98 @@ body.is-fullscreen.od-page .match-main {
    ☰ dropdown — must stay above it (the settings/unlock modals at z-modal still
    win over both). */
 .board-page .host-top { z-index: 60; }
+
+/* Smaller desktop board header (mirrors dope's 44px .game-host-top) — the
+   kanban itself is the point of the page, so the chrome above it stays thin. */
+.board-page { --xy-header-h: 44px; }
+.board-page .host-top { height: 44px; padding: var(--space-1-5) var(--page-pad-x-tight); }
+/* Same selector shape (not #id) as the mobile override below, so the cascade
+   (equal specificity, later source wins) still lets the mobile rule shrink
+   the title further on narrow screens. */
+.board-page h1 { font-size: var(--text-xl); }
+
+/* Breadcrumb: 🏠 / {board name}, replacing the old "←" back link. */
+.host-brand { display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 1 1 auto; }
+.host-home { display: inline-flex; align-items: center; text-decoration: none; font-size: 18px; line-height: 1; }
+.host-sep { color: var(--muted); }
+.host-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* Blue "unread" dots — on kanban cards, in the card detail head/timeline
+   label, and the 🔔 bell badge/panel rows. */
+.unread-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--blue, #2f6fed);
+  vertical-align: middle;
+}
+.kcard { position: relative; }
+.kcard-unread {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--blue, #2f6fed);
+}
+
+.notif-toggle { position: relative; }
+.notif-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--blue, #2f6fed);
+  border: 1.5px solid var(--structure);
+}
+.notif-panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  width: min(320px, 90vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-dropdown);
+}
+.notif-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2-5);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-bold);
+}
+.notif-empty { padding: var(--space-3); color: var(--muted); font-size: var(--text-sm); text-align: center; }
+.notif-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-2);
+  cursor: pointer;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+.notif-row:hover { background: var(--action-bg); }
+.notif-row .unread-dot { margin-top: 6px; flex: 0 0 auto; }
+.notif-row-body { min-width: 0; flex: 1 1 auto; }
+.notif-row-meta { font-size: var(--text-xs); color: var(--muted); }
+.notif-row-preview { font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* import & other .board-main pages keep their natural padding + page scroll */
 .board-main { padding: var(--space-4) var(--page-pad-x) var(--space-6); }
 .kanban {

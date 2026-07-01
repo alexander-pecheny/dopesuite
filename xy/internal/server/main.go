@@ -113,6 +113,11 @@ func Main() {
 	mux.HandleFunc("POST /api/cards/{id}/comments", srv.handleAddComment)
 	mux.HandleFunc("POST /api/cards/{id}/comments/import", srv.handleImportComments)
 
+	// ---- read markers / activity (blue dots + 🔔 bell) ----
+	mux.HandleFunc("POST /api/cards/{id}/read", srv.handleMarkRead)
+	mux.HandleFunc("GET /api/boards/{id}/activity", srv.handleBoardActivity)
+	mux.HandleFunc("POST /api/boards/{id}/read-all", srv.handleBoardReadAll)
+
 	// ---- export (chgksuite docx) ----
 	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
 

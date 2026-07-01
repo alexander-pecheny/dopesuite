@@ -26,7 +26,7 @@ const statusNode = document.getElementById("status");
 const kanban = document.getElementById("kanban");
 const titleNode = document.getElementById("boardTitle");
 
-const state = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null };
+const state = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null, unread: {} };
 let dk = null;
 // One-shot guard per card-drag gesture: set true the moment a drop commits the
 // move, so a stray duplicate drop is ignored and dragend can tell an aborted
@@ -281,6 +281,131 @@ document.getElementById("membersOverlay").addEventListener("pointerdown", (e) =>
   if (e.target.id === "membersOverlay") closeMembers();
 });
 
+// ---- read markers (blue dots) + 🔔 activity bell ----
+// Every user wants to read every OTHER user's changes; own edits never count.
+// Read-tracking is online-only best-effort (like loadMembers above): it never
+// goes through the sync outbox, so it's simply skipped offline.
+const notifToggle = document.getElementById("notifToggle");
+const notifBadge = document.getElementById("notifBadge");
+
+// renderNotifBadge shows the 🔔 badge iff any card has an unread bucket.
+function renderNotifBadge() {
+  const any = Object.values(state.unread).some((u) => u.content || u.comments);
+  notifBadge.hidden = !any;
+}
+
+// refreshCardUnreadDot updates a single kanban card's dot in place (cheaper
+// than a full render() and doesn't disturb drag state).
+function refreshCardUnreadDot(cardId) {
+  const node = kanban.querySelector(`.kcard[data-card-id="${cardId}"]`);
+  if (!node) return;
+  const u = state.unread[cardId];
+  const wantDot = !!(u && (u.content || u.comments));
+  const existing = node.querySelector(".kcard-unread");
+  if (wantDot && !existing) node.append(el("span", { class: "kcard-unread", title: "Непрочитанные изменения" }));
+  else if (!wantDot && existing) existing.remove();
+}
+
+// markCardRead advances the caller's read watermark(s) for a card to the
+// highest event id currently loaded in its timeline (captured by loadTimeline
+// into openCardEvents), then updates local state + the dots. Best-effort:
+// failures are swallowed (a missed watermark just means the dot lingers).
+async function markCardRead(cardId, { content = false, comments = false } = {}) {
+  if (!xySync.isOnline()) return;
+  const events = openCardEvents || [];
+  const maxId = (pred) => events.filter(pred).reduce((m, e) => (e.id > m ? e.id : m), 0);
+  const contentReadId = content ? maxId((e) => e.type !== "comment") : 0;
+  const commentReadId = comments ? maxId((e) => e.type === "comment") : 0;
+  if (!contentReadId && !commentReadId) return;
+  try {
+    await jpost(`/api/cards/${cardId}/read`, { content_read_id: contentReadId, comment_read_id: commentReadId });
+  } catch (_) { return; }
+  const u = { ...(state.unread[cardId] || {}) };
+  if (content) u.content = false;
+  if (comments) u.comments = false;
+  if (u.content || u.comments) state.unread[cardId] = u;
+  else delete state.unread[cardId];
+  if (content) document.getElementById("contentUnreadDot").hidden = true;
+  if (comments) document.getElementById("commentsUnreadDot").hidden = true;
+  refreshCardUnreadDot(cardId);
+  renderNotifBadge();
+}
+
+// ---- 🔔 bell panel: recent other-authored activity, newest first ----
+let notifPanelEl = null;
+
+function closeNotifPanel() {
+  if (!notifPanelEl) return;
+  notifPanelEl.remove();
+  notifPanelEl = null;
+  notifToggle.setAttribute("aria-expanded", "false");
+  document.removeEventListener("pointerdown", onNotifOutside, true);
+  document.removeEventListener("keydown", onNotifKey);
+}
+function onNotifOutside(e) { if (notifPanelEl && !notifPanelEl.contains(e.target) && e.target !== notifToggle) closeNotifPanel(); }
+function onNotifKey(e) { if (e.key === "Escape") closeNotifPanel(); }
+
+async function openNotifPanel() {
+  if (notifPanelEl) { closeNotifPanel(); return; }
+  const panel = el("div", { class: "notif-panel" });
+  const head = el("div", { class: "notif-panel-head" },
+    el("span", { text: "События" }),
+    el("button", {
+      class: "btn btn-small", type: "button", text: "Прочитать всё",
+      onclick: async () => {
+        try { await jpost(`/api/boards/${boardId}/read-all`, {}); } catch (_) { return; }
+        state.unread = {};
+        render();
+        renderNotifBadge();
+        closeNotifPanel();
+      },
+    }));
+  panel.append(head);
+  const body = el("div", { class: "notif-panel-body" }, el("div", { class: "notif-empty", text: "Загрузка…" }));
+  panel.append(body);
+  notifToggle.setAttribute("aria-expanded", "true");
+  notifToggle.parentElement.append(panel);
+  notifPanelEl = panel;
+  document.addEventListener("pointerdown", onNotifOutside, true);
+  document.addEventListener("keydown", onNotifKey);
+
+  let events = [];
+  try { events = await fetchJSON(`/api/boards/${boardId}/activity`); } catch (_) {}
+  if (notifPanelEl !== panel) return; // closed while loading
+  body.replaceChildren();
+  if (!events.length) { body.append(el("div", { class: "notif-empty", text: "Нет новых событий" })); return; }
+  for (const ev of events) {
+    const card = state.cards.find((c) => c.id === ev.card_id);
+    if (!card) continue; // card deleted/moved away since the event was recorded
+    const row = el("button", { class: "notif-row", type: "button" });
+    if (ev.unread) row.append(el("span", { class: "unread-dot" }));
+    // Neutral noun-phrase wording (mirrors renderEvent's own verbs map, gender-
+    // agnostic since we don't know the author's grammatical gender).
+    const verbs = {
+      comment: "комментарий", desc_edit: "правка описания",
+      label_add: "добавлена метка", label_remove: "снята метка",
+      attach_add: "вложение добавлено", attach_remove: "вложение удалено", attach_replace: "вложение заменено",
+    };
+    const verb = verbs[ev.type] || ev.type;
+    const when = new Date(ev.created_at).toLocaleString("ru-RU");
+    const bodyWrap = el("div", { class: "notif-row-body" },
+      el("div", { class: "notif-row-meta", text: `${eventAuthor(ev)} ${verb} · ${cardTitle(card)} · ${when}` }));
+    if (ev.type === "comment") {
+      let preview = "";
+      try { preview = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) {}
+      bodyWrap.append(el("div", { class: "notif-row-preview", text: deriveTitle(preview, 120) }));
+    }
+    row.append(bodyWrap);
+    row.addEventListener("click", () => {
+      closeNotifPanel();
+      openCard(card).then(() => { if (ev.type === "comment") highlightComment(ev.id); });
+    });
+    body.append(row);
+  }
+}
+
+notifToggle.addEventListener("click", () => { if (notifPanelEl) closeNotifPanel(); else openNotifPanel(); });
+
 // ---- load + decrypt snapshot ----
 // Source of truth: when online with an empty outbox, fetch the authoritative
 // snapshot and refresh the mirror. With local edits queued (or offline), render
@@ -314,6 +439,7 @@ async function load() {
     }
     state.role = snap.role || "editor";
     state.cardLabels = snap.card_labels || {};
+    state.unread = snap.unread || {};
     state.name = await xyCrypto.decField(dk, snap.name_enc);
     titleNode.textContent = state.name;
     document.title = state.name + " · xy";
@@ -335,6 +461,7 @@ async function load() {
       color: await xyCrypto.decField(dk, l.color_enc),
     })));
     render();
+    renderNotifBadge();
     setStatus("saved");
     loadMembers(); // best-effort: populate the author-name map for timelines (online only)
     maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
@@ -541,6 +668,8 @@ function renderCard(card, number) {
   }
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
+  const u = state.unread[card.id];
+  if (u && (u.content || u.comments)) node.append(el("span", { class: "kcard-unread", title: "Непрочитанные изменения" }));
   node.addEventListener("dragstart", (e) => {
     e.stopPropagation();
     e.dataTransfer.setData("text/xy-card", String(card.id));
@@ -1769,6 +1898,16 @@ let openCardId = null;
 let pendingList = null; // set while composing a brand-new (unsaved) card
 const cardOverlay = document.getElementById("cardOverlay");
 
+// openCardEvents mirrors the open card's timeline (set by loadTimeline) so
+// markCardRead can compute the per-bucket max event id without a re-fetch.
+let openCardEvents = [];
+// contentReadTimer: 10s content-dwell timer; commentsObserver: IntersectionObserver
+// that starts a short dwell once #timeline scrolls into view. Both are armed in
+// openCard and torn down in closeCard (and re-armed on every openCard, so
+// switching cards never leaks a timer/observer onto the wrong card).
+let contentReadTimer = null;
+let commentsObserver = null;
+
 // ---- card detail views: Просмотр (preview) / Поля (fields) / Текст (raw 4s) ----
 // The open card carries a working draft of its 4s description (and handout
 // settings) that flows between the three views without persisting; Save commits
@@ -2166,6 +2305,7 @@ async function copyCommentLink(eventId) {
 }
 
 async function openCard(card) {
+  stopReadTracking(); // tear down any timer/observer left over from a previous card
   pendingList = null;
   openCardId = card.id;
   reflectCardInUrl(card.id);
@@ -2199,6 +2339,54 @@ async function openCard(card) {
   // sequentially, to cut the total round-trip.
   setCardView(isTest ? "fields" : "preview");
   await Promise.all([loadAttachments(card.id), loadTimeline(card.id), populateMoveBoards()]);
+  armReadTracking(card);
+}
+
+// stopReadTracking clears the content-dwell timer and disconnects the
+// comments IntersectionObserver — called before re-arming (openCard) and on
+// closeCard, so neither ever fires against a card that's no longer open.
+function stopReadTracking() {
+  if (contentReadTimer) { clearTimeout(contentReadTimer); contentReadTimer = null; }
+  if (commentsObserver) { commentsObserver.disconnect(); commentsObserver = null; }
+}
+
+// armReadTracking shows/clears the in-card unread dots and arms the two
+// independent read triggers: a 10s content-dwell timer, and a short dwell
+// after #timeline first scrolls into view (via IntersectionObserver) for
+// comments. Each bucket clears independently.
+function armReadTracking(card) {
+  const u = state.unread[card.id] || {};
+  const contentDot = document.getElementById("contentUnreadDot");
+  const commentsDot = document.getElementById("commentsUnreadDot");
+  contentDot.hidden = !u.content;
+  commentsDot.hidden = !u.comments;
+
+  if (u.content) {
+    contentReadTimer = setTimeout(() => {
+      contentReadTimer = null;
+      if (openCardId === card.id) markCardRead(card.id, { content: true });
+    }, 10000);
+  }
+
+  if (u.comments) {
+    const timeline = document.getElementById("timeline");
+    let dwellTimer = null;
+    commentsObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && entry.intersectionRatio > 0) {
+          if (!dwellTimer) {
+            dwellTimer = setTimeout(() => {
+              if (openCardId === card.id) markCardRead(card.id, { comments: true });
+            }, 2000);
+          }
+        } else if (dwellTimer) {
+          clearTimeout(dwellTimer);
+          dwellTimer = null;
+        }
+      }
+    });
+    commentsObserver.observe(timeline);
+  }
 }
 
 // ---- move / copy a card (same board → relocate/duplicate; other board →
@@ -2531,6 +2719,7 @@ document.getElementById("cardCopy").addEventListener("click", async () => {
 });
 
 function closeCard() {
+  stopReadTracking();
   cardOverlay.hidden = true;
   reflectCardInUrl(null);
   openCardId = null;
@@ -2781,6 +2970,7 @@ async function loadTimeline(cardId) {
   }
   let events = [];
   try { events = await xySync.timelineFor(cardId); } catch (_) {}
+  if (cardId === openCardId) openCardEvents = events;
   // Newest first: events are oldest→newest (by id); show them reversed.
   for (const ev of [...events].reverse()) {
     let payload = "";

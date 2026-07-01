@@ -12,10 +12,17 @@
 </head>
 <body class="host board-page">
   <header class="host-top">
-    <h1 id="boardTitle">Доска</h1>
+    <div class="host-brand">
+      <a class="host-home" href="/" aria-label="Все доски" title="Все доски">🏠</a>
+      <span class="host-sep" aria-hidden="true">/</span>
+      <h1 id="boardTitle" class="host-title">Доска</h1>
+    </div>
     <div class="host-actions">
       <span class="sync-status" id="status" data-state="saved"></span>
-      <a class="action-icon" href="/" aria-label="Все доски" title="Все доски">←</a>
+      <button class="action-icon notif-toggle" id="notifToggle" type="button"
+              aria-label="События" title="События других участников" aria-haspopup="true" aria-expanded="false">
+        🔔<span class="notif-badge" id="notifBadge" hidden></span>
+      </button>
       <button class="action-icon" id="timerToggle" type="button" aria-label="Таймер" title="Таймер ЧГК" aria-pressed="false">⏰</button>
     </div>
   </header>
@@ -48,6 +55,7 @@
         </select>
         <h2 class="card-detail-title" id="cardDetailTitle" hidden></h2>
         <div class="card-head-actions">
+          <span class="unread-dot" id="contentUnreadDot" hidden data-edit-only title="Непрочитанные изменения"></span>
           <button class="btn btn-small" id="cardLink" type="button" title="Скопировать прямую ссылку на карточку" data-edit-only>🔗 Ссылка</button>
           <button class="btn btn-small" id="cardCopy" type="button" title="Скопировать текст вопроса для тест-сессии (экранный режим)" hidden>📋 Копировать</button>
           <button class="action-icon" id="cardClose" aria-label="Закрыть">×</button>
@@ -116,7 +124,7 @@
         <button class="btn btn-small btn-ghost" id="moveBtn" type="button">Переместить</button>
       </div>
 
-      <label class="card-section-label" data-edit-only>Лента</label>
+      <label class="card-section-label" data-edit-only>Лента <span class="unread-dot" id="commentsUnreadDot" hidden title="Непрочитанные комментарии"></span></label>
       <div class="timeline" id="timeline" data-edit-only></div>
       <form id="commentForm" class="comment-form" data-edit-only>
         <textarea class="card-desc comment-input" id="commentInput" placeholder="Комментарий…" spellcheck="false"></textarea>
