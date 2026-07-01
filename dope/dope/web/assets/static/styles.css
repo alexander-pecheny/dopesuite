@@ -4377,25 +4377,29 @@ body.od-screen-active .dope-rec-btn {
 
 /* Составы (rosters) — shared team→players table, used on every game page
    (EK/OD/KSI, host and viewer). Reuses the results-table design-system styling;
-   only the players column and the loading/empty states need local rules. The
-   host container is min-width:max-content, so a percentage width would blow up;
-   instead the columns get fixed pixel widths (table-layout:fixed) so the players
-   column is bounded and wraps its comma-separated list instead of scrolling. */
-.roster-results-table {
-  --roster-players-col: 520px;
-  table-layout: fixed;
+   only the players column, the links, and the loading/empty states need local
+   rules. The score-table host is min-width:max-content (so wide boards can
+   scroll), but the roster should instead fit the frame and wrap the players
+   column, so it never scrolls sideways and the sticky "Игроки" header stays put.
+   Neutralize the max-content host just for the roster and let the table be 100%
+   wide with a fixed layout — the fixed №/Команда columns leave the rest to the
+   players column, which wraps. */
+.table-host:has(.roster-results-wrapper) {
+  width: 100%;
+  min-width: 0;
 }
 
-.roster-results-table .results-place-head {
-  width: var(--results-place-col);
+.roster-results-wrapper {
+  width: 100%;
+}
+
+.roster-results-table {
+  width: 100%;
+  table-layout: fixed;
 }
 
 .roster-results-table .results-team-head {
   width: var(--results-team-col);
-}
-
-.roster-results-table .roster-players-head {
-  width: var(--roster-players-col);
 }
 
 .roster-team-name {
@@ -4433,6 +4437,16 @@ body.od-screen-active .dope-rec-btn {
 
 .roster-players-empty {
   color: var(--muted);
+}
+
+/* Team/player names link to rating.chgk.info when a rating id is known. */
+.roster-link {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.roster-link:hover {
+  text-decoration: underline;
 }
 
 .roster-loading,

@@ -1588,8 +1588,33 @@
     return promise;
   }
 
+  // rating.chgk.info deep links: team/player names in the Составы view link to
+  // their rating pages when a rating id is known.
+  const RATING_TEAM_URL = "https://rating.chgk.info/teams/";
+  const RATING_PLAYER_URL = "https://rating.chgk.info/players/";
+
+  // rosterNameNode returns a link to `href` (an external rating page) when one is
+  // given, otherwise a plain span — both carrying `className` so styling is the
+  // same whether or not a rating id was available.
+  function rosterNameNode(text, href, className) {
+    if (href) {
+      const a = document.createElement("a");
+      a.className = `${className} roster-link`;
+      a.href = href;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = text;
+      return a;
+    }
+    const span = document.createElement("span");
+    span.className = className;
+    span.textContent = text;
+    return span;
+  }
+
   // buildRosterTable renders the team→players table using the shared results-table
   // design-system styling. One row per team: number, name (+ city), player list.
+  // Team and player names become rating.chgk.info links when a rating id exists.
   function buildRosterTable(teams) {
     const wrapper = document.createElement("div");
     wrapper.className = "results-wrapper roster-results-wrapper";
@@ -1627,10 +1652,8 @@
 
       const teamCell = document.createElement("td");
       teamCell.className = "results-team roster-team-cell";
-      const name = document.createElement("span");
-      name.className = "roster-team-name";
-      name.textContent = team.name || "";
-      teamCell.appendChild(name);
+      const teamHref = Number(team.ratingID) > 0 ? `${RATING_TEAM_URL}${team.ratingID}` : "";
+      teamCell.appendChild(rosterNameNode(team.name || "", teamHref, "roster-team-name"));
       if (team.city) {
         const city = document.createElement("span");
         city.className = "roster-team-city";
@@ -1647,9 +1670,12 @@
         playersCell.textContent = "—";
       } else {
         players.forEach((player) => {
+          // Tolerate both the current {name, ratingID} shape and a bare string.
+          const info = typeof player === "string" ? {name: player} : (player || {});
           const chip = document.createElement("span");
           chip.className = "roster-player";
-          chip.textContent = player;
+          const href = Number(info.ratingID) > 0 ? `${RATING_PLAYER_URL}${info.ratingID}` : "";
+          chip.appendChild(rosterNameNode(info.name || "", href, "roster-player-name"));
           playersCell.appendChild(chip);
         });
       }
