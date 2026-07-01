@@ -1653,7 +1653,20 @@
       const teamCell = document.createElement("td");
       teamCell.className = "results-team roster-team-cell";
       const teamHref = Number(team.ratingID) > 0 ? `${RATING_TEAM_URL}${team.ratingID}` : "";
-      teamCell.appendChild(rosterNameNode(team.name || "", teamHref, "roster-team-name"));
+      // Same DOM shape as buildEKStatsTable's name cell, so the shared
+      // fade-on-overflow + hover/focus popover (results-team styling) applies to
+      // clipped team names — markNameOverflow toggles .results-team-truncated.
+      const nameWrap = document.createElement("span");
+      nameWrap.className = "results-team-name-wrap";
+      const nameEl = rosterNameNode(team.name || "", teamHref, "results-team-name roster-team-name");
+      nameEl.tabIndex = 0;
+      nameEl.setAttribute("aria-label", team.name || "");
+      nameWrap.appendChild(nameEl);
+      teamCell.appendChild(nameWrap);
+      const namePopover = document.createElement("span");
+      namePopover.className = "results-team-name-popover";
+      namePopover.textContent = team.name || "";
+      teamCell.appendChild(namePopover);
       if (team.city) {
         const city = document.createElement("span");
         city.className = "roster-team-city";
@@ -1702,6 +1715,19 @@
     fetchFestRoster(festID)
       .then((teams) => {
         container.replaceChildren(buildRosterTable(teams));
+        // Flag clipped team names so the shared fade + popover kick in, and
+        // re-check whenever the container's width changes (tab switch, resize).
+        // The popover itself is already handled: the CSS-only variant on OD/KSI,
+        // and the page-bound floating popover on the EK host/viewer roots.
+        const remeasure = () => markNameOverflow(container, {
+          cellSelector: ".roster-team-cell",
+          nameSelector: ".results-team-name",
+          truncatedClass: "results-team-truncated",
+        });
+        requestAnimationFrame(remeasure);
+        if (typeof ResizeObserver === "function") {
+          new ResizeObserver(remeasure).observe(container);
+        }
       })
       .catch(() => {
         const error = document.createElement("p");

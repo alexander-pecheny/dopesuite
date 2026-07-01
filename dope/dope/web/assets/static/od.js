@@ -101,8 +101,8 @@ const ENTRY_SELECTION_CLASSES = [
 const TABS = [
   {key: "results", label: "Итог"},
   {key: "detailed", label: "Подробно"},
-  {key: "roster", label: "Составы"},
   {key: "input", label: "Ввод"},
+  {key: "roster", label: "Составы"},
   // Экран (проекторное табло) is a host-only tool. Viewers never get the tab —
   // they only ever see the board when a host projects it on an actual screen.
   // (tabFromHash() filters against TABS, so #screen also can't be reached by a
