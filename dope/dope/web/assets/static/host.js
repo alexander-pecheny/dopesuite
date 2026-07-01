@@ -134,6 +134,8 @@ async function loadCurrent() {
     await loadStage();
   } else if (route.mode === "venues") {
     await loadVenuesPage();
+  } else if (route.mode === "roster") {
+    await loadRoster();
   } else if (route.mode === "stats") {
     await loadStats();
   } else if (route.mode === "seedImport") {
@@ -306,6 +308,20 @@ function statsStagesFromCache() {
     stages.push({code: stage.code, matches});
   }
   return stages;
+}
+
+async function loadRoster() {
+  // The roster view fetches the fest-level team→players list itself; here we only
+  // need the fest view for the heading/breadcrumbs. Render from cache immediately,
+  // then revalidate the fest in the background.
+  const cached = hydrateFestFromCache();
+  if (cached) renderRoster();
+  const response = await fetch(route.apiBase);
+  if (!response.ok) throw new Error(await response.text());
+  adoptFestView(await response.json());
+  writeFestCache(fest);
+  if (route.mode !== "roster") return;
+  renderRoster();
 }
 
 async function loadVenuesPage() {
@@ -1039,6 +1055,17 @@ function renderVenues() {
   refreshPresence();
 }
 
+function renderRoster() {
+  resetMatchTableIndex();
+  setHostMode("grid");
+  setHeading("ЭК");
+  setViewerLink(`${route.viewerBase}/roster`, "Открыть составы для зрителя");
+  document.title = pageTitle("Составы");
+  renderEKTabs();
+  hostRoot.replaceChildren(gameTable.buildRosterView(route.festID));
+  refreshPresence();
+}
+
 function renderStats() {
   resetMatchTableIndex();
   setHostMode("grid");
@@ -1114,6 +1141,7 @@ function gameSubnavItems() {
     {href: route.base + "/", label: "Сетка", key: "grid"},
     {href: route.base + "/venues", label: "Площадки", key: "venues"},
     {href: route.base + "/seed-import", label: "Импорт команд", key: "seedImport"},
+    {href: route.base + "/roster", label: "Составы", key: "roster"},
   ];
   ekSchemeStages().forEach((stage) => {
     items.push({
@@ -1176,6 +1204,7 @@ function activeTabKey() {
     return stageCode ? `stage:${stageCode}` : "grid";
   }
   if (route.mode === "venues") return "venues";
+  if (route.mode === "roster") return "roster";
   if (route.mode === "stats") return "stats";
   if (route.mode === "seedImport") return "seedImport";
   return "grid";
@@ -2884,6 +2913,7 @@ function currentRoute() {
     return {mode: "grid", festID, gameID, base, viewerBase, apiBase, festApi};
   }
   if (rest === "/venues") return {mode: "venues", festID, gameID, base, viewerBase, apiBase, festApi};
+  if (rest === "/roster") return {mode: "roster", festID, gameID, base, viewerBase, apiBase, festApi};
   if (rest === "/stats") return {mode: "stats", festID, gameID, base, viewerBase, apiBase, festApi};
   if (rest === "/seed-import") return {mode: "seedImport", festID, gameID, base, viewerBase, apiBase, festApi};
   const match = rest.match(/^\/matches\/([^/]+)$/);

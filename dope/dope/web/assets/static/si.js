@@ -51,6 +51,7 @@ const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "b
 const KSI_TABS = [
   {key: "detailed", label: "Подробно"},
   {key: "results", label: "Итог"},
+  {key: "roster", label: "Составы"},
   {key: "refusals", label: "Отказы"},
 ];
 
@@ -282,7 +283,9 @@ function render(options = {}) {
       ? buildResultsTable()
       : activeTab === "refusals"
         ? buildRefusalsTable()
-        : buildTable();
+        : activeTab === "roster"
+          ? rosterView()
+          : buildTable();
     renderedTable = activeTab === "detailed" ? node : null;
     if (activeTab !== "detailed") resetTableIndex();
     siRoot.replaceChildren(node);
@@ -460,6 +463,16 @@ function buildResultsTable() {
   wrapper.className = "results-wrapper";
   wrapper.appendChild(buildResultsTableInner());
   return wrapper;
+}
+
+// The «Составы» tab: the fest-level team→players roster (read-only, visible to
+// all visitors). Its content never depends on game state, so the view node is
+// built once and reused across renders — avoiding a re-fetch flash on every SSE
+// delta while this tab is open.
+let siRosterView = null;
+function rosterView() {
+  if (!siRosterView) siRosterView = gameTable.buildRosterView(route.festID);
+  return siRosterView;
 }
 
 // The «Отказы» tab: every team with a checkbox to mark it as having refused to play.

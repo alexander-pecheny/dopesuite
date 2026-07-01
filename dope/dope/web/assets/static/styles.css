@@ -4375,6 +4375,72 @@ body.od-screen-active .dope-rec-btn {
   font-size: var(--text-xs);
 }
 
+/* Составы (rosters) — shared team→players table, used on every game page
+   (EK/OD/KSI, host and viewer). Reuses the results-table design-system styling;
+   only the players column and the loading/empty states need local rules. The
+   host container is min-width:max-content, so a percentage width would blow up;
+   instead the columns get fixed pixel widths (table-layout:fixed) so the players
+   column is bounded and wraps its comma-separated list instead of scrolling. */
+.roster-results-table {
+  --roster-players-col: 520px;
+  table-layout: fixed;
+}
+
+.roster-results-table .results-place-head {
+  width: var(--results-place-col);
+}
+
+.roster-results-table .results-team-head {
+  width: var(--results-team-col);
+}
+
+.roster-results-table .roster-players-head {
+  width: var(--roster-players-col);
+}
+
+.roster-team-name {
+  display: block;
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.roster-team-city {
+  display: block;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.roster-players-head,
+.roster-players-cell {
+  text-align: left;
+}
+
+.roster-players-cell {
+  padding: var(--space-2) var(--results-team-pad);
+  white-space: normal;
+}
+
+/* Keep each full name intact; allow wrapping only at the space between names. */
+.roster-player {
+  white-space: nowrap;
+}
+
+.roster-player:not(:last-child)::after {
+  content: ", ";
+  white-space: normal;
+}
+
+.roster-players-empty {
+  color: var(--muted);
+}
+
+.roster-loading,
+.roster-empty {
+  color: var(--muted);
+  padding: var(--space-3);
+}
+
 .results-team-name-popover {
   position: absolute;
   top: calc(100% - 2px);

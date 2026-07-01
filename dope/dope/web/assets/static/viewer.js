@@ -106,6 +106,8 @@ async function loadCurrent() {
     await loadStage();
   } else if (route.mode === "venues") {
     await loadVenuesPage();
+  } else if (route.mode === "roster") {
+    await loadRoster();
   } else if (route.mode === "stats") {
     await loadStats();
   } else {
@@ -267,6 +269,30 @@ async function loadMatch() {
   adoptFestView(await festResponse.json());
   writeFestCache(fest);
   render();
+}
+
+async function loadRoster() {
+  // The roster view fetches the fest-level team→players list itself; here we only
+  // need the fest view for the heading/tabs. Render from cache immediately, then
+  // revalidate the fest in the background.
+  const cached = hydrateFestFromCache();
+  if (cached) renderRoster();
+  const response = await fetch(route.apiBase);
+  if (!response.ok) throw new Error(await response.text());
+  const freshFest = await response.json();
+  adoptFestView(freshFest);
+  writeFestCache(freshFest);
+  if (route.mode !== "roster") return;
+  renderRoster();
+}
+
+function renderRoster() {
+  resetReadonlyTableIndex();
+  setViewerMode("grid");
+  setHeading("ЭК");
+  document.title = pageTitle("Составы");
+  renderViewerTabs();
+  viewerRoot.replaceChildren(gameTable.buildRosterView(route.festID));
 }
 
 async function loadVenuesPage() {
@@ -783,6 +809,7 @@ function viewerTabItems() {
   const items = [
     {href: route.base + "/", label: "Сетка", key: "grid"},
     {href: route.base + "/venues", label: "Площадки", key: "venues"},
+    {href: route.base + "/roster", label: "Составы", key: "roster"},
   ];
   viewerStages().forEach((stage) => {
     items.push({
@@ -822,6 +849,7 @@ function activeViewerTabKey() {
     return stageCode ? `stage:${stageCode}` : "grid";
   }
   if (route.mode === "venues") return "venues";
+  if (route.mode === "roster") return "roster";
   if (route.mode === "stats") return "stats";
   return "grid";
 }
@@ -1089,6 +1117,7 @@ function currentRoute() {
     return {mode: "grid", festID, gameID, base, apiBase};
   }
   if (stripped === "/venues") return {mode: "venues", festID, gameID, base, apiBase};
+  if (stripped === "/roster") return {mode: "roster", festID, gameID, base, apiBase};
   if (stripped === "/stats") return {mode: "stats", festID, gameID, base, apiBase};
   const match = stripped.match(/^\/matches\/([^/]+)$/);
   if (match) return {mode: "match", matchCode: decodeURIComponent(match[1]), festID, gameID, base, apiBase};

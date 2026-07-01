@@ -447,6 +447,58 @@ func RemapAnswerMatrix(values [][]string, oldParts, newParts []games.KSIParticip
 	return out
 }
 
+// FestRosterTeamView is one team with its ordered player names, for the
+// read-only "Составы" roster view shown to every visitor of a fest. Sourced from
+// the canonical fest roster tables (fest_teams/fest_players/fest_team_players) so
+// all game types (EK/OD/KSI) surface the same "who plays for what team" list.
+type FestRosterTeamView struct {
+	Number  int64    `json:"number,omitempty"`
+	Name    string   `json:"name"`
+	City    string   `json:"city,omitempty"`
+	Players []string `json:"players"`
+}
+
+// LoadFestRosterView loads every active team of a fest with its ordered player
+// names, for the public Составы view. Teams keep their roster position order;
+// players keep their roster_order within each team.
+func LoadFestRosterView(ctx context.Context, q store.Queryer, festID int64) ([]FestRosterTeamView, error) {
+	rows, err := q.QueryContext(ctx, `
+select tt.id, coalesce(tt.number, 0), tt.name, tt.city,
+       coalesce(p.first_name, ''), coalesce(p.last_name, '')
+from fest_teams tt
+left join fest_team_players ttp on ttp.team_id = tt.id
+left join fest_players p on p.id = ttp.player_id
+where tt.fest_id = ? and tt.deleted = 0
+order by tt.position, tt.id, ttp.roster_order, p.id`, festID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var teams []FestRosterTeamView
+	byID := make(map[int64]int)
+	for rows.Next() {
+		var teamID, number int64
+		var name, city, firstName, lastName string
+		if err := rows.Scan(&teamID, &number, &name, &city, &firstName, &lastName); err != nil {
+			return nil, err
+		}
+		idx, ok := byID[teamID]
+		if !ok {
+			teams = append(teams, FestRosterTeamView{Number: number, Name: name, City: city})
+			idx = len(teams) - 1
+			byID[teamID] = idx
+		}
+		if player := store.JoinPlayerName(firstName, lastName); player != "" {
+			teams[idx].Players = append(teams[idx].Players, player)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return teams, nil
+}
+
 func LoadFestRosterImportTeamsTx(ctx context.Context, q store.Queryer, festID int64) ([]FestRosterImportTeam, error) {
 	teams, err := store.CollectRows(ctx, q, `
 select coalesce(rating_id, 0), name, city, coalesce(number, 0)
