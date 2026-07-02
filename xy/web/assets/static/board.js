@@ -411,7 +411,10 @@ notifToggle.addEventListener("click", () => { if (notifPanelEl) closeNotifPanel(
 // snapshot and refresh the mirror. With local edits queued (or offline), render
 // the mirror, which the sync engine keeps current (server snapshot + applied
 // pending ops). After the queue drains, onBoardSynced reloads with real ids.
+let loading = false;
 async function load() {
+  if (loading) return; // dedupe overlapping refreshes (e.g. visibility + online)
+  loading = true;
   setStatus("saving");
   try {
     let snap;
@@ -469,8 +472,19 @@ async function load() {
   } catch (e) {
     setStatus("error");
     console.error(e);
+  } finally {
+    loading = false;
   }
 }
+
+// There is no live push from the server, so a tab left in the background misses
+// remote changes made meanwhile. Re-pull the authoritative snapshot when the tab
+// returns to the foreground (only once unlocked). load() itself skips the network
+// fetch when offline or when local edits are still queued, and its `loading`
+// guard dedupes this against the sync engine's own onBoardSynced reloads.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && dk) load();
+});
 
 // pingVisit stamps this board as most-recently-visited (for the board-list
 // ordering). Online-only best-effort, fired once per page session.
