@@ -6100,6 +6100,12 @@ body.is-fullscreen.od-page .match-main {
   transition: opacity 0.12s;
 }
 .pv-q:hover .pv-edit, .pv-block:hover .pv-edit, .pv-edit:hover, .pv-edit:focus-visible { opacity: 1; }
+/* On desktop the 66ch reading column is centred with room to spare, so move the
+   pencil out into the right gutter where it no longer covers wrapped question
+   text. On phones (≤760px) the column fills the pane, so it stays at right:0. */
+@media (min-width: 761px) {
+  .preview-body:not(.card-preview-body) .pv-edit { right: -2.5em; }
+}
 /* preserve authored line breaks inside multi-line question/answer/meta text */
 .pv-q-text, .pv-field, .pv-meta, .pv-list-item { white-space: pre-wrap; }
 .pv-q-text { margin-bottom: var(--space-2); }
