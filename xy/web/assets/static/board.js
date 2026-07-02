@@ -1669,13 +1669,20 @@ function pvField(field, defaultLabel, text, imgMap, screen, cls) {
   return node;
 }
 
-// pvEditBtn builds the ✏️ button shown on each preview block: it closes the
-// preview and drops straight into the card editor for that card.
+// pvEditBtn builds the small inline ✏️ button rendered just before each preview
+// block's leading label (e.g. "✏️Вопрос 1."): it closes the preview and drops
+// straight into the card editor, remembering the preview + card so the card's
+// ↩️ back button can restore this exact preview scrolled to the same question.
 function pvEditBtn(card) {
+  const list = previewListRef;
   return el("button", {
     class: "pv-edit", title: "Редактировать карточку", "aria-label": "Редактировать карточку",
     text: "✏️",
-    onclick: (e) => { e.stopPropagation(); closePreview(); openCard(card); },
+    onclick: (e) => {
+      e.stopPropagation();
+      closePreview();
+      openCard(card, { returnTo: list ? { listId: list.id, cardId: card.id } : null });
+    },
   });
 }
 
@@ -1686,22 +1693,22 @@ function pvEditBtn(card) {
 // card-detail preview (already inside the editor) leaves it off.
 function renderPreviewCard(card, number, imgMap, screen, edit) {
   if (card.kind === "test") {
-    return el("p", { class: "pv-meta pv-test", text: testTitle(card.desc) });
+    return el("p", { class: "pv-meta pv-test", text: testTitle(card.desc), dataset: { cardId: card.id } });
   }
   const blocks = xyChgk.parseBlocks(card.desc);
   const find = (t) => blocks.find((b) => b.type === t);
 
   if (card.kind === "question" || find("question")) {
-    const wrap = el("article", { class: "pv-q" });
-    if (edit) wrap.append(pvEditBtn(card));
+    const wrap = el("article", { class: "pv-q", dataset: { cardId: card.id } });
     const handout = find("handout");
     if (handout) wrap.append(pvField("handout", PV_LABELS.handout, handout.text, imgMap, screen, "pv-handout"));
-    // Question line: bold "Вопрос N." label (overridable) + question text (which
-    // may itself be a blitz/duplet list).
+    // Question line: small inline ✏️ (edit lists only) + bold "Вопрос N." label
+    // (overridable) + question text (which may itself be a blitz/duplet list).
     const qov = xyChgk.applyOverride(xyChgk.questionText(card.desc));
     const qLabel = qov.label || "Вопрос";
-    const qline = el("div", { class: "pv-q-text" },
-      el("strong", { class: "pv-label", text: `${qLabel}${number ? " " + number : ""}. ` }));
+    const qline = el("div", { class: "pv-q-text" });
+    if (edit) qline.append(pvEditBtn(card));
+    qline.append(el("strong", { class: "pv-label", text: `${qLabel}${number ? " " + number : ""}. ` }));
     qline.append(renderFieldBody(qov.text, imgMap, fieldOpts("question", screen)));
     wrap.append(qline);
     for (const f of ["answer", "zachet", "nezachet", "comment", "source", "author"]) {
@@ -1712,8 +1719,7 @@ function renderPreviewCard(card, number, imgMap, screen, edit) {
   }
 
   // Non-question card: render each block by type (never screen-transformed).
-  const wrap = el("div", { class: "pv-block" });
-  if (edit) wrap.append(pvEditBtn(card));
+  const wrap = el("div", { class: "pv-block", dataset: { cardId: card.id } });
   for (const b of blocks) {
     if (b.type === "num" || b.type === "numnum") continue; // numbering directive only
     if (b.type === "heading" || b.type === "ljheading") {
@@ -1732,6 +1738,8 @@ function renderPreviewCard(card, number, imgMap, screen, edit) {
       wrap.append(p);
     }
   }
+  // Inline ✏️ tucked in front of the block's first line (edit lists only).
+  if (edit) (wrap.firstElementChild || wrap).prepend(pvEditBtn(card));
   return wrap;
 }
 
@@ -1945,6 +1953,11 @@ async function commitCardMove(cardId, targetListId, body) {
 // ---- card detail ----
 let openCardId = null;
 let pendingList = null; // set while composing a brand-new (unsaved) card
+// cardReturn remembers where the open card was launched from so its ↩️ back
+// button lands there: null → plain close (board view); {listId, cardId} → reopen
+// that list's preview scrolled to this question (set only when opened from a
+// preview's ✏️ button).
+let cardReturn = null;
 const cardOverlay = document.getElementById("cardOverlay");
 
 // openCardEvents mirrors the open card's timeline (set by loadTimeline) so
@@ -2353,9 +2366,10 @@ async function copyCommentLink(eventId) {
   catch (err) { showCopyMsg("Не удалось скопировать: " + err.message, true); }
 }
 
-async function openCard(card) {
+async function openCard(card, opts = {}) {
   stopReadTracking(); // tear down any timer/observer left over from a previous card
   pendingList = null;
+  cardReturn = opts.returnTo || null;
   openCardId = card.id;
   reflectCardInUrl(card.id);
   cardView = "";
@@ -2775,12 +2789,28 @@ function closeCard() {
   reflectCardInUrl(null);
   openCardId = null;
   pendingList = null;
+  cardReturn = null;
   cardView = "";
   cardFieldReaders = null;
   for (const u of cardPreviewUrls) URL.revokeObjectURL(u);
   cardPreviewUrls = [];
 }
-document.getElementById("cardClose").addEventListener("click", closeCard);
+
+// cardBack drives the ↩️ button: if the card was opened from a list preview,
+// close it and restore that preview scrolled to the same question; otherwise it
+// is a plain close back to the board.
+async function cardBack() {
+  const ret = cardReturn; // capture before closeCard clears it
+  closeCard();
+  if (!ret || ret.listId == null) return;
+  const list = state.lists.find((l) => l.id === ret.listId);
+  if (!list) return;
+  await previewList(list);
+  if (previewOverlay.hidden) return; // guard against a close during the await
+  const node = document.getElementById("previewBody").querySelector(`[data-card-id="${ret.cardId}"]`);
+  if (node) node.scrollIntoView({ block: "center" });
+}
+document.getElementById("cardClose").addEventListener("click", cardBack);
 document.getElementById("cardLink").addEventListener("click", copyCardLink);
 cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) closeCard(); });
 
