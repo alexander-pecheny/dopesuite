@@ -1682,7 +1682,9 @@ function pvEditBtn(card) {
 // renderPreviewCard renders one card the way the docx export would: a question
 // card becomes a numbered question with its answer/zachet/etc.; meta/heading/
 // section/editor/date cards become their corresponding paragraphs/headings.
-function renderPreviewCard(card, number, imgMap, screen) {
+// `edit` adds the ✏️ jump-to-editor button — only the list preview passes it; the
+// card-detail preview (already inside the editor) leaves it off.
+function renderPreviewCard(card, number, imgMap, screen, edit) {
   if (card.kind === "test") {
     return el("p", { class: "pv-meta pv-test", text: testTitle(card.desc) });
   }
@@ -1691,7 +1693,7 @@ function renderPreviewCard(card, number, imgMap, screen) {
 
   if (card.kind === "question" || find("question")) {
     const wrap = el("article", { class: "pv-q" });
-    wrap.append(pvEditBtn(card));
+    if (edit) wrap.append(pvEditBtn(card));
     const handout = find("handout");
     if (handout) wrap.append(pvField("handout", PV_LABELS.handout, handout.text, imgMap, screen, "pv-handout"));
     // Question line: bold "Вопрос N." label (overridable) + question text (which
@@ -1711,7 +1713,7 @@ function renderPreviewCard(card, number, imgMap, screen) {
 
   // Non-question card: render each block by type (never screen-transformed).
   const wrap = el("div", { class: "pv-block" });
-  wrap.append(pvEditBtn(card));
+  if (edit) wrap.append(pvEditBtn(card));
   for (const b of blocks) {
     if (b.type === "num" || b.type === "numnum") continue; // numbering directive only
     if (b.type === "heading" || b.type === "ljheading") {
@@ -1743,7 +1745,7 @@ function renderPreviewBody(screen) {
   body.replaceChildren();
   if (!previewCtx) return;
   const { cards, numbers, imgMap } = previewCtx;
-  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], imgMap, screen)));
+  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], imgMap, screen, true)));
 }
 
 function closePreview() {
