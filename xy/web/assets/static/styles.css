@@ -5708,7 +5708,9 @@ body.is-fullscreen.od-page .match-main {
 .host-brand { display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 1 1 auto; }
 .host-home { display: inline-flex; align-items: center; text-decoration: none; font-size: 18px; line-height: 1; }
 .host-sep { color: var(--muted); }
-.host-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* leading-snug (not the inherited leading-tight:1) so the clipping box that gives
+   us the ellipsis has room for descenders — at line-height 1 they were shaved. */
+.host-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; line-height: var(--leading-snug); }
 
 /* Blue "unread" dots — on kanban cards, in the card detail head/timeline
    label, and the 🔔 bell badge/panel rows. */
@@ -6074,10 +6076,28 @@ body.is-fullscreen.od-page .match-main {
 /* Cap the reading column to a comfortable measure (~66 characters) and centre it
    — full-width lines on a wide modal are tiring to read. */
 .preview-body > * { margin: 0 auto var(--space-3); max-width: 66ch; }
-/* docx-like rhythm: a larger gap before each question, a small gap between the
-   question text and its answer block, and no gap between the answer/zachet/
-   comment/source/author lines (they read as one tight block). */
-.pv-q { margin-bottom: var(--space-6); }
+/* docx-like rhythm: an even gap around each question (top gap == bottom gap), a
+   small gap between the question text and its answer block, and no gap between
+   the answer/zachet/comment/source/author lines (they read as one tight block). */
+.pv-q { margin-top: var(--space-5); margin-bottom: var(--space-5); }
+/* per-card ✏️ jump-to-editor button, tucked into the top-right of each preview
+   block; subtle by default, full-opacity on hover of the block. */
+.pv-q, .pv-block { position: relative; }
+.pv-edit {
+  position: absolute;
+  top: 0;
+  right: 0;
+  border: none;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: var(--space-0-5) var(--space-1);
+  font-size: var(--text-base);
+  line-height: 1;
+  cursor: var(--cursor-action);
+  opacity: 0.4;
+  transition: opacity 0.12s;
+}
+.pv-q:hover .pv-edit, .pv-block:hover .pv-edit, .pv-edit:hover, .pv-edit:focus-visible { opacity: 1; }
 /* preserve authored line breaks inside multi-line question/answer/meta text */
 .pv-q-text, .pv-field, .pv-meta, .pv-list-item { white-space: pre-wrap; }
 .pv-q-text { margin-bottom: var(--space-2); }

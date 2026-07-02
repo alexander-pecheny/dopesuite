@@ -508,6 +508,13 @@ function groupNumbering(lists) {
 
 function render() {
   kanban.hidden = false;
+  // Preserve scroll positions across the full rebuild below — otherwise a drag
+  // (or any mutation that re-renders) snaps the board back to the top-left, which
+  // is jarring mid-edit. Capture the horizontal board scroll + each list's
+  // vertical scroll, then restore them once the fresh DOM is in place.
+  const scrollLeft = kanban.scrollLeft;
+  const listScroll = new Map();
+  for (const b of kanban.querySelectorAll(".kcards")) listScroll.set(b.dataset.listId, b.scrollTop);
   kanban.replaceChildren();
   const sorted = [...state.lists].sort(byRank);
   // Walk the lists in board order; a maximal run of consecutive lists sharing a
@@ -526,6 +533,10 @@ function render() {
   }
   kanban.append(renderAddList());
   paintLabels();
+  kanban.scrollLeft = scrollLeft;
+  for (const b of kanban.querySelectorAll(".kcards")) {
+    if (listScroll.has(b.dataset.listId)) b.scrollTop = listScroll.get(b.dataset.listId);
+  }
 }
 
 // renderGroup wraps a run of grouped lists in a labelled container so it's clear
@@ -1644,6 +1655,16 @@ function pvField(field, defaultLabel, text, imgMap, screen, cls) {
   return node;
 }
 
+// pvEditBtn builds the ✏️ button shown on each preview block: it closes the
+// preview and drops straight into the card editor for that card.
+function pvEditBtn(card) {
+  return el("button", {
+    class: "pv-edit", title: "Редактировать карточку", "aria-label": "Редактировать карточку",
+    text: "✏️",
+    onclick: (e) => { e.stopPropagation(); closePreview(); openCard(card); },
+  });
+}
+
 // renderPreviewCard renders one card the way the docx export would: a question
 // card becomes a numbered question with its answer/zachet/etc.; meta/heading/
 // section/editor/date cards become their corresponding paragraphs/headings.
@@ -1656,6 +1677,7 @@ function renderPreviewCard(card, number, imgMap, screen) {
 
   if (card.kind === "question" || find("question")) {
     const wrap = el("article", { class: "pv-q" });
+    wrap.append(pvEditBtn(card));
     const handout = find("handout");
     if (handout) wrap.append(pvField("handout", PV_LABELS.handout, handout.text, imgMap, screen, "pv-handout"));
     // Question line: bold "Вопрос N." label (overridable) + question text (which
@@ -1675,6 +1697,7 @@ function renderPreviewCard(card, number, imgMap, screen) {
 
   // Non-question card: render each block by type (never screen-transformed).
   const wrap = el("div", { class: "pv-block" });
+  wrap.append(pvEditBtn(card));
   for (const b of blocks) {
     if (b.type === "num" || b.type === "numnum") continue; // numbering directive only
     if (b.type === "heading" || b.type === "ljheading") {
