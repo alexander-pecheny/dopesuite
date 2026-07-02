@@ -6082,29 +6082,18 @@ body.is-fullscreen.od-page .match-main {
    the question text and its answer block; and no gap between the answer/zachet/
    comment/source/author lines (they read as one tight block). */
 .pv-q { margin-bottom: var(--space-5); }
-/* per-card ✏️ jump-to-editor button, tucked into the top-right of each preview
-   block; subtle by default, full-opacity on hover of the block. */
-.pv-q, .pv-block { position: relative; }
+/* per-card ✏️ jump-to-editor button, rendered inline right before the block's
+   leading label ("✏️Вопрос 1.") so it never covers wrapped text — including on
+   mobile, where an overlaid pencil used to obscure the question. */
 .pv-edit {
-  position: absolute;
-  top: 0;
-  right: 0;
   border: none;
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  padding: var(--space-0-5) var(--space-1);
+  background: none;
+  padding: 0;
+  margin-right: 0.15em;
   font-size: var(--text-base);
   line-height: 1;
   cursor: var(--cursor-action);
-  opacity: 0.4;
-  transition: opacity 0.12s;
-}
-.pv-q:hover .pv-edit, .pv-block:hover .pv-edit, .pv-edit:hover, .pv-edit:focus-visible { opacity: 1; }
-/* On desktop the 66ch reading column is centred with room to spare, so move the
-   pencil out into the right gutter where it no longer covers wrapped question
-   text. On phones (≤760px) the column fills the pane, so it stays at right:0. */
-@media (min-width: 761px) {
-  .preview-body:not(.card-preview-body) .pv-edit { right: -2.5em; }
+  vertical-align: baseline;
 }
 /* preserve authored line breaks inside multi-line question/answer/meta text */
 .pv-q-text, .pv-field, .pv-meta, .pv-list-item { white-space: pre-wrap; }
