@@ -6082,19 +6082,23 @@ body.is-fullscreen.od-page .match-main {
    the question text and its answer block; and no gap between the answer/zachet/
    comment/source/author lines (they read as one tight block). */
 .pv-q { margin-bottom: var(--space-5); }
-/* per-card ✏️ jump-to-editor button, rendered inline right before the block's
-   leading label ("✏️Вопрос 1.") so it never covers wrapped text — including on
-   mobile, where an overlaid pencil used to obscure the question. */
+/* per-card ✏️ jump-to-editor button, rendered inline as a small bordered pill
+   right before the block's leading label ("✏️ Вопрос 1.") so it stays clearly
+   separated from the text and never covers it — including on mobile, where an
+   overlaid pencil used to obscure the question. */
 .pv-edit {
-  border: none;
-  background: none;
-  padding: 0;
-  margin-right: 0.15em;
-  font-size: var(--text-base);
-  line-height: 1;
+  display: inline-block;
+  border: 1px solid var(--action-border);
+  background: var(--action-bg);
+  border-radius: var(--radius-sm);
+  padding: 0.05em 0.35em;
+  margin-right: 0.4em;
+  font-size: 0.8em;
+  line-height: 1.4;
   cursor: var(--cursor-action);
-  vertical-align: baseline;
+  vertical-align: middle;
 }
+.pv-edit:hover, .pv-edit:focus-visible { border-color: var(--text); }
 /* preserve authored line breaks inside multi-line question/answer/meta text */
 .pv-q-text, .pv-field, .pv-meta, .pv-list-item { white-space: pre-wrap; }
 .pv-q-text { margin-bottom: var(--space-2); }

@@ -2813,6 +2813,14 @@ async function cardBack() {
 document.getElementById("cardClose").addEventListener("click", cardBack);
 document.getElementById("cardLink").addEventListener("click", copyCardLink);
 cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) closeCard(); });
+// Escape behaves like the ↩️ back button when the card is open — but only when
+// no in-card widget owns Escape first (paste modal, label popup), so it dismisses
+// those without also closing the card.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || cardOverlay.hidden) return;
+  if (!pasteOverlay.hidden || document.querySelector(".label-add-popup")) return;
+  cardBack();
+});
 
 document.getElementById("cardSave").addEventListener("click", async () => {
   captureDraft(); // fold the active view's edits into cardDraft / cardDraftMeta
