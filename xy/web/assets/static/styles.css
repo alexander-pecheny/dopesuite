@@ -5708,9 +5708,10 @@ body.is-fullscreen.od-page .match-main {
 .host-brand { display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 1 1 auto; }
 .host-home { display: inline-flex; align-items: center; text-decoration: none; font-size: 18px; line-height: 1; }
 .host-sep { color: var(--muted); }
-/* leading-snug (not the inherited leading-tight:1) so the clipping box that gives
-   us the ellipsis has room for descenders — at line-height 1 they were shaved. */
-.host-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; line-height: var(--leading-snug); }
+/* The overflow:hidden that yields the ellipsis clips at the padding edge, so a
+   line-height bump alone still shaved bold Cyrillic descenders (у, щ, р). Give
+   the clip box explicit bottom room via padding so descenders survive. */
+.host-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; line-height: var(--leading-snug); padding-bottom: 0.2em; }
 
 /* Blue "unread" dots — on kanban cards, in the card detail head/timeline
    label, and the 🔔 bell badge/panel rows. */
