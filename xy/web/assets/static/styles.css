@@ -6310,6 +6310,10 @@ body.is-fullscreen.od-page .match-main {
   cursor: text;
 }
 .card-preview-body > * { max-width: none; }
+/* The card-detail preview shows a single question, so the inter-question
+   bottom margin (.pv-q) is just a trailing gap — drop it; the container's own
+   padding already gives symmetric top/bottom breathing room. */
+.card-preview-body .pv-q { margin-bottom: 0; }
 
 /* ── structured fields (Поля) ─────────────────────────────────────────────── */
 .card-fields { display: flex; flex-direction: column; gap: var(--space-2); }
