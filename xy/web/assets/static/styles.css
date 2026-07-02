@@ -6077,10 +6077,11 @@ body.is-fullscreen.od-page .match-main {
 /* Cap the reading column to a comfortable measure (~66 characters) and centre it
    — full-width lines on a wide modal are tiring to read. */
 .preview-body > * { margin: 0 auto var(--space-3); max-width: 66ch; }
-/* docx-like rhythm: an even gap around each question (top gap == bottom gap), a
-   small gap between the question text and its answer block, and no gap between
-   the answer/zachet/comment/source/author lines (they read as one tight block). */
-.pv-q { margin-top: var(--space-5); margin-bottom: var(--space-5); }
+/* docx-like rhythm: the gap below each question matches the preview's own top
+   padding (space-5) so the spacing reads even top-to-bottom; a small gap between
+   the question text and its answer block; and no gap between the answer/zachet/
+   comment/source/author lines (they read as one tight block). */
+.pv-q { margin-bottom: var(--space-5); }
 /* per-card ✏️ jump-to-editor button, tucked into the top-right of each preview
    block; subtle by default, full-opacity on hover of the block. */
 .pv-q, .pv-block { position: relative; }
