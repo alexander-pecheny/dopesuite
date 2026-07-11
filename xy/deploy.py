@@ -45,14 +45,19 @@ def main():
     run(["go", "build", "-o", server_bin, "./cmd/xy-server"], env=env)
     run(["go", "build", "-o", bot_bin, "./cmd/telegram-bot"], env=env)
 
-    # Stage into a temp remote path, then move into place (atomic-ish) + restart.
-    run(["ssh", host, f"mkdir -p {install_dir}"])
-    run(["scp", server_bin, f"{host}:{install_dir}/xy-server.new"])
-    run(["scp", bot_bin, f"{host}:{install_dir}/telegram-bot.new"])
+    # Upload to a world-writable staging dir — the ssh user has no write access to
+    # install_dir — then sudo-install into place (atomic-ish) + restart.
+    stage = "/tmp/xy-deploy"
+    run(["ssh", host, f"mkdir -p {stage} && sudo mkdir -p {install_dir}"])
+    run(["scp", server_bin, bot_bin, f"{host}:{stage}/"])
     run(["ssh", host,
-         f"sudo install -m755 {install_dir}/xy-server.new {install_dir}/xy-server && "
-         f"sudo install -m755 {install_dir}/telegram-bot.new {install_dir}/telegram-bot && "
-         f"sudo systemctl restart {service} && sudo systemctl restart {bot}"])
+         f"sudo install -m755 {stage}/xy-server {install_dir}/xy-server && "
+         f"sudo install -m755 {stage}/telegram-bot {install_dir}/telegram-bot && "
+         f"rm -rf {stage} && "
+         f"sudo systemctl restart {service} && "
+         # The bot has its own unit and isn't installed on every host.
+         f"(systemctl list-unit-files {bot}.service >/dev/null 2>&1 "
+         f"&& sudo systemctl restart {bot} || echo 'no {bot} service, skipped')"])
     print("deployed.")
 
 
