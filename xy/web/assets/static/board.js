@@ -1458,16 +1458,12 @@ document.addEventListener("visibilitychange", async () => {
 async function appendImages(fd, cards, wanted) {
   const found = new Set();
   if (!wanted.size) return found;
-  const lists = await Promise.all(cards.map((c) =>
-    fetchJSON(`/api/cards/${c.id}/attachments`).catch(() => [])));
+  const lists = await Promise.all(cards.map((c) => cardAttachments(c.id)));
   const targets = new Map(); // name → attachment (first match wins)
   for (const atts of lists) {
     for (const att of atts) {
-      let name = "";
-      try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) { continue; }
-      if (wanted.has(name) && !targets.has(name)) targets.set(name, att);
+      if (att.name && wanted.has(att.name) && !targets.has(att.name)) targets.set(att.name, att);
     }
-    if (targets.size >= wanted.size) break;
   }
   await Promise.all([...targets].map(async ([name, att]) => {
     try {
@@ -1531,8 +1527,6 @@ const PV_LABELS = {
   comment: "Комментарий", source: "Источник", author: "Автор",
   handout: "Раздаточный материал", editor: "Редактор", date: "Дата",
 };
-// Object URLs minted for the current preview, revoked when it closes.
-let previewUrls = [];
 const previewOverlay = document.getElementById("previewOverlay");
 
 // imgName extracts the referenced filename from an (img …) run value: like
@@ -1555,31 +1549,91 @@ function imageRefs(cards) {
   return wanted;
 }
 
-// resolveImages maps each wanted image name → a decrypted object URL by scanning
+// ---- attachment caches (preview image resolution) ----
+// A card's attachment list changes on upload/delete, so it's cached per card and
+// invalidated by loadAttachments (which every mutation path already calls).
+// Attachment *bytes* are immutable for a given id, so a decrypted object URL is
+// memoized for the page's lifetime — reopening a preview then costs no network,
+// no decrypt. The URL cache is LRU-capped; evicted URLs are revoked.
+const attListCache = new Map(); // cardId → [{ ...att, name }]
+const attUrlCache = new Map();  // attId  → decrypted object URL
+const ATT_URL_CACHE_MAX = 64;
+
+// cardAttachments lists one card's attachments with their filenames decrypted.
+async function cardAttachments(cardId, refresh = false) {
+  if (refresh) attListCache.delete(cardId);
+  const hit = attListCache.get(cardId);
+  if (hit) return hit;
+  let atts;
+  try { atts = await fetchJSON(`/api/cards/${cardId}/attachments`); } catch (_) { return []; }
+  const out = await Promise.all(atts.map(async (att) => {
+    let name = "";
+    try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) {}
+    return { ...att, name };
+  }));
+  attListCache.set(cardId, out);
+  return out;
+}
+
+// attachmentUrl decrypts one attachment into an object URL, reading its
+// ciphertext through the offline IndexedDB mirror (so a reload doesn't
+// re-download) and memoizing the result.
+async function attachmentUrl(att) {
+  const hit = attUrlCache.get(att.id);
+  if (hit) { attUrlCache.delete(att.id); attUrlCache.set(att.id, hit); return hit; } // LRU touch
+  let cipher;
+  const cached = await xySync.getAttachment(att.id).catch(() => null);
+  if (cached) {
+    cipher = cached.bytes instanceof Uint8Array ? cached.bytes : new Uint8Array(cached.bytes);
+  } else {
+    const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
+    if (!res.ok) throw new Error("не удалось скачать вложение");
+    cipher = new Uint8Array(await res.arrayBuffer());
+    try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher }); } catch (_) {}
+  }
+  const plain = await xyCrypto.decBytes(dk, cipher);
+  const url = URL.createObjectURL(new Blob([plain], { type: att.mime }));
+  attUrlCache.set(att.id, url);
+  for (const stale of [...attUrlCache.keys()].slice(0, attUrlCache.size - ATT_URL_CACHE_MAX)) {
+    URL.revokeObjectURL(attUrlCache.get(stale));
+    attUrlCache.delete(stale);
+  }
+  return url;
+}
+
+// resolveImages maps each wanted image name → a decrypted object URL, scanning
 // the cards' attachments (online only — mirrors the docx export's image
-// gathering). Missing names simply render as a placeholder in renderRich.
-async function resolveImages(cards, wanted, urls = previewUrls) {
+// gathering). Attachment lists and image bodies are fetched in parallel, and
+// `onImage` fires per image as it lands so callers can fill placeholders in
+// progressively instead of waiting for the slowest one. Missing names simply
+// stay a placeholder (see renderRich).
+async function resolveImages(cards, wanted, onImage) {
   const map = new Map();
   if (!wanted.size || !xySync.isOnline()) return map;
-  for (const card of cards) {
-    if (map.size >= wanted.size) break;
-    let atts;
-    try { atts = await fetchJSON(`/api/cards/${card.id}/attachments`); } catch (_) { continue; }
+  const lists = await Promise.all(cards.map((c) => cardAttachments(c.id)));
+  const targets = new Map(); // name → attachment (first match wins, in card order)
+  for (const atts of lists) {
     for (const att of atts) {
-      let name = "";
-      try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) { continue; }
-      if (!wanted.has(name) || map.has(name)) continue;
-      try {
-        const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
-        if (!res.ok) continue;
-        const plain = await xyCrypto.decBytes(dk, new Uint8Array(await res.arrayBuffer()));
-        const url = URL.createObjectURL(new Blob([plain], { type: att.mime }));
-        urls.push(url);
-        map.set(name, url);
-      } catch (_) {}
+      if (att.name && wanted.has(att.name) && !targets.has(att.name)) targets.set(att.name, att);
     }
   }
+  await Promise.all([...targets].map(async ([name, att]) => {
+    try {
+      const url = await attachmentUrl(att);
+      map.set(name, url);
+      if (onImage) onImage(name, url);
+    } catch (_) {}
+  }));
   return map;
+}
+
+// fillPreviewImages swaps the "[изображение: …]" placeholders inside an already
+// rendered preview for the images that have since resolved.
+function fillPreviewImages(root, imgMap) {
+  for (const ph of root.querySelectorAll(".pv-img-missing[data-img]")) {
+    const url = imgMap.get(ph.dataset.img);
+    if (url) ph.replaceWith(el("img", { class: "pv-img", src: url, alt: ph.dataset.img }));
+  }
 }
 
 // Fields that accept a "!!Label " label override (chgksuite OVERRIDE_PREFIX).
@@ -1614,7 +1668,7 @@ function renderRich(text, imgMap, opts = {}) {
       const name = imgName(val);
       const url = imgMap.get(name);
       if (url) frag.append(el("img", { class: "pv-img", src: url, alt: name }));
-      else frag.append(el("span", { class: "pv-img-missing", text: `[изображение: ${name}]` }));
+      else frag.append(el("span", { class: "pv-img-missing", dataset: { img: name }, text: `[изображение: ${name}]` }));
       continue;
     }
     if (type === "screen") { frag.append(document.createTextNode(nb((screenSide ? val.for_screen : val.for_print) || ""))); continue; }
@@ -1758,8 +1812,6 @@ function renderPreviewBody(screen) {
 
 function closePreview() {
   previewOverlay.hidden = true;
-  for (const u of previewUrls) URL.revokeObjectURL(u);
-  previewUrls = [];
   previewCtx = null;
   previewListRef = null;
   document.getElementById("previewBody").replaceChildren();
@@ -1791,12 +1843,19 @@ async function previewList(list) {
     body.append(el("p", { class: "pv-empty", text: "В списке нет карточек." }));
     return;
   }
+  // Text renders straight away (cards are decrypted at board load); image
+  // handouts resolve in the background and replace their placeholders as they
+  // arrive, so a long list is readable immediately.
   const numbers = xyChgk.numberQuestionCards(cards);
-  const imgMap = await resolveImages(cards, imageRefs(cards));
-  // Guard against a close (or another open) during the await.
-  if (previewOverlay.hidden) { for (const u of previewUrls) URL.revokeObjectURL(u); previewUrls = []; return; }
-  previewCtx = { cards, numbers, imgMap };
+  const imgMap = new Map();
+  const ctx = { cards, numbers, imgMap };
+  previewCtx = ctx;
   renderPreviewBody(document.getElementById("previewScreen").checked);
+  await resolveImages(cards, imageRefs(cards), (name, url) => {
+    imgMap.set(name, url);
+    // Ignore a close (or another list's preview) that happened during the await.
+    if (previewCtx === ctx && !previewOverlay.hidden) fillPreviewImages(body, imgMap);
+  });
 }
 
 // Copy the previewed test list's tester summary; brief inline confirmation.
@@ -1981,7 +2040,6 @@ let cardDraft = "";          // unsaved working 4s description
 let cardDraftMeta = null;    // unsaved handout-generation settings (string|null)
 let cardFieldReaders = null; // per-field read() closures for the Поля view
 let cardFieldsExtra = null;  // unmodelled blocks preserved across a Поля recompose
-let cardPreviewUrls = [];    // object URLs minted for the single-card preview
 
 const CARD_TABS = ["preview", "fields", "text"];
 const tabBtn = (v) => document.getElementById("cardTab" + v[0].toUpperCase() + v.slice(1));
@@ -2296,18 +2354,18 @@ function readTesterRows() { return testerReaders ? testerReaders() : []; }
 // version of the list preview). Read-only; double-click jumps back to editing.
 async function renderCardPreview() {
   const body = document.getElementById("cardPreviewBody");
-  for (const u of cardPreviewUrls) URL.revokeObjectURL(u);
-  cardPreviewUrls = [];
   if (!cardDraft.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: "Пусто." })); return; }
   const c = openCardCard();
   const card = { id: c ? c.id : 0, kind: draftKind(), desc: cardDraft, listId: c ? c.listId : (pendingList ? pendingList.id : 0) };
   const number = card.kind === "question" ? questionNumberFor(card) : null;
   const reqId = openCardId;
-  body.replaceChildren(el("p", { class: "pv-empty", text: "…" }));
-  const imgMap = await resolveImages([card], imageRefs([card]), cardPreviewUrls);
-  if (cardView !== "preview" || openCardId !== reqId) return; // switched view/card during the await
   const screen = document.getElementById("cardPreviewScreen").checked;
+  const imgMap = new Map();
   body.replaceChildren(renderPreviewCard(card, number, imgMap, screen));
+  await resolveImages([card], imageRefs([card]), (name, url) => {
+    imgMap.set(name, url);
+    if (cardView === "preview" && openCardId === reqId) fillPreviewImages(body, imgMap);
+  });
 }
 
 // Tab clicks + the preview screen toggle + double-click-to-edit.
@@ -2792,8 +2850,6 @@ function closeCard() {
   cardReturn = null;
   cardView = "";
   cardFieldReaders = null;
-  for (const u of cardPreviewUrls) URL.revokeObjectURL(u);
-  cardPreviewUrls = [];
 }
 
 // cardBack drives the ↩️ button: if the card was opened from a list preview,
@@ -3152,11 +3208,11 @@ async function loadAttachments(cardId) {
   const box = document.getElementById("attachments");
   box.replaceChildren();
   cardImageNames = [];
-  let list;
-  try { list = await fetchJSON(`/api/cards/${cardId}/attachments`); } catch (_) { return; }
+  // Always refetch: this runs on card open and after every upload/delete, so it
+  // doubles as the invalidation point for the preview's attachment-list cache.
+  const list = await cardAttachments(cardId, true);
   for (const att of list) {
-    let name = "файл";
-    try { name = await xyCrypto.decField(dk, att.filename_enc); } catch (_) {}
+    const name = att.name || "файл";
     if ((att.mime || "").startsWith("image/")) cardImageNames.push(name);
     const row = el("div", { class: "attach-row" },
       el("button", { class: "attach-name", type: "button", text: `📎 ${name}`, onclick: () => download(att, name) }),
