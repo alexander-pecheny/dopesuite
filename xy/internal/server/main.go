@@ -56,6 +56,8 @@ func Main() {
 	mux.HandleFunc("GET /manifest.webmanifest", srv.serveRootAsset(
 		"static/manifest.webmanifest", "application/manifest+json; charset=utf-8",
 		"public, max-age=3600", nil))
+	mux.HandleFunc("GET /favicon.ico", srv.serveRootAsset(
+		"static/favicon.ico", "image/x-icon", "public, max-age=86400", nil))
 
 	// ---- auth API ----
 	mux.HandleFunc("POST /api/auth/register/start", srv.handleRegisterStart)
