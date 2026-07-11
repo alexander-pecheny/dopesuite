@@ -1,0 +1,39 @@
+doctype
+html lang="ru"
+  head
+    meta charset="utf-8"
+    meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    title "API-токены · xy"
+    link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin
+    link rel="stylesheet" href="/static/styles.css"
+    script src="/static/menu.js"
+    script type="module" src="/static/tokens.js"
+  body class="host import-page"
+    header class="host-top"
+      h1 "API-токены"
+      div class="host-actions"
+        span class="sync-status" id="status" data-state="saved"
+        a class="action-icon" href="/profile" aria-label="Профиль" title="Профиль" "←"
+
+    main class="match-main"
+      div class="sheet-frame import-frame"
+        section class="auth-step"
+          p class="auth-hint"
+            "Токен даёт доступ к доскам через Trello-совместимый API (например, для"
+            (code "chgksuite") "). Действует месяц. Данные приходят зашифрованными —"
+            "расшифровываются локально паролем доски."
+          form id="createForm" class="auth-form"
+            input class="input" id="tokenLabel" type="text" placeholder="Название (например, «chgksuite на ноутбуке»)" maxlength="100" spellcheck="false"
+            button class="btn" type="submit" "Создать токен"
+          pre id="createMessage" class="import-message"
+
+        section class="auth-step" id="newTokenSection" hidden
+          p class="auth-hint" "Скопируйте токен сейчас — позже он не будет показан:"
+          div class="token-reveal"
+            code id="newTokenValue" class="token-value"
+            button class="btn btn-ghost" id="copyTokenBtn" type="button" "Скопировать"
+
+        section class="auth-step"
+          h2 class="auth-subhead" "Активные и прошлые токены"
+          ul class="token-list" id="tokenList"
+          p class="auth-hint" id="emptyHint" hidden "Токенов пока нет."

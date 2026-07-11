@@ -1,0 +1,31 @@
+doctype
+html lang="ru"
+  head
+    meta charset="utf-8"
+    meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    title "Регистрация · xy"
+    link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin
+    link rel="stylesheet" href="/static/styles.css"
+    script src="/static/menu.js"
+    script type="module" src="/static/register.js"
+  body class="host import-page"
+    header class="host-top"
+      h1 "Регистрация"
+      div class="host-actions"
+        span class="sync-status" id="status" data-state="saved"
+        a class="action-icon" href="/login" aria-label="Вход" title="Вход" "←"
+
+    main class="match-main"
+      div class="sheet-frame import-frame"
+        section id="step-invite" class="auth-step"
+          p class="auth-hint" "Введите код-приглашение."
+          form id="inviteForm" class="auth-form"
+            input class="input" id="inviteCode" type="text" placeholder="Код-приглашение" autocapitalize="characters" spellcheck="false" required autofocus
+            button class="btn" type="submit" "Дальше"
+          pre id="inviteMessage" class="import-message"
+
+        section id="step-code" class="auth-step" hidden
+          p class="auth-hint" "Отправьте этот код боту в Telegram:"
+          p class="register-code" id="regCode"
+          p class="auth-hint" "Ждём подтверждения от бота…"
+          pre id="codeMessage" class="import-message"

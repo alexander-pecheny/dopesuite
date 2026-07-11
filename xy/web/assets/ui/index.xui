@@ -1,0 +1,34 @@
+doctype
+html lang="ru"
+  head
+    meta charset="utf-8"
+    meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    title "Мои доски · xy"
+    link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin
+    link rel="stylesheet" href="/static/styles.css"
+    script src="/static/menu.js"
+    script type="module" src="/static/index.js"
+  body class="host"
+    header class="host-top"
+      h1 "Доски"
+      div class="host-actions"
+        span class="sync-status" id="status" data-state="saved" aria-label="Готово" title="Готово"
+        a class="action-icon" href="/import" aria-label="Импорт из Trello" title="Импорт из Trello" "⇪"
+        button class="action-icon" id="newBoardBtn" aria-label="Новая доска" title="Новая доска" "+"
+
+    main class="match-main"
+      div id="boardList" class="board-grid"
+      pre id="message" class="import-message"
+
+    -- create-board dialog
+    div class="appearance-modal-overlay" id="createOverlay" hidden
+      div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Новая доска"
+        h2 class="appearance-modal-title" "Новая доска"
+        form id="createForm" class="auth-form auth-form-stack"
+          input class="input" id="boardName" type="text" placeholder="Название доски" required
+          input class="input" id="boardPass" type="password" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required
+          p class="auth-hint" "Пароль шифрует все данные доски на вашем устройстве. Запомните его — восстановить нельзя. Делитесь им с соавторами вне xy."
+          div class="auth-actions"
+            button class="btn" type="submit" "Создать"
+            button class="btn btn-ghost" type="button" id="createCancel" "Отмена"
+        pre id="createMessage" class="import-message"
