@@ -117,8 +117,19 @@
     trigger.setAttribute("aria-expanded", "false");
     // An SVG hamburger centers crisply at any size; the ☰ glyph (U+2630) sits
     // high in its em-box and reads off-centre inside the icon button.
-    trigger.innerHTML = '<svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true" focusable="false">'
-      + '<path d="M2.5 5h13M2.5 9h13M2.5 13h13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 18 18");
+    svg.setAttribute("width", "18");
+    svg.setAttribute("height", "18");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", "M2.5 5h13M2.5 9h13M2.5 13h13");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "1.8");
+    path.setAttribute("stroke-linecap", "round");
+    svg.append(path);
+    trigger.replaceChildren(svg);
 
     const dropdown = document.createElement("div");
     dropdown.className = "menu-dropdown";
