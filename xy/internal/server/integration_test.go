@@ -28,9 +28,19 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 		t.Fatalf("blobstore: %v", err)
 	}
 	srv := &server{db: db, blobs: blobs, staging: newHandoutStaging()}
-	srv.assetSource, _ = staticSource()
+	var mode string
+	srv.assetSource, mode = staticSource()
+	srv.assetNoCache = mode == "disk"
+	srv.warmPageCache()
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /", srv.handleIndex)
+	mux.HandleFunc("GET /login", srv.servePage("ui/login.xui"))
+	mux.HandleFunc("GET /register", srv.servePage("ui/register.xui"))
+	mux.HandleFunc("GET /profile", srv.servePage("ui/profile.xui"))
+	mux.HandleFunc("GET /profile/tokens", srv.servePage("ui/tokens.xui"))
+	mux.HandleFunc("GET /board/{id}", srv.servePage("ui/board.xui"))
+	mux.HandleFunc("GET /import", srv.servePage("ui/import.xui"))
 	mux.HandleFunc("POST /api/auth/register/start", srv.handleRegisterStart)
 	mux.HandleFunc("GET /api/auth/register/status", srv.handleRegisterStatus)
 	mux.HandleFunc("POST /api/auth/login/start", srv.handleLoginStart)

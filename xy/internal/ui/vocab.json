@@ -104,6 +104,14 @@
       "kind": "value"
     },
     {
+      "name": "max",
+      "kind": "value"
+    },
+    {
+      "name": "step",
+      "kind": "value"
+    },
+    {
       "name": "maxlength",
       "kind": "value"
     },
@@ -269,6 +277,8 @@
         "value",
         "checked",
         "min",
+        "max",
+        "step",
         "maxlength",
         "accept"
       ],
@@ -355,6 +365,7 @@
     "appearance-modal-done",
     "appearance-modal-overlay",
     "appearance-modal-title",
+    "appearance-row-label",
     "attach-add",
     "attach-lossless",
     "attachments",
@@ -410,10 +421,15 @@
     "host-sep",
     "host-title",
     "host-top",
+    "import-count",
+    "import-doc",
     "import-form",
     "import-frame",
     "import-message",
+    "import-overlay",
     "import-page",
+    "import-preview",
+    "import-textarea",
     "input",
     "kanban",
     "label-add-btn",
@@ -449,6 +465,12 @@
     "register-code",
     "section",
     "sheet-frame",
+    "sizes-actions",
+    "sizes-hint",
+    "sizes-modal",
+    "sizes-row",
+    "sizes-row-head",
+    "sizes-value",
     "stack",
     "sync-status",
     "timeline",

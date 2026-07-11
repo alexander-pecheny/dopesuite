@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"xy/internal/ui"
 	"xy/web/assets"
 )
 
@@ -94,14 +95,73 @@ func (s *server) versionAssetRefs(body []byte) []byte {
 	})
 }
 
-// servePage serves a static HTML file from the asset source with asset-ref
-// versioning and a strict Content-Security-Policy (see PLAN: XSS = total client
-// compromise, so all crypto-bearing pages get a locked-down CSP).
+// pagePaths are the ui/*.xui sources servePage compiles; warmPageCache
+// compiles them all up front in embed mode.
+var pagePaths = []string{
+	"ui/login.xui",
+	"ui/register.xui",
+	"ui/profile.xui",
+	"ui/tokens.xui",
+	"ui/import.xui",
+	"ui/board.xui",
+	"ui/index.xui",
+}
+
+// warmPageCache compiles every page in embed mode so a broken page fails fast
+// at startup rather than surfacing on a request. No-op in disk mode, which
+// recompiles per request for hot reload.
+func (s *server) warmPageCache() {
+	if s.assetNoCache {
+		return
+	}
+	for _, name := range pagePaths {
+		if _, err := s.compiledPage(name); err != nil {
+			panic(fmt.Sprintf("compile %s: %v", name, err))
+		}
+	}
+}
+
+// compiledPage returns the rendered HTML for a ui/*.xui page. In embed mode it
+// serves from pageCache (populated by warmPageCache, or lazily on first miss);
+// in disk mode it recompiles from disk on every call for hot reload.
+func (s *server) compiledPage(name string) ([]byte, error) {
+	if !s.assetNoCache {
+		s.pageMu.Lock()
+		body, ok := s.pageCache[name]
+		s.pageMu.Unlock()
+		if ok {
+			return body, nil
+		}
+	}
+
+	src, err := fs.ReadFile(s.assetSource, name)
+	if err != nil {
+		return nil, err
+	}
+	body, err := ui.Compile(name, src)
+	if err != nil {
+		return nil, err
+	}
+
+	if !s.assetNoCache {
+		s.pageMu.Lock()
+		if s.pageCache == nil {
+			s.pageCache = map[string][]byte{}
+		}
+		s.pageCache[name] = body
+		s.pageMu.Unlock()
+	}
+	return body, nil
+}
+
+// servePage compiles and serves a ui/*.xui page with asset-ref versioning and
+// a strict Content-Security-Policy (see PLAN: XSS = total client compromise,
+// so all crypto-bearing pages get a locked-down CSP).
 func (s *server) servePage(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := fs.ReadFile(s.assetSource, name)
+		body, err := s.compiledPage(name)
 		if err != nil {
-			http.NotFound(w, r)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		body = s.versionAssetRefs(body)

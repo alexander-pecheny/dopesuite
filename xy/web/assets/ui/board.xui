@@ -119,6 +119,22 @@ html lang="ru"
             button class="action-icon" id="previewClose" type="button" aria-label="Закрыть" "×"
         div class="preview-body" id="previewBody"
 
+    -- import verification overlay: the parsed 4s source (left, editable) next to
+    -- its live preview (right), so parsing mistakes can be fixed before the
+    -- package becomes a list. Only .docx needs it — .4s/.zip import straight.
+    div class="card-overlay import-overlay" id="importOverlay" hidden
+      div class="preview-doc import-doc" role="dialog" aria-modal="true" aria-label="Проверка импорта"
+        div class="preview-head"
+          h2 class="preview-title" id="importTitle" "Проверка импорта"
+          div class="preview-head-actions"
+            span class="import-count" id="importCount"
+            button class="btn btn-small" id="importCommit" type="button" "Импортировать"
+            button class="action-icon" id="importClose" type="button" aria-label="Закрыть" "×"
+        div class="handouts-body"
+          div class="handouts-pane handouts-src"
+            textarea class="input handouts-textarea import-textarea" id="importSource" spellcheck="false" aria-label="Исходник 4s"
+          div class="handouts-pane import-preview" id="importPreview"
+
     -- handouts generation overlay: edit the chgksuite .hndt source (left) and
     -- render it to a PDF via the server (right). The PDF is ephemeral.
     div class="card-overlay preview-overlay" id="handoutsOverlay" hidden
@@ -171,6 +187,31 @@ html lang="ru"
         div class="lists-manage-rows" id="listsManageRows"
         pre id="listsManageMessage" class="import-message"
         button class="appearance-modal-done" id="listsManageClose" type="button" "Готово"
+
+    -- sizes overlay: list width + max card height, stored per browser
+    div class="appearance-modal-overlay" id="sizesOverlay" hidden
+      div class="appearance-modal sizes-modal" role="dialog" aria-modal="true" aria-label="Изменить размеры"
+        h2 class="appearance-modal-title" "Изменить размеры"
+        div class="sizes-row"
+          div class="sizes-row-head"
+            label class="appearance-row-label" for="sizesBoardW" "Ширина рабочей области"
+            span class="sizes-value" id="sizesBoardWVal"
+          input type="range" id="sizesBoardW" min="800" max="3200" step="50"
+          p class="sizes-hint" "Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
+        div class="sizes-row"
+          div class="sizes-row-head"
+            label class="appearance-row-label" for="sizesListW" "Ширина списка"
+            span class="sizes-value" id="sizesListWVal"
+          input type="range" id="sizesListW" min="200" max="640" step="10"
+        div class="sizes-row"
+          div class="sizes-row-head"
+            label class="appearance-row-label" for="sizesCardH" "Текст карточки"
+            span class="sizes-value" id="sizesCardHVal"
+          input type="range" id="sizesCardH" min="1" max="12" step="1"
+          p class="sizes-hint" "Сколько строк вопроса показывать на карточке. На максимуме — весь текст."
+        div class="sizes-actions"
+          button class="btn btn-small btn-ghost" id="sizesReset" type="button" "Сбросить по умолчанию"
+          button class="appearance-modal-done" id="sizesClose" type="button" "Готово"
 
     -- members / sharing overlay
     div class="appearance-modal-overlay" id="membersOverlay" hidden

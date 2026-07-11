@@ -19,11 +19,22 @@ authorize. Built by reusing patterns and frontend assets from `~/dope`
   under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto.
 - **Tests**: Go (`go test`) + frontend (`node --test jstest/*.test.js`).
 - **Build/run**: `justfile`.
+- **UI markup**: no hand-written HTML anywhere. Pages are authored in `.xui`
+  (`web/assets/ui/`), a constrained typed DSL compiled to HTML at server startup
+  by `internal/ui` (spec: `internal/ui/DESIGN.md`); the dynamic /admin pages use
+  the generated typed Go builder from the same package. The vocabulary
+  (elements / per-element attrs / class tokens) is closed (`vocab.json`) —
+  unknown tag/attr/class or duplicate id is a compile error.
 
 ## Layout
 ```
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
 cmd/telegram-bot/      login bot, bridges to server via shared secret (no DB handle)
+cmd/uic/               compile one .xui page to HTML on stdout (debug/diff tool)
+cmd/uigen/             codegen: internal/ui/vocab.json → tags_gen.go (typed builder)
+internal/ui/           constrained UI DSL: .xui parser, validator, deterministic
+                       printer, typed Go builder; DESIGN.md is the spec,
+                       vocab.json the closed vocabulary (go:generate → tags_gen.go)
 internal/server/       package server — the whole HTTP server
   server.go            DB open (BuildDSN/WAL), write-tx discipline (conn-before-lock)
   db.go                full schema + migration runner (schema_versions)
@@ -38,7 +49,7 @@ internal/server/       package server — the whole HTTP server
   trello_compat.go     Trello-compatible API for chgksuite (token-authed via key+token)
   rank.go              server-side fractional-index keyAfter (Trello card upload)
   invite.go            invite minting (subcommand)
-  admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny")
+  admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny"); pages built with the typed ui builder
   export.go            POST /api/export/docx — Go docx fully in-process (chgk/docx), images included; no Python
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
                        parsed in memory, nothing persisted; the client encrypts the result into a new list
@@ -80,7 +91,10 @@ internal/blobstore/    attachment bytes ON DISK (content-addressed, sharded, wri
                        stores only a blob_ref. NB: backups therefore have two halves — litestream
                        replicates xy.db, an hourly `rclone copy` replicates blobs/. Restore the DB
                        alone and every attachment is a dangling ref. See README "Deployment & backups".
-web/assets/            //go:embed static (package assets)
+web/assets/            //go:embed static + ui (package assets)
+  ui/                  the 7 app pages as .xui (index, board, login, register,
+                       profile, tokens, import) — compiled to HTML by
+                       internal/ui at server startup (per-request in dev disk mode)
   static/
     crypto.js          envelope format + board key lifecycle + IndexedDB key cache
     store.js           offline IndexedDB layer: snapshot/timeline/attachment mirror,
@@ -93,8 +107,8 @@ web/assets/            //go:embed static (package assets)
     rank.js            fractional indexing (LexoRank-style keyBetween)
     app.js             shared fetch/DOM helpers, derived titles, offline-tolerant requireLogin
     diff.js            word-level token diff for desc_edit timeline highlighting
-    index.js/.html     board list + create-board (passphrase) flow; offline board-list cache
-    board.js/.html     kanban: unlock, drag-reorder, card detail, timeline, labels,
+    index.js           board list + create-board (passphrase) flow; offline board-list cache
+    board.js           kanban: unlock, drag-reorder, card detail, timeline, labels,
                        move/copy (by board name + list + position; a copy/cross-board
                        move carries the card's labels + comments + attachments via
                        copyCardExtras — online-only for the extras), list ⋯ menu
@@ -119,7 +133,7 @@ web/assets/            //go:embed static (package assets)
                        left, the live list preview on the right. .4s/.zip import straight.
     menu.js            theme boot + ☰ menu; also injects PWA <head> tags + registers sw.js
     login/register/profile  auth UI (login/menu ported from dope)
-    tokens.js/.html    /profile/tokens — create/revoke API tokens for the Trello API
+    tokens.js          /profile/tokens — create/revoke API tokens for the Trello API
     styles.css         dope design system (copied) + xy board/card section at the end
     vendor/            self-hosted @noble/hashes (scrypt + deps), WebCrypto shim
 jstest/                node --test: crypto round-trips, rank ordering, offline sync engine

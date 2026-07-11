@@ -238,6 +238,14 @@ func Min(v string) Attr {
 	return Attr{Name: "min", Value: v}
 }
 
+func Max(v string) Attr {
+	return Attr{Name: "max", Value: v}
+}
+
+func Step(v string) Attr {
+	return Attr{Name: "step", Value: v}
+}
+
 func Maxlength(v string) Attr {
 	return Attr{Name: "maxlength", Value: v}
 }
@@ -285,6 +293,7 @@ const AppearanceModal ClassToken = "appearance-modal"
 const AppearanceModalDone ClassToken = "appearance-modal-done"
 const AppearanceModalOverlay ClassToken = "appearance-modal-overlay"
 const AppearanceModalTitle ClassToken = "appearance-modal-title"
+const AppearanceRowLabel ClassToken = "appearance-row-label"
 const AttachAdd ClassToken = "attach-add"
 const AttachLossless ClassToken = "attach-lossless"
 const Attachments ClassToken = "attachments"
@@ -340,10 +349,15 @@ const HostHome ClassToken = "host-home"
 const HostSep ClassToken = "host-sep"
 const HostTitle ClassToken = "host-title"
 const HostTop ClassToken = "host-top"
+const ImportCount ClassToken = "import-count"
+const ImportDoc ClassToken = "import-doc"
 const ImportForm ClassToken = "import-form"
 const ImportFrame ClassToken = "import-frame"
 const ImportMessage ClassToken = "import-message"
+const ImportOverlay ClassToken = "import-overlay"
 const ImportPage ClassToken = "import-page"
+const ImportPreview ClassToken = "import-preview"
+const ImportTextarea ClassToken = "import-textarea"
 const InputClass ClassToken = "input"
 const Kanban ClassToken = "kanban"
 const LabelAddBtn ClassToken = "label-add-btn"
@@ -379,6 +393,12 @@ const PublicUser ClassToken = "public-user"
 const RegisterCode ClassToken = "register-code"
 const SectionClass ClassToken = "section"
 const SheetFrame ClassToken = "sheet-frame"
+const SizesActions ClassToken = "sizes-actions"
+const SizesHint ClassToken = "sizes-hint"
+const SizesModal ClassToken = "sizes-modal"
+const SizesRow ClassToken = "sizes-row"
+const SizesRowHead ClassToken = "sizes-row-head"
+const SizesValue ClassToken = "sizes-value"
 const Stack ClassToken = "stack"
 const SyncStatus ClassToken = "sync-status"
 const Timeline ClassToken = "timeline"

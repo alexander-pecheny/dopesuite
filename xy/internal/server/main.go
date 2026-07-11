@@ -32,17 +32,18 @@ func Main() {
 	if !srv.assetNoCache {
 		srv.assetETags = buildAssetETags(source)
 	}
+	srv.warmPageCache()
 
 	mux := http.NewServeMux()
 
 	// ---- HTML pages ----
 	mux.HandleFunc("GET /", srv.handleIndex)
-	mux.HandleFunc("GET /login", srv.servePage("static/login.html"))
-	mux.HandleFunc("GET /register", srv.servePage("static/register.html"))
-	mux.HandleFunc("GET /profile", srv.servePage("static/profile.html"))
-	mux.HandleFunc("GET /profile/tokens", srv.servePage("static/tokens.html"))
-	mux.HandleFunc("GET /board/{id}", srv.servePage("static/board.html"))
-	mux.HandleFunc("GET /import", srv.servePage("static/import.html"))
+	mux.HandleFunc("GET /login", srv.servePage("ui/login.xui"))
+	mux.HandleFunc("GET /register", srv.servePage("ui/register.xui"))
+	mux.HandleFunc("GET /profile", srv.servePage("ui/profile.xui"))
+	mux.HandleFunc("GET /profile/tokens", srv.servePage("ui/tokens.xui"))
+	mux.HandleFunc("GET /board/{id}", srv.servePage("ui/board.xui"))
+	mux.HandleFunc("GET /import", srv.servePage("ui/import.xui"))
 
 	// ---- admin tooling (gated on the configured admin username) ----
 	mux.HandleFunc("GET /admin", srv.HandleAdminLanding)
@@ -172,5 +173,5 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.servePage("static/index.html")(w, r)
+	s.servePage("ui/index.xui")(w, r)
 }

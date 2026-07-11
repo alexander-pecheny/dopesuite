@@ -38,6 +38,9 @@ type server struct {
 	assetNoCache bool
 	assetETags   map[string]string
 
+	pageMu    sync.Mutex
+	pageCache map[string][]byte // compiled ui/*.xui pages (embed mode only; see assets.go)
+
 	staging *handoutStaging // staged handout images (see staging.go)
 
 	// typst, compiled to wasm and run in-process (see typst.go). Built lazily and
