@@ -1,0 +1,460 @@
+{
+  "globalAttrs": [
+    "id",
+    "class",
+    "title",
+    "hidden",
+    "role"
+  ],
+  "attrPatterns": [
+    "aria-*",
+    "data-*"
+  ],
+  "attrs": [
+    {
+      "name": "lang",
+      "kind": "value"
+    },
+    {
+      "name": "charset",
+      "kind": "value"
+    },
+    {
+      "name": "name",
+      "kind": "value"
+    },
+    {
+      "name": "content",
+      "kind": "value"
+    },
+    {
+      "name": "rel",
+      "kind": "value"
+    },
+    {
+      "name": "href",
+      "kind": "value"
+    },
+    {
+      "name": "as",
+      "kind": "value"
+    },
+    {
+      "name": "type",
+      "kind": "value"
+    },
+    {
+      "name": "crossorigin",
+      "kind": "bare"
+    },
+    {
+      "name": "src",
+      "kind": "value"
+    },
+    {
+      "name": "defer",
+      "kind": "bare"
+    },
+    {
+      "name": "method",
+      "kind": "value"
+    },
+    {
+      "name": "action",
+      "kind": "value"
+    },
+    {
+      "name": "autocomplete",
+      "kind": "value"
+    },
+    {
+      "name": "placeholder",
+      "kind": "value"
+    },
+    {
+      "name": "spellcheck",
+      "kind": "value"
+    },
+    {
+      "name": "autocapitalize",
+      "kind": "value"
+    },
+    {
+      "name": "autocorrect",
+      "kind": "value"
+    },
+    {
+      "name": "required",
+      "kind": "bare"
+    },
+    {
+      "name": "autofocus",
+      "kind": "bare"
+    },
+    {
+      "name": "value",
+      "kind": "value"
+    },
+    {
+      "name": "checked",
+      "kind": "bare"
+    },
+    {
+      "name": "min",
+      "kind": "value"
+    },
+    {
+      "name": "maxlength",
+      "kind": "value"
+    },
+    {
+      "name": "accept",
+      "kind": "value"
+    },
+    {
+      "name": "disabled",
+      "kind": "bare"
+    },
+    {
+      "name": "for",
+      "kind": "value"
+    },
+    {
+      "name": "download",
+      "kind": "bare"
+    },
+    {
+      "name": "rows",
+      "kind": "value"
+    },
+    {
+      "name": "readonly",
+      "kind": "bare"
+    },
+    {
+      "name": "id",
+      "kind": "value"
+    },
+    {
+      "name": "class",
+      "kind": "value"
+    },
+    {
+      "name": "title",
+      "kind": "value"
+    },
+    {
+      "name": "hidden",
+      "kind": "bare"
+    },
+    {
+      "name": "role",
+      "kind": "value"
+    }
+  ],
+  "elements": [
+    {
+      "tag": "html",
+      "attrs": [
+        "lang"
+      ]
+    },
+    {
+      "tag": "head",
+      "attrs": []
+    },
+    {
+      "tag": "meta",
+      "attrs": [
+        "charset",
+        "name",
+        "content"
+      ],
+      "void": true
+    },
+    {
+      "tag": "title",
+      "attrs": []
+    },
+    {
+      "tag": "link",
+      "attrs": [
+        "rel",
+        "href",
+        "as",
+        "type",
+        "crossorigin"
+      ],
+      "void": true
+    },
+    {
+      "tag": "script",
+      "attrs": [
+        "src",
+        "type",
+        "defer"
+      ]
+    },
+    {
+      "tag": "body",
+      "attrs": []
+    },
+    {
+      "tag": "header",
+      "attrs": []
+    },
+    {
+      "tag": "h1",
+      "attrs": []
+    },
+    {
+      "tag": "h2",
+      "attrs": []
+    },
+    {
+      "tag": "h3",
+      "attrs": []
+    },
+    {
+      "tag": "div",
+      "attrs": []
+    },
+    {
+      "tag": "span",
+      "attrs": []
+    },
+    {
+      "tag": "a",
+      "attrs": [
+        "href",
+        "download"
+      ]
+    },
+    {
+      "tag": "main",
+      "attrs": []
+    },
+    {
+      "tag": "section",
+      "attrs": []
+    },
+    {
+      "tag": "p",
+      "attrs": []
+    },
+    {
+      "tag": "strong",
+      "attrs": []
+    },
+    {
+      "tag": "form",
+      "attrs": [
+        "method",
+        "action",
+        "autocomplete"
+      ]
+    },
+    {
+      "tag": "input",
+      "attrs": [
+        "name",
+        "type",
+        "placeholder",
+        "autocomplete",
+        "spellcheck",
+        "autocapitalize",
+        "autocorrect",
+        "required",
+        "autofocus",
+        "value",
+        "checked",
+        "min",
+        "maxlength",
+        "accept"
+      ],
+      "void": true
+    },
+    {
+      "tag": "button",
+      "attrs": [
+        "type",
+        "disabled"
+      ]
+    },
+    {
+      "tag": "pre",
+      "attrs": []
+    },
+    {
+      "tag": "label",
+      "attrs": [
+        "for"
+      ]
+    },
+    {
+      "tag": "select",
+      "attrs": []
+    },
+    {
+      "tag": "option",
+      "attrs": [
+        "value"
+      ]
+    },
+    {
+      "tag": "textarea",
+      "attrs": [
+        "spellcheck",
+        "placeholder",
+        "rows",
+        "readonly",
+        "name",
+        "required"
+      ]
+    },
+    {
+      "tag": "ul",
+      "attrs": []
+    },
+    {
+      "tag": "li",
+      "attrs": []
+    },
+    {
+      "tag": "code",
+      "attrs": []
+    },
+    {
+      "tag": "table",
+      "attrs": []
+    },
+    {
+      "tag": "thead",
+      "attrs": []
+    },
+    {
+      "tag": "tbody",
+      "attrs": []
+    },
+    {
+      "tag": "tr",
+      "attrs": []
+    },
+    {
+      "tag": "th",
+      "attrs": []
+    },
+    {
+      "tag": "td",
+      "attrs": []
+    }
+  ],
+  "classes": [
+    "action-icon",
+    "appearance-modal",
+    "appearance-modal-done",
+    "appearance-modal-overlay",
+    "appearance-modal-title",
+    "attach-add",
+    "attach-lossless",
+    "attachments",
+    "auth-actions",
+    "auth-form",
+    "auth-form-stack",
+    "auth-hint",
+    "auth-step",
+    "auth-subhead",
+    "board-grid",
+    "board-main",
+    "board-page",
+    "btn",
+    "btn-ghost",
+    "btn-small",
+    "card",
+    "card-copy-msg",
+    "card-desc",
+    "card-detail",
+    "card-detail-head",
+    "card-detail-title",
+    "card-fields",
+    "card-head-actions",
+    "card-kind-select",
+    "card-move",
+    "card-move-actions",
+    "card-move-stack",
+    "card-overlay",
+    "card-preview-body",
+    "card-preview-screen",
+    "card-section-label",
+    "card-view",
+    "card-view-tab",
+    "card-view-tabs",
+    "cluster",
+    "comment-form",
+    "comment-input",
+    "data-table",
+    "empty",
+    "field",
+    "handouts-body",
+    "handouts-doc",
+    "handouts-pane",
+    "handouts-pdf",
+    "handouts-preview",
+    "handouts-preview-head",
+    "handouts-src",
+    "handouts-textarea",
+    "host",
+    "host-actions",
+    "host-brand",
+    "host-home",
+    "host-sep",
+    "host-title",
+    "host-top",
+    "import-form",
+    "import-frame",
+    "import-message",
+    "import-page",
+    "input",
+    "kanban",
+    "label-add-btn",
+    "label-add-row",
+    "label-color-input",
+    "label-create",
+    "label-picker",
+    "list",
+    "list-row",
+    "list-row-title",
+    "lists-manage",
+    "lists-manage-moverow",
+    "lists-manage-rows",
+    "lists-manage-toolbar",
+    "lists-move-pos",
+    "match-main",
+    "member-add",
+    "members-list",
+    "muted",
+    "notif-badge",
+    "notif-toggle",
+    "preview-body",
+    "preview-doc",
+    "preview-head",
+    "preview-head-actions",
+    "preview-overlay",
+    "preview-screen-toggle",
+    "preview-title",
+    "public",
+    "public-main",
+    "public-top",
+    "public-user",
+    "register-code",
+    "section",
+    "sheet-frame",
+    "stack",
+    "sync-status",
+    "timeline",
+    "token-list",
+    "token-reveal",
+    "token-value",
+    "unread-dot"
+  ]
+}

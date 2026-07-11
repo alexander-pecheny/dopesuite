@@ -1,0 +1,141 @@
+package ui
+
+import "strings"
+
+// newElement is the shared constructor body behind every generated element
+// function (Div, P, …): it partitions items into attributes (in authored
+// order) and children (in authored order), then picks a content mode.
+//
+// Automatic content-mode inference only covers the unambiguous cases: no
+// children (empty element), all-Text children (inline), or any Element/Run
+// child (block, one per line). Mixed text-and-element content on one line —
+// the notif-badge idiom, `🔔<span class="notif-badge" …></span>` — has no
+// unambiguous automatic reading, so callers build it explicitly with
+// Line(...) (a single RunNode child) or force the outer element's own inline
+// content with Inline(...).
+func newElement(tag string, items []Item) *Element {
+	e := &Element{Tag: tag}
+	var children []Node
+	var forcedInline []Item
+	forced := false
+	for _, it := range items {
+		switch v := it.(type) {
+		case Attr:
+			e.Attrs = append(e.Attrs, v)
+		case inlineForce:
+			forced = true
+			forcedInline = v.items
+		case Node:
+			children = append(children, v)
+		}
+	}
+	if forced {
+		e.Inline = forcedInline
+		return e
+	}
+	if len(children) == 0 {
+		return e
+	}
+	allText := true
+	for _, c := range children {
+		if _, ok := c.(*TextNode); !ok {
+			allText = false
+			break
+		}
+	}
+	if allText {
+		for _, c := range children {
+			e.Inline = append(e.Inline, c.(Item))
+		}
+		return e
+	}
+	e.Block = children
+	return e
+}
+
+// inlineForce is the sentinel Item produced by Inline(...): it forces the
+// enclosing element's own content onto one line, overriding the automatic
+// all-Text/any-Element inference in newElement.
+type inlineForce struct{ items []Item }
+
+func (inlineForce) item() {}
+
+// Inline forces one-line content on the element it's passed to, e.g. mixed
+// text and inline elements that would otherwise be ambiguous.
+func Inline(items ...Item) Item {
+	return inlineForce{items: items}
+}
+
+// Line builds one inline-run child line: items concatenated with no
+// separator, as a single Node to pass as a child (e.g. the notif-badge
+// idiom: Button(Line(Text("🔔"), Span(...)))).
+func Line(items ...Item) *RunNode {
+	return &RunNode{Items: items}
+}
+
+// Text is a text leaf; pass it as a child to get inline element content.
+func Text(s string) *TextNode {
+	return &TextNode{Value: s}
+}
+
+// CommentNode builds an HTML comment; multiple lines render as one
+// multi-line comment.
+func CommentNode(lines ...string) *Comment {
+	return &Comment{Lines: lines}
+}
+
+// Blank preserves a blank line between siblings.
+func Blank() *BlankLine {
+	return &BlankLine{}
+}
+
+// DoctypeNode emits `<!doctype html>`; valid only as a Doc's first node.
+func DoctypeNode() *Doctype {
+	return &Doctype{}
+}
+
+// ClassToken is a whitelisted class-attribute token; its constants
+// (AuthHint, Btn, …) are generated into tags_gen.go from vocab.json's class
+// whitelist.
+type ClassToken string
+
+// ID sets the id attribute.
+func ID(v string) Attr {
+	return Attr{Name: "id", Value: v}
+}
+
+// Class sets the class attribute from whitelisted class tokens.
+func Class(tokens ...ClassToken) Attr {
+	parts := make([]string, len(tokens))
+	for i, t := range tokens {
+		parts[i] = string(t)
+	}
+	return Attr{Name: "class", Value: strings.Join(parts, " ")}
+}
+
+// Aria sets an aria-<name> attribute; an empty value produces a bare
+// attribute (e.g. Aria("hidden", "") -> aria-hidden).
+func Aria(name, value string) Attr {
+	return patternAttr("aria-"+name, value)
+}
+
+// Data sets a data-<name> attribute; an empty value produces a bare
+// attribute.
+func Data(name, value string) Attr {
+	return patternAttr("data-"+name, value)
+}
+
+func patternAttr(name, value string) Attr {
+	if value == "" {
+		return Attr{Name: name, Bare: true}
+	}
+	return Attr{Name: name, Value: value}
+}
+
+// Render validates a builder-made tree and prints it.
+func Render(doc *Doc) ([]byte, error) {
+	if err := Validate("", doc); err != nil {
+		return nil, err
+	}
+	return render(doc), nil
+}
