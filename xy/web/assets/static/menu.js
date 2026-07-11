@@ -351,7 +351,8 @@
   }
   try {
     injectHeadTag("link", { dedupe: ['link[rel="manifest"]'], props: { rel: "manifest", href: "/manifest.webmanifest" } });
-    injectHeadTag("meta", { dedupe: ['meta[name="theme-color"]'], props: { name: "theme-color", content: "#4477aa" } });
+    injectHeadTag("meta", { dedupe: ['meta[name="theme-color"]'], props: { name: "theme-color", content: "#6427c0" } });
+    injectHeadTag("link", { dedupe: ['link[rel="icon"]'], props: { rel: "icon", type: "image/svg+xml", href: "/static/favicon.svg" } });
     injectHeadTag("meta", { dedupe: ['meta[name="apple-mobile-web-app-capable"]'], props: { name: "apple-mobile-web-app-capable", content: "yes" } });
     injectHeadTag("meta", { dedupe: ['meta[name="apple-mobile-web-app-status-bar-style"]'], props: { name: "apple-mobile-web-app-status-bar-style", content: "default" } });
     injectHeadTag("meta", { dedupe: ['meta[name="apple-mobile-web-app-title"]'], props: { name: "apple-mobile-web-app-title", content: "xy" } });

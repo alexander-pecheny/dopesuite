@@ -15,7 +15,7 @@
 //     online while staying offline-capable.
 //   - everything else (/api/…): straight to network, untouched.
 
-const CACHE = "xy-shell-v4";
+const CACHE = "xy-shell-v5";
 
 // App shell precache: entry modules, styles, fonts, vendored crypto, icons, and
 // the static page routes. Unversioned URLs; versioned requests are cached
@@ -34,7 +34,7 @@ const PRECACHE = [
   "/static/vendor/utils.js", "/static/vendor/crypto.js",
   "/static/fonts/noto-sans-400.woff2", "/static/fonts/noto-sans-700.woff2",
   "/static/icon-192.png", "/static/icon-512.png", "/static/icon-maskable.png",
-  "/static/apple-touch-icon.png",
+  "/static/apple-touch-icon.png", "/static/favicon.svg", "/favicon.ico",
 ];
 
 self.addEventListener("install", (event) => {
