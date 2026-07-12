@@ -42,7 +42,8 @@ internal/server/       package server — the whole HTTP server
   export.go            POST /api/export/docx — Go docx fully in-process (chgk/docx), images included; no Python
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
                        parsed in memory, nothing persisted; the client encrypts the result into a new list
-  handouts.go          POST /api/handouts/{pdf,split_fit} — both fully in-process Go (chgk/handout + typst, XY_TYPST_CMD), no Python. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
+  handouts.go          POST /api/handouts/{pdf,split_fit} — fully in-process (chgk/handout + typst as a wasm module, see typst.go). No Python, no typst binary, nothing written to disk. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
+  typst.go             the shared typst (wasm) pool: built once, warmed at boot, injectable so handler tests stub it. XY_WASM_CACHE must be persistent (~15s cold compile vs ~0.6s cached)
   staging.go           handout image staging: /api/handouts/{stage,heartbeat,DELETE stage} — client uploads referenced images once on modal open; pdf/split_fit reuse them via a session id (reaped after ~1min of no heartbeat) instead of re-uploading each generate. Staged images live in memory only, never on disk
   multipart.go         readMultipart: in-memory multipart parsing for every endpoint that receives plaintext (export/handouts/staging/import). ParseMultipartForm spills parts over its budget into an unmanaged temp file — plaintext on disk is exactly what xy must not do. (attachments.go still uses it: those uploads are ciphertext.)
   debug.go             [timing] logs on export/handout endpoints, gated by XY_DEBUG_TIMING
@@ -75,6 +76,10 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        (img …) images are decoded (incl. WebP via x/image), re-encoded to PNG and embedded (images.go)
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
 internal/session/      cookie + session.User (ported from dope/platform/session)
+internal/blobstore/    attachment bytes ON DISK (content-addressed, sharded, write-once); the DB
+                       stores only a blob_ref. NB: backups therefore have two halves — litestream
+                       replicates xy.db, an hourly `rclone copy` replicates blobs/. Restore the DB
+                       alone and every attachment is a dangling ref. See README "Deployment & backups".
 web/assets/            //go:embed static (package assets)
   static/
     crypto.js          envelope format + board key lifecycle + IndexedDB key cache
@@ -146,6 +151,9 @@ just invite 7       # mint a registration invite
 # bootstrap a password account (registration is otherwise telegram-only):
 printf '<password>' | XY_DB=… xy-server adduser <username>   # password via stdin
 just test           # go test + node frontend tests
+# XY_TYPST_TEST_BIN=/path/to/typst  → also runs the typst-CLI parity tests (the
+#   oracle the in-process wasm typst is checked against). typst is NOT needed to
+#   run xy — only to run those tests.
 just pre-commit     # fmt + vet + tidy-check + test
 ```
 Server listens on `$PORT` (default 9673); DB at `$XY_DB` (default xy.db).

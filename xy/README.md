@@ -92,16 +92,65 @@ risk, see `PLAN`). No external tool is involved, so there is nothing to install.
 
 Handout PDFs (**генерация раздаток**, `POST /api/handouts/{pdf,split_fit}`) are
 also produced in-process: the `.hndt` source is rendered to `.typ` by
-`internal/chgk/handout` and typeset with [**typst**](https://typst.app/). typst
-is the only external runtime dependency; the font and template assets are
-embedded in the binary. Point the server at the binary with **`XY_TYPST_CMD`**
-(default `typst`):
+`internal/chgk/handout` and typeset with [**typst**](https://typst.app/) — which is
+**linked into the binary as a WebAssembly module**, not shelled out to. There is
+nothing to install: xy has no external runtime dependencies at all.
+
+typst's `World` trait is its filesystem abstraction, so `internal/chgk/typstwasm`
+serves the source, the fonts and every referenced image from memory. Handout
+rendering therefore writes **nothing to disk** — the one place xy used to have to
+put the user's decrypted questions on a filesystem. It runs under
+[wazero](https://wazero.io), a pure-Go WASM runtime, so the binary stays
+`CGO_ENABLED=0` and cross-compilable.
+
+**`XY_WASM_CACHE`** is where wazero caches typst compiled to machine code. It must
+live on **persistent** storage: compiling the 30 MB module takes ~15 s cold but
+~0.6 s from the cache, and the cache survives restarts — put it on tmpfs and every
+reboot pays the 15 s again. It contains compiled typst, never user data. Defaults
+to `$XDG_CACHE_HOME/xy/typst-wasm`.
+
+Rebuilding the wasm (only needed when bumping typst) requires Rust with the
+`wasm32-wasip1` target; the artifact is vendored, so the **Go build needs no Rust**:
 
 ```sh
-# download a standalone typst release and:
-#   XY_TYPST_CMD=/path/to/typst
+cd typst-wasm && cargo build --release --target wasm32-wasip1
+cp target/wasm32-wasip1/release/typst_wasm.wasm ../internal/chgk/typstwasm/typst.wasm
 ```
 
-On the production host (xy.pecheny.me) `XY_TYPST_CMD` is set in `/etc/xy.env` to a
-standalone typst binary under `/var/lib/xy`. xy is otherwise fully self-contained
-(pure Go, no Python) — see [`AGENTS.md`](AGENTS.md).
+`internal/chgk/handout`'s `CLITypesetter` still drives the standalone typst binary,
+but only as the **oracle** the wasm path is tested against (`wasm_parity_test.go`
+requires the fitted `split_fit` row counts to match) — it is on no request path.
+Set `XY_TYPST_TEST_BIN` to a typst binary to run those tests.
+
+## Deployment & backups
+
+**Attachment bytes are files on disk, not rows in SQLite** (`internal/blobstore`:
+content-addressed, sharded, write-once). The DB only stores a `blob_ref`. So a
+backup has **two halves, and a restore needs both** — restore `xy.db` alone and
+every attachment becomes a dangling ref:
+
+| what | how | where |
+| --- | --- | --- |
+| `xy.db` | litestream (continuous) | `r2:backups/xy/xy.db` |
+| `blobs/` | `rclone copy`, hourly systemd timer | `r2:backups/xy/blobs` |
+
+Restore both:
+
+```sh
+litestream restore -o /var/lib/xy/xy.db r2:backups/xy/xy.db
+set -a; . /etc/xy-blobs-backup.env; set +a
+RCLONE_CONFIG=/dev/null rclone copy r2:backups/xy/blobs /var/lib/xy/blobs
+chown -R xy:xy /var/lib/xy
+```
+
+Two deliberate choices worth knowing:
+
+- **`rclone copy`, not `sync`.** Blobs are immutable, so the backup only ever needs
+  to grow. `sync` would mirror deletions — one accidental attachment delete would
+  propagate to R2 and the bytes would be gone for good.
+- **Blobs are not stored in SQLite**, which would have given one backup mechanism
+  instead of two. litestream takes timer-driven *full* snapshots: a 1.6 MB `xy.db`
+  costs 21.5 MB in R2 (13 daily snapshots × ~1 MB, at a 14-day retention) — a ~13×
+  amplification. Ciphertext does not compress, so blobs in the DB would be
+  re-uploaded in full on every snapshot; `rclone copy` of an immutable
+  content-addressed tree uploads each blob exactly once, ever.
