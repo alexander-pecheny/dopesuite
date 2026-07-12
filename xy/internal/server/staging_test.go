@@ -6,8 +6,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -23,15 +21,7 @@ func TestHandoutStaging(t *testing.T) {
 	ts, srv := newTestServer(t)
 	c := registerUser(t, srv, ts, 770700, "stg")
 
-	// fake typst that asserts the staged image landed in the render dir.
-	dir := t.TempDir()
-	script := filepath.Join(dir, "fake-typst")
-	body := "#!/bin/sh\nset -e\n[ -f pic.png ] || { echo 'staged image missing' >&2; exit 1; }\n" +
-		"eval \"out=\\${$#}\"\nprintf '%%PDF-fake' > \"$out\"\n"
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XY_TYPST_CMD", script)
+	fake := stubTypst(t, srv)
 
 	// stage an image
 	var buf bytes.Buffer
@@ -63,7 +53,8 @@ func TestHandoutStaging(t *testing.T) {
 	mustStatus(t, resp, 204)
 	resp.Body.Close()
 
-	// PDF endpoint with the session (no inline image) → fake typst checks pic.png
+	// PDF endpoint with the session and no inline image: the staged copy must be
+	// what reaches typst — that is the whole point of staging.
 	var pbuf bytes.Buffer
 	pmw := multipart.NewWriter(&pbuf)
 	pmw.WriteField("source", "for_question: 1\ncolumns: 3\n\nimage: pic.png\n")
@@ -80,6 +71,9 @@ func TestHandoutStaging(t *testing.T) {
 	}
 	mustStatus(t, presp, 200)
 	presp.Body.Close()
+	if !fake.hasImage("pic.png") {
+		t.Error("the staged image did not reach typst")
+	}
 
 	// delete the session
 	dreq, _ := http.NewRequest("DELETE", ts.URL+"/api/handouts/stage?session="+sr.Session, nil)

@@ -6,14 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
@@ -39,41 +35,21 @@ func pdfConf() *model.Configuration {
 // their given/native size. The fitted layout is otherwise identical.
 const splitFitMaxRows = 256
 
-// newSFRun sets up a scratch dir with the images written, returning the run and
-// a cleanup func.
-func newSFRun(images map[string][]byte, a Args, typstPath string) (*sfRun, func(), error) {
-	if typstPath == "" {
-		typstPath = "typst"
+// newSFRun loads the run's images into the typesetter.
+func newSFRun(ctx context.Context, images map[string][]byte, a Args, ts Typesetter) (*sfRun, error) {
+	if err := ts.SetImages(ctx, images); err != nil {
+		return nil, err
 	}
-	fonts, err := bundledFontDir()
-	if err != nil {
-		return nil, nil, err
-	}
-	dir, err := scratchTemp("xy-splitfit-*")
-	if err != nil {
-		return nil, nil, err
-	}
-	for name, data := range images {
-		base := filepath.Base(name)
-		if base == "" || base == "." || base == ".." || strings.ContainsAny(name, `/\`) {
-			continue
-		}
-		if err := writeScratch(dir, base, data); err != nil {
-			os.RemoveAll(dir)
-			return nil, nil, err
-		}
-	}
-	return &sfRun{a: a, dir: dir, typst: typstPath, fonts: fonts}, func() { os.RemoveAll(dir) }, nil
+	return &sfRun{a: a, ts: ts}, nil
 }
 
 // FitRows returns the fitted row count per block (in order) — exported for parity
 // tests against chgksuite's "final rows=N".
-func FitRows(ctx context.Context, hndt string, images map[string][]byte, a Args, typstPath string) ([]int, error) {
-	r, cleanup, err := newSFRun(images, a, typstPath)
+func FitRows(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) ([]int, error) {
+	r, err := newSFRun(ctx, images, a, ts)
 	if err != nil {
 		return nil, err
 	}
-	defer cleanup()
 	var rows []int
 	for _, b := range parseSFBlocks(hndt) {
 		best, err := r.fitRows(ctx, b)
@@ -85,12 +61,11 @@ func FitRows(ctx context.Context, hndt string, images map[string][]byte, a Args,
 	return rows, nil
 }
 
-func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args, typstPath string) ([]byte, error) {
-	r, cleanup, err := newSFRun(images, a, typstPath)
+func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) ([]byte, error) {
+	r, err := newSFRun(ctx, images, a, ts)
 	if err != nil {
 		return nil, err
 	}
-	defer cleanup()
 
 	blocks := parseSFBlocks(hndt)
 	if len(blocks) == 0 {
@@ -177,11 +152,8 @@ func SplitFit(ctx context.Context, hndt string, images map[string][]byte, a Args
 
 // sfRun carries the per-invocation render context.
 type sfRun struct {
-	a     Args
-	dir   string
-	typst string
-	fonts string
-	seq   atomic.Int64
+	a  Args
+	ts Typesetter
 }
 
 // ── block model ──
@@ -381,63 +353,29 @@ func (r *sfRun) fitRows(ctx context.Context, b sfBlock) (int, error) {
 	return low * step, nil
 }
 
-// pageCount renders the handout to typst and asks typst itself how many pages it
-// paginates to (no PDF produced) — faithful to chgksuite's render+page-count but
-// without writing/parsing a PDF.
+// pageCount asks typst itself how many pages the handout paginates to (no PDF
+// produced) — faithful to chgksuite's render+page-count, but without writing or
+// parsing a PDF. The trailing metadata makes the page number queryable; the wasm
+// typesetter reads it straight off the laid-out document instead.
 func (r *sfRun) pageCount(ctx context.Context, hndt string) (int, error) {
 	typ := GenerateTyp(hndt, r.a) + "\n#context [#metadata(here().page()) <xypages>]\n"
-	name := r.tempName(".typ")
-	if err := writeScratch(r.dir, name, []byte(typ)); err != nil {
-		return 0, err
-	}
-	cmd := exec.CommandContext(ctx, r.typst, "query", "--root", "/", "--font-path", r.fonts, "--ignore-system-fonts", name, "<xypages>", "--field", "value", "--one")
-	cmd.Dir = r.dir
-	out, err := cmd.CombinedOutput()
-	os.Remove(filepath.Join(r.dir, name))
-	if err != nil {
-		return 0, fmt.Errorf("typst query: %s", strings.TrimSpace(string(out)))
-	}
-	// output is the page number, possibly with a trailing deprecation warning line
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if n, err := strconv.Atoi(strings.TrimSpace(line)); err == nil {
-			return n, nil
-		}
-	}
-	return 0, fmt.Errorf("typst query: unparseable page count %q", string(out))
+	_, pages, err := r.ts.Compile(ctx, typ, false)
+	return pages, err
 }
 
 // renderPDF compiles the handout to a PDF and compresses it with pdfcpu.
 func (r *sfRun) renderPDF(ctx context.Context, hndt string) ([]byte, error) {
-	typName := r.tempName(".typ")
-	pdfName := strings.TrimSuffix(typName, ".typ") + ".pdf"
-	if err := writeScratch(r.dir, typName, []byte(GenerateTyp(hndt, r.a))); err != nil {
-		return nil, err
-	}
-	defer os.Remove(filepath.Join(r.dir, typName))
-	cmd := exec.CommandContext(ctx, r.typst, "compile", "--root", "/", "--font-path", r.fonts, "--ignore-system-fonts", typName, pdfName)
-	cmd.Dir = r.dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("typst compile: %s", strings.TrimSpace(string(out)))
-	}
-	pdfPath := filepath.Join(r.dir, pdfName)
-	defer os.Remove(pdfPath)
-	raw, err := os.ReadFile(pdfPath)
+	pdf, _, err := r.ts.Compile(ctx, GenerateTyp(hndt, r.a), true)
 	if err != nil {
 		return nil, err
 	}
-	return compressPDF(raw), nil
+	return compressPDF(pdf), nil
 }
 
-// compressPDF optimizes a PDF in memory (pdfcpu), returning the original bytes if
-// optimization fails (it's best-effort, like chgksuite's compress_pdf).
 func compressPDF(raw []byte) []byte {
 	var out bytes.Buffer
 	if err := api.Optimize(bytes.NewReader(raw), &out, pdfConf()); err != nil || out.Len() == 0 {
 		return raw
 	}
 	return out.Bytes()
-}
-
-func (r *sfRun) tempName(ext string) string {
-	return fmt.Sprintf("sf_%d%s", r.seq.Add(1), ext)
 }

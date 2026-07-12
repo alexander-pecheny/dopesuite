@@ -1,0 +1,32 @@
+[package]
+name = "typst-wasm"
+version = "0.1.0"
+edition = "2021"
+
+# typst, linked as a library and compiled to WASI, driven from Go via wazero.
+#
+# Why this exists: handout rendering is the only part of xy that has to hand the
+# user's decrypted questions to a *filesystem*, because the typst CLI is a separate
+# process that reads its source and images as files. typst's `World` trait is an
+# abstract filesystem, so serving every file from memory removes that requirement:
+# the plaintext never leaves RAM.
+#
+# A cdylib (a WASI *reactor*), not a command: the module is instantiated once and
+# keeps its fonts and images across calls. split_fit binary-searches the row count
+# per block — dozens of compiles per generation — and a one-shot process would
+# re-parse the fonts and re-upload the images every time, which is exactly the cost
+# we are trying to delete.
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+typst = "0.15"
+typst-pdf = "0.15"
+typst-layout = "0.15"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+panic = "abort"

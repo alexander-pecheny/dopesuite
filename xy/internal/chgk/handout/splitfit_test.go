@@ -25,7 +25,12 @@ func TestSplitFitReal(t *testing.T) {
 		"---\nfor_question: 7\ncolumns: 3\n\nПобольше текста для второго вопроса, чтобы он занял заметно больше места и поместилось меньше строк на странице.\n" +
 		"---\nfor_question: 13\ncolumns: 6\nhandouts_per_team: 2\n\nКоманде\n"
 
-	zipBytes, err := SplitFit(context.Background(), src, nil, DefaultArgs(), bin)
+	ts, err := NewCLITypesetter(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	zipBytes, err := SplitFit(context.Background(), src, nil, DefaultArgs(), ts)
 	if err != nil {
 		t.Fatalf("SplitFit: %v", err)
 	}
@@ -71,7 +76,12 @@ func TestFitRowsReal(t *testing.T) {
 	if src == "" {
 		src = "for_question: 1\ncolumns: 3\n\nКороткий\n---\nfor_question: 2\ncolumns: 3\n\nДлинный текст раздаточного материала для второго вопроса.\n"
 	}
-	rows, err := FitRows(context.Background(), src, nil, DefaultArgs(), bin)
+	ts, err := NewCLITypesetter(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	rows, err := FitRows(context.Background(), src, nil, DefaultArgs(), ts)
 	if err != nil {
 		t.Fatalf("FitRows: %v", err)
 	}

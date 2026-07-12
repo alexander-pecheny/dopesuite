@@ -10,6 +10,9 @@ authorize. Built by reusing patterns and frontend assets from `~/dope`
 
 ## Stack
 - **Backend**: Go 1.26, SQLite (WAL, `modernc.org/sqlite`, pure Go, no cgo).
+  **No external runtime dependencies**: docx/import/handouts are all in-process,
+  and typst is linked in as a wasm module run under wazero (pure Go, so the binary
+  stays CGO_ENABLED=0 and cross-compilable).
 - **Frontend**: vanilla JS ES modules (no bundler) + the dope design system
   (`styles.css`), embedded in the binary.
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, **no WASM** → runs
@@ -55,10 +58,19 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
   chgkimport/          the import entry point: .docx/.4s/.zip → 4s source + its images.
                        Byte-parity with chgksuite's `parse` on all 12 chgk .docx fixtures
   handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans.
-                       scratch.go: typst is an external process with no virtual FS, so this is the ONE place
-                       plaintext must hit a filesystem. It goes to a RAM-backed scratch dir (/dev/shm, override
-                       XY_SCRATCH_DIR), owner-only, wiped on return — never persistent storage.
+                       typesetter.go: the Typesetter interface. The server uses the wasm one (typstwasm), so
+                       nothing is written anywhere. CLITypesetter drives the typst binary and is kept ONLY as the
+                       oracle the wasm path is checked against (wasm_parity_test.go: the fitted row counts must
+                       match, since split_fit binary-searches them).
                        splitfit.go: `handouts split_fit` port — per-block binary-search row fit using typst's own pagination (typst query page count, not pypdf), per-question + all-q PDFs, pdfcpu compress; ~12× faster, row counts match chgksuite. (image-shrink refinement not yet ported)
+  typstwasm/           typst linked in as a library, compiled to wasm32-wasip1, run under wazero with its
+                       World (= typst's filesystem abstraction) served from memory. Removes the last place xy
+                       had to hand decrypted questions to a filesystem. A pool of instances, since split_fit
+                       fits blocks in parallel; fonts parsed once, images once per generation.
+                       ~8× faster per probe than spawning the CLI (1.4ms vs 11.3ms).
+                       The .wasm is vendored (typst-wasm/ holds the Rust source) so the Go build needs no Rust.
+                       Rebuild: cd typst-wasm && cargo build --release --target wasm32-wasip1,
+                       then cp target/wasm32-wasip1/release/typst_wasm.wasm internal/chgk/typstwasm/typst.wasm
   docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite.
                        (img …) images are decoded (incl. WebP via x/image), re-encoded to PNG and embedded (images.go)
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
