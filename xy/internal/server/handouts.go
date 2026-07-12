@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"strconv"
@@ -37,16 +35,17 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
-	if err := r.ParseMultipartForm(16 << 20); err != nil {
-		httpError(w, http.StatusBadRequest, "bad multipart form")
+	form, err := readMultipart(r, maxExportRequest)
+	if err != nil {
+		httpError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	source := normalizeNewlines(r.FormValue("source"))
+	source := normalizeNewlines(form.Value("source"))
 	if strings.TrimSpace(source) == "" {
 		httpError(w, http.StatusBadRequest, "empty source")
 		return
 	}
-	outName := headerSafeName(safeImageName(r.FormValue("filename")))
+	outName := headerSafeName(safeImageName(form.Value("filename")))
 	if outName == "" {
 		outName = "handouts"
 	}
@@ -55,21 +54,12 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 	// Referenced images: any inline "img" parts, plus the user's staged session
 	// (the common case — the client uploaded them once when the modal opened).
 	images := map[string][]byte{}
-	for name, data := range s.stagedImages(r, u.UserID) {
+	for name, data := range s.stagedImages(form.Value("session"), u.UserID) {
 		images[name] = data
 	}
-	if r.MultipartForm != nil {
-		for _, fh := range r.MultipartForm.File["img"] {
-			base := safeImageName(fh.Filename)
-			if base == "" {
-				continue
-			}
-			data, err := readUpload(fh)
-			if err != nil {
-				handleErr(w, err)
-				return
-			}
-			images[base] = data
+	for _, f := range form.Files("img") {
+		if base := safeImageName(f.Filename); base != "" {
+			images[base] = f.Data
 		}
 	}
 
@@ -92,16 +82,6 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(pdf)
 }
 
-// readUpload reads a multipart file part fully into memory.
-func readUpload(fh *multipart.FileHeader) ([]byte, error) {
-	src, err := fh.Open()
-	if err != nil {
-		return nil, err
-	}
-	defer src.Close()
-	return io.ReadAll(src)
-}
-
 // ── split-fit (Go: per-block typst fit → per-question + all-questions PDFs) ──
 // Ports chgksuite's `handouts split_fit` (handout.SplitFit): each handout block
 // is paged to the densest 1-page layout (binary search via typst's own
@@ -115,16 +95,17 @@ func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
-	if err := r.ParseMultipartForm(16 << 20); err != nil {
-		httpError(w, http.StatusBadRequest, "bad multipart form")
+	form, err := readMultipart(r, maxExportRequest)
+	if err != nil {
+		httpError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	source := normalizeNewlines(r.FormValue("source"))
+	source := normalizeNewlines(form.Value("source"))
 	if strings.TrimSpace(source) == "" {
 		httpError(w, http.StatusBadRequest, "empty source")
 		return
 	}
-	outName := headerSafeName(safeImageName(r.FormValue("filename")))
+	outName := headerSafeName(safeImageName(form.Value("filename")))
 	if outName == "" {
 		outName = "handouts"
 	}
@@ -132,21 +113,12 @@ func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) 
 
 	// Referenced images: staged session images + any inline "img" parts.
 	images := map[string][]byte{}
-	for name, data := range s.stagedImages(r, u.UserID) {
+	for name, data := range s.stagedImages(form.Value("session"), u.UserID) {
 		images[name] = data
 	}
-	if r.MultipartForm != nil {
-		for _, fh := range r.MultipartForm.File["img"] {
-			base := safeImageName(fh.Filename)
-			if base == "" {
-				continue
-			}
-			data, err := readUpload(fh)
-			if err != nil {
-				handleErr(w, err)
-				return
-			}
-			images[base] = data
+	for _, f := range form.Files("img") {
+		if base := safeImageName(f.Filename); base != "" {
+			images[base] = f.Data
 		}
 	}
 

@@ -49,7 +49,7 @@ func newSFRun(images map[string][]byte, a Args, typstPath string) (*sfRun, func(
 	if err != nil {
 		return nil, nil, err
 	}
-	dir, err := os.MkdirTemp("", "xy-splitfit-*")
+	dir, err := scratchTemp("xy-splitfit-*")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -58,7 +58,7 @@ func newSFRun(images map[string][]byte, a Args, typstPath string) (*sfRun, func(
 		if base == "" || base == "." || base == ".." || strings.ContainsAny(name, `/\`) {
 			continue
 		}
-		if err := os.WriteFile(filepath.Join(dir, base), data, 0o644); err != nil {
+		if err := writeScratch(dir, base, data); err != nil {
 			os.RemoveAll(dir)
 			return nil, nil, err
 		}
@@ -387,7 +387,7 @@ func (r *sfRun) fitRows(ctx context.Context, b sfBlock) (int, error) {
 func (r *sfRun) pageCount(ctx context.Context, hndt string) (int, error) {
 	typ := GenerateTyp(hndt, r.a) + "\n#context [#metadata(here().page()) <xypages>]\n"
 	name := r.tempName(".typ")
-	if err := os.WriteFile(filepath.Join(r.dir, name), []byte(typ), 0o644); err != nil {
+	if err := writeScratch(r.dir, name, []byte(typ)); err != nil {
 		return 0, err
 	}
 	cmd := exec.CommandContext(ctx, r.typst, "query", "--root", "/", "--font-path", r.fonts, "--ignore-system-fonts", name, "<xypages>", "--field", "value", "--one")
@@ -410,7 +410,7 @@ func (r *sfRun) pageCount(ctx context.Context, hndt string) (int, error) {
 func (r *sfRun) renderPDF(ctx context.Context, hndt string) ([]byte, error) {
 	typName := r.tempName(".typ")
 	pdfName := strings.TrimSuffix(typName, ".typ") + ".pdf"
-	if err := os.WriteFile(filepath.Join(r.dir, typName), []byte(GenerateTyp(hndt, r.a)), 0o644); err != nil {
+	if err := writeScratch(r.dir, typName, []byte(GenerateTyp(hndt, r.a))); err != nil {
 		return nil, err
 	}
 	defer os.Remove(filepath.Join(r.dir, typName))

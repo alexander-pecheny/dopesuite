@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -15,25 +13,34 @@ import (
 // client decrypts the referenced images once and uploads them here; subsequent
 // PDF / split_fit generations reuse the staged copies instead of re-decrypting +
 // re-uploading them every time (which dominated the latency). A session stays
-// alive while the tab heartbeats; the reaper deletes it once heartbeats stop for
+// alive while the tab heartbeats; the reaper drops it once heartbeats stop for
 // handoutSessionTTL (tab closed or backgrounded long enough). The client revives
 // it by re-staging when a heartbeat 404s.
 //
-// Trade-off: the decrypted images sit in a temp dir for as long as the session
-// lives — a deliberate, bounded extension of the brief plaintext exposure docx
-// export already incurs (PLAN risk note). Files are wiped on close/expiry.
+// The staged images are the user's decrypted handouts, so they are held in memory
+// only — never written to the filesystem, where they would outlive a crash and sit
+// there in plaintext. They are still a bounded extension of the brief plaintext
+// exposure the docx export already incurs (PLAN risk note), and are dropped on
+// close/expiry.
 
 const (
 	handoutSessionTTL   = 60 * time.Second
 	handoutReapInterval = 20 * time.Second
 	maxHandoutSessions  = 200
+	// maxStagedBytes caps one session's images. Staging is in memory, so without
+	// this a handful of sessions could pin an unbounded amount of it.
+	maxStagedBytes = 128 << 20
 )
 
-var errStagingFull = errors.New("too many handout sessions")
+var (
+	errStagingFull  = errors.New("too many handout sessions")
+	errStagedTooBig = errors.New("staged images too large")
+)
 
 type handoutSession struct {
 	userID   int64
-	dir      string
+	images   map[string][]byte
+	bytes    int64
 	lastSeen time.Time
 }
 
@@ -67,39 +74,35 @@ func (hs *handoutStaging) reapLoop() {
 func (hs *handoutStaging) reap() {
 	now := time.Now()
 	hs.mu.Lock()
-	var stale []string
+	defer hs.mu.Unlock()
 	for id, s := range hs.sessions {
 		if now.Sub(s.lastSeen) > handoutSessionTTL {
-			stale = append(stale, s.dir)
-			delete(hs.sessions, id)
+			delete(hs.sessions, id) // the images go with it
 		}
-	}
-	hs.mu.Unlock()
-	for _, dir := range stale {
-		os.RemoveAll(dir)
 	}
 }
 
-// create registers a fresh per-user session with its own temp dir.
-func (hs *handoutStaging) create(userID int64) (string, *handoutSession, error) {
+// create registers a fresh per-user session holding the given images.
+func (hs *handoutStaging) create(userID int64, images map[string][]byte) (string, error) {
 	id, err := randToken()
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
-	dir, err := os.MkdirTemp("", "xy-handout-stage-*")
-	if err != nil {
-		return "", nil, err
+	var total int64
+	for _, data := range images {
+		total += int64(len(data))
 	}
-	s := &handoutSession{userID: userID, dir: dir, lastSeen: time.Now()}
+	if total > maxStagedBytes {
+		return "", errStagedTooBig
+	}
+	s := &handoutSession{userID: userID, images: images, bytes: total, lastSeen: time.Now()}
 	hs.mu.Lock()
+	defer hs.mu.Unlock()
 	if len(hs.sessions) >= maxHandoutSessions {
-		hs.mu.Unlock()
-		os.RemoveAll(dir)
-		return "", nil, errStagingFull
+		return "", errStagingFull
 	}
 	hs.sessions[id] = s
-	hs.mu.Unlock()
-	return id, s, nil
+	return id, nil
 }
 
 // touch returns the user's session, refreshing its TTL. ok=false if it's absent
@@ -118,62 +121,47 @@ func (hs *handoutStaging) touch(id string, userID int64) (*handoutSession, bool)
 	return s, true
 }
 
-// remove deletes the user's session and its files.
+// remove drops the user's session and its images.
 func (hs *handoutStaging) remove(id string, userID int64) {
 	hs.mu.Lock()
-	s := hs.sessions[id]
-	if s != nil && s.userID == userID {
+	defer hs.mu.Unlock()
+	if s := hs.sessions[id]; s != nil && s.userID == userID {
 		delete(hs.sessions, id)
-	} else {
-		s = nil
-	}
-	hs.mu.Unlock()
-	if s != nil {
-		os.RemoveAll(s.dir)
 	}
 }
 
 // ---- handlers ----
 
-// handleHandoutsStage creates a session and writes the uploaded images into it,
-// returning the session id. (Images are the multipart "img" parts.)
+// handleHandoutsStage creates a session holding the uploaded images (the
+// multipart "img" parts) and returns its id.
 func (s *server) handleHandoutsStage(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
-	if err := r.ParseMultipartForm(16 << 20); err != nil {
-		httpError(w, http.StatusBadRequest, "bad multipart form")
-		return
-	}
-	id, sess, err := s.staging.create(u.UserID)
+	form, err := readMultipart(r, maxExportRequest)
 	if err != nil {
-		if errors.Is(err, errStagingFull) {
-			httpError(w, http.StatusServiceUnavailable, "too many handout sessions, try again shortly")
-			return
-		}
-		handleErr(w, err)
+		httpError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if r.MultipartForm != nil {
-		for _, fh := range r.MultipartForm.File["img"] {
-			base := safeImageName(fh.Filename)
-			if base == "" {
-				continue
-			}
-			data, err := readUpload(fh)
-			if err != nil {
-				s.staging.remove(id, u.UserID)
-				handleErr(w, err)
-				return
-			}
-			if err := os.WriteFile(filepath.Join(sess.dir, base), data, 0o600); err != nil {
-				s.staging.remove(id, u.UserID)
-				handleErr(w, err)
-				return
-			}
+	images := map[string][]byte{}
+	for _, f := range form.Files("img") {
+		if base := safeImageName(f.Filename); base != "" {
+			images[base] = f.Data
 		}
+	}
+	id, err := s.staging.create(u.UserID, images)
+	if err != nil {
+		switch {
+		case errors.Is(err, errStagingFull):
+			httpError(w, http.StatusServiceUnavailable, "too many handout sessions, try again shortly")
+		case errors.Is(err, errStagedTooBig):
+			httpError(w, http.StatusRequestEntityTooLarge, "staged images too large")
+		default:
+			handleErr(w, err)
+		}
+		return
 	}
 	writeJSON(w, map[string]any{"session": id})
 }
@@ -202,26 +190,17 @@ func (s *server) handleHandoutsUnstage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// stagedImages returns the images staged under the request's "session" form
-// field (refreshing the TTL), keyed by base name; nil when there's no live
-// session. Merged into the render image set by the pdf / split_fit handlers.
-func (s *server) stagedImages(r *http.Request, userID int64) map[string][]byte {
-	sess, ok := s.staging.touch(r.FormValue("session"), userID)
+// stagedImages returns the images staged under sessionID (refreshing the TTL),
+// keyed by base name; nil when there's no live session. Merged into the render
+// image set by the pdf / split_fit handlers.
+func (s *server) stagedImages(sessionID string, userID int64) map[string][]byte {
+	sess, ok := s.staging.touch(sessionID, userID)
 	if !ok {
 		return nil
 	}
-	entries, err := os.ReadDir(sess.dir)
-	if err != nil {
-		return nil
-	}
-	out := map[string][]byte{}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if data, err := os.ReadFile(filepath.Join(sess.dir, e.Name())); err == nil {
-			out[e.Name()] = data
-		}
+	out := make(map[string][]byte, len(sess.images))
+	for name, data := range sess.images {
+		out[name] = data
 	}
 	return out
 }

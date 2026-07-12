@@ -56,16 +56,17 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
-	if err := r.ParseMultipartForm(16 << 20); err != nil {
-		httpError(w, http.StatusBadRequest, "bad multipart form")
+	form, err := readMultipart(r, maxExportRequest)
+	if err != nil {
+		httpError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	source := normalizeNewlines(r.FormValue("source"))
+	source := normalizeNewlines(form.Value("source"))
 	if strings.TrimSpace(source) == "" {
 		httpError(w, http.StatusBadRequest, "empty source")
 		return
 	}
-	outName := headerSafeName(safeImageName(r.FormValue("filename")))
+	outName := headerSafeName(safeImageName(form.Value("filename")))
 	if outName == "" {
 		outName = "export"
 	}
@@ -74,18 +75,9 @@ func (s *server) handleExportDocx(w http.ResponseWriter, r *http.Request) {
 	// Referenced images (multipart "img" parts), keyed by base name; the docx
 	// exporter re-encodes them to PNG and embeds them.
 	images := map[string][]byte{}
-	if r.MultipartForm != nil {
-		for _, fh := range r.MultipartForm.File["img"] {
-			base := safeImageName(fh.Filename)
-			if base == "" {
-				continue
-			}
-			data, err := readUpload(fh)
-			if err != nil {
-				handleErr(w, err)
-				return
-			}
-			images[base] = data
+	for _, f := range form.Files("img") {
+		if base := safeImageName(f.Filename); base != "" {
+			images[base] = f.Data
 		}
 	}
 

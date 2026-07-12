@@ -37,12 +37,27 @@ internal/server/       package server — the whole HTTP server
   invite.go            invite minting (subcommand)
   admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny")
   export.go            POST /api/export/docx — Go docx fully in-process (chgk/docx), images included; no Python
+  import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
+                       parsed in memory, nothing persisted; the client encrypts the result into a new list
   handouts.go          POST /api/handouts/{pdf,split_fit} — both fully in-process Go (chgk/handout + typst, XY_TYPST_CMD), no Python. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
-  staging.go           handout image staging: /api/handouts/{stage,heartbeat,DELETE stage} — client uploads referenced images once on modal open; pdf/split_fit reuse them via a session id (reaped after ~1min of no heartbeat) instead of re-uploading each generate
+  staging.go           handout image staging: /api/handouts/{stage,heartbeat,DELETE stage} — client uploads referenced images once on modal open; pdf/split_fit reuse them via a session id (reaped after ~1min of no heartbeat) instead of re-uploading each generate. Staged images live in memory only, never on disk
+  multipart.go         readMultipart: in-memory multipart parsing for every endpoint that receives plaintext (export/handouts/staging/import). ParseMultipartForm spills parts over its budget into an unmanaged temp file — plaintext on disk is exactly what xy must not do. (attachments.go still uses it: those uploads are ciphertext.)
   debug.go             [timing] logs on export/handout endpoints, gated by XY_DEBUG_TIMING
 internal/chgk/         Go port of chgksuite's core (xy no longer shells out to Python for docx/handouts)
-  fsource/             the "4s" parser (parse_4s parity; oracle-tested vs chgksuite --debug)
+  fsource/             the "4s" format, both ways: parse.go = parse_4s (oracle-tested vs
+                       chgksuite --debug), compose.go = compose_4s (structure → 4s text)
+  typo/                typotools.py: the typography pass (quotes/dashes/stress accents/
+                       %-decoding) + URL-aware underscore escaping
+  docxread/            .docx → plain text — a hand-rolled python-docx (zip/OPC, runs,
+                       hyperlinks, numbering, tables, image extraction, in memory, no fs)
+  textparse/           parser.py's ChgkParser: plain text → structure. A literal port,
+                       quirks included (see the comments); chgk game only, no si/troika
+  chgkimport/          the import entry point: .docx/.4s/.zip → 4s source + its images.
+                       Byte-parity with chgksuite's `parse` on all 12 chgk .docx fixtures
   handout/             .hndt → .typ (byte-exact vs chgksuite) → PDF via typst; embeds the typst template + Noto Sans.
+                       scratch.go: typst is an external process with no virtual FS, so this is the ONE place
+                       plaintext must hit a filesystem. It goes to a RAM-backed scratch dir (/dev/shm, override
+                       XY_SCRATCH_DIR), owner-only, wiped on return — never persistent storage.
                        splitfit.go: `handouts split_fit` port — per-block binary-search row fit using typst's own pagination (typst query page count, not pypdf), per-question + all-q PDFs, pdfcpu compress; ~12× faster, row counts match chgksuite. (image-shrink refinement not yet ported)
   docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite.
                        (img …) images are decoded (incl. WebP via x/image), re-encoded to PNG and embedded (images.go)
@@ -70,7 +85,12 @@ web/assets/            //go:embed static (package assets)
                        board, owner-only delete), docx export; direct links to a card
                        (?card=) and a comment (&comment=, copied from the timeline 🔗);
                        «Управление списками» modal groups consecutive lists into a
-                       list_of_lists (☰ menu); all mutations via sync.js (offline-capable)
+                       list_of_lists (☰ menu); all mutations via sync.js (offline-capable);
+                       «📥 Импорт» (☰ menu) uploads a .4s/.zip/.docx to /api/import/parse and
+                       turns the returned 4s into a new list — one card per blank-line block,
+                       each (img …) attached to the card that references it. A .docx (a lossy
+                       heuristic parse) first opens the verification screen: editable 4s on the
+                       left, the live list preview on the right. .4s/.zip import straight.
     menu.js            theme boot + ☰ menu; also injects PWA <head> tags + registers sw.js
     login/register/profile  auth UI (login/menu ported from dope)
     tokens.js/.html    /profile/tokens — create/revoke API tokens for the Trello API

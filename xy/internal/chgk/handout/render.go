@@ -57,7 +57,7 @@ func Render(ctx context.Context, hndt string, images map[string][]byte, a Args, 
 	if typstPath == "" {
 		typstPath = "typst"
 	}
-	dir, err := os.MkdirTemp("", "xy-handout-*")
+	dir, err := scratchTemp("xy-handout-*")
 	if err != nil {
 		return nil, err
 	}
@@ -68,12 +68,12 @@ func Render(ctx context.Context, hndt string, images map[string][]byte, a Args, 
 		if base == "" || base == "." || base == ".." || strings.ContainsAny(name, `/\`) {
 			continue // names are referenced flat; ignore path-bearing keys
 		}
-		if err := os.WriteFile(filepath.Join(dir, base), data, 0o644); err != nil {
+		if err := writeScratch(dir, base, data); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "source.typ"), []byte(GenerateTyp(hndt, a)), 0o644); err != nil {
+	if err := writeScratch(dir, "source.typ", []byte(GenerateTyp(hndt, a))); err != nil {
 		return nil, err
 	}
 	fonts, err := bundledFontDir()
