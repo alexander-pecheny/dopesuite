@@ -94,3 +94,22 @@ func Render(ctx context.Context, hndt string, images map[string][]byte, a Args, 
 	}
 	return os.ReadFile(filepath.Join(dir, "source.pdf"))
 }
+
+// BundledFonts returns the embedded Noto Sans faces as bytes. The wasm typst
+// (internal/chgk/typstwasm) serves fonts from memory, so it needs the bytes rather
+// than a directory to point --font-path at.
+func BundledFonts() ([][]byte, error) {
+	out := make([][]byte, 0, len(fontNames))
+	for _, n := range fontNames {
+		b, err := fontFS.ReadFile("assets/" + n)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, nil
+}
+
+// BundledFontDir exposes the materialised font dir for tests that drive the typst
+// CLI (which can only take a path).
+func BundledFontDir() (string, error) { return bundledFontDir() }
