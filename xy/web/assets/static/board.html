@@ -151,6 +151,29 @@
     </div>
   </div>
 
+  <!-- import verification overlay: the parsed 4s source (left, editable) next to
+       its live preview (right), so parsing mistakes can be fixed before the
+       package becomes a list. Only .docx needs it — .4s/.zip import straight. -->
+  <div class="card-overlay import-overlay" id="importOverlay" hidden>
+    <div class="preview-doc import-doc" role="dialog" aria-modal="true" aria-label="Проверка импорта">
+      <div class="preview-head">
+        <h2 class="preview-title" id="importTitle">Проверка импорта</h2>
+        <div class="preview-head-actions">
+          <span class="import-count" id="importCount"></span>
+          <button class="btn btn-small" id="importCommit" type="button">Импортировать</button>
+          <button class="action-icon" id="importClose" type="button" aria-label="Закрыть">×</button>
+        </div>
+      </div>
+      <div class="handouts-body">
+        <div class="handouts-pane handouts-src">
+          <textarea class="input handouts-textarea import-textarea" id="importSource"
+                    spellcheck="false" aria-label="Исходник 4s"></textarea>
+        </div>
+        <div class="handouts-pane import-preview" id="importPreview"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- handouts generation overlay: edit the chgksuite .hndt source (left) and
        render it to a PDF via the server (right). The PDF is ephemeral. -->
   <div class="card-overlay preview-overlay" id="handoutsOverlay" hidden>

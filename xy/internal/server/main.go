@@ -124,6 +124,9 @@ func Main() {
 	// ---- export (chgksuite docx) ----
 	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
 
+	// ---- import (.4s / .zip / .docx → 4s source + images) ----
+	mux.HandleFunc("POST /api/import/parse", srv.handleImportParse)
+
 	// ---- handouts ----
 	mux.HandleFunc("POST /api/handouts/pdf", srv.handleHandoutsPDF)
 	mux.HandleFunc("POST /api/handouts/split_fit", srv.handleHandoutsSplitFit)

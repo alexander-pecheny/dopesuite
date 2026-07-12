@@ -108,6 +108,10 @@ window.dopeMenu?.setExtras([{
   title: "Переупорядочить списки и связать их в группы (списки списков)",
   onClick: () => openListsManage(),
 }, {
+  label: "📥 Импорт",
+  title: "Импортировать пакет вопросов (.4s, .zip или .docx) в новый список",
+  onClick: () => pickImportFile(),
+}, {
   label: "👥 Участники доски",
   title: "Поделиться доской: добавить или убрать участников",
   onClick: () => openMembers(),
@@ -1196,6 +1200,228 @@ document.getElementById("listsMoveBtn").addEventListener("click", () => {
 document.getElementById("listsManageClose").addEventListener("click", closeListsManage);
 listsManageOverlay.addEventListener("pointerdown", (e) => { if (e.target === listsManageOverlay) closeListsManage(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !listsManageOverlay.hidden) closeListsManage(); });
+
+// ---- import a package (.4s / .zip / .docx) into a new list ----
+// The server parses the upload with the Go port of chgksuite's parser
+// (internal/chgk/chgkimport) and hands back 4s source plus the images it
+// references. Everything below happens client-side under the board key: the list,
+// its cards and the image attachments are all encrypted before they go back up.
+//
+// A .4s (or a .zip of one plus its images) is already in our own format, so it
+// imports straight away. A .docx has been through a lossy heuristic parse, so it
+// goes to the verification screen first.
+
+// importCtx holds the package awaiting confirmation on the verification screen.
+let importCtx = null;
+
+function pickImportFile() {
+  const input = el("input", { type: "file", accept: ".4s,.zip,.docx" });
+  input.style.display = "none";
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    input.remove();
+    if (file) await importFile(file);
+  });
+  // Dismissing the picker fires "cancel", not "change" — without this the hidden
+  // input would linger in the DOM, one per dismissal.
+  input.addEventListener("cancel", () => input.remove());
+  document.body.append(input);
+  input.click();
+}
+
+async function importFile(file) {
+  if (!xySync.isOnline()) { alert("Импорт доступен только онлайн."); return; }
+  setStatus("saving");
+  try {
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    const res = await fetch("/api/import/parse", { method: "POST", credentials: "same-origin", body: fd });
+    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+    const pkg = await res.json();
+    setStatus("saved");
+    // A .docx parse is a guess; let the user check it before it becomes a list.
+    if (/\.docx$/i.test(file.name)) openImportVerify(pkg);
+    else await commitImport(pkg.name, pkg.source, pkg.images);
+  } catch (err) {
+    setStatus("error");
+    alert("Не удалось разобрать файл: " + err.message);
+  }
+}
+
+// ---- verification screen (docx) ----
+
+const importOverlay = document.getElementById("importOverlay");
+
+// importCards splits 4s source the way the export path joins it: one card per
+// blank-line-separated block. Each card's kind comes from its leading marker.
+function importCards(source) {
+  return source
+    .split(/\n[ \t]*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean)
+    .map((desc, i) => ({ id: -(i + 1), kind: importKind(desc), desc }));
+}
+
+// importKind maps a 4s block to an xy card kind. A question is recognised by its
+// fields, not by its first line: compose_4s puts the "№ N" directive ahead of the
+// "? …" marker, and an unmarked block ("pre") is question text whose author
+// didn't prefix it.
+function importKind(desc) {
+  const blocks = xyChgk.parseBlocks(desc);
+  if (blocks.some((b) => b.type === "question" || b.type === "answer" || b.type === "pre")) return "question";
+  if (blocks.some((b) => b.type === "heading" || b.type === "ljheading")) return "heading";
+  return "meta";
+}
+
+// importImgMap turns the package's base64 images into object URLs so the preview
+// can show handouts exactly as the list will once imported.
+function importImgMap(images) {
+  const map = new Map();
+  for (const img of images || []) {
+    const bytes = Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0));
+    map.set(img.name, URL.createObjectURL(new Blob([bytes], { type: img.mime })));
+  }
+  return map;
+}
+
+function openImportVerify(pkg) {
+  closeImportVerify();
+  importCtx = { name: pkg.name, images: pkg.images || [], imgMap: importImgMap(pkg.images) };
+  document.getElementById("importTitle").textContent = "Проверка импорта: " + pkg.name;
+  const src = document.getElementById("importSource");
+  src.value = pkg.source;
+  importOverlay.hidden = false;
+  renderImportPreview();
+  src.focus();
+  // Focusing puts the caret at the end; the user wants to read from the top.
+  src.setSelectionRange(0, 0);
+  src.scrollTop = 0;
+}
+
+// renderImportPreview re-renders the right pane from whatever is in the editor,
+// using the same renderer the list preview uses — so what you check is what you get.
+function renderImportPreview() {
+  const body = document.getElementById("importPreview");
+  const cards = importCards(document.getElementById("importSource").value);
+  const numbers = xyChgk.numberQuestionCards(cards);
+  body.replaceChildren();
+  cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], importCtx.imgMap, false, false)));
+  const qs = cards.filter((c) => c.kind === "question").length;
+  document.getElementById("importCount").textContent = `${cards.length} блоков, ${qs} вопросов`;
+}
+
+function closeImportVerify() {
+  importOverlay.hidden = true;
+  if (importCtx) for (const url of importCtx.imgMap.values()) URL.revokeObjectURL(url);
+  importCtx = null;
+  document.getElementById("importPreview").replaceChildren();
+}
+
+document.getElementById("importSource").addEventListener("input", debounceImportPreview());
+document.getElementById("importClose").addEventListener("click", closeImportVerify);
+document.getElementById("importCommit").addEventListener("click", async () => {
+  if (!importCtx) return;
+  const { name, images } = importCtx;
+  const source = document.getElementById("importSource").value;
+  closeImportVerify();
+  await commitImport(name, source, images);
+});
+importOverlay.addEventListener("pointerdown", (e) => { if (e.target === importOverlay) closeImportVerify(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !importOverlay.hidden) closeImportVerify(); });
+
+// Re-rendering the whole preview on every keystroke is wasteful on a big package.
+function debounceImportPreview() {
+  let t = null;
+  return () => {
+    clearTimeout(t);
+    t = setTimeout(() => { if (importCtx) renderImportPreview(); }, 200);
+  };
+}
+
+// ---- commit: 4s source + images → a new encrypted list ----
+
+// commitImport creates the list, one card per 4s block, and attaches each image
+// to the card whose text references it via an `(img …)` directive.
+//
+// The list and its cards are posted directly (jpost), not through the sync
+// outbox: an import is online-only anyway, and mutate() hands back a negative
+// temp id whenever the queue is non-empty — which the attachment upload, a plain
+// POST to /api/cards/{id}/attachments, cannot use. Going direct keeps every id real.
+async function commitImport(name, source, images) {
+  const cards = importCards(source);
+  if (!cards.length) { alert("В файле не найдено вопросов."); return; }
+  if (!xySync.isOnline()) { alert("Импорт доступен только онлайн."); return; }
+  const title = (prompt("Название нового списка:", name || "Импорт") || "").trim();
+  if (!title) return;
+
+  setStatus("saving");
+  const byName = new Map((images || []).map((i) => [i.name, i]));
+  let done = 0, attached = 0;
+  const failed = []; // images the server refused — the card would keep a dead (img …)
+  try {
+    const ranks = [...state.lists].sort(byRank);
+    const rank = keyBetween(ranks.length ? ranks[ranks.length - 1].rank : null, null);
+    const lres = await jpost(`/api/boards/${boardId}/lists`, {
+      title_enc: await xyCrypto.encField(dk, title), rank, type: "normal",
+    });
+    state.lists.push({ id: lres.id, type: "normal", rank, title });
+
+    let cardRank = null;
+    for (const c of cards) {
+      cardRank = keyBetween(cardRank, null);
+      const res = await jpost(`/api/lists/${lres.id}/cards`, {
+        description_enc: await xyCrypto.encField(dk, c.desc), rank: cardRank, kind: c.kind,
+      });
+      state.cards.push({ id: res.id, listId: lres.id, kind: c.kind, rank: cardRank, desc: c.desc });
+      done++;
+      // Attach only the images this card actually references, so a handout lands
+      // on the question that uses it (which is where the preview/export look).
+      const refs = new Set();
+      for (const m of c.desc.matchAll(/\(img\b([^)]*)\)/g)) refs.add(imgName(m[1]));
+      for (const ref of refs) {
+        const img = byName.get(ref);
+        if (!img) continue;
+        if (await attachImported(res.id, img)) attached++;
+        else failed.push(ref);
+      }
+    }
+    render();
+    setStatus("saved");
+    let msg = `Импортировано: ${done} карточек, ${attached} изображений.`;
+    // A dropped image is invisible otherwise: the card keeps its (img …) directive
+    // but the picture is gone, and the parse response is not kept to retry from.
+    if (failed.length) msg += `\n\nНе удалось загрузить изображения (${failed.length}): ${failed.join(", ")}`;
+    alert(msg);
+  } catch (err) {
+    // The list and the cards created so far are already on the server — show them
+    // rather than leaving the board looking as if nothing happened.
+    render();
+    setStatus("error");
+    alert(`Импорт прерван после ${done} карточек: ${err.message}\n\nЧастично импортированный список остался на доске — удалите его перед повторным импортом.`);
+  }
+}
+
+// attachImported encrypts one imported image and posts it as an attachment of
+// `cardId`, under the same filename the (img …) directive refers to. Lossless:
+// re-encoding would change nothing but could degrade a handout. Returns false (and
+// lets the caller report it) if the server rejects it — e.g. an oversized scan.
+async function attachImported(cardId, img) {
+  try {
+    const bytes = Uint8Array.from(atob(img.data), (c) => c.charCodeAt(0));
+    const cipher = await xyCrypto.encBytes(dk, bytes);
+    const fd = new FormData();
+    fd.append("meta", JSON.stringify({
+      filename_enc: await xyCrypto.encField(dk, img.name),
+      mime: img.mime, lossless: true,
+      event_payload_enc: await xyCrypto.encField(dk, JSON.stringify({ file: img.name })),
+    }));
+    fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
+    const res = await fetch(`/api/cards/${cardId}/attachments`, {
+      method: "POST", credentials: "same-origin", body: fd,
+    });
+    return res.ok;
+  } catch (_) { return false; }
+}
 
 // ---- export a list to .docx via chgksuite (PLAN §8) ----
 // Concatenate the list's card descriptions (in board order) into a chgksuite

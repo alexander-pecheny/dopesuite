@@ -6380,6 +6380,14 @@ textarea.fld-input { min-height: 3em; }
   .card-preview-body { max-height: 40vh; }
 }
 
+/* ── import verification modal ─────────────────────────────────────────────────
+   Reuses the handouts split-pane shell: parsed 4s source on the left, the same
+   preview the list preview renders on the right. */
+.import-doc { width: min(1100px, 100%); }
+.import-textarea { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.5; }
+.import-count { color: var(--text-muted); font-size: var(--text-sm); white-space: nowrap; }
+.import-preview > * { margin: 0 0 var(--space-3); }
+
 /* ── lists management modal ────────────────────────────────────────────────── */
 .lists-manage { width: min(560px, 100%); text-align: left; }
 .lists-manage-toolbar {

@@ -42,8 +42,29 @@ type Question struct {
 
 func newQuestion() *Question { return &Question{vals: map[string]any{}} }
 
+// NewQuestion builds an empty question; exported for the text parser, which
+// produces the same structure from a .docx/.txt package.
+func NewQuestion() *Question { return newQuestion() }
+
 func (q *Question) Has(k string) bool { _, ok := q.vals[k]; return ok }
 func (q *Question) Get(k string) any  { return q.vals[k] }
+
+// Empty reports whether the question has no fields yet.
+func (q *Question) Empty() bool { return q.empty() }
+
+// Delete removes a field, keeping the remaining keys in insertion order.
+func (q *Question) Delete(k string) {
+	if _, ok := q.vals[k]; !ok {
+		return
+	}
+	delete(q.vals, k)
+	for i, key := range q.keys {
+		if key == k {
+			q.keys = append(q.keys[:i], q.keys[i+1:]...)
+			break
+		}
+	}
+}
 
 func (q *Question) Set(k string, v any) {
 	if _, ok := q.vals[k]; !ok {
