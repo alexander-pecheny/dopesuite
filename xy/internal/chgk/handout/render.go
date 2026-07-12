@@ -5,9 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 )
 
@@ -49,50 +47,20 @@ func bundledFontDir() (string, error) {
 	return fontDir, fontErr
 }
 
-// Render parses the .hndt source, emits the .typ, writes it (plus any referenced
-// images, keyed by the name used in the source) to a scratch dir, and compiles a
-// PDF with the typst binary at typstPath ("" → "typst" on PATH). Mirrors
-// chgksuite's `typst compile --root / --font-path <fonts> source.typ source.pdf`.
-func Render(ctx context.Context, hndt string, images map[string][]byte, a Args, typstPath string) ([]byte, error) {
-	if typstPath == "" {
-		typstPath = "typst"
+// Render typesets the .hndt source to a PDF. images are the pictures it
+// references, by the name used in the source.
+//
+// ts decides where typst runs: the server passes the in-memory wasm typesetter, so
+// the decrypted questions never reach a filesystem.
+func Render(ctx context.Context, hndt string, images map[string][]byte, a Args, ts Typesetter) ([]byte, error) {
+	if err := ts.SetImages(ctx, images); err != nil {
+		return nil, err
 	}
-	dir, err := scratchTemp("xy-handout-*")
+	pdf, _, err := ts.Compile(ctx, GenerateTyp(hndt, a), true)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("typst compile failed: %w", err)
 	}
-	defer os.RemoveAll(dir)
-
-	for name, data := range images {
-		base := filepath.Base(name)
-		if base == "" || base == "." || base == ".." || strings.ContainsAny(name, `/\`) {
-			continue // names are referenced flat; ignore path-bearing keys
-		}
-		if err := writeScratch(dir, base, data); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := writeScratch(dir, "source.typ", []byte(GenerateTyp(hndt, a))); err != nil {
-		return nil, err
-	}
-	fonts, err := bundledFontDir()
-	if err != nil {
-		return nil, err
-	}
-
-	// --ignore-system-fonts: we bundle the only font we use (Noto Sans), so skip
-	// scanning the OS font dirs on every invocation.
-	cmd := exec.CommandContext(ctx, typstPath, "compile", "--root", "/", "--font-path", fonts, "--ignore-system-fonts", "source.typ", "source.pdf")
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		msg := strings.TrimSpace(string(out))
-		if msg == "" {
-			msg = err.Error()
-		}
-		return nil, fmt.Errorf("typst compile failed: %s", msg)
-	}
-	return os.ReadFile(filepath.Join(dir, "source.pdf"))
+	return pdf, nil
 }
 
 // BundledFonts returns the embedded Noto Sans faces as bytes. The wasm typst

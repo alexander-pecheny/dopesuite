@@ -10,8 +10,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -267,28 +265,15 @@ func TestExportDocxRealChgksuite(t *testing.T) {
 }
 
 // TestHandoutsPDF drives the handout-PDF endpoint with a fake typst that writes
-// a PDF to its output argument, verifying the in-process Go render wiring (the
-// .typ generation itself is covered by the handout package's TypParity test).
+// typst is stubbed, so this covers the HTTP wiring: the source and its images
+// reach the typesetter and a PDF comes back. (The .typ generation itself is covered
+// by the handout package's TypParity test, and the real typesetting by its wasm
+// parity tests.)
 func TestHandoutsPDF(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell fake not portable to windows")
-	}
 	ts, srv := newTestServer(t)
 	c := registerUser(t, srv, ts, 770500, "hndt")
 
-	dir := t.TempDir()
-	script := filepath.Join(dir, "fake-typst")
-	// typst is invoked as: compile --root / --font-path <fonts> source.typ source.pdf
-	// (cwd = render scratch dir). Write a fake PDF to the last argument.
-	body := "#!/bin/sh\n" +
-		"set -e\n" +
-		"[ \"$1\" = compile ] || { echo 'not compile' >&2; exit 1; }\n" +
-		"eval \"out=\\${$#}\"\n" +
-		"printf '%%PDF-fake' > \"$out\"\n"
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XY_TYPST_CMD", script)
+	fake := stubTypst(t, srv)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -317,31 +302,21 @@ func TestHandoutsPDF(t *testing.T) {
 	if out.String() != "%PDF-fake" {
 		t.Fatalf("body = %q", out.String())
 	}
+	// The referenced image must have reached typst — in memory, not via a file.
+	if !fake.hasImage("pic.jpg") {
+		t.Error("the uploaded image was not handed to typst")
+	}
 }
 
 // TestHandoutsPDFMultiBlockCRLF guards the CRLF regression: browsers send
 // textarea values as CRLF in multipart, which used to collapse the "---"-
-// separated .hndt blocks into one. The fake typst asserts 3 #handout blocks
-// survived into the generated source.typ.
+// separated .hndt blocks into one. Assert 3 #handout blocks survive into the
+// generated source.
 func TestHandoutsPDFMultiBlockCRLF(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell fake not portable to windows")
-	}
 	ts, srv := newTestServer(t)
 	c := registerUser(t, srv, ts, 770550, "hndtm")
 
-	dir := t.TempDir()
-	script := filepath.Join(dir, "fake-typst")
-	body := "#!/bin/sh\n" +
-		"set -e\n" +
-		"n=$(grep -c '#handout(' source.typ || true)\n" +
-		"[ \"$n\" = 3 ] || { echo \"expected 3 blocks, got $n\" >&2; exit 1; }\n" +
-		"eval \"out=\\${$#}\"\n" +
-		"printf '%%PDF-fake' > \"$out\"\n"
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("XY_TYPST_CMD", script)
+	fake := stubTypst(t, srv)
 
 	// CRLF line endings, как их шлёт браузер.
 	src := "for_question: 2\r\ncolumns: 3\r\n\r\nПервый\r\n---\r\nfor_question: 7\r\ncolumns: 3\r\n\r\nВторой\r\n---\r\nfor_question: 13\r\ncolumns: 3\r\n\r\nТретий\r\n"
@@ -361,6 +336,9 @@ func TestHandoutsPDFMultiBlockCRLF(t *testing.T) {
 	}
 	mustStatus(t, resp, 200)
 	resp.Body.Close()
+	if n := fake.blocks(); n != 3 {
+		t.Fatalf("CRLF source collapsed: %d #handout blocks, want 3", n)
+	}
 }
 
 // TestHandoutsPDFRejectsEmpty checks the empty-source guard.

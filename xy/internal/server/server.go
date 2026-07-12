@@ -17,6 +17,8 @@ import (
 	_ "modernc.org/sqlite"
 
 	"xy/internal/blobstore"
+
+	"xy/internal/chgk/handout"
 )
 
 const (
@@ -37,6 +39,13 @@ type server struct {
 	assetETags   map[string]string
 
 	staging *handoutStaging // staged handout images (see staging.go)
+
+	// typst, compiled to wasm and run in-process (see typst.go). Built lazily and
+	// shared: compiling the module is what costs, not using it. Tests inject a stub
+	// so they neither compile the wasm nor need a real image to render.
+	typstOnce sync.Once
+	typst     handout.Typesetter
+	typstErr  error
 }
 
 // buildDSN assembles a modernc.org/sqlite DSN with WAL + durability pragmas,

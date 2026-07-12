@@ -8,13 +8,12 @@
 // from a map removes the requirement outright — the plaintext never leaves RAM.
 //
 // It runs under wazero, a pure-Go WASM runtime, so the server stays CGO_ENABLED=0
-// and cross-compilable (which linking typst natively via cgo would have cost).
+// and cross-compilable — which linking typst natively via cgo would have cost.
 //
-// The module is a WASI reactor: it is instantiated once and keeps its state, so
-// the fonts are parsed once per process and the images once per generation.
-// split_fit compiles the same document dozens of times while binary-searching the
-// row count, and with the CLI every one of those probes is a fresh process that
-// re-reads the fonts. Here they are already warm.
+// The guest is a WASI *reactor*: an instance keeps its fonts and images across
+// calls, so the fonts are parsed once and the images once per generation. split_fit
+// binary-searches the row count and so compiles the same document dozens of times;
+// with the CLI every one of those probes is a fresh process that re-reads the fonts.
 package typstwasm
 
 import (
@@ -23,7 +22,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"sync"
+	"strconv"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -31,35 +30,46 @@ import (
 )
 
 // typstWasm is the compiled guest (see typst-wasm/, built with
-// `cargo build --release --target wasm32-wasip1`). Embedding it keeps the Go build
-// free of any Rust toolchain — the artifact is vendored like the fonts.
+// `cargo build --release --target wasm32-wasip1`). It is vendored like the fonts,
+// so the Go build needs no Rust toolchain.
 //
 //go:embed typst.wasm
 var typstWasm []byte
 
-// Engine is one instantiated typst. It is NOT safe for concurrent use: the guest
-// holds the loaded fonts and images in globals, so callers must serialise (the
-// mutex below does that) or hold one Engine per concurrent render.
-type Engine struct {
-	mu       sync.Mutex
-	rt       wazero.Runtime
-	mod      api.Module
-	alloc    api.Function
-	dealloc  api.Function
-	addFont  api.Function
-	addFile  api.Function
-	reset    api.Function
-	compile  api.Function
-	closeCtx context.Context
+// Pool is a set of typst instances. It implements handout.Typesetter.
+//
+// A single instance would serialise everything: the guest keeps its fonts and
+// images in globals, so one compile at a time. split_fit fits its blocks in
+// parallel, so the pool holds one instance per worker. Compiling the wasm to
+// machine code happens once and is shared; instantiating is comparatively cheap.
+type Pool struct {
+	rt        wazero.Runtime
+	instances []*instance
+	free      chan *instance
+	closeCtx  context.Context
 }
 
-// New compiles the module and loads the fonts.
+type instance struct {
+	mod     api.Module
+	alloc   api.Function
+	dealloc api.Function
+	addFont api.Function
+	addFile api.Function
+	reset   api.Function
+	compile api.Function
+}
+
+// NewPool compiles the module once, instantiates `size` copies and loads the fonts
+// into each.
 //
-// Compiling 30 MB of wasm to machine code takes ~15s, so cacheDir matters: wazero
-// keeps the compiled code there and reuses it on the next start. Pass "" to skip
-// the cache (and pay the full compile every time). The cache holds compiled typst,
-// not user data, so it is safe on ordinary disk.
-func New(ctx context.Context, fonts [][]byte, cacheDir string) (*Engine, error) {
+// cacheDir is where wazero keeps the compiled machine code. It matters a lot:
+// compiling 30 MB of wasm takes ~15s cold but ~0.5s from the cache, and the cache
+// survives restarts. It must live on PERSISTENT storage — on tmpfs it is wiped on
+// reboot and the cold cost comes back. It holds compiled typst, no user data.
+func NewPool(ctx context.Context, fonts [][]byte, cacheDir string, size int) (*Pool, error) {
+	if size < 1 {
+		size = 1
+	}
 	cfg := wazero.NewRuntimeConfig().WithCloseOnContextDone(true)
 	if cacheDir != "" {
 		cache, err := wazero.NewCompilationCacheWithDir(cacheDir)
@@ -69,132 +79,177 @@ func New(ctx context.Context, fonts [][]byte, cacheDir string) (*Engine, error) 
 		cfg = cfg.WithCompilationCache(cache)
 	}
 	rt := wazero.NewRuntimeWithConfig(ctx, cfg)
+	fail := func(err error) (*Pool, error) {
+		rt.Close(ctx)
+		return nil, err
+	}
 	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
-		rt.Close(ctx)
-		return nil, fmt.Errorf("wasi: %w", err)
+		return fail(fmt.Errorf("wasi: %w", err))
 	}
-	// No filesystem, no env, no args: the guest cannot reach the host's disk even
-	// if typst tried to, which is the whole point.
-	mod, err := rt.InstantiateWithConfig(ctx, typstWasm,
-		wazero.NewModuleConfig().WithName("typst").WithStartFunctions("_initialize"))
+	// Compile once; every instance below is stamped from this.
+	compiled, err := rt.CompileModule(ctx, typstWasm)
 	if err != nil {
-		rt.Close(ctx)
-		return nil, fmt.Errorf("instantiate: %w", err)
+		return fail(fmt.Errorf("compile module: %w", err))
 	}
-	e := &Engine{
-		rt: rt, mod: mod, closeCtx: ctx,
-		alloc:   mod.ExportedFunction("alloc"),
-		dealloc: mod.ExportedFunction("dealloc"),
-		addFont: mod.ExportedFunction("add_font"),
-		addFile: mod.ExportedFunction("add_file"),
-		reset:   mod.ExportedFunction("reset_files"),
-		compile: mod.ExportedFunction("compile"),
-	}
-	for name, f := range map[string]api.Function{
-		"alloc": e.alloc, "dealloc": e.dealloc, "add_font": e.addFont,
-		"add_file": e.addFile, "reset_files": e.reset, "compile": e.compile,
-	} {
-		if f == nil {
-			rt.Close(ctx)
-			return nil, fmt.Errorf("guest is missing export %q", name)
-		}
-	}
-	for _, font := range fonts {
-		ptr, err := e.write(ctx, font)
+
+	p := &Pool{rt: rt, closeCtx: ctx, free: make(chan *instance, size)}
+	for i := range size {
+		// No filesystem, no env, no args: the guest could not reach the host's disk
+		// even if typst tried to, which is the whole point of the exercise.
+		mod, err := rt.InstantiateModule(ctx, compiled,
+			wazero.NewModuleConfig().
+				WithName("typst"+strconv.Itoa(i)).
+				WithStartFunctions("_initialize"))
 		if err != nil {
-			rt.Close(ctx)
-			return nil, err
+			return fail(fmt.Errorf("instantiate: %w", err))
 		}
-		if _, err := e.addFont.Call(ctx, uint64(ptr), uint64(len(font))); err != nil {
-			rt.Close(ctx)
-			return nil, fmt.Errorf("add_font: %w", err)
+		in := &instance{
+			mod:     mod,
+			alloc:   mod.ExportedFunction("alloc"),
+			dealloc: mod.ExportedFunction("dealloc"),
+			addFont: mod.ExportedFunction("add_font"),
+			addFile: mod.ExportedFunction("add_file"),
+			reset:   mod.ExportedFunction("reset_files"),
+			compile: mod.ExportedFunction("compile"),
 		}
-		e.free(ctx, ptr, uint32(len(font)))
+		for name, f := range map[string]api.Function{
+			"alloc": in.alloc, "dealloc": in.dealloc, "add_font": in.addFont,
+			"add_file": in.addFile, "reset_files": in.reset, "compile": in.compile,
+		} {
+			if f == nil {
+				return fail(fmt.Errorf("guest is missing export %q", name))
+			}
+		}
+		for _, font := range fonts {
+			ptr, err := in.write(ctx, font)
+			if err != nil {
+				return fail(err)
+			}
+			_, err = in.addFont.Call(ctx, uint64(ptr), uint64(len(font)))
+			in.free(ctx, ptr, uint32(len(font)))
+			if err != nil {
+				return fail(fmt.Errorf("add_font: %w", err))
+			}
+		}
+		p.instances = append(p.instances, in)
+		p.free <- in
 	}
-	return e, nil
+	return p, nil
 }
 
-func (e *Engine) Close() error { return e.rt.Close(e.closeCtx) }
-
-// write copies b into the guest's linear memory and returns its offset.
-func (e *Engine) write(ctx context.Context, b []byte) (uint32, error) {
-	res, err := e.alloc.Call(ctx, uint64(len(b)))
-	if err != nil {
-		return 0, fmt.Errorf("alloc: %w", err)
-	}
-	ptr := uint32(res[0])
-	if !e.mod.Memory().Write(ptr, b) {
-		return 0, errors.New("write outside guest memory")
-	}
-	return ptr, nil
-}
-
-func (e *Engine) free(ctx context.Context, ptr, size uint32) {
-	_, _ = e.dealloc.Call(ctx, uint64(ptr), uint64(size))
-}
+func (p *Pool) Close() error { return p.rt.Close(p.closeCtx) }
 
 // SetImages replaces the images the source may reference, keyed by the bare name
-// the (img …) directive uses.
-func (e *Engine) SetImages(ctx context.Context, images map[string][]byte) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if _, err := e.reset.Call(ctx); err != nil {
-		return fmt.Errorf("reset_files: %w", err)
+// the (img …) directive uses. Every instance gets them, since any one of them may
+// serve the next Compile.
+func (p *Pool) SetImages(ctx context.Context, images map[string][]byte) error {
+	// Drain the pool so no compile is running against half-replaced images.
+	held := make([]*instance, 0, len(p.instances))
+	defer func() {
+		for _, in := range held {
+			p.free <- in
+		}
+	}()
+	for range p.instances {
+		select {
+		case in := <-p.free:
+			held = append(held, in)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	for name, data := range images {
-		np, err := e.write(ctx, []byte(name))
-		if err != nil {
-			return err
+	for _, in := range held {
+		if _, err := in.reset.Call(ctx); err != nil {
+			return fmt.Errorf("reset_files: %w", err)
 		}
-		dp, err := e.write(ctx, data)
-		if err != nil {
-			return err
-		}
-		_, err = e.addFile.Call(ctx, uint64(np), uint64(len(name)), uint64(dp), uint64(len(data)))
-		e.free(ctx, np, uint32(len(name)))
-		e.free(ctx, dp, uint32(len(data)))
-		if err != nil {
-			return fmt.Errorf("add_file: %w", err)
+		for name, data := range images {
+			if err := in.addImage(ctx, name, data); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-// Compile typesets typ. wantPDF=false skips PDF generation and only reports the
-// page count — which is all split_fit's binary search needs.
-func (e *Engine) Compile(ctx context.Context, typ string, wantPDF bool) (pdf []byte, pages int, err error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+// Compile typesets typ on a free instance. wantPDF=false skips PDF generation and
+// only reports the page count — all split_fit's binary search needs.
+func (p *Pool) Compile(ctx context.Context, typ string, wantPDF bool) ([]byte, int, error) {
+	var in *instance
+	select {
+	case in = <-p.free:
+	case <-ctx.Done():
+		return nil, 0, ctx.Err()
+	}
+	defer func() { p.free <- in }()
+	return in.compileOn(ctx, typ, wantPDF)
+}
 
-	src, err := e.write(ctx, []byte(typ))
+// ── one instance ──
+
+func (in *instance) write(ctx context.Context, b []byte) (uint32, error) {
+	res, err := in.alloc.Call(ctx, uint64(len(b)))
+	if err != nil {
+		return 0, fmt.Errorf("alloc: %w", err)
+	}
+	ptr := uint32(res[0])
+	if !in.mod.Memory().Write(ptr, b) {
+		return 0, errors.New("write outside guest memory")
+	}
+	return ptr, nil
+}
+
+func (in *instance) free(ctx context.Context, ptr, size uint32) {
+	_, _ = in.dealloc.Call(ctx, uint64(ptr), uint64(size))
+}
+
+func (in *instance) addImage(ctx context.Context, name string, data []byte) error {
+	np, err := in.write(ctx, []byte(name))
+	if err != nil {
+		return err
+	}
+	dp, err := in.write(ctx, data)
+	if err != nil {
+		in.free(ctx, np, uint32(len(name)))
+		return err
+	}
+	_, err = in.addFile.Call(ctx, uint64(np), uint64(len(name)), uint64(dp), uint64(len(data)))
+	in.free(ctx, np, uint32(len(name)))
+	in.free(ctx, dp, uint32(len(data)))
+	if err != nil {
+		return fmt.Errorf("add_file: %w", err)
+	}
+	return nil
+}
+
+func (in *instance) compileOn(ctx context.Context, typ string, wantPDF bool) ([]byte, int, error) {
+	src, err := in.write(ctx, []byte(typ))
 	if err != nil {
 		return nil, 0, err
 	}
-	defer e.free(ctx, src, uint32(len(typ)))
+	defer in.free(ctx, src, uint32(len(typ)))
 
 	var want uint64
 	if wantPDF {
 		want = 1
 	}
-	res, err := e.compile.Call(ctx, uint64(src), uint64(len(typ)), want)
+	res, err := in.compile.Call(ctx, uint64(src), uint64(len(typ)), want)
 	if err != nil {
 		return nil, 0, fmt.Errorf("compile: %w", err)
 	}
 	// The guest packs its result buffer as (ptr << 32) | len.
-	packed := res[0]
-	ptr, size := uint32(packed>>32), uint32(packed)
-	out, ok := e.mod.Memory().Read(ptr, size)
+	ptr, size := uint32(res[0]>>32), uint32(res[0])
+	out, ok := in.mod.Memory().Read(ptr, size)
 	if !ok {
 		return nil, 0, errors.New("result outside guest memory")
 	}
 	buf := make([]byte, len(out))
-	copy(buf, out) // the guest frees the original on the next line
-	e.free(ctx, ptr, size)
+	copy(buf, out) // the guest frees the original next
+	in.free(ctx, ptr, size)
 
 	if len(buf) < 5 {
 		return nil, 0, errors.New("short result")
 	}
-	pages = int(binary.LittleEndian.Uint32(buf[1:5]))
+	pages := int(binary.LittleEndian.Uint32(buf[1:5]))
 	if buf[0] != 1 {
 		return nil, pages, fmt.Errorf("typst: %s", buf[5:])
 	}

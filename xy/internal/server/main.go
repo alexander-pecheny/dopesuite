@@ -152,6 +152,10 @@ func Main() {
 	if err != nil {
 		log.Fatalf("bind %s: %v", addr, err)
 	}
+	// Compile typst (wasm) ahead of the first handout request: cold, that is a ~15s
+	// wasm compile, which no user should sit through.
+	srv.warmTypst()
+
 	log.Printf("xy serving on %s (assets from %s)", addr, mode)
 
 	httpSrv := &http.Server{

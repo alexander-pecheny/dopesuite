@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -16,18 +15,11 @@ import (
 // lets the user edit it, then posts it here with any referenced image files.
 // The server renders it to a PDF in-process via the Go handout package (which
 // emits the same Typst document chgksuite would and compiles it with the typst
-// binary) — no Python, ~60× faster than shelling out to chgksuite. Plaintext only
-// lives in the render's scratch dir, wiped before this returns (PLAN risk note).
+// binary) — no Python. typst runs in-process as a wasm module with its filesystem
+// served from memory (internal/chgk/typstwasm), so the decrypted questions and
+// their images never touch a disk at all.
 
 const handoutTimeout = 180 * time.Second
-
-// typstCommand returns the typst binary path (XY_TYPST_CMD, default "typst").
-func typstCommand() string {
-	if raw := strings.TrimSpace(os.Getenv("XY_TYPST_CMD")); raw != "" {
-		return raw
-	}
-	return "typst"
-}
 
 func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
@@ -63,9 +55,14 @@ func (s *server) handleHandoutsPDF(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	ts, err := s.typesetter()
+	if err != nil {
+		httpError(w, http.StatusInternalServerError, "typst unavailable: "+err.Error())
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), handoutTimeout)
 	defer cancel()
-	pdf, err := handout.Render(ctx, source, images, handout.DefaultArgs(), typstCommand())
+	pdf, err := handout.Render(ctx, source, images, handout.DefaultArgs(), ts)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "typst timed out")
@@ -122,9 +119,14 @@ func (s *server) handleHandoutsSplitFit(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	ts, err := s.typesetter()
+	if err != nil {
+		httpError(w, http.StatusInternalServerError, "typst unavailable: "+err.Error())
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), splitFitTimeout)
 	defer cancel()
-	zipped, err := handout.SplitFit(ctx, source, images, handout.DefaultArgs(), typstCommand())
+	zipped, err := handout.SplitFit(ctx, source, images, handout.DefaultArgs(), ts)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "split_fit timed out")
