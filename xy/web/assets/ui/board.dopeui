@@ -25,7 +25,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
         unreaddot id="contentUnreadDot" data-edit-only title="Непрочитанные изменения"
         button id="cardLink" small title="Скопировать прямую ссылку на карточку" data-edit-only "🔗 Ссылка"
         button id="cardCopy" small hidden title="Скопировать текст вопроса для тест-сессии (экранный режим)" "📋 Копировать"
-        iconbtn id="cardClose" label="Назад" title="Назад" "↩️"
+        iconbtn id="cardClose" label="Назад" "↩️"
     mount id="cardCopyMsg" kind="card-copy-msg" hidden
 
     -- view switch: preview (read-only) / structured fields / raw 4s text
@@ -55,7 +55,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     label data-edit-only "Метки"
     mount id="labelPicker" kind="label-picker" data-edit-only
     mount id="labelAddRow" kind="label-add-row" data-edit-only
-      button id="labelAddBtn" "+ добавить метку…"
+      button kind="ghost" id="labelAddBtn" "+ добавить метку…"
     form id="newLabelForm" dir="row" gap="sm" data-edit-only
       textfield id="newLabelName" placeholder="Новая метка" grow
       colorfield id="newLabelColor" value="#4477aa"

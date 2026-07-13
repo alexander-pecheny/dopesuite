@@ -1,4 +1,4 @@
-page title="Вход · Фест" kind="sheet" classicscripts="login.js"
+page title="Вход · xy" kind="sheet" classicscripts="login.js"
   topbar title="Вход"
     iconlink href="/register" label="Регистрация" "→"
 

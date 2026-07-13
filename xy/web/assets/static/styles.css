@@ -10,6 +10,14 @@
 :root { --kanban-col: var(--structure); --kanban-card: var(--surface); }
 :root[data-theme="dark"] { --kanban-col: var(--surface); --kanban-card: var(--structure); }
 
+/* Tokens the xy layer (and a couple of core rules) reference but the shared
+   design system doesn't define yet — map them onto existing theme-aware tokens
+   here so both layers resolve. Belongs in core.css long-term (kit is read-only). */
+:root {
+  --accent: var(--success);
+  --shadow-sm: 0 1px 2px rgba(32, 33, 36, 0.12);
+}
+
 .btn-ghost {
   background: transparent;
   border-color: var(--border);
@@ -375,7 +383,7 @@
 @media (hover: none) { .tl-link { opacity: 0.55; } }
 /* flash a comment when arrived at via a direct link */
 .tl-event.tl-highlight { animation: tl-flash 2.5s ease-out; }
-@keyframes tl-flash { 0%, 40% { background: var(--accent-soft, var(--green-soft)); border-color: var(--accent); } 100% { background: var(--page); } }
+@keyframes tl-flash { 0%, 40% { background: var(--success-soft); border-color: var(--success); } 100% { background: var(--page); } }
 
 /* members / sharing modal */
 .members-list { display: flex; flex-direction: column; gap: var(--space-1); max-height: 320px; overflow-y: auto; }
@@ -404,7 +412,7 @@
 .tl-diff { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-1); font-family: var(--font-mono); font-size: var(--text-2xs); }
 .tl-before, .tl-after { padding: var(--space-2); border-radius: var(--radius-xs); white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
 .tl-before { background: var(--red-soft); }
-.tl-after { background: var(--green-soft, var(--accent-soft)); }
+.tl-after { background: var(--success-soft); }
 .tl-chg { border-radius: var(--radius-xs); color: #fff; padding: 0 1px; }
 .tl-before .tl-chg { background: var(--red); text-decoration: line-through; }
 .tl-after .tl-chg { background: var(--green); text-decoration: none; }
@@ -728,7 +736,7 @@ textarea.fld-input { min-height: 3em; }
    preview the list preview renders on the right. */
 .import-doc { width: min(1100px, 100%); }
 .import-textarea { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.5; }
-.import-count { color: var(--text-muted); font-size: var(--text-sm); white-space: nowrap; }
+.import-count { color: var(--muted); font-size: var(--text-sm); white-space: nowrap; }
 .import-preview > * { margin: 0 0 var(--space-3); }
 
 /* ── sizes modal (list width / card height) ───────────────────────────────── */
