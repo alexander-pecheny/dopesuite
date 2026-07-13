@@ -5798,12 +5798,19 @@ body.is-fullscreen.od-page .match-main {
   height: 100%;
   overflow-x: auto;
   padding-bottom: var(--space-2);
+  /* On a wide monitor a full-bleed board strands the reader at the screen edge,
+     so the workspace is a centred column with a user-set cap («Изменить размеры»).
+     max-width, not width: the box still scrolls internally once the lists
+     outgrow it. none = full bleed, the old behaviour. */
+  max-width: var(--kanban-max-w, none);
+  margin-inline: auto;
 }
-/* list width / card title height are user-tunable («Изменить размеры» in the ☰
-   menu, board.js) — the modal overrides these vars on <html>. */
+/* Workspace width, list width and card line count are user-tunable («Изменить
+   размеры» in the ☰ menu, board.js) — the modal overrides these vars on <html>. */
 :root {
+  --kanban-max-w: none;   /* none = board spans the full viewport width */
   --klist-w: 280px;
-  --kcard-title-max-h: none;   /* none = card grows with its text */
+  --kcard-lines: none;    /* none = card shows the whole question, unclamped */
 }
 .klist {
   flex: 0 0 var(--klist-w);
@@ -5836,7 +5843,21 @@ body.is-fullscreen.od-page .match-main {
 }
 .kcard:hover { background: var(--hover-bg); }
 .kcard.dragging { opacity: 0.4; }
-.kcard-title { font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; max-height: var(--kcard-title-max-h); overflow: hidden; }
+/* The node holds the card's whole text; -webkit-line-clamp cuts it at N lines
+   *with an ellipsis* (a plain max-height would slice a line in half). `none`
+   clamps nothing, so the card grows to fit the question. The -webkit- prefixed
+   pair is still the only thing that works cross-browser; `line-clamp` is the
+   standard alias, harmless where unsupported. */
+.kcard-title {
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--kcard-lines);
+  line-clamp: var(--kcard-lines);
+  overflow: hidden;
+}
 /* auto/directive question number reads as scaffolding, not content */
 .kcard-num { color: var(--muted); }
 .kcard-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
@@ -6399,6 +6420,7 @@ textarea.fld-input { min-height: 3em; }
 .sizes-row { display: flex; flex-direction: column; gap: var(--space-1); }
 .sizes-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
 .sizes-value { font-size: var(--text-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sizes-hint { margin: 0; font-size: var(--text-xs); color: var(--muted); }
 .sizes-row input[type="range"] { width: 100%; accent-color: var(--blue-strong); cursor: var(--cursor-action); }
 .sizes-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 

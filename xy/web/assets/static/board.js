@@ -136,49 +136,70 @@ window.dopeMenu?.setExtras([{
   onClick: () => deleteBoard(),
 }]);
 
-// ---- board sizes (list width / card height) ----
+// ---- board sizes (workspace width / list width / card height) ----
 // A display preference, not board data: it lives in localStorage (per browser,
-// all boards) and drives two CSS vars on <html>. cardH === null means the card
-// grows with its text, which the slider represents as its maximum value.
+// all boards) and drives three CSS vars on <html>.
+//   boardW    — max width of the kanban, which is centred in the viewport. On a
+//               wide monitor a left-aligned board strands the reader at the edge
+//               of the screen; null = use the whole width (the old behaviour).
+//   listW     — list column width.
+//   cardLines — how many lines of the question a card shows, as a line clamp
+//               (with an ellipsis). null = no clamp: the card shows the whole
+//               question, which is why cards render the full text rather than a
+//               truncated preview (see renderCardTitle).
+// Each slider's maximum position means "unlimited" (null), not its numeric value.
 const SIZES_KEY = "xy.sizes";
-const SIZES_DEFAULT = { listW: 280, cardH: null };
-const CARD_H_MAX = 400;
+const SIZES_DEFAULT = { boardW: null, listW: 280, cardLines: null };
+const BOARD_W_MIN = 800, BOARD_W_MAX = 3200;   // MAX = «вся ширина»
+const LIST_W_MIN = 200, LIST_W_MAX = 640;
+const CARD_LINES_MAX = 12;                     // MAX = «без ограничения»
+
+const inRange = (n, lo, hi) => Number.isFinite(n) && n >= lo && n < hi;
 
 function readSizes() {
   try {
     const s = JSON.parse(localStorage.getItem(SIZES_KEY) || "null");
     if (!s) return { ...SIZES_DEFAULT };
     const listW = Number(s.listW);
-    const cardH = Number(s.cardH);
     return {
-      listW: listW >= 200 && listW <= 640 ? listW : SIZES_DEFAULT.listW,
-      cardH: cardH >= 40 && cardH < CARD_H_MAX ? cardH : null,
+      boardW: inRange(Number(s.boardW), BOARD_W_MIN, BOARD_W_MAX) ? Number(s.boardW) : null,
+      listW: listW >= LIST_W_MIN && listW <= LIST_W_MAX ? listW : SIZES_DEFAULT.listW,
+      cardLines: inRange(Number(s.cardLines), 1, CARD_LINES_MAX) ? Number(s.cardLines) : null,
     };
   } catch (_) { return { ...SIZES_DEFAULT }; }
 }
 
 function applySizes(s) {
   const root = document.documentElement;
+  root.style.setProperty("--kanban-max-w", s.boardW == null ? "none" : s.boardW + "px");
   root.style.setProperty("--klist-w", s.listW + "px");
-  root.style.setProperty("--kcard-title-max-h", s.cardH == null ? "none" : s.cardH + "px");
+  root.style.setProperty("--kcard-lines", s.cardLines == null ? "none" : String(s.cardLines));
 }
 applySizes(readSizes());
 
 const sizesOverlay = document.getElementById("sizesOverlay");
+const sizesBoardW = document.getElementById("sizesBoardW");
 const sizesListW = document.getElementById("sizesListW");
 const sizesCardH = document.getElementById("sizesCardH");
 
 function syncSizesUI(s) {
+  sizesBoardW.value = String(s.boardW == null ? BOARD_W_MAX : s.boardW);
   sizesListW.value = String(s.listW);
-  sizesCardH.value = String(s.cardH == null ? CARD_H_MAX : s.cardH);
+  sizesCardH.value = String(s.cardLines == null ? CARD_LINES_MAX : s.cardLines);
+  document.getElementById("sizesBoardWVal").textContent = s.boardW == null ? "вся ширина" : s.boardW + " px";
   document.getElementById("sizesListWVal").textContent = s.listW + " px";
-  document.getElementById("sizesCardHVal").textContent = s.cardH == null ? "не ограничена" : s.cardH + " px";
+  document.getElementById("sizesCardHVal").textContent =
+    s.cardLines == null ? "весь текст" : s.cardLines + (s.cardLines === 1 ? " строка" : s.cardLines < 5 ? " строки" : " строк");
 }
 
 // Live-apply on every input move, so the board behind the modal previews the size.
 function commitSizes() {
-  const cardH = Number(sizesCardH.value);
-  const s = { listW: Number(sizesListW.value), cardH: cardH >= CARD_H_MAX ? null : cardH };
+  const boardW = Number(sizesBoardW.value), lines = Number(sizesCardH.value);
+  const s = {
+    boardW: boardW >= BOARD_W_MAX ? null : boardW,
+    listW: Number(sizesListW.value),
+    cardLines: lines >= CARD_LINES_MAX ? null : lines,
+  };
   applySizes(s);
   syncSizesUI(s);
   try { localStorage.setItem(SIZES_KEY, JSON.stringify(s)); } catch (_) {}
@@ -190,6 +211,7 @@ function openSizes() {
 }
 function closeSizes() { sizesOverlay.hidden = true; }
 
+sizesBoardW.addEventListener("input", commitSizes);
 sizesListW.addEventListener("input", commitSizes);
 sizesCardH.addEventListener("input", commitSizes);
 document.getElementById("sizesReset").addEventListener("click", () => {
@@ -743,13 +765,17 @@ async function deleteList(list) {
   } catch (err) { setStatus("error"); alert("Не удалось удалить: " + err.message); }
 }
 
-// cardTitle derives the short preview shown on a kanban card. Question cards are
-// prefixed with their (parsed or auto-assigned) number and stripped of the "? "
-// marker; meta/heading cards show their parsed text; test cards show the session.
+// Cards carry the card's *whole* text (whitespace collapsed), not a truncated
+// preview: how much of it is visible is a display choice, made in CSS by the
+// --kcard-lines clamp (see the sizes modal). Truncating here instead would cap
+// the card at 80 characters no matter how much room the reader gives it.
+const cardBody = (card) => deriveTitle(xyChgk.previewText(card.kind, card.desc), Infinity);
+
+// cardTitle is the plain-text form (move/copy dialogs, titles); renderCardTitle
+// below is the DOM form.
 function cardTitle(card, number) {
   if (card.kind === "test") return testTitle(card.desc);
-  const text = xyChgk.previewText(card.kind, card.desc);
-  const body = deriveTitle(text);
+  const body = cardBody(card);
   if (card.kind === "question" && number) return `${number}. ${body}`;
   return body;
 }
@@ -759,10 +785,9 @@ function cardTitle(card, number) {
 // visually distinct from the question content itself.
 function renderCardTitle(card, number) {
   if (card.kind === "question" && number) {
-    const body = deriveTitle(xyChgk.previewText(card.kind, card.desc));
     return el("div", { class: "kcard-title" },
       el("span", { class: "kcard-num", text: `${number}. ` }),
-      body);
+      cardBody(card));
   }
   return el("div", { class: "kcard-title", text: cardTitle(card, number) });
 }

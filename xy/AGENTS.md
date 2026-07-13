@@ -103,6 +103,14 @@ web/assets/            //go:embed static (package assets)
                        (?card=) and a comment (&comment=, copied from the timeline 🔗);
                        «Управление списками» modal groups consecutive lists into a
                        list_of_lists (☰ menu); all mutations via sync.js (offline-capable);
+                       «📐 Изменить размеры» (☰ menu) sets three display prefs, stored in
+                       localStorage["xy.sizes"] (per browser, all boards) and applied as CSS
+                       vars on <html>: --kanban-max-w (the board is a centred column, so a
+                       wide monitor doesn't strand the reader at the screen edge),
+                       --klist-w, --kcard-lines. Cards hold their FULL text; --kcard-lines
+                       line-clamps it (max slider position = no clamp = whole question).
+                       Don't reintroduce a char cap in cardBody — that's what made a card
+                       stop at 80 chars no matter how much room the reader gave it;
                        «📥 Импорт» (☰ menu) uploads a .4s/.zip/.docx to /api/import/parse and
                        turns the returned 4s into a new list — one card per blank-line block,
                        each (img …) attached to the card that references it. A .docx (a lossy

@@ -252,6 +252,14 @@
       <h2 class="appearance-modal-title">Изменить размеры</h2>
       <div class="sizes-row">
         <div class="sizes-row-head">
+          <label class="appearance-row-label" for="sizesBoardW">Ширина рабочей области</label>
+          <span class="sizes-value" id="sizesBoardWVal"></span>
+        </div>
+        <input type="range" id="sizesBoardW" min="800" max="3200" step="50">
+        <p class="sizes-hint">Доска центрируется на экране — на широком мониторе не приходится смотреть в край.</p>
+      </div>
+      <div class="sizes-row">
+        <div class="sizes-row-head">
           <label class="appearance-row-label" for="sizesListW">Ширина списка</label>
           <span class="sizes-value" id="sizesListWVal"></span>
         </div>
@@ -259,10 +267,11 @@
       </div>
       <div class="sizes-row">
         <div class="sizes-row-head">
-          <label class="appearance-row-label" for="sizesCardH">Высота карточки</label>
+          <label class="appearance-row-label" for="sizesCardH">Текст карточки</label>
           <span class="sizes-value" id="sizesCardHVal"></span>
         </div>
-        <input type="range" id="sizesCardH" min="40" max="400" step="10">
+        <input type="range" id="sizesCardH" min="1" max="12" step="1">
+        <p class="sizes-hint">Сколько строк вопроса показывать на карточке. На максимуме — весь текст.</p>
       </div>
       <div class="sizes-actions">
         <button class="btn btn-small btn-ghost" id="sizesReset" type="button">Сбросить по умолчанию</button>
