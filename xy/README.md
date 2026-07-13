@@ -109,13 +109,23 @@ live on **persistent** storage: compiling the 30 MB module takes ~15 s cold but
 reboot pays the 15 s again. It contains compiled typst, never user data. Defaults
 to `$XDG_CACHE_HOME/xy/typst-wasm`.
 
-Rebuilding the wasm (only needed when bumping typst) requires Rust with the
-`wasm32-wasip1` target; the artifact is vendored, so the **Go build needs no Rust**:
+The 30 MB artifact is **not in git** — building it is a separate path from
+building the app:
 
 ```sh
-cd typst-wasm && cargo build --release --target wasm32-wasip1
-cp target/wasm32-wasip1/release/typst_wasm.wasm ../internal/chgk/typstwasm/typst.wasm
+rustup target add wasm32-wasip1   # once
+just build-wasm                   # compiles typst-wasm/ → internal/chgk/typstwasm/typst.wasm
+just build                        # the app; embeds the wasm built above
 ```
+
+`just build-wasm` is the only step that needs Rust, and the only step that has to
+be repeated when bumping typst (`typst-wasm/Cargo.toml`). Everything else — build,
+dev, test — is pure Go and just embeds whatever `typst.wasm` is sitting there; the
+recipes fail with an instruction if it is missing.
+
+The release profile links with fat LTO and wants ~6 GB of free RAM; below that
+rustc is OOM-killed with no message (a bare `SIGKILL`). Use
+`CARGO_PROFILE_RELEASE_LTO=thin just build-wasm` on a smaller machine.
 
 `internal/chgk/handout`'s `CLITypesetter` still drives the standalone typst binary,
 but only as the **oracle** the wasm path is tested against (`wasm_parity_test.go`

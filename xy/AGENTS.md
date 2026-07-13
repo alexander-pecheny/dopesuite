@@ -69,9 +69,9 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        had to hand decrypted questions to a filesystem. A pool of instances, since split_fit
                        fits blocks in parallel; fonts parsed once, images once per generation.
                        ~8× faster per probe than spawning the CLI (1.4ms vs 11.3ms).
-                       The .wasm is vendored (typst-wasm/ holds the Rust source) so the Go build needs no Rust.
-                       Rebuild: cd typst-wasm && cargo build --release --target wasm32-wasip1,
-                       then cp target/wasm32-wasip1/release/typst_wasm.wasm internal/chgk/typstwasm/typst.wasm
+                       typst.wasm is //go:embed-ed but NOT in git (30 MB): `just build-wasm` compiles
+                       typst-wasm/ (Rust) into it — once per clone, then only on a typst bump. Every Go
+                       recipe (build/dev/test) depends on a guard that says so if the file is missing.
   docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite.
                        (img …) images are decoded (incl. WebP via x/image), re-encoded to PNG and embedded (images.go)
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
@@ -145,6 +145,9 @@ vendored same-origin under that CSP.
 
 ## Run / build / test
 ```
+just build-wasm     # compile typst → internal/chgk/typstwasm/typst.wasm (needs Rust;
+                    #   not in git — run once per clone, then only on a typst bump)
+just build          # the app (pure Go; embeds the wasm above)
 just dev-web-only   # server only (assets hot-read from disk)
 just dev            # server + bot
 just invite 7       # mint a registration invite

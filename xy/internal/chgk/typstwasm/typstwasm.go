@@ -29,9 +29,9 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
-// typstWasm is the compiled guest (see typst-wasm/, built with
-// `cargo build --release --target wasm32-wasip1`). It is vendored like the fonts,
-// so the Go build needs no Rust toolchain.
+// typstWasm is the compiled guest (the Rust source is typst-wasm/). It is NOT in
+// git — 30 MB of binary would grow the repo on every typst bump. Build it once
+// with `just build-wasm`; the Go build then only embeds it, needing no Rust.
 //
 //go:embed typst.wasm
 var typstWasm []byte

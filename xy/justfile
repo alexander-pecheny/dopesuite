@@ -2,15 +2,47 @@ set dotenv-load := true
 
 default: dev
 
+# typst is linked in as a wasm module, which the Go build embeds. The 30 MB
+# artifact is NOT in git — build it once with `just build-wasm` (the only step
+# that needs Rust), then again only when bumping typst. Every Go recipe below
+# depends on `wasm` so a fresh clone fails with an instruction, not a cryptic
+# //go:embed error.
+wasm_path := "internal/chgk/typstwasm/typst.wasm"
+
+# Build the app. Assumes the typst wasm is already built (see `just build-wasm`).
+build: wasm
+    CGO_ENABLED=0 go build -o xy-server ./cmd/xy-server
+
+# Compile typst to wasm32-wasip1 and drop the artifact where //go:embed wants it.
+# Needs Rust: rustup target add wasm32-wasip1
+# One-time per clone, and once per typst bump (typst-wasm/Cargo.toml).
+# The release profile links with fat LTO, which wants ~6 GB free — rustc gets
+# OOM-killed (SIGKILL, no message) on a loaded box. Fallback that fits in ~4 GB:
+#   CARGO_PROFILE_RELEASE_LTO=thin just build-wasm
+build-wasm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd typst-wasm && cargo build --release --target wasm32-wasip1
+    cp typst-wasm/target/wasm32-wasip1/release/typst_wasm.wasm {{wasm_path}}
+    ls -lh {{wasm_path}}
+
+# Guard: the embedded artifact must exist before anything compiles the Go tree.
+[private]
+wasm:
+    #!/usr/bin/env bash
+    [ -f {{wasm_path}} ] && exit 0
+    echo "missing {{wasm_path}} — run 'just build-wasm' once (needs Rust + the wasm32-wasip1 target)" >&2
+    exit 1
+
 # Server only (hot-reloads assets from disk). Use this unless testing the bot.
-dev-web-only:
+dev-web-only: wasm
     go run ./cmd/xy-server
 
 bot:
     go run ./cmd/telegram-bot
 
 # Run server + bot concurrently.
-dev:
+dev: wasm
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'kill 0' EXIT INT TERM
@@ -24,14 +56,14 @@ fmt:
     mapfile -t files < <(find cmd internal -type f -name '*.go')
     ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
 
-vet:
+vet: wasm
     go vet ./...
 
 tidy-check:
     go mod tidy -diff
 
 # Go tests + frontend (node) tests.
-test:
+test: wasm
     go test ./...
     node --test jstest/*.test.js
 
@@ -46,7 +78,7 @@ pre-commit:
     just test
 
 # Mint a one-shot registration invite and print it. Usage: just invite [days]
-invite days='7':
+invite days='7': wasm
     go run ./cmd/xy-server invite {{days}}
 
 deploy *args:
