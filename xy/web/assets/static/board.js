@@ -680,12 +680,14 @@ function renderList(list, precomputedNumbers) {
       { label: "↔ Переместить список…", onClick: () => openMoveList(list) },
       { label: "✏️ Переименовать список", onClick: () => renameList(list) },
     );
-    // docx export / handout generation are question-list features; skip them for
+    // Export / handout generation are question-list features; skip them for
     // test lists (whose cards hold tester sessions, not 4s questions).
     if (list.type !== "test") {
       const grouped = list.groupId != null;
+      const suffix = grouped ? " группы" : "";
       items.push(
-        { label: grouped ? "📄 Экспорт группы в docx" : "📄 Экспорт в docx", onClick: () => exportList(list) },
+        { label: `📄 Экспорт${suffix} в docx`, onClick: () => exportList(list, "docx") },
+        { label: `📕 Экспорт${suffix} в PDF`, onClick: () => exportList(list, "pdf") },
         { label: grouped ? "🧩 Генерация раздаток (вся группа)" : "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
       );
     }
@@ -1521,11 +1523,14 @@ async function attachImported(cardId, img) {
   } catch (_) { return false; }
 }
 
-// ---- export a list to .docx via chgksuite (PLAN §8) ----
+// ---- export a list to .docx / .pdf (PLAN §8) ----
 // Concatenate the list's card descriptions (in board order) into a chgksuite
 // "4s" document, gather any images referenced by `(img ...)` directives from the
-// cards' attachments, and hand both to the server, which composes the docx and
-// wipes the plaintext scratch files. See internal/server/export.go.
+// cards' attachments, and hand both to the server, which composes the file in
+// memory and streams it back. Both formats take the same request and render the
+// same document: the PDF is typeset by typst to look like the docx (same layout,
+// same non-breaking spaces/hyphens, same keep-together questions).
+// See internal/server/export.go.
 // exportScope resolves which lists a per-list action (export / handouts) covers:
 // a standalone list is just itself; a grouped list pulls in every (non-test) list
 // of its group, in board order, so the whole list_of_lists exports as one file.
@@ -1540,11 +1545,12 @@ function exportScope(list) {
   return { cards: lists.flatMap((l) => cardsOf(l.id)), title };
 }
 
-async function exportList(list) {
+async function exportList(list, format = "docx") {
+  const ext = format === "pdf" ? "pdf" : "docx";
   const scope = exportScope(list);
   const cards = scope.cards;
   if (!cards.length) { alert("В списке нет карточек."); return; }
-  if (!xySync.isOnline()) { alert("Экспорт в docx доступен только онлайн."); return; }
+  if (!xySync.isOnline()) { alert(`Экспорт в ${ext} доступен только онлайн.`); return; }
   setStatus("saving");
   try {
     const source = cards.map((c) => c.desc.trim()).filter(Boolean).join("\n\n") + "\n";
@@ -1564,11 +1570,11 @@ async function exportList(list) {
       setStatus("saved");
       return;
     }
-    const res = await fetch("/api/export/docx", { method: "POST", credentials: "same-origin", body: fd });
+    const res = await fetch("/api/export/" + ext, { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const a = el("a", { href: url, download: scope.title + ".docx" });
+    const a = el("a", { href: url, download: `${scope.title}.${ext}` });
     document.body.append(a);
     a.click();
     a.remove();

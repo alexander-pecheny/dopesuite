@@ -121,8 +121,9 @@ func Main() {
 	mux.HandleFunc("GET /api/boards/{id}/activity", srv.handleBoardActivity)
 	mux.HandleFunc("POST /api/boards/{id}/read-all", srv.handleBoardReadAll)
 
-	// ---- export (chgksuite docx) ----
+	// ---- export (the same package as .docx or as a typst-laid-out .pdf) ----
 	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
+	mux.HandleFunc("POST /api/export/pdf", srv.handleExportPDF)
 
 	// ---- import (.4s / .zip / .docx → 4s source + images) ----
 	mux.HandleFunc("POST /api/import/parse", srv.handleImportParse)

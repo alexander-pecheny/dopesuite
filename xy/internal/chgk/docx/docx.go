@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/inline"
 )
 
 //go:embed assets/template.docx
@@ -132,11 +133,11 @@ func (p *para) leadEmpty() {
 // addContent appends a run for editorial text, mirroring set_docx_run_text:
 // backtick accents, optional nbsp gluing, then the non-breaking-hyphen swap.
 func (e *exporter) addContent(p *para, text, kind string, nbsp bool) {
-	text = backtickReplace(text)
+	text = inline.BacktickReplace(text)
 	if nbsp {
-		text = replaceNoBreak(text)
+		text = inline.ReplaceNoBreak(text)
 	}
-	text = strings.ReplaceAll(text, nbHyphen, noBreakHyphenRepl)
+	text = strings.ReplaceAll(text, inline.NBHyphen, noBreakHyphenRepl)
 	p.runs = append(p.runs, runXML(text, rPr(kind)))
 }
 
@@ -146,7 +147,7 @@ func (e *exporter) addHyperlink(p *para, urlText string) {
 	relID := fmt.Sprintf("rId%d", e.nextRel)
 	e.nextRel++
 	e.rels = append(e.rels, relItem{id: relID, typ: hyperlinkRelType, target: urlQuote(urlText), external: true})
-	text := strings.ReplaceAll(urlText, nbHyphen, noBreakHyphenRepl)
+	text := strings.ReplaceAll(urlText, inline.NBHyphen, noBreakHyphenRepl)
 	inner := runXML(text, `<w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>`)
 	p.runs = append(p.runs, `<w:hyperlink r:id="`+relID+`">`+inner+`</w:hyperlink>`)
 }
@@ -328,7 +329,7 @@ func (e *exporter) addValue(p *para, v any, nbsp bool) {
 
 // addRuns tokenizes inline 4s markup and appends one run per token.
 func (e *exporter) addRuns(p *para, text string, nbsp bool) {
-	for _, r := range parse4sElem(text) {
+	for _, r := range inline.Parse4sElem(text) {
 		switch r.Kind {
 		case "linebreak":
 			p.addRaw("\n", "")

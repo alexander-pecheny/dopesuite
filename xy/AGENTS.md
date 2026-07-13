@@ -39,7 +39,9 @@ internal/server/       package server — the whole HTTP server
   rank.go              server-side fractional-index keyAfter (Trello card upload)
   invite.go            invite minting (subcommand)
   admin.go             /admin + /admin/create_users (gated on XY_ADMIN_USER, default "pecheny")
-  export.go            POST /api/export/docx — Go docx fully in-process (chgk/docx), images included; no Python
+  export.go            POST /api/export/{docx,pdf} — one 4s source + images, exported two ways, both fully
+                       in-process (chgk/docx, chgk/typstdoc), images included; no Python. The PDF goes through
+                       the shared typst (wasm) pool (typst.go), so it too writes nothing anywhere
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
                        parsed in memory, nothing persisted; the client encrypts the result into a new list
   handouts.go          POST /api/handouts/{pdf,split_fit} — fully in-process (chgk/handout + typst as a wasm module, see typst.go). No Python, no typst binary, nothing written to disk. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
@@ -74,6 +76,24 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        recipe (build/dev/test) depends on a guard that says so if the file is missing.
   docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite.
                        (img …) images are decoded (incl. WebP via x/image), re-encoded to PNG and embedded (images.go)
+  typstdoc/            parsed structure → .typ → PDF via typst (the same wasm pool handouts use): the docx
+                       export in the other format. template.docx's page setup transcribed into the preamble
+                       (A4, 1"/0.75" margins, 12pt body, 16/14pt headings, no auto-hyphenation, page number
+                       bottom-left) and Word's keeps mapped onto typst blocks: keepLines → breakable: false,
+                       keepNext → sticky, pageBreakBefore → #pagebreak(weak: true). Arial → Noto Sans (the
+                       faces already embedded for handouts). Emitted in typst CODE mode — every piece of
+                       editorial text is a typst string literal inside text("…"), so a question full of typst
+                       syntax is just characters. Two things typst forced: a pagebreak may not sit inside a
+                       block (a mid-question (PAGEBREAK) splits the block in two), and a line box is measured
+                       cap-height→baseline by default, which makes Word's flush paragraphs overlap by a
+                       descender — hence top-edge/bottom-edge + leading: 0 in the preamble. Noto Sans has no
+                       `smcp`, so (sc …) small caps are synthesized (upper + 0.8em), as Word synthesizes them.
+  inline/              the 4s inline layer BOTH exporters share, so the .docx and the .pdf agree
+                       character-for-character: markup tokenizing (bold/italic/img/screen/hyperlink…),
+                       backtick stress accents, the non-breaking space/hyphen gluing, and (img …) sizing.
+                       Lifted out of docx/ when typstdoc needed it — do not fork it back.
+  imgconv/             any image (incl. WebP) → PNG + pixel size. Word can't show WebP and typst reads few
+                       formats, so both exporters normalize through this.
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
 internal/session/      cookie + session.User (ported from dope/platform/session)
 internal/blobstore/    attachment bytes ON DISK (content-addressed, sharded, write-once); the DB
@@ -99,7 +119,8 @@ web/assets/            //go:embed static (package assets)
                        move carries the card's labels + comments + attachments via
                        copyCardExtras — online-only for the extras), list ⋯ menu
                        (incl. rename/delete list), board ☰ menu (incl. rename/delete
-                       board, owner-only delete), docx export; direct links to a card
+                       board, owner-only delete), export to docx / PDF (same request,
+                       `exportList(list, format)`); direct links to a card
                        (?card=) and a comment (&comment=, copied from the timeline 🔗);
                        «Управление списками» modal groups consecutive lists into a
                        list_of_lists (☰ menu); all mutations via sync.js (offline-capable);
@@ -232,8 +253,8 @@ its members consecutive — the invariant the board render relies on; the
 single-list move modal refuses to reorder a grouped list on the same board).
 On the board a group renders inside one bordered `.kgroup` box with a single
 header; numbering flows across the group (`numberQuestionCards` over the
-concatenated cards), and per-list docx export / handout generation cover the
-whole group when invoked on any member (`exportScope`).
+concatenated cards), and per-list export (docx / PDF) / handout generation cover
+the whole group when invoked on any member (`exportScope`).
 
 ## Trello-compatible API (chgksuite integration)
 `trello_compat.go` serves the three Trello calls chgksuite makes, authed by

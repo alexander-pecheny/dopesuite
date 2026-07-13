@@ -1,4 +1,4 @@
-package docx
+package inline
 
 import (
 	"regexp"
@@ -12,8 +12,9 @@ import (
 // URLs are skipped.
 
 const (
-	nbsp     = " "
-	nbHyphen = "‑"
+	// NBSP and NBHyphen are what the gluing below inserts.
+	NBSP     = " "
+	NBHyphen = "‑"
 )
 
 var nbRight = []string{"а", "без", "в", "во", "где", "для", "же", "за", "и", "или", "из", "из-за",
@@ -56,7 +57,7 @@ func buildNBRight() []nbRule {
 		for _, v := range variants(w) {
 			out = append(out, nbRule{
 				re:   regexp.MustCompile(`(^|[ \x{00a0}])` + regexp.QuoteMeta(v) + ` `),
-				repl: "${1}" + v + nbsp,
+				repl: "${1}" + v + NBSP,
 			})
 		}
 	}
@@ -69,7 +70,7 @@ func buildNBLeft() []nbRule {
 		for _, v := range variants(w) {
 			out = append(out, nbRule{
 				re:   regexp.MustCompile(` ` + regexp.QuoteMeta(v) + `([ \x{00a0}]|$)`),
-				repl: nbsp + v + "${1}",
+				repl: NBSP + v + "${1}",
 			})
 		}
 	}
@@ -91,7 +92,7 @@ func nbSegment(s string) string {
 			break
 		}
 		word := s[m[4]:m[5]]
-		repl := strings.ReplaceAll(word, "-", nbHyphen)
+		repl := strings.ReplaceAll(word, "-", NBHyphen)
 		if repl == word {
 			break
 		}
@@ -100,8 +101,8 @@ func nbSegment(s string) string {
 	return s
 }
 
-func replaceNoBreak(text string) string {
-	spans := httpURLSpans(text)
+func ReplaceNoBreak(text string) string {
+	spans := HTTPURLSpans(text)
 	if len(spans) == 0 {
 		return nbSegment(text)
 	}
