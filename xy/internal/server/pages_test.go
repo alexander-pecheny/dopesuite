@@ -6,7 +6,7 @@ import (
 )
 
 // TestPagesServe covers every page route servePage handles (compiled from
-// ui/*.xui): each responds 200 with an HTML body, regardless of login state
+// ui/*.dopeui): each responds 200 with an HTML body, regardless of login state
 // (the server never gates these — the client-side JS redirects when
 // unauthenticated).
 func TestPagesServe(t *testing.T) {

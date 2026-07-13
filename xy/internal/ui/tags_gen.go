@@ -2,415 +2,205 @@
 
 package ui
 
+import base "pecheny.me/dopeuikit/kit"
+
+// Node types, re-exported so app code imports one package.
+type Doc = base.Doc
+type Node = base.Node
+type Item = base.Item
+type Attr = base.Attr
+type Element = base.Element
+type TextNode = base.TextNode
+type RunNode = base.RunNode
+type Comment = base.Comment
+type BlankLine = base.BlankLine
+type Doctype = base.Doctype
+
+// Builder leaves, re-exported.
+var New = base.New
+var Text = base.Text
+var Line = base.Line
+var Inline = base.Inline
+var CommentNode = base.CommentNode
+var Blank = base.Blank
+var ID = base.ID
+var Aria = base.Aria
+var Data = base.Data
+
+// Base primitive constructors, re-exported.
+var Page = base.Page
+var Topbar = base.Topbar
+var Iconbtn = base.Iconbtn
+var Iconlink = base.Iconlink
+var Col = base.Col
+var Row = base.Row
+var Spacer = base.Spacer
+var Section = base.Section
+var Paragraph = base.Paragraph
+var Hint = base.Hint
+var Subhead = base.Subhead
+var Empty = base.Empty
+var SectionLabel = base.SectionLabel
+var Bigcode = base.Bigcode
+var Message = base.Message
+var Strong = base.Strong
+var Code = base.Code
+var Muted = base.Muted
+var Form = base.Form
+var Textfield = base.Textfield
+var Password = base.Password
+var Filefield = base.Filefield
+var Hiddenfield = base.Hiddenfield
+var Numfield = base.Numfield
+var Colorfield = base.Colorfield
+var Sliderrow = base.Sliderrow
+var Checkbox = base.Checkbox
+var Radio = base.Radio
+var Selectfield = base.Selectfield
+var Option = base.Option
+var Editor = base.Editor
+var Button = base.Button
+var Field = base.Field
+var Unreaddot = base.Unreaddot
+var Modal = base.Modal
+var Dialog = base.Dialog
+var Tabs = base.Tabs
+var Tab = base.Tab
+var Tabpanel = base.Tabpanel
+var Details = base.Details
+var Summary = base.Summary
+var Fieldset = base.Fieldset
+var Datalist = base.Datalist
+var List = base.List
+var Listrow = base.Listrow
+var Listtitle = base.Listtitle
+var Table = base.Table
+var Trow = base.Trow
+var Hcell = base.Hcell
+var Cell = base.Cell
+var Mount = base.Mount
+
+// Base prop constructors, re-exported.
+var Title = base.Title
+var Hidden = base.Hidden
+var Grow = base.Grow
+var Scripts = base.Scripts
+var Classicscripts = base.Classicscripts
+var Titleid = base.Titleid
+var Home = base.Home
+var Nosync = base.Nosync
+var Syncstate = base.Syncstate
+var Label = base.Label
+var Badgeid = base.Badgeid
+var Href = base.Href
+var Wrap = base.Wrap
+var For = base.For
+var Autocomplete = base.Autocomplete
+var Method = base.Method
+var Action = base.Action
+var Name = base.Name
+var Placeholder = base.Placeholder
+var Spellcheck = base.Spellcheck
+var Autocapitalize = base.Autocapitalize
+var Autocorrect = base.Autocorrect
+var Required = base.Required
+var Autofocus = base.Autofocus
+var Value = base.Value
+var Maxlength = base.Maxlength
+var Inputmode = base.Inputmode
+var Pattern = base.Pattern
+var InputList = base.InputList
+var Readonly = base.Readonly
+var Disabled = base.Disabled
+var Accept = base.Accept
+var Min = base.Min
+var Max = base.Max
+var Step = base.Step
+var Narrow = base.Narrow
+var Valueid = base.Valueid
+var SliderHint = base.SliderHint
+var Checked = base.Checked
+var Compact = base.Compact
+var Selected = base.Selected
+var Rows = base.Rows
+var Small = base.Small
+var Submit = base.Submit
+var Download = base.Download
+var Done = base.Done
+var Doneid = base.Doneid
+var Open = base.Open
+var View = base.View
+var Scroll = base.Scroll
+
+// Base enum constants, re-exported.
+var AlignStart = base.AlignStart
+var AlignCenter = base.AlignCenter
+var AlignEnd = base.AlignEnd
+var AlignStretch = base.AlignStretch
+var Primary = base.Primary
+var Ghost = base.Ghost
+var Danger = base.Danger
+var Secondary = base.Secondary
+var CheckPlain = base.CheckPlain
+var EditorPlain = base.EditorPlain
+var DirRow = base.DirRow
+var DirCol = base.DirCol
+var JustifyStart = base.JustifyStart
+var JustifyCenter = base.JustifyCenter
+var JustifyEnd = base.JustifyEnd
+var JustifyBetween = base.JustifyBetween
+var ModalVarPlain = base.ModalVarPlain
+var ModalVarLists = base.ModalVarLists
+var ModalVarSizes = base.ModalVarSizes
+var PageSheet = base.PageSheet
+var PageFull = base.PageFull
+var SpaceNone = base.SpaceNone
+var SpaceXS = base.SpaceXS
+var SpaceSM = base.SpaceSM
+var SpaceMD = base.SpaceMD
+var SpaceLG = base.SpaceLG
+var SpaceXL = base.SpaceXL
+
 // Primitive constructors.
 
-func Page(items ...Item) *Element {
-	return newElement("page", items)
-}
-
-func Topbar(items ...Item) *Element {
-	return newElement("topbar", items)
-}
-
-func Iconbtn(items ...Item) *Element {
-	return newElement("iconbtn", items)
-}
-
-func Iconlink(items ...Item) *Element {
-	return newElement("iconlink", items)
-}
-
-func Col(items ...Item) *Element {
-	return newElement("col", items)
-}
-
-func Row(items ...Item) *Element {
-	return newElement("row", items)
-}
-
-func Spacer(items ...Item) *Element {
-	return newElement("spacer", items)
-}
-
-func Section(items ...Item) *Element {
-	return newElement("section", items)
-}
-
-func Paragraph(items ...Item) *Element {
-	return newElement("text", items)
-}
-
-func Hint(items ...Item) *Element {
-	return newElement("hint", items)
-}
-
-func Subhead(items ...Item) *Element {
-	return newElement("subhead", items)
-}
-
-func SectionLabel(items ...Item) *Element {
-	return newElement("label", items)
-}
-
-func Bigcode(items ...Item) *Element {
-	return newElement("bigcode", items)
-}
-
-func Message(items ...Item) *Element {
-	return newElement("message", items)
-}
-
-func Strong(items ...Item) *Element {
-	return newElement("strong", items)
-}
-
-func Code(items ...Item) *Element {
-	return newElement("code", items)
-}
-
-func Muted(items ...Item) *Element {
-	return newElement("muted", items)
-}
-
-func Form(items ...Item) *Element {
-	return newElement("form", items)
-}
-
-func Textfield(items ...Item) *Element {
-	return newElement("textfield", items)
-}
-
-func Password(items ...Item) *Element {
-	return newElement("password", items)
-}
-
-func Filefield(items ...Item) *Element {
-	return newElement("filefield", items)
-}
-
-func Numfield(items ...Item) *Element {
-	return newElement("numfield", items)
-}
-
-func Colorfield(items ...Item) *Element {
-	return newElement("colorfield", items)
-}
-
-func Sliderrow(items ...Item) *Element {
-	return newElement("sliderrow", items)
-}
-
-func Checkbox(items ...Item) *Element {
-	return newElement("checkbox", items)
-}
-
-func Selectfield(items ...Item) *Element {
-	return newElement("selectfield", items)
-}
-
-func Option(items ...Item) *Element {
-	return newElement("option", items)
-}
-
-func Editor(items ...Item) *Element {
-	return newElement("editor", items)
-}
-
-func Button(items ...Item) *Element {
-	return newElement("button", items)
-}
-
-func Field(items ...Item) *Element {
-	return newElement("field", items)
-}
-
-func Unreaddot(items ...Item) *Element {
-	return newElement("unreaddot", items)
-}
-
-func Modal(items ...Item) *Element {
-	return newElement("modal", items)
+func Previewtitle(items ...Item) *Element {
+	return base.New("previewtitle", items...)
 }
 
 func Docoverlay(items ...Item) *Element {
-	return newElement("docoverlay", items)
+	return base.New("docoverlay", items...)
 }
 
 func Headrow(items ...Item) *Element {
-	return newElement("headrow", items)
+	return base.New("headrow", items...)
 }
 
 func Headactions(items ...Item) *Element {
-	return newElement("headactions", items)
-}
-
-func Previewtitle(items ...Item) *Element {
-	return newElement("previewtitle", items)
+	return base.New("headactions", items...)
 }
 
 func Split(items ...Item) *Element {
-	return newElement("split", items)
+	return base.New("split", items...)
 }
 
 func Pane(items ...Item) *Element {
-	return newElement("pane", items)
-}
-
-func Tabs(items ...Item) *Element {
-	return newElement("tabs", items)
-}
-
-func Tab(items ...Item) *Element {
-	return newElement("tab", items)
-}
-
-func Tabpanel(items ...Item) *Element {
-	return newElement("tabpanel", items)
-}
-
-func List(items ...Item) *Element {
-	return newElement("list", items)
-}
-
-func Listrow(items ...Item) *Element {
-	return newElement("listrow", items)
-}
-
-func Listtitle(items ...Item) *Element {
-	return newElement("listtitle", items)
-}
-
-func Table(items ...Item) *Element {
-	return newElement("table", items)
-}
-
-func Trow(items ...Item) *Element {
-	return newElement("trow", items)
-}
-
-func Hcell(items ...Item) *Element {
-	return newElement("hcell", items)
-}
-
-func Cell(items ...Item) *Element {
-	return newElement("cell", items)
-}
-
-func Mount(items ...Item) *Element {
-	return newElement("mount", items)
-}
-
-// Prop constructors.
-
-func Title(v string) Attr {
-	return Attr{Name: "title", Value: v}
-}
-
-func Hidden() Attr {
-	return Attr{Name: "hidden", Bare: true}
-}
-
-func Grow() Attr {
-	return Attr{Name: "grow", Bare: true}
-}
-
-func Scripts(v string) Attr {
-	return Attr{Name: "scripts", Value: v}
-}
-
-func Classicscripts(v string) Attr {
-	return Attr{Name: "classicscripts", Value: v}
-}
-
-func Titleid(v string) Attr {
-	return Attr{Name: "titleid", Value: v}
-}
-
-func Home(v string) Attr {
-	return Attr{Name: "home", Value: v}
-}
-
-func Label(v string) Attr {
-	return Attr{Name: "label", Value: v}
-}
-
-func Badgeid(v string) Attr {
-	return Attr{Name: "badgeid", Value: v}
-}
-
-func Href(v string) Attr {
-	return Attr{Name: "href", Value: v}
-}
-
-func Wrap() Attr {
-	return Attr{Name: "wrap", Bare: true}
-}
-
-func For(v string) Attr {
-	return Attr{Name: "for", Value: v}
-}
-
-func Autocomplete(v string) Attr {
-	return Attr{Name: "autocomplete", Value: v}
-}
-
-func Method(v string) Attr {
-	return Attr{Name: "method", Value: v}
-}
-
-func Action(v string) Attr {
-	return Attr{Name: "action", Value: v}
-}
-
-func Name(v string) Attr {
-	return Attr{Name: "name", Value: v}
-}
-
-func Placeholder(v string) Attr {
-	return Attr{Name: "placeholder", Value: v}
-}
-
-func Spellcheck(v string) Attr {
-	return Attr{Name: "spellcheck", Value: v}
-}
-
-func Autocapitalize(v string) Attr {
-	return Attr{Name: "autocapitalize", Value: v}
-}
-
-func Autocorrect(v string) Attr {
-	return Attr{Name: "autocorrect", Value: v}
-}
-
-func Required() Attr {
-	return Attr{Name: "required", Bare: true}
-}
-
-func Autofocus() Attr {
-	return Attr{Name: "autofocus", Bare: true}
-}
-
-func Value(v string) Attr {
-	return Attr{Name: "value", Value: v}
-}
-
-func Maxlength(v string) Attr {
-	return Attr{Name: "maxlength", Value: v}
-}
-
-func Accept(v string) Attr {
-	return Attr{Name: "accept", Value: v}
-}
-
-func Min(v string) Attr {
-	return Attr{Name: "min", Value: v}
-}
-
-func Max(v string) Attr {
-	return Attr{Name: "max", Value: v}
-}
-
-func Step(v string) Attr {
-	return Attr{Name: "step", Value: v}
-}
-
-func Narrow() Attr {
-	return Attr{Name: "narrow", Bare: true}
-}
-
-func Valueid(v string) Attr {
-	return Attr{Name: "valueid", Value: v}
-}
-
-func SliderHint(v string) Attr {
-	return Attr{Name: "hint", Value: v}
-}
-
-func Checked() Attr {
-	return Attr{Name: "checked", Bare: true}
-}
-
-func Compact() Attr {
-	return Attr{Name: "compact", Bare: true}
-}
-
-func Rows(v string) Attr {
-	return Attr{Name: "rows", Value: v}
-}
-
-func Readonly() Attr {
-	return Attr{Name: "readonly", Bare: true}
-}
-
-func Small() Attr {
-	return Attr{Name: "small", Bare: true}
-}
-
-func Submit() Attr {
-	return Attr{Name: "submit", Bare: true}
-}
-
-func Disabled() Attr {
-	return Attr{Name: "disabled", Bare: true}
-}
-
-func Download() Attr {
-	return Attr{Name: "download", Bare: true}
-}
-
-func Done(v string) Attr {
-	return Attr{Name: "done", Value: v}
-}
-
-func Doneid(v string) Attr {
-	return Attr{Name: "doneid", Value: v}
-}
-
-func View(v string) Attr {
-	return Attr{Name: "view", Value: v}
+	return base.New("pane", items...)
 }
 
 // Enum value constants (each carries its prop name).
 
-var AlignStart = Attr{Name: "align", Value: "start"}
-var AlignCenter = Attr{Name: "align", Value: "center"}
-var AlignEnd = Attr{Name: "align", Value: "end"}
-var AlignStretch = Attr{Name: "align", Value: "stretch"}
-
-var Primary = Attr{Name: "kind", Value: "primary"}
-var Ghost = Attr{Name: "kind", Value: "ghost"}
-
-var CheckPlain = Attr{Name: "kind", Value: "plain"}
 var CheckPreview = Attr{Name: "kind", Value: "preview"}
 var CheckCardPreview = Attr{Name: "kind", Value: "card-preview"}
-
 var DocKindDoc = Attr{Name: "kind", Value: "doc"}
 var DocKindDetail = Attr{Name: "kind", Value: "detail"}
-
 var DocVarPlain = Attr{Name: "variant", Value: "plain"}
 var DocVarHandouts = Attr{Name: "variant", Value: "handouts"}
 var DocVarImport = Attr{Name: "variant", Value: "import"}
-
-var EditorPlain = Attr{Name: "kind", Value: "plain"}
 var EditorComment = Attr{Name: "kind", Value: "comment"}
 var EditorHandouts = Attr{Name: "kind", Value: "handouts"}
 var EditorImportsrc = Attr{Name: "kind", Value: "importsrc"}
-
-var DirRow = Attr{Name: "dir", Value: "row"}
-var DirCol = Attr{Name: "dir", Value: "col"}
-
 var HeadDoc = Attr{Name: "kind", Value: "doc"}
 var HeadDetail = Attr{Name: "kind", Value: "detail"}
-
-var JustifyStart = Attr{Name: "justify", Value: "start"}
-var JustifyCenter = Attr{Name: "justify", Value: "center"}
-var JustifyEnd = Attr{Name: "justify", Value: "end"}
-var JustifyBetween = Attr{Name: "justify", Value: "between"}
-
-var ModalVarPlain = Attr{Name: "variant", Value: "plain"}
-var ModalVarLists = Attr{Name: "variant", Value: "lists"}
-var ModalVarSizes = Attr{Name: "variant", Value: "sizes"}
-
 var MountKanban = Attr{Name: "kind", Value: "kanban"}
 var MountBoardGrid = Attr{Name: "kind", Value: "board-grid"}
 var MountTimeline = Attr{Name: "kind", Value: "timeline"}
@@ -429,18 +219,7 @@ var MountTokenValue = Attr{Name: "kind", Value: "token-value"}
 var MountCardCopyMsg = Attr{Name: "kind", Value: "card-copy-msg"}
 var MountImportCount = Attr{Name: "kind", Value: "import-count"}
 var MountCardTitle = Attr{Name: "kind", Value: "card-title"}
-
-var PageSheet = Attr{Name: "kind", Value: "sheet"}
-var PageFull = Attr{Name: "kind", Value: "full"}
 var PageWide = Attr{Name: "kind", Value: "wide"}
 var PageBoard = Attr{Name: "kind", Value: "board"}
-
 var PaneSrc = Attr{Name: "kind", Value: "src"}
 var PanePreview = Attr{Name: "kind", Value: "preview"}
-
-var SpaceNone = Attr{Name: "gap", Value: "none"}
-var SpaceXS = Attr{Name: "gap", Value: "xs"}
-var SpaceSM = Attr{Name: "gap", Value: "sm"}
-var SpaceMD = Attr{Name: "gap", Value: "md"}
-var SpaceLG = Attr{Name: "gap", Value: "lg"}
-var SpaceXL = Attr{Name: "gap", Value: "xl"}

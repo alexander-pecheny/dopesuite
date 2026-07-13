@@ -19,26 +19,39 @@ authorize. Built by reusing patterns and frontend assets from `~/dope`
   under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto.
 - **Tests**: Go (`go test`) + frontend (`node --test jstest/*.test.js`).
 - **Build/run**: `justfile`.
-- **UI markup**: no hand-written HTML (or CSS classes) anywhere. Pages are
-  authored in `.xui` (`web/assets/ui/`) as typed AppKit-style primitives —
-  `page`, `topbar`, `col`/`row`, `button`, `modal`, `mount`… — compiled to HTML
-  at server startup by `internal/ui` (spec: `internal/ui/DESIGN.md`); the
-  dynamic /admin pages use the generated typed Go builder from the same
-  package. The vocabulary (primitives / typed props / enum tokens) is closed
-  (`vocab.json`); `render.go` is the only file that knows HTML tags or CSS
-  classes. Unknown primitive/prop, bad enum value, or duplicate id is a
-  compile error.
+- **UI markup**: no hand-written HTML (or CSS classes) anywhere. **DopeUIKit**
+  (`pecheny.me/dopeuikit`, vendored via `replace => ../dopeuikit`) has two layers:
+  `ui/` is the generic DSL **engine** (parser, validator, expansion framework,
+  printer, builder machinery, codegen — no vocabulary, no CSS class names) and
+  `kit/` is the shared **design system** (core vocab + expanders + Chrome +
+  generated builder + `core.css`/fonts). `internal/ui` is xy's thin **overlay**
+  on the `kit` (imports `pecheny.me/dopeuikit/kit`). Pages are authored in
+  `.dopeui` (`web/assets/ui/`) as typed AppKit-style primitives — `page`,
+  `topbar`, `col`/`row`, `button`, `modal`, `mount`… — compiled to HTML at server
+  startup by the xy `App` (`internal/ui/app.go`, `Compile`); the dynamic /admin
+  pages use the same package's builder (`Render`). The overlay adds xy primitives
+  (`docoverlay`/`headrow`/`headactions`/`split`/`pane`/`previewtitle`), overrides
+  `checkbox`/`editor`, and supplies the board mount kinds + PWA chrome
+  (`internal/ui/vocab.json`, `expand.go`). The vocabulary is closed; unknown
+  primitive/prop, bad enum value, or duplicate id is a compile error. Spec:
+  DopeUIKit `DESIGN.md` (engine + kit) + `internal/ui/DESIGN.md` (xy overlay).
+- **CSS**: the shared design system is DopeUIKit's `assets/core.css` (served via
+  `kit.CoreCSS`); xy's `web/assets/static/styles.css` is only the xy layer
+  (kanban/card/board + xy vars + PWA overrides). The server serves
+  `/static/styles.css` as core + xy concatenated; `/static/fonts/*` come from the
+  kit (`kit.Fonts`, no local font copies).
 
 ## Layout
 ```
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
 cmd/telegram-bot/      login bot, bridges to server via shared secret (no DB handle)
-cmd/uic/               compile one .xui page to HTML on stdout (debug/diff tool)
-cmd/uigen/             codegen: internal/ui/vocab.json → tags_gen.go (typed builder)
-internal/ui/           the primitive UI DSL: .xui parser, validator, primitive→HTML
-                       expansion + printer (render.go — sole owner of tags/classes),
-                       typed Go builder; DESIGN.md is the spec, vocab.json the
-                       closed vocabulary (go:generate → tags_gen.go)
+cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
+internal/ui/           xy's overlay on DopeUIKit's kit: overlay vocab.json (xy primitives +
+                       enum extensions), expand.go (checkbox/editor overrides + xy
+                       primitives + mount kinds), app.go (builds the xy App via kit.NewApp
+                       + Chrome, Compile/Render), generated tags_gen.go (go:generate via
+                       cmd/uigen -overlay -base .../kit). DESIGN.md documents the overlay;
+                       the DSL engine (ui/) + design system (kit/) + spec live in ../dopeuikit
 internal/server/       package server — the whole HTTP server
   server.go            DB open (BuildDSN/WAL), write-tx discipline (conn-before-lock)
   db.go                full schema + migration runner (schema_versions)
@@ -96,7 +109,7 @@ internal/blobstore/    attachment bytes ON DISK (content-addressed, sharded, wri
                        replicates xy.db, an hourly `rclone copy` replicates blobs/. Restore the DB
                        alone and every attachment is a dangling ref. See README "Deployment & backups".
 web/assets/            //go:embed static + ui (package assets)
-  ui/                  the 7 app pages as .xui (index, board, login, register,
+  ui/                  the 7 app pages as .dopeui (index, board, login, register,
                        profile, tokens, import) — compiled to HTML by
                        internal/ui at server startup (per-request in dev disk mode)
   static/

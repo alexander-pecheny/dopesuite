@@ -1,4 +1,4 @@
-// Command uic compiles a .xui file to HTML on stdout. Parse/validate errors
+// Command uic compiles a .dopeui file to HTML on stdout. Parse/validate errors
 // go to stderr as "file:line: message" and exit the process with status 1.
 package main
 
@@ -11,7 +11,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: uic file.xui")
+		fmt.Fprintln(os.Stderr, "usage: uic file.dopeui")
 		os.Exit(1)
 	}
 	path := os.Args[1]

@@ -1,5 +1,5 @@
 // Package assets embeds xy's frontend static files (JS/CSS/fonts) and the
-// .xui page sources compiled at serve time. The embedded FS keeps the leading
+// .dopeui page sources compiled at serve time. The embedded FS keeps the leading
 // "static/"/"ui/" path segments so the HTTP file server, ETag map, and page
 // compiler address files exactly as they appear on disk.
 package assets

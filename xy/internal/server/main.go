@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"net"
 	"net/http"
@@ -31,6 +33,9 @@ func Main() {
 	srv.assetNoCache = mode == "disk"
 	if !srv.assetNoCache {
 		srv.assetETags = buildAssetETags(source)
+		srv.stylesheet = srv.buildStylesheet()
+		sum := sha256.Sum256(srv.stylesheet)
+		srv.assetETags["/static/styles.css"] = `"` + hex.EncodeToString(sum[:16]) + `"`
 	}
 	srv.warmPageCache()
 
@@ -38,12 +43,12 @@ func Main() {
 
 	// ---- HTML pages ----
 	mux.HandleFunc("GET /", srv.handleIndex)
-	mux.HandleFunc("GET /login", srv.servePage("ui/login.xui"))
-	mux.HandleFunc("GET /register", srv.servePage("ui/register.xui"))
-	mux.HandleFunc("GET /profile", srv.servePage("ui/profile.xui"))
-	mux.HandleFunc("GET /profile/tokens", srv.servePage("ui/tokens.xui"))
-	mux.HandleFunc("GET /board/{id}", srv.servePage("ui/board.xui"))
-	mux.HandleFunc("GET /import", srv.servePage("ui/import.xui"))
+	mux.HandleFunc("GET /login", srv.servePage("ui/login.dopeui"))
+	mux.HandleFunc("GET /register", srv.servePage("ui/register.dopeui"))
+	mux.HandleFunc("GET /profile", srv.servePage("ui/profile.dopeui"))
+	mux.HandleFunc("GET /profile/tokens", srv.servePage("ui/tokens.dopeui"))
+	mux.HandleFunc("GET /board/{id}", srv.servePage("ui/board.dopeui"))
+	mux.HandleFunc("GET /import", srv.servePage("ui/import.dopeui"))
 
 	// ---- admin tooling (gated on the configured admin username) ----
 	mux.HandleFunc("GET /admin", srv.HandleAdminLanding)
@@ -142,6 +147,10 @@ func Main() {
 	mux.HandleFunc("DELETE /api/attachments/{id}", srv.handleDeleteAttachment)
 
 	// ---- static ----
+	// styles.css (core+xy concat) and fonts (from the kit) win over the generic
+	// file server via Go 1.22 most-specific-pattern routing.
+	mux.HandleFunc("GET /static/styles.css", srv.serveStylesheet())
+	mux.Handle("GET /static/fonts/", srv.serveFonts())
 	mux.Handle("GET /static/", staticFileServer(source, srv.assetNoCache, srv.assetETags))
 
 	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
@@ -173,5 +182,5 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.servePage("ui/index.xui")(w, r)
+	s.servePage("ui/index.dopeui")(w, r)
 }

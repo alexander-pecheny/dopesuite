@@ -37,9 +37,10 @@ type server struct {
 	assetSource  assetFS
 	assetNoCache bool
 	assetETags   map[string]string
+	stylesheet   []byte // core.css + "\n" + xy layer, served at /static/styles.css
 
 	pageMu    sync.Mutex
-	pageCache map[string][]byte // compiled ui/*.xui pages (embed mode only; see assets.go)
+	pageCache map[string][]byte // compiled ui/*.dopeui pages (embed mode only; see assets.go)
 
 	staging *handoutStaging // staged handout images (see staging.go)
 

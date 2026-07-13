@@ -14,10 +14,10 @@ const (
 	staticDir    = "../../web/assets/static"
 )
 
-// TestRealPagesCompile compiles every real app page (web/assets/ui/*.xui) — the
+// TestRealPagesCompile compiles every real app page (web/assets/ui/*.dopeui) — the
 // same sources servePage serves — so a broken page fails here, not at runtime.
 func TestRealPagesCompile(t *testing.T) {
-	pages, err := filepath.Glob(filepath.Join(realPagesDir, "*.xui"))
+	pages, err := filepath.Glob(filepath.Join(realPagesDir, "*.dopeui"))
 	if err != nil {
 		t.Fatalf("glob: %v", err)
 	}
@@ -58,12 +58,12 @@ var (
 // The closure is the page's declared scripts + menu.js, transitively following
 // relative ES-module imports.
 func TestPageSelectorContract(t *testing.T) {
-	pages, err := filepath.Glob(filepath.Join(realPagesDir, "*.xui"))
+	pages, err := filepath.Glob(filepath.Join(realPagesDir, "*.dopeui"))
 	if err != nil {
 		t.Fatalf("glob: %v", err)
 	}
 	for _, path := range pages {
-		name := strings.TrimSuffix(filepath.Base(path), ".xui")
+		name := strings.TrimSuffix(filepath.Base(path), ".dopeui")
 		src, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)
