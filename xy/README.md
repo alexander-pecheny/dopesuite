@@ -123,9 +123,12 @@ be repeated when bumping typst (`typst-wasm/Cargo.toml`). Everything else — bu
 dev, test — is pure Go and just embeds whatever `typst.wasm` is sitting there; the
 recipes fail with an instruction if it is missing.
 
-The release profile links with fat LTO and wants ~6 GB of free RAM; below that
-rustc is OOM-killed with no message (a bare `SIGKILL`). Use
-`CARGO_PROFILE_RELEASE_LTO=thin just build-wasm` on a smaller machine.
+The release profile links with **fat LTO**, which peaks at ~4.9 GB RSS — enough to
+get rustc OOM-killed with no message (a bare `SIGKILL`) on a 7.7 GB machine with no
+swap. `CARGO_PROFILE_RELEASE_LTO=thin just build-wasm` links in ~4 min and is a fine
+trade: measured against the fat build, per-render probe time is unchanged (~1.9 ms,
+within noise) and only pool startup gets ~9% slower (576 ms → 627 ms), because the
+module is 3 MB bigger. That is once per server restart, not per request.
 
 `internal/chgk/handout`'s `CLITypesetter` still drives the standalone typst binary,
 but only as the **oracle** the wasm path is tested against (`wasm_parity_test.go`
