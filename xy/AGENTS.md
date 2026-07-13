@@ -19,12 +19,15 @@ authorize. Built by reusing patterns and frontend assets from `~/dope`
   under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto.
 - **Tests**: Go (`go test`) + frontend (`node --test jstest/*.test.js`).
 - **Build/run**: `justfile`.
-- **UI markup**: no hand-written HTML anywhere. Pages are authored in `.xui`
-  (`web/assets/ui/`), a constrained typed DSL compiled to HTML at server startup
-  by `internal/ui` (spec: `internal/ui/DESIGN.md`); the dynamic /admin pages use
-  the generated typed Go builder from the same package. The vocabulary
-  (elements / per-element attrs / class tokens) is closed (`vocab.json`) —
-  unknown tag/attr/class or duplicate id is a compile error.
+- **UI markup**: no hand-written HTML (or CSS classes) anywhere. Pages are
+  authored in `.xui` (`web/assets/ui/`) as typed AppKit-style primitives —
+  `page`, `topbar`, `col`/`row`, `button`, `modal`, `mount`… — compiled to HTML
+  at server startup by `internal/ui` (spec: `internal/ui/DESIGN.md`); the
+  dynamic /admin pages use the generated typed Go builder from the same
+  package. The vocabulary (primitives / typed props / enum tokens) is closed
+  (`vocab.json`); `render.go` is the only file that knows HTML tags or CSS
+  classes. Unknown primitive/prop, bad enum value, or duplicate id is a
+  compile error.
 
 ## Layout
 ```
@@ -32,9 +35,10 @@ cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [da
 cmd/telegram-bot/      login bot, bridges to server via shared secret (no DB handle)
 cmd/uic/               compile one .xui page to HTML on stdout (debug/diff tool)
 cmd/uigen/             codegen: internal/ui/vocab.json → tags_gen.go (typed builder)
-internal/ui/           constrained UI DSL: .xui parser, validator, deterministic
-                       printer, typed Go builder; DESIGN.md is the spec,
-                       vocab.json the closed vocabulary (go:generate → tags_gen.go)
+internal/ui/           the primitive UI DSL: .xui parser, validator, primitive→HTML
+                       expansion + printer (render.go — sole owner of tags/classes),
+                       typed Go builder; DESIGN.md is the spec, vocab.json the
+                       closed vocabulary (go:generate → tags_gen.go)
 internal/server/       package server — the whole HTTP server
   server.go            DB open (BuildDSN/WAL), write-tx discipline (conn-before-lock)
   db.go                full schema + migration runner (schema_versions)
