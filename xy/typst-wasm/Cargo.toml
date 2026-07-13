@@ -27,6 +27,9 @@ typst-layout = "0.15"
 
 [profile.release]
 opt-level = 3
-lto = true
+# Thin, not fat: fat LTO peaks at ~4.9 GB RSS and gets OOM-killed on an 8 GB box.
+# It buys ~9% on pool startup (a 3 MB smaller module) and nothing per render —
+# probe time is the same ~1.9 ms either way. Not worth a build that won't build.
+lto = "thin"
 strip = true
 panic = "abort"

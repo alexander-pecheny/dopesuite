@@ -16,15 +16,14 @@ build: wasm
 # Compile typst to wasm32-wasip1 and drop the artifact where //go:embed wants it.
 # Needs Rust: rustup target add wasm32-wasip1
 # One-time per clone, and once per typst bump (typst-wasm/Cargo.toml).
-# The release profile links with fat LTO: measured 4.9 GB peak RSS, which the
-# OOM killer takes out (bare SIGKILL, no message) on a 7.7 GB box with no swap.
-# Thin LTO links in ~4 min and costs ~9% on pool startup (576ms → 627ms, from a
-# 3 MB bigger module); per-render probe time is unchanged (~1.9 ms, within noise):
-#   CARGO_PROFILE_RELEASE_LTO=thin just build-wasm
+# Links with thin LTO (typst-wasm/Cargo.toml) and takes ~4 min. Fat LTO peaks at
+# 4.9 GB RSS and gets OOM-killed (bare SIGKILL) on an 8 GB box; it would buy ~9%
+# on pool startup and nothing per render. If you ever want it on a big machine:
+#   CARGO_PROFILE_RELEASE_LTO=fat just build-wasm
 build-wasm:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd typst-wasm && cargo build --release --target wasm32-wasip1
+    cargo build --release --target wasm32-wasip1 --manifest-path typst-wasm/Cargo.toml
     cp typst-wasm/target/wasm32-wasip1/release/typst_wasm.wasm {{wasm_path}}
     ls -lh {{wasm_path}}
 
