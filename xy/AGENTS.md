@@ -109,6 +109,7 @@ web/assets/            //go:embed static (package assets)
                        wide monitor doesn't strand the reader at the screen edge),
                        --klist-w, --kcard-lines. Cards hold their FULL text; --kcard-lines
                        line-clamps it (max slider position = no clamp = whole question).
+                       Defaults: 1512px (a 14" MacBook's logical width) / 280px / 3 lines.
                        Don't reintroduce a char cap in cardBody — that's what made a card
                        stop at 80 chars no matter how much room the reader gave it;
                        «📥 Импорт» (☰ menu) uploads a .4s/.zip/.docx to /api/import/parse and

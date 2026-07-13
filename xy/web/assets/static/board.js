@@ -149,22 +149,26 @@ window.dopeMenu?.setExtras([{
 //               truncated preview (see renderCardTitle).
 // Each slider's maximum position means "unlimited" (null), not its numeric value.
 const SIZES_KEY = "xy.sizes";
-const SIZES_DEFAULT = { boardW: null, listW: 280, cardLines: null };
+// 1512 = the logical width of a 14" MacBook screen (3024 physical @2×), i.e. a
+// board that fills a laptop and stays a centred column on anything wider.
+const SIZES_DEFAULT = { boardW: 1512, listW: 280, cardLines: 3 };
 const BOARD_W_MIN = 800, BOARD_W_MAX = 3200;   // MAX = «вся ширина»
 const LIST_W_MIN = 200, LIST_W_MAX = 640;
 const CARD_LINES_MAX = 12;                     // MAX = «без ограничения»
 
 const inRange = (n, lo, hi) => Number.isFinite(n) && n >= lo && n < hi;
+// null is a *choice* ("no cap"), so it must survive a reload — only a missing or
+// out-of-range value falls back to the default.
+const pick = (v, lo, hi, dflt) => (v === null ? null : inRange(Number(v), lo, hi) ? Number(v) : dflt);
 
 function readSizes() {
   try {
     const s = JSON.parse(localStorage.getItem(SIZES_KEY) || "null");
     if (!s) return { ...SIZES_DEFAULT };
-    const listW = Number(s.listW);
     return {
-      boardW: inRange(Number(s.boardW), BOARD_W_MIN, BOARD_W_MAX) ? Number(s.boardW) : null,
-      listW: listW >= LIST_W_MIN && listW <= LIST_W_MAX ? listW : SIZES_DEFAULT.listW,
-      cardLines: inRange(Number(s.cardLines), 1, CARD_LINES_MAX) ? Number(s.cardLines) : null,
+      boardW: pick(s.boardW, BOARD_W_MIN, BOARD_W_MAX, SIZES_DEFAULT.boardW),
+      listW: pick(s.listW, LIST_W_MIN, LIST_W_MAX + 1, SIZES_DEFAULT.listW),
+      cardLines: pick(s.cardLines, 1, CARD_LINES_MAX, SIZES_DEFAULT.cardLines),
     };
   } catch (_) { return { ...SIZES_DEFAULT }; }
 }
