@@ -5,5 +5,5 @@ package assets
 
 import "embed"
 
-//go:embed static
+//go:embed static ui
 var FS embed.FS

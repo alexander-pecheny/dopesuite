@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -252,7 +251,7 @@ func (s *server) buildStaticEntry(ctx context.Context, route hostInitRoute) (*st
 // applies the asset cache-buster, returning the bytes (the no-ResponseWriter
 // twin of serveInjectedHTML, so snapshots can be cached).
 func (s *server) renderInjectedBytes(htmlPath, marker string, payload []byte) ([]byte, error) {
-	body, err := fs.ReadFile(s.eng.Assets, htmlPath)
+	body, err := s.pageBytes(htmlPath)
 	if err != nil {
 		return nil, err
 	}

@@ -10,7 +10,6 @@ import (
 	"dope/dope/storage/store"
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -224,7 +223,7 @@ func (s *server) writeAppHTML(w http.ResponseWriter, r *http.Request, body []byt
 // present in the HTML. On any I/O or marker-mismatch error the function
 // silently falls back to serving the file unchanged.
 func (s *server) serveInjectedHTML(w http.ResponseWriter, r *http.Request, htmlPath, marker string, payload []byte) {
-	body, err := fs.ReadFile(s.eng.Assets, htmlPath)
+	body, err := s.pageBytes(htmlPath)
 	if err != nil {
 		s.serveAppHTML(w, r, htmlPath)
 		return
@@ -366,7 +365,7 @@ func (s *server) serveAppHTML(w http.ResponseWriter, r *http.Request, path strin
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	body, err := fs.ReadFile(s.eng.Assets, path)
+	body, err := s.pageBytes(path)
 	if err != nil {
 		http.NotFound(w, r)
 		return

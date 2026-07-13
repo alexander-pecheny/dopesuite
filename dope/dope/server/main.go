@@ -67,6 +67,17 @@ type server struct {
 	// editor() so a bare &server{} still handles edits.
 	editBatcher     *editbatch.Batcher
 	editBatcherOnce sync.Once
+
+	// pageCache holds the compiled HTML for the .dopeui-authored shells (see
+	// pages.go). Populated at startup in embed mode; disk/dev mode recompiles per
+	// request for hot reload and never touches this map.
+	pageMu    sync.Mutex
+	pageCache map[string][]byte
+
+	// stylesheet is DopeUIKit's core.css + "\n" + dope's app layer, served at
+	// /static/styles.css (see css.go). Precomputed in embed mode; rebuilt per
+	// request in disk/dev mode.
+	stylesheet []byte
 }
 
 // editor returns the edit batcher, constructing it on first use against the
@@ -140,6 +151,14 @@ func Main() {
 		assetETags = buildAssetETags(assets)
 	}
 	srv.eng.AssetETags = assetETags
+	if !noCacheAssets {
+		srv.stylesheet = srv.buildStylesheet()
+		sum := sha256.Sum256(srv.stylesheet)
+		srv.eng.AssetETags["/static/styles.css"] = `"` + hex.EncodeToString(sum[:16]) + `"`
+	}
+	if err := srv.warmPageCache(); err != nil {
+		log.Fatal(err)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", srv.handlePublicIndex)
@@ -147,7 +166,7 @@ func Main() {
 	mux.HandleFunc("/register", srv.pageServer().HandleRegisterPage)
 	mux.HandleFunc("/register/invite", srv.pageServer().HandleRegisterInviteSubmit)
 	mux.HandleFunc("/register/username", srv.pageServer().HandleRegisterUsernameSubmit)
-	mux.HandleFunc("/login", srv.serveStaticPage(assets, "static/login.html"))
+	mux.HandleFunc("/login", srv.serveCompiledPage("static/login.html"))
 	mux.HandleFunc("/profile", srv.hostPageServer().HandleProfilePage)
 	mux.HandleFunc("/profile/logout", srv.hostPageServer().HandleProfileLogout)
 	mux.HandleFunc("/api/import", srv.handleImport)
@@ -172,6 +191,8 @@ func Main() {
 	mux.HandleFunc("/api/telegram/login", srv.tgBridge().HandleTelegramLogin)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
+	mux.HandleFunc("/static/styles.css", srv.serveStylesheet())
+	mux.Handle("/static/fonts/", srv.serveFonts())
 	mux.Handle("/static/", staticFileServer(assets, noCacheAssets, assetETags))
 
 	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
