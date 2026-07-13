@@ -5799,8 +5799,14 @@ body.is-fullscreen.od-page .match-main {
   overflow-x: auto;
   padding-bottom: var(--space-2);
 }
+/* list width / card title height are user-tunable («Изменить размеры» in the ☰
+   menu, board.js) — the modal overrides these vars on <html>. */
+:root {
+  --klist-w: 280px;
+  --kcard-title-max-h: none;   /* none = card grows with its text */
+}
 .klist {
-  flex: 0 0 280px;
+  flex: 0 0 var(--klist-w);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -5830,7 +5836,7 @@ body.is-fullscreen.od-page .match-main {
 }
 .kcard:hover { background: var(--hover-bg); }
 .kcard.dragging { opacity: 0.4; }
-.kcard-title { font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; }
+.kcard-title { font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; max-height: var(--kcard-title-max-h); overflow: hidden; }
 /* auto/directive question number reads as scaffolding, not content */
 .kcard-num { color: var(--muted); }
 .kcard-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
@@ -6387,6 +6393,14 @@ textarea.fld-input { min-height: 3em; }
 .import-textarea { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.5; }
 .import-count { color: var(--text-muted); font-size: var(--text-sm); white-space: nowrap; }
 .import-preview > * { margin: 0 0 var(--space-3); }
+
+/* ── sizes modal (list width / card height) ───────────────────────────────── */
+.sizes-modal { width: min(420px, 100%); text-align: left; }
+.sizes-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.sizes-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.sizes-value { font-size: var(--text-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.sizes-row input[type="range"] { width: 100%; accent-color: var(--blue-strong); cursor: var(--cursor-action); }
+.sizes-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 
 /* ── lists management modal ────────────────────────────────────────────────── */
 .lists-manage { width: min(560px, 100%); text-align: left; }

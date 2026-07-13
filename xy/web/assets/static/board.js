@@ -104,6 +104,10 @@ window.dopeMenu?.setExtras([{
   title: "Изменить название доски",
   onClick: () => renameBoard(),
 }, {
+  label: "📐 Изменить размеры",
+  title: "Ширина списков и высота карточек на этом устройстве",
+  onClick: () => openSizes(),
+}, {
   label: "📋 Управление списками",
   title: "Переупорядочить списки и связать их в группы (списки списков)",
   onClick: () => openListsManage(),
@@ -131,6 +135,71 @@ window.dopeMenu?.setExtras([{
   title: "Удалить доску со всеми списками и карточками (только владелец)",
   onClick: () => deleteBoard(),
 }]);
+
+// ---- board sizes (list width / card height) ----
+// A display preference, not board data: it lives in localStorage (per browser,
+// all boards) and drives two CSS vars on <html>. cardH === null means the card
+// grows with its text, which the slider represents as its maximum value.
+const SIZES_KEY = "xy.sizes";
+const SIZES_DEFAULT = { listW: 280, cardH: null };
+const CARD_H_MAX = 400;
+
+function readSizes() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SIZES_KEY) || "null");
+    if (!s) return { ...SIZES_DEFAULT };
+    const listW = Number(s.listW);
+    const cardH = Number(s.cardH);
+    return {
+      listW: listW >= 200 && listW <= 640 ? listW : SIZES_DEFAULT.listW,
+      cardH: cardH >= 40 && cardH < CARD_H_MAX ? cardH : null,
+    };
+  } catch (_) { return { ...SIZES_DEFAULT }; }
+}
+
+function applySizes(s) {
+  const root = document.documentElement;
+  root.style.setProperty("--klist-w", s.listW + "px");
+  root.style.setProperty("--kcard-title-max-h", s.cardH == null ? "none" : s.cardH + "px");
+}
+applySizes(readSizes());
+
+const sizesOverlay = document.getElementById("sizesOverlay");
+const sizesListW = document.getElementById("sizesListW");
+const sizesCardH = document.getElementById("sizesCardH");
+
+function syncSizesUI(s) {
+  sizesListW.value = String(s.listW);
+  sizesCardH.value = String(s.cardH == null ? CARD_H_MAX : s.cardH);
+  document.getElementById("sizesListWVal").textContent = s.listW + " px";
+  document.getElementById("sizesCardHVal").textContent = s.cardH == null ? "не ограничена" : s.cardH + " px";
+}
+
+// Live-apply on every input move, so the board behind the modal previews the size.
+function commitSizes() {
+  const cardH = Number(sizesCardH.value);
+  const s = { listW: Number(sizesListW.value), cardH: cardH >= CARD_H_MAX ? null : cardH };
+  applySizes(s);
+  syncSizesUI(s);
+  try { localStorage.setItem(SIZES_KEY, JSON.stringify(s)); } catch (_) {}
+}
+
+function openSizes() {
+  syncSizesUI(readSizes());
+  sizesOverlay.hidden = false;
+}
+function closeSizes() { sizesOverlay.hidden = true; }
+
+sizesListW.addEventListener("input", commitSizes);
+sizesCardH.addEventListener("input", commitSizes);
+document.getElementById("sizesReset").addEventListener("click", () => {
+  try { localStorage.removeItem(SIZES_KEY); } catch (_) {}
+  applySizes(SIZES_DEFAULT);
+  syncSizesUI(SIZES_DEFAULT);
+});
+document.getElementById("sizesClose").addEventListener("click", closeSizes);
+sizesOverlay.addEventListener("click", (e) => { if (e.target === sizesOverlay) closeSizes(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !sizesOverlay.hidden) closeSizes(); });
 
 // renameBoard / deleteBoard touch board-level metadata, which isn't part of the
 // per-board sync outbox (lists/cards) — so both are online-only. The server soft-
