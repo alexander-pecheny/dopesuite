@@ -246,6 +246,31 @@
     </div>
   </div>
 
+  <!-- sizes overlay: list width + max card height, stored per browser -->
+  <div class="appearance-modal-overlay" id="sizesOverlay" hidden>
+    <div class="appearance-modal sizes-modal" role="dialog" aria-modal="true" aria-label="Изменить размеры">
+      <h2 class="appearance-modal-title">Изменить размеры</h2>
+      <div class="sizes-row">
+        <div class="sizes-row-head">
+          <label class="appearance-row-label" for="sizesListW">Ширина списка</label>
+          <span class="sizes-value" id="sizesListWVal"></span>
+        </div>
+        <input type="range" id="sizesListW" min="200" max="640" step="10">
+      </div>
+      <div class="sizes-row">
+        <div class="sizes-row-head">
+          <label class="appearance-row-label" for="sizesCardH">Высота карточки</label>
+          <span class="sizes-value" id="sizesCardHVal"></span>
+        </div>
+        <input type="range" id="sizesCardH" min="40" max="400" step="10">
+      </div>
+      <div class="sizes-actions">
+        <button class="btn btn-small btn-ghost" id="sizesReset" type="button">Сбросить по умолчанию</button>
+        <button class="appearance-modal-done" id="sizesClose" type="button">Готово</button>
+      </div>
+    </div>
+  </div>
+
   <!-- members / sharing overlay -->
   <div class="appearance-modal-overlay" id="membersOverlay" hidden>
     <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Участники доски">
