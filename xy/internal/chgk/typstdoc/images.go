@@ -13,9 +13,14 @@ import (
 // through chgksuite's proportional_resize). A missing or undecodable image degrades
 // to a bold "[нет изображения: …]", as in the docx, so an export never fails on one.
 //
-// Images are handed to typst under generated names (img1.png, img2.png, …): typst
-// picks the decoder from the file extension, and xy's attachments are usually WebP
-// named whatever the user named them.
+// The bytes are re-encoded for the size they are drawn at (imgconv.ForPDF: downscale
+// to 200 dpi, JPEG unless the image has transparency). Embedding the original is how
+// an 800 KB photo turned into a megabyte PDF — a package is read on a screen and
+// printed on A4, and nothing beyond that sampling is ever visible.
+//
+// Images are handed to typst under generated names (img1.jpg, img2.png, …): typst
+// picks the decoder from the file extension, and xy's attachments are named whatever
+// the user named them (and are usually WebP, which Word can't read either).
 func (e *exporter) addImage(p *para, arg string) {
 	im, ok := inline.ParseImg(arg)
 	if !ok {
@@ -31,15 +36,25 @@ func (e *exporter) addImage(p *para, arg string) {
 		p.addStyled(missingImage(im.Name), "bold")
 		return
 	}
-	png, nativeW, nativeH, err := imgconv.ToPNG(raw)
+	// The size it will be drawn at comes from the ORIGINAL pixel dimensions
+	// (chgksuite's proportional_resize works off those), and the encoding is then
+	// chosen for that size — so decode first, size second, encode third.
+	src, err := imgconv.Decode(raw)
 	if err != nil {
 		p.addStyled(missingImage(im.Name), "bold")
 		return
 	}
-	name := fmt.Sprintf("img%d.png", len(e.used)+1)
-	e.used[name] = png
+	b := src.Bounds()
+	widthIn, heightIn := im.SizeInches(b.Dx(), b.Dy())
 
-	widthIn, heightIn := im.SizeInches(nativeW, nativeH)
+	data, ext, err := imgconv.ForPDF(raw, widthIn, heightIn)
+	if err != nil {
+		p.addStyled(missingImage(im.Name), "bold")
+		return
+	}
+	name := fmt.Sprintf("img%d.%s", len(e.used)+1, ext)
+	e.used[name] = data
+
 	expr := fmt.Sprintf("box(image(%s, width: %s, height: %s))",
 		typstString(name), mm(widthIn*25.4), mm(heightIn*25.4))
 	if im.Inline {
