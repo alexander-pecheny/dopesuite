@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Core catalog</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+</head>
+<body class="host">
+  <header class="host-top">
+    <h1>Каталог</h1>
+    <div class="host-actions">
+      <span class="sync-status" id="status" data-state="saved" aria-label="Готово" title="Готово"></span>
+      <a class="action-icon" href="/x" aria-label="Назад" title="Назад">↩</a>
+    </div>
+  </header>
+  <main class="match-main">
+
+    <section class="auth-step">
+      <h2 class="auth-subhead">Формы</h2>
+      <form class="u-col u-gap-md" id="f" method="post" action="/x">
+        <label class="field">
+          <span>Логин</span>
+          <input class="input" id="u" type="text" name="u" inputmode="email" pattern="[a-z]+" list="dl" required>
+        </label>
+        <label class="field">
+          <span>Пароль</span>
+          <input class="input" id="p" type="password" name="p" readonly disabled>
+        </label>
+        <input type="hidden" name="csrf" value="abc">
+        <datalist id="dl">
+          <option value="a">A</option>
+          <option value="b" selected>B</option>
+        </datalist>
+        <label class="checkbox">
+          <input type="checkbox" id="agree" checked>
+          <span> Согласен</span>
+        </label>
+        <label class="checkbox">
+          <input type="radio" name="kind" value="od" checked>
+          <span> ОД</span>
+        </label>
+        <label class="checkbox">
+          <input type="radio" name="kind" value="ek">
+          <span> ЭК</span>
+        </label>
+        <fieldset class="field">
+          <label class="checkbox">
+            <input type="radio" name="g" value="1">
+            <span> Раз</span>
+          </label>
+        </fieldset>
+        <details class="disclosure" open>
+          <summary>Ещё</summary>
+          <p>детали</p>
+        </details>
+        <div class="u-row u-gap-sm u-justify-between">
+          <button class="btn" type="submit">Сохранить</button>
+          <button class="btn btn-danger" type="button">Удалить</button>
+          <button class="btn btn-secondary" type="button">Отмена</button>
+          <button class="btn btn-ghost btn-small" type="button">…</button>
+        </div>
+      </form>
+
+      <p class="empty">Ничего нет</p>
+      <span class="muted">приглушённый блок</span>
+
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Ключ</th>
+              <th>Значение</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>x</td>
+              <td><code>1</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <dialog class="modal-dialog" id="dlg">
+      <p>нативная модалка</p>
+    </dialog>
+  </main>
+
+  <div class="appearance-modal-overlay" id="m" hidden>
+    <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Настройки">
+      <h2 class="appearance-modal-title">Настройки</h2>
+      <p class="auth-hint">Внутри модалки</p>
+      <button class="appearance-modal-done" id="mdone" type="button">Готово</button>
+    </div>
+  </div>
+</body>
+</html>

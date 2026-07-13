@@ -1,0 +1,45 @@
+page title="Core catalog" kind="full"
+  topbar title="Каталог"
+    iconlink href="/x" label="Назад" "↩"
+
+  section
+    subhead "Формы"
+    form id="f" dir="col" gap="md" method="post" action="/x"
+      field label="Логин"
+        textfield id="u" name="u" inputmode="email" pattern="[a-z]+" list="dl" required
+      field label="Пароль"
+        password id="p" name="p" readonly disabled
+      hiddenfield name="csrf" value="abc"
+      datalist id="dl"
+        option value="a" "A"
+        option value="b" selected "B"
+      checkbox id="agree" checked " Согласен"
+      radio name="kind" value="od" checked " ОД"
+      radio name="kind" value="ek" " ЭК"
+      fieldset
+        radio name="g" value="1" " Раз"
+      details open
+        summary "Ещё"
+        text "детали"
+      row gap="sm" justify="between"
+        button submit "Сохранить"
+        button kind="danger" "Удалить"
+        button kind="secondary" "Отмена"
+        button kind="ghost" small "…"
+
+    empty "Ничего нет"
+    muted "приглушённый блок"
+
+    table scroll
+      trow
+        hcell "Ключ"
+        hcell "Значение"
+      trow
+        cell "x"
+        cell (code "1")
+
+  dialog id="dlg"
+    text "нативная модалка"
+
+  modal id="m" label="Настройки" title="Настройки" done="Готово" doneid="mdone"
+    hint "Внутри модалки"
