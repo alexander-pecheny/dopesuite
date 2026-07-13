@@ -1380,7 +1380,7 @@ function shootoutControlsHeaderCell(attrs = {}, options = {}) {
 
     const removeQuestion = document.createElement("button");
     removeQuestion.type = "button";
-    removeQuestion.className = "btn danger";
+    removeQuestion.className = "btn btn-danger";
     removeQuestion.textContent = "Удалить вопрос";
     removeQuestion.addEventListener("click", () => removeShootoutQuestion(roundIndex));
     group.appendChild(removeQuestion);

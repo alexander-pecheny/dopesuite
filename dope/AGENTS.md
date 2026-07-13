@@ -68,7 +68,8 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `styles.css` | 5531 | Design system: CSS vars for all colors/spacing/typography, layout grids, table styles, theme overrides (light/dark/high-contrast) |
+| `styles.css` | ~1080 | dope's **app CSS layer** only (tournament tables/grids/screen/stickers + dope vars + dark overrides). The shared design system — tokens, controls, buttons, chrome, utilities, themes — lives in DopeUIKit's `assets/core.css`; the server serves `/static/styles.css` as core + this layer concatenated (`dope/server/css.go`). |
+| `pageforms.js` | ~60 | Shared behaviour for the server-rendered builder pages, replacing the inline `on*` handlers they used to carry (CSP-friendly, data-attribute driven: `[data-confirm]`, `[data-select-all]`, `[data-autosubmit]`, `[data-dialog-open="id"]`, `[data-dialog-close]`) |
 | `host.js` | 3153 | EK host editor — match score editing, undo/redo, stage tabs, SSE sync. Depends on `match-table.js` + `stage-cache.js` |
 | `od.js` | 3012 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync. Depends on `match-table.js` |
 | `match-table.js` | 2839 | **Core shared library** (`window.DopeTable`) — table builders, cell helpers, SSE parsing, state sync, floating popovers, virtual keypads, overflow controller. Used by all game pages |
@@ -114,21 +115,47 @@ Server listens on port **9672** by default (override with `$PORT`). Database def
 ## Testing UI Changes
 Use `cdp.py` on port 9222 (Chrome DevTools Protocol). If there's nothing on the port, run `/Applications/Comet.app/Contents/MacOS/Comet --remote-debugging-port=9222`
 
+## UI markup (DopeUIKit)
+No hand-written HTML anywhere. **DopeUIKit** (`pecheny.me/dopeuikit`, vendored via
+`replace => ../dopeuikit`) has two layers: `ui/` is the generic DSL **engine**
+(parser, validator, expansion framework, printer, builder, codegen — no vocabulary,
+no CSS class names) and `kit/` is the shared **design system** (core vocab +
+expanders + Chrome + generated builder + `core.css`/fonts). `dope/web/ui` is dope's
+thin **overlay** on the kit (imports `pecheny.me/dopeuikit/kit`).
+
+- **Static pages** are authored in `.dopeui` (`dope/web/assets/ui/`: login, host,
+  viewer, od, si) as typed primitives — `page`, `gametopbar`, `mount`… — compiled
+  to HTML at startup by the dope `App` (`dope/web/ui/app.go`, `Compile`). The
+  overlay adds the game topbar + mounts + dope page kinds + the `init` marker prop
+  (`init="__HOST_INIT__"` emits the exact byte-string `serve_html.go` splices the
+  per-request JSON payload over). Spec: DopeUIKit `DESIGN.md` (engine + kit) +
+  `dope/web/ui/vocab.json`/`expand.go` (dope overlay).
+- **Dynamic pages** (admin/audit/journal/register/numbers + hostpages: dash,
+  games, home, teams, imports, players) are built with the same package's typed
+  builder (`Render`) in `dope/web/pages/` and `dope/web/hostpages/`. Their former
+  inline `on*` handlers moved to `pageforms.js`, keyed on `data-*` attributes
+  (`data-confirm`/`data-autosubmit`/`data-dialog-open`/…) — never re-add inline
+  handlers (CSP forbids them).
+- **Scripts** are classic (not ES modules): the `page` `classicscripts` prop lists
+  them; `menu.js` boots first. The vocabulary is closed — unknown primitive/prop,
+  bad enum value, or duplicate id is a compile error.
+
 ## Design System
-When building a new page or UI component, you MUST use the existing design
-system in `dope/web/assets/static/styles.css` — its CSS variables (colors, spacing,
-typography), layout grids, table styles, and component classes — and the shared
-JS building blocks (`window.DopeTable` in `match-table.js`, `window.dopeMenu` in
-`menu.js`, etc.). Do not introduce bespoke one-off styles or hand-rolled widgets
-when a design-system equivalent exists.
+When building a new page or UI component, you MUST use the existing design system —
+DopeUIKit's `assets/core.css` (shared tokens/controls/buttons/chrome/utilities/
+themes) plus dope's `styles.css` layer (tournament-specific classes) — its CSS
+variables (colors, spacing, typography), layout grids, table styles, and component
+classes, and the shared JS building blocks (`window.DopeTable` in `match-table.js`,
+`window.dopeMenu` in `menu.js`, etc.). Do not introduce bespoke one-off styles or
+hand-rolled widgets when a design-system equivalent exists.
 
 Order of preference, strictly:
 1. **Reuse** an existing variable / class / component as-is.
-2. If something is genuinely missing, **extend the design system** — add the new
-   variable/class/component to `styles.css` (or the relevant shared JS module) so
-   it is reusable — rather than inlining a local solution. New tokens follow the
-   existing naming and must themselves be built from existing variables where
-   possible.
+2. If something is genuinely missing, **extend the design system** — add a
+   tournament-specific class to dope's `styles.css` layer, or a genuinely shared
+   token/primitive to DopeUIKit's `core.css`/kit (both apps consume it), rather
+   than inlining a local solution. New tokens follow the existing naming and must
+   themselves be built from existing variables where possible.
 3. Only as a last resort, and with a comment explaining why, add page-local
    styling — but first reconsider whether step 2 is the right call.
 
