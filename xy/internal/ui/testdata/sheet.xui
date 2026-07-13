@@ -1,0 +1,22 @@
+# sheet-page fixture: page chrome (sheet), topbar, text primitives, a form.
+page title="Вход · Фест" kind="sheet" scripts="index.js"
+  topbar title="Вход"
+    iconlink href="/register" label="Регистрация" "→"
+
+  section
+    hint "Вход для " (strong id="who") "."
+    form id="usernameForm" autocomplete="on"
+      textfield id="loginUsername" name="username" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required autofocus grow
+      button submit "Дальше"
+    message id="usernameMessage"
+
+  section
+    subhead "Активные токены"
+    hint
+      "Токен даёт доступ через "
+      (code "chgksuite") " API."
+    bigcode id="regCode"
+    row gap="sm" align="center" justify="between" wrap
+      button kind="ghost" small "Копировать"
+      spacer
+      button href="/profile" "Профиль"

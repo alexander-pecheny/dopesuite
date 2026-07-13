@@ -1,0 +1,76 @@
+# board-like fixture: page (board), topbar with brand + icon buttons, a mount,
+# a modal, detail + doc overlays with tabs/split/panes, sized/list modals.
+page title="Доска · xy" kind="board" scripts="board.js timer.js"
+  topbar title="Доска" titleid="boardTitle" home="/"
+    iconbtn id="notifToggle" label="События" title="События других участников" badgeid="notifBadge" aria-haspopup="true" aria-expanded="false" "🔔"
+    iconbtn id="timerToggle" label="Таймер" aria-pressed="false" "⏰"
+
+  mount id="kanban" kind="kanban" hidden
+
+  -- unlock overlay
+  modal id="unlockOverlay" label="Пароль доски" title="Пароль доски"
+    form id="unlockForm" dir="col"
+      password id="unlockPass" placeholder="Пароль доски" autocomplete="off" required autofocus grow
+      button submit "Открыть"
+    message id="unlockMessage"
+
+  -- card detail overlay
+  docoverlay id="cardOverlay" kind="detail"
+    headrow kind="detail"
+      selectfield id="cardKind" compact aria-label="Тип карточки"
+        option value="question" "Вопрос"
+        option value="meta" "Метаинформация"
+      headactions kind="detail"
+        unreaddot id="contentUnreadDot" data-edit-only title="Непрочитанные изменения"
+        button id="cardLink" small title="Скопировать ссылку" data-edit-only "🔗 Ссылка"
+    tabs id="cardViewTabs"
+      tab id="cardTabPreview" view="preview" "Просмотр"
+      tab id="cardTabText" view="text" "Текст"
+    tabpanel id="cardViewPreview"
+      checkbox id="cardPreviewScreen" kind="card-preview" title="Экранный режим" " для экрана"
+      mount id="cardPreviewBody" kind="card-preview-body" title="Двойной клик — редактировать"
+    tabpanel id="cardViewText"
+      label for="cardDesc" "Описание"
+      editor id="cardDesc" spellcheck="false"
+    label data-edit-only "Метки"
+    mount id="labelPicker" kind="label-picker" data-edit-only
+    mount id="labelAddRow" kind="label-add-row" data-edit-only
+      button id="labelAddBtn" "+ добавить метку…"
+    row gap="sm" align="center" wrap data-edit-only
+      colorfield id="newLabelColor" value="#4477aa"
+      filefield id="attachFile" accept=".png,.jpg"
+      button small "Загрузить"
+
+  -- handouts generation overlay
+  docoverlay id="handoutsOverlay" kind="doc" variant="handouts"
+    headrow
+      previewtitle "Генерация раздаток"
+      headactions
+        iconbtn id="handoutsClose" label="Закрыть" "×"
+    split
+      pane kind="src"
+        editor id="handoutsSource" kind="handouts" spellcheck="false"
+        button id="handoutsGenerate" small "Сгенерировать PDF"
+      pane kind="preview"
+        mount id="handoutsPdf" kind="handouts-pdf"
+
+  -- import verification overlay
+  docoverlay id="importOverlay" kind="doc" variant="import"
+    headrow
+      previewtitle id="importTitle" "Проверка импорта"
+      headactions
+        mount id="importCount" kind="import-count"
+        iconbtn id="importClose" label="Закрыть" "×"
+    split
+      pane kind="src"
+        editor id="importSource" kind="importsrc" spellcheck="false" aria-label="Исходник 4s"
+      mount id="importPreview" kind="import-preview"
+
+  -- sizes overlay
+  modal id="sizesOverlay" label="Изменить размеры" title="Изменить размеры" variant="sizes" done="Готово" doneid="sizesClose"
+    sliderrow id="sizesListW" label="Ширина списка" valueid="sizesListWVal" min="200" max="640" step="10" hint="Ширина списка в пикселях."
+
+  -- lists management overlay
+  modal id="listsManageOverlay" label="Управление списками" title="Управление списками" variant="lists" done="Готово" doneid="listsManageClose"
+    numfield id="listsMovePos" min="1" placeholder="№" narrow
+    mount id="listsManageRows" kind="lists-manage-rows"

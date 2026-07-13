@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Вход · Фест</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+  <script type="module" src="/static/index.js"></script>
+</head>
+<body class="host import-page">
+  <header class="host-top">
+    <h1>Вход</h1>
+    <div class="host-actions">
+      <span class="sync-status" id="status" data-state="saved" aria-label="Готово" title="Готово"></span>
+      <a class="action-icon" href="/register" aria-label="Регистрация" title="Регистрация">→</a>
+    </div>
+  </header>
+  <main class="match-main">
+    <div class="sheet-frame import-frame">
+
+      <section class="auth-step">
+        <p class="auth-hint">Вход для <strong id="who"></strong>.</p>
+        <form class="u-row u-gap-sm" id="usernameForm" autocomplete="on">
+          <input class="input u-grow" id="loginUsername" type="text" name="username" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required autofocus>
+          <button class="btn" type="submit">Дальше</button>
+        </form>
+        <pre class="import-message" id="usernameMessage"></pre>
+      </section>
+
+      <section class="auth-step">
+        <h2 class="auth-subhead">Активные токены</h2>
+        <p class="auth-hint">
+          Токен даёт доступ через 
+          <code>chgksuite</code> API.
+        </p>
+        <p class="register-code" id="regCode"></p>
+        <div class="u-row u-gap-sm u-align-center u-justify-between u-wrap">
+          <button class="btn btn-ghost btn-small" type="button">Копировать</button>
+          <div class="u-spacer"></div>
+          <a class="btn" href="/profile">Профиль</a>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

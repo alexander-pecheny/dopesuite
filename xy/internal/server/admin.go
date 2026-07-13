@@ -85,36 +85,15 @@ func newRandomPassword() (string, error) {
 	return string(buf), nil
 }
 
-// adminHead builds the <head> shared by both admin pages, differing only in
-// <title>.
-func adminHead(title string) *ui.Element {
-	return ui.Head(
-		ui.Meta(ui.Charset("utf-8")),
-		ui.Meta(ui.Name("viewport"), ui.Content("width=device-width, initial-scale=1")),
-		ui.Title(ui.Text(title)),
-		ui.Link(ui.Rel("preload"), ui.Href("/static/fonts/noto-sans-400.woff2"), ui.As("font"), ui.Type("font/woff2"), ui.Crossorigin()),
-		ui.Link(ui.Rel("stylesheet"), ui.Href("/static/styles.css")),
-		ui.Script(ui.Src("/static/menu.js")),
-	)
-}
-
 // adminIndexDoc builds the /admin landing page: a link list of admin tools.
 func adminIndexDoc() *ui.Doc {
 	return &ui.Doc{Nodes: []ui.Node{
-		ui.DoctypeNode(),
-		ui.Html(ui.Lang("ru"),
-			adminHead("Админка"),
-			ui.Body(ui.Class(ui.Public),
-				ui.Header(ui.Class(ui.PublicTop),
-					ui.H1(ui.Text("Админка")),
-				),
-				ui.Main(ui.Class(ui.PublicMain),
-					ui.Ul(ui.Class(ui.List),
-						ui.Li(
-							ui.A(ui.Class(ui.ListRow), ui.Href("/admin/create_users"),
-								ui.Span(ui.Class(ui.ListRowTitle), ui.Text("Создать пользователей")),
-							),
-						),
+		ui.Page(ui.Title("Админка"), ui.PageFull,
+			ui.Topbar(ui.Title("Админка")),
+			ui.Section(
+				ui.List(
+					ui.Listrow(ui.Href("/admin/create_users"),
+						ui.Listtitle(ui.Text("Создать пользователей")),
 					),
 				),
 			),
@@ -155,58 +134,55 @@ func (d adminCreateUsersData) Copyable() string {
 // createdSection renders the one-time credentials table + copy-paste textarea
 // shown after a create_users submit that created at least one account.
 func createdSection(data adminCreateUsersData) *ui.Element {
-	rows := make([]ui.Item, len(data.Created))
-	for i, u := range data.Created {
-		rows[i] = ui.Tr(
-			ui.Td(ui.Text(u.Username)),
-			ui.Td(ui.Code(ui.Text(u.Password))),
-		)
+	tableRows := []ui.Item{
+		ui.Trow(ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Пароль"))),
 	}
-	return ui.Section(ui.Class(ui.SectionClass),
-		ui.P(ui.Class(ui.AuthHint), ui.Text("Пароли показаны один раз. Скопируйте и разошлите — пользователи сменят их сами.")),
-		ui.Table(ui.Class(ui.DataTable),
-			ui.Thead(ui.Tr(ui.Th(ui.Text("Логин")), ui.Th(ui.Text("Пароль")))),
-			ui.Tbody(rows...),
-		),
-		ui.Label(ui.Class(ui.Field),
-			ui.Span(ui.Text("Для копирования (логин ⇥ пароль)")),
-			ui.Textarea(ui.Rows(strconv.Itoa(len(data.Created))), ui.Readonly(), ui.Text(data.Copyable())),
+	for _, u := range data.Created {
+		tableRows = append(tableRows, ui.Trow(
+			ui.Cell(ui.Text(u.Username)),
+			ui.Cell(ui.Code(ui.Text(u.Password))),
+		))
+	}
+	return ui.Section(
+		ui.Hint(ui.Text("Пароли показаны один раз. Скопируйте и разошлите — пользователи сменят их сами.")),
+		ui.Table(tableRows...),
+		ui.Field(ui.Label("Для копирования (логин ⇥ пароль)"),
+			ui.Editor(ui.Rows(strconv.Itoa(len(data.Created))), ui.Readonly(), ui.Text(data.Copyable())),
 		),
 	)
 }
 
 // skippedSection lists usernames that already existed and were left alone.
 func skippedSection(skipped []string) *ui.Element {
-	return ui.Section(ui.Class(ui.SectionClass),
-		ui.P(ui.Class(ui.Empty), ui.Text("Уже существуют (пропущены): "+strings.Join(skipped, ", "))),
+	return ui.Section(
+		ui.Hint(ui.Text("Уже существуют (пропущены): " + strings.Join(skipped, ", "))),
 	)
 }
 
 // errorsSection lists usernames rejected as invalid.
 func errorsSection(errs []adminUserError) *ui.Element {
-	items := []ui.Item{ui.Class(ui.List)}
-	for _, e := range errs {
-		items = append(items, ui.Li(ui.Class(ui.ListRow),
-			ui.Span(ui.Class(ui.ListRowTitle), ui.Text(e.Username)),
-			ui.Span(ui.Class(ui.Muted), ui.Text(e.Reason)),
-		))
+	rows := make([]ui.Item, len(errs))
+	for i, e := range errs {
+		rows[i] = ui.Listrow(
+			ui.Listtitle(ui.Text(e.Username)),
+			ui.Muted(ui.Text(e.Reason)),
+		)
 	}
-	return ui.Section(ui.Class(ui.SectionClass),
-		ui.P(ui.Class(ui.Empty), ui.Text("Ошибки:")),
-		ui.Ul(items...),
+	return ui.Section(
+		ui.Hint(ui.Text("Ошибки:")),
+		ui.List(rows...),
 	)
 }
 
 // createUsersFormSection is the bulk-create form, always shown.
 func createUsersFormSection() *ui.Element {
-	return ui.Section(ui.Class(ui.SectionClass),
-		ui.Form(ui.Method("post"), ui.Action("/admin/create_users"), ui.Class(ui.Card, ui.Stack), ui.Autocomplete("off"),
-			ui.Label(ui.Class(ui.Field),
-				ui.Span(ui.Text("Логины (по одному в строке)")),
-				ui.Textarea(ui.Name("usernames"), ui.Rows("10"), ui.Placeholder("anton\nanya_a\ndasha"), ui.Required()),
+	return ui.Section(
+		ui.Form(ui.DirCol, ui.SpaceMD, ui.Method("post"), ui.Action("/admin/create_users"), ui.Autocomplete("off"),
+			ui.Field(ui.Label("Логины (по одному в строке)"),
+				ui.Editor(ui.Name("usernames"), ui.Rows("10"), ui.Placeholder("anton\nanya_a\ndasha"), ui.Required()),
 			),
-			ui.Div(ui.Class(ui.Cluster),
-				ui.Button(ui.Class(ui.Btn), ui.Type("submit"), ui.Text("Создать")),
+			ui.Row(
+				ui.Button(ui.Submit(), ui.Text("Создать")),
 			),
 		),
 	)
@@ -216,7 +192,7 @@ func createUsersFormSection() *ui.Element {
 // form, plus (after a submit) the outcome — created credentials, skipped
 // usernames, and validation errors.
 func adminCreateUsersDoc(data adminCreateUsersData) *ui.Doc {
-	main := []ui.Item{ui.Class(ui.PublicMain)}
+	var main []ui.Item
 	if data.Submitted {
 		if len(data.Created) > 0 {
 			main = append(main, createdSection(data))
@@ -228,24 +204,20 @@ func adminCreateUsersDoc(data adminCreateUsersData) *ui.Doc {
 			main = append(main, errorsSection(data.Errors))
 		}
 		if len(data.Created) == 0 && len(data.Skipped) == 0 && len(data.Errors) == 0 {
-			main = append(main, ui.P(ui.Class(ui.Empty), ui.Text("Не указано ни одного логина.")))
+			main = append(main, ui.Section(ui.Hint(ui.Text("Не указано ни одного логина."))))
 		}
 	}
 	main = append(main, createUsersFormSection())
 
-	return &ui.Doc{Nodes: []ui.Node{
-		ui.DoctypeNode(),
-		ui.Html(ui.Lang("ru"),
-			adminHead("Создать пользователей · Админка"),
-			ui.Body(ui.Class(ui.Public),
-				ui.Header(ui.Class(ui.PublicTop),
-					ui.H1(ui.Text("Создать пользователей")),
-					ui.A(ui.Class(ui.PublicUser), ui.Href("/admin"), ui.Text("Админка")),
-				),
-				ui.Main(main...),
-			),
+	pageItems := []ui.Item{
+		ui.Title("Создать пользователей · Админка"), ui.PageFull,
+		ui.Topbar(ui.Title("Создать пользователей"),
+			ui.Iconlink(ui.Href("/admin"), ui.Label("Админка"), ui.Text("↩")),
 		),
-	}}
+	}
+	pageItems = append(pageItems, main...)
+
+	return &ui.Doc{Nodes: []ui.Node{ui.Page(pageItems...)}}
 }
 
 // HandleAdminLanding serves /admin — a landing page linking to the admin tools.

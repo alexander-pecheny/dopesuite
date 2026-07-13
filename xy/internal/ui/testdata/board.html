@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Доска · xy</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+  <script type="module" src="/static/board.js"></script>
+  <script type="module" src="/static/timer.js"></script>
+</head>
+<body class="host board-page">
+  <header class="host-top">
+    <div class="host-brand">
+      <a class="host-home" href="/" aria-label="Все доски" title="Все доски">🏠</a>
+      <span class="host-sep" aria-hidden="true">/</span>
+      <h1 class="host-title" id="boardTitle">Доска</h1>
+    </div>
+    <div class="host-actions">
+      <span class="sync-status" id="status" data-state="saved" aria-label="Готово" title="Готово"></span>
+      <button class="action-icon notif-toggle" id="notifToggle" type="button" aria-label="События" title="События других участников" aria-haspopup="true" aria-expanded="false">🔔<span class="notif-badge" id="notifBadge" hidden></span></button>
+      <button class="action-icon" id="timerToggle" type="button" aria-label="Таймер" title="Таймер" aria-pressed="false">⏰</button>
+    </div>
+  </header>
+  <main class="board-main">
+
+    <div class="kanban" id="kanban" hidden></div>
+  </main>
+
+  <!-- unlock overlay -->
+  <div class="appearance-modal-overlay" id="unlockOverlay" hidden>
+    <div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Пароль доски">
+      <h2 class="appearance-modal-title">Пароль доски</h2>
+      <form class="u-col u-gap-sm" id="unlockForm">
+        <input class="input u-grow" id="unlockPass" type="password" placeholder="Пароль доски" autocomplete="off" required autofocus>
+        <button class="btn" type="submit">Открыть</button>
+      </form>
+      <pre class="import-message" id="unlockMessage"></pre>
+    </div>
+  </div>
+
+  <!-- card detail overlay -->
+  <div class="card-overlay" id="cardOverlay" hidden>
+    <div class="card-detail" role="dialog" aria-modal="true">
+      <div class="card-detail-head">
+        <select class="input card-kind-select" id="cardKind" aria-label="Тип карточки">
+          <option value="question">Вопрос</option>
+          <option value="meta">Метаинформация</option>
+        </select>
+        <div class="card-head-actions">
+          <span class="unread-dot" id="contentUnreadDot" hidden title="Непрочитанные изменения" data-edit-only></span>
+          <button class="btn btn-small" id="cardLink" type="button" title="Скопировать ссылку" data-edit-only>🔗 Ссылка</button>
+        </div>
+      </div>
+      <div class="card-view-tabs" id="cardViewTabs" role="tablist">
+        <button class="card-view-tab" id="cardTabPreview" type="button" role="tab" data-view="preview">Просмотр</button>
+        <button class="card-view-tab" id="cardTabText" type="button" role="tab" data-view="text">Текст</button>
+      </div>
+      <div class="card-view" id="cardViewPreview" hidden>
+        <label class="attach-lossless card-preview-screen" title="Экранный режим"><input type="checkbox" id="cardPreviewScreen"> для экрана</label>
+        <div class="preview-body card-preview-body" id="cardPreviewBody" title="Двойной клик — редактировать"></div>
+      </div>
+      <div class="card-view" id="cardViewText" hidden>
+        <label class="card-section-label" for="cardDesc">Описание</label>
+        <textarea class="card-desc" id="cardDesc" spellcheck="false"></textarea>
+      </div>
+      <label class="card-section-label" data-edit-only>Метки</label>
+      <div class="label-picker" id="labelPicker" data-edit-only></div>
+      <div class="label-add-row" id="labelAddRow" data-edit-only>
+        <button class="btn" id="labelAddBtn" type="button">+ добавить метку…</button>
+      </div>
+      <div class="u-row u-gap-sm u-align-center u-wrap" data-edit-only>
+        <input class="label-color-input" id="newLabelColor" type="color" value="#4477aa">
+        <input class="input" id="attachFile" type="file" accept=".png,.jpg">
+        <button class="btn btn-small" type="button">Загрузить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- handouts generation overlay -->
+  <div class="card-overlay preview-overlay" id="handoutsOverlay" hidden>
+    <div class="preview-doc handouts-doc" role="dialog" aria-modal="true">
+      <div class="preview-head">
+        <h2 class="preview-title">Генерация раздаток</h2>
+        <div class="preview-head-actions">
+          <button class="action-icon" id="handoutsClose" type="button" aria-label="Закрыть" title="Закрыть">×</button>
+        </div>
+      </div>
+      <div class="handouts-body">
+        <div class="handouts-pane handouts-src">
+          <textarea class="card-desc handouts-textarea" id="handoutsSource" spellcheck="false"></textarea>
+          <button class="btn btn-small" id="handoutsGenerate" type="button">Сгенерировать PDF</button>
+        </div>
+        <div class="handouts-pane handouts-preview">
+          <div class="handouts-pdf" id="handoutsPdf"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- import verification overlay -->
+  <div class="card-overlay import-overlay" id="importOverlay" hidden>
+    <div class="preview-doc import-doc" role="dialog" aria-modal="true">
+      <div class="preview-head">
+        <h2 class="preview-title" id="importTitle">Проверка импорта</h2>
+        <div class="preview-head-actions">
+          <span class="import-count" id="importCount"></span>
+          <button class="action-icon" id="importClose" type="button" aria-label="Закрыть" title="Закрыть">×</button>
+        </div>
+      </div>
+      <div class="handouts-body">
+        <div class="handouts-pane handouts-src">
+          <textarea class="input handouts-textarea import-textarea" id="importSource" spellcheck="false" aria-label="Исходник 4s"></textarea>
+        </div>
+        <div class="handouts-pane import-preview" id="importPreview"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- sizes overlay -->
+  <div class="appearance-modal-overlay" id="sizesOverlay" hidden>
+    <div class="appearance-modal sizes-modal" role="dialog" aria-modal="true" aria-label="Изменить размеры">
+      <h2 class="appearance-modal-title">Изменить размеры</h2>
+      <div class="sizes-row">
+        <div class="sizes-row-head">
+          <label class="appearance-row-label" for="sizesListW">Ширина списка</label>
+          <span class="sizes-value" id="sizesListWVal"></span>
+        </div>
+        <input type="range" id="sizesListW" min="200" max="640" step="10">
+        <p class="sizes-hint">Ширина списка в пикселях.</p>
+      </div>
+      <button class="appearance-modal-done" id="sizesClose" type="button">Готово</button>
+    </div>
+  </div>
+
+  <!-- lists management overlay -->
+  <div class="appearance-modal-overlay" id="listsManageOverlay" hidden>
+    <div class="appearance-modal lists-manage" role="dialog" aria-modal="true" aria-label="Управление списками">
+      <h2 class="appearance-modal-title">Управление списками</h2>
+      <input class="input lists-move-pos" id="listsMovePos" type="number" min="1" placeholder="№">
+      <div class="lists-manage-rows" id="listsManageRows"></div>
+      <button class="appearance-modal-done" id="listsManageClose" type="button">Готово</button>
+    </div>
+  </div>
+</body>
+</html>

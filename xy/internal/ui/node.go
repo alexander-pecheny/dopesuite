@@ -1,11 +1,13 @@
-// Package ui implements a constrained UI DSL: a closed HTML vocabulary
-// (vocab.json), a line-oriented source language (.xui, parse.go) and an
-// equivalent Go builder (builder.go), both compiling to the same node tree
-// and printed by one deterministic renderer (render.go).
+// Package ui implements a constrained UI DSL of typed AppKit-style primitives
+// (page/row/col/button/modal/…): a closed vocabulary (vocab.json), a
+// line-oriented source language (.xui, parse.go) and an equivalent Go builder
+// (builder.go). Both produce the same primitive tree (Element.Tag = primitive
+// name, Attr = prop); render.go — the only place that knows HTML/classes —
+// expands it into an HTML node tree, printed by one deterministic printer.
 package ui
 
-// Item is anything that can appear in an element's argument list: an
-// attribute or a child node.
+// Item is anything that can appear in a primitive's argument list: a prop
+// (Attr) or a child node.
 type Item interface {
 	item()
 }
@@ -78,7 +80,8 @@ type BlankLine struct{}
 func (*BlankLine) item() {}
 func (*BlankLine) node() {}
 
-// Doctype emits `<!doctype html>`. Valid only as the document's first node.
+// Doctype emits `<!doctype html>`. Not authored directly in v2 — render.go
+// emits it as the first node when expanding a `page`.
 type Doctype struct {
 	Line int
 }

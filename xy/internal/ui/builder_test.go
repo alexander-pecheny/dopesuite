@@ -1,17 +1,22 @@
 package ui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestBuilder_InlineTextAndEmptyElement(t *testing.T) {
+func TestBuilder_PageRoundTrip(t *testing.T) {
 	doc := &Doc{Nodes: []Node{
-		DoctypeNode(),
-		Html(
-			ID("root"),
-			Head(),
-			Body(
-				Class(Host),
-				Header(Class(HostTop), H1(Text("Привет"))),
-				Div(ID("kanban"), Class(Kanban), Hidden()),
+		Page(Title("Админка"), PageFull, Scripts("admin.js"),
+			Topbar(Title("Админка"),
+				Iconlink(Href("/admin"), Label("Назад"), Text("↩")),
+			),
+			Section(
+				Hint(Text("Привет")),
+				Row(SpaceSM, JustifyBetween,
+					Button(Ghost, Small(), Text("Копировать")),
+					Spacer(),
+				),
 			),
 		),
 	}}
@@ -19,93 +24,63 @@ func TestBuilder_InlineTextAndEmptyElement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	want := `<!doctype html>
-<html id="root">
-<head></head>
-<body class="host">
-  <header class="host-top">
-    <h1>Привет</h1>
-  </header>
-  <div id="kanban" class="kanban" hidden></div>
-</body>
-</html>
-`
-	if string(got) != want {
-		t.Fatalf("output mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
-	}
-}
-
-func TestBuilder_LineForcesInlineRunChild(t *testing.T) {
-	doc := &Doc{Nodes: []Node{
-		Button(
-			ID("notifToggle"), Type("button"),
-			Line(Text("🔔"), Span(Class(NotifBadge), ID("notifBadge"), Hidden())),
-		),
-	}}
-	got, err := Render(doc)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	want := "<button id=\"notifToggle\" type=\"button\">\n" +
-		"  🔔<span class=\"notif-badge\" id=\"notifBadge\" hidden></span>\n" +
-		"</button>\n"
-	if string(got) != want {
-		t.Fatalf("output mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
-	}
-}
-
-func TestBuilder_InlineForcesOneLineMixedContent(t *testing.T) {
-	doc := &Doc{Nodes: []Node{
-		P(Class(AuthHint), Inline(Text("Вход для "), Strong(ID("who")), Text("."))),
-	}}
-	got, err := Render(doc)
-	if err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	want := "<p class=\"auth-hint\">Вход для <strong id=\"who\"></strong>.</p>\n"
-	if string(got) != want {
-		t.Fatalf("output mismatch: got %q, want %q", got, want)
-	}
-}
-
-func TestBuilder_AriaAndDataHelpers(t *testing.T) {
-	e := Div(Aria("modal", "true"), Aria("hidden", ""), Data("state", "saved"), Data("edit-only", ""))
-	want := []Attr{
-		{Name: "aria-modal", Value: "true"},
-		{Name: "aria-hidden", Bare: true},
-		{Name: "data-state", Value: "saved"},
-		{Name: "data-edit-only", Bare: true},
-	}
-	if len(e.Attrs) != len(want) {
-		t.Fatalf("expected %d attrs, got %d", len(want), len(e.Attrs))
-	}
-	for i, a := range want {
-		if e.Attrs[i] != a {
-			t.Fatalf("attr %d: got %+v, want %+v", i, e.Attrs[i], a)
+	for _, want := range []string{
+		`<body class="host">`,
+		`<script type="module" src="/static/admin.js"></script>`,
+		`<a class="action-icon" href="/admin" aria-label="Назад" title="Назад">↩</a>`,
+		`<div class="u-row u-gap-sm u-justify-between">`,
+		`<button class="btn btn-ghost btn-small" type="button">Копировать</button>`,
+		`<div class="u-spacer"></div>`,
+	} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("missing %q in:\n%s", want, got)
 		}
 	}
 }
 
-func TestBuilder_ValidateCatchesUnknownClassToken(t *testing.T) {
-	// Class only accepts generated ClassToken constants, so misuse can only
-	// be simulated by hand-building an Attr with an off-vocab class value —
-	// exactly what the generated builder can never produce, and what
-	// Validate must still catch coming from any other tree source.
-	doc := &Doc{Nodes: []Node{
-		&Element{Tag: "div", Attrs: []Attr{{Name: "class", Value: "not-a-real-token"}}},
-	}}
-	if _, err := Render(doc); err == nil {
-		t.Fatal("expected a validation error for an unknown class token")
+func TestBuilder_EnumConstsCarryPropAndValue(t *testing.T) {
+	cases := []struct {
+		got       Attr
+		name, val string
+	}{
+		{SpaceSM, "gap", "sm"},
+		{JustifyBetween, "justify", "between"},
+		{AlignCenter, "align", "center"},
+		{Ghost, "kind", "ghost"},
+		{PageFull, "kind", "full"},
+		{MountKanban, "kind", "kanban"},
+		{DirCol, "dir", "col"},
+	}
+	for _, c := range cases {
+		if c.got.Name != c.name || c.got.Value != c.val || c.got.Bare {
+			t.Errorf("enum const = %+v, want {Name:%q Value:%q}", c.got, c.name, c.val)
+		}
 	}
 }
 
-func TestBuilder_ValidateCatchesInlineElementWithBlockChildren(t *testing.T) {
-	inner := Span(ID("x"))
-	inner.Block = []Node{Div()}
+func TestBuilder_RenderValidates(t *testing.T) {
+	// Duplicate id is a runtime (validation) failure the types can't catch.
 	doc := &Doc{Nodes: []Node{
-		Div(Inline(inner)),
+		Col(Row(ID("dup")), Row(ID("dup"))),
 	}}
 	if _, err := Render(doc); err == nil {
-		t.Fatal("expected a validation error: inline element with block children")
+		t.Fatal("expected a validation error for a duplicate id")
+	}
+}
+
+func TestBuilder_AriaAndDataHelpers(t *testing.T) {
+	e := Row(Aria("label", "y"), Data("view", "x"), Data("edit-only", ""))
+	want := []Attr{
+		{Name: "aria-label", Value: "y"},
+		{Name: "data-view", Value: "x"},
+		{Name: "data-edit-only", Bare: true},
+	}
+	if len(e.Attrs) != len(want) {
+		t.Fatalf("expected %d props, got %d", len(want), len(e.Attrs))
+	}
+	for i, a := range want {
+		if e.Attrs[i] != a {
+			t.Fatalf("prop %d: got %+v, want %+v", i, e.Attrs[i], a)
+		}
 	}
 }

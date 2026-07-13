@@ -2,192 +2,256 @@
 
 package ui
 
-// Element constructors.
+// Primitive constructors.
 
-func Html(items ...Item) *Element {
-	return newElement("html", items)
+func Page(items ...Item) *Element {
+	return newElement("page", items)
 }
 
-func Head(items ...Item) *Element {
-	return newElement("head", items)
+func Topbar(items ...Item) *Element {
+	return newElement("topbar", items)
 }
 
-func Meta(items ...Item) *Element {
-	return newElement("meta", items)
+func Iconbtn(items ...Item) *Element {
+	return newElement("iconbtn", items)
 }
 
-func Title(items ...Item) *Element {
-	return newElement("title", items)
+func Iconlink(items ...Item) *Element {
+	return newElement("iconlink", items)
 }
 
-func Link(items ...Item) *Element {
-	return newElement("link", items)
+func Col(items ...Item) *Element {
+	return newElement("col", items)
 }
 
-func Script(items ...Item) *Element {
-	return newElement("script", items)
+func Row(items ...Item) *Element {
+	return newElement("row", items)
 }
 
-func Body(items ...Item) *Element {
-	return newElement("body", items)
-}
-
-func Header(items ...Item) *Element {
-	return newElement("header", items)
-}
-
-func H1(items ...Item) *Element {
-	return newElement("h1", items)
-}
-
-func H2(items ...Item) *Element {
-	return newElement("h2", items)
-}
-
-func H3(items ...Item) *Element {
-	return newElement("h3", items)
-}
-
-func Div(items ...Item) *Element {
-	return newElement("div", items)
-}
-
-func Span(items ...Item) *Element {
-	return newElement("span", items)
-}
-
-func A(items ...Item) *Element {
-	return newElement("a", items)
-}
-
-func Main(items ...Item) *Element {
-	return newElement("main", items)
+func Spacer(items ...Item) *Element {
+	return newElement("spacer", items)
 }
 
 func Section(items ...Item) *Element {
 	return newElement("section", items)
 }
 
-func P(items ...Item) *Element {
-	return newElement("p", items)
+func Paragraph(items ...Item) *Element {
+	return newElement("text", items)
+}
+
+func Hint(items ...Item) *Element {
+	return newElement("hint", items)
+}
+
+func Subhead(items ...Item) *Element {
+	return newElement("subhead", items)
+}
+
+func SectionLabel(items ...Item) *Element {
+	return newElement("label", items)
+}
+
+func Bigcode(items ...Item) *Element {
+	return newElement("bigcode", items)
+}
+
+func Message(items ...Item) *Element {
+	return newElement("message", items)
 }
 
 func Strong(items ...Item) *Element {
 	return newElement("strong", items)
 }
 
+func Code(items ...Item) *Element {
+	return newElement("code", items)
+}
+
+func Muted(items ...Item) *Element {
+	return newElement("muted", items)
+}
+
 func Form(items ...Item) *Element {
 	return newElement("form", items)
 }
 
-func Input(items ...Item) *Element {
-	return newElement("input", items)
+func Textfield(items ...Item) *Element {
+	return newElement("textfield", items)
 }
 
-func Button(items ...Item) *Element {
-	return newElement("button", items)
+func Password(items ...Item) *Element {
+	return newElement("password", items)
 }
 
-func Pre(items ...Item) *Element {
-	return newElement("pre", items)
+func Filefield(items ...Item) *Element {
+	return newElement("filefield", items)
 }
 
-func Label(items ...Item) *Element {
-	return newElement("label", items)
+func Numfield(items ...Item) *Element {
+	return newElement("numfield", items)
 }
 
-func Select(items ...Item) *Element {
-	return newElement("select", items)
+func Colorfield(items ...Item) *Element {
+	return newElement("colorfield", items)
+}
+
+func Sliderrow(items ...Item) *Element {
+	return newElement("sliderrow", items)
+}
+
+func Checkbox(items ...Item) *Element {
+	return newElement("checkbox", items)
+}
+
+func Selectfield(items ...Item) *Element {
+	return newElement("selectfield", items)
 }
 
 func Option(items ...Item) *Element {
 	return newElement("option", items)
 }
 
-func Textarea(items ...Item) *Element {
-	return newElement("textarea", items)
+func Editor(items ...Item) *Element {
+	return newElement("editor", items)
 }
 
-func Ul(items ...Item) *Element {
-	return newElement("ul", items)
+func Button(items ...Item) *Element {
+	return newElement("button", items)
 }
 
-func Li(items ...Item) *Element {
-	return newElement("li", items)
+func Field(items ...Item) *Element {
+	return newElement("field", items)
 }
 
-func Code(items ...Item) *Element {
-	return newElement("code", items)
+func Unreaddot(items ...Item) *Element {
+	return newElement("unreaddot", items)
+}
+
+func Modal(items ...Item) *Element {
+	return newElement("modal", items)
+}
+
+func Docoverlay(items ...Item) *Element {
+	return newElement("docoverlay", items)
+}
+
+func Headrow(items ...Item) *Element {
+	return newElement("headrow", items)
+}
+
+func Headactions(items ...Item) *Element {
+	return newElement("headactions", items)
+}
+
+func Previewtitle(items ...Item) *Element {
+	return newElement("previewtitle", items)
+}
+
+func Split(items ...Item) *Element {
+	return newElement("split", items)
+}
+
+func Pane(items ...Item) *Element {
+	return newElement("pane", items)
+}
+
+func Tabs(items ...Item) *Element {
+	return newElement("tabs", items)
+}
+
+func Tab(items ...Item) *Element {
+	return newElement("tab", items)
+}
+
+func Tabpanel(items ...Item) *Element {
+	return newElement("tabpanel", items)
+}
+
+func List(items ...Item) *Element {
+	return newElement("list", items)
+}
+
+func Listrow(items ...Item) *Element {
+	return newElement("listrow", items)
+}
+
+func Listtitle(items ...Item) *Element {
+	return newElement("listtitle", items)
 }
 
 func Table(items ...Item) *Element {
 	return newElement("table", items)
 }
 
-func Thead(items ...Item) *Element {
-	return newElement("thead", items)
+func Trow(items ...Item) *Element {
+	return newElement("trow", items)
 }
 
-func Tbody(items ...Item) *Element {
-	return newElement("tbody", items)
+func Hcell(items ...Item) *Element {
+	return newElement("hcell", items)
 }
 
-func Tr(items ...Item) *Element {
-	return newElement("tr", items)
+func Cell(items ...Item) *Element {
+	return newElement("cell", items)
 }
 
-func Th(items ...Item) *Element {
-	return newElement("th", items)
+func Mount(items ...Item) *Element {
+	return newElement("mount", items)
 }
 
-func Td(items ...Item) *Element {
-	return newElement("td", items)
+// Prop constructors.
+
+func Title(v string) Attr {
+	return Attr{Name: "title", Value: v}
 }
 
-// Attribute constructors.
-
-func Lang(v string) Attr {
-	return Attr{Name: "lang", Value: v}
+func Hidden() Attr {
+	return Attr{Name: "hidden", Bare: true}
 }
 
-func Charset(v string) Attr {
-	return Attr{Name: "charset", Value: v}
+func Grow() Attr {
+	return Attr{Name: "grow", Bare: true}
 }
 
-func Name(v string) Attr {
-	return Attr{Name: "name", Value: v}
+func Scripts(v string) Attr {
+	return Attr{Name: "scripts", Value: v}
 }
 
-func Content(v string) Attr {
-	return Attr{Name: "content", Value: v}
+func Classicscripts(v string) Attr {
+	return Attr{Name: "classicscripts", Value: v}
 }
 
-func Rel(v string) Attr {
-	return Attr{Name: "rel", Value: v}
+func Titleid(v string) Attr {
+	return Attr{Name: "titleid", Value: v}
+}
+
+func Home(v string) Attr {
+	return Attr{Name: "home", Value: v}
+}
+
+func Label(v string) Attr {
+	return Attr{Name: "label", Value: v}
+}
+
+func Badgeid(v string) Attr {
+	return Attr{Name: "badgeid", Value: v}
 }
 
 func Href(v string) Attr {
 	return Attr{Name: "href", Value: v}
 }
 
-func As(v string) Attr {
-	return Attr{Name: "as", Value: v}
+func Wrap() Attr {
+	return Attr{Name: "wrap", Bare: true}
 }
 
-func Type(v string) Attr {
-	return Attr{Name: "type", Value: v}
+func For(v string) Attr {
+	return Attr{Name: "for", Value: v}
 }
 
-func Crossorigin() Attr {
-	return Attr{Name: "crossorigin", Bare: true}
-}
-
-func Src(v string) Attr {
-	return Attr{Name: "src", Value: v}
-}
-
-func Defer() Attr {
-	return Attr{Name: "defer", Bare: true}
+func Autocomplete(v string) Attr {
+	return Attr{Name: "autocomplete", Value: v}
 }
 
 func Method(v string) Attr {
@@ -198,8 +262,8 @@ func Action(v string) Attr {
 	return Attr{Name: "action", Value: v}
 }
 
-func Autocomplete(v string) Attr {
-	return Attr{Name: "autocomplete", Value: v}
+func Name(v string) Attr {
+	return Attr{Name: "name", Value: v}
 }
 
 func Placeholder(v string) Attr {
@@ -230,8 +294,12 @@ func Value(v string) Attr {
 	return Attr{Name: "value", Value: v}
 }
 
-func Checked() Attr {
-	return Attr{Name: "checked", Bare: true}
+func Maxlength(v string) Attr {
+	return Attr{Name: "maxlength", Value: v}
+}
+
+func Accept(v string) Attr {
+	return Attr{Name: "accept", Value: v}
 }
 
 func Min(v string) Attr {
@@ -246,24 +314,24 @@ func Step(v string) Attr {
 	return Attr{Name: "step", Value: v}
 }
 
-func Maxlength(v string) Attr {
-	return Attr{Name: "maxlength", Value: v}
+func Narrow() Attr {
+	return Attr{Name: "narrow", Bare: true}
 }
 
-func Accept(v string) Attr {
-	return Attr{Name: "accept", Value: v}
+func Valueid(v string) Attr {
+	return Attr{Name: "valueid", Value: v}
 }
 
-func Disabled() Attr {
-	return Attr{Name: "disabled", Bare: true}
+func SliderHint(v string) Attr {
+	return Attr{Name: "hint", Value: v}
 }
 
-func For(v string) Attr {
-	return Attr{Name: "for", Value: v}
+func Checked() Attr {
+	return Attr{Name: "checked", Bare: true}
 }
 
-func Download() Attr {
-	return Attr{Name: "download", Bare: true}
+func Compact() Attr {
+	return Attr{Name: "compact", Bare: true}
 }
 
 func Rows(v string) Attr {
@@ -274,135 +342,105 @@ func Readonly() Attr {
 	return Attr{Name: "readonly", Bare: true}
 }
 
-func TitleAttr(v string) Attr {
-	return Attr{Name: "title", Value: v}
+func Small() Attr {
+	return Attr{Name: "small", Bare: true}
 }
 
-func Hidden() Attr {
-	return Attr{Name: "hidden", Bare: true}
+func Submit() Attr {
+	return Attr{Name: "submit", Bare: true}
 }
 
-func Role(v string) Attr {
-	return Attr{Name: "role", Value: v}
+func Disabled() Attr {
+	return Attr{Name: "disabled", Bare: true}
 }
 
-// ClassToken constants: the closed class-token whitelist (type declared in builder.go).
+func Download() Attr {
+	return Attr{Name: "download", Bare: true}
+}
 
-const ActionIcon ClassToken = "action-icon"
-const AppearanceModal ClassToken = "appearance-modal"
-const AppearanceModalDone ClassToken = "appearance-modal-done"
-const AppearanceModalOverlay ClassToken = "appearance-modal-overlay"
-const AppearanceModalTitle ClassToken = "appearance-modal-title"
-const AppearanceRowLabel ClassToken = "appearance-row-label"
-const AttachAdd ClassToken = "attach-add"
-const AttachLossless ClassToken = "attach-lossless"
-const Attachments ClassToken = "attachments"
-const AuthActions ClassToken = "auth-actions"
-const AuthForm ClassToken = "auth-form"
-const AuthFormStack ClassToken = "auth-form-stack"
-const AuthHint ClassToken = "auth-hint"
-const AuthStep ClassToken = "auth-step"
-const AuthSubhead ClassToken = "auth-subhead"
-const BoardGrid ClassToken = "board-grid"
-const BoardMain ClassToken = "board-main"
-const BoardPage ClassToken = "board-page"
-const Btn ClassToken = "btn"
-const BtnGhost ClassToken = "btn-ghost"
-const BtnSmall ClassToken = "btn-small"
-const Card ClassToken = "card"
-const CardCopyMsg ClassToken = "card-copy-msg"
-const CardDesc ClassToken = "card-desc"
-const CardDetail ClassToken = "card-detail"
-const CardDetailHead ClassToken = "card-detail-head"
-const CardDetailTitle ClassToken = "card-detail-title"
-const CardFields ClassToken = "card-fields"
-const CardHeadActions ClassToken = "card-head-actions"
-const CardKindSelect ClassToken = "card-kind-select"
-const CardMove ClassToken = "card-move"
-const CardMoveActions ClassToken = "card-move-actions"
-const CardMoveStack ClassToken = "card-move-stack"
-const CardOverlay ClassToken = "card-overlay"
-const CardPreviewBody ClassToken = "card-preview-body"
-const CardPreviewScreen ClassToken = "card-preview-screen"
-const CardSectionLabel ClassToken = "card-section-label"
-const CardView ClassToken = "card-view"
-const CardViewTab ClassToken = "card-view-tab"
-const CardViewTabs ClassToken = "card-view-tabs"
-const Cluster ClassToken = "cluster"
-const CommentForm ClassToken = "comment-form"
-const CommentInput ClassToken = "comment-input"
-const DataTable ClassToken = "data-table"
-const Empty ClassToken = "empty"
-const Field ClassToken = "field"
-const HandoutsBody ClassToken = "handouts-body"
-const HandoutsDoc ClassToken = "handouts-doc"
-const HandoutsPane ClassToken = "handouts-pane"
-const HandoutsPdf ClassToken = "handouts-pdf"
-const HandoutsPreview ClassToken = "handouts-preview"
-const HandoutsPreviewHead ClassToken = "handouts-preview-head"
-const HandoutsSrc ClassToken = "handouts-src"
-const HandoutsTextarea ClassToken = "handouts-textarea"
-const Host ClassToken = "host"
-const HostActions ClassToken = "host-actions"
-const HostBrand ClassToken = "host-brand"
-const HostHome ClassToken = "host-home"
-const HostSep ClassToken = "host-sep"
-const HostTitle ClassToken = "host-title"
-const HostTop ClassToken = "host-top"
-const ImportCount ClassToken = "import-count"
-const ImportDoc ClassToken = "import-doc"
-const ImportForm ClassToken = "import-form"
-const ImportFrame ClassToken = "import-frame"
-const ImportMessage ClassToken = "import-message"
-const ImportOverlay ClassToken = "import-overlay"
-const ImportPage ClassToken = "import-page"
-const ImportPreview ClassToken = "import-preview"
-const ImportTextarea ClassToken = "import-textarea"
-const InputClass ClassToken = "input"
-const Kanban ClassToken = "kanban"
-const LabelAddBtn ClassToken = "label-add-btn"
-const LabelAddRow ClassToken = "label-add-row"
-const LabelColorInput ClassToken = "label-color-input"
-const LabelCreate ClassToken = "label-create"
-const LabelPicker ClassToken = "label-picker"
-const List ClassToken = "list"
-const ListRow ClassToken = "list-row"
-const ListRowTitle ClassToken = "list-row-title"
-const ListsManage ClassToken = "lists-manage"
-const ListsManageMoverow ClassToken = "lists-manage-moverow"
-const ListsManageRows ClassToken = "lists-manage-rows"
-const ListsManageToolbar ClassToken = "lists-manage-toolbar"
-const ListsMovePos ClassToken = "lists-move-pos"
-const MatchMain ClassToken = "match-main"
-const MemberAdd ClassToken = "member-add"
-const MembersList ClassToken = "members-list"
-const Muted ClassToken = "muted"
-const NotifBadge ClassToken = "notif-badge"
-const NotifToggle ClassToken = "notif-toggle"
-const PreviewBody ClassToken = "preview-body"
-const PreviewDoc ClassToken = "preview-doc"
-const PreviewHead ClassToken = "preview-head"
-const PreviewHeadActions ClassToken = "preview-head-actions"
-const PreviewOverlay ClassToken = "preview-overlay"
-const PreviewScreenToggle ClassToken = "preview-screen-toggle"
-const PreviewTitle ClassToken = "preview-title"
-const Public ClassToken = "public"
-const PublicMain ClassToken = "public-main"
-const PublicTop ClassToken = "public-top"
-const PublicUser ClassToken = "public-user"
-const RegisterCode ClassToken = "register-code"
-const SectionClass ClassToken = "section"
-const SheetFrame ClassToken = "sheet-frame"
-const SizesActions ClassToken = "sizes-actions"
-const SizesHint ClassToken = "sizes-hint"
-const SizesModal ClassToken = "sizes-modal"
-const SizesRow ClassToken = "sizes-row"
-const SizesRowHead ClassToken = "sizes-row-head"
-const SizesValue ClassToken = "sizes-value"
-const Stack ClassToken = "stack"
-const SyncStatus ClassToken = "sync-status"
-const Timeline ClassToken = "timeline"
-const TokenList ClassToken = "token-list"
-const TokenReveal ClassToken = "token-reveal"
-const TokenValue ClassToken = "token-value"
-const UnreadDot ClassToken = "unread-dot"
+func Done(v string) Attr {
+	return Attr{Name: "done", Value: v}
+}
+
+func Doneid(v string) Attr {
+	return Attr{Name: "doneid", Value: v}
+}
+
+func View(v string) Attr {
+	return Attr{Name: "view", Value: v}
+}
+
+// Enum value constants (each carries its prop name).
+
+var AlignStart = Attr{Name: "align", Value: "start"}
+var AlignCenter = Attr{Name: "align", Value: "center"}
+var AlignEnd = Attr{Name: "align", Value: "end"}
+var AlignStretch = Attr{Name: "align", Value: "stretch"}
+
+var Primary = Attr{Name: "kind", Value: "primary"}
+var Ghost = Attr{Name: "kind", Value: "ghost"}
+
+var CheckPlain = Attr{Name: "kind", Value: "plain"}
+var CheckPreview = Attr{Name: "kind", Value: "preview"}
+var CheckCardPreview = Attr{Name: "kind", Value: "card-preview"}
+
+var DocKindDoc = Attr{Name: "kind", Value: "doc"}
+var DocKindDetail = Attr{Name: "kind", Value: "detail"}
+
+var DocVarPlain = Attr{Name: "variant", Value: "plain"}
+var DocVarHandouts = Attr{Name: "variant", Value: "handouts"}
+var DocVarImport = Attr{Name: "variant", Value: "import"}
+
+var EditorPlain = Attr{Name: "kind", Value: "plain"}
+var EditorComment = Attr{Name: "kind", Value: "comment"}
+var EditorHandouts = Attr{Name: "kind", Value: "handouts"}
+var EditorImportsrc = Attr{Name: "kind", Value: "importsrc"}
+
+var DirRow = Attr{Name: "dir", Value: "row"}
+var DirCol = Attr{Name: "dir", Value: "col"}
+
+var HeadDoc = Attr{Name: "kind", Value: "doc"}
+var HeadDetail = Attr{Name: "kind", Value: "detail"}
+
+var JustifyStart = Attr{Name: "justify", Value: "start"}
+var JustifyCenter = Attr{Name: "justify", Value: "center"}
+var JustifyEnd = Attr{Name: "justify", Value: "end"}
+var JustifyBetween = Attr{Name: "justify", Value: "between"}
+
+var ModalVarPlain = Attr{Name: "variant", Value: "plain"}
+var ModalVarLists = Attr{Name: "variant", Value: "lists"}
+var ModalVarSizes = Attr{Name: "variant", Value: "sizes"}
+
+var MountKanban = Attr{Name: "kind", Value: "kanban"}
+var MountBoardGrid = Attr{Name: "kind", Value: "board-grid"}
+var MountTimeline = Attr{Name: "kind", Value: "timeline"}
+var MountLabelPicker = Attr{Name: "kind", Value: "label-picker"}
+var MountLabelAddRow = Attr{Name: "kind", Value: "label-add-row"}
+var MountAttachments = Attr{Name: "kind", Value: "attachments"}
+var MountCardFields = Attr{Name: "kind", Value: "card-fields"}
+var MountPreviewBody = Attr{Name: "kind", Value: "preview-body"}
+var MountCardPreviewBody = Attr{Name: "kind", Value: "card-preview-body"}
+var MountHandoutsPdf = Attr{Name: "kind", Value: "handouts-pdf"}
+var MountImportPreview = Attr{Name: "kind", Value: "import-preview"}
+var MountListsManageRows = Attr{Name: "kind", Value: "lists-manage-rows"}
+var MountMembersList = Attr{Name: "kind", Value: "members-list"}
+var MountTokenList = Attr{Name: "kind", Value: "token-list"}
+var MountTokenValue = Attr{Name: "kind", Value: "token-value"}
+var MountCardCopyMsg = Attr{Name: "kind", Value: "card-copy-msg"}
+var MountImportCount = Attr{Name: "kind", Value: "import-count"}
+var MountCardTitle = Attr{Name: "kind", Value: "card-title"}
+
+var PageSheet = Attr{Name: "kind", Value: "sheet"}
+var PageFull = Attr{Name: "kind", Value: "full"}
+var PageWide = Attr{Name: "kind", Value: "wide"}
+var PageBoard = Attr{Name: "kind", Value: "board"}
+
+var PaneSrc = Attr{Name: "kind", Value: "src"}
+var PanePreview = Attr{Name: "kind", Value: "preview"}
+
+var SpaceNone = Attr{Name: "gap", Value: "none"}
+var SpaceXS = Attr{Name: "gap", Value: "xs"}
+var SpaceSM = Attr{Name: "gap", Value: "sm"}
+var SpaceMD = Attr{Name: "gap", Value: "md"}
+var SpaceLG = Attr{Name: "gap", Value: "lg"}
+var SpaceXL = Attr{Name: "gap", Value: "xl"}

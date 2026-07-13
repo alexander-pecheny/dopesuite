@@ -1,44 +1,29 @@
-doctype
-html lang="ru"
-  head
-    meta charset="utf-8"
-    meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
-    title "Профиль · xy"
-    link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin
-    link rel="stylesheet" href="/static/styles.css"
-    script src="/static/menu.js"
-    script type="module" src="/static/profile.js"
-  body class="host import-page"
-    header class="host-top"
-      h1 "Профиль"
-      div class="host-actions"
-        span class="sync-status" id="status" data-state="saved"
-        a class="action-icon" href="/" aria-label="Доски" title="Доски" "←"
+page title="Профиль · xy" kind="sheet" scripts="profile.js"
+  topbar title="Профиль"
+    iconlink href="/" label="Доски" "←"
 
-    main class="match-main"
-      div class="sheet-frame import-frame"
-        section class="auth-step"
-          p class="auth-hint" "Вы вошли как " (strong id="whoami" "…") "."
+  section
+    hint "Вы вошли как " (strong id="whoami" "…") "."
 
-        section class="auth-step" id="usernameSection" hidden
-          p class="auth-hint" "Задайте логин (один раз)."
-          form id="usernameForm" class="auth-form"
-            input class="input" id="usernameValue" type="text" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required
-            button class="btn" type="submit" "Сохранить"
-          pre id="usernameMessage" class="import-message"
+  section id="usernameSection" hidden
+    hint "Задайте логин (один раз)."
+    form id="usernameForm"
+      textfield id="usernameValue" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required grow
+      button submit "Сохранить"
+    message id="usernameMessage"
 
-        section class="auth-step"
-          p class="auth-hint" "Пароль для входа на сайт."
-          form id="passwordForm" class="auth-form auth-form-stack"
-            input class="input" id="currentPassword" type="password" placeholder="Текущий пароль (если установлен)" autocomplete="current-password"
-            input class="input" id="newPassword" type="password" placeholder="Новый пароль" autocomplete="new-password" required
-            input class="input" id="confirmPassword" type="password" placeholder="Повторите пароль" autocomplete="new-password" required
-            button class="btn" type="submit" "Сохранить пароль"
-          pre id="passwordMessage" class="import-message"
+  section
+    hint "Пароль для входа на сайт."
+    form id="passwordForm" dir="col"
+      password id="currentPassword" placeholder="Текущий пароль (если установлен)" autocomplete="current-password"
+      password id="newPassword" placeholder="Новый пароль" autocomplete="new-password" required
+      password id="confirmPassword" placeholder="Повторите пароль" autocomplete="new-password" required
+      button submit "Сохранить пароль"
+    message id="passwordMessage"
 
-        section class="auth-step"
-          p class="auth-hint" "API-токены для доступа через Trello-совместимый API (chgksuite)."
-          a class="btn btn-ghost" href="/profile/tokens" "API-токены"
+  section
+    hint "API-токены для доступа через Trello-совместимый API (chgksuite)."
+    button kind="ghost" href="/profile/tokens" "API-токены"
 
-        section class="auth-step"
-          button class="btn btn-ghost" id="logoutBtn" type="button" "Выйти"
+  section
+    button kind="ghost" id="logoutBtn" "Выйти"

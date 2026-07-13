@@ -2,89 +2,78 @@ package ui
 
 import "testing"
 
-func TestValidate_UnknownElement(t *testing.T) {
-	doc, err := Parse("t.xui", []byte("doctype\nfoo\n"))
+func mustParse(t *testing.T, src string) *Doc {
+	t.Helper()
+	doc, err := Parse("t.xui", []byte(src))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if err := Validate("t.xui", doc); err == nil {
-		t.Fatal("expected an error for an unknown element")
+	return doc
+}
+
+func wantInvalid(t *testing.T, src string) {
+	t.Helper()
+	if err := Validate("t.xui", mustParse(t, src)); err == nil {
+		t.Fatalf("expected a validation error for:\n%s", src)
 	}
 }
 
-func TestValidate_UnknownAttr(t *testing.T) {
-	doc, err := Parse("t.xui", []byte(`div bogus="x"`+"\n"))
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if err := Validate("t.xui", doc); err == nil {
-		t.Fatal("expected an error for an unknown attribute")
-	}
+func TestValidate_UnknownPrimitive(t *testing.T) {
+	wantInvalid(t, "frobnicate\n")
 }
 
-func TestValidate_UnknownClassToken(t *testing.T) {
-	doc, err := Parse("t.xui", []byte(`div class="not-a-real-token"`+"\n"))
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if err := Validate("t.xui", doc); err == nil {
-		t.Fatal("expected an error for an unknown class token")
-	}
+func TestValidate_UnknownProp(t *testing.T) {
+	wantInvalid(t, `row bogus="x"`+"\n")
+}
+
+func TestValidate_InvalidEnumValue(t *testing.T) {
+	wantInvalid(t, `row gap="huge"`+"\n")
+}
+
+func TestValidate_MissingRequiredProp(t *testing.T) {
+	wantInvalid(t, `mount id="x"`+"\n") // mount requires kind
 }
 
 func TestValidate_DuplicateID(t *testing.T) {
-	src := "doctype\ndiv\n  span id=\"x\"\n  span id=\"x\"\n"
-	doc, err := Parse("t.xui", []byte(src))
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if err := Validate("t.xui", doc); err == nil {
-		t.Fatal("expected an error for a duplicate id")
+	wantInvalid(t, "col\n  row id=\"a\"\n  row id=\"a\"\n")
+}
+
+func TestValidate_ChildNotInNamedSet(t *testing.T) {
+	wantInvalid(t, "tabs\n  row\n") // tabs allows only tab
+}
+
+func TestValidate_TextPolicyRejectsBlock(t *testing.T) {
+	wantInvalid(t, "hint\n  row\n") // hint takes text, not a container
+}
+
+func TestValidate_NoneChildrenRejected(t *testing.T) {
+	wantInvalid(t, `spacer "x"`+"\n") // spacer takes no children
+}
+
+func TestValidate_BareVsValueMismatch(t *testing.T) {
+	wantInvalid(t, `textfield required="x"`+"\n") // required is a flag
+	wantInvalid(t, `row gap`+"\n")                // gap needs a value
+}
+
+func TestValidate_PatternPropsAllowed(t *testing.T) {
+	if err := Validate("t.xui", mustParse(t, `row data-view="x" aria-label="y"`+"\n")); err != nil {
+		t.Fatalf("data-*/aria-* props should validate: %v", err)
 	}
 }
 
-func TestValidate_VoidElementWithChildren(t *testing.T) {
-	src := "doctype\nmeta charset=\"utf-8\"\n  div\n"
-	doc, err := Parse("t.xui", []byte(src))
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if err := Validate("t.xui", doc); err == nil {
-		t.Fatal("expected an error: void element with block children")
-	}
-}
-
-func TestValidate_ValidPageOK(t *testing.T) {
-	src := `doctype
-html lang="ru"
-  head
-    meta charset="utf-8"
-    title "Т"
-  body class="host"
-    header class="host-top"
-      h1 "Х"
-`
-	doc, err := Parse("t.xui", []byte(src))
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if err := Validate("t.xui", doc); err != nil {
+func TestValidate_ValidTreeOK(t *testing.T) {
+	src := "col gap=\"md\"\n  hint \"Привет\"\n  row justify=\"between\"\n    button \"OK\"\n"
+	if err := Validate("t.xui", mustParse(t, src)); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 }
 
 func TestValidate_ErrorHasFileAndLine(t *testing.T) {
-	doc, err := Parse("mypage.xui", []byte("doctype\nfoo\n"))
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	err = Validate("mypage.xui", doc)
-	if err == nil {
-		t.Fatal("expected an error")
-	}
+	doc := mustParse(t, "row\nfrobnicate\n")
+	err := Validate("mypage.xui", doc)
 	uiErr, ok := err.(*Error)
 	if !ok {
-		t.Fatalf("expected *ui.Error, got %T", err)
+		t.Fatalf("expected *ui.Error, got %T (%v)", err, err)
 	}
 	if uiErr.File != "mypage.xui" || uiErr.Line != 2 {
 		t.Fatalf("expected mypage.xui:2, got %s:%d", uiErr.File, uiErr.Line)

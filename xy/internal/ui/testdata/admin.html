@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Создать пользователей · Админка</title>
+  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu.js"></script>
+</head>
+<body class="host">
+  <header class="host-top">
+    <h1>Создать пользователей</h1>
+    <div class="host-actions">
+      <span class="sync-status" id="status" data-state="saved" aria-label="Готово" title="Готово"></span>
+      <a class="action-icon" href="/admin" aria-label="Админка" title="Админка">↩</a>
+    </div>
+  </header>
+  <main class="match-main">
+
+    <section class="auth-step">
+      <p class="auth-hint">Пароли показаны один раз. Скопируйте и разошлите.</p>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Логин</th>
+            <th>Пароль</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>anton</td>
+            <td><code>abcd2345</code></td>
+          </tr>
+          <tr>
+            <td>anya</td>
+            <td><code>wxyz6789</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <label class="field">
+        <span>Для копирования (логин + пароль)</span>
+        <textarea class="card-desc" rows="2" readonly>anton abcd2345
+anya wxyz6789</textarea>
+      </label>
+    </section>
+
+    <section class="auth-step">
+      <ul class="list">
+        <li>
+          <a class="list-row" href="/admin/create_users">
+            <span class="list-row-title">Создать пользователей</span>
+          </a>
+        </li>
+        <li class="list-row">
+          <span class="list-row-title">sasha</span>
+          <span class="muted">недопустимый логин</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="auth-step">
+      <form class="u-col u-gap-md" id="createForm" autocomplete="off" method="post" action="/admin/create_users">
+        <label class="field">
+          <span>Логины (по одному в строке)</span>
+          <textarea class="card-desc" placeholder="anton" rows="10" name="usernames" required></textarea>
+        </label>
+        <div class="u-row">
+          <button class="btn" type="submit">Создать</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

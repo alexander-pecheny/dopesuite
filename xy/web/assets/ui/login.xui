@@ -1,41 +1,26 @@
-doctype
-html lang="ru"
-  head
-    meta charset="utf-8"
-    meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
-    title "Вход · Фест"
-    link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin
-    link rel="stylesheet" href="/static/styles.css"
-    script src="/static/menu.js"
-    script defer src="/static/login.js"
-  body class="host import-page"
-    header class="host-top"
-      h1 "Вход"
-      div class="host-actions"
-        span class="sync-status" id="status" data-state="saved" aria-label="Готово" title="Готово"
-        a class="action-icon" href="/register" aria-label="Регистрация" title="Регистрация" "→"
+page title="Вход · Фест" kind="sheet" classicscripts="login.js"
+  topbar title="Вход"
+    iconlink href="/register" label="Регистрация" "→"
 
-    main class="match-main"
-      div class="sheet-frame import-frame"
-        section id="step-username" class="auth-step"
-          p class="auth-hint" "Введите логин."
-          form id="usernameForm" class="auth-form" autocomplete="on"
-            input class="input" id="loginUsername" name="username" type="text" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required autofocus
-            button class="btn" type="submit" "Дальше"
-          pre id="usernameMessage" class="import-message"
+  section id="step-username"
+    hint "Введите логин."
+    form id="usernameForm" autocomplete="on"
+      textfield id="loginUsername" name="username" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required autofocus grow
+      button submit "Дальше"
+    message id="usernameMessage"
 
-        section id="step-password" class="auth-step" hidden
-          p class="auth-hint" "Вход для " (strong id="passwordLogin") "."
-          form id="passwordForm" class="auth-form auth-form-stack" autocomplete="on"
-            input class="input" id="passwordValue" name="password" type="password" placeholder="Пароль" autocomplete="current-password" required
-            div class="auth-actions"
-              button class="btn" type="submit" "Войти по паролю"
-              button class="btn" id="requestCodeButton" type="button" "Получить код в телеграм"
-          pre id="passwordMessage" class="import-message"
+  section id="step-password" hidden
+    hint "Вход для " (strong id="passwordLogin") "."
+    form id="passwordForm" dir="col" autocomplete="on"
+      password id="passwordValue" name="password" placeholder="Пароль" autocomplete="current-password" required
+      row gap="sm" wrap
+        button submit "Войти по паролю"
+        button id="requestCodeButton" "Получить код в телеграм"
+    message id="passwordMessage"
 
-        section id="step-code" class="auth-step" hidden
-          p class="auth-hint" "Код отправлен в Telegram для " (strong id="codeLogin") "."
-          form id="codeForm" class="auth-form" autocomplete="on"
-            input class="input" id="loginCode" name="code" type="text" placeholder="Код из Telegram" autocomplete="one-time-code" spellcheck="false" autocapitalize="characters" required
-            button class="btn" type="submit" "Войти"
-          pre id="loginMessage" class="import-message"
+  section id="step-code" hidden
+    hint "Код отправлен в Telegram для " (strong id="codeLogin") "."
+    form id="codeForm" autocomplete="on"
+      textfield id="loginCode" name="code" placeholder="Код из Telegram" autocomplete="one-time-code" spellcheck="false" autocapitalize="characters" required grow
+      button submit "Войти"
+    message id="loginMessage"

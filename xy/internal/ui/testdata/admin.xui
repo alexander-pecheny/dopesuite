@@ -1,0 +1,35 @@
+# admin-like fixture: full-width page, a data table, a copy field, a link list,
+# and a column form (the /admin/create_users surface in v2 primitives).
+page title="Создать пользователей · Админка" kind="full"
+  topbar title="Создать пользователей"
+    iconlink href="/admin" label="Админка" "↩"
+
+  section
+    hint "Пароли показаны один раз. Скопируйте и разошлите."
+    table
+      trow
+        hcell "Логин"
+        hcell "Пароль"
+      trow
+        cell "anton"
+        cell (code "abcd2345")
+      trow
+        cell "anya"
+        cell (code "wxyz6789")
+    field label="Для копирования (логин + пароль)"
+      editor rows="2" readonly "anton abcd2345\nanya wxyz6789"
+
+  section
+    list
+      listrow href="/admin/create_users"
+        listtitle "Создать пользователей"
+      listrow
+        listtitle "sasha"
+        muted "недопустимый логин"
+
+  section
+    form id="createForm" dir="col" gap="md" method="post" action="/admin/create_users" autocomplete="off"
+      field label="Логины (по одному в строке)"
+        editor name="usernames" rows="10" placeholder="anton" required
+      row
+        button submit "Создать"

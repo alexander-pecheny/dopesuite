@@ -1,236 +1,182 @@
-doctype
-html lang="ru"
-  head
-    meta charset="utf-8"
-    meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
-    title "Доска · xy"
-    link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin
-    link rel="stylesheet" href="/static/styles.css"
-    script src="/static/menu.js"
-    script type="module" src="/static/board.js"
-    script type="module" src="/static/timer.js"
-  body class="host board-page"
-    header class="host-top"
-      div class="host-brand"
-        a class="host-home" href="/" aria-label="Все доски" title="Все доски" "🏠"
-        span class="host-sep" aria-hidden="true" "/"
-        h1 id="boardTitle" class="host-title" "Доска"
-      div class="host-actions"
-        span class="sync-status" id="status" data-state="saved"
-        button class="action-icon notif-toggle" id="notifToggle" type="button" aria-label="События" title="События других участников" aria-haspopup="true" aria-expanded="false"
-          "🔔" (span class="notif-badge" id="notifBadge" hidden)
-        button class="action-icon" id="timerToggle" type="button" aria-label="Таймер" title="Таймер ЧГК" aria-pressed="false" "⏰"
+page title="Доска · xy" kind="board" scripts="board.js timer.js"
+  topbar title="Доска" titleid="boardTitle" home="/"
+    iconbtn id="notifToggle" label="События" title="События других участников" badgeid="notifBadge" aria-haspopup="true" aria-expanded="false" "🔔"
+    iconbtn id="timerToggle" label="Таймер" title="Таймер ЧГК" aria-pressed="false" "⏰"
 
-    main class="board-main"
-      div id="kanban" class="kanban" hidden
+  mount id="kanban" kind="kanban" hidden
 
-    -- unlock overlay
-    div class="appearance-modal-overlay" id="unlockOverlay" hidden
-      div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Пароль доски"
-        h2 class="appearance-modal-title" "Пароль доски"
-        form id="unlockForm" class="auth-form auth-form-stack"
-          input class="input" id="unlockPass" type="password" placeholder="Пароль доски" autocomplete="off" required autofocus
-          button class="btn" type="submit" "Открыть"
-        pre id="unlockMessage" class="import-message"
+  -- unlock overlay
+  modal id="unlockOverlay" label="Пароль доски" title="Пароль доски"
+    form id="unlockForm" dir="col"
+      password id="unlockPass" placeholder="Пароль доски" autocomplete="off" required autofocus
+      button submit "Открыть"
+    message id="unlockMessage"
 
-    -- card detail overlay
-    div class="card-overlay" id="cardOverlay" hidden
-      div class="card-detail" role="dialog" aria-modal="true"
-        div class="card-detail-head"
-          select class="input card-kind-select" id="cardKind" aria-label="Тип карточки"
-            option value="question" "Вопрос"
-            option value="meta" "Метаинформация"
-            option value="heading" "Заголовок"
-            option value="other" "Другое"
-          h2 class="card-detail-title" id="cardDetailTitle" hidden
-          div class="card-head-actions"
-            span class="unread-dot" id="contentUnreadDot" hidden data-edit-only title="Непрочитанные изменения"
-            button class="btn btn-small" id="cardLink" type="button" title="Скопировать прямую ссылку на карточку" data-edit-only "🔗 Ссылка"
-            button class="btn btn-small" id="cardCopy" type="button" title="Скопировать текст вопроса для тест-сессии (экранный режим)" hidden "📋 Копировать"
-            button class="action-icon" id="cardClose" type="button" aria-label="Назад" title="Назад" "↩️"
-        div class="card-copy-msg" id="cardCopyMsg" hidden
+  -- card detail overlay
+  docoverlay id="cardOverlay" kind="detail"
+    headrow kind="detail"
+      selectfield id="cardKind" compact aria-label="Тип карточки"
+        option value="question" "Вопрос"
+        option value="meta" "Метаинформация"
+        option value="heading" "Заголовок"
+        option value="other" "Другое"
+      mount id="cardDetailTitle" kind="card-title" hidden
+      headactions kind="detail"
+        unreaddot id="contentUnreadDot" data-edit-only title="Непрочитанные изменения"
+        button id="cardLink" small title="Скопировать прямую ссылку на карточку" data-edit-only "🔗 Ссылка"
+        button id="cardCopy" small hidden title="Скопировать текст вопроса для тест-сессии (экранный режим)" "📋 Копировать"
+        iconbtn id="cardClose" label="Назад" title="Назад" "↩️"
+    mount id="cardCopyMsg" kind="card-copy-msg" hidden
 
-        -- view switch: preview (read-only) / structured fields / raw 4s text
-        div class="card-view-tabs" id="cardViewTabs" role="tablist"
-          button class="card-view-tab" id="cardTabPreview" type="button" role="tab" data-view="preview" "Просмотр"
-          button class="card-view-tab" id="cardTabFields" type="button" role="tab" data-view="fields" "Поля"
-          button class="card-view-tab" id="cardTabText" type="button" role="tab" data-view="text" "Текст"
+    -- view switch: preview (read-only) / structured fields / raw 4s text
+    tabs id="cardViewTabs"
+      tab id="cardTabPreview" view="preview" "Просмотр"
+      tab id="cardTabFields" view="fields" "Поля"
+      tab id="cardTabText" view="text" "Текст"
 
-        -- Просмотр: single-card docx-style render (read-only)
-        div class="card-view" id="cardViewPreview" hidden
-          label class="attach-lossless card-preview-screen" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения"
-            (input type="checkbox" id="cardPreviewScreen") " для экрана"
-          div class="preview-body card-preview-body" id="cardPreviewBody" title="Двойной клик — редактировать"
+    -- Просмотр: single-card docx-style render (read-only)
+    tabpanel id="cardViewPreview"
+      checkbox id="cardPreviewScreen" kind="card-preview" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения" " для экрана"
+      mount id="cardPreviewBody" kind="card-preview-body" title="Двойной клик — редактировать"
 
-        -- Поля: structured field editor (question cards)
-        div class="card-view" id="cardViewFields" hidden
-          div class="card-fields" id="cardFields"
+    -- Поля: structured field editor (question cards)
+    tabpanel id="cardViewFields"
+      mount id="cardFields" kind="card-fields"
 
-        -- Текст: raw 4s editor
-        div class="card-view" id="cardViewText" hidden
-          label class="card-section-label" id="cardDescLabel" "Описание"
-          textarea class="card-desc" id="cardDesc" spellcheck="false"
+    -- Текст: raw 4s editor
+    tabpanel id="cardViewText"
+      label id="cardDescLabel" "Описание"
+      editor id="cardDesc" spellcheck="false"
 
-        div class="auth-actions"
-          button class="btn" id="cardSave" type="button" "Сохранить"
-          button class="btn btn-ghost" id="cardDelete" type="button" data-edit-only "Удалить карточку"
+    row gap="sm" wrap
+      button id="cardSave" "Сохранить"
+      button kind="ghost" id="cardDelete" data-edit-only "Удалить карточку"
 
-        label class="card-section-label" data-edit-only "Метки"
-        div class="label-picker" id="labelPicker" data-edit-only
-        div class="label-add-row" id="labelAddRow" data-edit-only
-          button class="input label-add-btn" id="labelAddBtn" type="button" "+ добавить метку…"
-        form id="newLabelForm" class="label-create" data-edit-only
-          input class="input" id="newLabelName" type="text" placeholder="Новая метка"
-          input type="color" id="newLabelColor" value="#4477aa" class="label-color-input"
-          button class="btn btn-small" type="submit" "+"
+    label data-edit-only "Метки"
+    mount id="labelPicker" kind="label-picker" data-edit-only
+    mount id="labelAddRow" kind="label-add-row" data-edit-only
+      button id="labelAddBtn" "+ добавить метку…"
+    form id="newLabelForm" dir="row" gap="sm" data-edit-only
+      textfield id="newLabelName" placeholder="Новая метка" grow
+      colorfield id="newLabelColor" value="#4477aa"
+      button small submit "+"
 
-        label class="card-section-label" data-edit-only "Вложения"
-        div class="attachments" id="attachments" data-edit-only
-        div class="attach-add" data-edit-only
-          input type="file" id="attachFile" class="input"
-          label class="attach-lossless" (input type="checkbox" id="attachLossless") " без потерь"
-          button class="btn btn-small" id="attachUpload" type="button" "Загрузить"
+    label data-edit-only "Вложения"
+    mount id="attachments" kind="attachments" data-edit-only
+    row gap="sm" align="center" wrap data-edit-only
+      filefield id="attachFile"
+      checkbox id="attachLossless" " без потерь"
+      button small id="attachUpload" "Загрузить"
 
-        label class="card-section-label" data-edit-only "Переместить / копировать"
-        div class="card-move" data-edit-only
-          select id="moveBoard" class="input" title="Доска"
-          select id="moveList" class="input" title="Список"
-          select id="movePos" class="input" title="Позиция"
-        div class="card-move-actions" data-edit-only
-          button class="btn btn-small" id="copyBtn" type="button" "Копировать"
-          button class="btn btn-small btn-ghost" id="moveBtn" type="button" "Переместить"
+    label data-edit-only "Переместить / копировать"
+    row gap="sm" align="center" wrap data-edit-only
+      selectfield id="moveBoard" title="Доска" grow
+      selectfield id="moveList" title="Список" grow
+      selectfield id="movePos" title="Позиция" grow
+    row gap="sm" align="center" wrap data-edit-only
+      button small id="copyBtn" "Копировать"
+      button small kind="ghost" id="moveBtn" "Переместить"
 
-        label class="card-section-label" data-edit-only "Лента " (span class="unread-dot" id="commentsUnreadDot" hidden title="Непрочитанные комментарии")
-        div class="timeline" id="timeline" data-edit-only
-        form id="commentForm" class="comment-form" data-edit-only
-          textarea class="card-desc comment-input" id="commentInput" placeholder="Комментарий…" spellcheck="false"
-          button class="btn btn-small" type="submit" "Отправить"
-        pre id="cardMessage" class="import-message"
+    label data-edit-only "Лента " (unreaddot id="commentsUnreadDot" title="Непрочитанные комментарии")
+    mount id="timeline" kind="timeline" data-edit-only
+    form id="commentForm" dir="col" data-edit-only
+      editor id="commentInput" kind="comment" placeholder="Комментарий…" spellcheck="false"
+      button small submit "Отправить"
+    message id="cardMessage"
 
-    -- list preview overlay (docx-style render, JS-only)
-    div class="card-overlay preview-overlay" id="previewOverlay" hidden
-      div class="preview-doc" role="dialog" aria-modal="true" aria-label="Предпросмотр списка"
-        div class="preview-head"
-          h2 class="preview-title" id="previewTitle" "Предпросмотр"
-          div class="preview-head-actions"
-            button class="btn btn-small" id="previewCopyTesters" type="button" hidden "👥 Копировать список тестеров"
-            label class="attach-lossless preview-screen-toggle" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения"
-              (input type="checkbox" id="previewScreen") " для экрана"
-            button class="action-icon" id="previewClose" type="button" aria-label="Закрыть" "×"
-        div class="preview-body" id="previewBody"
+  -- list preview overlay (docx-style render, JS-only)
+  docoverlay id="previewOverlay" kind="doc" label="Предпросмотр списка"
+    headrow
+      previewtitle id="previewTitle" "Предпросмотр"
+      headactions
+        button small id="previewCopyTesters" hidden "👥 Копировать список тестеров"
+        checkbox id="previewScreen" kind="preview" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения" " для экрана"
+        iconbtn id="previewClose" label="Закрыть" "×"
+    mount id="previewBody" kind="preview-body"
 
-    -- import verification overlay: the parsed 4s source (left, editable) next to
-    -- its live preview (right), so parsing mistakes can be fixed before the
-    -- package becomes a list. Only .docx needs it — .4s/.zip import straight.
-    div class="card-overlay import-overlay" id="importOverlay" hidden
-      div class="preview-doc import-doc" role="dialog" aria-modal="true" aria-label="Проверка импорта"
-        div class="preview-head"
-          h2 class="preview-title" id="importTitle" "Проверка импорта"
-          div class="preview-head-actions"
-            span class="import-count" id="importCount"
-            button class="btn btn-small" id="importCommit" type="button" "Импортировать"
-            button class="action-icon" id="importClose" type="button" aria-label="Закрыть" "×"
-        div class="handouts-body"
-          div class="handouts-pane handouts-src"
-            textarea class="input handouts-textarea import-textarea" id="importSource" spellcheck="false" aria-label="Исходник 4s"
-          div class="handouts-pane import-preview" id="importPreview"
+  -- import verification overlay: the parsed 4s source (left, editable) next to
+  -- its live preview (right), so parsing mistakes can be fixed before the
+  -- package becomes a list. Only .docx needs it — .4s/.zip import straight.
+  docoverlay id="importOverlay" kind="doc" variant="import" label="Проверка импорта"
+    headrow
+      previewtitle id="importTitle" "Проверка импорта"
+      headactions
+        mount id="importCount" kind="import-count"
+        button small id="importCommit" "Импортировать"
+        iconbtn id="importClose" label="Закрыть" "×"
+    split
+      pane kind="src"
+        editor id="importSource" kind="importsrc" spellcheck="false" aria-label="Исходник 4s"
+      mount id="importPreview" kind="import-preview"
 
-    -- handouts generation overlay: edit the chgksuite .hndt source (left) and
-    -- render it to a PDF via the server (right). The PDF is ephemeral.
-    div class="card-overlay preview-overlay" id="handoutsOverlay" hidden
-      div class="preview-doc handouts-doc" role="dialog" aria-modal="true" aria-label="Генерация раздаток"
-        div class="preview-head"
-          h2 class="preview-title" "Генерация раздаток"
-          div class="preview-head-actions"
-            button class="action-icon" id="handoutsClose" type="button" aria-label="Закрыть" "×"
-        div class="handouts-body"
-          div class="handouts-pane handouts-src"
-            label class="card-section-label" "Источник (.hndt)"
-            textarea class="card-desc handouts-textarea" id="handoutsSource" spellcheck="false"
-            div class="card-move-actions"
-              button class="btn btn-small" id="handoutsGenerate" type="button" "Сгенерировать PDF"
-              button class="btn btn-small btn-ghost" id="handoutsSplitFit" type="button" title="Подобрать раскладку (split-fit) и скачать zip со всеми PDF" "✂ Split-fit (zip)"
-            pre id="handoutsMessage" class="import-message"
-          div class="handouts-pane handouts-preview"
-            div class="handouts-preview-head"
-              label class="card-section-label" "PDF"
-              a class="btn btn-small" id="handoutsDownload" hidden download "Скачать"
-            div class="handouts-pdf" id="handoutsPdf"
+  -- handouts generation overlay: edit the chgksuite .hndt source (left) and
+  -- render it to a PDF via the server (right). The PDF is ephemeral.
+  docoverlay id="handoutsOverlay" kind="doc" variant="handouts" label="Генерация раздаток"
+    headrow
+      previewtitle "Генерация раздаток"
+      headactions
+        iconbtn id="handoutsClose" label="Закрыть" "×"
+    split
+      pane kind="src"
+        label "Источник (.hndt)"
+        editor id="handoutsSource" kind="handouts" spellcheck="false"
+        row gap="sm" align="center" wrap
+          button small id="handoutsGenerate" "Сгенерировать PDF"
+          button small kind="ghost" id="handoutsSplitFit" title="Подобрать раскладку (split-fit) и скачать zip со всеми PDF" "✂ Split-fit (zip)"
+        message id="handoutsMessage"
+      pane kind="preview"
+        row gap="sm" align="center" justify="between"
+          label "PDF"
+          button small download id="handoutsDownload" hidden "Скачать"
+        mount id="handoutsPdf" kind="handouts-pdf"
 
-    -- move / copy list overlay (within board → re-rank; other board →
-    -- client-side re-encryption of the list + its cards)
-    div class="appearance-modal-overlay" id="moveListOverlay" hidden
-      div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Переместить список"
-        h2 class="appearance-modal-title" "Переместить список"
-        div class="card-move card-move-stack"
-          label class="card-section-label" for="moveListBoard" "Доска"
-          select id="moveListBoard" class="input" title="Доска"
-          label class="card-section-label" for="moveListPos" "Позиция"
-          select id="moveListPos" class="input" title="Позиция"
-        div class="card-move-actions"
-          button class="btn btn-small" id="moveListCopyBtn" type="button" "Копировать"
-          button class="btn btn-small btn-ghost" id="moveListMoveBtn" type="button" "Переместить"
-        pre id="moveListMessage" class="import-message"
-        button class="appearance-modal-done" id="moveListClose" type="button" "Закрыть"
+  -- move / copy list overlay (within board → re-rank; other board →
+  -- client-side re-encryption of the list + its cards)
+  modal id="moveListOverlay" label="Переместить список" title="Переместить список" done="Закрыть" doneid="moveListClose"
+    col gap="sm"
+      label for="moveListBoard" "Доска"
+      selectfield id="moveListBoard" title="Доска"
+      label for="moveListPos" "Позиция"
+      selectfield id="moveListPos" title="Позиция"
+    row gap="sm" align="center" wrap
+      button small id="moveListCopyBtn" "Копировать"
+      button small kind="ghost" id="moveListMoveBtn" "Переместить"
+    message id="moveListMessage"
 
-    -- lists management overlay: reorder lists (drag / position), select several
-    -- and move them together, and link consecutive lists into a group
-    -- (list_of_lists) with shared numbering + combined export.
-    div class="appearance-modal-overlay" id="listsManageOverlay" hidden
-      div class="appearance-modal lists-manage" role="dialog" aria-modal="true" aria-label="Управление списками"
-        h2 class="appearance-modal-title" "Управление списками"
-        div class="lists-manage-toolbar"
-          button class="btn btn-small" id="listsLinkBtn" type="button" disabled title="Выберите подряд идущие списки и свяжите их в группу" "🔗 Связать списки"
-          div class="lists-manage-moverow"
-            input class="input lists-move-pos" id="listsMovePos" type="number" min="1" placeholder="№"
-            button class="btn btn-small btn-ghost" id="listsMoveBtn" type="button" disabled title="Переместить выбранные на указанную позицию" "Переместить выбранные"
-        div class="lists-manage-rows" id="listsManageRows"
-        pre id="listsManageMessage" class="import-message"
-        button class="appearance-modal-done" id="listsManageClose" type="button" "Готово"
+  -- lists management overlay: reorder lists (drag / position), select several
+  -- and move them together, and link consecutive lists into a group
+  -- (list_of_lists) with shared numbering + combined export.
+  modal id="listsManageOverlay" label="Управление списками" title="Управление списками" variant="lists" done="Готово" doneid="listsManageClose"
+    row gap="sm" align="center" justify="between" wrap
+      button small id="listsLinkBtn" disabled title="Выберите подряд идущие списки и свяжите их в группу" "🔗 Связать списки"
+      row gap="sm" align="center"
+        numfield id="listsMovePos" min="1" placeholder="№" narrow
+        button small kind="ghost" id="listsMoveBtn" disabled title="Переместить выбранные на указанную позицию" "Переместить выбранные"
+    mount id="listsManageRows" kind="lists-manage-rows"
+    message id="listsManageMessage"
 
-    -- sizes overlay: list width + max card height, stored per browser
-    div class="appearance-modal-overlay" id="sizesOverlay" hidden
-      div class="appearance-modal sizes-modal" role="dialog" aria-modal="true" aria-label="Изменить размеры"
-        h2 class="appearance-modal-title" "Изменить размеры"
-        div class="sizes-row"
-          div class="sizes-row-head"
-            label class="appearance-row-label" for="sizesBoardW" "Ширина рабочей области"
-            span class="sizes-value" id="sizesBoardWVal"
-          input type="range" id="sizesBoardW" min="800" max="3200" step="50"
-          p class="sizes-hint" "Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
-        div class="sizes-row"
-          div class="sizes-row-head"
-            label class="appearance-row-label" for="sizesListW" "Ширина списка"
-            span class="sizes-value" id="sizesListWVal"
-          input type="range" id="sizesListW" min="200" max="640" step="10"
-        div class="sizes-row"
-          div class="sizes-row-head"
-            label class="appearance-row-label" for="sizesCardH" "Текст карточки"
-            span class="sizes-value" id="sizesCardHVal"
-          input type="range" id="sizesCardH" min="1" max="12" step="1"
-          p class="sizes-hint" "Сколько строк вопроса показывать на карточке. На максимуме — весь текст."
-        div class="sizes-actions"
-          button class="btn btn-small btn-ghost" id="sizesReset" type="button" "Сбросить по умолчанию"
-          button class="appearance-modal-done" id="sizesClose" type="button" "Готово"
+  -- sizes overlay: list width + max card height, stored per browser
+  modal id="sizesOverlay" label="Изменить размеры" title="Изменить размеры" variant="sizes"
+    sliderrow id="sizesBoardW" label="Ширина рабочей области" valueid="sizesBoardWVal" min="800" max="3200" step="50" hint="Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
+    sliderrow id="sizesListW" label="Ширина списка" valueid="sizesListWVal" min="200" max="640" step="10"
+    sliderrow id="sizesCardH" label="Текст карточки" valueid="sizesCardHVal" min="1" max="12" step="1" hint="Сколько строк вопроса показывать на карточке. На максимуме — весь текст."
+    row gap="sm" align="center" justify="between"
+      button small kind="ghost" id="sizesReset" "Сбросить по умолчанию"
+      button id="sizesClose" "Готово"
 
-    -- members / sharing overlay
-    div class="appearance-modal-overlay" id="membersOverlay" hidden
-      div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Участники доски"
-        h2 class="appearance-modal-title" "Участники доски"
-        div class="members-list" id="membersList"
-        form id="addMemberForm" class="member-add" hidden
-          input class="input" id="addMemberName" type="text" placeholder="Имя пользователя" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
-          button class="btn btn-small" type="submit" "Добавить"
-        pre id="membersMessage" class="import-message"
-        button class="appearance-modal-done" id="membersClose" type="button" "Готово"
+  -- members / sharing overlay
+  modal id="membersOverlay" label="Участники доски" title="Участники доски" done="Готово" doneid="membersClose"
+    mount id="membersList" kind="members-list"
+    form id="addMemberForm" dir="row" gap="sm" hidden
+      textfield id="addMemberName" placeholder="Имя пользователя" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" grow
+      button small submit "Добавить"
+    message id="membersMessage"
 
-    -- paste-image overlay
-    div class="appearance-modal-overlay" id="pasteOverlay" hidden
-      div class="appearance-modal" role="dialog" aria-modal="true" aria-label="Вставить изображение"
-        h2 class="appearance-modal-title" "Вставить изображение"
-        form id="pasteForm" class="auth-form auth-form-stack"
-          input class="input" id="pasteName" type="text" placeholder="Имя файла" autocomplete="off" required
-          label class="attach-lossless" (input type="checkbox" id="pasteCompress" checked) " сжать (WebP)"
-          div class="auth-actions"
-            button class="btn" type="submit" "Сохранить"
-            button class="btn btn-ghost" id="pasteCancel" type="button" "Отмена"
+  -- paste-image overlay
+  modal id="pasteOverlay" label="Вставить изображение" title="Вставить изображение"
+    form id="pasteForm" dir="col"
+      textfield id="pasteName" placeholder="Имя файла" autocomplete="off" required
+      checkbox id="pasteCompress" checked " сжать (WebP)"
+      row gap="sm" wrap
+        button submit "Сохранить"
+        button kind="ghost" id="pasteCancel" "Отмена"

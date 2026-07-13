@@ -1,482 +1,214 @@
 {
-  "globalAttrs": [
-    "id",
-    "class",
-    "title",
-    "hidden",
-    "role"
+  "enums": {
+    "space":          { "prefix": "Space",    "values": ["none", "xs", "sm", "md", "lg", "xl"] },
+    "align":          { "prefix": "Align",    "values": ["start", "center", "end", "stretch"] },
+    "justify":        { "prefix": "Justify",  "values": ["start", "center", "end", "between"] },
+    "button-kind":    { "prefix": "",         "values": ["primary", "ghost"] },
+    "page-kind":      { "prefix": "Page",     "values": ["sheet", "full", "wide", "board"] },
+    "form-dir":       { "prefix": "Dir",      "values": ["row", "col"] },
+    "editor-kind":    { "prefix": "Editor",   "values": ["plain", "comment", "handouts", "importsrc"] },
+    "checkbox-kind":  { "prefix": "Check",    "values": ["plain", "preview", "card-preview"] },
+    "doc-kind":       { "prefix": "DocKind",  "values": ["doc", "detail"] },
+    "doc-variant":    { "prefix": "DocVar",   "values": ["plain", "handouts", "import"] },
+    "modal-variant":  { "prefix": "ModalVar", "values": ["plain", "lists", "sizes"] },
+    "pane-kind":      { "prefix": "Pane",     "values": ["src", "preview"] },
+    "head-kind":      { "prefix": "Head",     "values": ["doc", "detail"] },
+    "mount-kind":     { "prefix": "Mount",    "values": [
+      "kanban", "board-grid", "timeline", "label-picker", "label-add-row",
+      "attachments", "card-fields", "preview-body", "card-preview-body",
+      "handouts-pdf", "import-preview", "lists-manage-rows", "members-list",
+      "token-list", "token-value", "card-copy-msg", "import-count", "card-title"
+    ] }
+  },
+  "universal": [
+    { "name": "id" },
+    { "name": "title" },
+    { "name": "hidden", "kind": "bare" },
+    { "name": "grow", "kind": "bare" }
   ],
-  "attrPatterns": [
-    "aria-*",
-    "data-*"
-  ],
-  "attrs": [
-    {
-      "name": "lang",
-      "kind": "value"
-    },
-    {
-      "name": "charset",
-      "kind": "value"
-    },
-    {
-      "name": "name",
-      "kind": "value"
-    },
-    {
-      "name": "content",
-      "kind": "value"
-    },
-    {
-      "name": "rel",
-      "kind": "value"
-    },
-    {
-      "name": "href",
-      "kind": "value"
-    },
-    {
-      "name": "as",
-      "kind": "value"
-    },
-    {
-      "name": "type",
-      "kind": "value"
-    },
-    {
-      "name": "crossorigin",
-      "kind": "bare"
-    },
-    {
-      "name": "src",
-      "kind": "value"
-    },
-    {
-      "name": "defer",
-      "kind": "bare"
-    },
-    {
-      "name": "method",
-      "kind": "value"
-    },
-    {
-      "name": "action",
-      "kind": "value"
-    },
-    {
-      "name": "autocomplete",
-      "kind": "value"
-    },
-    {
-      "name": "placeholder",
-      "kind": "value"
-    },
-    {
-      "name": "spellcheck",
-      "kind": "value"
-    },
-    {
-      "name": "autocapitalize",
-      "kind": "value"
-    },
-    {
-      "name": "autocorrect",
-      "kind": "value"
-    },
-    {
-      "name": "required",
-      "kind": "bare"
-    },
-    {
-      "name": "autofocus",
-      "kind": "bare"
-    },
-    {
-      "name": "value",
-      "kind": "value"
-    },
-    {
-      "name": "checked",
-      "kind": "bare"
-    },
-    {
-      "name": "min",
-      "kind": "value"
-    },
-    {
-      "name": "max",
-      "kind": "value"
-    },
-    {
-      "name": "step",
-      "kind": "value"
-    },
-    {
-      "name": "maxlength",
-      "kind": "value"
-    },
-    {
-      "name": "accept",
-      "kind": "value"
-    },
-    {
-      "name": "disabled",
-      "kind": "bare"
-    },
-    {
-      "name": "for",
-      "kind": "value"
-    },
-    {
-      "name": "download",
-      "kind": "bare"
-    },
-    {
-      "name": "rows",
-      "kind": "value"
-    },
-    {
-      "name": "readonly",
-      "kind": "bare"
-    },
-    {
-      "name": "id",
-      "kind": "value"
-    },
-    {
-      "name": "class",
-      "kind": "value"
-    },
-    {
-      "name": "title",
-      "kind": "value"
-    },
-    {
-      "name": "hidden",
-      "kind": "bare"
-    },
-    {
-      "name": "role",
-      "kind": "value"
-    }
-  ],
-  "elements": [
-    {
-      "tag": "html",
-      "attrs": [
-        "lang"
-      ]
-    },
-    {
-      "tag": "head",
-      "attrs": []
-    },
-    {
-      "tag": "meta",
-      "attrs": [
-        "charset",
-        "name",
-        "content"
+  "propPatterns": ["data-*", "aria-*"],
+  "primitives": [
+    { "name": "page",
+      "props": [
+        { "name": "title", "required": true },
+        { "name": "kind", "enum": "page-kind" },
+        { "name": "scripts" },
+        { "name": "classicscripts" }
       ],
-      "void": true
-    },
-    {
-      "tag": "title",
-      "attrs": []
-    },
-    {
-      "tag": "link",
-      "attrs": [
-        "rel",
-        "href",
-        "as",
-        "type",
-        "crossorigin"
+      "children": "any" },
+
+    { "name": "topbar",
+      "props": [
+        { "name": "title", "required": true },
+        { "name": "titleid" },
+        { "name": "home" }
       ],
-      "void": true
-    },
-    {
-      "tag": "script",
-      "attrs": [
-        "src",
-        "type",
-        "defer"
-      ]
-    },
-    {
-      "tag": "body",
-      "attrs": []
-    },
-    {
-      "tag": "header",
-      "attrs": []
-    },
-    {
-      "tag": "h1",
-      "attrs": []
-    },
-    {
-      "tag": "h2",
-      "attrs": []
-    },
-    {
-      "tag": "h3",
-      "attrs": []
-    },
-    {
-      "tag": "div",
-      "attrs": []
-    },
-    {
-      "tag": "span",
-      "attrs": []
-    },
-    {
-      "tag": "a",
-      "attrs": [
-        "href",
-        "download"
-      ]
-    },
-    {
-      "tag": "main",
-      "attrs": []
-    },
-    {
-      "tag": "section",
-      "attrs": []
-    },
-    {
-      "tag": "p",
-      "attrs": []
-    },
-    {
-      "tag": "strong",
-      "attrs": []
-    },
-    {
-      "tag": "form",
-      "attrs": [
-        "method",
-        "action",
-        "autocomplete"
-      ]
-    },
-    {
-      "tag": "input",
-      "attrs": [
-        "name",
-        "type",
-        "placeholder",
-        "autocomplete",
-        "spellcheck",
-        "autocapitalize",
-        "autocorrect",
-        "required",
-        "autofocus",
-        "value",
-        "checked",
-        "min",
-        "max",
-        "step",
-        "maxlength",
-        "accept"
+      "children": ["iconbtn", "iconlink"] },
+
+    { "name": "iconbtn",
+      "props": [
+        { "name": "label", "required": true },
+        { "name": "badgeid" }
       ],
-      "void": true
-    },
-    {
-      "tag": "button",
-      "attrs": [
-        "type",
-        "disabled"
-      ]
-    },
-    {
-      "tag": "pre",
-      "attrs": []
-    },
-    {
-      "tag": "label",
-      "attrs": [
-        "for"
-      ]
-    },
-    {
-      "tag": "select",
-      "attrs": []
-    },
-    {
-      "tag": "option",
-      "attrs": [
-        "value"
-      ]
-    },
-    {
-      "tag": "textarea",
-      "attrs": [
-        "spellcheck",
-        "placeholder",
-        "rows",
-        "readonly",
-        "name",
-        "required"
-      ]
-    },
-    {
-      "tag": "ul",
-      "attrs": []
-    },
-    {
-      "tag": "li",
-      "attrs": []
-    },
-    {
-      "tag": "code",
-      "attrs": []
-    },
-    {
-      "tag": "table",
-      "attrs": []
-    },
-    {
-      "tag": "thead",
-      "attrs": []
-    },
-    {
-      "tag": "tbody",
-      "attrs": []
-    },
-    {
-      "tag": "tr",
-      "attrs": []
-    },
-    {
-      "tag": "th",
-      "attrs": []
-    },
-    {
-      "tag": "td",
-      "attrs": []
-    }
-  ],
-  "classes": [
-    "action-icon",
-    "appearance-modal",
-    "appearance-modal-done",
-    "appearance-modal-overlay",
-    "appearance-modal-title",
-    "appearance-row-label",
-    "attach-add",
-    "attach-lossless",
-    "attachments",
-    "auth-actions",
-    "auth-form",
-    "auth-form-stack",
-    "auth-hint",
-    "auth-step",
-    "auth-subhead",
-    "board-grid",
-    "board-main",
-    "board-page",
-    "btn",
-    "btn-ghost",
-    "btn-small",
-    "card",
-    "card-copy-msg",
-    "card-desc",
-    "card-detail",
-    "card-detail-head",
-    "card-detail-title",
-    "card-fields",
-    "card-head-actions",
-    "card-kind-select",
-    "card-move",
-    "card-move-actions",
-    "card-move-stack",
-    "card-overlay",
-    "card-preview-body",
-    "card-preview-screen",
-    "card-section-label",
-    "card-view",
-    "card-view-tab",
-    "card-view-tabs",
-    "cluster",
-    "comment-form",
-    "comment-input",
-    "data-table",
-    "empty",
-    "field",
-    "handouts-body",
-    "handouts-doc",
-    "handouts-pane",
-    "handouts-pdf",
-    "handouts-preview",
-    "handouts-preview-head",
-    "handouts-src",
-    "handouts-textarea",
-    "host",
-    "host-actions",
-    "host-brand",
-    "host-home",
-    "host-sep",
-    "host-title",
-    "host-top",
-    "import-count",
-    "import-doc",
-    "import-form",
-    "import-frame",
-    "import-message",
-    "import-overlay",
-    "import-page",
-    "import-preview",
-    "import-textarea",
-    "input",
-    "kanban",
-    "label-add-btn",
-    "label-add-row",
-    "label-color-input",
-    "label-create",
-    "label-picker",
-    "list",
-    "list-row",
-    "list-row-title",
-    "lists-manage",
-    "lists-manage-moverow",
-    "lists-manage-rows",
-    "lists-manage-toolbar",
-    "lists-move-pos",
-    "match-main",
-    "member-add",
-    "members-list",
-    "muted",
-    "notif-badge",
-    "notif-toggle",
-    "preview-body",
-    "preview-doc",
-    "preview-head",
-    "preview-head-actions",
-    "preview-overlay",
-    "preview-screen-toggle",
-    "preview-title",
-    "public",
-    "public-main",
-    "public-top",
-    "public-user",
-    "register-code",
-    "section",
-    "sheet-frame",
-    "sizes-actions",
-    "sizes-hint",
-    "sizes-modal",
-    "sizes-row",
-    "sizes-row-head",
-    "sizes-value",
-    "stack",
-    "sync-status",
-    "timeline",
-    "token-list",
-    "token-reveal",
-    "token-value",
-    "unread-dot"
+      "children": "text" },
+
+    { "name": "iconlink",
+      "props": [
+        { "name": "href", "required": true },
+        { "name": "label", "required": true }
+      ],
+      "children": "text" },
+
+    { "name": "col",
+      "props": [
+        { "name": "gap", "enum": "space" },
+        { "name": "align", "enum": "align" },
+        { "name": "justify", "enum": "justify" },
+        { "name": "wrap", "kind": "bare" }
+      ],
+      "children": "any" },
+
+    { "name": "row",
+      "props": [
+        { "name": "gap", "enum": "space" },
+        { "name": "align", "enum": "align" },
+        { "name": "justify", "enum": "justify" },
+        { "name": "wrap", "kind": "bare" }
+      ],
+      "children": "any" },
+
+    { "name": "spacer", "props": [], "children": "none" },
+    { "name": "section", "props": [], "children": "any" },
+
+    { "name": "text", "props": [], "children": "text" },
+    { "name": "hint", "props": [], "children": "text" },
+    { "name": "subhead", "props": [], "children": "text" },
+    { "name": "label", "props": [{ "name": "for" }], "children": "text" },
+    { "name": "bigcode", "props": [], "children": "none" },
+    { "name": "message", "props": [], "children": "none" },
+    { "name": "strong", "props": [], "children": "text" },
+    { "name": "code", "props": [], "children": "text" },
+    { "name": "muted", "props": [], "children": "text" },
+
+    { "name": "form",
+      "props": [
+        { "name": "dir", "enum": "form-dir" },
+        { "name": "gap", "enum": "space" },
+        { "name": "autocomplete" },
+        { "name": "method" },
+        { "name": "action" }
+      ],
+      "children": "any" },
+
+    { "name": "textfield",
+      "props": [
+        { "name": "name" }, { "name": "placeholder" }, { "name": "autocomplete" },
+        { "name": "spellcheck" }, { "name": "autocapitalize" }, { "name": "autocorrect" },
+        { "name": "required", "kind": "bare" }, { "name": "autofocus", "kind": "bare" },
+        { "name": "value" }, { "name": "maxlength" }
+      ],
+      "children": "none" },
+
+    { "name": "password",
+      "props": [
+        { "name": "name" }, { "name": "placeholder" }, { "name": "autocomplete" },
+        { "name": "spellcheck" }, { "name": "autocapitalize" }, { "name": "autocorrect" },
+        { "name": "required", "kind": "bare" }, { "name": "autofocus", "kind": "bare" },
+        { "name": "value" }, { "name": "maxlength" }
+      ],
+      "children": "none" },
+
+    { "name": "filefield",
+      "props": [{ "name": "accept" }, { "name": "required", "kind": "bare" }],
+      "children": "none" },
+
+    { "name": "numfield",
+      "props": [
+        { "name": "min" }, { "name": "max" }, { "name": "step" },
+        { "name": "placeholder" }, { "name": "narrow", "kind": "bare" }
+      ],
+      "children": "none" },
+
+    { "name": "colorfield", "props": [{ "name": "value" }], "children": "none" },
+
+    { "name": "sliderrow",
+      "props": [
+        { "name": "id", "required": true },
+        { "name": "label", "required": true },
+        { "name": "valueid", "required": true },
+        { "name": "min" }, { "name": "max" }, { "name": "step" }, { "name": "hint" }
+      ],
+      "children": "none" },
+
+    { "name": "checkbox",
+      "props": [{ "name": "kind", "enum": "checkbox-kind" }, { "name": "checked", "kind": "bare" }],
+      "children": "text" },
+
+    { "name": "selectfield",
+      "props": [{ "name": "compact", "kind": "bare" }],
+      "children": ["option"] },
+
+    { "name": "option",
+      "props": [{ "name": "value", "required": true }],
+      "children": "text" },
+
+    { "name": "editor",
+      "props": [
+        { "name": "kind", "enum": "editor-kind" }, { "name": "placeholder" },
+        { "name": "spellcheck" }, { "name": "rows" }, { "name": "readonly", "kind": "bare" },
+        { "name": "name" }, { "name": "required", "kind": "bare" }
+      ],
+      "children": "text" },
+
+    { "name": "button",
+      "props": [
+        { "name": "kind", "enum": "button-kind" }, { "name": "small", "kind": "bare" },
+        { "name": "submit", "kind": "bare" }, { "name": "disabled", "kind": "bare" },
+        { "name": "href" }, { "name": "download", "kind": "bare" }
+      ],
+      "children": "text" },
+
+    { "name": "field", "props": [{ "name": "label", "required": true }], "children": "any" },
+    { "name": "unreaddot", "props": [], "children": "none" },
+
+    { "name": "modal",
+      "props": [
+        { "name": "id", "required": true },
+        { "name": "label", "required": true },
+        { "name": "title" }, { "name": "done" }, { "name": "doneid" },
+        { "name": "variant", "enum": "modal-variant" }
+      ],
+      "children": "any" },
+
+    { "name": "docoverlay",
+      "props": [
+        { "name": "id", "required": true },
+        { "name": "label" },
+        { "name": "kind", "enum": "doc-kind" },
+        { "name": "variant", "enum": "doc-variant" }
+      ],
+      "children": "any" },
+
+    { "name": "headrow", "props": [{ "name": "kind", "enum": "head-kind" }], "children": "any" },
+    { "name": "headactions", "props": [{ "name": "kind", "enum": "head-kind" }], "children": "any" },
+    { "name": "previewtitle", "props": [], "children": "text" },
+
+    { "name": "split", "props": [], "children": ["pane", "mount"] },
+    { "name": "pane", "props": [{ "name": "kind", "enum": "pane-kind" }], "children": "any" },
+
+    { "name": "tabs", "props": [], "children": ["tab"] },
+    { "name": "tab", "props": [{ "name": "view", "required": true }], "children": "text" },
+    { "name": "tabpanel", "props": [], "children": "any" },
+
+    { "name": "list", "props": [], "children": ["listrow"] },
+    { "name": "listrow", "props": [{ "name": "href" }], "children": "any" },
+    { "name": "listtitle", "props": [], "children": "text" },
+
+    { "name": "table", "props": [], "children": ["trow"] },
+    { "name": "trow", "props": [], "children": ["hcell", "cell"] },
+    { "name": "hcell", "props": [], "children": "text" },
+    { "name": "cell", "props": [], "children": "text" },
+
+    { "name": "mount", "props": [{ "name": "kind", "enum": "mount-kind", "required": true }], "children": "any" }
   ]
 }

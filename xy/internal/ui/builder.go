@@ -1,9 +1,7 @@
 package ui
 
-import "strings"
-
-// newElement is the shared constructor body behind every generated element
-// function (Div, P, …): it partitions items into attributes (in authored
+// newElement is the shared constructor body behind every generated primitive
+// function (Row, Button, …): it partitions items into props (in authored
 // order) and children (in authored order), then picks a content mode.
 //
 // Automatic content-mode inference only covers the unambiguous cases: no
@@ -89,31 +87,12 @@ func Blank() *BlankLine {
 	return &BlankLine{}
 }
 
-// DoctypeNode emits `<!doctype html>`; valid only as a Doc's first node.
-func DoctypeNode() *Doctype {
-	return &Doctype{}
-}
-
-// ClassToken is a whitelisted class-attribute token; its constants
-// (AuthHint, Btn, …) are generated into tags_gen.go from vocab.json's class
-// whitelist.
-type ClassToken string
-
-// ID sets the id attribute.
+// ID sets the id prop.
 func ID(v string) Attr {
 	return Attr{Name: "id", Value: v}
 }
 
-// Class sets the class attribute from whitelisted class tokens.
-func Class(tokens ...ClassToken) Attr {
-	parts := make([]string, len(tokens))
-	for i, t := range tokens {
-		parts[i] = string(t)
-	}
-	return Attr{Name: "class", Value: strings.Join(parts, " ")}
-}
-
-// Aria sets an aria-<name> attribute; an empty value produces a bare
+// Aria sets an aria-<name> prop; an empty value produces a bare
 // attribute (e.g. Aria("hidden", "") -> aria-hidden).
 func Aria(name, value string) Attr {
 	return patternAttr("aria-"+name, value)

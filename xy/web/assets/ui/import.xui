@@ -1,33 +1,19 @@
-doctype
-html lang="ru"
-  head
-    meta charset="utf-8"
-    meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
-    title "Импорт из Trello · xy"
-    link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin
-    link rel="stylesheet" href="/static/styles.css"
-    script src="/static/menu.js"
-    script type="module" src="/static/import.js"
-  body class="host"
-    header class="host-top"
-      h1 "Импорт из Trello"
-      div class="host-actions"
-        span class="sync-status" id="status" data-state="saved" title="Готово"
-        a class="action-icon" href="/" aria-label="Все доски" title="Все доски" "←"
+page title="Импорт из Trello · xy" kind="wide" scripts="import.js"
+  topbar title="Импорт из Trello"
+    iconlink href="/" label="Все доски" "←"
 
-    main class="board-main"
-      form id="importForm" class="auth-form auth-form-stack import-form"
-        p class="auth-hint"
-          "Экспортируйте доску из Trello (меню доски → «Печать, экспорт и общий доступ» →"
-          "«Экспортировать как JSON»), затем выберите сохранённый " (code ".json") "-файл ниже."
-          "Списки, оканчивающиеся на " (code "_tests") ", импортируются как тест-списки; зелёные"
-          "и красные метки тест-карточек распознаются автоматически."
-        input class="input" id="boardName" type="text" placeholder="Название доски (по умолчанию — из Trello)"
-        input class="input" id="boardPass" type="password" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required
-        p class="auth-hint" "Пароль шифрует все данные доски. Запомните его — восстановить нельзя."
-        label class="card-section-label" for="trelloFile" "Файл доски Trello (.json)"
-        input class="input" id="trelloFile" type="file" accept=".json,application/json" required
-        div class="auth-actions"
-          button class="btn" type="submit" id="importBtn" "Импортировать"
-          a class="btn btn-ghost" href="/" "Отмена"
-        pre id="importMessage" class="import-message"
+  form id="importForm" dir="col"
+    hint
+      "Экспортируйте доску из Trello (меню доски → «Печать, экспорт и общий доступ» →"
+      "«Экспортировать как JSON»), затем выберите сохранённый " (code ".json") "-файл ниже."
+      "Списки, оканчивающиеся на " (code "_tests") ", импортируются как тест-списки; зелёные"
+      "и красные метки тест-карточек распознаются автоматически."
+    textfield id="boardName" placeholder="Название доски (по умолчанию — из Trello)"
+    password id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required
+    hint "Пароль шифрует все данные доски. Запомните его — восстановить нельзя."
+    label for="trelloFile" "Файл доски Trello (.json)"
+    filefield id="trelloFile" accept=".json,application/json" required
+    row gap="sm" wrap
+      button submit id="importBtn" "Импортировать"
+      button kind="ghost" href="/" "Отмена"
+    message id="importMessage"

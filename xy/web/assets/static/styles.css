@@ -6457,3 +6457,28 @@ textarea.fld-input { min-height: 3em; }
   padding: 0 var(--space-2) var(--space-2) calc(var(--space-5) + var(--space-2));
 }
 .lm-member { display: flex; align-items: center; padding: var(--space-0-5) var(--space-2); border-left: 2px solid var(--blue-strong); }
+
+/* === ui layout utilities (internal/ui render.go) ============================
+   The closed set of flex utilities the v2 UI primitives (col/row/spacer)
+   compile to. Gap tokens map onto the existing --space-* scale, calibrated so
+   form layouts keep their rhythm (auth-form/auth-actions used --space-2 = sm).
+   Do not extend ad hoc: add a token here only when a primitive emits it. */
+.u-col { display: flex; flex-direction: column; }
+.u-row { display: flex; flex-direction: row; }
+.u-row.u-wrap { flex-wrap: wrap; }
+.u-grow { flex: 1 1 auto; min-width: 0; }
+.u-spacer { flex: 1 1 auto; }
+
+.u-gap-xs { gap: var(--space-1); }
+.u-gap-sm { gap: var(--space-2); }
+.u-gap-md { gap: var(--space-3); }
+.u-gap-lg { gap: var(--space-4); }
+.u-gap-xl { gap: var(--space-6); }
+
+.u-align-start { align-items: flex-start; }
+.u-align-center { align-items: center; }
+.u-align-end { align-items: flex-end; }
+
+.u-justify-center { justify-content: center; }
+.u-justify-end { justify-content: flex-end; }
+.u-justify-between { justify-content: space-between; }

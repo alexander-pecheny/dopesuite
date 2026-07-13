@@ -66,8 +66,8 @@ func splitLines(file string, src []byte) ([]rawLine, error) {
 	return lines, nil
 }
 
-// Parse compiles .xui source into a node tree. file is used only to label
-// errors.
+// Parse compiles .xui source into a primitive tree (each Element.Tag is a
+// primitive name; each Attr is a prop). file is used only to label errors.
 func Parse(file string, src []byte) (*Doc, error) {
 	lines, err := splitLines(file, src)
 	if err != nil {
@@ -78,11 +78,6 @@ func Parse(file string, src []byte) (*Doc, error) {
 	nodes, err := p.parseSiblings(&i, 0)
 	if err != nil {
 		return nil, err
-	}
-	for idx, n := range nodes {
-		if d, ok := n.(*Doctype); ok && idx != 0 {
-			return nil, errf(file, d.Line, "doctype is only valid as the first node")
-		}
 	}
 	return &Doc{Nodes: nodes}, nil
 }
@@ -143,13 +138,6 @@ func (p *parser) parseSiblings(i *int, depth int) ([]Node, error) {
 				*i++
 			}
 			nodes = append(nodes, com)
-
-		case ln.content == "doctype":
-			if depth != 0 {
-				return nil, p.errf(ln.no, "doctype is only valid at the top level")
-			}
-			nodes = append(nodes, &Doctype{Line: ln.no})
-			*i++
 
 		case strings.HasPrefix(ln.content, `"`) || strings.HasPrefix(ln.content, "("):
 			items, err := p.parseItems(ln.content, ln.no)
