@@ -9,13 +9,17 @@ import (
 	"xy/internal/chgk/inline"
 )
 
-// mediaItem is an image embedded into the docx (word/media/imageN.png + a
-// relationship). All images are re-encoded to PNG so Word can display them
-// (WebP — what xy often stores — isn't a valid docx image type).
+// mediaItem is an image embedded into the docx (word/media/imageN.{jpg,png} + a
+// relationship). Images go through imgconv.ForExport: re-encoded for the size Word
+// will draw them at, as JPEG unless they carry transparency. Re-encoding is not
+// optional — WebP, which is what xy usually stores, is not a valid docx image type
+// — but re-encoding a photo as PNG (which this used to do, indiscriminately) is
+// lossless and makes the .docx several times larger than the pictures in it.
 type mediaItem struct {
 	relID    string
-	partName string // e.g. media/image1.png
-	data     []byte // PNG bytes
+	partName string // e.g. media/image1.jpg
+	data     []byte
+	ext      string // "jpg" / "png" — drives the [Content_Types].xml defaults
 }
 
 const emuPerInch = 914400
@@ -41,19 +45,27 @@ func (e *exporter) embedImage(arg string) string {
 	if raw == nil {
 		return missingImage(name)
 	}
-	pngData, nativeW, nativeH, err := imgconv.ToPNG(raw)
+	// The drawn size comes from the ORIGINAL pixel dimensions (chgksuite's
+	// proportional_resize works off those); the encoding is then chosen for that
+	// size. So: decode, size, encode.
+	src, err := imgconv.Decode(raw)
+	if err != nil {
+		return missingImage(name)
+	}
+	b := src.Bounds()
+	widthIn, heightIn := im.SizeInches(b.Dx(), b.Dy())
+	cx, cy := inchesToEMU(widthIn), inchesToEMU(heightIn)
+
+	data, ext, err := imgconv.ForExport(raw, widthIn, heightIn)
 	if err != nil {
 		return missingImage(name)
 	}
 
-	widthIn, heightIn := im.SizeInches(nativeW, nativeH)
-	cx, cy := inchesToEMU(widthIn), inchesToEMU(heightIn)
-
 	idx := len(e.media) + 1
 	relID := fmt.Sprintf("rId%d", e.nextRel)
 	e.nextRel++
-	partName := fmt.Sprintf("media/image%d.png", idx)
-	e.media = append(e.media, mediaItem{relID: relID, partName: partName, data: pngData})
+	partName := fmt.Sprintf("media/image%d.%s", idx, ext)
+	e.media = append(e.media, mediaItem{relID: relID, partName: partName, data: data, ext: ext})
 	e.rels = append(e.rels, relItem{id: relID, typ: imageRelType, target: partName})
 	docID := e.nextDoc
 	e.nextDoc++

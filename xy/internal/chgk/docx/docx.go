@@ -3,9 +3,9 @@
 // to a .docx by generating word/document.xml and repackaging chgksuite's
 // template.docx (reused verbatim for its named styles / page setup). Inline 4s
 // markup and the non-breaking-space gluing are ported from the validated xy
-// client logic (chgk.js). Images referenced by (img …) are re-encoded to PNG and
-// embedded (see images.go). See docx_test.go for parity checks against
-// chgksuite's own `compose docx` output.
+// client logic (chgk.js). Images referenced by (img …) are re-encoded for the size
+// Word draws them at and embedded (see images.go). See docx_test.go for parity
+// checks against chgksuite's own `compose docx` output.
 //
 // The run/paragraph emission deliberately mirrors python-docx (which chgksuite
 // drives): a run's text is split on "\n"/"\t" into <w:br/>/<w:tab/> *inside* one
@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 
 	"xy/internal/chgk/fsource"
@@ -472,7 +473,7 @@ func (e *exporter) repackage(body string) ([]byte, error) {
 			}
 		case "[Content_Types].xml":
 			if len(e.media) > 0 {
-				data = []byte(injectPNGContentType(string(data)))
+				data = []byte(injectMediaContentTypes(string(data), e.media))
 			}
 		}
 		w, err := zw.Create(f.Name)
@@ -531,9 +532,24 @@ func injectRels(rels string, items []relItem) string {
 	return strings.Replace(rels, "</Relationships>", add.String()+"</Relationships>", 1)
 }
 
-func injectPNGContentType(ct string) string {
-	if strings.Contains(ct, `Extension="png"`) {
+// injectMediaContentTypes declares a <Default> for every image extension the
+// document actually embeds. Word refuses to open a part whose extension has no
+// content type, so this has to follow what imgconv.ForExport chose, not a fixed
+// guess.
+func injectMediaContentTypes(ct string, media []mediaItem) string {
+	types := map[string]string{"png": "image/png", "jpg": "image/jpeg"}
+	var add strings.Builder
+	for _, ext := range []string{"jpg", "png"} { // deterministic order
+		if !slices.ContainsFunc(media, func(m mediaItem) bool { return m.ext == ext }) {
+			continue
+		}
+		if strings.Contains(ct, `Extension="`+ext+`"`) {
+			continue
+		}
+		fmt.Fprintf(&add, `<Default Extension="%s" ContentType="%s"/>`, ext, types[ext])
+	}
+	if add.Len() == 0 {
 		return ct
 	}
-	return strings.Replace(ct, "</Types>", `<Default Extension="png" ContentType="image/png"/></Types>`, 1)
+	return strings.Replace(ct, "</Types>", add.String()+"</Types>", 1)
 }

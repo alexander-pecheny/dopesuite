@@ -75,7 +75,7 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        typst-wasm/ (Rust) into it — once per clone, then only on a typst bump. Every Go
                        recipe (build/dev/test) depends on a guard that says so if the file is missing.
   docx/                parsed structure → .docx (OOXML), reusing chgksuite's template.docx; byte-parity tested (document.xml body + rels: spacing, run boundaries, hyperlinks) vs chgksuite.
-                       (img …) images are decoded (incl. WebP via x/image), re-encoded to PNG and embedded (images.go)
+                       (img …) images go through imgconv.ForExport like the PDF's — see below (images.go)
   typstdoc/            parsed structure → .typ → PDF via typst (the same wasm pool handouts use): the docx
                        export in the other format. template.docx's page setup transcribed into the preamble
                        (A4, 1"/0.75" margins, 12pt body, 16/14pt headings, no auto-hyphenation, page number
@@ -92,8 +92,11 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        character-for-character: markup tokenizing (bold/italic/img/screen/hyperlink…),
                        backtick stress accents, the non-breaking space/hyphen gluing, and (img …) sizing.
                        Lifted out of docx/ when typstdoc needed it — do not fork it back.
-  imgconv/             any image (incl. WebP) → PNG + pixel size. Word can't show WebP and typst reads few
-                       formats, so both exporters normalize through this.
+  imgconv/             ForExport: encode a picture for the size it is DRAWN at — downscale to 200 dpi of that
+                       size (never up), JPEG q85 unless it has transparency (then PNG). Both exporters use it.
+                       Re-encoding is unavoidable (neither Word nor typst reads WebP), but re-encoding a photo
+                       as PNG is lossless and huge: an 800 KB JPEG attachment used to come back as a megabyte
+                       of PNG — most of the exported file. Don't "simplify" this back to a plain ToPNG.
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
 internal/session/      cookie + session.User (ported from dope/platform/session)
 internal/blobstore/    attachment bytes ON DISK (content-addressed, sharded, write-once); the DB
@@ -210,7 +213,8 @@ Config via `.env` (see `.env.example`). Telegram register/login needs
   all behind write-tx + ACL; encrypted blob store;
 - kanban UI: unlock, drag-reorder, derived titles, optimistic updates;
 - card detail: monospace editor, desc diffs, labels, comments, attachments
-  (WebP q70 recompress + encrypt + upload/download/delete);
+  (encrypt + upload/download/delete; stored as uploaded — WebP q70 recompression
+  is an opt-in checkbox, since the exports re-encode pictures for the page anyway);
 - test lists/cards (datetime title, tester list — players/teams, auto green/red labels);
 - cross-board copy/move with client-side re-encryption + label reconcile;
 - `deploy.py` SSH template.

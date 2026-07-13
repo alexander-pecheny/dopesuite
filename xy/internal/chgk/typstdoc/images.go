@@ -13,7 +13,7 @@ import (
 // through chgksuite's proportional_resize). A missing or undecodable image degrades
 // to a bold "[нет изображения: …]", as in the docx, so an export never fails on one.
 //
-// The bytes are re-encoded for the size they are drawn at (imgconv.ForPDF: downscale
+// The bytes are re-encoded for the size they are drawn at (imgconv.ForExport: downscale
 // to 200 dpi, JPEG unless the image has transparency). Embedding the original is how
 // an 800 KB photo turned into a megabyte PDF — a package is read on a screen and
 // printed on A4, and nothing beyond that sampling is ever visible.
@@ -47,7 +47,7 @@ func (e *exporter) addImage(p *para, arg string) {
 	b := src.Bounds()
 	widthIn, heightIn := im.SizeInches(b.Dx(), b.Dy())
 
-	data, ext, err := imgconv.ForPDF(raw, widthIn, heightIn)
+	data, ext, err := imgconv.ForExport(raw, widthIn, heightIn)
 	if err != nil {
 		p.addStyled(missingImage(im.Name), "bold")
 		return

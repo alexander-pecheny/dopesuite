@@ -39,7 +39,7 @@ func encodePNG(t *testing.T, img image.Image) []byte {
 // being megabytes.
 func TestForPDFShrinksPhotos(t *testing.T) {
 	raw := encodePNG(t, photo(255))
-	data, ext, err := imgconv.ForPDF(raw, 4, 3) // drawn 4in × 3in
+	data, ext, err := imgconv.ForExport(raw, 4, 3) // drawn 4in × 3in
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,13 +49,13 @@ func TestForPDFShrinksPhotos(t *testing.T) {
 	if len(data) > len(raw)/10 {
 		t.Errorf("photo barely shrank: %d KB → %d KB", len(raw)/1024, len(data)/1024)
 	}
-	// It is downscaled to the drawn size at PDFDPI, not left at 1600×1200.
+	// It is downscaled to the drawn size at ExportDPI, not left at 1600×1200.
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := int(4 * imgconv.PDFDPI); cfg.Width != want {
-		t.Errorf("width = %d px, want %d (4in at %.0f dpi)", cfg.Width, want, imgconv.PDFDPI)
+	if want := int(4 * imgconv.ExportDPI); cfg.Width != want {
+		t.Errorf("width = %d px, want %d (4in at %.0f dpi)", cfg.Width, want, imgconv.ExportDPI)
 	}
 	t.Logf("%d KB PNG → %d KB %s at %d×%d", len(raw)/1024, len(data)/1024, ext, cfg.Width, cfg.Height)
 }
@@ -63,7 +63,7 @@ func TestForPDFShrinksPhotos(t *testing.T) {
 // Transparency can't survive JPEG, so those stay PNG (still downscaled).
 func TestForPDFKeepsAlphaAsPNG(t *testing.T) {
 	raw := encodePNG(t, photo(128))
-	data, ext, err := imgconv.ForPDF(raw, 4, 3)
+	data, ext, err := imgconv.ForExport(raw, 4, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestForPDFKeepsAlphaAsPNG(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Width != int(4*imgconv.PDFDPI) {
+	if cfg.Width != int(4*imgconv.ExportDPI) {
 		t.Errorf("transparent image was not downscaled: %d px wide", cfg.Width)
 	}
 }
@@ -82,7 +82,7 @@ func TestForPDFKeepsAlphaAsPNG(t *testing.T) {
 // A small image is left at its own resolution — upscaling only invents pixels.
 func TestForPDFDoesNotUpscale(t *testing.T) {
 	small := image.NewRGBA(image.Rect(0, 0, 64, 48))
-	data, _, err := imgconv.ForPDF(encodePNG(t, small), 4, 3)
+	data, _, err := imgconv.ForExport(encodePNG(t, small), 4, 3)
 	if err != nil {
 		t.Fatal(err)
 	}

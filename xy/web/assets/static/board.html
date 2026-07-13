@@ -109,7 +109,7 @@
       <div class="attachments" id="attachments" data-edit-only></div>
       <div class="attach-add" data-edit-only>
         <input type="file" id="attachFile" class="input">
-        <label class="attach-lossless"><input type="checkbox" id="attachLossless"> без потерь</label>
+        <label class="attach-lossless"><input type="checkbox" id="attachCompress"> сжать (WebP)</label>
         <button class="btn btn-small" id="attachUpload" type="button">Загрузить</button>
       </div>
 
@@ -300,7 +300,7 @@
       <h2 class="appearance-modal-title">Вставить изображение</h2>
       <form id="pasteForm" class="auth-form auth-form-stack">
         <input class="input" id="pasteName" type="text" placeholder="Имя файла" autocomplete="off" required>
-        <label class="attach-lossless"><input type="checkbox" id="pasteCompress" checked> сжать (WebP)</label>
+        <label class="attach-lossless"><input type="checkbox" id="pasteCompress"> сжать (WebP)</label>
         <div class="auth-actions">
           <button class="btn" type="submit">Сохранить</button>
           <button class="btn btn-ghost" id="pasteCancel" type="button">Отмена</button>

@@ -3559,7 +3559,8 @@ function humanSize(n) {
   return (n / 1024 / 1024).toFixed(1) + " MB";
 }
 
-// recompressToWebp re-encodes an image File to WebP q70 unless lossless.
+// recompressToWebp re-encodes an image File to WebP q70. Opt-in (see
+// uploadAttachment): the default is to store what the user uploaded.
 async function recompressToWebp(file) {
   if (!file.type.startsWith("image/")) return { bytes: new Uint8Array(await file.arrayBuffer()), mime: file.type || "application/octet-stream" };
   const bitmap = await createImageBitmap(file);
@@ -3573,9 +3574,11 @@ async function recompressToWebp(file) {
 }
 
 // uploadAttachment encrypts `file` under the saved name and POSTs it to the open
-// card. When lossless is false the bytes are re-encoded to WebP q70 first (the
-// same recompression the default file-picker upload applies). Online-only —
-// callers must gate on xySync.isOnline(). Refreshes the attachment list+timeline.
+// card. Attachments are stored AS UPLOADED by default; re-encoding to WebP q70
+// (lossless=false) is opt-in, because the exports no longer need it: docx and PDF
+// both re-encode each picture for the size it is drawn at (imgconv.ForExport), so
+// throwing away the original on the way in bought nothing but a worse original.
+// Online-only — callers must gate on xySync.isOnline(). Refreshes list+timeline.
 async function uploadAttachment(file, lossless, name) {
   if (!file || !openCardId) return;
   const msg = document.getElementById("cardMessage");
@@ -3603,17 +3606,17 @@ document.getElementById("attachUpload").addEventListener("click", async () => {
   const file = input.files[0];
   if (!file || !openCardId) return;
   if (!xySync.isOnline()) { document.getElementById("cardMessage").textContent = "Загрузка вложений доступна только онлайн."; return; }
-  const lossless = document.getElementById("attachLossless").checked;
+  const compress = document.getElementById("attachCompress").checked;
   try {
-    await uploadAttachment(file, lossless, file.name);
+    await uploadAttachment(file, !compress, file.name);
     input.value = "";
-    document.getElementById("attachLossless").checked = false;
+    document.getElementById("attachCompress").checked = false;
   } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
 });
 
 // ---- paste-to-attach ----
 // Pasting an image while a saved card is open captures it, then asks for a
-// filename + whether to WebP-compress (matching the default-upload checkbox)
+// filename + whether to WebP-compress (off by default, like the file picker)
 // before encrypting and uploading it as an attachment.
 let pastedFile = null;
 const pasteOverlay = document.getElementById("pasteOverlay");
@@ -3652,7 +3655,7 @@ document.addEventListener("paste", (e) => {
   // Clipboard images usually arrive as the generic "image.png"; offer a friendlier
   // default the user can overwrite.
   nameInput.value = (file.name && file.name !== "image.png") ? file.name : `вставка.${extFromMime(file.type)}`;
-  document.getElementById("pasteCompress").checked = true;
+  document.getElementById("pasteCompress").checked = false;
   pasteOverlay.hidden = false;
   nameInput.focus();
   nameInput.select();

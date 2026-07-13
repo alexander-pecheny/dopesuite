@@ -20,55 +20,48 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
-// Decode decodes an image of any supported format (PNG/JPEG/GIF/WebP).
+// Decode decodes an image of any supported format (PNG/JPEG/GIF/WebP). Callers
+// need this before ForExport, because the size a picture is drawn at is derived
+// from its ORIGINAL pixel dimensions (inline.Img.SizeInches).
 func Decode(raw []byte) (image.Image, error) {
 	img, _, err := image.Decode(bytes.NewReader(raw))
 	return img, err
 }
 
-// ToPNG decodes and re-encodes as PNG, returning it with its pixel dimensions.
-// This is the docx path: PNG is the one raster format every Word reliably shows.
-func ToPNG(raw []byte) (data []byte, w, h int, err error) {
-	img, err := Decode(raw)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
-		return nil, 0, 0, err
-	}
-	b := img.Bounds()
-	return buf.Bytes(), b.Dx(), b.Dy(), nil
-}
-
-// PDFDPI is the resolution images are embedded at. A picture in an exported
+// ExportDPI is the resolution images are embedded at. A picture in an exported
 // package is laid out at a known physical size (a few inches — see
 // inline.Img.SizeInches), so anything beyond a print-quality sampling of that size
 // is bytes nobody will ever see.
-const PDFDPI = 200.0
+const ExportDPI = 200.0
 
 // jpegQuality is what an already-lossy photo is re-encoded at. The source is
-// typically a JPEG or a WebP q70 attachment, so this is not the first generation
-// of loss; 85 keeps it invisible.
+// typically a photo straight off a camera or phone (already JPEG), so 85 is a
+// second generation of loss at worst, and an invisible one.
 const jpegQuality = 85
 
-// ForPDF encodes an image for embedding in the PDF at the size it will be drawn
-// (widthIn × heightIn, in inches): it is downscaled to PDFDPI and, if it has no
+// ForExport encodes an image for embedding at the size it will be drawn
+// (widthIn × heightIn, in inches): downscaled to ExportDPI and, if it has no
 // transparency, encoded as JPEG rather than PNG.
 //
-// Both halves matter. A PNG of a photograph is lossless and enormous — an 800 KB
-// JPEG attachment came back out as a megabyte of PNG, which was most of the file —
-// and the original is usually a many-megapixel photo being drawn five inches wide.
-// Transparent images stay PNG (JPEG has no alpha) and are only downscaled.
+// Both halves matter, and both exporters want both. A PNG of a photograph is
+// lossless and enormous — an 800 KB JPEG attachment came back out as a megabyte of
+// PNG, which was most of the exported file — and the original is usually a
+// many-megapixel photo being drawn five inches wide. Transparent images stay PNG
+// (JPEG has no alpha) and are only downscaled.
 //
-// The returned ext ("png"/"jpg") is the extension the image must be handed to typst
-// under: typst picks its decoder from the file name.
-func ForPDF(raw []byte, widthIn, heightIn float64) (data []byte, ext string, err error) {
+// It is also the WebP escape hatch: neither Word nor typst reads WebP, and an
+// attachment may well be one (the client can compress to WebP q70 on upload).
+// Decoding here means both exporters get a format they can display.
+//
+// The returned ext ("png"/"jpg") is the extension the image must be stored under:
+// typst picks its decoder from the file name, and the docx declares a content type
+// per extension.
+func ForExport(raw []byte, widthIn, heightIn float64) (data []byte, ext string, err error) {
 	img, err := Decode(raw)
 	if err != nil {
 		return nil, "", err
 	}
-	img = downscale(img, int(widthIn*PDFDPI+0.5), int(heightIn*PDFDPI+0.5))
+	img = downscale(img, int(widthIn*ExportDPI+0.5), int(heightIn*ExportDPI+0.5))
 
 	var buf bytes.Buffer
 	if hasAlpha(img) {
