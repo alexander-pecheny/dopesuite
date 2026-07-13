@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +18,8 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
+	"dope/dope/web/pages"
+	dopeui "dope/dope/web/ui"
 )
 
 type hostFestDashData struct {
@@ -56,228 +58,205 @@ type hostDashMessages struct {
 	RosterNotice string
 }
 
-var hostFestDashTemplate = template.Must(template.New("hostDash").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Fest.Title}} · ведущий</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public"{{if .Fest.IsPublic}} data-jump-label="Страница зрителя" data-jump-href="/fest/{{.Fest.Ref}}" data-jump-title="Открыть зрительскую страницу"{{end}}>
-  <header class="public-top">
-    <a class="public-back" href="/host">←</a>
-    <h1>{{.Fest.Title}}</h1>
-  </header>
-  <main class="public-main">
-    {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    {{if .CanManageFest}}
-    <form method="post" action="/host/fest/{{.Fest.Ref}}" class="card stack" autocomplete="off">
-      <label class="field">
-        <span>Название</span>
-        <input name="title" value="{{.Fest.Title}}" required>
-      </label>
-      <label class="field">
-        <span>Описание (markdown)</span>
-        <textarea name="description" rows="6">{{.Description}}</textarea>
-      </label>
-      <label class="field">
-        <span>Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})</span>
-        <input name="slug" value="{{.Slug}}" pattern="[a-z0-9-]+" placeholder="my-fest">
-      </label>
-      <label class="field">
-        <span>Дата начала</span>
-        <input name="start_date" value="{{.Fest.StartDate}}">
-      </label>
-      <label class="field">
-        <span>Дата окончания</span>
-        <input name="end_date" value="{{.Fest.EndDate}}">
-      </label>
-      <label class="field">
-        <span>rating.chgk.info ID</span>
-        <input name="rating_id" value="{{if .RatingID}}{{.RatingID}}{{end}}" inputmode="numeric">
-      </label>
-      <label class="checkbox">
-        <input type="checkbox" name="is_public" value="1"{{if .Fest.IsPublic}} checked{{end}}>
-        <span>Публичный</span>
-      </label>
-      <div class="cluster">
-        <button class="btn" type="submit">Сохранить</button>
-      </div>
-    </form>
-    {{end}}
+// hostFestDashDoc builds the fest dashboard: the (role-gated) fest-edit form, the
+// games list with per-row settings/clear/delete controls, the access management
+// section (bulk-action dialog + editable roster table), the participants links,
+// and the delete-fest section. Confirms and the bulk dialog run through
+// pageforms.js data-attributes (no inline on* handlers).
+func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
+	ref := data.Fest.Ref()
+	page := []dopeui.Item{
+		dopeui.Title(data.Fest.Title + " · ведущий"), dopeui.PagePublic, dopeui.Classicscripts("pageforms.js"),
+	}
+	if data.Fest.IsPublic {
+		page = append(page,
+			dopeui.Data("jump-label", "Страница зрителя"),
+			dopeui.Data("jump-href", "/fest/"+ref),
+			dopeui.Data("jump-title", "Открыть зрительскую страницу"),
+		)
+	}
+	page = append(page, dopeui.Publictopbar(dopeui.Title(data.Fest.Title), dopeui.Back("/host")))
+	if data.Error != "" {
+		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
+	}
+	if data.CanManageFest {
+		page = append(page, hostDashFestForm(data, ref))
+	}
+	page = append(page, hostDashGamesSection(data, ref))
+	if data.CanManageAccess {
+		page = append(page, hostDashAccessSection(data, ref))
+	}
+	if data.CanManageFest {
+		page = append(page, hostDashRosterSection(data, ref))
+	}
+	if data.CanDeleteFest {
+		page = append(page, dopeui.Section(
+			dopeui.Subhead(dopeui.Text("Удаление")),
+			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/delete"), dopeui.Autocomplete("off"),
+				dopeui.Data("confirm", "Удалить турнир? Все игры, команды и результаты будут удалены."),
+				dopeui.Note(dopeui.Text("Удаление убирает фест со всеми играми, командами и результатами.")),
+				dopeui.Row(dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text("Удалить фест"))),
+			),
+		))
+	}
+	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
 
-    <section class="section">
-      <h2>Игры</h2>
-      {{if .Games}}
-      <ul class="list">
-        {{range .Games}}
-        <li class="list-action-row">
-          <a class="list-row" href="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/">
-            <span class="list-row-title">{{.Title}}</span>
-            {{if .Slug}}<span class="muted">{{.Slug}}</span>{{end}}
-          </a>
-          {{if $.CanManageGames}}
-          <a class="btn" href="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/settings">Свойства</a>
-          <form method="post" action="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/clear" onsubmit="return confirm('Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся.');">
-            <button class="btn danger" type="submit">Очистить</button>
-          </form>
-          <form method="post" action="/host/fest/{{$.Fest.Ref}}/game/{{.Ref}}/delete" onsubmit="return confirm('Удалить игру? Все результаты этой игры будут потеряны.');">
-            <button class="btn danger" type="submit">Удалить</button>
-          </form>
-          {{end}}
-        </li>
-        {{end}}
-      </ul>
-      {{else}}
-      <p class="empty">Игр пока нет.</p>
-      {{end}}
-      {{if .CanManageGames}}
-      <div class="cluster">
-        <a class="btn" href="/host/fest/{{.Fest.Ref}}/game/new">Добавить игру</a>
-      </div>
-      {{end}}
-    </section>
+func hostDashFestForm(data hostFestDashData, ref string) *dopeui.Element {
+	ratingID := ""
+	if data.RatingID != 0 {
+		ratingID = strconv.FormatInt(data.RatingID, 10)
+	}
+	pub := dopeui.Checkbox(dopeui.Name("is_public"), dopeui.Value("1"), dopeui.Text("Публичный"))
+	if data.Fest.IsPublic {
+		pub = dopeui.Checkbox(dopeui.Name("is_public"), dopeui.Value("1"), dopeui.Checked(), dopeui.Text("Публичный"))
+	}
+	return dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref), dopeui.Autocomplete("off"),
+		dopeui.Field(dopeui.Label("Название"), dopeui.Textfield(dopeui.Name("title"), dopeui.Value(data.Fest.Title), dopeui.Required())),
+		dopeui.Field(dopeui.Label("Описание (markdown)"), dopeui.Editor(dopeui.Name("description"), dopeui.Rows("6"), dopeui.Text(data.Description))),
+		dopeui.Field(dopeui.Label("Slug (необязательно; задайте, чтобы получить URL вида /fest/{slug})"),
+			dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Slug), dopeui.Pattern("[a-z0-9-]+"), dopeui.Placeholder("my-fest"))),
+		dopeui.Field(dopeui.Label("Дата начала"), dopeui.Textfield(dopeui.Name("start_date"), dopeui.Value(data.Fest.StartDate))),
+		dopeui.Field(dopeui.Label("Дата окончания"), dopeui.Textfield(dopeui.Name("end_date"), dopeui.Value(data.Fest.EndDate))),
+		dopeui.Field(dopeui.Label("rating.chgk.info ID"), dopeui.Textfield(dopeui.Name("rating_id"), dopeui.Value(ratingID), dopeui.Inputmode("numeric"))),
+		pub,
+		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text("Сохранить"))),
+	)
+}
 
-    {{if .CanManageAccess}}
-    <section class="section" id="access">
-      <h2>Доступ</h2>
-      {{if .AccessError}}<p class="empty">{{.AccessError}}</p>{{end}}
-      {{if .AccessNotice}}<p class="muted">{{.AccessNotice}}</p>{{end}}
-      <div class="cluster">
-        <button class="btn" type="button" data-access-bulk-open>Массовое действие</button>
-      </div>
-      <dialog class="modal-dialog" data-access-bulk-dialog>
-        <form method="post" action="/host/fest/{{.Fest.Ref}}/access#access" class="stack" autocomplete="off">
-          <h2>Массовое действие</h2>
-          <input type="hidden" name="bulk_access" value="1">
-          <label class="field">
-            <span>Данные</span>
-            <textarea name="bulk_access_lines" rows="8" placeholder="username1:host&#10;username2:host&#10;username3:admin&#10;username4:remove" required></textarea>
-          </label>
-          <div class="cluster">
-            <button class="btn" type="submit">Применить</button>
-            <button class="btn" type="button" data-access-bulk-close>Отмена</button>
-          </div>
-        </form>
-      </dialog>
-      <form method="post" action="/host/fest/{{.Fest.Ref}}/access#access" class="card stack" autocomplete="off">
-        <div class="table-scroll">
-          <table class="data-table access-table">
-            <thead><tr><th class="access-name-col">Никнейм</th><th class="access-role-col">Роль</th><th class="access-action-col"></th></tr></thead>
-            <tbody>
-              {{range .Access}}
-              <tr>
-                <td class="access-name-cell">{{.Nickname}}</td>
-                <td class="access-role-cell">
-                  {{if .IsCreator}}
-                  <input type="hidden" name="role_{{.UserID}}" value="creator">
-                  <span class="access-role-label">creator</span>
-                  {{else}}
-                  <select name="role_{{.UserID}}" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
-                    <option value="admin"{{if eq .Role "admin"}} selected{{end}}>admin</option>
-                    <option value="host"{{if eq .Role "host"}} selected{{end}}>host</option>
-                  </select>
-                  {{end}}
-                </td>
-                <td class="access-action-cell">
-                  {{if not .IsCreator}}
-                  <button class="btn danger" type="submit" name="delete_{{.UserID}}" value="1" onclick="return confirm('Удалить доступ для {{.Nickname}}?');">Удалить</button>
-                  {{end}}
-                </td>
-              </tr>
-              {{end}}
-              <tr>
-                <td class="access-name-cell"><input name="new_nickname" placeholder="nickname"></td>
-                <td class="access-role-cell">
-                  <select name="new_role">
-                    <option value="host">host</option>
-                    <option value="admin">admin</option>
-                  </select>
-                </td>
-                <td class="access-action-cell"><button class="btn" type="submit" name="add_access" value="1">Добавить</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </form>
-    </section>
-    {{end}}
+func hostDashGamesSection(data hostFestDashData, ref string) *dopeui.Element {
+	sect := []dopeui.Item{dopeui.Subhead(dopeui.Text("Игры"))}
+	if len(data.Games) > 0 {
+		rows := make([]dopeui.Item, 0, len(data.Games))
+		for _, g := range data.Games {
+			base := "/host/fest/" + ref + "/game/" + g.Ref()
+			link := []dopeui.Item{dopeui.Href(base + "/"), dopeui.Listtitle(dopeui.Text(g.Title))}
+			if g.Slug != "" {
+				link = append(link, dopeui.Muted(dopeui.Text(g.Slug)))
+			}
+			row := []dopeui.Item{dopeui.Rowlink(link...)}
+			if data.CanManageGames {
+				row = append(row,
+					dopeui.Button(dopeui.Href(base+"/settings"), dopeui.Text("Свойства")),
+					dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/clear"),
+						dopeui.Data("confirm", "Очистить игру? Все результаты, импортированные команды и посев будут удалены, игра вернётся в исходное состояние. Настройки и ссылка сохранятся."),
+						dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text("Очистить"))),
+					dopeui.Form(dopeui.Method("post"), dopeui.Action(base+"/delete"),
+						dopeui.Data("confirm", "Удалить игру? Все результаты этой игры будут потеряны."),
+						dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Text("Удалить"))),
+				)
+			}
+			rows = append(rows, dopeui.Actionrow(row...))
+		}
+		sect = append(sect, dopeui.Actionlist(rows...))
+	} else {
+		sect = append(sect, dopeui.Empty(dopeui.Text("Игр пока нет.")))
+	}
+	if data.CanManageGames {
+		sect = append(sect, dopeui.Row(dopeui.Button(dopeui.Href("/host/fest/"+ref+"/game/new"), dopeui.Text("Добавить игру"))))
+	}
+	return dopeui.Section(sect...)
+}
 
-    {{if .CanManageFest}}
-    <section class="section">
-      <h2>Участники</h2>
-      {{if .RosterError}}<p class="empty">{{.RosterError}}</p>{{end}}
-      {{if .RosterNotice}}<p class="muted">{{.RosterNotice}}</p>{{end}}
-      <ul class="list">
-        <li>
-          <a class="list-row" href="/host/fest/{{.Fest.Ref}}/teams">
-            <span class="list-row-title">Команды</span>
-            <span class="muted">{{.TeamCount}}</span>
-          </a>
-        </li>
-        <li>
-          <a class="list-row" href="/host/fest/{{.Fest.Ref}}/players">
-            <span class="list-row-title">Игроки</span>
-            <span class="muted">{{.PlayerCount}}</span>
-          </a>
-        </li>
-        {{if .TeamCount}}
-        <li>
-          <a class="list-row" href="/host/fest/{{.Fest.Ref}}/numbers">
-            <span class="list-row-title">Номера команд</span>
-            <span class="muted">{{if .NumbersAllSet}}готово{{else if .NumbersAssigned}}{{.NumbersAssigned}} из {{.TeamCount}}{{else}}не выставлены{{end}}</span>
-          </a>
-        </li>
-        {{end}}
-        <li>
-          <a class="list-row" href="/host/fest/{{.Fest.Ref}}/rating/import">
-            <span class="list-row-title">Загрузить команды и игроков</span>
-            <span class="muted">{{if .RatingID}}rating {{.RatingID}}{{else}}нет rating ID{{end}}</span>
-          </a>
-        </li>
-        <li>
-          <a class="list-row" href="/host/fest/{{.Fest.Ref}}/audit">
-            <span class="list-row-title">История изменений</span>
-            <span class="muted">откат состояния</span>
-          </a>
-        </li>
-      </ul>
-    </section>
-    {{end}}
+func hostDashAccessSection(data hostFestDashData, ref string) *dopeui.Element {
+	sect := []dopeui.Item{dopeui.ID("access"), dopeui.Subhead(dopeui.Text("Доступ"))}
+	if data.AccessError != "" {
+		sect = append(sect, dopeui.Empty(dopeui.Text(data.AccessError)))
+	}
+	if data.AccessNotice != "" {
+		sect = append(sect, dopeui.Note(dopeui.Text(data.AccessNotice)))
+	}
+	sect = append(sect,
+		dopeui.Row(dopeui.Button(dopeui.Data("dialog-open", "bulkAccessDialog"), dopeui.Text("Массовое действие"))),
+		dopeui.Dialog(dopeui.ID("bulkAccessDialog"),
+			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/access#access"), dopeui.Autocomplete("off"),
+				dopeui.Subhead(dopeui.Text("Массовое действие")),
+				dopeui.Hiddenfield(dopeui.Name("bulk_access"), dopeui.Value("1")),
+				dopeui.Field(dopeui.Label("Данные"),
+					dopeui.Editor(dopeui.Name("bulk_access_lines"), dopeui.Rows("8"),
+						dopeui.Placeholder("username1:host\nusername2:host\nusername3:admin\nusername4:remove"), dopeui.Required())),
+				dopeui.Row(
+					dopeui.Button(dopeui.Submit(), dopeui.Text("Применить")),
+					dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text("Отмена")),
+				),
+			),
+		),
+	)
 
-    {{if .CanDeleteFest}}
-    <section class="section">
-      <h2>Удаление</h2>
-      <form method="post" action="/host/fest/{{.Fest.Ref}}/delete" class="card stack" autocomplete="off" onsubmit="return confirm('Удалить турнир? Все игры, команды и результаты будут удалены.');">
-        <p class="muted">Удаление убирает фест со всеми играми, командами и результатами.</p>
-        <div class="cluster">
-          <button class="btn danger" type="submit">Удалить фест</button>
-        </div>
-      </form>
-    </section>
-    {{end}}
-  </main>
-  <script>
-    (() => {
-      const dialog = document.querySelector("[data-access-bulk-dialog]");
-      const open = document.querySelector("[data-access-bulk-open]");
-      const close = document.querySelector("[data-access-bulk-close]");
-      if (!dialog || !open) return;
-      open.addEventListener("click", () => {
-        if (typeof dialog.showModal === "function") dialog.showModal();
-        else dialog.setAttribute("open", "");
-      });
-      close?.addEventListener("click", () => {
-        if (typeof dialog.close === "function") dialog.close();
-        else dialog.removeAttribute("open");
-      });
-    })();
-  </script>
-</body>
-</html>`))
+	rows := []dopeui.Item{dopeui.Trow(
+		dopeui.Hcell(dopeui.Text("Никнейм")), dopeui.Hcell(dopeui.Text("Роль")), dopeui.Hcell(),
+	)}
+	for _, m := range data.Access {
+		uid := strconv.FormatInt(m.UserID, 10)
+		var roleCell, actionCell *dopeui.Element
+		if m.IsCreator {
+			roleCell = dopeui.Cell(dopeui.Hiddenfield(dopeui.Name("role_"+uid), dopeui.Value("creator")), dopeui.Text("creator"))
+			actionCell = dopeui.Cell()
+		} else {
+			roleCell = dopeui.Cell(dopeui.Selectfield(dopeui.Name("role_"+uid), dopeui.Data("autosubmit", ""),
+				roleOption("admin", m.Role), roleOption("host", m.Role)))
+			actionCell = dopeui.Cell(dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Name("delete_"+uid), dopeui.Value("1"),
+				dopeui.Data("confirm", "Удалить доступ для "+m.Nickname+"?"), dopeui.Text("Удалить")))
+		}
+		rows = append(rows, dopeui.Trow(dopeui.Cell(dopeui.Text(m.Nickname)), roleCell, actionCell))
+	}
+	rows = append(rows, dopeui.Trow(
+		dopeui.Cell(dopeui.Textfield(dopeui.Name("new_nickname"), dopeui.Placeholder("nickname"))),
+		dopeui.Cell(dopeui.Selectfield(dopeui.Name("new_role"),
+			dopeui.Option(dopeui.Value("host"), dopeui.Text("host")),
+			dopeui.Option(dopeui.Value("admin"), dopeui.Text("admin")))),
+		dopeui.Cell(dopeui.Button(dopeui.Submit(), dopeui.Name("add_access"), dopeui.Value("1"), dopeui.Text("Добавить"))),
+	))
+	sect = append(sect,
+		dopeui.Form(dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/access#access"), dopeui.Autocomplete("off"),
+			dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
+		),
+	)
+	return dopeui.Section(sect...)
+}
+
+func roleOption(value, current string) *dopeui.Element {
+	if value == current {
+		return dopeui.Option(dopeui.Value(value), dopeui.Selected(), dopeui.Text(value))
+	}
+	return dopeui.Option(dopeui.Value(value), dopeui.Text(value))
+}
+
+func hostDashRosterSection(data hostFestDashData, ref string) *dopeui.Element {
+	sect := []dopeui.Item{dopeui.Subhead(dopeui.Text("Участники"))}
+	if data.RosterError != "" {
+		sect = append(sect, dopeui.Empty(dopeui.Text(data.RosterError)))
+	}
+	if data.RosterNotice != "" {
+		sect = append(sect, dopeui.Note(dopeui.Text(data.RosterNotice)))
+	}
+	rows := []dopeui.Item{
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/teams"), dopeui.Listtitle(dopeui.Text("Команды")), dopeui.Muted(dopeui.Text(strconv.Itoa(data.TeamCount)))),
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/players"), dopeui.Listtitle(dopeui.Text("Игроки")), dopeui.Muted(dopeui.Text(strconv.Itoa(data.PlayerCount)))),
+	}
+	if data.TeamCount > 0 {
+		status := "не выставлены"
+		if data.NumbersAllSet {
+			status = "готово"
+		} else if data.NumbersAssigned > 0 {
+			status = fmt.Sprintf("%d из %d", data.NumbersAssigned, data.TeamCount)
+		}
+		rows = append(rows, dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/numbers"),
+			dopeui.Listtitle(dopeui.Text("Номера команд")), dopeui.Muted(dopeui.Text(status))))
+	}
+	ratingStatus := "нет rating ID"
+	if data.RatingID != 0 {
+		ratingStatus = "rating " + strconv.FormatInt(data.RatingID, 10)
+	}
+	rows = append(rows,
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/rating/import"),
+			dopeui.Listtitle(dopeui.Text("Загрузить команды и игроков")), dopeui.Muted(dopeui.Text(ratingStatus))),
+		dopeui.Listrow(dopeui.Href("/host/fest/"+ref+"/audit"),
+			dopeui.Listtitle(dopeui.Text("История изменений")), dopeui.Muted(dopeui.Text("откат состояния"))),
+	)
+	sect = append(sect, dopeui.List(rows...))
+	return dopeui.Section(sect...)
+}
 
 func (s *Server) handleHostCreateFest(w http.ResponseWriter, r *http.Request, user session.User) {
 	if err := r.ParseForm(); err != nil {
@@ -556,8 +535,7 @@ from fest_teams where fest_id = ? and deleted = 0`, festID).Scan(&numbersAssigne
 	if ratingID.Valid {
 		data.RatingID = ratingID.Int64
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = hostFestDashTemplate.Execute(w, data)
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostFestDashDoc(data))
 }
 
 func (s *Server) loadHostFestRosterCounts(ctx context.Context, festID int64) (int, int, error) {

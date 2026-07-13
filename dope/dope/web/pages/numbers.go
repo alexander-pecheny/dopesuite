@@ -8,9 +8,9 @@ import (
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
+	ui "dope/dope/web/ui"
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 	"sort"
 	"strconv"
@@ -32,338 +32,72 @@ type hostFestNumbersData struct {
 	HasNumbers bool
 }
 
-var hostFestNumbersTemplate = template.Must(template.New("hostNumbers").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Fest.Title}} · номера команд</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
-    <h1>Номера команд</h1>
-  </header>
-  <main class="public-main">
-    {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    {{if .Notice}}<p class="muted">{{.Notice}}</p>{{end}}
-    {{if not .Rows}}
-    <p class="empty">Сначала загрузите команды на странице феста.</p>
-    {{else}}
-    <form method="post" action="/host/fest/{{.Fest.Ref}}/numbers" class="card stack number-form" id="numbers-form" autocomplete="off" data-has-numbers="{{if .HasNumbers}}1{{end}}">
-      <div class="cluster numbers-actions">
-        {{if .HasNumbers}}
-        <button class="btn" type="submit" id="numbers-clear-btn" formaction="/host/fest/{{.Fest.Ref}}/numbers/clear" formnovalidate>Очистить</button>
-        {{end}}
-        <button class="btn" type="submit" id="numbers-auto-btn" formaction="/host/fest/{{.Fest.Ref}}/numbers/auto" formnovalidate>Проставить автоматически</button>
-        <button class="btn" type="button" id="numbers-import-btn">Импорт номеров</button>
-        {{if .HasNumbers}}
-        <button class="btn" type="button" id="numbers-edit-btn">Замена номера</button>
-        {{end}}
-      </div>
-      <p class="muted numbers-help" id="numbers-help" hidden>
-        Меняйте номер прямо в строке. Когда сохраните, все упоминания старого номера в ОД заменятся на новый — удобно, чтобы перевести команду на резервный номер (101 и т. п.), не задевая остальных.
-      </p>
-      <ol class="number-list">
-        {{range .Rows}}
-        <li class="number-row">
-          <input class="number-row-num"
-                 type="text"
-                 inputmode="numeric"
-                 maxlength="4"
-                 name="num_{{.Index}}"
-                 value="{{.Number}}"
-                 readonly>
-          <span class="number-row-team">{{.TeamLabel}}</span>
-          <input type="hidden" name="team_label_{{.Index}}" value="{{.TeamLabel}}">
-          <input type="hidden" name="team_id_{{.Index}}" value="{{if .TeamID}}{{.TeamID}}{{end}}">
-        </li>
-        {{end}}
-      </ol>
-      <div class="cluster" id="numbers-save" hidden>
-        <button class="btn" type="submit">Сохранить</button>
-        <button class="btn btn-secondary" type="button" id="numbers-cancel-btn">Отмена</button>
-      </div>
-    </form>
-    <script>
-      (() => {
-        const form = document.getElementById("numbers-form");
-        if (!form) return;
-        const hasNumbers = form.dataset.hasNumbers === "1";
-        const editBtn = document.getElementById("numbers-edit-btn");
-        const autoBtn = document.getElementById("numbers-auto-btn");
-        const clearBtn = document.getElementById("numbers-clear-btn");
-        const cancelBtn = document.getElementById("numbers-cancel-btn");
-        const help = document.getElementById("numbers-help");
-        const save = document.getElementById("numbers-save");
-        const numInputs = form.querySelectorAll(".number-row-num");
+// hostNumbersDoc builds the fest team-numbers editor: the read-only number list
+// with the actions cluster (clear/auto/import/edit). The edit-in-place toggle and
+// the two mass-import <dialog> modals are driven by numbers.js (keyed on the ids
+// and data-has-numbers here); the DSL page carries no script.
+func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
+	ref := data.Fest.Ref()
+	page := []ui.Item{
+		ui.Title(data.Fest.Title + " · номера команд"), ui.PagePublic, ui.Classicscripts("numbers.js"),
+		ui.Publictopbar(ui.Title("Номера команд"), ui.Back("/host/fest/"+ref)),
+	}
+	if data.Error != "" {
+		page = append(page, ui.Empty(ui.Text(data.Error)))
+	}
+	if data.Notice != "" {
+		page = append(page, ui.Note(ui.Text(data.Notice)))
+	}
+	if len(data.Rows) == 0 {
+		page = append(page, ui.Empty(ui.Text("Сначала загрузите команды на странице феста.")))
+		return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+	}
 
-        const enterEdit = () => {
-          form.classList.add("editing");
-          numInputs.forEach((input) => input.removeAttribute("readonly"));
-          help.removeAttribute("hidden");
-          save.removeAttribute("hidden");
-          if (editBtn) editBtn.setAttribute("hidden", "");
-          if (autoBtn) autoBtn.setAttribute("hidden", "");
-          if (clearBtn) clearBtn.setAttribute("hidden", "");
-        };
-        const exitEdit = () => {
-          location.reload();
-        };
+	hasNum := ""
+	if data.HasNumbers {
+		hasNum = "1"
+	}
+	base := "/host/fest/" + ref + "/numbers"
 
-        if (editBtn) editBtn.addEventListener("click", enterEdit);
-        if (cancelBtn) cancelBtn.addEventListener("click", exitEdit);
-        if (autoBtn && hasNumbers) {
-          autoBtn.addEventListener("click", (event) => {
-            const ok = window.confirm("Команды будут перенумерованы 1..N по алфавиту. Если бланки ответов уже напечатаны со старыми номерами — они станут невалидными. Продолжить?");
-            if (!ok) event.preventDefault();
-          });
-        }
-        if (clearBtn) {
-          clearBtn.addEventListener("click", (event) => {
-            const ok = window.confirm("Очистить все номера команд?");
-            if (!ok) event.preventDefault();
-          });
-        }
+	actions := []ui.Item{ui.Wrap()}
+	if data.HasNumbers {
+		actions = append(actions, ui.Button(ui.Submit(), ui.ID("numbers-clear-btn"),
+			ui.Formaction(base+"/clear"), ui.Formnovalidate(), ui.Text("Очистить")))
+	}
+	actions = append(actions,
+		ui.Button(ui.Submit(), ui.ID("numbers-auto-btn"), ui.Formaction(base+"/auto"), ui.Formnovalidate(), ui.Text("Проставить автоматически")),
+		ui.Button(ui.ID("numbers-import-btn"), ui.Text("Импорт номеров")),
+	)
+	if data.HasNumbers {
+		actions = append(actions, ui.Button(ui.ID("numbers-edit-btn"), ui.Text("Замена номера")))
+	}
 
-        const importBtn = document.getElementById("numbers-import-btn");
-        const baseAction = form.getAttribute("action");
+	rows := make([]ui.Item, 0, len(data.Rows))
+	for _, row := range data.Rows {
+		teamID := ""
+		if row.TeamID != 0 {
+			teamID = strconv.FormatInt(row.TeamID, 10)
+		}
+		rows = append(rows, ui.Numberrow(
+			ui.Index(strconv.Itoa(row.Index)), ui.Num(row.Number),
+			ui.Teamlabel(row.TeamLabel), ui.Teamid(teamID),
+		))
+	}
 
-        const closeDialog = (dialog) => {
-          if (dialog && dialog.parentNode) dialog.close();
-        };
-
-        const openImportDialog = () => {
-          const dialog = document.createElement("dialog");
-          dialog.className = "numbers-import-dialog";
-          const dform = document.createElement("form");
-          dform.className = "numbers-import-form";
-          const title = document.createElement("h2");
-          title.textContent = "Импорт номеров";
-          const hint = document.createElement("p");
-          hint.className = "muted";
-          hint.textContent = "Вставьте строки в формате «номер⇥команда» (через табуляцию), по одной на строку. Имена сопоставятся с командами феста; неточные совпадения можно будет поправить.";
-          const textarea = document.createElement("textarea");
-          textarea.className = "numbers-import-textarea";
-          textarea.rows = 12;
-          textarea.placeholder = "1\tНазвание команды\n2\tДругая команда";
-          const err = document.createElement("p");
-          err.className = "empty";
-          err.hidden = true;
-          const actions = document.createElement("div");
-          actions.className = "numbers-import-actions cluster";
-          const cancel = document.createElement("button");
-          cancel.type = "button";
-          cancel.className = "btn btn-secondary";
-          cancel.textContent = "Отмена";
-          cancel.addEventListener("click", () => closeDialog(dialog));
-          const submit = document.createElement("button");
-          submit.type = "submit";
-          submit.className = "btn";
-          submit.textContent = "Сопоставить";
-          actions.append(cancel, submit);
-          dform.append(title, hint, textarea, err, actions);
-          dform.addEventListener("submit", (event) => {
-            event.preventDefault();
-            const text = textarea.value;
-            if (!text.trim()) {
-              err.textContent = "Вставьте данные для импорта.";
-              err.hidden = false;
-              return;
-            }
-            submit.disabled = true;
-            err.hidden = true;
-            fetch(baseAction + "/import/match", {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({ text }),
-            })
-              .then((resp) => {
-                if (!resp.ok) throw new Error("Ошибка сервера (" + resp.status + ").");
-                return resp.json();
-              })
-              .then((data) => {
-                closeDialog(dialog);
-                openConfirmDialog(data);
-              })
-              .catch((e) => {
-                submit.disabled = false;
-                err.textContent = e.message || "Не удалось сопоставить.";
-                err.hidden = false;
-              });
-          });
-          dialog.appendChild(dform);
-          dialog.addEventListener("close", () => dialog.remove());
-          document.body.appendChild(dialog);
-          dialog.showModal();
-          textarea.focus();
-        };
-
-        const openConfirmDialog = (data) => {
-          const teams = (data && data.teams) || [];
-          const matches = (data && data.matches) || [];
-          const errors = (data && data.errors) || [];
-
-          const dialog = document.createElement("dialog");
-          dialog.className = "numbers-import-dialog";
-          const dform = document.createElement("form");
-          dform.className = "numbers-import-form";
-          const title = document.createElement("h2");
-          title.textContent = "Подтвердите сопоставление";
-
-          dform.append(title);
-
-          if (errors.length) {
-            const errBox = document.createElement("ul");
-            errBox.className = "numbers-import-errors";
-            errors.forEach((line) => {
-              const li = document.createElement("li");
-              li.textContent = line;
-              errBox.appendChild(li);
-            });
-            dform.appendChild(errBox);
-          }
-
-          if (!matches.length) {
-            const empty = document.createElement("p");
-            empty.className = "empty";
-            empty.textContent = "Не удалось разобрать ни одной строки.";
-            dform.appendChild(empty);
-          }
-
-          const buildSelect = (selectedId) => {
-            const select = document.createElement("select");
-            select.className = "numbers-import-select";
-            const skip = document.createElement("option");
-            skip.value = "";
-            skip.textContent = "— пропустить —";
-            select.appendChild(skip);
-            teams.forEach((team) => {
-              const opt = document.createElement("option");
-              opt.value = String(team.id);
-              opt.textContent = team.label;
-              if (team.id === selectedId) opt.selected = true;
-              select.appendChild(opt);
-            });
-            return select;
-          };
-
-          const rowEls = [];
-          if (matches.length) {
-            const list = document.createElement("ol");
-            list.className = "numbers-import-list";
-            matches.forEach((m) => {
-              const li = document.createElement("li");
-              li.className = "numbers-import-row";
-              if (!m.teamId) li.classList.add("is-unmatched");
-              else if (!m.exact) li.classList.add("is-fuzzy");
-
-              const num = document.createElement("span");
-              num.className = "numbers-import-num";
-              num.textContent = m.number;
-
-              const raw = document.createElement("span");
-              raw.className = "numbers-import-raw";
-              raw.textContent = m.raw;
-
-              const arrow = document.createElement("span");
-              arrow.className = "numbers-import-arrow";
-              arrow.textContent = "→";
-
-              const select = buildSelect(m.teamId);
-
-              const badge = document.createElement("span");
-              badge.className = "numbers-import-badge";
-              if (!m.teamId) badge.textContent = "нет совпадения";
-              else if (m.exact) badge.textContent = "точно";
-              else badge.textContent = "≈ (" + m.distance + ")";
-
-              li.append(num, raw, arrow, select, badge);
-              list.appendChild(li);
-              rowEls.push({ number: m.number, select });
-            });
-            dform.appendChild(list);
-          }
-
-          const err = document.createElement("p");
-          err.className = "empty";
-          err.hidden = true;
-          dform.appendChild(err);
-
-          const actions = document.createElement("div");
-          actions.className = "numbers-import-actions cluster";
-          const back = document.createElement("button");
-          back.type = "button";
-          back.className = "btn btn-secondary";
-          back.textContent = "Назад";
-          back.addEventListener("click", () => {
-            closeDialog(dialog);
-            openImportDialog();
-          });
-          const apply = document.createElement("button");
-          apply.type = "submit";
-          apply.className = "btn";
-          apply.textContent = "Применить";
-          if (!matches.length) apply.disabled = true;
-          actions.append(back, apply);
-          dform.appendChild(actions);
-
-          dform.addEventListener("submit", (event) => {
-            event.preventDefault();
-            const assignments = [];
-            const usedTeams = new Set();
-            for (const row of rowEls) {
-              const val = row.select.value;
-              if (!val) continue;
-              const teamId = Number(val);
-              if (usedTeams.has(teamId)) {
-                err.textContent = "Одна команда выбрана несколько раз — поправьте сопоставление.";
-                err.hidden = false;
-                return;
-              }
-              usedTeams.add(teamId);
-              assignments.push({ teamId, number: row.number });
-            }
-            if (!assignments.length) {
-              err.textContent = "Нет ни одного подтверждённого сопоставления.";
-              err.hidden = false;
-              return;
-            }
-            apply.disabled = true;
-            err.hidden = true;
-            fetch(baseAction + "/import/apply", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ assignments }),
-            })
-              .then((resp) => resp.json())
-              .then((res) => {
-                if (!res.ok) throw new Error(res.error || "Не удалось сохранить.");
-                location.reload();
-              })
-              .catch((e) => {
-                apply.disabled = false;
-                err.textContent = e.message || "Не удалось сохранить.";
-                err.hidden = false;
-              });
-          });
-
-          dialog.appendChild(dform);
-          dialog.addEventListener("close", () => dialog.remove());
-          document.body.appendChild(dialog);
-          dialog.showModal();
-        };
-
-        if (importBtn) importBtn.addEventListener("click", openImportDialog);
-      })();
-    </script>
-    {{end}}
-  </main>
-</body>
-</html>`))
+	form := []ui.Item{ui.ID("numbers-form"), ui.Action(base), ui.Data("has-numbers", hasNum)}
+	form = append(form,
+		ui.Row(actions...),
+		ui.Note(ui.ID("numbers-help"), ui.Hidden(), ui.Text(
+			"Меняйте номер прямо в строке. Когда сохраните, все упоминания старого номера в ОД заменятся на новый — удобно, чтобы перевести команду на резервный номер (101 и т. п.), не задевая остальных.")),
+		ui.Numberlist(rows...),
+		ui.Row(ui.ID("numbers-save"), ui.Hidden(),
+			ui.Button(ui.Submit(), ui.Text("Сохранить")),
+			ui.Button(ui.Secondary, ui.ID("numbers-cancel-btn"), ui.Text("Отмена")),
+		),
+	)
+	page = append(page, ui.Numbersform(form...))
+	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+}
 
 func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string, override []hostFestNumberRow) {
 	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
@@ -381,8 +115,7 @@ func (s *Server) RenderHostFestNumbers(w http.ResponseWriter, r *http.Request, f
 		return
 	}
 	data.Fest = fest
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = hostFestNumbersTemplate.Execute(w, data)
+	RenderDoc(w, s.h.Engine().AssetETags, hostNumbersDoc(data))
 }
 
 func (s *Server) buildHostFestNumbersData(ctx context.Context, festID int64, errMsg, notice string, override []hostFestNumberRow) (hostFestNumbersData, error) {

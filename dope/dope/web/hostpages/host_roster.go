@@ -8,12 +8,14 @@ import (
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
+	"dope/dope/web/pages"
+	dopeui "dope/dope/web/ui"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -49,297 +51,226 @@ type hostFestImportData struct {
 	Notice   string
 }
 
-var hostFestTeamsTemplate = template.Must(template.New("hostTeams").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Fest.Title}} · команды</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
-    <h1>Команды</h1>
-  </header>
-  <main class="public-main">
-    {{if .Teams}}
-    <div class="table-scroll">
-      <table class="data-table">
-        <thead><tr><th>ID</th><th>Команда</th><th>Город</th><th>Игроков</th></tr></thead>
-        <tbody>
-          {{range .Teams}}
-          <tr><td>{{if .RatingID}}{{.RatingID}}{{end}}</td><td>{{.Name}}</td><td>{{.City}}</td><td>{{.Players}}</td></tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{else}}
-    <p class="empty">Команды пока не загружены.</p>
-    {{end}}
-  </main>
-</body>
-</html>`))
+// hostTeamsDoc builds the fest's teams table (or an empty note).
+func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
+	page := []dopeui.Item{
+		dopeui.Title(data.Fest.Title + " · команды"), dopeui.PagePublic,
+		dopeui.Publictopbar(dopeui.Title("Команды"), dopeui.Back("/host/fest/"+data.Fest.Ref())),
+	}
+	if len(data.Teams) > 0 {
+		rows := []dopeui.Item{dopeui.Trow(
+			dopeui.Hcell(dopeui.Text("ID")), dopeui.Hcell(dopeui.Text("Команда")),
+			dopeui.Hcell(dopeui.Text("Город")), dopeui.Hcell(dopeui.Text("Игроков")),
+		)}
+		for _, t := range data.Teams {
+			rows = append(rows, dopeui.Trow(
+				dopeui.Cell(dopeui.Text(optionalID(t.RatingID))),
+				dopeui.Cell(dopeui.Text(t.Name)),
+				dopeui.Cell(dopeui.Text(t.City)),
+				dopeui.Cell(dopeui.Text(strconv.Itoa(t.Players))),
+			))
+		}
+		page = append(page, dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...))
+	} else {
+		page = append(page, dopeui.Empty(dopeui.Text("Команды пока не загружены.")))
+	}
+	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
 
-var hostFestPlayersTemplate = template.Must(template.New("hostPlayers").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Fest.Title}} · игроки</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
-    <h1>Игроки</h1>
-  </header>
-  <main class="public-main">
-    {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    {{if .Notice}}<p class="muted">{{.Notice}}</p>{{end}}
-    <div class="cluster">
-      <button class="btn" type="button" data-player-override-open>Добавить оверрайд для игры</button>
-    </div>
+// optionalID renders a rating id, or "" when it is 0 (matching {{if .RatingID}}).
+func optionalID(id int64) string {
+	if id == 0 {
+		return ""
+	}
+	return strconv.FormatInt(id, 10)
+}
 
-    <dialog class="modal-dialog player-override-dialog" data-player-override-dialog>
-      <form method="post" action="/host/fest/{{.Fest.Ref}}/players/overrides" class="stack" autocomplete="off" data-player-override-form>
-        <h2>Оверрайд игрока</h2>
-        <input type="hidden" name="player_id" data-player-override-player-id>
-        <input type="hidden" name="team_id" data-player-override-team-id>
-        <label class="field">
-          <span>Игрок</span>
-          <input name="player_label" list="playerOverridePlayers" required data-player-override-player>
-        </label>
-        <datalist id="playerOverridePlayers">
-          {{range .OverridePlayers}}<option value="{{.Label}}" data-id="{{.ID}}"></option>{{end}}
-        </datalist>
-        <label class="field">
-          <span>Новая команда</span>
-          <input name="team_label" list="playerOverrideTeams" required data-player-override-team>
-        </label>
-        <datalist id="playerOverrideTeams">
-          {{range .OverrideTeams}}<option value="{{.Label}}" data-id="{{.ID}}"></option>{{end}}
-        </datalist>
-        <fieldset class="field game-type-fieldset">
-          <span>Игры</span>
-          <div class="checkbox-list">
-            {{range .OverrideGames}}
-            <label class="checkbox">
-              <input type="checkbox" name="game_id" value="{{.ID}}">
-              <span>{{.Label}}</span>
-            </label>
-            {{else}}
-            <p class="empty">В фесте пока нет игр КСИ или ЭК.</p>
-            {{end}}
-          </div>
-        </fieldset>
-        <div class="cluster">
-          <button class="btn" type="submit">Сохранить</button>
-          <button class="btn" type="button" data-player-override-close>Отмена</button>
-        </div>
-      </form>
-    </dialog>
+// hostPlayersDoc builds the fest players page: the add-override dialog (datalist
+// autocomplete + game picker), the overrides table with per-row edit dialogs, and
+// the players table. Dialog open/close, the delete confirm, and the datalist →
+// hidden-id validation run through pageforms.js / roster.js data-attributes.
+func hostPlayersDoc(data hostFestRosterData) *dopeui.Doc {
+	ref := data.Fest.Ref()
+	page := []dopeui.Item{
+		dopeui.Title(data.Fest.Title + " · игроки"), dopeui.PagePublic, dopeui.Classicscripts("pageforms.js roster.js"),
+		dopeui.Publictopbar(dopeui.Title("Игроки"), dopeui.Back("/host/fest/"+ref)),
+	}
+	if data.Error != "" {
+		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
+	}
+	if data.Notice != "" {
+		page = append(page, dopeui.Note(dopeui.Text(data.Notice)))
+	}
+	page = append(page,
+		dopeui.Row(dopeui.Button(dopeui.Data("dialog-open", "playerOverrideDialog"), dopeui.Text("Добавить оверрайд для игры"))),
+		hostAddOverrideDialog(data, ref),
+	)
+	if len(data.Overrides) > 0 {
+		page = append(page, hostOverridesSection(data, ref))
+	}
+	if len(data.Players) > 0 {
+		rows := []dopeui.Item{dopeui.Trow(dopeui.Hcell(dopeui.Text("ID")), dopeui.Hcell(dopeui.Text("Игрок")), dopeui.Hcell(dopeui.Text("Команда")))}
+		for _, p := range data.Players {
+			rows = append(rows, dopeui.Trow(dopeui.Cell(dopeui.Text(optionalID(p.RatingID))), dopeui.Cell(dopeui.Text(p.Name)), dopeui.Cell(dopeui.Text(p.Team))))
+		}
+		page = append(page, dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...))
+	} else {
+		page = append(page, dopeui.Empty(dopeui.Text("Игроки пока не загружены.")))
+	}
+	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
 
-    {{if .Overrides}}
-    <section class="section" id="overrides">
-      <h2>Оверрайды</h2>
-      <div class="table-scroll">
-        <table class="data-table player-overrides-table">
-          <thead><tr><th>Игрок</th><th>Из команды</th><th>В команду</th><th>Игры</th><th class="override-action-cell"></th></tr></thead>
-          <tbody>
-            {{range .Overrides}}
-            <tr>
-              <td>{{.Player}}</td>
-              <td>{{.SourceTeam}}</td>
-              <td>{{.OverrideTeam}}</td>
-              <td>{{.Games}}</td>
-              <td class="override-action-cell"><button class="override-edit-button" type="button" data-player-override-edit-open="{{.DialogID}}" aria-label="Редактировать оверрайд" title="Редактировать оверрайд">✏️</button></td>
-            </tr>
-            {{end}}
-          </tbody>
-        </table>
-      </div>
-      {{range .Overrides}}
-      {{$row := .}}
-      <dialog class="modal-dialog player-override-dialog" id="{{.DialogID}}" data-player-override-edit-dialog>
-        <form method="post" action="/host/fest/{{$.Fest.Ref}}/players/overrides" class="stack" autocomplete="off">
-          <h2>Оверрайд игрока</h2>
-          <input type="hidden" name="mode" value="edit">
-          <input type="hidden" name="player_id" value="{{.PlayerID}}">
-          <input type="hidden" name="source_team_id" value="{{.SourceTeamID}}">
-          <input type="hidden" name="team_id" value="{{.OverrideTeamID}}">
-          <div class="override-summary">
-            <div><span>Игрок</span><strong>{{.Player}}</strong></div>
-            <div><span>Из команды</span><strong>{{.SourceTeam}}</strong></div>
-            <div><span>В команду</span><strong>{{.OverrideTeam}}</strong></div>
-          </div>
-          <fieldset class="field game-type-fieldset">
-            <span>Игры</span>
-            <div class="checkbox-list">
-              {{range $.OverrideGames}}
-              <label class="checkbox">
-                <input type="checkbox" name="game_id" value="{{.ID}}" {{if $row.HasGame .ID}}checked{{end}}>
-                <span>{{.Label}}</span>
-              </label>
-              {{end}}
-            </div>
-          </fieldset>
-          <div class="cluster">
-            <button class="btn" type="submit">Сохранить</button>
-            <button class="btn danger" type="submit" name="delete" value="1" formnovalidate data-player-override-delete>Удалить</button>
-            <button class="btn" type="button" data-player-override-edit-close>Отмена</button>
-          </div>
-        </form>
-      </dialog>
-      {{end}}
-    </section>
-    {{end}}
+func hostAddOverrideDialog(data hostFestRosterData, ref string) *dopeui.Element {
+	playerOpts := make([]dopeui.Item, 0, len(data.OverridePlayers))
+	for _, o := range data.OverridePlayers {
+		playerOpts = append(playerOpts, dopeui.Option(dopeui.Value(o.Label), dopeui.Data("id", strconv.FormatInt(o.ID, 10))))
+	}
+	teamOpts := make([]dopeui.Item, 0, len(data.OverrideTeams))
+	for _, o := range data.OverrideTeams {
+		teamOpts = append(teamOpts, dopeui.Option(dopeui.Value(o.Label), dopeui.Data("id", strconv.FormatInt(o.ID, 10))))
+	}
+	var gamePicker dopeui.Item
+	if len(data.OverrideGames) > 0 {
+		boxes := make([]dopeui.Item, 0, len(data.OverrideGames))
+		for _, g := range data.OverrideGames {
+			boxes = append(boxes, dopeui.Checkbox(dopeui.Name("game_id"), dopeui.Value(strconv.FormatInt(g.ID, 10)), dopeui.Text(g.Label)))
+		}
+		gamePicker = dopeui.Col(append([]dopeui.Item{dopeui.SpaceSM}, boxes...)...)
+	} else {
+		gamePicker = dopeui.Empty(dopeui.Text("В фесте пока нет игр КСИ или ЭК."))
+	}
+	return dopeui.Dialog(dopeui.ID("playerOverrideDialog"),
+		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/players/overrides"), dopeui.Autocomplete("off"), dopeui.Data("player-override-form", ""),
+			dopeui.Subhead(dopeui.Text("Оверрайд игрока")),
+			dopeui.Hiddenfield(dopeui.Name("player_id"), dopeui.Data("player-override-player-id", "")),
+			dopeui.Hiddenfield(dopeui.Name("team_id"), dopeui.Data("player-override-team-id", "")),
+			dopeui.Field(dopeui.Label("Игрок"),
+				dopeui.Textfield(dopeui.Name("player_label"), dopeui.InputList("playerOverridePlayers"), dopeui.Required(), dopeui.Data("player-override-player", ""))),
+			dopeui.Datalist(append([]dopeui.Item{dopeui.ID("playerOverridePlayers")}, playerOpts...)...),
+			dopeui.Field(dopeui.Label("Новая команда"),
+				dopeui.Textfield(dopeui.Name("team_label"), dopeui.InputList("playerOverrideTeams"), dopeui.Required(), dopeui.Data("player-override-team", ""))),
+			dopeui.Datalist(append([]dopeui.Item{dopeui.ID("playerOverrideTeams")}, teamOpts...)...),
+			dopeui.Pickgroup(dopeui.Label("Игры"), gamePicker),
+			dopeui.Row(
+				dopeui.Button(dopeui.Submit(), dopeui.Text("Сохранить")),
+				dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text("Отмена")),
+			),
+		),
+	)
+}
 
-    {{if .Players}}
-    <div class="table-scroll">
-      <table class="data-table">
-        <thead><tr><th>ID</th><th>Игрок</th><th>Команда</th></tr></thead>
-        <tbody>
-          {{range .Players}}
-          <tr><td>{{if .RatingID}}{{.RatingID}}{{end}}</td><td>{{.Name}}</td><td>{{.Team}}</td></tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{else}}
-    <p class="empty">Игроки пока не загружены.</p>
-    {{end}}
-  </main>
-  <script>
-    (() => {
-      const dialog = document.querySelector("[data-player-override-dialog]");
-      const open = document.querySelector("[data-player-override-open]");
-      const close = document.querySelector("[data-player-override-close]");
-      const form = document.querySelector("[data-player-override-form]");
-      if (!dialog || !open || !form) return;
-      const bindSuggest = (inputSelector, hiddenSelector, listID) => {
-        const input = form.querySelector(inputSelector);
-        const hidden = form.querySelector(hiddenSelector);
-        const options = Array.from(document.getElementById(listID)?.options || []);
-        const sync = () => {
-          const found = options.find((option) => option.value === input.value);
-          hidden.value = found?.dataset.id || "";
-          input.setCustomValidity(hidden.value ? "" : "Выберите значение из подсказки");
-        };
-        input.addEventListener("input", sync);
-        input.addEventListener("change", sync);
-        return {sync, input, hidden};
-      };
-      const syncPlayer = bindSuggest("[data-player-override-player]", "[data-player-override-player-id]", "playerOverridePlayers");
-      const syncTeam = bindSuggest("[data-player-override-team]", "[data-player-override-team-id]", "playerOverrideTeams");
-      open.addEventListener("click", () => {
-        if (typeof dialog.showModal === "function") dialog.showModal();
-        else dialog.setAttribute("open", "");
-      });
-      close?.addEventListener("click", () => dialog.close ? dialog.close() : dialog.removeAttribute("open"));
-      document.querySelectorAll("[data-player-override-edit-open]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const editDialog = document.getElementById(button.dataset.playerOverrideEditOpen);
-          if (!editDialog) return;
-          if (typeof editDialog.showModal === "function") editDialog.showModal();
-          else editDialog.setAttribute("open", "");
-        });
-      });
-      document.querySelectorAll("[data-player-override-edit-close]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const editDialog = button.closest("dialog");
-          if (!editDialog) return;
-          if (typeof editDialog.close === "function") editDialog.close();
-          else editDialog.removeAttribute("open");
-        });
-      });
-      document.querySelectorAll("[data-player-override-delete]").forEach((button) => {
-        button.addEventListener("click", (event) => {
-          if (!window.confirm("Удалить оверрайд?")) event.preventDefault();
-        });
-      });
-      form.addEventListener("submit", (event) => {
-        syncPlayer.sync();
-        syncTeam.sync();
-        if (syncPlayer.hidden.value && syncTeam.hidden.value) return;
-        event.preventDefault();
-        (syncPlayer.hidden.value ? syncTeam.input : syncPlayer.input).reportValidity();
-      });
-    })();
-  </script>
-</body>
-</html>`))
+func hostOverridesSection(data hostFestRosterData, ref string) *dopeui.Element {
+	rows := []dopeui.Item{dopeui.Trow(
+		dopeui.Hcell(dopeui.Text("Игрок")), dopeui.Hcell(dopeui.Text("Из команды")),
+		dopeui.Hcell(dopeui.Text("В команду")), dopeui.Hcell(dopeui.Text("Игры")), dopeui.Hcell(),
+	)}
+	for _, o := range data.Overrides {
+		rows = append(rows, dopeui.Trow(
+			dopeui.Cell(dopeui.Text(o.Player)), dopeui.Cell(dopeui.Text(o.SourceTeam)),
+			dopeui.Cell(dopeui.Text(o.OverrideTeam)), dopeui.Cell(dopeui.Text(o.Games)),
+			dopeui.Cell(dopeui.Iconbtn(dopeui.Label("Редактировать оверрайд"), dopeui.Data("dialog-open", o.DialogID()), dopeui.Text("✏️"))),
+		))
+	}
+	sect := []dopeui.Item{
+		dopeui.ID("overrides"),
+		dopeui.Subhead(dopeui.Text("Оверрайды")),
+		dopeui.Table(append([]dopeui.Item{dopeui.Scroll()}, rows...)...),
+	}
+	for _, o := range data.Overrides {
+		sect = append(sect, hostOverrideEditDialog(data, ref, o))
+	}
+	return dopeui.Section(sect...)
+}
 
-var hostFestRatingImportTemplate = template.Must(template.New("hostRatingImport").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Fest.Title}} · импорт участников</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
-    <h1>Импорт участников</h1>
-  </header>
-  <main class="public-main">
-    {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    {{if .Notice}}<p class="muted">{{.Notice}}</p>{{end}}
-    <section class="section">
-      {{if .RatingID}}
-      <p class="muted">Источник: rating.chgk.info ID {{.RatingID}}</p>
-      <form method="post" action="/host/fest/{{.Fest.Ref}}/rating/import" class="card stack" autocomplete="off">
-        <p class="muted">Импорт заменит списки команд и игроков феста и обновит список команд в играх ЧГК и КСИ.</p>
-        <div class="cluster">
-          <button class="btn" type="submit">Загрузить команды и игроков</button>
-        </div>
-      </form>
-      {{else}}
-      <p class="empty">Сначала сохраните rating.chgk.info ID в свойствах феста.</p>
-      {{end}}
-    </section>
-  </main>
-</body>
-</html>`))
+func hostOverrideEditDialog(data hostFestRosterData, ref string, o overrides.HostPlayerOverrideRow) *dopeui.Element {
+	boxes := make([]dopeui.Item, 0, len(data.OverrideGames))
+	for _, g := range data.OverrideGames {
+		items := []dopeui.Item{dopeui.Name("game_id"), dopeui.Value(strconv.FormatInt(g.ID, 10))}
+		if o.HasGame(g.ID) {
+			items = append(items, dopeui.Checked())
+		}
+		boxes = append(boxes, dopeui.Checkbox(append(items, dopeui.Text(g.Label))...))
+	}
+	summary := dopeui.Row(dopeui.SpaceMD, dopeui.Wrap(),
+		dopeui.Col(dopeui.SpaceNone, dopeui.Muted(dopeui.Text("Игрок")), dopeui.Strong(dopeui.Text(o.Player))),
+		dopeui.Col(dopeui.SpaceNone, dopeui.Muted(dopeui.Text("Из команды")), dopeui.Strong(dopeui.Text(o.SourceTeam))),
+		dopeui.Col(dopeui.SpaceNone, dopeui.Muted(dopeui.Text("В команду")), dopeui.Strong(dopeui.Text(o.OverrideTeam))),
+	)
+	return dopeui.Dialog(dopeui.ID(o.DialogID()),
+		dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/players/overrides"), dopeui.Autocomplete("off"),
+			dopeui.Subhead(dopeui.Text("Оверрайд игрока")),
+			dopeui.Hiddenfield(dopeui.Name("mode"), dopeui.Value("edit")),
+			dopeui.Hiddenfield(dopeui.Name("player_id"), dopeui.Value(strconv.FormatInt(o.PlayerID, 10))),
+			dopeui.Hiddenfield(dopeui.Name("source_team_id"), dopeui.Value(strconv.FormatInt(o.SourceTeamID, 10))),
+			dopeui.Hiddenfield(dopeui.Name("team_id"), dopeui.Value(strconv.FormatInt(o.OverrideTeamID, 10))),
+			summary,
+			dopeui.Pickgroup(append([]dopeui.Item{dopeui.Label("Игры")}, dopeui.Col(append([]dopeui.Item{dopeui.SpaceSM}, boxes...)...))...),
+			dopeui.Row(
+				dopeui.Button(dopeui.Submit(), dopeui.Text("Сохранить")),
+				dopeui.Button(dopeui.Danger, dopeui.Submit(), dopeui.Name("delete"), dopeui.Value("1"), dopeui.Formnovalidate(),
+					dopeui.Data("confirm", "Удалить оверрайд?"), dopeui.Text("Удалить")),
+				dopeui.Button(dopeui.Data("dialog-close", ""), dopeui.Text("Отмена")),
+			),
+		),
+	)
+}
 
-var hostFestSchemeImportTemplate = template.Must(template.New("hostSchemeImport").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Fest.Title}} · импорт схемы</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
-    <h1>Импорт схемы</h1>
-  </header>
-  <main class="public-main">
-    {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    {{if .Notice}}<p class="muted">{{.Notice}}</p>{{end}}
-    <form method="post" action="/host/fest/{{.Fest.Ref}}/import" class="card stack" autocomplete="off">
-      <p class="muted">Импорт пересоздаёт игру феста из JSON-схемы. Существующие игры этого феста будут заменены.</p>
-      <label class="field">
-        <span>JSON-схема</span>
-        <textarea name="scheme" rows="14" placeholder='{"slug":"...","title":"...","gameType":"ek","stages":[...]}'></textarea>
-      </label>
-      <div class="cluster">
-        <button class="btn" type="submit">Импортировать</button>
-      </div>
-    </form>
-  </main>
-</body>
-</html>`))
+// hostRatingImportDoc builds the rating.chgk.info roster-import page: when the
+// fest has a rating id, a confirm-and-import form; otherwise a note to set one.
+func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
+	festRef := data.Fest.Ref()
+	page := []dopeui.Item{
+		dopeui.Title(data.Fest.Title + " · импорт участников"), dopeui.PagePublic,
+		dopeui.Publictopbar(dopeui.Title("Импорт участников"), dopeui.Back("/host/fest/"+festRef)),
+	}
+	page = append(page, importMessages(data.Error, data.Notice)...)
+
+	var sect []dopeui.Item
+	if data.RatingID != 0 {
+		sect = []dopeui.Item{
+			dopeui.Note(dopeui.Text("Источник: rating.chgk.info ID " + strconv.FormatInt(data.RatingID, 10))),
+			dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+festRef+"/rating/import"), dopeui.Autocomplete("off"),
+				dopeui.Note(dopeui.Text("Импорт заменит списки команд и игроков феста и обновит список команд в играх ЧГК и КСИ.")),
+				dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text("Загрузить команды и игроков"))),
+			),
+		}
+	} else {
+		sect = []dopeui.Item{dopeui.Empty(dopeui.Text("Сначала сохраните rating.chgk.info ID в свойствах феста."))}
+	}
+	page = append(page, dopeui.Section(sect...))
+	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
+
+// hostSchemeImportDoc builds the JSON-scheme import page: a paste-and-import form.
+func hostSchemeImportDoc(data hostFestImportData) *dopeui.Doc {
+	festRef := data.Fest.Ref()
+	page := []dopeui.Item{
+		dopeui.Title(data.Fest.Title + " · импорт схемы"), dopeui.PagePublic,
+		dopeui.Publictopbar(dopeui.Title("Импорт схемы"), dopeui.Back("/host/fest/"+festRef)),
+	}
+	page = append(page, importMessages(data.Error, data.Notice)...)
+	page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+festRef+"/import"), dopeui.Autocomplete("off"),
+		dopeui.Note(dopeui.Text("Импорт пересоздаёт игру феста из JSON-схемы. Существующие игры этого феста будут заменены.")),
+		dopeui.Field(dopeui.Label("JSON-схема"),
+			dopeui.Editor(dopeui.Name("scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`)),
+		),
+		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text("Импортировать"))),
+	))
+	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
+
+// importMessages renders the shared error (empty) + notice (muted) lines the
+// import pages show above their forms.
+func importMessages(errMsg, notice string) []dopeui.Item {
+	var out []dopeui.Item
+	if errMsg != "" {
+		out = append(out, dopeui.Empty(dopeui.Text(errMsg)))
+	}
+	if notice != "" {
+		out = append(out, dopeui.Note(dopeui.Text(notice)))
+	}
+	return out
+}
 
 func (s *Server) renderHostFestTeams(w http.ResponseWriter, r *http.Request, festID int64) {
 	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
@@ -356,8 +287,7 @@ func (s *Server) renderHostFestTeams(w http.ResponseWriter, r *http.Request, fes
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = hostFestTeamsTemplate.Execute(w, hostFestRosterData{Fest: fest, Teams: teams})
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostTeamsDoc(hostFestRosterData{Fest: fest, Teams: teams}))
 }
 
 func (s *Server) renderHostFestPlayers(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -384,8 +314,7 @@ func (s *Server) renderHostFestPlayersWithMessage(w http.ResponseWriter, r *http
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = hostFestPlayersTemplate.Execute(w, hostFestRosterData{
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostPlayersDoc(hostFestRosterData{
 		Fest:            fest,
 		Players:         players,
 		OverridePlayers: overridePlayers,
@@ -394,7 +323,7 @@ func (s *Server) renderHostFestPlayersWithMessage(w http.ResponseWriter, r *http
 		Overrides:       overrides,
 		Error:           errMsg,
 		Notice:          notice,
-	})
+	}))
 }
 
 func (s *Server) handleHostAddPlayerOverride(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -486,13 +415,12 @@ func (s *Server) renderHostRatingImportPage(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = hostFestRatingImportTemplate.Execute(w, hostFestImportData{
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostRatingImportDoc(hostFestImportData{
 		Fest:     fest,
 		RatingID: ratingID,
 		Error:    errMsg,
 		Notice:   notice,
-	})
+	}))
 }
 
 func (s *Server) renderHostSchemeImportPage(w http.ResponseWriter, r *http.Request, festID int64, errMsg, notice string) {
@@ -505,12 +433,11 @@ func (s *Server) renderHostSchemeImportPage(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = hostFestSchemeImportTemplate.Execute(w, hostFestImportData{
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostSchemeImportDoc(hostFestImportData{
 		Fest:   fest,
 		Error:  errMsg,
 		Notice: notice,
-	})
+	}))
 }
 
 func (s *Server) loadHostFestTeams(ctx context.Context, festID int64) ([]hostFestTeam, error) {

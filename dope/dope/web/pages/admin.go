@@ -7,11 +7,12 @@ import (
 	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
+	ui "dope/dope/web/ui"
 	"errors"
-	"html/template"
 	"math/big"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -60,28 +61,18 @@ func newRandomPassword() (string, error) {
 	return string(buf), nil
 }
 
-var adminIndexTemplate = template.Must(template.New("adminIndex").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Админка</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <h1>Админка</h1>
-  </header>
-  <main class="public-main">
-    <ul class="list">
-      <li><a class="list-row" href="/admin/create_users"><span class="list-row-title">Создать пользователей</span></a></li>
-      <li><a class="list-row" href="/admin/users"><span class="list-row-title">Пользователи</span></a></li>
-    </ul>
-  </main>
-</body>
-</html>`))
+// adminIndexDoc builds the /admin landing page: a link list of admin tools.
+func adminIndexDoc() *ui.Doc {
+	return &ui.Doc{Nodes: []ui.Node{
+		ui.Page(ui.Title("Админка"), ui.PagePublic,
+			ui.Publictopbar(ui.Title("Админка")),
+			ui.List(
+				ui.Listrow(ui.Href("/admin/create_users"), ui.Listtitle(ui.Text("Создать пользователей"))),
+				ui.Listrow(ui.Href("/admin/users"), ui.Listtitle(ui.Text("Пользователи"))),
+			),
+		),
+	}}
+}
 
 type adminCreatedUser struct {
 	Username string
@@ -113,70 +104,79 @@ func (d adminCreateUsersData) Copyable() string {
 	return b.String()
 }
 
-var adminCreateUsersTemplate = template.Must(template.New("adminCreateUsers").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Создать пользователей · Админка</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <h1>Создать пользователей</h1>
-    <a class="public-user" href="/admin">Админка</a>
-  </header>
-  <main class="public-main">
-    {{if .Submitted}}
-    {{if .Created}}
-    <section class="section">
-      <p class="auth-hint">Пароли показаны один раз. Скопируйте и разошлите — пользователи сменят их сами.</p>
-      <table class="data-table">
-        <thead><tr><th>Логин</th><th>Пароль</th></tr></thead>
-        <tbody>
-          {{range .Created}}<tr><td>{{.Username}}</td><td><code>{{.Password}}</code></td></tr>{{end}}
-        </tbody>
-      </table>
-      <label class="field">
-        <span>Для копирования (логин ⇥ пароль)</span>
-        <textarea rows="{{len .Created}}" readonly onclick="this.select()">{{.Copyable}}</textarea>
-      </label>
-    </section>
-    {{end}}
-    {{if .Skipped}}
-    <section class="section">
-      <p class="empty">Уже существуют (пропущены): {{range $i, $u := .Skipped}}{{if $i}}, {{end}}{{$u}}{{end}}</p>
-    </section>
-    {{end}}
-    {{if .Errors}}
-    <section class="section">
-      <p class="empty">Ошибки:</p>
-      <ul class="list">
-        {{range .Errors}}<li class="list-row"><span class="list-row-title">{{.Username}}</span><span class="muted">{{.Reason}}</span></li>{{end}}
-      </ul>
-    </section>
-    {{end}}
-    {{if not .Created}}{{if not .Skipped}}{{if not .Errors}}
-    <p class="empty">Не указано ни одного логина.</p>
-    {{end}}{{end}}{{end}}
-    {{end}}
+// createdSection renders the one-time credentials table + copy-paste textarea
+// shown after a create_users submit that created at least one account.
+func createdSection(data adminCreateUsersData) *ui.Element {
+	tableRows := []ui.Item{ui.Trow(ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Пароль")))}
+	for _, u := range data.Created {
+		tableRows = append(tableRows, ui.Trow(
+			ui.Cell(ui.Text(u.Username)),
+			ui.Cell(ui.Code(ui.Text(u.Password))),
+		))
+	}
+	return ui.Section(
+		ui.Hint(ui.Text("Пароли показаны один раз. Скопируйте и разошлите — пользователи сменят их сами.")),
+		ui.Table(tableRows...),
+		ui.Field(ui.Label("Для копирования (логин ⇥ пароль)"),
+			ui.Editor(ui.Rows(strconv.Itoa(len(data.Created))), ui.Readonly(), ui.Data("select-all", ""), ui.Text(data.Copyable())),
+		),
+	)
+}
 
-    <section class="section">
-      <form method="post" action="/admin/create_users" class="card stack" autocomplete="off">
-        <label class="field">
-          <span>Логины (по одному в строке)</span>
-          <textarea name="usernames" rows="10" placeholder="anton&#10;anya_a&#10;dasha" required></textarea>
-        </label>
-        <div class="cluster">
-          <button class="btn" type="submit">Создать</button>
-        </div>
-      </form>
-    </section>
-  </main>
-</body>
-</html>`))
+// skippedSection lists usernames that already existed and were left alone.
+func skippedSection(skipped []string) *ui.Element {
+	return ui.Section(ui.Empty(ui.Text("Уже существуют (пропущены): " + strings.Join(skipped, ", "))))
+}
+
+// errorsSection lists usernames rejected as invalid.
+func errorsSection(errs []adminUserError) *ui.Element {
+	rows := make([]ui.Item, len(errs))
+	for i, e := range errs {
+		rows[i] = ui.Listrow(ui.Listtitle(ui.Text(e.Username)), ui.Muted(ui.Text(e.Reason)))
+	}
+	return ui.Section(ui.Empty(ui.Text("Ошибки:")), ui.List(rows...))
+}
+
+// createUsersFormSection is the bulk-create form, always shown.
+func createUsersFormSection() *ui.Element {
+	return ui.Section(
+		ui.Form(ui.DirCol, ui.SpaceMD, ui.Method("post"), ui.Action("/admin/create_users"), ui.Autocomplete("off"),
+			ui.Field(ui.Label("Логины (по одному в строке)"),
+				ui.Editor(ui.Name("usernames"), ui.Rows("10"), ui.Placeholder("anton\nanya_a\ndasha"), ui.Required()),
+			),
+			ui.Row(ui.Button(ui.Submit(), ui.Text("Создать"))),
+		),
+	)
+}
+
+// adminCreateUsersDoc builds the /admin/create_users page: the bulk-create form,
+// plus (after a submit) the outcome — created credentials, skipped usernames, and
+// validation errors. pageforms.js drives the copy-textarea select-on-click.
+func adminCreateUsersDoc(data adminCreateUsersData) *ui.Doc {
+	var main []ui.Item
+	if data.Submitted {
+		if len(data.Created) > 0 {
+			main = append(main, createdSection(data))
+		}
+		if len(data.Skipped) > 0 {
+			main = append(main, skippedSection(data.Skipped))
+		}
+		if len(data.Errors) > 0 {
+			main = append(main, errorsSection(data.Errors))
+		}
+		if len(data.Created) == 0 && len(data.Skipped) == 0 && len(data.Errors) == 0 {
+			main = append(main, ui.Empty(ui.Text("Не указано ни одного логина.")))
+		}
+	}
+	main = append(main, createUsersFormSection())
+
+	page := []ui.Item{
+		ui.Title("Создать пользователей · Админка"), ui.PagePublic, ui.Classicscripts("pageforms.js"),
+		ui.Publictopbar(ui.Title("Создать пользователей"), ui.User("/admin"), ui.Userlabel("Админка")),
+	}
+	page = append(page, main...)
+	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+}
 
 type adminUserRow struct {
 	ID        int64
@@ -190,37 +190,38 @@ type adminUsersData struct {
 	Users []adminUserRow
 }
 
-var adminUsersTemplate = template.Must(template.New("adminUsers").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Пользователи · Админка</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <h1>Пользователи</h1>
-    <a class="public-user" href="/admin">Админка</a>
-  </header>
-  <main class="public-main">
-    {{if .Users}}
-    <section class="section">
-      <table class="data-table">
-        <thead><tr><th>ID</th><th>Логин</th><th>Telegram</th><th>Создан</th></tr></thead>
-        <tbody>
-          {{range .Users}}<tr><td>{{.ID}}</td><td>{{.Username}}{{if .IsSystem}} <span class="muted">(система)</span>{{end}}</td><td>{{.Telegram}}</td><td>{{.CreatedAt}}</td></tr>{{end}}
-        </tbody>
-      </table>
-    </section>
-    {{else}}
-    <p class="empty">Пользователей нет.</p>
-    {{end}}
-  </main>
-</body>
-</html>`))
+// adminUsersDoc builds the /admin/users page: a table of all users, or an empty
+// note. System accounts are tagged "(система)".
+func adminUsersDoc(data adminUsersData) *ui.Doc {
+	var body ui.Item
+	if len(data.Users) > 0 {
+		rows := []ui.Item{ui.Trow(
+			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text("Логин")),
+			ui.Hcell(ui.Text("Telegram")), ui.Hcell(ui.Text("Создан")),
+		)}
+		for _, u := range data.Users {
+			nameCell := ui.Cell(ui.Text(u.Username))
+			if u.IsSystem {
+				nameCell = ui.Cell(ui.Inline(ui.Text(u.Username+" "), ui.Muted(ui.Text("(система)"))))
+			}
+			rows = append(rows, ui.Trow(
+				ui.Cell(ui.Text(strconv.FormatInt(u.ID, 10))),
+				nameCell,
+				ui.Cell(ui.Text(u.Telegram)),
+				ui.Cell(ui.Text(u.CreatedAt)),
+			))
+		}
+		body = ui.Section(ui.Table(rows...))
+	} else {
+		body = ui.Empty(ui.Text("Пользователей нет."))
+	}
+	return &ui.Doc{Nodes: []ui.Node{
+		ui.Page(ui.Title("Пользователи · Админка"), ui.PagePublic,
+			ui.Publictopbar(ui.Title("Пользователи"), ui.User("/admin"), ui.Userlabel("Админка")),
+			body,
+		),
+	}}
+}
 
 // /admin/users — lists all users with their creation timestamp.
 func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
@@ -240,8 +241,7 @@ func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = adminUsersTemplate.Execute(w, adminUsersData{Users: users})
+	RenderDoc(w, s.h.Engine().AssetETags, adminUsersDoc(adminUsersData{Users: users}))
 }
 
 func (s *Server) loadAdminUsers(ctx context.Context) ([]adminUserRow, error) {
@@ -275,8 +275,7 @@ func (s *Server) HandleAdminLanding(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAdmin(w, r); !ok {
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = adminIndexTemplate.Execute(w, nil)
+	RenderDoc(w, s.h.Engine().AssetETags, adminIndexDoc())
 }
 
 // /admin/create_users — GET shows the form; POST bulk-creates users with random
@@ -306,8 +305,7 @@ func (s *Server) HandleAdminCreateUsers(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) renderAdminCreateUsers(w http.ResponseWriter, data adminCreateUsersData) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = adminCreateUsersTemplate.Execute(w, data)
+	RenderDoc(w, s.h.Engine().AssetETags, adminCreateUsersDoc(data))
 }
 
 func (s *Server) handleAdminCreateUsersSubmit(w http.ResponseWriter, r *http.Request) {

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,6 +20,8 @@ import (
 	"dope/dope/storage/journal"
 	"dope/dope/storage/store"
 	"dope/dope/storage/storeutil"
+	"dope/dope/web/pages"
+	dopeui "dope/dope/web/ui"
 )
 
 type hostGameSettingsData struct {
@@ -43,188 +44,137 @@ type gameIdentity struct {
 }
 
 // stickerPaletteColors is the fixed set of colours an organizer may assign to a
-// sticker. Each entry pairs the CSS variable that draws the swatch (defined in
-// styles.css) with the hex submitted as the form value — keep both in sync.
-var stickerPaletteColors = []struct{ Var, Hex string }{
-	{"--sticker-c-white", "#ffffff"},
-	{"--sticker-c-yellow", "#fdf66f"},
-	{"--sticker-c-green", "#aded87"},
-	{"--sticker-c-red", "#ff7a6b"},
-	{"--sticker-c-blue", "#68caff"},
-	{"--sticker-c-pink", "#f4a8ff"},
-	{"--sticker-c-orange", "#ffae37"},
+// sticker. Name is the closed swatch-color enum token the swatchradio primitive
+// turns into --sticker-c-<name>; Hex is the value submitted with the form.
+var stickerPaletteColors = []struct{ Name, Hex string }{
+	{"white", "#ffffff"},
+	{"yellow", "#fdf66f"},
+	{"green", "#aded87"},
+	{"red", "#ff7a6b"},
+	{"blue", "#68caff"},
+	{"pink", "#f4a8ff"},
+	{"orange", "#ffae37"},
 }
 
-// stickerPaletteHTML renders the swatch radio group for one sticker colour field.
-func stickerPaletteHTML(name, selected string) template.HTML {
-	var b strings.Builder
-	b.WriteString(`<div class="sticker-palette" role="radiogroup" aria-label="Цвет"><span>Цвет</span>`)
-	for _, s := range stickerPaletteColors {
-		checked := ""
-		if strings.EqualFold(s.Hex, selected) {
-			checked = " checked"
+// stickerPalette builds the swatch radio group for one sticker colour field; the
+// swatchradio expansion owns the inline --swatch style.
+func stickerPalette(name, selected string) *dopeui.Element {
+	swatches := make([]dopeui.Item, 0, len(stickerPaletteColors))
+	for _, c := range stickerPaletteColors {
+		items := []dopeui.Item{dopeui.Name(name), dopeui.Value(c.Hex), dopeui.Attr{Name: "color", Value: c.Name}, dopeui.Title(c.Hex)}
+		if strings.EqualFold(c.Hex, selected) {
+			items = append(items, dopeui.Checked())
 		}
-		fmt.Fprintf(&b, `<label class="swatch" title="%s"><input type="radio" name="%s" value="%s"%s><span class="swatch-dot" style="--swatch:var(%s)"></span></label>`,
-			s.Hex, name, s.Hex, checked, s.Var)
+		swatches = append(swatches, dopeui.Swatchradio(items...))
 	}
-	b.WriteString(`</div>`)
-	return template.HTML(b.String())
+	return dopeui.Palette(swatches...)
 }
 
-var hostGameCreateTemplate = template.Must(template.New("hostGameCreate").Funcs(template.FuncMap{
-	"stickerPalette": stickerPaletteHTML,
-}).Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Fest.Title}} · новая игра</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
-    <h1>Добавить игру</h1>
-  </header>
-  <main class="public-main">
-    {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    <form method="post" action="/host/fest/{{.Fest.Ref}}/game/new" class="card stack" autocomplete="off" data-game-create-form>
-      <fieldset class="field game-type-fieldset">
-        <span>Тип игры</span>
-        <label class="checkbox">
-          <input type="radio" name="game_type" value="od" {{if eq .SelectedType "od"}}checked{{end}}>
-          <span>ОД</span>
-        </label>
-        <label class="checkbox">
-          <input type="radio" name="game_type" value="ksi" {{if eq .SelectedType "ksi"}}checked{{end}}>
-          <span>КСИ</span>
-        </label>
-        <label class="checkbox">
-          <input type="radio" name="game_type" value="ksi_stickers" {{if eq .SelectedType "ksi_stickers"}}checked{{end}}>
-          <span>КСИ со стикерами</span>
-        </label>
-        <label class="checkbox">
-          <input type="radio" name="game_type" value="ek" {{if eq .SelectedType "ek"}}checked{{end}}>
-          <span>ЭК</span>
-        </label>
-      </fieldset>
+// stickerRow builds one sticker-type config row: a max-count field and its colour
+// palette under the sticker's name.
+func stickerRow(label, maxName, maxVal, colorName, colorSel string) *dopeui.Element {
+	return dopeui.Col(dopeui.SpaceSM,
+		dopeui.Strong(dopeui.Text(label)),
+		dopeui.Row(dopeui.AlignCenter, dopeui.SpaceMD, dopeui.Wrap(),
+			dopeui.Field(dopeui.Label("Макс."), dopeui.Textfield(dopeui.Name(maxName), dopeui.Inputmode("numeric"), dopeui.Value(maxVal))),
+			stickerPalette(colorName, colorSel),
+		),
+	)
+}
 
-      <section class="stack game-create-settings" data-game-settings="od" {{if ne .SelectedType "od"}}hidden{{end}}>
-        <label class="field">
-          <span>Количество туров</span>
-          <input name="od_tours" inputmode="numeric" value="3">
-        </label>
-        <label class="field">
-          <span>Количество вопросов в туре</span>
-          <input name="od_questions" inputmode="numeric" value="15">
-        </label>
-      </section>
+// gameTypeRadio builds one game-type radio, pre-checked when it is the selected type.
+func gameTypeRadio(value, label, selected string) *dopeui.Element {
+	items := []dopeui.Item{dopeui.Name("game_type"), dopeui.Value(value)}
+	if value == selected {
+		items = append(items, dopeui.Checked())
+	}
+	return dopeui.Radio(append(items, dopeui.Text(label))...)
+}
 
-      <section class="stack game-create-settings" data-game-settings="ksi" {{if ne .SelectedType "ksi"}}hidden{{end}}>
-        <label class="field">
-          <span>Количество тем</span>
-          <input name="ksi_themes" inputmode="numeric" value="20">
-        </label>
-      </section>
+// gameSettings wraps one game type's settings in a data-game-settings section,
+// hidden unless that type is the selected one (gamecreate.js toggles them).
+func gameSettings(kind, selected string, kids ...dopeui.Item) *dopeui.Element {
+	items := []dopeui.Item{dopeui.SpaceMD, dopeui.Data("game-settings", kind)}
+	if kind != selected {
+		items = append(items, dopeui.Hidden())
+	}
+	return dopeui.Col(append(items, kids...)...)
+}
 
-      <section class="stack game-create-settings" data-game-settings="ksi_stickers" {{if ne .SelectedType "ksi_stickers"}}hidden{{end}}>
-        <label class="field">
-          <span>Количество тем</span>
-          <input name="ksis_themes" inputmode="numeric" value="20">
-        </label>
-        <p class="hint">Для каждого стикера задайте, сколько штук есть у команды (0 — стикер не используется) и цвет для подсветки. «Обычный» стикер работает как стандартная тема КСИ.</p>
-        <div class="field">
-          <span>Обычный</span>
-          <label class="sticker-max">Макс. <input name="ksis_neutral_max" inputmode="numeric" value="20"></label>
-          {{stickerPalette "ksis_neutral_color" "#ffffff"}}
-        </div>
-        <div class="field">
-          <span>×2 (правильные и неправильные удваиваются)</span>
-          <label class="sticker-max">Макс. <input name="ksis_x2_max" inputmode="numeric" value="2"></label>
-          {{stickerPalette "ksis_x2_color" "#fdf66f"}}
-        </div>
-        <div class="field">
-          <span>Без минуса (неправильные = 0)</span>
-          <label class="sticker-max">Макс. <input name="ksis_nowrong_max" inputmode="numeric" value="1"></label>
-          {{stickerPalette "ksis_nowrong_color" "#aded87"}}
-        </div>
-        <div class="field">
-          <span>Пустой = минус (пустые = −номинал)</span>
-          <label class="sticker-max">Макс. <input name="ksis_emptywrong_max" inputmode="numeric" value="1"></label>
-          {{stickerPalette "ksis_emptywrong_color" "#ff7a6b"}}
-        </div>
-      </section>
+// hostGameCreateDoc builds the create-game form: the game-type radio group and
+// four conditional settings sections (OD / KSI / KSI-stickers / EK), plus the
+// submit cluster. gamecreate.js shows the matching section and the submit button
+// once a type is picked (keyed on data-game-create-form / data-game-settings /
+// data-game-submit).
+func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
+	ref := data.Fest.Ref()
+	sel := data.SelectedType
+	page := []dopeui.Item{
+		dopeui.Title(data.Fest.Title + " · новая игра"), dopeui.PagePublic, dopeui.Classicscripts("gamecreate.js"),
+		dopeui.Publictopbar(dopeui.Title("Добавить игру"), dopeui.Back("/host/fest/"+ref)),
+	}
+	if data.Error != "" {
+		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
+	}
 
-      <section class="stack game-create-settings" data-game-settings="ek" {{if ne .SelectedType "ek"}}hidden{{end}}>
-        <label class="field">
-          <span>JSON-схема</span>
-          <textarea name="ek_scheme" rows="14" placeholder='{"slug":"...","title":"...","gameType":"ek","stages":[...]}'></textarea>
-        </label>
-      </section>
+	submit := []dopeui.Item{dopeui.Data("game-submit", "")}
+	if sel == "" {
+		submit = append(submit, dopeui.Hidden())
+	}
+	submit = append(submit, dopeui.Button(dopeui.Submit(), dopeui.Text("Создать")))
 
-      <div class="cluster" data-game-submit {{if eq .SelectedType ""}}hidden{{end}}>
-        <button class="btn" type="submit">Создать</button>
-      </div>
-    </form>
-  </main>
-  <script>
-    (() => {
-      const form = document.querySelector("[data-game-create-form]");
-      if (!form) return;
-      const sync = () => {
-        const selected = form.querySelector('input[name="game_type"]:checked')?.value || "";
-        form.querySelectorAll("[data-game-settings]").forEach((section) => {
-          section.hidden = section.dataset.gameSettings !== selected;
-        });
-        const submit = form.querySelector("[data-game-submit]");
-        if (submit) submit.hidden = selected === "";
-      };
-      form.querySelectorAll('input[name="game_type"]').forEach((input) => input.addEventListener("change", sync));
-      sync();
-    })();
-  </script>
-</body>
-</html>`))
+	page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+ref+"/game/new"),
+		dopeui.Autocomplete("off"), dopeui.Data("game-create-form", ""),
+		dopeui.Pickgroup(dopeui.Label("Тип игры"),
+			gameTypeRadio("od", "ОД", sel),
+			gameTypeRadio("ksi", "КСИ", sel),
+			gameTypeRadio("ksi_stickers", "КСИ со стикерами", sel),
+			gameTypeRadio("ek", "ЭК", sel),
+		),
+		gameSettings("od", sel,
+			dopeui.Field(dopeui.Label("Количество туров"), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
+			dopeui.Field(dopeui.Label("Количество вопросов в туре"), dopeui.Textfield(dopeui.Name("od_questions"), dopeui.Inputmode("numeric"), dopeui.Value("15"))),
+		),
+		gameSettings("ksi", sel,
+			dopeui.Field(dopeui.Label("Количество тем"), dopeui.Textfield(dopeui.Name("ksi_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
+		),
+		gameSettings("ksi_stickers", sel,
+			dopeui.Field(dopeui.Label("Количество тем"), dopeui.Textfield(dopeui.Name("ksis_themes"), dopeui.Inputmode("numeric"), dopeui.Value("20"))),
+			dopeui.Hint(dopeui.Text("Для каждого стикера задайте, сколько штук есть у команды (0 — стикер не используется) и цвет для подсветки. «Обычный» стикер работает как стандартная тема КСИ.")),
+			stickerRow("Обычный", "ksis_neutral_max", "20", "ksis_neutral_color", "#ffffff"),
+			stickerRow("×2 (правильные и неправильные удваиваются)", "ksis_x2_max", "2", "ksis_x2_color", "#fdf66f"),
+			stickerRow("Без минуса (неправильные = 0)", "ksis_nowrong_max", "1", "ksis_nowrong_color", "#aded87"),
+			stickerRow("Пустой = минус (пустые = −номинал)", "ksis_emptywrong_max", "1", "ksis_emptywrong_color", "#ff7a6b"),
+		),
+		gameSettings("ek", sel,
+			dopeui.Field(dopeui.Label("JSON-схема"),
+				dopeui.Editor(dopeui.Name("ek_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`))),
+		),
+		dopeui.Row(submit...),
+	))
+	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
 
-var hostGameSettingsTemplate = template.Must(template.New("hostGameSettings").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Game.Title}} · {{.Fest.Title}}</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.Fest.Ref}}">←</a>
-    <h1>{{.Game.Title}}</h1>
-  </header>
-  <main class="public-main">
-    {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    <form method="post" action="/host/fest/{{.Fest.Ref}}/game/{{.Game.Ref}}/settings" class="card stack" autocomplete="off">
-      <label class="field">
-        <span>Тип игры</span>
-        <input value="{{.Game.Type}}" disabled>
-      </label>
-      <label class="field">
-        <span>Название</span>
-        <input name="title" value="{{.Game.Title}}" required>
-      </label>
-      <label class="field">
-        <span>Slug (необязательно, a-z, 0-9, дефис)</span>
-        <input name="slug" value="{{.Slug}}" pattern="[a-z0-9-]+">
-      </label>
-      <div class="cluster">
-        <button class="btn" type="submit">Сохранить</button>
-      </div>
-    </form>
-  </main>
-</body>
-</html>`))
+// hostGameSettingsDoc builds a game's settings page: a small form to rename the
+// game and set its slug (its type is shown read-only).
+func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
+	festRef := data.Fest.Ref()
+	page := []dopeui.Item{
+		dopeui.Title(data.Game.Title + " · " + data.Fest.Title), dopeui.PagePublic,
+		dopeui.Publictopbar(dopeui.Title(data.Game.Title), dopeui.Back("/host/fest/"+festRef)),
+	}
+	if data.Error != "" {
+		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
+	}
+	page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"),
+		dopeui.Action("/host/fest/"+festRef+"/game/"+data.Game.Ref()+"/settings"), dopeui.Autocomplete("off"),
+		dopeui.Field(dopeui.Label("Тип игры"), dopeui.Textfield(dopeui.Value(data.Game.Type), dopeui.Disabled())),
+		dopeui.Field(dopeui.Label("Название"), dopeui.Textfield(dopeui.Name("title"), dopeui.Value(data.Game.Title), dopeui.Required())),
+		dopeui.Field(dopeui.Label("Slug (необязательно, a-z, 0-9, дефис)"), dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Slug), dopeui.Pattern("[a-z0-9-]+"))),
+		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text("Сохранить"))),
+	))
+	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
 
 func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64, errMsg string) {
 	fest, err := s.h.LoadHostFestHeader(r.Context(), festID)
@@ -251,8 +201,7 @@ select code, title, game_type, slug from games where id = ? and fest_id = ?`, ga
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = hostGameSettingsTemplate.Execute(w, hostGameSettingsData{
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameSettingsDoc(hostGameSettingsData{
 		Fest: fest,
 		Game: PublicFestGame{
 			ID:    gameID,
@@ -263,7 +212,7 @@ select code, title, game_type, slug from games where id = ? and fest_id = ?`, ga
 		},
 		Slug:  slug.String,
 		Error: errMsg,
-	})
+	}))
 }
 
 func (s *Server) handleHostUpdateGameSettings(w http.ResponseWriter, r *http.Request, festID, gameID int64) {
@@ -557,8 +506,7 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = hostGameCreateTemplate.Execute(w, hostGameCreateData{Fest: fest, Error: errMsg, SelectedType: selectedType})
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameCreateDoc(hostGameCreateData{Fest: fest, Error: errMsg, SelectedType: selectedType}))
 }
 
 func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, festID int64) {

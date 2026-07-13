@@ -7,9 +7,10 @@ import (
 	"dope/dope/platform/session"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
+	"dope/dope/web/pages"
+	ui "dope/dope/web/ui"
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -24,143 +25,117 @@ type hostLandingData struct {
 	Error    string
 }
 
-var hostLoggedOutTemplate = template.Must(template.New("hostLogin").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Вход для организаторов · Фест</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public" data-jump-label="Страница зрителя" data-jump-href="/" data-jump-title="Открыть зрительскую страницу">
-  <header class="public-top">
-    <h1>Организаторы</h1>
-  </header>
-  <main class="public-main">
-    <p>Чтобы создавать фесты и проводить бои, нужно войти.</p>
-    <ul class="list">
-      <li><a class="list-row" href="/login"><span class="list-row-title">Вход</span></a></li>
-      <li><a class="list-row" href="/register"><span class="list-row-title">Регистрация по приглашению</span></a></li>
-    </ul>
-  </main>
-</body>
-</html>`))
+// jumpViewerNav are the body data-jump-* attrs menu.js reads to offer a jump to
+// the public viewer page from the host landing.
+func jumpViewerNav() []ui.Item {
+	return []ui.Item{
+		ui.Data("jump-label", "Страница зрителя"),
+		ui.Data("jump-href", "/"),
+		ui.Data("jump-title", "Открыть зрительскую страницу"),
+	}
+}
 
-var hostLoggedInTemplate = template.Must(template.New("hostHome").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Мои фесты · {{.Username}}</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public" data-jump-label="Страница зрителя" data-jump-href="/" data-jump-title="Открыть зрительскую страницу">
-  <header class="public-top">
-    <h1>Мои фесты</h1>
-  </header>
-  <main class="public-main">
-    {{if .Error}}<p class="empty">{{.Error}}</p>{{end}}
-    {{if .Groups}}
-    {{range .Groups}}
-    <details class="fest-group" open>
-      <summary class="fest-group-title">{{.Title}}</summary>
-      <ul class="list fest-list">
-        {{range .Fests}}
-        <li>
-          <a class="list-row fest-row" href="/host/fest/{{.Ref}}">
-            <span class="fest-row-title">{{.Title}}{{if not .IsPublic}} · непубличный{{end}}</span>
-            {{if .Dates}}<span class="fest-row-dates">{{.Dates}}</span>{{end}}
-          </a>
-        </li>
-        {{end}}
-      </ul>
-    </details>
-    {{end}}
-    {{else}}
-    <p class="empty">Фестов пока нет.</p>
-    {{end}}
+// hostLoggedOutDoc builds the /host landing shown to anonymous visitors: a prompt
+// to log in or register.
+func hostLoggedOutDoc() *ui.Doc {
+	page := []ui.Item{ui.Title("Вход для организаторов · Фест"), ui.PagePublic}
+	page = append(page, jumpViewerNav()...)
+	page = append(page,
+		ui.Publictopbar(ui.Title("Организаторы")),
+		ui.Paragraph(ui.Text("Чтобы создавать фесты и проводить бои, нужно войти.")),
+		ui.List(
+			ui.Listrow(ui.Href("/login"), ui.Listtitle(ui.Text("Вход"))),
+			ui.Listrow(ui.Href("/register"), ui.Listtitle(ui.Text("Регистрация по приглашению"))),
+		),
+	)
+	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+}
 
-    <section class="section">
-      <details class="disclosure">
-        <summary class="btn">Создать фест</summary>
-        <form method="post" action="/host/fest" class="card stack" autocomplete="off">
-        <label class="field">
-          <span>Название</span>
-          <input name="title" required>
-        </label>
-        <label class="field">
-          <span>Описание (markdown)</span>
-          <textarea name="description" rows="4"></textarea>
-        </label>
-        <label class="field">
-          <span>Дата начала (YYYY-MM-DD)</span>
-          <input name="start_date" placeholder="2026-05-15">
-        </label>
-        <label class="field">
-          <span>Дата окончания</span>
-          <input name="end_date" placeholder="2026-05-17">
-        </label>
-        <label class="field">
-          <span>rating.chgk.info ID (опционально)</span>
-          <input name="rating_id" inputmode="numeric">
-        </label>
-        <label class="checkbox">
-          <input type="checkbox" name="is_public" value="1">
-          <span>Публичный</span>
-        </label>
-        <div class="cluster">
-          <button class="btn" type="submit">Создать</button>
-        </div>
-        </form>
-      </details>
-    </section>
-  </main>
-</body>
-</html>`))
+// hostLoggedInDoc builds the /host landing for a signed-in organizer: their fests
+// grouped into current/future/past disclosures, and the create-fest form.
+func hostLoggedInDoc(data hostLandingData) *ui.Doc {
+	page := []ui.Item{ui.Title("Мои фесты · " + data.Username), ui.PagePublic}
+	page = append(page, jumpViewerNav()...)
+	page = append(page, ui.Publictopbar(ui.Title("Мои фесты")))
+
+	if data.Error != "" {
+		page = append(page, ui.Empty(ui.Text(data.Error)))
+	}
+	if len(data.Groups) > 0 {
+		for _, g := range data.Groups {
+			fests := make([]ui.Item, 0, len(g.Fests))
+			for _, f := range g.Fests {
+				title := f.Title
+				if !f.IsPublic {
+					title += " · непубличный"
+				}
+				row := []ui.Item{ui.Href("/host/fest/" + f.Ref()), ui.Listtitle(ui.Text(title))}
+				if f.Dates != "" {
+					row = append(row, ui.Muted(ui.Text(f.Dates)))
+				}
+				fests = append(fests, ui.Listrow(row...))
+			}
+			page = append(page, ui.Details(ui.Open(), ui.Summary(ui.Text(g.Title)), ui.List(fests...)))
+		}
+	} else {
+		page = append(page, ui.Empty(ui.Text("Фестов пока нет.")))
+	}
+
+	page = append(page, ui.Section(ui.Details(
+		ui.Summary(ui.Btn(), ui.Text("Создать фест")),
+		ui.Form(ui.DirCol, ui.Method("post"), ui.Action("/host/fest"), ui.Autocomplete("off"),
+			ui.Field(ui.Label("Название"), ui.Textfield(ui.Name("title"), ui.Required())),
+			ui.Field(ui.Label("Описание (markdown)"), ui.Editor(ui.Name("description"), ui.Rows("4"))),
+			ui.Field(ui.Label("Дата начала (YYYY-MM-DD)"), ui.Textfield(ui.Name("start_date"), ui.Placeholder("2026-05-15"))),
+			ui.Field(ui.Label("Дата окончания"), ui.Textfield(ui.Name("end_date"), ui.Placeholder("2026-05-17"))),
+			ui.Field(ui.Label("rating.chgk.info ID (опционально)"), ui.Textfield(ui.Name("rating_id"), ui.Inputmode("numeric"))),
+			ui.Checkbox(ui.Name("is_public"), ui.Value("1"), ui.Text("Публичный")),
+			ui.Row(ui.Button(ui.Submit(), ui.Text("Создать"))),
+		),
+	)))
+	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+}
 
 type profileData struct {
 	HasPassword bool
 }
 
-var profileTemplate = template.Must(template.New("profile").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Профиль</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-  <script defer src="/static/profile.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <h1>Профиль</h1>
-  </header>
-  <main class="public-main">
-    <a class="list-row" href="/host"><span class="list-row-title">← Назад к списку турниров</span></a>
-    <section class="auth-step">
-      <p class="auth-hint">{{if .HasPassword}}Сменить пароль{{else}}Установить пароль{{end}}</p>
-      <form id="passwordForm" class="auth-form auth-form-stack" autocomplete="off" data-has-password="{{if .HasPassword}}1{{else}}0{{end}}">
-        {{if .HasPassword}}
-        <input class="input" id="currentPassword" name="current_password" type="password" placeholder="Текущий пароль" autocomplete="current-password" required>
-        {{end}}
-        <input class="input" id="newPassword" name="new_password" type="password" placeholder="Новый пароль" autocomplete="new-password" minlength="8" required>
-        <input class="input" id="confirmPassword" name="confirm_password" type="password" placeholder="Повторите новый пароль" autocomplete="new-password" minlength="8" required>
-        <button class="btn" type="submit">{{if .HasPassword}}Сменить пароль{{else}}Установить пароль{{end}}</button>
-      </form>
-      <pre id="passwordMessage" class="import-message"></pre>
-    </section>
-    <form method="post" action="/profile/logout">
-      <button class="btn" type="submit">Разлогиниться</button>
-    </form>
-  </main>
-</body>
-</html>`))
+// profileDoc builds the /profile page: the set/change-password form (driven by
+// profile.js via #passwordForm + data-has-password) and a logout form.
+func profileDoc(data profileData) *ui.Doc {
+	action := "Установить пароль"
+	hasPassword := "0"
+	if data.HasPassword {
+		action = "Сменить пароль"
+		hasPassword = "1"
+	}
+	form := []ui.Item{ui.ID("passwordForm"), ui.DirCol, ui.Autocomplete("off"), ui.Data("has-password", hasPassword)}
+	if data.HasPassword {
+		form = append(form, ui.Password(ui.ID("currentPassword"), ui.Name("current_password"),
+			ui.Placeholder("Текущий пароль"), ui.Autocomplete("current-password"), ui.Required()))
+	}
+	form = append(form,
+		ui.Password(ui.ID("newPassword"), ui.Name("new_password"),
+			ui.Placeholder("Новый пароль"), ui.Autocomplete("new-password"), ui.Minlength("8"), ui.Required()),
+		ui.Password(ui.ID("confirmPassword"), ui.Name("confirm_password"),
+			ui.Placeholder("Повторите новый пароль"), ui.Autocomplete("new-password"), ui.Required()),
+		ui.Button(ui.Submit(), ui.Text(action)),
+	)
+	return &ui.Doc{Nodes: []ui.Node{
+		ui.Page(ui.Title("Профиль"), ui.PagePublic, ui.Classicscripts("profile.js"),
+			ui.Publictopbar(ui.Title("Профиль")),
+			ui.List(ui.Listrow(ui.Href("/host"), ui.Listtitle(ui.Text("← Назад к списку турниров")))),
+			ui.Section(
+				ui.Hint(ui.Text(action)),
+				ui.Form(form...),
+				ui.Message(ui.ID("passwordMessage")),
+			),
+			ui.Form(ui.Method("post"), ui.Action("/profile/logout"),
+				ui.Button(ui.Submit(), ui.Text("Разлогиниться")),
+			),
+		),
+	}}
+}
 
 // /host — landing page.
 func (s *Server) HandleHostLanding(w http.ResponseWriter, r *http.Request) {
@@ -179,8 +154,7 @@ func (s *Server) HandleHostLanding(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMsg string) {
 	user, ok := s.h.Engine().LookupSession(r)
 	if !ok {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = hostLoggedOutTemplate.Execute(w, nil)
+		pages.RenderDoc(w, s.h.Engine().AssetETags, hostLoggedOutDoc())
 		return
 	}
 	fests, err := s.loadHostFests(r.Context(), user.UserID)
@@ -195,13 +169,12 @@ func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMs
 	if username == "" {
 		username = "Профиль"
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = hostLoggedInTemplate.Execute(w, hostLandingData{
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostLoggedInDoc(hostLandingData{
 		LoggedIn: true,
 		Username: username,
 		Groups:   groupHostFests(fests, time.Now().Format("2006-01-02")),
 		Error:    errMsg,
-	})
+	}))
 }
 
 func (s *Server) HandleProfilePage(w http.ResponseWriter, r *http.Request) {
@@ -222,8 +195,7 @@ func (s *Server) HandleProfilePage(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = profileTemplate.Execute(w, profileData{HasPassword: hash.Valid && hash.String != ""})
+		pages.RenderDoc(w, s.h.Engine().AssetETags, profileDoc(profileData{HasPassword: hash.Valid && hash.String != ""}))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}

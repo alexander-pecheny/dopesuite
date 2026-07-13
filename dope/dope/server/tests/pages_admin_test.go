@@ -163,16 +163,23 @@ func TestAdminPagesRejectNonAdmin(t *testing.T) {
 	}
 }
 
-// passwordFromPage extracts the generated password rendered next to a username
-// in the results table (<td>name</td><td><code>PASSWORD</code></td>).
+// passwordFromPage extracts the generated password rendered next to a username in
+// the results table: the username cell (<td>name</td>) followed by the adjacent
+// password cell's <code>PASSWORD</code>. It is whitespace-tolerant because the DSL
+// renderer lays each table cell on its own line, so the two cells are no longer
+// byte-adjacent.
 func passwordFromPage(t *testing.T, body, username string) string {
 	t.Helper()
-	marker := "<td>" + username + "</td><td><code>"
-	i := strings.Index(body, marker)
+	i := strings.Index(body, ">"+username+"<")
 	if i < 0 {
 		t.Fatalf("username %q row not found in page", username)
 	}
-	rest := body[i+len(marker):]
+	rest := body[i:]
+	open := strings.Index(rest, "<code>")
+	if open < 0 {
+		t.Fatalf("password cell for %q not found", username)
+	}
+	rest = rest[open+len("<code>"):]
 	end := strings.Index(rest, "</code>")
 	if end < 0 {
 		t.Fatalf("password cell for %q not closed", username)

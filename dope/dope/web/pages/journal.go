@@ -7,10 +7,11 @@ import (
 	"dope/dope/storage/store"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
+
+	ui "dope/dope/web/ui"
 )
 
 // The per-game journal page lists a game's edits newest-first, each rendered as
@@ -720,57 +721,59 @@ func formatJournalTime(ts string) string {
 
 // --- HTTP -------------------------------------------------------------------
 
-var gameJournalTmpl = template.Must(template.New("game-journal").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>История игры · {{.GameTitle}}</title>
-  <link rel="preload" href="/static/fonts/noto-sans-400.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public">
-  <header class="public-top">
-    <a class="public-back" href="/host/fest/{{.FestID}}/audit">←</a>
-    <h1>История · {{.GameTitle}}</h1>
-  </header>
-  <main class="public-main">
-    {{if .Err}}<p class="empty">{{.Err}}</p>{{end}}
-    {{if .Notice}}<p class="muted">{{.Notice}}</p>{{end}}
-    <section class="section">
-      {{if .Groups}}
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr><th>когда</th><th>кто</th><th>изменения</th><th></th></tr></thead>
-          <tbody>
-          {{range .Groups}}
-            <tr>
-              <td class="muted">{{.When}}</td>
-              <td>{{if .Actor}}{{.Actor}}{{else}}<span class="muted">—</span>{{end}}</td>
-              <td>
-                {{range .Lines}}<div>{{.}}</div>{{end}}
-                {{if .More}}<div class="muted">+ ещё {{.More}}</div>{{end}}
-              </td>
-              <td>
-                <form method="post" action="/host/fest/{{$.FestID}}/audit/{{$.GameID}}/revert"
-                      onsubmit="return confirm('Откатить игру до состояния перед этим изменением? Все последующие изменения этой игры будут отменены.');">
-                  <input type="hidden" name="target" value="{{.RevertTo}}">
-                  <button class="btn danger" type="submit">откатить сюда</button>
-                </form>
-              </td>
-            </tr>
-          {{end}}
-          </tbody>
-        </table>
-      </div>
-      {{else}}
-      <p class="empty">Изменений пока нет.</p>
-      {{end}}
-    </section>
-  </main>
-</body>
-</html>`))
+// journalDoc builds a game's edit-history page: a scrollable table with one row
+// per host action (when / who / the change descriptions) and a per-row
+// revert-to-here form. The revert confirm is a data-confirm attribute wired by
+// pageforms.js (no inline on* handler).
+func journalDoc(festID, gameID int64, title, errMsg, notice string, groups []journalChange) *ui.Doc {
+	var main []ui.Item
+	if errMsg != "" {
+		main = append(main, ui.Empty(ui.Text(errMsg)))
+	}
+	if notice != "" {
+		main = append(main, ui.Note(ui.Text(notice)))
+	}
+	if len(groups) > 0 {
+		rows := []ui.Item{ui.Trow(
+			ui.Hcell(ui.Text("когда")), ui.Hcell(ui.Text("кто")),
+			ui.Hcell(ui.Text("изменения")), ui.Hcell(),
+		)}
+		for _, g := range groups {
+			rows = append(rows, journalRow(festID, gameID, g))
+		}
+		main = append(main, ui.Section(ui.Table(append([]ui.Item{ui.Scroll()}, rows...)...)))
+	} else {
+		main = append(main, ui.Section(ui.Empty(ui.Text("Изменений пока нет."))))
+	}
+
+	page := []ui.Item{
+		ui.Title("История игры · " + title), ui.PagePublic, ui.Classicscripts("pageforms.js"),
+		ui.Publictopbar(ui.Title("История · "+title), ui.Back(fmt.Sprintf("/host/fest/%d/audit", festID))),
+	}
+	page = append(page, main...)
+	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
+}
+
+func journalRow(festID, gameID int64, g journalChange) *ui.Element {
+	actor := ui.Cell(ui.Muted(ui.Text("—")))
+	if g.Actor != "" {
+		actor = ui.Cell(ui.Text(g.Actor))
+	}
+	lines := make([]ui.Item, 0, len(g.Lines)+1)
+	for _, ln := range g.Lines {
+		lines = append(lines, ui.Paragraph(ui.Text(ln)))
+	}
+	if g.More > 0 {
+		lines = append(lines, ui.Note(ui.Text(fmt.Sprintf("+ ещё %d", g.More))))
+	}
+	revert := ui.Cell(ui.Form(
+		ui.Method("post"), ui.Action(fmt.Sprintf("/host/fest/%d/audit/%d/revert", festID, gameID)),
+		ui.Data("confirm", "Откатить игру до состояния перед этим изменением? Все последующие изменения этой игры будут отменены."),
+		ui.Hiddenfield(ui.Name("target"), ui.Value(strconv.FormatInt(g.RevertTo, 10))),
+		ui.Button(ui.Danger, ui.Submit(), ui.Text("откатить сюда")),
+	))
+	return ui.Trow(ui.Cell(ui.Muted(ui.Text(g.When))), actor, ui.Cell(lines...), revert)
+}
 
 func (s *Server) RenderGameJournal(w http.ResponseWriter, r *http.Request, festID, gameID int64, errMsg, notice string) {
 	var title string
@@ -783,15 +786,7 @@ func (s *Server) RenderGameJournal(w http.ResponseWriter, r *http.Request, festI
 		http.Error(w, "journal: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = gameJournalTmpl.Execute(w, map[string]any{
-		"FestID":    festID,
-		"GameID":    gameID,
-		"GameTitle": title,
-		"Groups":    groups,
-		"Err":       errMsg,
-		"Notice":    notice,
-	})
+	RenderDoc(w, s.h.Engine().AssetETags, journalDoc(festID, gameID, title, errMsg, notice, groups))
 }
 
 func (s *Server) HandleGameRevert(w http.ResponseWriter, r *http.Request, festID, gameID int64) {

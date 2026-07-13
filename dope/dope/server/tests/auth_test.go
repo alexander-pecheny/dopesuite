@@ -540,6 +540,13 @@ func TestHostDashboardAccessAndRoleRoutes(t *testing.T) {
 	}
 }
 
+// hiddenAttrPresent reports whether the element carrying marker also has the
+// bare `hidden` attribute, regardless of attribute order (the typed UI builder
+// emits universal props like hidden ahead of the page's data-* attrs).
+func hiddenAttrPresent(body, marker string) bool {
+	return strings.Contains(body, "hidden "+marker) || strings.Contains(body, marker+" hidden")
+}
+
 func TestHostCreateGameFlow(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
@@ -558,10 +565,10 @@ func TestHostCreateGameFlow(t *testing.T) {
 		strings.Contains(body, `name="game_type" value="ksi" checked`) ||
 		strings.Contains(body, `name="game_type" value="ek" checked`) {
 		t.Fatalf("new game page must not preselect game type: %s", body)
-	} else if !strings.Contains(body, `data-game-settings="od" hidden`) ||
-		!strings.Contains(body, `data-game-settings="ksi" hidden`) ||
-		!strings.Contains(body, `data-game-settings="ek" hidden`) ||
-		!strings.Contains(body, `data-game-submit hidden`) {
+	} else if !hiddenAttrPresent(body, `data-game-settings="od"`) ||
+		!hiddenAttrPresent(body, `data-game-settings="ksi"`) ||
+		!hiddenAttrPresent(body, `data-game-settings="ek"`) ||
+		!hiddenAttrPresent(body, "data-game-submit") {
 		t.Fatalf("new game page must hide settings and submit until game type is selected: %s", body)
 	}
 
