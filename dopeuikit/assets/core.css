@@ -49,6 +49,11 @@
   --paper-transparent: rgba(255, 255, 255, 0);
   --structure: #eef1f4;
   --accent-soft: #eef3fa;
+  /* Semantic aliases onto existing theme-aware tokens (theme-aware through
+     their referents, so no dark-block override needed). */
+  --accent: var(--success);
+  --text-muted: var(--muted);
+  --orange-dark: var(--amber-text);
   --slate: #64748b;
   --slate-strong: #334155;
   --blue-strong: #174ea6;
@@ -152,6 +157,7 @@
   --fw-extrabold: 800;
   --fw-black: 900;
 
+  --shadow-sm: 0 1px 2px rgba(32, 33, 36, 0.12);
   --shadow-popover: 0 8px 20px rgba(32, 33, 36, 0.18);
   --shadow-popover-up: 0 -8px 20px rgba(32, 33, 36, 0.18);
   --shadow-card: 0 8px 24px rgba(32, 33, 36, 0.18);
@@ -210,9 +216,6 @@
 .table-scroll,
 .sheet-frame,
 .tabs,
-.scoreboard,
-.viewer-sheet,
-.toolbar,
 .od-shootout-team-list,
 .entry-suggest {
   --scroll-fade-bg: var(--surface);
@@ -236,10 +239,7 @@
 }
 
 .scroll-fade-x,
-.tabs,
-.scoreboard,
-.viewer-sheet,
-.toolbar {
+.tabs {
   background-image:
     linear-gradient(to right, var(--scroll-fade-bg) 30%, transparent),
     linear-gradient(to left, var(--scroll-fade-bg) 30%, transparent),
@@ -289,7 +289,6 @@
 /* per-container background tints to keep covers matching the bg */
 .sheet-frame { --scroll-fade-bg: var(--structure); }
 .tabs { --scroll-fade-bg: var(--surface-tint); }
-.toolbar { --scroll-fade-bg: var(--toolbar); }
 
 /* ── popovers ─────────────────────────────────────────────
    Shared base for all hover-revealed name/team popovers
@@ -387,17 +386,6 @@ a.list-row:hover { background: var(--hover-bg); }
 .muted {
   color: var(--muted);
   font-size: var(--text-sm);
-}
-
-.data-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-4);
-}
-
-.data-grid h3 {
-  margin: 0;
-  font-size: var(--text-base);
 }
 
 .table-scroll {
@@ -648,7 +636,7 @@ a.list-row:hover { background: var(--hover-bg); }
 
 .btn:hover { border-color: var(--text); }
 
-.btn.danger {
+.btn.btn-danger {
   border-color: var(--red-dark);
   color: var(--red-dark);
   background: var(--red-soft);
@@ -993,32 +981,6 @@ a.list-row:hover { background: var(--hover-bg); }
   background: var(--structure);
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 58px;
-  margin: 0 var(--space-4);
-  padding: 0 18px;
-  border-radius: var(--radius-pill-lg);
-  background-color: var(--toolbar);
-  color: var(--text-strong);
-}
-
-.toolbar button {
-  height: 34px;
-  min-width: 34px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius-sm-plus);
-  background: transparent;
-  color: inherit;
-}
-
-.toolbar button:hover {
-  background: var(--grid);
-}
-
 .divider {
   width: 1px;
   height: var(--space-5-5);
@@ -1094,10 +1056,10 @@ a.list-row:hover { background: var(--hover-bg); }
   transform: none;
 }
 .sync-status[data-state="offline"] {
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
 }
 .sync-status[data-state="pending"] {
-  color: var(--orange-dark, #c47f00);
+  color: var(--orange-dark);
 }
 .sync-status[data-state="pending"]::before {
   background: currentColor;
@@ -1108,42 +1070,6 @@ a.list-row:hover { background: var(--hover-bg); }
   to {
     transform: rotate(360deg);
   }
-}
-
-.formula-bar {
-  display: grid;
-  grid-template-columns: 120px 48px 1fr;
-  align-items: center;
-  height: 52px;
-  background: var(--paper);
-  border-top: 1px solid var(--border-soft);
-}
-
-.name-box,
-.fx,
-.formula-value {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  border-right: 1px solid var(--grid);
-}
-
-.fx {
-  color: var(--muted-light);
-  font-size: var(--text-xl-plus);
-  font-style: italic;
-}
-
-.formula-value {
-  font-size: var(--text-base);
-}
-
-.sheet-main {
-  height: calc(100vh - 244px);
-  min-height: 360px;
-  overflow: hidden;
-  background: var(--paper);
 }
 
 .match-main {
@@ -1166,18 +1092,6 @@ a.list-row:hover { background: var(--hover-bg); }
 .fight-frame {
   border: 0;
   background-color: var(--structure);
-}
-
-.corner-cell {
-  position: sticky;
-  top: 0;
-  left: 0;
-  z-index: 8;
-  width: var(--sheet-corner-col);
-  height: var(--sheet-corner-row);
-  background: var(--surface-tint);
-  border-right: 1px solid var(--grid-dark);
-  border-bottom: 1px solid var(--grid-dark);
 }
 
 .table-host {
@@ -1855,15 +1769,6 @@ a.list-row:hover { background: var(--hover-bg); }
   min-width: var(--place-col);
 }
 
-.tiebreak-input {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  text-align: center;
-}
-
 .place-input {
   width: 100%;
   height: 100%;
@@ -1900,68 +1805,10 @@ a.list-row:hover { background: var(--hover-bg); }
   min-width: var(--narrow-col);
 }
 
-.subnav {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  margin-bottom: 8px;
-}
-
 .match-link {
   color: var(--text);
   font-weight: var(--fw-bold);
   text-decoration: none;
-}
-
-.fest-table {
-  width: 100%;
-  min-width: 820px;
-  border-collapse: separate;
-  border-spacing: 0;
-  background: var(--paper);
-  font-size: var(--text-sm);
-  line-height: var(--leading-snug);
-}
-
-.fest-table th,
-.fest-table td {
-  padding: 9px 10px;
-  border-right: 1px solid var(--grid);
-  border-bottom: 1px solid var(--grid);
-  background: var(--paper);
-  vertical-align: top;
-}
-
-.fest-table th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--header);
-  color: var(--text-strong);
-  font-size: var(--text-xs);
-  font-weight: var(--fw-bold);
-  text-align: left;
-  text-transform: uppercase;
-}
-
-.fest-table .stage-name {
-  width: 150px;
-  color: var(--text-strong);
-  font-weight: var(--fw-bold);
-}
-
-.fest-table .code-cell,
-.fest-table .venue-number {
-  width: 58px;
-}
-
-.fest-table .venue-cell {
-  width: 150px;
-  color: var(--text-strong);
 }
 
 .teams-cell span {
@@ -2185,15 +2032,6 @@ body:not(.embedded-match) .grid-match {
   overflow: hidden;
 }
 
-.grid-reseed-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  border-radius: inherit;
-  overflow: hidden;
-  table-layout: fixed;
-}
-
 .grid-slot-cell {
   height: 24px;
   min-width: 0;
@@ -2248,19 +2086,6 @@ body:not(.embedded-match) .grid-match {
 .grid-slot-grid .slot-place {
   justify-content: flex-end;
   text-align: right;
-}
-
-.grid-reseed-table td {
-  height: 24px;
-  padding: 3px 6px;
-  border-bottom: var(--cell-gap) solid var(--structure);
-  background: var(--paper);
-  font-size: var(--text-xs);
-  vertical-align: middle;
-}
-
-.grid-reseed-table tr:last-child td {
-  border-bottom: 0;
 }
 
 .grid-slot-row-last,
@@ -2335,16 +2160,6 @@ body:not(.embedded-match) .grid-match {
 .slot-place {
   font-variant-numeric: tabular-nums;
   text-align: right;
-}
-
-.grid-reseed-table {
-  width: 100%;
-  border: var(--cell-gap) solid transparent;
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(var(--paper), var(--paper)) padding-box,
-    linear-gradient(var(--structure), var(--structure)) border-box;
-  overflow: hidden;
 }
 
 .stage-table-stack {
@@ -2459,144 +2274,6 @@ body:not(.embedded-match) .grid-match {
   color: var(--text);
   background: var(--warning-soft);
   font-weight: var(--fw-bold);
-}
-
-.viewer {
-  min-height: 100vh;
-  background: var(--page);
-  color: var(--text);
-}
-
-.viewer-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-5);
-  padding: var(--space-5-5) var(--page-pad-x-loose) var(--space-4-5);
-  background-color: var(--paper);
-  border-bottom: 1px solid var(--border);
-}
-
-.viewer-kicker {
-  color: var(--slate);
-  font-size: var(--text-sm);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.viewer h1 {
-  margin: var(--space-1) 0 0;
-  font-size: clamp(32px, 6vw, 64px);
-  line-height: var(--leading-tight);
-  letter-spacing: 0;
-}
-
-.viewer-layout {
-  display: grid;
-  gap: var(--space-4-5);
-  padding: var(--space-4-5) var(--page-pad-x-loose) var(--page-pad-x-loose);
-}
-
-.scoreboard,
-.viewer-sheet {
-  overflow-x: auto;
-  background-color: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-}
-
-.viewer-score-table,
-.viewer-grid-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.viewer-score-table th,
-.viewer-score-table td,
-.viewer-grid-table th,
-.viewer-grid-table td {
-  padding: var(--space-3) var(--space-3-5);
-  border-bottom: 1px solid var(--grid);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.viewer-score-table th,
-.viewer-grid-table th {
-  color: var(--slate);
-  background: var(--action-bg);
-  font-size: var(--text-xs-plus);
-  font-weight: var(--fw-bold);
-  text-transform: uppercase;
-}
-
-.viewer-score-table .team,
-.viewer-grid-table .team,
-.viewer-score-table th:nth-child(2),
-.viewer-grid-table th:first-child {
-  text-align: left;
-}
-
-.viewer-score-table .rank {
-  width: 56px;
-  color: var(--blue-bright);
-  font-size: var(--text-xl-plus);
-  font-weight: var(--fw-extrabold);
-}
-
-.viewer-score-table .team {
-  font-size: var(--text-xl-plus);
-  font-weight: var(--fw-extrabold);
-}
-
-.viewer-score-table .num {
-  font-size: var(--text-xl-plus);
-  font-weight: var(--fw-extrabold);
-}
-
-.viewer-grid-table {
-  min-width: 1120px;
-}
-
-.viewer-grid-table td {
-  min-width: 78px;
-  vertical-align: top;
-}
-
-.viewer-grid-table td span {
-  display: block;
-  font-size: var(--text-lg-plus);
-  font-weight: var(--fw-extrabold);
-}
-
-.viewer-grid-table td small {
-  display: block;
-  max-width: 90px;
-  margin-top: 3px;
-  color: var(--slate);
-  font-size: var(--text-xs-tight);
-  line-height: 1.2;
-  white-space: normal;
-}
-
-.viewer-grid-table .theme-positive {
-  background: var(--success-soft);
-  color: var(--success-text);
-}
-
-.viewer-grid-table .theme-negative {
-  background: var(--danger-soft);
-  color: var(--danger-text);
-}
-
-.viewer-grid-table .theme-zero {
-  background: var(--paper);
-  color: var(--slate-strong);
-}
-
-.viewer-grid-table .total {
-  font-weight: var(--fw-black);
 }
 
 @media (max-width: 760px) {
@@ -2778,11 +2455,6 @@ body:not(.embedded-match) .grid-match {
     min-width: 24px;
   }
 
-  .tiebreak-input {
-    width: 28px;
-    font-size: var(--text-xs);
-  }
-
   .place-input {
     width: 100%;
     font-size: var(--text-xs);
@@ -2791,35 +2463,6 @@ body:not(.embedded-match) .grid-match {
   .match-table .narrow {
     width: 20px;
     min-width: 20px;
-  }
-
-  .subnav {
-    min-height: 30px;
-    margin-bottom: 5px;
-  }
-
-  .subnav a {
-    min-height: 26px;
-    padding: 0 8px;
-    font-size: var(--text-xs);
-  }
-
-  .fest-table {
-    min-width: 680px;
-    font-size: var(--text-xs);
-  }
-
-  .fest-table th,
-  .fest-table td {
-    padding: 7px 8px;
-  }
-
-  .fest-table .stage-name {
-    width: 110px;
-  }
-
-  .fest-table .venue-cell {
-    width: 120px;
   }
 
   .teams-cell span {
@@ -2852,8 +2495,7 @@ body:not(.embedded-match) .grid-match {
     padding: 6px;
   }
 
-  .grid-slot-cell,
-  .grid-reseed-table td {
+  .grid-slot-cell {
     height: 24px;
     padding: 3px 4px;
     font-size: var(--text-xs-tight);
@@ -2873,20 +2515,6 @@ body:not(.embedded-match) .grid-match {
     outline-width: 1px;
   }
 
-  .viewer-top {
-    align-items: flex-start;
-    padding: var(--space-4-5) 18px 18px;
-  }
-
-  .viewer-layout {
-    padding: var(--page-pad-x-tight);
-  }
-
-  .viewer-score-table .team,
-  .viewer-score-table .num {
-    font-size: var(--text-lg);
-  }
-
   .sheet-shell {
     height: 176px;
   }
@@ -2902,19 +2530,6 @@ body:not(.embedded-match) .grid-match {
 
   .doc-title {
     font-size: var(--text-lg);
-  }
-
-  .toolbar {
-    overflow-x: auto;
-    margin: 0 8px;
-  }
-
-  .formula-bar {
-    grid-template-columns: 78px 42px 1fr;
-  }
-
-  .sheet-main {
-    height: calc(100vh - 224px);
   }
 
   .tabs {
@@ -3734,56 +3349,6 @@ body:not(.embedded-match) .grid-match {
 }
 
 /* Итог */
-/* Экран: projector scoreboard. Reuses the Итог (.results-table) styling; the
-   columns are laid out side by side and the whole board is scaled with `zoom`
-   by layoutScreen() so every team fits the screen. */
-.screen-wrapper {
-  box-sizing: border-box;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  padding: var(--space-2);
-  background: var(--structure);
-}
-
-.screen-cols {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  gap: var(--space-4);
-}
-
-/* The board doesn't scroll, so the Итог frozen-column offsets are pointless —
-   drop them. Team names keep Итог's truncate/fade, but the column is narrower
-   than Итог's so short names don't waste width — that lets the font grow. Long
-   names fade out (acceptable for projection). */
-.screen-table.results-table .results-place,
-.screen-table.results-table .results-team,
-.screen-table.results-table .results-total,
-.screen-table.results-table thead th {
-  position: static;
-}
-
-.screen-table.od-results-table {
-  --results-team-col: 160px;
-}
-
-.screen-empty {
-  color: var(--muted);
-  font-size: var(--text-lg);
-}
-
-/* Fullscreen (projector) mode: drop the site chrome so only the board shows. */
-body.is-fullscreen .host-top {
-  display: none;
-}
-
-body.is-fullscreen.od-page .match-main {
-  height: 100vh;
-}
-
 .results-wrapper {
   display: flex;
   flex-direction: column;

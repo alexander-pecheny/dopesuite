@@ -88,7 +88,7 @@
         { "name": "name" }, { "name": "placeholder" }, { "name": "autocomplete" },
         { "name": "spellcheck" }, { "name": "autocapitalize" }, { "name": "autocorrect" },
         { "name": "required", "kind": "bare" }, { "name": "autofocus", "kind": "bare" },
-        { "name": "value" }, { "name": "maxlength" }, { "name": "inputmode" },
+        { "name": "value" }, { "name": "maxlength" }, { "name": "minlength" }, { "name": "inputmode" },
         { "name": "pattern" }, { "name": "list" },
         { "name": "readonly", "kind": "bare" }, { "name": "disabled", "kind": "bare" }
       ],
@@ -99,7 +99,7 @@
         { "name": "name" }, { "name": "placeholder" }, { "name": "autocomplete" },
         { "name": "spellcheck" }, { "name": "autocapitalize" }, { "name": "autocorrect" },
         { "name": "required", "kind": "bare" }, { "name": "autofocus", "kind": "bare" },
-        { "name": "value" }, { "name": "maxlength" }, { "name": "inputmode" },
+        { "name": "value" }, { "name": "maxlength" }, { "name": "minlength" }, { "name": "inputmode" },
         { "name": "pattern" },
         { "name": "readonly", "kind": "bare" }, { "name": "disabled", "kind": "bare" }
       ],
@@ -142,7 +142,7 @@
       "children": "text" },
 
     { "name": "selectfield",
-      "props": [{ "name": "compact", "kind": "bare" }],
+      "props": [{ "name": "name" }, { "name": "compact", "kind": "bare" }],
       "children": ["option"] },
 
     { "name": "option",
@@ -161,7 +161,9 @@
       "props": [
         { "name": "kind", "enum": "button-kind" }, { "name": "small", "kind": "bare" },
         { "name": "submit", "kind": "bare" }, { "name": "disabled", "kind": "bare" },
-        { "name": "href" }, { "name": "download", "kind": "bare" }
+        { "name": "href" }, { "name": "download", "kind": "bare" },
+        { "name": "formaction" }, { "name": "formnovalidate", "kind": "bare" },
+        { "name": "name" }, { "name": "value" }
       ],
       "children": "text" },
 

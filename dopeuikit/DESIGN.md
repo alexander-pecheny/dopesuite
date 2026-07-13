@@ -105,6 +105,11 @@ becomes `<header>`; `placement:"overlay"` children render after `</main>`.
 its `data-state`. `HeadHook` is the seam for an extension to splice head nodes
 positionally (dope's `init` marker: `<script>window.__HOST_INIT__=null;</script>`).
 
+**Scripts convention**: page JS that talks over `window` globals with no imports
+(dope's whole frontend, xy's `menu.js`) is listed in `classicscripts` (emitted as
+`<script defer>`, boot order preserved); genuine ES modules go in `scripts`
+(emitted `type=module`). A page mixes both freely.
+
 ## .dopeui grammar
 
 Line-oriented, indentation = tree depth (2 spaces/level, tabs forbidden). Per
@@ -122,12 +127,23 @@ enums: `space align justify button-kind`(primary/ghost/danger/secondary)
 modal-variant mount-kind`(empty — apps fill). Values become `Attr` constants
 carrying their prop name (`ui.SpaceSM`, `ui.Ghost`, `ui.PageFull`).
 
+These are DSL enums, distinct from the **CSS design tokens** (custom properties)
+in `assets/core.css` — colors, spacing, type scale, shadows, and semantic aliases
+(`--accent`, `--text-muted`, `--orange-dark` map onto existing theme-aware tokens;
+`--shadow-sm`) that the app CSS layers build on. Both apps serve core.css first,
+then their own layer.
+
 ## Core primitive catalog (summary)
 
 Chrome: `page topbar iconbtn iconlink`. Layout: `col row spacer section`. Text:
 `text hint subhead label bigcode message empty muted strong code`. Forms:
 `form textfield password filefield hiddenfield numfield colorfield sliderrow
-checkbox radio selectfield/option editor button field`. Overlays/compound:
+checkbox radio selectfield/option editor button field`. Notable form props:
+`textfield`/`password` carry `minlength`/`maxlength`/`pattern`; `selectfield`
+takes `name`; `button` supports multi-target form submission via
+`formaction`/`formnovalidate` plus `name`/`value` (a `submit` button that posts to
+a different action or carries a named value — the numbers page's per-action
+buttons). Overlays/compound:
 `modal dialog details/summary fieldset datalist tabs/tab/tabpanel list/listrow/
 listtitle table/trow/hcell/cell unreaddot mount`. Children policies: `any`,
 `text` (inline text/inline-primitives), `content` (text or block — table cells),

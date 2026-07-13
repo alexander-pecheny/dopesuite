@@ -339,6 +339,10 @@ func Maxlength(v string) Attr {
 	return Attr{Name: "maxlength", Value: v}
 }
 
+func Minlength(v string) Attr {
+	return Attr{Name: "minlength", Value: v}
+}
+
 func Inputmode(v string) Attr {
 	return Attr{Name: "inputmode", Value: v}
 }
@@ -413,6 +417,14 @@ func Submit() Attr {
 
 func Download() Attr {
 	return Attr{Name: "download", Bare: true}
+}
+
+func Formaction(v string) Attr {
+	return Attr{Name: "formaction", Value: v}
+}
+
+func Formnovalidate() Attr {
+	return Attr{Name: "formnovalidate", Bare: true}
 }
 
 func Done(v string) Attr {

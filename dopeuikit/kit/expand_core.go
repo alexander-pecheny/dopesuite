@@ -37,10 +37,10 @@ var coreExpanders = map[string]ExpandFunc{
 	"muted":   func(c *ExpandCtx, p *Element) []Node { return one(inlineMuted(c, p).(*Element)) },
 	"form":    expandForm,
 	"textfield": func(c *ExpandCtx, p *Element) []Node {
-		return one(Input(c, "text", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "inputmode", "pattern", "list"))
+		return one(Input(c, "text", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern", "list"))
 	},
 	"password": func(c *ExpandCtx, p *Element) []Node {
-		return one(Input(c, "password", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "inputmode", "pattern"))
+		return one(Input(c, "password", p, "name", "placeholder", "autocomplete", "spellcheck", "autocapitalize", "autocorrect", "value", "maxlength", "minlength", "inputmode", "pattern"))
 	},
 	"filefield": func(c *ExpandCtx, p *Element) []Node { return one(Input(c, "file", p, "accept")) },
 	"hiddenfield": func(c *ExpandCtx, p *Element) []Node {
@@ -206,6 +206,7 @@ func expandSelect(c *ExpandCtx, p *Element) []Node {
 	}
 	attrs := []Attr{ClassAttr(GrowClasses(base, p)...)}
 	attrs = append(attrs, IDAttr(p)...)
+	attrs = append(attrs, CopyProps(p, "name")...)
 	attrs = append(attrs, MetaAttrs(p)...)
 	return one(El("select", attrs, c.Nodes(p.Block)...))
 }
@@ -273,7 +274,8 @@ func expandButton(c *ExpandCtx, p *Element) []Node {
 	attrs := []Attr{ClassAttr(classes...)}
 	attrs = append(attrs, IDAttr(p)...)
 	attrs = append(attrs, At("type", typ))
-	attrs = append(attrs, CopyFlags(p, "disabled")...)
+	attrs = append(attrs, CopyProps(p, "name", "value", "formaction")...)
+	attrs = append(attrs, CopyFlags(p, "formnovalidate", "disabled")...)
 	attrs = append(attrs, MetaAttrs(p)...)
 	return one(&Element{Tag: "button", Attrs: attrs, Inline: c.Items(p.Inline)})
 }

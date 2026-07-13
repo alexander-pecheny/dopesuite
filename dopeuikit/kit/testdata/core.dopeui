@@ -8,7 +8,7 @@ page title="Core catalog" kind="full"
       field label="Логин"
         textfield id="u" name="u" inputmode="email" pattern="[a-z]+" list="dl" required
       field label="Пароль"
-        password id="p" name="p" readonly disabled
+        password id="p" name="p" minlength="8" maxlength="64" readonly disabled
       hiddenfield name="csrf" value="abc"
       datalist id="dl"
         option value="a" "A"
