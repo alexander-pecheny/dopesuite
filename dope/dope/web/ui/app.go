@@ -77,14 +77,21 @@ func mustApp() *base.App {
 }
 
 // headHook emits, between the boot script and the page scripts, dope's per-request
-// init marker and/or a meta-refresh. serve_html.go splices the route JSON over the
-// exact byte-string `null;/*__X_INIT__*/`, so the init script must contain it
-// verbatim. The refresh prop drives the register code stage's 2s auto-advance.
+// init marker and/or a meta-refresh. The marker is a NON-executable
+// `<script type="application/json">` data block (not inline JS), so a strict
+// `script-src 'self'` CSP needs no nonce/unsafe-inline; init.js reads the block
+// into window.<name>. serve_html.go splices the route JSON over the exact
+// byte-string `null;/*__X_INIT__*/`, so the block body must contain it verbatim.
+// The refresh prop drives the register code stage's 2s auto-advance.
 func headHook(_ *base.ExpandCtx, p *base.Element) []base.Node {
 	var out []base.Node
 	if name, ok := base.Get(p, "init"); ok {
-		js := "window." + name + "=null;/*" + name + "*/"
-		out = append(out, base.Inl("script", nil, &base.TextNode{Value: js}))
+		marker := "null;/*" + name + "*/"
+		out = append(out, base.Inl("script", []base.Attr{
+			base.At("type", "application/json"),
+			base.At("id", name),
+			base.At("data-dope-init", ""),
+		}, &base.TextNode{Value: marker}))
 	}
 	if sec, ok := base.Get(p, "refresh"); ok {
 		out = append(out, base.El("meta", []base.Attr{base.At("http-equiv", "refresh"), base.At("content", sec)}))

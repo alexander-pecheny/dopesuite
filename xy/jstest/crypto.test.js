@@ -44,6 +44,21 @@ test("passphrase change re-wraps the same DK (no data re-encrypt)", async () => 
   await assert.rejects(() => xyCrypto.unlockBoard("old pass", newKeymeta));
 });
 
+test("validatePassphrase enforces length and word count on set", () => {
+  const ok = xyCrypto.validatePassphrase;
+  // Clears the floor (>=16 chars, >=3 non-empty words) on each separator.
+  assert.equal(ok("alpha bravo charlie"), null);
+  assert.equal(ok("alpha-bravo_charlie-x"), null);
+  // Too short even with enough words.
+  assert.match(ok("one two three"), /16 символов/);
+  // Long enough but too few words (a single 16-char token).
+  assert.match(ok("abcdefghijklmnop"), /минимум 3 слова/);
+  // Trailing/repeated separators do not invent words.
+  assert.match(ok("aaaaaaaaaaaaaaaa----"), /минимум 3 слова/);
+  // Empty.
+  assert.match(ok(""), /16 символов/);
+});
+
 test("bytes round-trip for attachments", async () => {
   const { dk } = await xyCrypto.createBoardKeys("pw");
   const data = new Uint8Array([0, 1, 2, 250, 255]);

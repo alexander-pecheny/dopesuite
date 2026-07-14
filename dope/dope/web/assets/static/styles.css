@@ -4470,6 +4470,17 @@ body.is-fullscreen.od-page .match-main {
   box-sizing: border-box;
 }
 
+/* The colour comes from expandSwatchradio's closed palette enum as data-color,
+   mapped here to --swatch so the dot needs no inline style. Keep the values in
+   sync with the --sticker-c-* palette above. */
+.sticker-palette .swatch-dot[data-color="white"] { --swatch: var(--sticker-c-white); }
+.sticker-palette .swatch-dot[data-color="yellow"] { --swatch: var(--sticker-c-yellow); }
+.sticker-palette .swatch-dot[data-color="green"] { --swatch: var(--sticker-c-green); }
+.sticker-palette .swatch-dot[data-color="red"] { --swatch: var(--sticker-c-red); }
+.sticker-palette .swatch-dot[data-color="blue"] { --swatch: var(--sticker-c-blue); }
+.sticker-palette .swatch-dot[data-color="pink"] { --swatch: var(--sticker-c-pink); }
+.sticker-palette .swatch-dot[data-color="orange"] { --swatch: var(--sticker-c-orange); }
+
 .sticker-palette .swatch input:checked + .swatch-dot,
 .sticker-palette .swatch input:focus-visible + .swatch-dot {
   outline: var(--space-0-5) solid var(--blue-bright);

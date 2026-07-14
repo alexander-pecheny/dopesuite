@@ -120,9 +120,10 @@ func expandPalette(c *base.ExpandCtx, p *base.Element) []base.Node {
 	return one(base.El("div", attrs, kids...))
 }
 
-// expandSwatchradio renders one sticker-colour radio. The expansion owns the
-// inline --swatch style (the colour comes from a closed palette enum, never a
-// free-form value), so no page authors raw CSS.
+// expandSwatchradio renders one sticker-colour radio. The colour comes from a
+// closed palette enum, emitted as data-color; styles.css maps each value to its
+// --swatch var, so the dot carries no inline style (keeps the CSP script/style
+// strict) and no page authors raw CSS.
 func expandSwatchradio(c *base.ExpandCtx, p *base.Element) []base.Node {
 	name, _ := base.Get(p, "name")
 	value, _ := base.Get(p, "value")
@@ -133,7 +134,7 @@ func expandSwatchradio(c *base.ExpandCtx, p *base.Element) []base.Node {
 	}
 	boxAttrs := []base.Attr{base.At("type", "radio"), base.At("name", name), base.At("value", value)}
 	boxAttrs = append(boxAttrs, base.CopyFlags(p, "checked")...)
-	dot := base.El("span", []base.Attr{base.ClassAttr("swatch-dot"), base.At("style", "--swatch:var(--sticker-c-"+color+")")})
+	dot := base.El("span", []base.Attr{base.ClassAttr("swatch-dot"), base.At("data-color", color)})
 	return one(base.El("label", labelAttrs, base.El("input", boxAttrs), dot))
 }
 

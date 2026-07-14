@@ -227,7 +227,7 @@ func Main() {
 	srv.metrics.Init()
 
 	httpSrv := &http.Server{
-		Handler:           auditmw.ContextMiddleware(&srv.eng, webassets.Gzip(mux, "/events", "/host-events")),
+		Handler:           securityHeaders(auditmw.ContextMiddleware(&srv.eng, webassets.Gzip(mux, "/events", "/host-events"))),
 		ReadHeaderTimeout: 5 * time.Second,
 		// No WriteTimeout: SSE responses are intentionally long-lived.
 		IdleTimeout: 120 * time.Second,

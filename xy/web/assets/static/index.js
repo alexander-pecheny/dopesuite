@@ -103,6 +103,8 @@ createForm.addEventListener("submit", async (e) => {
   const name = document.getElementById("boardName").value.trim();
   const pass = document.getElementById("boardPass").value;
   if (!name || !pass) return;
+  const passErr = xyCrypto.validatePassphrase(pass);
+  if (passErr) { createMessage.textContent = passErr; return; }
   if (!xySync.isOnline()) { createMessage.textContent = "Создание доски доступно только онлайн."; return; }
   try {
     const { keymeta, dk } = await xyCrypto.createBoardKeys(pass);

@@ -246,7 +246,7 @@ func setPendingRegisterCookie(w http.ResponseWriter, code string) {
 		Value:    code,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   session.IsProdEnv(),
+		Secure:   session.SecureCookies(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(session.TelegramAuthLifetime / time.Second),
 	})
@@ -258,7 +258,7 @@ func clearPendingRegisterCookie(w http.ResponseWriter) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   session.IsProdEnv(),
+		Secure:   session.SecureCookies(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})

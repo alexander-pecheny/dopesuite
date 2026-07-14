@@ -19,7 +19,7 @@ const (
 	TelegramAuthLifetime = time.Minute
 )
 
-// ProdEnvVar names the environment variable consulted by IsProdEnv. Each app
+// ProdEnvVar names the environment variable consulted by SecureCookies. Each app
 // sets it at startup; the apps' deployed environments predate this package and
 // use different names, so it stays configurable rather than unified.
 var ProdEnvVar = "APP_ENV"
@@ -35,9 +35,19 @@ type User struct {
 	IsSystem  bool
 }
 
-// IsProdEnv reports whether the server is running in production.
-func IsProdEnv() bool {
-	return strings.EqualFold(os.Getenv(ProdEnvVar), "production")
+// SecureCookies reports whether session cookies get the Secure flag. It fails
+// safe: Secure is ON unless ProdEnvVar is set to an explicit non-production value
+// (development/dev/local/test), so a missing or misspelled var in a real
+// deployment cannot silently downgrade the cookie to travel over plaintext HTTP —
+// the exact footgun of a per-env "== production" check. Local HTTP dev opts out by
+// setting the app's env var to "development" (http://localhost is a secure context
+// anyway, so Secure cookies are still delivered there even without opting out).
+func SecureCookies() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(ProdEnvVar))) {
+	case "development", "dev", "local", "test", "testing":
+		return false
+	}
+	return true
 }
 
 // SetCookie writes the session cookie carrying token.
@@ -47,7 +57,7 @@ func SetCookie(w http.ResponseWriter, token string) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   IsProdEnv(),
+		Secure:   SecureCookies(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(Lifetime / time.Second),
 	})
@@ -60,7 +70,7 @@ func ClearCookie(w http.ResponseWriter) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   IsProdEnv(),
+		Secure:   SecureCookies(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})

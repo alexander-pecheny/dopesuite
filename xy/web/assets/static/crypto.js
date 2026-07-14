@@ -17,9 +17,36 @@ const ALG_AES_GCM = 1;
 const NONCE_LEN = 12;
 const HEADER_LEN = MAGIC.length + 1 + NONCE_LEN;
 
-// Default KDF params, stored per board so they can be raised later.
-const DEFAULT_KDF = { kdf: "scrypt", N: 32768, r: 8, p: 1, dkLen: 32 };
+// Default KDF params, stored per board so they can be raised later without
+// touching existing boards (unlock reads each board's own params; only new
+// boards and passphrase re-wraps pick up a bumped N). N=2^16 needs 128*N*r =
+// 64 MiB and ~0.2s desktop / ~1s low-end-mobile per derive — paid once per
+// unlock (the DK is then cached), so a cheap Android tab stays within budget.
+const DEFAULT_KDF = { kdf: "scrypt", N: 65536, r: 8, p: 1, dkLen: 32 };
 const VERIFY_PLAINTEXT = "xy-verify-v1";
+
+// Minimum board-passphrase strength. The passphrase is the ONLY secret guarding
+// a board (the server holds just ciphertext + KDF material), and it is checked
+// offline, so a weak one is cheaply cracked no matter how high N goes. Enforced
+// wherever a passphrase is SET (board create, import, future passphrase change) —
+// never on unlock, so existing boards are never locked out. Callers show the
+// returned message inline.
+const PASSPHRASE_MIN_LEN = 16;
+const PASSPHRASE_MIN_WORDS = 3;
+
+// validatePassphrase returns a human error string, or null when the passphrase
+// clears the floor: at least PASSPHRASE_MIN_LEN characters AND PASSPHRASE_MIN_WORDS
+// non-empty words separated by space, "-" or "_".
+function validatePassphrase(passphrase) {
+  const pass = (passphrase || "").normalize("NFKC");
+  if ([...pass].length < PASSPHRASE_MIN_LEN) {
+    return `Пароль доски должен быть не короче ${PASSPHRASE_MIN_LEN} символов.`;
+  }
+  if (pass.split(/[ \-_]+/).filter(Boolean).length < PASSPHRASE_MIN_WORDS) {
+    return `Пароль доски должен содержать минимум ${PASSPHRASE_MIN_WORDS} слова (через пробел, «-» или «_»).`;
+  }
+  return null;
+}
 
 function randomBytes(n) {
   const b = new Uint8Array(n);
@@ -189,7 +216,7 @@ async function forgetDK(boardId) {
 
 export const xyCrypto = {
   toB64, fromB64,
-  createBoardKeys, unlockBoard, rewrapKey,
+  createBoardKeys, unlockBoard, rewrapKey, validatePassphrase,
   encField, decField, encBytes, decBytes,
   cacheDK, loadCachedDK, forgetDK,
   // low-level, exposed for tests

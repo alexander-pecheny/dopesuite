@@ -74,6 +74,9 @@ func (s *server) handleAuthRegisterStart(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !RequireSameOriginUnsafe(w, r) {
+		return
+	}
 	defer r.Body.Close()
 
 	var req startRegisterRequest
@@ -281,6 +284,9 @@ func (s *server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !RequireSameOriginUnsafe(w, r) {
+		return
+	}
 	defer r.Body.Close()
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -305,6 +311,9 @@ func (s *server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleAuthLoginStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !RequireSameOriginUnsafe(w, r) {
 		return
 	}
 	defer r.Body.Close()
@@ -473,6 +482,9 @@ update telegram_login_codes set consumed_at = ? where id = ?`, now.Format(time.R
 func (s *server) handleAuthLoginPassword(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !RequireSameOriginUnsafe(w, r) {
 		return
 	}
 	defer r.Body.Close()

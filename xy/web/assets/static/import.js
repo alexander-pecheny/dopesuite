@@ -187,6 +187,11 @@ form.addEventListener("submit", async (e) => {
     log("Выберите JSON-файл, экспортированный из Trello.");
     return;
   }
+  const passErr = xyCrypto.validatePassphrase(pass);
+  if (passErr) {
+    log(passErr);
+    return;
+  }
   let board;
   try {
     board = JSON.parse(await file.text());
