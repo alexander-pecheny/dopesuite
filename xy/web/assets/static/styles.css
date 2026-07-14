@@ -10,14 +10,8 @@
 :root { --kanban-col: var(--structure); --kanban-card: var(--surface); }
 :root[data-theme="dark"] { --kanban-col: var(--surface); --kanban-card: var(--structure); }
 
-/* Ghost = no fill and no outline at rest; hover materialises the fill (it used
-   to materialise a --text outline, which is the contrast border we dropped). */
-.btn-ghost {
-  background: transparent;
-  color: var(--muted);
-  font-weight: var(--fw-semibold);
-}
-.btn-ghost:hover { background: var(--action-hover-bg); color: var(--text); }
+/* .btn-ghost now lives in the kit (core.css) — it is one of the core button
+   kinds, not an xy invention, and it needs a fill there to read as a button. */
 .btn-small { min-height: 30px; padding: 0 var(--space-3); }
 
 /* board list */
@@ -41,7 +35,7 @@
 }
 .board-card:hover { background: var(--hover-bg); }
 .board-card.has-unread { position: relative; }
-.board-card-name { font-weight: var(--fw-bold); font-size: var(--text-lg); }
+.board-card-name { font-weight: var(--fw-semibold); font-size: var(--text-lg); }
 .board-card-role { font-size: var(--text-xs); color: var(--muted); }
 /* blue "unread" dot — a board has changes by another member the user hasn't read */
 .board-card-unread {
@@ -135,7 +129,7 @@
   padding: var(--space-2) var(--space-2-5);
   border-bottom: 1px solid var(--border);
   font-size: var(--text-sm);
-  font-weight: var(--fw-bold);
+  font-weight: var(--fw-semibold);
 }
 .notif-empty { padding: var(--space-3); color: var(--muted); font-size: var(--text-sm); text-align: center; }
 .notif-row {
@@ -191,7 +185,7 @@
 }
 .klist.dragging { opacity: 0.5; }
 .klist-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-2); }
-.klist-title { font-weight: var(--fw-bold); }
+.klist-title { font-weight: var(--fw-semibold); }
 .kadd {
   border: none;
   background: transparent;
@@ -249,7 +243,7 @@
 }
 .kgroup-head {
   padding: var(--space-1) var(--space-2);
-  font-weight: var(--fw-bold);
+  font-weight: var(--fw-semibold);
   color: var(--blue-strong);
 }
 .kgroup-title { white-space: nowrap; }
@@ -300,7 +294,7 @@
 .card-detail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .card-kind-select { flex: 0 1 auto; width: auto; min-width: 0; }
 /* Test-card session heading (shown instead of the kind selector). */
-.card-detail-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: var(--text-base); font-weight: 600; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-detail-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: var(--text-base); font-weight: var(--fw-semibold); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-head-actions { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; margin-left: auto; }
 /* Copy-for-test feedback sits right under the button (top-right of the panel). */
 .card-copy-msg { align-self: flex-end; margin-top: calc(var(--space-1) * -1); font-size: var(--text-xs); color: var(--green, var(--accent)); }
@@ -624,7 +618,7 @@
   gap: var(--space-2);
   flex-wrap: wrap;
 }
-.token-row-label { font-weight: var(--fw-bold); color: var(--text-strong); }
+.token-row-label { font-weight: var(--fw-semibold); color: var(--text-strong); }
 .token-row-status { font-size: var(--text-xs); color: var(--muted); }
 .token-row-meta {
   grid-column: 1;
@@ -667,7 +661,7 @@
   color: var(--muted);
   font: inherit;
   font-size: var(--text-sm);
-  font-weight: var(--fw-bold);
+  font-weight: var(--fw-regular);
   padding: var(--space-1) var(--space-3);
   border-radius: 999px;
   cursor: var(--cursor-action);
@@ -675,7 +669,7 @@
 .fld-add:hover { color: var(--text); border-color: var(--muted); }
 .fld-muted .fld-add { opacity: 0.75; }
 .fld-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.fld-label { font-size: var(--text-xs); font-weight: var(--fw-bold); color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.fld-label { font-size: var(--text-sm); font-weight: var(--fw-semibold); color: var(--muted); }
 .fld-rm, .fld-row-rm, .fld-tag-rm {
   border: none; background: transparent; color: var(--muted);
   font-size: var(--text-base); line-height: 1; cursor: var(--cursor-action);
@@ -750,7 +744,7 @@ textarea.fld-input { min-height: 3em; }
 .lm-pos { color: var(--muted); font-size: var(--text-sm); min-width: 2.2rem; }
 .lm-handle { color: var(--muted); cursor: grab; font-size: var(--text-lg); line-height: 1; }
 .lm-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lm-group-title { font-weight: var(--fw-bold); color: var(--blue-strong); white-space: normal; }
+.lm-group-title { font-weight: var(--fw-semibold); color: var(--blue-strong); white-space: normal; }
 .lm-icon {
   border: none; background: transparent; color: var(--muted);
   cursor: var(--cursor-action); font-size: var(--text-sm); padding: 0 var(--space-1);

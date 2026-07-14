@@ -50,7 +50,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
 
     row gap="sm" wrap
       button id="cardSave" "Сохранить"
-      button kind="ghost" id="cardDelete" data-edit-only "Удалить карточку"
+      button kind="danger" id="cardDelete" data-edit-only "Удалить карточку"
 
     label data-edit-only "Метки"
     mount id="labelPicker" kind="label-picker" data-edit-only
@@ -75,7 +75,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
       selectfield id="movePos" title="Позиция" grow
     row gap="sm" align="center" wrap data-edit-only
       button small id="copyBtn" "Копировать"
-      button small kind="ghost" id="moveBtn" "Переместить"
+      button small id="moveBtn" "Переместить"
 
     label data-edit-only "Лента " (unreaddot id="commentsUnreadDot" title="Непрочитанные комментарии")
     mount id="timeline" kind="timeline" data-edit-only
@@ -140,7 +140,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
       selectfield id="moveListPos" title="Позиция"
     row gap="sm" align="center" wrap
       button small id="moveListCopyBtn" "Копировать"
-      button small kind="ghost" id="moveListMoveBtn" "Переместить"
+      button small id="moveListMoveBtn" "Переместить"
     message id="moveListMessage"
 
   -- lists management overlay: reorder lists (drag / position), select several

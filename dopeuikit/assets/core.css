@@ -95,6 +95,15 @@
   --action-hover-bg: #d6dde7;
   --action-fg: var(--text);
   --field-bg: #eaeef3;
+
+  /* Ghost = the low-emphasis button. It is TRANSLUCENT on purpose: a ghost sits
+     on --surface, --structure and --page alike, and any opaque fill picked to
+     read on one of them disappears into another. A wash of the text color works
+     against all three. It must still read as a button — with the outlines gone,
+     a ghost with no fill at all is just a word (which is what it had become). */
+  --action-ghost-bg: rgba(32, 33, 36, 0.06);
+  --action-ghost-hover-bg: rgba(32, 33, 36, 0.12);
+
   --action-disabled-bg: var(--structure);
   --action-disabled-fg: var(--muted-light);
   --action-disabled-opacity: 0.72;
@@ -320,7 +329,7 @@ a.list-row:hover { background: var(--hover-bg); }
 
 .data-table th {
   color: var(--muted);
-  font-weight: var(--fw-bold);
+  font-weight: var(--fw-semibold);
 }
 
 .data-table input:not([type="checkbox"]),
@@ -403,7 +412,21 @@ a.list-row:hover { background: var(--hover-bg); }
   font-size: var(--text-lg);
 }
 
-/* ── design system: buttons & links ──────────────────────── */
+/* ── design system: buttons & links ───────────────────────────────────────────
+   THE BUTTON KINDS. The vocabulary has always declared four (primary / ghost /
+   danger / secondary, see kit/vocab.json) but the stylesheet only ever painted
+   two of them, so `secondary` and `primary` silently rendered as a plain .btn.
+   All four are defined here now, and they separate by FILL WEIGHT — there are no
+   outlines to separate them with:
+
+     primary    strongest — an accent fill. One per view, the thing to do next.
+     .btn       default (= secondary): a tonal fill. The everyday button.
+     ghost      quietest — a translucent wash. Still a button, still clickable.
+     danger     a red fill. Destructive, and it should look it.
+
+   Peer actions must share a kind: a filled button next to a ghost one reads as
+   "this one is real and that one is a label", which is a lie when both do the
+   same class of thing. */
 
 .btn {
   display: inline-flex;
@@ -415,7 +438,10 @@ a.list-row:hover { background: var(--hover-bg); }
   border-radius: var(--radius-md);
   background: var(--action-bg);
   color: var(--text);
-  font-weight: var(--fw-bold);
+  /* semibold, not bold: every button on every page shouting at 700 is what made
+     the UI feel heavy. Weight is for emphasis, and if all of it is emphasised
+     none of it is. */
+  font-weight: var(--fw-semibold);
   cursor: var(--cursor-action);
   text-decoration: none;
 }
@@ -423,6 +449,28 @@ a.list-row:hover { background: var(--hover-bg); }
 /* Hover is a fill step, not an outline. (It used to promote border-color to
    --text, which is exactly the "contrast border" this pass removes.) */
 .btn:hover { background: var(--action-hover-bg); }
+
+.btn.btn-primary {
+  background: var(--blue);
+  color: #fff;
+}
+
+.btn.btn-primary:hover { background: var(--blue); filter: brightness(1.08); }
+
+/* Ghost: the quiet kind. It carries a faint wash rather than nothing at all —
+   with the outlines gone, a fill-less ghost is indistinguishable from body text,
+   and «Удалить карточку» / «Переместить» stopped reading as buttons entirely.
+   Lives in the kit (not an app layer): it is one of the core button kinds. */
+.btn.btn-ghost {
+  background: var(--action-ghost-bg);
+  color: var(--muted);
+  font-weight: var(--fw-regular);
+}
+
+.btn.btn-ghost:hover {
+  background: var(--action-ghost-hover-bg);
+  color: var(--text);
+}
 
 /* Danger reads through its fill too. --red-soft was near-white and relied on the
    red outline to be legible as a danger button; --red is the actual tinted fill,
@@ -736,6 +784,8 @@ a.list-row:hover { background: var(--hover-bg); }
   --action-bg: #333944;
   --action-hover-bg: #3e4552;
   --field-bg: #2b303a;
+  --action-ghost-bg: rgba(255, 255, 255, 0.07);
+  --action-ghost-hover-bg: rgba(255, 255, 255, 0.14);
   --action-disabled-bg: #20242b;
 
   /* text — off-white high-emphasis, dimmer for muted (avoids halation) */
@@ -1070,13 +1120,17 @@ a.list-row:hover { background: var(--hover-bg); }
    which is concatenated after this file. */
 .unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--blue, #2f6fed); vertical-align: middle; }
 
-.card-section-label { font-size: var(--text-xs); font-weight: var(--fw-bold); color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: var(--space-3); }
+/* Section labels read in the case they were authored in ("Метки", not "МЕТКИ").
+   The uppercase + tracked-out + 700 treatment is three separate emphasis devices
+   stacked on a word whose whole job is to be quiet scaffolding; muted color and
+   a small size already say "label". Same reasoning for .fld-label in xy. */
+.card-section-label { font-size: var(--text-sm); font-weight: var(--fw-semibold); color: var(--muted); margin-top: var(--space-3); }
 
 /* The dash IS the affordance here (a tear-off code box), so it takes --grid-dark
    directly rather than the transparent --border. */
 .register-code { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: var(--fw-bold); letter-spacing: 0.08em; text-align: center; padding: var(--space-3); border: 1px dashed var(--grid-dark); border-radius: var(--radius-md); }
 
-.auth-subhead { margin: 0; font-size: var(--text-md); font-weight: var(--fw-bold); color: var(--text-strong); }
+.auth-subhead { margin: 0; font-size: var(--text-md); font-weight: var(--fw-semibold); color: var(--text-strong); }
 
 .card-view-tabs {
   display: flex;
@@ -1094,7 +1148,7 @@ a.list-row:hover { background: var(--hover-bg); }
   color: var(--muted);
   font: inherit;
   font-size: var(--text-sm);
-  font-weight: var(--fw-bold);
+  font-weight: var(--fw-semibold);
   padding: var(--space-2) var(--space-2);
   border-radius: var(--radius-sm);
   cursor: var(--cursor-action);
