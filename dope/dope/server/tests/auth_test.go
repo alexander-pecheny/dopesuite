@@ -7,7 +7,6 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/roles"
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/festaccess"
@@ -21,6 +20,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"pecheny.me/dopecore/authcred"
+	"pecheny.me/dopecore/session"
 )
 
 func newAuthTestServer(t *testing.T) *dopeserver.Server {
@@ -1132,7 +1134,7 @@ values(?, ?, ?, 0, ?, ?)`, 4242, "tg_x", "x", now, now)
 	}
 
 	// Backdate expiry to one second from now, then call handler -> sliding extension should kick in.
-	hash := core.HashSessionToken(tok)
+	hash := authcred.HashSessionToken(tok)
 	soon := time.Now().UTC().Add(2 * time.Second).Format(time.RFC3339)
 	if _, err := srv.Eng().DB.Exec(`update sessions set expires_at = ? where token_hash = ?`, soon, hash); err != nil {
 		t.Fatalf("backdate: %v", err)

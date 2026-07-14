@@ -23,11 +23,12 @@ import (
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/roles"
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
+
+	"pecheny.me/dopecore/session"
 )
 
 // festScope is a local alias for core.FestScope so the existing dopeserver code

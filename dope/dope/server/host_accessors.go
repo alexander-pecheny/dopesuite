@@ -5,15 +5,18 @@ import (
 	"database/sql"
 	"net/http"
 
+	"pecheny.me/dopecore/authcred"
+
 	"dope/dope/domain/core"
 	"dope/dope/domain/view"
 	"dope/dope/export/gameexport"
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	"dope/dope/web/hostpages"
 	"dope/dope/web/pages"
 	"dope/dope/web/telegrambridge"
+
+	"pecheny.me/dopecore/session"
 )
 
 // host_accessors.go consolidates the thin exported accessors that adapt *server
@@ -88,7 +91,9 @@ func (s *server) BeginWriteTx(ctx context.Context) (*sql.Tx, error) { return s.e
 func (s *server) LookupSession(r *http.Request) (session.User, bool) { return s.eng.LookupSession(r) }
 
 // HashPassword hashes a plaintext password for storage.
-func (s *server) HashPassword(password string) (string, error) { return hashPassword(password) }
+func (s *server) HashPassword(password string) (string, error) {
+	return authcred.HashPassword(password)
+}
 
 // RequireSameOrigin enforces the CSRF same-origin check on unsafe methods.
 func (s *server) RequireSameOrigin(w http.ResponseWriter, r *http.Request) bool {
@@ -187,4 +192,4 @@ func (s *server) Unlock() { s.eng.Mu.Unlock() }
 func (s *server) BotSecret() string { return s.eng.BotSecret }
 
 // NewTelegramLoginCode returns a fresh opaque login/register code.
-func (s *server) NewTelegramLoginCode() (string, error) { return newTelegramLoginCode() }
+func (s *server) NewTelegramLoginCode() (string, error) { return authcred.NewTelegramLoginCode() }

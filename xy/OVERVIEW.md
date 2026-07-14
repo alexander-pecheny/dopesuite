@@ -2,7 +2,7 @@
 We're making a Trello clone geared specifically towards ЧГК trivia quiz
 
 # Architecture & Stack
-- heavily reuse ~/dope: Go+sqlite for backend, vanilla JS for frontend
+- heavily reuse ../dope (its sibling in the dopesuite monorepo): Go+sqlite for backend, vanilla JS for frontend
 - reuse Dope's design system, auth code etc – in short, reuse as much code as possibly. Might extract that into a shared module later, for now just copy
 - API-first, anything that can be done using UI should be able to be done using API (except maybe search, see below). We shouldsupport some subset of Trello API to ease migration for existing clients using Trello (TBD steps for this one)
 - Tightly integrated with chgksuite, can import and export from it (TBD, can be done later after we have the core functionality)

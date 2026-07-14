@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"pecheny.me/dopecore/authcred"
 )
 
 func TestTrelloCompatAPI(t *testing.T) {
@@ -201,7 +203,7 @@ func TestTrelloAuthFailures(t *testing.T) {
 	// expire the token in-place -> 401
 	if _, err := srv.db.ExecContext(context.Background(),
 		`update api_tokens set expires_at = ? where token_hash = ?`,
-		rfc3339(time.Now().Add(-time.Hour)), hashSessionToken(tok.Token)); err != nil {
+		rfc3339(time.Now().Add(-time.Hour)), authcred.HashSessionToken(tok.Token)); err != nil {
 		t.Fatal(err)
 	}
 	mustStatus(t, get("?token="+tok.Token), 401)
@@ -213,7 +215,7 @@ func TestTrelloAuthFailures(t *testing.T) {
 	c.decode(resp, &tok2)
 	var tok2ID int64
 	if err := srv.db.QueryRowContext(context.Background(),
-		`select id from api_tokens where token_hash = ?`, hashSessionToken(tok2.Token)).Scan(&tok2ID); err != nil {
+		`select id from api_tokens where token_hash = ?`, authcred.HashSessionToken(tok2.Token)).Scan(&tok2ID); err != nil {
 		t.Fatal(err)
 	}
 	mustStatus(t, c.do("DELETE", "/api/tokens/"+itoa(tok2ID), nil), 204)

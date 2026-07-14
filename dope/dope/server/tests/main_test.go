@@ -9,7 +9,6 @@ import (
 	"dope/dope/domain/overrides"
 	rosterpkg "dope/dope/domain/roster"
 	"dope/dope/platform/realtime"
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
@@ -24,6 +23,9 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"pecheny.me/dopecore/authcred"
+	"pecheny.me/dopecore/session"
 )
 
 func TestDefaultMatchScores(t *testing.T) {
@@ -1884,10 +1886,10 @@ func TestAuthCodeHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("session token: %v", err)
 	}
-	if core.HashSessionToken(tok) == tok {
+	if authcred.HashSessionToken(tok) == tok {
 		t.Fatal("session hash should differ from token")
 	}
-	if core.HashSessionToken(tok) != core.HashSessionToken(tok) {
+	if authcred.HashSessionToken(tok) != authcred.HashSessionToken(tok) {
 		t.Fatal("session hash should be deterministic")
 	}
 }
@@ -1928,35 +1930,6 @@ func TestVersionAssetRefs(t *testing.T) {
 	bare := dopeserver.NewTestServer(nil)
 	if got := string(bare.VersionAssetRefs(in)); got != string(in) {
 		t.Fatalf("disk-mode versionAssetRefs should be a no-op")
-	}
-}
-
-func TestStaticFileServerCachePolicy(t *testing.T) {
-	src := fstest.MapFS{"static/host.js": &fstest.MapFile{Data: []byte("// host")}}
-	h := dopeserver.StaticFileServer(src, false, map[string]string{"/static/host.js": `"abc"`})
-
-	serve := func(target string) *httptest.ResponseRecorder {
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
-		return rec
-	}
-
-	// A content-addressed "?v=" request is cached forever.
-	versioned := serve("/static/host.js?v=abc")
-	if versioned.Code != http.StatusOK {
-		t.Fatalf("versioned status = %d", versioned.Code)
-	}
-	if cc := versioned.Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
-		t.Fatalf("versioned Cache-Control = %q, want immutable", cc)
-	}
-
-	// A bare request keeps the revalidating policy.
-	bare := serve("/static/host.js")
-	if cc := bare.Header().Get("Cache-Control"); !strings.Contains(cc, "stale-while-revalidate") {
-		t.Fatalf("bare Cache-Control = %q, want stale-while-revalidate", cc)
-	}
-	if et := bare.Header().Get("ETag"); et != `"abc"` {
-		t.Fatalf("bare ETag = %q, want \"abc\"", et)
 	}
 }
 

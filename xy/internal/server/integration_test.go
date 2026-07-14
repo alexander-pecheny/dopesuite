@@ -28,9 +28,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 		t.Fatalf("blobstore: %v", err)
 	}
 	srv := &server{db: db, blobs: blobs, staging: newHandoutStaging()}
-	var mode string
-	srv.assetSource, mode = staticSource()
-	srv.assetNoCache = mode == "disk"
+	srv.assets = newAssets()
 	srv.warmPageCache()
 
 	mux := http.NewServeMux()

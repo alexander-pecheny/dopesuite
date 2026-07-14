@@ -1,6 +1,5 @@
-// Package session holds the authenticated-identity type and cookie helpers
-// shared between the auth machinery and the HTTP handlers. It is a pure data
-// leaf (no server coupling), ported from dope's platform/session.
+// Package session holds the authenticated-identity type and the session-cookie
+// helpers shared by both apps. It is a pure data leaf — no server coupling.
 package session
 
 import (
@@ -20,19 +19,25 @@ const (
 	TelegramAuthLifetime = time.Minute
 )
 
+// ProdEnvVar names the environment variable consulted by IsProdEnv. Each app
+// sets it at startup; the apps' deployed environments predate this package and
+// use different names, so it stays configurable rather than unified.
+var ProdEnvVar = "APP_ENV"
+
 // User is a resolved session identity: the session row id, the user it belongs
 // to, and the display fields. Username/Telegram are nullable for telegram-only
-// accounts.
+// accounts. IsSystem is only meaningful in apps that have a system role.
 type User struct {
 	SessionID int64
 	UserID    int64
 	Username  sql.NullString
 	Telegram  sql.NullString
+	IsSystem  bool
 }
 
-// IsProdEnv reports whether the server is running in production (XY_ENV).
+// IsProdEnv reports whether the server is running in production.
 func IsProdEnv() bool {
-	return strings.EqualFold(os.Getenv("XY_ENV"), "production")
+	return strings.EqualFold(os.Getenv(ProdEnvVar), "production")
 }
 
 // SetCookie writes the session cookie carrying token.
@@ -61,8 +66,21 @@ func ClearCookie(w http.ResponseWriter) {
 	})
 }
 
-// HasCookie reports whether a non-empty session cookie is present.
+// HasCookie reports whether a non-empty session cookie is present. Cheap probe
+// used on hot read paths before any DB lookup.
 func HasCookie(r *http.Request) bool {
 	c, err := r.Cookie(CookieName)
 	return err == nil && c.Value != ""
+}
+
+// StartRegisterResponse is returned when a registration is initiated.
+type StartRegisterResponse struct {
+	Code      string `json:"code"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+// RegisterStatusResponse reports the status of a pending registration.
+type RegisterStatusResponse struct {
+	Status   string  `json:"status"`
+	Username *string `json:"username,omitempty"`
 }

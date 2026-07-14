@@ -14,8 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"xy/internal/session"
+	"pecheny.me/dopecore/authcred"
+
 	"xy/internal/ui"
+
+	"pecheny.me/dopecore/session"
 )
 
 // adminUsername gates the /admin tooling. Defaults to "pecheny"; override with
@@ -257,7 +260,7 @@ func (s *server) renderAdminPage(w http.ResponseWriter, doc *ui.Doc) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	body := s.versionAssetRefs(rendered)
+	body := s.assets.VersionRefs(rendered)
 	w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "same-origin")
@@ -293,7 +296,7 @@ func (s *server) handleAdminCreateUsersSubmit(w http.ResponseWriter, r *http.Req
 			if err != nil {
 				return err
 			}
-			hash, err := hashPassword(password)
+			hash, err := authcred.HashPassword(password)
 			if err != nil {
 				return err
 			}

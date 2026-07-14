@@ -14,10 +14,11 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/export/gameexport"
 	"dope/dope/platform/markdown"
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	"dope/dope/web/hostpages"
+
+	"pecheny.me/dopecore/session"
 )
 
 type publicFestSummary struct {

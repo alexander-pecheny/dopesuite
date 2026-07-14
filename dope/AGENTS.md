@@ -4,16 +4,16 @@
 Tournament/championship management system with real-time web UI and Telegram bot. Handles EK (эрудит-квартет), OD/KVRM (командная викторина с раундами по минуте), and KSI (командная своя игра) formats. Russian-language domain.
 
 ## Stack
-- **Backend**: Go 1.25, SQLite 3 (WAL mode, modernc.org/sqlite)
+- **Backend**: Go 1.26, SQLite 3 (WAL mode, modernc.org/sqlite)
 - **Frontend**: Vanilla JS + HTML/CSS, no framework, embedded in binary
-- **Frontend tests**: Deno (`dope/web/jstest/`)
+- **Frontend tests**: node (`node --test`, in `dope/web/jstest/`)
 - **Build/run**: `justfile` (see commands below)
-- **Deploy**: `just deploy`, which calls `deploy.py` (SSH-based)
+- **Deploy**: `just deploy`, which calls the monorepo's `../deploy.py` (SSH-based)
 - **Production** is at `ssh vps2day-ee`, use it to run commands on production server
 
-## Note on git
-
-This project uses `gitbutler` for managing git. Use `gitbutler` skill to familiarize yourself with this tool. For merging a branch when told so by the user, use `~/scripts/but-quick-merge.py --pull`, like that: `python ~/scripts/but-quick-merge.py --pull ui`, where `ui` is the short `gitbutler` ID of the branch.
+dope is one module of the **dopesuite** monorepo; the module root is this `dope/`
+directory (`go.mod: module "dope"`), not the repo root. See the root `AGENTS.md`
+for the monorepo rules (git workflow, toolchain, cross-module recipes).
 
 ## Directory Structure
 
@@ -34,9 +34,10 @@ dope/                    # module root (go.mod: module "dope")
 scripts/
   loadtest/              # Real SSE load testing suite
   ek_restore/            # DB restoration tools
+  cdp.py                 # Chrome DevTools Protocol driver (see "Testing UI Changes")
 justfile                 # All task runner commands
-deploy.py                # SSH deployment
 .env.example             # Config template
+../deploy.py             # SSH deployment — the monorepo's shared script
 ```
 
 ## Key Files
@@ -87,7 +88,7 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 ```bash
 just dev-web-only     # Server only. Usually you should run this unless you need to test changes related to bot
 just dev              # Run server + bot concurrently (hot reload from disk)
-just test             # Go tests + Deno JS tests
+just test             # Go tests + node JS tests
 just test-js          # Frontend tests only
 just fmt              # gofmt
 just vet              # go vet
@@ -113,7 +114,7 @@ Server listens on port **9672** by default (override with `$PORT`). Database def
 **Game types**: EK, OD, KSI implemented as pluggable modules with independent question/match state.
 
 ## Testing UI Changes
-Use `cdp.py` on port 9222 (Chrome DevTools Protocol). If there's nothing on the port, run `/Applications/Comet.app/Contents/MacOS/Comet --remote-debugging-port=9222`
+Use `dope/scripts/cdp.py` on port 9222 (Chrome DevTools Protocol). If there's nothing on the port, run `/Applications/Comet.app/Contents/MacOS/Comet --remote-debugging-port=9222`
 
 ## UI markup (DopeUIKit)
 No hand-written HTML anywhere. **DopeUIKit** (`pecheny.me/dopeuikit`, vendored via

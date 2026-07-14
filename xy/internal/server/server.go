@@ -10,11 +10,13 @@ import (
 	"database/sql"
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"pecheny.me/dopecore/sqlitex"
+	"pecheny.me/dopecore/webassets"
 
 	"xy/internal/blobstore"
 
@@ -23,7 +25,6 @@ import (
 
 const (
 	dbFile             = "xy.db"
-	maxOpenConns       = 8
 	slowWriteThreshold = time.Second
 	writeTxTimeout     = 5 * time.Second
 )
@@ -34,10 +35,7 @@ type server struct {
 	blobs *blobstore.Store
 	mu    sync.Mutex // global write lock — serializes all write transactions
 
-	assetSource  assetFS
-	assetNoCache bool
-	assetETags   map[string]string
-	stylesheet   []byte // core.css + "\n" + xy layer, served at /static/styles.css
+	assets *webassets.Assets
 
 	pageMu    sync.Mutex
 	pageCache map[string][]byte // compiled ui/*.dopeui pages (embed mode only; see assets.go)
@@ -52,46 +50,7 @@ type server struct {
 	typstErr  error
 }
 
-// buildDSN assembles a modernc.org/sqlite DSN with WAL + durability pragmas,
-// mirroring dope's storage/store.BuildDSN.
-func buildDSN(path string) string {
-	pragmas := []string{
-		"_pragma=busy_timeout(5000)",
-		"_pragma=foreign_keys(1)",
-		"_pragma=journal_mode(WAL)",
-		"_pragma=synchronous(FULL)",
-		"_pragma=journal_size_limit(67108864)",
-		"_pragma=cache_size(-65536)",
-		"_pragma=temp_store(MEMORY)",
-	}
-	params := strings.Join(pragmas, "&")
-	if strings.HasPrefix(path, "file:") {
-		sep := "?"
-		if strings.Contains(path, "?") {
-			sep = "&"
-		}
-		return path + sep + params
-	}
-	return "file:" + path + "?" + params
-}
-
-// openDB opens the SQLite database, runs migrations on a single connection, then
-// opens up the pool.
-func openDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", buildDSN(path))
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	if err := migrate(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	db.SetMaxOpenConns(maxOpenConns)
-	db.SetMaxIdleConns(maxOpenConns)
-	db.SetConnMaxIdleTime(30 * time.Minute)
-	return db, nil
-}
+func openDB(path string) (*sql.DB, error) { return sqlitex.Open(path, migrate) }
 
 func newServer() (*server, error) {
 	path := os.Getenv("XY_DB")

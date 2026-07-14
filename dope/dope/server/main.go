@@ -1,10 +1,7 @@
 package dopeserver
 
 import (
-	"compress/gzip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -21,20 +18,24 @@ import (
 	"sync"
 	"time"
 
+	"pecheny.me/dopecore/authcred"
+
+	"pecheny.me/dopecore/webassets"
+
 	"dope/dope/domain/core"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/roles"
-	"dope/dope/platform/session"
 	"dope/dope/storage/auditmw"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/journal"
 	"dope/dope/storage/migrate"
 	"dope/dope/storage/store"
-	"dope/dope/web/assets"
 	"dope/dope/web/editbatch"
+
+	"pecheny.me/dopecore/session"
 )
 
 const (
@@ -42,6 +43,10 @@ const (
 	actionAddShootoutTheme    = "addShootoutTheme"
 	actionRemoveShootoutTheme = "removeShootoutTheme"
 )
+
+// dope's deployed environment predates the shared session package, so it keeps
+// its own env-var name for the production switch.
+func init() { session.ProdEnvVar = "DOPE_ENV" }
 
 type server struct {
 	eng          core.Engine
@@ -74,10 +79,9 @@ type server struct {
 	pageMu    sync.Mutex
 	pageCache map[string][]byte
 
-	// stylesheet is DopeUIKit's core.css + "\n" + dope's app layer, served at
-	// /static/styles.css (see css.go). Precomputed in embed mode; rebuilt per
-	// request in disk/dev mode.
-	stylesheet []byte
+	// assets is the static-asset layer: source FS, ETags, the core+dope
+	// stylesheet, fonts (see css.go).
+	assets *webassets.Assets
 }
 
 // editor returns the edit batcher, constructing it on first use against the
@@ -138,24 +142,10 @@ func Main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	assets, assetMode := staticSource()
-	noCacheAssets := assetMode == "disk"
-	srv.eng.Assets = assets
-	srv.eng.AssetNoCache = noCacheAssets
-	// In embed mode the asset bytes change only on deploy, so precompute a
-	// content-hash ETag per file: it gives a strong validator (embed files
-	// have a zero ModTime, so without one a browser revalidation re-downloads
-	// the whole file instead of getting a 304) and lets us cache aggressively.
-	var assetETags map[string]string
-	if !noCacheAssets {
-		assetETags = buildAssetETags(assets)
-	}
-	srv.eng.AssetETags = assetETags
-	if !noCacheAssets {
-		srv.stylesheet = srv.buildStylesheet()
-		sum := sha256.Sum256(srv.stylesheet)
-		srv.eng.AssetETags["/static/styles.css"] = `"` + hex.EncodeToString(sum[:16]) + `"`
-	}
+	srv.assets = newAssets()
+	srv.eng.Assets = srv.assets.Source
+	srv.eng.AssetNoCache = srv.assets.NoCache
+	srv.eng.AssetETags = srv.assets.ETags
 	if err := srv.warmPageCache(); err != nil {
 		log.Fatal(err)
 	}
@@ -191,16 +181,16 @@ func Main() {
 	mux.HandleFunc("/api/telegram/login", srv.tgBridge().HandleTelegramLogin)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
-	mux.HandleFunc("/static/styles.css", srv.serveStylesheet())
-	mux.Handle("/static/fonts/", srv.serveFonts())
-	mux.Handle("/static/", staticFileServer(assets, noCacheAssets, assetETags))
+	mux.HandleFunc("/static/styles.css", srv.assets.ServeStylesheet())
+	mux.Handle("/static/fonts/", srv.assets.ServeFonts())
+	mux.Handle("/static/", srv.assets.FileServer())
 
 	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
 	if port == "" {
 		port = "9672"
 	}
 	addr := ":" + port
-	log.Printf("serving static from %s", assetMode)
+	log.Printf("serving static from %s", srv.assets.Mode)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatalf("bind %s: %v", addr, err)
@@ -237,227 +227,12 @@ func Main() {
 	srv.metrics.Init()
 
 	httpSrv := &http.Server{
-		Handler:           auditmw.ContextMiddleware(&srv.eng, gzipMiddleware(mux)),
+		Handler:           auditmw.ContextMiddleware(&srv.eng, webassets.Gzip(mux, "/events", "/host-events")),
 		ReadHeaderTimeout: 5 * time.Second,
 		// No WriteTimeout: SSE responses are intentionally long-lived.
 		IdleTimeout: 120 * time.Second,
 	}
 	log.Fatal(httpSrv.Serve(listener))
-}
-
-func staticSource() (fs.FS, string) {
-	if info, err := os.Stat("static"); err == nil && info.IsDir() {
-		return os.DirFS("."), "disk"
-	}
-	if info, err := os.Stat("dope/web/assets/static"); err == nil && info.IsDir() {
-		return os.DirFS("dope/web/assets"), "disk"
-	}
-	return assets.FS, "embed"
-}
-
-func staticFileServer(source fs.FS, noCache bool, etags map[string]string) http.Handler {
-	handler := http.FileServer(http.FS(source))
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case noCache:
-			w.Header().Set("Cache-Control", "no-cache")
-		case strings.HasPrefix(r.URL.Path, "/static/fonts/"):
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		default:
-			// Embed-mode asset bytes change only on deploy. The content-hash
-			// ETag is a strong validator (http.FileServer would otherwise have
-			// no Last-Modified for embedded files and re-send the whole body on
-			// every revalidation), so an expired cache entry costs a tiny 304
-			// instead of a full re-download. max-age keeps repeat loads request-
-			// free; stale-while-revalidate keeps any revalidation off the
-			// critical path. A new deploy changes the hash, busting the cache.
-			if tag := etags[r.URL.Path]; tag != "" {
-				w.Header().Set("ETag", tag)
-			}
-			// A "?v=<hash>" request is content-addressed (the HTML shell only
-			// emits it for the current deploy's bytes), so it can be cached
-			// forever — a new deploy changes the hash, i.e. the URL. Bare
-			// (unversioned) requests still get the revalidating policy.
-			if strings.Contains(r.URL.RawQuery, "v=") {
-				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-			} else {
-				w.Header().Set("Cache-Control", "public, max-age=3600, stale-while-revalidate=604800")
-			}
-		}
-		handler.ServeHTTP(w, r)
-	})
-}
-
-// buildAssetETags precomputes a strong content-hash ETag for every embedded
-// static file, keyed by its request path ("/static/..."). Computed once at
-// startup; used only in embed mode (disk mode serves no-cache for live edits).
-func buildAssetETags(source fs.FS) map[string]string {
-	etags := map[string]string{}
-	_ = fs.WalkDir(source, "static", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		b, rerr := fs.ReadFile(source, path)
-		if rerr != nil {
-			return nil
-		}
-		sum := sha256.Sum256(b)
-		etags["/"+path] = `"` + hex.EncodeToString(sum[:16]) + `"`
-		return nil
-	})
-	return etags
-}
-
-// gzipPool recycles gzip.Writer instances. Each writer holds a ~64KB internal
-// buffer, so pooling cuts allocations sharply when hundreds of viewers fetch
-// JSON at once.
-var gzipPool = sync.Pool{
-	New: func() any {
-		// BestSpeed is the sweet spot for low-CPU VPS hosting: still ~3x
-		// shrink on JSON, a fraction of the CPU of DefaultCompression.
-		gz, _ := gzip.NewWriterLevel(io.Discard, gzip.BestSpeed)
-		return gz
-	},
-}
-
-type gzipResponseWriter struct {
-	http.ResponseWriter
-	gz           *gzip.Writer
-	headerSent   bool
-	bypass       bool // true means write straight through, never gzip
-	statusCached int
-}
-
-func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
-	return &gzipResponseWriter{ResponseWriter: w}
-}
-
-func (g *gzipResponseWriter) WriteHeader(status int) {
-	if g.headerSent {
-		return
-	}
-	g.headerSent = true
-	g.statusCached = status
-	h := g.Header()
-	if !shouldGzipResponse(status, h) {
-		g.bypass = true
-		g.ResponseWriter.WriteHeader(status)
-		return
-	}
-	h.Set("Content-Encoding", "gzip")
-	h.Add("Vary", "Accept-Encoding")
-	// Content-Length set by the inner handler is no longer accurate.
-	h.Del("Content-Length")
-	gz := gzipPool.Get().(*gzip.Writer)
-	gz.Reset(g.ResponseWriter)
-	g.gz = gz
-	g.ResponseWriter.WriteHeader(status)
-}
-
-func (g *gzipResponseWriter) Write(b []byte) (int, error) {
-	if !g.headerSent {
-		if g.Header().Get("Content-Type") == "" {
-			g.Header().Set("Content-Type", http.DetectContentType(b))
-		}
-		g.WriteHeader(http.StatusOK)
-	}
-	if g.bypass || g.gz == nil {
-		return g.ResponseWriter.Write(b)
-	}
-	return g.gz.Write(b)
-}
-
-func (g *gzipResponseWriter) Flush() {
-	if g.gz != nil {
-		_ = g.gz.Flush()
-	}
-	if f, ok := g.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-func (g *gzipResponseWriter) finish() {
-	if g.gz == nil {
-		return
-	}
-	_ = g.gz.Close()
-	g.gz.Reset(io.Discard)
-	gzipPool.Put(g.gz)
-	g.gz = nil
-}
-
-func gzipMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// SSE responses are flushed incrementally; gzip would buffer
-		// them and break the framing the client expects.
-		if r.URL.Path == "/events" || r.URL.Path == "/host-events" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if !acceptsGzip(r) {
-			next.ServeHTTP(w, r)
-			return
-		}
-		gw := newGzipResponseWriter(w)
-		defer gw.finish()
-		next.ServeHTTP(gw, r)
-	})
-}
-
-func acceptsGzip(r *http.Request) bool {
-	enc := r.Header.Get("Accept-Encoding")
-	if enc == "" {
-		return false
-	}
-	for _, v := range strings.Split(enc, ",") {
-		token := strings.TrimSpace(v)
-		if i := strings.IndexByte(token, ';'); i >= 0 {
-			token = token[:i]
-		}
-		if strings.EqualFold(token, "gzip") {
-			return true
-		}
-	}
-	return false
-}
-
-func shouldGzipResponse(status int, h http.Header) bool {
-	if status < 200 || status == 204 || status == 304 {
-		return false
-	}
-	if h.Get("Content-Encoding") != "" {
-		return false
-	}
-	return isGzippableType(h.Get("Content-Type"))
-}
-
-func isGzippableType(ct string) bool {
-	if ct == "" {
-		// We don't know yet — let it through; http.DetectContentType will
-		// pick a text-ish type for most handler payloads.
-		return true
-	}
-	base := ct
-	if i := strings.IndexByte(ct, ';'); i >= 0 {
-		base = ct[:i]
-	}
-	base = strings.TrimSpace(strings.ToLower(base))
-	if base == "text/event-stream" {
-		return false
-	}
-	switch {
-	case strings.HasPrefix(base, "text/"):
-		return true
-	case base == "application/json":
-		return true
-	case base == "application/javascript":
-		return true
-	case base == "application/xml":
-		return true
-	case base == "image/svg+xml":
-		return true
-	}
-	return false
 }
 
 func newServer() (*server, error) {
@@ -477,7 +252,7 @@ func newServer() (*server, error) {
 	if matchCode == "" {
 		matchCode = defaultMatchCode
 	}
-	epoch, err := randomBase32(8)
+	epoch, err := authcred.RandomBase32(8)
 	if err != nil {
 		_ = db.Close()
 		return nil, err

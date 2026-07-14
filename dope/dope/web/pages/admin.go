@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	ui "dope/dope/web/ui"
@@ -15,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/session"
 )
 
 // adminUsername gates the /admin tooling. Defaults to "pecheny"; override with

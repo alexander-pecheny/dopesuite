@@ -2,91 +2,26 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
-	"encoding/base32"
-	"encoding/hex"
 	"errors"
-	"math/big"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
+	"pecheny.me/dopecore/authcred"
 
-	"xy/internal/session"
+	"pecheny.me/dopecore/session"
 )
 
-const (
-	sessionTokenBytes        = 32
-	inviteCodeBytes          = 12
-	telegramAuthBytes        = 12
-	telegramLoginCodeLen     = 8
-	telegramLoginCodeAlpha   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	passwordMinLen           = 8
-	passwordMaxLen           = 72 // bcrypt limit
-	sessionRefreshGranlarity = time.Minute
-)
-
-var base32enc = base32.StdEncoding.WithPadding(base32.NoPadding)
+// sessionRefreshInterval is the minimum gap between sessions.last_seen_at
+// writes for a given session: most authenticated requests are served from a
+// single SELECT, and only every ~minute do we round-trip a write to extend the
+// sliding lifetime.
+const sessionRefreshInterval = time.Minute
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
-
-// ---- credential generation ----
-
-func randomBase32(n int) (string, error) {
-	buf := make([]byte, n)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return base32enc.EncodeToString(buf), nil
-}
-
-func newSessionToken() (string, error) {
-	buf := make([]byte, sessionTokenBytes)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf), nil
-}
-
-func newInviteCode() (string, error)       { return randomBase32(inviteCodeBytes) }
-func newTelegramAuthCode() (string, error) { return randomBase32(telegramAuthBytes) }
-
-func newTelegramLoginCode() (string, error) {
-	buf := make([]byte, telegramLoginCodeLen)
-	max := big.NewInt(int64(len(telegramLoginCodeAlpha)))
-	for i := range buf {
-		n, err := rand.Int(rand.Reader, max)
-		if err != nil {
-			return "", err
-		}
-		buf[i] = telegramLoginCodeAlpha[n.Int64()]
-	}
-	return string(buf), nil
-}
-
-func hashSessionToken(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
-}
-
-// ---- password hashing ----
-
-func hashPassword(pw string) (string, error) {
-	h, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
-	return string(h), err
-}
-
-func verifyPassword(storedHash, pw string) bool {
-	if storedHash == "" {
-		return false
-	}
-	return bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(pw)) == nil
-}
 
 // ---- session lookup / middleware ----
 
@@ -97,7 +32,7 @@ func (s *server) lookupSession(w http.ResponseWriter, r *http.Request) (session.
 	if err != nil || c.Value == "" {
 		return session.User{}, false
 	}
-	hash := hashSessionToken(c.Value)
+	hash := authcred.HashSessionToken(c.Value)
 	var (
 		u           session.User
 		expiresStr  string
@@ -119,7 +54,7 @@ where s.token_hash = ?`, hash)
 		})
 		return session.User{}, false
 	}
-	if lastSeen, _ := time.Parse(time.RFC3339, lastSeenStr); now.Sub(lastSeen) >= sessionRefreshGranlarity {
+	if lastSeen, _ := time.Parse(time.RFC3339, lastSeenStr); now.Sub(lastSeen) >= sessionRefreshInterval {
 		_ = s.withWriteTx(r.Context(), "session-refresh", func(ctx context.Context, tx *sql.Tx) error {
 			_, err := tx.ExecContext(ctx, `update sessions set last_seen_at = ?, expires_at = ? where id = ?`,
 				rfc3339(now), rfc3339(now.Add(session.Lifetime)), u.SessionID)
@@ -141,14 +76,14 @@ func (s *server) requireUser(w http.ResponseWriter, r *http.Request) (session.Us
 
 func (s *server) createSessionTx(ctx context.Context, tx *sql.Tx, userID int64, now time.Time) (string, error) {
 	for attempt := 0; attempt < 3; attempt++ {
-		token, err := newSessionToken()
+		token, err := authcred.NewSessionToken()
 		if err != nil {
 			return "", err
 		}
 		_, err = tx.ExecContext(ctx, `
 insert into sessions(user_id, token_hash, created_at, expires_at, last_seen_at)
 values(?, ?, ?, ?, ?)`,
-			userID, hashSessionToken(token), rfc3339(now), rfc3339(now.Add(session.Lifetime)), rfc3339(now))
+			userID, authcred.HashSessionToken(token), rfc3339(now), rfc3339(now.Add(session.Lifetime)), rfc3339(now))
 		if err == nil {
 			return token, nil
 		}
@@ -233,7 +168,7 @@ func (s *server) handleRegisterStart(w http.ResponseWriter, r *http.Request) {
 		if expires, _ := time.Parse(time.RFC3339, expiresStr); now.After(expires) {
 			return errBadRequest("срок действия кода истёк")
 		}
-		regCode, err := newTelegramAuthCode()
+		regCode, err := authcred.NewTelegramAuthCode()
 		if err != nil {
 			return err
 		}
@@ -401,7 +336,7 @@ func (s *server) handleLoginStart(w http.ResponseWriter, r *http.Request) {
 			if !tgUserID.Valid {
 				return errBadRequest("нет привязанного телеграма для входа по коду")
 			}
-			code, err := newTelegramLoginCode()
+			code, err := authcred.NewTelegramLoginCode()
 			if err != nil {
 				return err
 			}
@@ -506,7 +441,7 @@ func (s *server) handleLoginPassword(w http.ResponseWriter, r *http.Request) {
 			}
 			return err
 		}
-		if !verifyPassword(pwHash.String, req.Password) {
+		if !authcred.VerifyPassword(pwHash.String, req.Password) {
 			return errBadRequest("неверный логин или пароль")
 		}
 		var err error
@@ -583,11 +518,11 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if len(req.NewPassword) < passwordMinLen || len(req.NewPassword) > passwordMaxLen {
+	if len(req.NewPassword) < authcred.PasswordMinLen || len(req.NewPassword) > authcred.PasswordMaxLen {
 		httpError(w, http.StatusBadRequest, "пароль должен быть от 8 до 72 символов")
 		return
 	}
-	newHash, err := hashPassword(req.NewPassword)
+	newHash, err := authcred.HashPassword(req.NewPassword)
 	if err != nil {
 		httpError(w, http.StatusInternalServerError, "ошибка сервера")
 		return
@@ -598,7 +533,7 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if cur.Valid && cur.String != "" {
-			if !verifyPassword(cur.String, req.CurrentPassword) {
+			if !authcred.VerifyPassword(cur.String, req.CurrentPassword) {
 				return errBadRequest("неверный текущий пароль")
 			}
 		}
@@ -702,7 +637,7 @@ func (s *server) handleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 			}
 			return err
 		}
-		code, err := newTelegramLoginCode()
+		code, err := authcred.NewTelegramLoginCode()
 		if err != nil {
 			return err
 		}

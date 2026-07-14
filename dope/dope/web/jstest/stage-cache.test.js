@@ -1,3 +1,4 @@
+import {test} from "node:test";
 import assert from "node:assert/strict";
 import {loadStaticModule} from "./browser-module.js";
 
@@ -24,7 +25,7 @@ function makeCache(initialStages) {
   return {cache, setStages: (s) => (stages = s)};
 }
 
-Deno.test("adoptFest keeps cached match state across a same-structure revision bump", () => {
+test("adoptFest keeps cached match state across a same-structure revision bump", () => {
   const {cache} = makeCache([{code: "r16", matches: [{code: "A"}, {code: "B"}]}]);
   cache.adoptFest({revision: 1});
   cache.applyMatchUpdate({code: "A", seq: 3, total: 42});
@@ -35,7 +36,7 @@ Deno.test("adoptFest keeps cached match state across a same-structure revision b
   assert.equal(cache.matchState("A").total, 42);
 });
 
-Deno.test("adoptFest drops caches when the stage/match structure changes", () => {
+test("adoptFest drops caches when the stage/match structure changes", () => {
   const {cache, setStages} = makeCache([{code: "r16", matches: [{code: "A"}, {code: "B"}]}]);
   cache.adoptFest({revision: 1});
   cache.applyMatchUpdate({code: "A", seq: 3, total: 42});
@@ -45,7 +46,7 @@ Deno.test("adoptFest drops caches when the stage/match structure changes", () =>
   assert.equal(cache.matchState("A"), null, "structural change clears the cache");
 });
 
-Deno.test("adoptFest treats a stage-type change as structural", () => {
+test("adoptFest treats a stage-type change as structural", () => {
   const {cache, setStages} = makeCache([{code: "r16", type: "matches", matches: [{code: "A"}]}]);
   cache.adoptFest({revision: 1});
   cache.applyMatchUpdate({code: "A", seq: 1, total: 5});
@@ -54,7 +55,7 @@ Deno.test("adoptFest treats a stage-type change as structural", () => {
   assert.equal(cache.matchState("A"), null, "stage type change clears the cache");
 });
 
-Deno.test("applyMatchUpdate is seq-monotonic: older updates are dropped", () => {
+test("applyMatchUpdate is seq-monotonic: older updates are dropped", () => {
   const {cache} = makeCache([{code: "r16", matches: [{code: "A"}]}]);
   cache.adoptFest({revision: 1});
   cache.applyMatchUpdate({code: "A", seq: 5, total: 50});
@@ -65,7 +66,7 @@ Deno.test("applyMatchUpdate is seq-monotonic: older updates are dropped", () => 
   assert.equal(cache.matchState("A").total, 60, "newer seq applies");
 });
 
-Deno.test("applyMatchUpdate ignores an unknown match code", () => {
+test("applyMatchUpdate ignores an unknown match code", () => {
   const {cache} = makeCache([{code: "r16", matches: [{code: "A"}]}]);
   cache.adoptFest({revision: 1});
   assert.equal(cache.applyMatchUpdate({code: "ZZZ", seq: 1}).found, false);

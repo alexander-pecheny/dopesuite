@@ -1,3 +1,4 @@
+import {test} from "node:test";
 import assert from "node:assert/strict";
 import {loadStaticModule, fakeIndex, fakeLocalStorage} from "./browser-module.js";
 
@@ -5,7 +6,7 @@ const T = loadStaticModule("match-table.js").DopeTable;
 
 const SCORE_OPTS = {entity: "team", shootout: true};
 
-Deno.test("patchScoreTable writes shared value cells through the index", () => {
+test("patchScoreTable writes shared value cells through the index", () => {
   const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS));
   const total0 = idx.register("total", {team: 0});
   const plus1 = idx.register("plus", {team: 1});
@@ -33,7 +34,7 @@ Deno.test("patchScoreTable writes shared value cells through the index", () => {
   assert.ok(answer.classList.contains("right"));
 });
 
-Deno.test("patchScoreTable clears a stale mark before applying the new one", () => {
+test("patchScoreTable clears a stale mark before applying the new one", () => {
   const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS));
   const answer = idx.register("answer", {team: 0, shootout: "0", theme: 0, answer: 0});
   answer.classList.add("wrong");
@@ -44,7 +45,7 @@ Deno.test("patchScoreTable clears a stale mark before applying the new one", () 
   assert.ok(!answer.classList.contains("wrong"), "previous mark removed");
 });
 
-Deno.test("patchScoreTable syncs the per-round player name in place", () => {
+test("patchScoreTable syncs the per-round player name in place", () => {
   const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS));
   const player0 = idx.register("playerText", {team: 0, shootout: "0", theme: 0});
   const player1 = idx.register("playerText", {team: 0, shootout: "0", theme: 1});
@@ -57,7 +58,7 @@ Deno.test("patchScoreTable syncs the per-round player name in place", () => {
 
 // Guardrail for the class of bug this refactor fixes: any live cell must be in
 // the single spec list with a sync, so it can never be rendered-but-not-synced.
-Deno.test("scoreCellSpecs declares a sync for every live cell, incl. the player", () => {
+test("scoreCellSpecs declares a sync for every live cell, incl. the player", () => {
   const synced = T.scoreCellSpecs(SCORE_OPTS).filter((s) => s.sync).map((s) => s.name);
   for (const name of ["answer", "themeScore", "total", "plus", "tiebreak", "correctCount",
     "playerText", "playerSelect"]) {
@@ -65,19 +66,19 @@ Deno.test("scoreCellSpecs declares a sync for every live cell, incl. the player"
   }
 });
 
-Deno.test("patchScoreTable tolerates cells missing from the index", () => {
+test("patchScoreTable tolerates cells missing from the index", () => {
   const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS)); // specs present, nothing registered
   assert.doesNotThrow(() =>
     T.patchScoreTable(idx, {teams: [{total: 1, plus: 1, correctCounts: [], themes: [], shootoutThemes: []}]}, {formatNumber: String}));
 });
 
-Deno.test("canPatchScoreShape: identical shape is patchable", () => {
+test("canPatchScoreShape: identical shape is patchable", () => {
   const base = {code: "C", finished: false, questionValues: [10, 20],
     teams: [{name: "X", themes: [{}, {}], shootoutThemes: []}, {name: "Y", themes: [{}, {}], shootoutThemes: []}]};
   assert.equal(T.canPatchScoreShape(base, structuredClone(base)), true);
 });
 
-Deno.test("canPatchScoreShape: shape changes force a rebuild", () => {
+test("canPatchScoreShape: shape changes force a rebuild", () => {
   const base = {code: "C", finished: false, questionValues: [10, 20],
     teams: [{name: "X", themes: [{}, {}], shootoutThemes: []}, {name: "Y", themes: [{}, {}], shootoutThemes: []}]};
   const cases = {
@@ -98,7 +99,7 @@ Deno.test("canPatchScoreShape: shape changes force a rebuild", () => {
   assert.equal(T.canPatchScoreShape(base, null), false);
 });
 
-Deno.test("applyDeltaOps applies set-ops to a clone without mutating the base", () => {
+test("applyDeltaOps applies set-ops to a clone without mutating the base", () => {
   const base = {seq: 1, revision: 5, teams: [{total: 10}]};
   const next = T.applyDeltaOps(base, [
     {op: "set", path: ["teams", 0, "total"], value: 20},
@@ -110,13 +111,13 @@ Deno.test("applyDeltaOps applies set-ops to a clone without mutating the base", 
   assert.equal(base.revision, 5, "base.revision not mutated");
 });
 
-Deno.test("applyDeltaOps skips non-set ops", () => {
+test("applyDeltaOps skips non-set ops", () => {
   const next = T.applyDeltaOps({a: 1}, [{op: "delete", path: ["a"]}, {op: "set", path: ["b"], value: 2}]);
   assert.equal(next.a, 1);
   assert.equal(next.b, 2);
 });
 
-Deno.test("createPendingOps overlays un-acked edits and coalesces by path", () => {
+test("createPendingOps overlays un-acked edits and coalesces by path", () => {
   const p = T.createPendingOps();
   p.add(["teams", 0, "themes", 1, "answers", 2], "right");
   p.add(["teams", 0, "themes", 1, "answers", 2], "wrong"); // same path: last write wins
@@ -129,7 +130,7 @@ Deno.test("createPendingOps overlays un-acked edits and coalesces by path", () =
   assert.equal(p.queued(), 2, "two distinct paths queued");
 });
 
-Deno.test("createPendingOps: ack drops confirmed ops, requeue keeps them, newer queued wins", () => {
+test("createPendingOps: ack drops confirmed ops, requeue keeps them, newer queued wins", () => {
   const p = T.createPendingOps();
   p.add(["a"], 1);
   const sent = p.take(); // a:1 now in-flight
@@ -148,7 +149,7 @@ Deno.test("createPendingOps: ack drops confirmed ops, requeue keeps them, newer 
   assert.equal(p.overlay({}).a, 3);
 });
 
-Deno.test("createPendingOps.has reports un-acked paths (queued then in flight, cleared on ack)", () => {
+test("createPendingOps.has reports un-acked paths (queued then in flight, cleared on ack)", () => {
   const p = T.createPendingOps();
   const path = ["themes", 0, "answers", 1, 2];
   assert.equal(p.has(path), false);
@@ -161,7 +162,7 @@ Deno.test("createPendingOps.has reports un-acked paths (queued then in flight, c
   assert.equal(p.has(path), false, "cleared once the server confirms it");
 });
 
-Deno.test("createPendingOps.has marks cells under a coarse ancestor op (OD whole-array patch)", () => {
+test("createPendingOps.has marks cells under a coarse ancestor op (OD whole-array patch)", () => {
   const p = T.createPendingOps();
   p.add(["entries"], [[1, 2]]); // OD patches the whole entries array in some flows
   assert.equal(p.has(["entries", 3, 0]), true, "a cell under the patched subtree is pending");
@@ -169,7 +170,7 @@ Deno.test("createPendingOps.has marks cells under a coarse ancestor op (OD whole
   assert.equal(p.has(["shootoutRounds", 0]), false, "an unrelated subtree is not pending");
 });
 
-Deno.test("createPendingOps persists un-acked edits and rehydrates them on a fresh instance", () => {
+test("createPendingOps persists un-acked edits and rehydrates them on a fresh instance", () => {
   const mod = loadStaticModule("match-table.js");
   mod.localStorage = fakeLocalStorage();
   const ops = mod.DopeTable.createPendingOps;
@@ -192,7 +193,7 @@ Deno.test("createPendingOps persists un-acked edits and rehydrates them on a fre
   assert.equal(ops({storageKey: key}).queued(), 0, "nothing recovered after ack");
 });
 
-Deno.test("createPendingOps drops persisted edits past the TTL (no resurrecting ancient sessions)", () => {
+test("createPendingOps drops persisted edits past the TTL (no resurrecting ancient sessions)", () => {
   const mod = loadStaticModule("match-table.js");
   mod.localStorage = fakeLocalStorage();
   const key = "dope.pending:game-state:9";
@@ -203,7 +204,7 @@ Deno.test("createPendingOps drops persisted edits past the TTL (no resurrecting 
   assert.equal(mod.localStorage.getItem(key), null, "and the stale entry is purged");
 });
 
-Deno.test("createClientRecorder is a safe no-op when localStorage is unavailable", () => {
+test("createClientRecorder is a safe no-op when localStorage is unavailable", () => {
   // The test window has no localStorage; the recorder must degrade to disabled
   // and never throw, so it can never break a page where storage is blocked.
   const rec = T.createClientRecorder({scope: "game-state:2"});
@@ -217,7 +218,7 @@ Deno.test("createClientRecorder is a safe no-op when localStorage is unavailable
   assert.ok(Array.isArray(dump.events) && Array.isArray(dump.snapshots));
 });
 
-Deno.test("computeEKPlayerStats aggregates per player across battles, regular themes only", () => {
+test("computeEKPlayerStats aggregates per player across battles, regular themes only", () => {
   const stages = [
     {code: "r16", matches: [
       {code: "A", teams: [
@@ -256,7 +257,7 @@ Deno.test("computeEKPlayerStats aggregates per player across battles, regular th
   assert.equal(Math.round(bob.share * 100), 38); // 30/80
 });
 
-Deno.test("computeEKPlayerStats team-share zeroes out non-helpers", () => {
+test("computeEKPlayerStats team-share zeroes out non-helpers", () => {
   const stages = [
     {code: "r16", matches: [
       {code: "A", teams: [
@@ -288,7 +289,7 @@ Deno.test("computeEKPlayerStats team-share zeroes out non-helpers", () => {
   }
 });
 
-Deno.test("createLocalCache round-trips JSON and degrades safely", () => {
+test("createLocalCache round-trips JSON and degrades safely", () => {
   const win = loadStaticModule("match-table.js");
   const T = win.DopeTable;
   win.localStorage = fakeLocalStorage();
@@ -302,13 +303,13 @@ Deno.test("createLocalCache round-trips JSON and degrades safely", () => {
   assert.equal(cache.read(), null, "corrupt JSON reads as null, not a throw");
 });
 
-Deno.test("gameEventsURL includes game_id only when present, encoded", () => {
+test("gameEventsURL includes game_id only when present, encoded", () => {
   const T = loadStaticModule("match-table.js").DopeTable;
   assert.equal(T.gameEventsURL("f1"), "/events?fest_id=f1");
   assert.equal(T.gameEventsURL("f 1", "g/2"), "/events?fest_id=f%201&game_id=g%2F2");
 });
 
-Deno.test("createGameDataLoader hydrates from __GAME_INIT__, caches it, and revalidates", async () => {
+test("createGameDataLoader hydrates from __GAME_INIT__, caches it, and revalidates", async () => {
   const win = loadStaticModule("match-table.js");
   const T = win.DopeTable;
   win.localStorage = fakeLocalStorage();
@@ -331,7 +332,7 @@ Deno.test("createGameDataLoader hydrates from __GAME_INIT__, caches it, and reva
   assert.equal(revalidated, 1);
 });
 
-Deno.test("createGameDataLoader falls back to the localStorage snapshot", async () => {
+test("createGameDataLoader falls back to the localStorage snapshot", async () => {
   const win = loadStaticModule("match-table.js");
   const T = win.DopeTable;
   win.localStorage = fakeLocalStorage();
@@ -353,7 +354,7 @@ Deno.test("createGameDataLoader falls back to the localStorage snapshot", async 
   assert.equal(revalidated, 1, "cache hit still kicks a background revalidation");
 });
 
-Deno.test("markNameOverflow flags only cells whose name is clipped", () => {
+test("markNameOverflow flags only cells whose name is clipped", () => {
   const T = loadStaticModule("match-table.js").DopeTable;
   function cell(scrollWidth, clientWidth) {
     const classes = new Set();
@@ -371,13 +372,13 @@ Deno.test("markNameOverflow flags only cells whose name is clipped", () => {
   assert.ok(!fits.has("trunc"), "name within 1px is not flagged");
 });
 
-Deno.test("computePlaces ranks by total with shared-rank ranges", () => {
+test("computePlaces ranks by total with shared-rank ranges", () => {
   const T = loadStaticModule("match-table.js").DopeTable;
   // 30, 20, 20, 10 -> "1", "2–3", "2–3", "4"
   assert.deepEqual(T.computePlaces([10, 20, 30, 20]), ["4", "2–3", "1", "2–3"]);
 });
 
-Deno.test("computePlaces breaks ties with the supplied comparator", () => {
+test("computePlaces breaks ties with the supplied comparator", () => {
   const T = loadStaticModule("match-table.js").DopeTable;
   // Equal totals (20,20) split by tiebreak: lower tiebreak ranks higher.
   // compareTiebreak(a,b) > 0 means a ranks below b.
@@ -391,7 +392,7 @@ Deno.test("computePlaces breaks ties with the supplied comparator", () => {
   assert.deepEqual(tied, ["1–2", "1–2"]);
 });
 
-Deno.test("createEpochTracker baselines the first epoch and flags real changes", () => {
+test("createEpochTracker baselines the first epoch and flags real changes", () => {
   const T = loadStaticModule("match-table.js").DopeTable;
   const tracker = T.createEpochTracker();
   assert.equal(tracker.changed({epoch: ""}), false, "empty epoch ignored");
@@ -402,7 +403,7 @@ Deno.test("createEpochTracker baselines the first epoch and flags real changes",
   assert.equal(tracker.changed({epoch: "b"}), true, "new epoch is a change");
 });
 
-Deno.test("notifyEmbeddedResize stays a no-op outside an embed", () => {
+test("notifyEmbeddedResize stays a no-op outside an embed", () => {
   const win = loadStaticModule("match-table.js");
   const T = win.DopeTable;
   let posted = 0;

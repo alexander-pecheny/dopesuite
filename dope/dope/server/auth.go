@@ -2,14 +2,9 @@ package dopeserver
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
-	"dope/dope/domain/core"
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
+	"pecheny.me/dopecore/authcred"
+	"pecheny.me/dopecore/session"
 )
 
 const (
@@ -128,7 +124,7 @@ select id, used_by, expires_at from invites where code = ?`, invite).Scan(&invit
 
 	expires := now.Add(session.TelegramAuthLifetime)
 	for attempt := 0; attempt < 3; attempt++ {
-		code, err := newTelegramAuthCode()
+		code, err := authcred.NewTelegramAuthCode()
 		if err != nil {
 			return session.StartRegisterResponse{}, err
 		}
@@ -385,7 +381,7 @@ func (s *server) issueLoginCode(ctx context.Context, userID int64, tgUserID int6
 	expires := now.Add(session.TelegramAuthLifetime).Format(time.RFC3339)
 	createdAt := now.Format(time.RFC3339)
 	for attempt := 0; attempt < 3; attempt++ {
-		code, err := newTelegramLoginCode()
+		code, err := authcred.NewTelegramLoginCode()
 		if err != nil {
 			return "", "", err
 		}
@@ -521,7 +517,7 @@ select id, password_hash, password_salt, is_system from users where username = ?
 		http.Error(w, "system user cannot log in", http.StatusForbidden)
 		return
 	}
-	ok, upgraded, err := verifyPassword(hash.String, salt.String, password)
+	ok, upgraded, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, password)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -560,50 +556,6 @@ update users set password_hash = ?, password_salt = null, updated_at = ? where i
 	writeJSONValue(w, meResponseFor(user))
 }
 
-// hashPassword returns a bcrypt hash of password. The bcrypt format embeds its
-// own salt, so callers do not pass one in. The legacy SHA256 variant is kept
-// as legacySHA256Password for verifying old database rows during migration.
-func hashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(hash), nil
-}
-
-func legacySHA256Password(password, salt string) string {
-	sum := sha256.Sum256([]byte(salt + ":" + password))
-	return hex.EncodeToString(sum[:])
-}
-
-// verifyPassword checks a candidate password against the stored hash. It
-// returns (ok, upgradedHash, err). If the stored hash is a legacy SHA256 and
-// the password matches, upgradedHash is a fresh bcrypt hash that callers
-// should persist so the next login no longer relies on the weaker scheme.
-func verifyPassword(storedHash, storedSalt, password string) (bool, string, error) {
-	if storedHash == "" {
-		return false, "", nil
-	}
-	if strings.HasPrefix(storedHash, "$2a$") || strings.HasPrefix(storedHash, "$2b$") || strings.HasPrefix(storedHash, "$2y$") {
-		if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password)); err != nil {
-			if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-				return false, "", nil
-			}
-			return false, "", err
-		}
-		return true, "", nil
-	}
-	expected := legacySHA256Password(password, storedSalt)
-	if subtle.ConstantTimeCompare([]byte(storedHash), []byte(expected)) != 1 {
-		return false, "", nil
-	}
-	upgraded, err := hashPassword(password)
-	if err != nil {
-		return true, "", nil
-	}
-	return true, upgraded, nil
-}
-
 func (s *server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -632,7 +584,7 @@ func (s *server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) logoutSession(r *http.Request) {
 	if cookie, err := r.Cookie(session.CookieName); err == nil {
-		hash := core.HashSessionToken(cookie.Value)
+		hash := authcred.HashSessionToken(cookie.Value)
 		_, _ = s.eng.DB.ExecContext(r.Context(), `delete from sessions where token_hash = ?`, hash)
 	}
 }
@@ -736,7 +688,7 @@ select password_hash, password_salt from users where id = ?`, user.UserID).Scan(
 	}
 	// Changing an existing password requires proving knowledge of the old one.
 	if hash.Valid && hash.String != "" {
-		ok, _, err := verifyPassword(hash.String, salt.String, req.CurrentPassword)
+		ok, _, err := authcred.VerifyPasswordUpgrading(hash.String, salt.String, req.CurrentPassword)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -746,7 +698,7 @@ select password_hash, password_salt from users where id = ?`, user.UserID).Scan(
 			return
 		}
 	}
-	hashed, err := hashPassword(req.NewPassword)
+	hashed, err := authcred.HashPassword(req.NewPassword)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -785,11 +737,11 @@ select username, telegram_username, is_system from users where id = ?`, userID).
 
 func createSessionTx(ctx context.Context, tx *sql.Tx, userID int64, now time.Time) (string, error) {
 	for attempt := 0; attempt < 3; attempt++ {
-		token, err := newSessionToken()
+		token, err := authcred.NewSessionToken()
 		if err != nil {
 			return "", err
 		}
-		hash := core.HashSessionToken(token)
+		hash := authcred.HashSessionToken(token)
 		expires := now.Add(session.Lifetime).Format(time.RFC3339)
 		nowStr := now.Format(time.RFC3339)
 		_, err = tx.ExecContext(ctx, `
@@ -916,7 +868,7 @@ func createInvite(ctx context.Context, db *sql.DB, createdBy int64) (string, err
 	now := time.Now().UTC()
 	expires := now.Add(inviteLifetime).Format(time.RFC3339)
 	for attempt := 0; attempt < 3; attempt++ {
-		code, err := newInviteCode()
+		code, err := authcred.NewInviteCode()
 		if err != nil {
 			return "", err
 		}

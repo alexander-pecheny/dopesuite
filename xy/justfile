@@ -82,5 +82,7 @@ pre-commit:
 invite days='7': wasm
     go run ./cmd/xy-server invite {{days}}
 
-deploy *args:
-    python3 deploy.py {{args}}
+# A later --target wins: `just deploy --target xy-server` deploys the server alone.
+# Build + deploy both xy units (server + bot) via the monorepo's ../deploy.py.
+deploy *args: wasm
+    python3 ../deploy.py --target xy-server,xy-bot {{args}}

@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
+
+	"pecheny.me/dopecore/session"
 )
 
 // telegram_bridge.go is the server side of the Telegram login/registration

@@ -11,6 +11,8 @@ import (
 	"io/fs"
 	"net/http"
 
+	"pecheny.me/dopecore/authcred"
+
 	"dope/dope/domain/core"
 	"dope/dope/platform/metrics"
 	"dope/dope/storage/store"
@@ -69,7 +71,7 @@ const (
 	DefaultVenueTitle         = defaultVenueTitle
 	ActionAddShootoutTheme    = actionAddShootoutTheme
 	ActionRemoveShootoutTheme = actionRemoveShootoutTheme
-	TelegramLoginCodeLen      = telegramLoginCodeLen
+	TelegramLoginCodeLen      = authcred.TelegramLoginCodeLen
 	TrustedOriginHostsEnv     = trustedOriginHostsEnv
 )
 
@@ -91,17 +93,16 @@ var (
 	ApplyMatchEditTx          = applyMatchEditTx
 	CreateInvite              = createInvite
 	CreateSessionTx           = createSessionTx
-	HashPassword              = hashPassword
-	LegacySHA256Password      = legacySHA256Password
+	HashPassword              = authcred.HashPassword
+	LegacySHA256Password      = authcred.LegacySHA256Password
 	LoadActiveContext         = loadActiveContext
-	NewInviteCode             = newInviteCode
-	NewSessionToken           = newSessionToken
-	NewTelegramLoginCode      = newTelegramLoginCode
+	NewInviteCode             = authcred.NewInviteCode
+	NewSessionToken           = authcred.NewSessionToken
+	NewTelegramLoginCode      = authcred.NewTelegramLoginCode
 	SqliteTableExists         = sqliteTableExists
-	VerifyPassword            = verifyPassword
+	VerifyPassword            = authcred.VerifyPasswordUpgrading
 	EnvInt64                  = envInt64
 	Contains                  = contains
-	StaticFileServer          = staticFileServer
 )
 
 // ----- exported method wrappers (one per unexported method tests invoke) -----

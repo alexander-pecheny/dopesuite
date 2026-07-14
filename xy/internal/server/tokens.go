@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/authcred"
 )
 
 // API tokens authorize the Trello-compatible API (see trello_compat.go). They
@@ -109,7 +111,7 @@ func (s *server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	err = s.withWriteTx(r.Context(), "create-token", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
 insert into api_tokens(user_id, token_hash, label, created_at, expires_at)
-values(?, ?, ?, ?, ?)`, u.UserID, hashSessionToken(raw), nullStr(label), rfc3339(now), rfc3339(expiresAt))
+values(?, ?, ?, ?, ?)`, u.UserID, authcred.HashSessionToken(raw), nullStr(label), rfc3339(now), rfc3339(expiresAt))
 		if err != nil {
 			return err
 		}

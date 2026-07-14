@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"dope/dope/platform/session"
+	"pecheny.me/dopecore/session"
 )
 
 // makeAdminUser inserts a user with the given username and returns a session

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"dope/dope/domain/core"
 	"dope/dope/platform/roles"
-	"dope/dope/platform/session"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
 	"dope/dope/web/pages"
@@ -16,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/session"
 )
 
 type hostLandingData struct {

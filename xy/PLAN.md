@@ -1,6 +1,6 @@
 # XY — Implementation Plan
 
-A Trello-style board app for ЧГК (trivia) editing, built by reusing `~/dope`
+A Trello-style board app for ЧГК (trivia) editing, built by reusing `../dope`
 (Go + SQLite backend, vanilla-JS frontend, shared design system). The defining
 difference from dope: **all user-entered data is encrypted client-side** with a
 per-board passphrase, and (later) the app works **offline as a PWA**.
@@ -15,8 +15,12 @@ This plan reflects four decisions made up front:
    data key (DK); the passphrase derives a KEK (Argon2id) that only wraps/unwraps
    DK. Changing the passphrase re-wraps DK without re-encrypting board data;
    sharing means sharing the passphrase out-of-band.
-3. **Reuse = copy into a fresh repo.** `~/xy` is a new self-contained Go module;
-   we copy and adapt the needed dope packages rather than refactoring dope now.
+3. ~~**Reuse = copy into a fresh repo.**~~ **Superseded by the monorepo merge.**
+   xy was built as a separate repo that copied and adapted dope packages rather
+   than refactoring dope. xy and dope now live in one repo (dopesuite), so those
+   copies are simply duplication — debt, not policy. It is being paid down: a
+   shared `dopecore` module (webassets, sqlitex, session, authcred) is being
+   extracted, and both apps move onto it. Do not add new copies.
 4. **Telegram login = reuse dope's bot bridge** (separate bot binary + shared-
    secret endpoints), with its own bot token.
 
@@ -24,9 +28,9 @@ This plan reflects four decisions made up front:
 
 ## 1. Architecture overview
 
-> **Note (2026-06-19):** `~/dope` was refactored from a flat `package main` into
+> **Note (2026-06-19):** `../dope` was refactored from a flat `package main` into
 > seven semantic groups under `dope/dope/` (cmd, server, web, domain, storage,
-> export, platform — see `~/dope/ARCHITECTURE.md`). xy does **not** import dope;
+> export, platform — see `../dope/ARCHITECTURE.md`). xy does **not** import dope;
 > it is its own `module xy` that reuses dope's *patterns* and copies the needed
 > frontend assets. xy is much smaller than dope, so it uses a flatter layout
 > (not dope's seven groups) while keeping the same idioms (write-tx discipline,
@@ -53,8 +57,8 @@ xy/                         module root (go.mod: module "xy")
       styles.css            design system (ported from dope, trimmed)
       menu.js / login.*     chrome + auth UI (ported)
       vendor/noble-hashes.js  pinned, SRI'd single JS dependency
-  jstest/                   Deno frontend tests (crypto round-trips, ranks)
-  justfile, deploy.py       (ported patterns)
+  jstest/                   node frontend tests (crypto round-trips, ranks)
+  justfile                  (ported patterns; deploy is the monorepo's ../deploy.py)
 ```
 
 **Trust model.** The server is treated as honest-but-curious: it stores and
@@ -111,7 +115,7 @@ iOS Lockdown Mode). That rules out WASM Argon2 builds; the KDF is pure JS
 **Encryption envelope (one canonical format).** Every encrypted field/blob is:
 `magic("xy1") | alg(1) | nonce(12) | ciphertext+tag`, stored as SQLite `BLOB`
 (or base64 in JSON over the wire). One `crypto.js` encode/decode pair is the
-only place this format lives; covered by Deno round-trip tests.
+only place this format lives; covered by node round-trip tests.
 
 **Key caching.** DK (not the passphrase) is cached per board in IndexedDB,
 optionally behind a session-scoped flag for "remember on this device". Neither
@@ -218,7 +222,7 @@ convention. New modules:
 - Unlock UI — passphrase prompt when a board's DK isn't cached; create-board
   flow that sets the passphrase.
 
-Frontend tests in Deno (`jstest/`): crypto round-trip, envelope compatibility,
+Frontend tests in node (`node --test jstest/*.test.js`): crypto round-trip, envelope compatibility,
 rank-insertion math, title derivation.
 
 ---
@@ -260,7 +264,7 @@ can be revisited later only if poll latency proves annoying.)
    bridge) with its own token.
 3. **Crypto foundation.** `crypto.js` (scrypt via @noble/hashes + AES-GCM envelope), board
    create (generate DK, wrap, verify token), unlock UI, IndexedDB key cache,
-   strict CSP + SRI. Deno round-trip tests.
+   strict CSP + SRI. node round-trip tests.
 4. **Data model + API.** boards/members/lists/cards/labels/card_labels/timeline/
    attachments tables + endpoints, write-tx, ACL checks.
 5. **Board UI.** Board list, kanban view, drag-reorder (fractional ranks),

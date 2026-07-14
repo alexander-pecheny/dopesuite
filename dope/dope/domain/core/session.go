@@ -1,21 +1,14 @@
 package core
 
 import (
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"net/http"
 	"time"
 
-	"dope/dope/platform/session"
-)
+	"pecheny.me/dopecore/authcred"
 
-// HashSessionToken hashes a raw session token into the value stored in
-// sessions.token_hash (sha256, hex-encoded).
-func HashSessionToken(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
-}
+	"pecheny.me/dopecore/session"
+)
 
 // sessionRefreshInterval is the minimum gap between sessions.last_seen_at
 // writes for a given session. Most authenticated requests can be served from
@@ -33,7 +26,7 @@ func (e *Engine) LookupSession(r *http.Request) (session.User, bool) {
 	if err != nil || cookie.Value == "" {
 		return session.User{}, false
 	}
-	hash := HashSessionToken(cookie.Value)
+	hash := authcred.HashSessionToken(cookie.Value)
 
 	ctx := r.Context()
 

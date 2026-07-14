@@ -5,7 +5,6 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/roles"
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
@@ -17,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"pecheny.me/dopecore/session"
 )
 
 func scopedAPITestIDs(t *testing.T, srv *dopeserver.Server) (int64, int64) {

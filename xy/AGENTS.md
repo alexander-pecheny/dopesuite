@@ -5,8 +5,9 @@ A Trello-style board app for ЧГК (trivia) question editing. Every piece of
 user-entered data (board/list/card/label/comment/attachment) is **encrypted
 client-side** with a per-board passphrase; the server only ever stores and
 serves ciphertext plus the structural metadata needed to order, sync, and
-authorize. Built by reusing patterns and frontend assets from `~/dope`
-(see `OVERVIEW.md`, `PLAN.md`). Russian-language UI.
+authorize. Built by reusing patterns and frontend assets from `../dope`, its
+sibling in the dopesuite monorepo (see `OVERVIEW.md`, `PLAN.md`; the root
+`AGENTS.md` has the monorepo rules). Russian-language UI.
 
 ## Stack
 - **Backend**: Go 1.26, SQLite (WAL, `modernc.org/sqlite`, pure Go, no cgo).
@@ -248,7 +249,7 @@ Config via `.env` (see `.env.example`). Telegram register/login needs
   is an opt-in checkbox, since the exports re-encode pictures for the page anyway);
 - test lists/cards (datetime title, tester list — players/teams, auto green/red labels);
 - cross-board copy/move with client-side re-encryption + label reconcile;
-- `deploy.py` SSH template.
+- SSH deploy (now the monorepo's shared `../deploy.py`, targets `xy-server`/`xy-bot`).
 
 Test coverage: Go integration tests (`internal/server/*_test.go`) cover the full
 register→board→card→label→timeline→attachment flow + ACL rejection;

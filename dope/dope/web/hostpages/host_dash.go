@@ -14,12 +14,13 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/domain/view"
 	"dope/dope/platform/roles"
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/store"
 	"dope/dope/web/pages"
 	dopeui "dope/dope/web/ui"
+
+	"pecheny.me/dopecore/session"
 )
 
 type hostFestDashData struct {

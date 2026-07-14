@@ -13,7 +13,8 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
-	"strings"
+
+	"pecheny.me/dopecore/sqlitex"
 
 	// Blank-imported so its init() registers the dope_z/dope_unz scalar SQL
 	// functions (audit-log zstd compression) on the shared sqlite driver. The
@@ -27,42 +28,11 @@ import (
 // MaxOpenConns sizes the read connection pool. SQLite under WAL handles many
 // concurrent readers against a single writer; this lets viewer GETs and SSE
 // bootstraps proceed in parallel with host edits.
-const MaxOpenConns = 8
+const MaxOpenConns = sqlitex.MaxOpenConns
 
-// BuildDSN turns a bare file path into a URI that ships per-connection pragmas
-// with every new pool connection. journal_mode is database-wide and only takes
-// effect once, but resetting it on each connection is harmless and lets a
-// freshly-deleted/recreated DB land in WAL without a separate Exec call.
-func BuildDSN(path string) string {
-	pragmas := []string{
-		"_pragma=busy_timeout(5000)",
-		"_pragma=foreign_keys(1)",
-		"_pragma=journal_mode(WAL)",
-		// synchronous=FULL fsyncs the WAL on every commit, so an acknowledged
-		// (200 OK) edit can never be rolled back by a crash or restart — WAL +
-		// NORMAL only guarantees durability across an app crash in theory, and a
-		// crash-loop here once silently reverted ~3 min of committed edits to the
-		// last checkpoint. Measured cost on prod's disk is ~0.8 ms/commit (~1160
-		// commits/s ceiling) vs an observed peak of ~10 edits/s, i.e. negligible.
-		"_pragma=synchronous(FULL)",
-		// Cap the WAL file so it's truncated back down after a checkpoint instead
-		// of growing without bound (prod's WAL had ballooned past 500 MB — a
-		// long-lived second connection from the bot kept pinning it; that's gone
-		// now, but bound it regardless). 64 MB comfortably spans a write burst.
-		"_pragma=journal_size_limit(67108864)",
-		"_pragma=cache_size(-65536)",
-		"_pragma=temp_store(MEMORY)",
-	}
-	params := strings.Join(pragmas, "&")
-	if strings.HasPrefix(path, "file:") {
-		sep := "?"
-		if strings.Contains(path, "?") {
-			sep = "&"
-		}
-		return path + sep + params
-	}
-	return "file:" + path + "?" + params
-}
+// BuildDSN turns a bare file path into a URI that ships the shared pragma set
+// with every new pool connection.
+func BuildDSN(path string) string { return sqlitex.BuildDSN(path) }
 
 // ColumnSpec is one column to add to a table in an additive migration.
 type ColumnSpec struct {

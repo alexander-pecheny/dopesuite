@@ -6,10 +6,11 @@ require (
 	github.com/klauspost/compress v1.18.6
 	github.com/xuri/excelize/v2 v2.10.1
 	github.com/yuin/goldmark v1.8.2
-	golang.org/x/crypto v0.52.0
 	modernc.org/sqlite v1.50.0
 	pecheny.me/dopeuikit v0.0.0
 )
+
+require golang.org/x/crypto v0.52.0 // indirect
 
 replace pecheny.me/dopeuikit => ../dopeuikit
 
@@ -30,4 +31,7 @@ require (
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
+	pecheny.me/dopecore v0.0.0
 )
+
+replace pecheny.me/dopecore => ../dopecore

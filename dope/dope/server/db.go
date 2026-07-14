@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
+
+	"pecheny.me/dopecore/sqlitex"
 
 	_ "modernc.org/sqlite"
 
@@ -27,32 +28,19 @@ const (
 	systemUserUsername = "system"
 )
 
+// openFestDB opens the DB pinned to one connection for the schema work —
+// migrations toggle PRAGMA foreign_keys and run multi-statement rewrites, which
+// must land on a single connection — then widens the pool for runtime reads.
 func openFestDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", store.BuildDSN(path))
-	if err != nil {
-		return nil, err
-	}
-	// Migrations toggle PRAGMA foreign_keys and run multi-statement
-	// schema rewrites; those need to land on a single connection.
-	// We pin the pool to 1 connection while migrating, then open it up
-	// for runtime concurrency.
-	db.SetMaxOpenConns(1)
-	if err := migrateDB(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if err := journal.EnsureTriggers(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if err := journal.BackfillGameCheckpoints(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	db.SetMaxOpenConns(store.MaxOpenConns)
-	db.SetMaxIdleConns(store.MaxOpenConns)
-	db.SetConnMaxIdleTime(30 * time.Minute)
-	return db, nil
+	return sqlitex.Open(path, func(db *sql.DB) error {
+		if err := migrateDB(db); err != nil {
+			return err
+		}
+		if err := journal.EnsureTriggers(db); err != nil {
+			return err
+		}
+		return journal.BackfillGameCheckpoints(db)
+	})
 }
 
 // loadActiveContext picks an arbitrary fest/game/first-match to drive the

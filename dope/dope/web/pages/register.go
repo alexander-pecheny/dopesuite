@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"dope/dope/platform/session"
 	"dope/dope/platform/util"
 	ui "dope/dope/web/ui"
+
+	"pecheny.me/dopecore/session"
 )
 
 const (

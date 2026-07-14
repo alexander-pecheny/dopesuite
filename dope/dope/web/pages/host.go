@@ -16,8 +16,9 @@ import (
 
 	"dope/dope/domain/core"
 	"dope/dope/domain/view"
-	"dope/dope/platform/session"
 	"dope/dope/storage/store"
+
+	"pecheny.me/dopecore/session"
 )
 
 // Host is the slice of service-core capabilities the page handlers need. *server

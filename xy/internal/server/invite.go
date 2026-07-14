@@ -7,12 +7,14 @@ import (
 	"log"
 	"strconv"
 	"time"
+
+	"pecheny.me/dopecore/authcred"
 )
 
 // mintInvite creates a one-shot invite valid for the given duration and returns
 // the code.
 func (s *server) mintInvite(ctx context.Context, ttl time.Duration) (string, error) {
-	code, err := newInviteCode()
+	code, err := authcred.NewInviteCode()
 	if err != nil {
 		return "", err
 	}

@@ -4,10 +4,14 @@
 // logic (cell patching, shape checks, cache invalidation, delta application)
 // can be unit-tested without a real DOM. Anything that touches real layout is
 // covered by the app itself, not here.
-import {join} from "node:path";
+import {readFileSync} from "node:fs";
+import {dirname, join} from "node:path";
+import {fileURLToPath} from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 export function loadStaticModule(filename) {
-  const src = Deno.readTextFileSync(join(import.meta.dirname, "..", "assets", "static", filename));
+  const src = readFileSync(join(HERE, "..", "assets", "static", filename), "utf8");
   const window = {};
   const document = {activeElement: null, createElement: () => fakeCell()};
   new Function("window", "document", src)(window, document);
@@ -16,7 +20,7 @@ export function loadStaticModule(filename) {
 
 // fakeLocalStorage is an in-memory Storage stand-in for testing persistence;
 // assign it to a loaded module's `window.localStorage` before exercising code
-// that reads it (the real one isn't available in the Deno test runtime).
+// that reads it (the real one isn't available in the node test runtime).
 export function fakeLocalStorage() {
   const store = new Map();
   return {

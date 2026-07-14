@@ -1,15 +1,20 @@
 package server
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/session"
+	"pecheny.me/dopecore/webassets"
 )
+
+// xy's deployed environment predates the shared session package, so it keeps
+// its own env-var name for the production switch.
+func init() { session.ProdEnvVar = "XY_ENV" }
 
 // Main is the server entry point, invoked by cmd/xy-server. The `invite`
 // subcommand mints a one-shot registration invite and prints it.
@@ -28,15 +33,7 @@ func Main() {
 		log.Fatal(err)
 	}
 
-	source, mode := staticSource()
-	srv.assetSource = source
-	srv.assetNoCache = mode == "disk"
-	if !srv.assetNoCache {
-		srv.assetETags = buildAssetETags(source)
-		srv.stylesheet = srv.buildStylesheet()
-		sum := sha256.Sum256(srv.stylesheet)
-		srv.assetETags["/static/styles.css"] = `"` + hex.EncodeToString(sum[:16]) + `"`
-	}
+	srv.assets = newAssets()
 	srv.warmPageCache()
 
 	mux := http.NewServeMux()
@@ -150,9 +147,9 @@ func Main() {
 	// ---- static ----
 	// styles.css (core+xy concat) and fonts (from the kit) win over the generic
 	// file server via Go 1.22 most-specific-pattern routing.
-	mux.HandleFunc("GET /static/styles.css", srv.serveStylesheet())
-	mux.Handle("GET /static/fonts/", srv.serveFonts())
-	mux.Handle("GET /static/", staticFileServer(source, srv.assetNoCache, srv.assetETags))
+	mux.HandleFunc("GET /static/styles.css", srv.assets.ServeStylesheet())
+	mux.Handle("GET /static/fonts/", srv.assets.ServeFonts())
+	mux.Handle("GET /static/", srv.assets.FileServer())
 
 	port := strings.TrimPrefix(os.Getenv("PORT"), ":")
 	if port == "" {
@@ -167,10 +164,10 @@ func Main() {
 	// wasm compile, which no user should sit through.
 	srv.warmTypst()
 
-	log.Printf("xy serving on %s (assets from %s)", addr, mode)
+	log.Printf("xy serving on %s (assets from %s)", addr, srv.assets.Mode)
 
 	httpSrv := &http.Server{
-		Handler:           gzipMiddleware(mux),
+		Handler:           webassets.Gzip(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

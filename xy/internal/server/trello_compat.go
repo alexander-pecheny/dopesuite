@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/authcred"
 )
 
 // Trello-compatible API surface for chgksuite (https://github.com/lemonsqueeze
@@ -91,7 +93,7 @@ func (s *server) authToken(w http.ResponseWriter, r *http.Request) (int64, bool)
 	)
 	err := s.db.QueryRowContext(r.Context(), `
 select id, user_id, expires_at, revoked_at from api_tokens where token_hash = ?`,
-		hashSessionToken(raw)).Scan(&id, &uid, &expires, &revoked)
+		authcred.HashSessionToken(raw)).Scan(&id, &uid, &expires, &revoked)
 	if errors.Is(err, sql.ErrNoRows) {
 		httpError(w, http.StatusUnauthorized, "invalid token")
 		return 0, false

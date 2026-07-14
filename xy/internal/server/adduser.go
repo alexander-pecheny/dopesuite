@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/authcred"
 )
 
 // addUser provisions a username+password account directly, bypassing the
@@ -19,10 +21,10 @@ func (s *server) addUser(ctx context.Context, username, password string) error {
 	if len(username) < 3 {
 		return errors.New("username too short")
 	}
-	if len(password) < passwordMinLen || len(password) > passwordMaxLen {
-		return fmt.Errorf("password must be %d-%d chars", passwordMinLen, passwordMaxLen)
+	if len(password) < authcred.PasswordMinLen || len(password) > authcred.PasswordMaxLen {
+		return fmt.Errorf("password must be %d-%d chars", authcred.PasswordMinLen, authcred.PasswordMaxLen)
 	}
-	hash, err := hashPassword(password)
+	hash, err := authcred.HashPassword(password)
 	if err != nil {
 		return err
 	}

@@ -2,11 +2,9 @@ package dopeserver
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"pecheny.me/dopecore/webassets"
 
 	"dope/dope/domain/games"
 )
@@ -244,7 +244,7 @@ func (s *server) buildStaticEntry(ctx context.Context, route hostInitRoute) (*st
 	if err != nil {
 		return nil, err
 	}
-	return &staticEntry{raw: html, gz: gzipBytes(html)}, nil
+	return &staticEntry{raw: html, gz: webassets.GzipBytes(html)}, nil
 }
 
 // renderInjectedBytes splices payload over the marker in an HTML shell and
@@ -264,19 +264,6 @@ func (s *server) renderInjectedBytes(htmlPath, marker string, payload []byte) ([
 	out = append(out, payload...)
 	out = append(out, body[idx+len(marker):]...)
 	return s.versionAssetRefs(out), nil
-}
-
-// gzipBytes compresses raw using the shared pool at BestSpeed (same level the
-// live gzip middleware uses).
-func gzipBytes(raw []byte) []byte {
-	var buf bytes.Buffer
-	gz := gzipPool.Get().(*gzip.Writer)
-	gz.Reset(&buf)
-	_, _ = gz.Write(raw)
-	_ = gz.Close()
-	gz.Reset(io.Discard)
-	gzipPool.Put(gz)
-	return buf.Bytes()
 }
 
 // staticSnapshot returns the cached snapshot for a route, building it once on a
@@ -343,7 +330,7 @@ func (s *server) serveStaticSnapshot(w http.ResponseWriter, r *http.Request, rou
 	// jitter regardless.
 	h.Set("Cache-Control", "public, max-age=5")
 	body := e.raw
-	if acceptsGzip(r) && len(e.gz) > 0 {
+	if webassets.AcceptsGzip(r) && len(e.gz) > 0 {
 		h.Set("Content-Encoding", "gzip")
 		h.Add("Vary", "Accept-Encoding")
 		body = e.gz

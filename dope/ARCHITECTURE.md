@@ -19,8 +19,9 @@ groups.
 
 ## Layout
 
-Module root is the repo root (`go.mod: module "dope"`); the server tree lives
-under the inner `dope/` directory, so packages resolve as `dope/dope/<group>/<pkg>`.
+The module root is `dope/` inside the dopesuite monorepo — that is where `go.mod`
+(`module "dope"`) lives, NOT at the repo root. The server tree lives under a
+second, inner `dope/` directory, so packages resolve as `dope/dope/<group>/<pkg>`.
 
 ```
 dope/                       module root (go.mod: module "dope")
@@ -74,7 +75,7 @@ is what made the decomposition possible without import cycles.
 - `editbatch` — coalesces per-game PATCH edits into one locked write tx per window.
 - `telegrambridge` — shared-secret endpoints the bot calls instead of opening the DB.
 - `assets` — the `//go:embed static` package; the FS keeps the `static/` prefix.
-  Frontend source lives under `web/assets/static/`; Deno tests under `web/jstest/`.
+  Frontend source lives under `web/assets/static/`; node tests under `web/jstest/`.
 
 ### `domain/` — game + festival domain logic
 
