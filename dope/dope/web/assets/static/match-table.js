@@ -1599,7 +1599,7 @@
   function rosterNameNode(text, href, className) {
     if (href) {
       const a = document.createElement("a");
-      a.className = `${className} roster-link`;
+      a.className = `${className} quiet-link`;
       a.href = href;
       a.target = "_blank";
       a.rel = "noopener noreferrer";
@@ -1679,7 +1679,7 @@
       playersCell.className = "roster-players-cell";
       const players = Array.isArray(team.players) ? team.players : [];
       if (players.length === 0) {
-        playersCell.classList.add("roster-players-empty");
+        playersCell.classList.add("empty");
         playersCell.textContent = "—";
       } else {
         players.forEach((player) => {
@@ -1708,7 +1708,7 @@
     const container = document.createElement("div");
     container.className = "roster-view";
     const loading = document.createElement("p");
-    loading.className = "roster-loading";
+    loading.className = "roster-empty";
     loading.textContent = "Загрузка составов…";
     container.appendChild(loading);
 
