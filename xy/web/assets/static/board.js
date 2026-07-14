@@ -2454,10 +2454,11 @@ function setCardView(view) {
   tabBtn("preview").hidden = !!pendingList || test;
   document.getElementById("cardViewTabs").hidden = false;
   document.getElementById("cardSave").hidden = view === "preview";
-  // The insert helpers need a field to insert into, so they follow the two edit
-  // views. →.4s rewrites the raw 4s editor, and only for a question: a test
-  // card's Текст view holds a tester list, and meta/heading cards aren't questions.
+  // The tools edit text, so they follow the two edit views. Both rewriting tools
+  // are question-only: a test card's draft is JSON (its Текст view is a tester
+  // list), and →.4s additionally needs the raw 4s editor it types into.
   document.getElementById("cardEditTools").hidden = view === "preview";
+  document.getElementById("cardTypo").hidden = test;
   document.getElementById("cardTo4s").hidden = view !== "text" || !fieldsAvailable();
   document.getElementById("cardDescLabel").textContent = test ? "Тестировали (- игрок, -T команда)" : "Описание";
   if (view === "text") {
@@ -2709,10 +2710,10 @@ document.getElementById("cardPreviewScreen").addEventListener("change", () => { 
 document.getElementById("cardPreviewBody").addEventListener("dblclick", () => setCardView(lastEditView));
 
 // ---- edit tools (the row under the tabs) ----
-// The insert buttons type into the field the user was editing, which by the time
-// the click lands is no longer the focused one (a button takes focus on
-// mousedown) — so remember the last field the caret was in. The Поля view rebuilds
-// its inputs on every view switch, hence the isConnected check when using it.
+// ударение types into the field the user was editing, which by the time the click
+// lands is no longer the focused one (a button takes focus on mousedown) — so
+// remember the last field the caret was in. The Поля view rebuilds its inputs on
+// every view switch, hence the isConnected check when using it.
 let lastEditField = null;
 for (const panel of ["cardViewFields", "cardViewText"]) {
   document.getElementById(panel).addEventListener("focusin", (e) => {
@@ -2720,32 +2721,24 @@ for (const panel of ["cardViewFields", "cardViewText"]) {
   });
 }
 
-// editField is the field an insert button writes into: the last one edited, or —
-// when the card was just opened and nothing has been focused yet — the raw editor.
+// editField is the field ударение writes into: the last one edited, or — when the
+// card was just opened and nothing has been focused yet — the raw editor.
 function editField() {
   if (lastEditField && lastEditField.isConnected && lastEditField.offsetParent) return lastEditField;
   return cardView === "text" ? document.getElementById("cardDesc") : null;
 }
 
-// insertAtCaret types `before` + the selection + `after` over the field's
-// selection (an empty selection is just an insertion point). It goes through
-// execCommand because that is the only way to edit a field without throwing away
-// the browser's undo stack — a hand-spliced .value makes Ctrl-Z drop everything
-// typed before it. It also fires `input`, which is what regrows an autoGrow
-// textarea; the fallback has to do that itself.
-function insertAtCaret(field, before, after = "") {
+// insertAtCaret types text at the field's caret (replacing its selection). It goes
+// through execCommand because that is the only way to edit a field without
+// throwing away the browser's undo stack — a hand-spliced .value makes Ctrl-Z drop
+// everything typed before it. It also fires `input`, which is what regrows an
+// autoGrow textarea; the fallback has to do that itself.
+function insertAtCaret(field, text) {
   field.focus();
+  if (document.execCommand("insertText", false, text)) return;
   const s = field.selectionStart, e = field.selectionEnd;
-  const text = before + field.value.slice(s, e) + after;
-  if (!document.execCommand("insertText", false, text)) {
-    field.setRangeText(text, s, e, "end");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  }
-  // With nothing selected the caret belongs between the quotes, not after them.
-  if (after && s === e) {
-    const caret = field.selectionStart - after.length;
-    field.setSelectionRange(caret, caret);
-  }
+  field.setRangeText(text, s, e, "end");
+  field.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 // replaceField swaps a field's whole content through the same undo-preserving path.
@@ -2764,9 +2757,37 @@ document.getElementById("cardInsStress").addEventListener("click", () => {
   const f = editField();
   if (f) insertAtCaret(f, "́");
 });
-document.getElementById("cardInsQuotes").addEventListener("click", () => {
-  const f = editField();
-  if (f) insertAtCaret(f, "«", "»");
+
+// типограф runs the WHOLE card — not just the focused field — through chgksuite's
+// typography pass (/api/typo: quotes → «ёлочки», hyphen runs → em dashes,
+// non-breaking spaces and hyphens, percent-escapes decoded back into the words a
+// pasted wiki link stands for). The draft is 4s either way, so Поля and Текст
+// send the same text; only where the result lands differs. Online-only, like →.4s:
+// the pass is the Go port on the server (it never keeps the text).
+document.getElementById("cardTypo").addEventListener("click", async () => {
+  captureDraft();
+  if (!cardDraft.trim()) return;
+  if (!xySync.isOnline()) { alert("Типографика доступна только онлайн."); return; }
+  setStatus("saving");
+  try {
+    const res = await fetch("/api/typo", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: cardDraft }),
+    });
+    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+    const { text } = await res.json();
+    setStatus("saved");
+    cardDraft = text;
+    // In Текст the user is looking at the raw 4s, so type it back into the editor
+    // (undo intact); in Поля the fields are a view of the draft, so rebuild them.
+    if (cardView === "text") replaceField(document.getElementById("cardDesc"), text);
+    else renderCardFields();
+  } catch (err) {
+    setStatus("error");
+    alert("Не удалось применить типографику: " + err.message);
+  }
 });
 
 // →.4s runs the raw editor's content through the server's chgk text parser — the

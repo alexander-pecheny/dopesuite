@@ -37,11 +37,11 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
       tab id="cardTabFields" view="fields" "Поля"
       tab id="cardTabText" view="text" "Текст"
 
-    -- editing tools: the insert buttons act on whichever field of Поля/Текст the
-    -- caret was last in; →.4s rewrites the raw editor, so it is Текст-only
+    -- editing tools: ударение types into whichever field of Поля/Текст the caret
+    -- was last in; типограф and →.4s rewrite the whole card, so they need no caret
     row id="cardEditTools" gap="sm" align="center" wrap
       button small kind="ghost" id="cardInsStress" title="Вставить знак ударения (ставится на гласную слева от курсора)" "◌́ ударение"
-      button small kind="ghost" id="cardInsQuotes" title="Вставить кавычки-ёлочки (выделенный текст берётся в кавычки)" "«» кавычки"
+      button small kind="ghost" id="cardTypo" title="Типографика: кавычки-ёлочки, тире, неразрывные пробелы и дефисы, раскодирование ссылок" "типограф"
       button small kind="ghost" id="cardTo4s" title="Разобрать простой текст вопроса в формат 4s" "→.4s"
 
     -- Просмотр: single-card docx-style render (read-only)

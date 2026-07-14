@@ -75,6 +75,8 @@ internal/server/       package server — the whole HTTP server
                        parsed in memory, nothing persisted; the client encrypts the result into a new list.
                        POST /api/import/text — the same pipeline without the file: one card's plain text
                        (a question pasted as prose) → 4s, behind the card editor's →.4s button
+  typo.go              POST /api/typo — one card's 4s through the typography pass (chgk/typoedit),
+                       behind the editor's «типограф» button. Plaintext in, plaintext out, nothing kept
   handouts.go          POST /api/handouts/{pdf,split_fit} — fully in-process (chgk/handout + typst as a wasm module, see typst.go). No Python, no typst binary, nothing written to disk. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
   typst.go             the shared typst (wasm) pool: built once, warmed at boot, injectable so handler tests stub it. XY_WASM_CACHE must be persistent (~15s cold compile vs ~0.6s cached)
   staging.go           handout image staging: /api/handouts/{stage,heartbeat,DELETE stage} — client uploads referenced images once on modal open; pdf/split_fit reuse them via a session id (reaped after ~1min of no heartbeat) instead of re-uploading each generate. Staged images live in memory only, never on disk
@@ -85,6 +87,12 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        chgksuite --debug), compose.go = compose_4s (structure → 4s text)
   typo/                typotools.py: the typography pass (quotes/dashes/stress accents/
                        %-decoding) + URL-aware underscore escaping
+  typoedit/            the editor's «типограф» button: typo (quotes/dashes/%-decoding — every
+                       knob but accents, which have their own button) + inline's nbsp/nbhyphen
+                       gluing, applied to 4s SOURCE rather than to a field's value.
+                       Every line is split at its marker first (fsource.SplitMarker) — a pass
+                       let loose on raw 4s reads a list item's leading "-" as a stray hyphen
+                       and turns it into an em dash, eating the list
   docxread/            .docx → plain text — a hand-rolled python-docx (zip/OPC, runs,
                        hyperlinks, numbering, tables, image extraction, in memory, no fs)
   textparse/           parser.py's ChgkParser: plain text → structure. A literal port,
@@ -153,13 +161,14 @@ web/assets/            //go:embed static + ui (package assets)
     index.js           board list + create-board (passphrase) flow; offline board-list cache
     board.js           kanban: unlock, drag-reorder, card detail, timeline, labels,
                        the card editor's tools row (under the Просмотр/Поля/Текст tabs):
-                       insert a stress accent (U+0301) or «ёлочки» into whichever field
-                       the caret was last in — a button steals focus on mousedown, so the
-                       field is remembered on focusin, not read at click time — and, on
-                       Текст only, →.4s, which runs the raw editor's prose through
-                       /api/import/text and types the 4s back in. Both go through
-                       execCommand("insertText"), the only edit path that keeps the
-                       browser's undo stack (a spliced .value makes Ctrl-Z drop everything);
+                       ударение types a stress accent (U+0301) into whichever field the
+                       caret was last in — a button steals focus on mousedown, so the field
+                       is remembered on focusin, not read at click time; типограф (/api/typo)
+                       and, on Текст only, →.4s (/api/import/text) rewrite the WHOLE draft,
+                       so they need no caret — in Текст the result is typed back into the
+                       editor, in Поля the fields are re-rendered from the new draft. Every
+                       edit goes through execCommand("insertText"), the only path that keeps
+                       the browser's undo stack (a spliced .value makes Ctrl-Z drop everything);
                        move/copy (by board name + list + position; a copy/cross-board
                        move carries the card's labels + comments + attachments via
                        copyCardExtras — online-only for the extras), list ⋯ menu

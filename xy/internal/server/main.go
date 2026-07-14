@@ -132,6 +132,9 @@ func Main() {
 	mux.HandleFunc("POST /api/import/parse", srv.handleImportParse)
 	mux.HandleFunc("POST /api/import/text", srv.handleImportText)
 
+	// ---- typography (the card editor's «типограф» button) ----
+	mux.HandleFunc("POST /api/typo", srv.handleTypo)
+
 	// ---- handouts ----
 	mux.HandleFunc("POST /api/handouts/pdf", srv.handleHandoutsPDF)
 	mux.HandleFunc("POST /api/handouts/split_fit", srv.handleHandoutsSplitFit)

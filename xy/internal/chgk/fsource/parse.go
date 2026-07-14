@@ -173,6 +173,35 @@ func dropRunes(line string, n int) string {
 	return string(r[n:])
 }
 
+// SplitMarker splits a 4s line into everything structural at its head — an
+// element marker ("? ", "! ", "^ ", "## "…) or a list item's "-", together with
+// the whitespace that follows it — and the editorial text after that. A line
+// that carries no marker comes back as ("", line).
+//
+// It exists because the typography passes are defined on a *field's value*: the
+// parser applies them after this split, never to raw 4s. Anything that
+// typographs the source directly (the editor's Типограф button) has to make the
+// same split first, or it rewrites a list item's leading "-" into an em dash.
+func SplitMarker(line string) (prefix, rest string) {
+	first, ok := firstField(line)
+	if !ok {
+		return "", line
+	}
+	// A list item is a bare leading "-", which is not in markerMapping: the parser
+	// only sees it later, inside an element's content (processList).
+	head := first
+	if _, isMarker := markerMapping[first]; !isMarker {
+		if !strings.HasPrefix(strings.TrimLeft(line, " \t"), "-") {
+			return "", line
+		}
+		head = "-"
+	}
+	idx := strings.Index(line, head) + len(head)
+	rest = line[idx:]
+	n := len(rest) - len(strings.TrimLeft(rest, " \t"))
+	return line[:idx] + rest[:n], rest[n:]
+}
+
 // ── counters (4SCOUNTER macros) ──
 var reCounterUnify = regexp.MustCompile(`(4SCOUNTER([0-9a-zA-Z_]*)|set 4SCOUNTER([0-9a-zA-Z_]*) = ([0-9+]+))`)
 var reSetCounter = regexp.MustCompile(`set 4SCOUNTER([0-9a-zA-Z_]*) = ([0-9+]+)`)
