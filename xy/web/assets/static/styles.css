@@ -229,7 +229,6 @@
 .kcard-heading:hover { background: transparent; }
 .kcard-heading .kcard-title {
   font-weight: var(--fw-bold);
-  text-transform: uppercase;
   letter-spacing: 0.02em;
   color: var(--muted);
 }
