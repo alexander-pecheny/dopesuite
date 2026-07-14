@@ -66,15 +66,13 @@
   overflow: hidden;
   padding: var(--space-4) var(--page-pad-x);
 }
-/* The card modal (z 50) covers the lower section, but the fixed header — and its
-   ☰ dropdown — must stay above it (the settings/unlock modals at z-modal still
-   win over both). */
-.board-page .host-top { z-index: 60; }
-
 /* Smaller desktop board header (mirrors dope's 44px .game-host-top) — the
-   kanban itself is the point of the page, so the chrome above it stays thin. */
+   kanban itself is the point of the page, so the chrome above it stays thin.
+   z-index: the card modal (z 50) covers the lower section, but the fixed header
+   — and its ☰ dropdown — must stay above it (the settings/unlock modals at
+   z-modal still win over both). */
 .board-page { --xy-header-h: 44px; }
-.board-page .host-top { height: 44px; padding: var(--space-1-5) var(--page-pad-x-tight); }
+.board-page .host-top { z-index: 60; height: 44px; padding: var(--space-1-5) var(--page-pad-x-tight); }
 /* Same selector shape (not #id) as the mobile override below, so the cascade
    (equal specificity, later source wins) still lets the mobile rule shrink
    the title further on narrow screens. */
@@ -92,7 +90,6 @@
 /* Blue "unread" dots — on kanban cards (.kcard-unread), in the card detail
    head/timeline label, and the 🔔 bell panel rows (.notif-row .unread-dot).
    The base .unread-dot rule lives in core.css (the unreaddot primitive). */
-.kcard { position: relative; }
 .kcard-unread {
   position: absolute;
   top: 6px;
@@ -205,6 +202,7 @@
 .kadd:hover { color: var(--text); }
 .kcards { display: flex; flex-direction: column; gap: var(--space-2); overflow-y: auto; min-height: var(--space-6); padding: var(--space-1); }
 .kcard {
+  position: relative; /* anchors .kcard-unread */
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--kanban-card);
@@ -230,11 +228,6 @@
 /* auto/directive question number reads as scaffolding, not content */
 .kcard-num { color: var(--muted); }
 .kcard-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
-/* heading cards read as list dividers (no tile), meta cards as muted notes */
-.kcard-heading { background: transparent; padding-bottom: var(--space-1); }
-.kcard-heading:hover { background: transparent; }
-.kcard-heading .kcard-title { font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted); }
-.kcard-meta .kcard-title { color: var(--muted); font-style: italic; }
 .klist-add { background: transparent; }
 .klist-add .kadd-form { color: var(--muted); }
 .klist-add:hover .kadd-form { color: var(--text); }
@@ -485,7 +478,7 @@
    numbers are plain weight (only field labels are bold). */
 .pv-list { margin-top: var(--space-1); }
 .pv-list-item { padding-left: 1.6em; text-indent: -1.6em; margin-bottom: var(--space-0-5); }
-.pv-list-num { font-weight: var(--fw-normal); }
+.pv-list-num { font-weight: var(--fw-regular); }
 .pv-handout { color: var(--muted); }
 .pv-heading { font-size: var(--text-xl); font-weight: var(--fw-bold); margin: var(--space-5) 0 var(--space-3); }
 .pv-section { font-size: var(--text-lg); font-weight: var(--fw-semibold); margin: var(--space-4) 0 var(--space-2); }
@@ -745,7 +738,6 @@ textarea.fld-input { min-height: 3em; }
 }
 .lm-unit { border-radius: var(--radius-md); background: var(--structure); }
 .lm-unit.dragging { opacity: 0.5; }
-.lm-group { border: 2px solid var(--blue-strong); background: var(--accent-soft); padding: var(--space-1); }
 .lm-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); }
 .lm-check { display: inline-flex; align-items: center; }
 .lm-pos { color: var(--muted); font-size: var(--text-sm); min-width: 2.2rem; }

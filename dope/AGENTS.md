@@ -69,7 +69,7 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `styles.css` | ~1080 | dope's **app CSS layer** only (tournament tables/grids/screen/stickers + dope vars + dark overrides). The shared design system — tokens, controls, buttons, chrome, utilities, themes — lives in DopeUIKit's `assets/core.css`; the server serves `/static/styles.css` as core + this layer concatenated (`dope/server/css.go`). |
+| `styles.css` | ~4500 | dope's **app CSS layer** only (tournament tables/grids/screen/stickers + dope vars + dark overrides). The shared design system — tokens, controls, buttons, chrome, utilities, themes — lives in DopeUIKit's `assets/core.css` (~1030 lines); the server serves `/static/styles.css` as core + this layer concatenated (`dope/server/css.go`). The tournament domain used to live in `core.css`; it was moved down here, so **do not add tournament-specific rules to the kit** — they belong in this file. |
 | `pageforms.js` | ~60 | Shared behaviour for the server-rendered builder pages, replacing the inline `on*` handlers they used to carry (CSP-friendly, data-attribute driven: `[data-confirm]`, `[data-select-all]`, `[data-autosubmit]`, `[data-dialog-open="id"]`, `[data-dialog-close]`) |
 | `host.js` | 3153 | EK host editor — match score editing, undo/redo, stage tabs, SSE sync. Depends on `match-table.js` + `stage-cache.js` |
 | `od.js` | 3012 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync. Depends on `match-table.js` |
