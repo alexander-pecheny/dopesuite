@@ -12,7 +12,7 @@
 
 /* .btn-ghost now lives in the kit (core.css) — it is one of the core button
    kinds, not an xy invention, and it needs a fill there to read as a button. */
-.btn-small { min-height: 30px; padding: 0 var(--space-3); }
+.btn-small { min-height: var(--control-h-sm); padding: 0 var(--space-3); }
 
 /* board list */
 .board-grid {

@@ -55,7 +55,7 @@ func mustApp() *base.App {
 			Lang:         "ru",
 			Viewport:     viewportContent,
 			Stylesheets:  []string{"/static/styles.css"},
-			FontPreloads: []string{"/static/fonts/noto-sans-400.woff2"},
+			FontPreloads: []string{"/static/fonts/noto-sans-var.woff2"},
 			BootScripts:  []string{"/static/menu.js"},
 			DefaultKind:  "sheet",
 			PageKinds: map[string]base.PageKind{

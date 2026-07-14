@@ -35,7 +35,7 @@ func fakeApp(t *testing.T) *App {
 			Lang:         "ru",
 			Viewport:     "width=device-width, initial-scale=1, viewport-fit=cover",
 			Stylesheets:  []string{"/static/styles.css"},
-			FontPreloads: []string{"/static/fonts/noto-sans-400.woff2"},
+			FontPreloads: []string{"/static/fonts/noto-sans-var.woff2"},
 			BootScripts:  []string{"/static/menu.js"},
 			DefaultKind:  "board",
 			PageKinds: map[string]PageKind{

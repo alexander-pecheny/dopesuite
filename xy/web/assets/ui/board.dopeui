@@ -21,10 +21,13 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
         option value="heading" "Заголовок"
         option value="other" "Другое"
       mount id="cardDetailTitle" kind="card-title" hidden
+      -- these buttons share the header row with the 38px kind-select and the
+      -- icon button, so they are full height too — `small` made them 30px and
+      -- nothing in the row agreed with anything else
       headactions kind="detail"
         unreaddot id="contentUnreadDot" data-edit-only title="Непрочитанные изменения"
-        button id="cardLink" small title="Скопировать прямую ссылку на карточку" data-edit-only "🔗 Ссылка"
-        button id="cardCopy" small hidden title="Скопировать текст вопроса для тест-сессии (экранный режим)" "📋 Копировать"
+        button id="cardLink" title="Скопировать прямую ссылку на карточку" data-edit-only "🔗 Ссылка"
+        button id="cardCopy" hidden title="Скопировать текст вопроса для тест-сессии (экранный режим)" "📋 Копировать"
         iconbtn id="cardClose" label="Назад" "↩️"
     mount id="cardCopyMsg" kind="card-copy-msg" hidden
 
@@ -68,9 +71,11 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     label data-edit-only "Вложения"
     mount id="attachments" kind="attachments" data-edit-only
     row gap="sm" align="center" wrap data-edit-only
+      -- no `small` on the upload button: it shares this row with the file field,
+      -- and a 30px button beside a 38px field cannot line up with it
       filefield id="attachFile"
       checkbox id="attachCompress" " сжать (WebP)"
-      button small id="attachUpload" "Загрузить"
+      button id="attachUpload" "Загрузить"
 
     label data-edit-only "Переместить / копировать"
     row gap="sm" align="center" wrap data-edit-only

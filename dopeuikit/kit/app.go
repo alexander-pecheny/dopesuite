@@ -57,7 +57,7 @@ func CoreChrome() Chrome {
 		Lang:         "ru",
 		Viewport:     "width=device-width, initial-scale=1",
 		Stylesheets:  []string{"/static/styles.css"},
-		FontPreloads: []string{"/static/fonts/noto-sans-400.woff2"},
+		FontPreloads: []string{"/static/fonts/noto-sans-var.woff2"},
 		BootScripts:  []string{"/static/menu.js"},
 		DefaultKind:  "sheet",
 		PageKinds: map[string]PageKind{

@@ -1,17 +1,43 @@
+/* ── Fonts ────────────────────────────────────────────────────────────────────
+   Three VARIABLE faces, not a pile of static instances. Each carries a live
+   `wght` axis over 400..700, so 400/600/700 — and anything between — come out of
+   one file instead of needing one download per weight.
+
+   NB the naive version of this is a REGRESSION, not a saving: a variable font
+   ships interpolation deltas for its whole design space, so the stock Noto Sans
+   VF is 513 KB against 181 KB for a single static instance. Two things pay for
+   it, and both are load-bearing:
+     · the axes are cut to what we use — `wdth` pinned out entirely, `wght`
+       clamped to 400..700 instead of 100..900;
+     · the astral plane is subset away (mathematical alphanumerics, phonetic
+       extensions). Every BMP codepoint the old fonts had survives — all Cyrillic
+       and Greek, punctuation, arrows, math, and U+0301 COMBINING ACUTE, which is
+       what ЧГК stress accents are made of. Dropping that would corrupt questions.
+   Net: 416 KB for three faces vs 362 KB for the old two, and we gain real
+   italics (previously the browser SYNTHESISED them by shearing the roman) and a
+   real mono. Regenerate with the recipe in DESIGN.md if a face is ever rebuilt. */
 @font-face {
   font-family: "Noto Sans";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 400 700;
   font-display: swap;
-  src: url("/static/fonts/noto-sans-400.woff2") format("woff2");
+  src: url("/static/fonts/noto-sans-var.woff2") format("woff2");
 }
 
 @font-face {
   font-family: "Noto Sans";
-  font-style: normal;
-  font-weight: 700;
+  font-style: italic;
+  font-weight: 400 700;
   font-display: swap;
-  src: url("/static/fonts/noto-sans-700.woff2") format("woff2");
+  src: url("/static/fonts/noto-sans-var-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/jetbrains-mono-var.woff2") format("woff2");
 }
 
 :root {
@@ -145,12 +171,16 @@
   --text-xl-plus: 24px;
   --text-2xl: 30px;
 
-  /* The height a text-ish form control settles at (36px min + the 15px/1.55 line
-     box and 8px padding land on 38). Named because things have to LINE UP with a
-     field: input[type=color] is a replaced element, so `align-self: stretch` is
-     silently ignored on it and the swatch floated 4px above the row it sat in.
-     Anything that must match a field's height takes this token, not a guess. */
+  /* THE CONTROL HEIGHT SCALE. Everything that can share a row with a field —
+     buttons, icon buttons, selects, the file field — resolves to one of these, so
+     a row of mixed controls lines up by construction instead of by luck. It used
+     to be luck, and it lost: a card header held a 38px select, a 30px button and
+     a 34px icon button, three heights in one row, and nothing agreed with
+     anything. Replaced elements (input[type=color], input[type=file]) can't be
+     stretched by flexbox at all, so they MUST be told a height — hence a token
+     rather than a guess at each call site. */
   --control-h: 38px;
+  --control-h-sm: 30px;
 
   --leading-tight: 1;
   --leading-snug: 1.25;
@@ -189,7 +219,10 @@
   --inline-fade-bg: linear-gradient(to right, var(--paper-transparent), var(--paper));
 
   --font-sans: "Noto Sans", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* JetBrains Mono is shipped now (it was system-mono roulette before), but the
+     stack keeps its fallbacks: the subset drops astral codepoints, so anything
+     exotic in the 4s editor still lands on a system mono rather than tofu. */
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* ── scroll-fade utility ──────────────────────────────────
@@ -390,12 +423,114 @@ a.list-row:hover { background: var(--hover-bg); }
   font-family: inherit;
 }
 
+/* A <select> sizes itself from its own UA box and lands 2px over --control-h on
+   a bare min-height, which is exactly the 1px-off look in a header where it sits
+   beside buttons. Pin the height; the padding has to go to 0 or the text clips. */
+select.input,
+.field > select {
+  height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 .checkbox {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   font-size: var(--text-sm);
 }
+
+/* Native checkboxes/radios draw their own 1px box, which no token of ours can
+   reach — appearance:none is the only way to stop them, and once it's off we owe
+   them the whole widget (fill, tick, focus ring). They take --field-bg like every
+   other field, and --action-border, so the high-contrast theme puts the outline
+   back exactly as it does everywhere else. */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--action-border);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  cursor: var(--cursor-action);
+}
+
+input[type="radio"] { border-radius: var(--radius-full); }
+
+input[type="checkbox"]::before,
+input[type="radio"]::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  transform: scale(0);
+  background: #fff;
+  /* a tick, drawn rather than typed: a glyph would depend on the font stack */
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+input[type="radio"]::before {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  clip-path: none;
+}
+
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+input[type="checkbox"]:checked::before,
+input[type="radio"]:checked::before { transform: scale(1); }
+
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+  background: var(--action-disabled-bg);
+  opacity: var(--action-disabled-opacity);
+  cursor: var(--cursor-disabled);
+}
+
+/* appearance:none also removes the UA focus ring — put a real one back, or the
+   box becomes unreachable-looking for keyboard users. */
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* The file field's "Browse…" is a UA-drawn button with its own border. Style the
+   ::file-selector-button into an ordinary small button so the control stops
+   looking like a stray piece of 1998 and matches --control-h. */
+.input[type="file"] {
+  height: var(--control-h);
+  padding: 0;
+  padding-right: var(--space-3);
+  overflow: hidden;
+}
+
+.input[type="file"]::file-selector-button {
+  height: 100%;
+  margin-right: var(--space-3);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: var(--action-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  cursor: var(--cursor-action);
+}
+
+.input[type="file"]:hover::file-selector-button { background: var(--action-hover-bg); }
 
 /* The outline used to be the only thing lifting the dialog off the backdrop;
    with it gone the shadow carries the elevation (as it already did for
@@ -439,7 +574,9 @@ a.list-row:hover { background: var(--hover-bg); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  /* --control-h, so a button sitting in a row with a select or a field shares
+     its height instead of being 2px short of it */
+  min-height: var(--control-h);
   padding: 0 var(--space-4);
   border: 1px solid var(--action-border);
   border-radius: var(--radius-md);
@@ -508,8 +645,10 @@ a.list-row:hover { background: var(--hover-bg); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  /* square, on the same scale as every other control — it was 34px against a
+     38px select and a 30px button in the very same card header */
+  width: var(--control-h);
+  height: var(--control-h);
   padding: 0;
   border: 1px solid var(--action-border);
   border-radius: var(--radius-md);

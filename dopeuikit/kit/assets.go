@@ -8,6 +8,7 @@ import "pecheny.me/dopeuikit/assets"
 var (
 	// CoreCSS is the shared design-system stylesheet (core.css).
 	CoreCSS = assets.CoreCSS
-	// Fonts is the font directory (noto-sans-*.woff2), served at /static/fonts/.
+	// Fonts is the font directory (the variable noto-sans-*/jetbrains-mono-* woff2),
+	// served at /static/fonts/.
 	Fonts = assets.Fonts
 )

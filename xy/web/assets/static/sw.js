@@ -32,7 +32,8 @@ const PRECACHE = [
   "/static/vendor/scrypt.js", "/static/vendor/_assert.js", "/static/vendor/_md.js",
   "/static/vendor/hmac.js", "/static/vendor/pbkdf2.js", "/static/vendor/sha256.js",
   "/static/vendor/utils.js", "/static/vendor/crypto.js",
-  "/static/fonts/noto-sans-400.woff2", "/static/fonts/noto-sans-700.woff2",
+  "/static/fonts/noto-sans-var.woff2", "/static/fonts/noto-sans-var-italic.woff2",
+  "/static/fonts/jetbrains-mono-var.woff2",
   "/static/icon-192.png", "/static/icon-512.png", "/static/icon-maskable.png",
   "/static/apple-touch-icon.png", "/static/favicon.svg", "/favicon.ico",
 ];
