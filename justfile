@@ -1,26 +1,47 @@
 # Monorepo fan-out. xy/ and dope/ keep their own justfiles (run those directly
-# when working inside one); dopeuikit/ has none, so its recipes live here.
+# when working inside one); dopeuikit/ and dopecore/ have none, so their recipes
+# live here.
 
 default:
     @just --list
 
-# Go tests + frontend (node) tests, all three modules.
-test: test-uikit
+# Go tests + frontend (node) tests, all four modules.
+test: test-core test-uikit
     cd xy && just test
     cd dope && just test
 
-fmt: fmt-uikit
+fmt: fmt-core fmt-uikit
     cd xy && just fmt
     cd dope && just fmt
 
-vet: vet-uikit
+vet: vet-core vet-uikit
     cd xy && just vet
     cd dope && just vet
 
 # Run before committing anything, anywhere in the repo.
-pre-commit: pre-commit-uikit
+pre-commit: pre-commit-core pre-commit-uikit
     cd xy && just pre-commit
     cd dope && just pre-commit
+
+## dopecore ###################################################################
+
+test-core:
+    cd dopecore && go test ./...
+
+vet-core:
+    cd dopecore && go vet ./...
+
+fmt-core:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd dopecore
+    mapfile -t files < <(find . -type f -name '*.go')
+    ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
+
+tidy-check-core:
+    cd dopecore && go mod tidy -diff
+
+pre-commit-core: fmt-core vet-core tidy-check-core test-core
 
 ## dopeuikit ##################################################################
 
