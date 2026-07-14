@@ -361,7 +361,7 @@ func isViewerSubPath(parts []string) bool {
 		return true
 	}
 	switch parts[2] {
-	case "venues", "stats":
+	case "venues", "stats", "roster":
 		return len(parts) == 3
 	case "matches", "stage":
 		return len(parts) == 4 && parts[3] != ""

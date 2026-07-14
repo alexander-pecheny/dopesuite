@@ -1565,6 +1565,179 @@
     return wrapper;
   }
 
+  // Roster ("Составы") — the fest-level team→players list, shared by every game
+  // page (EK/OD/KSI, host and viewer). The data is the same for all games in a
+  // fest, so it is fetched once per festID and cached for the page's lifetime.
+  const rosterCache = new Map();
+
+  function fetchFestRoster(festID) {
+    if (!festID) return Promise.resolve([]);
+    if (rosterCache.has(festID)) return rosterCache.get(festID);
+    const promise = fetch(`/api/fest/${encodeURIComponent(festID)}/roster`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`roster ${response.status}`);
+        return response.json();
+      })
+      .then((data) => (data && Array.isArray(data.teams) ? data.teams : []))
+      .catch((err) => {
+        // Don't cache a failure — let a later render retry the fetch.
+        rosterCache.delete(festID);
+        throw err;
+      });
+    rosterCache.set(festID, promise);
+    return promise;
+  }
+
+  // rating.chgk.info deep links: team/player names in the Составы view link to
+  // their rating pages when a rating id is known.
+  const RATING_TEAM_URL = "https://rating.chgk.info/teams/";
+  const RATING_PLAYER_URL = "https://rating.chgk.info/players/";
+
+  // rosterNameNode returns a link to `href` (an external rating page) when one is
+  // given, otherwise a plain span — both carrying `className` so styling is the
+  // same whether or not a rating id was available.
+  function rosterNameNode(text, href, className) {
+    if (href) {
+      const a = document.createElement("a");
+      a.className = `${className} roster-link`;
+      a.href = href;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = text;
+      return a;
+    }
+    const span = document.createElement("span");
+    span.className = className;
+    span.textContent = text;
+    return span;
+  }
+
+  // buildRosterTable renders the team→players table using the shared results-table
+  // design-system styling. One row per team: number, name (+ city), player list.
+  // Team and player names become rating.chgk.info links when a rating id exists.
+  function buildRosterTable(teams) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "results-wrapper roster-results-wrapper";
+    const list = teams || [];
+    if (list.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "roster-empty";
+      empty.textContent = "Составы пока не заданы.";
+      wrapper.appendChild(empty);
+      return wrapper;
+    }
+
+    const hasNumbers = list.some((team) => Number(team.number) > 0);
+    const table = document.createElement("table");
+    table.className = "results-table roster-results-table";
+
+    const thead = document.createElement("thead");
+    const header = document.createElement("tr");
+    if (hasNumbers) header.appendChild(th("№", "results-place-head"));
+    header.appendChild(th("Команда", "results-team-head"));
+    header.appendChild(th("Игроки", "roster-players-head"));
+    thead.appendChild(header);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    list.forEach((team, index) => {
+      const row = document.createElement("tr");
+      row.className = "results-row";
+      if (index === 0) row.classList.add("results-group-first");
+      if (index === list.length - 1) row.classList.add("results-group-last");
+
+      if (hasNumbers) {
+        row.appendChild(td(Number(team.number) > 0 ? team.number : "", "results-place"));
+      }
+
+      const teamCell = document.createElement("td");
+      teamCell.className = "results-team roster-team-cell";
+      const teamHref = Number(team.ratingID) > 0 ? `${RATING_TEAM_URL}${team.ratingID}` : "";
+      // Same DOM shape as buildEKStatsTable's name cell, so the shared
+      // fade-on-overflow + hover/focus popover (results-team styling) applies to
+      // clipped team names — markNameOverflow toggles .results-team-truncated.
+      const nameWrap = document.createElement("span");
+      nameWrap.className = "results-team-name-wrap";
+      const nameEl = rosterNameNode(team.name || "", teamHref, "results-team-name roster-team-name");
+      nameEl.tabIndex = 0;
+      nameEl.setAttribute("aria-label", team.name || "");
+      nameWrap.appendChild(nameEl);
+      teamCell.appendChild(nameWrap);
+      const namePopover = document.createElement("span");
+      namePopover.className = "results-team-name-popover";
+      namePopover.textContent = team.name || "";
+      teamCell.appendChild(namePopover);
+      if (team.city) {
+        const city = document.createElement("span");
+        city.className = "roster-team-city";
+        city.textContent = team.city;
+        teamCell.appendChild(city);
+      }
+      row.appendChild(teamCell);
+
+      const playersCell = document.createElement("td");
+      playersCell.className = "roster-players-cell";
+      const players = Array.isArray(team.players) ? team.players : [];
+      if (players.length === 0) {
+        playersCell.classList.add("roster-players-empty");
+        playersCell.textContent = "—";
+      } else {
+        players.forEach((player) => {
+          // Tolerate both the current {name, ratingID} shape and a bare string.
+          const info = typeof player === "string" ? {name: player} : (player || {});
+          const chip = document.createElement("span");
+          chip.className = "roster-player";
+          const href = Number(info.ratingID) > 0 ? `${RATING_PLAYER_URL}${info.ratingID}` : "";
+          chip.appendChild(rosterNameNode(info.name || "", href, "roster-player-name"));
+          playersCell.appendChild(chip);
+        });
+      }
+      row.appendChild(playersCell);
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    return wrapper;
+  }
+
+  // buildRosterView returns a container node for the "Составы" tab that fills
+  // itself asynchronously: it shows a loading line, fetches the fest roster, then
+  // swaps in the table (or an error line on failure). Safe to drop straight into
+  // a tab pane by any page — no roster data needs to be threaded through.
+  function buildRosterView(festID) {
+    const container = document.createElement("div");
+    container.className = "roster-view";
+    const loading = document.createElement("p");
+    loading.className = "roster-loading";
+    loading.textContent = "Загрузка составов…";
+    container.appendChild(loading);
+
+    fetchFestRoster(festID)
+      .then((teams) => {
+        container.replaceChildren(buildRosterTable(teams));
+        // Flag clipped team names so the shared fade + popover kick in, and
+        // re-check whenever the container's width changes (tab switch, resize).
+        // The popover itself is already handled: the CSS-only variant on OD/KSI,
+        // and the page-bound floating popover on the EK host/viewer roots.
+        const remeasure = () => markNameOverflow(container, {
+          cellSelector: ".roster-team-cell",
+          nameSelector: ".results-team-name",
+          truncatedClass: "results-team-truncated",
+        });
+        requestAnimationFrame(remeasure);
+        if (typeof ResizeObserver === "function") {
+          new ResizeObserver(remeasure).observe(container);
+        }
+      })
+      .catch(() => {
+        const error = document.createElement("p");
+        error.className = "roster-empty";
+        error.textContent = "Не удалось загрузить составы.";
+        container.replaceChildren(error);
+      });
+    return container;
+  }
+
   // installCellNavBar mounts a floating ↑/↓ bar pinned just above the on-screen
   // keyboard for advancing between editable cells. Mobile numeric keypads
   // (inputmode=numeric/decimal) have no Return key on iOS, so this is the only
@@ -2980,6 +3153,9 @@
     stageTabLabel,
     teamListCell,
     buildVenuesTable,
+    fetchFestRoster,
+    buildRosterTable,
+    buildRosterView,
     createFloatingPopover,
     installCellNavBar,
     installVirtualKeypad,

@@ -107,6 +107,7 @@ const TABS = [
   // (tabFromHash() filters against TABS, so #screen also can't be reached by a
   // viewer via the URL hash.)
   ...(viewer ? [] : [{key: "screen", label: "Экран"}]),
+  {key: "roster", label: "Составы"},
 ];
 
 function tabFromHash() {
@@ -471,6 +472,7 @@ function getTabPane(tab) {
   let node;
   if (tab === "input") node = buildInputView();
   else if (tab === "detailed") node = buildDetailedTable();
+  else if (tab === "roster") node = gameTable.buildRosterView(route.festID);
   else if (tab === "screen") node = buildScreenView();
   else node = buildResultsTable();
   const pane = document.createElement("div");

@@ -18,6 +18,7 @@ import (
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
 	"dope/dope/domain/resolver"
+	"dope/dope/domain/roster"
 	"dope/dope/export/gameexport"
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
@@ -234,6 +235,7 @@ func (s *server) authorizeHostPresence(w http.ResponseWriter, r *http.Request, f
 }
 
 // /api/fest/{tid}
+// /api/fest/{tid}/roster
 // /api/fest/{tid}/venues
 // /api/fest/{tid}/venues/{n}
 // /api/fest/{tid}/games/{gid}
@@ -282,6 +284,13 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	case "venues":
 		s.handleScopedVenues(w, r, tid, parts[2:])
+		return
+	case "roster":
+		if len(parts) != 2 {
+			http.NotFound(w, r)
+			return
+		}
+		s.handleScopedFestRoster(w, r, tid)
 		return
 	case "games":
 		if len(parts) < 3 {
@@ -361,6 +370,30 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.NotFound(w, r)
+}
+
+// handleScopedFestRoster serves the fest's canonical team→players roster as JSON
+// for the read-only "Составы" tab. Read-gated like every other viewer surface
+// (authorizeFestRead), so it is visible to all visitors of a public fest, not
+// just hosts.
+func (s *server) handleScopedFestRoster(w http.ResponseWriter, r *http.Request, festID int64) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.authorizeFestRead(w, r, festID) {
+		return
+	}
+	teams, err := roster.LoadFestRosterView(r.Context(), s.eng.DB, festID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if teams == nil {
+		teams = []roster.FestRosterTeamView{}
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{"teams": teams})
 }
 
 func (s *server) handleHostPresence(w http.ResponseWriter, r *http.Request, festID int64) {
