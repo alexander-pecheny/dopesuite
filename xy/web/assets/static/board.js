@@ -2454,6 +2454,11 @@ function setCardView(view) {
   tabBtn("preview").hidden = !!pendingList || test;
   document.getElementById("cardViewTabs").hidden = false;
   document.getElementById("cardSave").hidden = view === "preview";
+  // The insert helpers need a field to insert into, so they follow the two edit
+  // views. →.4s rewrites the raw 4s editor, and only for a question: a test
+  // card's Текст view holds a tester list, and meta/heading cards aren't questions.
+  document.getElementById("cardEditTools").hidden = view === "preview";
+  document.getElementById("cardTo4s").hidden = view !== "text" || !fieldsAvailable();
   document.getElementById("cardDescLabel").textContent = test ? "Тестировали (- игрок, -T команда)" : "Описание";
   if (view === "text") {
     const ta = document.getElementById("cardDesc");
@@ -2702,6 +2707,95 @@ async function renderCardPreview() {
 for (const v of CARD_TABS) tabBtn(v).addEventListener("click", () => setCardView(v));
 document.getElementById("cardPreviewScreen").addEventListener("change", () => { if (cardView === "preview") renderCardPreview(); });
 document.getElementById("cardPreviewBody").addEventListener("dblclick", () => setCardView(lastEditView));
+
+// ---- edit tools (the row under the tabs) ----
+// The insert buttons type into the field the user was editing, which by the time
+// the click lands is no longer the focused one (a button takes focus on
+// mousedown) — so remember the last field the caret was in. The Поля view rebuilds
+// its inputs on every view switch, hence the isConnected check when using it.
+let lastEditField = null;
+for (const panel of ["cardViewFields", "cardViewText"]) {
+  document.getElementById(panel).addEventListener("focusin", (e) => {
+    if (e.target.matches("textarea, input[type=text]")) lastEditField = e.target;
+  });
+}
+
+// editField is the field an insert button writes into: the last one edited, or —
+// when the card was just opened and nothing has been focused yet — the raw editor.
+function editField() {
+  if (lastEditField && lastEditField.isConnected && lastEditField.offsetParent) return lastEditField;
+  return cardView === "text" ? document.getElementById("cardDesc") : null;
+}
+
+// insertAtCaret types `before` + the selection + `after` over the field's
+// selection (an empty selection is just an insertion point). It goes through
+// execCommand because that is the only way to edit a field without throwing away
+// the browser's undo stack — a hand-spliced .value makes Ctrl-Z drop everything
+// typed before it. It also fires `input`, which is what regrows an autoGrow
+// textarea; the fallback has to do that itself.
+function insertAtCaret(field, before, after = "") {
+  field.focus();
+  const s = field.selectionStart, e = field.selectionEnd;
+  const text = before + field.value.slice(s, e) + after;
+  if (!document.execCommand("insertText", false, text)) {
+    field.setRangeText(text, s, e, "end");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  // With nothing selected the caret belongs between the quotes, not after them.
+  if (after && s === e) {
+    const caret = field.selectionStart - after.length;
+    field.setSelectionRange(caret, caret);
+  }
+}
+
+// replaceField swaps a field's whole content through the same undo-preserving path.
+function replaceField(field, text) {
+  field.focus();
+  field.setSelectionRange(0, field.value.length);
+  if (!document.execCommand("insertText", false, text)) {
+    field.value = text;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+}
+
+// The combining acute (U+0301) attaches to the character left of the caret, which
+// is the chgk convention for marking stress ("зАмок" → "зам́ок" as typed).
+document.getElementById("cardInsStress").addEventListener("click", () => {
+  const f = editField();
+  if (f) insertAtCaret(f, "́");
+});
+document.getElementById("cardInsQuotes").addEventListener("click", () => {
+  const f = editField();
+  if (f) insertAtCaret(f, "«", "»");
+});
+
+// →.4s runs the raw editor's content through the server's chgk text parser — the
+// .docx import pipeline minus the .docx — so a question pasted as plain prose
+// ("Вопрос 1: … Ответ: … Автор: …") becomes marked-up 4s. The parse is a guess, so
+// it lands back in the editor for the user to check; nothing is saved until Save.
+// Online-only: the parser is the Go port on the server (it never keeps the text).
+document.getElementById("cardTo4s").addEventListener("click", async () => {
+  const ta = document.getElementById("cardDesc");
+  const text = ta.value.trim();
+  if (!text) return;
+  if (!xySync.isOnline()) { alert("Разбор текста доступен только онлайн."); return; }
+  setStatus("saving");
+  try {
+    const res = await fetch("/api/import/text", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
+    const { source } = await res.json();
+    setStatus("saved");
+    replaceField(ta, source);
+  } catch (err) {
+    setStatus("error");
+    alert("Не удалось разобрать текст: " + err.message);
+  }
+});
 
 // ---- direct links (shareable URLs for a card and a comment) ----
 // A card link is /board/{id}?card={cardId}; a comment link adds &comment={eventId}

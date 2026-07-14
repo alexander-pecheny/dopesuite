@@ -27,6 +27,38 @@ type importResponse struct {
 	Images []importedImage `json:"images"`
 }
 
+type textParseRequest struct {
+	Text string `json:"text"`
+}
+
+type textParseResponse struct {
+	Source string `json:"source"`
+}
+
+// handleImportText turns one card's plain text — a question pasted as prose,
+// "Вопрос 1: … Ответ: … Автор: …" — into 4s source. It is handleImportParse's
+// pipeline without the file: the same chgk text parser, run on text the client
+// already holds in plaintext.
+//
+// Like the other parse endpoints, this handler necessarily sees plaintext, and
+// like them it keeps none of it: the text is parsed in memory and the 4s handed
+// straight back for the client to encrypt under the board key.
+func (s *server) handleImportText(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireUser(w, r); !ok {
+		return
+	}
+	var req textParseRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	source := chgkimport.ParseText(req.Text)
+	if source == "" {
+		httpError(w, http.StatusBadRequest, "в тексте не найдено вопросов")
+		return
+	}
+	writeJSON(w, textParseResponse{Source: source})
+}
+
 // handleImportParse parses an uploaded question package (.4s, .zip or .docx) into
 // 4s source plus its images. This is the read side of chgksuite's `parse` command,
 // ported to Go (internal/chgk/chgkimport).

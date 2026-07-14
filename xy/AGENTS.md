@@ -72,7 +72,9 @@ internal/server/       package server — the whole HTTP server
                        in-process (chgk/docx, chgk/typstdoc), images included; no Python. The PDF goes through
                        the shared typst (wasm) pool (typst.go), so it too writes nothing anywhere
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
-                       parsed in memory, nothing persisted; the client encrypts the result into a new list
+                       parsed in memory, nothing persisted; the client encrypts the result into a new list.
+                       POST /api/import/text — the same pipeline without the file: one card's plain text
+                       (a question pasted as prose) → 4s, behind the card editor's →.4s button
   handouts.go          POST /api/handouts/{pdf,split_fit} — fully in-process (chgk/handout + typst as a wasm module, see typst.go). No Python, no typst binary, nothing written to disk. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
   typst.go             the shared typst (wasm) pool: built once, warmed at boot, injectable so handler tests stub it. XY_WASM_CACHE must be persistent (~15s cold compile vs ~0.6s cached)
   staging.go           handout image staging: /api/handouts/{stage,heartbeat,DELETE stage} — client uploads referenced images once on modal open; pdf/split_fit reuse them via a session id (reaped after ~1min of no heartbeat) instead of re-uploading each generate. Staged images live in memory only, never on disk
@@ -150,6 +152,14 @@ web/assets/            //go:embed static + ui (package assets)
     diff.js            word-level token diff for desc_edit timeline highlighting
     index.js           board list + create-board (passphrase) flow; offline board-list cache
     board.js           kanban: unlock, drag-reorder, card detail, timeline, labels,
+                       the card editor's tools row (under the Просмотр/Поля/Текст tabs):
+                       insert a stress accent (U+0301) or «ёлочки» into whichever field
+                       the caret was last in — a button steals focus on mousedown, so the
+                       field is remembered on focusin, not read at click time — and, on
+                       Текст only, →.4s, which runs the raw editor's prose through
+                       /api/import/text and types the 4s back in. Both go through
+                       execCommand("insertText"), the only edit path that keeps the
+                       browser's undo stack (a spliced .value makes Ctrl-Z drop everything);
                        move/copy (by board name + list + position; a copy/cross-board
                        move carries the card's labels + comments + attachments via
                        copyCardExtras — online-only for the extras), list ⋯ menu

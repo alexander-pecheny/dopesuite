@@ -71,6 +71,14 @@ func Parse(filename string, data []byte) (*Result, error) {
 	return nil, fmt.Errorf("%w: %s", ErrUnsupported, filepath.Ext(filename))
 }
 
+// ParseText turns the plain text of a question package into 4s source: the .docx
+// pipeline (plain text → structure → 4s) minus the .docx reader. It is what the
+// card editor's →.4s button runs a pasted, unmarked-up question through.
+func ParseText(text string) string {
+	doc := textparse.Parse(normalizeNewlines(text), textparse.Options{})
+	return strings.TrimSpace(fsource.Compose(doc, fsource.NumbersDefault))
+}
+
 // validate runs a .4s through the 4s parser so a file that isn't really 4s
 // (or that holds nothing importable) fails here rather than becoming an empty
 // list. A .docx skips this: it came out of Compose and is 4s by construction.

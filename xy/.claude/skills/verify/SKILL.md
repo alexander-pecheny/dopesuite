@@ -50,13 +50,15 @@ await p.evalJS(`(()=>{loginUsername.value="tester";usernameForm.requestSubmit()}
 await sleep(800);
 await p.evalJS(`(()=>{passwordValue.value="testpass123";passwordForm.requestSubmit()})()`);
 
-// create a board (passphrase = client-side DK); lands on /board/{id}
+// create a board (passphrase = client-side DK); lands on /board/{id}.
+// The passphrase must be ≥16 chars — a short one just parks a message in
+// #createMessage and never navigates, which reads exactly like a hang.
 await p.goto("http://127.0.0.1:9681/");
-await p.evalJS(`(()=>{newBoardBtn.click();boardName.value="Тестовая доска";boardPass.value="pass";createForm.requestSubmit()})()`);
+await p.evalJS(`(()=>{newBoardBtn.click();boardName.value="Тестовая доска";boardPass.value="board-pass-16chars";createForm.requestSubmit()})()`);
 await sleep(3000);   // scrypt KEK derivation is deliberately slow
 
 // unlock on every later page load (the DK cache is per-browser-profile)
-await p.evalJS(`(()=>{const o=unlockOverlay;if(!o.hidden){unlockPass.value="pass";unlockForm.requestSubmit()}})()`);
+await p.evalJS(`(()=>{const o=unlockOverlay;if(!o.hidden){unlockPass.value="board-pass-16chars";unlockForm.requestSubmit()}})()`);
 
 // add a list
 await p.evalJS(`(()=>{const f=document.querySelector(".klist-add .kadd-form");
@@ -89,6 +91,17 @@ Sliders/inputs need `dispatchEvent(new Event("input",{bubbles:true}))` — setti
 
 ## Gotchas
 
+- **Turn focus emulation on before testing anything focus-driven:**
+  ```js
+  await p.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  ```
+  An unfocused headless page updates `document.activeElement` on `.focus()` but
+  never fires `focus`/`focusin`, so any handler that tracks the focused field
+  silently sees nothing — the feature looks broken when it isn't.
+- `connect()` opens its own fresh tab, so every script must `goto` + unlock;
+  a script that only calls `evalJS` is talking to `about:blank`.
+- The session cookie lives in the Chromium profile, so a second run starts
+  logged in — `/login` redirects to `/` and the login-form ids are absent.
 - Everything on a board is behind the unlock overlay; re-unlock after each
   `goto`. Board data is encrypted, so there is no way to seed it via SQL — seed
   through the UI.

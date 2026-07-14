@@ -128,8 +128,9 @@ func Main() {
 	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
 	mux.HandleFunc("POST /api/export/pdf", srv.handleExportPDF)
 
-	// ---- import (.4s / .zip / .docx → 4s source + images) ----
+	// ---- import (.4s / .zip / .docx → 4s source + images; plain text → 4s) ----
 	mux.HandleFunc("POST /api/import/parse", srv.handleImportParse)
+	mux.HandleFunc("POST /api/import/text", srv.handleImportText)
 
 	// ---- handouts ----
 	mux.HandleFunc("POST /api/handouts/pdf", srv.handleHandoutsPDF)

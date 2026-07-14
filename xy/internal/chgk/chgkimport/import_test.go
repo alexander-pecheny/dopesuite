@@ -292,3 +292,17 @@ func TestSafeImageNamesLeavesProseAlone(t *testing.T) {
 		t.Errorf("directive was not rewritten: %q", r.Source)
 	}
 }
+
+// TestParseText: a question pasted as prose becomes 4s — what the card editor's
+// →.4s button is for. Nothing else in the app can turn unmarked text into markers.
+func TestParseText(t *testing.T) {
+	got := ParseText("Вопрос 1:\r\nВ известном романе ОН появляется дважды.\r\nОтвет: Кот\r\nЗачёт: кошка\r\nКомментарий: всё просто.\r\nИсточник: https://example.com\r\nАвтор: Иван Иванов")
+	want := "? В известном романе ОН появляется дважды.\n! Кот\n= кошка\n/ всё просто.\n^ https://example.com\n@ Иван Иванов"
+	if got != want {
+		t.Errorf("ParseText:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+	// Nothing parseable → nothing composed, so the handler can 400 on "".
+	if got := ParseText("   \n\n  "); got != "" {
+		t.Errorf("blank text: got %q, want empty", got)
+	}
+}
