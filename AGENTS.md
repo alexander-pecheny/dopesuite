@@ -41,7 +41,5 @@ dope/        tournament management (EK/OD/KSI) + realtime web UI
 
 ## Git
 
-This repo uses `gitbutler`. Use the `gitbutler` skill; do not drive branches or
-PRs with raw `git`/`graphite`. To merge a branch when the user says so:
-`python ~/scripts/but-quick-merge.py --pull <id>`, where `<id>` is the short
-gitbutler branch ID (e.g. `ui`).
+Plain `git`. Branch, commit and merge with raw git commands — no `gitbutler`, no
+`graphite`, no wrapper scripts.
