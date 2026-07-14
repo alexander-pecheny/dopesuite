@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"pecheny.me/dopecore/sqlitex"
+
 	"pecheny.me/dopecore/authcred"
 )
 
@@ -33,7 +35,7 @@ func (s *server) addUser(ctx context.Context, username, password string) error {
 		_, err := tx.ExecContext(ctx, `
 insert into users(username, password_hash, created_at, updated_at) values(?, ?, ?, ?)`,
 			username, hash, rfc3339(now), rfc3339(now))
-		if err != nil && strings.Contains(err.Error(), "UNIQUE") {
+		if sqlitex.IsUniqueViolation(err) {
 			return errors.New("username already taken")
 		}
 		return err

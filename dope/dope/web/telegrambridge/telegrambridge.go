@@ -2,7 +2,6 @@ package telegrambridge
 
 import (
 	"context"
-	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -11,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/tgbridge"
 
 	"dope/dope/platform/util"
 
@@ -41,35 +42,23 @@ const (
 	TelegramBridgeCodeExpired  = "Срок действия кода истек. Запроси новый на " + TelegramBridgeRegisterURL + "."
 )
 
-type telegramRegisterRequest struct {
-	Code             string `json:"code"`
-	TelegramUserID   int64  `json:"telegram_user_id"`
-	TelegramUsername string `json:"telegram_username"`
-}
-
-type telegramLoginRequest struct {
-	TelegramUserID   int64  `json:"telegram_user_id"`
-	TelegramUsername string `json:"telegram_username"`
-}
-
-type TelegramBridgeResponse struct {
-	Message string `json:"message"`
-}
+// The wire protocol — request/response shapes, the shared-secret gate, the SQL —
+// is single-sourced in dopecore/tgbridge. The handlers stay here because they run
+// under dope's own write-mutex discipline and carry dope's reply text.
+type TelegramBridgeResponse = tgbridge.Response
 
 // authorizeBot gates the bot bridge with the shared secret. When DOPE_BOT_SECRET
 // is unset the bridge is disabled outright (503) so the code-issuing endpoints
 // are never open to unauthenticated callers.
 func (s *Server) authorizeBot(w http.ResponseWriter, r *http.Request) bool {
-	if s.h.BotSecret() == "" {
+	ok, configured := tgbridge.SecretOK(r, s.h.BotSecret())
+	switch {
+	case !configured:
 		http.Error(w, "telegram bridge disabled", http.StatusServiceUnavailable)
-		return false
-	}
-	got := r.Header.Get("X-Bot-Secret")
-	if subtle.ConstantTimeCompare([]byte(got), []byte(s.h.BotSecret())) != 1 {
+	case !ok:
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return false
 	}
-	return true
+	return ok && configured
 }
 
 func (s *Server) HandleTelegramRegister(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +70,7 @@ func (s *Server) HandleTelegramRegister(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer r.Body.Close()
-	var req telegramRegisterRequest
+	var req tgbridge.RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
@@ -99,7 +88,7 @@ func (s *Server) HandleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	var req telegramLoginRequest
+	var req tgbridge.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
@@ -111,7 +100,7 @@ func (s *Server) HandleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 // TelegramConsumeRegister marks a pending 'register' code as consumed by the
 // telegram account that sent it. Returns the user-facing reply text.
 func (s *Server) TelegramConsumeRegister(ctx context.Context, code string, tgUserID int64, tgUsername string) string {
-	if !looksLikeTelegramRegisterCode(code) {
+	if !tgbridge.LooksLikeRegisterCode(code) {
 		return TelegramBridgeCodeMissing
 	}
 	// Serialize through the global write mutex like the game-state path, so a
@@ -120,13 +109,7 @@ func (s *Server) TelegramConsumeRegister(ctx context.Context, code string, tgUse
 	s.h.Lock()
 	defer s.h.Unlock()
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.h.DB().ExecContext(ctx, `
-update telegram_login_codes
-set telegram_user_id = ?, telegram_username = ?, consumed_at = ?
-where code = ?
-  and kind = 'register'
-  and consumed_at is null
-  and expires_at > ?`, tgUserID, tgUsername, now, code, now)
+	res, err := s.h.DB().ExecContext(ctx, tgbridge.ConsumeRegisterSQL, tgUserID, tgUsername, now, code, now)
 	if err != nil {
 		log.Printf("telegram register consume %s: %v", code, err)
 		return TelegramBridgeGenericError
@@ -187,9 +170,7 @@ func (s *Server) TelegramIssueLogin(ctx context.Context, tgUserID int64, tgUsern
 			log.Printf("telegram login gen code: %v", err)
 			return TelegramBridgeGenericError
 		}
-		_, err = s.h.DB().ExecContext(ctx, `
-insert into telegram_login_codes(code, kind, user_id, telegram_user_id, telegram_username, created_at, expires_at)
-values(?, 'login', ?, ?, ?, ?, ?)`, code, userID, tgUserID, tgUsername, createdAt, expires)
+		_, err = s.h.DB().ExecContext(ctx, tgbridge.IssueLoginSQL, code, userID, tgUserID, tgUsername, createdAt, expires)
 		if err == nil {
 			return fmt.Sprintf(TelegramBridgeLoginCodeMsg, code)
 		}
@@ -199,19 +180,4 @@ values(?, 'login', ?, ?, ?, ?, ?)`, code, userID, tgUserID, tgUsername, createdA
 		}
 	}
 	return TelegramBridgeLoginExhausted
-}
-
-// looksLikeTelegramRegisterCode is a cheap shape check (base32 alphabet, sane
-// length) mirroring the bot's old local triage, so an obviously-bogus message
-// never hits the database.
-func looksLikeTelegramRegisterCode(s string) bool {
-	if len(s) < 4 || len(s) > 64 {
-		return false
-	}
-	for _, r := range s {
-		if !(r >= 'A' && r <= 'Z') && !(r >= '2' && r <= '7') {
-			return false
-		}
-	}
-	return true
 }

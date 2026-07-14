@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/subtle"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -10,16 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"pecheny.me/dopecore/tgbridge"
+
+	"pecheny.me/dopecore/sqlitex"
+
 	"pecheny.me/dopecore/authcred"
 
 	"pecheny.me/dopecore/session"
 )
-
-// sessionRefreshInterval is the minimum gap between sessions.last_seen_at
-// writes for a given session: most authenticated requests are served from a
-// single SELECT, and only every ~minute do we round-trip a write to extend the
-// sliding lifetime.
-const sessionRefreshInterval = time.Minute
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
@@ -54,7 +51,8 @@ where s.token_hash = ?`, hash)
 		})
 		return session.User{}, false
 	}
-	if lastSeen, _ := time.Parse(time.RFC3339, lastSeenStr); now.Sub(lastSeen) >= sessionRefreshInterval {
+	lastSeen, _ := time.Parse(time.RFC3339, lastSeenStr)
+	if authcred.NeedsRefresh(lastSeen, expires, now) {
 		_ = s.withWriteTx(r.Context(), "session-refresh", func(ctx context.Context, tx *sql.Tx) error {
 			_, err := tx.ExecContext(ctx, `update sessions set last_seen_at = ?, expires_at = ? where id = ?`,
 				rfc3339(now), rfc3339(now.Add(session.Lifetime)), u.SessionID)
@@ -75,20 +73,7 @@ func (s *server) requireUser(w http.ResponseWriter, r *http.Request) (session.Us
 }
 
 func (s *server) createSessionTx(ctx context.Context, tx *sql.Tx, userID int64, now time.Time) (string, error) {
-	for attempt := 0; attempt < 3; attempt++ {
-		token, err := authcred.NewSessionToken()
-		if err != nil {
-			return "", err
-		}
-		_, err = tx.ExecContext(ctx, `
-insert into sessions(user_id, token_hash, created_at, expires_at, last_seen_at)
-values(?, ?, ?, ?, ?)`,
-			userID, authcred.HashSessionToken(token), rfc3339(now), rfc3339(now.Add(session.Lifetime)), rfc3339(now))
-		if err == nil {
-			return token, nil
-		}
-	}
-	return "", errors.New("could not create session")
+	return authcred.CreateSession(ctx, tx, userID, now)
 }
 
 // ---- response shapes ----
@@ -493,7 +478,7 @@ func (s *server) handleSetUsername(w http.ResponseWriter, r *http.Request) {
 		}
 		_, err := tx.ExecContext(ctx, `update users set username = ?, updated_at = ? where id = ?`,
 			uname, rfc3339(time.Now()), u.UserID)
-		if err != nil && strings.Contains(err.Error(), "UNIQUE") {
+		if sqlitex.IsUniqueViolation(err) {
 			return errBadRequest("логин занят")
 		}
 		return err
@@ -549,35 +534,24 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 
 // ---- telegram bridge (shared-secret) ----
 
-func botSecretOK(r *http.Request) (bool, bool) {
-	secret := os.Getenv("XY_BOT_SECRET")
-	if secret == "" {
-		return false, false // not configured
+// requireBotSecret gates the bridge on XY_BOT_SECRET. An unset secret disables
+// the bridge outright rather than leaving the code-issuing endpoints open.
+func (s *server) requireBotSecret(w http.ResponseWriter, r *http.Request) bool {
+	ok, configured := tgbridge.SecretOK(r, os.Getenv("XY_BOT_SECRET"))
+	switch {
+	case !configured:
+		httpError(w, http.StatusServiceUnavailable, "bot bridge not configured")
+	case !ok:
+		httpError(w, http.StatusUnauthorized, "bad secret")
 	}
-	got := r.Header.Get("X-Bot-Secret")
-	return subtle.ConstantTimeCompare([]byte(got), []byte(secret)) == 1, true
-}
-
-type telegramRegisterRequest struct {
-	Code             string `json:"code"`
-	TelegramUserID   int64  `json:"telegram_user_id"`
-	TelegramUsername string `json:"telegram_username"`
-}
-type telegramMessageResponse struct {
-	Message string `json:"message"`
+	return ok && configured
 }
 
 func (s *server) handleTelegramRegister(w http.ResponseWriter, r *http.Request) {
-	ok, configured := botSecretOK(r)
-	if !configured {
-		httpError(w, http.StatusServiceUnavailable, "bot bridge not configured")
+	if !s.requireBotSecret(w, r) {
 		return
 	}
-	if !ok {
-		httpError(w, http.StatusUnauthorized, "bad secret")
-		return
-	}
-	var req telegramRegisterRequest
+	var req tgbridge.RegisterRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
@@ -585,10 +559,7 @@ func (s *server) handleTelegramRegister(w http.ResponseWriter, r *http.Request) 
 	now := time.Now()
 	var msg string
 	err := s.withWriteTx(r.Context(), "tg-register", func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `
-update telegram_login_codes
-set telegram_user_id = ?, telegram_username = ?, consumed_at = ?
-where code = ? and kind = 'register' and consumed_at is null and expires_at > ?`,
+		res, err := tx.ExecContext(ctx, tgbridge.ConsumeRegisterSQL,
 			req.TelegramUserID, nullStr(req.TelegramUsername), rfc3339(now), code, rfc3339(now))
 		if err != nil {
 			return err
@@ -603,25 +574,14 @@ where code = ? and kind = 'register' and consumed_at is null and expires_at > ?`
 	if handleErr(w, err) {
 		return
 	}
-	writeJSON(w, telegramMessageResponse{Message: msg})
-}
-
-type telegramLoginRequest struct {
-	TelegramUserID   int64  `json:"telegram_user_id"`
-	TelegramUsername string `json:"telegram_username"`
+	writeJSON(w, tgbridge.Response{Message: msg})
 }
 
 func (s *server) handleTelegramLogin(w http.ResponseWriter, r *http.Request) {
-	ok, configured := botSecretOK(r)
-	if !configured {
-		httpError(w, http.StatusServiceUnavailable, "bot bridge not configured")
+	if !s.requireBotSecret(w, r) {
 		return
 	}
-	if !ok {
-		httpError(w, http.StatusUnauthorized, "bad secret")
-		return
-	}
-	var req telegramLoginRequest
+	var req tgbridge.LoginRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
@@ -641,9 +601,7 @@ func (s *server) handleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `
-insert into telegram_login_codes(code, kind, user_id, telegram_user_id, telegram_username, created_at, expires_at)
-values(?, 'login', ?, ?, ?, ?, ?)`,
+		_, err = tx.ExecContext(ctx, tgbridge.IssueLoginSQL,
 			code, uid, req.TelegramUserID, nullStr(req.TelegramUsername), rfc3339(now), rfc3339(now.Add(session.TelegramAuthLifetime)))
 		if err != nil {
 			return err
@@ -654,7 +612,7 @@ values(?, 'login', ?, ?, ?, ?, ?)`,
 	if handleErr(w, err) {
 		return
 	}
-	writeJSON(w, telegramMessageResponse{Message: msg})
+	writeJSON(w, tgbridge.Response{Message: msg})
 }
 
 func nullStr(s string) sql.NullString {

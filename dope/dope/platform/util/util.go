@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"pecheny.me/dopecore/sqlitex"
 )
 
 const (
@@ -90,13 +92,7 @@ func ValidUsername(s string) bool {
 
 // IsUniqueViolation reports whether err looks like a SQLite UNIQUE/constraint
 // violation.
-func IsUniqueViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "unique") || strings.Contains(msg, "constraint")
-}
+func IsUniqueViolation(err error) bool { return sqlitex.IsUniqueViolation(err) }
 
 // AlphaKey normalizes a string for alphabetical comparison: lowercased, trimmed,
 // with Cyrillic ё folded to е.

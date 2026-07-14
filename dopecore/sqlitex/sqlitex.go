@@ -51,6 +51,16 @@ func BuildDSN(path string) string {
 	return "file:" + path + "?" + params
 }
 
+// IsUniqueViolation reports whether err is a SQLite UNIQUE/constraint violation.
+// modernc.org/sqlite reports these as plain text, so this matches on the message.
+func IsUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique") || strings.Contains(msg, "constraint")
+}
+
 // Open opens the database pinned to a single connection, runs migrate on it,
 // then widens the pool. Migrating on one connection keeps concurrent schema
 // changes impossible; widening afterwards restores read concurrency.

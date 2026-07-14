@@ -736,25 +736,7 @@ select username, telegram_username, is_system from users where id = ?`, userID).
 }
 
 func createSessionTx(ctx context.Context, tx *sql.Tx, userID int64, now time.Time) (string, error) {
-	for attempt := 0; attempt < 3; attempt++ {
-		token, err := authcred.NewSessionToken()
-		if err != nil {
-			return "", err
-		}
-		hash := authcred.HashSessionToken(token)
-		expires := now.Add(session.Lifetime).Format(time.RFC3339)
-		nowStr := now.Format(time.RFC3339)
-		_, err = tx.ExecContext(ctx, `
-insert into sessions(user_id, token_hash, created_at, expires_at, last_seen_at)
-values(?, ?, ?, ?, ?)`, userID, hash, nowStr, expires, nowStr)
-		if err == nil {
-			return token, nil
-		}
-		if !util.IsUniqueViolation(err) {
-			return "", err
-		}
-	}
-	return "", errors.New("could not allocate session token")
+	return authcred.CreateSession(ctx, tx, userID, now)
 }
 
 func meResponseFor(user session.User) meResponse {

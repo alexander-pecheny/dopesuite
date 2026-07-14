@@ -2,64 +2,26 @@ package pages
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	ui "dope/dope/web/ui"
 	"errors"
-	"math/big"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"pecheny.me/dopecore/adminusers"
 	"pecheny.me/dopecore/session"
 )
 
-// adminUsername gates the /admin tooling. Defaults to "pecheny"; override with
-// DOPE_ADMIN_USER for other deployments or tests.
-func adminUsername() string {
-	if v := strings.TrimSpace(os.Getenv("DOPE_ADMIN_USER")); v != "" {
-		return v
-	}
-	return "pecheny"
-}
+const adminUserEnv = "DOPE_ADMIN_USER"
 
-// requireAdmin resolves the session and confirms it belongs to the configured
-// admin. On failure it writes the response itself — a redirect to /login when
-// logged out, otherwise a 404 so the page's existence isn't revealed to
-// authenticated non-admins — and returns false.
 func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (session.User, bool) {
-	user, ok := s.h.LookupSession(r)
-	if !ok {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return session.User{}, false
-	}
-	if !user.Username.Valid || user.Username.String != adminUsername() {
-		http.NotFound(w, r)
-		return session.User{}, false
-	}
-	return user, true
-}
-
-// generatedPasswordAlphabet omits look-alike characters (0/O, 1/l/I) so the
-// one-time passwords can be read aloud or retyped without ambiguity.
-const generatedPasswordAlphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
-const generatedPasswordLen = 12
-
-func newRandomPassword() (string, error) {
-	buf := make([]byte, generatedPasswordLen)
-	max := big.NewInt(int64(len(generatedPasswordAlphabet)))
-	for i := range buf {
-		n, err := rand.Int(rand.Reader, max)
-		if err != nil {
-			return "", err
-		}
-		buf[i] = generatedPasswordAlphabet[n.Int64()]
-	}
-	return string(buf), nil
+	return adminusers.RequireAdmin(w, r, adminUserEnv, func() (session.User, bool) {
+		return s.h.LookupSession(r)
+	})
 }
 
 // adminIndexDoc builds the /admin landing page: a link list of admin tools.
@@ -75,39 +37,9 @@ func adminIndexDoc() *ui.Doc {
 	}}
 }
 
-type adminCreatedUser struct {
-	Username string
-	Password string
-}
-
-type adminUserError struct {
-	Username string
-	Reason   string
-}
-
-type adminCreateUsersData struct {
-	Submitted bool
-	Created   []adminCreatedUser
-	Skipped   []string
-	Errors    []adminUserError
-}
-
-// Copyable returns the created credentials as tab-separated lines, ready to
-// paste into a message to hand out to each new user.
-func (d adminCreateUsersData) Copyable() string {
-	var b strings.Builder
-	for _, u := range d.Created {
-		b.WriteString(u.Username)
-		b.WriteString("\t")
-		b.WriteString(u.Password)
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
 // createdSection renders the one-time credentials table + copy-paste textarea
 // shown after a create_users submit that created at least one account.
-func createdSection(data adminCreateUsersData) *ui.Element {
+func createdSection(data adminusers.CreateUsersData) *ui.Element {
 	tableRows := []ui.Item{ui.Trow(ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Пароль")))}
 	for _, u := range data.Created {
 		tableRows = append(tableRows, ui.Trow(
@@ -130,7 +62,7 @@ func skippedSection(skipped []string) *ui.Element {
 }
 
 // errorsSection lists usernames rejected as invalid.
-func errorsSection(errs []adminUserError) *ui.Element {
+func errorsSection(errs []adminusers.UserError) *ui.Element {
 	rows := make([]ui.Item, len(errs))
 	for i, e := range errs {
 		rows[i] = ui.Listrow(ui.Listtitle(ui.Text(e.Username)), ui.Muted(ui.Text(e.Reason)))
@@ -153,7 +85,7 @@ func createUsersFormSection() *ui.Element {
 // adminCreateUsersDoc builds the /admin/create_users page: the bulk-create form,
 // plus (after a submit) the outcome — created credentials, skipped usernames, and
 // validation errors. pageforms.js drives the copy-textarea select-on-click.
-func adminCreateUsersDoc(data adminCreateUsersData) *ui.Doc {
+func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
 	var main []ui.Item
 	if data.Submitted {
 		if len(data.Created) > 0 {
@@ -291,7 +223,7 @@ func (s *Server) HandleAdminCreateUsers(w http.ResponseWriter, r *http.Request) 
 		if _, ok := s.requireAdmin(w, r); !ok {
 			return
 		}
-		s.renderAdminCreateUsers(w, adminCreateUsersData{})
+		s.renderAdminCreateUsers(w, adminusers.CreateUsersData{})
 	case http.MethodPost:
 		if _, ok := s.requireAdmin(w, r); !ok {
 			return
@@ -305,8 +237,38 @@ func (s *Server) HandleAdminCreateUsers(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (s *Server) renderAdminCreateUsers(w http.ResponseWriter, data adminCreateUsersData) {
+func (s *Server) renderAdminCreateUsers(w http.ResponseWriter, data adminusers.CreateUsersData) {
 	RenderDoc(w, s.h.Engine().AssetETags, adminCreateUsersDoc(data))
+}
+
+// adminUserStore is dope's half of the bulk create: dope's users schema, run
+// inside the caller's write transaction.
+type adminUserStore struct {
+	tx *sql.Tx
+}
+
+func (st adminUserStore) UserExists(ctx context.Context, username string) (bool, error) {
+	var id int64
+	err := st.tx.QueryRowContext(ctx, `select id from users where username = ?`, username).Scan(&id)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil
+	default:
+		return false, err
+	}
+}
+
+func (st adminUserStore) InsertUser(ctx context.Context, username, passwordHash string) error {
+	now := util.UtcNow()
+	_, err := st.tx.ExecContext(ctx, `
+insert into users(telegram_user_id, telegram_username, username, password_hash, password_salt, is_system, created_at, updated_at)
+values(null, null, ?, ?, null, 0, ?, ?)`, username, passwordHash, now, now)
+	if util.IsUniqueViolation(err) {
+		return adminusers.ErrUserExists
+	}
+	return err
 }
 
 func (s *Server) handleAdminCreateUsersSubmit(w http.ResponseWriter, r *http.Request) {
@@ -314,9 +276,7 @@ func (s *Server) handleAdminCreateUsersSubmit(w http.ResponseWriter, r *http.Req
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
-	usernames := parseUsernameLines(r.PostForm.Get("usernames"))
-
-	data := adminCreateUsersData{Submitted: true}
+	usernames := adminusers.ParseUsernameLines(r.PostForm.Get("usernames"))
 
 	ctx := r.Context()
 	tx, err := s.h.BeginWriteTx(ctx)
@@ -326,66 +286,15 @@ func (s *Server) handleAdminCreateUsersSubmit(w http.ResponseWriter, r *http.Req
 	}
 	defer tx.Rollback()
 
-	for _, name := range usernames {
-		if !util.ValidUsername(name) {
-			data.Errors = append(data.Errors, adminUserError{Username: name, Reason: "недопустимый логин"})
-			continue
-		}
-		var existing int64
-		err := tx.QueryRowContext(ctx, `select id from users where username = ?`, name).Scan(&existing)
-		if err == nil {
-			data.Skipped = append(data.Skipped, name)
-			continue
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			data.Errors = append(data.Errors, adminUserError{Username: name, Reason: err.Error()})
-			continue
-		}
-		password, err := newRandomPassword()
-		if err != nil {
-			data.Errors = append(data.Errors, adminUserError{Username: name, Reason: err.Error()})
-			continue
-		}
-		hash, err := s.h.HashPassword(password)
-		if err != nil {
-			data.Errors = append(data.Errors, adminUserError{Username: name, Reason: err.Error()})
-			continue
-		}
-		now := util.UtcNow()
-		if _, err := tx.ExecContext(ctx, `
-insert into users(telegram_user_id, telegram_username, username, password_hash, password_salt, is_system, created_at, updated_at)
-values(null, null, ?, ?, null, 0, ?, ?)`, name, hash, now, now); err != nil {
-			if util.IsUniqueViolation(err) {
-				data.Skipped = append(data.Skipped, name)
-				continue
-			}
-			data.Errors = append(data.Errors, adminUserError{Username: name, Reason: err.Error()})
-			continue
-		}
-		data.Created = append(data.Created, adminCreatedUser{Username: name, Password: password})
-	}
+	data, _ := adminusers.Creator{
+		Store:    adminUserStore{tx: tx},
+		Validate: util.ValidUsername,
+		Policy:   adminusers.CollectRowErrors,
+	}.Create(ctx, usernames)
 
 	if err := tx.Commit(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	s.renderAdminCreateUsers(w, data)
-}
-
-// parseUsernameLines splits the textarea input into trimmed, de-duplicated
-// usernames, preserving first-seen order and dropping blank lines.
-func parseUsernameLines(raw string) []string {
-	seen := make(map[string]struct{})
-	var out []string
-	for _, line := range strings.Split(raw, "\n") {
-		name := strings.TrimSpace(line)
-		if name == "" {
-			continue
-		}
-		if _, dup := seen[name]; dup {
-			continue
-		}
-		seen[name] = struct{}{}
-		out = append(out, name)
-	}
-	return out
 }
