@@ -2369,10 +2369,23 @@ let lastEditView = "fields";
 let cardDraft = "";          // unsaved working 4s description
 let cardDraftMeta = null;    // unsaved handout-generation settings (string|null)
 let cardFieldReaders = null; // per-field read() closures for the Поля view
-let cardFieldsExtra = null;  // unmodelled blocks preserved across a Поля recompose
+// Blocks the Поля editor doesn't render but must not eat: the pre-question
+// markup (№/№№ and friends) and anything else unmodelled. Both are captured at
+// render time and re-emitted verbatim on recompose; the Текст view edits them.
+let cardFieldsPre = null;
+let cardFieldsExtra = null;
 
 const CARD_TABS = ["preview", "fields", "text"];
 const tabBtn = (v) => document.getElementById("cardTab" + v[0].toUpperCase() + v.slice(1));
+
+// The 4s skeleton a new question's Текст view opens on: question / answer /
+// comment / source / author, the blocks a question is expected to carry.
+const QUESTION_STUB = "? \n! \n/ \n^ \n@ ";
+// hasContent: does a 4s draft say anything, or is it just bare markers? An
+// untouched stub must not create a card — it's an empty form, not a question.
+function hasContent(text) {
+  return (text || "").split("\n").some((l) => l.replace(/^\s*(\?|!=|=|!|\/|\^|@)/, "").trim() !== "");
+}
 
 // fitTextarea grows a textarea to fit its content so the user never scrolls
 // inside it (CSS min-height still sets the floor). scrollHeight is 0 while the
@@ -2403,16 +2416,32 @@ function draftKind() {
 function fieldsAvailable() { return draftKind() === "question"; }
 function isTestCard() { return draftKind() === "test"; }
 
-// boardAuthors collects author names already used across the board's question
-// cards (deduped, sorted) — the autocomplete suggestions for the Автор field.
-function boardAuthors() {
+// boardAuthors / boardSources collect the author names and source lines already
+// used across the board's question cards (deduped, sorted) — the autocomplete
+// suggestions for the Автор and Источник fields. A pack's questions tend to
+// share both (the same authors, the same handful of references), so offering
+// what the board already says beats retyping it.
+function boardFieldValues(pick) {
   const set = new Set();
   for (const c of state.cards) {
     if (c.kind !== "question") continue;
-    const f = xyChgk.splitFields(c.desc);
-    for (const a of f.authors || []) set.add(a);
+    for (const v of pick(xyChgk.splitFields(c.desc)) || []) {
+      const s = (v || "").trim();
+      if (s) set.add(s);
+    }
   }
   return [...set].sort((a, b) => a.localeCompare(b, "ru"));
+}
+function boardAuthors() { return boardFieldValues((f) => f.authors); }
+function boardSources() { return boardFieldValues((f) => f.sources); }
+
+// datalist populates (creating on first use) a shared <datalist> and returns its
+// id, so an input can offer the board's existing values as an autocomplete list.
+function datalist(id, values) {
+  let dl = document.getElementById(id);
+  if (!dl) { dl = el("datalist", { id }); document.body.append(dl); }
+  dl.replaceChildren(...values.map((v) => el("option", { value: v })));
+  return id;
 }
 
 // captureDraft folds the currently-visible view's edits back into the draft so
@@ -2464,6 +2493,14 @@ function setCardView(view) {
   if (view === "text") {
     const ta = document.getElementById("cardDesc");
     ta.value = test ? xyChgk.testersToText(xyChgk.parseTestCard(cardDraft).testers) : cardDraft;
+    // A brand-new question opens on an empty editor, which says nothing about what
+    // the format wants. Seed the markers so the writer fills in blanks instead of
+    // recalling 4s from memory; the caret lands after the "?".
+    if (!test && pendingList && !ta.value.trim()) {
+      ta.value = QUESTION_STUB;
+      ta.focus();
+      ta.setSelectionRange(2, 2);
+    }
     fitTextarea(ta);
   } else if (view === "fields") { if (test) renderTesterFields(); else renderCardFields(); }
   else if (view === "preview") renderCardPreview();
@@ -2540,15 +2577,17 @@ function buildHandoutField(initial) {
 }
 
 // buildSourcesField: the multi-line "Источник" field (one input per source line,
-// add/remove rows).
-function buildSourcesField(initial) {
+// add/remove rows), each row autocompleting from the board's existing sources.
+function buildSourcesField(initial, suggestions) {
   const wrap = el("div", { class: "fld" });
   const addBtn = el("button", { class: "fld-add", type: "button", text: "+ Источник", title: "Добавить поле" });
   const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
   const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Источник" }), rmBtn);
   const rows = el("div", { class: "fld-rows" });
+  const dlId = datalist("sourcesDatalist", suggestions);
   const addRow = (val) => {
     const inp = el("input", { class: "input fld-row-input", type: "text", value: val || "" });
+    inp.setAttribute("list", dlId);
     const rrm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: "Удалить строку" });
     const row = el("div", { class: "fld-row" }, inp, rrm);
     rrm.addEventListener("click", () => row.remove());
@@ -2577,11 +2616,8 @@ function buildAuthorsField(initial, suggestions) {
   const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Автор" }), rmBtn);
   const tags = el("div", { class: "fld-tags" });
   const tagSet = [];
-  let dl = document.getElementById("authorsDatalist");
-  if (!dl) { dl = el("datalist", { id: "authorsDatalist" }); document.body.append(dl); }
-  dl.replaceChildren(...suggestions.map((s) => el("option", { value: s })));
   const inp = el("input", { class: "input fld-tag-input", type: "text", placeholder: "имя автора…" });
-  inp.setAttribute("list", "authorsDatalist");
+  inp.setAttribute("list", datalist("authorsDatalist", suggestions));
   const renderTags = () => {
     tags.replaceChildren(...tagSet.map((t, i) => {
       const rm = el("button", { class: "fld-tag-rm", type: "button", text: "×" });
@@ -2605,24 +2641,24 @@ function buildAuthorsField(initial, suggestions) {
 }
 
 // renderCardFields rebuilds the Поля editor from the current draft (and handout
-// settings). Field #10 (handout-gen markup) binds to cardDraftMeta, not the 4s.
+// settings). The last field (handout-gen markup) binds to cardDraftMeta, not the 4s.
 function renderCardFields() {
   const f = xyChgk.splitFields(cardDraft);
+  cardFieldsPre = f.preMarkup;
   cardFieldsExtra = f.extra;
   const box = document.getElementById("cardFields");
   box.replaceChildren();
   const R = {};
-  R.preMarkup = buildField("Доп. разметка перед вопросом", "area", f.preMarkup, { muted: true });
   R.handout = buildHandoutField(f.handout);
   R.question = buildField("Текст вопроса", "area", f.question);
   R.answer = buildField("Ответ", "area", f.answer);
   R.zachet = buildField("Зачёт", "input", f.zachet);
   R.nezachet = buildField("Незачёт", "input", f.nezachet);
   R.comment = buildField("Комментарий", "area", f.comment);
-  R.sources = buildSourcesField(f.sources);
+  R.sources = buildSourcesField(f.sources, boardSources());
   R.authors = buildAuthorsField(f.authors, boardAuthors());
   R.hndt = buildField("Доп. разметка для генерации раздаток", "area", cardDraftMeta, { muted: true });
-  for (const k of ["preMarkup", "handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"]) box.append(R[k].node);
+  for (const k of ["handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"]) box.append(R[k].node);
   // Size pre-filled fields now they're in the live DOM (scrollHeight is 0 while
   // detached, so the fit during buildField is a no-op for visible content).
   for (const ta of box.querySelectorAll("textarea")) fitTextarea(ta);
@@ -2630,11 +2666,11 @@ function renderCardFields() {
 }
 
 // readCardFields collapses the Поля editor back into a 4s description + handout
-// settings, preserving any unmodelled blocks captured at render time.
+// settings, preserving the pre-question and unmodelled blocks captured at render time.
 function readCardFields() {
   const R = cardFieldReaders;
   const rec = {
-    preMarkup: R.preMarkup.read(),
+    preMarkup: cardFieldsPre,
     handout: R.handout.read(),
     question: R.question.read(),
     answer: R.answer.read(),
@@ -3330,7 +3366,7 @@ document.getElementById("cardSave").addEventListener("click", async () => {
   // the full edit view.
   if (pendingList) {
     const text = cardDraft;
-    if (!text.trim()) { msg.textContent = "Введите описание."; return; }
+    if (!hasContent(text)) { msg.textContent = "Введите описание."; return; }
     const list = pendingList;
     const kind = document.getElementById("cardKind").value || "question";
     const existing = cardsOf(list.id);
