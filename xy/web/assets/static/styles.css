@@ -223,6 +223,17 @@
 /* auto/directive question number reads as scaffolding, not content */
 .kcard-num { color: var(--muted); }
 .kcard-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
+/* A card that isn't a question isn't a tile: no fill, so the list shows through
+   and the eye can tell scaffolding (headings, meta) from the questions. */
+.kcard-heading { background: transparent; padding-bottom: var(--space-1); }
+.kcard-heading:hover { background: transparent; }
+.kcard-heading .kcard-title {
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.kcard-meta .kcard-title { color: var(--muted); font-style: italic; }
 .klist-add { background: transparent; }
 .klist-add .kadd-form { color: var(--muted); }
 .klist-add:hover .kadd-form { color: var(--text); }
