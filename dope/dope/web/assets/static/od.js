@@ -2772,7 +2772,7 @@ function buildScreenOverlay(wrapper) {
   const settingsBtn = document.createElement("button");
   settingsBtn.type = "button";
   settingsBtn.className = "btn screen-btn";
-  settingsBtn.textContent = "⚙ Настройки";
+  settingsBtn.textContent = "⚙️ Настройки";
   settingsBtn.setAttribute("aria-expanded", screenPanelOpen ? "true" : "false");
   settingsBtn.addEventListener("click", () => {
     screenPanelOpen = !screenPanelOpen;

@@ -1,6 +1,6 @@
 page title="Профиль · xy" kind="sheet" scripts="profile.js"
   topbar title="Профиль"
-    iconlink href="/" label="Доски" "←"
+    iconlink href="/" label="Доски" "⬅️"
 
   section
     hint "Вы вошли как " (strong id="whoami" "…") "."

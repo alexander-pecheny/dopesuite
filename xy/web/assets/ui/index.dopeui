@@ -1,7 +1,7 @@
 page title="Мои доски · xy" kind="full" scripts="index.js"
   topbar title="Доски"
-    iconlink href="/import" label="Импорт из Trello" "⇪"
-    iconbtn id="newBoardBtn" label="Новая доска" "+"
+    iconlink href="/import" label="Импорт из Trello" "📥"
+    iconbtn id="newBoardBtn" label="Новая доска" "➕"
 
   mount id="boardList" kind="board-grid"
   message id="message"

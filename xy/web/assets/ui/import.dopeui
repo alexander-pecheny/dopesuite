@@ -1,6 +1,6 @@
 page title="Импорт из Trello · xy" kind="wide" scripts="import.js"
   topbar title="Импорт из Trello"
-    iconlink href="/" label="Все доски" "←"
+    iconlink href="/" label="Все доски" "⬅️"
 
   form id="importForm" dir="col"
     hint

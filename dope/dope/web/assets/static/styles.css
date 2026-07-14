@@ -479,7 +479,9 @@
   padding: 5px 8px;
   border: 1px solid var(--action-border);
   border-radius: var(--radius-sm);
-  background: var(--paper);
+  /* --field-bg, not --paper: this select sits ON a paper dialog, and the outline
+     that used to give it a shape is transparent now (see core.css). */
+  background: var(--field-bg);
   color: var(--text);
   font: inherit;
 }
@@ -1905,6 +1907,9 @@ body:not(.embedded-match) .grid-match {
    on-screen keyboard via visualViewport (top set in JS) because mobile numeric
    keypads have no Return key on iOS — this is the only way to step between
    cells without dismissing the keypad. Touch devices only. */
+/* NB: this background is not an outline — it shows THROUGH the 1px gaps between
+   the keys and is what draws the key seams. It takes --grid-dark directly;
+   --border is transparent by design (see core.css) and would erase the grid. */
 .entry-nav-bar {
   position: fixed;
   left: 0;
@@ -1912,7 +1917,7 @@ body:not(.embedded-match) .grid-match {
   display: flex;
   gap: 1px;
   padding: 0;
-  background: var(--border);
+  background: var(--grid-dark);
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
   z-index: var(--z-toast);
 }
@@ -1941,8 +1946,9 @@ body:not(.embedded-match) .grid-match {
    digit-only cell entry on touch devices: the host input sets inputmode="none"
    to suppress the native keypad, and these keys drive it via callbacks. Pinned
    to the bottom of the visual viewport (top set in JS). Touch devices only. A
-   nav row (← ↑ ↓ →) sits above a 3-column digit pad; 1px gaps over the --border
-   backdrop draw the key seams, so every key stays equal-width via the grid. */
+   nav row (← ↑ ↓ →) sits above a 3-column digit pad; 1px gaps over the
+   --grid-dark backdrop draw the key seams, so every key stays equal-width via
+   the grid. (Not --border: that token is transparent — see core.css.) */
 .entry-keypad {
   position: fixed;
   left: 0;
@@ -1951,7 +1957,7 @@ body:not(.embedded-match) .grid-match {
   flex-direction: column;
   gap: 1px;
   padding-top: 1px;
-  background: var(--border);
+  background: var(--grid-dark);
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.18);
   z-index: var(--z-toast);
   user-select: none;
@@ -3885,7 +3891,7 @@ body:not(.embedded-match) .grid-match {
   padding: var(--space-2) var(--space-2-5);
   border: 1px solid var(--action-border);
   border-radius: var(--radius-sm);
-  background: var(--paper);
+  background: var(--field-bg);
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: var(--text-sm);
@@ -3937,7 +3943,7 @@ body:not(.embedded-match) .grid-match {
   padding: 4px 6px;
   border: 1px solid var(--action-border);
   border-radius: var(--radius-sm);
-  background: var(--paper);
+  background: var(--field-bg);
   color: var(--text);
   font: inherit;
 }
@@ -4460,13 +4466,15 @@ body.is-fullscreen.od-page .match-main {
   cursor: pointer;
 }
 
+/* the ring keeps a pale swatch from vanishing into the palette — a graphic, so
+   --grid-dark rather than the transparent --border */
 .sticker-palette .swatch-dot {
   display: inline-block;
   width: var(--space-5);
   height: var(--space-5);
   border-radius: var(--radius-sm);
   background: var(--swatch);
-  border: 1px solid var(--border);
+  border: 1px solid var(--grid-dark);
   box-sizing: border-box;
 }
 

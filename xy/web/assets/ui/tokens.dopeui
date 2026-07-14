@@ -1,6 +1,6 @@
 page title="API-токены · xy" kind="sheet" scripts="tokens.js"
   topbar title="API-токены"
-    iconlink href="/profile" label="Профиль" "←"
+    iconlink href="/profile" label="Профиль" "⬅️"
 
   section
     hint

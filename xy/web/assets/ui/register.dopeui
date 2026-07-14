@@ -1,6 +1,6 @@
 page title="Регистрация · xy" kind="sheet" scripts="register.js"
   topbar title="Регистрация"
-    iconlink href="/login" label="Вход" "←"
+    iconlink href="/login" label="Вход" "⬅️"
 
   section id="step-invite"
     hint "Введите код-приглашение."

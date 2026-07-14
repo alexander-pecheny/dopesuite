@@ -10,13 +10,14 @@
 :root { --kanban-col: var(--structure); --kanban-card: var(--surface); }
 :root[data-theme="dark"] { --kanban-col: var(--surface); --kanban-card: var(--structure); }
 
+/* Ghost = no fill and no outline at rest; hover materialises the fill (it used
+   to materialise a --text outline, which is the contrast border we dropped). */
 .btn-ghost {
   background: transparent;
-  border-color: var(--border);
   color: var(--muted);
   font-weight: var(--fw-semibold);
 }
-.btn-ghost:hover { border-color: var(--text); color: var(--text); }
+.btn-ghost:hover { background: var(--action-hover-bg); color: var(--text); }
 .btn-small { min-height: 30px; padding: 0 var(--space-3); }
 
 /* board list */
@@ -346,8 +347,10 @@
 .label-add-row { position: relative; display: flex; gap: var(--space-2); align-items: center; }
 .label-add-row .input { flex: 1; min-width: 0; }
 
-/* custom add-label popup: filter field over a scrollable, sorted label list */
-.label-add-popup { left: 0; right: 0; min-width: 0; gap: var(--space-1); }
+/* custom add-label popup: filter field over a scrollable, sorted label list.
+   This one deliberately stretches to its anchor row (left:0;right:0), so it has
+   to opt out of the shared dropdown's width:max-content / max-width sizing. */
+.label-add-popup { left: 0; right: 0; width: auto; min-width: 0; max-width: none; gap: var(--space-1); }
 .label-add-filter { margin-bottom: var(--space-1); }
 .label-add-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
 .label-add-item { display: flex; align-items: center; gap: var(--space-2); }
@@ -468,7 +471,7 @@
   cursor: var(--cursor-action);
   vertical-align: middle;
 }
-.pv-edit:hover, .pv-edit:focus-visible { border-color: var(--text); }
+.pv-edit:hover, .pv-edit:focus-visible { background: var(--action-hover-bg); }
 /* preserve authored line breaks inside multi-line question/answer/meta text */
 .pv-q-text, .pv-field, .pv-meta, .pv-list-item { white-space: pre-wrap; }
 .pv-q-text { margin-bottom: var(--space-2); }
@@ -489,7 +492,8 @@
    narrow screens (links are often unbreakable runs with no spaces). */
 .pv-link { color: var(--blue, var(--text)); overflow-wrap: anywhere; word-break: break-word; }
 .pv-sc { font-variant: small-caps; }
-.pv-pagebreak { border: 0; border-top: 1px dashed var(--border); margin: var(--space-4) 0; }
+/* the dash IS the page-break mark, so it takes --grid-dark, not --border */
+.pv-pagebreak { border: 0; border-top: 1px dashed var(--grid-dark); margin: var(--space-4) 0; }
 .pv-img {
   display: block;
   max-width: min(100%, 480px);
@@ -654,9 +658,11 @@
 /* ── structured fields (Поля) ─────────────────────────────────────────────── */
 .card-fields { display: flex; flex-direction: column; gap: var(--space-2); }
 .fld { display: flex; flex-direction: column; }
+/* the dashed ring is this button's whole identity ("add a field") — --grid-dark,
+   not the transparent --border */
 .fld-add {
   align-self: flex-start;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--grid-dark);
   background: var(--page);
   color: var(--muted);
   font: inherit;
@@ -705,14 +711,15 @@ textarea.fld-input { min-height: 3em; }
 .handouts-doc { width: min(1100px, 100%); }
 .handouts-body { flex: 1; display: flex; min-height: 0; }
 .handouts-pane { flex: 1 1 50%; display: flex; flex-direction: column; min-width: 0; padding: var(--space-4) var(--space-5); overflow-y: auto; }
-.handouts-src { border-right: 1px solid var(--border); }
+/* pane splitter — a structural rule, so --grid (like the table cell grids) */
+.handouts-src { border-right: 1px solid var(--grid); }
 .handouts-textarea { flex: 1; min-height: 320px; width: 100%; }
 .handouts-pdf { flex: 1; margin-top: var(--space-2); background: var(--page); border-radius: var(--radius-md); min-height: 320px; display: flex; }
 .handouts-pdf-frame { flex: 1; width: 100%; height: 100%; border: none; border-radius: var(--radius-md); }
 
 @media (max-width: 720px) {
   .handouts-body { flex-direction: column; }
-  .handouts-src { border-right: none; border-bottom: 1px solid var(--border); }
+  .handouts-src { border-right: none; border-bottom: 1px solid var(--grid); }
   .card-preview-body { max-height: 40vh; }
 }
 

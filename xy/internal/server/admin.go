@@ -146,7 +146,7 @@ func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
 	pageItems := []ui.Item{
 		ui.Title("Создать пользователей · Админка"), ui.PageFull,
 		ui.Topbar(ui.Title("Создать пользователей"),
-			ui.Iconlink(ui.Href("/admin"), ui.Label("Админка"), ui.Text("↩")),
+			ui.Iconlink(ui.Href("/admin"), ui.Label("Админка"), ui.Text("↩️")),
 		),
 	}
 	pageItems = append(pageItems, main...)

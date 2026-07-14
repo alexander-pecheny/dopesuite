@@ -131,7 +131,7 @@ window.dopeMenu?.setExtras([{
     location.reload();
   },
 }, {
-  label: "🗑 Удалить доску",
+  label: "🗑️ Удалить доску",
   title: "Удалить доску со всеми списками и карточками (только владелец)",
   onClick: () => deleteBoard(),
 }]);
@@ -677,7 +677,7 @@ function renderList(list, precomputedNumbers) {
     if (list.type === "test") items.push({ label: "👥 Копировать список тестеров", onClick: () => copyTesterList(list) });
     items.push(
       { label: "🔍 Предпросмотр", onClick: () => previewList(list) },
-      { label: "↔ Переместить список…", onClick: () => openMoveList(list) },
+      { label: "↔️ Переместить список…", onClick: () => openMoveList(list) },
       { label: "✏️ Переименовать список", onClick: () => renameList(list) },
     );
     // Export / handout generation are question-list features; skip them for
@@ -691,7 +691,7 @@ function renderList(list, precomputedNumbers) {
         { label: grouped ? "🧩 Генерация раздаток (вся группа)" : "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
       );
     }
-    items.push({ label: "🗑 Удалить список", onClick: () => deleteList(list) });
+    items.push({ label: "🗑️ Удалить список", onClick: () => deleteList(list) });
     popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
@@ -1125,7 +1125,7 @@ function manageCheckbox(unit) {
 
 function manageMoveControl(unit) {
   const inp = el("input", { class: "input lm-move-pos", type: "number", min: "1", placeholder: "№" });
-  const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", text: "↕", title: "Переместить на эту позицию" });
+  const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", text: "↕️", title: "Переместить на эту позицию" });
   const go = () => { const n = parseInt(inp.value, 10); if (n >= 1) moveUnitsTo(new Set([unit.key]), n); };
   btn.addEventListener("click", go);
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
@@ -1145,8 +1145,8 @@ function renderManageUnit(unit, pos) {
       el("span", { class: "lm-pos", text: "#" + pos }),
       el("span", { class: "lm-handle", text: "≡", title: "Перетащить" }),
       el("span", { class: "lm-title lm-group-title", text: "🔗 " + ((g && g.name) || "Связанные списки") }),
-      el("button", { class: "lm-icon", type: "button", text: "✎", title: "Переименовать группу", onclick: () => renameGroup(unit.id) }),
-      el("button", { class: "lm-icon", type: "button", text: "✕🔗", title: "Разъединить группу", onclick: () => unlinkGroup(unit.id) }),
+      el("button", { class: "lm-icon", type: "button", text: "✏️", title: "Переименовать группу", onclick: () => renameGroup(unit.id) }),
+      el("button", { class: "lm-icon", type: "button", text: "✂️", title: "Разъединить группу", onclick: () => unlinkGroup(unit.id) }),
       manageMoveControl(unit),
     ));
     const members = el("div", { class: "lm-members" });
@@ -2278,7 +2278,7 @@ function testTitle(desc) {
     const parts = [];
     if (players) parts.push(`${players} игр.`);
     if (teams) parts.push(`${teams} ком.`);
-    return `🗓 ${head}${parts.length ? " · " + parts.join(", ") : ""}`;
+    return `🗓️ ${head}${parts.length ? " · " + parts.join(", ") : ""}`;
   } catch (_) { return "тест-сессия"; }
 }
 

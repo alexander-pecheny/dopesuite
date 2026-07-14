@@ -122,7 +122,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
         editor id="handoutsSource" kind="handouts" spellcheck="false"
         row gap="sm" align="center" wrap
           button small id="handoutsGenerate" "Сгенерировать PDF"
-          button small kind="ghost" id="handoutsSplitFit" title="Подобрать раскладку (split-fit) и скачать zip со всеми PDF" "✂ Split-fit (zip)"
+          button small kind="ghost" id="handoutsSplitFit" title="Подобрать раскладку (split-fit) и скачать zip со всеми PDF" "✂️ Split-fit (zip)"
         message id="handoutsMessage"
       pane kind="preview"
         row gap="sm" align="center" justify="between"
