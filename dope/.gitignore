@@ -1,0 +1,11 @@
+/match_state.json
+/fest.db*
+/tournament.db*
+/dope-server
+/dope/dope
+/telegram-bot
+/.env
+__pycache__/
+dist/
+ek_restore_backups/
+.prod-backups/

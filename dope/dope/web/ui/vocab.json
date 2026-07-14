@@ -1,0 +1,69 @@
+{
+  "enums": {
+    "page-kind":    { "prefix": "Page",   "values": ["ek", "viewer", "od", "si", "public"] },
+    "mount-kind":   { "prefix": "Mount",  "values": ["table-host"] },
+    "swatch-color": { "prefix": "Swatch", "values": ["white", "yellow", "green", "red", "blue", "pink", "orange"] }
+  },
+  "primitives": [
+    { "name": "palette", "props": [], "children": ["swatchradio"] },
+
+    { "name": "swatchradio",
+      "props": [
+        { "name": "name", "required": true }, { "name": "value", "required": true },
+        { "name": "color", "enum": "swatch-color", "required": true },
+        { "name": "checked", "kind": "bare" }
+      ],
+      "children": "none" },
+
+    { "name": "numbersform", "props": [{ "name": "action" }], "children": "any" },
+    { "name": "numberlist", "props": [], "children": ["numberrow"] },
+
+    { "name": "numberrow",
+      "props": [
+        { "name": "index", "required": true }, { "name": "num" },
+        { "name": "teamlabel" }, { "name": "teamid" }
+      ],
+      "children": "none" },
+
+    { "name": "pickgroup", "props": [{ "name": "label", "required": true }], "children": "any" },
+
+    { "name": "actionlist", "props": [], "children": ["actionrow"] },
+    { "name": "actionrow", "props": [], "children": "any" },
+    { "name": "rowlink", "props": [{ "name": "href", "required": true }], "children": "any" },
+
+    { "name": "gametopbar",
+      "placement": "header",
+      "props": [
+        { "name": "tabsid", "required": true },
+        { "name": "ektabs", "kind": "bare" },
+        { "name": "tabshidden", "kind": "bare" },
+        { "name": "heading" },
+        { "name": "progressid" },
+        { "name": "viewer", "kind": "bare" },
+        { "name": "syncstate" }
+      ],
+      "children": "none" },
+
+    { "name": "publictopbar",
+      "placement": "header",
+      "props": [
+        { "name": "title", "required": true },
+        { "name": "back" },
+        { "name": "user" },
+        { "name": "userlabel" }
+      ],
+      "children": "none" },
+
+    { "name": "link",
+      "props": [
+        { "name": "href", "required": true },
+        { "name": "newtab", "kind": "bare" }
+      ],
+      "inline": true,
+      "children": "text" },
+
+    { "name": "codedisplay", "props": [], "children": "text" },
+
+    { "name": "note", "props": [], "children": "text" }
+  ]
+}

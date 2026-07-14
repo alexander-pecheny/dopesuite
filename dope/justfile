@@ -1,0 +1,87 @@
+set dotenv-load := true
+
+default: dev
+
+dev-web-only:
+    go run ./dope/cmd/dope-server
+
+bot:
+    go run ./dope/cmd/telegram-bot
+
+dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill 0' EXIT INT TERM
+    go run ./dope/cmd/dope-server &
+    go run ./dope/cmd/telegram-bot &
+    wait
+
+fmt:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(find dope -type f -name '*.go')
+    ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
+
+test:
+    go test ./...
+    deno test --allow-read dope/web/jstest/
+
+# Frontend unit tests only (Deno's built-in runner; reads dope/web/assets/static/*.js).
+test-js:
+    deno test --allow-read dope/web/jstest/
+
+vet:
+    go vet ./...
+
+tidy-check:
+    go mod tidy -diff
+
+deploy *args:
+    python3 deploy.py {{args}}
+
+# Drive a realtime load test (wraps scripts/loadtest/realtime_demo.sh).
+# Raises the fd limit first so 1000s of SSE viewer connections fit.
+# Flags map to the script's env vars: --foo-bar baz -> FOO_BAR=baz; --local is a switch.
+# Usage:
+#   just loadtest --eps 10 --viewers 200-1000
+#   just loadtest --eps 5 --viewers 30-100 --duration 600 --local
+#   just loadtest --eps 0 --viewers 10-1000   # viewers only, no edits
+#   just loadtest --eps 5 --viewers 0         # editors only, no viewers
+loadtest *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ulimit -n 99999 2>/dev/null || echo "warn: could not raise fd limit to 99999 (hard cap $(ulimit -Hn))" >&2
+    set -- {{args}}
+    envs=()
+    while (($#)); do
+      case "$1" in
+        --local) envs+=("LOCAL=1"); shift;;
+        --*=*)   kv="${1#--}"; envs+=("$(echo "${kv%%=*}" | tr 'a-z-' 'A-Z_')=${kv#*=}"); shift;;
+        --*)     [[ $# -ge 2 ]] || { echo "missing value for $1" >&2; exit 1; }
+                 envs+=("$(echo "${1#--}" | tr 'a-z-' 'A-Z_')=$2"); shift 2;;
+        *)       echo "unexpected arg: $1" >&2; exit 1;;
+      esac
+    done
+    exec env "${envs[@]}" scripts/loadtest/realtime_demo.sh
+
+pre-commit:
+    just fmt
+    just vet
+    just tidy-check
+    just test
+
+# Mint a one-shot invite code and print it. Reads DOPE_DB from .env.
+# Usage: just invite [days]
+invite days='7':
+    uv run python scripts/mint_invite.py {{days}}
+
+# Generate and seed an existing fest with the StudChR scheme.
+# Usage: DOPE_SESSION=<session-cookie-value> just seed <fest_id>
+seed fest_id:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${DOPE_SESSION:?set DOPE_SESSION to an organizer session cookie value}"
+    python3 scripts/generate_studchr_grid.py | curl -s -X POST -H "Content-Type: application/json" \
+      --cookie "session=${DOPE_SESSION}" \
+      --data-binary @- \
+      "http://localhost:9672/api/import?fest_id={{fest_id}}" > /dev/null && echo seeded

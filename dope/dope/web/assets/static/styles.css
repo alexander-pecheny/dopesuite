@@ -1,0 +1,537 @@
+/* Kept in the app layer (a duplicate of core.css) because it is load-bearing:
+   [hidden] must beat the layout classes on hidden auth/game sections. */
+[hidden] {
+  display: none !important;
+}
+
+:root {
+  /* Экран (projector board) defaults. Theme-independent on purpose: a projector
+     board is white/black regardless of the host's UI theme. The host can
+     override each via the Экран settings panel (stored per game). */
+  --screen-bg-default: #ffffff;
+  --screen-fg-default: #000000;
+  --screen-muted-default: #5f6b7a;
+  --ksi-sticker-col: 36px;
+  --transition-fast: 120ms ease;
+}
+
+/* ── design system: layout primitives ─────────────────────── */
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.section > h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.empty {
+  color: var(--muted);
+  margin: 0;
+}
+
+/* ── public + host common page chrome ────────────────────── */
+.public {
+  margin: 0;
+  padding: 0;
+  background: var(--page);
+  color: var(--text);
+}
+
+.public-top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface);
+}
+
+.public-top h1 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--fw-bold);
+}
+
+.public-main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ── public fest index: collapsible groups + stacked rows ──── */
+.fest-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.fest-group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  list-style: none;
+}
+
+.fest-group-title::-webkit-details-marker {
+  display: none;
+}
+
+.fest-group-title::before {
+  content: "▾";
+  font-size: var(--text-sm);
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.fest-group:not([open]) > .fest-group-title::before {
+  transform: rotate(-90deg);
+}
+
+.fest-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+}
+
+.fest-row-title {
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.fest-row-dates {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.public-user {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+}
+
+.public-user:hover {
+  text-decoration: underline;
+}
+/* Итог */
+/* Экран: projector scoreboard. Reuses the Итог (.results-table) styling; the
+   columns are laid out side by side and the whole board is scaled with `zoom`
+   by layoutScreen() so every team fits the screen. */
+.screen-wrapper {
+  /* Host-overridable projector palette; JS sets the --screen-* vars inline from
+     the saved settings, falling back to the theme-independent defaults. */
+  --screen-bg: var(--screen-bg-default);
+  --screen-fg: var(--screen-fg-default);
+  --screen-muted: var(--screen-muted-default);
+  --screen-border: color-mix(in srgb, var(--screen-fg) 16%, transparent);
+  --screen-team-col: 160px;
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  overflow: auto;
+  background: var(--screen-bg);
+  color: var(--screen-fg);
+}
+
+.screen-cols {
+  /* margin:auto centres on both axes AND, unlike justify-content, never clips
+     the start edge when the (font-scaled) board overflows — so the host can
+     scroll to it. */
+  margin: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  /* The board is zoom-scaled, which under Chrome's modern `zoom` makes it a
+     stacking context and (worse) intercepts pointer events over the floating
+     overlay even when the overlay has a higher z-index — so clicks on the
+     controls / colour pickers did nothing once the board filled the width. The
+     board is display-only, so drop its pointer events entirely; the positioned
+     overlay above it then reliably receives clicks. */
+  position: relative;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.screen-table.od-results-table {
+  --results-team-col: var(--screen-team-col);
+}
+
+/* Recolour the board from the host palette: cells take the chosen background and
+   text colour; headers are muted so they don't distract from the content; city
+   sub-labels use the muted colour. */
+.screen-table.results-table th,
+.screen-table.results-table td,
+.screen-table.results-table .results-place,
+.screen-table.results-table .results-team,
+.screen-table.results-table .results-total,
+.screen-table.results-table thead th {
+  background: var(--screen-bg);
+  color: var(--screen-fg);
+}
+
+.screen-table.results-table thead th,
+.screen-table.results-table .results-team-city {
+  color: var(--screen-muted);
+}
+
+/* Separators: NONE inside a place-group (rows glued), one line BETWEEN groups.
+   The packer inserts a .results-group-gap row at every in-column group boundary,
+   so the line lives there; the per-row Итог divider is dropped. */
+.screen-table.results-table .results-row:not(.results-group-first) td {
+  border-top: 0;
+}
+
+.screen-table.results-table .results-group-gap td {
+  height: var(--space-1);
+  padding: 0;
+  background: var(--screen-bg);
+  border-bottom: 2px solid var(--screen-border);
+}
+
+.screen-empty {
+  color: var(--screen-muted);
+  font-size: var(--text-lg);
+}
+
+/* Floating host overlay (controls bar + settings panel) at the top-right of the
+   board. Hidden by default; revealed only when the pointer is in the top-right
+   ninth of the board (JS toggles .screen-overlay-active) or the panel is open,
+   so it never sits on the projected image. */
+.screen-overlay {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+
+.screen-wrapper.screen-overlay-active .screen-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.screen-controls {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.screen-btn {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.screen-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(280px, calc(100vw - var(--space-6)));
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-modal);
+}
+
+.screen-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.screen-field > input[type="color"] {
+  width: 48px;
+  min-height: 32px;
+  padding: 2px;
+  cursor: var(--cursor-action);
+}
+
+.screen-field > input[type="range"] {
+  flex: 1;
+}
+
+.screen-field > input[type="number"] {
+  width: 72px;
+}
+
+.screen-check {
+  font-size: var(--text-base);
+}
+
+.screen-reset {
+  align-self: flex-start;
+}
+
+/* The diagnostic "Скачать лог" chip must never show on the projected board. */
+body.od-screen-active .dope-rec-btn {
+  display: none;
+}
+
+/* Fullscreen (projector) mode: drop the site chrome so only the board shows. */
+body.is-fullscreen .host-top {
+  display: none;
+}
+
+body.is-fullscreen.od-page .match-main {
+  height: 100vh;
+}
+
+/* Составы (rosters) — shared team→players table, used on every game page
+   (EK/OD/KSI, host and viewer). Reuses the results-table design-system styling
+   (links are the kit's .quiet-link); only the players column and the empty
+   states need local rules. The score-table host is min-width:max-content (so wide boards can
+   scroll), but the roster should instead fit the frame and wrap the players
+   column, so it never scrolls sideways and the sticky "Игроки" header stays put.
+   Neutralize the max-content host just for the roster and let the table be 100%
+   wide with a fixed layout — the fixed №/Команда columns leave the rest to the
+   players column, which wraps. */
+.table-host:has(.roster-results-wrapper) {
+  width: 100%;
+  min-width: 0;
+}
+
+.roster-results-wrapper {
+  width: 100%;
+}
+
+.roster-results-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.roster-results-table .results-team-head {
+  width: var(--results-team-col);
+}
+
+/* The team name reuses .results-team-name (clip + fade + popover from the shared
+   results-table styling); we only add the roster's bold weight on top. */
+.roster-team-name {
+  font-weight: var(--fw-semibold);
+}
+
+.roster-team-city {
+  display: block;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* Left-align the Игроки header (the shared thead th centers by default, and its
+   `.results-table thead th` selector out-specifies a bare class). */
+.roster-results-table .roster-players-head,
+.roster-results-table .roster-players-cell {
+  text-align: left;
+}
+
+.roster-players-cell {
+  padding: var(--space-2) var(--results-team-pad);
+  white-space: normal;
+}
+
+/* Keep each full name intact; allow wrapping only at the space between names. */
+.roster-player {
+  white-space: nowrap;
+}
+
+.roster-player:not(:last-child)::after {
+  content: ", ";
+  white-space: normal;
+}
+
+.roster-empty {
+  color: var(--muted);
+  padding: var(--space-3);
+}
+
+/* KSI-with-stickers: the per-(team, theme) sticker dropdown lives in the theme's
+   spacer column, so that gap widens to hold the control. */
+.match-table.ksi-detailed .ksi-sticker-cell {
+  /* Cell footprint = sticker column + an empty strip after it (border-box, so
+     the gap is added to the width rather than eaten out of the sticker area).
+     The strip groups the sticker with the theme on its left, not the next one
+     — same separation as the inter-theme gap in plain KSI. */
+  width: calc(var(--ksi-sticker-col) + var(--theme-gap-col));
+  min-width: calc(var(--ksi-sticker-col) + var(--theme-gap-col));
+  max-width: calc(var(--ksi-sticker-col) + var(--theme-gap-col));
+  overflow: visible;
+  padding: 0;
+  background: var(--cell-fill);
+  border-color: var(--structure);
+  vertical-align: middle;
+  border-right: var(--theme-gap-col) solid transparent;
+  background-clip: padding-box;
+}
+
+.ksi-sticker-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 24px;
+}
+
+.ksi-sticker-icon {
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Composes with the SVG's inline colorize filter; dark theme dims stickers
+     a shade so they don't read as over-contrasty on the dark background. */
+  filter: var(--ksi-sticker-dim, none);
+}
+
+.ksi-sticker-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* Transparent select overlay covers the whole cell for interaction. */
+.ksi-sticker-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ksi-sticker-select:disabled {
+  cursor: default;
+}
+
+/* Unselected: subtle chevron placeholder. */
+.ksi-sticker-wrap:not(.has-sticker)::after {
+  content: "▾";
+  font-size: var(--text-xs);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* Over the allowed count: thick red inset border on the cell. */
+.match-table.ksi-detailed .ksi-sticker-cell.ksi-sticker-over {
+  box-shadow: inset 0 0 0 3px var(--danger);
+}
+
+.ksi-sticker-cell.ksi-sticker-over .ksi-sticker-icon {
+  color: var(--danger-text) !important;
+}
+
+/* Small muted helper text under a form section. */
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* The fixed sticker colour palette — the only colours an organizer may pick.
+   Hex values mirror stickerPaletteColors in host_games.go; keep the two in
+   sync. Each swatch is a hidden radio over a coloured dot. */
+:root {
+  --sticker-c-white: #ffffff;
+  --sticker-c-yellow: #fdf66f;
+  --sticker-c-green: #aded87;
+  --sticker-c-red: #ff7a6b;
+  --sticker-c-blue: #68caff;
+  --sticker-c-pink: #f4a8ff;
+  --sticker-c-orange: #ffae37;
+}
+
+.sticker-palette {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-right: var(--space-3);
+}
+
+.sticker-palette > span {
+  font-size: var(--text-sm);
+}
+
+.sticker-palette .swatch {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.sticker-palette .swatch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.sticker-palette .swatch-dot {
+  display: inline-block;
+  width: var(--space-5);
+  height: var(--space-5);
+  border-radius: var(--radius-sm);
+  background: var(--swatch);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+.sticker-palette .swatch input:checked + .swatch-dot,
+.sticker-palette .swatch input:focus-visible + .swatch-dot {
+  outline: var(--space-0-5) solid var(--blue-bright);
+  outline-offset: var(--space-0-5);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   APPEARANCE: dark theme + high-contrast mode
+   Two independent axes set by menu.js on <html>:
+     data-theme    = light | dark
+     data-contrast = regular | high
+   Default (no overrides) is the light/regular palette in :root above. Each
+   block below only re-points existing color variables, so the whole app
+   re-themes through the variables it already uses. The high-contrast blocks
+   are scoped per theme ([data-theme=light/dark][data-contrast=high]) so they
+   layer on top of the active theme with higher specificity than the bare
+   dark block — order-independent.
+   Palette rationale (Material dark theme + WCAG): no pure black; depth via
+   lighter surfaces ~3-4 L apart, not shadows; off-white (not #fff) text;
+   lightened/desaturated accents; high-contrast separates adjacent surfaces
+   with stronger, text-colored borders and darker grays.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Dark theme ─────────────────────────────────────────────────────────── */
+:root[data-theme="dark"] {
+  /* Dim KSI stickers a shade on dark theme — full-bright colors read as
+     over-contrasty against the dark cells. */
+  --ksi-sticker-dim: brightness(0.85);
+}
