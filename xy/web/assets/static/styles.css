@@ -335,22 +335,38 @@
   cursor: var(--cursor-action);
 }
 .label-pick.is-on { font-weight: var(--fw-bold); }
-.label-empty { font-size: var(--text-xs); color: var(--muted); padding: var(--space-1) var(--space-2); }
+/* No horizontal padding: this sits at the left edge of the labels row and its
+   text has to line up with the block above and below it, not sit indented 8px
+   into open space. */
+.label-empty { font-size: var(--text-xs); color: var(--muted); padding: var(--space-1) 0; }
 /* position:relative anchors the custom add-label popup (.menu-dropdown) below
    the trigger button. */
 .label-add-row { position: relative; display: flex; gap: var(--space-2); align-items: center; }
 .label-add-row .input { flex: 1; min-width: 0; }
 
-/* custom add-label popup: filter field over a scrollable, sorted label list.
-   This one deliberately stretches to its anchor row (left:0;right:0), so it has
-   to opt out of the shared dropdown's width:max-content / max-width sizing. */
-.label-add-popup { left: 0; right: 0; width: auto; min-width: 0; max-width: none; gap: var(--space-1); }
+/* Custom add-label popup: filter field, scrollable sorted label list, and the
+   create-new-label form at the foot. It hangs off the ➕ button (a ~180px anchor)
+   rather than a full-width row now, so it sizes itself instead of stretching to
+   the anchor — it has to hold a name field + colour + submit. */
+.label-add-popup {
+  left: 0;
+  right: auto;
+  width: max-content;
+  min-width: 280px;
+  max-width: min(420px, calc(100vw - var(--space-4)));
+  gap: var(--space-1);
+}
 .label-add-filter { margin-bottom: var(--space-1); }
 .label-add-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
 .label-add-item { display: flex; align-items: center; gap: var(--space-2); }
 .label-swatch { flex: none; width: 12px; height: 12px; border-radius: var(--radius-sm); background: var(--muted); }
 .label-add-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.label-color-input { width: 38px; height: 34px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+/* --control-h, not a hardcoded 34px and not `align-self: stretch`: the swatch is
+   an input[type=color], a REPLACED element, so flex stretch is silently ignored
+   on it (verified — align-self computes to `stretch` and the height stays at its
+   intrinsic 27px). It has to be told the field height explicitly to share a
+   baseline with the name field beside it. */
+.label-color-input { width: 38px; height: var(--control-h); padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
 
 /* timeline */
 .timeline { display: flex; flex-direction: column; gap: var(--space-2); max-height: 320px; overflow-y: auto; }

@@ -3345,10 +3345,21 @@ function closeLabelAddPopup() {
   if (popup) popup.remove();
 }
 
-// openLabelAddPopup mounts a custom dropdown under the "+ добавить метку" button:
+// The "create a new label" form is authored in board.dopeui but does NOT belong
+// in the card body: it used to sit there permanently as a third stacked row under
+// «Метки», duplicating the popup's job and pushing the section to three lines for
+// a control almost nobody needs on any given card. Detach it once at boot and
+// keep the node; openLabelAddPopup mounts it at the foot of the popup, where
+// "create a label" actually belongs. Handlers bound to the element survive the
+// move, so its submit listener below keeps working.
+const newLabelForm = document.getElementById("newLabelForm");
+newLabelForm.remove();
+
+// openLabelAddPopup mounts a custom dropdown under the "➕ Добавить метку" button:
 // a filter field above a scrollable list of the unassigned labels, sorted by last
-// usage (sortLabels). A native <select> can't host a search box, hence the
-// hand-rolled popup (shares the .menu-dropdown styling of the list "⋯" menu).
+// usage (sortLabels), with the create-new-label form at the foot. A native
+// <select> can't host a search box, hence the hand-rolled popup (shares the
+// .menu-dropdown styling of the list "⋯" menu).
 function openLabelAddPopup() {
   const card = state.cards.find((c) => c.id === openCardId);
   if (!card) return;
@@ -3363,7 +3374,7 @@ function openLabelAddPopup() {
     placeholder: "Фильтр меток…", autocomplete: "off",
   });
   const listBox = el("div", { class: "label-add-list" });
-  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, filter, listBox);
+  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, filter, listBox, newLabelForm);
 
   function fill() {
     const q = filter.value.trim().toLowerCase();
@@ -3417,7 +3428,9 @@ async function toggleLabel(card, lbl) {
   } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
 }
 
-document.getElementById("newLabelForm").addEventListener("submit", async (e) => {
+// NB: `newLabelForm` (the retained node), not getElementById — the form is
+// detached from the document above and lives inside the popup while it is open.
+newLabelForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = document.getElementById("newLabelName").value.trim();
   const color = document.getElementById("newLabelColor").value;
@@ -3427,10 +3440,15 @@ document.getElementById("newLabelForm").addEventListener("submit", async (e) => 
       name_enc: await xyCrypto.encField(dk, name),
       color_enc: await xyCrypto.encField(dk, color),
     });
-    state.labels.push({ id: res.id, kind: "normal", name, color });
+    const lbl = { id: res.id, kind: "normal", name, color };
+    state.labels.push(lbl);
     document.getElementById("newLabelName").value = "";
     const card = state.cards.find((c) => c.id === openCardId);
-    if (card) renderLabelPicker(card);
+    // The form is now reachable only from inside the add-label popup, so naming a
+    // label there means you want it ON this card — assign it instead of merely
+    // creating it and making the user reopen the popup to pick what they just
+    // typed. toggleLabel does the API call, re-renders and closes the popup.
+    if (card) await toggleLabel(card, lbl);
   } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
 });
 

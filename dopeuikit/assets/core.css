@@ -145,6 +145,13 @@
   --text-xl-plus: 24px;
   --text-2xl: 30px;
 
+  /* The height a text-ish form control settles at (36px min + the 15px/1.55 line
+     box and 8px padding land on 38). Named because things have to LINE UP with a
+     field: input[type=color] is a replaced element, so `align-self: stretch` is
+     silently ignored on it and the swatch floated 4px above the row it sat in.
+     Anything that must match a field's height takes this token, not a guess. */
+  --control-h: 38px;
+
   --leading-tight: 1;
   --leading-snug: 1.25;
   --leading-relaxed: 1.55;
@@ -361,7 +368,7 @@ a.list-row:hover { background: var(--hover-bg); }
 .field > textarea,
 .field > select {
   font-size: var(--text-base);
-  min-height: 36px;
+  min-height: var(--control-h);
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -1123,8 +1130,22 @@ a.list-row:hover { background: var(--hover-bg); }
 /* Section labels read in the case they were authored in ("Метки", not "МЕТКИ").
    The uppercase + tracked-out + 700 treatment is three separate emphasis devices
    stacked on a word whose whole job is to be quiet scaffolding; muted color and
-   a small size already say "label". Same reasoning for .fld-label in xy. */
-.card-section-label { font-size: var(--text-sm); font-weight: var(--fw-semibold); color: var(--muted); margin-top: var(--space-3); }
+   a small size already say "label". Same reasoning for .fld-label in xy.
+
+   PROXIMITY: a label must sit much closer to the thing it labels than to the
+   block above it, or it reads as floating between the two and you cannot tell
+   what it refers to. It was 20px above / 16px below — near-equidistant, so it
+   bound to nothing. The margin-bottom is NEGATIVE on purpose: these labels live
+   in flex columns with a `gap`, which applies equally on both sides, and pulling
+   the bottom back in is the only way to beat it. Ratio is now ~32 above / ~4-12
+   below. */
+.card-section-label {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+  margin-top: var(--space-5);
+  margin-bottom: calc(var(--space-1) * -1);
+}
 
 /* The dash IS the affordance here (a tear-off code box), so it takes --grid-dark
    directly rather than the transparent --border. */
