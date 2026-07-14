@@ -392,6 +392,14 @@
 
 /* attachments (card detail) */
 .attachments { display: flex; flex-direction: column; gap: var(--space-1); }
+
+/* A mount with nothing in it is still a flex ITEM, and a flex item still eats a
+   `gap` on each side — so an empty .attachments/.timeline (0px tall, invisible)
+   silently pushed its section 8px apart, which is why «Вложения» and «Лента» sat
+   12px off the thing they label while «Метки» (whose mount is never empty) sat
+   at 4px. Collapse them out of the layout when they hold nothing. */
+.attachments:empty,
+.timeline:empty { display: none; }
 .attach-row { display: flex; align-items: center; gap: var(--space-2); }
 .attach-name { flex: 1; text-align: left; border: none; background: transparent; color: var(--blue, var(--text)); cursor: var(--cursor-action); font-size: var(--text-sm); }
 .attach-name:hover { text-decoration: underline; }
