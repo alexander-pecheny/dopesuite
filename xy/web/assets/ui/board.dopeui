@@ -1,0 +1,182 @@
+page title="Доска · xy" kind="board" scripts="board.js timer.js"
+  topbar title="Доска" titleid="boardTitle" home="/"
+    iconbtn id="notifToggle" label="События" title="События других участников" badgeid="notifBadge" aria-haspopup="true" aria-expanded="false" "🔔"
+    iconbtn id="timerToggle" label="Таймер" title="Таймер ЧГК" aria-pressed="false" "⏰"
+
+  mount id="kanban" kind="kanban" hidden
+
+  -- unlock overlay
+  modal id="unlockOverlay" label="Пароль доски" title="Пароль доски"
+    form id="unlockForm" dir="col"
+      password id="unlockPass" placeholder="Пароль доски" autocomplete="off" required autofocus
+      button submit "Открыть"
+    message id="unlockMessage"
+
+  -- card detail overlay
+  docoverlay id="cardOverlay" kind="detail"
+    headrow kind="detail"
+      selectfield id="cardKind" compact aria-label="Тип карточки"
+        option value="question" "Вопрос"
+        option value="meta" "Метаинформация"
+        option value="heading" "Заголовок"
+        option value="other" "Другое"
+      mount id="cardDetailTitle" kind="card-title" hidden
+      headactions kind="detail"
+        unreaddot id="contentUnreadDot" data-edit-only title="Непрочитанные изменения"
+        button id="cardLink" small title="Скопировать прямую ссылку на карточку" data-edit-only "🔗 Ссылка"
+        button id="cardCopy" small hidden title="Скопировать текст вопроса для тест-сессии (экранный режим)" "📋 Копировать"
+        iconbtn id="cardClose" label="Назад" "↩️"
+    mount id="cardCopyMsg" kind="card-copy-msg" hidden
+
+    -- view switch: preview (read-only) / structured fields / raw 4s text
+    tabs id="cardViewTabs"
+      tab id="cardTabPreview" view="preview" "Просмотр"
+      tab id="cardTabFields" view="fields" "Поля"
+      tab id="cardTabText" view="text" "Текст"
+
+    -- Просмотр: single-card docx-style render (read-only)
+    tabpanel id="cardViewPreview"
+      checkbox id="cardPreviewScreen" kind="card-preview" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения" " для экрана"
+      mount id="cardPreviewBody" kind="card-preview-body" title="Двойной клик — редактировать"
+
+    -- Поля: structured field editor (question cards)
+    tabpanel id="cardViewFields"
+      mount id="cardFields" kind="card-fields"
+
+    -- Текст: raw 4s editor
+    tabpanel id="cardViewText"
+      label id="cardDescLabel" "Описание"
+      editor id="cardDesc" spellcheck="false"
+
+    row gap="sm" wrap
+      button id="cardSave" "Сохранить"
+      button kind="ghost" id="cardDelete" data-edit-only "Удалить карточку"
+
+    label data-edit-only "Метки"
+    mount id="labelPicker" kind="label-picker" data-edit-only
+    mount id="labelAddRow" kind="label-add-row" data-edit-only
+      button kind="ghost" id="labelAddBtn" "+ добавить метку…"
+    form id="newLabelForm" dir="row" gap="sm" data-edit-only
+      textfield id="newLabelName" placeholder="Новая метка" grow
+      colorfield id="newLabelColor" value="#4477aa"
+      button small submit "+"
+
+    label data-edit-only "Вложения"
+    mount id="attachments" kind="attachments" data-edit-only
+    row gap="sm" align="center" wrap data-edit-only
+      filefield id="attachFile"
+      checkbox id="attachCompress" " сжать (WebP)"
+      button small id="attachUpload" "Загрузить"
+
+    label data-edit-only "Переместить / копировать"
+    row gap="sm" align="center" wrap data-edit-only
+      selectfield id="moveBoard" title="Доска" grow
+      selectfield id="moveList" title="Список" grow
+      selectfield id="movePos" title="Позиция" grow
+    row gap="sm" align="center" wrap data-edit-only
+      button small id="copyBtn" "Копировать"
+      button small kind="ghost" id="moveBtn" "Переместить"
+
+    label data-edit-only "Лента " (unreaddot id="commentsUnreadDot" title="Непрочитанные комментарии")
+    mount id="timeline" kind="timeline" data-edit-only
+    form id="commentForm" dir="col" data-edit-only
+      editor id="commentInput" kind="comment" placeholder="Комментарий…" spellcheck="false"
+      button small submit "Отправить"
+    message id="cardMessage"
+
+  -- list preview overlay (docx-style render, JS-only)
+  docoverlay id="previewOverlay" kind="doc" label="Предпросмотр списка"
+    headrow
+      previewtitle id="previewTitle" "Предпросмотр"
+      headactions
+        button small id="previewCopyTesters" hidden "👥 Копировать список тестеров"
+        checkbox id="previewScreen" kind="preview" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения" " для экрана"
+        iconbtn id="previewClose" label="Закрыть" "×"
+    mount id="previewBody" kind="preview-body"
+
+  -- import verification overlay: the parsed 4s source (left, editable) next to
+  -- its live preview (right), so parsing mistakes can be fixed before the
+  -- package becomes a list. Only .docx needs it — .4s/.zip import straight.
+  docoverlay id="importOverlay" kind="doc" variant="import" label="Проверка импорта"
+    headrow
+      previewtitle id="importTitle" "Проверка импорта"
+      headactions
+        mount id="importCount" kind="import-count"
+        button small id="importCommit" "Импортировать"
+        iconbtn id="importClose" label="Закрыть" "×"
+    split
+      pane kind="src"
+        editor id="importSource" kind="importsrc" spellcheck="false" aria-label="Исходник 4s"
+      mount id="importPreview" kind="import-preview"
+
+  -- handouts generation overlay: edit the chgksuite .hndt source (left) and
+  -- render it to a PDF via the server (right). The PDF is ephemeral.
+  docoverlay id="handoutsOverlay" kind="doc" variant="handouts" label="Генерация раздаток"
+    headrow
+      previewtitle "Генерация раздаток"
+      headactions
+        iconbtn id="handoutsClose" label="Закрыть" "×"
+    split
+      pane kind="src"
+        label "Источник (.hndt)"
+        editor id="handoutsSource" kind="handouts" spellcheck="false"
+        row gap="sm" align="center" wrap
+          button small id="handoutsGenerate" "Сгенерировать PDF"
+          button small kind="ghost" id="handoutsSplitFit" title="Подобрать раскладку (split-fit) и скачать zip со всеми PDF" "✂ Split-fit (zip)"
+        message id="handoutsMessage"
+      pane kind="preview"
+        row gap="sm" align="center" justify="between"
+          label "PDF"
+          button small download id="handoutsDownload" hidden "Скачать"
+        mount id="handoutsPdf" kind="handouts-pdf"
+
+  -- move / copy list overlay (within board → re-rank; other board →
+  -- client-side re-encryption of the list + its cards)
+  modal id="moveListOverlay" label="Переместить список" title="Переместить список" done="Закрыть" doneid="moveListClose"
+    col gap="sm"
+      label for="moveListBoard" "Доска"
+      selectfield id="moveListBoard" title="Доска"
+      label for="moveListPos" "Позиция"
+      selectfield id="moveListPos" title="Позиция"
+    row gap="sm" align="center" wrap
+      button small id="moveListCopyBtn" "Копировать"
+      button small kind="ghost" id="moveListMoveBtn" "Переместить"
+    message id="moveListMessage"
+
+  -- lists management overlay: reorder lists (drag / position), select several
+  -- and move them together, and link consecutive lists into a group
+  -- (list_of_lists) with shared numbering + combined export.
+  modal id="listsManageOverlay" label="Управление списками" title="Управление списками" variant="lists" done="Готово" doneid="listsManageClose"
+    row gap="sm" align="center" justify="between" wrap
+      button small id="listsLinkBtn" disabled title="Выберите подряд идущие списки и свяжите их в группу" "🔗 Связать списки"
+      row gap="sm" align="center"
+        numfield id="listsMovePos" min="1" placeholder="№" narrow
+        button small kind="ghost" id="listsMoveBtn" disabled title="Переместить выбранные на указанную позицию" "Переместить выбранные"
+    mount id="listsManageRows" kind="lists-manage-rows"
+    message id="listsManageMessage"
+
+  -- sizes overlay: list width + max card height, stored per browser
+  modal id="sizesOverlay" label="Изменить размеры" title="Изменить размеры" variant="sizes"
+    sliderrow id="sizesBoardW" label="Ширина рабочей области" valueid="sizesBoardWVal" min="800" max="3200" step="50" hint="Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
+    sliderrow id="sizesListW" label="Ширина списка" valueid="sizesListWVal" min="200" max="640" step="10"
+    sliderrow id="sizesCardH" label="Текст карточки" valueid="sizesCardHVal" min="1" max="12" step="1" hint="Сколько строк вопроса показывать на карточке. На максимуме — весь текст."
+    row gap="sm" align="center" justify="between"
+      button small kind="ghost" id="sizesReset" "Сбросить по умолчанию"
+      button id="sizesClose" "Готово"
+
+  -- members / sharing overlay
+  modal id="membersOverlay" label="Участники доски" title="Участники доски" done="Готово" doneid="membersClose"
+    mount id="membersList" kind="members-list"
+    form id="addMemberForm" dir="row" gap="sm" hidden
+      textfield id="addMemberName" placeholder="Имя пользователя" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" grow
+      button small submit "Добавить"
+    message id="membersMessage"
+
+  -- paste-image overlay
+  modal id="pasteOverlay" label="Вставить изображение" title="Вставить изображение"
+    form id="pasteForm" dir="col"
+      textfield id="pasteName" placeholder="Имя файла" autocomplete="off" required
+      checkbox id="pasteCompress" " сжать (WebP)"
+      row gap="sm" wrap
+        button submit "Сохранить"
+        button kind="ghost" id="pasteCancel" "Отмена"

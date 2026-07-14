@@ -1,0 +1,1 @@
+{'GREYTEXT': '#qlabel[<GREYTEXT>]', 'IMG': 'image("<IMGPATH>", width: <IMGWIDTH>)', 'IMGWIDTH': '<QWIDTH>'}

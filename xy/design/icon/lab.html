@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xy icon lab</title>
+<style>
+  :root { --bg:#0d0f12; --panel:#15181d; --line:#262b32; --ink:#e7ecf2; --dim:#8b95a3; --accent:#a06bf0; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+         background:var(--bg); color:var(--ink); }
+  .wrap { display:flex; min-height:100vh; }
+  .panel { width:340px; flex:none; padding:20px; background:var(--panel);
+           border-right:1px solid var(--line); overflow-y:auto; height:100vh; }
+  .stage { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+           gap:28px; padding:24px; }
+  .board { width:min(64vh,64vw); aspect-ratio:1; overflow:hidden;
+           background-image:linear-gradient(45deg,#1b1e23 25%,transparent 25%),
+             linear-gradient(-45deg,#1b1e23 25%,transparent 25%),
+             linear-gradient(45deg,transparent 75%,#1b1e23 75%),
+             linear-gradient(-45deg,transparent 75%,#1b1e23 75%);
+           background-size:24px 24px; background-position:0 0,0 12px,12px -12px,-12px 0; }
+  .board svg { display:block; }
+  .sizes { display:flex; align-items:flex-end; gap:22px; }
+  .sizes figure { margin:0; text-align:center; color:var(--dim); font-size:11px; }
+  .sizes .thumb { display:block; margin:0 auto 6px; overflow:hidden; }
+  .sizes svg { display:block; width:100%; height:100%; }
+  h1 { font-size:15px; margin:0 0 2px; letter-spacing:.3px; }
+  .sub { color:var(--dim); font-size:12px; margin:0 0 18px; }
+  .grp h2 { font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--dim);
+            margin:18px 0 10px; font-weight:600; }
+  .row { display:flex; align-items:center; gap:10px; margin:9px 0; }
+  .row label { flex:1; }
+  .row .val { width:52px; text-align:right; color:var(--accent); font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .swatches { display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; }
+  .sw { display:flex; align-items:center; gap:8px; }
+  .sw label { flex:1; font-size:12px; }
+  input[type=color] { width:34px; height:24px; padding:0; border:1px solid var(--line);
+                      border-radius:5px; background:none; cursor:pointer; }
+  .chk { display:flex; align-items:center; gap:8px; margin:10px 0; color:var(--dim); }
+  .btns { display:flex; gap:8px; margin-top:18px; flex-wrap:wrap; }
+  button { flex:1; min-width:90px; padding:9px 10px; border:1px solid var(--line);
+           background:#1d2127; color:var(--ink); border-radius:7px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--accent); color:var(--accent); }
+  .derived { color:var(--dim); font-size:11px; margin-top:14px; line-height:1.7; }
+  .derived b { color:var(--ink); font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <h1>xy icon lab</h1>
+    <p class="sub">Live view of <code>icon.js</code></p>
+
+    <div class="grp">
+      <h2>Colour</h2>
+      <div class="swatches" id="swatches"></div>
+      <label class="chk"><input type="checkbox" id="transparent"> transparent tile</label>
+    </div>
+
+    <div class="grp"><h2>Shape</h2></div>
+    <div id="ranges"></div>
+
+    <div class="btns">
+      <button id="copy">Copy SVG</button>
+      <button id="png">Download PNG</button>
+      <button id="cli">Copy CLI</button>
+      <button id="reset">Reset</button>
+    </div>
+
+    <div class="derived" id="derived"></div>
+  </div>
+
+  <div class="stage">
+    <div class="board" id="board"></div>
+    <div class="sizes" id="sizes"></div>
+  </div>
+</div>
+
+<script type="module">
+import { buildSVG, COLORS, DEFAULTS, derived, RANGES, SIZE } from "./icon.js";
+
+const el = {};
+const ranges = document.getElementById("ranges");
+for (const [id, label, min, max, step, def] of RANGES) {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.innerHTML = `<label>${label}</label>
+    <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${def}">
+    <span class="val" id="${id}_v"></span>`;
+  ranges.appendChild(row);
+  el[id] = row.querySelector("input");
+  el[id].addEventListener("input", render);
+}
+const swatches = document.getElementById("swatches");
+for (const [id, label, def] of COLORS) {
+  const sw = document.createElement("div");
+  sw.className = "sw";
+  sw.innerHTML = `<label>${label}</label><input type="color" id="${id}" value="${def}">`;
+  swatches.appendChild(sw);
+  el[id] = sw.querySelector("input");
+  el[id].addEventListener("input", render);
+}
+el.transparent = document.getElementById("transparent");
+el.transparent.addEventListener("input", render);
+
+// The icon lives at 32px in a browser tab and 180px on a home screen; a rendered
+// preview at those sizes is the only honest test of the shape knobs.
+const PREVIEWS = [180, 64, 32];
+const sizes = document.getElementById("sizes");
+for (const px of PREVIEWS) {
+  const fig = document.createElement("figure");
+  fig.innerHTML = `<span class="thumb" id="thumb${px}" style="width:${px}px;height:${px}px"></span>${px}px`;
+  sizes.appendChild(fig);
+}
+
+function params() {
+  const p = { transparent: el.transparent.checked };
+  for (const [id] of RANGES) p[id] = parseFloat(el[id].value);
+  for (const [id] of COLORS) p[id] = el[id].value;
+  return p;
+}
+
+function writeHash(p) {
+  const q = new URLSearchParams();
+  for (const [id] of RANGES) q.set(id, p[id]);
+  for (const [id] of COLORS) q.set(id, p[id].replace("#", ""));
+  q.set("t", p.transparent ? 1 : 0);
+  history.replaceState(null, "", "#" + q.toString());
+}
+
+function readHash() {
+  if (!location.hash) return;
+  const q = new URLSearchParams(location.hash.slice(1));
+  for (const [id] of RANGES) if (q.has(id)) el[id].value = q.get(id);
+  for (const [id] of COLORS) if (q.has(id)) el[id].value = "#" + q.get(id);
+  if (q.has("t")) el.transparent.checked = q.get("t") === "1";
+}
+
+function render() {
+  const p = params();
+  for (const [id, , , , , , dec] of RANGES)
+    document.getElementById(id + "_v").textContent = p[id].toFixed(dec);
+  const svg = buildSVG(p, { fixedSize: false });
+  document.getElementById("board").innerHTML = svg;
+  for (const px of PREVIEWS) document.getElementById("thumb" + px).innerHTML = svg;
+  writeHash(p);
+
+  const d = derived(p);
+  document.getElementById("derived").innerHTML =
+    `cards <b>${d.cards}</b> · block <b>${d.block}</b> · side margin <b>${d.margin}</b> of ${SIZE}`;
+}
+
+const cli = () => {
+  const p = params();
+  const flags = [...RANGES, ...COLORS]
+    .filter(([id]) => String(p[id]) !== String(DEFAULTS[id]))
+    .map(([id]) => `--${id} '${p[id]}'`);
+  return `deno task icon ${flags.join(" ")}`.trim();
+};
+
+const flash = (btn, text) => {
+  const was = btn.textContent;
+  btn.textContent = text;
+  setTimeout(() => (btn.textContent = was), 1200);
+};
+
+document.getElementById("copy").onclick = async (e) => {
+  await navigator.clipboard.writeText(buildSVG(params()));
+  flash(e.target, "Copied!");
+};
+document.getElementById("cli").onclick = async (e) => {
+  await navigator.clipboard.writeText(cli());
+  flash(e.target, "Copied!");
+};
+document.getElementById("png").onclick = () => {
+  const svg = buildSVG(params());
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement("canvas");
+    c.width = SIZE; c.height = SIZE;
+    c.getContext("2d").drawImage(img, 0, 0);
+    c.toBlob((b) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(b); a.download = "icon.png"; a.click();
+    });
+  };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+};
+document.getElementById("reset").onclick = () => {
+  for (const [id] of [...RANGES, ...COLORS]) el[id].value = DEFAULTS[id];
+  el.transparent.checked = DEFAULTS.transparent;
+  render();
+};
+
+readHash();
+render();
+</script>
+</body>
+</html>

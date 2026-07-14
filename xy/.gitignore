@@ -1,0 +1,12 @@
+/xy.db
+/xy.db-wal
+/xy.db-shm
+*.db
+*.db-wal
+*.db-shm
+/blobs/
+.env
+/xy-server
+/telegram-bot
+# built by `just build-wasm` (30 MB); the Rust source is typst-wasm/
+/internal/chgk/typstwasm/typst.wasm

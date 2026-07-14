@@ -1,0 +1,6 @@
+{
+  "tasks": {
+    "icon": "deno run --allow-read --allow-write --allow-run gen-icon.js",
+    "lab": "deno run --allow-read --allow-net gen-icon.js --lab"
+  }
+}

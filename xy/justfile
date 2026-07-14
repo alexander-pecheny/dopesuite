@@ -1,0 +1,86 @@
+set dotenv-load := true
+
+default: dev
+
+# typst is linked in as a wasm module, which the Go build embeds. The 30 MB
+# artifact is NOT in git — build it once with `just build-wasm` (the only step
+# that needs Rust), then again only when bumping typst. Every Go recipe below
+# depends on `wasm` so a fresh clone fails with an instruction, not a cryptic
+# //go:embed error.
+wasm_path := "internal/chgk/typstwasm/typst.wasm"
+
+# Build the app. Assumes the typst wasm is already built (see `just build-wasm`).
+build: wasm
+    CGO_ENABLED=0 go build -o xy-server ./cmd/xy-server
+
+# Compile typst to wasm32-wasip1 and drop the artifact where //go:embed wants it.
+# Needs Rust: rustup target add wasm32-wasip1
+# One-time per clone, and once per typst bump (typst-wasm/Cargo.toml).
+# Links with thin LTO (typst-wasm/Cargo.toml) and takes ~4 min. Fat LTO peaks at
+# 4.9 GB RSS and gets OOM-killed (bare SIGKILL) on an 8 GB box; it would buy ~9%
+# on pool startup and nothing per render. If you ever want it on a big machine:
+#   CARGO_PROFILE_RELEASE_LTO=fat just build-wasm
+build-wasm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release --target wasm32-wasip1 --manifest-path typst-wasm/Cargo.toml
+    cp typst-wasm/target/wasm32-wasip1/release/typst_wasm.wasm {{wasm_path}}
+    ls -lh {{wasm_path}}
+
+# Guard: the embedded artifact must exist before anything compiles the Go tree.
+[private]
+wasm:
+    #!/usr/bin/env bash
+    [ -f {{wasm_path}} ] && exit 0
+    echo "missing {{wasm_path}} — run 'just build-wasm' once (needs Rust + the wasm32-wasip1 target)" >&2
+    exit 1
+
+# Server only (hot-reloads assets from disk). Use this unless testing the bot.
+dev-web-only: wasm
+    go run ./cmd/xy-server
+
+bot:
+    go run ./cmd/telegram-bot
+
+# Run server + bot concurrently.
+dev: wasm
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill 0' EXIT INT TERM
+    go run ./cmd/xy-server &
+    go run ./cmd/telegram-bot &
+    wait
+
+fmt:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(find cmd internal -type f -name '*.go')
+    ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
+
+vet: wasm
+    go vet ./...
+
+tidy-check:
+    go mod tidy -diff
+
+# Go tests + frontend (node) tests.
+test: wasm
+    go test ./...
+    node --test jstest/*.test.js
+
+# Frontend unit tests only.
+test-js:
+    node --test jstest/*.test.js
+
+pre-commit:
+    just fmt
+    just vet
+    just tidy-check
+    just test
+
+# Mint a one-shot registration invite and print it. Usage: just invite [days]
+invite days='7': wasm
+    go run ./cmd/xy-server invite {{days}}
+
+deploy *args:
+    python3 deploy.py {{args}}

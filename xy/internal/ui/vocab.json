@@ -1,0 +1,36 @@
+{
+  "enums": {
+    "page-kind":     { "prefix": "Page",    "values": ["wide", "board"] },
+    "checkbox-kind": { "prefix": "Check",   "values": ["preview", "card-preview"] },
+    "editor-kind":   { "prefix": "Editor",  "values": ["comment", "handouts", "importsrc"] },
+    "pane-kind":     { "prefix": "Pane",    "values": ["src", "preview"] },
+    "doc-kind":      { "prefix": "DocKind", "values": ["doc", "detail"] },
+    "doc-variant":   { "prefix": "DocVar",  "values": ["plain", "handouts", "import"] },
+    "head-kind":     { "prefix": "Head",    "values": ["doc", "detail"] },
+    "mount-kind":    { "prefix": "Mount",   "values": [
+      "kanban", "board-grid", "timeline", "label-picker", "label-add-row",
+      "attachments", "card-fields", "preview-body", "card-preview-body",
+      "handouts-pdf", "import-preview", "lists-manage-rows", "members-list",
+      "token-list", "token-value", "card-copy-msg", "import-count", "card-title"
+    ] }
+  },
+  "primitives": [
+    { "name": "previewtitle", "props": [], "children": "text" },
+
+    { "name": "docoverlay",
+      "placement": "overlay",
+      "props": [
+        { "name": "id", "required": true },
+        { "name": "label" },
+        { "name": "kind", "enum": "doc-kind" },
+        { "name": "variant", "enum": "doc-variant" }
+      ],
+      "children": "any" },
+
+    { "name": "headrow", "props": [{ "name": "kind", "enum": "head-kind" }], "children": "any" },
+    { "name": "headactions", "props": [{ "name": "kind", "enum": "head-kind" }], "children": "any" },
+
+    { "name": "split", "props": [], "children": ["pane", "mount"] },
+    { "name": "pane", "props": [{ "name": "kind", "enum": "pane-kind" }], "children": "any" }
+  ]
+}

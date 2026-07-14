@@ -1,0 +1,26 @@
+page title="Вход · xy" kind="sheet" classicscripts="login.js"
+  topbar title="Вход"
+    iconlink href="/register" label="Регистрация" "→"
+
+  section id="step-username"
+    hint "Введите логин."
+    form id="usernameForm" autocomplete="on"
+      textfield id="loginUsername" name="username" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required autofocus grow
+      button submit "Дальше"
+    message id="usernameMessage"
+
+  section id="step-password" hidden
+    hint "Вход для " (strong id="passwordLogin") "."
+    form id="passwordForm" dir="col" autocomplete="on"
+      password id="passwordValue" name="password" placeholder="Пароль" autocomplete="current-password" required
+      row gap="sm" wrap
+        button submit "Войти по паролю"
+        button id="requestCodeButton" "Получить код в телеграм"
+    message id="passwordMessage"
+
+  section id="step-code" hidden
+    hint "Код отправлен в Telegram для " (strong id="codeLogin") "."
+    form id="codeForm" autocomplete="on"
+      textfield id="loginCode" name="code" placeholder="Код из Telegram" autocomplete="one-time-code" spellcheck="false" autocapitalize="characters" required grow
+      button submit "Войти"
+    message id="loginMessage"

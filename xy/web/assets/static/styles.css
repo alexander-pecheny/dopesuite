@@ -1,0 +1,777 @@
+/* ============================================================
+   xy — board / card / kanban (built on the shared design tokens)
+   ============================================================ */
+
+/* Kanban depth is carried by fill, not borders: a column is a panel lifted off
+   the canvas, and a card is lifted again off the column. The two surface tokens
+   sit in opposite luminance order per theme (light: surface=white is brightest;
+   dark: structure is brighter than surface), so map them per theme to keep the
+   card reading brighter (= raised) than its column in both. */
+:root { --kanban-col: var(--structure); --kanban-card: var(--surface); }
+:root[data-theme="dark"] { --kanban-col: var(--surface); --kanban-card: var(--structure); }
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--muted);
+  font-weight: var(--fw-semibold);
+}
+.btn-ghost:hover { border-color: var(--text); color: var(--text); }
+.btn-small { min-height: 30px; padding: 0 var(--space-3); }
+
+/* board list */
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+}
+.board-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 90px;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+  color: var(--text);
+}
+.board-card:hover { background: var(--hover-bg); }
+.board-card.has-unread { position: relative; }
+.board-card-name { font-weight: var(--fw-bold); font-size: var(--text-lg); }
+.board-card-role { font-size: var(--text-xs); color: var(--muted); }
+/* blue "unread" dot — a board has changes by another member the user hasn't read */
+.board-card-unread {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--blue, #2f6fed);
+}
+
+/* trello import */
+.import-form { max-width: 760px; margin: 0 auto; }
+.import-form .card-desc { min-height: 320px; }
+
+/* kanban — the board is an SPA: the header is fixed and never scrolls, the
+   lower section (.board-main) fills the rest of the viewport and only scrolls
+   *inside* itself (the kanban scrolls horizontally, each list vertically), so
+   the page as a whole never scrolls or rubber-bands. */
+.board-page .board-main {
+  height: calc(100dvh - var(--xy-header-h));
+  overflow: hidden;
+  padding: var(--space-4) var(--page-pad-x);
+}
+/* The card modal (z 50) covers the lower section, but the fixed header — and its
+   ☰ dropdown — must stay above it (the settings/unlock modals at z-modal still
+   win over both). */
+.board-page .host-top { z-index: 60; }
+
+/* Smaller desktop board header (mirrors dope's 44px .game-host-top) — the
+   kanban itself is the point of the page, so the chrome above it stays thin. */
+.board-page { --xy-header-h: 44px; }
+.board-page .host-top { height: 44px; padding: var(--space-1-5) var(--page-pad-x-tight); }
+/* Same selector shape (not #id) as the mobile override below, so the cascade
+   (equal specificity, later source wins) still lets the mobile rule shrink
+   the title further on narrow screens. */
+.board-page h1 { font-size: var(--text-xl); }
+
+/* Breadcrumb: 🏠 / {board name}, replacing the old "←" back link. */
+.host-brand { display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 1 1 auto; }
+.host-home { display: inline-flex; align-items: center; text-decoration: none; font-size: 18px; line-height: 1; }
+.host-sep { color: var(--muted); }
+/* The overflow:hidden that yields the ellipsis clips at the padding edge, so a
+   line-height bump alone still shaved bold Cyrillic descenders (у, щ, р). Give
+   the clip box explicit bottom room via padding so descenders survive. */
+.host-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; line-height: var(--leading-snug); padding-bottom: 0.2em; }
+
+/* Blue "unread" dots — on kanban cards (.kcard-unread), in the card detail
+   head/timeline label, and the 🔔 bell panel rows (.notif-row .unread-dot).
+   The base .unread-dot rule lives in core.css (the unreaddot primitive). */
+.kcard { position: relative; }
+.kcard-unread {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--blue, #2f6fed);
+}
+
+.notif-toggle { position: relative; }
+.notif-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--blue, #2f6fed);
+  border: 1.5px solid var(--structure);
+}
+.notif-panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  width: min(320px, 90vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-dropdown);
+}
+.notif-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2-5);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-bold);
+}
+.notif-empty { padding: var(--space-3); color: var(--muted); font-size: var(--text-sm); text-align: center; }
+.notif-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-2);
+  cursor: pointer;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+.notif-row:hover { background: var(--action-bg); }
+.notif-row .unread-dot { margin-top: 6px; flex: 0 0 auto; }
+.notif-row-body { min-width: 0; flex: 1 1 auto; }
+.notif-row-meta { font-size: var(--text-xs); color: var(--muted); }
+.notif-row-preview { font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* import & other .board-main pages keep their natural padding + page scroll */
+.board-main { padding: var(--space-4) var(--page-pad-x) var(--space-6); }
+.kanban {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  height: 100%;
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  /* On a wide monitor a full-bleed board strands the reader at the screen edge,
+     so the workspace is a centred column with a user-set cap («Изменить размеры»).
+     max-width, not width: the box still scrolls internally once the lists
+     outgrow it. none = full bleed, the old behaviour. */
+  max-width: var(--kanban-max-w, none);
+  margin-inline: auto;
+}
+/* Workspace width, list width and card line count are user-tunable («Изменить
+   размеры» in the ☰ menu, board.js) — the modal overrides these vars on <html>. */
+:root {
+  --kanban-max-w: none;   /* none = board spans the full viewport width */
+  --klist-w: 280px;
+  --kcard-lines: none;    /* none = card shows the whole question, unclamped */
+}
+.klist {
+  flex: 0 0 var(--klist-w);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 100%;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--kanban-col);
+}
+.klist.dragging { opacity: 0.5; }
+.klist-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-2); }
+.klist-title { font-weight: var(--fw-bold); }
+.kadd {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: var(--cursor-action);
+}
+.kadd:hover { color: var(--text); }
+.kcards { display: flex; flex-direction: column; gap: var(--space-2); overflow-y: auto; min-height: var(--space-6); padding: var(--space-1); }
+.kcard {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--kanban-card);
+  cursor: pointer;
+}
+.kcard:hover { background: var(--hover-bg); }
+.kcard.dragging { opacity: 0.4; }
+/* The node holds the card's whole text; -webkit-line-clamp cuts it at N lines
+   *with an ellipsis* (a plain max-height would slice a line in half). `none`
+   clamps nothing, so the card grows to fit the question. The -webkit- prefixed
+   pair is still the only thing that works cross-browser; `line-clamp` is the
+   standard alias, harmless where unsupported. */
+.kcard-title {
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--kcard-lines);
+  line-clamp: var(--kcard-lines);
+  overflow: hidden;
+}
+/* auto/directive question number reads as scaffolding, not content */
+.kcard-num { color: var(--muted); }
+.kcard-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
+/* heading cards read as list dividers (no tile), meta cards as muted notes */
+.kcard-heading { background: transparent; padding-bottom: var(--space-1); }
+.kcard-heading:hover { background: transparent; }
+.kcard-heading .kcard-title { font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted); }
+.kcard-meta .kcard-title { color: var(--muted); font-style: italic; }
+.klist-add { background: transparent; }
+.klist-add .kadd-form { color: var(--muted); }
+.klist-add:hover .kadd-form { color: var(--text); }
+.kadd-form { width: 100%; }
+
+/* list group (list_of_lists): a bordered region whose single header spans its
+   member lists, so it reads as one unit on the board. */
+.kgroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-self: stretch;
+  max-height: 100%;
+  padding: var(--space-2);
+  border: 2px solid var(--blue-strong);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+}
+.kgroup-head {
+  padding: var(--space-1) var(--space-2);
+  font-weight: var(--fw-bold);
+  color: var(--blue-strong);
+}
+.kgroup-title { white-space: nowrap; }
+.kgroup-lists { display: flex; gap: var(--space-3); align-items: flex-start; overflow: hidden; min-height: 0; }
+.kgroup-lists .klist { background: var(--kanban-col); }
+
+/* labels */
+.label-chip {
+  display: inline-block;
+  width: 34px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--muted);
+}
+
+/* card detail overlay — occupies the whole lower section (below the fixed
+   header), fully obscuring the kanban; the panel itself scrolls internally so
+   the page never scrolls. */
+.card-overlay {
+  position: fixed;
+  top: var(--xy-header-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: var(--backdrop);
+  overflow: hidden;
+  z-index: 50;
+}
+.card-detail {
+  width: min(680px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  overflow-y: auto;
+  background: var(--surface);
+  box-shadow: var(--shadow-modal);
+}
+/* The detail is a fixed-height scrolling flex column; pin every child at its
+   natural size (flex: none) so nothing is compressed — iOS WebKit otherwise
+   shrinks native <select>s below their min-height and clips the value text. */
+.card-detail > * { flex: none; }
+/* type selector, copy button and close × share one line */
+.card-detail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.card-kind-select { flex: 0 1 auto; width: auto; min-width: 0; }
+/* Test-card session heading (shown instead of the kind selector). */
+.card-detail-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: var(--text-base); font-weight: 600; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-head-actions { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; margin-left: auto; }
+/* Copy-for-test feedback sits right under the button (top-right of the panel). */
+.card-copy-msg { align-self: flex-end; margin-top: calc(var(--space-1) * -1); font-size: var(--text-xs); color: var(--green, var(--accent)); }
+.card-copy-msg[data-err] { color: var(--red, var(--danger)); }
+/* Flat card view: the only borders are on buttons. Inputs/selects, the editor,
+   timeline events and the colour swatch read as fills, not boxed fields. */
+.card-detail .input,
+.card-detail .card-desc,
+.card-detail .label-color-input { border-color: transparent; background: var(--page); }
+.card-detail .input:focus,
+.card-detail .card-desc:focus { border-color: var(--blue); }
+.card-detail .tl-event { border-color: transparent; }
+.card-desc {
+  width: 100%;
+  min-height: 260px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  resize: vertical;
+}
+.comment-input { min-height: 52px; }
+
+/* label picker */
+.label-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* Assigned labels render as filled colour pills (the colour is set via the CSSOM
+   in paintLabels); the trailing "×" stays as the remove affordance. */
+.label-pick {
+  padding: var(--space-0-5) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--muted);
+  color: #fff;
+  font-size: var(--text-xs);
+  cursor: var(--cursor-action);
+}
+.label-pick.is-on { font-weight: var(--fw-bold); }
+.label-empty { font-size: var(--text-xs); color: var(--muted); padding: var(--space-1) var(--space-2); }
+/* position:relative anchors the custom add-label popup (.menu-dropdown) below
+   the trigger button. */
+.label-add-row { position: relative; display: flex; gap: var(--space-2); align-items: center; }
+.label-add-row .input { flex: 1; min-width: 0; }
+
+/* custom add-label popup: filter field over a scrollable, sorted label list */
+.label-add-popup { left: 0; right: 0; min-width: 0; gap: var(--space-1); }
+.label-add-filter { margin-bottom: var(--space-1); }
+.label-add-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+.label-add-item { display: flex; align-items: center; gap: var(--space-2); }
+.label-swatch { flex: none; width: 12px; height: 12px; border-radius: var(--radius-sm); background: var(--muted); }
+.label-add-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.label-color-input { width: 38px; height: 34px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+
+/* timeline */
+.timeline { display: flex; flex-direction: column; gap: var(--space-2); max-height: 320px; overflow-y: auto; }
+.tl-event { padding: var(--space-2) var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--page); }
+.tl-meta { font-size: var(--text-2xs); color: var(--muted); display: flex; align-items: center; gap: var(--space-1); }
+.tl-comment { white-space: pre-wrap; font-size: var(--text-sm); margin-top: var(--space-1); }
+/* copy-link affordance on a comment; revealed on hover/focus to stay quiet */
+.tl-link { border: none; background: none; cursor: pointer; padding: 0; font-size: var(--text-2xs); line-height: 1; opacity: 0; transition: opacity 0.1s; }
+.tl-event:hover .tl-link, .tl-link:focus-visible { opacity: 0.7; }
+.tl-link:hover { opacity: 1; }
+/* touch devices have no hover — keep the link visible there */
+@media (hover: none) { .tl-link { opacity: 0.55; } }
+/* flash a comment when arrived at via a direct link */
+.tl-event.tl-highlight { animation: tl-flash 2.5s ease-out; }
+@keyframes tl-flash { 0%, 40% { background: var(--success-soft); border-color: var(--success); } 100% { background: var(--page); } }
+
+/* members / sharing modal */
+.members-list { display: flex; flex-direction: column; gap: var(--space-1); max-height: 320px; overflow-y: auto; }
+.member-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) 0; }
+.member-name { flex: 1; min-width: 0; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-role { font-size: var(--text-2xs); color: var(--muted); }
+.member-del { font-size: var(--text-lg); }
+
+/* attachments (card detail) */
+.attachments { display: flex; flex-direction: column; gap: var(--space-1); }
+.attach-row { display: flex; align-items: center; gap: var(--space-2); }
+.attach-name { flex: 1; text-align: left; border: none; background: transparent; color: var(--blue, var(--text)); cursor: var(--cursor-action); font-size: var(--text-sm); }
+.attach-name:hover { text-decoration: underline; }
+.attach-size { font-size: var(--text-2xs); color: var(--muted); }
+.attach-del { border: none; background: transparent; color: var(--muted); cursor: var(--cursor-action); font-size: var(--text-lg); line-height: 1; }
+.attach-del:hover { color: var(--red-dark, var(--danger)); }
+.attach-lossless { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); color: var(--muted); }
+/* selects must never push past their container on narrow screens */
+.card-detail select.input { max-width: 100%; }
+
+/* per-list "⋯" menu: anchor the shared .menu-dropdown under the trigger */
+.klist-menu-wrap { position: relative; display: inline-flex; }
+
+/* two-pane before/after diff (timeline desc_edit), with the word-level changes
+   highlighted inside each pane */
+.tl-diff { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-1); font-family: var(--font-mono); font-size: var(--text-2xs); }
+.tl-before, .tl-after { padding: var(--space-2); border-radius: var(--radius-xs); white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.tl-before { background: var(--red-soft); }
+.tl-after { background: var(--success-soft); }
+.tl-chg { border-radius: var(--radius-xs); color: #fff; padding: 0 1px; }
+.tl-before .tl-chg { background: var(--red); text-decoration: line-through; }
+.tl-after .tl-chg { background: var(--green); text-decoration: none; }
+
+
+/* card create mode: show only the type chooser + description editor */
+.card-detail.creating [data-edit-only] { display: none !important; }
+.card-detail:not(.creating) [data-create-only] { display: none !important; }
+
+/* list preview ("à la docx export", rendered client-side) — a wide, scrollable
+   reading view layered over the board like the card detail. */
+.preview-doc {
+  width: min(820px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  box-shadow: var(--shadow-modal);
+}
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex: none;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.preview-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-head-actions { display: flex; align-items: center; gap: var(--space-3); flex: none; }
+.preview-screen-toggle { white-space: nowrap; cursor: var(--cursor-action); }
+.preview-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--text);
+}
+/* Cap the reading column to a comfortable measure (~66 characters) and centre it
+   — full-width lines on a wide modal are tiring to read. */
+.preview-body > * { margin: 0 auto var(--space-3); max-width: 66ch; }
+/* docx-like rhythm: the gap below each question matches the preview's own top
+   padding (space-5) so the spacing reads even top-to-bottom; a small gap between
+   the question text and its answer block; and no gap between the answer/zachet/
+   comment/source/author lines (they read as one tight block). */
+.pv-q { margin-bottom: var(--space-5); }
+/* per-card ✏️ jump-to-editor button, rendered inline as a small bordered pill
+   right before the block's leading label ("✏️ Вопрос 1.") so it stays clearly
+   separated from the text and never covers it — including on mobile, where an
+   overlaid pencil used to obscure the question. */
+.pv-edit {
+  display: inline-block;
+  border: 1px solid var(--action-border);
+  background: var(--action-bg);
+  border-radius: var(--radius-sm);
+  padding: 0.05em 0.35em;
+  margin-right: 0.4em;
+  font-size: 0.8em;
+  line-height: 1.4;
+  cursor: var(--cursor-action);
+  vertical-align: middle;
+}
+.pv-edit:hover, .pv-edit:focus-visible { border-color: var(--text); }
+/* preserve authored line breaks inside multi-line question/answer/meta text */
+.pv-q-text, .pv-field, .pv-meta, .pv-list-item { white-space: pre-wrap; }
+.pv-q-text { margin-bottom: var(--space-2); }
+.pv-field { margin-bottom: 0; }
+.pv-label { font-weight: var(--fw-bold); }
+/* numbered list (sources, blitz/duplet questions & answers): hanging "N." — the
+   numbers are plain weight (only field labels are bold). */
+.pv-list { margin-top: var(--space-1); }
+.pv-list-item { padding-left: 1.6em; text-indent: -1.6em; margin-bottom: var(--space-0-5); }
+.pv-list-num { font-weight: var(--fw-normal); }
+.pv-handout { color: var(--muted); }
+.pv-heading { font-size: var(--text-xl); font-weight: var(--fw-bold); margin: var(--space-5) 0 var(--space-3); }
+.pv-section { font-size: var(--text-lg); font-weight: var(--fw-semibold); margin: var(--space-4) 0 var(--space-2); }
+.pv-test { color: var(--muted); font-style: italic; }
+.pv-testers { white-space: pre-wrap; line-height: 1.7; font-size: var(--text-base); }
+.pv-empty { color: var(--muted); }
+/* break long URLs at any character so they never force horizontal scroll on
+   narrow screens (links are often unbreakable runs with no spaces). */
+.pv-link { color: var(--blue, var(--text)); overflow-wrap: anywhere; word-break: break-word; }
+.pv-sc { font-variant: small-caps; }
+.pv-pagebreak { border: 0; border-top: 1px dashed var(--border); margin: var(--space-4) 0; }
+.pv-img {
+  display: block;
+  max-width: min(100%, 480px);
+  max-height: 12em;
+  width: auto;
+  height: auto;
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-sm);
+}
+.pv-img-missing { color: var(--muted); font-style: italic; }
+
+/* Touch / small screens: shrink the type to fit more questions on screen (the
+   same densification ~/dope applies on mobile). */
+@media (max-width: 760px) {
+  /* tighter board header so more of the board is visible on phones */
+  .board-page { --xy-header-h: 48px; }
+  .board-page .host-top { height: 48px; padding: 6px 10px; gap: 6px; }
+  .board-page h1 { font-size: var(--text-lg); }
+  .board-page .action-icon { width: 30px; height: 30px; font-size: 15px; }
+
+  .board-main { padding: var(--space-2) var(--space-2); }
+  .klist { flex-basis: 86vw; max-width: 320px; }
+  .klist-title { font-size: var(--text-sm); }
+  .kcard { padding: var(--space-1) var(--space-2); }
+  .kcard-title { font-size: var(--text-xs); }
+  /* keep the label pills off the card's top edge */
+  .kcard-labels { margin-top: var(--space-1); }
+  .card-detail { padding: var(--space-4) var(--space-3); }
+  .preview-head { padding: var(--space-3) var(--space-4); }
+  .preview-body { padding: var(--space-4) var(--space-4); font-size: var(--text-sm); }
+  .card-desc { font-size: var(--text-xs-plus); min-height: 200px; }
+  .card-section-label { margin-top: var(--space-2); }
+  .tl-comment { font-size: var(--text-xs-plus); }
+  .label-pick { font-size: var(--text-2xs); }
+}
+
+/* ЧГК play timer — floats bottom-right, above the kanban/card modal (z 50) but
+   below the fixed header (z 60). Toggled by the ⏰ header button (timer.js). */
+.timer-overlay {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 240px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.timer-overlay[hidden] { display: none; }
+.timer-row, .timer-custom { display: flex; }
+.timer-preset, .timer-custom-input { width: 100%; }
+.timer-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+}
+.timer-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-bold);
+  font-size: 56px;
+  line-height: 1;
+  color: var(--text-strong);
+}
+.timer-time.timer-urgent { color: var(--danger); }
+.timer-time.timer-answer { color: var(--accent); }
+.timer-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  min-height: 1em;
+}
+.timer-actions { display: flex; gap: var(--space-2); justify-content: center; }
+.timer-actions .btn { flex: 1; }
+
+@media (max-width: 760px) {
+  .timer-overlay { right: var(--space-2); bottom: var(--space-2); width: min(220px, calc(100vw - 2 * var(--space-2))); padding: var(--space-2); }
+  .timer-time { font-size: 44px; }
+  .timer-display { padding: var(--space-1) 0; }
+  /* let the three control buttons shrink to share the row instead of overflowing
+     the box (flex items default to min-width:auto = their text width) */
+  .timer-actions { gap: var(--space-1); }
+  .timer-actions .btn { min-width: 0; padding-left: var(--space-2); padding-right: var(--space-2); }
+}
+
+/* API tokens page (tokens.html) — built on the auth/sheet layout above.
+   .auth-subhead (the subhead primitive) lives in core.css. */
+.token-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-sm);
+  word-break: break-all;
+  user-select: all;
+}
+.token-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.token-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.token-row-inactive { opacity: 0.55; }
+.token-row-main {
+  grid-column: 1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.token-row-label { font-weight: var(--fw-bold); color: var(--text-strong); }
+.token-row-status { font-size: var(--text-xs); color: var(--muted); }
+.token-row-meta {
+  grid-column: 1;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.token-revoke {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  white-space: nowrap;
+}
+
+/* card detail: 3-view switch (Просмотр / Поля / Текст) — the tabs/tab/tabpanel
+   primitives; base .card-view-tabs/.card-view-tab/.card-view live in core.css. */
+/* preview view inside the card: a bounded, scrollable docx-style render */
+.card-preview-screen { display: inline-flex; align-items: center; gap: var(--space-1); cursor: var(--cursor-action); margin-bottom: var(--space-2); }
+.card-preview-body {
+  padding: var(--space-3) var(--space-4);
+  background: var(--page);
+  border-radius: var(--radius-md);
+  max-height: 52vh;
+  overflow-y: auto;
+  cursor: text;
+}
+.card-preview-body > * { max-width: none; }
+/* The card-detail preview shows a single question, so the inter-question
+   bottom margin (.pv-q) is just a trailing gap — drop it; the container's own
+   padding already gives symmetric top/bottom breathing room. */
+.card-preview-body .pv-q { margin-bottom: 0; }
+
+/* ── structured fields (Поля) ─────────────────────────────────────────────── */
+.card-fields { display: flex; flex-direction: column; gap: var(--space-2); }
+.fld { display: flex; flex-direction: column; }
+.fld-add {
+  align-self: flex-start;
+  border: 1px dashed var(--border);
+  background: var(--page);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-bold);
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  cursor: var(--cursor-action);
+}
+.fld-add:hover { color: var(--text); border-color: var(--muted); }
+.fld-muted .fld-add { opacity: 0.75; }
+.fld-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.fld-label { font-size: var(--text-xs); font-weight: var(--fw-bold); color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.fld-rm, .fld-row-rm, .fld-tag-rm {
+  border: none; background: transparent; color: var(--muted);
+  font-size: var(--text-base); line-height: 1; cursor: var(--cursor-action);
+  padding: 0 var(--space-1);
+}
+.fld-rm:hover, .fld-row-rm:hover, .fld-tag-rm:hover { color: var(--red); }
+.fld-body { margin-top: var(--space-1); }
+.fld-input { width: 100%; }
+textarea.fld-input { min-height: 3em; }
+.fld-rows { display: flex; flex-direction: column; gap: var(--space-1); }
+.fld-row { display: flex; align-items: center; gap: var(--space-1); }
+.fld-row-input { flex: 1; }
+.fld-add-row { align-self: flex-start; font-size: var(--text-sm); margin-top: var(--space-1); cursor: var(--cursor-action); padding: var(--space-1) var(--space-2); width: auto; }
+/* handout text/image toggle */
+.seg-toggle { display: inline-flex; gap: 2px; background: var(--page); border-radius: var(--radius-sm); padding: 2px; margin-bottom: var(--space-1); }
+.seg-btn {
+  border: none; background: transparent; color: var(--muted); font: inherit;
+  font-size: var(--text-sm); padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm); cursor: var(--cursor-action);
+}
+.seg-btn.active { background: var(--surface); color: var(--text-strong); box-shadow: var(--shadow-sm); }
+/* test-card tester rows: игрок/команда toggle sits inline with the name input */
+.tester-seg { margin-bottom: 0; flex: none; }
+/* author tags */
+.fld-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
+.fld-tag {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  background: var(--page); border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px var(--space-2); font-size: var(--text-sm);
+}
+
+/* ── handouts generation modal ────────────────────────────────────────────── */
+.handouts-doc { width: min(1100px, 100%); }
+.handouts-body { flex: 1; display: flex; min-height: 0; }
+.handouts-pane { flex: 1 1 50%; display: flex; flex-direction: column; min-width: 0; padding: var(--space-4) var(--space-5); overflow-y: auto; }
+.handouts-src { border-right: 1px solid var(--border); }
+.handouts-textarea { flex: 1; min-height: 320px; width: 100%; }
+.handouts-pdf { flex: 1; margin-top: var(--space-2); background: var(--page); border-radius: var(--radius-md); min-height: 320px; display: flex; }
+.handouts-pdf-frame { flex: 1; width: 100%; height: 100%; border: none; border-radius: var(--radius-md); }
+
+@media (max-width: 720px) {
+  .handouts-body { flex-direction: column; }
+  .handouts-src { border-right: none; border-bottom: 1px solid var(--border); }
+  .card-preview-body { max-height: 40vh; }
+}
+
+/* ── import verification modal ─────────────────────────────────────────────────
+   Reuses the handouts split-pane shell: parsed 4s source on the left, the same
+   preview the list preview renders on the right. */
+.import-doc { width: min(1100px, 100%); }
+.import-textarea { font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.5; }
+.import-count { color: var(--muted); font-size: var(--text-sm); white-space: nowrap; }
+.import-preview > * { margin: 0 0 var(--space-3); }
+
+/* ── sizes modal (list width / card height) ───────────────────────────────── */
+.sizes-modal { width: min(420px, 100%); text-align: left; }
+/* The .sizes-row/.sizes-value/.sizes-hint slider rows are the sliderrow
+   primitive; their base rules live in core.css. */
+
+/* ── lists management modal ────────────────────────────────────────────────── */
+.lists-manage { width: min(560px, 100%); text-align: left; }
+.lists-move-pos { width: 4.5rem; }
+.lists-manage-rows {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  max-height: 55vh; overflow-y: auto; padding: var(--space-1);
+}
+.lm-unit { border-radius: var(--radius-md); background: var(--structure); }
+.lm-unit.dragging { opacity: 0.5; }
+.lm-group { border: 2px solid var(--blue-strong); background: var(--accent-soft); padding: var(--space-1); }
+.lm-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); }
+.lm-check { display: inline-flex; align-items: center; }
+.lm-pos { color: var(--muted); font-size: var(--text-sm); min-width: 2.2rem; }
+.lm-handle { color: var(--muted); cursor: grab; font-size: var(--text-lg); line-height: 1; }
+.lm-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-group-title { font-weight: var(--fw-bold); color: var(--blue-strong); white-space: normal; }
+.lm-icon {
+  border: none; background: transparent; color: var(--muted);
+  cursor: var(--cursor-action); font-size: var(--text-sm); padding: 0 var(--space-1);
+}
+.lm-icon:hover { color: var(--text); }
+.lm-move { display: flex; align-items: center; gap: var(--space-1); }
+.lm-move-pos { width: 3.5rem; }
+.lm-members {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-2) calc(var(--space-5) + var(--space-2));
+}
+.lm-member { display: flex; align-items: center; padding: var(--space-0-5) var(--space-2); border-left: 2px solid var(--blue-strong); }
+
+/* PWA html/body overrides — xy layer only (dope must NOT inherit these).
+   iOS: don't bump font sizes on rotate, don't rubber-band/zoom; the app is a
+   fixed shell whose inner sections scroll (see menu.js gesture guards). */
+html,
+body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}

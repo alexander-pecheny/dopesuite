@@ -1,0 +1,422 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { xyChgk } from "../web/assets/static/chgk.js";
+
+const { questionText, blockText, numberQuestionCards, parseBlocks, numberDirective,
+  removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem } = xyChgk;
+
+test("question text strips the leading '? ' marker", () => {
+  const desc = "? В каком году?\n! 1799\n^ источник";
+  assert.equal(questionText(desc), "В каком году?");
+});
+
+test("question without a marker falls back to the whole text", () => {
+  assert.equal(questionText("Просто текст вопроса"), "Просто текст вопроса");
+});
+
+test("multi-line question keeps continuation lines", () => {
+  const desc = "? Первая строка\nвторая строка\n! ответ";
+  assert.equal(questionText(desc), "Первая строка\nвторая строка");
+});
+
+test("meta and heading blocks are extracted", () => {
+  assert.equal(blockText("# Редактор пакета", "meta"), "Редактор пакета");
+  assert.equal(blockText("### Тур 1", "heading"), "Тур 1");
+});
+
+test("number directives: № explicit and №№ base", () => {
+  assert.deepEqual(numberDirective(parseBlocks("№ 5\n? q")), { value: "5", base: false });
+  assert.deepEqual(numberDirective(parseBlocks("№№ 10\n? q")), { value: "10", base: true });
+});
+
+test("auto-numbers questions 1,2,3 in order", () => {
+  const cards = [
+    { kind: "question", desc: "? a" },
+    { kind: "question", desc: "? b" },
+    { kind: "question", desc: "? c" },
+  ];
+  assert.deepEqual(numberQuestionCards(cards), ["1", "2", "3"]);
+});
+
+test("headings and meta do not consume numbers", () => {
+  const cards = [
+    { kind: "heading", desc: "### Тур 1" },
+    { kind: "question", desc: "? a" },
+    { kind: "meta", desc: "# инфо" },
+    { kind: "question", desc: "? b" },
+  ];
+  assert.deepEqual(numberQuestionCards(cards), [null, "1", null, "2"]);
+});
+
+test("№№ resets the running base and subsequent questions continue", () => {
+  const cards = [
+    { kind: "question", desc: "№№ 4\n? a" },
+    { kind: "question", desc: "? b" },
+    { kind: "question", desc: "? c" },
+  ];
+  assert.deepEqual(numberQuestionCards(cards), ["4", "5", "6"]);
+});
+
+test("explicit № overrides but a zero number does not advance the counter", () => {
+  const cards = [
+    { kind: "question", desc: "№ 0\n? warmup" },
+    { kind: "question", desc: "? first real" },
+    { kind: "question", desc: "№ 7\n? seven" },
+    { kind: "question", desc: "? eight" },
+  ];
+  assert.deepEqual(numberQuestionCards(cards), ["0", "1", "7", "8"]);
+});
+
+// ── screen-mode transforms ──────────────────────────────────────────────────
+test("removeAccents strips U+0301 stress marks", () => {
+  assert.equal(removeAccents("при́вет мо́ре"), "привет море");
+});
+
+test("removeAccents keeps accents inside handout brackets", () => {
+  assert.equal(
+    removeAccents("сло́во [Раздаточный материал: за́мок]"),
+    "слово [Раздаточный материал: за́мок]",
+  );
+});
+
+test("removeSquareBrackets drops host notes but keeps handouts", () => {
+  assert.equal(
+    removeSquareBrackets("текст [пауза для ведущего] дальше"),
+    "текст дальше",
+  );
+  assert.equal(
+    removeSquareBrackets("вопрос [Раздаточный материал: фото] и всё"),
+    "вопрос [Раздаточный материал: фото] и всё",
+  );
+});
+
+test("removeSquareBrackets unescapes literal brackets", () => {
+  assert.equal(removeSquareBrackets("массив a\\[i\\]"), "массив a[i]");
+});
+
+test("screenText applies both transforms", () => {
+  assert.equal(
+    screenText("Назови́те [для ведущего: не торопясь] го́род."),
+    "Назовите город.",
+  );
+});
+
+test("shareText prefixes the question number and reproduces handouts", () => {
+  const desc = "? Что э́то? [прочитать дважды]\n! ответ\n^ источник";
+  assert.equal(shareText(desc, "5"), "Вопрос 5. Что это?");
+
+  const withHandout = "> Схема ме́тро\n? Что на схеме?\n! круг";
+  assert.equal(
+    shareText(withHandout, "3"),
+    "Раздаточный материал:\nСхема метро\n\nВопрос 3. Что на схеме?",
+  );
+});
+
+test("numberQuestionCards: №№ on a heading card resets the base for following questions", () => {
+  const cards = [
+    { kind: "question", desc: "? a" },
+    { kind: "heading", desc: "### Тур 2\n№№ 10" },
+    { kind: "question", desc: "? b" },
+    { kind: "question", desc: "? c" },
+  ];
+  assert.deepEqual(numberQuestionCards(cards), ["1", null, "10", "11"]);
+});
+
+test("numberQuestionCards: №№ on a meta card resets, but an 'other' card is ignored", () => {
+  const cards = [
+    { kind: "meta", desc: "# редактор\n№№ 7" },
+    { kind: "question", desc: "? a" },
+    { kind: "other", desc: "№№ 99" },
+    { kind: "question", desc: "? b" },
+  ];
+  assert.deepEqual(numberQuestionCards(cards), [null, "7", null, "8"]);
+});
+
+test("screenText resolves (LINEBREAK) to a newline", () => {
+  assert.equal(screenText("До(LINEBREAK)после"), "До\nпосле");
+});
+
+test("screenText keeps the for_screen side of a (screen …) directive", () => {
+  assert.equal(screenText("(screen печать|экран)"), "экран");
+  assert.equal(screenText("текст (screen А|Б) хвост"), "текст Б хвост");
+});
+
+test("screenText strips inline formatting markers but keeps the text", () => {
+  assert.equal(screenText("_курсив_ и __жирный__"), "курсив и жирный");
+  assert.equal(screenText("~зачёркнутый~ текст"), "зачёркнутый текст");
+});
+
+test("screenText does not corrupt underscores inside URLs", () => {
+  assert.equal(
+    screenText("см. http://example.com/a_b_c дальше"),
+    "см. http://example.com/a_b_c дальше",
+  );
+});
+
+test("screenText backtick adds a combining stress accent (chgksuite applies it after accent removal, so it survives)", () => {
+  assert.equal(screenText("сл`ово"), "сло́во");
+});
+
+test("screenText drops (img …) and (PAGEBREAK) directives", () => {
+  assert.equal(screenText("текст (PAGEBREAK)ещё").includes("PAGEBREAK"), false);
+  assert.equal(screenText("(img foo.jpg)подпись").includes("img"), false);
+});
+
+test("parse4sElem tags the inline directives", () => {
+  const runs = parse4sElem("a (LINEBREAK)b (screen p|s)");
+  const types = runs.map((r) => r[0]);
+  assert.ok(types.includes("linebreak"));
+  assert.ok(types.includes("screen"));
+  const screenRun = runs.find((r) => r[0] === "screen");
+  assert.deepEqual(screenRun[1], { for_print: "p", for_screen: "s" });
+});
+
+test("printRuns keeps host-only square brackets and accents (print mode)", () => {
+  const runs = xyChgk.printRuns("текст [реплика ведущего] сл`ово");
+  const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
+  assert.ok(flat.includes("[реплика ведущего]"), "host brackets preserved");
+  assert.ok(flat.includes("сло́во"), "backtick stress resolved");
+});
+
+test("printRuns unescapes \\[ and \\] to literal brackets", () => {
+  const runs = xyChgk.printRuns("\\[не директива\\]");
+  const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
+  assert.equal(flat, "[не директива]");
+});
+
+test("printRuns tags an (img …) run with its filename as the last token", () => {
+  const runs = xyChgk.printRuns("(img w=300 cat.jpg)");
+  const img = runs.find((r) => r[0] === "img");
+  assert.ok(img, "img run present");
+  assert.equal(String(img[1]).trim().split(/\s+/).pop(), "cat.jpg");
+});
+
+test("applyOverride peels a !!Label override (~ → space) off a field value", () => {
+  assert.deepEqual(xyChgk.applyOverride("!!Авторка Арина Далецкая"),
+    { label: "Авторка", text: "Арина Далецкая" });
+  assert.deepEqual(xyChgk.applyOverride("!!Верный~ответ Москва"),
+    { label: "Верный ответ", text: "Москва" });
+});
+
+test("applyOverride leaves a normal value untouched", () => {
+  assert.deepEqual(xyChgk.applyOverride("Арина Далецкая"), { label: null, text: "Арина Далецкая" });
+  assert.deepEqual(xyChgk.applyOverride("- один\n- два"), { label: null, text: "- один\n- два" });
+});
+
+test("splitList turns '- ' lines into numbered items (with preamble)", () => {
+  assert.deepEqual(xyChgk.splitList("см.:\n- источник один\n- источник два"),
+    { preamble: "см.:", items: ["источник один", "источник два"] });
+});
+
+test("splitList: a single '- ' item is not a list (marker stripped)", () => {
+  assert.deepEqual(xyChgk.splitList("- единственный"), { preamble: "единственный", items: null });
+});
+
+test("splitList: no dash → plain text", () => {
+  assert.deepEqual(xyChgk.splitList("обычный текст"), { preamble: "обычный текст", items: null });
+});
+
+test("splitList handles a blitz question (no preamble, multiple items)", () => {
+  const r = xyChgk.splitList("- Первый вопрос?\n- Второй вопрос?\n- Третий вопрос?");
+  assert.equal(r.preamble, "");
+  assert.deepEqual(r.items, ["Первый вопрос?", "Второй вопрос?", "Третий вопрос?"]);
+});
+
+test("renderRuns screen mode strips host brackets and accents", () => {
+  const runs = xyChgk.renderRuns("текст [ведущему] сл́ово", { accents: true, brackets: true });
+  const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
+  assert.ok(!flat.includes("["), "host brackets removed");
+  assert.ok(!flat.includes("́"), "accent removed");
+});
+
+test("renderRuns answer-style (accents only) keeps brackets", () => {
+  const runs = xyChgk.renderRuns("Москва [и область]", { accents: true, brackets: false });
+  const flat = runs.map((r) => (typeof r[1] === "string" ? r[1] : "")).join("");
+  assert.ok(flat.includes("[и область]"), "brackets kept for answer/zachet");
+});
+
+test("replaceNoBreak glues short prepositions and particles with NBSP", () => {
+  assert.equal(xyChgk.replaceNoBreak("в лесу"), "в лесу");
+  assert.equal(xyChgk.replaceNoBreak("сделал бы"), "сделал бы");
+  assert.equal(xyChgk.replaceNoBreak("то да сё"), "то да сё");
+});
+
+test("replaceNoBreak uses a non-breaking hyphen in short hyphenated words", () => {
+  assert.equal(xyChgk.replaceNoBreak("из-за"), "из‑за");
+  // a stray spaced hyphen must NOT turn every hyphen non-breaking
+  assert.equal(xyChgk.replaceNoBreak("кто - то"), "кто - то");
+});
+
+test("replaceNoBreak leaves URLs untouched", () => {
+  assert.equal(xyChgk.replaceNoBreak("см. http://a.com/x_y и тут"), "см. http://a.com/x_y и тут");
+});
+
+test("fixTrelloFormatting collapses double line breaks and unescapes markers", () => {
+  const raw = "\\### Тур 1\n\n? Вопрос\n\n\\@ Автор\n\n  отступ\n\\- пункт";
+  const out = xyChgk.fixTrelloFormatting(raw);
+  assert.equal(out, "### Тур 1\n? Вопрос\n@ Автор\nотступ\n- пункт");
+});
+
+test("fixTrelloFormatting collapses Trello smart-link [url](url) to a bare url", () => {
+  const raw = "см. [https://example.com/a_b](https://example.com/a_b) тут";
+  assert.equal(xyChgk.fixTrelloFormatting(raw), "см. https://example.com/a_b тут");
+});
+
+test("fixTrelloFormatting keeps real markdown links (text != url) intact", () => {
+  const raw = "[пример](https://example.com)";
+  assert.equal(xyChgk.fixTrelloFormatting(raw), "[пример](https://example.com)");
+});
+
+test("fixTrelloFormatting strips code fences", () => {
+  assert.equal(xyChgk.fixTrelloFormatting("```\n? q\n```"), "\n? q\n");
+});
+
+// ── structured fields ────────────────────────────────────────────────────────
+const { splitFields, composeFields, generateHndt, parseHndtMetaByQuestion } = xyChgk;
+
+test("splitFields separates known question fields", () => {
+  const desc = "№№ 5\n> (img map.png)\n? Что на схеме?\n! круг\n= окружность\n!= квадрат\n/ комментарий\n^ книга\n@ Иванов, Пётр";
+  const f = splitFields(desc);
+  assert.equal(f.preMarkup, "№№ 5");
+  assert.deepEqual(f.handout, { kind: "image", name: "map.png" });
+  assert.equal(f.question, "Что на схеме?");
+  assert.equal(f.answer, "круг");
+  assert.equal(f.zachet, "окружность");
+  assert.equal(f.nezachet, "квадрат");
+  assert.equal(f.comment, "комментарий");
+  assert.deepEqual(f.sources, ["книга"]);
+  assert.deepEqual(f.authors, ["Иванов", "Пётр"]);
+});
+
+test("splitFields distinguishes absent vs present-empty fields", () => {
+  const f = splitFields("? Вопрос\n!\n="); // answer + zachet present but empty; others absent
+  assert.equal(f.answer, "");
+  assert.equal(f.zachet, "");
+  assert.equal(f.nezachet, null);
+  assert.equal(f.comment, null);
+  assert.equal(f.sources, null);
+  assert.equal(f.authors, null);
+  assert.equal(f.handout, null);
+});
+
+test("composeFields round-trips a structured question", () => {
+  const desc = "> Схема\n? Что на схеме?\n! круг\n^ книга\n@ Иванов";
+  assert.equal(composeFields(splitFields(desc)), desc);
+});
+
+test("composeFields keeps a bare marker for present-empty fields", () => {
+  const f = splitFields("? Вопрос\n!");
+  assert.equal(composeFields(f), "? Вопрос\n!");
+});
+
+test("source list of several lines composes a '- ' list", () => {
+  const f = splitFields("? Q\n^\n- один\n- два");
+  assert.deepEqual(f.sources, ["один", "два"]);
+  assert.equal(composeFields(f), "? Q\n^\n- один\n- два");
+});
+
+test("unmodelled blocks survive as extra", () => {
+  const f = splitFields("? Q\n! A\n## секция");
+  assert.equal(f.extra, "## секция");
+  assert.equal(composeFields(f), "? Q\n! A\n## секция");
+});
+
+// ── handout generation ───────────────────────────────────────────────────────
+test("generateHndt emits a block per question with a handout", () => {
+  const cards = [
+    { id: 1, kind: "question", desc: "> Текст раздатки\n? Вопрос 1\n! ответ" },
+    { id: 2, kind: "question", desc: "? Без раздатки\n! ответ" },
+    { id: 3, kind: "question", desc: "> (img foto.png)\n? Что тут?\n! х" },
+  ];
+  const numbers = ["1", "2", "3"];
+  const out = generateHndt(cards, numbers, {});
+  const blocks = out.split("\n---\n");
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0], "for_question: 1\ncolumns: 3\n\nТекст раздатки");
+  assert.equal(blocks[1], "for_question: 3\ncolumns: 3\n\nimage: foto.png");
+});
+
+test("generateHndt uses saved per-question settings", () => {
+  const cards = [{ id: 7, kind: "question", desc: "> Раздатка\n? Q\n! a" }];
+  const out = generateHndt(cards, ["4"], { 7: "columns: 2\nrows: 5" });
+  assert.equal(out, "for_question: 4\ncolumns: 2\nrows: 5\n\nРаздатка");
+});
+
+test("generateHndt reads a legacy inline handout bracket", () => {
+  const cards = [{ id: 1, kind: "question", desc: "? Текст [Раздаточный материал: листок] вопроса\n! a" }];
+  const out = generateHndt(cards, ["1"], {});
+  assert.equal(out, "for_question: 1\ncolumns: 3\n\nлисток");
+});
+
+test("parseHndtMetaByQuestion strips content, keeps settings by question", () => {
+  const hndt = "for_question: 1\ncolumns: 2\nrows: 3\n\nтекст\n---\nfor_question: 4\ncolumns: 3\n\nimage: a.png";
+  const m = parseHndtMetaByQuestion(hndt);
+  assert.equal(m["1"], "columns: 2\nrows: 3");
+  assert.equal(m["4"], "columns: 3");
+});
+
+// ---- test cards: tester lists ----
+const { parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText } = xyChgk;
+
+test("parseTestCard reads the new {testers} shape", () => {
+  const desc = JSON.stringify({ datetime: "2026-06-29 12:00", title: "Алиев", testers: [
+    { text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }] });
+  const m = parseTestCard(desc);
+  assert.equal(m.datetime, "2026-06-29 12:00");
+  assert.equal(m.title, "Алиев");
+  assert.deepEqual(m.testers, [
+    { text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }]);
+});
+
+test("parseTestCard migrates legacy {players:[ids]} to player strings", () => {
+  const m = parseTestCard(JSON.stringify({ datetime: "d", players: [12, 34] }));
+  assert.deepEqual(m.testers, [
+    { text: "12", type: "player" }, { text: "34", type: "player" }]);
+});
+
+test("parseTestCard tolerates garbage and bad types", () => {
+  assert.deepEqual(parseTestCard("not json").testers, []);
+  const m = parseTestCard(JSON.stringify({ testers: [{ text: "X", type: "weird" }, null, { text: 5 }] }));
+  assert.deepEqual(m.testers, [{ text: "X", type: "player" }, { text: "5", type: "player" }]);
+});
+
+test("testersToText / testersFromText round-trip", () => {
+  const testers = [{ text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }];
+  assert.equal(testersToText(testers), "- Александр Иванов\n-T Ромашка");
+  assert.deepEqual(testersFromText("- Александр Иванов\n-T Ромашка"), testers);
+});
+
+test("testersFromText skips blank lines and trims, tolerates missing space", () => {
+  assert.deepEqual(testersFromText("\n-  Имя  \n\n-T  Тим \n"), [
+    { text: "Имя", type: "player" }, { text: "Тим", type: "team" }]);
+  // a name starting with T is still a player (the -T marker needs no inner letter)
+  assert.deepEqual(testersFromText("- Tom"), [{ text: "Tom", type: "player" }]);
+});
+
+test("serializeTestCard drops blank rows and keeps datetime/title", () => {
+  const json = serializeTestCard({ datetime: "d", title: "t", testers: [
+    { text: " A ", type: "player" }, { text: "", type: "team" }] });
+  assert.deepEqual(JSON.parse(json), { datetime: "d", title: "t", testers: [{ text: "A", type: "player" }] });
+});
+
+test("testerCopyText sorts players by surname then given, teams alphabetically", () => {
+  const testers = [
+    { text: "Борис Иванов", type: "player" },
+    { text: "Александр Иванов", type: "player" },
+    { text: "Яна Архипова", type: "player" },
+    { text: "Ромашка", type: "team" },
+    { text: "Авангард", type: "team" },
+  ];
+  assert.equal(testerCopyText(testers),
+    "Вопросы тестировали: Яна Архипова, Александр Иванов, Борис Иванов" +
+    ", а также команды: Авангард, Ромашка");
+});
+
+test("testerCopyText dedupes and handles players-only / teams-only / empty", () => {
+  assert.equal(testerCopyText([
+    { text: "Иван Иванов", type: "player" }, { text: "Иван Иванов", type: "player" }]),
+    "Вопросы тестировали: Иван Иванов");
+  assert.equal(testerCopyText([{ text: "Альфа", type: "team" }]),
+    "Вопросы тестировали команды: Альфа");
+  assert.equal(testerCopyText([]), "");
+});

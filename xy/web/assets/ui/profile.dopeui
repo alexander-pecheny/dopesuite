@@ -1,0 +1,29 @@
+page title="Профиль · xy" kind="sheet" scripts="profile.js"
+  topbar title="Профиль"
+    iconlink href="/" label="Доски" "←"
+
+  section
+    hint "Вы вошли как " (strong id="whoami" "…") "."
+
+  section id="usernameSection" hidden
+    hint "Задайте логин (один раз)."
+    form id="usernameForm"
+      textfield id="usernameValue" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required grow
+      button submit "Сохранить"
+    message id="usernameMessage"
+
+  section
+    hint "Пароль для входа на сайт."
+    form id="passwordForm" dir="col"
+      password id="currentPassword" placeholder="Текущий пароль (если установлен)" autocomplete="current-password"
+      password id="newPassword" placeholder="Новый пароль" autocomplete="new-password" required
+      password id="confirmPassword" placeholder="Повторите пароль" autocomplete="new-password" required
+      button submit "Сохранить пароль"
+    message id="passwordMessage"
+
+  section
+    hint "API-токены для доступа через Trello-совместимый API (chgksuite)."
+    button kind="ghost" href="/profile/tokens" "API-токены"
+
+  section
+    button kind="ghost" id="logoutBtn" "Выйти"

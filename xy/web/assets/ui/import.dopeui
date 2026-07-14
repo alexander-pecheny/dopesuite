@@ -1,0 +1,19 @@
+page title="Импорт из Trello · xy" kind="wide" scripts="import.js"
+  topbar title="Импорт из Trello"
+    iconlink href="/" label="Все доски" "←"
+
+  form id="importForm" dir="col"
+    hint
+      "Экспортируйте доску из Trello (меню доски → «Печать, экспорт и общий доступ» →"
+      "«Экспортировать как JSON»), затем выберите сохранённый " (code ".json") "-файл ниже."
+      "Списки, оканчивающиеся на " (code "_tests") ", импортируются как тест-списки; зелёные"
+      "и красные метки тест-карточек распознаются автоматически."
+    textfield id="boardName" placeholder="Название доски (по умолчанию — из Trello)"
+    password id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required
+    hint "Пароль шифрует все данные доски. Запомните его — восстановить нельзя."
+    label for="trelloFile" "Файл доски Trello (.json)"
+    filefield id="trelloFile" accept=".json,application/json" required
+    row gap="sm" wrap
+      button submit id="importBtn" "Импортировать"
+      button kind="ghost" href="/" "Отмена"
+    message id="importMessage"

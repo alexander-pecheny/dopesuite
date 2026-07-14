@@ -1,0 +1,27 @@
+[
+  [
+    "Question",
+    {
+      "setcounter": "5",
+      "question": "Первый?",
+      "answer": "да",
+      "number": 5
+    }
+  ],
+  [
+    "Question",
+    {
+      "question": "Второй?",
+      "answer": "нет",
+      "number": 6
+    }
+  ],
+  [
+    "Question",
+    {
+      "number": "0",
+      "question": "Разминочный?",
+      "answer": "может быть"
+    }
+  ]
+]

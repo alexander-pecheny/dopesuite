@@ -1,0 +1,24 @@
+page title="API-токены · xy" kind="sheet" scripts="tokens.js"
+  topbar title="API-токены"
+    iconlink href="/profile" label="Профиль" "←"
+
+  section
+    hint
+      "Токен даёт доступ к доскам через Trello-совместимый API (например, для"
+      (code "chgksuite") "). Действует месяц. Данные приходят зашифрованными —"
+      "расшифровываются локально паролем доски."
+    form id="createForm"
+      textfield id="tokenLabel" placeholder="Название (например, «chgksuite на ноутбуке»)" maxlength="100" spellcheck="false" grow
+      button submit "Создать токен"
+    message id="createMessage"
+
+  section id="newTokenSection" hidden
+    hint "Скопируйте токен сейчас — позже он не будет показан:"
+    row gap="sm" align="center" wrap
+      mount id="newTokenValue" kind="token-value"
+      button kind="ghost" id="copyTokenBtn" "Скопировать"
+
+  section
+    subhead "Активные и прошлые токены"
+    mount id="tokenList" kind="token-list"
+    hint id="emptyHint" hidden "Токенов пока нет."
