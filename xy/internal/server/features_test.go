@@ -212,6 +212,62 @@ func TestExportDocx(t *testing.T) {
 	}
 }
 
+// TestExportPDF drives the PDF export with the same body the docx export takes:
+// the 4s source reaches typst as a typst document (with the question in it), the
+// referenced image comes along, and the response is served as a PDF download.
+// typst itself is stubbed — the layout is typstdoc's business (and its tests');
+// this is about the HTTP plumbing.
+func TestExportPDF(t *testing.T) {
+	ts, srv := newTestServer(t)
+	fake := stubTypst(t, srv)
+	c := registerUser(t, srv, ts, 770201, "exppdf")
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	_ = mw.WriteField("source", "? Что на картинке? (img pic.png)\n! кот\n@ Автор\n")
+	_ = mw.WriteField("filename", "Тур 1")
+	fw, _ := mw.CreateFormFile("img", "pic.png")
+	fw.Write(tinyPNG(t))
+	mw.Close()
+
+	req, _ := http.NewRequest("POST", ts.URL+"/api/export/pdf", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	for _, ck := range c.jar {
+		req.AddCookie(ck)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustStatus(t, resp, 200)
+	defer resp.Body.Close()
+	body := new(bytes.Buffer)
+	body.ReadFrom(resp.Body)
+
+	if ct := resp.Header.Get("Content-Type"); ct != "application/pdf" {
+		t.Errorf("Content-Type = %q, want application/pdf", ct)
+	}
+	if cd := resp.Header.Get("Content-Disposition"); !strings.Contains(cd, ".pdf") {
+		t.Errorf("Content-Disposition = %q, want a .pdf attachment", cd)
+	}
+	if body.String() != "%PDF-fake" {
+		t.Errorf("body = %q, want typst's PDF passed through", body.String())
+	}
+	src := fake.source()
+	// The question arrives having been through the shared text pipeline: "что" and
+	// "на" glue to the word after them with a non-breaking space, as in the docx.
+	if !strings.Contains(src, "Что на картинке?") {
+		t.Errorf("the question never reached typst (or the nbsp pass changed):\n%s", src)
+	}
+	if !strings.Contains(src, "breakable: false") {
+		t.Errorf("the question is not a keep-together block:\n%s", src)
+	}
+	// The image is handed over under the generated name the source references.
+	if !fake.hasImage("img1.png") || !strings.Contains(src, `image("img1.png"`) {
+		t.Errorf("the referenced image did not reach typst (images: %v)\n%s", fake.images, src)
+	}
+}
+
 // tinyPNG returns a minimal valid PNG for image-embedding tests.
 func tinyPNG(t *testing.T) []byte {
 	t.Helper()

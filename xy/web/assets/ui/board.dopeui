@@ -65,7 +65,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     mount id="attachments" kind="attachments" data-edit-only
     row gap="sm" align="center" wrap data-edit-only
       filefield id="attachFile"
-      checkbox id="attachLossless" " без потерь"
+      checkbox id="attachCompress" " сжать (WebP)"
       button small id="attachUpload" "Загрузить"
 
     label data-edit-only "Переместить / копировать"
@@ -176,7 +176,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
   modal id="pasteOverlay" label="Вставить изображение" title="Вставить изображение"
     form id="pasteForm" dir="col"
       textfield id="pasteName" placeholder="Имя файла" autocomplete="off" required
-      checkbox id="pasteCompress" checked " сжать (WebP)"
+      checkbox id="pasteCompress" " сжать (WebP)"
       row gap="sm" wrap
         button submit "Сохранить"
         button kind="ghost" id="pasteCancel" "Отмена"

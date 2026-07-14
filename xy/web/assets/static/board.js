@@ -680,12 +680,14 @@ function renderList(list, precomputedNumbers) {
       { label: "↔ Переместить список…", onClick: () => openMoveList(list) },
       { label: "✏️ Переименовать список", onClick: () => renameList(list) },
     );
-    // docx export / handout generation are question-list features; skip them for
+    // Export / handout generation are question-list features; skip them for
     // test lists (whose cards hold tester sessions, not 4s questions).
     if (list.type !== "test") {
       const grouped = list.groupId != null;
+      const suffix = grouped ? " группы" : "";
       items.push(
-        { label: grouped ? "📄 Экспорт группы в docx" : "📄 Экспорт в docx", onClick: () => exportList(list) },
+        { label: `📄 Экспорт${suffix} в docx`, onClick: () => exportList(list, "docx") },
+        { label: `📕 Экспорт${suffix} в PDF`, onClick: () => exportList(list, "pdf") },
         { label: grouped ? "🧩 Генерация раздаток (вся группа)" : "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
       );
     }
@@ -1521,11 +1523,14 @@ async function attachImported(cardId, img) {
   } catch (_) { return false; }
 }
 
-// ---- export a list to .docx via chgksuite (PLAN §8) ----
+// ---- export a list to .docx / .pdf (PLAN §8) ----
 // Concatenate the list's card descriptions (in board order) into a chgksuite
 // "4s" document, gather any images referenced by `(img ...)` directives from the
-// cards' attachments, and hand both to the server, which composes the docx and
-// wipes the plaintext scratch files. See internal/server/export.go.
+// cards' attachments, and hand both to the server, which composes the file in
+// memory and streams it back. Both formats take the same request and render the
+// same document: the PDF is typeset by typst to look like the docx (same layout,
+// same non-breaking spaces/hyphens, same keep-together questions).
+// See internal/server/export.go.
 // exportScope resolves which lists a per-list action (export / handouts) covers:
 // a standalone list is just itself; a grouped list pulls in every (non-test) list
 // of its group, in board order, so the whole list_of_lists exports as one file.
@@ -1540,11 +1545,12 @@ function exportScope(list) {
   return { cards: lists.flatMap((l) => cardsOf(l.id)), title };
 }
 
-async function exportList(list) {
+async function exportList(list, format = "docx") {
+  const ext = format === "pdf" ? "pdf" : "docx";
   const scope = exportScope(list);
   const cards = scope.cards;
   if (!cards.length) { alert("В списке нет карточек."); return; }
-  if (!xySync.isOnline()) { alert("Экспорт в docx доступен только онлайн."); return; }
+  if (!xySync.isOnline()) { alert(`Экспорт в ${ext} доступен только онлайн.`); return; }
   setStatus("saving");
   try {
     const source = cards.map((c) => c.desc.trim()).filter(Boolean).join("\n\n") + "\n";
@@ -1564,11 +1570,11 @@ async function exportList(list) {
       setStatus("saved");
       return;
     }
-    const res = await fetch("/api/export/docx", { method: "POST", credentials: "same-origin", body: fd });
+    const res = await fetch("/api/export/" + ext, { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const a = el("a", { href: url, download: scope.title + ".docx" });
+    const a = el("a", { href: url, download: `${scope.title}.${ext}` });
     document.body.append(a);
     a.click();
     a.remove();
@@ -3553,7 +3559,8 @@ function humanSize(n) {
   return (n / 1024 / 1024).toFixed(1) + " MB";
 }
 
-// recompressToWebp re-encodes an image File to WebP q70 unless lossless.
+// recompressToWebp re-encodes an image File to WebP q70. Opt-in (see
+// uploadAttachment): the default is to store what the user uploaded.
 async function recompressToWebp(file) {
   if (!file.type.startsWith("image/")) return { bytes: new Uint8Array(await file.arrayBuffer()), mime: file.type || "application/octet-stream" };
   const bitmap = await createImageBitmap(file);
@@ -3567,9 +3574,11 @@ async function recompressToWebp(file) {
 }
 
 // uploadAttachment encrypts `file` under the saved name and POSTs it to the open
-// card. When lossless is false the bytes are re-encoded to WebP q70 first (the
-// same recompression the default file-picker upload applies). Online-only —
-// callers must gate on xySync.isOnline(). Refreshes the attachment list+timeline.
+// card. Attachments are stored AS UPLOADED by default; re-encoding to WebP q70
+// (lossless=false) is opt-in, because the exports no longer need it: docx and PDF
+// both re-encode each picture for the size it is drawn at (imgconv.ForExport), so
+// throwing away the original on the way in bought nothing but a worse original.
+// Online-only — callers must gate on xySync.isOnline(). Refreshes list+timeline.
 async function uploadAttachment(file, lossless, name) {
   if (!file || !openCardId) return;
   const msg = document.getElementById("cardMessage");
@@ -3597,17 +3606,17 @@ document.getElementById("attachUpload").addEventListener("click", async () => {
   const file = input.files[0];
   if (!file || !openCardId) return;
   if (!xySync.isOnline()) { document.getElementById("cardMessage").textContent = "Загрузка вложений доступна только онлайн."; return; }
-  const lossless = document.getElementById("attachLossless").checked;
+  const compress = document.getElementById("attachCompress").checked;
   try {
-    await uploadAttachment(file, lossless, file.name);
+    await uploadAttachment(file, !compress, file.name);
     input.value = "";
-    document.getElementById("attachLossless").checked = false;
+    document.getElementById("attachCompress").checked = false;
   } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
 });
 
 // ---- paste-to-attach ----
 // Pasting an image while a saved card is open captures it, then asks for a
-// filename + whether to WebP-compress (matching the default-upload checkbox)
+// filename + whether to WebP-compress (off by default, like the file picker)
 // before encrypting and uploading it as an attachment.
 let pastedFile = null;
 const pasteOverlay = document.getElementById("pasteOverlay");
@@ -3646,7 +3655,7 @@ document.addEventListener("paste", (e) => {
   // Clipboard images usually arrive as the generic "image.png"; offer a friendlier
   // default the user can overwrite.
   nameInput.value = (file.name && file.name !== "image.png") ? file.name : `вставка.${extFromMime(file.type)}`;
-  document.getElementById("pasteCompress").checked = true;
+  document.getElementById("pasteCompress").checked = false;
   pasteOverlay.hidden = false;
   nameInput.focus();
   nameInput.select();

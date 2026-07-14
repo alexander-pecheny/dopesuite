@@ -3,9 +3,9 @@
 // to a .docx by generating word/document.xml and repackaging chgksuite's
 // template.docx (reused verbatim for its named styles / page setup). Inline 4s
 // markup and the non-breaking-space gluing are ported from the validated xy
-// client logic (chgk.js). Images referenced by (img …) are re-encoded to PNG and
-// embedded (see images.go). See docx_test.go for parity checks against
-// chgksuite's own `compose docx` output.
+// client logic (chgk.js). Images referenced by (img …) are re-encoded for the size
+// Word draws them at and embedded (see images.go). See docx_test.go for parity
+// checks against chgksuite's own `compose docx` output.
 //
 // The run/paragraph emission deliberately mirrors python-docx (which chgksuite
 // drives): a run's text is split on "\n"/"\t" into <w:br/>/<w:tab/> *inside* one
@@ -23,9 +23,11 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 
 	"xy/internal/chgk/fsource"
+	"xy/internal/chgk/inline"
 )
 
 //go:embed assets/template.docx
@@ -132,11 +134,11 @@ func (p *para) leadEmpty() {
 // addContent appends a run for editorial text, mirroring set_docx_run_text:
 // backtick accents, optional nbsp gluing, then the non-breaking-hyphen swap.
 func (e *exporter) addContent(p *para, text, kind string, nbsp bool) {
-	text = backtickReplace(text)
+	text = inline.BacktickReplace(text)
 	if nbsp {
-		text = replaceNoBreak(text)
+		text = inline.ReplaceNoBreak(text)
 	}
-	text = strings.ReplaceAll(text, nbHyphen, noBreakHyphenRepl)
+	text = strings.ReplaceAll(text, inline.NBHyphen, noBreakHyphenRepl)
 	p.runs = append(p.runs, runXML(text, rPr(kind)))
 }
 
@@ -146,7 +148,7 @@ func (e *exporter) addHyperlink(p *para, urlText string) {
 	relID := fmt.Sprintf("rId%d", e.nextRel)
 	e.nextRel++
 	e.rels = append(e.rels, relItem{id: relID, typ: hyperlinkRelType, target: urlQuote(urlText), external: true})
-	text := strings.ReplaceAll(urlText, nbHyphen, noBreakHyphenRepl)
+	text := strings.ReplaceAll(urlText, inline.NBHyphen, noBreakHyphenRepl)
 	inner := runXML(text, `<w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>`)
 	p.runs = append(p.runs, `<w:hyperlink r:id="`+relID+`">`+inner+`</w:hyperlink>`)
 }
@@ -328,7 +330,7 @@ func (e *exporter) addValue(p *para, v any, nbsp bool) {
 
 // addRuns tokenizes inline 4s markup and appends one run per token.
 func (e *exporter) addRuns(p *para, text string, nbsp bool) {
-	for _, r := range parse4sElem(text) {
+	for _, r := range inline.Parse4sElem(text) {
 		switch r.Kind {
 		case "linebreak":
 			p.addRaw("\n", "")
@@ -471,7 +473,7 @@ func (e *exporter) repackage(body string) ([]byte, error) {
 			}
 		case "[Content_Types].xml":
 			if len(e.media) > 0 {
-				data = []byte(injectPNGContentType(string(data)))
+				data = []byte(injectMediaContentTypes(string(data), e.media))
 			}
 		}
 		w, err := zw.Create(f.Name)
@@ -530,9 +532,24 @@ func injectRels(rels string, items []relItem) string {
 	return strings.Replace(rels, "</Relationships>", add.String()+"</Relationships>", 1)
 }
 
-func injectPNGContentType(ct string) string {
-	if strings.Contains(ct, `Extension="png"`) {
+// injectMediaContentTypes declares a <Default> for every image extension the
+// document actually embeds. Word refuses to open a part whose extension has no
+// content type, so this has to follow what imgconv.ForExport chose, not a fixed
+// guess.
+func injectMediaContentTypes(ct string, media []mediaItem) string {
+	types := map[string]string{"png": "image/png", "jpg": "image/jpeg"}
+	var add strings.Builder
+	for _, ext := range []string{"jpg", "png"} { // deterministic order
+		if !slices.ContainsFunc(media, func(m mediaItem) bool { return m.ext == ext }) {
+			continue
+		}
+		if strings.Contains(ct, `Extension="`+ext+`"`) {
+			continue
+		}
+		fmt.Fprintf(&add, `<Default Extension="%s" ContentType="%s"/>`, ext, types[ext])
+	}
+	if add.Len() == 0 {
 		return ct
 	}
-	return strings.Replace(ct, "</Types>", `<Default Extension="png" ContentType="image/png"/></Types>`, 1)
+	return strings.Replace(ct, "</Types>", add.String()+"</Types>", 1)
 }

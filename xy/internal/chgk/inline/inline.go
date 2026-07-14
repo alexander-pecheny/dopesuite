@@ -1,4 +1,13 @@
-package docx
+// Package inline is the 4s inline layer shared by every exporter: it tokenizes a
+// 4s text element into runs (bold/italic/img/screen/hyperlink/…), applies the
+// typographic passes (backtick stress accents, non-breaking-space gluing,
+// non-breaking hyphens), and parses the (img …) sizing options.
+//
+// It was lifted verbatim out of internal/chgk/docx when the typst PDF exporter
+// (internal/chgk/typstdoc) needed the same text pipeline: the two exports must
+// agree character-for-character on where the nbsp/nbhyphen land, so there can only
+// be one copy of this.
+package inline
 
 import (
 	"net/url"
@@ -11,7 +20,7 @@ import (
 // xy chgk.js parse4sElem). Kind is "" for plain text, or one of italic/bold/
 // underline/italicbold/boldunderline/italicboldunderline/strike/sc/img/screen/
 // linebreak/pagebreak/hyperlink.
-type run struct {
+type Run struct {
 	Kind      string
 	Text      string
 	ForPrint  string // screen runs only
@@ -27,7 +36,7 @@ var rePercent = regexp.MustCompile(`(%[0-9a-fA-F]{2})+`)
 
 // backtickReplace: a backtick before a Cyrillic letter adds a combining stress
 // accent to it (chgksuite backtick_replace); otherwise the backtick is dropped.
-func backtickReplace(s string) string {
+func BacktickReplace(s string) string {
 	r := []rune(s)
 	var out []rune
 	for i := 0; i < len(r); i++ {
@@ -52,7 +61,7 @@ func isCyrillic(r rune) bool {
 	return (r >= 'а' && r <= 'я') || r == 'ё' || (r >= 'А' && r <= 'Я') || r == 'Ё'
 }
 
-func httpURLSpans(s string) [][2]int {
+func HTTPURLSpans(s string) [][2]int {
 	var spans [][2]int
 	r := []rune(s)
 	i := 0
@@ -140,7 +149,7 @@ func findNextUnescaped(r []rune, index, length int) int {
 	return -1
 }
 
-func processEsc(s string) string {
+func ProcessEsc(s string) string {
 	s = strings.ReplaceAll(s, "\\_", "_")
 	s = strings.ReplaceAll(s, "\\.", ".")
 	s = strings.ReplaceAll(s, underscorePlaceholder, "_")
@@ -149,7 +158,7 @@ func processEsc(s string) string {
 }
 
 // parse4sElem tokenizes a 4s inline string into runs.
-func parse4sElem(s string) []run {
+func Parse4sElem(s string) []Run {
 	s = strings.ReplaceAll(s, "\\_", underscorePlaceholder)
 	s = strings.ReplaceAll(s, "\\~", tildePlaceholder)
 
@@ -158,7 +167,7 @@ func parse4sElem(s string) []run {
 		r := []rune(s)
 		var b strings.Builder
 		last := 0
-		for _, sp := range httpURLSpans(s) {
+		for _, sp := range HTTPURLSpans(s) {
 			b.WriteString(string(r[last:sp[0]]))
 			seg := string(r[sp[0]:sp[1]])
 			seg = strings.ReplaceAll(seg, "_", underscorePlaceholder)
@@ -241,10 +250,10 @@ func parse4sElem(s string) []run {
 
 	sort.Ints(topart)
 	segs := partition(r, topart)
-	var parts []run
+	var parts []Run
 	for _, seg := range segs {
 		text := strings.ReplaceAll(seg, "敥", "")
-		parts = append(parts, run{Kind: "", Text: text})
+		parts = append(parts, Run{Kind: "", Text: text})
 	}
 
 	for idx := range parts {
@@ -301,8 +310,8 @@ func parse4sElem(s string) []run {
 			pr := []rune(p.Text)
 			inner := string(pr[8 : len(pr)-1])
 			fp, fs, _ := strings.Cut(inner, "|")
-			p.ForPrint = processEsc(fp)
-			p.ForScreen = processEsc(fs)
+			p.ForPrint = ProcessEsc(fp)
+			p.ForScreen = ProcessEsc(fs)
 			p.Kind = "screen"
 			p.Text = ""
 			continue
@@ -318,7 +327,7 @@ func parse4sElem(s string) []run {
 			p.Text = string(pr[3 : len(pr)-1])
 			p.Kind = "sc"
 		}
-		p.Text = processEsc(p.Text)
+		p.Text = ProcessEsc(p.Text)
 	}
 	return parts
 }
