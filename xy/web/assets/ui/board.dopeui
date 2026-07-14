@@ -55,11 +55,11 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     label data-edit-only "Метки"
     mount id="labelPicker" kind="label-picker" data-edit-only
     mount id="labelAddRow" kind="label-add-row" data-edit-only
-      button kind="ghost" id="labelAddBtn" "+ добавить метку…"
+      button kind="ghost" id="labelAddBtn" "➕ Добавить метку…"
     form id="newLabelForm" dir="row" gap="sm" data-edit-only
       textfield id="newLabelName" placeholder="Новая метка" grow
       colorfield id="newLabelColor" value="#4477aa"
-      button small submit "+"
+      button small submit title="Добавить метку" "➕"
 
     label data-edit-only "Вложения"
     mount id="attachments" kind="attachments" data-edit-only
