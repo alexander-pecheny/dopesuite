@@ -65,6 +65,7 @@ func mustApp() *base.App {
 				"viewer": {Body: []string{"host", "viewer-readonly", "ek-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 				"od":     {Body: []string{"host", "od-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 				"si":     {Body: []string{"host", "si-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
+				"brain":  {Body: []string{"host", "brain-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 			},
 			TopbarSync: base.SyncSpec{ID: "status", Class: "sync-status", State: "saved", Label: "Готово"},
 			HeadHook:   headHook,

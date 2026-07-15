@@ -3113,7 +3113,60 @@
     document.body.appendChild(btn);
   }
 
+  // buildCrossTable renders a round-robin group standings cross-table: rows ×
+  // opponents grid (score-vs-opponent, × on the diagonal) plus trailing metric
+  // columns. Reusable by any round-robin game type. options:
+  //   teams: [{ name, cells: [{text, boutCode?, className?}|null], metrics: [...] }]
+  //          cells[i] === null renders the diagonal ×; cells length = teams.length
+  //   metricHeaders: column labels after the grid (e.g. ["О","+","−","+/−","М"])
+  //   nameHeader, className, onCellClick(boutCode): host click-through to a бой
+  function buildCrossTable(options) {
+    const opts = options || {};
+    const teams = opts.teams || [];
+    const metricHeaders = opts.metricHeaders || [];
+    const table = document.createElement("table");
+    table.className = "cross-table" + (opts.className ? " " + opts.className : "");
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    headRow.appendChild(th("№", "cross-num-head"));
+    headRow.appendChild(th(opts.nameHeader || "Команда", "cross-team-head"));
+    for (let i = 0; i < teams.length; i++) headRow.appendChild(th(String(i + 1), "cross-opp-head"));
+    for (const label of metricHeaders) headRow.appendChild(th(label, "cross-metric-head"));
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    teams.forEach((team, rowIndex) => {
+      const tr = document.createElement("tr");
+      tr.appendChild(td(String(rowIndex + 1), "cross-num"));
+      tr.appendChild(td(team.name || "", "cross-team"));
+      (team.cells || []).forEach((cellData, colIndex) => {
+        if (rowIndex === colIndex || !cellData) {
+          tr.appendChild(td("×", "cross-cell cross-diag"));
+          return;
+        }
+        const node = td(cellData.text || "", "cross-cell" + (cellData.className ? " " + cellData.className : ""));
+        if (opts.onCellClick && cellData.boutCode) {
+          node.classList.add("cross-cell-link");
+          node.dataset.bout = cellData.boutCode;
+          node.tabIndex = 0;
+        }
+        tr.appendChild(node);
+      });
+      (team.metrics || []).forEach((value) => tr.appendChild(td(formatDisplayText(value), "cross-metric")));
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    if (opts.onCellClick) {
+      table.addEventListener("click", (event) => {
+        const cell = event.target.closest(".cross-cell-link");
+        if (cell && cell.dataset.bout) opts.onCellClick(cell.dataset.bout);
+      });
+    }
+    return table;
+  }
+
   window.DopeTable = {
+    buildCrossTable,
     th,
     td,
     option,

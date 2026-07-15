@@ -3,6 +3,7 @@ package dopeserver
 import (
 	"bytes"
 	"context"
+	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
 	"dope/dope/platform/roles"
@@ -121,7 +122,16 @@ func (s *server) serveHostHTMLWithInit(w http.ResponseWriter, r *http.Request, s
 		s.serveHostHTML(w, r)
 		return
 	}
-	s.serveInjectedHTML(w, r, "static/host.html", hostInitMarker, data)
+	// Bracket games share the host-init payload (the whole fest view) but брейн
+	// ships its own shell + JS bundle; pick the shell by game type.
+	shell := "static/host.html"
+	if scope.GameID > 0 {
+		var gameType string
+		if err := s.eng.DB.QueryRowContext(r.Context(), `select game_type from games where id = ?`, scope.GameID).Scan(&gameType); err == nil && gameType == games.BRAIN {
+			shell = "static/brain.html"
+		}
+	}
+	s.serveInjectedHTML(w, r, shell, hostInitMarker, data)
 }
 
 // serveGameHTMLWithInit serves od.html or si.html with window.__GAME_INIT__

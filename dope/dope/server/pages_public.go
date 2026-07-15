@@ -311,6 +311,11 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 				case "si", "ksi":
 					s.serveGameHTMLWithInit(w, r, "static/si.html", scope)
 					return
+				case games.BRAIN:
+					// Brain uses the host-init (fest view) shell; a public viewer gets
+					// it read-only (no edit session → canEdit stays false).
+					s.serveHostHTMLWithInit(w, r, scope, parts[1:])
+					return
 				default:
 					s.serveViewerHTMLWithInit(w, r, scope, parts[1:])
 					return

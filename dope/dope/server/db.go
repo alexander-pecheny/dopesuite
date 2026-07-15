@@ -336,6 +336,20 @@ create table if not exists match_results(
   primary key(match_id, team_id)
 );
 
+-- match_questions holds брейн бой protocols: one row per (team, question),
+-- recording the answering player and a mark. Брейн has no themes, so it does not
+-- reuse the EK themes/answers tables; the бой's bracket context (matches, slots,
+-- match_results) is shared with EK.
+create table if not exists match_questions(
+  id integer primary key,
+  match_id integer not null references matches(id) on delete cascade,
+  team_id integer not null references teams(id) on delete cascade,
+  question_index integer not null,
+  player_id integer references players(id),
+  mark text not null default '',
+  unique(match_id, team_id, question_index)
+);
+
 create table if not exists reseed_entries(
   stage_id integer not null references stages(id) on delete cascade,
   rank integer not null,

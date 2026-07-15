@@ -8,3 +8,4 @@ __pycache__/
 dist/
 ek_restore_backups/
 .prod-backups/
+/brain-demo.db*

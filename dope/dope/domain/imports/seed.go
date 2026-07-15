@@ -87,7 +87,7 @@ func LoadSeedImportView(eng *core.Engine, ctx context.Context, scope core.FestSc
 	if err := eng.DB.QueryRowContext(ctx, `
 select coalesce(state_json, '{}')
 from games
-where fest_id = ? and id = ? and game_type = 'ek'`, scope.FestID, scope.GameID).Scan(&rawState); err != nil {
+where fest_id = ? and id = ? and game_type in ('ek', 'brain')`, scope.FestID, scope.GameID).Scan(&rawState); err != nil {
 		return SeedImportView{}, err
 	}
 	state, err := seedImportStateFromRaw(rawState)
@@ -258,7 +258,7 @@ func loadEKGameStateForSeedImport(ctx context.Context, q store.Queryer, scope co
 	err := q.QueryRowContext(ctx, `
 select coalesce(state_json, '{}')
 from games
-where fest_id = ? and id = ? and game_type = 'ek'`, scope.FestID, scope.GameID).Scan(&rawState)
+where fest_id = ? and id = ? and game_type in ('ek', 'brain')`, scope.FestID, scope.GameID).Scan(&rawState)
 	return rawState, err
 }
 
@@ -269,7 +269,7 @@ func saveSeedImportState(ctx context.Context, tx *sql.Tx, scope core.FestScope, 
 	}
 	if _, err := tx.ExecContext(ctx, `
 update games set state_json = ?, updated_at = ?
-where fest_id = ? and id = ? and game_type = 'ek'`, string(stateJSON), util.UtcNow(), scope.FestID, scope.GameID); err != nil {
+where fest_id = ? and id = ? and game_type in ('ek', 'brain')`, string(stateJSON), util.UtcNow(), scope.FestID, scope.GameID); err != nil {
 		return SeedImportView{}, 0, nil, err
 	}
 	assignments, err := replaceSeedAssignments(ctx, tx, scope.GameID, state.Rows)
@@ -432,7 +432,7 @@ order by ms.id`, []any{gameID}, func(rows *sql.Rows) (slotRecord, error) {
 			return err
 		}
 		if teamID > 0 {
-			if err := resolver.EnsureRegularThemes(ctx, tx, slot.MatchID, teamID); err != nil {
+			if err := ensureMatchScoringRowsTx(ctx, tx, slot.MatchID, teamID); err != nil {
 				return err
 			}
 		}
@@ -443,6 +443,25 @@ order by ms.id`, []any{gameID}, func(rows *sql.Rows) (slotRecord, error) {
 		}
 	}
 	return nil
+}
+
+// ensureMatchScoringRowsTx provisions a newly-seated team's per-match scoring
+// rows, dispatching on the stage layout: брейн crosstable бои get question rows,
+// everything else (EK) gets regular themes. Keyed on the stage config, not the
+// game code, so future round-robin types reuse it.
+func ensureMatchScoringRowsTx(ctx context.Context, tx *sql.Tx, matchID, teamID int64) error {
+	var configJSON string
+	if err := tx.QueryRowContext(ctx, `
+select s.config_json from matches m join stages s on s.id = m.stage_id where m.id = ?`, matchID).Scan(&configJSON); err != nil {
+		return err
+	}
+	if layout, questions := store.StageLayoutConfig(configJSON); layout == store.BrainMatchLayout {
+		if questions <= 0 {
+			questions = 1
+		}
+		return store.EnsureBrainQuestionsTx(ctx, tx, matchID, teamID, questions)
+	}
+	return resolver.EnsureRegularThemes(ctx, tx, matchID, teamID)
 }
 
 func pruneMatchStateToSlots(ctx context.Context, tx *sql.Tx, matchID int64) error {

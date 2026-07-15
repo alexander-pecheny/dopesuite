@@ -320,6 +320,9 @@ func (s *server) handleScopedAPI(w http.ResponseWriter, r *http.Request) {
 		case "matches":
 			s.handleScopedMatches(w, r, scope, parts[4:])
 			return
+		case "bouts":
+			s.handleScopedBouts(w, r, scope, parts[4:])
+			return
 		case "stages":
 			s.handleScopedStages(w, r, scope, parts[4:])
 			return

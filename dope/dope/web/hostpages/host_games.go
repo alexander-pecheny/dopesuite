@@ -130,6 +130,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			gameTypeRadio("ksi", "КСИ", sel),
 			gameTypeRadio("ksi_stickers", "КСИ со стикерами", sel),
 			gameTypeRadio("ek", "ЭК", sel),
+			gameTypeRadio("brain", "Брейн", sel),
 		),
 		gameSettings("od", sel,
 			dopeui.Field(dopeui.Label("Количество туров"), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
@@ -149,6 +150,12 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 		gameSettings("ek", sel,
 			dopeui.Field(dopeui.Label("JSON-схема"),
 				dopeui.Editor(dopeui.Name("ek_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`))),
+		),
+		gameSettings("brain", sel,
+			dopeui.Field(dopeui.Label("Количество групп"), dopeui.Textfield(dopeui.Name("brain_groups"), dopeui.Inputmode("numeric"), dopeui.Value("6"))),
+			dopeui.Field(dopeui.Label("Команд в группе"), dopeui.Textfield(dopeui.Name("brain_team_count"), dopeui.Inputmode("numeric"), dopeui.Value("4"))),
+			dopeui.Field(dopeui.Label("Вопросов в бою"), dopeui.Textfield(dopeui.Name("brain_questions"), dopeui.Inputmode("numeric"), dopeui.Value("5"))),
+			dopeui.Hint(dopeui.Text("Команды распределяются по группам жеребьёвкой (посевом): каждая группа получает по одной команде из каждой корзины.")),
 		),
 		dopeui.Row(submit...),
 	))
@@ -528,7 +535,7 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 		return 0, errors.New("sqlite is not enabled")
 	}
 	gameType = strings.TrimSpace(gameType)
-	if gameType != games.OD && gameType != games.KSI && gameType != games.EK && gameType != ksiStickersGameType {
+	if gameType != games.OD && gameType != games.KSI && gameType != games.EK && gameType != ksiStickersGameType && gameType != games.BRAIN {
 		return 0, errors.New("выберите тип игры")
 	}
 
@@ -589,6 +596,23 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 				return fmt.Errorf("Не удалось разобрать JSON: %w", err)
 			}
 			gameID, err = CreateEKGameTx(ctx, tx, festID, scheme)
+			if err != nil {
+				return err
+			}
+		case games.BRAIN:
+			nGroups, err := parsePositiveFormInt(form, "brain_groups", "Количество групп", 1, 52)
+			if err != nil {
+				return err
+			}
+			teamCount, err := parsePositiveFormInt(form, "brain_team_count", "Команд в группе", 2, 4)
+			if err != nil {
+				return err
+			}
+			questions, err := parsePositiveFormInt(form, "brain_questions", "Вопросов в бою", 1, 12)
+			if err != nil {
+				return err
+			}
+			gameID, err = CreateBrainGameTx(ctx, tx, festID, nGroups, teamCount, questions)
 			if err != nil {
 				return err
 			}
@@ -657,6 +681,42 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 		}
 	}
 	return insertJSONGameTx(ctx, tx, festID, identity, "od", schemeJSON, stateJSON)
+}
+
+// CreateBrainGameTx generates a брейн group-stage scheme (venues + one round-robin
+// group per group index) and materialises it through the shared EK bracket builder.
+// Teams land later via the seed draw; state_json stays '{}' until then.
+func CreateBrainGameTx(ctx context.Context, tx *sql.Tx, festID int64, nGroups, teamCount, questions int) (int64, error) {
+	identity, err := nextGameIdentityTx(ctx, tx, festID, games.BRAIN, "Брейн")
+	if err != nil {
+		return 0, err
+	}
+	scheme := games.BrainGenerateScheme(identity.Code, identity.Title, nGroups, teamCount, questions)
+	if err := storeutil.ValidateScheme(scheme); err != nil {
+		return 0, err
+	}
+	schemeJSON, err := json.Marshal(scheme)
+	if err != nil {
+		return 0, err
+	}
+	now := util.UtcNow()
+	schemeID, err := store.InsertReturningID(ctx, tx, `
+insert into schemes(slug, title, version, schema_json, created_at)
+values(?, ?, ?, ?, ?)`, uniqueSchemeSlug(scheme.Slug), identity.Title, util.MaxInt(scheme.SchemaVersion, 2), string(schemeJSON), now)
+	if err != nil {
+		return 0, err
+	}
+	gameID, err := store.InsertReturningID(ctx, tx, `
+insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, ?, ?, ?, ?, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
+		festID, identity.Code, identity.Title, games.BRAIN, identity.Position, schemeID, string(schemeJSON), now, now)
+	if err != nil {
+		return 0, err
+	}
+	if err := buildEKStructureTx(ctx, tx, festID, gameID, scheme, now); err != nil {
+		return 0, err
+	}
+	return gameID, nil
 }
 
 // ksiStickersGameType is the creation-form value for the "KSI with stickers"

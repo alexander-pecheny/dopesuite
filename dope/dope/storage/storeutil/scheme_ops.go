@@ -22,8 +22,9 @@ func ValidateScheme(scheme store.FestScheme) error {
 		return errors.New("schema title is required")
 	}
 	gameType := scheme.GameType
-	// EK is the default game type when none is recorded.
-	if (gameType == "" || gameType == "ek") && len(scheme.Stages) == 0 {
+	// EK is the default game type when none is recorded. Bracket-family types (EK,
+	// брейн) are materialised into stages/matches and require a non-empty stage list.
+	if (gameType == "" || gameType == "ek" || gameType == "brain") && len(scheme.Stages) == 0 {
 		return errors.New("schema stages are required")
 	}
 	stageCodes := make(map[string]struct{}, len(scheme.Stages))

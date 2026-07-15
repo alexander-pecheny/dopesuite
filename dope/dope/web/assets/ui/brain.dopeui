@@ -1,0 +1,3 @@
+page title="Ведущий · Брейн" kind="brain" init="__HOST_INIT__" classicscripts="init.js fest-grid.js match-table.js stage-cache.js brain.js"
+  gametopbar tabsid="brainTabs" ektabs
+  mount kind="table-host" id="brainTable"

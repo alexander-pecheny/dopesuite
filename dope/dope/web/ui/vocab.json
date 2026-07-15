@@ -1,6 +1,6 @@
 {
   "enums": {
-    "page-kind":    { "prefix": "Page",   "values": ["ek", "viewer", "od", "si", "public"] },
+    "page-kind":    { "prefix": "Page",   "values": ["ek", "viewer", "od", "si", "brain", "public"] },
     "mount-kind":   { "prefix": "Mount",  "values": ["table-host"] },
     "swatch-color": { "prefix": "Swatch", "values": ["white", "yellow", "green", "red", "blue", "pink", "orange"] }
   },

@@ -4518,3 +4518,141 @@ body.is-fullscreen.od-page .match-main {
      over-contrasty against the dark cells. */
   --ksi-sticker-dim: brightness(0.85);
 }
+
+/* ── Брейн: round-robin group cross-tables + бой protocol editor ──────────
+   The cross-table reuses the results-table look (structure headers, paper
+   cells, tabular-nums) with brain-specific grid columns; mark cells reuse the
+   shared .answer-cell green/red fills. All colours come from existing vars so
+   light/dark/high-contrast theme for free. */
+.brain-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--brain-group-min, 380px), 1fr));
+  gap: var(--space-4);
+  padding: var(--space-3);
+}
+
+.brain-group-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-regular);
+  color: var(--text);
+  background: var(--structure);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.cross-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  background: transparent;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  font-variant-numeric: tabular-nums;
+  width: 100%;
+}
+
+.cross-table th,
+.cross-table td {
+  padding: var(--space-1) var(--space-2);
+  background: var(--paper);
+  vertical-align: middle;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.cross-table thead th {
+  background: var(--structure);
+  color: var(--text);
+  font-size: var(--text-xs-plus);
+  font-weight: var(--fw-regular);
+  font-style: italic;
+}
+
+.cross-table .cross-team-head,
+.cross-table .cross-team {
+  text-align: left;
+  max-width: var(--brain-team-col, 200px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cross-num-head,
+.cross-num,
+.cross-opp-head,
+.cross-metric-head,
+.cross-metric {
+  width: var(--brain-cell-col, 34px);
+  min-width: var(--brain-cell-col, 34px);
+}
+
+.cross-cell {
+  color: var(--text);
+}
+
+.cross-diag {
+  color: var(--text);
+  opacity: 0.3;
+}
+
+.cross-cell-link {
+  cursor: pointer;
+}
+
+.cross-cell-link:hover,
+.cross-cell-link:focus-visible {
+  background: var(--surface-tint);
+  outline: none;
+}
+
+.brain-editor {
+  margin: var(--space-3);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--structure);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.brain-editor-head {
+  font-weight: var(--fw-medium);
+  margin-bottom: var(--space-2);
+  text-align: center;
+}
+
+.brain-bout-table {
+  margin: 0 auto var(--space-2);
+}
+
+.brain-bout-team {
+  text-align: left;
+  padding-right: var(--space-2);
+  max-width: var(--brain-team-col, 200px);
+}
+
+.brain-mark {
+  cursor: pointer;
+  text-align: center;
+  min-width: var(--brain-cell-col, 34px);
+}
+
+.brain-player-select {
+  max-width: var(--brain-player-col, 120px);
+  font-size: var(--text-xs);
+}
+
+.brain-editor-foot {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.brain-protocol-list .brain-protocol-code {
+  text-align: left;
+  color: var(--muted);
+  width: var(--brain-team-col, 200px);
+}
+
+.brain-protocol-list .brain-protocol-score {
+  font-weight: var(--fw-medium);
+  min-width: var(--brain-cell-col, 34px);
+}

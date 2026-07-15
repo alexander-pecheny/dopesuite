@@ -14,10 +14,11 @@ import "encoding/json"
 
 // Canonical game_type codes as stored in the games.game_type column.
 const (
-	EK  = "ek"  // эрудит-квартет (bracket of small matches)
-	OD  = "od"  // ЧГК — командная викторина с раундами по минуте
-	KSI = "ksi" // командная своя игра
-	SI  = "si"  // legacy alias used by some viewers/renderers for KSI
+	EK    = "ek"    // эрудит-квартет (bracket of small matches)
+	OD    = "od"    // ЧГК — командная викторина с раундами по минуте
+	KSI   = "ksi"   // командная своя игра
+	SI    = "si"    // legacy alias used by some viewers/renderers for KSI
+	BRAIN = "brain" // брейн — round-robin groups of head-to-head бои (bracket family)
 )
 
 // Default is the game type assumed when a game has none recorded.
@@ -28,19 +29,16 @@ const Default = EK
 type Definition struct {
 	Code  string // canonical game_type value
 	Label string // short display label (Russian)
-	// ChGK reports whether the format is part of the ЧГК family rendered as a
-	// single flat grid (OD, KSI, SI) as opposed to EK's per-match bracket. Used
-	// to collapse viewer/snapshot routing for those types.
-	ChGK bool
 }
 
 // registry is the single source of truth for known game types. Iteration order
 // is never relied upon; look-ups go through the helpers below.
 var registry = map[string]Definition{
-	EK:  {Code: EK, Label: "ЭК"},
-	OD:  {Code: OD, Label: "ЧГК", ChGK: true},
-	KSI: {Code: KSI, Label: "КСИ", ChGK: true},
-	SI:  {Code: SI, Label: "СИ", ChGK: true},
+	EK:    {Code: EK, Label: "ЭК"},
+	OD:    {Code: OD, Label: "ЧГК"},
+	KSI:   {Code: KSI, Label: "КСИ"},
+	SI:    {Code: SI, Label: "СИ"},
+	BRAIN: {Code: BRAIN, Label: "Брейн"},
 }
 
 // Label returns the short display label for a game type, falling back to the
@@ -52,10 +50,16 @@ func Label(code string) string {
 	return code
 }
 
-// IsChGK reports whether code is a ЧГК-family flat-grid game (OD, KSI, SI).
+// IsChGK reports whether code is a ЧГК-family flat-grid game (OD, KSI, SI), as
+// opposed to a per-match bracket game (EK, брейн). Used to collapse
+// viewer/snapshot routing for the flat-grid types.
 func IsChGK(code string) bool {
-	d, ok := registry[code]
-	return ok && d.ChGK
+	switch code {
+	case OD, KSI, SI:
+		return true
+	default:
+		return false
+	}
 }
 
 // mustJSON marshals value to a JSON string, returning "{}" on the (impossible
