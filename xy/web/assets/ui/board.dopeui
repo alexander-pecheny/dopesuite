@@ -171,7 +171,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     mount id="listsManageRows" kind="lists-manage-rows"
     message id="listsManageMessage"
 
-  -- sizes overlay: list width + max card height, stored per browser
+  -- sizes overlay: list width + max card height, stored per user (server-side, all boards)
   modal id="sizesOverlay" label="Изменить размеры" title="Изменить размеры" variant="sizes"
     sliderrow id="sizesBoardW" label="Ширина рабочей области" valueid="sizesBoardWVal" min="800" max="3200" step="50" hint="Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
     sliderrow id="sizesListW" label="Ширина списка" valueid="sizesListWVal" min="200" max="640" step="10"

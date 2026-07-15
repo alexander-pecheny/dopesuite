@@ -7,13 +7,13 @@ We're making a Trello clone geared specifically towards ЧГК trivia quiz
 - API-first, anything that can be done using UI should be able to be done using API (except maybe search, see below). We shouldsupport some subset of Trello API to ease migration for existing clients using Trello (TBD steps for this one)
 - Tightly integrated with chgksuite, can import and export from it (TBD, can be done later after we have the core functionality)
 - Major differences from dope:
-	- everything in the user-entered data (boards, cards, labels, comments, file attachment) is symmetrically encrypted client-side with a passphrase. When board is shared, user shares the passphrase with collaborators outside of dope. Passphrase is saved browser-side (cookies or localstorage, whichever is safer, your choice) so users don't have to reenter it each time. Client side creds theft is less of a concern here, main concern is that site operator can't read user data and if server is hacked the hacker gets nothing
+	- the user-entered data (cards, labels, comments, file attachments, list titles) is symmetrically encrypted client-side with a passphrase. **Board names are the exception** — kept plaintext so the board list is readable without unlocking each board (encrypting them cost more UX than it bought). When board is shared, user shares the passphrase with collaborators outside of dope. Passphrase is saved browser-side (cookies or localstorage, whichever is safer, your choice) so users don't have to reenter it each time. Client side creds theft is less of a concern here, main concern is that site operator can't read user *content* (board names aside) and if server is hacked the hacker gets no question data
 	- Offline mode. We want editing ans creating boards/cards/etc. work offline on mobile via PWA and syncing later when internet reappears
 
 # Basic features
 - users log in via password or login code in Telegram
 - user can create boards. Inside a board, user can create named lists and cards.  Cards have descriptions but don't have titles, they are automatically derived from description (first few words and then fade out like Dope table cells). Both lists and cards can be dragged around to reorder
-- On board creation, user specifies a passphrase that is used for client side encrypting all data in the board
+- On board creation, user specifies a passphrase that is used for client side encrypting all data in the board (except the board's name, which is stored plaintext)
 - Card descriptions and comments are simple plain text fields with monospace font  when editing
 - Instead of just 'comments' we have a section called 'timeline' that includes both comments and any changes to the card: edit description (shows before / after in two side diff style), add/remove label, add/remove/replace file attachment.
 - All attachments are encrypted as well as other fields. Image attachments are recompessed into webp quality 70 to save space, unless user explicitly checks a box to upload image losslessly

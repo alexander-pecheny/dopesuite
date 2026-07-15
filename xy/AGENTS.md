@@ -2,10 +2,13 @@
 
 ## What this is
 A Trello-style board app for ЧГК (trivia) question editing. Every piece of
-user-entered data (board/list/card/label/comment/attachment) is **encrypted
+user-entered data (list/card/label/comment/attachment) is **encrypted
 client-side** with a per-board passphrase; the server only ever stores and
 serves ciphertext plus the structural metadata needed to order, sync, and
-authorize. Built by reusing patterns and frontend assets from `../dope`, its
+authorize. **Board names are the one exception** — plaintext, server-visible, so
+the board list is readable without unlocking each board (per-board
+`schema_version`: 1 = legacy `name_enc`, 2 = plaintext `name`; legacy boards
+backfilled lazily via `POST /api/boards/{id}/migrate-name`; see `migrateV10`). Built by reusing patterns and frontend assets from `../dope`, its
 sibling in the dopesuite monorepo (see `OVERVIEW.md`, `PLAN.md`; the root
 `AGENTS.md` has the monorepo rules). Russian-language UI.
 
@@ -178,8 +181,12 @@ web/assets/            //go:embed static + ui (package assets)
                        (?card=) and a comment (&comment=, copied from the timeline 🔗);
                        «Управление списками» modal groups consecutive lists into a
                        list_of_lists (☰ menu); all mutations via sync.js (offline-capable);
-                       «📐 Изменить размеры» (☰ menu) sets three display prefs, stored in
-                       localStorage["xy.sizes"] (per browser, all boards) and applied as CSS
+                       «📐 Изменить размеры» (☰ menu) sets three display prefs, stored
+                       server-side per user (users.sizes, plaintext JSON — display numbers,
+                       not question content — the same on all the user's boards, following
+                       them across devices; delivered in the board snapshot as the caller's
+                       setting, saved via POST /api/auth/sizes with a debounced online-only
+                       request like rename) and applied as CSS
                        vars on <html>: --kanban-max-w (the board is a centred column, so a
                        wide monitor doesn't strand the reader at the screen edge),
                        --klist-w, --kcard-lines. Cards hold their FULL text; --kcard-lines
@@ -207,8 +214,9 @@ The app is an installable PWA that works offline and resyncs on reconnect.
   assets cache-first, others stale-while-revalidate. `/api/*` is never SW-cached.
 - **Data mirror**: `store.js` keeps a per-board ciphertext snapshot, per-card
   timelines, the board list and downloaded attachment bytes in IndexedDB
-  (DB `xy-offline`). Everything stored is ciphertext (same as the server); the
-  cached DK in `xy-keys` is what decrypts it. No plaintext is persisted.
+  (DB `xy-offline`). Everything stored is ciphertext (same as the server) except
+  plaintext board names; the cached DK in `xy-keys` decrypts the rest. No
+  encrypted *content* is persisted in the clear.
 - **Outbox + resync**: every board mutation flows through `sync.js#mutate`. Online
   with an empty queue it's sent immediately; otherwise it's queued. Entities
   created offline get **negative temp ids** (which flow transparently through the
@@ -253,8 +261,9 @@ Config via `.env` (see `.env.example`). Telegram register/login needs
   also `export`.
 - **Write discipline**: every mutation goes through `s.withWriteTx` (pulls the
   pooled conn before the lock, bounds the tx). Ported from dope.
-- **Server never sees plaintext**: content columns are `_enc` BLOB envelopes;
-  handlers validate structure + ACL only.
+- **Server never sees plaintext content**: content columns are `_enc` BLOB
+  envelopes; handlers validate structure + ACL only. The lone plaintext exception
+  is `boards.name` (a deliberate carve-out — see "What this is").
 
 ## Milestone 1 status
 **Functionally complete.** Built & tested:

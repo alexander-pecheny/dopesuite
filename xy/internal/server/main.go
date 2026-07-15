@@ -72,6 +72,7 @@ func Main() {
 	mux.HandleFunc("GET /api/auth/me", srv.handleMe)
 	mux.HandleFunc("POST /api/auth/username", srv.handleSetUsername)
 	mux.HandleFunc("POST /api/auth/password", srv.handleSetPassword)
+	mux.HandleFunc("POST /api/auth/sizes", srv.handleSetSizes)
 
 	// ---- API tokens (Trello-compatible API credentials) ----
 	mux.HandleFunc("GET /api/tokens", srv.handleListTokens)
@@ -93,6 +94,7 @@ func Main() {
 	mux.HandleFunc("GET /api/boards/{id}", srv.handleGetBoard)
 	mux.HandleFunc("POST /api/boards/{id}/visit", srv.handleBoardVisit)
 	mux.HandleFunc("PATCH /api/boards/{id}", srv.handlePatchBoard)
+	mux.HandleFunc("POST /api/boards/{id}/migrate-name", srv.handleMigrateName)
 	mux.HandleFunc("DELETE /api/boards/{id}", srv.handleDeleteBoard)
 	mux.HandleFunc("GET /api/boards/{id}/keymeta", srv.handleGetKeymeta)
 	mux.HandleFunc("PUT /api/boards/{id}/keymeta", srv.handlePutKeymeta)

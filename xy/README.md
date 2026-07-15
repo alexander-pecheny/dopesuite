@@ -1,9 +1,11 @@
 # xy
 
 A Trello-style board app for ЧГК (trivia) question editing. Every piece of
-user-entered data (board/list/card/label/comment/attachment) is **encrypted
+user-entered data (list/card/label/comment/attachment) is **encrypted
 client-side** with a per-board passphrase; the server only stores and serves
 ciphertext plus the structural metadata needed to order, sync, and authorize.
+**Board names are the one exception** — they're stored in plaintext so the board
+list is readable without unlocking every board (see the trust model in `PLAN.md`).
 
 - **Backend**: Go 1.26, SQLite (WAL, `modernc.org/sqlite`, pure Go, no cgo).
 - **Frontend**: vanilla JS ES modules (no bundler) + the dope design system,
@@ -69,12 +71,14 @@ The `key` is ignored; the `token` is an **xy API token** minted at
 and can be revoked at any time; only a salted hash is stored, and the raw value
 is shown once.
 
-Because the board is end-to-end encrypted, every text field (board/list/card/
-label name and card `desc`) is returned as the **base64 ciphertext envelope** —
-the same bytes the web client gets — and is decrypted locally with the board
-passphrase (the `crypto.js` envelope format). Uploads are symmetric: `desc` must
-already be such an envelope (a plaintext `desc` is rejected), so the server never
-sees plaintext. Board/list/card ids are xy's numeric ids as strings.
+Because the board's data is end-to-end encrypted, its encrypted text fields
+(list/card/label name and card `desc`) are returned as the **base64 ciphertext
+envelope** — the same bytes the web client gets — and are decrypted locally with
+the board passphrase (the `crypto.js` envelope format). The **board `name` is
+plaintext** (migrated boards; legacy boards still return the ciphertext envelope
+until backfilled). Uploads are symmetric: `desc` must already be such an envelope
+(a plaintext `desc` is rejected), so the server never sees encrypted content in
+the clear. Board/list/card ids are xy's numeric ids as strings.
 
 To point chgksuite at xy, set its Trello API base (the `API` constant in
 `chgksuite/trello.py`) to `https://xy.pecheny.me/1`, paste the token when prompted,
@@ -146,6 +150,10 @@ every attachment becomes a dangling ref:
 | --- | --- | --- |
 | `xy.db` | litestream (continuous) | `r2:backups/xy/xy.db` |
 | `blobs/` | `rclone copy`, hourly systemd timer | `r2:backups/xy/blobs` |
+
+The `xy.db` half is mostly ciphertext, but note that **board names are plaintext**
+(see the trust model) — they, and the structural metadata, are visible to whoever
+holds the R2 backup. All other user content remains encrypted at rest and in R2.
 
 Restore both:
 

@@ -129,7 +129,8 @@ function applyOpToSnapshot(snap, op, resultId) {
       snap.card_labels[ids[0]] = (body.label_ids || []).slice();
       break;
     case "patchBoard":
-      if (body.name_enc != null) snap.name_enc = body.name_enc;
+      // Board names are plaintext now; a rename bumps the board to schema_version 2.
+      if (body.name != null) { snap.name = body.name; snap.schema_version = 2; }
       break;
     default:
       break; // comment / no snapshot effect

@@ -61,18 +61,26 @@ function renderBoards(boards) {
   }
   // Boards arrive already ordered by the caller's last visit (server-side).
   for (const b of boards) {
+    // Migrated (v2) boards carry a plaintext name — shown with no key needed. Legacy
+    // (v1) boards still need the cached DK, so start with a 🔒 placeholder.
+    const migrated = b.schema_version >= 2;
     const card = el("a", { class: "board-card", href: `/board/${b.id}` },
-      el("span", { class: "board-card-name", text: "🔒 доска #" + b.id }),
+      el("span", { class: "board-card-name", text: migrated ? b.name : "🔒 доска #" + b.id }),
       el("span", { class: "board-card-role", text: b.role === "owner" ? "владелец" : "редактор" }),
     );
     if (b.unread) {
       card.classList.add("has-unread");
       card.append(el("span", { class: "board-card-unread", title: "Есть непрочитанные изменения" }));
     }
-    // Decrypt the name lazily if we have the cached key.
-    decryptName(b).then((name) => {
-      if (name) card.querySelector(".board-card-name").textContent = name;
-    });
+    if (!migrated) {
+      // Decrypt the name lazily if we have the cached key, and — since we now hold
+      // the plaintext — opportunistically migrate the board off name_enc.
+      decryptName(b).then((name) => {
+        if (!name) return;
+        card.querySelector(".board-card-name").textContent = name;
+        migrateName(b.id, name);
+      });
+    }
     listNode.append(card);
   }
 }
@@ -85,6 +93,13 @@ async function decryptName(b) {
   } catch (_) {
     return null;
   }
+}
+
+// Backfill a legacy board's plaintext name once we've decrypted it. Best-effort and
+// online-only; the server ignores it if the board is already migrated (no clobber).
+async function migrateName(id, name) {
+  if (!xySync.isOnline()) return;
+  try { await jpost(`/api/boards/${id}/migrate-name`, { name }); } catch (_) {}
 }
 
 // ---- create board ----
@@ -107,9 +122,10 @@ createForm.addEventListener("submit", async (e) => {
   if (passErr) { createMessage.textContent = passErr; return; }
   if (!xySync.isOnline()) { createMessage.textContent = "Создание доски доступно только онлайн."; return; }
   try {
+    // The passphrase still mints the board's data key (lists/cards stay encrypted);
+    // only the name travels in the clear now.
     const { keymeta, dk } = await xyCrypto.createBoardKeys(pass);
-    const nameEnc = await xyCrypto.encField(dk, name);
-    const res = await jpost("/api/boards", { ...keymeta, name_enc: nameEnc });
+    const res = await jpost("/api/boards", { ...keymeta, name });
     await xyCrypto.cacheDK(res.id, dk);
     window.location.href = `/board/${res.id}`;
   } catch (err) {

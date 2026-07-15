@@ -55,7 +55,7 @@ async function runImport(board, name, pass) {
   // 1. fresh board key + board row
   const { keymeta, dk } = await xyCrypto.createBoardKeys(pass);
   const boardName = name || board.name || "Импорт из Trello";
-  const created = await jpost("/api/boards", { ...keymeta, name_enc: await xyCrypto.encField(dk, boardName) });
+  const created = await jpost("/api/boards", { ...keymeta, name: boardName });
   const boardId = created.id;
   await xyCrypto.cacheDK(boardId, dk);
 

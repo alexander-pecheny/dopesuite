@@ -31,7 +31,7 @@ func TestReadMarkers(t *testing.T) {
 	b.decode(b.do("GET", "/api/auth/me", nil), &meB)
 
 	board := map[string]string{
-		"name_enc":     enc("shared board"),
+		"name":         "shared board",
 		"kdf_salt":     enc("salt"),
 		"kdf_params":   `{"kdf":"scrypt","N":32768,"r":8,"p":1}`,
 		"wrapped_key":  enc("wrapped"),
@@ -158,7 +158,7 @@ func TestBoardListVisitOrdering(t *testing.T) {
 
 	newBoard := func(name string) string {
 		resp := a.do("POST", "/api/boards", map[string]string{
-			"name_enc": enc(name), "kdf_salt": enc("salt"),
+			"name": name, "kdf_salt": enc("salt"),
 			"kdf_params":  `{"kdf":"scrypt","N":32768,"r":8,"p":1}`,
 			"wrapped_key": enc("wrapped"), "verify_token": enc("verify"),
 		})

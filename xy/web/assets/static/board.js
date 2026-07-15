@@ -26,7 +26,7 @@ const statusNode = document.getElementById("status");
 const kanban = document.getElementById("kanban");
 const titleNode = document.getElementById("boardTitle");
 
-const state = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null, unread: {} };
+const state = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null, unread: {}, sizes: null };
 let dk = null;
 // One-shot guard per card-drag gesture: set true the moment a drop commits the
 // move, so a stray duplicate drop is ignored and dragend can tell an aborted
@@ -148,7 +148,11 @@ window.dopeMenu?.setExtras([{
 //               question, which is why cards render the full text rather than a
 //               truncated preview (see renderCardTitle).
 // Each slider's maximum position means "unlimited" (null), not its numeric value.
-const SIZES_KEY = "xy.sizes";
+// The sizes are a per-user, all-boards preference, stored server-side (users.sizes,
+// plain JSON) and delivered in the board snapshot as the caller's setting — not a
+// per-browser localStorage key, which neither followed the user across devices nor
+// was scoped to an account. state.sizes holds the live values; changes save back to
+// the user (POST /api/auth/sizes) with a debounced request (online-only, like rename).
 // 1512 = the logical width of a 14" MacBook screen (3024 physical @2×), i.e. a
 // board that fills a laptop and stays a centred column on anything wider.
 const SIZES_DEFAULT = { boardW: 1512, listW: 280, cardLines: 3 };
@@ -157,20 +161,20 @@ const LIST_W_MIN = 200, LIST_W_MAX = 640;
 const CARD_LINES_MAX = 12;                     // MAX = «без ограничения»
 
 const inRange = (n, lo, hi) => Number.isFinite(n) && n >= lo && n < hi;
-// null is a *choice* ("no cap"), so it must survive a reload — only a missing or
-// out-of-range value falls back to the default.
+// null is a *choice* ("no cap"), so it must survive a round-trip — only a missing
+// or out-of-range value falls back to the default.
 const pick = (v, lo, hi, dflt) => (v === null ? null : inRange(Number(v), lo, hi) ? Number(v) : dflt);
 
-function readSizes() {
-  try {
-    const s = JSON.parse(localStorage.getItem(SIZES_KEY) || "null");
-    if (!s) return { ...SIZES_DEFAULT };
-    return {
-      boardW: pick(s.boardW, BOARD_W_MIN, BOARD_W_MAX, SIZES_DEFAULT.boardW),
-      listW: pick(s.listW, LIST_W_MIN, LIST_W_MAX + 1, SIZES_DEFAULT.listW),
-      cardLines: pick(s.cardLines, 1, CARD_LINES_MAX, SIZES_DEFAULT.cardLines),
-    };
-  } catch (_) { return { ...SIZES_DEFAULT }; }
+// Clamp a raw sizes object (from the snapshot, or null when never set) into the
+// usable shape. The server stores whatever the client sent, so validation lives
+// here — a stale or hand-edited value can never break the layout.
+function sanitizeSizes(s) {
+  if (!s || typeof s !== "object") return { ...SIZES_DEFAULT };
+  return {
+    boardW: pick(s.boardW, BOARD_W_MIN, BOARD_W_MAX, SIZES_DEFAULT.boardW),
+    listW: pick(s.listW, LIST_W_MIN, LIST_W_MAX + 1, SIZES_DEFAULT.listW),
+    cardLines: pick(s.cardLines, 1, CARD_LINES_MAX, SIZES_DEFAULT.cardLines),
+  };
 }
 
 function applySizes(s) {
@@ -179,7 +183,10 @@ function applySizes(s) {
   root.style.setProperty("--klist-w", s.listW + "px");
   root.style.setProperty("--kcard-lines", s.cardLines == null ? "none" : String(s.cardLines));
 }
-applySizes(readSizes());
+// Apply defaults immediately so the CSS vars are defined; the board snapshot then
+// overrides state.sizes with this board's saved values (see the load path).
+state.sizes = { ...SIZES_DEFAULT };
+applySizes(state.sizes);
 
 const sizesOverlay = document.getElementById("sizesOverlay");
 const sizesBoardW = document.getElementById("sizesBoardW");
@@ -196,7 +203,21 @@ function syncSizesUI(s) {
     s.cardLines == null ? "весь текст" : s.cardLines + (s.cardLines === 1 ? " строка" : s.cardLines < 5 ? " строки" : " строк");
 }
 
-// Live-apply on every input move, so the board behind the modal previews the size.
+// Live-apply on every input move, so the board behind the modal previews the size,
+// and debounce the save so dragging a slider fires one PATCH, not one per pixel.
+let sizesSaveTimer = null;
+function scheduleSizesSave() {
+  if (sizesSaveTimer) clearTimeout(sizesSaveTimer);
+  sizesSaveTimer = setTimeout(saveSizes, 400);
+}
+async function saveSizes() {
+  sizesSaveTimer = null;
+  // A user preference, not board data, so it's not in the per-board sync outbox;
+  // like rename it's online-only. Offline the preview still applies for the
+  // session, it just won't persist. Best-effort — a failed save is not fatal.
+  if (!xySync.isOnline()) return;
+  try { await jpost(`/api/auth/sizes`, state.sizes); } catch (_) {}
+}
 function commitSizes() {
   const boardW = Number(sizesBoardW.value), lines = Number(sizesCardH.value);
   const s = {
@@ -204,13 +225,14 @@ function commitSizes() {
     listW: Number(sizesListW.value),
     cardLines: lines >= CARD_LINES_MAX ? null : lines,
   };
+  state.sizes = s;
   applySizes(s);
   syncSizesUI(s);
-  try { localStorage.setItem(SIZES_KEY, JSON.stringify(s)); } catch (_) {}
+  scheduleSizesSave();
 }
 
 function openSizes() {
-  syncSizesUI(readSizes());
+  syncSizesUI(state.sizes);
   sizesOverlay.hidden = false;
 }
 function closeSizes() { sizesOverlay.hidden = true; }
@@ -219,13 +241,22 @@ sizesBoardW.addEventListener("input", commitSizes);
 sizesListW.addEventListener("input", commitSizes);
 sizesCardH.addEventListener("input", commitSizes);
 document.getElementById("sizesReset").addEventListener("click", () => {
-  try { localStorage.removeItem(SIZES_KEY); } catch (_) {}
-  applySizes(SIZES_DEFAULT);
-  syncSizesUI(SIZES_DEFAULT);
+  state.sizes = { ...SIZES_DEFAULT };
+  applySizes(state.sizes);
+  syncSizesUI(state.sizes);
+  scheduleSizesSave();
 });
 document.getElementById("sizesClose").addEventListener("click", closeSizes);
 sizesOverlay.addEventListener("click", (e) => { if (e.target === sizesOverlay) closeSizes(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !sizesOverlay.hidden) closeSizes(); });
+
+// Board names are plaintext server-side metadata now (only the board's data stays
+// encrypted). Backfill a legacy board's name once we've decrypted it on load — best-
+// effort, online-only; the server ignores it if the board is already migrated.
+function migrateBoardName(name) {
+  if (!name || !xySync.isOnline()) return;
+  jpost(`/api/boards/${boardId}/migrate-name`, { name }).catch(() => {});
+}
 
 // renameBoard / deleteBoard touch board-level metadata, which isn't part of the
 // per-board sync outbox (lists/cards) — so both are online-only. The server soft-
@@ -238,7 +269,7 @@ async function renameBoard() {
   if (!xySync.isOnline()) { alert("Переименование доски доступно только онлайн."); return; }
   setStatus("saving");
   try {
-    await jpatch(`/api/boards/${boardId}`, { name_enc: await xyCrypto.encField(dk, t) });
+    await jpatch(`/api/boards/${boardId}`, { name: t });
     state.name = t;
     titleNode.textContent = t;
     document.title = t + " · xy";
@@ -542,7 +573,18 @@ async function load() {
     state.role = snap.role || "editor";
     state.cardLabels = snap.card_labels || {};
     state.unread = snap.unread || {};
-    state.name = await xyCrypto.decField(dk, snap.name_enc);
+    // The caller's per-user display layout (same on every board); absent (never
+    // set) → defaults. Apply now so the board renders at the user's saved sizes.
+    state.sizes = sanitizeSizes(snap.sizes);
+    applySizes(state.sizes);
+    // Migrated boards (schema_version 2) carry a plaintext name; legacy boards still
+    // need the DK to decrypt name_enc — and, since we now hold it, get backfilled.
+    if (snap.schema_version >= 2) {
+      state.name = snap.name;
+    } else {
+      state.name = await xyCrypto.decField(dk, snap.name_enc);
+      migrateBoardName(state.name);
+    }
     titleNode.textContent = state.name;
     document.title = state.name + " · xy";
     state.lists = await Promise.all(snap.lists.map(async (l) => ({
@@ -931,6 +973,7 @@ async function populateMoveListBoards() {
   for (const b of boards) {
     let label = "доска #" + b.id;
     if (b.id === boardId) label = (state.name || label) + " (эта доска)";
+    else if (b.schema_version >= 2) label = b.name; // plaintext name, no key needed
     else {
       try { const cdk = await xyCrypto.loadCachedDK(b.id); if (cdk) label = await xyCrypto.decField(cdk, b.name_enc); }
       catch (_) {}
@@ -3027,6 +3070,7 @@ async function populateMoveBoards() {
   for (const b of boards) {
     let label = "доска #" + b.id;
     if (b.id === boardId) label = (state.name || label) + " (эта доска)";
+    else if (b.schema_version >= 2) label = b.name; // plaintext name, no key needed
     else {
       try { const cdk = await xyCrypto.loadCachedDK(b.id); if (cdk) label = await xyCrypto.decField(cdk, b.name_enc); }
       catch (_) {}

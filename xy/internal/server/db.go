@@ -178,7 +178,63 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV8(db); err != nil {
 		return err
 	}
+	if err := migrateV9(db); err != nil {
+		return err
+	}
+	if err := migrateV10(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV10 un-encrypts board NAMES. Names were the one piece of user-entered
+// data whose encryption cost more UX than it bought (you couldn't see a board's
+// name without its data key — the board list showed 🔒 placeholders); everything
+// else stays encrypted. Two columns: `name` (plaintext, NULL until migrated) and
+// per-board `schema_version` (1 = name still in name_enc; 2 = name is plaintext).
+// The server can't decrypt existing name_enc, so legacy rows start at version 1 and
+// are backfilled lazily by DK-holding clients (POST /api/boards/{id}/migrate-name);
+// new boards are created at version 2. Invariant: schema_version = 2 ⟺ name IS NOT
+// NULL. name_enc is kept (dead once migrated) until a later retirement migration
+// drops it once no version-1 boards remain.
+func migrateV10(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 10`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+alter table boards add column name text;
+alter table boards add column schema_version integer not null default 1;
+insert or ignore into schema_versions(version, applied_at)
+  values(10, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
+}
+
+// migrateV9 adds users.sizes: a small plaintext JSON blob of the user's board
+// display layout ({boardW,listW,cardLines}), shared across all of that user's
+// boards and devices. These are display numbers only — no question content — so,
+// like ranks and ordering, they are stored in the clear rather than encrypted.
+// NULL = never set (the client falls back to its defaults). Replaces the old
+// localStorage["xy.sizes"], which lived per browser and so neither followed the
+// user across devices nor was scoped to an account on a shared browser.
+func migrateV9(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 9`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+alter table users add column sizes text;
+insert or ignore into schema_versions(version, applied_at)
+  values(9, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV8 adds board_members.last_visited_at: a per-user, per-board timestamp

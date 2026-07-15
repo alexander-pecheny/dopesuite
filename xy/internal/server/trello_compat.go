@@ -144,15 +144,23 @@ func (s *server) handleTrelloGetBoard(w http.ResponseWriter, r *http.Request) {
 	bidStr := idStr(bid)
 
 	var (
+		name          sql.NullString
 		nameEnc       []byte
 		salt, wrapped []byte
 		verify        []byte
 		kdfParams     string
+		schemaVersion int
 	)
 	if err := s.db.QueryRowContext(ctx,
-		`select name_enc, kdf_salt, kdf_params, wrapped_key, verify_token from boards where id = ?`, bid).
-		Scan(&nameEnc, &salt, &kdfParams, &wrapped, &verify); handleErr(w, err) {
+		`select name, name_enc, schema_version, kdf_salt, kdf_params, wrapped_key, verify_token from boards where id = ?`, bid).
+		Scan(&name, &nameEnc, &schemaVersion, &salt, &kdfParams, &wrapped, &verify); handleErr(w, err) {
 		return
+	}
+	// Board name is plaintext once migrated (schema_version 2); legacy boards still
+	// return the base64 ciphertext envelope, which chgksuite decrypts locally.
+	boardName := b64(nameEnc)
+	if schemaVersion >= 2 {
+		boardName = name.String
 	}
 
 	lists, err := scanLists(ctx, s.db, bid)
@@ -183,7 +191,7 @@ func (s *server) handleTrelloGetBoard(w http.ResponseWriter, r *http.Request) {
 
 	board := trelloBoard{
 		ID:     bidStr,
-		Name:   b64(nameEnc),
+		Name:   boardName,
 		URL:    trelloBoardURL(bid),
 		Lists:  make([]trelloList, 0, len(lists)),
 		Cards:  make([]trelloCard, 0, len(cards)),

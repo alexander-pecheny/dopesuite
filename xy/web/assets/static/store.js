@@ -2,8 +2,9 @@
 // ciphertext snapshots, the board list, per-card timelines and attachment bytes
 // so a board can be opened and edited with no network, plus an ordered mutation
 // **outbox** and the temp-id ↔ real-id map the sync engine (sync.js) replays on
-// reconnect. Everything stored here is the same ciphertext the server holds
-// (envelopes from crypto.js); no plaintext is persisted. See PLAN §8.
+// reconnect. Everything stored here is the same bytes the server holds — ciphertext
+// envelopes from crypto.js, plus plaintext board names (the one un-encrypted field);
+// no encrypted *content* is persisted in the clear. See PLAN §8.
 //
 // This module owns one IndexedDB database ("xy-offline"); crypto.js owns a
 // separate one ("xy-keys") for the cached data keys.

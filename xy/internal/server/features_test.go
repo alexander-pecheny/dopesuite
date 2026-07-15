@@ -22,7 +22,7 @@ func boardWithList(t *testing.T) (c *apiClient, boardID, listID string) {
 	ts, srv := newTestServer(t)
 	c = registerUser(t, srv, ts, 770100, "feat")
 	resp := c.do("POST", "/api/boards", map[string]string{
-		"name_enc": enc("b"), "kdf_salt": enc("s"),
+		"name": "b", "kdf_salt": enc("s"),
 		"kdf_params": `{"kdf":"scrypt","N":1,"r":1,"p":1}`, "wrapped_key": enc("w"), "verify_token": enc("v"),
 	})
 	mustStatus(t, resp, 200)

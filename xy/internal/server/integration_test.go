@@ -51,6 +51,8 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("GET /api/boards", srv.handleListBoards)
 	mux.HandleFunc("POST /api/boards", srv.handleCreateBoard)
 	mux.HandleFunc("GET /api/boards/{id}", srv.handleGetBoard)
+	mux.HandleFunc("PATCH /api/boards/{id}", srv.handlePatchBoard)
+	mux.HandleFunc("POST /api/boards/{id}/migrate-name", srv.handleMigrateName)
 	mux.HandleFunc("POST /api/boards/{id}/visit", srv.handleBoardVisit)
 	mux.HandleFunc("GET /api/boards/{id}/keymeta", srv.handleGetKeymeta)
 	mux.HandleFunc("POST /api/boards/{id}/lists", srv.handleCreateList)
@@ -201,9 +203,9 @@ func TestFullFlow(t *testing.T) {
 	resp = c2.do("POST", "/api/auth/login-password", map[string]string{"username": "tester", "password": "hunter2hunter"})
 	mustStatus(t, resp, 200)
 
-	// create a board (fake ciphertext fields — server treats them as opaque)
+	// create a board (name is plaintext now; crypto fields stay opaque)
 	board := map[string]string{
-		"name_enc":     enc("my board"),
+		"name":         "my board",
 		"kdf_salt":     enc("salt"),
 		"kdf_params":   `{"kdf":"scrypt","N":32768,"r":8,"p":1}`,
 		"wrapped_key":  enc("wrapped"),

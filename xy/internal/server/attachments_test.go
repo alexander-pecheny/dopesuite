@@ -15,7 +15,7 @@ func TestAttachments(t *testing.T) {
 
 	// board + list + card
 	resp := c.do("POST", "/api/boards", map[string]string{
-		"name_enc": enc("b"), "kdf_salt": enc("s"), "kdf_params": "{}", "wrapped_key": enc("w"), "verify_token": enc("v"),
+		"name": "b", "kdf_salt": enc("s"), "kdf_params": "{}", "wrapped_key": enc("w"), "verify_token": enc("v"),
 	})
 	mustStatus(t, resp, 200)
 	var b struct {

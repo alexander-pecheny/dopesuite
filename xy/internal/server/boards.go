@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -75,8 +77,11 @@ func (s *server) requireBoard(w http.ResponseWriter, r *http.Request, paramName 
 // ---- wire types ----
 
 type boardSummary struct {
-	ID            int64   `json:"id"`
-	NameEnc       string  `json:"name_enc"`
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`     // plaintext (schema_version 2); "" for legacy
+	NameEnc string `json:"name_enc"` // legacy ciphertext (schema_version 1 fallback)
+	// SchemaVersion: 1 = name still encrypted in name_enc; 2 = name is plaintext.
+	SchemaVersion int     `json:"schema_version"`
 	Role          string  `json:"role"`
 	CreatedAt     string  `json:"created_at"`
 	UpdatedAt     string  `json:"updated_at"`
@@ -93,7 +98,7 @@ func (s *server) handleListBoards(w http.ResponseWriter, r *http.Request) {
 	// boards fall back to update time). `unread` aggregates the per-card unread
 	// predicate (see the board snapshot / activity feed) across the whole board.
 	rows, err := s.db.QueryContext(r.Context(), `
-select b.id, b.name_enc, m.role, b.created_at, b.updated_at, m.last_visited_at,
+select b.id, b.name, b.name_enc, b.schema_version, m.role, b.created_at, b.updated_at, m.last_visited_at,
   exists(
     select 1 from timeline_events e
     join cards c on c.id = e.card_id and c.deleted_at is null
@@ -112,12 +117,14 @@ order by m.last_visited_at is null, m.last_visited_at desc, b.updated_at desc`, 
 	out := []boardSummary{}
 	for rows.Next() {
 		var b boardSummary
+		var name sql.NullString
 		var nameEnc []byte
 		var lastVisited sql.NullString
 		var unread int
-		if err := rows.Scan(&b.ID, &nameEnc, &b.Role, &b.CreatedAt, &b.UpdatedAt, &lastVisited, &unread); handleErr(w, err) {
+		if err := rows.Scan(&b.ID, &name, &nameEnc, &b.SchemaVersion, &b.Role, &b.CreatedAt, &b.UpdatedAt, &lastVisited, &unread); handleErr(w, err) {
 			return
 		}
+		b.Name = name.String
 		b.NameEnc = b64(nameEnc)
 		if lastVisited.Valid {
 			b.LastVisitedAt = &lastVisited.String
@@ -148,7 +155,7 @@ func (s *server) handleBoardVisit(w http.ResponseWriter, r *http.Request) {
 }
 
 type createBoardRequest struct {
-	NameEnc     string `json:"name_enc"`
+	Name        string `json:"name"` // plaintext; the board's data (lists/cards/…) is still encrypted
 	KDFSalt     string `json:"kdf_salt"`
 	KDFParams   string `json:"kdf_params"`
 	WrappedKey  string `json:"wrapped_key"`
@@ -164,21 +171,22 @@ func (s *server) handleCreateBoard(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	nameEnc, err1 := unb64(req.NameEnc)
 	salt, err2 := unb64(req.KDFSalt)
 	wrapped, err3 := unb64(req.WrappedKey)
 	verify, err4 := unb64(req.VerifyToken)
-	if err1 != nil || err2 != nil || err3 != nil || err4 != nil || req.KDFParams == "" {
-		httpError(w, http.StatusBadRequest, "invalid board crypto fields")
+	if strings.TrimSpace(req.Name) == "" || err2 != nil || err3 != nil || err4 != nil || req.KDFParams == "" {
+		httpError(w, http.StatusBadRequest, "invalid board fields")
 		return
 	}
 	now := time.Now()
 	var boardID int64
 	err := s.withWriteTx(r.Context(), "create-board", func(ctx context.Context, tx *sql.Tx) error {
+		// New boards are born at schema_version 2 (plaintext name). name_enc is
+		// NOT NULL for legacy reasons, so store an empty blob until it's dropped.
 		res, err := tx.ExecContext(ctx, `
-insert into boards(owner_user_id, name_enc, kdf_salt, kdf_params, wrapped_key, verify_token, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?, ?, ?)`,
-			u.UserID, nameEnc, salt, req.KDFParams, wrapped, verify, rfc3339(now), rfc3339(now))
+insert into boards(owner_user_id, name, name_enc, schema_version, kdf_salt, kdf_params, wrapped_key, verify_token, created_at, updated_at)
+values(?, ?, x'', 2, ?, ?, ?, ?, ?, ?)`,
+			u.UserID, req.Name, salt, req.KDFParams, wrapped, verify, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -197,15 +205,24 @@ values(?, ?, ?, ?, ?, ?, ?, ?)`,
 
 // boardSnapshot is the single-fetch board payload the UI bootstraps from.
 type boardSnapshot struct {
-	ID         int64                `json:"id"`
-	NameEnc    string               `json:"name_enc"`
-	Role       string               `json:"role"`
-	Lists      []listDTO            `json:"lists"`
-	Groups     []groupDTO           `json:"groups"`
-	Cards      []cardDTO            `json:"cards"`
-	Labels     []labelDTO           `json:"labels"`
-	CardLabels map[string][]int64   `json:"card_labels"`
-	Unread     map[string]unreadDTO `json:"unread"`
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`     // plaintext (schema_version 2); "" for legacy
+	NameEnc string `json:"name_enc"` // legacy ciphertext (schema_version 1 fallback)
+	// SchemaVersion: 1 = name still encrypted in name_enc; 2 = name is plaintext.
+	SchemaVersion int                  `json:"schema_version"`
+	Role          string               `json:"role"`
+	Lists         []listDTO            `json:"lists"`
+	Groups        []groupDTO           `json:"groups"`
+	Cards         []cardDTO            `json:"cards"`
+	Labels        []labelDTO           `json:"labels"`
+	CardLabels    map[string][]int64   `json:"card_labels"`
+	Unread        map[string]unreadDTO `json:"unread"`
+	// Sizes is the CALLER's display layout ({boardW,listW,cardLines}) — a per-user,
+	// all-boards preference (users.sizes, plaintext JSON; see migrateV9), delivered
+	// here alongside the snapshot's other caller-specific fields (role, unread) so
+	// the board renders at the user's sizes without a second fetch. Omitted when
+	// never set — the client then uses its defaults. Written via POST /api/auth/sizes.
+	Sizes json.RawMessage `json:"sizes,omitempty"`
 }
 
 // unreadDTO flags, per card, whether the caller has unread events in either
@@ -224,11 +241,23 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, CardLabels: map[string][]int64{}, Unread: map[string]unreadDTO{}}
 
+	var name sql.NullString
 	var nameEnc []byte
-	if err := s.db.QueryRowContext(ctx, `select name_enc from boards where id = ?`, bid).Scan(&nameEnc); handleErr(w, err) {
+	if err := s.db.QueryRowContext(ctx, `select name, name_enc, schema_version from boards where id = ?`, bid).Scan(&name, &nameEnc, &snap.SchemaVersion); handleErr(w, err) {
 		return
 	}
+	snap.Name = name.String
 	snap.NameEnc = b64(nameEnc)
+
+	// The caller's per-user display layout (see boardSnapshot.Sizes), shared across
+	// all their boards — so it's keyed on the user, not this board.
+	var sizes sql.NullString
+	if err := s.db.QueryRowContext(ctx, `select sizes from users where id = ?`, uid).Scan(&sizes); handleErr(w, err) {
+		return
+	}
+	if sizes.Valid && sizes.String != "" {
+		snap.Sizes = json.RawMessage(sizes.String)
+	}
 
 	lists, err := scanLists(ctx, s.db, bid)
 	if handleErr(w, err) {
@@ -304,7 +333,7 @@ group by e.card_id`, uid, bid, uid)
 }
 
 type patchBoardRequest struct {
-	NameEnc *string `json:"name_enc"`
+	Name *string `json:"name"` // plaintext new name
 }
 
 func (s *server) handlePatchBoard(w http.ResponseWriter, r *http.Request) {
@@ -316,18 +345,55 @@ func (s *server) handlePatchBoard(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if req.NameEnc == nil {
+	if req.Name == nil {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	nameEnc, err := unb64(*req.NameEnc)
-	if err != nil {
-		httpError(w, http.StatusBadRequest, "invalid name_enc")
+	name := strings.TrimSpace(*req.Name)
+	if name == "" {
+		httpError(w, http.StatusBadRequest, "empty name")
 		return
 	}
-	err = s.withWriteTx(r.Context(), "patch-board", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update boards set name_enc = ?, updated_at = ? where id = ?`,
-			nameEnc, rfc3339(time.Now()), bid)
+	// A rename writes the plaintext name and settles the board at schema_version 2
+	// (renaming a legacy board is itself a migration off name_enc).
+	err := s.withWriteTx(r.Context(), "patch-board", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update boards set name = ?, schema_version = 2, updated_at = ? where id = ?`,
+			name, rfc3339(time.Now()), bid)
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleMigrateName backfills a legacy board's plaintext name from a client that
+// holds the data key (it decrypts name_enc and posts the plaintext here). One-shot
+// and retirable: it only ever touches schema_version = 1 rows, so a stale client
+// replaying an old name can never clobber a real rename (which has already moved
+// the board to version 2). A no-op 204 when the board is already migrated.
+type migrateNameRequest struct {
+	Name string `json:"name"`
+}
+
+func (s *server) handleMigrateName(w http.ResponseWriter, r *http.Request) {
+	_, bid, _, ok := s.requireBoard(w, r, "id")
+	if !ok {
+		return
+	}
+	var req migrateNameRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		httpError(w, http.StatusBadRequest, "empty name")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "migrate-name", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`update boards set name = ?, schema_version = 2, updated_at = ? where id = ? and schema_version = 1`,
+			name, rfc3339(time.Now()), bid)
 		return err
 	})
 	if handleErr(w, err) {

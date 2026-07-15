@@ -2,8 +2,9 @@
 
 A Trello-style board app for ЧГК (trivia) editing, built by reusing `../dope`
 (Go + SQLite backend, vanilla-JS frontend, shared design system). The defining
-difference from dope: **all user-entered data is encrypted client-side** with a
-per-board passphrase, and (later) the app works **offline as a PWA**.
+difference from dope: **user-entered data is encrypted client-side** with a
+per-board passphrase (board names excepted — plaintext; see the trust model), and
+the app works **offline as a PWA**.
 
 This plan reflects four decisions made up front:
 
@@ -63,17 +64,23 @@ xy/                         module root (go.mod: module "xy")
 
 **Trust model.** The server is treated as honest-but-curious: it stores and
 serves ciphertext and the *structural metadata* needed to order, sync, and
-authorize (entity IDs, parent IDs, positions, timestamps, types, member ACLs).
-It can never read names, descriptions, comments, label text/colors, or
-attachment bytes. Server-side ACL (board membership) and the passphrase are
-defense-in-depth: membership gates who can *fetch* a board's ciphertext, the
-passphrase gates who can *decrypt* it.
+authorize (entity IDs, parent IDs, positions, timestamps, types, member ACLs),
+plus **board names in plaintext** (see below). It can never read list/card
+descriptions, comments, label text/colors, or attachment bytes. Server-side ACL
+(board membership) and the passphrase are defense-in-depth: membership gates who
+can *fetch* a board's ciphertext, the passphrase gates who can *decrypt* it.
 
-**Explicit metadata leakage (accepted for M1).** The server learns board/list/
-card structure, item counts, positions, timestamps, authorship, label↔card
-associations (as opaque IDs), and attachment sizes/mime. It does not learn any
-content. This is the pragmatic tradeoff that keeps relational ordering, sync,
-and realtime simple. Documented so it's a conscious choice, not an accident.
+**Explicit metadata leakage (accepted).** The server learns board/list/card
+structure, item counts, positions, timestamps, authorship, label↔card
+associations (as opaque IDs), attachment sizes/mime, and **board names**. It does
+not learn any other content. Board names were de-encrypted deliberately: keeping
+them encrypted meant the board list couldn't be read without unlocking every
+board (data key per board), which cost more UX than the names were worth. Every
+other field stays encrypted. This is the pragmatic tradeoff that keeps relational
+ordering, sync, and realtime simple. Documented so it's a conscious choice, not
+an accident. (Per-board `schema_version`: 1 = name still encrypted in `name_enc`;
+2 = plaintext `name`. Legacy boards are backfilled lazily by clients holding the
+DK; see `migrateV10` and `POST /api/boards/{id}/migrate-name`.)
 
 **XSS = total client compromise.** Because all crypto is client-side, an XSS
 hole defeats it entirely. Therefore: strict `Content-Security-Policy` (no inline
@@ -137,8 +144,11 @@ Ported auth tables (unchanged from dope): `users`, `sessions`, `invites`,
 New tables (content columns suffixed `_enc` are encryption envelopes; everything
 else is plaintext structural metadata):
 
-- `boards(id, owner_user_id, name_enc, kdf_salt, kdf_params, wrapped_key,
-  verify_token, created_at, updated_at)`
+- `boards(id, owner_user_id, name, name_enc, schema_version, kdf_salt, kdf_params,
+  wrapped_key, verify_token, created_at, updated_at)` — `name` is plaintext
+  (schema_version 2); `name_enc` is the legacy encrypted name kept for
+  not-yet-migrated (schema_version 1) boards until a later retirement migration
+  drops it.
 - `board_members(board_id, user_id, role)` — role ∈ {owner, editor}. ACL only.
 - `lists(id, board_id, type['normal'|'test'], title_enc, rank, created_at,
   updated_at, deleted_at)`

@@ -17,7 +17,7 @@ func TestTrelloCompatAPI(t *testing.T) {
 
 	// board
 	resp := c.do("POST", "/api/boards", map[string]string{
-		"name_enc": enc("Пакет"), "kdf_salt": enc("salt"),
+		"name": "Пакет", "kdf_salt": enc("salt"),
 		"kdf_params": `{"kdf":"scrypt"}`, "wrapped_key": enc("w"), "verify_token": enc("v"),
 	})
 	mustStatus(t, resp, 200)
@@ -94,8 +94,9 @@ func TestTrelloCompatAPI(t *testing.T) {
 	if tb.ID != boardID {
 		t.Fatalf("board id = %q, want %q", tb.ID, boardID)
 	}
-	if dec(tb.Name) != "Пакет" {
-		t.Fatalf("board name decodes to %q", dec(tb.Name))
+	// Board name is plaintext now (schema_version 2), not a ciphertext envelope.
+	if tb.Name != "Пакет" {
+		t.Fatalf("board name = %q, want plaintext %q", tb.Name, "Пакет")
 	}
 	// keymeta must travel with the board so a token holder can derive the DK.
 	if tb.Keymeta.KDFParams != `{"kdf":"scrypt"}` || dec(tb.Keymeta.KDFSalt) != "salt" ||
@@ -163,7 +164,7 @@ func TestTrelloAuthFailures(t *testing.T) {
 	ts, srv := newTestServer(t)
 	c := registerUser(t, srv, ts, 770010, "owner")
 	resp := c.do("POST", "/api/boards", map[string]string{
-		"name_enc": enc("B"), "kdf_salt": enc("s"),
+		"name": "B", "kdf_salt": enc("s"),
 		"kdf_params": `{}`, "wrapped_key": enc("w"), "verify_token": enc("v"),
 	})
 	mustStatus(t, resp, 200)

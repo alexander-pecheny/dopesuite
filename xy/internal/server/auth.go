@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -524,6 +525,46 @@ func (s *server) handleSetPassword(w http.ResponseWriter, r *http.Request) {
 		}
 		_, err := tx.ExecContext(ctx, `update users set password_hash = ?, updated_at = ? where id = ?`,
 			newHash, rfc3339(time.Now()), u.UserID)
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---- display prefs ----
+
+// displaySizes is the per-user board layout ({boardW,listW,cardLines}), shared
+// across all of the user's boards and devices. Display numbers only — no question
+// content — so it lives plaintext in users.sizes, like ranks (see migrateV9). All
+// three are pointers so a null (boardW/cardLines "unlimited") round-trips and an
+// absent field doesn't collapse to a spurious zero; the client clamps ranges on
+// read, so the server only validates the shape.
+type displaySizes struct {
+	BoardW    *int `json:"boardW"`
+	ListW     *int `json:"listW"`
+	CardLines *int `json:"cardLines"`
+}
+
+func (s *server) handleSetSizes(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var sz displaySizes
+	if !readJSON(w, r, &sz) {
+		return
+	}
+	// Re-marshal to a canonical {boardW,listW,cardLines}, dropping anything else.
+	canon, err := json.Marshal(sz)
+	if err != nil {
+		httpError(w, http.StatusBadRequest, "invalid sizes")
+		return
+	}
+	err = s.withWriteTx(r.Context(), "set-sizes", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update users set sizes = ?, updated_at = ? where id = ?`,
+			string(canon), rfc3339(time.Now()), u.UserID)
 		return err
 	})
 	if handleErr(w, err) {
