@@ -145,11 +145,14 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
         iconbtn id="handoutsClose" label="Закрыть" "×"
     split
       pane kind="src"
-        label "Источник (.hndt)"
+        -- both panes open with the same header row, so the two labels (and the
+        -- textarea / pdf area under them) sit on one line across the splitter
+        row gap="sm" align="center" justify="between"
+          label "Источник (.hndt)"
         editor id="handoutsSource" kind="handouts" spellcheck="false"
         row gap="sm" align="center" wrap
           button small id="handoutsGenerate" "Сгенерировать PDF"
-          button small kind="ghost" id="handoutsSplitFit" title="Подобрать раскладку (split-fit) и скачать zip со всеми PDF" "✂️ Split-fit (zip)"
+          button small kind="ghost" id="handoutsSplitFit" title="Подобрать раскладку (split-fit) и скачать zip со всеми PDF" "Split-fit"
         message id="handoutsMessage"
       pane kind="preview"
         row gap="sm" align="center" justify="between"

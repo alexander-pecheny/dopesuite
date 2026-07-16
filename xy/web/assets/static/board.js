@@ -2013,7 +2013,14 @@ function renderRich(text, imgMap, opts = {}) {
   const screenSide = !!(opts.accents || opts.brackets);
   const nb = (t) => (opts.nbsp ? xyChgk.replaceNoBreak(t) : t);
   const frag = document.createDocumentFragment();
-  for (const [type, val] of xyChgk.renderRuns(text, opts)) {
+  // An image renders as a block, so it already ends its line; under pre-wrap the
+  // source's own newline right after "(img …)" would add a second, empty one.
+  let afterImg = false;
+  for (let [type, val] of xyChgk.renderRuns(text, opts)) {
+    if (afterImg) {
+      afterImg = false;
+      if (!type && typeof val === "string" && val.startsWith("\n")) val = val.slice(1);
+    }
     if (type === "linebreak") { frag.append(el("br")); continue; }
     if (type === "pagebreak") { frag.append(el("hr", { class: "pv-pagebreak" })); continue; }
     if (type === "img") {
@@ -2021,6 +2028,7 @@ function renderRich(text, imgMap, opts = {}) {
       const url = imgMap.get(name);
       if (url) frag.append(el("img", { class: "pv-img", src: url, alt: name }));
       else frag.append(el("span", { class: "pv-img-missing", dataset: { img: name }, text: `[изображение: ${name}]` }));
+      afterImg = true;
       continue;
     }
     if (type === "screen") { frag.append(document.createTextNode(nb((screenSide ? val.for_screen : val.for_print) || ""))); continue; }
@@ -2198,7 +2206,10 @@ async function previewList(list) {
   // Text renders straight away (cards are decrypted at board load); image
   // handouts resolve in the background and replace their placeholders as they
   // arrive, so a long list is readable immediately.
-  const numbers = xyChgk.numberQuestionCards(cards);
+  // Match the board: a grouped list numbers continuously across its group.
+  const numbers = list.groupId != null
+    ? (groupNumbering(listsInGroup(list.groupId)).get(list.id) || [])
+    : xyChgk.numberQuestionCards(cards);
   const imgMap = new Map();
   const ctx = { cards, numbers, imgMap };
   previewCtx = ctx;
@@ -3773,9 +3784,11 @@ async function loadAttachments(cardId) {
   const list = await cardAttachments(cardId, true);
   for (const att of list) {
     const name = att.name || "файл";
-    if ((att.mime || "").startsWith("image/")) cardImageNames.push(name);
+    const isImage = (att.mime || "").startsWith("image/");
+    if (isImage) cardImageNames.push(name);
+    // Images open in a new tab (save via right-click there); other files download.
     const row = el("div", { class: "attach-row" },
-      el("button", { class: "attach-name", type: "button", text: `📎 ${name}`, onclick: () => download(att, name) }),
+      el("button", { class: "attach-name", type: "button", text: `📎 ${name}`, onclick: () => (isImage ? viewAttachment(att) : download(att, name)) }),
       el("span", { class: "attach-size", text: humanSize(att.size) }),
       el("button", { class: "attach-del", type: "button", title: "Удалить", text: "×", onclick: () => removeAttachment(att, name) }),
     );
@@ -3908,6 +3921,16 @@ document.getElementById("pasteForm").addEventListener("submit", async (e) => {
 document.getElementById("pasteCancel").addEventListener("click", closePasteModal);
 pasteOverlay.addEventListener("pointerdown", (e) => { if (e.target === pasteOverlay) closePasteModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pasteOverlay.hidden) closePasteModal(); });
+
+// viewAttachment shows an image attachment in a new tab. attachmentUrl already
+// handles the offline mirror + memoizes the object URL, which stays alive for
+// the page's lifetime — so the tab can be reloaded / the image saved from there.
+async function viewAttachment(att) {
+  try {
+    const url = await attachmentUrl(att);
+    window.open(url, "_blank", "noopener");
+  } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
+}
 
 async function download(att, name) {
   try {

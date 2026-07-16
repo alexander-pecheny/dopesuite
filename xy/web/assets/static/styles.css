@@ -508,7 +508,9 @@
   margin: var(--space-2) 0;
   border-radius: var(--radius-sm);
 }
-.pv-img-missing { color: var(--muted); font-style: italic; }
+/* block, like the image it stands in for — renderRich swallows the source
+   newline after an (img …), so an inline placeholder would glue to the text */
+.pv-img-missing { display: block; color: var(--muted); font-style: italic; }
 
 /* Touch / small screens: shrink the type to fit more questions on screen (the
    same densification ~/dope applies on mobile). */
@@ -745,7 +747,15 @@ textarea.fld-input { min-height: 3em; }
 /* pane splitter — a structural rule, so --grid (like the table cell grids) */
 .handouts-src { border-right: 1px solid var(--grid); }
 .handouts-textarea { flex: 1; min-height: 320px; width: 100%; }
-.handouts-pdf { flex: 1; margin-top: var(--space-2); background: var(--page); border-radius: var(--radius-md); min-height: 320px; display: flex; }
+/* The two panes are mirrored columns: header row, then the big area, spaced by
+   the pane's gap (not by per-widget margins, which is what glued the label /
+   buttons to the textarea). The section-label's own margins are for flowing
+   forms, not headers — zeroed here; the header rows reserve a small-button
+   height so «Скачать» appearing doesn't push the PDF down out of line. */
+.handouts-doc .handouts-pane { gap: var(--space-3); }
+.handouts-doc .section-label { margin: 0; }
+.handouts-doc .handouts-pane > .u-row:first-child { min-height: var(--control-h-sm); }
+.handouts-pdf { flex: 1; background: var(--field-bg); border-radius: var(--radius-md); min-height: 320px; display: flex; }
 .handouts-pdf-frame { flex: 1; width: 100%; height: 100%; border: none; border-radius: var(--radius-md); }
 
 @media (max-width: 760px) {
