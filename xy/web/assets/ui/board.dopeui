@@ -110,6 +110,17 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
         iconbtn id="previewClose" label="Закрыть" "×"
     mount id="previewBody" kind="preview-body"
 
+  -- import picker: the package file plus how it lands on the board — one list,
+  -- or (разбить по турам) one list per "## " section, linked into a group with
+  -- continuous numbering and combined export
+  modal id="importPickOverlay" label="Импорт пакета" title="Импорт пакета"
+    form id="importPickForm" dir="col"
+      filefield id="importFile" accept=".4s,.zip,.docx" required
+      checkbox id="importSplitTours" title="Каждый тур станет отдельным списком; списки будут связаны в группу со сквозной нумерацией и общим экспортом" " разбить по турам"
+      row gap="sm" wrap
+        button submit "Импортировать"
+        button kind="ghost" id="importPickCancel" "Отмена"
+
   -- import verification overlay: the parsed 4s source (left, editable) next to
   -- its live preview (right), so parsing mistakes can be fixed before the
   -- package becomes a list. Only .docx needs it — .4s/.zip import straight.

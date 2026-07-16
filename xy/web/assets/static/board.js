@@ -109,8 +109,8 @@ window.dopeMenu?.setExtras([{
   onClick: () => openListsManage(),
 }, {
   label: "📥 Импорт",
-  title: "Импортировать пакет вопросов (.4s, .zip или .docx) в новый список",
-  onClick: () => pickImportFile(),
+  title: "Импортировать пакет вопросов (.4s, .zip или .docx)",
+  onClick: () => openImportPick(),
 }, {
   label: "👥 Участники доски",
   title: "Поделиться доской: добавить или убрать участников",
@@ -1248,22 +1248,27 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !listsMa
 // importCtx holds the package awaiting confirmation on the verification screen.
 let importCtx = null;
 
-function pickImportFile() {
-  const input = el("input", { type: "file", accept: ".4s,.zip,.docx" });
-  input.style.display = "none";
-  input.addEventListener("change", async () => {
-    const file = input.files[0];
-    input.remove();
-    if (file) await importFile(file);
-  });
-  // Dismissing the picker fires "cancel", not "change" — without this the hidden
-  // input would linger in the DOM, one per dismissal.
-  input.addEventListener("cancel", () => input.remove());
-  document.body.append(input);
-  input.click();
-}
+const importPickOverlay = document.getElementById("importPickOverlay");
 
-async function importFile(file) {
+function openImportPick() {
+  document.getElementById("importPickForm").reset();
+  importPickOverlay.hidden = false;
+}
+function closeImportPick() { importPickOverlay.hidden = true; }
+
+document.getElementById("importPickForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const file = document.getElementById("importFile").files[0];
+  if (!file) return;
+  const splitTours = document.getElementById("importSplitTours").checked;
+  closeImportPick();
+  await importFile(file, splitTours);
+});
+document.getElementById("importPickCancel").addEventListener("click", closeImportPick);
+importPickOverlay.addEventListener("pointerdown", (e) => { if (e.target === importPickOverlay) closeImportPick(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !importPickOverlay.hidden) closeImportPick(); });
+
+async function importFile(file, splitTours) {
   if (!xySync.isOnline()) { alert("Импорт доступен только онлайн."); return; }
   setStatus("saving");
   try {
@@ -1274,8 +1279,8 @@ async function importFile(file) {
     const pkg = await res.json();
     setStatus("saved");
     // A .docx parse is a guess; let the user check it before it becomes a list.
-    if (/\.docx$/i.test(file.name)) openImportVerify(pkg);
-    else await commitImport(pkg.name, pkg.source, pkg.images);
+    if (/\.docx$/i.test(file.name)) openImportVerify(pkg, splitTours);
+    else await commitImport(pkg.name, pkg.source, pkg.images, splitTours);
   } catch (err) {
     setStatus("error");
     alert("Не удалось разобрать файл: " + err.message);
@@ -1318,9 +1323,9 @@ function importImgMap(images) {
   return map;
 }
 
-function openImportVerify(pkg) {
+function openImportVerify(pkg, splitTours) {
   closeImportVerify();
-  importCtx = { name: pkg.name, images: pkg.images || [], imgMap: importImgMap(pkg.images) };
+  importCtx = { name: pkg.name, images: pkg.images || [], imgMap: importImgMap(pkg.images), splitTours };
   document.getElementById("importTitle").textContent = "Проверка импорта: " + pkg.name;
   const src = document.getElementById("importSource");
   src.value = pkg.source;
@@ -1355,10 +1360,10 @@ document.getElementById("importSource").addEventListener("input", debounceImport
 document.getElementById("importClose").addEventListener("click", closeImportVerify);
 document.getElementById("importCommit").addEventListener("click", async () => {
   if (!importCtx) return;
-  const { name, images } = importCtx;
+  const { name, images, splitTours } = importCtx;
   const source = document.getElementById("importSource").value;
   closeImportVerify();
-  await commitImport(name, source, images);
+  await commitImport(name, source, images, splitTours);
 });
 importOverlay.addEventListener("pointerdown", (e) => { if (e.target === importOverlay) closeImportVerify(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !importOverlay.hidden) closeImportVerify(); });
@@ -1372,21 +1377,48 @@ function debounceImportPreview() {
   };
 }
 
-// ---- commit: 4s source + images → a new encrypted list ----
+// ---- commit: 4s source + images → a new encrypted list (or a group of them) ----
 
-// commitImport creates the list, one card per 4s block, and attaches each image
-// to the card whose text references it via an `(img …)` directive.
+// splitCardsByTours groups the blocks into tours: a "## …" section block starts
+// a new tour and names its list (the section card itself is kept, so the 4s
+// source survives export intact). Blocks before the first section — usually the
+// editors/date preamble — become their own leading list.
+function splitCardsByTours(cards) {
+  const tours = [];
+  let cur = null;
+  for (const c of cards) {
+    const sec = xyChgk.parseBlocks(c.desc).find((b) => b.type === "section");
+    if (sec) {
+      cur = { title: sec.text.split("\n")[0].trim() || `Тур ${tours.length + 1}`, cards: [] };
+      tours.push(cur);
+    } else if (!cur) {
+      cur = { title: "Преамбула", cards: [] };
+      tours.push(cur);
+    }
+    cur.cards.push(c);
+  }
+  return tours;
+}
+
+// commitImport creates the list(s), one card per 4s block, and attaches each
+// image to the card whose text references it via an `(img …)` directive. With
+// splitTours on, each tour becomes its own list and the lists are linked into a
+// list group — continuous numbering and combined export across tours.
 //
-// The list and its cards are posted directly (jpost), not through the sync
+// The lists and cards are posted directly (jpost), not through the sync
 // outbox: an import is online-only anyway, and mutate() hands back a negative
 // temp id whenever the queue is non-empty — which the attachment upload, a plain
 // POST to /api/cards/{id}/attachments, cannot use. Going direct keeps every id real.
-async function commitImport(name, source, images) {
+async function commitImport(name, source, images, splitTours) {
   const cards = importCards(source);
   if (!cards.length) { alert("В файле не найдено вопросов."); return; }
   if (!xySync.isOnline()) { alert("Импорт доступен только онлайн."); return; }
-  const title = (prompt("Название нового списка:", name || "Импорт") || "").trim();
+  const tours = splitTours ? splitCardsByTours(cards) : [];
+  // The server refuses a group of one, and a group of one is pointless anyway.
+  const grouped = tours.length >= 2;
+  const title = (prompt(grouped ? "Название группы списков:" : "Название нового списка:", name || "Импорт") || "").trim();
   if (!title) return;
+  const parts = grouped ? tours : [{ title, cards }];
 
   setStatus("saving");
   const byName = new Map((images || []).map((i) => [i.name, i]));
@@ -1394,40 +1426,52 @@ async function commitImport(name, source, images) {
   const failed = []; // images the server refused — the card would keep a dead (img …)
   try {
     const ranks = [...state.lists].sort(byRank);
-    const rank = keyBetween(ranks.length ? ranks[ranks.length - 1].rank : null, null);
-    const lres = await jpost(`/api/boards/${boardId}/lists`, {
-      title_enc: await xyCrypto.encField(dk, title), rank, type: "normal",
-    });
-    state.lists.push({ id: lres.id, type: "normal", rank, title });
-
-    let cardRank = null;
-    for (const c of cards) {
-      cardRank = keyBetween(cardRank, null);
-      const res = await jpost(`/api/lists/${lres.id}/cards`, {
-        description_enc: await xyCrypto.encField(dk, c.desc), rank: cardRank, kind: c.kind,
+    let rank = ranks.length ? ranks[ranks.length - 1].rank : null;
+    const listIds = [];
+    for (const part of parts) {
+      rank = keyBetween(rank, null);
+      const lres = await jpost(`/api/boards/${boardId}/lists`, {
+        title_enc: await xyCrypto.encField(dk, part.title), rank, type: "normal",
       });
-      state.cards.push({ id: res.id, listId: lres.id, kind: c.kind, rank: cardRank, desc: c.desc });
-      done++;
-      // Attach only the images this card actually references, so a handout lands
-      // on the question that uses it (which is where the preview/export look).
-      const refs = new Set();
-      for (const m of c.desc.matchAll(/\(img\b([^)]*)\)/g)) refs.add(imgName(m[1]));
-      for (const ref of refs) {
-        const img = byName.get(ref);
-        if (!img) continue;
-        if (await attachImported(res.id, img)) attached++;
-        else failed.push(ref);
+      listIds.push(lres.id);
+      state.lists.push({ id: lres.id, type: "normal", rank, title: part.title });
+
+      let cardRank = null;
+      for (const c of part.cards) {
+        cardRank = keyBetween(cardRank, null);
+        const res = await jpost(`/api/lists/${lres.id}/cards`, {
+          description_enc: await xyCrypto.encField(dk, c.desc), rank: cardRank, kind: c.kind,
+        });
+        state.cards.push({ id: res.id, listId: lres.id, kind: c.kind, rank: cardRank, desc: c.desc });
+        done++;
+        // Attach only the images this card actually references, so a handout lands
+        // on the question that uses it (which is where the preview/export look).
+        const refs = new Set();
+        for (const m of c.desc.matchAll(/\(img\b([^)]*)\)/g)) refs.add(imgName(m[1]));
+        for (const ref of refs) {
+          const img = byName.get(ref);
+          if (!img) continue;
+          if (await attachImported(res.id, img)) attached++;
+          else failed.push(ref);
+        }
       }
     }
-    render();
+    if (grouped) {
+      await jpost(`/api/boards/${boardId}/list-groups`, { name_enc: await xyCrypto.encField(dk, title), list_ids: listIds });
+      // Reload rather than mirror group_id/groups[] locally — import is online-only.
+      await load();
+    } else render();
     setStatus("saved");
-    let msg = `Импортировано: ${done} карточек, ${attached} изображений.`;
+    let msg = grouped
+      ? `Импортировано: ${parts.length} списков (по турам), ${done} карточек, ${attached} изображений.`
+      : `Импортировано: ${done} карточек, ${attached} изображений.`;
+    if (splitTours && !grouped) msg += "\nТуры («## …») в файле не найдены — создан один список.";
     // A dropped image is invisible otherwise: the card keeps its (img …) directive
     // but the picture is gone, and the parse response is not kept to retry from.
     if (failed.length) msg += `\n\nНе удалось загрузить изображения (${failed.length}): ${failed.join(", ")}`;
     alert(msg);
   } catch (err) {
-    // The list and the cards created so far are already on the server — show them
+    // The lists and the cards created so far are already on the server — show them
     // rather than leaving the board looking as if nothing happened.
     render();
     setStatus("error");
