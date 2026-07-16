@@ -24,6 +24,12 @@ func newAssets() *webassets.Assets {
 		CoreCSSDiskPath: "../dopeuikit/assets/core.css",
 		Fonts:           kit.Fonts,
 		FontsDiskRoot:   "../dopeuikit/assets",
+		Shared: []webassets.SharedFile{{
+			Path:        "/static/login.js",
+			Bytes:       kit.LoginJS,
+			DiskPath:    "../dopeuikit/assets/login.js",
+			ContentType: "text/javascript; charset=utf-8",
+		}},
 	})
 }
 

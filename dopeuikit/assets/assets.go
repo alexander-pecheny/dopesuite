@@ -11,6 +11,14 @@ import (
 //go:embed core.css
 var CoreCSS []byte
 
+// LoginJS is the shared multi-step login page script (username → password/code
+// branch). Both apps' login.dopeui pages load it as /static/login.js; the
+// post-login destination comes from a data-login-redirect attribute on the page
+// (default "/").
+//
+//go:embed login.js
+var LoginJS []byte
+
 // Fonts is the font directory (the variable noto-sans-*/jetbrains-mono-* woff2),
 // served at /static/fonts/.
 //

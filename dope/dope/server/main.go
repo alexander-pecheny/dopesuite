@@ -182,6 +182,7 @@ func Main() {
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
 	mux.HandleFunc("/static/styles.css", srv.assets.ServeStylesheet())
+	mux.HandleFunc("/static/login.js", srv.assets.ServeShared("/static/login.js"))
 	mux.Handle("/static/fonts/", srv.assets.ServeFonts())
 	mux.Handle("/static/", srv.assets.FileServer())
 

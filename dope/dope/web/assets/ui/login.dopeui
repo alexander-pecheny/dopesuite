@@ -2,7 +2,7 @@ page title="Вход · Фест" kind="sheet" classicscripts="login.js"
   topbar title="Вход"
     iconlink href="/register" label="Регистрация" "→"
 
-  section id="step-username"
+  section id="step-username" data-login-redirect="/host"
     hint "Введите логин."
     form id="usernameForm" autocomplete="on"
       textfield id="loginUsername" name="username" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required autofocus grow

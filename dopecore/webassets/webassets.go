@@ -38,6 +38,22 @@ type Config struct {
 	// FontsDiskRoot is the directory containing "fonts" in disk/dev mode.
 	// Optional.
 	FontsDiskRoot string
+
+	// Shared are kit-owned files served under /static/ alongside the app's own
+	// (e.g. the shared login.js). Same disk-or-embed contract as CoreCSS.
+	Shared []SharedFile
+}
+
+// SharedFile is one kit-owned static file.
+type SharedFile struct {
+	// Path is the request path ("/static/login.js").
+	Path string
+	// Bytes are the embedded kit bytes.
+	Bytes []byte
+	// DiskPath re-reads the sibling checkout in disk/dev mode. Optional.
+	DiskPath string
+	// ContentType is the served Content-Type.
+	ContentType string
 }
 
 // Assets is the resolved asset source plus everything derived from it.
@@ -73,6 +89,9 @@ func New(cfg Config) *Assets {
 		// only the app layer would leave a core.css-only change invisible to
 		// caches holding an immutable ?v= copy.
 		a.ETags["/static/styles.css"] = etag(a.stylesheet)
+		for _, sf := range cfg.Shared {
+			a.ETags[sf.Path] = etag(sf.Bytes)
+		}
 	}
 	return a
 }
@@ -188,6 +207,36 @@ func (a *Assets) ServeFonts() http.Handler {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		handler.ServeHTTP(w, r)
 	})
+}
+
+// ServeShared serves a kit-owned file registered in Config.Shared, re-reading
+// the sibling checkout in disk/dev mode (the CoreCSS contract).
+func (a *Assets) ServeShared(path string) http.HandlerFunc {
+	var file SharedFile
+	for _, sf := range a.cfg.Shared {
+		if sf.Path == path {
+			file = sf
+			break
+		}
+	}
+	if file.Path == "" {
+		panic("webassets: ServeShared of unregistered path " + path)
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		body := file.Bytes
+		if a.NoCache && file.DiskPath != "" {
+			if b, err := os.ReadFile(file.DiskPath); err == nil {
+				body = b
+			}
+		}
+		a.setCachePolicy(w, r, file.Path)
+		w.Header().Set("Content-Type", file.ContentType)
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		_, _ = w.Write(body)
+	}
 }
 
 var assetRefRe = regexp.MustCompile(`(src|href)="(/static/[^"?]+\.(?:js|css))"`)

@@ -8,6 +8,8 @@ import "pecheny.me/dopeuikit/assets"
 var (
 	// CoreCSS is the shared design-system stylesheet (core.css).
 	CoreCSS = assets.CoreCSS
+	// LoginJS is the shared login page script, served at /static/login.js.
+	LoginJS = assets.LoginJS
 	// Fonts is the font directory (the variable noto-sans-*/jetbrains-mono-* woff2),
 	// served at /static/fonts/.
 	Fonts = assets.Fonts

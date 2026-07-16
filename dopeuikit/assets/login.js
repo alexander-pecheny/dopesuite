@@ -139,7 +139,10 @@ function showStep(target) {
 }
 
 function redirectToHost() {
-  window.location.replace("/");
+  // Where a successful login lands is the app's call: the login page marks an
+  // element with data-login-redirect (dope's step-username → "/host"); default "/".
+  const marked = document.querySelector("[data-login-redirect]");
+  window.location.replace(marked?.getAttribute("data-login-redirect") || "/");
 }
 
 async function fetchJSON(url, init) {
