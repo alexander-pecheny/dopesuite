@@ -24,10 +24,8 @@ type para struct {
 	size      float64 // block-level text size (headings); 0 = body size
 	bold      bool
 	italic    bool
-	runSize   float64 // per-run text size, pt; 0 = inherit. Expressions are built at
-	// append time, so flipping this mid-paragraph resizes only the runs that follow
-	// (author glued onto the answer paragraph).
-	exprs []string // content expressions, with pbMarker where a page break falls
+	runSize   float64  // per-run text size, pt; 0 = inherit
+	exprs     []string // content expressions, with pbMarker where a page break falls
 }
 
 // pbMarker separates the block-chunks of a paragraph interrupted by a page break.

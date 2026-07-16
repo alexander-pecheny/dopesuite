@@ -497,8 +497,11 @@
 .pv-list-item { padding-left: 1.6em; text-indent: -1.6em; margin-bottom: var(--space-0-5); }
 .pv-list-num { font-weight: var(--fw-regular); }
 .pv-handout { color: var(--muted); }
-/* sources/authors set smaller, matching the exports' 12pt → 10pt */
+/* sources/authors set smaller, matching the exports' 12pt → 10pt. The block after
+   a body-size one starts one BODY line below, not one small line: the lost height
+   is 1.55 × (2/12) body-em = 0.31 of the small block's own em. */
 .pv-small { font-size: calc(10em / 12); }
+:not(.pv-small) + .pv-small { margin-top: 0.31em; }
 .pv-heading { font-size: var(--text-xl); font-weight: var(--fw-bold); margin: var(--space-5) 0 var(--space-3); }
 .pv-section { font-size: var(--text-lg); font-weight: var(--fw-semibold); margin: var(--space-4) 0 var(--space-2); }
 .pv-test { color: var(--muted); font-style: italic; }

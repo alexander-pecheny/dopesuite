@@ -116,15 +116,20 @@ func TestDocxTextParity(t *testing.T) {
 	}
 }
 
-// stripSrcSz removes the source/author font-size run props so the body parity
-// check below still locks in everything else. Applied to both sides: xy emits
-// sz+szCs, chgksuite (python-docx) emits sz only, and older oracles none.
+// stripSrcSz removes xy's deliberate source/author deviations — the 10pt run
+// props, the compensating paragraph gap, and the author-without-source paragraph
+// split — so the body parity check below still locks in everything else. Applied
+// to both sides: xy emits sz+szCs, chgksuite (python-docx) emits sz only, and
+// older oracles none.
 func stripSrcSz(s string) string {
-	for _, frag := range []string{`<w:sz w:val="20"/>`, `<w:szCs w:val="20"/>`} {
+	for _, frag := range []string{`<w:sz w:val="20"/>`, `<w:szCs w:val="20"/>`, `<w:spacing w:before="46"/>`} {
 		s = strings.ReplaceAll(s, frag, "")
 	}
 	s = strings.ReplaceAll(s, "<w:rPr></w:rPr>", "")
 	s = strings.ReplaceAll(s, "<w:rPr/>", "")
+	// Collapse the (spacing-stripped) source/author paragraph boundary to the
+	// in-paragraph line break older oracles used for author-without-source.
+	s = strings.ReplaceAll(s, "</w:p><w:p><w:pPr><w:keepLines/></w:pPr>", "<w:r><w:br/></w:r>")
 	return strings.ReplaceAll(s, "<w:r></w:r>", "<w:r/>") // empty token run, size-stripped
 }
 

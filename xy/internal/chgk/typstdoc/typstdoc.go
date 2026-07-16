@@ -61,6 +61,7 @@ const (
 	questionPt  = 18.0      // question paragraph w:before=360tw
 	answerPt    = 6.0       // answer paragraph w:before=120tw
 	srcPt       = 10.0      // source/author runs: 2pt below body (matches the docx export)
+	srcGapPt    = 2.72      // the shrunk block starts one BODY line below: 2pt × Noto Sans's 1.362em line box (asc 1.069 + desc 0.293)
 	linkColor   = "#0000ff" // Hyperlink character style
 	tabWidth    = "36pt"    // Word's default tab stop (0.5in)
 	fontFamily  = "Noto Sans"
@@ -166,8 +167,9 @@ func (e *exporter) generate(doc fsource.Doc) string {
 }
 
 // renderQuestion mirrors docx.renderQuestion: the question (label + handout +
-// text), the answer (with zachet/nezachet/comment glued on), and the source (with
-// the author glued on) — each a keep-together paragraph.
+// text), the answer (with zachet/nezachet/comment glued on), and the shared
+// source/author paragraph — smaller type, spaced to start one body line below —
+// each a keep-together paragraph.
 func (e *exporter) renderQuestion(q *fsource.Question) string {
 	var out strings.Builder
 
@@ -193,22 +195,19 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 			continue
 		}
 		nbsp := field != "source"
-		if field == "source" {
-			src = &para{keepLines: true, runSize: srcPt}
+		if field == "source" || field == "author" {
+			if src == nil {
+				src = &para{keepLines: true, runSize: srcPt, above: srcGapPt}
+			} else {
+				src.addBreak()
+			}
 			src.addStyled(labelFor(q, field)+": ", "bold")
 			e.addValue(src, v, nbsp)
 			continue
 		}
-		cur := p2
-		if src != nil {
-			cur = src
-		}
-		if field == "author" {
-			cur.runSize = srcPt
-		}
-		cur.addBreak()
-		cur.addStyled(labelFor(q, field)+": ", "bold")
-		e.addValue(cur, v, nbsp)
+		p2.addBreak()
+		p2.addStyled(labelFor(q, field)+": ", "bold")
+		e.addValue(p2, v, nbsp)
 	}
 	out.WriteString(p2.typ())
 	if src != nil {

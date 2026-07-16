@@ -48,6 +48,10 @@ const (
 	// srcSz: source/author runs are set 2pt below the 12pt body (half-points).
 	// A deliberate deviation from chgksuite's output.
 	srcSz = 20
+	// srcGapTw: the shrunk source/author paragraph starts one BODY line below the
+	// answer paragraph, not one small line — the 2pt shrink × Arial's 1.15em line
+	// box, in twips.
+	srcGapTw = 46
 )
 
 // relItem is a relationship appended to word/_rels/document.xml.rels in document
@@ -86,10 +90,8 @@ type para struct {
 	pageBreakBefore bool
 	spacingBefore   int  // twips; 0 = none
 	lang            bool // template para0 carries <w:rPr><w:lang w:val="en-US"/>
-	sz              int  // run font size, half-points; 0 = style default. Runs are
-	// serialized at append time, so flipping this mid-paragraph resizes only the
-	// runs that follow (author glued onto the answer paragraph).
-	runs []string
+	sz              int // run font size, half-points; 0 = style default
+	runs            []string
 }
 
 // pPr child order follows the OOXML CT_PPr schema (pStyle, keepNext, keepLines,
@@ -250,8 +252,9 @@ func (e *exporter) renderQuestion(q *fsource.Question) []string {
 	e.addValue(p1, q.Get("question"), true)
 	out = append(out, p1.xml())
 
-	// Paragraph 2: answer (+ zachet/nezachet/comment glued in). The source field
-	// starts a fresh paragraph; author then glues onto that source paragraph.
+	// Paragraph 2: answer (+ zachet/nezachet/comment glued in). Source and author
+	// share a fresh paragraph, set 2pt smaller, spaced to start one body line
+	// below (whichever of the two comes first opens it).
 	p2 := &para{keepLines: true, spacingBefore: 120}
 	p2.addRaw(labelFor(q, "answer")+": ", "bold")
 	e.addValue(p2, q.Get("answer"), true)
@@ -263,22 +266,19 @@ func (e *exporter) renderQuestion(q *fsource.Question) []string {
 			continue
 		}
 		nbsp := field != "source"
-		if field == "source" {
-			src = &para{keepLines: true, sz: srcSz}
+		if field == "source" || field == "author" {
+			if src == nil {
+				src = &para{keepLines: true, sz: srcSz, spacingBefore: srcGapTw}
+			} else {
+				src.addRaw("\n", "")
+			}
 			src.addRaw(labelFor(q, field)+": ", "bold")
 			e.addValue(src, v, nbsp)
 			continue
 		}
-		cur := p2
-		if src != nil {
-			cur = src
-		}
-		if field == "author" {
-			cur.sz = srcSz
-		}
-		cur.addRaw("\n", "")
-		cur.addRaw(labelFor(q, field)+": ", "bold")
-		e.addValue(cur, v, nbsp)
+		p2.addRaw("\n", "")
+		p2.addRaw(labelFor(q, field)+": ", "bold")
+		e.addValue(p2, v, nbsp)
 	}
 	out = append(out, p2.xml())
 	if src != nil {
