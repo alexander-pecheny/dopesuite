@@ -94,11 +94,12 @@ async function requireLogin() {
 // must agree on defaults, ranges and the null="unlimited" convention.
 // 1512 = the logical width of a 14" MacBook screen — a board that fills a
 // laptop and stays a centred column on anything wider.
-const SIZES_DEFAULT = { boardW: 1512, listW: 280, cardLines: 3 };
+const SIZES_DEFAULT = { boardW: 1512, listW: 280, cardLines: 3, cardFont: 14 };
 const SIZES_RANGE = {
   BOARD_W_MIN: 800, BOARD_W_MAX: 3200,   // MAX = «вся ширина»
   LIST_W_MIN: 200, LIST_W_MAX: 640,
   CARD_LINES_MAX: 12,                    // MAX = «без ограничения»
+  CARD_FONT_MIN: 10, CARD_FONT_MAX: 18,  // px; default 14 = --text-sm
 };
 
 const inRange = (n, lo, hi) => Number.isFinite(n) && n >= lo && n < hi;
@@ -115,6 +116,10 @@ function sanitizeSizes(s) {
     boardW: pickSize(s.boardW, SIZES_RANGE.BOARD_W_MIN, SIZES_RANGE.BOARD_W_MAX, SIZES_DEFAULT.boardW),
     listW: pickSize(s.listW, SIZES_RANGE.LIST_W_MIN, SIZES_RANGE.LIST_W_MAX + 1, SIZES_DEFAULT.listW),
     cardLines: pickSize(s.cardLines, 1, SIZES_RANGE.CARD_LINES_MAX, SIZES_DEFAULT.cardLines),
+    // no null sentinel here — sizes saved before this knob existed carry
+    // cardFont: null (the server canonicalizes absent fields to null)
+    cardFont: inRange(Number(s.cardFont), SIZES_RANGE.CARD_FONT_MIN, SIZES_RANGE.CARD_FONT_MAX + 1)
+      ? Number(s.cardFont) : SIZES_DEFAULT.cardFont,
   };
 }
 
@@ -124,6 +129,7 @@ function applySizes(s, root = document.documentElement) {
   root.style.setProperty("--kanban-max-w", s.boardW == null ? "none" : s.boardW + "px");
   root.style.setProperty("--klist-w", s.listW + "px");
   root.style.setProperty("--kcard-lines", s.cardLines == null ? "none" : String(s.cardLines));
+  root.style.setProperty("--kcard-font", s.cardFont + "px");
 }
 
 export const xySizes = { DEFAULT: SIZES_DEFAULT, ...SIZES_RANGE, sanitize: sanitizeSizes, apply: applySizes };

@@ -559,6 +559,7 @@ type displaySizes struct {
 	BoardW    *int `json:"boardW"`
 	ListW     *int `json:"listW"`
 	CardLines *int `json:"cardLines"`
+	CardFont  *int `json:"cardFont"`
 }
 
 func (s *server) handleSetSizes(w http.ResponseWriter, r *http.Request) {

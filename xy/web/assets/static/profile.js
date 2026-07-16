@@ -89,6 +89,7 @@ passwordForm.addEventListener("submit", async (e) => {
 const sizesBoardW = document.getElementById("sizesBoardW");
 const sizesListW = document.getElementById("sizesListW");
 const sizesCardH = document.getElementById("sizesCardH");
+const sizesCardFont = document.getElementById("sizesCardFont");
 const preview = document.getElementById("sizesPreview");
 
 // The pretend monitor the preview scales against: wide enough that the default
@@ -102,6 +103,9 @@ function renderPreview() {
   const k = (preview.clientWidth || 360) / PREVIEW_SCREEN_W;
   preview.style.setProperty("--pv-board-w", sizes.boardW == null ? "none" : Math.round(sizes.boardW * k) + "px");
   preview.style.setProperty("--pv-list-w", Math.round(sizes.listW * k) + "px");
+  // A text line is ~1.4× the font size; scale it like everything else so the
+  // font knob visibly re-packs the wireframe cards.
+  preview.style.setProperty("--pvb-line-h", Math.max(1.5, sizes.cardFont * 1.4 * k).toFixed(1) + "px");
   const lists = [];
   for (let i = 0; i < 8; i++) {
     const cards = [];
@@ -124,10 +128,12 @@ function syncSizesUI() {
   sizesBoardW.value = String(s.boardW == null ? xySizes.BOARD_W_MAX : s.boardW);
   sizesListW.value = String(s.listW);
   sizesCardH.value = String(s.cardLines == null ? xySizes.CARD_LINES_MAX : s.cardLines);
+  sizesCardFont.value = String(s.cardFont);
   document.getElementById("sizesBoardWVal").textContent = s.boardW == null ? "вся ширина" : s.boardW + " px";
   document.getElementById("sizesListWVal").textContent = s.listW + " px";
   document.getElementById("sizesCardHVal").textContent =
     s.cardLines == null ? "весь текст" : s.cardLines + (s.cardLines === 1 ? " строка" : s.cardLines < 5 ? " строки" : " строк");
+  document.getElementById("sizesCardFontVal").textContent = s.cardFont + " px";
   renderPreview();
 }
 
@@ -148,6 +154,7 @@ function commitSizes() {
     boardW: boardW >= xySizes.BOARD_W_MAX ? null : boardW,
     listW: Number(sizesListW.value),
     cardLines: lines >= xySizes.CARD_LINES_MAX ? null : lines,
+    cardFont: Number(sizesCardFont.value),
   };
   syncSizesUI();
   scheduleSizesSave();
@@ -156,6 +163,7 @@ function commitSizes() {
 sizesBoardW.addEventListener("input", commitSizes);
 sizesListW.addEventListener("input", commitSizes);
 sizesCardH.addEventListener("input", commitSizes);
+sizesCardFont.addEventListener("input", commitSizes);
 document.getElementById("sizesReset").addEventListener("click", () => {
   sizes = { ...xySizes.DEFAULT };
   syncSizesUI();

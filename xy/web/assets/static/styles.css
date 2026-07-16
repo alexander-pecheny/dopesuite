@@ -153,6 +153,7 @@
   --z-board-header: 60;
   --klist-w: 280px;
   --kcard-lines: none;    /* none = card shows the whole question, unclamped */
+  --kcard-font: 14px;     /* card text size — smaller packs more questions on screen */
 }
 .klist {
   flex: 0 0 var(--klist-w);
@@ -197,7 +198,7 @@
    pair is still the only thing that works cross-browser; `line-clamp` is the
    standard alias, harmless where unsupported. */
 .kcard-title {
-  font-size: var(--text-sm);
+  font-size: var(--kcard-font);
   white-space: pre-wrap;
   word-break: break-word;
   display: -webkit-box;
@@ -222,6 +223,9 @@
 /* No fill, so no visible box: zero the vertical padding to line the input's
    top edge up with the list panels' top edge. */
 .klist-add { background: transparent; padding-block: 0; }
+/* the ghost "new list" tile is an input, but it stands in the row of list
+   columns — take their fill, not the form-field one (a subtly different grey) */
+.klist-add .input { background: var(--kanban-col); }
 .klist-add .kadd-form { color: var(--muted); }
 .klist-add:hover .kadd-form { color: var(--text); }
 .kadd-form { width: 100%; }
@@ -529,7 +533,8 @@
   .klist { flex-basis: 86vw; max-width: 320px; }
   .klist-title { font-size: var(--text-sm); }
   .kcard { padding: var(--space-1) var(--space-2); }
-  .kcard-title { font-size: var(--text-xs); }
+  /* phones already densify to 12px; a smaller user-chosen card font still wins */
+  .kcard-title { font-size: min(var(--kcard-font), var(--text-xs)); }
   /* keep the label pills off the card's top edge */
   .kcard-labels { margin-top: var(--space-1); }
   .card-detail { padding: var(--space-4) var(--space-3); }
@@ -825,7 +830,7 @@ textarea.fld-input { min-height: 3em; }
   border-radius: 2px;
   background: var(--surface);
 }
-.pvb-line { height: 3px; border-radius: 1.5px; background: var(--grid-dark); }
+.pvb-line { height: var(--pvb-line-h, 3px); border-radius: 1.5px; background: var(--grid-dark); }
 .pvb-line-last { width: 60%; }
 
 /* ── lists management modal ────────────────────────────────────────────────── */
