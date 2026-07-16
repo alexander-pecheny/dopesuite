@@ -38,55 +38,6 @@
   --results-team-city-size-mobile: 9px;
 }
 
-.od-shootout-team-list,
-.entry-suggest {
-  --scroll-fade-bg: var(--surface);
-}
-
-.entry-suggest {
-  background-image:
-    linear-gradient(var(--scroll-fade-bg) 30%, transparent),
-    linear-gradient(transparent, var(--scroll-fade-bg) 70%),
-    radial-gradient(farthest-side at 50% 0, var(--scroll-fade-color), transparent),
-    radial-gradient(farthest-side at 50% 100%, var(--scroll-fade-color), transparent);
-  background-position: center top, center bottom, center top, center bottom;
-  background-repeat: no-repeat;
-  background-size:
-    100% var(--scroll-fade-size),
-    100% var(--scroll-fade-size),
-    100% calc(var(--scroll-fade-size) * 0.5),
-    100% calc(var(--scroll-fade-size) * 0.5);
-  background-attachment: local, local, scroll, scroll;
-}
-
-.od-shootout-team-list {
-  background-image:
-    linear-gradient(var(--scroll-fade-bg) 30%, transparent),
-    linear-gradient(transparent, var(--scroll-fade-bg) 70%),
-    linear-gradient(to right, var(--scroll-fade-bg) 30%, transparent),
-    linear-gradient(to left, var(--scroll-fade-bg) 30%, transparent),
-    radial-gradient(farthest-side at 50% 0, var(--scroll-fade-color), transparent),
-    radial-gradient(farthest-side at 50% 100%, var(--scroll-fade-color), transparent),
-    radial-gradient(farthest-side at 0 50%, var(--scroll-fade-color), transparent),
-    radial-gradient(farthest-side at 100% 50%, var(--scroll-fade-color), transparent);
-  background-position:
-    center top, center bottom,
-    left center, right center,
-    center top, center bottom,
-    left center, right center;
-  background-repeat: no-repeat;
-  background-size:
-    100% var(--scroll-fade-size),
-    100% var(--scroll-fade-size),
-    var(--scroll-fade-size) 100%,
-    var(--scroll-fade-size) 100%,
-    100% calc(var(--scroll-fade-size) * 0.5),
-    100% calc(var(--scroll-fade-size) * 0.5),
-    calc(var(--scroll-fade-size) * 0.5) 100%,
-    calc(var(--scroll-fade-size) * 0.5) 100%;
-  background-attachment: local, local, local, local, scroll, scroll, scroll, scroll;
-}
-
 /* ── popovers ─────────────────────────────────────────────
    The surface (paper + hairline + shadow) is the kit's .popover base — every
    JS emitter adds that class. The block below holds only what a hover-revealed

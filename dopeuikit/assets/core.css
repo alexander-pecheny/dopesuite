@@ -233,39 +233,42 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* ── scroll-fade utility ──────────────────────────────────
+/* ── scroll-fade utilities ────────────────────────────────
    Pure-CSS scroll shadows (Lea Verou trick): a soft fade appears
    at the edge the user CAN scroll toward, and disappears when
    they've reached that end. Background covers move with content
    (background-attachment: local) so they reveal the static
    shadows underneath as scrolling progresses.
 
-   Applied directly to the overflow:auto element; override
-   --scroll-fade-bg where the container's background isn't --surface.
-   Three edge sets are in use: vertical only (.entry-suggest), horizontal
-   only (.tabs), and all four (.table-scroll, .sheet-frame). */
+   Two utilities on the overflow:auto element itself: .scroll-fade-y
+   (vertical) and .scroll-fade-xy (all four edges). The kit's own scroll
+   surfaces (.table-scroll, .sheet-frame) are in the groups below; an app
+   container composes the utility class and overrides --scroll-fade-bg
+   where its background isn't --surface. */
+.scroll-fade-y,
+.scroll-fade-xy,
 .table-scroll,
-.sheet-frame,
-.tabs {
+.sheet-frame {
   --scroll-fade-bg: var(--surface);
 }
 
-.tabs {
+.scroll-fade-y {
   background-image:
-    linear-gradient(to right, var(--scroll-fade-bg) 30%, transparent),
-    linear-gradient(to left, var(--scroll-fade-bg) 30%, transparent),
-    radial-gradient(farthest-side at 0 50%, var(--scroll-fade-color), transparent),
-    radial-gradient(farthest-side at 100% 50%, var(--scroll-fade-color), transparent);
-  background-position: left center, right center, left center, right center;
+    linear-gradient(var(--scroll-fade-bg) 30%, transparent),
+    linear-gradient(transparent, var(--scroll-fade-bg) 70%),
+    radial-gradient(farthest-side at 50% 0, var(--scroll-fade-color), transparent),
+    radial-gradient(farthest-side at 50% 100%, var(--scroll-fade-color), transparent);
+  background-position: center top, center bottom, center top, center bottom;
   background-repeat: no-repeat;
   background-size:
-    var(--scroll-fade-size) 100%,
-    var(--scroll-fade-size) 100%,
-    calc(var(--scroll-fade-size) * 0.5) 100%,
-    calc(var(--scroll-fade-size) * 0.5) 100%;
+    100% var(--scroll-fade-size),
+    100% var(--scroll-fade-size),
+    100% calc(var(--scroll-fade-size) * 0.5),
+    100% calc(var(--scroll-fade-size) * 0.5);
   background-attachment: local, local, scroll, scroll;
 }
 
+.scroll-fade-xy,
 .table-scroll,
 .sheet-frame {
   background-image:
@@ -295,10 +298,8 @@
   background-attachment: local, local, local, local, scroll, scroll, scroll, scroll;
 }
 
-/* per-container background tints to keep covers matching the bg */
+/* per-container background tint to keep covers matching the bg */
 .sheet-frame { --scroll-fade-bg: var(--structure); }
-
-.tabs { --scroll-fade-bg: var(--surface-tint); }
 
 * {
   box-sizing: border-box;
@@ -865,25 +866,6 @@ input[type="radio"]:focus-visible {
   color: var(--muted);
 }
 
-.tabs {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-  height: 48px;
-  padding: 0 64px;
-  overflow-x: auto;
-  border-top: 1px solid var(--grid);
-  background-color: var(--surface-tint);
-  color: var(--text-strong);
-  white-space: nowrap;
-}
-
-.tabs button {
-  border: 0;
-  background: transparent;
-  font-size: var(--text-xl);
-}
-
 @media (max-width: 760px) {
   .host {
     --header-h: 56px;
@@ -907,10 +889,6 @@ input[type="radio"]:focus-visible {
 
   .import-frame {
     padding: 6px;
-  }
-
-  .tabs {
-    padding: 0 16px;
   }
 }
 

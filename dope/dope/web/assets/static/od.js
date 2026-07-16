@@ -2028,7 +2028,7 @@ function updateEntrySuggest(input) {
   }
   if (!entrySuggest) {
     const list = document.createElement("div");
-    list.className = "popover entry-suggest";
+    list.className = "popover scroll-fade-y entry-suggest";
     list.tabIndex = -1;
     document.body.appendChild(list);
     entrySuggest = {input, list, items: [], active: 0};
@@ -2412,7 +2412,7 @@ function openShootoutRoundDialog() {
   form.appendChild(title);
 
   const list = document.createElement("div");
-  list.className = "od-shootout-team-list";
+  list.className = "scroll-fade-xy od-shootout-team-list";
   const stats = questionStats();
   const totals = state.teams.map((_, teamIndex) => sumRow(teamIndex, stats));
   const order = state.teams
