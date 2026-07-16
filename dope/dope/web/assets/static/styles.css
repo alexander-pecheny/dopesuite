@@ -192,12 +192,6 @@
   height: auto;
 }
 
-.game-host-top {
-  height: 44px;
-  gap: var(--space-2-5);
-  padding: var(--space-1-5) var(--page-pad-x-tight);
-}
-
 .game-header-main {
   display: flex;
   align-items: center;
@@ -268,7 +262,6 @@
 .od-page .match-main,
 .si-page .match-main,
 .ek-page .match-main {
-  height: calc(100vh - 44px);
   padding-top: var(--space-2);
 }
 

@@ -49,7 +49,7 @@ func mustApp() *base.App {
 				"sheet": {Body: []string{"host", "import-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "import-frame"}},
 				"full":  {Body: []string{"host"}, Main: []string{"match-main"}},
 				"wide":  {Body: []string{"host"}, Main: []string{"board-main"}, Frame: []string{"import-form"}},
-				"board": {Body: []string{"host", "board-page"}, Main: []string{"board-main"}},
+				"board": {Body: []string{"host", "host-compact", "board-page"}, Main: []string{"board-main"}},
 			},
 			TopbarSync: base.SyncSpec{ID: "status", Class: "sync-status", State: "saved", Label: "Готово"},
 		},

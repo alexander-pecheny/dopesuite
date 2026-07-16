@@ -719,10 +719,22 @@ input[type="radio"]:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-5);
-  height: 64px;
+  height: var(--header-h);
   padding: var(--page-pad-y-tight) var(--page-pad-x);
   border-bottom: 0;
   background: var(--structure);
+}
+
+/* Compact chrome — game/board pages where the content below the header is the
+   point. A body class next to .host: the height var drives .host-top and the
+   .match-main calc alike. */
+.host-compact {
+  --header-h: 44px;
+}
+
+.host-compact .host-top {
+  gap: var(--space-2-5);
+  padding: var(--space-1-5) var(--page-pad-x-tight);
 }
 
 .host h1 {
@@ -816,7 +828,8 @@ input[type="radio"]:focus-visible {
 }
 
 .match-main {
-  height: calc(100vh - 64px);
+  height: calc(100vh - var(--header-h));
+  height: calc(100dvh - var(--header-h));
   min-height: 360px;
   padding: var(--space-3-5);
   overflow: hidden;
@@ -871,8 +884,11 @@ input[type="radio"]:focus-visible {
     --header-h: 56px;
   }
 
+  .host-compact {
+    --header-h: 48px;
+  }
+
   .host-top {
-    height: 56px;
     gap: 8px;
     padding: 7px 10px;
   }
@@ -882,7 +898,6 @@ input[type="radio"]:focus-visible {
   }
 
   .match-main {
-    height: calc(100vh - 56px);
     min-height: 0;
     padding: 4px;
   }

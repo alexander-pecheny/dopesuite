@@ -69,13 +69,11 @@
   overflow: hidden;
   padding: var(--space-4) var(--page-pad-x);
 }
-/* Smaller desktop board header (mirrors dope's 44px .game-host-top) — the
-   kanban itself is the point of the page, so the chrome above it stays thin.
+/* The board page uses the kit's compact chrome (44px, .host-compact on body).
    z-index: the card modal (--z-card-overlay) covers the lower section, but the
    fixed header — and its ☰ dropdown — must stay above it (the settings/unlock
    modals at z-modal still win over both). */
-.board-page { --header-h: 44px; }
-.board-page .host-top { z-index: var(--z-board-header); height: 44px; padding: var(--space-1-5) var(--page-pad-x-tight); }
+.board-page .host-top { z-index: var(--z-board-header); }
 /* Same selector shape (not #id) as the mobile override below, so the cascade
    (equal specificity, later source wins) still lets the mobile rule shrink
    the title further on narrow screens. */
@@ -523,8 +521,7 @@
    same densification ~/dope applies on mobile). */
 @media (max-width: 760px) {
   /* tighter board header so more of the board is visible on phones */
-  .board-page { --header-h: 48px; }
-  .board-page .host-top { height: 48px; padding: 6px 10px; gap: 6px; }
+  .board-page .host-top { padding: 6px 10px; gap: 6px; }
   .board-page h1 { font-size: var(--text-lg); }
   .board-page .action-icon { width: 30px; height: 30px; font-size: 15px; }
 
