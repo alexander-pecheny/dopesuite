@@ -303,10 +303,11 @@ per list, drag / position-input reorder, multi-select move-together, and
 are standalone lists and whole groups (a group always moves as one block, keeping
 its members consecutive — the invariant the board render relies on; the
 single-list move modal refuses to reorder a grouped list on the same board).
-On the board a group renders inside one bordered `.kgroup` box with a single
-header; numbering flows across the group (`numberQuestionCards` over the
-concatenated cards), and per-list export (docx / PDF) / handout generation cover
-the whole group when invoked on any member (`exportScope`).
+On the board grouped lists render as ordinary columns, each with a small
+`🔗group-name` tag underneath (`.klist-group-tag`); numbering flows across
+the group (`numberQuestionCards` over the concatenated cards), and per-list
+export (docx / PDF) / handout generation cover the whole group when invoked on
+any member (`exportScope`).
 
 ## Trello-compatible API (chgksuite integration)
 `trello_compat.go` serves the three Trello calls chgksuite makes, authed by

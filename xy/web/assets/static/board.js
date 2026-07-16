@@ -564,14 +564,17 @@ function render() {
   kanban.replaceChildren();
   const sorted = [...state.lists].sort(byRank);
   // Walk the lists in board order; a maximal run of consecutive lists sharing a
-  // group_id renders inside one bordered group box with a single header.
+  // group_id gets continuous numbering. On the board the members render as
+  // ordinary lists, each with a small 🔗group tag underneath (a bordered
+  // wrapper box around the run used to trap the board's scroll).
   let i = 0;
   while (i < sorted.length) {
     const l = sorted[i];
     if (l.groupId != null) {
       const run = [];
       while (i < sorted.length && sorted[i].groupId === l.groupId) { run.push(sorted[i]); i++; }
-      kanban.append(renderGroup(l.groupId, run));
+      const numbering = groupNumbering(run);
+      for (const list of run) kanban.append(renderList(list, numbering.get(list.id)));
     } else {
       kanban.append(renderList(l));
       i++;
@@ -583,21 +586,6 @@ function render() {
   for (const b of kanban.querySelectorAll(".kcards")) {
     if (listScroll.has(b.dataset.listId)) b.scrollTop = listScroll.get(b.dataset.listId);
   }
-}
-
-// renderGroup wraps a run of grouped lists in a labelled container so it's clear
-// at a glance which lists belong together. Question numbering flows across the
-// member lists (groupNumbering).
-function renderGroup(groupId, lists) {
-  const g = groupById(groupId);
-  const box = el("div", { class: "kgroup", dataset: { groupId } });
-  box.append(el("div", { class: "kgroup-head" },
-    el("span", { class: "kgroup-title", text: "🔗 " + ((g && g.name) || "Связанные списки") })));
-  const numbering = groupNumbering(lists);
-  const row = el("div", { class: "kgroup-lists" });
-  for (const list of lists) row.append(renderList(list, numbering.get(list.id)));
-  box.append(row);
-  return box;
 }
 
 function renderList(list, precomputedNumbers) {
@@ -641,6 +629,10 @@ function renderList(list, precomputedNumbers) {
   const numbers = list.type === "test" ? [] : (precomputedNumbers || xyChgk.numberQuestionCards(cards));
   cards.forEach((card, i) => body.append(renderCard(card, numbers[i])));
   col.append(body);
+  if (list.groupId != null) {
+    const g = groupById(list.groupId);
+    col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт", text: "🔗" + ((g && g.name) || "связанные списки") }));
+  }
 
   // list drag
   col.addEventListener("dragstart", (e) => {
