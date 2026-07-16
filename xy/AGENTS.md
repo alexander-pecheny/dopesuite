@@ -272,15 +272,12 @@ node tests (`jstest/`) cover crypto round-trips/tamper/rewrap, rank ordering,
 and the offline sync engine (temp-id remapping, snapshot apply, and a full
 offline→online resync against an in-memory IndexedDB).
 
-**Browser testing**: a headless browser *is* available — Playwright's Chromium
-binaries are cached under `~/.cache/ms-playwright/` (no `playwright`/`puppeteer`
-npm package). Drive it over CDP with Node's built-in `WebSocket` (no deps): launch
-`chrome-headless-shell` with `--remote-debugging-port`, `fetch` a tab from
-`/json/new?<url>`, then `Page.navigate`/`Runtime.evaluate`/`Page.captureScreenshot`.
+**Browser testing**: use the `verify` skill (repo root `.claude/skills/verify/`) —
+`rodney` drives a persistent headless Chrome from the shell, with the xy login /
+board-create / unlock / card flows and their gotchas documented there.
 Run the built binary from `/tmp` (not the repo dir) to get embed mode + `?v=`
-asset versioning. The `/profile/tokens` page + token→Trello-API flow were verified
-this way. Still worth a manual pass before release: the full board/card UI flows
-and service-worker install/offline behaviour.
+asset versioning. Still worth a manual pass before release: the full board/card
+UI flows and service-worker install/offline behaviour.
 
 **Not built yet**: encrypted client-side search (an IndexedDB index built from
 decrypted content as boards are opened; server-side encrypted search is out of

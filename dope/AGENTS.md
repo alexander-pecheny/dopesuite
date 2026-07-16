@@ -114,7 +114,10 @@ Server listens on port **9672** by default (override with `$PORT`). Database def
 **Game types**: EK, OD, KSI implemented as pluggable modules with independent question/match state.
 
 ## Testing UI Changes
-Use `dope/scripts/cdp.py` on port 9222 (Chrome DevTools Protocol). If there's nothing on the port, run `/Applications/Comet.app/Contents/MacOS/Comet --remote-debugging-port=9222`
+Use the `verify` skill (repo root `.claude/skills/verify/`): `rodney` drives a
+persistent headless Chrome from the shell. For mobile-device emulation only,
+`dope/scripts/cdp.py device iphone` against Comet on port 9222 still works
+(`/Applications/Comet.app/Contents/MacOS/Comet --remote-debugging-port=9222`).
 
 ## UI markup (DopeUIKit)
 No hand-written HTML anywhere. **DopeUIKit** (`pecheny.me/dopeuikit`, vendored via
