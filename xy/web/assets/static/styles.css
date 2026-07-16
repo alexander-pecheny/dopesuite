@@ -553,7 +553,7 @@
   .preview-head { padding: var(--space-3) var(--space-4); }
   .preview-body { padding: var(--space-4) var(--space-4); font-size: var(--text-sm); }
   .card-desc { font-size: var(--text-xs-plus); min-height: 200px; }
-  .card-section-label { margin-top: var(--space-2); }
+  .section-label { margin-top: var(--space-2); }
   .tl-comment { font-size: var(--text-xs-plus); }
   .label-pick { font-size: var(--text-2xs); }
 }
@@ -613,7 +613,7 @@
 }
 
 /* API tokens page (tokens.html) — built on the auth/sheet layout above.
-   .auth-subhead (the subhead primitive) lives in core.css. */
+   .subhead (the subhead primitive) lives in core.css. */
 .token-value {
   flex: 1 1 auto;
   min-width: 0;

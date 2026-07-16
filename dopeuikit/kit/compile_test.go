@@ -39,8 +39,8 @@ func TestCompile_ByteExact(t *testing.T) {
     </div>
   </header>
   <main class="match-main">
-    <p class="auth-hint">Вход для <strong id="who"></strong>.</p>
-    <pre class="import-message" id="m"></pre>
+    <p class="hint">Вход для <strong id="who"></strong>.</p>
+    <pre class="message" id="m"></pre>
   </main>
 </body>
 </html>

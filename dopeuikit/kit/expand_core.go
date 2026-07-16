@@ -21,16 +21,16 @@ var coreExpanders = map[string]ExpandFunc{
 	},
 	"spacer": func(c *ExpandCtx, p *Element) []Node { return one(El("div", RootAttrs([]string{"u-spacer"}, p))) },
 	"section": func(c *ExpandCtx, p *Element) []Node {
-		return one(El("section", RootAttrs([]string{"auth-step"}, p), c.Nodes(p.Block)...))
+		return one(El("section", RootAttrs([]string{"section"}, p), c.Nodes(p.Block)...))
 	},
 	"text":    func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "p", nil, nil, p)) },
-	"hint":    func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "p", []string{"auth-hint"}, nil, p)) },
-	"subhead": func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "h2", []string{"auth-subhead"}, nil, p)) },
+	"hint":    func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "p", []string{"hint"}, nil, p)) },
+	"subhead": func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "h2", []string{"subhead"}, nil, p)) },
 	"label": func(c *ExpandCtx, p *Element) []Node {
-		return one(Leaf(c, "label", []string{"card-section-label"}, forAttr(p), p))
+		return one(Leaf(c, "label", []string{"section-label"}, forAttr(p), p))
 	},
-	"bigcode": func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "p", []string{"register-code"}, nil, p)) },
-	"message": func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "pre", []string{"import-message"}, nil, p)) },
+	"bigcode": func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "p", []string{"bigcode"}, nil, p)) },
+	"message": func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "pre", []string{"message"}, nil, p)) },
 	"empty":   func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "p", []string{"empty"}, nil, p)) },
 	"strong":  func(c *ExpandCtx, p *Element) []Node { return one(inlineStrong(c, p).(*Element)) },
 	"code":    func(c *ExpandCtx, p *Element) []Node { return one(inlineCode(c, p).(*Element)) },

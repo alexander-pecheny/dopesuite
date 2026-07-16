@@ -3986,23 +3986,6 @@ body:not(.embedded-match) .grid-match {
   gap: var(--space-2);
 }
 
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-5);
-}
-
-.section > h2 {
-  margin: 0;
-  font-size: var(--text-lg);
-}
-
-.empty {
-  color: var(--muted);
-  margin: 0;
-}
-
 /* ── public + host common page chrome ────────────────────── */
 .public {
   margin: 0;
@@ -4411,13 +4394,6 @@ body.is-fullscreen.od-page .match-main {
 
 .ksi-sticker-cell.ksi-sticker-over .ksi-sticker-icon {
   color: var(--danger-text) !important;
-}
-
-/* Small muted helper text under a form section. */
-.hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
 }
 
 /* The fixed sticker colour palette — the only colours an organizer may pick.

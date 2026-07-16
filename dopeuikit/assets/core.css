@@ -809,30 +809,34 @@ input[type="radio"]:focus-visible {
   padding: var(--space-4);
 }
 
-.import-message {
+/* the message primitive: a status/result line that preserves line breaks */
+.message {
   min-height: 24px;
   margin: 0;
   color: var(--muted);
   white-space: pre-wrap;
 }
 
-/* auth + register layout (used by login.html and /register stages).
+/* the section primitive: a form/step column (login, register, profile stages).
    Inputs use .input, submit buttons use .btn — see design system above. */
-
-.auth-step {
+.section {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   max-width: 420px;
 }
 
-.auth-step[hidden] {
-  display: none;
+/* the hint primitive: muted helper text under a field or section */
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 
-.auth-hint {
+/* the empty primitive: an "nothing here yet" placeholder line */
+.empty {
   margin: 0;
-  color: var(--text);
+  color: var(--muted);
 }
 
 .tabs {
@@ -1262,7 +1266,7 @@ input[type="radio"]:focus-visible {
    Base styling for classes emitted by core primitives (unreaddot, label,
    bigcode, subhead, tabs/tab/tabpanel, sliderrow) — they belong to the shared
    design system so any app using these primitives is styled. App-specific
-   overrides (e.g. xy's mobile .card-section-label margin) stay in the app layer,
+   overrides (e.g. xy's mobile .section-label margin) stay in the app layer,
    which is concatenated after this file. */
 .unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--blue, #2f6fed); vertical-align: middle; }
 
@@ -1278,7 +1282,7 @@ input[type="radio"]:focus-visible {
    in flex columns with a `gap`, which applies equally on both sides, and pulling
    the bottom back in is the only way to beat it. Ratio is now ~32 above / ~4-12
    below. */
-.card-section-label {
+.section-label {
   font-size: var(--text-sm);
   font-weight: var(--fw-semibold);
   color: var(--muted);
@@ -1288,9 +1292,9 @@ input[type="radio"]:focus-visible {
 
 /* The dash IS the affordance here (a tear-off code box), so it takes --grid-dark
    directly rather than the transparent --border. */
-.register-code { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: var(--fw-bold); letter-spacing: 0.08em; text-align: center; padding: var(--space-3); border: 1px dashed var(--grid-dark); border-radius: var(--radius-md); }
+.bigcode { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: var(--fw-bold); letter-spacing: 0.08em; text-align: center; padding: var(--space-3); border: 1px dashed var(--grid-dark); border-radius: var(--radius-md); }
 
-.auth-subhead { margin: 0; font-size: var(--text-md); font-weight: var(--fw-semibold); color: var(--text-strong); }
+.subhead { margin: 0; font-size: var(--text-md); font-weight: var(--fw-semibold); color: var(--text-strong); }
 
 .card-view-tabs {
   display: flex;

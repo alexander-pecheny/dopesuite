@@ -56,7 +56,7 @@ async function refresh() {
 function renderBoards(boards) {
   listNode.replaceChildren();
   if (!boards.length) {
-    listNode.append(el("p", { class: "auth-hint", text: "Пока нет досок. Нажмите + чтобы создать." }));
+    listNode.append(el("p", { class: "empty", text: "Пока нет досок. Нажмите + чтобы создать." }));
     return;
   }
   // Boards arrive already ordered by the caller's last visit (server-side).
