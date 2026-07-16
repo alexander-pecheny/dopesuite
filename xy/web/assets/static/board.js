@@ -2586,7 +2586,7 @@ function buildHandoutField(initial) {
   const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Раздаточный материал" }), rmBtn);
   const modeText = el("button", { class: "seg-btn", type: "button", text: "текст" });
   const modeImg = el("button", { class: "seg-btn", type: "button", text: "картинка" });
-  const toggle = el("div", { class: "seg-toggle" }, modeText, modeImg);
+  const toggle = el("div", { class: "seg" }, modeText, modeImg);
   const ta = el("textarea", { class: "card-desc fld-input", spellcheck: "false" });
   autoGrow(ta);
   const sel = el("select", { class: "input fld-input" });
@@ -2739,7 +2739,7 @@ function renderTesterFields() {
   const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Тестировали" }));
   const rows = el("div", { class: "fld-rows" });
   const addRow = (t) => {
-    const seg = el("div", { class: "seg-toggle tester-seg" });
+    const seg = el("div", { class: "seg tester-seg" });
     const bP = el("button", { class: "seg-btn", type: "button", text: "игрок" });
     const bT = el("button", { class: "seg-btn", type: "button", text: "команда" });
     let type = t && t.type === "team" ? "team" : "player";

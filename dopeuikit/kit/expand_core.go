@@ -64,7 +64,7 @@ var coreExpanders = map[string]ExpandFunc{
 	"modal":       expandModal,
 	"dialog":      expandDialog,
 	"tabs": func(c *ExpandCtx, p *Element) []Node {
-		return one(El("div", RootAttrs([]string{"card-view-tabs"}, p, At("role", "tablist")), c.Nodes(p.Block)...))
+		return one(El("div", RootAttrs([]string{"seg", "seg-grow"}, p, At("role", "tablist")), c.Nodes(p.Block)...))
 	},
 	"tab":      expandTab,
 	"tabpanel": func(c *ExpandCtx, p *Element) []Node { return one(El("div", tabpanelAttrs(p), c.Nodes(p.Block)...)) },
@@ -344,14 +344,14 @@ func expandDetails(c *ExpandCtx, p *Element) []Node {
 
 func expandTab(c *ExpandCtx, p *Element) []Node {
 	view, _ := Get(p, "view")
-	attrs := []Attr{ClassAttr("card-view-tab")}
+	attrs := []Attr{ClassAttr("seg-btn")}
 	attrs = append(attrs, IDAttr(p)...)
 	attrs = append(attrs, At("type", "button"), At("role", "tab"), At("data-view", view))
 	return one(&Element{Tag: "button", Attrs: attrs, Inline: c.Items(p.Inline)})
 }
 
 func tabpanelAttrs(p *Element) []Attr {
-	attrs := []Attr{ClassAttr("card-view")}
+	attrs := []Attr{ClassAttr("tabpanel")}
 	attrs = append(attrs, IDAttr(p)...)
 	attrs = append(attrs, BareAt("hidden"))
 	attrs = append(attrs, Passthrough(p)...)

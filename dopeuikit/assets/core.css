@@ -1194,32 +1194,6 @@ input[type="radio"]:focus-visible {
   color: var(--muted);
 }
 
-.appearance-segment {
-  display: inline-flex;
-  padding: var(--space-0-5);
-  background: var(--structure);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.appearance-segment-btn {
-  padding: var(--space-1-5) var(--space-3);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--text-sm);
-  cursor: var(--cursor-action);
-}
-
-.appearance-segment-btn.is-active {
-  background: var(--surface);
-  color: var(--text-strong);
-  box-shadow: var(--shadow-popover);
-  font-weight: var(--fw-semibold);
-}
-
 .appearance-modal-done {
   align-self: flex-end;
   padding: var(--space-2) var(--space-4);
@@ -1304,33 +1278,45 @@ input[type="radio"]:focus-visible {
 
 .subhead { margin: 0; font-size: var(--text-md); font-weight: var(--fw-semibold); color: var(--text-strong); }
 
-.card-view-tabs {
-  display: flex;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-  background: var(--page);
+/* ── segmented control ────────────────────────────────────────────────────
+   THE either/or switch: the tabs primitive (the card-detail view switch), the
+   appearance modal's theme/contrast rows, xy's editor toggles. A recessed
+   track holding flat buttons; the active one lifts to a surface card
+   (.active, toggled by the page's JS). .seg-grow splits the row equally. */
+.seg {
+  display: inline-flex;
+  gap: var(--space-0-5);
+  padding: var(--space-0-5);
+  background: var(--structure);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 3px;
 }
 
-.card-view-tab {
-  flex: 1 1 0;
-  border: none;
+.seg-grow { display: flex; }
+
+.seg-grow .seg-btn { flex: 1 1 0; }
+
+.seg-btn {
+  padding: var(--space-1-5) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
   font: inherit;
   font-size: var(--text-sm);
-  font-weight: var(--fw-semibold);
-  padding: var(--space-2) var(--space-2);
-  border-radius: var(--radius-sm);
   cursor: var(--cursor-action);
 }
 
-.card-view-tab:hover { color: var(--text); }
+.seg-btn:hover { color: var(--text); }
 
-.card-view-tab.active { background: var(--surface); color: var(--text-strong); box-shadow: var(--shadow-sm); }
+.seg-btn.active {
+  background: var(--surface);
+  color: var(--text-strong);
+  font-weight: var(--fw-semibold);
+  box-shadow: var(--shadow-sm);
+}
 
-.card-view { margin-top: var(--space-2); }
+.tabpanel { margin-top: var(--space-2); }
 
 .sizes-row { display: flex; flex-direction: column; gap: var(--space-1); }
 

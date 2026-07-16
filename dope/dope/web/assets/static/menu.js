@@ -226,13 +226,13 @@
       label.className = "appearance-row-label";
       label.textContent = labelText;
       const group = document.createElement("div");
-      group.className = "appearance-segment";
+      group.className = "seg";
       group.setAttribute("role", "group");
       group.setAttribute("aria-label", labelText);
       const buttons = options.map((opt) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "appearance-segment-btn";
+        button.className = "seg-btn";
         button.dataset.value = opt.value;
         button.textContent = opt.label;
         button.addEventListener("click", () => { set(opt.value); sync(); });
@@ -243,7 +243,7 @@
         const current = get();
         buttons.forEach((button) => {
           const on = button.dataset.value === current;
-          button.classList.toggle("is-active", on);
+          button.classList.toggle("active", on);
           button.setAttribute("aria-pressed", on ? "true" : "false");
         });
       }
@@ -300,7 +300,7 @@
       syncModal();
       overlay.hidden = false;
       document.addEventListener("keydown", onModalKey);
-      overlay.querySelector(".appearance-segment-btn")?.focus();
+      overlay.querySelector(".seg-btn")?.focus();
     }
     function closeModal() {
       if (overlay) overlay.hidden = true;
