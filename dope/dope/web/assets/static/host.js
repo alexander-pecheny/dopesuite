@@ -2419,7 +2419,7 @@ function battleHeader() {
   if (venues.length > 0) {
     const venueButton = document.createElement("button");
     venueButton.type = "button";
-    venueButton.className = "venue-edit-button";
+    venueButton.className = "btn btn-xs venue-edit-button";
     venueButton.dataset.matchCode = matchCode;
     venueButton.textContent = "✏️";
     venueButton.title = "Изменить площадку";
@@ -2504,7 +2504,7 @@ function shootoutControlsHeader() {
 
   const addShootout = document.createElement("button");
   addShootout.type = "button";
-  addShootout.className = "shootout-add-button";
+  addShootout.className = "btn btn-xs shootout-add-button";
   addShootout.textContent = "+П";
   addShootout.title = "Добавить тему перестрелки";
   addShootout.setAttribute("aria-label", "Добавить тему перестрелки");
@@ -2522,7 +2522,7 @@ function shootoutControlsHeader() {
   if (shootoutThemeCount() > 0) {
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
-    deleteButton.className = "theme-delete-button";
+    deleteButton.className = "btn btn-xs theme-delete-button";
     deleteButton.textContent = "−П";
     deleteButton.title = "Удалить тему перестрелки";
     deleteButton.setAttribute("aria-label", "Удалить тему перестрелки");

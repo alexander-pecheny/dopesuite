@@ -187,6 +187,8 @@
      rather than a guess at each call site. */
   --control-h: 38px;
   --control-h-sm: 30px;
+  /* the micro tier: buttons that live INSIDE a table cell or a text line */
+  --control-h-xs: 20px;
 
   --leading-tight: 1;
   --leading-snug: 1.25;
@@ -637,6 +639,18 @@ input[type="radio"]:focus-visible {
 }
 
 .btn.btn-danger:hover { background: var(--red); filter: brightness(0.94); }
+
+/* The micro button: composes .btn (fill, fill-step hover, disabled states) at
+   in-cell scale. Peers of table content, not of fields — hence its own tier. */
+.btn.btn-xs {
+  min-height: var(--control-h-xs);
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-sm-plus);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-regular);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+}
 
 .btn:disabled,
 .btn[aria-disabled="true"] {
