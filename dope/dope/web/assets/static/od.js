@@ -2401,7 +2401,7 @@ function detailedNameHeader() {
 function openShootoutRoundDialog() {
   if (viewer || !allTeamsNumbered() || state.teams.length < 2) return;
   const dialog = document.createElement("dialog");
-  dialog.className = "od-shootout-dialog";
+  dialog.className = "modal-dialog od-shootout-dialog";
 
   const form = document.createElement("form");
   form.method = "dialog";
@@ -2441,7 +2441,7 @@ function openShootoutRoundDialog() {
   form.appendChild(list);
 
   const actions = document.createElement("div");
-  actions.className = "od-shootout-dialog-actions";
+  actions.className = "modal-actions";
   const cancel = document.createElement("button");
   cancel.type = "button";
   cancel.className = "btn";

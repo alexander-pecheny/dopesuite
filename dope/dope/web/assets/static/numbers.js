@@ -51,7 +51,7 @@
 
   const openImportDialog = () => {
     const dialog = document.createElement("dialog");
-    dialog.className = "numbers-import-dialog";
+    dialog.className = "modal-dialog numbers-import-dialog";
     const dform = document.createElement("form");
     dform.className = "numbers-import-form";
     const title = document.createElement("h2");
@@ -67,7 +67,7 @@
     err.className = "empty";
     err.hidden = true;
     const actions = document.createElement("div");
-    actions.className = "numbers-import-actions cluster";
+    actions.className = "modal-actions";
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.className = "btn btn-secondary";
@@ -121,7 +121,7 @@
     const errors = (data && data.errors) || [];
 
     const dialog = document.createElement("dialog");
-    dialog.className = "numbers-import-dialog";
+    dialog.className = "modal-dialog numbers-import-dialog";
     const dform = document.createElement("form");
     dform.className = "numbers-import-form";
     const title = document.createElement("h2");
@@ -207,7 +207,7 @@
     dform.appendChild(err);
 
     const actions = document.createElement("div");
-    actions.className = "numbers-import-actions cluster";
+    actions.className = "modal-actions";
     const back = document.createElement("button");
     back.type = "button";
     back.className = "btn btn-secondary";

@@ -2451,7 +2451,7 @@ function openVenueDialog(matchCode) {
   const matchState = matchStateFor(matchCode);
   if (!matchState) return;
   const dialog = document.createElement("dialog");
-  dialog.className = "venue-dialog";
+  dialog.className = "modal-dialog venue-dialog";
   const form = document.createElement("form");
   form.className = "venue-dialog-form";
 
@@ -2468,7 +2468,7 @@ function openVenueDialog(matchCode) {
   form.appendChild(select);
 
   const actions = document.createElement("div");
-  actions.className = "venue-dialog-actions";
+  actions.className = "modal-actions";
   const cancel = document.createElement("button");
   cancel.type = "button";
   cancel.className = "btn";

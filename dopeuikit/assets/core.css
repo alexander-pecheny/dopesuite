@@ -538,13 +538,12 @@ input[type="radio"]:focus-visible {
 
 .input[type="file"]:hover::file-selector-button { background: var(--action-hover-bg); }
 
-/* The outline used to be the only thing lifting the dialog off the backdrop;
-   with it gone the shadow carries the elevation (as it already did for
-   .menu-dropdown / .appearance-modal). */
+/* A modal is a floating layer: hairline + shadow carry the edge (see the
+   .popover base note). */
 .modal-dialog {
   width: min(560px, calc(100vw - var(--space-6)));
   padding: var(--space-4);
-  border: 1px solid var(--border);
+  border: 1px solid var(--grid-dark);
   border-radius: var(--radius-lg);
   background-color: var(--surface);
   color: var(--text);
@@ -558,6 +557,13 @@ input[type="radio"]:focus-visible {
 .modal-dialog h2 {
   margin: 0;
   font-size: var(--text-lg);
+}
+
+/* the right-aligned button row a dialog ends with */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }
 
 /* ── design system: buttons & links ───────────────────────────────────────────
@@ -1186,7 +1192,7 @@ input[type="radio"]:focus-visible {
   padding: var(--space-5);
   background: var(--surface);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--grid-dark);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-modal);
 }

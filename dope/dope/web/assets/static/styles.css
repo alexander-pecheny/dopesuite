@@ -444,29 +444,12 @@
 
 .venue-dialog {
   width: min(340px, calc(100vw - var(--space-6)));
-  padding: 0;
-  border: 1px solid var(--grid-dark);
-  border-radius: var(--radius-md);
-  background-color: var(--paper);
-  color: var(--text);
-  box-shadow: var(--shadow-modal);
-}
-
-.venue-dialog::backdrop {
-  background: var(--backdrop);
 }
 
 .venue-dialog-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-}
-
-.venue-dialog-form h2 {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: var(--fw-bold);
+  gap: var(--space-3);
 }
 
 .venue-dialog-select {
@@ -480,12 +463,6 @@
   background: var(--field-bg);
   color: var(--text);
   font: inherit;
-}
-
-.venue-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .finish-control {
@@ -2386,28 +2363,12 @@ body:not(.embedded-match) .grid-match {
 .od-shootout-dialog {
   width: min(520px, calc(100vw - var(--space-6)));
   max-height: calc(100vh - var(--space-8));
-  padding: 0;
-  border: 1px solid var(--grid-dark);
-  border-radius: var(--radius-lg);
-  background-color: var(--paper);
-  color: var(--text);
-  box-shadow: var(--shadow-modal);
-}
-
-.od-shootout-dialog::backdrop {
-  background: var(--backdrop);
 }
 
 .od-shootout-dialog-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-}
-
-.od-shootout-dialog h2 {
-  margin: 0;
-  font-size: var(--text-lg);
+  gap: var(--space-3);
 }
 
 .od-shootout-team-list {
@@ -2441,17 +2402,6 @@ body:not(.embedded-match) .grid-match {
 
 .od-shootout-team-option .team-number-badge {
   margin-right: 0;
-}
-
-.od-shootout-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.od-shootout-dialog-actions .btn:disabled {
-  color: var(--muted);
-  cursor: not-allowed;
 }
 
 /* Итог */
@@ -3847,30 +3797,13 @@ body:not(.embedded-match) .grid-match {
 /* Mass number import (Импорт номеров) — paste modal + confirmation modal. */
 .numbers-import-dialog {
   width: min(640px, calc(100vw - var(--space-6)));
-  padding: 0;
-  border: 1px solid var(--grid-dark);
-  border-radius: var(--radius-md);
-  background-color: var(--paper);
-  color: var(--text);
-  box-shadow: var(--shadow-modal);
-}
-
-.numbers-import-dialog::backdrop {
-  background: var(--backdrop);
 }
 
 .numbers-import-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4);
   max-height: calc(100vh - var(--space-6));
-}
-
-.numbers-import-form h2 {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: var(--fw-bold);
 }
 
 .numbers-import-textarea {
@@ -3945,12 +3878,6 @@ body:not(.embedded-match) .grid-match {
 .numbers-import-row.is-fuzzy .numbers-import-badge { color: var(--amber-text); }
 
 .numbers-import-row.is-unmatched .numbers-import-badge { color: var(--muted-light); }
-
-.numbers-import-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
 
 /* ════════════════════════════════════════════════════════════════════════
    end of the section moved out of core.css — the original dope layer follows
