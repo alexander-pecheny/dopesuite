@@ -225,6 +225,9 @@
    carries a small tag naming its group, right under the title (the negative
    margin eats most of the column's gap so the tag reads as a subtitle). */
 .klist-group-tag {
+  /* overflow:hidden zeroes the automatic min-height, letting a full column's
+     flex squash the tag under the first card — pin it */
+  flex: none;
   font-size: var(--text-xs);
   color: var(--muted);
   padding: 0 var(--space-2);
