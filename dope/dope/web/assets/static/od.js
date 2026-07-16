@@ -2028,7 +2028,7 @@ function updateEntrySuggest(input) {
   }
   if (!entrySuggest) {
     const list = document.createElement("div");
-    list.className = "entry-suggest";
+    list.className = "popover entry-suggest";
     list.tabIndex = -1;
     document.body.appendChild(list);
     entrySuggest = {input, list, items: [], active: 0};
@@ -2379,7 +2379,7 @@ function nameCell(teamIndex) {
   cell.appendChild(layout);
 
   const fullName = document.createElement("span");
-  fullName.className = "od-detailed-team-name-popover";
+  fullName.className = "popover od-detailed-team-name-popover";
   fullName.textContent = label;
   cell.appendChild(fullName);
 
@@ -2584,7 +2584,7 @@ function resultsTeamCell(index, opts = {}) {
   }
   nameTd.appendChild(nameWrap);
   const fullName = document.createElement("span");
-  fullName.className = "results-team-name-popover";
+  fullName.className = "popover results-team-name-popover";
   fullName.textContent = displayText;
   nameTd.appendChild(fullName);
   return nameTd;

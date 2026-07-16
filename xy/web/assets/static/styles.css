@@ -125,11 +125,6 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-popover);
-  z-index: var(--z-dropdown);
 }
 .notif-panel-head {
   display: flex;

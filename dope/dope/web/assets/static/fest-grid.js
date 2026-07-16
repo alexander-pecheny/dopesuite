@@ -345,7 +345,7 @@ function reseedTeamCell(name) {
   wrap.appendChild(label);
   cell.appendChild(wrap);
   const popover = document.createElement("span");
-  popover.className = "results-team-name-popover";
+  popover.className = "popover results-team-name-popover";
   popover.textContent = name;
   cell.appendChild(popover);
   return cell;
@@ -392,7 +392,7 @@ function slotTeamCell(label) {
   name.setAttribute("aria-label", label);
   cell.appendChild(name);
   const fullName = document.createElement("span");
-  fullName.className = "grid-slot-team-popover";
+  fullName.className = "popover grid-slot-team-popover";
   fullName.textContent = label;
   cell.appendChild(fullName);
   return cell;

@@ -477,7 +477,7 @@ function onNotifKey(e) { if (e.key === "Escape") closeNotifPanel(); }
 
 async function openNotifPanel() {
   if (notifPanelEl) { closeNotifPanel(); return; }
-  const panel = el("div", { class: "notif-panel" });
+  const panel = el("div", { class: "popover notif-panel" });
   const head = el("div", { class: "notif-panel-head" },
     el("span", { text: "События" }),
     el("button", {

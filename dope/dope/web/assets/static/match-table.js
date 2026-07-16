@@ -1664,7 +1664,7 @@
       nameWrap.appendChild(nameEl);
       teamCell.appendChild(nameWrap);
       const namePopover = document.createElement("span");
-      namePopover.className = "results-team-name-popover";
+      namePopover.className = "popover results-team-name-popover";
       namePopover.textContent = team.name || "";
       teamCell.appendChild(namePopover);
       if (team.city) {
@@ -1933,7 +1933,7 @@
     function ensureNode() {
       if (!popoverNode) {
         popoverNode = document.createElement("div");
-        popoverNode.className = "floating-name-popover";
+        popoverNode.className = "popover floating-name-popover";
         document.body.appendChild(popoverNode);
       }
       return popoverNode;
@@ -2870,7 +2870,7 @@
       wrap.appendChild(name);
       cell.appendChild(wrap);
       const popover = document.createElement("span");
-      popover.className = "results-team-name-popover";
+      popover.className = "popover results-team-name-popover";
       popover.textContent = text;
       cell.appendChild(popover);
       return cell;

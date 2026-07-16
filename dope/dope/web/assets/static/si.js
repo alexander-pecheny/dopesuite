@@ -521,7 +521,7 @@ function buildRefusalsTable() {
     nameWrap.appendChild(name);
     teamCell.appendChild(nameWrap);
     const fullName = document.createElement("span");
-    fullName.className = "results-team-name-popover";
+    fullName.className = "popover results-team-name-popover";
     fullName.textContent = label;
     teamCell.appendChild(fullName);
     tr.appendChild(teamCell);
@@ -581,7 +581,7 @@ function buildResultsTableInner() {
     nameWrap.appendChild(nameSpan);
     nameTd.appendChild(nameWrap);
     const fullName = document.createElement("span");
-    fullName.className = "results-team-name-popover";
+    fullName.className = "popover results-team-name-popover";
     fullName.textContent = row.name;
     nameTd.appendChild(fullName);
     tr.appendChild(nameTd);
@@ -836,7 +836,7 @@ function nameCell(name, playerIndex) {
     cell.appendChild(layout);
 
     const fullName = document.createElement("span");
-    fullName.className = "od-detailed-team-name-popover";
+    fullName.className = "popover od-detailed-team-name-popover";
     fullName.textContent = baseName;
     cell.appendChild(fullName);
     return cell;

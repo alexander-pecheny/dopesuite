@@ -95,9 +95,11 @@
   --hover-bg: #eef1f5;
 
   /* ── Element outlines are OFF ──────────────────────────────────────────
-     Buttons, menus, popovers, cards, modals and inputs separate themselves by
-     FILL (+ shadow for floating layers), never by a contrast outline. The four
-     outline tokens below are therefore `transparent` in the regular themes, and
+     Buttons, cards, modals and inputs separate themselves by FILL, never by a
+     contrast outline. (Floating layers — menus, popovers — are the exception:
+     they carry a --grid-dark hairline + shadow via the .popover base, because
+     they must hold an edge against whatever they cover.) The four outline
+     tokens below are therefore `transparent` in the regular themes, and
      only the [data-contrast=high] blocks give them real colors — that mode
      exists precisely to carry separation on displays that cannot resolve the
      fills, so it is the one place an outline earns its keep.
@@ -1101,6 +1103,24 @@ input[type="radio"]:focus-visible {
   box-shadow: var(--shadow-popover);
 }
 
+/* ── popover base ─────────────────────────────────────────────────────────
+   Every floating surface — the ☰ dropdown, hover name popovers, suggestion
+   lists, notification panels — shares one silhouette: paper, a --grid-dark
+   hairline, the popover shadow. The hairline is a deliberate exception to the
+   outlines-off rule: a floating layer needs an edge against WHATEVER it
+   happens to cover, and no fill step can guarantee that — same reasoning as
+   the structural --grid-dark rules. App emitters compose by adding this class
+   next to their positioning class; .menu-dropdown gets it here (it is emitted
+   in too many places to retrofit). */
+.popover,
+.menu-dropdown {
+  background-color: var(--paper);
+  border: 1px solid var(--grid-dark);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+  z-index: var(--z-dropdown);
+}
+
 /* The dropdown sizes itself to its longest item (width: max-content) instead of
    forcing every label to wrap inside a fixed 184px column — menu labels are
    single actions and must each read on ONE line. min-width keeps short menus
@@ -1116,11 +1136,6 @@ input[type="radio"]:focus-visible {
   display: flex;
   flex-direction: column;
   padding: var(--space-1);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-popover);
-  z-index: var(--z-dropdown);
 }
 
 /* flex + gap gives the emoji a real column of its own, so the labels align down

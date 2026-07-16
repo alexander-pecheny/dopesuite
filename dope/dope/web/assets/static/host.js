@@ -1471,7 +1471,7 @@ function buildSeedImportPanel() {
     }
     teamCell.appendChild(nameWrap);
     const fullName = document.createElement("span");
-    fullName.className = "results-team-name-popover";
+    fullName.className = "popover results-team-name-popover";
     fullName.textContent = teamLabel;
     teamCell.appendChild(fullName);
     tr.appendChild(teamCell);
@@ -2240,7 +2240,7 @@ function teamNameCell(team, teamIndex) {
   cell.appendChild(layout);
 
   const fullName = document.createElement("span");
-  fullName.className = "od-detailed-team-name-popover";
+  fullName.className = "popover od-detailed-team-name-popover";
   fullName.textContent = labelText;
   cell.appendChild(fullName);
   return cell;
@@ -2338,7 +2338,7 @@ function themeCells(team, teamIndex, theme, themeIndex, isShootout) {
   });
   selectWrap.appendChild(select);
   const playerPopover = document.createElement("span");
-  playerPopover.className = "player-select-popover";
+  playerPopover.className = "popover player-select-popover";
   playerPopover.textContent = selectedPlayerLabel(select);
   selectWrap.appendChild(playerPopover);
   editor.appendChild(selectWrap);

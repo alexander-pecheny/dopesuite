@@ -956,7 +956,7 @@ function readonlyTeamNameCell(team, teamIndex) {
   layout.appendChild(nameWrap);
   cell.appendChild(layout);
   const fullName = document.createElement("span");
-  fullName.className = "od-detailed-team-name-popover";
+  fullName.className = "popover od-detailed-team-name-popover";
   fullName.textContent = labelText;
   cell.appendChild(fullName);
   return cell;
@@ -1038,7 +1038,7 @@ function readonlyThemeCells(teamIndex, theme, themeIndex, isShootout) {
   // Always render the popover (even empty) so the sync keeps it in step when the
   // player changes from/to blank, rather than only existing at build time.
   const playerPopover = document.createElement("span");
-  playerPopover.className = "readonly-player-popover";
+  playerPopover.className = "popover readonly-player-popover";
   playerPopover.textContent = playerLabel;
   playerCell.appendChild(playerPopover);
   const answers = theme.answers.map((mark, answerIndex) => {
@@ -1233,7 +1233,7 @@ function readonlyBattleTitleNode(matchState) {
   }
 
   const popover = document.createElement("span");
-  popover.className = "readonly-battle-popover";
+  popover.className = "popover readonly-battle-popover";
   popover.textContent = fullLabel;
   title.appendChild(popover);
 
