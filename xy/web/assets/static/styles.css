@@ -2,13 +2,23 @@
    xy — board / card / kanban (built on the shared design tokens)
    ============================================================ */
 
-/* Kanban depth is carried by fill, not borders: a column is a panel lifted off
-   the canvas, and a card is lifted again off the column. The two surface tokens
-   sit in opposite luminance order per theme (light: surface=white is brightest;
-   dark: structure is brighter than surface), so map them per theme to keep the
-   card reading brighter (= raised) than its column in both. */
-:root { --kanban-col: var(--structure); --kanban-card: var(--surface); }
-:root[data-theme="dark"] { --kanban-col: var(--surface); --kanban-card: var(--structure); }
+/* Kanban depth is carried by fill, not borders: the canvas, the column and the
+   card are three luminance steps. Light: pure white canvas, gray column panels,
+   white cards back on top (canvas == card is fine — they never touch, a card
+   always sits on a column). The kit's structure canvas made all three grays sit
+   within a couple of L of each other and the board read as dirty. Dark keeps
+   the kit canvas: panel/card luminance is remapped below for the same reason. */
+:root { --canvas: var(--paper); --kanban-col: var(--structure); --kanban-card: var(--surface); }
+:root[data-theme="dark"] { --canvas: var(--structure); --kanban-col: var(--surface); --kanban-card: var(--structure); }
+
+/* The app shell (header + the section under it) sits on the canvas, not on the
+   kit's structure gray. */
+.host,
+.host-top,
+.match-main,
+.sheet-frame { background: var(--canvas); }
+
+.sheet-frame { --scroll-fade-bg: var(--canvas); }
 
 /* .btn-ghost now lives in the kit (core.css) — it is one of the core button
    kinds, not an xy invention, and it needs a fill there to read as a button. */
