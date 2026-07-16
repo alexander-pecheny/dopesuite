@@ -840,9 +840,16 @@ func (p *parser) headerPass(final fsource.Doc) fsource.Doc {
 	}
 	if !headingDefined && len(final) > 0 && final[0].Type == "meta" {
 		final[0].Type = "heading"
-		final = append(fsource.Doc{{Type: "ljheading", Content: final[0].Content}}, final...)
-		// Python keeps using the stale `fq` after this insert, so the date scan
-		// below covers one element fewer than it looks like it does. Kept as is.
+	}
+	// a heading stays a heading; the date it contains becomes its own element
+	// (pre-existing behaviour, previously via the ljheading copy that used to
+	// absorb this conversion)
+	makeDate := func(i int) {
+		if final[i].Type == "heading" {
+			final = append(final[:i], append(fsource.Doc{{Type: "date", Content: final[i].Content}}, final[i:]...)...)
+		} else {
+			final[i].Type = "date"
+		}
 	}
 	for i := 0; !dateDefined && i < fq && i < len(final); i++ {
 		content, ok := final[i].Content.(string)
@@ -851,12 +858,12 @@ func (p *parser) headerPass(final fsource.Doc) fsource.Doc {
 		}
 		n := float64(utf8.RuneCountInString(content)) / 10
 		if m := reDate2.FindString(content); m != "" && float64(utf8.RuneCountInString(m)) >= n {
-			final[i].Type = "date"
+			makeDate(i)
 			dateDefined = true
 			break
 		}
 		if m := p.searchForDate(content); m != "" && float64(utf8.RuneCountInString(m)) >= n {
-			final[i].Type = "date"
+			makeDate(i)
 			dateDefined = true
 			break
 		}
