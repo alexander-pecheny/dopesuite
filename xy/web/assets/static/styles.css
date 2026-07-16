@@ -8,8 +8,8 @@
    always sits on a column). The kit's structure canvas made all three grays sit
    within a couple of L of each other and the board read as dirty. Dark keeps
    the kit canvas: panel/card luminance is remapped below for the same reason. */
-:root { --canvas: var(--paper); --kanban-col: var(--structure); --kanban-card: var(--surface); }
-:root[data-theme="dark"] { --canvas: var(--structure); --kanban-col: var(--surface); --kanban-card: var(--structure); }
+:root { --canvas: var(--paper); --kanban-col: var(--structure); --kanban-card: var(--surface); --board-tile: var(--structure); }
+:root[data-theme="dark"] { --canvas: var(--structure); --kanban-col: var(--surface); --kanban-card: var(--structure); --board-tile: var(--surface); }
 
 /* The app shell (header + the section under it) sits on the canvas, not on the
    kit's structure gray. */
@@ -31,6 +31,9 @@
   gap: var(--space-4);
   padding: var(--space-4) 0;
 }
+/* Board tiles carry depth by fill, not shadow — the same two-luminance-step
+   scheme as the kanban (--board-tile flips against --canvas in dark). Hover is
+   --action-bg: the one fill picked to read against structure and paper alike. */
 .board-card {
   display: flex;
   flex-direction: column;
@@ -38,12 +41,11 @@
   min-height: 90px;
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
+  background: var(--board-tile);
   text-decoration: none;
   color: var(--text);
 }
-.board-card:hover { background: var(--hover-bg); }
+.board-card:hover { background: var(--action-bg); }
 .board-card.has-unread { position: relative; }
 .board-card-name { font-weight: var(--fw-semibold); font-size: var(--text-lg); }
 .board-card-role { font-size: var(--text-xs); color: var(--muted); }
