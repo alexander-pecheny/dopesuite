@@ -3820,9 +3820,10 @@ body:not(.embedded-match) .grid-match {
 
 .public-top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  height: var(--header-h);
+  padding: 0 var(--space-5);
   background: var(--surface);
 }
 
@@ -3830,6 +3831,11 @@ body:not(.embedded-match) .grid-match {
   margin: 0;
   font-size: var(--text-xl);
   font-weight: var(--fw-bold);
+  /* the bar's height is fixed (--header-h) — a long fest title must not wrap */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .public-main {

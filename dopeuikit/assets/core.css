@@ -224,6 +224,11 @@
   --page-pad-x-tight: 16px;
   --page-pad-y-tight: 8px;
 
+  /* the ONE header height — every top bar (host, compact game/board, public)
+     is this tall, and the mains/overlays that lay out against the header
+     (calc(100dvh - …), sticky offsets) read the same token. */
+  --header-h: 44px;
+
   /* scroll-fade utility */
   --scroll-fade-size: 24px;
   --scroll-fade-color: rgba(32, 33, 36, 0.18);
@@ -714,9 +719,6 @@ input[type="radio"]:focus-visible {
 .host {
   overflow: hidden;
   background: var(--structure);
-  /* Header height, kept in a variable so the board's fixed lower section and the
-     modals that cover it stay in sync (see .board-main / .card-overlay). */
-  --header-h: 64px;
 }
 
 .host-top {
@@ -727,18 +729,13 @@ input[type="radio"]:focus-visible {
   justify-content: space-between;
   gap: var(--space-5);
   height: var(--header-h);
-  padding: var(--page-pad-y-tight) var(--page-pad-x);
+  padding: var(--space-1-5) var(--page-pad-x);
   border-bottom: 0;
   background: var(--structure);
 }
 
 /* Compact chrome — game/board pages where the content below the header is the
-   point. A body class next to .host: the height var drives .host-top and the
-   .match-main calc alike. */
-.host-compact {
-  --header-h: 44px;
-}
-
+   point: tighter gaps and side padding (the height is the shared token). */
 .host-compact .host-top {
   gap: var(--space-2-5);
   padding: var(--space-1-5) var(--page-pad-x-tight);
@@ -887,11 +884,7 @@ input[type="radio"]:focus-visible {
 }
 
 @media (max-width: 760px) {
-  .host {
-    --header-h: 56px;
-  }
-
-  .host-compact {
+  :root {
     --header-h: 48px;
   }
 
@@ -1106,11 +1099,9 @@ input[type="radio"]:focus-visible {
   display: block;
 }
 
-/* In a .public-top bar (which baseline-aligns its title), pin the menu to the
-   right and centre it vertically against the bar instead of riding the baseline. */
+/* In a .public-top bar, pin the menu to the right edge. */
 .menu-public {
   margin-left: auto;
-  align-self: center;
 }
 
 .menu-floating .menu-trigger {
