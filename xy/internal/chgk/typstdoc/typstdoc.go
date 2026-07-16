@@ -6,7 +6,7 @@
 // spaces and hyphens) and the same image sizing, and this package's preamble
 // reproduces chgksuite's template.docx page setup — A4, 1"/0.75" margins, 12pt
 // body, 16pt/14pt headings, blue underlined links, no auto-hyphenation, a page
-// number bottom-left. The one deliberate substitution is the typeface: the docx
+// number bottom-center. The one deliberate substitution is the typeface: the docx
 // asks for Arial, which we cannot ship, so the PDF uses the Noto Sans faces already
 // embedded for handouts (also a neo-grotesque, so the page reads the same).
 //
@@ -107,7 +107,7 @@ type exporter struct {
 // advance where typst's default had it (≈1.36em: the ascender and descender we just
 // took in are what the 0.65em leading used to add), i.e. Word's single spacing.
 func (e *exporter) preamble() string {
-	return fmt.Sprintf(`#set page(paper: "a4", margin: (top: %s, bottom: %s, left: %s, right: %s), footer: context align(left, text(size: %s, counter(page).display())))
+	return fmt.Sprintf(`#set page(paper: "a4", margin: (top: %s, bottom: %s, left: %s, right: %s), footer: context align(center, text(size: %s, counter(page).display())))
 #set text(font: %q, size: %s, lang: "ru", hyphenate: false, top-edge: "ascender", bottom-edge: "descender")
 #set par(spacing: 0pt, leading: 0pt, justify: false)
 `, marginV, marginV, marginH, marginH, pt(bodyPt), fontFamily, pt(bodyPt))
