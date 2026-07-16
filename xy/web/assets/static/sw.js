@@ -15,7 +15,7 @@
 //     online while staying offline-capable.
 //   - everything else (/api/…): straight to network, untouched.
 
-const CACHE = "xy-shell-v5";
+const CACHE = "xy-shell-v6";
 
 // App shell precache: entry modules, styles, fonts, vendored crypto, icons, and
 // the static page routes. Unversioned URLs; versioned requests are cached
@@ -29,6 +29,7 @@ const PRECACHE = [
   "/static/diff.js", "/static/board.js", "/static/timer.js", "/static/index.js", "/static/menu.js", "/static/pwa.js",
   "/static/login.js", "/static/profile.js", "/static/register.js", "/static/import.js",
   "/static/store.js", "/static/sync.js",
+  "/static/ding.mp3",
   "/static/vendor/scrypt.js", "/static/vendor/_assert.js", "/static/vendor/_md.js",
   "/static/vendor/hmac.js", "/static/vendor/pbkdf2.js", "/static/vendor/sha256.js",
   "/static/vendor/utils.js", "/static/vendor/crypto.js",

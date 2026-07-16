@@ -1,9 +1,10 @@
 // timer.js — a ЧГК (trivia) play timer that floats bottom-right of the board.
 // Toggled by the ⏰ button in the header. Counts a question's minute (or its
 // duplet/blitz sub-segments) down to zero with audible cues, then runs the
-// 10-second answer-writing countdown. All sound is synthesised with WebAudio
-// (oscillators) so there are no media assets to ship and nothing to fetch —
-// which keeps it within the strict same-origin CSP (default-src 'self').
+// 10-second answer-writing countdown. The cues are one shipped bell sample
+// (/static/ding.mp3, same-origin so CSP-fine) played through WebAudio at
+// different rates to stay distinguishable by ear; until it's decoded the old
+// synthesised oscillator beeps sound instead.
 import { xyApp } from "./app.js";
 const { el } = xyApp;
 
@@ -22,8 +23,10 @@ const PRESETS = {
 const ANSWER_SEC = 10; // post-question window to write the answer down
 const WARN_AT = 10; // seconds-left at which the single warning beep fires
 
-// ---- WebAudio beeps ---------------------------------------------------------
+// ---- WebAudio bell ----------------------------------------------------------
 let audioCtx = null;
+let dingBuf = null; // decoded ding.mp3; null until it arrives (tones fall back)
+let dingReq = null;
 // ensureAudio lazily builds the context and resumes it. Must be called from a
 // user gesture (Start click) the first time, or iOS keeps it suspended.
 function ensureAudio() {
@@ -32,10 +35,34 @@ function ensureAudio() {
     if (!AC) return null;
     if (!audioCtx) audioCtx = new AC();
     if (audioCtx.state === "suspended") audioCtx.resume();
+    loadDing(audioCtx);
     return audioCtx;
   } catch (_) {
     return null;
   }
+}
+function loadDing(ac) {
+  if (dingReq) return;
+  dingReq = fetch("/static/ding.mp3")
+    .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); })
+    .then((b) => ac.decodeAudioData(b))
+    .then((buf) => { dingBuf = buf; })
+    .catch(() => { dingReq = null; }); // retry on the next user gesture
+}
+// ding plays the bell once; rate shifts pitch and length together (2 = the
+// answer ticks an octave up and half as long, 0.5 = the end an octave down).
+function ding(rate, gain, fallback) {
+  const ac = ensureAudio();
+  if (!ac) return;
+  if (!dingBuf) { fallback(); return; }
+  const src = ac.createBufferSource();
+  src.buffer = dingBuf;
+  src.playbackRate.value = rate;
+  const g = ac.createGain();
+  g.gain.value = gain;
+  src.connect(g);
+  g.connect(ac.destination);
+  src.start();
 }
 // tone schedules a single shaped oscillator burst (attack/release envelope so it
 // doesn't click). Frequencies/lengths are chosen to be distinguishable by ear.
@@ -56,9 +83,9 @@ function tone(freq, dur, type = "square", gain = 0.18) {
   osc.start(t);
   osc.stop(t + dur + 0.02);
 }
-const warningBeep = () => tone(880, 0.22, "square", 0.18); // "10 seconds left"
-const tickBeep = () => tone(1040, 0.085, "square", 0.16); // answer-countdown tick
-const longBeep = () => tone(587, 0.85, "sawtooth", 0.2); // segment / answer end
+const warningBeep = () => ding(1, 0.7, () => tone(880, 0.22, "square", 0.18)); // "10 seconds left"
+const tickBeep = () => ding(2, 0.35, () => tone(1040, 0.085, "square", 0.16)); // answer-countdown tick
+const longBeep = () => ding(0.5, 1, () => tone(587, 0.85, "sawtooth", 0.2)); // segment / answer end
 
 // ---- state machine ----------------------------------------------------------
 // phase: ready    → press Start to run the current segment
