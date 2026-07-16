@@ -165,11 +165,13 @@
   background: var(--kanban-col);
 }
 .klist.dragging { opacity: 0.5; }
-.klist-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-2); }
+.klist-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) var(--space-2); }
 .klist-title { font-weight: var(--fw-semibold); }
-/* the question count sits right after the title and soaks up the middle space,
-   keeping the ⋯ menu pinned to the right edge */
-.klist-count { flex: 1 1 auto; font-size: var(--text-xs); color: var(--muted); white-space: nowrap; }
+/* title + question count share a text BASELINE (centring would drop the smaller
+   count's baseline below the title's), and the count wraps to its own line when
+   a long title leaves it no room; the ⋯ menu stays pinned top-right. */
+.klist-headmain { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-2); flex: 1 1 auto; min-width: 0; }
+.klist-count { font-size: var(--text-xs); color: var(--muted); white-space: nowrap; }
 .kadd {
   border: none;
   background: transparent;

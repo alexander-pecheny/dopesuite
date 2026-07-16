@@ -635,12 +635,11 @@ function renderList(list, precomputedNumbers) {
   // Test lists get a 🧪 prefix so they stand out from ordinary question lists.
   const titleText = (list.type === "test" ? "🧪 " : "") + (list.title || "(без названия)");
   const cards = cardsOf(list.id);
-  const head = el("div", { class: "klist-head" },
+  const headMain = el("div", { class: "klist-headmain" },
     el("span", { class: "klist-title", text: titleText }));
   const qCount = list.type === "test" ? 0 : cards.filter((c) => c.kind === "question").length;
-  if (qCount) head.append(el("span", { class: "klist-count", text: questionCountLabel(qCount) }));
-  head.append(menuWrap);
-  col.append(head);
+  if (qCount) headMain.append(el("span", { class: "klist-count", text: questionCountLabel(qCount) }));
+  col.append(el("div", { class: "klist-head" }, headMain, menuWrap));
   if (list.groupId != null) {
     const g = groupById(list.groupId);
     col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт", text: "🔗" + ((g && g.name) || "связанные списки") }));
