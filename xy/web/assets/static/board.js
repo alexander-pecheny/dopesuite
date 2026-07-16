@@ -622,6 +622,10 @@ function renderList(list, precomputedNumbers) {
     el("span", { class: "klist-title", text: titleText }),
     menuWrap,
   ));
+  if (list.groupId != null) {
+    const g = groupById(list.groupId);
+    col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт", text: "🔗" + ((g && g.name) || "связанные списки") }));
+  }
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
   const cards = cardsOf(list.id);
   // Grouped lists carry continuous numbering computed across the whole group;
@@ -629,10 +633,6 @@ function renderList(list, precomputedNumbers) {
   const numbers = list.type === "test" ? [] : (precomputedNumbers || xyChgk.numberQuestionCards(cards));
   cards.forEach((card, i) => body.append(renderCard(card, numbers[i])));
   col.append(body);
-  if (list.groupId != null) {
-    const g = groupById(list.groupId);
-    col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт", text: "🔗" + ((g && g.name) || "связанные списки") }));
-  }
 
   // list drag
   col.addEventListener("dragstart", (e) => {
@@ -763,15 +763,20 @@ function paintLabels() {
   }
 }
 
-function dragAfter(container, y) {
-  const cards = [...container.querySelectorAll(".kcard:not(.dragging)")];
+// dragAfterIn returns which of `els` the dragged node should be inserted
+// before, given the pointer's y (null = append at the end).
+function dragAfterIn(els, y) {
   let closest = null, closestOffset = -Infinity;
-  for (const c of cards) {
+  for (const c of els) {
     const box = c.getBoundingClientRect();
     const offset = y - box.top - box.height / 2;
     if (offset < 0 && offset > closestOffset) { closestOffset = offset; closest = c; }
   }
   return closest;
+}
+
+function dragAfter(container, y) {
+  return dragAfterIn([...container.querySelectorAll(".kcard:not(.dragging)")], y);
 }
 
 // ---- add list / card ----
@@ -999,6 +1004,10 @@ let manageSelected = new Set();       // selected unit keys ("l"+listId / "g"+gr
 let manageUnitByKey = new Map();      // key → unit (rebuilt each render)
 let manageDragKey = null;
 let manageDragCommitted = false;
+// Dragging a member row *inside* its group (reorder within, never across):
+// the group id whose members container owns the gesture.
+let memberDragGid = null;
+let memberDragCommitted = false;
 
 // computeUnits walks the rank-sorted lists, folding each maximal run of lists
 // sharing a group_id into one group unit; ungrouped lists are singleton units.
@@ -1075,8 +1084,48 @@ function renderManageUnit(unit, pos) {
       el("button", { class: "lm-icon", type: "button", text: "✂️", title: "Разъединить группу", onclick: () => unlinkGroup(unit.id) }),
       manageMoveControl(unit),
     ));
+    // Members are draggable within their own group (the whole group is still
+    // the unit that moves among lists — a member can't be dragged out of it,
+    // that would break the group's consecutiveness).
     const members = el("div", { class: "lm-members" });
-    for (const l of unit.lists) members.append(el("div", { class: "lm-member" }, el("span", { class: "lm-title", text: manageTitle(l) })));
+    for (const l of unit.lists) {
+      const row = el("div", { class: "lm-member", draggable: "true", dataset: { listId: l.id } },
+        el("span", { class: "lm-handle", text: "≡", title: "Перетащить внутри группы" }),
+        el("span", { class: "lm-title", text: manageTitle(l) }));
+      row.addEventListener("dragstart", (e) => {
+        e.stopPropagation(); // the unit node is draggable too — don't start both
+        memberDragGid = unit.id;
+        memberDragCommitted = false;
+        row.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        try { e.dataTransfer.setData("text/plain", "m" + l.id); } catch (_) {}
+      });
+      row.addEventListener("dragend", () => {
+        row.classList.remove("dragging");
+        memberDragGid = null;
+        if (!memberDragCommitted) renderManage(); // aborted drag — resync DOM from state
+      });
+      members.append(row);
+    }
+    members.addEventListener("dragover", (e) => {
+      if (memberDragGid !== unit.id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const dragging = members.querySelector(".lm-member.dragging");
+      if (!dragging) return;
+      const after = dragAfterIn([...members.querySelectorAll(".lm-member:not(.dragging)")], e.clientY);
+      if (after == null) members.append(dragging);
+      else members.insertBefore(dragging, after);
+    });
+    members.addEventListener("drop", (e) => {
+      if (memberDragGid !== unit.id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      memberDragCommitted = true;
+      const byId = new Map(unit.lists.map((l) => [String(l.id), l]));
+      const order = [...members.querySelectorAll(".lm-member")].map((n) => byId.get(n.dataset.listId)).filter(Boolean);
+      if (order.length === unit.lists.length) applyMemberOrder(unit.key, order);
+    });
     node.append(members);
   } else {
     node.append(el("div", { class: "lm-row" },
@@ -1103,14 +1152,7 @@ function renderManageUnit(unit, pos) {
 }
 
 function manageDragAfter(y) {
-  const els = [...listsManageRows.querySelectorAll(".lm-unit:not(.dragging)")];
-  let closest = null, closestOffset = -Infinity;
-  for (const c of els) {
-    const box = c.getBoundingClientRect();
-    const offset = y - box.top - box.height / 2;
-    if (offset < 0 && offset > closestOffset) { closestOffset = offset; closest = c; }
-  }
-  return closest;
+  return dragAfterIn([...listsManageRows.querySelectorAll(".lm-unit:not(.dragging)")], y);
 }
 
 listsManageRows.addEventListener("dragover", (e) => {
@@ -1161,6 +1203,16 @@ async function applyUnitOrder(orderedUnits) {
     render();
     renderManage();
   } catch (err) { setStatus("error"); msg.textContent = err.message; load(); }
+}
+
+// applyMemberOrder reorders the lists INSIDE one group: the group keeps its
+// place among the units, only its members' ranks are rewritten.
+function applyMemberOrder(unitKey, order) {
+  const units = computeUnits();
+  const target = units.find((u) => u.key === unitKey);
+  if (!target) return Promise.resolve();
+  target.lists = order;
+  return applyUnitOrder(units);
 }
 
 // moveUnitsTo relocates the selected units, preserving their relative order, so
