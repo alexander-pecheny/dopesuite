@@ -76,7 +76,7 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 				}
 				fests = append(fests, ui.Listrow(row...))
 			}
-			page = append(page, ui.Details(ui.Open(), ui.Summary(ui.Text(g.Title)), ui.List(fests...)))
+			page = append(page, ui.Festgroup(ui.Open(), ui.Title(g.Title), ui.List(fests...)))
 		}
 	} else {
 		page = append(page, ui.Empty(ui.Text("Фестов пока нет.")))

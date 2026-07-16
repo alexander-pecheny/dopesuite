@@ -27,6 +27,13 @@
 
     { "name": "pickgroup", "props": [{ "name": "label", "required": true }], "children": "any" },
 
+    { "name": "festgroup",
+      "props": [
+        { "name": "title", "required": true },
+        { "name": "open", "kind": "bare" }
+      ],
+      "children": "any" },
+
     { "name": "actionlist", "props": [], "children": ["actionrow"] },
     { "name": "actionrow", "props": [], "children": "any" },
     { "name": "rowlink", "props": [{ "name": "href", "required": true }], "children": "any" },

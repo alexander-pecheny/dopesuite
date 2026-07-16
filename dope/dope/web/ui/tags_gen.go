@@ -190,6 +190,10 @@ func Pickgroup(items ...Item) *Element {
 	return base.New("pickgroup", items...)
 }
 
+func Festgroup(items ...Item) *Element {
+	return base.New("festgroup", items...)
+}
+
 func Actionlist(items ...Item) *Element {
 	return base.New("actionlist", items...)
 }

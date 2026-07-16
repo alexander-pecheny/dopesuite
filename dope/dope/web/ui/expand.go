@@ -173,6 +173,18 @@ func expandNumberrow(c *base.ExpandCtx, p *base.Element) []base.Node {
 	return one(base.El("li", []base.Attr{base.ClassAttr("number-row")}, numInput, team, hiddenLabel, hiddenID))
 }
 
+// expandFestgroup is the fest-list collapsible bucket (Текущие/Будущие/Прошедшие)
+// shared by the public index and the host landing: details.fest-group with the
+// chevroned summary.fest-group-title.
+func expandFestgroup(c *base.ExpandCtx, p *base.Element) []base.Node {
+	title, _ := base.Get(p, "title")
+	attrs := []base.Attr{base.ClassAttr("fest-group")}
+	attrs = append(attrs, base.CopyFlags(p, "open")...)
+	summary := base.Inl("summary", []base.Attr{base.ClassAttr("fest-group-title")}, &base.TextNode{Value: title})
+	kids := append([]base.Node{summary}, c.Nodes(p.Block)...)
+	return one(base.El("details", attrs, kids...))
+}
+
 // expandPickgroup is a labelled <fieldset> for a group of radios/checkboxes (game
 // type on create, game picker on the roster override dialogs).
 func expandPickgroup(c *base.ExpandCtx, p *base.Element) []base.Node {

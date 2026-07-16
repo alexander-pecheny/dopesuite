@@ -42,6 +42,7 @@ func mustApp() *base.App {
 			"numbersform":  expandNumbersform,
 			"numberlist":   expandNumberlist,
 			"numberrow":    expandNumberrow,
+			"festgroup":    expandFestgroup,
 			"pickgroup":    expandPickgroup,
 			"actionlist":   expandActionlist,
 			"actionrow":    expandActionrow,

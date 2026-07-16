@@ -3841,7 +3841,7 @@ body:not(.embedded-match) .grid-match {
   gap: var(--space-5);
 }
 
-/* ── public fest index: collapsible groups + stacked rows ──── */
+/* ── fest lists (public index + host landing): collapsible groups + stacked rows ──── */
 .fest-group {
   display: flex;
   flex-direction: column;
