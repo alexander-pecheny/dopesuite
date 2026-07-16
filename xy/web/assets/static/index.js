@@ -80,6 +80,12 @@ function renderBoards(boards) {
         card.querySelector(".board-card-name").textContent = name;
         migrateName(b.id, name);
       });
+    } else {
+      // The name is readable without a key, but opening the board still needs its
+      // DK — mark boards that will ask for the passphrase.
+      xyCrypto.loadCachedDK(b.id).then((dk) => {
+        if (!dk) card.querySelector(".board-card-name").textContent = "🔒 " + b.name;
+      }).catch(() => {});
     }
     listNode.append(card);
   }
