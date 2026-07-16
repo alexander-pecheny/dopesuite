@@ -62,6 +62,7 @@ var publicListTemplate = template.Must(template.New("publicList").Parse(`<!docty
   <title>Фесты</title>
   <link rel="preload" href="/static/fonts/noto-sans-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu-config.js"></script>
   <script src="/static/menu.js"></script>
 </head>
 <body class="public" data-jump-label="Режим ведущего" data-jump-href="/host" data-jump-title="Перейти в режим ведущего">
@@ -100,6 +101,7 @@ var publicFestTemplate = template.Must(template.New("publicFest").Parse(`<!docty
   <title>{{.Title}}</title>
   <link rel="preload" href="/static/fonts/noto-sans-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/menu-config.js"></script>
   <script src="/static/menu.js"></script>
 </head>
 <body class="public" data-jump-label="Режим ведущего" data-jump-href="/host/fest/{{.Ref}}" data-jump-title="Открыть в режиме ведущего">

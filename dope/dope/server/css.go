@@ -23,6 +23,11 @@ func newAssets() *webassets.Assets {
 			Bytes:       kit.LoginJS,
 			DiskPath:    "../dopeuikit/assets/login.js",
 			ContentType: "text/javascript; charset=utf-8",
+		}, {
+			Path:        "/static/menu.js",
+			Bytes:       kit.MenuJS,
+			DiskPath:    "../dopeuikit/assets/menu.js",
+			ContentType: "text/javascript; charset=utf-8",
 		}},
 	})
 }

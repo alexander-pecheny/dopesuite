@@ -19,6 +19,13 @@ var CoreCSS []byte
 //go:embed login.js
 var LoginJS []byte
 
+// MenuJS is the site-wide chrome script (theme boot + ☰ menu + Appearance
+// modal), served at /static/menu.js on every page. App-specific labels come
+// from window.dopeMenuConfig, set by an app boot script loaded before it.
+//
+//go:embed menu.js
+var MenuJS []byte
+
 // Fonts is the font directory (the variable noto-sans-*/jetbrains-mono-* woff2),
 // served at /static/fonts/.
 //

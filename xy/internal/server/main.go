@@ -155,6 +155,7 @@ func Main() {
 	// file server via Go 1.22 most-specific-pattern routing.
 	mux.HandleFunc("GET /static/styles.css", srv.assets.ServeStylesheet())
 	mux.HandleFunc("GET /static/login.js", srv.assets.ServeShared("/static/login.js"))
+	mux.HandleFunc("GET /static/menu.js", srv.assets.ServeShared("/static/menu.js"))
 	mux.Handle("GET /static/fonts/", srv.assets.ServeFonts())
 	mux.Handle("GET /static/", srv.assets.FileServer())
 

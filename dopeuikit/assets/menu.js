@@ -1,8 +1,11 @@
-// menu.js — site-wide theme boot + the ☰ menu (Appearance modal + the
-// context-aware "edit / view" jump, page-supplied download links, account link).
-// Loaded as a NON-deferred <head> script on
+// menu.js — the kit's site-wide chrome script: theme boot + the ☰ menu
+// (Appearance modal + the context-aware "edit / view" jump, page-supplied
+// download links, account link). Loaded as a NON-deferred <head> script on
 // every page so the stored theme is applied to <html> before first paint (no
 // flash of the wrong theme). The menu/modal are built on DOMContentLoaded.
+// App-specific menu labels come from window.dopeMenuConfig (see the account
+// entry); app-specific page behaviour (xy's PWA boot) lives in the app's own
+// boot script, not here.
 //
 // Two independent axes, persisted in localStorage and reflected as attributes
 // on :root (see styles.css overrides):
@@ -117,8 +120,19 @@
     trigger.setAttribute("aria-expanded", "false");
     // An SVG hamburger centers crisply at any size; the ☰ glyph (U+2630) sits
     // high in its em-box and reads off-centre inside the icon button.
-    trigger.innerHTML = '<svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true" focusable="false">'
-      + '<path d="M2.5 5h13M2.5 9h13M2.5 13h13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 18 18");
+    svg.setAttribute("width", "18");
+    svg.setAttribute("height", "18");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", "M2.5 5h13M2.5 9h13M2.5 13h13");
+    path.setAttribute("stroke", "currentColor");
+    path.setAttribute("stroke-width", "1.8");
+    path.setAttribute("stroke-linecap", "round");
+    svg.append(path);
+    trigger.replaceChildren(svg);
 
     const dropdown = document.createElement("div");
     dropdown.className = "menu-dropdown";
@@ -167,27 +181,36 @@
       }
 
       for (const item of extras) {
-        const link = document.createElement("a");
-        link.className = "menu-item";
-        link.setAttribute("role", "menuitem");
-        link.href = item.href;
-        link.textContent = item.label;
-        if (item.title) link.title = item.title;
-        if (item.download) link.setAttribute("download", "");
-        link.addEventListener("click", closeMenu);
-        dropdown.appendChild(link);
+        // Action items (with onClick) render as a <button>; link items as an <a>.
+        const node = document.createElement(item.onClick ? "button" : "a");
+        node.className = "menu-item";
+        node.setAttribute("role", "menuitem");
+        if (item.onClick) {
+          node.type = "button";
+          node.addEventListener("click", () => { closeMenu(); item.onClick(); });
+        } else {
+          node.href = item.href;
+          if (item.download) node.setAttribute("download", "");
+          node.addEventListener("click", closeMenu);
+        }
+        node.textContent = item.label;
+        if (item.title) node.title = item.title;
+        dropdown.appendChild(node);
       }
 
       if (account) {
+        // Labels/targets are the app's (dope's account entry is the host's
+        // door): window.dopeMenuConfig, set by a boot script loaded before us.
+        const cfg = window.dopeMenuConfig || {};
         const link = document.createElement("a");
         link.className = "menu-item";
         link.setAttribute("role", "menuitem");
         if (account.loggedIn) {
-          link.href = "/profile";
-          link.textContent = "Профиль ведущего";
+          link.href = cfg.profileHref || "/profile";
+          link.textContent = cfg.profileLabel || "Профиль";
         } else {
-          link.href = "/host";
-          link.textContent = "Вход для ведущего";
+          link.href = cfg.loginHref || "/login";
+          link.textContent = cfg.loginLabel || "Вход";
         }
         link.addEventListener("click", closeMenu);
         dropdown.appendChild(link);

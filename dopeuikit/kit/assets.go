@@ -10,6 +10,8 @@ var (
 	CoreCSS = assets.CoreCSS
 	// LoginJS is the shared login page script, served at /static/login.js.
 	LoginJS = assets.LoginJS
+	// MenuJS is the site-wide chrome script (theme boot + ☰ menu), /static/menu.js.
+	MenuJS = assets.MenuJS
 	// Fonts is the font directory (the variable noto-sans-*/jetbrains-mono-* woff2),
 	// served at /static/fonts/.
 	Fonts = assets.Fonts

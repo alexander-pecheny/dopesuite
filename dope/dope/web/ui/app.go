@@ -56,7 +56,7 @@ func mustApp() *base.App {
 			Viewport:     viewportContent,
 			Stylesheets:  []string{"/static/styles.css"},
 			FontPreloads: []string{"/static/fonts/noto-sans-var.woff2"},
-			BootScripts:  []string{"/static/menu.js"},
+			BootScripts:  []string{"/static/menu-config.js", "/static/menu.js"},
 			DefaultKind:  "sheet",
 			PageKinds: map[string]base.PageKind{
 				"public": {Body: []string{"public"}, Main: []string{"public-main"}},
