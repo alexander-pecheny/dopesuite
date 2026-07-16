@@ -116,6 +116,18 @@ func TestDocxTextParity(t *testing.T) {
 	}
 }
 
+// stripSrcSz removes the source/author font-size run props so the body parity
+// check below still locks in everything else. Applied to both sides: xy emits
+// sz+szCs, chgksuite (python-docx) emits sz only, and older oracles none.
+func stripSrcSz(s string) string {
+	for _, frag := range []string{`<w:sz w:val="20"/>`, `<w:szCs w:val="20"/>`} {
+		s = strings.ReplaceAll(s, frag, "")
+	}
+	s = strings.ReplaceAll(s, "<w:rPr></w:rPr>", "")
+	s = strings.ReplaceAll(s, "<w:rPr/>", "")
+	return strings.ReplaceAll(s, "<w:r></w:r>", "<w:r/>") // empty token run, size-stripped
+}
+
 // TestDocxBodyParity compares the generated <w:body> XML byte-for-byte against
 // chgksuite's, which locks in paragraph spacing (keepLines/keepNext/spacing),
 // run boundaries (python-docx's br-inside-run + conditional xml:space), and
@@ -137,8 +149,8 @@ func TestDocxBodyParity(t *testing.T) {
 			if err != nil {
 				t.Fatalf("export: %v", err)
 			}
-			want := bodyXML(documentXML(t, oracle))
-			got := bodyXML(documentXML(t, mine))
+			want := stripSrcSz(bodyXML(documentXML(t, oracle)))
+			got := stripSrcSz(bodyXML(documentXML(t, mine)))
 			if want != got {
 				t.Errorf("body XML mismatch for %s\n--- chgksuite ---\n%s\n--- go ---\n%s", name, want, got)
 			}

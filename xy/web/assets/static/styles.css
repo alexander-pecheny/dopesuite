@@ -497,6 +497,8 @@
 .pv-list-item { padding-left: 1.6em; text-indent: -1.6em; margin-bottom: var(--space-0-5); }
 .pv-list-num { font-weight: var(--fw-regular); }
 .pv-handout { color: var(--muted); }
+/* sources/authors set smaller, matching the exports' 12pt → 10pt */
+.pv-small { font-size: calc(10em / 12); }
 .pv-heading { font-size: var(--text-xl); font-weight: var(--fw-bold); margin: var(--space-5) 0 var(--space-3); }
 .pv-section { font-size: var(--text-lg); font-weight: var(--fw-semibold); margin: var(--space-4) 0 var(--space-2); }
 .pv-test { color: var(--muted); font-style: italic; }

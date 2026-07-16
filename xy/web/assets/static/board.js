@@ -2087,6 +2087,12 @@ function renderFieldBody(text, imgMap, opts) {
   return frag;
 }
 
+// pvSmallCls: sources and authors are set smaller, like the docx/PDF exports
+// (12pt body → 10pt).
+function pvSmallCls(field) {
+  return field === "source" || field === "author" ? "pv-small" : "";
+}
+
 // pvField renders a "Label: value" line: peels a "!!Label" override, numbers any
 // "- …" list, and (for sources that became a list) uses the plural label.
 function pvField(field, defaultLabel, text, imgMap, screen, cls) {
@@ -2145,7 +2151,7 @@ function renderPreviewCard(card, number, imgMap, screen, edit) {
     wrap.append(qline);
     for (const f of ["answer", "zachet", "nezachet", "comment", "source", "author"]) {
       const b = find(f);
-      if (b) wrap.append(pvField(f, PV_LABELS[f], b.text, imgMap, screen));
+      if (b) wrap.append(pvField(f, PV_LABELS[f], b.text, imgMap, screen, pvSmallCls(f)));
     }
     return wrap;
   }
@@ -2163,7 +2169,7 @@ function renderPreviewCard(card, number, imgMap, screen, edit) {
       h.append(renderRich(b.text, imgMap, { nbsp: true }));
       wrap.append(h);
     } else if (PV_LABELS[b.type]) {
-      wrap.append(pvField(b.type, PV_LABELS[b.type], b.text, imgMap, false));
+      wrap.append(pvField(b.type, PV_LABELS[b.type], b.text, imgMap, false, pvSmallCls(b.type)));
     } else {
       const p = el("p", { class: "pv-meta" });
       p.append(renderRich(b.text, imgMap, { nbsp: true }));

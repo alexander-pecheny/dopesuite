@@ -21,10 +21,13 @@ type para struct {
 	keepLines bool    // w:keepLines → breakable: false
 	sticky    bool    // w:keepNext  → sticky: true
 	pageBreak bool    // w:pageBreakBefore
-	size      float64 // 0 = body size
+	size      float64 // block-level text size (headings); 0 = body size
 	bold      bool
 	italic    bool
-	exprs     []string // content expressions, with pbMarker where a page break falls
+	runSize   float64 // per-run text size, pt; 0 = inherit. Expressions are built at
+	// append time, so flipping this mid-paragraph resizes only the runs that follow
+	// (author glued onto the answer paragraph).
+	exprs []string // content expressions, with pbMarker where a page break falls
 }
 
 // pbMarker separates the block-chunks of a paragraph interrupted by a page break.
@@ -37,9 +40,17 @@ func (p *para) add(expr string) {
 	}
 }
 
+// sized wraps a content expression in the paragraph's per-run size, if one is set.
+func (p *para) sized(expr string) string {
+	if expr == "" || p.runSize == 0 {
+		return expr
+	}
+	return "text(size: " + pt(p.runSize) + ", " + expr + ")"
+}
+
 // addStyled appends verbatim text (labels, list markers, "\n" separators) — no
 // backtick/nbsp processing, mirroring docx's addRaw.
-func (p *para) addStyled(text, kind string) { p.add(styled(text, kind)) }
+func (p *para) addStyled(text, kind string) { p.add(p.sized(styled(text, kind))) }
 
 // addContent appends editorial text: backtick stress accents, then the
 // non-breaking-space gluing, exactly as the docx export does it. The
@@ -51,7 +62,7 @@ func (p *para) addContent(text, kind string, nbsp bool) {
 	if nbsp {
 		text = inline.ReplaceNoBreak(text)
 	}
-	p.add(styled(text, kind))
+	p.add(p.sized(styled(text, kind)))
 }
 
 func (p *para) addBreak()     { p.add("linebreak()") }
@@ -60,8 +71,8 @@ func (p *para) addPageBreak() { p.exprs = append(p.exprs, pbMarker) }
 // addLink appends a link styled like the docx Hyperlink character style (blue,
 // underlined). The URL is both the target and the visible text, as in the 4s source.
 func (p *para) addLink(url string) {
-	p.add(fmt.Sprintf("link(%s, underline(text(fill: rgb(%q), %s)))",
-		typstString(url), linkColor, typstString(url)))
+	p.add(p.sized(fmt.Sprintf("link(%s, underline(text(fill: rgb(%q), %s)))",
+		typstString(url), linkColor, typstString(url))))
 }
 
 // typ renders the paragraph to typst source.

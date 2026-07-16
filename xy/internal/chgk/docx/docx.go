@@ -45,6 +45,9 @@ const (
 	hyperlinkRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
 	// NO_BREAK_HYPHEN_REPLACEMENT (docx.py): word-joiner + hyphen + word-joiner.
 	noBreakHyphenRepl = "⁠-⁠"
+	// srcSz: source/author runs are set 2pt below the 12pt body (half-points).
+	// A deliberate deviation from chgksuite's output.
+	srcSz = 20
 )
 
 // relItem is a relationship appended to word/_rels/document.xml.rels in document
@@ -83,7 +86,10 @@ type para struct {
 	pageBreakBefore bool
 	spacingBefore   int  // twips; 0 = none
 	lang            bool // template para0 carries <w:rPr><w:lang w:val="en-US"/>
-	runs            []string
+	sz              int  // run font size, half-points; 0 = style default. Runs are
+	// serialized at append time, so flipping this mid-paragraph resizes only the
+	// runs that follow (author glued onto the answer paragraph).
+	runs []string
 }
 
 // pPr child order follows the OOXML CT_PPr schema (pStyle, keepNext, keepLines,
@@ -123,7 +129,7 @@ func (p *para) xml() string {
 // addRaw appends a run for verbatim text (mirrors python-docx paragraph.add_run
 // for labels / list markers / "\n" separators — no nbsp/backtick processing).
 func (p *para) addRaw(text, kind string) {
-	p.runs = append(p.runs, runXML(text, rPr(kind)))
+	p.runs = append(p.runs, runXML(text, rPr(kind, p.sz)))
 }
 
 // leadEmpty appends the template para0's leading empty run (<w:r><w:rPr/></w:r>).
@@ -139,7 +145,7 @@ func (e *exporter) addContent(p *para, text, kind string, nbsp bool) {
 		text = inline.ReplaceNoBreak(text)
 	}
 	text = strings.ReplaceAll(text, inline.NBHyphen, noBreakHyphenRepl)
-	p.runs = append(p.runs, runXML(text, rPr(kind)))
+	p.runs = append(p.runs, runXML(text, rPr(kind, p.sz)))
 }
 
 // addHyperlink appends a <w:hyperlink> wrapping a Hyperlink-styled run, and
@@ -149,7 +155,7 @@ func (e *exporter) addHyperlink(p *para, urlText string) {
 	e.nextRel++
 	e.rels = append(e.rels, relItem{id: relID, typ: hyperlinkRelType, target: urlQuote(urlText), external: true})
 	text := strings.ReplaceAll(urlText, inline.NBHyphen, noBreakHyphenRepl)
-	inner := runXML(text, `<w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>`)
+	inner := runXML(text, `<w:rPr><w:rStyle w:val="Hyperlink"/>`+szXML(p.sz)+`</w:rPr>`)
 	p.runs = append(p.runs, `<w:hyperlink r:id="`+relID+`">`+inner+`</w:hyperlink>`)
 }
 
@@ -258,7 +264,7 @@ func (e *exporter) renderQuestion(q *fsource.Question) []string {
 		}
 		nbsp := field != "source"
 		if field == "source" {
-			src = &para{keepLines: true}
+			src = &para{keepLines: true, sz: srcSz}
 			src.addRaw(labelFor(q, field)+": ", "bold")
 			e.addValue(src, v, nbsp)
 			continue
@@ -266,6 +272,9 @@ func (e *exporter) renderQuestion(q *fsource.Question) []string {
 		cur := p2
 		if src != nil {
 			cur = src
+		}
+		if field == "author" {
+			cur.sz = srcSz
 		}
 		cur.addRaw("\n", "")
 		cur.addRaw(labelFor(q, field)+": ", "bold")
@@ -388,11 +397,8 @@ func runXML(text, rpr string) string {
 }
 
 // rPr renders run properties. Child order follows the OOXML CT_RPr schema
-// (b, i, smallCaps, strike, u).
-func rPr(kind string) string {
-	if kind == "" {
-		return ""
-	}
+// (b, i, smallCaps, strike, sz, szCs, u).
+func rPr(kind string, sz int) string {
 	var props string
 	if strings.Contains(kind, "bold") {
 		props += "<w:b/>"
@@ -406,6 +412,7 @@ func rPr(kind string) string {
 	if kind == "strike" {
 		props += "<w:strike/>"
 	}
+	props += szXML(sz)
 	if strings.Contains(kind, "underline") {
 		props += `<w:u w:val="single"/>`
 	}
@@ -413,6 +420,13 @@ func rPr(kind string) string {
 		return ""
 	}
 	return "<w:rPr>" + props + "</w:rPr>"
+}
+
+func szXML(sz int) string {
+	if sz == 0 {
+		return ""
+	}
+	return fmt.Sprintf(`<w:sz w:val="%d"/><w:szCs w:val="%d"/>`, sz, sz)
 }
 
 func brk() string { return "<w:r><w:br/></w:r>" }

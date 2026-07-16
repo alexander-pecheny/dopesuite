@@ -60,6 +60,7 @@ const (
 	headingBelo = 3.0       // …w:after=60tw
 	questionPt  = 18.0      // question paragraph w:before=360tw
 	answerPt    = 6.0       // answer paragraph w:before=120tw
+	srcPt       = 10.0      // source/author runs: 2pt below body (matches the docx export)
 	linkColor   = "#0000ff" // Hyperlink character style
 	tabWidth    = "36pt"    // Word's default tab stop (0.5in)
 	fontFamily  = "Noto Sans"
@@ -193,7 +194,7 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 		}
 		nbsp := field != "source"
 		if field == "source" {
-			src = &para{keepLines: true}
+			src = &para{keepLines: true, runSize: srcPt}
 			src.addStyled(labelFor(q, field)+": ", "bold")
 			e.addValue(src, v, nbsp)
 			continue
@@ -201,6 +202,9 @@ func (e *exporter) renderQuestion(q *fsource.Question) string {
 		cur := p2
 		if src != nil {
 			cur = src
+		}
+		if field == "author" {
+			cur.runSize = srcPt
 		}
 		cur.addBreak()
 		cur.addStyled(labelFor(q, field)+": ", "bold")
