@@ -74,11 +74,6 @@
    fixed header — and its ☰ dropdown — must stay above it (the settings/unlock
    modals at z-modal still win over both). */
 .board-page .host-top { z-index: var(--z-board-header); }
-/* Same selector shape (not #id) as the mobile override below, so the cascade
-   (equal specificity, later source wins) still lets the mobile rule shrink
-   the title further on narrow screens. */
-.board-page h1 { font-size: var(--text-xl); }
-
 /* Breadcrumb: 🏠 / {board name}, replacing the old "←" back link. */
 .host-brand { display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 1 1 auto; }
 .host-home { display: inline-flex; align-items: center; text-decoration: none; font-size: 18px; line-height: 1; }
@@ -700,6 +695,39 @@ textarea.fld-input { min-height: 3em; }
 .fld-row { display: flex; align-items: center; gap: var(--space-1); }
 .fld-row-input { flex: 1; }
 .fld-add-row { align-self: flex-start; font-size: var(--text-sm); margin-top: var(--space-1); cursor: var(--cursor-action); padding: var(--space-1) var(--space-2); width: auto; }
+/* hand-drawn autocomplete (suggestWrap in board.js — <datalist> never opens on
+   iOS Safari, so the dropdown is ours) */
+.suggest-wrap { position: relative; flex: 1 1 auto; min-width: 0; }
+.suggest-wrap > .input { width: 100%; }
+.suggest-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  max-height: 40vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+}
+.suggest-item {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  padding: var(--space-1-5) var(--space-2-5);
+  cursor: var(--cursor-action);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.suggest-item:hover, .suggest-item.active { background: var(--hover-bg); }
+
 /* handout text/image toggle (.seg lives in the kit) */
 .fld-body > .seg { margin-bottom: var(--space-1); }
 /* test-card tester rows: игрок/команда toggle sits inline with the name input */
@@ -740,6 +768,52 @@ textarea.fld-input { min-height: 3em; }
 .sizes-modal { width: min(420px, 100%); text-align: left; }
 /* The .sizes-row/.sizes-value/.sizes-hint slider rows are the sliderrow
    primitive; their base rules live in core.css. */
+
+/* The pseudo-board preview in the sizes dialog (profile.js#renderPreview):
+   a to-scale wireframe of a monitor — the board column centres inside the
+   "screen", lists are --pv-list-w wide, cards are stacks of "text line" bars
+   cut by the card-height clamp. Proportions only, hence bars, not text. */
+.sizes-preview {
+  height: 150px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.pvb-screen {
+  display: flex;
+  justify-content: center;
+  height: 100%;
+  background: var(--structure);
+  overflow: hidden;
+}
+.pvb-board {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  max-width: var(--pv-board-w, none);
+  padding: 5px;
+  overflow: hidden;
+}
+.pvb-list {
+  flex: 0 0 var(--pv-list-w, 70px);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 3px;
+  background: var(--action-bg);
+}
+.pvb-title { height: 4px; width: 55%; border-radius: 2px; background: var(--grid-dark); margin: 1px 0 2px; }
+.pvb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 2px;
+  background: var(--surface);
+}
+.pvb-line { height: 3px; border-radius: 1.5px; background: var(--grid-dark); }
+.pvb-line-last { width: 60%; }
 
 /* ── lists management modal ────────────────────────────────────────────────── */
 .lists-manage { width: min(560px, 100%); text-align: left; }

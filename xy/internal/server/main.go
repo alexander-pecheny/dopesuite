@@ -73,6 +73,7 @@ func Main() {
 	mux.HandleFunc("POST /api/auth/username", srv.handleSetUsername)
 	mux.HandleFunc("POST /api/auth/password", srv.handleSetPassword)
 	mux.HandleFunc("POST /api/auth/sizes", srv.handleSetSizes)
+	mux.HandleFunc("POST /api/auth/default-author", srv.handleSetDefaultAuthor)
 
 	// ---- API tokens (Trello-compatible API credentials) ----
 	mux.HandleFunc("GET /api/tokens", srv.handleListTokens)

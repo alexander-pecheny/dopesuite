@@ -1,6 +1,5 @@
 page title="Профиль · xy" kind="sheet" scripts="profile.js"
-  topbar title="Профиль"
-    iconlink href="/" label="Доски" "⬅️"
+  topbar title="Профиль" home="/"
 
   section
     hint "Вы вошли как " (strong id="whoami" "…") "."
@@ -13,17 +12,40 @@ page title="Профиль · xy" kind="sheet" scripts="profile.js"
     message id="usernameMessage"
 
   section
-    hint "Пароль для входа на сайт."
+    button kind="ghost" id="passwordBtn" "Изменить пароль"
+    button kind="ghost" id="sizesBtn" "Настройка ширины / высоты"
+    button kind="ghost" id="authorBtn" "Автор по умолчанию"
+    button kind="ghost" href="/profile/tokens" "API-токены"
+    button kind="ghost" id="logoutBtn" "Выйти"
+
+  -- change-password dialog
+  modal id="passwordOverlay" label="Изменить пароль" title="Изменить пароль"
     form id="passwordForm" dir="col"
       password id="currentPassword" placeholder="Текущий пароль (если установлен)" autocomplete="current-password"
       password id="newPassword" placeholder="Новый пароль" autocomplete="new-password" required
       password id="confirmPassword" placeholder="Повторите пароль" autocomplete="new-password" required
-      button submit "Сохранить пароль"
+      row gap="sm" wrap
+        button submit "Сохранить пароль"
+        button kind="ghost" id="passwordCancel" "Отмена"
     message id="passwordMessage"
 
-  section
-    hint "API-токены для доступа через Trello-совместимый API (chgksuite)."
-    button kind="ghost" href="/profile/tokens" "API-токены"
+  -- board sizes dialog: workspace/list width + card height, stored per user
+  -- (server-side, all boards); the pseudo-board previews the proportions
+  modal id="sizesOverlay" label="Настройка ширины / высоты" title="Настройка ширины / высоты" variant="sizes"
+    mount id="sizesPreview" kind="sizes-preview"
+    sliderrow id="sizesBoardW" label="Ширина рабочей области" valueid="sizesBoardWVal" min="800" max="3200" step="50" hint="Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
+    sliderrow id="sizesListW" label="Ширина списка" valueid="sizesListWVal" min="200" max="640" step="10"
+    sliderrow id="sizesCardH" label="Текст карточки" valueid="sizesCardHVal" min="1" max="12" step="1" hint="Сколько строк вопроса показывать на карточке. На максимуме — весь текст."
+    row gap="sm" align="center" justify="between"
+      button small kind="ghost" id="sizesReset" "Сбросить по умолчанию"
+      button id="sizesClose" "Готово"
 
-  section
-    button kind="ghost" id="logoutBtn" "Выйти"
+  -- default-author dialog: pre-filled into new question cards
+  modal id="authorOverlay" label="Автор по умолчанию" title="Автор по умолчанию"
+    form id="authorForm" dir="col"
+      textfield id="authorValue" placeholder="Имя автора" autocomplete="off" maxlength="200"
+      hint "Подставляется в новые карточки-вопросы (поле Автор и строка «@» в Тексте). Пустое — не подставлять."
+      row gap="sm" wrap
+        button submit "Сохранить"
+        button kind="ghost" id="authorCancel" "Отмена"
+    message id="authorMessage"

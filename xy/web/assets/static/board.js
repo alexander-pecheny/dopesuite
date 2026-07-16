@@ -1,6 +1,6 @@
 // board.js — kanban board: unlock, render lists/cards (derived titles),
 // drag-reorder with fractional ranks, card detail + timeline + labels.
-import { xyApp } from "./app.js";
+import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
@@ -26,7 +26,7 @@ const statusNode = document.getElementById("status");
 const kanban = document.getElementById("kanban");
 const titleNode = document.getElementById("boardTitle");
 
-const state = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null, unread: {}, sizes: null };
+const state = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null, unread: {}, sizes: null, defaultAuthor: "" };
 let dk = null;
 // One-shot guard per card-drag gesture: set true the moment a drop commits the
 // move, so a stray duplicate drop is ignored and dragend can tell an aborted
@@ -104,10 +104,6 @@ window.dopeMenu?.setExtras([{
   title: "Изменить название доски",
   onClick: () => renameBoard(),
 }, {
-  label: "📐 Изменить размеры",
-  title: "Ширина списков и высота карточек на этом устройстве",
-  onClick: () => openSizes(),
-}, {
   label: "📋 Управление списками",
   title: "Переупорядочить списки и связать их в группы (списки списков)",
   onClick: () => openListsManage(),
@@ -137,118 +133,12 @@ window.dopeMenu?.setExtras([{
 }]);
 
 // ---- board sizes (workspace width / list width / card height) ----
-// A display preference, not board data: it lives in localStorage (per browser,
-// all boards) and drives three CSS vars on <html>.
-//   boardW    — max width of the kanban, which is centred in the viewport. On a
-//               wide monitor a left-aligned board strands the reader at the edge
-//               of the screen; null = use the whole width (the old behaviour).
-//   listW     — list column width.
-//   cardLines — how many lines of the question a card shows, as a line clamp
-//               (with an ellipsis). null = no clamp: the card shows the whole
-//               question, which is why cards render the full text rather than a
-//               truncated preview (see renderCardTitle).
-// Each slider's maximum position means "unlimited" (null), not its numeric value.
-// The sizes are a per-user, all-boards preference, stored server-side (users.sizes,
-// plain JSON) and delivered in the board snapshot as the caller's setting — not a
-// per-browser localStorage key, which neither followed the user across devices nor
-// was scoped to an account. state.sizes holds the live values; changes save back to
-// the user (POST /api/auth/sizes) with a debounced request (online-only, like rename).
-// 1512 = the logical width of a 14" MacBook screen (3024 physical @2×), i.e. a
-// board that fills a laptop and stays a centred column on anything wider.
-const SIZES_DEFAULT = { boardW: 1512, listW: 280, cardLines: 3 };
-const BOARD_W_MIN = 800, BOARD_W_MAX = 3200;   // MAX = «вся ширина»
-const LIST_W_MIN = 200, LIST_W_MAX = 640;
-const CARD_LINES_MAX = 12;                     // MAX = «без ограничения»
-
-const inRange = (n, lo, hi) => Number.isFinite(n) && n >= lo && n < hi;
-// null is a *choice* ("no cap"), so it must survive a round-trip — only a missing
-// or out-of-range value falls back to the default.
-const pick = (v, lo, hi, dflt) => (v === null ? null : inRange(Number(v), lo, hi) ? Number(v) : dflt);
-
-// Clamp a raw sizes object (from the snapshot, or null when never set) into the
-// usable shape. The server stores whatever the client sent, so validation lives
-// here — a stale or hand-edited value can never break the layout.
-function sanitizeSizes(s) {
-  if (!s || typeof s !== "object") return { ...SIZES_DEFAULT };
-  return {
-    boardW: pick(s.boardW, BOARD_W_MIN, BOARD_W_MAX, SIZES_DEFAULT.boardW),
-    listW: pick(s.listW, LIST_W_MIN, LIST_W_MAX + 1, SIZES_DEFAULT.listW),
-    cardLines: pick(s.cardLines, 1, CARD_LINES_MAX, SIZES_DEFAULT.cardLines),
-  };
-}
-
-function applySizes(s) {
-  const root = document.documentElement;
-  root.style.setProperty("--kanban-max-w", s.boardW == null ? "none" : s.boardW + "px");
-  root.style.setProperty("--klist-w", s.listW + "px");
-  root.style.setProperty("--kcard-lines", s.cardLines == null ? "none" : String(s.cardLines));
-}
-// Apply defaults immediately so the CSS vars are defined; the board snapshot then
-// overrides state.sizes with this board's saved values (see the load path).
-state.sizes = { ...SIZES_DEFAULT };
-applySizes(state.sizes);
-
-const sizesOverlay = document.getElementById("sizesOverlay");
-const sizesBoardW = document.getElementById("sizesBoardW");
-const sizesListW = document.getElementById("sizesListW");
-const sizesCardH = document.getElementById("sizesCardH");
-
-function syncSizesUI(s) {
-  sizesBoardW.value = String(s.boardW == null ? BOARD_W_MAX : s.boardW);
-  sizesListW.value = String(s.listW);
-  sizesCardH.value = String(s.cardLines == null ? CARD_LINES_MAX : s.cardLines);
-  document.getElementById("sizesBoardWVal").textContent = s.boardW == null ? "вся ширина" : s.boardW + " px";
-  document.getElementById("sizesListWVal").textContent = s.listW + " px";
-  document.getElementById("sizesCardHVal").textContent =
-    s.cardLines == null ? "весь текст" : s.cardLines + (s.cardLines === 1 ? " строка" : s.cardLines < 5 ? " строки" : " строк");
-}
-
-// Live-apply on every input move, so the board behind the modal previews the size,
-// and debounce the save so dragging a slider fires one PATCH, not one per pixel.
-let sizesSaveTimer = null;
-function scheduleSizesSave() {
-  if (sizesSaveTimer) clearTimeout(sizesSaveTimer);
-  sizesSaveTimer = setTimeout(saveSizes, 400);
-}
-async function saveSizes() {
-  sizesSaveTimer = null;
-  // A user preference, not board data, so it's not in the per-board sync outbox;
-  // like rename it's online-only. Offline the preview still applies for the
-  // session, it just won't persist. Best-effort — a failed save is not fatal.
-  if (!xySync.isOnline()) return;
-  try { await jpost(`/api/auth/sizes`, state.sizes); } catch (_) {}
-}
-function commitSizes() {
-  const boardW = Number(sizesBoardW.value), lines = Number(sizesCardH.value);
-  const s = {
-    boardW: boardW >= BOARD_W_MAX ? null : boardW,
-    listW: Number(sizesListW.value),
-    cardLines: lines >= CARD_LINES_MAX ? null : lines,
-  };
-  state.sizes = s;
-  applySizes(s);
-  syncSizesUI(s);
-  scheduleSizesSave();
-}
-
-function openSizes() {
-  syncSizesUI(state.sizes);
-  sizesOverlay.hidden = false;
-}
-function closeSizes() { sizesOverlay.hidden = true; }
-
-sizesBoardW.addEventListener("input", commitSizes);
-sizesListW.addEventListener("input", commitSizes);
-sizesCardH.addEventListener("input", commitSizes);
-document.getElementById("sizesReset").addEventListener("click", () => {
-  state.sizes = { ...SIZES_DEFAULT };
-  applySizes(state.sizes);
-  syncSizesUI(state.sizes);
-  scheduleSizesSave();
-});
-document.getElementById("sizesClose").addEventListener("click", closeSizes);
-sizesOverlay.addEventListener("click", (e) => { if (e.target === sizesOverlay) closeSizes(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !sizesOverlay.hidden) closeSizes(); });
+// A per-user display preference, edited on /profile (see profile.js) and
+// delivered in the board snapshot; here it only drives the three CSS vars.
+// Apply defaults immediately so the vars are defined; the snapshot then
+// overrides state.sizes with the user's saved values (see the load path).
+state.sizes = { ...xySizes.DEFAULT };
+xySizes.apply(state.sizes);
 
 // Board names are plaintext server-side metadata now (only the board's data stays
 // encrypted). Backfill a legacy board's name once we've decrypted it on load — best-
@@ -573,10 +463,11 @@ async function load() {
     state.role = snap.role || "editor";
     state.cardLabels = snap.card_labels || {};
     state.unread = snap.unread || {};
-    // The caller's per-user display layout (same on every board); absent (never
+    // The caller's per-user display prefs (same on every board); absent (never
     // set) → defaults. Apply now so the board renders at the user's saved sizes.
-    state.sizes = sanitizeSizes(snap.sizes);
-    applySizes(state.sizes);
+    state.sizes = xySizes.sanitize(snap.sizes);
+    xySizes.apply(state.sizes);
+    state.defaultAuthor = snap.default_author || "";
     // Migrated boards (schema_version 2) carry a plaintext name; legacy boards still
     // need the DK to decrypt name_enc — and, since we now hold it, get backfilled.
     if (snap.schema_version >= 2) {
@@ -2422,12 +2313,11 @@ const CARD_TABS = ["preview", "fields", "text"];
 const tabBtn = (v) => document.getElementById("cardTab" + v[0].toUpperCase() + v.slice(1));
 
 // The 4s skeleton a new question's Текст view opens on: question / answer /
-// comment / source / author, the blocks a question is expected to carry.
-const QUESTION_STUB = "? \n! \n/ \n^ \n@ ";
-// hasContent: does a 4s draft say anything, or is it just bare markers? An
-// untouched stub must not create a card — it's an empty form, not a question.
-function hasContent(text) {
-  return (text || "").split("\n").some((l) => l.replace(/^\s*(\?|!=|=|!|\/|\^|@)/, "").trim() !== "");
+// comment / source / author, the blocks a question is expected to carry. The
+// "@" line pre-fills the user's default author (a /profile setting) — saving
+// an otherwise untouched stub is allowed and creates a card with just that.
+function questionStub() {
+  return "? \n! \n/ \n^ \n@ " + (state.defaultAuthor || "");
 }
 
 // fitTextarea grows a textarea to fit its content so the user never scrolls
@@ -2478,13 +2368,48 @@ function boardFieldValues(pick) {
 function boardAuthors() { return boardFieldValues((f) => f.authors); }
 function boardSources() { return boardFieldValues((f) => f.sources); }
 
-// datalist populates (creating on first use) a shared <datalist> and returns its
-// id, so an input can offer the board's existing values as an autocomplete list.
-function datalist(id, values) {
-  let dl = document.getElementById(id);
-  if (!dl) { dl = el("datalist", { id }); document.body.append(dl); }
-  dl.replaceChildren(...values.map((v) => el("option", { value: v })));
-  return id;
+// suggestWrap wraps an input in a hand-drawn autocomplete dropdown (substring
+// filter, tap or ↑/↓+Enter to pick). A <datalist> would be less code, but iOS
+// Safari simply never shows its options, so the suggestions are drawn by hand.
+// `values` is captured at build time — the board's authors/sources don't change
+// while the editor is open. onPick (optional) runs after a suggestion is taken.
+function suggestWrap(input, values, onPick) {
+  const menu = el("div", { class: "suggest-menu", hidden: true });
+  const wrap = el("div", { class: "suggest-wrap" }, input, menu);
+  let items = [], active = -1;
+  const close = () => { menu.hidden = true; menu.replaceChildren(); items = []; active = -1; };
+  const pick = (v) => { input.value = v; close(); if (onPick) onPick(v); };
+  const setActive = (i) => {
+    active = i;
+    [...menu.children].forEach((n, j) => n.classList.toggle("active", j === i));
+  };
+  const open = () => {
+    const q = input.value.trim().toLowerCase();
+    items = values.filter((v) => v.toLowerCase().includes(q) && v !== input.value.trim()).slice(0, 8);
+    if (!items.length) { close(); return; }
+    menu.replaceChildren(...items.map((v) => {
+      const b = el("button", { class: "suggest-item", type: "button", text: v });
+      // pointerdown + preventDefault, not click: picking must not blur the input
+      // (blur closes the menu before a click would land).
+      b.addEventListener("pointerdown", (e) => { e.preventDefault(); pick(v); });
+      return b;
+    }));
+    menu.hidden = false;
+    active = -1;
+  };
+  input.addEventListener("input", open);
+  input.addEventListener("focus", open);
+  input.addEventListener("blur", close);
+  // Registered before any caller keydown handler (Enter-commits-tag in the
+  // authors field), so a menu pick can stopImmediatePropagation past it.
+  input.addEventListener("keydown", (e) => {
+    if (menu.hidden) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((active + 1) % items.length); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((active - 1 + items.length) % items.length); }
+    else if (e.key === "Enter" && active >= 0) { e.preventDefault(); e.stopImmediatePropagation(); pick(items[active]); }
+    else if (e.key === "Escape") { e.stopPropagation(); close(); }
+  });
+  return wrap;
 }
 
 // captureDraft folds the currently-visible view's edits back into the draft so
@@ -2538,9 +2463,13 @@ function setCardView(view) {
     ta.value = test ? xyChgk.testersToText(xyChgk.parseTestCard(cardDraft).testers) : cardDraft;
     // A brand-new question opens on an empty editor, which says nothing about what
     // the format wants. Seed the markers so the writer fills in blanks instead of
-    // recalling 4s from memory; the caret lands after the "?".
-    if (!test && pendingList && !ta.value.trim()) {
-      ta.value = QUESTION_STUB;
+    // recalling 4s from memory; the caret lands after the "?". "Empty" includes
+    // the author-only draft an untouched Поля view composes when a default
+    // author is set — that's still a blank form.
+    const bare = ta.value.trim();
+    const authorOnly = state.defaultAuthor && bare === "@ " + state.defaultAuthor;
+    if (!test && pendingList && (!bare || authorOnly)) {
+      ta.value = questionStub();
       ta.focus();
       ta.setSelectionRange(2, 2);
     }
@@ -2627,12 +2556,10 @@ function buildSourcesField(initial, suggestions) {
   const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
   const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Источник" }), rmBtn);
   const rows = el("div", { class: "fld-rows" });
-  const dlId = datalist("sourcesDatalist", suggestions);
   const addRow = (val) => {
     const inp = el("input", { class: "input fld-row-input", type: "text", value: val || "" });
-    inp.setAttribute("list", dlId);
     const rrm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: "Удалить строку" });
-    const row = el("div", { class: "fld-row" }, inp, rrm);
+    const row = el("div", { class: "fld-row" }, suggestWrap(inp, suggestions), rrm);
     rrm.addEventListener("click", () => row.remove());
     rows.append(row);
     return inp;
@@ -2660,7 +2587,6 @@ function buildAuthorsField(initial, suggestions) {
   const tags = el("div", { class: "fld-tags" });
   const tagSet = [];
   const inp = el("input", { class: "input fld-tag-input", type: "text", placeholder: "имя автора…" });
-  inp.setAttribute("list", datalist("authorsDatalist", suggestions));
   const renderTags = () => {
     tags.replaceChildren(...tagSet.map((t, i) => {
       const rm = el("button", { class: "fld-tag-rm", type: "button", text: "×" });
@@ -2669,9 +2595,11 @@ function buildAuthorsField(initial, suggestions) {
     }));
   };
   const commit = () => { const v = inp.value.trim(); if (v) { tagSet.push(v); inp.value = ""; renderTags(); } };
+  // suggestWrap first, so its keydown handler outranks the Enter-commit below.
+  const inpWrap = suggestWrap(inp, suggestions, commit);
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); commit(); } });
   inp.addEventListener("blur", commit);
-  const body = el("div", { class: "fld-body" }, tags, inp);
+  const body = el("div", { class: "fld-body" }, tags, inpWrap);
   let present = initial !== null && initial !== undefined;
   if (present) initial.forEach((t) => tagSet.push(t));
   renderTags();
@@ -2687,6 +2615,8 @@ function buildAuthorsField(initial, suggestions) {
 // settings). The last field (handout-gen markup) binds to cardDraftMeta, not the 4s.
 function renderCardFields() {
   const f = xyChgk.splitFields(cardDraft);
+  // A brand-new card pre-fills the user's default author (a /profile setting).
+  if (pendingList && !cardDraft.trim() && f.authors == null && state.defaultAuthor) f.authors = [state.defaultAuthor];
   cardFieldsPre = f.preMarkup;
   cardFieldsExtra = f.extra;
   const box = document.getElementById("cardFields");
@@ -3410,7 +3340,6 @@ document.getElementById("cardSave").addEventListener("click", async () => {
   // the full edit view.
   if (pendingList) {
     const text = cardDraft;
-    if (!hasContent(text)) { msg.textContent = "Введите описание."; return; }
     const list = pendingList;
     const kind = document.getElementById("cardKind").value || "question";
     const existing = cardsOf(list.id);

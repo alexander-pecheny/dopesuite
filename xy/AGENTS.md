@@ -181,26 +181,33 @@ web/assets/            //go:embed static + ui (package assets)
                        (?card=) and a comment (&comment=, copied from the timeline 🔗);
                        «Управление списками» modal groups consecutive lists into a
                        list_of_lists (☰ menu); all mutations via sync.js (offline-capable);
-                       «📐 Изменить размеры» (☰ menu) sets three display prefs, stored
-                       server-side per user (users.sizes, plaintext JSON — display numbers,
-                       not question content — the same on all the user's boards, following
-                       them across devices; delivered in the board snapshot as the caller's
-                       setting, saved via POST /api/auth/sizes with a debounced online-only
-                       request like rename) and applied as CSS
-                       vars on <html>: --kanban-max-w (the board is a centred column, so a
-                       wide monitor doesn't strand the reader at the screen edge),
-                       --klist-w, --kcard-lines. Cards hold their FULL text; --kcard-lines
-                       line-clamps it (max slider position = no clamp = whole question).
-                       Defaults: 1512px (a 14" MacBook's logical width) / 280px / 3 lines.
-                       Don't reintroduce a char cap in cardBody — that's what made a card
-                       stop at 80 chars no matter how much room the reader gave it;
+                       display sizes (users.sizes, edited on /profile — see profile.js) are
+                       delivered in the board snapshot and applied as CSS vars on <html>:
+                       --kanban-max-w (the board is a centred column, so a wide monitor
+                       doesn't strand the reader at the screen edge), --klist-w,
+                       --kcard-lines. Cards hold their FULL text; --kcard-lines line-clamps
+                       it (no clamp = whole question). Don't reintroduce a char cap in
+                       cardBody — that's what made a card stop at 80 chars no matter how
+                       much room the reader gave it. The snapshot also carries the caller's
+                       default_author, pre-filled into new question cards (the Поля Автор
+                       field and the Текст stub's "@" line — an untouched stub saves as a
+                       card with just that, deliberately). Автор/Источник inputs
+                       autocomplete from the board's existing values via suggestWrap, a
+                       hand-drawn dropdown (<datalist> never opens on iOS Safari);
                        «📥 Импорт» (☰ menu) uploads a .4s/.zip/.docx to /api/import/parse and
                        turns the returned 4s into a new list — one card per blank-line block,
                        each (img …) attached to the card that references it. A .docx (a lossy
                        heuristic parse) first opens the verification screen: editable 4s on the
                        left, the live list preview on the right. .4s/.zip import straight.
     menu.js            theme boot + ☰ menu; also injects PWA <head> tags + registers sw.js
-    login/register/profile  auth UI (login/menu ported from dope)
+    login/register     auth UI (login/menu ported from dope)
+    profile.js         /profile: username set-once, logout, and three dialogs — change
+                       password, board sizes (three sliders + a to-scale pseudo-board
+                       preview, wireframe bars for text; defaults 1512px / 280px / 3
+                       lines, max slider position = unlimited/null; debounced POST
+                       /api/auth/sizes), default author (POST /api/auth/default-author).
+                       Shared defaults/ranges/sanitize/apply live in app.js (xySizes)
+                       so this write path and board.js's read path agree
     tokens.js          /profile/tokens — create/revoke API tokens for the Trello API
     styles.css         dope design system (copied) + xy board/card section at the end
     vendor/            self-hosted @noble/hashes (scrypt + deps), WebCrypto shim

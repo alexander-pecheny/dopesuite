@@ -184,7 +184,30 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV10(db); err != nil {
 		return err
 	}
+	if err := migrateV11(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV11 adds users.default_author: the author name pre-filled into new
+// question cards (the Текст-tab stub's "@" line and the Поля editor's Автор
+// field). A display default, not question content, so it lives plaintext like
+// users.sizes. NULL/empty = no default.
+func migrateV11(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 11`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+alter table users add column default_author text;
+insert or ignore into schema_versions(version, applied_at)
+  values(11, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV10 un-encrypts board NAMES. Names were the one piece of user-entered

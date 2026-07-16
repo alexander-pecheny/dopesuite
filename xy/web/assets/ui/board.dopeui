@@ -171,15 +171,6 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     mount id="listsManageRows" kind="lists-manage-rows"
     message id="listsManageMessage"
 
-  -- sizes overlay: list width + max card height, stored per user (server-side, all boards)
-  modal id="sizesOverlay" label="Изменить размеры" title="Изменить размеры" variant="sizes"
-    sliderrow id="sizesBoardW" label="Ширина рабочей области" valueid="sizesBoardWVal" min="800" max="3200" step="50" hint="Доска центрируется на экране — на широком мониторе не приходится смотреть в край."
-    sliderrow id="sizesListW" label="Ширина списка" valueid="sizesListWVal" min="200" max="640" step="10"
-    sliderrow id="sizesCardH" label="Текст карточки" valueid="sizesCardHVal" min="1" max="12" step="1" hint="Сколько строк вопроса показывать на карточке. На максимуме — весь текст."
-    row gap="sm" align="center" justify="between"
-      button small kind="ghost" id="sizesReset" "Сбросить по умолчанию"
-      button id="sizesClose" "Готово"
-
   -- members / sharing overlay
   modal id="membersOverlay" label="Участники доски" title="Участники доски" done="Готово" doneid="membersClose"
     mount id="membersList" kind="members-list"

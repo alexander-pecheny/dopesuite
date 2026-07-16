@@ -222,6 +222,7 @@ var MountTokenValue = Attr{Name: "kind", Value: "token-value"}
 var MountCardCopyMsg = Attr{Name: "kind", Value: "card-copy-msg"}
 var MountImportCount = Attr{Name: "kind", Value: "import-count"}
 var MountCardTitle = Attr{Name: "kind", Value: "card-title"}
+var MountSizesPreview = Attr{Name: "kind", Value: "sizes-preview"}
 var PageWide = Attr{Name: "kind", Value: "wide"}
 var PageBoard = Attr{Name: "kind", Value: "board"}
 var PaneSrc = Attr{Name: "kind", Value: "src"}

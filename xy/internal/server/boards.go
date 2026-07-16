@@ -223,6 +223,10 @@ type boardSnapshot struct {
 	// the board renders at the user's sizes without a second fetch. Omitted when
 	// never set — the client then uses its defaults. Written via POST /api/auth/sizes.
 	Sizes json.RawMessage `json:"sizes,omitempty"`
+	// DefaultAuthor is the caller's pre-fill for new question cards
+	// (users.default_author), delivered like Sizes so the card editor works
+	// offline from the cached snapshot.
+	DefaultAuthor string `json:"default_author,omitempty"`
 }
 
 // unreadDTO flags, per card, whether the caller has unread events in either
@@ -249,15 +253,17 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	snap.Name = name.String
 	snap.NameEnc = b64(nameEnc)
 
-	// The caller's per-user display layout (see boardSnapshot.Sizes), shared across
-	// all their boards — so it's keyed on the user, not this board.
-	var sizes sql.NullString
-	if err := s.db.QueryRowContext(ctx, `select sizes from users where id = ?`, uid).Scan(&sizes); handleErr(w, err) {
+	// The caller's per-user display prefs (see boardSnapshot.Sizes /
+	// .DefaultAuthor), shared across all their boards — keyed on the user, not
+	// this board.
+	var sizes, defAuthor sql.NullString
+	if err := s.db.QueryRowContext(ctx, `select sizes, default_author from users where id = ?`, uid).Scan(&sizes, &defAuthor); handleErr(w, err) {
 		return
 	}
 	if sizes.Valid && sizes.String != "" {
 		snap.Sizes = json.RawMessage(sizes.String)
 	}
+	snap.DefaultAuthor = defAuthor.String
 
 	lists, err := scanLists(ctx, s.db, bid)
 	if handleErr(w, err) {

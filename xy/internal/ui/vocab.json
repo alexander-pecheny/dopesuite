@@ -11,7 +11,8 @@
       "kanban", "board-grid", "timeline", "label-picker", "label-add-row",
       "attachments", "card-fields", "preview-body", "card-preview-body",
       "handouts-pdf", "import-preview", "lists-manage-rows", "members-list",
-      "token-list", "token-value", "card-copy-msg", "import-count", "card-title"
+      "token-list", "token-value", "card-copy-msg", "import-count", "card-title",
+      "sizes-preview"
     ] }
   },
   "primitives": [

@@ -87,5 +87,49 @@ async function requireLogin() {
   return null;
 }
 
+// ---- board display sizes (workspace width / list width / card height) ----
+// A per-user, all-boards preference stored server-side (users.sizes, plain
+// JSON) and edited on /profile; the board page applies it from the snapshot.
+// Shared here because the write path (profile.js) and the read path (board.js)
+// must agree on defaults, ranges and the null="unlimited" convention.
+// 1512 = the logical width of a 14" MacBook screen — a board that fills a
+// laptop and stays a centred column on anything wider.
+const SIZES_DEFAULT = { boardW: 1512, listW: 280, cardLines: 3 };
+const SIZES_RANGE = {
+  BOARD_W_MIN: 800, BOARD_W_MAX: 3200,   // MAX = «вся ширина»
+  LIST_W_MIN: 200, LIST_W_MAX: 640,
+  CARD_LINES_MAX: 12,                    // MAX = «без ограничения»
+};
+
+const inRange = (n, lo, hi) => Number.isFinite(n) && n >= lo && n < hi;
+// null is a *choice* ("no cap"), so it must survive a round-trip — only a missing
+// or out-of-range value falls back to the default.
+const pickSize = (v, lo, hi, dflt) => (v === null ? null : inRange(Number(v), lo, hi) ? Number(v) : dflt);
+
+// Clamp a raw sizes object (from the snapshot/me, or null when never set) into
+// the usable shape. The server stores whatever the client sent, so validation
+// lives here — a stale or hand-edited value can never break the layout.
+function sanitizeSizes(s) {
+  if (!s || typeof s !== "object") return { ...SIZES_DEFAULT };
+  return {
+    boardW: pickSize(s.boardW, SIZES_RANGE.BOARD_W_MIN, SIZES_RANGE.BOARD_W_MAX, SIZES_DEFAULT.boardW),
+    listW: pickSize(s.listW, SIZES_RANGE.LIST_W_MIN, SIZES_RANGE.LIST_W_MAX + 1, SIZES_DEFAULT.listW),
+    cardLines: pickSize(s.cardLines, 1, SIZES_RANGE.CARD_LINES_MAX, SIZES_DEFAULT.cardLines),
+  };
+}
+
+// applySizes drives the three CSS vars; `root` defaults to <html> (the board),
+// the profile preview passes its own container instead.
+function applySizes(s, root = document.documentElement) {
+  root.style.setProperty("--kanban-max-w", s.boardW == null ? "none" : s.boardW + "px");
+  root.style.setProperty("--klist-w", s.listW + "px");
+  root.style.setProperty("--kcard-lines", s.cardLines == null ? "none" : String(s.cardLines));
+}
+
+export const xySizes = { DEFAULT: SIZES_DEFAULT, ...SIZES_RANGE, sanitize: sanitizeSizes, apply: applySizes };
+
 export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin };
-if (typeof window !== "undefined") window.xyApp = xyApp;
+if (typeof window !== "undefined") {
+  window.xyApp = xyApp;
+  window.xySizes = xySizes;
+}

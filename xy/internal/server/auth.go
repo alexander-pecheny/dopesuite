@@ -83,6 +83,11 @@ type meResponse struct {
 	UserID   int64   `json:"user_id"`
 	Username *string `json:"username"`
 	Telegram *string `json:"telegram"`
+	// Display preferences, editable on /profile: the board layout (see
+	// handleSetSizes) and the author name pre-filled into new question cards
+	// (see handleSetDefaultAuthor).
+	Sizes         json.RawMessage `json:"sizes,omitempty"`
+	DefaultAuthor string          `json:"default_author,omitempty"`
 }
 
 func meOf(u session.User) meResponse {
@@ -101,7 +106,16 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, meOf(u))
+	resp := meOf(u)
+	var sizes, author sql.NullString
+	if err := s.db.QueryRowContext(r.Context(), `select sizes, default_author from users where id = ?`, u.UserID).Scan(&sizes, &author); handleErr(w, err) {
+		return
+	}
+	if sizes.Valid && sizes.String != "" {
+		resp.Sizes = json.RawMessage(sizes.String)
+	}
+	resp.DefaultAuthor = author.String
+	writeJSON(w, resp)
 }
 
 func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -565,6 +579,35 @@ func (s *server) handleSetSizes(w http.ResponseWriter, r *http.Request) {
 	err = s.withWriteTx(r.Context(), "set-sizes", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `update users set sizes = ?, updated_at = ? where id = ?`,
 			string(canon), rfc3339(time.Now()), u.UserID)
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSetDefaultAuthor stores the author name pre-filled into new question
+// cards (users.default_author, see migrateV11). Empty clears it.
+func (s *server) handleSetDefaultAuthor(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		DefaultAuthor string `json:"default_author"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	author := strings.TrimSpace(req.DefaultAuthor)
+	if len(author) > 200 {
+		httpError(w, http.StatusBadRequest, "слишком длинное имя")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "set-default-author", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update users set default_author = ?, updated_at = ? where id = ?`,
+			author, rfc3339(time.Now()), u.UserID)
 		return err
 	})
 	if handleErr(w, err) {
