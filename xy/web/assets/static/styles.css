@@ -55,7 +55,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--blue, #2f6fed);
+  background: var(--blue);
 }
 
 /* trello import */
@@ -67,17 +67,17 @@
    *inside* itself (the kanban scrolls horizontally, each list vertically), so
    the page as a whole never scrolls or rubber-bands. */
 .board-page .board-main {
-  height: calc(100dvh - var(--xy-header-h));
+  height: calc(100dvh - var(--header-h));
   overflow: hidden;
   padding: var(--space-4) var(--page-pad-x);
 }
 /* Smaller desktop board header (mirrors dope's 44px .game-host-top) — the
    kanban itself is the point of the page, so the chrome above it stays thin.
-   z-index: the card modal (z 50) covers the lower section, but the fixed header
-   — and its ☰ dropdown — must stay above it (the settings/unlock modals at
-   z-modal still win over both). */
-.board-page { --xy-header-h: 44px; }
-.board-page .host-top { z-index: 60; height: 44px; padding: var(--space-1-5) var(--page-pad-x-tight); }
+   z-index: the card modal (--z-card-overlay) covers the lower section, but the
+   fixed header — and its ☰ dropdown — must stay above it (the settings/unlock
+   modals at z-modal still win over both). */
+.board-page { --header-h: 44px; }
+.board-page .host-top { z-index: var(--z-board-header); height: 44px; padding: var(--space-1-5) var(--page-pad-x-tight); }
 /* Same selector shape (not #id) as the mobile override below, so the cascade
    (equal specificity, later source wins) still lets the mobile rule shrink
    the title further on narrow screens. */
@@ -102,7 +102,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--blue, #2f6fed);
+  background: var(--blue);
 }
 
 .notif-toggle { position: relative; }
@@ -113,7 +113,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--blue, #2f6fed);
+  background: var(--blue);
   border: 1.5px solid var(--structure);
 }
 .notif-panel {
@@ -180,6 +180,10 @@
    размеры» in the ☰ menu, board.js) — the modal overrides these vars on <html>. */
 :root {
   --kanban-max-w: none;   /* none = board spans the full viewport width */
+  /* board stacking: card overlay < timer < fixed header, all under --z-modal */
+  --z-card-overlay: 50;
+  --z-timer: 55;
+  --z-board-header: 60;
   --klist-w: 280px;
   --kcard-lines: none;    /* none = card shows the whole question, unclamped */
 }
@@ -284,7 +288,7 @@
    the page never scrolls. */
 .card-overlay {
   position: fixed;
-  top: var(--xy-header-h);
+  top: var(--header-h);
   left: 0;
   right: 0;
   bottom: 0;
@@ -293,7 +297,7 @@
   justify-content: center;
   background: var(--backdrop);
   overflow: hidden;
-  z-index: 50;
+  z-index: var(--z-card-overlay);
 }
 .card-detail {
   width: min(680px, 100%);
@@ -317,8 +321,8 @@
 .card-detail-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: var(--text-base); font-weight: var(--fw-semibold); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-head-actions { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; margin-left: auto; }
 /* Copy-for-test feedback sits right under the button (top-right of the panel). */
-.card-copy-msg { align-self: flex-end; margin-top: calc(var(--space-1) * -1); font-size: var(--text-xs); color: var(--green, var(--accent)); }
-.card-copy-msg[data-err] { color: var(--red, var(--danger)); }
+.card-copy-msg { align-self: flex-end; margin-top: calc(var(--space-1) * -1); font-size: var(--text-xs); color: var(--green); }
+.card-copy-msg[data-err] { color: var(--red); }
 /* The card view no longer needs to flatten anything by hand: borders are off
    system-wide and fields carry --field-bg from the kit. The old override here
    (border-color: transparent + background: --page) was written back when fields
@@ -421,11 +425,11 @@
 .attachments:empty,
 .timeline:empty { display: none; }
 .attach-row { display: flex; align-items: center; gap: var(--space-2); }
-.attach-name { flex: 1; text-align: left; border: none; background: transparent; color: var(--blue, var(--text)); cursor: var(--cursor-action); font-size: var(--text-sm); }
+.attach-name { flex: 1; text-align: left; border: none; background: transparent; color: var(--blue); cursor: var(--cursor-action); font-size: var(--text-sm); }
 .attach-name:hover { text-decoration: underline; }
 .attach-size { font-size: var(--text-2xs); color: var(--muted); }
 .attach-del { border: none; background: transparent; color: var(--muted); cursor: var(--cursor-action); font-size: var(--text-lg); line-height: 1; }
-.attach-del:hover { color: var(--red-dark, var(--danger)); }
+.attach-del:hover { color: var(--red-dark); }
 .attach-lossless { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); color: var(--muted); }
 /* selects must never push past their container on narrow screens */
 .card-detail select.input { max-width: 100%; }
@@ -528,7 +532,7 @@
 .pv-empty { color: var(--muted); }
 /* break long URLs at any character so they never force horizontal scroll on
    narrow screens (links are often unbreakable runs with no spaces). */
-.pv-link { color: var(--blue, var(--text)); overflow-wrap: anywhere; word-break: break-word; }
+.pv-link { color: var(--blue); overflow-wrap: anywhere; word-break: break-word; }
 .pv-sc { font-variant: small-caps; }
 /* the dash IS the page-break mark, so it takes --grid-dark, not --border */
 .pv-pagebreak { border: 0; border-top: 1px dashed var(--grid-dark); margin: var(--space-4) 0; }
@@ -547,7 +551,7 @@
    same densification ~/dope applies on mobile). */
 @media (max-width: 760px) {
   /* tighter board header so more of the board is visible on phones */
-  .board-page { --xy-header-h: 48px; }
+  .board-page { --header-h: 48px; }
   .board-page .host-top { height: 48px; padding: 6px 10px; gap: 6px; }
   .board-page h1 { font-size: var(--text-lg); }
   .board-page .action-icon { width: 30px; height: 30px; font-size: 15px; }
@@ -568,13 +572,13 @@
   .label-pick { font-size: var(--text-2xs); }
 }
 
-/* ЧГК play timer — floats bottom-right, above the kanban/card modal (z 50) but
-   below the fixed header (z 60). Toggled by the ⏰ header button (timer.js). */
+/* ЧГК play timer — floats bottom-right, above the kanban/card modal but below
+   the fixed board header. Toggled by the ⏰ header button (timer.js). */
 .timer-overlay {
   position: fixed;
   right: var(--space-4);
   bottom: var(--space-4);
-  z-index: 55;
+  z-index: var(--z-timer);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -631,7 +635,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   word-break: break-all;
   user-select: all;
@@ -755,7 +759,7 @@ textarea.fld-input { min-height: 3em; }
 .handouts-pdf { flex: 1; margin-top: var(--space-2); background: var(--page); border-radius: var(--radius-md); min-height: 320px; display: flex; }
 .handouts-pdf-frame { flex: 1; width: 100%; height: 100%; border: none; border-radius: var(--radius-md); }
 
-@media (max-width: 720px) {
+@media (max-width: 760px) {
   .handouts-body { flex-direction: column; }
   .handouts-src { border-right: none; border-bottom: 1px solid var(--grid); }
   .card-preview-body { max-height: 40vh; }

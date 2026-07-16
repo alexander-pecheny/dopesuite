@@ -73,6 +73,10 @@
   --paper: #ffffff;
   --paper-transparent: rgba(255, 255, 255, 0);
   --structure: #eef1f4;
+  /* Transparent twins for gradient endpoints: a fade must end on the alpha-0
+     version of ITS OWN color — `transparent` (black) or a hardcoded light value
+     tints the ramp on the other themes. */
+  --structure-transparent: rgba(238, 241, 244, 0);
   --accent-soft: #eef3fa;
   /* Semantic aliases onto existing theme-aware tokens (theme-aware through
      their referents, so no dark-block override needed). */
@@ -682,7 +686,7 @@ input[type="radio"]:focus-visible {
   background: var(--structure);
   /* Header height, kept in a variable so the board's fixed lower section and the
      modals that cover it stay in sync (see .board-main / .card-overlay). */
-  --xy-header-h: 64px;
+  --header-h: 64px;
 }
 
 .host-top {
@@ -860,7 +864,7 @@ input[type="radio"]:focus-visible {
 
 @media (max-width: 760px) {
   .host {
-    --xy-header-h: 56px;
+    --header-h: 56px;
   }
 
   .host-top {
@@ -919,6 +923,7 @@ input[type="radio"]:focus-visible {
   --surface: var(--paper);
   --surface-tint: #262a31;
   --structure: #262a31;
+  --structure-transparent: rgba(38, 42, 49, 0);
   --header: #22262d;
   --hover-bg: #2c313a;
   --accent-soft: #1d2532;
@@ -1001,6 +1006,7 @@ input[type="radio"]:focus-visible {
   --border: var(--grid-dark);
   --border-soft: #b5bcc6;
   --structure: #d2d8e0;
+  --structure-transparent: rgba(210, 216, 224, 0);
   --header: #cbd0d7;
   --toolbar: #dbe1ea;
   --page: #e6e9ee;
@@ -1040,7 +1046,9 @@ input[type="radio"]:focus-visible {
 :root[data-theme="dark"][data-contrast="high"] {
   --page: #0e1014;
   --paper: #1f232b;
+  --paper-transparent: rgba(31, 35, 43, 0);
   --structure: #2f3540;
+  --structure-transparent: rgba(47, 53, 64, 0);
   --header: #2b313b;
   --toolbar: #282d36;
   --hover-bg: #363d49;
@@ -1268,7 +1276,7 @@ input[type="radio"]:focus-visible {
    design system so any app using these primitives is styled. App-specific
    overrides (e.g. xy's mobile .section-label margin) stay in the app layer,
    which is concatenated after this file. */
-.unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--blue, #2f6fed); vertical-align: middle; }
+.unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--blue); vertical-align: middle; }
 
 /* Section labels read in the case they were authored in ("Метки", not "МЕТКИ").
    The uppercase + tracked-out + 700 treatment is three separate emphasis devices

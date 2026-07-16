@@ -772,7 +772,7 @@
   z-index: 1;
   display: none;
   width: 32px;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--paper));
+  background: linear-gradient(to right, var(--paper-transparent), var(--paper));
   pointer-events: none;
 }
 
@@ -863,7 +863,7 @@
 
 .answer-cell:hover:not(.active),
 .answer-cell:focus:not(.active) {
-  outline: 2px dashed rgba(26, 115, 232, 0.4);
+  outline: 2px dashed color-mix(in srgb, var(--blue) 40%, transparent);
   outline-offset: -3px;
 }
 
@@ -975,7 +975,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: rgba(26, 115, 232, 0.18);
+  background: color-mix(in srgb, var(--blue) 18%, transparent);
   box-shadow:
     var(--cell-selection-top, 0 0 0 0 transparent),
     var(--cell-selection-bottom, 0 0 0 0 transparent),
@@ -1360,7 +1360,7 @@ body:not(.embedded-match) .grid-match {
   right: 0;
   bottom: 0;
   width: 34px;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--paper));
+  background: linear-gradient(to right, var(--paper-transparent), var(--paper));
   pointer-events: none;
 }
 
@@ -2641,16 +2641,19 @@ body:not(.embedded-match) .grid-match {
 .od-results-table thead th.results-team-head,
 .ksi-results-table thead th.results-team-head {
   --results-sticky-fade-from: var(--structure);
+  --results-sticky-fade-to: var(--structure-transparent);
 }
 
 .od-results-table thead th.results-total-head,
 .ksi-results-table thead th.results-total-head {
   --results-sticky-fade-from: var(--structure);
+  --results-sticky-fade-to: var(--structure-transparent);
 }
 
 .od-results-table .results-total,
 .ksi-results-table .results-total {
   --results-sticky-fade-from: var(--paper);
+  --results-sticky-fade-to: var(--paper-transparent);
 }
 
 .results-scroll-left .od-results-table thead th.results-total-head::after,
@@ -2664,7 +2667,7 @@ body:not(.embedded-match) .grid-match {
   bottom: 0;
   width: 28px;
   pointer-events: none;
-  background: linear-gradient(to right, var(--results-sticky-fade-from), rgba(238, 241, 244, 0));
+  background: linear-gradient(to right, var(--results-sticky-fade-from), var(--results-sticky-fade-to));
 }
 
 .detailed-scroll-left .match-table.od-detailed .sticky-total::after {
@@ -2675,7 +2678,7 @@ body:not(.embedded-match) .grid-match {
   bottom: 0;
   width: 28px;
   pointer-events: none;
-  background: linear-gradient(to right, var(--structure), rgba(238, 241, 244, 0));
+  background: linear-gradient(to right, var(--structure), var(--structure-transparent));
 }
 
 /* EK stage tables get the same scrolled-under fade as OD/KSI, drawn off the
@@ -2690,7 +2693,7 @@ body:not(.embedded-match) .grid-match {
   bottom: 0;
   width: 28px;
   pointer-events: none;
-  background: linear-gradient(to right, var(--structure), rgba(238, 241, 244, 0));
+  background: linear-gradient(to right, var(--structure), var(--structure-transparent));
 }
 
 .results-table .results-place,
@@ -2819,7 +2822,7 @@ body:not(.embedded-match) .grid-match {
 
 .results-tour-toggle:hover,
 .results-tour-toggle:focus-visible {
-  background: rgba(26, 115, 232, 0.08);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
   outline: 0;
 }
 
@@ -3171,7 +3174,7 @@ body:not(.embedded-match) .grid-match {
   right: 0;
   bottom: 0;
   width: 28px;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--paper));
+  background: linear-gradient(to right, var(--paper-transparent), var(--paper));
   pointer-events: none;
 }
 
@@ -3183,7 +3186,7 @@ body:not(.embedded-match) .grid-match {
   right: 0;
   bottom: 0;
   width: 34px;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--paper));
+  background: linear-gradient(to right, var(--paper-transparent), var(--paper));
   pointer-events: none;
 }
 
@@ -3368,7 +3371,7 @@ body:not(.embedded-match) .grid-match {
     right: 0;
     bottom: 0;
     width: 28px;
-    background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--paper));
+    background: linear-gradient(to right, var(--paper-transparent), var(--paper));
     pointer-events: none;
   }
 
@@ -3395,7 +3398,7 @@ body:not(.embedded-match) .grid-match {
     right: 0;
     bottom: 0;
     width: 28px;
-    background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--paper));
+    background: linear-gradient(to right, var(--paper-transparent), var(--paper));
     pointer-events: none;
   }
 
@@ -3447,9 +3450,9 @@ body:not(.embedded-match) .grid-match {
     left: 0;
   }
 
-  .ek-stats-table td.ek-stats-player { z-index: 1; --ek-stats-fade-from: var(--paper); }
+  .ek-stats-table td.ek-stats-player { z-index: 1; --ek-stats-fade-from: var(--paper); --ek-stats-fade-to: var(--paper-transparent); }
 
-  .ek-stats-table thead th.ek-stats-player-head { z-index: 4; --ek-stats-fade-from: var(--structure); }
+  .ek-stats-table thead th.ek-stats-player-head { z-index: 4; --ek-stats-fade-from: var(--structure); --ek-stats-fade-to: var(--structure-transparent); }
 
   /* Scrolled-under fade off the frozen player column's right edge, drawn once
      the rest has scrolled — same cue as the OD/KSI results tables. The scroll
@@ -3463,7 +3466,7 @@ body:not(.embedded-match) .grid-match {
     bottom: 0;
     width: 28px;
     pointer-events: none;
-    background: linear-gradient(to right, var(--ek-stats-fade-from), rgba(238, 241, 244, 0));
+    background: linear-gradient(to right, var(--ek-stats-fade-from), var(--ek-stats-fade-to));
   }
 
   .ek-stats-table .narrow { width: 26px; min-width: 26px; }
@@ -3732,7 +3735,7 @@ body:not(.embedded-match) .grid-match {
   right: 0;
   bottom: 0;
   width: 28px;
-  background: linear-gradient(to right, rgba(255, 255, 255, 0), var(--paper));
+  background: linear-gradient(to right, var(--paper-transparent), var(--paper));
   pointer-events: none;
 }
 
@@ -3868,7 +3871,7 @@ body:not(.embedded-match) .grid-match {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4, 16px);
+  padding: var(--space-4);
   max-height: calc(100vh - var(--space-6));
 }
 
@@ -3886,7 +3889,7 @@ body:not(.embedded-match) .grid-match {
   border-radius: var(--radius-sm);
   background: var(--field-bg);
   color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
 
@@ -3904,7 +3907,7 @@ body:not(.embedded-match) .grid-match {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1, 4px);
+  gap: var(--space-1);
 }
 
 .numbers-import-row {
@@ -3912,7 +3915,7 @@ body:not(.embedded-match) .grid-match {
   grid-template-columns: 2.5em minmax(0, 1fr) auto minmax(0, 1.4fr) auto;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-1, 4px) 0;
+  padding: var(--space-1) 0;
 }
 
 .numbers-import-num {
