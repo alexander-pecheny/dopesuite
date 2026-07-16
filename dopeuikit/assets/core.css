@@ -95,11 +95,9 @@
   --hover-bg: #eef1f5;
 
   /* ── Element outlines are OFF ──────────────────────────────────────────
-     Buttons, cards, modals and inputs separate themselves by FILL, never by a
-     contrast outline. (Floating layers — menus, popovers — are the exception:
-     they carry a --grid-dark hairline + shadow via the .popover base, because
-     they must hold an edge against whatever they cover.) The four outline
-     tokens below are therefore `transparent` in the regular themes, and
+     Buttons, menus, popovers, cards, modals and inputs separate themselves by
+     FILL (+ shadow for floating layers), never by a contrast outline. The four
+     outline tokens below are therefore `transparent` in the regular themes, and
      only the [data-contrast=high] blocks give them real colors — that mode
      exists precisely to carry separation on displays that cannot resolve the
      fills, so it is the one place an outline earns its keep.
@@ -541,12 +539,12 @@ input[type="radio"]:focus-visible {
 
 .input[type="file"]:hover::file-selector-button { background: var(--action-hover-bg); }
 
-/* A modal is a floating layer: hairline + shadow carry the edge (see the
-   .popover base note). */
+/* The shadow carries the modal's elevation; the border paints only in high
+   contrast (--border is transparent elsewhere). */
 .modal-dialog {
   width: min(560px, calc(100vw - var(--space-6)));
   padding: var(--space-4);
-  border: 1px solid var(--grid-dark);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background-color: var(--surface);
   color: var(--text);
@@ -1118,17 +1116,15 @@ input[type="radio"]:focus-visible {
 
 /* ── popover base ─────────────────────────────────────────────────────────
    Every floating surface — the ☰ dropdown, hover name popovers, suggestion
-   lists, notification panels — shares one silhouette: paper, a --grid-dark
-   hairline, the popover shadow. The hairline is a deliberate exception to the
-   outlines-off rule: a floating layer needs an edge against WHATEVER it
-   happens to cover, and no fill step can guarantee that — same reasoning as
-   the structural --grid-dark rules. App emitters compose by adding this class
-   next to their positioning class; .menu-dropdown gets it here (it is emitted
-   in too many places to retrofit). */
+   lists, notification panels — shares one silhouette: paper + the popover
+   shadow (outlines are OFF; the 1px --border box paints only in high
+   contrast). App emitters compose by adding this class next to their
+   positioning class; .menu-dropdown gets it here (it is emitted in too many
+   places to retrofit). */
 .popover,
 .menu-dropdown {
   background-color: var(--paper);
-  border: 1px solid var(--grid-dark);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-popover);
   z-index: var(--z-dropdown);
@@ -1199,7 +1195,7 @@ input[type="radio"]:focus-visible {
   padding: var(--space-5);
   background: var(--surface);
   color: var(--text);
-  border: 1px solid var(--grid-dark);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-modal);
 }
