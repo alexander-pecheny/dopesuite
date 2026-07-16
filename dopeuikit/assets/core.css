@@ -44,7 +44,6 @@
   color-scheme: light;
   --grid: #dfe3e8;
   --grid-dark: #c9ced6;
-  --header: #e9eaec;
   --text: #202124;
   --text-strong: #3c4043;
   --muted: #5f6368;
@@ -88,11 +87,17 @@
   --blue-soft: #d3ebff;
   --danger-text: #9f1239;
 
-  /* design system — non-EK pages */
-  --page: #f6f7f9;
+  /* THE NEUTRAL LADDER. Light keeps exactly four fill grays — paper (#fff),
+     structure, the control fill, the control hover — plus the two line grays
+     (--grid/--grid-dark). Everything else aliases onto a rung: page,
+     surface-tint and hover-bg all resolve to --structure. The old palette had
+     nine near-identical fills (#f8fafc/#f6f7f9/#eef1f5/#eef1f4/#eaeef3/
+     #e9eaec/#e3e8ef/…) whose differences carried no meaning and read as dirt.
+     Dark keeps its own ladder below: there the steps ARE the elevation. */
+  --page: var(--structure);
   --surface: var(--paper);
-  --surface-tint: #f8fafc;
-  --hover-bg: #eef1f5;
+  --surface-tint: var(--structure);
+  --hover-bg: var(--structure);
 
   /* ── Element outlines are OFF ──────────────────────────────────────────
      Buttons, menus, popovers, cards, modals and inputs separate themselves by
@@ -116,15 +121,16 @@
   --action-border: transparent;
   --action-disabled-border: transparent;
 
-  /* Action + field fills. These carry the whole affordance now that the outlines
-     are gone, so each must read against BOTH --surface (#fff) and --structure
-     (#eef1f4) — the two backgrounds controls actually sit on. The old
-     --action-bg (#f8fafc) was ~1% off white and only worked because a border
-     drew the shape; it would have made every button invisible here. */
+  /* THE control fill. It carries the whole affordance now that the outlines
+     are gone, so it must read against BOTH --surface (#fff) and --structure —
+     the two backgrounds controls actually sit on. Buttons and fields share it
+     in light (shape and typography already tell them apart; a 2% gray
+     difference told nobody anything); dark keeps them split below, where
+     recessed-field vs lifted-button is real elevation. */
   --action-bg: #e3e8ef;
   --action-hover-bg: #d6dde7;
   --action-fg: var(--text);
-  --field-bg: #eaeef3;
+  --field-bg: var(--action-bg);
 
   /* Ghost = the low-emphasis button. It is TRANSLUCENT on purpose: a ghost sits
      on --surface, --structure and --page alike, and any opaque fill picked to
@@ -449,9 +455,10 @@ select.input,
 
 /* Native checkboxes/radios draw their own 1px box, which no token of ours can
    reach — appearance:none is the only way to stop them, and once it's off we owe
-   them the whole widget (fill, tick, focus ring). They take --field-bg like every
-   other field, and --action-border, so the high-contrast theme puts the outline
-   back exactly as it does everywhere else. */
+   them the whole widget (fill, tick, focus ring). The ring is --grid-dark and
+   NOT the (transparent) --action-border: for an empty checkbox the outline IS
+   the widget — an 18px pale circle with no edge reads as nothing at all on the
+   page gray. A graphic, like the sync spinner's ring. */
 input[type="checkbox"],
 input[type="radio"] {
   appearance: none;
@@ -463,7 +470,7 @@ input[type="radio"] {
   height: 18px;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--action-border);
+  border: 1px solid var(--grid-dark);
   border-radius: var(--radius-sm);
   background: var(--field-bg);
   cursor: var(--cursor-action);
@@ -529,7 +536,9 @@ input[type="radio"]:focus-visible {
   padding: 0 var(--space-3);
   border: 0;
   border-radius: var(--radius-md) 0 0 var(--radius-md);
-  background: var(--action-bg);
+  /* one step down from the field fill (they share --action-bg now), so the
+     button keeps a visible seam inside the field */
+  background: var(--action-hover-bg);
   color: var(--text);
   font: inherit;
   font-size: var(--text-sm);
@@ -537,7 +546,7 @@ input[type="radio"]:focus-visible {
   cursor: var(--cursor-action);
 }
 
-.input[type="file"]:hover::file-selector-button { background: var(--action-hover-bg); }
+.input[type="file"]:hover::file-selector-button { filter: brightness(0.96); }
 
 /* The shadow carries the modal's elevation; the border paints only in high
    contrast (--border is transparent elsewhere). */
@@ -934,10 +943,8 @@ input[type="radio"]:focus-visible {
   --paper: #1e2128;
   --paper-transparent: rgba(30, 33, 40, 0);
   --surface: var(--paper);
-  --surface-tint: #262a31;
   --structure: #262a31;
   --structure-transparent: rgba(38, 42, 49, 0);
-  --header: #22262d;
   --hover-bg: #2c313a;
   --accent-soft: #1d2532;
   --grid: #353b45;
@@ -1020,8 +1027,6 @@ input[type="radio"]:focus-visible {
   --border-soft: #b5bcc6;
   --structure: #d2d8e0;
   --structure-transparent: rgba(210, 216, 224, 0);
-  --header: #cbd0d7;
-  --toolbar: #dbe1ea;
   --page: #e6e9ee;
   --hover-bg: #ccd2da;
   --accent-soft: #dbe5f4;
