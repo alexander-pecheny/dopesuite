@@ -432,7 +432,7 @@ function refreshCardUnreadDot(cardId) {
   const u = state.unread[cardId];
   const wantDot = !!(u && (u.content || u.comments));
   const existing = node.querySelector(".kcard-unread");
-  if (wantDot && !existing) node.append(el("span", { class: "kcard-unread", title: "Непрочитанные изменения" }));
+  if (wantDot && !existing) node.append(el("span", { class: "unread-dot unread-dot-corner kcard-unread", title: "Непрочитанные изменения" }));
   else if (!wantDot && existing) existing.remove();
 }
 
@@ -850,7 +850,7 @@ function renderCard(card, number) {
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
   const u = state.unread[card.id];
-  if (u && (u.content || u.comments)) node.append(el("span", { class: "kcard-unread", title: "Непрочитанные изменения" }));
+  if (u && (u.content || u.comments)) node.append(el("span", { class: "unread-dot unread-dot-corner kcard-unread", title: "Непрочитанные изменения" }));
   node.addEventListener("dragstart", (e) => {
     e.stopPropagation();
     e.dataTransfer.setData("text/xy-card", String(card.id));

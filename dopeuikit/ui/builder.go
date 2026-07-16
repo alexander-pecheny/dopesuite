@@ -69,7 +69,7 @@ func Inline(items ...Item) Item {
 }
 
 // Line builds one inline-run child line: items concatenated with no
-// separator, as a single Node to pass as a child (e.g. the notif-badge
+// separator, as a single Node to pass as a child (e.g. the unread-dot badge
 // idiom: Button(Line(Text("🔔"), Span(...)))).
 func Line(items ...Item) *RunNode {
 	return &RunNode{Items: items}

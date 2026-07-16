@@ -110,7 +110,7 @@ func expandIconbtn(c *ExpandCtx, p *Element) []Node {
 	classes := []string{"action-icon"}
 	badgeid, hasBadge := Get(p, "badgeid")
 	if hasBadge {
-		classes = append(classes, "notif-toggle")
+		classes = append(classes, "has-badge")
 	}
 	attrs := []Attr{ClassAttr(classes...)}
 	attrs = append(attrs, IDAttr(p)...)
@@ -118,7 +118,7 @@ func expandIconbtn(c *ExpandCtx, p *Element) []Node {
 	attrs = append(attrs, Passthrough(p)...)
 	items := c.Items(p.Inline)
 	if hasBadge {
-		items = append(items, &Element{Tag: "span", Attrs: []Attr{ClassAttr("notif-badge"), At("id", badgeid), BareAt("hidden")}})
+		items = append(items, &Element{Tag: "span", Attrs: []Attr{ClassAttr("unread-dot", "unread-dot-badge"), At("id", badgeid), BareAt("hidden")}})
 	}
 	return one(&Element{Tag: "button", Attrs: attrs, Inline: items})
 }

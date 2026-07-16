@@ -47,15 +47,13 @@
 .board-card.has-unread { position: relative; }
 .board-card-name { font-weight: var(--fw-semibold); font-size: var(--text-lg); }
 .board-card-role { font-size: var(--text-xs); color: var(--muted); }
-/* blue "unread" dot — a board has changes by another member the user hasn't read */
+/* blue "unread" dot — a board has changes by another member the user hasn't
+   read. The kit's .unread-dot(-corner); a touch bigger on the large tile. */
 .board-card-unread {
-  position: absolute;
   top: var(--space-3);
   right: var(--space-3);
   width: 10px;
   height: 10px;
-  border-radius: 50%;
-  background: var(--blue);
 }
 
 /* trello import */
@@ -92,30 +90,9 @@
    the clip box explicit bottom room via padding so descenders survive. */
 .host-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; line-height: var(--leading-snug); padding-bottom: 0.2em; }
 
-/* Blue "unread" dots — on kanban cards (.kcard-unread), in the card detail
-   head/timeline label, and the 🔔 bell panel rows (.notif-row .unread-dot).
-   The base .unread-dot rule lives in core.css (the unreaddot primitive). */
-.kcard-unread {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--blue);
-}
-
-.notif-toggle { position: relative; }
-.notif-badge {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--blue);
-  border: 1.5px solid var(--structure);
-}
+/* Blue "unread" dots are the kit's .unread-dot: .unread-dot-corner on kanban
+   cards and board tiles, .unread-dot-badge on the 🔔 bell, plain in the card
+   detail head / timeline label / bell panel rows. */
 .notif-panel {
   position: absolute;
   top: calc(100% + var(--space-1));

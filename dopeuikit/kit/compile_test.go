@@ -59,7 +59,7 @@ func TestCompile_IconbtnBadgeIdiom(t *testing.T) {
   topbar title="Доска"
     iconbtn id="notifToggle" label="События" badgeid="notifBadge" "🔔"
 `
-	want := `<button class="action-icon notif-toggle" id="notifToggle" type="button" aria-label="События" title="События">🔔<span class="notif-badge" id="notifBadge" hidden></span></button>`
+	want := `<button class="action-icon has-badge" id="notifToggle" type="button" aria-label="События" title="События">🔔<span class="unread-dot unread-dot-badge" id="notifBadge" hidden></span></button>`
 	got, err := Compile("t.dopeui", []byte(src))
 	if err != nil {
 		t.Fatalf("Compile: %v", err)

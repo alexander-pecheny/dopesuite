@@ -70,7 +70,7 @@ function renderBoards(boards) {
     );
     if (b.unread) {
       card.classList.add("has-unread");
-      card.append(el("span", { class: "board-card-unread", title: "Есть непрочитанные изменения" }));
+      card.append(el("span", { class: "unread-dot unread-dot-corner board-card-unread", title: "Есть непрочитанные изменения" }));
     }
     if (!migrated) {
       // Decrypt the name lazily if we have the cached key, and — since we now hold

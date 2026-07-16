@@ -1287,6 +1287,24 @@ input[type="radio"]:focus-visible {
    which is concatenated after this file. */
 .unread-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--blue); vertical-align: middle; }
 
+/* iconbtn badgeid: the dot pinned to the button's corner, ringed with the
+   button's own fill so it reads as a cutout */
+.action-icon.has-badge { position: relative; }
+
+.unread-dot-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  border: 1.5px solid var(--action-bg);
+}
+
+/* the floating variant: pinned to the top-right of a positioned card/tile */
+.unread-dot-corner {
+  position: absolute;
+  top: var(--space-1-5);
+  right: var(--space-1-5);
+}
+
 /* Section labels read in the case they were authored in ("Метки", not "МЕТКИ").
    The uppercase + tracked-out + 700 treatment is three separate emphasis devices
    stacked on a word whose whole job is to be quiet scaffolding; muted color and
