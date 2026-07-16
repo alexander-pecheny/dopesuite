@@ -42,8 +42,8 @@
 
 :root {
   color-scheme: light;
-  --grid: #dfe3e8;
-  --grid-dark: #c9ced6;
+  --grid: #e3e3e4;
+  --grid-dark: #cececf;
   --text: #202124;
   --text-strong: #3c4043;
   --muted: #5f6368;
@@ -71,11 +71,11 @@
   --diag-fg: #ffffff;
   --paper: #ffffff;
   --paper-transparent: rgba(255, 255, 255, 0);
-  --structure: #eef1f4;
+  --structure: #f1f1f2;
   /* Transparent twins for gradient endpoints: a fade must end on the alpha-0
      version of ITS OWN color — `transparent` (black) or a hardcoded light value
      tints the ramp on the other themes. */
-  --structure-transparent: rgba(238, 241, 244, 0);
+  --structure-transparent: rgba(241, 241, 242, 0);
   --accent-soft: #eef3fa;
   /* Semantic aliases onto existing theme-aware tokens (theme-aware through
      their referents, so no dark-block override needed). */
@@ -89,7 +89,9 @@
 
   /* THE NEUTRAL LADDER. Light keeps exactly four fill grays — paper (#fff),
      structure, the control fill, the control hover — plus the two line grays
-     (--grid/--grid-dark). Everything else aliases onto a rung: page,
+     (--grid/--grid-dark). Every rung is NEUTRAL — the ghost wash's base
+     rgb(32,33,36) over white — not blue-gray; a cool-tinted rung next to the
+     neutral ghost read as two unrelated grays. Everything else aliases onto a rung: page,
      surface-tint and hover-bg all resolve to --structure. The old palette had
      nine near-identical fills (#f8fafc/#f6f7f9/#eef1f5/#eef1f4/#eaeef3/
      #e9eaec/#e3e8ef/…) whose differences carried no meaning and read as dirt.
@@ -126,9 +128,13 @@
      the two backgrounds controls actually sit on. Buttons and fields share it
      in light (shape and typography already tell them apart; a 2% gray
      difference told nobody anything); dark keeps them split below, where
-     recessed-field vs lifted-button is real elevation. */
-  --action-bg: #e3e8ef;
-  --action-hover-bg: #d6dde7;
+     recessed-field vs lifted-button is real elevation.
+     NEUTRAL, not blue-gray: it must sit in the same hue family as the ghost
+     wash below — a bluish filled button next to a neutral ghost read as two
+     unrelated grays. These are the ghost's base rgb(32,33,36) over white at
+     ~10% / ~15%. */
+  --action-bg: #e9e9ea;
+  --action-hover-bg: #dedee0;
   --action-fg: var(--text);
   --field-bg: var(--action-bg);
 
@@ -743,7 +749,9 @@ input[type="radio"]:focus-visible {
 
 .host h1 {
   margin: 0;
-  font-size: var(--text-2xl);
+  /* one title size on every top bar — sheet pages don't shout louder than
+     board/game pages */
+  font-size: var(--text-xl);
   line-height: var(--leading-tight);
   letter-spacing: 0;
 }
@@ -868,6 +876,12 @@ input[type="radio"]:focus-visible {
   flex-direction: column;
   gap: var(--space-3);
   max-width: 420px;
+}
+
+/* stacked sections must not glue together (two one-button sections otherwise
+   render as one visual block) */
+.section + .section {
+  margin-top: var(--space-4);
 }
 
 /* the hint primitive: muted helper text under a field or section */
