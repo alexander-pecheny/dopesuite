@@ -1,7 +1,7 @@
 // crypto.js — xy's client-side encryption layer. Sole owner of the wire
 // envelope format and the per-board key lifecycle. Pure JS scrypt (vendored
 // @noble/hashes, no WASM → runs under iOS Lockdown Mode) + native AES-256-GCM
-// via WebCrypto. See PLAN §2.
+// via WebCrypto.
 //
 // Loaded as an ES module (CSP script-src 'self'); consumers import from it or
 // read window.xyCrypto.

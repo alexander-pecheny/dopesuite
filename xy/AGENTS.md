@@ -9,8 +9,8 @@ authorize. **Board names are the one exception** — plaintext, server-visible, 
 the board list is readable without unlocking each board (per-board
 `schema_version`: 1 = legacy `name_enc`, 2 = plaintext `name`; legacy boards
 backfilled lazily via `POST /api/boards/{id}/migrate-name`; see `migrateV10`). Built by reusing patterns and frontend assets from `../dope`, its
-sibling in the dopesuite monorepo (see `OVERVIEW.md`, `PLAN.md`; the root
-`AGENTS.md` has the monorepo rules). Russian-language UI.
+sibling in the dopesuite monorepo (the root `AGENTS.md` has the monorepo rules).
+Russian-language UI.
 
 ## Stack
 - **Backend**: Go 1.26, SQLite (WAL, `modernc.org/sqlite`, pure Go, no cgo).
@@ -207,7 +207,7 @@ web/assets/            //go:embed static + ui (package assets)
 jstest/                node --test: crypto round-trips, rank ordering, offline sync engine
 ```
 
-## Offline / PWA (PLAN §8)
+## Offline / PWA
 The app is an installable PWA that works offline and resyncs on reconnect.
 - **App shell**: `sw.js` (served at `/sw.js`, scope `/`) precaches the static
   assets + page routes; navigations are network-first→cache, versioned `?v=`
@@ -225,7 +225,7 @@ The app is an installable PWA that works offline and resyncs on reconnect.
   before sending. After a board's queue drains, the UI reloads a fresh snapshot.
   Cross-board copy/move, board creation, and attachment upload/delete stay online-only.
 
-## Crypto model (see PLAN §2)
+## Crypto model
 Each board has a random 32-byte data key (DK). The passphrase derives a KEK
 (scrypt) that only wraps/unwraps DK; a `verify_token` lets the client confirm a
 passphrase on unlock. Changing the passphrase re-wraps DK (no data re-encrypt).
@@ -265,26 +265,12 @@ Config via `.env` (see `.env.example`). Telegram register/login needs
   envelopes; handlers validate structure + ACL only. The lone plaintext exception
   is `boards.name` (a deliberate carve-out — see "What this is").
 
-## Milestone 1 status
-**Functionally complete.** Built & tested:
-- scaffold, auth (password + telegram bridge + bot binary), session middleware;
-- client crypto (`crypto.js`) + IndexedDB key cache; fractional ranks (`rank.js`);
-- full API: boards/members/keymeta/lists/cards/labels/timeline/attachments,
-  all behind write-tx + ACL; encrypted blob store;
-- kanban UI: unlock, drag-reorder, derived titles, optimistic updates;
-- card detail: monospace editor, desc diffs, labels, comments, attachments
-  (encrypt + upload/download/delete; stored as uploaded — WebP q70 recompression
-  is an opt-in checkbox, since the exports re-encode pictures for the page anyway);
-- test lists/cards (datetime title, tester list — players/teams, auto green/red labels);
-- cross-board copy/move with client-side re-encryption + label reconcile;
-- SSH deploy (now the monorepo's shared `../deploy.py`, targets `xy-server`/`xy-bot`).
-
-Test coverage: Go integration tests (`internal/server/*_test.go`) cover the full
+## Testing
+Go integration tests (`internal/server/*_test.go`) cover the full
 register→board→card→label→timeline→attachment flow + ACL rejection;
-node tests (`jstest/`) cover crypto round-trips/tamper/rewrap and rank ordering.
-
-node tests also cover the offline sync engine (temp-id remapping, snapshot apply,
-and a full offline→online resync against an in-memory IndexedDB).
+node tests (`jstest/`) cover crypto round-trips/tamper/rewrap, rank ordering,
+and the offline sync engine (temp-id remapping, snapshot apply, and a full
+offline→online resync against an in-memory IndexedDB).
 
 **Browser testing**: a headless browser *is* available — Playwright's Chromium
 binaries are cached under `~/.cache/ms-playwright/` (no `playwright`/`puppeteer`
@@ -296,11 +282,9 @@ asset versioning. The `/profile/tokens` page + token→Trello-API flow were veri
 this way. Still worth a manual pass before release: the full board/card UI flows
 and service-worker install/offline behaviour.
 
-**Later phases** (PLAN §8): ~~offline/PWA~~ (done — see "Offline / PWA" above),
-~~Trello API compatibility~~ (done — see `trello_compat.go`: the read+upload
-surface chgksuite's `trello.py` uses, token-authed; text fields return as the
-base64 ciphertext envelope, decrypted locally with the board passphrase),
-encrypted client-side search, chgksuite import/export.
+**Not built yet**: encrypted client-side search (an IndexedDB index built from
+decrypted content as boards are opened; server-side encrypted search is out of
+scope).
 
 ## List groups (list_of_lists)
 A named, ordered run of **consecutive** lists, sharing one question-numbering

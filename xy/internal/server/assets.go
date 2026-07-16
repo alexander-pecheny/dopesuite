@@ -87,8 +87,8 @@ func (s *server) compiledPage(name string) ([]byte, error) {
 }
 
 // servePage compiles and serves a ui/*.dopeui page with asset-ref versioning and
-// a strict Content-Security-Policy (see PLAN: XSS = total client compromise,
-// so all crypto-bearing pages get a locked-down CSP).
+// a strict Content-Security-Policy (XSS = total client compromise, so all
+// crypto-bearing pages get a locked-down CSP).
 func (s *server) servePage(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := s.compiledPage(name)
@@ -113,7 +113,7 @@ func (s *server) servePage(name string) http.HandlerFunc {
 
 // contentSecurityPolicy locks the page to same-origin scripts only: no inline
 // scripts, no eval, no wasm, no third-party origins. This is the real defense
-// for client-side crypto (see PLAN §1). worker-src/manifest-src keep the PWA's
+// for client-side crypto. worker-src/manifest-src keep the PWA's
 // service worker and web manifest same-origin too.
 const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self'; " +

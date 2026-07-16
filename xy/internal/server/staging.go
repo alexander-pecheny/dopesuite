@@ -20,7 +20,7 @@ import (
 // The staged images are the user's decrypted handouts, so they are held in memory
 // only — never written to the filesystem, where they would outlive a crash and sit
 // there in plaintext. They are still a bounded extension of the brief plaintext
-// exposure the docx export already incurs (PLAN risk note), and are dropped on
+// exposure the docx export already incurs (a tolerated risk), and are dropped on
 // close/expiry.
 
 const (

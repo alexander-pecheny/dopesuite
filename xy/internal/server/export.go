@@ -17,7 +17,7 @@ import (
 // card descriptions concatenated in board order) plus its referenced images into a
 // .docx (chgk/docx) or a .pdf (chgk/typstdoc — the same document, laid out by typst
 // to look like the docx) — entirely in-process, no Python. This is one of the two
-// places plaintext briefly reaches the server (PLAN risk note); nothing is written
+// places plaintext briefly reaches the server (a tolerated risk); nothing is written
 // to disk: both are built in memory and streamed, and typst itself runs as a wasm
 // module whose filesystem is a map.
 

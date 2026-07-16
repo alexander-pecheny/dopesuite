@@ -13,7 +13,7 @@ import (
 
 // Attachments carry ciphertext bytes (already an xy envelope) plus encrypted
 // metadata. The server stores them opaquely in the blob store and records mime/
-// size in the clear (accepted metadata leakage, PLAN §1).
+// size in the clear (accepted metadata leakage — see the trust model in AGENTS.md).
 
 const maxAttachmentBytes = 50 << 20 // 50 MiB ciphertext cap
 // maxAttachmentRequest bounds the whole multipart upload (ciphertext + meta +

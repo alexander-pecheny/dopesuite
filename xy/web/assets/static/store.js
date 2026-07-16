@@ -4,7 +4,7 @@
 // **outbox** and the temp-id ↔ real-id map the sync engine (sync.js) replays on
 // reconnect. Everything stored here is the same bytes the server holds — ciphertext
 // envelopes from crypto.js, plus plaintext board names (the one un-encrypted field);
-// no encrypted *content* is persisted in the clear. See PLAN §8.
+// no encrypted *content* is persisted in the clear.
 //
 // This module owns one IndexedDB database ("xy-offline"); crypto.js owns a
 // separate one ("xy-keys") for the cached data keys.

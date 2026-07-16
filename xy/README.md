@@ -5,7 +5,7 @@ user-entered data (list/card/label/comment/attachment) is **encrypted
 client-side** with a per-board passphrase; the server only stores and serves
 ciphertext plus the structural metadata needed to order, sync, and authorize.
 **Board names are the one exception** — they're stored in plaintext so the board
-list is readable without unlocking every board (see the trust model in `PLAN.md`).
+list is readable without unlocking every board (see the trust model in `AGENTS.md`).
 
 - **Backend**: Go 1.26, SQLite (WAL, `modernc.org/sqlite`, pure Go, no cgo).
 - **Frontend**: vanilla JS ES modules (no bundler) + the dope design system,
@@ -18,8 +18,8 @@ list is readable without unlocking every board (see the trust model in `PLAN.md`
   temporary ids remapped to real server ids on sync). See the *Offline / PWA*
   section in [`AGENTS.md`](AGENTS.md).
 
-See [`AGENTS.md`](AGENTS.md) for the codebase map and [`PLAN.md`](PLAN.md) /
-[`OVERVIEW.md`](OVERVIEW.md) for the design.
+See [`AGENTS.md`](AGENTS.md) for the codebase map, the crypto/trust model, and
+conventions.
 
 ## Develop
 
@@ -92,7 +92,7 @@ directives — to `POST /api/export/docx`. The server composes the `.docx`
 **in-process** with the Go port of chgksuite's core (`internal/chgk/docx`,
 output byte-for-byte equal to chgksuite's), returns it, and wipes the plaintext
 immediately (the one place plaintext briefly reaches the server — a tolerated
-risk, see `PLAN`). No external tool is involved, so there is nothing to install.
+risk). No external tool is involved, so there is nothing to install.
 
 Handout PDFs (**генерация раздаток**, `POST /api/handouts/{pdf,split_fit}`) are
 also produced in-process: the `.hndt` source is rendered to `.typ` by

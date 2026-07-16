@@ -1566,7 +1566,7 @@ async function attachImported(cardId, img) {
   } catch (_) { return false; }
 }
 
-// ---- export a list to .docx / .pdf (PLAN §8) ----
+// ---- export a list to .docx / .pdf ----
 // Concatenate the list's card descriptions (in board order) into a chgksuite
 // "4s" document, gather any images referenced by `(img ...)` directives from the
 // cards' attachments, and hand both to the server, which composes the file in
@@ -1629,7 +1629,7 @@ async function exportList(list, format = "docx") {
   }
 }
 
-// ---- handouts generation (chgksuite .hndt → PDF, PLAN §8) ----
+// ---- handouts generation (chgksuite .hndt → PDF) ----
 // "Генерация раздаток": port of `chgksuite handouts 4s2hndt` (in chgk.js) builds
 // an editable .hndt source from the list's questions, merging each question's
 // saved layout settings (handout_meta) with its live handout text. "Сгенерировать
@@ -2275,7 +2275,7 @@ function addCard(list) {
 // addTestCard: a test card's "description" is JSON {datetime, title, testers}
 // (see chgk.js parseTestCard). Creating it also auto-creates two board labels
 // ("{dt} взяли" green / "не взяли" red) for the user to assign to questions
-// later (OVERVIEW / PLAN §6); the tester list is edited in the card detail.
+// later; the tester list is edited in the card detail.
 async function addTestCard(list) {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -3037,7 +3037,7 @@ function armReadTracking(card) {
 }
 
 // ---- move / copy a card (same board → relocate/duplicate; other board →
-// client-side re-encryption, PLAN §6). Boards are chosen by (decrypted) name and
+// client-side re-encryption). Boards are chosen by (decrypted) name and
 // the destination list + position are selectable. ----
 
 // moveCtx caches the currently-selected destination board: its DK, lists (with

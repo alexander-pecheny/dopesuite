@@ -8,7 +8,7 @@ import "database/sql"
 //
 // Content columns suffixed `_enc` hold client-side encryption envelopes (opaque
 // BLOBs, base64 over the wire). Everything else is plaintext structural metadata
-// the server needs to order, sync, and authorize (see PLAN §1 trust model).
+// the server needs to order, sync, and authorize (the trust model — see AGENTS.md).
 func migrate(db *sql.DB) error {
 	if _, err := db.Exec(`
 create table if not exists schema_versions(

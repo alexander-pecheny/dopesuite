@@ -2,7 +2,7 @@
 // moved item's rank. A faithful port of the public-domain `fractional-indexing`
 // algorithm (rocicorp/fractional-indexing, MIT). Keys are base-62 strings that
 // sort lexicographically; `keyBetween(a, b)` returns a key strictly between a
-// and b (null = open end). See PLAN §3 ("Ordering").
+// and b (null = open end).
 //
 // ES module + window.xyRank global.
 

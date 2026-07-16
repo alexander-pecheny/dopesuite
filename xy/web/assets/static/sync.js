@@ -1,7 +1,7 @@
 // sync.js — xy's offline sync engine. Turns every board mutation into an
 // idempotent, replayable op: when online it goes straight to the server, when
 // offline (or the request fails) it lands in an ordered outbox (store.js) and is
-// flushed on reconnect. See PLAN §8 ("offline / PWA").
+// flushed on reconnect.
 //
 // Identity model. Server ids are positive autoincrement integers. An entity
 // created offline can't have one yet, so the engine mints a **negative temp id**
