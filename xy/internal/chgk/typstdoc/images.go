@@ -47,6 +47,15 @@ func (e *exporter) addImage(p *para, arg string) {
 	b := src.Bounds()
 	widthIn, heightIn := im.SizeInches(b.Dx(), b.Dy())
 
+	// The board preview caps a picture at 12em tall / 480px wide (.pv-img), but
+	// SizeInches only clamps the AUTO size (longest side ≤ 5in) — a portrait photo
+	// or an explicit h= still ate half a page of the PDF. Scale down (never up)
+	// into the preview's box: 2in tall (12em at the 12pt body), 5in wide.
+	const maxImgW, maxImgH = 5.0, 2.0
+	if s := min(maxImgW/widthIn, maxImgH/heightIn); s < 1 {
+		widthIn, heightIn = widthIn*s, heightIn*s
+	}
+
 	data, ext, err := imgconv.ForExport(raw, widthIn, heightIn)
 	if err != nil {
 		p.addStyled(missingImage(im.Name), "bold")

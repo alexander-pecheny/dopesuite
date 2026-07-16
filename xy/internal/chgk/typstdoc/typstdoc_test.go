@@ -3,6 +3,8 @@ package typstdoc_test
 import (
 	"bytes"
 	"context"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,6 +119,25 @@ func TestGenerateTypSmallCaps(t *testing.T) {
 	typ := typstdoc.GenerateTyp(parse(t, "? Имя(LINEBREAK)(scВасилий)\n! Ответ\n"), nil)
 	if !strings.Contains(typ, "size: 0.8em") || !strings.Contains(typ, "АСИЛИЙ") {
 		t.Errorf("small caps were not synthesized:\n%s", typ)
+	}
+}
+
+// A giant image is scaled down into the preview's box (2in tall / 5in wide) —
+// even when the directive sets an explicit size.
+func TestGenerateTypImageCap(t *testing.T) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 300, 3000))); err != nil {
+		t.Fatal(err)
+	}
+	images := map[string][]byte{"tall.png": buf.Bytes()}
+	for _, src := range []string{
+		"? Вопрос:\n(img tall.png)\n! Ответ\n",        // auto size: 600px@120dpi = 5in tall
+		"? Вопрос:\n(img h=10in tall.png)\n! Ответ\n", // explicit
+	} {
+		typ := typstdoc.GenerateTyp(parse(t, src), images)
+		if !strings.Contains(typ, "width: 5.08mm, height: 50.8mm") {
+			t.Errorf("tall image not capped to 2in in %q:\n%s", src, typ)
+		}
 	}
 }
 

@@ -552,6 +552,15 @@ function groupNumbering(lists) {
   return map;
 }
 
+// questionCountLabel declines "вопрос" for n: 1 вопрос, 2 вопроса, 12 вопросов.
+function questionCountLabel(n) {
+  const m10 = n % 10, m100 = n % 100;
+  const word = m100 >= 11 && m100 <= 14 ? "вопросов"
+    : m10 === 1 ? "вопрос"
+    : m10 >= 2 && m10 <= 4 ? "вопроса" : "вопросов";
+  return `${n} ${word}`;
+}
+
 function render() {
   kanban.hidden = false;
   // Preserve scroll positions across the full rebuild below — otherwise a drag
@@ -596,8 +605,15 @@ function renderList(list, precomputedNumbers) {
     e.stopPropagation();
     const items = [{ label: "➕ Добавить карточку", onClick: () => addCard(list) }];
     if (list.type === "test") items.push({ label: "👥 Копировать список тестеров", onClick: () => copyTesterList(list) });
+    if (list.groupId != null) {
+      items.push(
+        { label: "🔍 Предпросмотр списка", onClick: () => previewList(list) },
+        { label: "🔍 Предпросмотр всей группы", onClick: () => previewList(list, true) },
+      );
+    } else {
+      items.push({ label: "🔍 Предпросмотр", onClick: () => previewList(list) });
+    }
     items.push(
-      { label: "🔍 Предпросмотр", onClick: () => previewList(list) },
       { label: "↔️ Переместить список…", onClick: () => openMoveList(list) },
       { label: "✏️ Переименовать список", onClick: () => renameList(list) },
     );
@@ -618,16 +634,18 @@ function renderList(list, precomputedNumbers) {
   menuWrap.append(menuBtn);
   // Test lists get a 🧪 prefix so they stand out from ordinary question lists.
   const titleText = (list.type === "test" ? "🧪 " : "") + (list.title || "(без названия)");
-  col.append(el("div", { class: "klist-head" },
-    el("span", { class: "klist-title", text: titleText }),
-    menuWrap,
-  ));
+  const cards = cardsOf(list.id);
+  const head = el("div", { class: "klist-head" },
+    el("span", { class: "klist-title", text: titleText }));
+  const qCount = list.type === "test" ? 0 : cards.filter((c) => c.kind === "question").length;
+  if (qCount) head.append(el("span", { class: "klist-count", text: questionCountLabel(qCount) }));
+  head.append(menuWrap);
+  col.append(head);
   if (list.groupId != null) {
     const g = groupById(list.groupId);
     col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт", text: "🔗" + ((g && g.name) || "связанные списки") }));
   }
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
-  const cards = cardsOf(list.id);
   // Grouped lists carry continuous numbering computed across the whole group;
   // standalone lists number from 1.
   const numbers = list.type === "test" ? [] : (precomputedNumbers || xyChgk.numberQuestionCards(cards));
@@ -2094,8 +2112,9 @@ function pvEditBtn(card) {
     text: "✏️",
     onclick: (e) => {
       e.stopPropagation();
+      const group = previewGroupMode;
       closePreview();
-      openCard(card, { returnTo: list ? { listId: list.id, cardId: card.id } : null });
+      openCard(card, { returnTo: list ? { listId: list.id, cardId: card.id, group } : null });
     },
   });
 }
@@ -2161,6 +2180,7 @@ function renderPreviewCard(card, number, imgMap, screen, edit) {
 // screen-mode toggle can re-render without refetching attachments.
 let previewCtx = null;
 let previewListRef = null; // the list currently shown in the preview overlay
+let previewGroupMode = false; // true when the overlay shows the whole group
 
 function renderPreviewBody(screen) {
   const body = document.getElementById("previewBody");
@@ -2174,21 +2194,29 @@ function closePreview() {
   previewOverlay.hidden = true;
   previewCtx = null;
   previewListRef = null;
+  previewGroupMode = false;
   document.getElementById("previewBody").replaceChildren();
 }
 
 // previewList opens the preview modal and renders the whole list. Test lists show
 // their tester summary (the same line the copy action produces); question lists
 // render docx-style — text instantly, image handouts resolved + filled in after.
-async function previewList(list) {
-  const cards = cardsOf(list.id);
-  document.getElementById("previewTitle").textContent = (list.type === "test" ? "🧪 " : "") + (list.title || "Предпросмотр");
+// wholeGroup previews the list's entire group (non-test members, board order,
+// continuous numbering) — the same scope its export/handouts cover.
+async function previewList(list, wholeGroup = false) {
+  const group = wholeGroup && list.groupId != null ? groupById(list.groupId) : null;
+  const scopeLists = group ? listsInGroup(list.groupId).filter((l) => l.type !== "test") : [list];
+  const cards = scopeLists.flatMap((l) => cardsOf(l.id));
+  document.getElementById("previewTitle").textContent = group
+    ? "🔗" + (group.name || "связанные списки")
+    : (list.type === "test" ? "🧪 " : "") + (list.title || "Предпросмотр");
   const body = document.getElementById("previewBody");
   body.replaceChildren();
   previewCtx = null;
   previewListRef = list;
+  previewGroupMode = !!group;
   // Screen-mode toggle + tester-copy button are mutually exclusive per list kind.
-  const isTest = list.type === "test";
+  const isTest = !group && list.type === "test";
   document.querySelector(".preview-screen-toggle").hidden = isTest;
   document.getElementById("previewCopyTesters").hidden = !isTest;
   previewOverlay.hidden = false;
@@ -2206,8 +2234,9 @@ async function previewList(list) {
   // Text renders straight away (cards are decrypted at board load); image
   // handouts resolve in the background and replace their placeholders as they
   // arrive, so a long list is readable immediately.
-  // Match the board: a grouped list numbers continuously across its group.
-  const numbers = list.groupId != null
+  // Match the board: a grouped list numbers continuously across its group. In
+  // whole-group mode the cards ARE the concatenated group, so number them flat.
+  const numbers = !group && list.groupId != null
     ? (groupNumbering(listsInGroup(list.groupId)).get(list.id) || [])
     : xyChgk.numberQuestionCards(cards);
   const imgMap = new Map();
@@ -3415,7 +3444,7 @@ async function cardBack() {
   if (!ret || ret.listId == null) return;
   const list = state.lists.find((l) => l.id === ret.listId);
   if (!list) return;
-  await previewList(list);
+  await previewList(list, ret.group);
   if (previewOverlay.hidden) return; // guard against a close during the await
   const node = document.getElementById("previewBody").querySelector(`[data-card-id="${ret.cardId}"]`);
   if (node) node.scrollIntoView({ block: "center" });
