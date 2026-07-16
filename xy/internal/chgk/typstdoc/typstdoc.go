@@ -49,6 +49,27 @@ var labels = map[string]string{
 	"author": "Автор", "handout": "Раздаточный материал",
 }
 
+// Device selects the page geometry: Desktop is the docx-mirroring A4 layout,
+// Mobile a page sized for phone reading.
+type Device string
+
+const (
+	Desktop Device = "desktop"
+	Mobile  Device = "mobile"
+)
+
+// Mobile page = 1.5× the iPhone 17 Pro screen (6.3", 2622×1206 @ 460ppi), so
+// zoom-to-fit shows the 12pt body at 8pt-scale — comfortable at phone viewing
+// distance (1× reads too big, 2× too small). The bottom margin is deeper: the
+// page-number line box (~5.8mm) plus typst's 30% footer-descent must fit
+// inside it, or the number sits flush with the page edge.
+const (
+	mobileWMM       = 99.89
+	mobileHMM       = 217.17
+	mobileMarginMM  = 7.5
+	mobileMarginBMM = 12.0
+)
+
 // Page setup, transcribed from template.docx (twips → mm/pt).
 const (
 	marginV     = "25.4mm"  // w:top / w:bottom = 1440tw
@@ -69,8 +90,8 @@ const (
 
 // Export renders the parsed structure to PDF bytes. images maps the names used in
 // (img …) directives to their bytes (any format; re-encoded to PNG).
-func Export(ctx context.Context, doc fsource.Doc, images map[string][]byte, ts Typesetter) ([]byte, error) {
-	e := &exporter{images: images, used: map[string][]byte{}}
+func Export(ctx context.Context, doc fsource.Doc, images map[string][]byte, ts Typesetter, device Device) ([]byte, error) {
+	e := &exporter{images: images, used: map[string][]byte{}, device: device}
 	src := e.generate(doc)
 	if err := ts.SetImages(ctx, e.used); err != nil {
 		return nil, err
@@ -85,14 +106,15 @@ func Export(ctx context.Context, doc fsource.Doc, images map[string][]byte, ts T
 // GenerateTyp returns the typst source for a document, without compiling it (the
 // unit-testable half; also what you want when a PDF comes out looking wrong).
 // Referenced images are resolved, so their sizes land in the source.
-func GenerateTyp(doc fsource.Doc, images map[string][]byte) string {
-	e := &exporter{images: images, used: map[string][]byte{}}
+func GenerateTyp(doc fsource.Doc, images map[string][]byte, device Device) string {
+	e := &exporter{images: images, used: map[string][]byte{}, device: device}
 	return e.generate(doc)
 }
 
 type exporter struct {
 	images map[string][]byte
 	used   map[string][]byte // images actually referenced, keyed by the name the source uses
+	device Device
 }
 
 // preamble is template.docx's page setup, in typst.
@@ -107,10 +129,16 @@ type exporter struct {
 // advance where typst's default had it (≈1.36em: the ascender and descender we just
 // took in are what the 0.65em leading used to add), i.e. Word's single spacing.
 func (e *exporter) preamble() string {
-	return fmt.Sprintf(`#set page(paper: "a4", margin: (top: %s, bottom: %s, left: %s, right: %s), footer: context align(center, text(size: %s, counter(page).display())))
+	page := fmt.Sprintf(`paper: "a4", margin: (top: %s, bottom: %s, left: %s, right: %s)`,
+		marginV, marginV, marginH, marginH)
+	if e.device == Mobile {
+		page = fmt.Sprintf(`width: %s, height: %s, margin: (top: %s, left: %s, right: %s, bottom: %s)`,
+			mm(mobileWMM), mm(mobileHMM), mm(mobileMarginMM), mm(mobileMarginMM), mm(mobileMarginMM), mm(mobileMarginBMM))
+	}
+	return fmt.Sprintf(`#set page(%s, footer: context align(center, text(size: %s, counter(page).display())))
 #set text(font: %q, size: %s, lang: "ru", hyphenate: false, top-edge: "ascender", bottom-edge: "descender")
 #set par(spacing: 0pt, leading: 0pt, justify: false)
-`, marginV, marginV, marginH, marginH, pt(bodyPt), fontFamily, pt(bodyPt))
+`, page, pt(bodyPt), fontFamily, pt(bodyPt))
 }
 
 func (e *exporter) generate(doc fsource.Doc) string {

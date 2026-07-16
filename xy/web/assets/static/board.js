@@ -625,6 +625,7 @@ function renderList(list, precomputedNumbers) {
       items.push(
         { label: `📄 Экспорт${suffix} в docx`, onClick: () => exportList(list, "docx") },
         { label: `📕 Экспорт${suffix} в PDF`, onClick: () => exportList(list, "pdf") },
+        { label: `📱 Экспорт${suffix} в PDF для телефона`, onClick: () => exportList(list, "pdf", true) },
         { label: grouped ? "🧩 Генерация раздаток (вся группа)" : "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
       );
     }
@@ -1584,9 +1585,10 @@ function exportScope(list) {
   return { cards: lists.flatMap((l) => cardsOf(l.id)), title };
 }
 
-async function exportList(list, format = "docx") {
+async function exportList(list, format = "docx", mobile = false) {
   const ext = format === "pdf" ? "pdf" : "docx";
   const scope = exportScope(list);
+  if (mobile) scope.title += "_mobile";
   const cards = scope.cards;
   if (!cards.length) { alert("В списке нет карточек."); return; }
   if (!xySync.isOnline()) { alert(`Экспорт в ${ext} доступен только онлайн.`); return; }
@@ -1601,6 +1603,7 @@ async function exportList(list, format = "docx") {
     const fd = new FormData();
     fd.append("source", source);
     fd.append("filename", scope.title);
+    if (mobile) fd.append("device", "mobile");
 
     // resolve referenced images from the cards' attachments (decrypt + attach)
     const found = await appendImages(fd, cards, wanted);

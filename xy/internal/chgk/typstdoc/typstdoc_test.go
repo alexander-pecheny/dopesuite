@@ -40,7 +40,7 @@ func parse(t *testing.T, src string) fsource.Doc {
 // The layout properties the docx export gets from Word's paragraph flags have to
 // survive into the typst source, or a question splits across a page.
 func TestGenerateTypLayout(t *testing.T) {
-	typ := typstdoc.GenerateTyp(parse(t, sample), nil)
+	typ := typstdoc.GenerateTyp(parse(t, sample), nil, typstdoc.Desktop)
 
 	for _, want := range []string{
 		`#set text(font: "Noto Sans"`,
@@ -62,7 +62,7 @@ func TestGenerateTypLayout(t *testing.T) {
 // docx exporter: the same prepositions glue, and the same short hyphenated words get
 // a non-breaking hyphen.
 func TestGenerateTypNoBreak(t *testing.T) {
-	typ := typstdoc.GenerateTyp(parse(t, sample), nil)
+	typ := typstdoc.GenerateTyp(parse(t, sample), nil, typstdoc.Desktop)
 	if !strings.Contains(typ, "из‑за") {
 		t.Error("short hyphenated word did not get a non-breaking hyphen (U+2011)")
 	}
@@ -79,7 +79,7 @@ func TestGenerateTypNoBreak(t *testing.T) {
 // come out as those characters, not as markup (nor as a compile error).
 func TestGenerateTypEscaping(t *testing.T) {
 	doc := parse(t, "? #let x = 1 $e^x$ \"кавычки\" и #[markup]\n! Ответ\n")
-	typ := typstdoc.GenerateTyp(doc, nil)
+	typ := typstdoc.GenerateTyp(doc, nil, typstdoc.Desktop)
 	if !strings.Contains(typ, `\"кавычки\"`) {
 		t.Errorf("quotes were not escaped into the string literal:\n%s", typ)
 	}
@@ -98,7 +98,7 @@ func TestGenerateTypEscaping(t *testing.T) {
 // A (PAGEBREAK) inside a question can't stay inside the block — typst rejects a
 // pagebreak in a container — so the paragraph splits around it.
 func TestGenerateTypPageBreak(t *testing.T) {
-	typ := typstdoc.GenerateTyp(parse(t, "? До(PAGEBREAK)после\n! Ответ\n"), nil)
+	typ := typstdoc.GenerateTyp(parse(t, "? До(PAGEBREAK)после\n! Ответ\n"), nil, typstdoc.Desktop)
 	i := strings.Index(typ, "#pagebreak(")
 	if i < 0 {
 		t.Fatalf("no pagebreak emitted:\n%s", typ)
@@ -116,7 +116,7 @@ func TestGenerateTypPageBreak(t *testing.T) {
 // of chgksuite's tokenizer that the shared inline package reproduces — hence the
 // (LINEBREAK) in front of it here.
 func TestGenerateTypSmallCaps(t *testing.T) {
-	typ := typstdoc.GenerateTyp(parse(t, "? Имя(LINEBREAK)(scВасилий)\n! Ответ\n"), nil)
+	typ := typstdoc.GenerateTyp(parse(t, "? Имя(LINEBREAK)(scВасилий)\n! Ответ\n"), nil, typstdoc.Desktop)
 	if !strings.Contains(typ, "size: 0.8em") || !strings.Contains(typ, "АСИЛИЙ") {
 		t.Errorf("small caps were not synthesized:\n%s", typ)
 	}
@@ -134,10 +134,33 @@ func TestGenerateTypImageCap(t *testing.T) {
 		"? Вопрос:\n(img tall.png)\n! Ответ\n",        // auto size: 600px@120dpi = 5in tall
 		"? Вопрос:\n(img h=10in tall.png)\n! Ответ\n", // explicit
 	} {
-		typ := typstdoc.GenerateTyp(parse(t, src), images)
+		typ := typstdoc.GenerateTyp(parse(t, src), images, typstdoc.Desktop)
 		if !strings.Contains(typ, "width: 5.08mm, height: 50.8mm") {
 			t.Errorf("tall image not capped to 2in in %q:\n%s", src, typ)
 		}
+	}
+}
+
+// The mobile device swaps the A4 page for the phone-screen-sized one and caps
+// images to its narrower text column.
+func TestGenerateTypMobile(t *testing.T) {
+	typ := typstdoc.GenerateTyp(parse(t, sample), nil, typstdoc.Mobile)
+	if !strings.Contains(typ, "width: 99.89mm, height: 217.17mm") {
+		t.Errorf("mobile page size missing:\n%s", typ)
+	}
+	if strings.Contains(typ, `paper: "a4"`) {
+		t.Errorf("mobile source still sets a4:\n%s", typ)
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 3000, 300))); err != nil {
+		t.Fatal(err)
+	}
+	images := map[string][]byte{"wide.png": buf.Bytes()}
+	typ = typstdoc.GenerateTyp(parse(t, "? Вопрос:\n(img w=10in wide.png)\n! Ответ\n"), images, typstdoc.Mobile)
+	// text column = 99.89mm − 2×7.5mm = 84.89mm
+	if !strings.Contains(typ, "width: 84.89mm") {
+		t.Errorf("wide image not capped to the mobile text column:\n%s", typ)
 	}
 }
 
@@ -170,7 +193,7 @@ func TestExportPDF(t *testing.T) {
 - https://example.com/second
 `
 	pdf, err := typstdoc.Export(context.Background(), parse(t, src),
-		map[string][]byte{"pic.png": testPNG(t)}, pool)
+		map[string][]byte{"pic.png": testPNG(t)}, pool, typstdoc.Desktop)
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}

@@ -66,6 +66,7 @@ func headerSafeName(name string) string {
 type exportRequest struct {
 	source string
 	name   string
+	device string // "" (desktop) or "mobile" — PDF export only
 	images map[string][]byte
 }
 
@@ -91,6 +92,7 @@ func (s *server) readExportRequest(w http.ResponseWriter, r *http.Request, ext s
 	req := exportRequest{
 		source: source,
 		name:   strings.TrimSuffix(name, ext),
+		device: form.Value("device"),
 		images: map[string][]byte{},
 	}
 	for _, f := range form.Files("img") {
@@ -144,9 +146,13 @@ func (s *server) handleExportPDF(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusInternalServerError, "typst unavailable: "+err.Error())
 		return
 	}
+	device := typstdoc.Desktop
+	if req.device == "mobile" {
+		device = typstdoc.Mobile
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), exportPDFTimeout)
 	defer cancel()
-	b, err := typstdoc.Export(ctx, fsource.Parse(req.source, "chgk"), req.images, ts)
+	b, err := typstdoc.Export(ctx, fsource.Parse(req.source, "chgk"), req.images, ts, device)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			httpError(w, http.StatusGatewayTimeout, "typst timed out")

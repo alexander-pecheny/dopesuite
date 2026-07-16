@@ -51,7 +51,11 @@ func (e *exporter) addImage(p *para, arg string) {
 	// SizeInches only clamps the AUTO size (longest side ≤ 5in) — a portrait photo
 	// or an explicit h= still ate half a page of the PDF. Scale down (never up)
 	// into the preview's box: 2in tall (12em at the 12pt body), 5in wide.
-	const maxImgW, maxImgH = 5.0, 2.0
+	// The mobile page's text column is narrower than 5in, so cap to it there.
+	maxImgW, maxImgH := 5.0, 2.0
+	if e.device == Mobile {
+		maxImgW = (mobileWMM - 2*mobileMarginMM) / 25.4
+	}
 	if s := min(maxImgW/widthIn, maxImgH/heightIn); s < 1 {
 		widthIn, heightIn = widthIn*s, heightIn*s
 	}
