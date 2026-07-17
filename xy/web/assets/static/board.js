@@ -2479,6 +2479,21 @@ function autoGrow(ta) {
 }
 autoGrow(document.getElementById("cardDesc"));
 
+// cardToast flashes a brief, auto-dismissing confirmation pinned to the top of
+// the viewport — seen in any view or scroll position, unlike #cardMessage which
+// sits at the far bottom of the (long) card panel.
+let cardToastTimer = null;
+function cardToast(text) {
+  let t = document.getElementById("cardToast");
+  if (!t) { t = el("div", { id: "cardToast", class: "card-toast", role: "status" }); document.body.append(t); }
+  t.textContent = text;
+  // force a reflow so re-triggering while still visible replays the transition
+  void t.offsetWidth;
+  t.classList.add("show");
+  if (cardToastTimer) clearTimeout(cardToastTimer);
+  cardToastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+}
+
 function openCardCard() { return state.cards.find((c) => c.id === openCardId); }
 
 function draftKind() {
@@ -2584,9 +2599,6 @@ function refreshSaveState() {
     ? cardDraft.trim() !== ""
     : cardDraft !== savedDesc || (cardDraftMeta || null) !== (savedMeta || null);
   btn.disabled = !dirty;
-  // A stale "Карточка сохранена." next to a re-enabled button reads as a lie.
-  const msg = document.getElementById("cardMessage");
-  if (dirty && msg.textContent === "Карточка сохранена.") msg.textContent = "";
 }
 
 function setCardView(view) {
@@ -3511,6 +3523,7 @@ document.getElementById("cardSave").addEventListener("click", async () => {
       state.cards.push(card);
       render();
       await openCard(card);
+      cardToast("Карточка сохранена.");
     } catch (err) { msg.textContent = err.message; }
     return;
   }
@@ -3535,20 +3548,20 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     savedMeta = newMeta;
     render();
     await loadTimeline(card.id);
-    // Reflect the saved/normalized desc back into the editor views (test cards
-    // re-render their own tester editor, not the question fields).
+    document.getElementById("cardDesc").value = newDesc;
+    // Test cards have no Просмотр — keep them in the current editor view (re-rendering
+    // their own tester editor); every other card jumps to the rendered preview, which
+    // is itself the confirmation that the edits landed.
     if (isTestCard()) {
       setTestDetailTitle(card);
       if (cardView === "fields") renderTesterFields();
       else if (cardView === "text") { const ta = document.getElementById("cardDesc"); ta.value = xyChgk.testersToText(xyChgk.parseTestCard(newDesc).testers); fitTextarea(ta); }
+      refreshSaveState();
     } else {
-      document.getElementById("cardDesc").value = newDesc;
-      if (cardView === "text") fitTextarea(document.getElementById("cardDesc"));
-      if (cardView === "fields") renderCardFields();
-      else if (cardView === "preview") renderCardPreview();
+      setCardView("preview");
     }
-    refreshSaveState();
-    msg.textContent = "Карточка сохранена.";
+    document.querySelector(".card-detail").scrollTop = 0;
+    cardToast("Карточка сохранена.");
   } catch (err) { msg.textContent = err.message; }
 });
 

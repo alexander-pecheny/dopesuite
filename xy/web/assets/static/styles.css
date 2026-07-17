@@ -271,6 +271,27 @@
   overflow: hidden;
   z-index: var(--z-card-overlay);
 }
+/* transient save confirmation, pinned to the top of the viewport so it's seen in
+   any view or scroll position (the persistent #cardMessage sits at the far bottom
+   of a long panel). Appended to <body> to clear every overlay stacking context. */
+.card-toast {
+  position: fixed;
+  top: calc(var(--header-h) + var(--space-3));
+  left: 50%;
+  transform: translateX(-50%) translateY(-10px);
+  z-index: var(--z-toast);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--success);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  box-shadow: var(--shadow-popover);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.card-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .card-detail {
   width: min(680px, 100%);
   height: 100%;
