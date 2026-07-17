@@ -39,7 +39,7 @@ func TestRealPagesCompile(t *testing.T) {
 
 // idsCreatedByJS are element ids that scripts create at runtime rather than
 // find in the static page, so the selector contract does not require them.
-var idsCreatedByJS = map[string]bool{"authorsDatalist": true, "cardToast": true}
+var idsCreatedByJS = map[string]bool{"authorsDatalist": true}
 
 // loadBearingClasses lists CSS classes JS selects on static markup. host-actions
 // is on every page (the topbar emits it); the rest are board-only widgets.

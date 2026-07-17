@@ -61,6 +61,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     row gap="sm" wrap
       button id="cardSave" "Сохранить"
       button kind="danger" id="cardDelete" data-edit-only "Удалить карточку"
+    message id="cardMessage"
 
     label data-edit-only "Метки"
     -- The assigned labels and the add button share ONE row; the "create a new
@@ -98,7 +99,6 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     form id="commentForm" dir="col" data-edit-only
       editor id="commentInput" kind="comment" placeholder="Комментарий…" spellcheck="false"
       button small submit "Отправить"
-    message id="cardMessage"
 
   -- list preview overlay (docx-style render, JS-only)
   docoverlay id="previewOverlay" kind="doc" label="Предпросмотр списка"

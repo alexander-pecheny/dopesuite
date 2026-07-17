@@ -2479,21 +2479,6 @@ function autoGrow(ta) {
 }
 autoGrow(document.getElementById("cardDesc"));
 
-// cardToast flashes a brief, auto-dismissing confirmation pinned to the top of
-// the viewport — seen in any view or scroll position, unlike #cardMessage which
-// sits at the far bottom of the (long) card panel.
-let cardToastTimer = null;
-function cardToast(text) {
-  let t = document.getElementById("cardToast");
-  if (!t) { t = el("div", { id: "cardToast", class: "card-toast", role: "status" }); document.body.append(t); }
-  t.textContent = text;
-  // force a reflow so re-triggering while still visible replays the transition
-  void t.offsetWidth;
-  t.classList.add("show");
-  if (cardToastTimer) clearTimeout(cardToastTimer);
-  cardToastTimer = setTimeout(() => t.classList.remove("show"), 1800);
-}
-
 function openCardCard() { return state.cards.find((c) => c.id === openCardId); }
 
 function draftKind() {
@@ -2599,6 +2584,9 @@ function refreshSaveState() {
     ? cardDraft.trim() !== ""
     : cardDraft !== savedDesc || (cardDraftMeta || null) !== (savedMeta || null);
   btn.disabled = !dirty;
+  // A stale "Карточка сохранена." next to a re-enabled button reads as a lie.
+  const msg = document.getElementById("cardMessage");
+  if (dirty && msg.textContent === "Карточка сохранена.") msg.textContent = "";
 }
 
 function setCardView(view) {
@@ -3523,7 +3511,7 @@ document.getElementById("cardSave").addEventListener("click", async () => {
       state.cards.push(card);
       render();
       await openCard(card);
-      cardToast("Карточка сохранена.");
+      msg.textContent = "Карточка сохранена.";
     } catch (err) { msg.textContent = err.message; }
     return;
   }
@@ -3560,8 +3548,7 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     } else {
       setCardView("preview");
     }
-    document.querySelector(".card-detail").scrollTop = 0;
-    cardToast("Карточка сохранена.");
+    msg.textContent = "Карточка сохранена.";
   } catch (err) { msg.textContent = err.message; }
 });
 
