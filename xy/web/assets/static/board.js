@@ -2079,8 +2079,10 @@ function renderFieldBody(text, imgMap, opts) {
     if (lst.preamble.trim()) frag.append(renderRich(lst.preamble, imgMap, opts));
     const box = el("div", { class: "pv-list" });
     lst.items.forEach((it, i) => {
-      const li = el("div", { class: "pv-list-item" }, el("span", { class: "pv-list-num", text: `${i + 1}. ` }));
-      li.append(renderRich(it, imgMap, opts));
+      const li = el("div", { class: "pv-list-item" }, el("span", { class: "pv-list-num", text: `${i + 1}.` }));
+      const body = el("div", { class: "pv-list-body" });
+      body.append(renderRich(it, imgMap, opts));
+      li.append(body);
       box.append(li);
     });
     frag.append(box);
@@ -2438,6 +2440,8 @@ let cardView = "";
 let lastEditView = "fields";
 let cardDraft = "";          // unsaved working 4s description
 let cardDraftMeta = null;    // unsaved handout-generation settings (string|null)
+let savedDesc = "";          // last-persisted desc — the baseline for the dirty check
+let savedMeta = null;        // last-persisted handout settings (string|null)
 let cardFieldReaders = null; // per-field read() closures for the Поля view
 // Blocks the Поля editor doesn't render but must not eat: the pre-question
 // markup (№/№№ and friends) and anything else unmodelled. Both are captured at
@@ -2570,6 +2574,21 @@ function captureDraft() {
   }
 }
 
+// refreshSaveState enables the save button only when the draft differs from what
+// was last persisted, so it's obvious whether the current edits are applied. A
+// new (unsaved) card has no baseline — save stays enabled while it has content.
+function refreshSaveState() {
+  captureDraft();
+  const btn = document.getElementById("cardSave");
+  const dirty = pendingList
+    ? cardDraft.trim() !== ""
+    : cardDraft !== savedDesc || (cardDraftMeta || null) !== (savedMeta || null);
+  btn.disabled = !dirty;
+  // A stale "Карточка сохранена." next to a re-enabled button reads as a lie.
+  const msg = document.getElementById("cardMessage");
+  if (dirty && msg.textContent === "Карточка сохранена.") msg.textContent = "";
+}
+
 function setCardView(view) {
   captureDraft();
   const test = isTestCard();
@@ -2612,6 +2631,7 @@ function setCardView(view) {
     fitTextarea(ta);
   } else if (view === "fields") { if (test) renderTesterFields(); else renderCardFields(); }
   else if (view === "preview") renderCardPreview();
+  refreshSaveState();
 }
 
 // ensureOption adds a <select> option for `name` if it isn't already present (so
@@ -3024,6 +3044,8 @@ async function openCard(card, opts = {}) {
   cardFieldReaders = null;
   cardDraft = card.desc;
   cardDraftMeta = card.handoutMeta != null ? card.handoutMeta : null;
+  savedDesc = cardDraft;
+  savedMeta = cardDraftMeta;
   document.querySelector(".card-detail").classList.remove("creating");
   document.getElementById("cardDesc").value = card.desc;
   document.getElementById("cardMessage").textContent = "";
@@ -3509,6 +3531,8 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     await patch("patchCard", `/api/cards/${card.id}`, body);
     card.desc = newDesc;
     card.handoutMeta = newMeta;
+    savedDesc = newDesc;
+    savedMeta = newMeta;
     render();
     await loadTimeline(card.id);
     // Reflect the saved/normalized desc back into the editor views (test cards
@@ -3523,7 +3547,8 @@ document.getElementById("cardSave").addEventListener("click", async () => {
       if (cardView === "fields") renderCardFields();
       else if (cardView === "preview") renderCardPreview();
     }
-    msg.textContent = "Сохранено.";
+    refreshSaveState();
+    msg.textContent = "Карточка сохранена.";
   } catch (err) { msg.textContent = err.message; }
 });
 
@@ -3536,6 +3561,15 @@ function saveOnCmdEnter(e) {
 }
 document.getElementById("cardDesc").addEventListener("keydown", saveOnCmdEnter);
 document.getElementById("cardFields").addEventListener("keydown", saveOnCmdEnter);
+
+// Re-evaluate the save button on every edit. Typing fires "input"; the Поля
+// view's +/× field pills and the tool buttons change the draft via clicks, which
+// bubble here after their own handlers have run.
+for (const id of ["cardDesc", "cardFields"]) {
+  const node = document.getElementById(id);
+  node.addEventListener("input", refreshSaveState);
+  node.addEventListener("click", refreshSaveState);
+}
 
 document.getElementById("cardDelete").addEventListener("click", async () => {
   const card = state.cards.find((c) => c.id === openCardId);

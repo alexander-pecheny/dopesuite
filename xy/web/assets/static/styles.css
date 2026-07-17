@@ -487,15 +487,18 @@
 }
 .pv-edit:hover, .pv-edit:focus-visible { background: var(--action-hover-bg); }
 /* preserve authored line breaks inside multi-line question/answer/meta text */
-.pv-q-text, .pv-field, .pv-meta, .pv-list-item { white-space: pre-wrap; }
+.pv-q-text, .pv-field, .pv-meta, .pv-list-body { white-space: pre-wrap; }
 .pv-q-text { margin-bottom: var(--space-2); }
 .pv-field { margin-bottom: 0; }
 .pv-label { font-weight: var(--fw-bold); }
-/* numbered list (sources, blitz/duplet questions & answers): hanging "N." — the
+/* numbered list (sources, blitz/duplet questions & answers): the "N." marker and
+   the item body are separate boxes so wrapping a long unbreakable value (e.g. a
+   bare URL) inside the body can never orphan the marker onto its own line. The
    numbers are plain weight (only field labels are bold). */
 .pv-list { margin-top: var(--space-1); }
-.pv-list-item { padding-left: 1.6em; text-indent: -1.6em; margin-bottom: var(--space-0-5); }
-.pv-list-num { font-weight: var(--fw-regular); }
+.pv-list-item { display: flex; gap: 0.4em; margin-bottom: var(--space-0-5); }
+.pv-list-num { flex: 0 0 auto; font-weight: var(--fw-regular); }
+.pv-list-body { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .pv-handout { color: var(--muted); }
 /* sources/authors set smaller, matching the exports' 12pt → 10pt. The block after
    a body-size one starts one BODY line below, not one small line: the lost height
