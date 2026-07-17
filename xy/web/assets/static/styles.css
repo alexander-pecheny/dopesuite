@@ -147,9 +147,11 @@
    размеры» in the ☰ menu, board.js) — the modal overrides these vars on <html>. */
 :root {
   --kanban-max-w: none;   /* none = board spans the full viewport width */
-  /* board stacking: card overlay < timer < fixed header, all under --z-modal */
+  /* board stacking: card overlay < fixed header < --z-modal; the timer floats
+     above ALL of it (modals and toasts included) — it is dragged anywhere on
+     screen and must stay visible while a question is being played. */
   --z-card-overlay: 50;
-  --z-timer: 55;
+  --z-timer: 130;
   --z-board-header: 60;
   --klist-w: 280px;
   --kcard-lines: none;    /* none = card shows the whole question, unclamped */
@@ -406,8 +408,12 @@
 /* selects must never push past their container on narrow screens */
 .card-detail select.input { max-width: 100%; }
 
-/* per-list "⋯" menu: anchor the shared .menu-dropdown under the trigger */
+/* per-list "⋯" menu: the shared .menu-dropdown floats on <body> at a fixed,
+   viewport-clamped spot (board.js popupMenu) — anchored inside the kanban
+   scroll container it was clipped at the work area's edge. The wrap only
+   keeps the trigger button inline. */
 .klist-menu-wrap { position: relative; display: inline-flex; }
+.menu-dropdown.menu-fixed { position: fixed; top: auto; right: auto; }
 
 /* two-pane before/after diff (timeline desc_edit), with the word-level changes
    highlighted inside each pane */
@@ -554,13 +560,17 @@
   .label-pick { font-size: var(--text-2xs); }
 }
 
-/* ЧГК play timer — floats bottom-right, above the kanban/card modal but below
-   the fixed board header. Toggled by the ⏰ header button (timer.js). */
+/* ЧГК play timer — floats bottom-right by default, above everything
+   (--z-timer). Toggled by the ⏰ header button; draggable anywhere on screen
+   (timer.js sets left/top and remembers them in localStorage). */
 .timer-overlay {
   position: fixed;
   right: var(--space-4);
   bottom: var(--space-4);
   z-index: var(--z-timer);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -572,6 +582,10 @@
   box-shadow: var(--shadow-card);
 }
 .timer-overlay[hidden] { display: none; }
+/* controls stay fully interactive inside the draggable surface */
+.timer-overlay :is(input, select, button) { touch-action: auto; user-select: auto; -webkit-user-select: auto; }
+.timer-overlay.timer-moved { right: auto; bottom: auto; }
+.timer-overlay.timer-dragging { cursor: grabbing; }
 .timer-row, .timer-custom { display: flex; }
 .timer-preset, .timer-custom-input { width: 100%; }
 .timer-display {
@@ -773,8 +787,11 @@ textarea.fld-input { min-height: 3em; }
 .handouts-doc .handouts-pane { gap: var(--space-3); }
 .handouts-doc .section-label { margin: 0; }
 .handouts-doc .handouts-pane > .u-row:first-child { min-height: var(--control-h-sm); }
-.handouts-pdf { flex: 1; background: var(--field-bg); border-radius: var(--radius-md); min-height: 320px; display: flex; }
-.handouts-pdf-frame { flex: 1; width: 100%; height: 100%; border: none; border-radius: var(--radius-md); }
+/* The frame fills its box via absolute inset, not flex + height:100% — a
+   percentage height inside a flex-sized box resolves against an indefinite
+   height in some engines, which cropped the preview to a fraction of the box. */
+.handouts-pdf { flex: 1; background: var(--field-bg); border-radius: var(--radius-md); min-height: 320px; position: relative; }
+.handouts-pdf-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: none; border-radius: var(--radius-md); }
 
 @media (max-width: 760px) {
   .handouts-body { flex-direction: column; }

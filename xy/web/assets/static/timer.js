@@ -242,9 +242,11 @@ function build() {
   timeNode = el("div", { class: "timer-time", text: "60" });
   labelNode = el("div", { class: "timer-label", text: "" });
 
-  startBtn = el("button", { class: "btn btn-small", type: "button", text: "Старт", onclick: start });
-  pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", text: "Пауза", onclick: pause });
-  const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", text: "Сброс", onclick: reset });
+  // Icons, not captions — three worded buttons overflowed the 240px box
+  // («Продолжить» alone nearly filled it). The word lives in title/aria-label.
+  startBtn = el("button", { class: "btn btn-small", type: "button", text: "▶", title: "Старт", "aria-label": "Старт", onclick: start });
+  pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", text: "⏸", title: "Пауза", "aria-label": "Пауза", onclick: pause });
+  const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", text: "↺", title: "Сброс", "aria-label": "Сброс", onclick: reset });
 
   overlay = el(
     "div",
@@ -255,8 +257,60 @@ function build() {
     el("div", { class: "timer-actions" }, startBtn, pauseBtn, resetBtn),
   );
   document.body.append(overlay);
+  wireDrag();
   renderTime();
   renderControls();
+}
+
+// ---- drag anywhere + remembered position ------------------------------------
+// The overlay floats above everything and can be parked wherever it does not
+// cover the question being played; the spot is remembered per browser.
+const POS_KEY = "xyTimerPos";
+
+function savedPos() {
+  try { return JSON.parse(localStorage.getItem(POS_KEY) || "null"); } catch (_) { return null; }
+}
+// applyPos pins the overlay at left/top (switching it off its default
+// bottom-right anchor), clamped so at least the whole box stays on screen.
+function applyPos(pos) {
+  if (!pos || typeof pos.left !== "number" || typeof pos.top !== "number") return;
+  const left = Math.max(0, Math.min(pos.left, window.innerWidth - overlay.offsetWidth));
+  const top = Math.max(0, Math.min(pos.top, window.innerHeight - overlay.offsetHeight));
+  overlay.classList.add("timer-moved");
+  overlay.style.left = left + "px";
+  overlay.style.top = top + "px";
+}
+
+function wireDrag() {
+  let drag = null; // pointer offset inside the box while a drag is live
+  overlay.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest("button, select, input")) return; // controls are not drag handles
+    const r = overlay.getBoundingClientRect();
+    drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+    try { overlay.setPointerCapture(e.pointerId); } catch (_) {} // synthetic events have no active pointer
+    overlay.classList.add("timer-dragging");
+    e.preventDefault();
+  });
+  overlay.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    applyPos({ left: e.clientX - drag.dx, top: e.clientY - drag.dy });
+  });
+  const end = () => {
+    if (!drag) return;
+    drag = null;
+    overlay.classList.remove("timer-dragging");
+    const r = overlay.getBoundingClientRect();
+    try { localStorage.setItem(POS_KEY, JSON.stringify({ left: r.left, top: r.top })); } catch (_) {}
+  };
+  overlay.addEventListener("pointerup", end);
+  overlay.addEventListener("pointercancel", end);
+  // keep a parked overlay on screen when the window shrinks
+  window.addEventListener("resize", () => {
+    if (overlay.hidden || !overlay.classList.contains("timer-moved")) return;
+    const r = overlay.getBoundingClientRect();
+    applyPos({ left: r.left, top: r.top });
+  });
 }
 
 function renderTime() {
@@ -279,7 +333,9 @@ function renderControls() {
   const canPause = m.phase === "running" || m.phase === "answer";
   startBtn.disabled = !canStart;
   pauseBtn.disabled = !canPause;
-  startBtn.textContent = m.phase === "paused" ? "Продолжить" : "Старт";
+  const startWord = m.phase === "paused" ? "Продолжить" : "Старт";
+  startBtn.title = startWord;
+  startBtn.setAttribute("aria-label", startWord);
 }
 
 // ---- toggle wiring ----------------------------------------------------------
@@ -289,7 +345,10 @@ function toggle() {
   overlay.hidden = !show;
   const btn = document.getElementById("timerToggle");
   if (btn) btn.setAttribute("aria-pressed", String(show));
-  if (show) ensureAudio(); // user gesture — get audio ready before first Start
+  if (show) {
+    applyPos(savedPos()); // restore the remembered spot (clamped, now measurable)
+    ensureAudio(); // user gesture — get audio ready before first Start
+  }
 }
 
 function init() {

@@ -32,6 +32,11 @@ let dk = null;
 // move, so a stray duplicate drop is ignored and dragend can tell an aborted
 // gesture (which must re-render to undo `dragover`'s DOM relocation) from a real one.
 let cardDragCommitted = false;
+// Board-level list drag: the dragged list's id + the same commit/abort guard.
+// A grouped list drags its whole group as one block (reorder INSIDE a group
+// lives in «Управление списками»).
+let listDragId = null;
+let listDragCommitted = false;
 
 // The header badge combines a transient per-action state (saving/error) with the
 // persistent sync state (offline / queued edits), the latter taking precedence.
@@ -563,6 +568,9 @@ function questionCountLabel(n) {
 
 function render() {
   kanban.hidden = false;
+  // The list "⋯" menu floats on <body>: a rebuild would strand it next to a
+  // stale anchor, so close it with the DOM it was opened for.
+  if (openListMenu) openListMenu.close();
   // Preserve scroll positions across the full rebuild below — otherwise a drag
   // (or any mutation that re-renders) snaps the board back to the top-left, which
   // is jarring mid-edit. Capture the horizontal board scroll + each list's
@@ -652,13 +660,22 @@ function renderList(list, precomputedNumbers) {
   cards.forEach((card, i) => body.append(renderCard(card, numbers[i])));
   col.append(body);
 
-  // list drag
+  // list drag — a grouped list picks up its whole group (all member columns
+  // move as one block); a standalone list moves alone.
   col.addEventListener("dragstart", (e) => {
     if (e.target !== col) return;
     e.dataTransfer.setData("text/xy-list", String(list.id));
-    col.classList.add("dragging");
+    listDragId = list.id;
+    listDragCommitted = false;
+    for (const n of listDragBlock()) n.classList.add("dragging");
   });
-  col.addEventListener("dragend", () => col.classList.remove("dragging"));
+  col.addEventListener("dragend", () => {
+    for (const n of kanban.querySelectorAll(".klist.dragging")) n.classList.remove("dragging");
+    listDragId = null;
+    // Aborted gesture: `dragover` may have relocated the block without a commit
+    // to back it — re-render from state so the DOM matches the source of truth.
+    if (!listDragCommitted) render();
+  });
 
   // card drop target
   body.addEventListener("dragover", (e) => {
@@ -797,19 +814,103 @@ function dragAfter(container, y) {
   return dragAfterIn([...container.querySelectorAll(".kcard:not(.dragging)")], y);
 }
 
+// ---- board-level list reorder (drag a column) ----
+// Orderable units are standalone lists and whole groups, same as the
+// «Управление списками» modal: the dragged block is every column of the
+// dragged list's unit, and an insertion point is only ever BETWEEN units —
+// snapToUnitStart keeps a drop from splitting somebody else's group.
+
+// dragAfterInX is dragAfterIn for a horizontal row of columns.
+function dragAfterInX(els, x) {
+  let closest = null, closestOffset = -Infinity;
+  for (const c of els) {
+    const box = c.getBoundingClientRect();
+    const offset = x - box.left - box.width / 2;
+    if (offset < 0 && offset > closestOffset) { closestOffset = offset; closest = c; }
+  }
+  return closest;
+}
+
+const listByIdNum = (id) => state.lists.find((l) => l.id === id);
+
+// listDragBlock returns the dragged unit's column nodes in DOM order.
+function listDragBlock() {
+  const dragged = listByIdNum(listDragId);
+  if (!dragged) return [];
+  const ids = new Set(
+    dragged.groupId == null
+      ? [String(dragged.id)]
+      : state.lists.filter((l) => l.groupId === dragged.groupId).map((l) => String(l.id)),
+  );
+  return [...kanban.querySelectorAll(".klist[data-list-id]")].filter((n) => ids.has(n.dataset.listId));
+}
+
+// snapToUnitStart walks a grouped target column back to the first column of its
+// group's run, so the block is inserted before the whole group, never inside it.
+function snapToUnitStart(col) {
+  if (!col) return null;
+  const gidOf = (n) => {
+    if (!n || !n.dataset || !n.dataset.listId || n.classList.contains("dragging")) return null;
+    const l = listByIdNum(Number(n.dataset.listId));
+    return l ? l.groupId : null;
+  };
+  const gid = gidOf(col);
+  if (gid == null) return col;
+  let first = col;
+  while (gidOf(first.previousElementSibling) === gid) first = first.previousElementSibling;
+  return first;
+}
+
+kanban.addEventListener("dragover", (e) => {
+  if (listDragId == null || !e.dataTransfer.types.includes("text/xy-list")) return;
+  e.preventDefault();
+  const block = listDragBlock();
+  if (!block.length) return;
+  const others = [...kanban.querySelectorAll(".klist[data-list-id]:not(.dragging)")];
+  const after = snapToUnitStart(dragAfterInX(others, e.clientX));
+  const anchor = after || kanban.querySelector(".klist-add");
+  for (const n of block) kanban.insertBefore(n, anchor);
+});
+
+kanban.addEventListener("drop", (e) => {
+  if (listDragId == null || !e.dataTransfer.types.includes("text/xy-list")) return;
+  e.preventDefault();
+  listDragCommitted = true;
+  // Fold the DOM column order into units and persist it via the same rank
+  // writer the lists-management modal uses.
+  const order = [...kanban.querySelectorAll(".klist[data-list-id]")]
+    .map((n) => listByIdNum(Number(n.dataset.listId))).filter(Boolean);
+  const units = [];
+  let i = 0;
+  while (i < order.length) {
+    const l = order[i];
+    if (l.groupId != null) {
+      const run = [];
+      while (i < order.length && order[i].groupId === l.groupId) { run.push(order[i]); i++; }
+      units.push({ kind: "group", id: l.groupId, key: "g" + l.groupId, lists: run });
+    } else {
+      units.push({ kind: "list", id: l.id, key: "l" + l.id, lists: [l] });
+      i++;
+    }
+  }
+  applyUnitOrder(units);
+});
+
 // ---- add list / card ----
 function renderAddList() {
   const wrap = el("div", { class: "klist klist-add" });
   const form = el("form", { class: "kadd-form" });
   const input = el("input", { class: "input", type: "text", placeholder: "+ Новый список" });
-  const typeRow = el("label", { class: "attach-lossless" },
-    el("input", { type: "checkbox", id: "newListTest" }), " тест-список");
+  const typeSel = el("select", { class: "input", "aria-label": "Тип списка" },
+    el("option", { value: "normal", text: "вопросы" }),
+    el("option", { value: "test", text: "тесты" }));
+  const typeRow = el("label", { class: "attach-lossless" }, "Тип:", typeSel);
   form.append(input, typeRow);
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const title = input.value.trim();
     if (!title) return;
-    const type = typeRow.querySelector("input").checked ? "test" : "normal";
+    const type = typeSel.value;
     const ranks = [...state.lists].sort(byRank);
     const rank = keyBetween(ranks.length ? ranks[ranks.length - 1].rank : null, null);
     try {
@@ -817,7 +918,7 @@ function renderAddList() {
       const res = await create("createList", `/api/boards/${boardId}/lists`, { title_enc: titleEnc, rank, type });
       state.lists.push({ id: res.id, type, rank, title });
       input.value = "";
-      typeRow.querySelector("input").checked = false;
+      typeSel.value = "normal";
       render();
     } catch (err) { setStatus("error"); }
   });
@@ -827,13 +928,20 @@ function renderAddList() {
 
 // ---- list menu (popup) ----
 
-// popupMenu mounts a small dropdown (dope .menu-dropdown styling) inside a
-// position:relative anchor, closing on outside click / Escape / item choice.
+// popupMenu mounts a small dropdown (dope .menu-dropdown styling) on <body>,
+// position:fixed next to the anchor and clamped to the viewport — an
+// absolutely-positioned menu inside the kanban scroll container got CLIPPED at
+// the work area's edge whenever it was wider than the space beside its list.
+// Closes on outside click / Escape / scroll / item choice.
 // Reused by the per-list "⋯" menu.
+let openListMenu = null; // { anchor, close } of the one open menu
 function popupMenu(anchor, items) {
-  const existing = anchor.querySelector(".menu-dropdown");
-  if (existing) { existing.remove(); return; } // toggle off
-  const menu = el("div", { class: "menu-dropdown", role: "menu" });
+  if (openListMenu) {
+    const sameAnchor = openListMenu.anchor === anchor;
+    openListMenu.close();
+    if (sameAnchor) return; // toggle off
+  }
+  const menu = el("div", { class: "menu-dropdown menu-fixed", role: "menu" });
   for (const it of items) {
     menu.append(el("button", {
       class: "menu-item", type: "button", role: "menuitem", text: it.label,
@@ -842,14 +950,29 @@ function popupMenu(anchor, items) {
   }
   function close() {
     menu.remove();
+    openListMenu = null;
     document.removeEventListener("pointerdown", onOutside, true);
     document.removeEventListener("keydown", onKey);
+    window.removeEventListener("scroll", close, true);
+    window.removeEventListener("resize", close);
   }
-  function onOutside(e) { if (!anchor.contains(e.target)) close(); }
+  function onOutside(e) { if (!menu.contains(e.target) && !anchor.contains(e.target)) close(); }
   function onKey(e) { if (e.key === "Escape") close(); }
-  anchor.append(menu);
+  document.body.append(menu);
+  // Right-align to the trigger, then clamp inside the viewport; below the
+  // trigger unless there is no room, then above.
+  const r = anchor.getBoundingClientRect();
+  const pad = 8;
+  const left = Math.max(pad, Math.min(r.right - menu.offsetWidth, window.innerWidth - menu.offsetWidth - pad));
+  let top = r.bottom + 4;
+  if (top + menu.offsetHeight > window.innerHeight - pad) top = Math.max(pad, r.top - menu.offsetHeight - 4);
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+  openListMenu = { anchor, close };
   document.addEventListener("pointerdown", onOutside, true);
   document.addEventListener("keydown", onKey);
+  window.addEventListener("scroll", close, true);
+  window.addEventListener("resize", close);
 }
 
 // ---- move / copy a whole list (within board → re-rank/duplicate; other board →
