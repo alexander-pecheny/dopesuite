@@ -231,6 +231,15 @@
 .klist-add .kadd-form { color: var(--muted); }
 .klist-add:hover .kadd-form { color: var(--text); }
 .kadd-form { width: 100%; }
+/* The Тип row under the new-list field: breathe away from the field, and the
+   select shrinks to the row's xs type scale instead of full .input chrome. */
+.kadd-form .attach-lossless { margin-top: var(--space-2); }
+.kadd-form select.input {
+  width: auto;
+  height: auto;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
 
 /* linked lists (list_of_lists) leave the board layout alone: each member just
    carries a small tag naming its group, right under the title (the negative
@@ -610,7 +619,8 @@
   min-height: 1em;
 }
 .timer-actions { display: flex; gap: var(--space-2); justify-content: center; }
-.timer-actions .btn { flex: 1; }
+.timer-actions .btn { flex: 1; display: flex; align-items: center; justify-content: center; }
+.timer-ico { width: 16px; height: 16px; display: block; }
 
 @media (max-width: 760px) {
   .timer-overlay { right: var(--space-2); bottom: var(--space-2); width: min(220px, calc(100vw - 2 * var(--space-2))); padding: var(--space-2); }
@@ -792,6 +802,9 @@ textarea.fld-input { min-height: 3em; }
    height in some engines, which cropped the preview to a fraction of the box. */
 .handouts-pdf { flex: 1; background: var(--field-bg); border-radius: var(--radius-md); min-height: 320px; position: relative; }
 .handouts-pdf-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: none; border-radius: var(--radius-md); }
+/* Safari-standalone/iOS fallback: no inline PDF there, offer a real navigation */
+.handouts-pdf-fallback { position: absolute; inset: 0; display: flex; flex-direction: column; gap: var(--space-3); align-items: center; justify-content: center; padding: var(--space-4); text-align: center; }
+.handouts-pdf-note { font-size: var(--text-xs); color: var(--muted); }
 
 @media (max-width: 760px) {
   .handouts-body { flex-direction: column; }

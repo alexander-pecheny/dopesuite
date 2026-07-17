@@ -219,6 +219,33 @@ function parseCustom(raw) {
 // ---- DOM --------------------------------------------------------------------
 let overlay, timeNode, labelNode, startBtn, pauseBtn, presetSel, customWrap, customInput;
 
+// Inline SVG button icons (Feather shapes, currentColor). Font glyphs were the
+// first take, but ↺ renders half the size of ▶/⏸ and varies per platform —
+// drawn paths keep the three buttons visually equal everywhere.
+const SVG_NS = "http://www.w3.org/2000/svg";
+function icon(...shapes) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "timer-ico");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  for (const [tag, attrs] of shapes) {
+    const n = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    svg.append(n);
+  }
+  return svg;
+}
+const stroked = (extra) => ({ fill: "none", stroke: "currentColor", "stroke-width": "2.5", "stroke-linecap": "round", "stroke-linejoin": "round", ...extra });
+const playIcon = () => icon(["polygon", { points: "7 4 20 12 7 20", fill: "currentColor" }]);
+const pauseIcon = () => icon(
+  ["rect", { x: "6", y: "4", width: "4", height: "16", rx: "1", fill: "currentColor" }],
+  ["rect", { x: "14", y: "4", width: "4", height: "16", rx: "1", fill: "currentColor" }],
+);
+const resetIcon = () => icon(
+  ["polyline", stroked({ points: "1.5 4 1.5 10 7.5 10" })],
+  ["path", stroked({ d: "M3.8 15a9 9 0 1 0 2.1-9.4L1.5 10" })],
+);
+
 function build() {
   presetSel = el("select", { class: "input timer-preset", "aria-label": "Режим таймера" });
   for (const [key, p] of Object.entries(PRESETS)) presetSel.append(el("option", { value: key, text: p.label }));
@@ -244,9 +271,9 @@ function build() {
 
   // Icons, not captions — three worded buttons overflowed the 240px box
   // («Продолжить» alone nearly filled it). The word lives in title/aria-label.
-  startBtn = el("button", { class: "btn btn-small", type: "button", text: "▶", title: "Старт", "aria-label": "Старт", onclick: start });
-  pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", text: "⏸", title: "Пауза", "aria-label": "Пауза", onclick: pause });
-  const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", text: "↺", title: "Сброс", "aria-label": "Сброс", onclick: reset });
+  startBtn = el("button", { class: "btn btn-small", type: "button", title: "Старт", "aria-label": "Старт", onclick: start }, playIcon());
+  pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Пауза", "aria-label": "Пауза", onclick: pause }, pauseIcon());
+  const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Сброс", "aria-label": "Сброс", onclick: reset }, resetIcon());
 
   overlay = el(
     "div",

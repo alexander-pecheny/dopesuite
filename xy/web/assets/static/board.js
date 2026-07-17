@@ -1783,6 +1783,26 @@ function openHandouts(list) {
   startHandoutHeartbeat();
 }
 
+// WebKit won't render a PDF inside an <iframe> in a standalone web app (macOS
+// Dock app / iOS home-screen PWA — the preview pane comes up blank), and on
+// iOS even the in-browser iframe shows at most a flat first page. No Safari
+// setting changes this; the working path there is a top-level navigation, so
+// those contexts get an «Открыть PDF» button instead of the inline preview.
+function pdfInlinePreviewBroken() {
+  const ua = navigator.userAgent;
+  const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const webkitOnly = /AppleWebKit/.test(ua) && !/Chrome|CriOS|EdgiOS|FxiOS|Android/.test(ua);
+  const standalone = navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+  return ios || (webkitOnly && standalone);
+}
+
+function pdfPreviewNode(url) {
+  if (!pdfInlinePreviewBroken()) return el("iframe", { class: "handouts-pdf-frame", src: url, title: "PDF" });
+  return el("div", { class: "handouts-pdf-fallback" },
+    el("div", { class: "handouts-pdf-note", text: "Safari не показывает PDF внутри приложения." }),
+    el("a", { class: "btn", href: url, target: "_blank", rel: "noopener", text: "Открыть PDF" }));
+}
+
 function clearHandoutsPdf() {
   const pane = document.getElementById("handoutsPdf");
   pane.replaceChildren();
@@ -1839,8 +1859,7 @@ async function generateHandoutsPdf() {
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const blob = await res.blob();
     handoutsPdfUrl = URL.createObjectURL(blob);
-    const embed = el("iframe", { class: "handouts-pdf-frame", src: handoutsPdfUrl, title: "PDF" });
-    document.getElementById("handoutsPdf").replaceChildren(embed);
+    document.getElementById("handoutsPdf").replaceChildren(pdfPreviewNode(handoutsPdfUrl));
     const dl = document.getElementById("handoutsDownload");
     dl.href = handoutsPdfUrl;
     dl.setAttribute("download", (handoutsCtx.title || handoutsCtx.list.title || "handouts") + ".pdf");
