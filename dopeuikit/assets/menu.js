@@ -41,11 +41,26 @@
     catch (_) { return "light"; }
   }
 
+  // Keep the PWA/browser-chrome colour (meta[name=theme-color], if the app
+  // injects one) matching the topbar (--structure), so an installed PWA's title
+  // bar tracks light/dark instead of showing a fixed colour. No-op where the
+  // meta is absent (e.g. dope) or the stylesheet hasn't resolved the var yet.
+  function syncThemeColor() {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return;
+    const c = getComputedStyle(root).getPropertyValue("--structure").trim();
+    if (c) meta.setAttribute("content", c);
+  }
+
   function apply() {
     root.dataset.theme = resolveTheme();
     root.dataset.contrast = contrast;
+    syncThemeColor();
   }
   apply(); // synchronous — runs during <head> parse, before the body paints
+  // The meta may be injected after this first apply() (the app's PWA boot runs
+  // later); re-sync once the DOM is ready so the initial colour is correct too.
+  document.addEventListener("DOMContentLoaded", syncThemeColor);
 
   // Re-apply when OS preference changes while "system" mode is active.
   try {

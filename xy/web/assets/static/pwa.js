@@ -17,7 +17,10 @@
   }
   try {
     injectHeadTag("link", { dedupe: ['link[rel="manifest"]'], props: { rel: "manifest", href: "/manifest.webmanifest" } });
-    injectHeadTag("meta", { dedupe: ['meta[name="theme-color"]'], props: { name: "theme-color", content: "#6427c0" } });
+    // Match the topbar (--structure) rather than a fixed brand colour; menu.js
+    // keeps this in sync when the theme flips (fallback = dark topbar).
+    const topbar = getComputedStyle(document.documentElement).getPropertyValue("--structure").trim() || "#262a31";
+    injectHeadTag("meta", { dedupe: ['meta[name="theme-color"]'], props: { name: "theme-color", content: topbar } });
     injectHeadTag("link", { dedupe: ['link[rel="icon"]'], props: { rel: "icon", type: "image/svg+xml", href: "/static/favicon.svg" } });
     injectHeadTag("meta", { dedupe: ['meta[name="apple-mobile-web-app-capable"]'], props: { name: "apple-mobile-web-app-capable", content: "yes" } });
     injectHeadTag("meta", { dedupe: ['meta[name="apple-mobile-web-app-status-bar-style"]'], props: { name: "apple-mobile-web-app-status-bar-style", content: "default" } });
