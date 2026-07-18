@@ -300,8 +300,39 @@ test("splitFields distinguishes absent vs present-empty fields", () => {
 });
 
 test("composeFields round-trips a structured question", () => {
-  const desc = "> Схема\n? Что на схеме?\n! круг\n^ книга\n@ Иванов";
+  const desc = "? Что на схеме?\n! круг\n^ книга\n@ Иванов";
   assert.equal(composeFields(splitFields(desc)), desc);
+});
+
+// The handout lives INSIDE the question as the chgksuite-style bracket — the
+// old standalone "> " block never reached the docx/PDF exporters.
+test("handout composes to the inline question bracket and round-trips", () => {
+  const desc = "? [Раздаточный материал:\nСхема\n]\nЧто на схеме?\n! круг";
+  const f = splitFields(desc);
+  assert.deepEqual(f.handout, { kind: "text", text: "Схема" });
+  assert.equal(f.question, "Что на схеме?");
+  assert.equal(composeFields(f), desc);
+});
+
+test("image handout uses the single-line inline bracket", () => {
+  const desc = "? [Раздаточный материал: (img map.png)]\nЧто тут?\n! х";
+  const f = splitFields(desc);
+  assert.deepEqual(f.handout, { kind: "image", name: "map.png" });
+  assert.equal(f.question, "Что тут?");
+  assert.equal(composeFields(f), desc);
+});
+
+test("legacy '> ' handout still parses and migrates to the inline form", () => {
+  const f = splitFields("> Схема\n? Что на схеме?\n! круг");
+  assert.deepEqual(f.handout, { kind: "text", text: "Схема" });
+  assert.equal(composeFields(f), "? [Раздаточный материал:\nСхема\n]\nЧто на схеме?\n! круг");
+});
+
+test("a mid-question handout bracket stays in the question text", () => {
+  const desc = "? Взгляните на [Раздаточный материал: АБВ] и ответьте.\n! х";
+  const f = splitFields(desc);
+  assert.equal(f.handout, null);
+  assert.equal(composeFields(f), desc);
 });
 
 test("composeFields keeps a bare marker for present-empty fields", () => {

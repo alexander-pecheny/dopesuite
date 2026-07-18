@@ -688,6 +688,33 @@ function parseHandoutBlock(text) {
   return { kind: "text", text: text || "" };
 }
 
+// extractInlineHandout pulls a LEADING "[Раздаточный материал: …]" bracket out
+// of question text → { handout, rest } or null. Only the leading position is
+// claimed by the Поля editor: a bracket in mid-question stays where the author
+// put it (extracting it would reorder the text on recompose).
+function extractInlineHandout(q) {
+  const t = q || "";
+  for (const [start, end, body] of bracketSpans(t)) {
+    if (start !== 0 || !isHandoutBody(body)) return null;
+    const idx = body.indexOf(":");
+    const text = (idx >= 0 ? body.slice(idx + 1) : body).trim();
+    const rest = t.slice(end).replace(/^\s+/, "");
+    const name = imgInText(text);
+    return { handout: name ? { kind: "image", name } : { kind: "text", text }, rest };
+  }
+  return null;
+}
+
+// composeInlineHandout renders the handout field as the inline question-text
+// bracket (single-line for an image, the text on its own lines otherwise).
+// "" for an empty handout: unlike the other fields there is no bare-marker
+// form, so present-but-empty does not survive a recompose.
+function composeInlineHandout(h) {
+  if (!h) return "";
+  if (h.kind === "image") return h.name ? `[Раздаточный материал: (img ${h.name})]` : "";
+  return h.text ? `[Раздаточный материал:\n${h.text}\n]` : "";
+}
+
 // sourcesFromBlock splits a "^" source block into individual source lines,
 // stripping any "- " list markers. An empty block yields [""] (present-empty).
 function sourcesFromBlock(text) {
@@ -713,8 +740,15 @@ function splitFields(desc) {
   let seenQuestion = false, sawAuthor = false;
   for (const b of blocks) {
     const t = b.type;
+    // "> " blocks are legacy (they never reached the exporters — see
+    // composeFields); still read so old cards surface their handout.
     if (t === "handout" && res.handout === null) { res.handout = parseHandoutBlock(b.text); continue; }
-    if ((t === "question" || t === "pre") && !seenQuestion) { res.question = b.text; seenQuestion = true; continue; }
+    if ((t === "question" || t === "pre") && !seenQuestion) {
+      let q = b.text;
+      const ih = res.handout === null ? extractInlineHandout(q) : null;
+      if (ih) { res.handout = ih.handout; q = ih.rest; }
+      res.question = q; seenQuestion = true; continue;
+    }
     if ((t === "answer" || t === "zachet" || t === "nezachet" || t === "comment") && res[t] === null) { res[t] = b.text; continue; }
     if (t === "source" && res.sources === null) { res.sources = sourcesFromBlock(b.text); continue; }
     if (t === "author") { sawAuthor = true; authorList.push(...authorsFromText(b.text)); continue; }
@@ -725,13 +759,6 @@ function splitFields(desc) {
   if (preLines.length) res.preMarkup = preLines.join("\n");
   if (extraLines.length) res.extra = extraLines.join("\n");
   return res;
-}
-
-// composeHandout renders a handout field back to its "> …" 4s block.
-function composeHandout(h) {
-  if (!h) return null;
-  if (h.kind === "image") return h.name ? `> (img ${h.name})` : ">";
-  return h.text ? `> ${h.text}` : ">";
 }
 
 // composeSources renders the source field: a single "^ x", or a "^" list of
@@ -751,8 +778,14 @@ function composeFields(f) {
   const out = [];
   const marker = (m, v) => out.push(v ? `${m} ${v}` : m);
   if (f.preMarkup && f.preMarkup.trim()) out.push(f.preMarkup.trim());
-  if (f.handout) out.push(composeHandout(f.handout));
-  if (f.question !== null && f.question !== undefined) marker("?", f.question);
+  // The handout rides INSIDE the question text as the chgksuite-style
+  // "[Раздаточный материал: …]" bracket. The old standalone "> " block sat
+  // before the "?" marker, where parse_4s reads it as a loose doc element that
+  // never reaches the exported Question — docx/PDF silently dropped it.
+  const inline = composeInlineHandout(f.handout);
+  if (inline || (f.question !== null && f.question !== undefined)) {
+    marker("?", [inline, f.question || ""].filter((s) => s !== "").join("\n"));
+  }
   if (f.answer !== null && f.answer !== undefined) marker("!", f.answer);
   if (f.zachet !== null && f.zachet !== undefined) marker("=", f.zachet);
   if (f.nezachet !== null && f.nezachet !== undefined) marker("!=", f.nezachet);
@@ -780,10 +813,10 @@ function postprocessHandout(s) {
   return (s || "").replace(/\\_/g, "_");
 }
 
-// handoutForCard extracts a question card's handout: the "> …" block (preferred,
-// xy-native) or a legacy inline "[Раздаточный материал: …]" bracket in the
-// question (chgksuite-native, what 4s2hndt scans). Returns {kind:'image',name} |
-// {kind:'text',text} | null.
+// handoutForCard extracts a question card's handout: the inline
+// "[Раздаточный материал: …]" bracket in the question (chgksuite-native, what
+// 4s2hndt scans, and what the Поля editor composes) or a legacy standalone
+// "> …" block. Returns {kind:'image',name} | {kind:'text',text} | null.
 function handoutForCard(desc) {
   const blocks = parseBlocks(desc);
   const h = blocks.find((b) => b.type === "handout");
@@ -974,7 +1007,7 @@ export const xyChgk = {
   removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,
-  splitFields, composeFields, parseHandoutBlock, composeHandout,
+  splitFields, composeFields, parseHandoutBlock,
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
   parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText,
 };
