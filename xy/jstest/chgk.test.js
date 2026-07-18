@@ -328,6 +328,14 @@ test("legacy '> ' handout still parses and migrates to the inline form", () => {
   assert.equal(composeFields(f), "? [Раздаточный материал:\nСхема\n]\nЧто на схеме?\n! круг");
 });
 
+test("the handout lands after a leading host note, and extracts from there", () => {
+  const desc = "? [Ведущему: не торопитесь]\n[Раздаточный материал:\nАБВ\n]\nЧто это?\n! х";
+  const f = splitFields(desc);
+  assert.deepEqual(f.handout, { kind: "text", text: "АБВ" });
+  assert.equal(f.question, "[Ведущему: не торопитесь]\nЧто это?");
+  assert.equal(composeFields(f), desc);
+});
+
 test("a mid-question handout bracket stays in the question text", () => {
   const desc = "? Взгляните на [Раздаточный материал: АБВ] и ответьте.\n! х";
   const f = splitFields(desc);

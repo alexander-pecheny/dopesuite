@@ -689,20 +689,41 @@ function parseHandoutBlock(text) {
 }
 
 // extractInlineHandout pulls a LEADING "[Раздаточный материал: …]" bracket out
-// of question text → { handout, rest } or null. Only the leading position is
-// claimed by the Поля editor: a bracket in mid-question stays where the author
+// of question text → { handout, rest } or null. "Leading" means only host-note
+// brackets ([Ведущему: …] reading instructions) may precede it — those stay in
+// the question text. A bracket after real question text stays where the author
 // put it (extracting it would reorder the text on recompose).
 function extractInlineHandout(q) {
   const t = q || "";
+  let cursor = 0; // end of the leading bracket run scanned so far
   for (const [start, end, body] of bracketSpans(t)) {
-    if (start !== 0 || !isHandoutBody(body)) return null;
+    if (t.slice(cursor, start).trim() !== "") return null; // real text reached
+    if (!isHandoutBody(body)) { cursor = end; continue; } // host note — skip past
     const idx = body.indexOf(":");
     const text = (idx >= 0 ? body.slice(idx + 1) : body).trim();
-    const rest = t.slice(end).replace(/^\s+/, "");
+    const before = t.slice(0, start).replace(/\s+$/, "");
+    const after = t.slice(end).replace(/^\s+/, "");
+    const rest = [before, after].filter((s) => s !== "").join("\n");
     const name = imgInText(text);
     return { handout: name ? { kind: "image", name } : { kind: "text", text }, rest };
   }
   return null;
+}
+
+// insertInlineHandout is the compose-side mirror: the handout bracket lands
+// after any leading host-note brackets but before the question text itself
+// (the host reads their instruction first, then presents the handout).
+function insertInlineHandout(q, inline) {
+  const t = q || "";
+  if (!inline) return t;
+  let cut = 0; // insertion point: after the leading host-note run
+  for (const [start, end, body] of bracketSpans(t)) {
+    if (t.slice(cut, start).trim() !== "" || isHandoutBody(body)) break;
+    cut = end;
+  }
+  const head = t.slice(0, cut).replace(/\s+$/, "");
+  const tail = t.slice(cut).replace(/^\s+/, "");
+  return [head, inline, tail].filter((s) => s !== "").join("\n");
 }
 
 // composeInlineHandout renders the handout field as the inline question-text
@@ -784,7 +805,7 @@ function composeFields(f) {
   // never reaches the exported Question — docx/PDF silently dropped it.
   const inline = composeInlineHandout(f.handout);
   if (inline || (f.question !== null && f.question !== undefined)) {
-    marker("?", [inline, f.question || ""].filter((s) => s !== "").join("\n"));
+    marker("?", insertInlineHandout(f.question, inline));
   }
   if (f.answer !== null && f.answer !== undefined) marker("!", f.answer);
   if (f.zachet !== null && f.zachet !== undefined) marker("=", f.zachet);
