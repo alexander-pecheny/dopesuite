@@ -688,33 +688,55 @@ function parseHandoutBlock(text) {
   return { kind: "text", text: text || "" };
 }
 
-// extractInlineHandout pulls a LEADING "[Раздаточный материал: …]" bracket out
-// of question text → { handout, rest } or null. "Leading" means only host-note
-// brackets ([Ведущему: …] reading instructions) may precede it — those stay in
-// the question text. A bracket after real question text stays where the author
-// put it (extracting it would reorder the text on recompose).
+// handoutBracketContent: the text after the "Раздат…" label's colon, "" for a
+// label-only bracket — which is the position ANCHOR the pair of functions
+// below uses to keep a mid-question handout in its place.
+function handoutBracketContent(body) {
+  const idx = body.indexOf(":");
+  return idx >= 0 ? body.slice(idx + 1).trim() : "";
+}
+
+const HANDOUT_ANCHOR = "[Раздаточный материал]";
+
+// extractInlineHandout pulls the first "[Раздаточный материал: …]" bracket out
+// of question text → { handout, rest } or null. A LEADING bracket (only
+// host-note brackets like [Ведущему: …] may precede it — those stay in the
+// text) is removed outright; a mid-question bracket is replaced by the bare
+// [Раздаточный материал] anchor, so the spot survives question edits and the
+// compose side can put the handout back exactly where the author had it.
 function extractInlineHandout(q) {
   const t = q || "";
-  let cursor = 0; // end of the leading bracket run scanned so far
+  let cursor = 0, leading = true;
   for (const [start, end, body] of bracketSpans(t)) {
-    if (t.slice(cursor, start).trim() !== "") return null; // real text reached
-    if (!isHandoutBody(body)) { cursor = end; continue; } // host note — skip past
-    const idx = body.indexOf(":");
-    const text = (idx >= 0 ? body.slice(idx + 1) : body).trim();
-    const before = t.slice(0, start).replace(/\s+$/, "");
-    const after = t.slice(end).replace(/^\s+/, "");
-    const rest = [before, after].filter((s) => s !== "").join("\n");
+    if (t.slice(cursor, start).trim() !== "") leading = false;
+    if (!isHandoutBody(body)) { cursor = end; continue; }
+    const text = handoutBracketContent(body);
     const name = imgInText(text);
-    return { handout: name ? { kind: "image", name } : { kind: "text", text }, rest };
+    const handout = name ? { kind: "image", name } : { kind: "text", text };
+    let rest;
+    if (leading) {
+      const before = t.slice(0, start).replace(/\s+$/, "");
+      const after = t.slice(end).replace(/^\s+/, "");
+      rest = [before, after].filter((s) => s !== "").join("\n");
+    } else {
+      rest = t.slice(0, start) + HANDOUT_ANCHOR + t.slice(end);
+    }
+    return { handout, rest };
   }
   return null;
 }
 
-// insertInlineHandout is the compose-side mirror: the handout bracket lands
-// after any leading host-note brackets but before the question text itself
-// (the host reads their instruction first, then presents the handout).
+// insertInlineHandout is the compose-side mirror: an anchor in the question
+// marks the handout's home and is swapped for the real bracket (or tidied away
+// when the field was removed); with no anchor the bracket lands after any
+// leading host-note brackets, before the question text itself.
 function insertInlineHandout(q, inline) {
   const t = q || "";
+  for (const [start, end, body] of bracketSpans(t)) {
+    if (!isHandoutBody(body) || handoutBracketContent(body) !== "") continue;
+    if (inline) return t.slice(0, start) + inline + t.slice(end);
+    return (t.slice(0, start).replace(/[ \t]+$/, "") + t.slice(end)).replace(/^\s+/, "");
+  }
   if (!inline) return t;
   let cut = 0; // insertion point: after the leading host-note run
   for (const [start, end, body] of bracketSpans(t)) {
@@ -727,13 +749,17 @@ function insertInlineHandout(q, inline) {
 }
 
 // composeInlineHandout renders the handout field as the inline question-text
-// bracket (single-line for an image, the text on its own lines otherwise).
-// "" for an empty handout: unlike the other fields there is no bare-marker
-// form, so present-but-empty does not survive a recompose.
+// bracket: single-line for an image or one line of text (so a human's
+// mid-sentence bracket round-trips verbatim), the block form for multi-line
+// text. "" for an empty handout: unlike the other fields there is no
+// bare-marker form, so present-but-empty does not survive a recompose.
 function composeInlineHandout(h) {
   if (!h) return "";
   if (h.kind === "image") return h.name ? `[Раздаточный материал: (img ${h.name})]` : "";
-  return h.text ? `[Раздаточный материал:\n${h.text}\n]` : "";
+  if (!h.text) return "";
+  return h.text.includes("\n")
+    ? `[Раздаточный материал:\n${h.text}\n]`
+    : `[Раздаточный материал: ${h.text}]`;
 }
 
 // sourcesFromBlock splits a "^" source block into individual source lines,

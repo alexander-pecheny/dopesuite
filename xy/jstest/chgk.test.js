@@ -306,41 +306,58 @@ test("composeFields round-trips a structured question", () => {
 
 // The handout lives INSIDE the question as the chgksuite-style bracket — the
 // old standalone "> " block never reached the docx/PDF exporters.
-test("handout composes to the inline question bracket and round-trips", () => {
-  const desc = "? [Раздаточный материал:\nСхема\n]\nЧто на схеме?\n! круг";
+test("multi-line handout composes to the block bracket and round-trips", () => {
+  const desc = "? [Раздаточный материал:\nСхема:\nкруг\n]\nЧто на схеме?\n! круг";
   const f = splitFields(desc);
-  assert.deepEqual(f.handout, { kind: "text", text: "Схема" });
+  assert.deepEqual(f.handout, { kind: "text", text: "Схема:\nкруг" });
   assert.equal(f.question, "Что на схеме?");
   assert.equal(composeFields(f), desc);
 });
 
-test("image handout uses the single-line inline bracket", () => {
-  const desc = "? [Раздаточный материал: (img map.png)]\nЧто тут?\n! х";
-  const f = splitFields(desc);
-  assert.deepEqual(f.handout, { kind: "image", name: "map.png" });
-  assert.equal(f.question, "Что тут?");
-  assert.equal(composeFields(f), desc);
+test("one-line text and image handouts use the single-line bracket", () => {
+  for (const [desc, handout] of [
+    ["? [Раздаточный материал: (img map.png)]\nЧто тут?\n! х", { kind: "image", name: "map.png" }],
+    ["? [Раздаточный материал: АБВ]\nЧто тут?\n! х", { kind: "text", text: "АБВ" }],
+  ]) {
+    const f = splitFields(desc);
+    assert.deepEqual(f.handout, handout);
+    assert.equal(f.question, "Что тут?");
+    assert.equal(composeFields(f), desc);
+  }
 });
 
 test("legacy '> ' handout still parses and migrates to the inline form", () => {
   const f = splitFields("> Схема\n? Что на схеме?\n! круг");
   assert.deepEqual(f.handout, { kind: "text", text: "Схема" });
-  assert.equal(composeFields(f), "? [Раздаточный материал:\nСхема\n]\nЧто на схеме?\n! круг");
+  assert.equal(composeFields(f), "? [Раздаточный материал: Схема]\nЧто на схеме?\n! круг");
 });
 
 test("the handout lands after a leading host note, and extracts from there", () => {
-  const desc = "? [Ведущему: не торопитесь]\n[Раздаточный материал:\nАБВ\n]\nЧто это?\n! х";
+  const desc = "? [Ведущему: не торопитесь]\n[Раздаточный материал: АБВ]\nЧто это?\n! х";
   const f = splitFields(desc);
   assert.deepEqual(f.handout, { kind: "text", text: "АБВ" });
   assert.equal(f.question, "[Ведущему: не торопитесь]\nЧто это?");
   assert.equal(composeFields(f), desc);
 });
 
-test("a mid-question handout bracket stays in the question text", () => {
+test("a mid-question handout extracts, anchors, and returns to its spot", () => {
   const desc = "? Взгляните на [Раздаточный материал: АБВ] и ответьте.\n! х";
   const f = splitFields(desc);
-  assert.equal(f.handout, null);
-  assert.equal(composeFields(f), desc);
+  assert.deepEqual(f.handout, { kind: "text", text: "АБВ" });
+  assert.equal(f.question, "Взгляните на [Раздаточный материал] и ответьте.");
+  assert.equal(composeFields(f), desc); // verbatim, bracket back mid-sentence
+});
+
+test("editing an anchored handout keeps its position", () => {
+  const f = splitFields("? Взгляните на [Раздаточный материал: АБВ] и ответьте.\n! х");
+  f.handout = { kind: "text", text: "ГДЕ" };
+  assert.equal(composeFields(f), "? Взгляните на [Раздаточный материал: ГДЕ] и ответьте.\n! х");
+});
+
+test("removing the handout field tidies the anchor away", () => {
+  const f = splitFields("? Взгляните на [Раздаточный материал: АБВ] и ответьте.\n! х");
+  f.handout = null;
+  assert.equal(composeFields(f), "? Взгляните на и ответьте.\n! х");
 });
 
 test("composeFields keeps a bare marker for present-empty fields", () => {
