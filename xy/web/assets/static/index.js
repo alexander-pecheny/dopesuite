@@ -109,6 +109,7 @@ async function migrateName(id, name) {
 }
 
 // ---- create board ----
+xyApp.swapPlusIcon(document.getElementById("newBoardBtn")); // emoji ➕ → SVG plus
 document.getElementById("newBoardBtn").addEventListener("click", () => {
   createMessage.textContent = "";
   createForm.reset();

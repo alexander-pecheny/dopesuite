@@ -132,9 +132,36 @@ function applySizes(s, root = document.documentElement) {
   root.style.setProperty("--kcard-font", s.cardFont + "px");
 }
 
+// plusIcon draws the "+" the UI used to spell with the ➕ emoji: an inline SVG
+// stroked in currentColor, so it follows the button's text color — the emoji
+// glyph is dark on every platform and all but disappears on the dark theme.
+function plusIcon() {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "plus-ico");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const p = document.createElementNS(NS, "path");
+  p.setAttribute("d", "M12 5v14M5 12h14");
+  p.setAttribute("fill", "none");
+  p.setAttribute("stroke", "currentColor");
+  p.setAttribute("stroke-width", "2.5");
+  p.setAttribute("stroke-linecap", "round");
+  svg.append(p);
+  return svg;
+}
+
+// swapPlusIcon replaces a compiled page button's leading ➕ with plusIcon().
+// The .dopeui vocabulary has no svg primitive, so the pages ship the emoji as
+// authored and each page's script swaps it at boot.
+function swapPlusIcon(btn) {
+  const rest = btn.textContent.replace(/^➕\s*/, "");
+  btn.replaceChildren(plusIcon(), ...(rest ? [" " + rest] : []));
+}
+
 export const xySizes = { DEFAULT: SIZES_DEFAULT, ...SIZES_RANGE, sanitize: sanitizeSizes, apply: applySizes };
 
-export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin };
+export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin, plusIcon, swapPlusIcon };
 if (typeof window !== "undefined") {
   window.xyApp = xyApp;
   window.xySizes = xySizes;

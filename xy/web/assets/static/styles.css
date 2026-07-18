@@ -184,6 +184,9 @@
   cursor: var(--cursor-action);
 }
 .kadd:hover { color: var(--text); }
+/* the SVG "+" (app.js plusIcon) sizes with the surrounding text and inherits
+   its color via currentColor — the reason it replaced the always-dark ➕ emoji */
+.plus-ico { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; }
 .kcards { display: flex; flex-direction: column; gap: var(--space-2); overflow-y: auto; min-height: var(--space-6); padding: var(--space-1); }
 .kcard {
   position: relative; /* anchors .kcard-unread */
@@ -232,11 +235,14 @@
 .klist-add:hover .kadd-form { color: var(--text); }
 .kadd-form { width: 100%; }
 /* The Тип row under the new-list field: breathe away from the field, and the
-   select shrinks to the row's xs type scale instead of full .input chrome. */
+   select shrinks to the row's xs type scale instead of full .input chrome.
+   min-height too — .input's --control-h floor is what kept the select
+   full-size in Firefox/Chromium (Safari's native select ignores it). */
 .kadd-form .attach-lossless { margin-top: var(--space-2); }
 .kadd-form select.input {
   width: auto;
   height: auto;
+  min-height: 0;
   padding: var(--space-1) var(--space-2);
   font-size: var(--text-xs);
 }

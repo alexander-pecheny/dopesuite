@@ -7,7 +7,7 @@ import { xyChgk } from "./chgk.js";
 import { xyDiff } from "./diff.js";
 import { xySync } from "./sync.js";
 
-const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle } = xyApp;
+const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, plusIcon, swapPlusIcon } = xyApp;
 const { keyBetween } = xyRank;
 
 // Mutation wrappers — every board mutation flows through the sync engine, which
@@ -608,10 +608,14 @@ function render() {
 function renderList(list, precomputedNumbers) {
   const col = el("div", { class: "klist", draggable: "true", dataset: { listId: list.id } });
   const menuWrap = el("div", { class: "klist-menu-wrap" });
+  // Adding a card is the most-used list action (issue #4): a dedicated "+"
+  // beside the ⋯ menu saves the menu round-trip. The menu item stays too.
+  const addCardBtn = el("button", { class: "kadd", title: "Добавить карточку", "aria-label": "Добавить карточку" }, plusIcon());
+  addCardBtn.addEventListener("click", () => addCard(list));
   const menuBtn = el("button", { class: "kadd", title: "Меню списка", text: "⋯", "aria-haspopup": "true" });
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const items = [{ label: "➕ Добавить карточку", onClick: () => addCard(list) }];
+    const items = [{ icon: plusIcon(), label: "Добавить карточку", onClick: () => addCard(list) }];
     if (list.type === "test") items.push({ label: "👥 Копировать список тестеров", onClick: () => copyTesterList(list) });
     if (list.groupId != null) {
       items.push(
@@ -648,7 +652,7 @@ function renderList(list, precomputedNumbers) {
     el("span", { class: "klist-title", text: titleText }));
   const qCount = list.type === "test" ? 0 : cards.filter((c) => c.kind === "question").length;
   if (qCount) headMain.append(el("span", { class: "klist-count", text: questionCountLabel(qCount) }));
-  col.append(el("div", { class: "klist-head" }, headMain, menuWrap));
+  col.append(el("div", { class: "klist-head" }, headMain, addCardBtn, menuWrap));
   if (list.groupId != null) {
     const g = groupById(list.groupId);
     col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт", text: "🔗" + ((g && g.name) || "связанные списки") }));
@@ -722,13 +726,42 @@ async function deleteList(list) {
   if (!confirm(`Удалить список «${list.title || "без названия"}»${tail}? Это действие необратимо.`)) return;
   setStatus("saving");
   try {
+    const removed = cardsOf(list.id);
     await del("deleteList", `/api/lists/${list.id}`);
     state.lists = state.lists.filter((l) => l.id !== list.id);
     state.cards = state.cards.filter((c) => c.listId !== list.id);
     if (openCardId != null && !state.cards.some((c) => c.id === openCardId)) closeCard();
+    await cleanupTestLabels(removed);
     setStatus("saved");
     render();
   } catch (err) { setStatus("error"); alert("Не удалось удалить: " + err.message); }
+}
+
+// cleanupTestLabels runs after cards are deleted: the auto-created green/red
+// "взяли / не взяли" labels of a deleted test session are deleted with it,
+// unless some remaining card is still marked by them (issue #13 — a board
+// otherwise accretes a label pair per deleted session forever). Only the
+// test_taken/test_missed kinds are touched: a hand-made label assigned to a
+// test card may well be in use elsewhere by design.
+async function cleanupTestLabels(deletedCards) {
+  const candidates = new Set();
+  for (const c of deletedCards) {
+    const ids = state.cardLabels[c.id] || [];
+    if (c.kind === "test") {
+      for (const lid of ids) {
+        const l = labelById(lid);
+        if (l && (l.kind === "test_taken" || l.kind === "test_missed")) candidates.add(lid);
+      }
+    }
+    delete state.cardLabels[c.id]; // drop the dead card's row before the usage scan
+  }
+  for (const lid of candidates) {
+    if (state.cards.some((c) => (state.cardLabels[c.id] || []).includes(lid))) continue;
+    try {
+      await del("deleteLabel", `/api/labels/${lid}`);
+      state.labels = state.labels.filter((l) => l.id !== lid);
+    } catch (_) { /* leave the label; it can be removed by hand */ }
+  }
 }
 
 // Cards carry the card's *whole* text (whitespace collapsed), not a truncated
@@ -943,10 +976,12 @@ function popupMenu(anchor, items) {
   }
   const menu = el("div", { class: "menu-dropdown menu-fixed", role: "menu" });
   for (const it of items) {
+    // Most items carry their icon inside the label string (emoji); an SVG icon
+    // comes as it.icon and takes the emoji's slot before the text.
     menu.append(el("button", {
-      class: "menu-item", type: "button", role: "menuitem", text: it.label,
+      class: "menu-item", type: "button", role: "menuitem",
       onclick: () => { close(); it.onClick(); },
-    }));
+    }, it.icon ? [it.icon, " "] : [], it.label));
   }
   function close() {
     menu.remove();
@@ -2796,12 +2831,17 @@ function buildField(label, kind, initial, opts = {}) {
   if (kind === "area") autoGrow(input);
   let present = initial !== null && initial !== undefined;
   if (present) input.value = initial;
+  // opts.open pre-expands an absent field (new cards open Текст вопроса/Ответ
+  // ready to type). Left untouched it still reads as absent, so an unedited
+  // stub composes to the same (empty) draft as before.
+  const autoOpened = !present && !!opts.open;
+  if (autoOpened) present = true;
   const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; if (present && kind === "area") fitTextarea(input); };
   addBtn.addEventListener("click", () => { present = true; sync(); input.focus(); });
   rmBtn.addEventListener("click", () => { present = false; sync(); });
   wrap.append(addBtn, head, body);
   sync();
-  return { node: wrap, read: () => (present ? input.value : null) };
+  return { node: wrap, read: () => (present ? (autoOpened && input.value === "" ? null : input.value) : null) };
 }
 
 // buildHandoutField: the "Раздаточный материал" field with a текст/картинка
@@ -2906,23 +2946,33 @@ function buildAuthorsField(initial, suggestions) {
   rmBtn.addEventListener("click", () => { present = false; sync(); });
   wrap.append(addBtn, head, body);
   sync();
-  return { node: wrap, read: () => { commit(); return present ? tagSet.slice() : null; } };
+  // read() runs on EVERY input event (refreshSaveState → captureDraft), so it
+  // must not commit() — that turned each typed letter into its own author tag.
+  // Include the in-progress text without touching the input; actual commits
+  // happen on Enter/comma/blur/suggestion-pick.
+  return { node: wrap, read: () => {
+    if (!present) return null;
+    const v = inp.value.trim();
+    return v ? [...tagSet, v] : tagSet.slice();
+  } };
 }
 
 // renderCardFields rebuilds the Поля editor from the current draft (and handout
 // settings). The last field (handout-gen markup) binds to cardDraftMeta, not the 4s.
 function renderCardFields() {
   const f = xyChgk.splitFields(cardDraft);
-  // A brand-new card pre-fills the user's default author (a /profile setting).
-  if (pendingList && !cardDraft.trim() && f.authors == null && state.defaultAuthor) f.authors = [state.defaultAuthor];
+  // A brand-new card pre-fills the user's default author (a /profile setting)
+  // and opens the two fields every question has, ready to type into.
+  const fresh = pendingList && !cardDraft.trim();
+  if (fresh && f.authors == null && state.defaultAuthor) f.authors = [state.defaultAuthor];
   cardFieldsPre = f.preMarkup;
   cardFieldsExtra = f.extra;
   const box = document.getElementById("cardFields");
   box.replaceChildren();
   const R = {};
   R.handout = buildHandoutField(f.handout);
-  R.question = buildField("Текст вопроса", "area", f.question);
-  R.answer = buildField("Ответ", "area", f.answer);
+  R.question = buildField("Текст вопроса", "area", f.question, { open: fresh });
+  R.answer = buildField("Ответ", "area", f.answer, { open: fresh });
   R.zachet = buildField("Зачёт", "input", f.zachet);
   R.nezachet = buildField("Незачёт", "input", f.nezachet);
   R.comment = buildField("Комментарий", "area", f.comment);
@@ -3719,6 +3769,7 @@ document.getElementById("cardDelete").addEventListener("click", async () => {
   try {
     await del("deleteCard", `/api/cards/${card.id}`);
     state.cards = state.cards.filter((c) => c.id !== card.id);
+    await cleanupTestLabels([card]);
     cardOverlay.hidden = true;
     render();
   } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
@@ -3790,6 +3841,10 @@ function closeLabelAddPopup() {
 // move, so its submit listener below keeps working.
 const newLabelForm = document.getElementById("newLabelForm");
 newLabelForm.remove();
+
+// The compiled pages spell "+" as the ➕ emoji; swap it for the SVG plus.
+swapPlusIcon(document.getElementById("labelAddBtn"));
+swapPlusIcon(newLabelForm.querySelector('button[type="submit"]'));
 
 // openLabelAddPopup mounts a custom dropdown under the "➕ Добавить метку" button:
 // a filter field above a scrollable list of the unassigned labels, sorted by last
