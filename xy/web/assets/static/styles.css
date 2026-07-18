@@ -710,8 +710,22 @@
 .card-preview-body .pv-q { margin-bottom: 0; }
 
 /* ── structured fields (Поля) ─────────────────────────────────────────────── */
-.card-fields { display: flex; flex-direction: column; gap: var(--space-2); }
+/* Density (user request): absent fields are pills that FLOW TOGETHER on shared
+   wrap rows, and a present field spans the full row with its label BESIDE the
+   control, not above it — the stacked label/input made any filled card scroll. */
+.card-fields { display: flex; flex-flow: row wrap; gap: var(--space-2); }
 .fld { display: flex; flex-direction: column; }
+.fld-wide, .fld-present { flex: 1 1 100%; }
+.fld-present {
+  display: grid;
+  grid-template-columns: 9em 1fr;
+  column-gap: var(--space-2);
+  align-items: start;
+}
+/* label column: × next to the label (not flushed to the far edge of the card),
+   label dropped onto the input's first text line */
+.fld-present > .fld-head { justify-content: flex-start; padding-top: 6px; }
+.fld-present > .fld-body { margin-top: 0; }
 /* the dashed ring is this button's whole identity ("add a field") — --grid-dark,
    not the transparent --border */
 .fld-add {
@@ -738,7 +752,23 @@
 .fld-rm:hover, .fld-row-rm:hover, .fld-tag-rm:hover { color: var(--red); }
 .fld-body { margin-top: var(--space-1); }
 .fld-input { width: 100%; }
-textarea.fld-input { min-height: 3em; }
+/* rows=1 + no floor: a one-line answer takes one line; autoGrow adds the rest */
+textarea.fld-input { min-height: 0; padding-block: var(--space-2); }
+/* desktop: shave the 38px control floor inside Поля — it reads airy repeated
+   over nine fields; phones keep the full touch target */
+@media (min-width: 761px) {
+  .card-fields .input { min-height: 32px; padding-block: 5px; }
+  .card-fields select.input { height: 32px; }
+}
+/* phones have no width to spare for a label column — stack label above input
+   again (this block must FOLLOW the .fld-present grid rules to win the tie) */
+@media (max-width: 760px) {
+  /* align-items too: the grid rule's `start` would shrink the stacked children
+     to content width */
+  .fld-present { display: flex; flex-direction: column; align-items: stretch; }
+  .fld-present > .fld-head { justify-content: space-between; padding-top: 0; }
+  .fld-present > .fld-body { margin-top: var(--space-1); }
+}
 .fld-rows { display: flex; flex-direction: column; gap: var(--space-1); }
 .fld-row { display: flex; align-items: center; gap: var(--space-1); }
 .fld-row-input { flex: 1; }

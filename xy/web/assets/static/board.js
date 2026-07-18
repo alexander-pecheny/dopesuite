@@ -2779,6 +2779,9 @@ function setCardView(view) {
   document.getElementById("cardViewFields").hidden = view !== "fields";
   document.getElementById("cardViewText").hidden = view !== "text";
   for (const t of CARD_TABS) tabBtn(t).classList.toggle("active", t === view);
+  // The raw tab shows 4s for questions but a plaintext tester list for test
+  // cards — «Формат 4s» would be a lie there, so it falls back to «Текст».
+  tabBtn("text").textContent = test ? "Текст" : "Формат 4s";
   tabBtn("fields").hidden = !fieldsAvailable() && !test;
   tabBtn("preview").hidden = !!pendingList || test;
   document.getElementById("cardViewTabs").hidden = false;
@@ -2825,7 +2828,7 @@ function buildField(label, kind, initial, opts = {}) {
   const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
   const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: label }), rmBtn);
   const input = kind === "area"
-    ? el("textarea", { class: "card-desc fld-input", spellcheck: "false" })
+    ? el("textarea", { class: "card-desc fld-input", spellcheck: "false", rows: "1" })
     : el("input", { class: "input fld-input", type: "text" });
   const body = el("div", { class: "fld-body" }, input);
   if (kind === "area") autoGrow(input);
@@ -2836,7 +2839,7 @@ function buildField(label, kind, initial, opts = {}) {
   // stub composes to the same (empty) draft as before.
   const autoOpened = !present && !!opts.open;
   if (autoOpened) present = true;
-  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; if (present && kind === "area") fitTextarea(input); };
+  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; wrap.classList.toggle("fld-present", present); if (present && kind === "area") fitTextarea(input); };
   addBtn.addEventListener("click", () => { present = true; sync(); input.focus(); });
   rmBtn.addEventListener("click", () => { present = false; sync(); });
   wrap.append(addBtn, head, body);
@@ -2854,7 +2857,7 @@ function buildHandoutField(initial) {
   const modeText = el("button", { class: "seg-btn", type: "button", text: "текст" });
   const modeImg = el("button", { class: "seg-btn", type: "button", text: "картинка" });
   const toggle = el("div", { class: "seg" }, modeText, modeImg);
-  const ta = el("textarea", { class: "card-desc fld-input", spellcheck: "false" });
+  const ta = el("textarea", { class: "card-desc fld-input", spellcheck: "false", rows: "1" });
   autoGrow(ta);
   const sel = el("select", { class: "input fld-input" });
   for (const n of cardImageNames) sel.append(el("option", { value: n, text: n }));
@@ -2875,7 +2878,7 @@ function buildHandoutField(initial) {
   modeText.addEventListener("click", () => { mode = "text"; syncMode(); });
   modeImg.addEventListener("click", () => { mode = "image"; syncMode(); });
   let present = !!initial;
-  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; if (present && mode === "text") fitTextarea(ta); };
+  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; wrap.classList.toggle("fld-present", present); if (present && mode === "text") fitTextarea(ta); };
   addBtn.addEventListener("click", () => { present = true; sync(); });
   rmBtn.addEventListener("click", () => { present = false; sync(); });
   wrap.append(addBtn, head, body);
@@ -2907,7 +2910,7 @@ function buildSourcesField(initial, suggestions) {
   const body = el("div", { class: "fld-body" }, rows, rowAdd);
   let present = initial !== null && initial !== undefined;
   (present ? (initial.length ? initial : [""]) : []).forEach((s) => addRow(s));
-  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; };
+  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; wrap.classList.toggle("fld-present", present); };
   addBtn.addEventListener("click", () => { present = true; if (!rows.children.length) addRow(""); sync(); });
   rmBtn.addEventListener("click", () => { present = false; sync(); });
   wrap.append(addBtn, head, body);
@@ -2941,7 +2944,7 @@ function buildAuthorsField(initial, suggestions) {
   let present = initial !== null && initial !== undefined;
   if (present) initial.forEach((t) => tagSet.push(t));
   renderTags();
-  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; };
+  const sync = () => { addBtn.hidden = present; head.hidden = !present; body.hidden = !present; wrap.classList.toggle("fld-present", present); };
   addBtn.addEventListener("click", () => { present = true; sync(); inp.focus(); });
   rmBtn.addEventListener("click", () => { present = false; sync(); });
   wrap.append(addBtn, head, body);
@@ -3013,7 +3016,9 @@ function renderTesterFields() {
   const box = document.getElementById("cardFields");
   box.replaceChildren();
   const m = xyChgk.parseTestCard(cardDraft);
-  const wrap = el("div", { class: "fld" });
+  // fld-wide: .card-fields wraps pills side by side now, so a stacked block
+  // must claim the full row explicitly.
+  const wrap = el("div", { class: "fld fld-wide" });
   const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Тестировали" }));
   const rows = el("div", { class: "fld-rows" });
   const addRow = (t) => {

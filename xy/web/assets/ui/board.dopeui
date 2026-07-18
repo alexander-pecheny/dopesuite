@@ -35,7 +35,7 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     tabs id="cardViewTabs"
       tab id="cardTabPreview" view="preview" "Просмотр"
       tab id="cardTabFields" view="fields" "Поля"
-      tab id="cardTabText" view="text" "Текст"
+      tab id="cardTabText" view="text" "Формат 4s"
 
     -- editing tools: ударение types into whichever field of Поля/Текст the caret
     -- was last in; типограф and →.4s rewrite the whole card, so they need no caret
