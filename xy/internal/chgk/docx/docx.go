@@ -90,7 +90,7 @@ type para struct {
 	pageBreakBefore bool
 	spacingBefore   int  // twips; 0 = none
 	lang            bool // template para0 carries <w:rPr><w:lang w:val="en-US"/>
-	sz              int // run font size, half-points; 0 = style default
+	sz              int  // run font size, half-points; 0 = style default
 	runs            []string
 }
 
