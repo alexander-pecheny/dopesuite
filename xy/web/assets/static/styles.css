@@ -718,13 +718,17 @@
 .fld-wide, .fld-present { flex: 1 1 100%; }
 .fld-present {
   display: grid;
-  grid-template-columns: 9em 1fr;
+  /* as narrow as the longest unbreakable label («Комментарий» at text-xs)
+     allows — multi-word labels wrap instead of widening the column */
+  grid-template-columns: 5.5em 1fr;
   column-gap: var(--space-2);
   align-items: start;
 }
 /* label column: × next to the label (not flushed to the far edge of the card),
    label dropped onto the input's first text line */
-.fld-present > .fld-head { justify-content: flex-start; padding-top: 6px; }
+.fld-present > .fld-head { justify-content: flex-start; padding-top: 7px; gap: var(--space-1); }
+.fld-present .fld-label { font-size: var(--text-xs); }
+.fld-present .fld-rm { padding: 0 2px; }
 .fld-present > .fld-body { margin-top: 0; }
 /* the dashed ring is this button's whole identity ("add a field") — --grid-dark,
    not the transparent --border */
