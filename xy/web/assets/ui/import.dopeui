@@ -18,6 +18,9 @@ page title="Импорт из Trello · xy" kind="wide" scripts="import.js"
       col id="trelloPickArea" gap="sm" hidden
         label for="trelloBoard" "Доска в Trello"
         selectfield id="trelloBoard"
+        hint
+          "«Все доски» перенесёт каждую открытую доску Trello в отдельную доску xy —"
+          "все под одним паролем; названия берутся из Trello."
         button kind="ghost" small id="trelloResetBtn" "Подключить другой аккаунт"
 
     details id="fileFallback"

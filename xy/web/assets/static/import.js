@@ -40,8 +40,11 @@ const importBtn = document.getElementById("importBtn");
 function setStatus(s) {
   statusNode.dataset.state = s;
 }
+// logPrefix labels every progress line when several boards are imported in a row
+// ("Доска 2/7 «Синхрон»: …"); empty for a single board.
+let logPrefix = "";
 function log(line) {
-  msg.textContent = line;
+  msg.textContent = line ? logPrefix + line : "";
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -264,7 +267,31 @@ async function runImport(source, name, pass) {
     + `${tally.comments} комментариев, ${tally.attachments} вложений.`;
   if (errors.length) summary += `\n\nОшибки (${errors.length}):\n` + errors.slice(0, 20).join("\n");
   log(summary);
-  return boardId;
+  return { id: boardId, summary };
+}
+
+// runImportAll imports every open Trello board, one xy board each, all under the
+// same passphrase. The board-name field is ignored — names come from Trello. One
+// board's failure never stops the rest; the final report lists every board.
+async function runImportAll(token, pass) {
+  const boards = openBoards.slice();
+  const report = [];
+  for (let i = 0; i < boards.length; i++) {
+    const b = boards[i];
+    logPrefix = `[${i + 1}/${boards.length}] «${b.name || b.id}» — `;
+    try {
+      log("загружаю из Trello…");
+      const source = await trelloSource(token, b.id);
+      const { summary } = await runImport(source, b.name || "", pass);
+      report.push(`«${b.name || b.id}» — ${summary}`);
+    } catch (err) {
+      report.push(`«${b.name || b.id}» — НЕ ИМПОРТИРОВАНА: ${err.message}`);
+    }
+  }
+  logPrefix = "";
+  const failed = report.filter((r) => r.includes("НЕ ИМПОРТИРОВАНА")).length;
+  setStatus(failed ? "error" : "saved");
+  log(`Импортировано досок: ${boards.length - failed} из ${boards.length}.\n\n` + report.join("\n\n"));
 }
 
 // importNormalCard: classify by chgksuite markup, store the question/heading/meta
@@ -378,24 +405,28 @@ function authorizeURL() {
   return "https://trello.com/1/authorize?" + p.toString();
 }
 
+// ALL_BOARDS is the picker's synthetic first option: import every open board,
+// each into its own xy board (all sharing the one passphrase typed below).
+const ALL_BOARDS = "__all__";
+let openBoards = []; // the picker's boards, kept for the ALL_BOARDS run
+
 async function loadBoards(token) {
   const boards = await trelloGet(token, "/members/me/boards", { fields: "name,closed", filter: "open" });
   const sel = document.getElementById("trelloBoard");
   sel.innerHTML = "";
-  const open = (boards || []).filter((b) => !b.closed);
-  if (!open.length) {
+  openBoards = (boards || []).filter((b) => !b.closed);
+  const option = (value, text) => {
     const o = document.createElement("option");
-    o.textContent = "(нет открытых досок)";
-    o.value = "";
+    o.value = value;
+    o.textContent = text;
     sel.appendChild(o);
+  };
+  if (!openBoards.length) {
+    option("", "(нет открытых досок)");
     return;
   }
-  for (const b of open) {
-    const o = document.createElement("option");
-    o.value = b.id;
-    o.textContent = b.name || b.id;
-    sel.appendChild(o);
-  }
+  if (openBoards.length > 1) option(ALL_BOARDS, `★ Все доски (${openBoards.length})`);
+  for (const b of openBoards) option(b.id, b.name || b.id);
 }
 
 // stage switches the connect area between: "connect" (offer the button),
@@ -431,6 +462,15 @@ form.addEventListener("submit", async (e) => {
   const pickerActive = !document.getElementById("trelloPickArea").hidden;
   const file = document.getElementById("trelloFile").files[0];
 
+  // "Все доски": import each open board in turn, under the one passphrase. A
+  // board that fails is reported and the rest still go through.
+  if (token && pickerActive && boardSel.value === ALL_BOARDS) {
+    importBtn.disabled = true;
+    await runImportAll(token, pass);
+    importBtn.disabled = false;
+    return;
+  }
+
   let source;
   try {
     if (token && pickerActive && boardSel.value) {
@@ -455,8 +495,8 @@ form.addEventListener("submit", async (e) => {
 
   importBtn.disabled = true;
   try {
-    const boardId = await runImport(source, name, pass);
-    setTimeout(() => { window.location.href = `/board/${boardId}`; }, 1500);
+    const { id } = await runImport(source, name, pass);
+    setTimeout(() => { window.location.href = `/board/${id}`; }, 1500);
   } catch (err) {
     setStatus("error");
     log("Импорт прерван: " + err.message);
