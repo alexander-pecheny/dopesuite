@@ -4059,9 +4059,9 @@ async function loadAttachments(cardId) {
     const name = att.name || "файл";
     const isImage = (att.mime || "").startsWith("image/");
     if (isImage) cardImageNames.push(name);
-    // Images open in a new tab (save via right-click there); other files download.
+    // Images open in the lightbox (save via right-click there); other files download.
     const row = el("div", { class: "attach-row" },
-      el("button", { class: "attach-name", type: "button", text: `📎 ${name}`, onclick: () => (isImage ? viewAttachment(att) : download(att, name)) }),
+      el("button", { class: "attach-name", type: "button", text: `📎 ${name}`, onclick: () => (isImage ? viewAttachment(att, name) : download(att, name)) }),
       el("span", { class: "attach-size", text: humanSize(att.size) }),
       el("button", { class: "attach-del", type: "button", title: "Удалить", text: "×", onclick: () => removeAttachment(att, name) }),
     );
@@ -4195,15 +4195,106 @@ document.getElementById("pasteCancel").addEventListener("click", closePasteModal
 pasteOverlay.addEventListener("pointerdown", (e) => { if (e.target === pasteOverlay) closePasteModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pasteOverlay.hidden) closePasteModal(); });
 
-// viewAttachment shows an image attachment in a new tab. attachmentUrl already
-// handles the offline mirror + memoizes the object URL, which stays alive for
-// the page's lifetime — so the tab can be reloaded / the image saved from there.
-async function viewAttachment(att) {
+// viewAttachment shows an image attachment in an in-page lightbox (zoom/pan,
+// right-click → save still works since it's a real <img> on the blob URL).
+// attachmentUrl already handles the offline mirror + memoizes the object URL,
+// so the URL stays alive for the page's lifetime.
+async function viewAttachment(att, name) {
   try {
-    const url = await attachmentUrl(att);
-    window.open(url, "_blank", "noopener");
+    openLightbox(await attachmentUrl(att), name || att.name || "");
   } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
 }
+
+// ---- image lightbox ----------------------------------------------------------
+// A single reused overlay: click the image (or wheel) to zoom toward the cursor,
+// drag to pan while zoomed, click the backdrop / × / Escape to close.
+let lbEls = null, lbScale = 1, lbTx = 0, lbTy = 0, lbBaseW = 0, lbBaseH = 0, lbDragged = false;
+const LB_MIN = 1, LB_MAX = 8;
+
+function lbApply() {
+  lbEls.img.style.transform = `translate(${lbTx}px, ${lbTy}px) scale(${lbScale})`;
+  lbEls.img.classList.toggle("img-lb-zoomed", lbScale > 1);
+}
+
+// Rescale toward a screen point, keeping whatever is under the cursor fixed.
+function lbZoomTo(next, cx, cy) {
+  next = Math.min(LB_MAX, Math.max(LB_MIN, next));
+  const r = lbEls.img.getBoundingClientRect();
+  const fx = (cx - r.left) / r.width, fy = (cy - r.top) / r.height; // point under cursor, 0..1
+  const nw = lbBaseW * next, nh = lbBaseH * next;
+  const cont = lbEls.overlay.getBoundingClientRect();
+  const centerX = cont.left + cont.width / 2, centerY = cont.top + cont.height / 2;
+  lbScale = next;
+  // rect.left = centerX - nw/2 + tx  ⇒  solve tx so the fractional point stays put.
+  lbTx = (cx - fx * nw) - (centerX - nw / 2);
+  lbTy = (cy - fy * nh) - (centerY - nh / 2);
+  if (next === 1) { lbTx = 0; lbTy = 0; }
+  lbApply();
+}
+
+function ensureLightbox() {
+  if (lbEls) return lbEls;
+  const img = el("img", { class: "img-lb-img", alt: "" });
+  const closeBtn = el("button", { class: "img-lb-close", type: "button", title: "Закрыть", text: "×" });
+  const overlay = el("div", { class: "img-lb", role: "dialog", "aria-label": "Просмотр изображения", hidden: true }, img, closeBtn);
+  document.body.append(overlay);
+  lbEls = { overlay, img, closeBtn };
+
+  closeBtn.addEventListener("click", closeLightbox);
+  // Backdrop click closes; a click on the image toggles fit ↔ 2× toward the point.
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeLightbox(); });
+  img.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (lbDragged) { lbDragged = false; return; } // a pan gesture isn't a zoom toggle
+    lbZoomTo(lbScale > 1 ? 1 : 2.5, e.clientX, e.clientY);
+  });
+  img.addEventListener("wheel", (e) => { e.preventDefault(); lbZoomTo(lbScale * (e.deltaY < 0 ? 1.2 : 1 / 1.2), e.clientX, e.clientY); }, { passive: false });
+  img.addEventListener("dblclick", (e) => { e.preventDefault(); lbZoomTo(1, e.clientX, e.clientY); });
+
+  // Drag to pan while zoomed.
+  let drag = null;
+  img.addEventListener("pointerdown", (e) => {
+    if (lbScale <= 1) return;
+    drag = { x: e.clientX, y: e.clientY, tx: lbTx, ty: lbTy };
+    lbDragged = false;
+    img.setPointerCapture(e.pointerId);
+  });
+  img.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) lbDragged = true;
+    lbTx = drag.tx + (e.clientX - drag.x); lbTy = drag.ty + (e.clientY - drag.y); lbApply();
+  });
+  const endDrag = () => { drag = null; };
+  img.addEventListener("pointerup", endDrag);
+  img.addEventListener("pointercancel", endDrag);
+  return lbEls;
+}
+
+function openLightbox(url, name) {
+  const { overlay, img } = ensureLightbox();
+  lbScale = 1; lbTx = 0; lbTy = 0;
+  img.alt = name;
+  img.onload = () => { lbBaseW = img.clientWidth; lbBaseH = img.clientHeight; lbApply(); };
+  img.src = url;
+  overlay.hidden = false;
+  document.addEventListener("keydown", lbOnKey);
+}
+
+function closeLightbox() {
+  if (!lbEls || lbEls.overlay.hidden) return;
+  lbEls.overlay.hidden = true;
+  lbEls.img.removeAttribute("src"); // don't hold a big decoded bitmap while closed
+  document.removeEventListener("keydown", lbOnKey);
+}
+
+function lbOnKey(e) { if (e.key === "Escape") { e.preventDefault(); closeLightbox(); } }
+
+// Inline (img …) preview images open in the same lightbox. Delegated so it
+// covers every preview surface (card, list, import) without wiring each <img>.
+document.addEventListener("click", (e) => {
+  const img = e.target.closest && e.target.closest("img.pv-img");
+  if (img && img.getAttribute("src")) openLightbox(img.src, img.alt || "");
+});
 
 async function download(att, name) {
   try {

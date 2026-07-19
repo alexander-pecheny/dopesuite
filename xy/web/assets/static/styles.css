@@ -420,6 +420,50 @@
 .attach-del { border: none; background: transparent; color: var(--muted); cursor: var(--cursor-action); font-size: var(--text-lg); line-height: 1; }
 .attach-del:hover { color: var(--red-dark); }
 .attach-lossless { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); color: var(--muted); }
+
+/* Image lightbox: a full-screen viewer for image attachments. Above the modals
+   it may be opened over, below the timer (which must stay usable). The <img> is
+   a real element on the blob URL, so right-click → «Сохранить как…» still works. */
+.img-lb {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--backdrop);
+  z-index: 125;
+  overflow: hidden;
+  touch-action: none;
+}
+.img-lb[hidden] { display: none; }
+.img-lb-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: zoom-in;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/* Keep the max-width/height fit cap even when zoomed: the transform scales the
+   fit-sized layout box, so the zoom math (lbBaseW/H) stays consistent. */
+.img-lb-img.img-lb-zoomed { cursor: grab; }
+.img-lb-close {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-xl);
+  line-height: 1;
+  cursor: var(--cursor-action);
+}
+.img-lb-close:hover { filter: brightness(0.96); }
 /* selects must never push past their container on narrow screens */
 .card-detail select.input { max-width: 100%; }
 
@@ -545,6 +589,7 @@
   height: auto;
   margin: var(--space-2) 0;
   border-radius: var(--radius-sm);
+  cursor: zoom-in; /* click opens the lightbox */
 }
 /* block, like the image it stands in for — renderRich swallows the source
    newline after an (img …), so an inline placeholder would glue to the text */
