@@ -4,15 +4,32 @@ page title="Импорт из Trello · xy" kind="wide" scripts="import.js"
 
   form id="importForm" dir="col"
     hint
-      "Экспортируйте доску из Trello (меню доски → «Печать, экспорт и общий доступ» →"
-      "«Экспортировать как JSON»), затем выберите сохранённый " (code ".json") "-файл ниже."
-      "Списки, оканчивающиеся на " (code "_tests") ", импортируются как тест-списки; зелёные"
-      "и красные метки тест-карточек распознаются автоматически."
+      "Подключите Trello и выберите доску — импортируются карточки, списки, метки,"
+      "все комментарии (без лимита в 1000) и вложения (файлы и фото). Списки,"
+      "оканчивающиеся на " (code "_tests") ", становятся тест-списками; зелёные и"
+      "красные метки тест-карточек распознаются автоматически."
+
+    col id="trelloArea" gap="sm"
+      button kind="primary" id="trelloConnectBtn" href="#" "Подключить Trello"
+      col id="trelloTokenArea" gap="sm" hidden
+        hint "Нажмите «Allow», скопируйте показанный токен и вставьте его сюда."
+        textfield id="trelloTokenInput" placeholder="Токен из Trello" autocomplete="off"
+        button kind="ghost" small id="trelloTokenBtn" "Подтвердить токен"
+      col id="trelloPickArea" gap="sm" hidden
+        label for="trelloBoard" "Доска в Trello"
+        selectfield id="trelloBoard"
+        button kind="ghost" small id="trelloResetBtn" "Подключить другой аккаунт"
+
+    details id="fileFallback"
+      summary "…или импортировать сохранённый JSON-экспорт"
+      hint
+        "Меню доски → «Печать, экспорт и общий доступ» → «Экспортировать как JSON»."
+        "Из файла берутся до 1000 последних комментариев; вложения так не переносятся."
+      filefield id="trelloFile" accept=".json,application/json"
+
     textfield id="boardName" placeholder="Название доски (по умолчанию — из Trello)"
     password id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required
     hint "Пароль шифрует все данные доски. Запомните его — восстановить нельзя."
-    label for="trelloFile" "Файл доски Trello (.json)"
-    filefield id="trelloFile" accept=".json,application/json" required
     row gap="sm" wrap
       button submit id="importBtn" "Импортировать"
       button kind="ghost" href="/" "Отмена"
