@@ -9,7 +9,7 @@ page title="Импорт из Trello · xy" kind="wide" scripts="import.js"
       "оканчивающиеся на " (code "_tests") ", становятся тест-списками; зелёные и"
       "красные метки тест-карточек распознаются автоматически."
 
-    col id="trelloArea" gap="sm"
+    col gap="sm"
       button kind="primary" id="trelloConnectBtn" href="#" "Подключить Trello"
       col id="trelloTokenArea" gap="sm" hidden
         hint "Нажмите «Allow», скопируйте показанный токен и вставьте его сюда."
