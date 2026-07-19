@@ -47,7 +47,7 @@ func mustApp() *base.App {
 			DefaultKind:  "sheet",
 			PageKinds: map[string]base.PageKind{
 				"sheet": {Body: []string{"host", "import-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "import-frame"}},
-				"full":  {Body: []string{"host"}, Main: []string{"match-main"}},
+				"full":  {Body: []string{"host", "list-page"}, Main: []string{"match-main"}},
 				"wide":  {Body: []string{"host"}, Main: []string{"board-main"}, Frame: []string{"import-form"}},
 				"board": {Body: []string{"host", "host-compact", "board-page"}, Main: []string{"board-main"}},
 			},
