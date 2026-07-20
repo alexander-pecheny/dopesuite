@@ -89,8 +89,11 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     -- Выписки: the comments and attachments flagged as source excerpts, counted
     -- here and shown together in one modal — the point of the flag is to have the
     -- sources at hand mid-edit without scrolling the whole лента for them.
+    -- the count is a span mount, NOT a `label`: the label primitive is a section
+    -- heading and carries a 24px top margin, which drops it out of line with the
+    -- button beside it however the row is aligned
     row gap="sm" align="center" wrap data-edit-only
-      label id="excerptsCount" "Выписок: 0"
+      mount id="excerptsCount" kind="excerpt-count"
       button small kind="ghost" id="excerptsView" disabled "Смотреть"
 
     label data-edit-only "Вложения"

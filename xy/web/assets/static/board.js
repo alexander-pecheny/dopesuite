@@ -4046,13 +4046,17 @@ function renderEvent(ev, payload) {
     // have no id yet, so none of that can address them.
     if (ev.id) {
       wrap.id = "tlev-" + ev.id;
-      metaRow.append(el("button", {
-        class: "tl-link", type: "button", title: "Копировать ссылку на комментарий",
-        text: "🔗", onclick: () => copyCommentLink(ev.id),
-      }), el("button", {
-        class: "tl-link", type: "button", title: "Действия с комментарием", "aria-haspopup": "true",
-        text: "⋯", onclick: (e) => commentMenu(e.currentTarget, ev, payload),
-      }));
+      // Right-anchored so both controls sit in the comment's top-right corner
+      // rather than trailing a timestamp of unpredictable width.
+      metaRow.append(el("div", { class: "tl-actions" },
+        el("button", {
+          class: "tl-link", type: "button", title: "Копировать ссылку на комментарий",
+          text: "🔗", onclick: () => copyCommentLink(ev.id),
+        }),
+        el("button", {
+          class: "tl-menu", type: "button", title: "Действия с комментарием", "aria-haspopup": "true",
+          text: "⋯", onclick: (e) => commentMenu(e.currentTarget, ev, payload),
+        })));
     }
     wrap.append(metaRow, el("div", { class: "tl-comment", text: payload }));
   } else if (ev.type === "desc_edit") {

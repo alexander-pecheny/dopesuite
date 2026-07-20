@@ -416,6 +416,17 @@
 .tl-link:hover { opacity: 1; }
 /* touch devices have no hover — keep the link visible there */
 @media (hover: none) { .tl-link { opacity: 0.55; } }
+/* Comment controls, pinned to the top-right corner of the event: the 🔗 stays
+   quiet (hover-revealed), but ⋯ is the entry point to edit/delete/выписка and is
+   always visible, at a real touch-sized target — hunting for a hover-only sliver
+   after a variable-width timestamp is exactly the friction to avoid. */
+.tl-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-1); }
+.tl-menu {
+  border: none; background: none; cursor: var(--cursor-action); color: var(--muted);
+  padding: 0 var(--space-1); min-width: 24px; min-height: 24px;
+  font-size: var(--text-lg); line-height: 1;
+}
+.tl-menu:hover { color: var(--text); }
 /* a comment flagged as a выписка — tinted so it reads as reference material
    rather than discussion while scanning the лента */
 .tl-event.tl-excerpt { background: var(--structure); border-color: var(--border); }
@@ -455,6 +466,7 @@
 /* выписки modal: the card's excerpts in one scrollable column. Images are shown
    inline at readable size (click → the lightbox below) rather than as links —
    they are screenshots of a source, and the point is to glance at them. */
+.excerpt-count { font-size: var(--text-sm); color: var(--muted); }
 .excerpts { display: flex; flex-direction: column; gap: var(--space-3); max-height: 65vh; overflow-y: auto; }
 .excerpt { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--page); }
 .excerpt-meta { font-size: var(--text-2xs); color: var(--muted); }
@@ -512,7 +524,11 @@
    scroll container it was clipped at the work area's edge. The wrap only
    keeps the trigger button inline. */
 .klist-menu-wrap { position: relative; display: inline-flex; }
-.menu-dropdown.menu-fixed { position: fixed; top: auto; right: auto; }
+/* A body-mounted fixed popup must outrank whatever it was opened from, and the
+   comment/attachment ⋯ menus are opened from INSIDE the card overlay — at the
+   inherited --z-dropdown (30) they painted under it (50) and read as a dead
+   button. Above the overlay and the board header, still below --z-modal. */
+.menu-dropdown.menu-fixed { position: fixed; top: auto; right: auto; z-index: 70; }
 
 /* two-pane before/after diff (timeline desc_edit), with the word-level changes
    highlighted inside each pane */

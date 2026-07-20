@@ -127,4 +127,5 @@ var xyMounts = map[string]base.MountSpec{
 	"card-title":        {Tag: "h2", Classes: []string{"card-detail-title"}},
 	"sizes-preview":     {Tag: "div", Classes: []string{"sizes-preview"}},
 	"excerpts":          {Tag: "div", Classes: []string{"excerpts"}},
+	"excerpt-count":     {Tag: "span", Classes: []string{"excerpt-count"}},
 }
