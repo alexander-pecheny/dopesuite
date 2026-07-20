@@ -416,6 +416,13 @@
 .tl-link:hover { opacity: 1; }
 /* touch devices have no hover — keep the link visible there */
 @media (hover: none) { .tl-link { opacity: 0.55; } }
+/* a comment flagged as a выписка — tinted so it reads as reference material
+   rather than discussion while scanning the лента */
+.tl-event.tl-excerpt { background: var(--structure); border-color: var(--border); }
+.tl-badge { font-size: var(--text-2xs); color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 var(--space-1); }
+/* in-place comment editor (board.js#startCommentEdit) */
+.tl-editbox { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-1); }
+.tl-editrow { display: flex; gap: var(--space-2); }
 /* flash a comment when arrived at via a direct link */
 .tl-event.tl-highlight { animation: tl-flash 2.5s ease-out; }
 @keyframes tl-flash { 0%, 40% { background: var(--success-soft); border-color: var(--success); } 100% { background: var(--page); } }
@@ -444,6 +451,15 @@
 .attach-del { border: none; background: transparent; color: var(--muted); cursor: var(--cursor-action); font-size: var(--text-lg); line-height: 1; }
 .attach-del:hover { color: var(--red-dark); }
 .attach-lossless { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); color: var(--muted); }
+
+/* выписки modal: the card's excerpts in one scrollable column. Images are shown
+   inline at readable size (click → the lightbox below) rather than as links —
+   they are screenshots of a source, and the point is to glance at them. */
+.excerpts { display: flex; flex-direction: column; gap: var(--space-3); max-height: 65vh; overflow-y: auto; }
+.excerpt { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--page); }
+.excerpt-meta { font-size: var(--text-2xs); color: var(--muted); }
+.excerpt-text { white-space: pre-wrap; font-size: var(--text-sm); }
+.excerpt-img { max-width: 100%; border-radius: var(--radius-sm); cursor: zoom-in; }
 
 /* Image lightbox: a full-screen viewer for image attachments. Above the modals
    it may be opened over, below the timer (which must stay usable). The <img> is

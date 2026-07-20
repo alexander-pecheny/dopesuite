@@ -788,11 +788,13 @@ func (s *server) handleSetCardLabels(w http.ResponseWriter, r *http.Request) {
 // ---- timeline ----
 
 type timelineEventDTO struct {
-	ID         int64  `json:"id"`
-	Type       string `json:"type"`
-	AuthorID   *int64 `json:"author_user_id"`
-	CreatedAt  string `json:"created_at"`
-	PayloadEnc string `json:"payload_enc"`
+	ID         int64   `json:"id"`
+	Type       string  `json:"type"`
+	AuthorID   *int64  `json:"author_user_id"`
+	CreatedAt  string  `json:"created_at"`
+	EditedAt   *string `json:"edited_at,omitempty"`
+	IsExcerpt  bool    `json:"is_excerpt"`
+	PayloadEnc string  `json:"payload_enc"`
 }
 
 func (s *server) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
@@ -801,7 +803,8 @@ func (s *server) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.QueryContext(r.Context(), `
-select id, type, author_user_id, created_at, payload_enc from timeline_events where card_id = ? order by id`, cardID)
+select id, type, author_user_id, created_at, edited_at, is_excerpt, payload_enc
+from timeline_events where card_id = ? and deleted_at is null order by id`, cardID)
 	if handleErr(w, err) {
 		return
 	}
@@ -810,13 +813,19 @@ select id, type, author_user_id, created_at, payload_enc from timeline_events wh
 	for rows.Next() {
 		var e timelineEventDTO
 		var author sql.NullInt64
+		var edited sql.NullString
+		var excerpt int
 		var payload []byte
-		if err := rows.Scan(&e.ID, &e.Type, &author, &e.CreatedAt, &payload); handleErr(w, err) {
+		if err := rows.Scan(&e.ID, &e.Type, &author, &e.CreatedAt, &edited, &excerpt, &payload); handleErr(w, err) {
 			return
 		}
 		if author.Valid {
 			e.AuthorID = &author.Int64
 		}
+		if edited.Valid {
+			e.EditedAt = &edited.String
+		}
+		e.IsExcerpt = excerpt != 0
 		e.PayloadEnc = b64(payload)
 		out = append(out, e)
 	}
@@ -849,6 +858,109 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type patchCommentRequest struct {
+	PayloadEnc *string `json:"payload_enc"`
+	IsExcerpt  *bool   `json:"is_excerpt"`
+}
+
+// handlePatchComment edits a comment's text and/or flips its «выписка» flag.
+// The two fields carry different permissions: rewriting what someone said is
+// the author's business alone, while marking a comment as an excerpt is
+// curation any board member may do (the same trust level as adding one).
+func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
+	uid, evID, _, _, author, ok := s.requireComment(w, r)
+	if !ok {
+		return
+	}
+	var req patchCommentRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if req.PayloadEnc != nil && (author == nil || *author != uid) {
+		httpError(w, http.StatusForbidden, "редактировать может только автор")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "patch-comment", func(ctx context.Context, tx *sql.Tx) error {
+		if req.IsExcerpt != nil {
+			flag := 0
+			if *req.IsExcerpt {
+				flag = 1
+			}
+			if _, err := tx.ExecContext(ctx, `update timeline_events set is_excerpt = ? where id = ?`, flag, evID); err != nil {
+				return err
+			}
+		}
+		if req.PayloadEnc != nil {
+			payload, err := unb64(*req.PayloadEnc)
+			if err != nil || len(payload) == 0 {
+				return errBadRequest("invalid payload_enc")
+			}
+			if _, err := tx.ExecContext(ctx, `
+update timeline_events set payload_enc = ?, edited_at = ? where id = ?`, payload, rfc3339(time.Now()), evID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeleteComment tombstones a comment (author only). The row survives so
+// the id stays taken — read watermarks are ids, and reusing one would silently
+// mark later comments read.
+func (s *server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
+	uid, evID, _, _, author, ok := s.requireComment(w, r)
+	if !ok {
+		return
+	}
+	if author == nil || *author != uid {
+		httpError(w, http.StatusForbidden, "удалить может только автор")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "delete-comment", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update timeline_events set deleted_at = ? where id = ?`, rfc3339(time.Now()), evID)
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// requireComment resolves {id} to a live comment event the caller may see,
+// returning the caller's uid plus the event's board, card and author.
+func (s *server) requireComment(w http.ResponseWriter, r *http.Request) (uid, evID, bid, cardID int64, author *int64, ok bool) {
+	u, okU := s.requireUser(w, r)
+	if !okU {
+		return
+	}
+	id, okP := pathInt(w, r, "id")
+	if !okP {
+		return
+	}
+	var a sql.NullInt64
+	err := s.db.QueryRowContext(r.Context(), `
+select board_id, card_id, author_user_id from timeline_events
+where id = ? and type = 'comment' and deleted_at is null`, id).Scan(&bid, &cardID, &a)
+	if errors.Is(err, sql.ErrNoRows) {
+		httpError(w, http.StatusNotFound, "комментарий не найден")
+		return
+	}
+	if handleErr(w, err) {
+		return
+	}
+	if _, err := boardRole(r.Context(), s.db, bid, u.UserID); handleErr(w, err) {
+		return
+	}
+	if a.Valid {
+		author = &a.Int64
+	}
+	return u.UserID, id, bid, cardID, author, true
+}
+
 type importCommentsRequest struct {
 	Comments []importedComment `json:"comments"`
 }
@@ -856,6 +968,7 @@ type importCommentsRequest struct {
 type importedComment struct {
 	AuthorUserID *int64 `json:"author_user_id"`
 	CreatedAt    string `json:"created_at"`
+	IsExcerpt    bool   `json:"is_excerpt"`
 	PayloadEnc   string `json:"payload_enc"`
 }
 
@@ -889,8 +1002,8 @@ func (s *server) handleImportComments(w http.ResponseWriter, r *http.Request) {
 				author = *c.AuthorUserID
 			}
 			if _, err := tx.ExecContext(ctx, `
-insert into timeline_events(board_id, card_id, type, author_user_id, created_at, payload_enc)
-values(?, ?, 'comment', ?, ?, ?)`, bid, cardID, author, created, payload); err != nil {
+insert into timeline_events(board_id, card_id, type, author_user_id, created_at, is_excerpt, payload_enc)
+values(?, ?, 'comment', ?, ?, ?, ?)`, bid, cardID, author, created, boolInt(c.IsExcerpt), payload); err != nil {
 				return err
 			}
 		}

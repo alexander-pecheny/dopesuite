@@ -308,6 +308,8 @@ func expandModal(c *ExpandCtx, p *Element) []Node {
 		innerCls = append(innerCls, "lists-manage")
 	case "sizes":
 		innerCls = append(innerCls, "sizes-modal")
+	case "wide":
+		innerCls = append(innerCls, "modal-wide")
 	}
 	var kids []Node
 	if title, ok := Get(p, "title"); ok {

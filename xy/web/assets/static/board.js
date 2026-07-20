@@ -2119,8 +2119,11 @@ function imageRefs(cards) {
 // Attachment *bytes* are immutable for a given id, so a decrypted object URL is
 // memoized for the page's lifetime — reopening a preview then costs no network,
 // no decrypt. The URL cache is LRU-capped; evicted URLs are revoked.
+// Replacing an attachment (handleReplaceAttachment) keeps its id and bumps its
+// rev, so both caches key on id+rev — otherwise a replaced screenshot would keep
+// serving the bytes it replaced for the rest of the page's life.
 const attListCache = new Map(); // cardId → [{ ...att, name }]
-const attUrlCache = new Map();  // attId  → decrypted object URL
+const attUrlCache = new Map();  // id:rev → decrypted object URL
 const ATT_URL_CACHE_MAX = 64;
 
 // cardAttachments lists one card's attachments with their filenames decrypted.
@@ -2143,21 +2146,25 @@ async function cardAttachments(cardId, refresh = false) {
 // ciphertext through the offline IndexedDB mirror (so a reload doesn't
 // re-download) and memoizing the result.
 async function attachmentUrl(att) {
-  const hit = attUrlCache.get(att.id);
-  if (hit) { attUrlCache.delete(att.id); attUrlCache.set(att.id, hit); return hit; } // LRU touch
+  const rev = att.rev || 0;
+  const key = `${att.id}:${rev}`;
+  const hit = attUrlCache.get(key);
+  if (hit) { attUrlCache.delete(key); attUrlCache.set(key, hit); return hit; } // LRU touch
   let cipher;
+  // The offline mirror is keyed by id alone; a stale rev there means the bytes
+  // are the ones a replace superseded, so refetch instead of trusting them.
   const cached = await xySync.getAttachment(att.id).catch(() => null);
-  if (cached) {
+  if (cached && (cached.rev || 0) === rev) {
     cipher = cached.bytes instanceof Uint8Array ? cached.bytes : new Uint8Array(cached.bytes);
   } else {
     const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });
     if (!res.ok) throw new Error("не удалось скачать вложение");
     cipher = new Uint8Array(await res.arrayBuffer());
-    try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher }); } catch (_) {}
+    try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher, rev }); } catch (_) {}
   }
   const plain = await xyCrypto.decBytes(dk, cipher);
   const url = URL.createObjectURL(new Blob([plain], { type: att.mime }));
-  attUrlCache.set(att.id, url);
+  attUrlCache.set(key, url);
   for (const stale of [...attUrlCache.keys()].slice(0, attUrlCache.size - ATT_URL_CACHE_MAX)) {
     URL.revokeObjectURL(attUrlCache.get(stale));
     attUrlCache.delete(stale);
@@ -3500,6 +3507,7 @@ async function copyCardExtras(srcCardId, targetDk, newCardId) {
     comments.push({
       author_user_id: ev.author_user_id != null ? ev.author_user_id : null,
       created_at: ev.created_at,
+      is_excerpt: !!ev.is_excerpt,
       payload_enc: await xyCrypto.encField(targetDk, text),
     });
   }
@@ -3523,7 +3531,7 @@ async function copyCardExtras(srcCardId, targetDk, newCardId) {
     const fd = new FormData();
     fd.append("meta", JSON.stringify({
       filename_enc: await xyCrypto.encField(targetDk, name),
-      mime: att.mime, lossless: !!att.lossless,
+      mime: att.mime, lossless: !!att.lossless, is_excerpt: !!att.is_excerpt,
       event_payload_enc: await xyCrypto.encField(targetDk, JSON.stringify({ file: name })),
     }));
     fd.append("blob", new Blob([recipher], { type: "application/octet-stream" }), "blob");
@@ -3713,7 +3721,7 @@ cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverla
 // those without also closing the card.
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape" || cardOverlay.hidden) return;
-  if (!pasteOverlay.hidden || document.querySelector(".label-add-popup")) return;
+  if (!pasteOverlay.hidden || !excerptsOverlay.hidden || document.querySelector(".label-add-popup")) return;
   cardBack();
 });
 
@@ -4001,7 +4009,7 @@ async function loadTimeline(cardId) {
   }
   let events = [];
   try { events = await xySync.timelineFor(cardId); } catch (_) {}
-  if (cardId === openCardId) openCardEvents = events;
+  if (cardId === openCardId) { openCardEvents = events; renderExcerptCount(); }
   // Newest first: events are oldest→newest (by id); show them reversed.
   for (const ev of [...events].reverse()) {
     let payload = "";
@@ -4028,14 +4036,22 @@ function renderEvent(ev, payload) {
   const meta = (rest) => (author ? `${author} · ${rest}` : rest);
   const wrap = el("div", { class: "tl-event tl-" + ev.type });
   if (ev.type === "comment") {
-    const metaRow = el("div", { class: "tl-meta" }, meta(when));
-    // Synced comments have a stable event id → offer a copyable direct link and
-    // make the node an anchor target. Pending (offline) comments have no id yet.
+    const metaRow = el("div", { class: "tl-meta" }, meta(when + (ev.edited_at ? " · изменён" : "")));
+    if (ev.is_excerpt) {
+      wrap.classList.add("tl-excerpt");
+      metaRow.append(el("span", { class: "tl-badge", text: "выписка" }));
+    }
+    // Synced comments have a stable event id → offer a copyable direct link, the
+    // edit/delete/выписка menu, and an anchor target. Pending (offline) comments
+    // have no id yet, so none of that can address them.
     if (ev.id) {
       wrap.id = "tlev-" + ev.id;
       metaRow.append(el("button", {
         class: "tl-link", type: "button", title: "Копировать ссылку на комментарий",
         text: "🔗", onclick: () => copyCommentLink(ev.id),
+      }), el("button", {
+        class: "tl-link", type: "button", title: "Действия с комментарием", "aria-haspopup": "true",
+        text: "⋯", onclick: (e) => commentMenu(e.currentTarget, ev, payload),
       }));
     }
     wrap.append(metaRow, el("div", { class: "tl-comment", text: payload }));
@@ -4073,6 +4089,67 @@ function renderEvent(ev, payload) {
   return wrap;
 }
 
+// ---- comment edit / delete / выписка ----
+// Rewriting or removing a comment is the author's business; flagging one as a
+// выписка is curation any member may do (the server draws the same line in
+// handlePatchComment). All three are online-only, like attachment mutations: a
+// queued edit of a comment that has not itself synced yet is a temp-id knot the
+// outbox has no reason to learn.
+function commentMenu(anchor, ev, payload) {
+  const mine = state.me && ev.author_user_id === state.me.user_id;
+  const items = [];
+  if (mine) {
+    items.push({ label: "✏️ Редактировать", onClick: () => startCommentEdit(ev, payload) });
+    items.push({ label: "🗑 Удалить", onClick: () => deleteComment(ev) });
+  }
+  items.push({
+    label: `${ev.is_excerpt ? "☑" : "☐"} Выписка`,
+    onClick: () => commentAction(() => jpatch(`/api/comments/${ev.id}`, { is_excerpt: !ev.is_excerpt })),
+  });
+  popupMenu(anchor, items);
+}
+
+// commentAction runs one comment mutation and re-renders the лента (which also
+// refreshes the выписки counter), reporting failures in the card's message line.
+async function commentAction(fn) {
+  const msg = document.getElementById("cardMessage");
+  if (!xySync.isOnline()) { msg.textContent = "Правка комментариев доступна только онлайн."; return; }
+  try {
+    await fn();
+    msg.textContent = "";
+    await loadTimeline(openCardId);
+  } catch (err) { msg.textContent = err.message; }
+}
+
+function deleteComment(ev) {
+  if (!confirm("Удалить комментарий?")) return;
+  commentAction(() => jdelete(`/api/comments/${ev.id}`));
+}
+
+// startCommentEdit swaps the comment's body for a textarea in place, so the
+// surrounding лента stays put while it is edited.
+function startCommentEdit(ev, payload) {
+  const wrap = document.getElementById("tlev-" + ev.id);
+  if (!wrap || wrap.querySelector(".tl-edit")) return;
+  const body = wrap.querySelector(".tl-comment");
+  const ta = el("textarea", { class: "card-desc comment-input tl-edit", spellcheck: "false" });
+  ta.value = payload;
+  const save = el("button", {
+    class: "btn btn-small", type: "button", text: "Сохранить",
+    onclick: async () => {
+      const text = ta.value.trim();
+      if (!text) return;
+      await commentAction(async () => jpatch(`/api/comments/${ev.id}`, { payload_enc: await xyCrypto.encField(dk, text) }));
+    },
+  });
+  const cancel = el("button", {
+    class: "btn btn-small btn-ghost", type: "button", text: "Отмена",
+    onclick: () => loadTimeline(openCardId),
+  });
+  body.replaceWith(el("div", { class: "tl-editbox" }, ta, el("div", { class: "tl-editrow" }, save, cancel)));
+  ta.focus();
+}
+
 document.getElementById("commentForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const input = document.getElementById("commentInput");
@@ -4104,12 +4181,122 @@ async function loadAttachments(cardId) {
     // Images open in the lightbox (save via right-click there); other files download.
     const row = el("div", { class: "attach-row" },
       el("button", { class: "attach-name", type: "button", text: `📎 ${name}`, onclick: () => (isImage ? viewAttachment(att, name) : download(att, name)) }),
+      att.is_excerpt ? el("span", { class: "tl-badge", text: "выписка" }) : null,
       el("span", { class: "attach-size", text: humanSize(att.size) }),
-      el("button", { class: "attach-del", type: "button", title: "Удалить", text: "×", onclick: () => removeAttachment(att, name) }),
+      el("button", {
+        class: "attach-del", type: "button", title: "Действия с вложением", text: "⋯", "aria-haspopup": "true",
+        onclick: (e) => attachMenu(e.currentTarget, att, name),
+      }),
     );
     box.append(row);
   }
+  openCardExcerptAtts = list.filter((a) => a.is_excerpt);
+  renderExcerptCount();
 }
+
+function attachMenu(anchor, att, name) {
+  popupMenu(anchor, [
+    { label: "🔄 Заменить", onClick: () => pickReplacement(att, name) },
+    { label: "🗑 Удалить", onClick: () => removeAttachment(att, name) },
+    {
+      label: `${att.is_excerpt ? "☑" : "☐"} Выписка`,
+      onClick: () => attachAction(async () => {
+        await jpatch(`/api/attachments/${att.id}`, { is_excerpt: !att.is_excerpt });
+      }),
+    },
+  ]);
+}
+
+async function attachAction(fn) {
+  const msg = document.getElementById("cardMessage");
+  if (!xySync.isOnline()) { msg.textContent = "Правка вложений доступна только онлайн."; return; }
+  try {
+    await fn();
+    msg.textContent = "";
+    await loadAttachments(openCardId);
+    await loadTimeline(openCardId);
+  } catch (err) { msg.textContent = err.message; }
+}
+
+// pickReplacement re-shoots an attachment in place: the id (and so its выписка
+// flag, its position, and every card that names the file) survives, only the
+// bytes change. The compress choice is inherited from what the original stored.
+function pickReplacement(att, name) {
+  const picker = el("input", { type: "file" });
+  picker.addEventListener("change", () => {
+    const file = picker.files[0];
+    if (!file) return;
+    attachAction(async () => {
+      const msg = document.getElementById("cardMessage");
+      msg.textContent = "Шифрование…";
+      const lossless = !!att.lossless;
+      let bytes, mime;
+      if (lossless) { bytes = new Uint8Array(await file.arrayBuffer()); mime = file.type || "application/octet-stream"; }
+      else ({ bytes, mime } = await recompressToWebp(file));
+      const fd = new FormData();
+      fd.append("meta", JSON.stringify({
+        filename_enc: await xyCrypto.encField(dk, name),
+        mime, lossless,
+        event_payload_enc: await xyCrypto.encField(dk, JSON.stringify({ file: name })),
+      }));
+      fd.append("blob", new Blob([await xyCrypto.encBytes(dk, bytes)], { type: "application/octet-stream" }), "blob");
+      const res = await fetch(`/api/attachments/${att.id}`, { method: "PUT", credentials: "same-origin", body: fd });
+      if (!res.ok) throw new Error((await res.text()) || "ошибка замены");
+    });
+  });
+  picker.click();
+}
+
+// ---- выписки ----
+// A выписка is an excerpt from a source — a comment or an attachment flagged as
+// such — so the sources behind a question can be re-read mid-edit without
+// scrolling the whole лента or opening attachments one browser tab at a time.
+// The flag is a plaintext column server-side (migrateV14); the content is not.
+let openCardExcerptAtts = [];
+
+function excerptComments() {
+  return (openCardEvents || []).filter((e) => e.type === "comment" && e.is_excerpt);
+}
+
+function renderExcerptCount() {
+  const n = excerptComments().length + openCardExcerptAtts.length;
+  document.getElementById("excerptsCount").textContent = `Выписок: ${n}`;
+  document.getElementById("excerptsView").disabled = n === 0;
+}
+
+const excerptsOverlay = document.getElementById("excerptsOverlay");
+const closeExcerpts = () => { excerptsOverlay.hidden = true; };
+
+async function openExcerpts() {
+  const body = document.getElementById("excerptsBody");
+  body.replaceChildren();
+  for (const ev of excerptComments()) {
+    let text = "";
+    try { text = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) {}
+    body.append(el("div", { class: "excerpt" },
+      el("div", { class: "excerpt-meta", text: `${eventAuthor(ev)} · ${new Date(ev.created_at).toLocaleString("ru-RU")}` }),
+      el("div", { class: "excerpt-text", text })));
+  }
+  for (const att of openCardExcerptAtts) {
+    const name = att.name || "файл";
+    const box = el("div", { class: "excerpt" }, el("div", { class: "excerpt-meta", text: `📎 ${name}` }));
+    if ((att.mime || "").startsWith("image/")) {
+      // .pv-img wires it into the shared lightbox (zoom/pan) on click.
+      const img = el("img", { class: "excerpt-img pv-img", alt: name });
+      attachmentUrl(att).then((u) => { img.src = u; }).catch(() => {});
+      box.append(img);
+    } else {
+      box.append(el("button", { class: "attach-name", type: "button", text: "Скачать", onclick: () => download(att, name) }));
+    }
+    body.append(box);
+  }
+  excerptsOverlay.hidden = false;
+}
+
+document.getElementById("excerptsView").addEventListener("click", openExcerpts);
+document.getElementById("excerptsClose").addEventListener("click", closeExcerpts);
+excerptsOverlay.addEventListener("pointerdown", (e) => { if (e.target === excerptsOverlay) closeExcerpts(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !excerptsOverlay.hidden) closeExcerpts(); });
 
 function humanSize(n) {
   if (n < 1024) return n + " B";

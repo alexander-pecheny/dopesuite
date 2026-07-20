@@ -321,7 +321,7 @@ select e.card_id,
 from timeline_events e
 join cards c on c.id = e.card_id and c.deleted_at is null
 left join card_reads cr on cr.card_id = e.card_id and cr.user_id = ?
-where e.board_id = ? and e.author_user_id is not null and e.author_user_id <> ?
+where e.board_id = ? and e.deleted_at is null and e.author_user_id is not null and e.author_user_id <> ?
 group by e.card_id`, uid, bid, uid)
 	if handleErr(w, err) {
 		return

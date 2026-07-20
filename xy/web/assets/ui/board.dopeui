@@ -86,6 +86,13 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     row id="cardAliasRow" gap="sm" align="center"
       textfield id="cardAlias" placeholder="короткое имя карточки — показывается в списке вместо текста" autocomplete="off" maxlength="200" grow
 
+    -- Выписки: the comments and attachments flagged as source excerpts, counted
+    -- here and shown together in one modal — the point of the flag is to have the
+    -- sources at hand mid-edit without scrolling the whole лента for them.
+    row gap="sm" align="center" wrap data-edit-only
+      label id="excerptsCount" "Выписок: 0"
+      button small kind="ghost" id="excerptsView" disabled "Смотреть"
+
     label data-edit-only "Вложения"
     mount id="attachments" kind="attachments" data-edit-only
     row gap="sm" align="center" wrap data-edit-only
@@ -202,6 +209,12 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
       textfield id="addMemberName" placeholder="Имя пользователя" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" grow
       button small submit "Добавить"
     message id="membersMessage"
+
+  -- выписки viewer: every excerpt of the open card in one scrollable place,
+  -- images inline (they are usually screenshots of the source, and opening one
+  -- per tab was exactly the friction this replaces)
+  modal id="excerptsOverlay" label="Выписки" title="Выписки" variant="wide" done="Закрыть" doneid="excerptsClose"
+    mount id="excerptsBody" kind="excerpts"
 
   -- paste-image overlay
   modal id="pasteOverlay" label="Вставить изображение" title="Вставить изображение"

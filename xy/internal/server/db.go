@@ -193,7 +193,47 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV13(db); err != nil {
 		return err
 	}
+	if err := migrateV14(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV14 makes comments editable/deletable and lets a comment or an
+// attachment be flagged as a «выписка» — an excerpt from a source, kept beside
+// the question so it can be checked at a glance during a quick edit.
+//
+// timeline_events was append-only until now: deleted_at tombstones a comment
+// (filtered out of the timeline, the activity feed and the unread rollup) and
+// edited_at marks a rewritten payload. Only comments are ever edited or
+// deleted — the derived events (desc_edit, label_*, attach_*) stay a log.
+//
+// attachments.rev counts replacements, so a client can tell that an id it has
+// already downloaded now holds different bytes (see attachmentDTO.Rev).
+//
+// is_excerpt is a PLAINTEXT column on both tables, so the server learns which
+// items are excerpts (one bit each) without learning what they say. That is the
+// same accepted metadata leak as attachments.mime/size; it buys a countable,
+// filterable flag instead of forcing the client to decrypt every comment and
+// filename just to render «Выписок: N».
+func migrateV14(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 14`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+alter table timeline_events add column deleted_at text;
+alter table timeline_events add column edited_at text;
+alter table timeline_events add column is_excerpt integer not null default 0;
+alter table attachments add column is_excerpt integer not null default 0;
+alter table attachments add column rev integer not null default 0;
+insert or ignore into schema_versions(version, applied_at)
+  values(14, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV13 adds users.card_title: which field a card's list preview derives

@@ -468,6 +468,7 @@ var JustifyBetween = Attr{Name: "justify", Value: "between"}
 var ModalVarPlain = Attr{Name: "variant", Value: "plain"}
 var ModalVarLists = Attr{Name: "variant", Value: "lists"}
 var ModalVarSizes = Attr{Name: "variant", Value: "sizes"}
+var ModalVarWide = Attr{Name: "variant", Value: "wide"}
 var PageSheet = Attr{Name: "kind", Value: "sheet"}
 var PageFull = Attr{Name: "kind", Value: "full"}
 var SpaceNone = Attr{Name: "gap", Value: "none"}

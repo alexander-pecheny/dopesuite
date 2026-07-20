@@ -122,6 +122,8 @@ func Main() {
 	mux.HandleFunc("GET /api/cards/{id}/timeline", srv.handleGetTimeline)
 	mux.HandleFunc("POST /api/cards/{id}/comments", srv.handleAddComment)
 	mux.HandleFunc("POST /api/cards/{id}/comments/import", srv.handleImportComments)
+	mux.HandleFunc("PATCH /api/comments/{id}", srv.handlePatchComment)
+	mux.HandleFunc("DELETE /api/comments/{id}", srv.handleDeleteComment)
 
 	// ---- read markers / activity (blue dots + 🔔 bell) ----
 	mux.HandleFunc("POST /api/cards/{id}/read", srv.handleMarkRead)
@@ -153,6 +155,8 @@ func Main() {
 	mux.HandleFunc("GET /api/cards/{id}/attachments", srv.handleListAttachments)
 	mux.HandleFunc("POST /api/cards/{id}/attachments", srv.handleCreateAttachment)
 	mux.HandleFunc("GET /api/attachments/{id}", srv.handleGetAttachment)
+	mux.HandleFunc("PUT /api/attachments/{id}", srv.handleReplaceAttachment)
+	mux.HandleFunc("PATCH /api/attachments/{id}", srv.handlePatchAttachment)
 	mux.HandleFunc("DELETE /api/attachments/{id}", srv.handleDeleteAttachment)
 
 	// ---- static ----

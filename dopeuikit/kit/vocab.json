@@ -9,7 +9,7 @@
     "form-dir":       { "prefix": "Dir",      "values": ["row", "col"] },
     "editor-kind":    { "prefix": "Editor",   "values": ["plain"] },
     "checkbox-kind":  { "prefix": "Check",    "values": ["plain"] },
-    "modal-variant":  { "prefix": "ModalVar", "values": ["plain", "lists", "sizes"] },
+    "modal-variant":  { "prefix": "ModalVar", "values": ["plain", "lists", "sizes", "wide"] },
     "mount-kind":     { "prefix": "Mount",    "values": [] }
   },
   "universal": [

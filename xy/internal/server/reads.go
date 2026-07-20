@@ -90,7 +90,7 @@ select e.id, e.card_id, e.type, e.author_user_id, e.created_at, e.payload_enc,
 from timeline_events e
 join cards c on c.id = e.card_id and c.deleted_at is null
 left join card_reads cr on cr.card_id = e.card_id and cr.user_id = ?
-where e.board_id = ? and e.author_user_id is not null and e.author_user_id <> ?
+where e.board_id = ? and e.deleted_at is null and e.author_user_id is not null and e.author_user_id <> ?
 order by e.id desc
 limit ?`, uid, bid, uid, limit)
 	if handleErr(w, err) {
