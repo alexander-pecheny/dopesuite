@@ -991,6 +991,19 @@ function popupMenu(anchor, items) {
   }
   const menu = el("div", { class: "menu-dropdown menu-fixed", role: "menu" });
   for (const it of items) {
+    // An item with `checked` is a toggle: a real checkbox, styled by the design
+    // system's input[type=checkbox] rules, rather than a ☐/☑ glyph. It is a
+    // <label> so the whole row remains the hit target. preventDefault keeps the
+    // box from flipping optimistically — the caller re-renders from what the
+    // server actually stored.
+    if (it.checked !== undefined) {
+      const box = el("input", { type: "checkbox", role: "menuitemcheckbox" });
+      box.checked = !!it.checked;
+      const row = el("label", { class: "menu-item menu-item-check" }, box, it.label);
+      row.addEventListener("click", (e) => { e.preventDefault(); close(); it.onClick(); });
+      menu.append(row);
+      continue;
+    }
     // Most items carry their icon inside the label string (emoji); an SVG icon
     // comes as it.icon and takes the emoji's slot before the text.
     menu.append(el("button", {
@@ -3999,9 +4012,13 @@ newLabelForm.addEventListener("submit", async (e) => {
 });
 
 // ---- timeline ----
+// loadTimeline renders into a detached fragment and swaps it in once. Emptying
+// the лента first and appending as the decrypts resolved collapsed the card
+// overlay's scroll height mid-render, so the browser clamped the scroll position
+// and the view jumped up — every marked выписка threw the reader back to
+// «Выписок: N». The container must never be shorter than its content.
 async function loadTimeline(cardId) {
   const tl = document.getElementById("timeline");
-  tl.replaceChildren();
   // Refresh the cached server timeline when online, then merge any pending
   // (un-synced) events synthesized from the outbox so offline edits/comments show.
   if (xySync.isOnline()) {
@@ -4011,11 +4028,13 @@ async function loadTimeline(cardId) {
   try { events = await xySync.timelineFor(cardId); } catch (_) {}
   if (cardId === openCardId) { openCardEvents = events; renderExcerptCount(); }
   // Newest first: events are oldest→newest (by id); show them reversed.
+  const frag = document.createDocumentFragment();
   for (const ev of [...events].reverse()) {
     let payload = "";
     try { payload = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) {}
-    tl.append(renderEvent(ev, payload));
+    frag.append(renderEvent(ev, payload));
   }
+  tl.replaceChildren(frag);
 }
 
 // eventAuthor resolves a timeline event's author to a display name. Pending
@@ -4107,7 +4126,7 @@ function commentMenu(anchor, ev, payload) {
     items.push({ label: "🗑 Удалить", onClick: () => deleteComment(ev) });
   }
   items.push({
-    label: `${ev.is_excerpt ? "☑" : "☐"} Выписка`,
+    label: "Выписка", checked: !!ev.is_excerpt,
     onClick: () => commentAction(() => jpatch(`/api/comments/${ev.id}`, { is_excerpt: !ev.is_excerpt })),
   });
   popupMenu(anchor, items);
@@ -4173,11 +4192,12 @@ let cardImageNames = [];
 
 async function loadAttachments(cardId) {
   const box = document.getElementById("attachments");
-  box.replaceChildren();
   cardImageNames = [];
   // Always refetch: this runs on card open and after every upload/delete, so it
   // doubles as the invalidation point for the preview's attachment-list cache.
   const list = await cardAttachments(cardId, true);
+  // Built off-DOM and swapped in one go — see loadTimeline on the scroll jump.
+  const frag = document.createDocumentFragment();
   for (const att of list) {
     const name = att.name || "файл";
     const isImage = (att.mime || "").startsWith("image/");
@@ -4192,8 +4212,9 @@ async function loadAttachments(cardId) {
         onclick: (e) => attachMenu(e.currentTarget, att, name),
       }),
     );
-    box.append(row);
+    frag.append(row);
   }
+  box.replaceChildren(frag);
   openCardExcerptAtts = list.filter((a) => a.is_excerpt);
   renderExcerptCount();
 }
@@ -4203,7 +4224,7 @@ function attachMenu(anchor, att, name) {
     { label: "🔄 Заменить", onClick: () => pickReplacement(att, name) },
     { label: "🗑 Удалить", onClick: () => removeAttachment(att, name) },
     {
-      label: `${att.is_excerpt ? "☑" : "☐"} Выписка`,
+      label: "Выписка", checked: !!att.is_excerpt,
       onClick: () => attachAction(async () => {
         await jpatch(`/api/attachments/${att.id}`, { is_excerpt: !att.is_excerpt });
       }),

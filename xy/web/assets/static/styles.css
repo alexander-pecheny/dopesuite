@@ -471,7 +471,11 @@
 .excerpt { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--page); }
 .excerpt-meta { font-size: var(--text-2xs); color: var(--muted); }
 .excerpt-text { white-space: pre-wrap; font-size: var(--text-sm); }
-.excerpt-img { max-width: 100%; border-radius: var(--radius-sm); cursor: zoom-in; }
+/* .excerpt is a flex column, so the default align-items:stretch was forcing the
+   image to the container's width and squashing it — a replaced element with an
+   intrinsic size still stretches on the cross axis. align-self + height:auto
+   keep the aspect ratio. */
+.excerpt-img { align-self: flex-start; max-width: 100%; height: auto; border-radius: var(--radius-sm); cursor: zoom-in; }
 
 /* Image lightbox: a full-screen viewer for image attachments. Above the modals
    it may be opened over, below the timer (which must stay usable). The <img> is
@@ -529,6 +533,9 @@
    inherited --z-dropdown (30) they painted under it (50) and read as a dead
    button. Above the overlay and the board header, still below --z-modal. */
 .menu-dropdown.menu-fixed { position: fixed; top: auto; right: auto; z-index: 70; }
+/* a toggle row in a popup menu: .menu-item is already the flex row, this only
+   makes the <label> behave like the <button> siblings it sits among */
+.menu-item-check { cursor: var(--cursor-action); user-select: none; }
 
 /* two-pane before/after diff (timeline desc_edit), with the word-level changes
    highlighted inside each pane */
