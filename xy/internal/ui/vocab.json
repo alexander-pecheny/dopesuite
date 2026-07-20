@@ -5,14 +5,14 @@
     "editor-kind":   { "prefix": "Editor",  "values": ["comment", "handouts", "importsrc"] },
     "pane-kind":     { "prefix": "Pane",    "values": ["src", "preview"] },
     "doc-kind":      { "prefix": "DocKind", "values": ["doc", "detail"] },
-    "doc-variant":   { "prefix": "DocVar",  "values": ["plain", "handouts", "import"] },
+    "doc-variant":   { "prefix": "DocVar",  "values": ["plain", "handouts", "import", "feed"] },
     "head-kind":     { "prefix": "Head",    "values": ["doc", "detail"] },
     "mount-kind":    { "prefix": "Mount",   "values": [
       "kanban", "board-grid", "timeline", "label-picker", "label-add-row",
       "attachments", "card-fields", "preview-body", "card-preview-body",
       "handouts-pdf", "import-preview", "lists-manage-rows", "members-list",
       "token-list", "token-value", "card-copy-msg", "import-count", "card-title",
-      "sizes-preview", "excerpts", "excerpt-count", "thread"
+      "sizes-preview", "excerpts", "excerpt-count", "thread", "feed-grid"
     ] }
   },
   "primitives": [

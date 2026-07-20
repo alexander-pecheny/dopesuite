@@ -64,6 +64,8 @@ func expandDocoverlay(c *base.ExpandCtx, p *base.Element) []base.Node {
 			docCls = "preview-doc handouts-doc"
 		case "import":
 			overlayCls, docCls = "card-overlay import-overlay", "preview-doc import-doc"
+		case "feed":
+			docCls = "preview-doc feed-doc"
 		}
 	}
 	id, _ := base.Get(p, "id")
@@ -129,4 +131,5 @@ var xyMounts = map[string]base.MountSpec{
 	"excerpts":          {Tag: "div", Classes: []string{"excerpts"}},
 	"excerpt-count":     {Tag: "span", Classes: []string{"excerpt-count"}},
 	"thread":            {Tag: "div", Classes: []string{"thread"}},
+	"feed-grid":         {Tag: "div", Classes: []string{"feed-grid"}},
 }

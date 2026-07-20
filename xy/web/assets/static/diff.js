@@ -46,5 +46,56 @@ function diffTokens(before, after) {
   return ops;
 }
 
-export const xyDiff = { tokenize, diffTokens };
+// takeWords returns the leading (or, with fromEnd, trailing) `n` word tokens of
+// a token run, whitespace included, so the slice reads as natural text.
+function takeWords(toks, n, fromEnd) {
+  if (n <= 0) return "";
+  let count = 0;
+  if (fromEnd) {
+    for (let i = toks.length - 1; i >= 0; i--) {
+      if (/\S/.test(toks[i]) && ++count === n) return toks.slice(i).join("");
+    }
+  } else {
+    for (let i = 0; i < toks.length; i++) {
+      if (/\S/.test(toks[i]) && ++count === n) return toks.slice(0, i + 1).join("");
+    }
+  }
+  return toks.join(""); // fewer than n words — the whole run IS the context
+}
+
+// briefOps elides the unchanged bulk of a diff, keeping `context` words either
+// side of every change and replacing what it drops with a "gap" op. A question
+// is mostly untouched text between small edits; showing all of it to reveal two
+// swapped words is what the краткий view exists to avoid.
+//
+// The context around a change belongs to the change: for an equal run the words
+// nearest the PREVIOUS change (its head) and the NEXT one (its tail) are kept,
+// and only the middle is dropped. The leading run has nothing before it and the
+// trailing run nothing after, so each keeps only its inner side.
+function briefOps(ops, context = 4) {
+  const out = [];
+  // A gap is emitted even as the very first op — the leading run of a long
+  // question is exactly what gets dropped, and starting mid-sentence with no …
+  // reads as if that were the whole text.
+  const pushGap = () => {
+    const last = out[out.length - 1];
+    if (!last || last.type !== "gap") out.push({ type: "gap", text: "…" });
+  };
+  ops.forEach((op, idx) => {
+    if (op.type !== "eq") { out.push(op); return; }
+    const toks = tokenize(op.text);
+    const words = toks.filter((t) => /\S/.test(t)).length;
+    const keepHead = idx === 0 ? 0 : context;
+    const keepTail = idx === ops.length - 1 ? 0 : context;
+    if (words <= keepHead + keepTail) { out.push(op); return; } // nothing worth dropping
+    const head = takeWords(toks, keepHead, false);
+    const tail = takeWords(toks, keepTail, true);
+    if (head) out.push({ type: "eq", text: head });
+    pushGap();
+    if (tail) out.push({ type: "eq", text: tail });
+  });
+  return out;
+}
+
+export const xyDiff = { tokenize, diffTokens, briefOps };
 if (typeof window !== "undefined") window.xyDiff = xyDiff;

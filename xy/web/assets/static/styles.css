@@ -557,6 +557,31 @@
    makes the <label> behave like the <button> siblings it sits among */
 .menu-item-check { cursor: var(--cursor-action); user-select: none; }
 
+/* краткий diff: one flowing line, old and new inline, the untouched bulk of the
+   question replaced by … — the whole point is that it costs a couple of lines */
+.tl-brief {
+  margin-top: var(--space-1); font-size: var(--text-sm);
+  white-space: pre-wrap; word-break: break-word; line-height: 1.5;
+}
+.tl-gap { color: var(--muted); }
+
+/* the expanded лента: the same events flowed into columns. The container has a
+   definite height, so the columns fill top-to-bottom and continue sideways —
+   hence the horizontal scroll rather than a vertical one. */
+/* full width, unlike the 820px reading column the other doc overlays want —
+   the whole point is to spend the screen on columns */
+/* both classes: .preview-doc's own width rule is later in this file and would
+   otherwise win on equal specificity */
+.preview-doc.feed-doc { width: 100%; }
+.feed-grid {
+  flex: 1; min-height: 0; overflow: auto;
+  column-width: 340px; column-gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+}
+.feed-grid .tl-event { break-inside: avoid; margin-bottom: var(--space-2); }
+/* a column-broken .tl-diff turns into two unreadable slivers */
+.feed-grid .tl-diff { grid-template-columns: 1fr; }
+
 /* two-pane before/after diff (timeline desc_edit), with the word-level changes
    highlighted inside each pane */
 .tl-diff { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-1); font-family: var(--font-mono); font-size: var(--text-2xs); }

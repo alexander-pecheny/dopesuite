@@ -115,6 +115,14 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
       button small id="moveBtn" "Переместить"
 
     label data-edit-only "Лента " (unreaddot id="commentsUnreadDot" title="Непрочитанные комментарии")
+    -- вид правок controls how desc_edit events render: краткий shows only the
+    -- changed words with a little context, подробный the whole before/after.
+    row gap="sm" align="center" wrap data-edit-only
+      label for="feedDiffView" "Вид правок"
+      selectfield id="feedDiffView" compact title="Вид правок"
+        option value="brief" "краткий"
+        option value="full" "подробный"
+      button small kind="ghost" id="feedExpand" title="Развернуть ленту на весь экран" "⛶ Развернуть"
     mount id="timeline" kind="timeline" data-edit-only
     form id="commentForm" dir="col" data-edit-only
       editor id="commentInput" kind="comment" placeholder="Комментарий…" spellcheck="false"
@@ -212,6 +220,19 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
       textfield id="addMemberName" placeholder="Имя пользователя" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" grow
       button small submit "Добавить"
     message id="membersMessage"
+
+  -- expanded лента: the same feed on the whole screen, flowed into columns so a
+  -- long discussion can be read without scrolling a 320px-tall panel
+  docoverlay id="feedOverlay" kind="doc" variant="feed" label="Лента"
+    headrow
+      previewtitle "Лента"
+      headactions
+        label for="feedDiffViewFull" "Вид правок"
+        selectfield id="feedDiffViewFull" compact title="Вид правок"
+          option value="brief" "краткий"
+          option value="full" "подробный"
+        iconbtn id="feedClose" label="Закрыть" "×"
+    mount id="feedGrid" kind="feed-grid"
 
   -- thread viewer: one comment and its replies, oldest→newest (the лента itself
   -- is newest-first, but a conversation only reads top-to-bottom). Replies also

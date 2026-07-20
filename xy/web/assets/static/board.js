@@ -3739,7 +3739,7 @@ cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverla
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape" || cardOverlay.hidden) return;
   if (!pasteOverlay.hidden || !excerptsOverlay.hidden || !threadOverlay.hidden
-      || document.querySelector(".label-add-popup")) return;
+      || !feedOverlay.hidden || document.querySelector(".label-add-popup")) return;
   cardBack();
 });
 
@@ -4119,23 +4119,9 @@ function renderEvent(ev, payload) {
   } else if (ev.type === "desc_edit") {
     let diff = {};
     try { diff = JSON.parse(payload); } catch (_) {}
-    // Two-pane before/after, with the word-level changes highlighted within each
-    // pane: removed tokens struck through in the "before" pane, added tokens
-    // highlighted in the "after" pane; unchanged text plain in both.
-    const before = el("div", { class: "tl-before" });
-    const after = el("div", { class: "tl-after" });
-    for (const op of xyDiff.diffTokens(diff.before || "", diff.after || "")) {
-      if (op.type === "eq") {
-        before.append(document.createTextNode(op.text));
-        after.append(document.createTextNode(op.text));
-      } else if (op.type === "del") {
-        before.append(el("del", { class: "tl-chg", text: op.text }));
-      } else {
-        after.append(el("ins", { class: "tl-chg", text: op.text }));
-      }
-    }
+    const ops = xyDiff.diffTokens(diff.before || "", diff.after || "");
     wrap.append(el("div", { class: "tl-meta", text: meta("правка описания · " + when) }),
-      el("div", { class: "tl-diff" }, before, after));
+      diffView() === "brief" ? renderBriefDiff(ops) : renderFullDiff(ops));
   } else {
     let info = {};
     try { info = JSON.parse(payload); } catch (_) {}
@@ -4149,6 +4135,95 @@ function renderEvent(ev, payload) {
   }
   return wrap;
 }
+
+// ---- desc_edit rendering: краткий / подробный ----
+// A card's description is long and an edit usually touches a few words, so the
+// default (краткий) shows just those with a little context. подробный is the
+// original two-pane before/after, kept for when the whole text matters. The
+// choice is a per-reader display preference, so it lives in localStorage beside
+// the other display prefs rather than on the server.
+const DIFF_VIEW_KEY = "xy.diffView";
+function diffView() {
+  return localStorage.getItem(DIFF_VIEW_KEY) === "full" ? "full" : "brief";
+}
+
+// renderFullDiff: two panes, changes highlighted within each — removed tokens
+// struck through in "before", added tokens highlighted in "after".
+function renderFullDiff(ops) {
+  const before = el("div", { class: "tl-before" });
+  const after = el("div", { class: "tl-after" });
+  for (const op of ops) {
+    if (op.type === "eq") {
+      before.append(document.createTextNode(op.text));
+      after.append(document.createTextNode(op.text));
+    } else if (op.type === "del") {
+      before.append(el("del", { class: "tl-chg", text: op.text }));
+    } else {
+      after.append(el("ins", { class: "tl-chg", text: op.text }));
+    }
+  }
+  return el("div", { class: "tl-diff" }, before, after);
+}
+
+// renderBriefDiff: one flowing line, old and new inline, the untouched bulk
+// replaced by … (xyDiff.briefOps decides what survives).
+function renderBriefDiff(ops) {
+  const box = el("div", { class: "tl-brief" });
+  for (const op of xyDiff.briefOps(ops)) {
+    if (op.type === "eq") box.append(document.createTextNode(op.text));
+    else if (op.type === "gap") box.append(el("span", { class: "tl-gap", text: " … " }));
+    else if (op.type === "del") box.append(el("del", { class: "tl-chg", text: op.text }));
+    else box.append(el("ins", { class: "tl-chg", text: op.text }));
+  }
+  // An edit that changed only whitespace leaves nothing visible to show.
+  if (!box.textContent.trim()) box.append(el("span", { class: "tl-gap", text: "без видимых изменений" }));
+  return box;
+}
+
+// setDiffView keeps the two selects (card + expanded лента) in step and
+// re-renders whichever feeds are on screen.
+async function setDiffView(v) {
+  localStorage.setItem(DIFF_VIEW_KEY, v === "full" ? "full" : "brief");
+  for (const id of ["feedDiffView", "feedDiffViewFull"]) document.getElementById(id).value = diffView();
+  if (openCardId) await loadTimeline(openCardId);
+  if (!feedOverlay.hidden) await renderFeedGrid();
+}
+
+for (const id of ["feedDiffView", "feedDiffViewFull"]) {
+  const sel = document.getElementById(id);
+  sel.value = diffView();
+  sel.addEventListener("change", () => setDiffView(sel.value));
+}
+
+// ---- expanded лента ----
+// The card panel gives the лента ~320px of height; on a long discussion that is
+// a keyhole. Развернуть re-renders the same events full-screen, flowed into
+// columns so as much as possible is readable at once.
+const feedOverlay = document.getElementById("feedOverlay");
+function closeFeed() { feedOverlay.hidden = true; }
+
+async function renderFeedGrid() {
+  const grid = document.getElementById("feedGrid");
+  const frag = document.createDocumentFragment();
+  for (const ev of [...(openCardEvents || [])].reverse()) {
+    let payload = "";
+    if (!ev.deleted) { try { payload = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) {} }
+    const node = renderEvent(ev, payload);
+    // The panel's лента already owns tlev-{id}; these are a SECOND rendering of
+    // the same events, so they must not duplicate those ids — deep links and
+    // highlightComment resolve by id and would land on whichever came first.
+    node.removeAttribute("id");
+    frag.append(node);
+  }
+  grid.replaceChildren(frag);
+}
+
+document.getElementById("feedExpand").addEventListener("click", async () => {
+  feedOverlay.hidden = false;
+  await renderFeedGrid();
+});
+document.getElementById("feedClose").addEventListener("click", closeFeed);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !feedOverlay.hidden) closeFeed(); });
 
 // ---- reply threads ----
 // Threads are one level deep and live in a modal: the лента stays flat and
@@ -4232,7 +4307,10 @@ function commentMenu(anchor, ev, payload) {
   // replies yet, that is just the comment plus an empty answer box.
   const items = [{ label: "↩️ Ответить", onClick: () => openThread(ev.reply_to_id || ev.id) }];
   if (mine) {
-    items.push({ label: "✏️ Редактировать", onClick: () => startCommentEdit(ev, payload) });
+    // The node is taken from the anchor, not looked up by id: the same comment
+    // may also be rendered in the expanded лента, and the edit must open on the
+    // copy whose ⋯ was actually clicked.
+    items.push({ label: "✏️ Редактировать", onClick: () => startCommentEdit(ev, payload, anchor.closest(".tl-event")) });
     items.push({ label: "🗑 Удалить", onClick: () => deleteComment(ev) });
   }
   items.push({
@@ -4250,8 +4328,15 @@ async function commentAction(fn) {
   try {
     await fn();
     msg.textContent = "";
-    await loadTimeline(openCardId);
+    await refreshFeeds();
   } catch (err) { msg.textContent = err.message; }
+}
+
+// refreshFeeds re-renders both places a comment can appear: the card panel's
+// лента and, when open, the expanded one.
+async function refreshFeeds() {
+  await loadTimeline(openCardId);
+  if (!feedOverlay.hidden) await renderFeedGrid();
 }
 
 function deleteComment(ev) {
@@ -4261,8 +4346,7 @@ function deleteComment(ev) {
 
 // startCommentEdit swaps the comment's body for a textarea in place, so the
 // surrounding лента stays put while it is edited.
-function startCommentEdit(ev, payload) {
-  const wrap = document.getElementById("tlev-" + ev.id);
+function startCommentEdit(ev, payload, wrap) {
   if (!wrap || wrap.querySelector(".tl-edit")) return;
   const body = wrap.querySelector(".tl-comment");
   const ta = el("textarea", { class: "card-desc comment-input tl-edit", spellcheck: "false" });
@@ -4277,7 +4361,7 @@ function startCommentEdit(ev, payload) {
   });
   const cancel = el("button", {
     class: "btn btn-small btn-ghost", type: "button", text: "Отмена",
-    onclick: () => loadTimeline(openCardId),
+    onclick: () => refreshFeeds(),
   });
   body.replaceWith(el("div", { class: "tl-editbox" }, ta, el("div", { class: "tl-editrow" }, save, cancel)));
   ta.focus();
