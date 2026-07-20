@@ -230,17 +230,20 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
 
   -- expanded лента: the same feed on the whole screen, flowed into columns so a
   -- long discussion can be read without scrolling a 320px-tall panel
-  -- No «Лента» title: after «Развернуть» it is obvious where you are, and the
-  -- two labelled selects each sit by the control they name, in a compact block
-  -- (label → select grid), with the close button pinned top-right.
+  -- No «Лента» title: after «Развернуть» it is obvious where you are. Both
+  -- labelled selects sit on ONE line (desktop has the room, and a second row
+  -- would only eat into the feed); on a phone they shrink and wrap.
   docoverlay id="feedOverlay" kind="doc" variant="feed" label="Лента"
     headrow
       headactions
-        col
+        -- each label+select is one nowrap unit, so when the row wraps on a phone
+        -- the label never orphans from its select (two clean pairs, one each row)
+        row gap="sm" align="center"
           label for="feedDiffViewFull" "Вид правок"
           selectfield id="feedDiffViewFull" compact title="Вид правок"
             option value="brief" "краткий"
             option value="full" "подробный"
+        row gap="sm" align="center"
           label for="feedOrder" "Порядок"
           selectfield id="feedOrder" compact title="Порядок событий"
             option value="new" "сначала новое"
