@@ -73,3 +73,36 @@ test("briefOps elides between two distant changes but not between close ones", (
   const near = xyDiff.briefOps(xyDiff.diffTokens("aa bb cc dd", "XX bb cc YY"), 2);
   assert.equal(near.filter((o) => o.type === "gap").length, 0); // changes too close to elide
 });
+
+test("clusterChanges groups a rewritten phrase into one del then one add", () => {
+  // the LCS keeps the surviving short words, so the raw diff alternates
+  const before = "то и книгу они могут не дочитать.";
+  const after = "то и книгу читать им сложно.";
+  const raw = xyDiff.diffTokens(before, after);
+  assert.ok(raw.filter((o) => o.type === "del").length > 1, "raw diff really does alternate");
+
+  const ops = xyDiff.clusterChanges(raw);
+  const dels = ops.filter((o) => o.type === "del");
+  const adds = ops.filter((o) => o.type === "add");
+  assert.equal(dels.length, 1);
+  assert.equal(adds.length, 1);
+  // and every changed word survives the regrouping, in order
+  assert.equal(dels[0].text, "они могут не дочитать.");
+  assert.equal(adds[0].text, "читать им сложно.");
+  // deleted chunk comes before the inserted one
+  assert.ok(ops.indexOf(dels[0]) < ops.indexOf(adds[0]));
+  // untouched text is left alone
+  assert.ok(ops.some((o) => o.type === "eq" && o.text.includes("книгу")));
+});
+
+test("clusterChanges keeps separate changes separate", () => {
+  const ops = xyDiff.clusterChanges(
+    xyDiff.diffTokens("аа бб вв гг дд ее", "ХХ бб вв гг дд ЯЯ"));
+  assert.equal(ops.filter((o) => o.type === "del").length, 2); // real words between them
+  assert.equal(ops.filter((o) => o.type === "add").length, 2);
+});
+
+test("clusterChanges is a no-op on a pure insertion", () => {
+  const raw = xyDiff.diffTokens("", "совсем новый текст");
+  assert.deepEqual(xyDiff.clusterChanges(raw).map((o) => o.type), ["add"]);
+});

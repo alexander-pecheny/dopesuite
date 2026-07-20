@@ -569,6 +569,9 @@
    went, green for what came. */
 .tl-brief del.tl-chg { background: var(--red); text-decoration: line-through; }
 .tl-brief ins.tl-chg { background: var(--green); text-decoration: none; }
+/* the whitespace that used to separate them was absorbed into the cluster
+   (clusterChanges), so the gap between the old chunk and the new one is drawn */
+.tl-brief .tl-chg + .tl-chg { margin-left: 0.35em; }
 
 /* the expanded лента: the same events flowed into columns. The container has a
    definite height, so the columns fill top-to-bottom and continue sideways —

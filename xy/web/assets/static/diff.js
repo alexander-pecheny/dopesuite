@@ -63,6 +63,43 @@ function takeWords(toks, n, fromEnd) {
   return toks.join(""); // fewer than n words — the whole run IS the context
 }
 
+// clusterChanges merges a run of changes separated only by whitespace into one
+// deleted chunk followed by one inserted chunk.
+//
+// A rewritten phrase rarely replaces every word: the LCS latches onto whatever
+// short tokens survive ("не", a preposition) and the result alternates
+// del/add/del/add, which in the INLINE view reads as an unparseable barcode.
+// The two-pane view does not need this — each side has its own pane — so this
+// runs for the краткий view only, where old and new share one line.
+//
+// Pieces are rejoined with single spaces: the whitespace between them belonged
+// to the ops being absorbed, and a summary line does not owe the original its
+// line breaks.
+function clusterChanges(ops) {
+  const isWs = (op) => op.type === "eq" && !/\S/.test(op.text);
+  const join = (parts) => parts.map((t) => t.trim()).filter(Boolean).join(" ");
+  const out = [];
+  let i = 0;
+  while (i < ops.length) {
+    if (ops[i].type === "eq") { out.push(ops[i]); i++; continue; }
+    const dels = [], adds = [];
+    let j = i, lastChange = i;
+    while (j < ops.length && (ops[j].type !== "eq" || isWs(ops[j]))) {
+      if (ops[j].type === "del") { dels.push(ops[j].text); lastChange = j; }
+      else if (ops[j].type === "add") { adds.push(ops[j].text); lastChange = j; }
+      j++;
+    }
+    const del = join(dels), add = join(adds);
+    if (del) out.push({ type: "del", text: del });
+    if (add) out.push({ type: "add", text: add });
+    // whitespace trailing the last real change separates the cluster from what
+    // follows, so it belongs outside it
+    for (const op of ops.slice(lastChange + 1, j)) out.push(op);
+    i = j;
+  }
+  return out;
+}
+
 // briefOps elides the unchanged bulk of a diff, keeping `context` words either
 // side of every change and replacing what it drops with a "gap" op. A question
 // is mostly untouched text between small edits; showing all of it to reveal two
@@ -72,7 +109,8 @@ function takeWords(toks, n, fromEnd) {
 // nearest the PREVIOUS change (its head) and the NEXT one (its tail) are kept,
 // and only the middle is dropped. The leading run has nothing before it and the
 // trailing run nothing after, so each keeps only its inner side.
-function briefOps(ops, context = 4) {
+function briefOps(rawOps, context = 4) {
+  const ops = clusterChanges(rawOps);
   const out = [];
   // A gap is emitted even as the very first op — the leading run of a long
   // question is exactly what gets dropped, and starting mid-sentence with no …
@@ -97,5 +135,5 @@ function briefOps(ops, context = 4) {
   return out;
 }
 
-export const xyDiff = { tokenize, diffTokens, briefOps };
+export const xyDiff = { tokenize, diffTokens, clusterChanges, briefOps };
 if (typeof window !== "undefined") window.xyDiff = xyDiff;
