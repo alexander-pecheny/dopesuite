@@ -476,3 +476,27 @@ test("testerCopyText dedupes and handles players-only / teams-only / empty", () 
     "Вопросы тестировали команды: Альфа");
   assert.equal(testerCopyText([]), "");
 });
+
+// ---- card-preview modes (users.card_title) ----
+
+test("answerText returns the '! ' block, or '' when there is none", () => {
+  assert.equal(xyChgk.answerText("? Кто?\n! Пушкин\n/ комментарий"), "Пушкин");
+  assert.equal(xyChgk.answerText("? Кто?"), "");
+});
+
+test("previewText in answer mode previews a question by its answer", () => {
+  const desc = "? Длинный текст вопроса\n! Пушкин";
+  assert.equal(xyChgk.previewText("question", desc, "answer"), "Пушкин");
+  assert.equal(xyChgk.previewText("question", desc, "question"), "Длинный текст вопроса");
+  // No mode is the historic default.
+  assert.equal(xyChgk.previewText("question", desc), "Длинный текст вопроса");
+});
+
+test("an answerless question falls back to its text rather than previewing blank", () => {
+  assert.equal(xyChgk.previewText("question", "? Кто?", "answer"), "Кто?");
+});
+
+test("answer mode does not touch non-question cards", () => {
+  assert.equal(xyChgk.previewText("heading", "### Тур 1", "answer"), "Тур 1");
+  assert.equal(xyChgk.previewText("meta", "# Дата", "answer"), "Дата");
+});

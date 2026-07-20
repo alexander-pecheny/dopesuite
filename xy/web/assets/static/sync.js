@@ -87,6 +87,7 @@ function applyOpToSnapshot(snap, op, resultId) {
         id: resultId, list_id: ids[0], kind: body.kind || "normal",
         description_enc: body.description_enc, rank: body.rank,
         ...(body.handout_meta_enc ? { handout_meta_enc: body.handout_meta_enc } : {}),
+        ...(body.alias_enc ? { alias_enc: body.alias_enc } : {}),
       });
       break;
     case "patchCard": {
@@ -99,6 +100,10 @@ function applyOpToSnapshot(snap, op, resultId) {
         if (body.handout_meta_enc != null) {
           if (body.handout_meta_enc === "") delete c.handout_meta_enc;
           else c.handout_meta_enc = body.handout_meta_enc;
+        }
+        if (body.alias_enc != null) {
+          if (body.alias_enc === "") delete c.alias_enc;
+          else c.alias_enc = body.alias_enc;
         }
       }
       break;

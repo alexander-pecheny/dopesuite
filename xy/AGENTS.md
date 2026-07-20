@@ -188,7 +188,15 @@ web/assets/            //go:embed static + ui (package assets)
                        --kcard-lines. Cards hold their FULL text; --kcard-lines line-clamps
                        it (no clamp = whole question). Don't reintroduce a char cap in
                        cardBody — that's what made a card stop at 80 chars no matter how
-                       much room the reader gave it. The snapshot also carries the caller's
+                       much room the reader gave it. What a card previews is
+                       alias → (question text | answer). The alias is the card's own short
+                       label (cards.alias_enc, migrateV12 — its OWN encrypted column, NOT a
+                       4s marker: the 4s markers mirror chgksuite byte-for-byte, so a marker
+                       of ours would break import/export parity or leak into exports); it is
+                       edited in the first Поля field and wins whenever set. The question/
+                       answer fallback is the reader's own choice (users.card_title,
+                       migrateV13, edited on /profile); an answerless question falls back to
+                       its text rather than previewing blank. The snapshot also carries the caller's
                        default_author, pre-filled into new question cards (the Поля Автор
                        field and the Текст stub's "@" line — an untouched stub saves as a
                        card with just that, deliberately). Автор/Источник inputs
@@ -201,11 +209,12 @@ web/assets/            //go:embed static + ui (package assets)
                        left, the live list preview on the right. .4s/.zip import straight.
     menu.js            theme boot + ☰ menu; also injects PWA <head> tags + registers sw.js
     login/register     auth UI (login/menu ported from dope)
-    profile.js         /profile: username set-once, logout, and three dialogs — change
+    profile.js         /profile: username set-once, logout, and four dialogs — change
                        password, board sizes (three sliders + a to-scale pseudo-board
                        preview, wireframe bars for text; defaults 1512px / 280px / 3
                        lines, max slider position = unlimited/null; debounced POST
-                       /api/auth/sizes), default author (POST /api/auth/default-author).
+                       /api/auth/sizes), default author (POST /api/auth/default-author),
+                       card title (POST /api/auth/card-title — question text vs answer).
                        Shared defaults/ranges/sanitize/apply live in app.js (xySizes)
                        so this write path and board.js's read path agree
     tokens.js          /profile/tokens — create/revoke API tokens for the Trello API

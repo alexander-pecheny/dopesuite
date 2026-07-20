@@ -85,9 +85,11 @@ type meResponse struct {
 	Telegram *string `json:"telegram"`
 	// Display preferences, editable on /profile: the board layout (see
 	// handleSetSizes) and the author name pre-filled into new question cards
-	// (see handleSetDefaultAuthor).
+	// (see handleSetDefaultAuthor), and which field a card's list preview
+	// derives its title from (see handleSetCardTitle).
 	Sizes         json.RawMessage `json:"sizes,omitempty"`
 	DefaultAuthor string          `json:"default_author,omitempty"`
+	CardTitle     string          `json:"card_title,omitempty"`
 }
 
 func meOf(u session.User) meResponse {
@@ -107,14 +109,15 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := meOf(u)
-	var sizes, author sql.NullString
-	if err := s.db.QueryRowContext(r.Context(), `select sizes, default_author from users where id = ?`, u.UserID).Scan(&sizes, &author); handleErr(w, err) {
+	var sizes, author, cardTitle sql.NullString
+	if err := s.db.QueryRowContext(r.Context(), `select sizes, default_author, card_title from users where id = ?`, u.UserID).Scan(&sizes, &author, &cardTitle); handleErr(w, err) {
 		return
 	}
 	if sizes.Valid && sizes.String != "" {
 		resp.Sizes = json.RawMessage(sizes.String)
 	}
 	resp.DefaultAuthor = author.String
+	resp.CardTitle = cardTitle.String
 	writeJSON(w, resp)
 }
 
@@ -609,6 +612,41 @@ func (s *server) handleSetDefaultAuthor(w http.ResponseWriter, r *http.Request) 
 	err := s.withWriteTx(r.Context(), "set-default-author", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `update users set default_author = ?, updated_at = ? where id = ?`,
 			author, rfc3339(time.Now()), u.UserID)
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// cardTitleModes allowlists the values of users.card_title (see migrateV13):
+// which field a card's list preview derives its title from. "" means the
+// default, "question".
+var cardTitleModes = map[string]bool{"": true, "question": true, "answer": true}
+
+// handleSetCardTitle stores whether card previews show the question text or the
+// answer (users.card_title, see migrateV13). A card's alias, when set, wins over
+// either.
+func (s *server) handleSetCardTitle(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		CardTitle string `json:"card_title"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	mode := strings.TrimSpace(req.CardTitle)
+	if !cardTitleModes[mode] {
+		httpError(w, http.StatusBadRequest, "bad card_title")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "set-card-title", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update users set card_title = ?, updated_at = ? where id = ?`,
+			mode, rfc3339(time.Now()), u.UserID)
 		return err
 	})
 	if handleErr(w, err) {

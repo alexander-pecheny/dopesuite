@@ -26,7 +26,7 @@ const statusNode = document.getElementById("status");
 const kanban = document.getElementById("kanban");
 const titleNode = document.getElementById("boardTitle");
 
-const state = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null, unread: {}, sizes: null, defaultAuthor: "" };
+const state = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null, unread: {}, sizes: null, defaultAuthor: "", cardTitle: "question" };
 let dk = null;
 // One-shot guard per card-drag gesture: set true the moment a drop commits the
 // move, so a stray duplicate drop is ignored and dragend can tell an aborted
@@ -473,6 +473,7 @@ async function load() {
     state.sizes = xySizes.sanitize(snap.sizes);
     xySizes.apply(state.sizes);
     state.defaultAuthor = snap.default_author || "";
+    state.cardTitle = snap.card_title || "question";
     // Migrated boards (schema_version 2) carry a plaintext name; legacy boards still
     // need the DK to decrypt name_enc — and, since we now hold it, get backfilled.
     if (snap.schema_version >= 2) {
@@ -494,6 +495,7 @@ async function load() {
       id: c.id, listId: c.list_id, kind: c.kind, rank: c.rank,
       desc: await xyCrypto.decField(dk, c.description_enc),
       handoutMeta: c.handout_meta_enc ? await xyCrypto.decField(dk, c.handout_meta_enc) : null,
+      alias: c.alias_enc ? await xyCrypto.decField(dk, c.alias_enc) : null,
     })));
     state.labels = await Promise.all(snap.labels.map(async (l) => ({
       id: l.id, kind: l.kind,
@@ -768,7 +770,15 @@ async function cleanupTestLabels(deletedCards) {
 // preview: how much of it is visible is a display choice, made in CSS by the
 // --kcard-lines clamp (see the sizes modal). Truncating here instead would cap
 // the card at 80 characters no matter how much room the reader gives it.
-const cardBody = (card) => deriveTitle(xyChgk.previewText(card.kind, card.desc), Infinity);
+// An alias (a card's own 1–3 keywords) wins over both: it was written precisely
+// to identify this card at a glance, so it beats any derivation from the text.
+// state.cardTitle is the reader's fallback preference — question text or answer.
+const cardBody = (card) =>
+  aliasOf(card) || deriveTitle(xyChgk.previewText(card.kind, card.desc, state.cardTitle), Infinity);
+
+// aliasOf normalizes a card's alias to a non-empty string or "" (absent cards,
+// null, and whitespace-only all collapse to "no alias").
+const aliasOf = (card) => ((card && card.alias) || "").trim();
 
 // cardTitle is the plain-text form (move/copy dialogs, titles); renderCardTitle
 // below is the DOM form.
@@ -783,12 +793,15 @@ function cardTitle(card, number) {
 // directive number is rendered in a muted span so it reads as scaffolding,
 // visually distinct from the question content itself.
 function renderCardTitle(card, number) {
+  // An aliased card gets a modifier class: the alias is a label, not an excerpt,
+  // so it should not be line-clamped down to nothing by --kcard-lines.
+  const cls = "kcard-title" + (aliasOf(card) ? " kcard-title-alias" : "");
   if (card.kind === "question" && number) {
-    return el("div", { class: "kcard-title" },
+    return el("div", { class: cls },
       el("span", { class: "kcard-num", text: `${number}. ` }),
       cardBody(card));
   }
-  return el("div", { class: "kcard-title", text: cardTitle(card, number) });
+  return el("div", { class: cls, text: cardTitle(card, number) });
 }
 
 function renderCard(card, number) {
@@ -1110,7 +1123,7 @@ async function doMoveListCopy(remove) {
       for (const c of srcCards) {
         cr = keyBetween(cr, null);
         const cres = await jpost(`/api/lists/${lres.id}/cards`, await cardCopyBody(c, cr, dk));
-        state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc, handoutMeta: c.handoutMeta || null });
+        state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc, handoutMeta: c.handoutMeta || null, alias: c.alias || null });
         const ids = state.cardLabels[c.id] || [];
         if (ids.length) { await jput(`/api/cards/${cres.id}/labels`, { label_ids: ids }); state.cardLabels[cres.id] = ids.slice(); }
         await copyCardExtras(c.id, dk, cres.id);
@@ -2617,8 +2630,10 @@ let cardView = "";
 let lastEditView = "fields";
 let cardDraft = "";          // unsaved working 4s description
 let cardDraftMeta = null;    // unsaved handout-generation settings (string|null)
+let cardDraftAlias = null;   // unsaved alias (string|null) — its own column, not 4s
 let savedDesc = "";          // last-persisted desc — the baseline for the dirty check
 let savedMeta = null;        // last-persisted handout settings (string|null)
+let savedAlias = null;       // last-persisted alias (string|null)
 let cardFieldReaders = null; // per-field read() closures for the Поля view
 // Blocks the Поля editor doesn't render but must not eat: the pre-question
 // markup (№/№№ and friends) and anything else unmodelled. Both are captured at
@@ -2748,6 +2763,7 @@ function captureDraft() {
     const r = readCardFields();
     cardDraft = r.desc;
     cardDraftMeta = r.meta;
+    cardDraftAlias = r.alias;
   }
 }
 
@@ -2759,7 +2775,8 @@ function refreshSaveState() {
   const btn = document.getElementById("cardSave");
   const dirty = pendingList
     ? cardDraft.trim() !== ""
-    : cardDraft !== savedDesc || (cardDraftMeta || null) !== (savedMeta || null);
+    : cardDraft !== savedDesc || (cardDraftMeta || null) !== (savedMeta || null)
+      || (cardDraftAlias || null) !== (savedAlias || null);
   btn.disabled = !dirty;
   // A stale "Карточка сохранена." next to a re-enabled button reads as a lie.
   const msg = document.getElementById("cardMessage");
@@ -2973,6 +2990,10 @@ function renderCardFields() {
   const box = document.getElementById("cardFields");
   box.replaceChildren();
   const R = {};
+  // Алиас sits first: it's the card's name, and when set it's what the board
+  // shows instead of the question/answer text. Bound to cardDraftAlias (its own
+  // encrypted column), not to the 4s — see migrateV12.
+  R.alias = buildField("Алиас", "input", cardDraftAlias);
   R.handout = buildHandoutField(f.handout);
   R.question = buildField("Текст вопроса", "area", f.question, { open: fresh });
   R.answer = buildField("Ответ", "area", f.answer, { open: fresh });
@@ -2982,7 +3003,7 @@ function renderCardFields() {
   R.sources = buildSourcesField(f.sources, boardSources());
   R.authors = buildAuthorsField(f.authors, boardAuthors());
   R.hndt = buildField("Доп. разметка для генерации раздаток", "area", cardDraftMeta, { muted: true });
-  for (const k of ["handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"]) box.append(R[k].node);
+  for (const k of ["alias", "handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"]) box.append(R[k].node);
   // Size pre-filled fields now they're in the live DOM (scrollHeight is 0 while
   // detached, so the fit during buildField is a no-op for visible content).
   for (const ta of box.querySelectorAll("textarea")) fitTextarea(ta);
@@ -3005,7 +3026,7 @@ function readCardFields() {
     authors: R.authors.read(),
     extra: cardFieldsExtra,
   };
-  return { desc: xyChgk.composeFields(rec), meta: R.hndt.read() };
+  return { desc: xyChgk.composeFields(rec), meta: R.hndt.read(), alias: R.alias.read() };
 }
 
 // ---- test card "Поля" editor: one row per tester, each a name input + a
@@ -3241,8 +3262,10 @@ async function openCard(card, opts = {}) {
   cardFieldReaders = null;
   cardDraft = card.desc;
   cardDraftMeta = card.handoutMeta != null ? card.handoutMeta : null;
+  cardDraftAlias = card.alias != null ? card.alias : null;
   savedDesc = cardDraft;
   savedMeta = cardDraftMeta;
+  savedAlias = cardDraftAlias;
   document.querySelector(".card-detail").classList.remove("creating");
   document.getElementById("cardDesc").value = card.desc;
   document.getElementById("cardMessage").textContent = "";
@@ -3440,12 +3463,13 @@ function rankForSlot(cards, posValue, excludeId) {
 
 // cardCopyBody builds the create-card payload for a copy: it re-encrypts the
 // description and — when set — the handout-generation settings (field #10,
-// handout_meta_enc) under `key` (the destination board's data key). kind carries
-// over verbatim. Keeping handout meta here (not in copyCardExtras) means it copies
-// offline too, like the description.
+// handout_meta_enc) and the alias under `key` (the destination board's data key).
+// kind carries over verbatim. Keeping these here (not in copyCardExtras) means
+// they copy offline too, like the description.
 async function cardCopyBody(src, rank, key) {
   const body = { description_enc: await xyCrypto.encField(key, src.desc), rank, kind: src.kind };
   if (src.handoutMeta) body.handout_meta_enc = await xyCrypto.encField(key, src.handoutMeta);
+  if (src.alias) body.alias_enc = await xyCrypto.encField(key, src.alias);
   return body;
 }
 
@@ -3526,7 +3550,7 @@ async function doMoveCopy(remove) {
         card.rank = rank;
       } else {
         const res = await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, dk));
-        state.cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc, handoutMeta: card.handoutMeta || null });
+        state.cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc, handoutMeta: card.handoutMeta || null, alias: card.alias || null });
         const ids = state.cardLabels[card.id] || [];
         if (ids.length) { await jput(`/api/cards/${res.id}/labels`, { label_ids: ids }); state.cardLabels[res.id] = ids.slice(); }
         await copyCardExtras(card.id, dk, res.id);
@@ -3700,11 +3724,13 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     const existing = cardsOf(list.id);
     const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
     const meta = cardDraftMeta && cardDraftMeta.trim() ? cardDraftMeta : null;
+    const alias = cardDraftAlias && cardDraftAlias.trim() ? cardDraftAlias.trim() : null;
     try {
       const reqBody = { description_enc: await xyCrypto.encField(dk, text), rank, kind };
       if (meta) reqBody.handout_meta_enc = await xyCrypto.encField(dk, meta);
+      if (alias) reqBody.alias_enc = await xyCrypto.encField(dk, alias);
       const res = await create("createCard", `/api/lists/${list.id}/cards`, reqBody);
-      const card = { id: res.id, listId: list.id, kind, rank, desc: text, handoutMeta: meta };
+      const card = { id: res.id, listId: list.id, kind, rank, desc: text, handoutMeta: meta, alias };
       state.cards.push(card);
       render();
       await openCard(card);
@@ -3716,6 +3742,7 @@ document.getElementById("cardSave").addEventListener("click", async () => {
   if (!card) return;
   const newDesc = cardDraft;
   const newMeta = cardDraftMeta && cardDraftMeta.trim() ? cardDraftMeta : null;
+  const newAlias = cardDraftAlias && cardDraftAlias.trim() ? cardDraftAlias.trim() : null;
   msg.textContent = "";
   try {
     const body = { description_enc: await xyCrypto.encField(dk, newDesc) };
@@ -3726,11 +3753,17 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     if (newMeta !== (card.handoutMeta || null)) {
       body.handout_meta_enc = newMeta ? await xyCrypto.encField(dk, newMeta) : "";
     }
+    // Same "" -clears convention for the alias.
+    if (newAlias !== (card.alias || null)) {
+      body.alias_enc = newAlias ? await xyCrypto.encField(dk, newAlias) : "";
+    }
     await patch("patchCard", `/api/cards/${card.id}`, body);
     card.desc = newDesc;
     card.handoutMeta = newMeta;
+    card.alias = newAlias;
     savedDesc = newDesc;
     savedMeta = newMeta;
+    savedAlias = newAlias;
     render();
     await loadTimeline(card.id);
     document.getElementById("cardDesc").value = newDesc;

@@ -227,6 +227,10 @@ type boardSnapshot struct {
 	// (users.default_author), delivered like Sizes so the card editor works
 	// offline from the cached snapshot.
 	DefaultAuthor string `json:"default_author,omitempty"`
+	// CardTitle is the caller's card-preview mode ("question" / "answer",
+	// users.card_title), delivered like Sizes so the board renders previews the
+	// reader's way straight from the cached snapshot. A card's alias wins over it.
+	CardTitle string `json:"card_title,omitempty"`
 }
 
 // unreadDTO flags, per card, whether the caller has unread events in either
@@ -256,14 +260,15 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	// The caller's per-user display prefs (see boardSnapshot.Sizes /
 	// .DefaultAuthor), shared across all their boards — keyed on the user, not
 	// this board.
-	var sizes, defAuthor sql.NullString
-	if err := s.db.QueryRowContext(ctx, `select sizes, default_author from users where id = ?`, uid).Scan(&sizes, &defAuthor); handleErr(w, err) {
+	var sizes, defAuthor, cardTitle sql.NullString
+	if err := s.db.QueryRowContext(ctx, `select sizes, default_author, card_title from users where id = ?`, uid).Scan(&sizes, &defAuthor, &cardTitle); handleErr(w, err) {
 		return
 	}
 	if sizes.Valid && sizes.String != "" {
 		snap.Sizes = json.RawMessage(sizes.String)
 	}
 	snap.DefaultAuthor = defAuthor.String
+	snap.CardTitle = cardTitle.String
 
 	lists, err := scanLists(ctx, s.db, bid)
 	if handleErr(w, err) {

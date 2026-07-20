@@ -224,6 +224,14 @@
   line-clamp: var(--kcard-lines);
   overflow: hidden;
 }
+/* An alias is the card's name, not an excerpt of it: it's already short, so the
+   --kcard-lines clamp has nothing to do, and the weight marks it as deliberate
+   (someone typed it) rather than derived from the question text. */
+.kcard-title-alias {
+  -webkit-line-clamp: none;
+  line-clamp: none;
+  font-weight: var(--fw-bold);
+}
 /* auto/directive question number reads as scaffolding, not content */
 .kcard-num { color: var(--muted); }
 .kcard-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }

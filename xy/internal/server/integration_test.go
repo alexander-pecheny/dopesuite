@@ -48,6 +48,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("GET /api/auth/me", srv.handleMe)
 	mux.HandleFunc("POST /api/auth/username", srv.handleSetUsername)
 	mux.HandleFunc("POST /api/auth/password", srv.handleSetPassword)
+	mux.HandleFunc("POST /api/auth/card-title", srv.handleSetCardTitle)
 	mux.HandleFunc("GET /api/boards", srv.handleListBoards)
 	mux.HandleFunc("POST /api/boards", srv.handleCreateBoard)
 	mux.HandleFunc("GET /api/boards/{id}", srv.handleGetBoard)

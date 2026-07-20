@@ -93,10 +93,26 @@ function blockText(desc, type) {
   return (desc || "").trim();
 }
 
+// answerText returns the "! " block of a question, or "" when it has none. Kept
+// separate from blockText, whose preamble/whole-text fallback is right for meta
+// and heading cards but would make an answerless question preview as its own
+// question text under a heading that says "ответ".
+function answerText(desc) {
+  const b = parseBlocks(desc).find((x) => x.type === "answer");
+  return b ? b.text : "";
+}
+
 // previewText returns the marker-stripped text used to derive a card title for a
 // given kind (number prefix for questions is added by the caller, since it needs
-// the card's position in the list).
-function previewText(kind, desc) {
+// the card's position in the list). `mode` is the reader's card-title preference
+// (users.card_title): "answer" previews a question by its answer, which is often
+// the faster way to recognize it. An answerless question falls back to its text —
+// a blank card is worse than the old default.
+function previewText(kind, desc, mode) {
+  if (kind === "question" && mode === "answer") {
+    const a = answerText(desc);
+    if (a !== "") return a;
+  }
   if (kind === "question") return questionText(desc);
   if (kind === "meta") return blockText(desc, "meta");
   if (kind === "heading") return blockText(desc, "heading");
@@ -1049,7 +1065,7 @@ function testerCopyText(testers) {
 }
 
 export const xyChgk = {
-  parseBlocks, numberDirective, questionText, blockText, previewText,
+  parseBlocks, numberDirective, questionText, answerText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,

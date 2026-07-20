@@ -15,6 +15,7 @@ page title="Профиль · xy" kind="sheet" scripts="profile.js"
     button kind="ghost" id="passwordBtn" "Изменить пароль"
     button kind="ghost" id="sizesBtn" "Настройка ширины / высоты"
     button kind="ghost" id="authorBtn" "Автор по умолчанию"
+    button kind="ghost" id="cardTitleBtn" "Заголовок карточки"
     button kind="ghost" href="/profile/tokens" "API-токены"
     button kind="ghost" id="logoutBtn" "Выйти"
 
@@ -50,3 +51,15 @@ page title="Профиль · xy" kind="sheet" scripts="profile.js"
         button submit "Сохранить"
         button kind="ghost" id="authorCancel" "Отмена"
     message id="authorMessage"
+
+  -- card-title dialog: which field a card shows in the board list
+  modal id="cardTitleOverlay" label="Заголовок карточки" title="Заголовок карточки"
+    form id="cardTitleForm" dir="col"
+      fieldset
+        radio name="cardTitle" value="question" "Текст вопроса"
+        radio name="cardTitle" value="answer" "Ответ"
+      hint "По ответу вопрос часто узнаётся быстрее, чем по началу текста. Если у карточки задан алиас, показывается он — в любом режиме."
+      row gap="sm" wrap
+        button submit "Сохранить"
+        button kind="ghost" id="cardTitleCancel" "Отмена"
+    message id="cardTitleMessage"

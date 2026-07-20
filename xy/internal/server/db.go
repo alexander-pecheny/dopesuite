@@ -187,7 +187,56 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV11(db); err != nil {
 		return err
 	}
+	if err := migrateV12(db); err != nil {
+		return err
+	}
+	if err := migrateV13(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV13 adds users.card_title: which field a card's list preview derives
+// its title from — "" / "question" (the question text, the historic behaviour)
+// or "answer". A per-reader display preference, not question content, so it
+// lives plaintext like users.sizes. An alias (cards.alias_enc, migrateV12) wins
+// over both.
+func migrateV13(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 13`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+alter table users add column card_title text;
+insert or ignore into schema_versions(version, applied_at)
+  values(13, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
+}
+
+// migrateV12 adds cards.alias_enc: an optional encrypted short label for a
+// question — 1–3 keywords that identify it in a list faster than the opening
+// words of its text. Deliberately NOT a 4s marker: the alias is xy card
+// metadata, and the 4s markers mirror chgksuite's table byte-for-byte (see
+// internal/chgk/fsource), so a marker of our own would either break import /
+// export parity or leak the alias into exported documents. NULL means no alias.
+func migrateV12(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 12`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+alter table cards add column alias_enc blob;
+insert or ignore into schema_versions(version, applied_at)
+  values(12, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV11 adds users.default_author: the author name pre-filled into new

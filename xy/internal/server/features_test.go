@@ -538,3 +538,87 @@ func TestImportCommentsPreservesAuthorAndTime(t *testing.T) {
 	})
 	mustStatus(t, resp, 204)
 }
+
+// TestCardAliasRoundTrip covers cards.alias_enc (migrateV12): the optional
+// encrypted short label a card is identified by in the board list. Same
+// create/patch/clear contract as handout_meta_enc.
+func TestCardAliasRoundTrip(t *testing.T) {
+	c, boardID, listID := boardWithList(t)
+
+	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{
+		"description_enc": enc("? q"), "rank": "m", "kind": "question",
+		"alias_enc": enc("Пушкин, дуэль"),
+	})
+	mustStatus(t, resp, 200)
+	var card struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &card)
+	cardID := itoa(card.ID)
+
+	snap := getSnapshotFor(t, c, boardID)
+	if len(snap.Cards) != 1 || snap.Cards[0].AliasEnc == nil || *snap.Cards[0].AliasEnc != enc("Пушкин, дуэль") {
+		t.Fatalf("alias not persisted on create: %+v", snap.Cards)
+	}
+
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"alias_enc": enc("дуэль")})
+	mustStatus(t, resp, 204)
+	snap = getSnapshotFor(t, c, boardID)
+	if snap.Cards[0].AliasEnc == nil || *snap.Cards[0].AliasEnc != enc("дуэль") {
+		t.Fatalf("alias not updated: %+v", snap.Cards[0])
+	}
+
+	resp = c.do("PATCH", "/api/cards/"+cardID, map[string]string{"alias_enc": ""})
+	mustStatus(t, resp, 204)
+	snap = getSnapshotFor(t, c, boardID)
+	if snap.Cards[0].AliasEnc != nil {
+		t.Fatalf("alias not cleared: %+v", snap.Cards[0])
+	}
+
+	// A card created without an alias has none.
+	resp = c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{
+		"description_enc": enc("? q2"), "rank": "n", "kind": "question",
+	})
+	mustStatus(t, resp, 200)
+	snap = getSnapshotFor(t, c, boardID)
+	for _, cd := range snap.Cards {
+		if cd.AliasEnc != nil {
+			t.Fatalf("unexpected alias: %+v", cd)
+		}
+	}
+}
+
+// TestCardTitlePreference covers users.card_title (migrateV13): the per-user
+// choice of which field a card's board preview shows. It reaches the client
+// through both /api/auth/me and the board snapshot.
+func TestCardTitlePreference(t *testing.T) {
+	c, boardID, _ := boardWithList(t)
+
+	// Unset by default — the client then uses "question".
+	snap := getSnapshotFor(t, c, boardID)
+	if snap.CardTitle != "" {
+		t.Fatalf("card_title should start unset, got %q", snap.CardTitle)
+	}
+
+	mustStatus(t, c.do("POST", "/api/auth/card-title", map[string]string{"card_title": "answer"}), 204)
+
+	snap = getSnapshotFor(t, c, boardID)
+	if snap.CardTitle != "answer" {
+		t.Fatalf("snapshot card_title = %q, want answer", snap.CardTitle)
+	}
+	resp := c.do("GET", "/api/auth/me", nil)
+	mustStatus(t, resp, 200)
+	var me meResponse
+	c.decode(resp, &me)
+	if me.CardTitle != "answer" {
+		t.Fatalf("me card_title = %q, want answer", me.CardTitle)
+	}
+
+	// Back to the default, and junk is refused rather than stored.
+	mustStatus(t, c.do("POST", "/api/auth/card-title", map[string]string{"card_title": "question"}), 204)
+	mustStatus(t, c.do("POST", "/api/auth/card-title", map[string]string{"card_title": "жираф"}), 400)
+	snap = getSnapshotFor(t, c, boardID)
+	if snap.CardTitle != "question" {
+		t.Fatalf("card_title = %q, want question", snap.CardTitle)
+	}
+}

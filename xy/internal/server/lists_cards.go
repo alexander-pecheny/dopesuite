@@ -31,6 +31,7 @@ type cardDTO struct {
 	DescEnc        string  `json:"description_enc"`
 	Rank           string  `json:"rank"`
 	HandoutMetaEnc *string `json:"handout_meta_enc,omitempty"` // nil = no saved handout settings
+	AliasEnc       *string `json:"alias_enc,omitempty"`        // nil = no alias
 }
 
 type labelDTO struct {
@@ -87,7 +88,7 @@ select id, name_enc from list_groups where board_id = ? and deleted_at is null o
 
 func scanCards(ctx context.Context, q querier, boardID int64) ([]cardDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, list_id, kind, description_enc, rank, handout_meta_enc from cards where board_id = ? and deleted_at is null order by rank`, boardID)
+select id, list_id, kind, description_enc, rank, handout_meta_enc, alias_enc from cards where board_id = ? and deleted_at is null order by rank`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -95,14 +96,18 @@ select id, list_id, kind, description_enc, rank, handout_meta_enc from cards whe
 	out := []cardDTO{}
 	for rows.Next() {
 		var c cardDTO
-		var descEnc, metaEnc []byte
-		if err := rows.Scan(&c.ID, &c.ListID, &c.Kind, &descEnc, &c.Rank, &metaEnc); err != nil {
+		var descEnc, metaEnc, aliasEnc []byte
+		if err := rows.Scan(&c.ID, &c.ListID, &c.Kind, &descEnc, &c.Rank, &metaEnc, &aliasEnc); err != nil {
 			return nil, err
 		}
 		c.DescEnc = b64(descEnc)
 		if metaEnc != nil {
 			s := b64(metaEnc)
 			c.HandoutMetaEnc = &s
+		}
+		if aliasEnc != nil {
+			s := b64(aliasEnc)
+			c.AliasEnc = &s
 		}
 		out = append(out, c)
 	}
@@ -398,6 +403,7 @@ type createCardRequest struct {
 	Rank           string  `json:"rank"`
 	Kind           string  `json:"kind"`
 	HandoutMetaEnc *string `json:"handout_meta_enc"` // optional handout-gen settings
+	AliasEnc       *string `json:"alias_enc"`        // optional short label shown instead of the card's text
 }
 
 // validCardKind allowlists the card kinds the client may set (mirrors the
@@ -449,12 +455,17 @@ func (s *server) handleCreateCard(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "invalid handout_meta_enc")
 		return
 	}
+	aliasEnc, err := optBlob(req.AliasEnc)
+	if err != nil {
+		httpError(w, http.StatusBadRequest, "invalid alias_enc")
+		return
+	}
 	now := time.Now()
 	var id int64
 	err = s.withWriteTx(r.Context(), "create-card", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
-insert into cards(board_id, list_id, kind, description_enc, rank, handout_meta_enc, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?, ?)`,
-			bid, listID, kind, descEnc, req.Rank, metaEnc, rfc3339(now), rfc3339(now))
+insert into cards(board_id, list_id, kind, description_enc, rank, handout_meta_enc, alias_enc, created_at, updated_at) values(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			bid, listID, kind, descEnc, req.Rank, metaEnc, aliasEnc, rfc3339(now), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -474,6 +485,7 @@ type patchCardRequest struct {
 	Kind           *string `json:"kind"`             // optional kind change (feature: change card type after creation)
 	DescEventEnc   *string `json:"desc_event_enc"`   // optional desc_edit timeline payload
 	HandoutMetaEnc *string `json:"handout_meta_enc"` // optional handout-gen settings; "" clears (sets NULL)
+	AliasEnc       *string `json:"alias_enc"`        // optional short card label; "" clears (sets NULL)
 }
 
 // optBlob maps an optional base64 field to nullable blob bytes: nil pointer or
@@ -516,6 +528,15 @@ func (s *server) handlePatchCard(w http.ResponseWriter, r *http.Request) {
 				return errBadRequest("invalid handout_meta_enc")
 			}
 			if _, err := tx.ExecContext(ctx, `update cards set handout_meta_enc = ?, updated_at = ? where id = ?`, metaEnc, now, cardID); err != nil {
+				return err
+			}
+		}
+		if req.AliasEnc != nil {
+			aliasEnc, err := optBlob(req.AliasEnc)
+			if err != nil {
+				return errBadRequest("invalid alias_enc")
+			}
+			if _, err := tx.ExecContext(ctx, `update cards set alias_enc = ?, updated_at = ? where id = ?`, aliasEnc, now, cardID); err != nil {
 				return err
 			}
 		}

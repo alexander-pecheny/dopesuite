@@ -32,6 +32,7 @@ function wireModal(overlayId, openBtnId, cancelBtnId, onOpen) {
 // ---- state loaded from /api/auth/me ----
 let sizes = { ...xySizes.DEFAULT };
 let defaultAuthor = "";
+let cardTitle = "question"; // which field a card's board preview shows
 
 async function boot() {
   const me = await xyApp.requireLogin();
@@ -40,6 +41,7 @@ async function boot() {
   if (!me.username) usernameSection.hidden = false;
   sizes = xySizes.sanitize(me.sizes);
   defaultAuthor = me.default_author || "";
+  cardTitle = me.card_title || "question";
 }
 const booted = boot();
 
@@ -195,6 +197,30 @@ authorForm.addEventListener("submit", async (e) => {
     authorModal.close();
   } catch (err) {
     setText(authorMessage, err.message);
+  }
+});
+
+// ---- card title (question text vs answer) ----
+const cardTitleForm = document.getElementById("cardTitleForm");
+const cardTitleMessage = document.getElementById("cardTitleMessage");
+const cardTitleRadios = () => cardTitleForm.querySelectorAll('input[name="cardTitle"]');
+const cardTitleModal = wireModal("cardTitleOverlay", "cardTitleBtn", "cardTitleCancel", async () => {
+  await booted;
+  for (const r of cardTitleRadios()) r.checked = r.value === cardTitle;
+  setText(cardTitleMessage, "");
+});
+
+cardTitleForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setText(cardTitleMessage, "");
+  const picked = [...cardTitleRadios()].find((r) => r.checked);
+  const v = picked ? picked.value : "question";
+  try {
+    await jpost("/api/auth/card-title", { card_title: v });
+    cardTitle = v;
+    cardTitleModal.close();
+  } catch (err) {
+    setText(cardTitleMessage, err.message);
   }
 });
 
