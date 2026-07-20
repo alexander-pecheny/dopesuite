@@ -2807,6 +2807,12 @@ function refreshSaveState() {
     : cardDraft !== savedDesc || (cardDraftMeta || null) !== (savedMeta || null)
       || (cardDraftAlias || null) !== (savedAlias || null);
   btn.disabled = !dirty;
+  // Просмотр hides the save button — it edits nothing. Except it does: the alias
+  // input sits BELOW the view panels and stays editable in every view, so an
+  // alias typed in Просмотр (the view a saved card OPENS in) had no button to
+  // save it and was silently lost on close. Reveal it whenever there is
+  // something to save; the clean preview is preserved while there isn't.
+  btn.hidden = cardView === "preview" && !dirty;
   // A stale "Карточка сохранена." next to a re-enabled button reads as a lie.
   const msg = document.getElementById("cardMessage");
   if (dirty && msg.textContent === "Карточка сохранена.") msg.textContent = "";
@@ -2831,7 +2837,8 @@ function setCardView(view) {
   tabBtn("fields").hidden = !fieldsAvailable() && !test;
   tabBtn("preview").hidden = !!pendingList || test;
   document.getElementById("cardViewTabs").hidden = false;
-  document.getElementById("cardSave").hidden = view === "preview";
+  // (the save button's visibility is refreshSaveState's alone — see the end of
+  // this function — because it depends on more than the view)
   // The tools edit text, so they follow the two edit views. Both rewriting tools
   // are question-only: a test card's draft is JSON (its Текст view is a tester
   // list), and →.4s additionally needs the raw 4s editor it types into.
@@ -4202,10 +4209,20 @@ for (const id of ["feedDiffView", "feedDiffViewFull"]) {
 const feedOverlay = document.getElementById("feedOverlay");
 function closeFeed() { feedOverlay.hidden = true; }
 
+// Reading order in the expanded лента. The panel's feed is always newest-first
+// (you go there for what just happened); reading a whole discussion end to end
+// is the other job, and that one wants oldest-first.
+const FEED_ORDER_KEY = "xy.feedOrder";
+function feedOrder() {
+  return localStorage.getItem(FEED_ORDER_KEY) === "old" ? "old" : "new";
+}
+
 async function renderFeedGrid() {
   const grid = document.getElementById("feedGrid");
   const frag = document.createDocumentFragment();
-  for (const ev of [...(openCardEvents || [])].reverse()) {
+  // openCardEvents is oldest→newest (by id), so "сначала новое" is the reverse.
+  const ordered = feedOrder() === "old" ? [...(openCardEvents || [])] : [...(openCardEvents || [])].reverse();
+  for (const ev of ordered) {
     let payload = "";
     if (!ev.deleted) { try { payload = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) {} }
     const node = renderEvent(ev, payload);
@@ -4217,6 +4234,13 @@ async function renderFeedGrid() {
   }
   grid.replaceChildren(frag);
 }
+
+const feedOrderSel = document.getElementById("feedOrder");
+feedOrderSel.value = feedOrder();
+feedOrderSel.addEventListener("change", async () => {
+  localStorage.setItem(FEED_ORDER_KEY, feedOrderSel.value === "old" ? "old" : "new");
+  if (!feedOverlay.hidden) await renderFeedGrid();
+});
 
 document.getElementById("feedExpand").addEventListener("click", async () => {
   feedOverlay.hidden = false;

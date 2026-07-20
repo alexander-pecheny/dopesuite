@@ -564,6 +564,11 @@
   white-space: pre-wrap; word-break: break-word; line-height: 1.5;
 }
 .tl-gap { color: var(--muted); }
+/* The two-pane view colours a change by which PANE it is in; inline there are no
+   panes, so the tokens carry the colour themselves — red struck-through for what
+   went, green for what came. */
+.tl-brief del.tl-chg { background: var(--red); text-decoration: line-through; }
+.tl-brief ins.tl-chg { background: var(--green); text-decoration: none; }
 
 /* the expanded лента: the same events flowed into columns. The container has a
    definite height, so the columns fill top-to-bottom and continue sideways —
@@ -573,6 +578,11 @@
 /* both classes: .preview-doc's own width rule is later in this file and would
    otherwise win on equal specificity */
 .preview-doc.feed-doc { width: 100%; }
+/* .section-label is a heading for the block BENEATH it and carries a top margin
+   to prove it; used as an inline caption beside a control it drags itself off
+   the shared centre line. Same fix as .handouts-doc's. */
+.feed-doc .section-label,
+.card-detail .u-row > .section-label { margin: 0; }
 .feed-grid {
   flex: 1; min-height: 0; overflow: auto;
   column-width: 340px; column-gap: var(--space-4);
