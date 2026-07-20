@@ -2803,20 +2803,30 @@ function captureDraft() {
 function refreshSaveState() {
   captureDraft();
   const btn = document.getElementById("cardSave");
+  // The alias is NOT part of this: it is a separate column with its own save
+  // button (refreshAliasState). «Сохранить» is about the card's 4s content —
+  // on a NEW card that content still carries the alias along (see cardSave), so
+  // the alias only counts as "dirty" here while creating.
   const dirty = pendingList
-    ? cardDraft.trim() !== ""
-    : cardDraft !== savedDesc || (cardDraftMeta || null) !== (savedMeta || null)
-      || (cardDraftAlias || null) !== (savedAlias || null);
+    ? cardDraft.trim() !== "" || (cardDraftAlias || null) !== null
+    : cardDraft !== savedDesc || (cardDraftMeta || null) !== (savedMeta || null);
   btn.disabled = !dirty;
-  // Просмотр hides the save button — it edits nothing. Except it does: the alias
-  // input sits BELOW the view panels and stays editable in every view, so an
-  // alias typed in Просмотр (the view a saved card OPENS in) had no button to
-  // save it and was silently lost on close. Reveal it whenever there is
-  // something to save; the clean preview is preserved while there isn't.
+  // Просмотр is read-only, so nothing can be dirty there; the button hides.
   btn.hidden = cardView === "preview" && !dirty;
   // A stale "Карточка сохранена." next to a re-enabled button reads as a lie.
   const msg = document.getElementById("cardMessage");
   if (dirty && msg.textContent === "Карточка сохранена.") msg.textContent = "";
+  refreshAliasState();
+}
+
+// refreshAliasState enables the alias's own save button only when the input
+// differs from what is persisted. On a card being created there is no alias
+// column yet (the button is data-edit-only, hidden), so this is a no-op then.
+function refreshAliasState() {
+  const btn = document.getElementById("cardAliasSave");
+  if (!btn || pendingList) return;
+  const cur = document.getElementById("cardAlias").value.trim() || null;
+  btn.disabled = cur === (savedAlias || null);
 }
 
 function setCardView(view) {
@@ -3781,7 +3791,8 @@ document.getElementById("cardSave").addEventListener("click", async () => {
   if (!card) return;
   const newDesc = cardDraft;
   const newMeta = cardDraftMeta && cardDraftMeta.trim() ? cardDraftMeta : null;
-  const newAlias = cardDraftAlias && cardDraftAlias.trim() ? cardDraftAlias.trim() : null;
+  // The alias is deliberately absent here — it saves on its own button
+  // (saveAlias). «Сохранить» touches the card's 4s content only.
   msg.textContent = "";
   try {
     const body = { description_enc: await xyCrypto.encField(dk, newDesc) };
@@ -3792,17 +3803,11 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     if (newMeta !== (card.handoutMeta || null)) {
       body.handout_meta_enc = newMeta ? await xyCrypto.encField(dk, newMeta) : "";
     }
-    // Same "" -clears convention for the alias.
-    if (newAlias !== (card.alias || null)) {
-      body.alias_enc = newAlias ? await xyCrypto.encField(dk, newAlias) : "";
-    }
     await patch("patchCard", `/api/cards/${card.id}`, body);
     card.desc = newDesc;
     card.handoutMeta = newMeta;
-    card.alias = newAlias;
     savedDesc = newDesc;
     savedMeta = newMeta;
-    savedAlias = newAlias;
     render();
     await loadTimeline(card.id);
     document.getElementById("cardDesc").value = newDesc;
@@ -3842,7 +3847,34 @@ for (const id of ["cardDesc", "cardFields", "cardAlias"]) {
   node.addEventListener("input", refreshSaveState);
   node.addEventListener("click", refreshSaveState);
 }
-document.getElementById("cardAlias").addEventListener("keydown", saveOnCmdEnter);
+// saveAlias persists the alias alone — its own column, its own PATCH, decoupled
+// from the card's content save. "" clears it (same convention as the server's
+// optBlob). Online-capable via the sync outbox like any other card mutation.
+async function saveAlias() {
+  if (pendingList || !openCardId) return; // a new card saves its alias on create
+  const card = state.cards.find((c) => c.id === openCardId);
+  if (!card) return;
+  const btn = document.getElementById("cardAliasSave");
+  const next = document.getElementById("cardAlias").value.trim() || null;
+  if (next === (savedAlias || null)) return;
+  try {
+    const body = { alias_enc: next ? await xyCrypto.encField(dk, next) : "" };
+    await patch("patchCard", `/api/cards/${card.id}`, body);
+    card.alias = next;
+    savedAlias = next;
+    cardDraftAlias = next;
+    render(); // the board card previews the alias
+    btn.disabled = true;
+    btn.textContent = "✓";
+    setTimeout(() => { btn.textContent = "Сохранить"; }, 1200);
+  } catch (err) { document.getElementById("cardMessage").textContent = err.message; }
+}
+document.getElementById("cardAliasSave").addEventListener("click", saveAlias);
+document.getElementById("cardAlias").addEventListener("keydown", (e) => {
+  // Enter saves the alias (not the card); Cmd/Ctrl+Enter keeps the card-save
+  // shortcut for muscle memory, but on a saved card that too means the alias.
+  if (e.key === "Enter") { e.preventDefault(); saveAlias(); }
+});
 
 document.getElementById("cardDelete").addEventListener("click", async () => {
   const card = state.cards.find((c) => c.id === openCardId);

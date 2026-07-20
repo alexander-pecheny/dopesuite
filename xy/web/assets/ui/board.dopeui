@@ -83,8 +83,15 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
     -- need a persisted card (labels, attachments, timeline), an alias does not, and
     -- hiding it would make it unsettable on the card-creation screen.
     label id="cardAliasLabel" "Алиас"
+    -- The alias is its own column, saved on its OWN button fused to the input —
+    -- NOT via «Сохранить», which is about the card's 4s content. The two are
+    -- unrelated, and coupling them meant an alias could not be saved from the
+    -- read-only Просмотр view at all. The button is data-edit-only: on a card
+    -- being CREATED there is no alias column yet, so the alias rides along on the
+    -- initial create instead (see cardSave), and only an existing card needs it.
     row id="cardAliasRow" gap="sm" align="center"
       textfield id="cardAlias" placeholder="короткое имя карточки — показывается в списке вместо текста" autocomplete="off" maxlength="200" grow
+      button id="cardAliasSave" data-edit-only disabled title="Сохранить алиас" "Сохранить"
 
     -- Выписки: the comments and attachments flagged as source excerpts, counted
     -- here and shown together in one modal — the point of the flag is to have the
@@ -223,18 +230,21 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
 
   -- expanded лента: the same feed on the whole screen, flowed into columns so a
   -- long discussion can be read without scrolling a 320px-tall panel
+  -- No «Лента» title: after «Развернуть» it is obvious where you are, and the
+  -- two labelled selects each sit by the control they name, in a compact block
+  -- (label → select grid), with the close button pinned top-right.
   docoverlay id="feedOverlay" kind="doc" variant="feed" label="Лента"
     headrow
-      previewtitle "Лента"
       headactions
-        label for="feedDiffViewFull" "Вид правок"
-        selectfield id="feedDiffViewFull" compact title="Вид правок"
-          option value="brief" "краткий"
-          option value="full" "подробный"
-        label for="feedOrder" "Порядок"
-        selectfield id="feedOrder" compact title="Порядок событий"
-          option value="new" "сначала новое"
-          option value="old" "сначала старое"
+        col
+          label for="feedDiffViewFull" "Вид правок"
+          selectfield id="feedDiffViewFull" compact title="Вид правок"
+            option value="brief" "краткий"
+            option value="full" "подробный"
+          label for="feedOrder" "Порядок"
+          selectfield id="feedOrder" compact title="Порядок событий"
+            option value="new" "сначала новое"
+            option value="old" "сначала старое"
         iconbtn id="feedClose" label="Закрыть" "×"
     mount id="feedGrid" kind="feed-grid"
 

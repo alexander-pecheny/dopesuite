@@ -226,7 +226,17 @@
 }
 /* The alias sits below the view panels, between Метки and Вложения: it belongs
    to the card rather than to any one view, so it stays put as the tabs change. */
-#cardAliasRow { margin-bottom: var(--space-2); }
+#cardAliasRow { margin-bottom: var(--space-2); gap: 0; }
+/* The alias input and its save button are one fused control — a visual cue that
+   the alias saves on its own, apart from the card's «Сохранить». Both are
+   control-h, so they meet flush; the shared edge is a single divider. */
+#cardAlias { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+#cardAliasSave {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
+}
 
 /* An alias is the card's name, not an excerpt of it: it's already short, so the
    --kcard-lines clamp has nothing to do, and the weight marks it as deliberate
@@ -588,20 +598,30 @@
 /* .section-label is a heading for the block BENEATH it and carries a top margin
    to prove it; used as an inline caption beside a control it drags itself off
    the shared centre line. Same fix as .handouts-doc's. */
-.feed-doc .section-label,
 .card-detail .u-row > .section-label { margin: 0; }
-/* This head carries four controls (two labelled selects + the close button),
-   which no phone fits on one line — unwrapped they ran 117px off a 375px screen,
-   taking «Порядок» with them. The other doc overlays keep their single line;
-   only this one is crowded enough to need wrapping. */
-/* .preview-head-actions is flex:none, i.e. always its max-content width, so its
-   children could never be asked to wrap however the head itself wrapped. It has
-   to be allowed to shrink first. */
-.feed-doc .preview-head { flex-wrap: wrap; }
-.feed-doc .preview-head-actions {
-  flex: 1 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end;
+/* Feed head: the controls block fills the row (a label→select grid, each label
+   right-aligned so the two selects line up), the close button pinned top-right.
+   No «Лента» title — after «Развернуть» the surface is unmistakable. Compact
+   padding: this is chrome above the content, not content. */
+.feed-doc .preview-head {
+  align-items: flex-start;
+  padding: var(--space-3) var(--space-4);
 }
-.feed-doc .preview-head-actions select { max-width: 100%; }
+.feed-doc .preview-head-actions {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.feed-doc .preview-head-actions > .u-col {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+.feed-doc .preview-head-actions > .u-col > .section-label { margin: 0; justify-self: end; }
+.feed-doc .preview-head-actions > .u-col select { max-width: 100%; }
 .feed-grid {
   flex: 1; min-height: 0; overflow: auto;
   column-width: 340px; column-gap: var(--space-4);
@@ -612,6 +632,7 @@
    scrolling a feed sideways is worse than scrolling it down */
 @media (max-width: 560px) {
   .feed-grid { column-width: auto; column-count: 1; padding: var(--space-3); }
+  .feed-doc .preview-head { padding: var(--space-2) var(--space-3); }
 }
 /* a column-broken .tl-diff turns into two unreadable slivers */
 .feed-grid .tl-diff { grid-template-columns: 1fr; }
