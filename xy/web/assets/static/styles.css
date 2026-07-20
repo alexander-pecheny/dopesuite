@@ -443,6 +443,8 @@
   font: inherit; font-size: var(--text-2xs); color: var(--blue);
 }
 .tl-replyto:hover { text-decoration: underline; }
+/* «карточка создана» — the лента's floor, quieter than the events above it */
+.tl-event.tl-born { background: transparent; border-style: dashed; }
 /* a comment whose text was deleted but whose thread survives */
 .tl-event.tl-deleted { color: var(--muted); font-style: italic; }
 .tl-thread {

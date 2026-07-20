@@ -32,6 +32,11 @@ type cardDTO struct {
 	Rank           string  `json:"rank"`
 	HandoutMetaEnc *string `json:"handout_meta_enc,omitempty"` // nil = no saved handout settings
 	AliasEnc       *string `json:"alias_enc,omitempty"`        // nil = no alias
+	// CreatedAt anchors the лента: the client shows it as a «карточка создана»
+	// line under the oldest event, so every later timestamp has something to be
+	// read against. Deliberately NOT a timeline event — the column already
+	// exists on every card ever made, where an event would only cover new ones.
+	CreatedAt string `json:"created_at"`
 }
 
 type labelDTO struct {
@@ -88,7 +93,8 @@ select id, name_enc from list_groups where board_id = ? and deleted_at is null o
 
 func scanCards(ctx context.Context, q querier, boardID int64) ([]cardDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, list_id, kind, description_enc, rank, handout_meta_enc, alias_enc from cards where board_id = ? and deleted_at is null order by rank`, boardID)
+select id, list_id, kind, description_enc, rank, handout_meta_enc, alias_enc, created_at
+from cards where board_id = ? and deleted_at is null order by rank`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +103,7 @@ select id, list_id, kind, description_enc, rank, handout_meta_enc, alias_enc fro
 	for rows.Next() {
 		var c cardDTO
 		var descEnc, metaEnc, aliasEnc []byte
-		if err := rows.Scan(&c.ID, &c.ListID, &c.Kind, &descEnc, &c.Rank, &metaEnc, &aliasEnc); err != nil {
+		if err := rows.Scan(&c.ID, &c.ListID, &c.Kind, &descEnc, &c.Rank, &metaEnc, &aliasEnc, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		c.DescEnc = b64(descEnc)

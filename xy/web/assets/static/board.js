@@ -496,6 +496,7 @@ async function load() {
       desc: await xyCrypto.decField(dk, c.description_enc),
       handoutMeta: c.handout_meta_enc ? await xyCrypto.decField(dk, c.handout_meta_enc) : null,
       alias: c.alias_enc ? await xyCrypto.decField(dk, c.alias_enc) : null,
+      createdAt: c.created_at || null,
     })));
     state.labels = await Promise.all(snap.labels.map(async (l) => ({
       id: l.id, kind: l.kind,
@@ -1139,7 +1140,7 @@ async function doMoveListCopy(remove) {
       for (const c of srcCards) {
         cr = keyBetween(cr, null);
         const cres = await jpost(`/api/lists/${lres.id}/cards`, await cardCopyBody(c, cr, dk));
-        state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc, handoutMeta: c.handoutMeta || null, alias: c.alias || null });
+        state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc, handoutMeta: c.handoutMeta || null, alias: c.alias || null, createdAt: nowStamp() });
         const ids = state.cardLabels[c.id] || [];
         if (ids.length) { await jput(`/api/cards/${cres.id}/labels`, { label_ids: ids }); state.cardLabels[cres.id] = ids.slice(); }
         await copyCardExtras(c.id, dk, cres.id);
@@ -1691,7 +1692,7 @@ async function commitImport(name, source, images, splitTours) {
         const res = await jpost(`/api/lists/${lres.id}/cards`, {
           description_enc: await xyCrypto.encField(dk, c.desc), rank: cardRank, kind: c.kind,
         });
-        state.cards.push({ id: res.id, listId: lres.id, kind: c.kind, rank: cardRank, desc: c.desc });
+        state.cards.push({ id: res.id, listId: lres.id, kind: c.kind, rank: cardRank, desc: c.desc, createdAt: nowStamp() });
         done++;
         // Attach only the images this card actually references, so a handout lands
         // on the question that uses it (which is where the preview/export look).
@@ -2537,7 +2538,7 @@ async function addTestCard(list) {
     const res = await create("createCard", `/api/lists/${list.id}/cards`, {
       description_enc: await xyCrypto.encField(dk, desc), rank, kind: "test",
     });
-    state.cards.push({ id: res.id, listId: list.id, kind: "test", rank, desc });
+    state.cards.push({ id: res.id, listId: list.id, kind: "test", rank, desc, createdAt: nowStamp() });
     // auto labels, then assign both to the new card
     const autoIds = [];
     for (const [suffix, color, kind] of [["взяли", "#3aa657", "test_taken"], ["не взяли", "#dd3322", "test_missed"]]) {
@@ -3587,7 +3588,7 @@ async function doMoveCopy(remove) {
         card.rank = rank;
       } else {
         const res = await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, dk));
-        state.cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc, handoutMeta: card.handoutMeta || null, alias: card.alias || null });
+        state.cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc, handoutMeta: card.handoutMeta || null, alias: card.alias || null, createdAt: nowStamp() });
         const ids = state.cardLabels[card.id] || [];
         if (ids.length) { await jput(`/api/cards/${res.id}/labels`, { label_ids: ids }); state.cardLabels[res.id] = ids.slice(); }
         await copyCardExtras(card.id, dk, res.id);
@@ -3768,7 +3769,7 @@ document.getElementById("cardSave").addEventListener("click", async () => {
       if (meta) reqBody.handout_meta_enc = await xyCrypto.encField(dk, meta);
       if (alias) reqBody.alias_enc = await xyCrypto.encField(dk, alias);
       const res = await create("createCard", `/api/lists/${list.id}/cards`, reqBody);
-      const card = { id: res.id, listId: list.id, kind, rank, desc: text, handoutMeta: meta, alias };
+      const card = { id: res.id, listId: list.id, kind, rank, desc: text, handoutMeta: meta, alias, createdAt: nowStamp() };
       state.cards.push(card);
       render();
       await openCard(card);
@@ -4056,7 +4057,26 @@ async function loadTimeline(cardId) {
     try { payload = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) {}
     frag.append(renderEvent(ev, payload));
   }
+  // Oldest goes last in the newest-first лента.
+  const born = cardCreatedNode(cardId);
+  if (born) frag.append(born);
   tl.replaceChildren(frag);
+}
+
+// nowStamp is the local stand-in for cards.created_at on a card this session
+// just made: it is not in a snapshot yet, and offline it may not reach the
+// server for a while. The next snapshot replaces it with the server's value.
+const nowStamp = () => new Date().toISOString();
+
+// cardCreatedNode is the «карточка создана» line closing the лента — the anchor
+// every later timestamp is read against. It is derived from cards.created_at
+// rather than from a timeline event, so it is there for every card ever made,
+// not just ones created after this shipped.
+function cardCreatedNode(cardId) {
+  const card = state.cards.find((c) => c.id === cardId);
+  if (!card || !card.createdAt) return null;
+  return el("div", { class: "tl-event tl-born" },
+    el("div", { class: "tl-meta", text: `карточка создана · ${new Date(card.createdAt).toLocaleString("ru-RU")}` }));
 }
 
 // eventAuthor resolves a timeline event's author to a display name. Pending
@@ -4232,6 +4252,9 @@ async function renderFeedGrid() {
     node.removeAttribute("id");
     frag.append(node);
   }
+  // whichever end of this ordering is the oldest
+  const born = cardCreatedNode(openCardId);
+  if (born) { if (feedOrder() === "old") frag.prepend(born); else frag.append(born); }
   grid.replaceChildren(frag);
 }
 
