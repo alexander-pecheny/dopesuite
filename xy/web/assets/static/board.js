@@ -4031,6 +4031,16 @@ async function loadTimeline(cardId) {
   }
   let events = [];
   try { events = await xySync.timelineFor(cardId); } catch (_) {}
+  // reply_count arrives from the server, which cannot see replies still sitting
+  // in the outbox — so «N ответов» would omit one composed offline. The client
+  // holds the card's WHOLE timeline (deleted replies already filtered out
+  // server-side), so recounting over the merged list is equivalent online and
+  // correct offline.
+  const replies = new Map();
+  for (const e of events) {
+    if (e.reply_to_id != null) replies.set(e.reply_to_id, (replies.get(e.reply_to_id) || 0) + 1);
+  }
+  for (const e of events) e.reply_count = replies.get(e.id) || 0;
   if (cardId === openCardId) { openCardEvents = events; renderExcerptCount(); }
   // Newest first: events are oldest→newest (by id); show them reversed.
   const frag = document.createDocumentFragment();
@@ -4080,7 +4090,6 @@ function renderEvent(ev, payload) {
     // .tl-actions, which is margin-left:auto and would otherwise push this to
     // the far right of the row.
     if (ev.reply_to_id) {
-      wrap.classList.add("tl-reply");
       const parent = (openCardEvents || []).find((e) => e.id === ev.reply_to_id);
       const who = parent ? (parent.deleted ? "удалённый комментарий" : eventAuthor(parent)) : "комментарий";
       metaRow.append(el("span", { class: "tl-sep", text: "·" }), el("button", {
@@ -4164,7 +4173,14 @@ async function openThread(rootId) {
   threadRootId = rootId;
   const events = openCardEvents || [];
   const root = events.find((e) => e.id === rootId);
-  const replies = events.filter((e) => e.reply_to_id === rootId).sort((a, b) => a.id - b.id);
+  // Oldest first. Synced replies order by id; un-synced ones are the newest of
+  // all but carry NEGATIVE temp ids, so a plain id sort would float them to the
+  // top. They go last, in the order they were queued (-1 queued before -2).
+  const all = events.filter((e) => e.reply_to_id === rootId);
+  const replies = [
+    ...all.filter((e) => e.id > 0).sort((a, b) => a.id - b.id),
+    ...all.filter((e) => e.id <= 0).sort((a, b) => b.id - a.id),
+  ];
   const body = document.getElementById("threadBody");
   const frag = document.createDocumentFragment();
   for (const ev of [root, ...replies]) {

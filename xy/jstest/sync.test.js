@@ -78,6 +78,18 @@ test("pendingTimeline synthesizes per-card events from ops", () => {
   assert.equal(new Set(tl.map((e) => e.id)).size, tl.length);
 });
 
+test("pendingTimeline carries a reply's parent, so an offline reply stays threaded", () => {
+  const ops = [
+    { kind: "comment", path: "/api/cards/5/comments", body: { payload_enc: "TOP" }, ts: "t1" },
+    { kind: "comment", path: "/api/cards/5/comments", body: { payload_enc: "REPLY", reply_to_id: 42 }, ts: "t2" },
+  ];
+  const tl = _pendingTimeline(ops, 5);
+  // a top-level comment carries no parent; a reply keeps the real (synced) id it
+  // answers, so it renders under its thread instead of as a new top-level comment
+  assert.equal(tl[0].reply_to_id, undefined);
+  assert.equal(tl[1].reply_to_id, 42);
+});
+
 test("end-to-end: a queued card op remaps after its list create resolves", () => {
   // Offline: create list (temp -1), then create a card in list -1.
   const idmap = {}; // numeric keys

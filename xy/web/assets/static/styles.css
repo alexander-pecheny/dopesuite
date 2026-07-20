@@ -434,11 +434,9 @@
 /* in-place comment editor (board.js#startCommentEdit) */
 .tl-editbox { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-1); }
 .tl-editrow { display: flex; gap: var(--space-2); }
-/* replies: kept in the flat лента (nothing is hidden from the card's history),
-   marked with a left rule and a link up to what they answer */
-/* indented AND ruled: the лента is newest-first, so a reply usually sits ABOVE
-   the comment it answers and cannot rely on adjacency to read as subordinate */
-.tl-event.tl-reply { margin-left: var(--space-5); border-left: 2px solid var(--blue); }
+/* Replies stay in the flat лента, visually identical to any other comment — the
+   «↳ в ответ X» mark in the meta line carries it. No indent, no rule: the лента
+   is a flat history, and decorating replies made it read as a tree it is not. */
 .tl-sep { color: var(--muted); }
 .tl-replyto {
   border: none; background: none; padding: 0; cursor: var(--cursor-action);

@@ -157,7 +157,14 @@ function pendingTimeline(ops, cardId) {
     const body = op.body || {};
     const when = op.ts || "";
     if (op.kind === "comment" && body.payload_enc) {
-      out.push({ id: n--, type: "comment", author_user_id: null, created_at: when, payload_enc: body.payload_enc });
+      // reply_to_id is always a REAL (synced) id — a reply can only be composed
+      // from a rendered thread, and un-synced comments have no thread affordance
+      // — so it needs no temp-id remapping and is carried through as-is.
+      out.push({
+        id: n--, type: "comment", author_user_id: null, created_at: when,
+        reply_to_id: body.reply_to_id != null ? body.reply_to_id : undefined,
+        payload_enc: body.payload_enc,
+      });
     } else if (op.kind === "patchCard" && body.desc_event_enc) {
       out.push({ id: n--, type: "desc_edit", author_user_id: null, created_at: when, payload_enc: body.desc_event_enc });
     } else if (op.kind === "setCardLabels" && Array.isArray(body.events)) {
