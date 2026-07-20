@@ -794,7 +794,12 @@ type timelineEventDTO struct {
 	CreatedAt  string  `json:"created_at"`
 	EditedAt   *string `json:"edited_at,omitempty"`
 	IsExcerpt  bool    `json:"is_excerpt"`
-	PayloadEnc string  `json:"payload_enc"`
+	ReplyToID  *int64  `json:"reply_to_id,omitempty"`
+	ReplyCount int     `json:"reply_count"`
+	// Deleted marks a tombstone: a comment whose text is gone but which is still
+	// rendered because live replies hang off it. PayloadEnc is empty for these.
+	Deleted    bool   `json:"deleted,omitempty"`
+	PayloadEnc string `json:"payload_enc"`
 }
 
 func (s *server) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
@@ -802,9 +807,21 @@ func (s *server) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// A deleted comment is normally gone from the лента, but one that still
+	// anchors live replies is returned as a tombstone (deleted = 1, empty
+	// payload) so the thread beneath it stays reachable instead of orphaned.
 	rows, err := s.db.QueryContext(r.Context(), `
-select id, type, author_user_id, created_at, edited_at, is_excerpt, payload_enc
-from timeline_events where card_id = ? and deleted_at is null order by id`, cardID)
+select e.id, e.type, e.author_user_id, e.created_at, e.edited_at, e.is_excerpt,
+       e.reply_to_id, e.deleted_at is not null,
+       (select count(*) from timeline_events r
+          where r.reply_to_id = e.id and r.deleted_at is null),
+       e.payload_enc
+from timeline_events e
+where e.card_id = ?
+  and (e.deleted_at is null
+       or exists (select 1 from timeline_events r
+                    where r.reply_to_id = e.id and r.deleted_at is null))
+order by e.id`, cardID)
 	if handleErr(w, err) {
 		return
 	}
@@ -812,11 +829,12 @@ from timeline_events where card_id = ? and deleted_at is null order by id`, card
 	out := []timelineEventDTO{}
 	for rows.Next() {
 		var e timelineEventDTO
-		var author sql.NullInt64
+		var author, replyTo sql.NullInt64
 		var edited sql.NullString
-		var excerpt int
+		var excerpt, deleted int
 		var payload []byte
-		if err := rows.Scan(&e.ID, &e.Type, &author, &e.CreatedAt, &edited, &excerpt, &payload); handleErr(w, err) {
+		if err := rows.Scan(&e.ID, &e.Type, &author, &e.CreatedAt, &edited, &excerpt,
+			&replyTo, &deleted, &e.ReplyCount, &payload); handleErr(w, err) {
 			return
 		}
 		if author.Valid {
@@ -825,15 +843,23 @@ from timeline_events where card_id = ? and deleted_at is null order by id`, card
 		if edited.Valid {
 			e.EditedAt = &edited.String
 		}
+		if replyTo.Valid {
+			e.ReplyToID = &replyTo.Int64
+		}
 		e.IsExcerpt = excerpt != 0
+		e.Deleted = deleted != 0
 		e.PayloadEnc = b64(payload)
 		out = append(out, e)
+	}
+	if err := rows.Err(); handleErr(w, err) {
+		return
 	}
 	writeJSON(w, out)
 }
 
 type addCommentRequest struct {
 	PayloadEnc string `json:"payload_enc"`
+	ReplyToID  *int64 `json:"reply_to_id"`
 }
 
 func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
@@ -849,13 +875,51 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "payload_enc required")
 		return
 	}
+	var replyTo any
+	if req.ReplyToID != nil {
+		root, err := threadRoot(r.Context(), s.db, *req.ReplyToID, cardID)
+		if handleErr(w, err) {
+			return
+		}
+		replyTo = root
+	}
 	err := s.withWriteTx(r.Context(), "add-comment", func(ctx context.Context, tx *sql.Tx) error {
-		return appendEvent(ctx, tx, bid, cardID, "comment", uid, req.PayloadEnc)
+		payload, err := unb64(req.PayloadEnc)
+		if err != nil {
+			return errBadRequest("invalid payload_enc")
+		}
+		_, err = tx.ExecContext(ctx, `
+insert into timeline_events(board_id, card_id, type, author_user_id, created_at, payload_enc, reply_to_id)
+values(?, ?, 'comment', ?, ?, ?, ?)`, bid, cardID, uid, rfc3339(time.Now()), payload, replyTo)
+		return err
 	})
 	if handleErr(w, err) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// threadRoot resolves the comment a reply should hang off. Threads are one level
+// deep: replying to a reply attaches to that reply's root, so a thread is always
+// a flat run under a single parent. The target must be a comment on the SAME
+// card — otherwise a reply could be smuggled onto another board's discussion.
+// A tombstoned parent is still a valid target; its thread outlives its text.
+func threadRoot(ctx context.Context, q querier, id, cardID int64) (int64, error) {
+	var root sql.NullInt64
+	var owner int64
+	err := q.QueryRowContext(ctx, `
+select card_id, coalesce(reply_to_id, id) from timeline_events where id = ? and type = 'comment'`, id).
+		Scan(&owner, &root)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, errNotFound("комментарий не найден")
+	}
+	if err != nil {
+		return 0, err
+	}
+	if owner != cardID {
+		return 0, errBadRequest("комментарий с другой карточки")
+	}
+	return root.Int64, nil
 }
 
 type patchCommentRequest struct {
@@ -910,7 +974,9 @@ update timeline_events set payload_enc = ?, edited_at = ? where id = ?`, payload
 
 // handleDeleteComment tombstones a comment (author only). The row survives so
 // the id stays taken — read watermarks are ids, and reusing one would silently
-// mark later comments read.
+// mark later comments read — and so a thread hanging off it stays anchored. The
+// TEXT is scrubbed, not merely hidden: a tombstone with replies is still sent to
+// clients, and delete has to mean the words are gone.
 func (s *server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	uid, evID, _, _, author, ok := s.requireComment(w, r)
 	if !ok {
@@ -921,7 +987,8 @@ func (s *server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "delete-comment", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update timeline_events set deleted_at = ? where id = ?`, rfc3339(time.Now()), evID)
+		_, err := tx.ExecContext(ctx, `
+update timeline_events set deleted_at = ?, payload_enc = x'', is_excerpt = 0 where id = ?`, rfc3339(time.Now()), evID)
 		return err
 	})
 	if handleErr(w, err) {
@@ -966,6 +1033,12 @@ type importCommentsRequest struct {
 }
 
 type importedComment struct {
+	// SrcID / ReplyToSrcID are the SOURCE card's event ids, used only to rebuild
+	// threading: the copy gets fresh ids, so a reply's parent is resolved through
+	// a src→new map as the batch is inserted (oldest first, so a parent is always
+	// already mapped by the time its reply arrives).
+	SrcID        int64  `json:"src_id"`
+	ReplyToSrcID *int64 `json:"reply_to_src_id"`
 	AuthorUserID *int64 `json:"author_user_id"`
 	CreatedAt    string `json:"created_at"`
 	IsExcerpt    bool   `json:"is_excerpt"`
@@ -988,6 +1061,7 @@ func (s *server) handleImportComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "import-comments", func(ctx context.Context, tx *sql.Tx) error {
+		newID := make(map[int64]int64, len(req.Comments))
 		for _, c := range req.Comments {
 			payload, err := unb64(c.PayloadEnc)
 			if err != nil {
@@ -1001,10 +1075,26 @@ func (s *server) handleImportComments(w http.ResponseWriter, r *http.Request) {
 			if c.AuthorUserID != nil {
 				author = *c.AuthorUserID
 			}
-			if _, err := tx.ExecContext(ctx, `
-insert into timeline_events(board_id, card_id, type, author_user_id, created_at, is_excerpt, payload_enc)
-values(?, ?, 'comment', ?, ?, ?, ?)`, bid, cardID, author, created, boolInt(c.IsExcerpt), payload); err != nil {
+			// An unresolvable parent (out-of-order or absent from the batch) drops
+			// the reply to top level rather than failing the whole copy.
+			var replyTo any
+			if c.ReplyToSrcID != nil {
+				if mapped, ok := newID[*c.ReplyToSrcID]; ok {
+					replyTo = mapped
+				}
+			}
+			res, err := tx.ExecContext(ctx, `
+insert into timeline_events(board_id, card_id, type, author_user_id, created_at, is_excerpt, payload_enc, reply_to_id)
+values(?, ?, 'comment', ?, ?, ?, ?, ?)`, bid, cardID, author, created, boolInt(c.IsExcerpt), payload, replyTo)
+			if err != nil {
 				return err
+			}
+			id, err := res.LastInsertId()
+			if err != nil {
+				return err
+			}
+			if c.SrcID != 0 {
+				newID[c.SrcID] = id
 			}
 		}
 		return nil

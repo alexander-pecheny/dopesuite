@@ -213,6 +213,16 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
       button small submit "Добавить"
     message id="membersMessage"
 
+  -- thread viewer: one comment and its replies, oldest→newest (the лента itself
+  -- is newest-first, but a conversation only reads top-to-bottom). Replies also
+  -- stay in the flat лента; this is the place to read one exchange in order.
+  modal id="threadOverlay" label="Ответы" title="Ответы" variant="wide" done="Закрыть" doneid="threadClose"
+    mount id="threadBody" kind="thread"
+    form id="threadForm" dir="col"
+      editor id="threadInput" kind="comment" placeholder="Ответить…" spellcheck="false"
+      button small submit "Ответить"
+    message id="threadMessage"
+
   -- выписки viewer: every excerpt of the open card in one scrollable place,
   -- images inline (they are usually screenshots of the source, and opening one
   -- per tab was exactly the friction this replaces)

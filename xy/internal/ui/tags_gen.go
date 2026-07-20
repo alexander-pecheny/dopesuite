@@ -226,6 +226,7 @@ var MountCardTitle = Attr{Name: "kind", Value: "card-title"}
 var MountSizesPreview = Attr{Name: "kind", Value: "sizes-preview"}
 var MountExcerpts = Attr{Name: "kind", Value: "excerpts"}
 var MountExcerptCount = Attr{Name: "kind", Value: "excerpt-count"}
+var MountThread = Attr{Name: "kind", Value: "thread"}
 var PageWide = Attr{Name: "kind", Value: "wide"}
 var PageBoard = Attr{Name: "kind", Value: "board"}
 var PaneSrc = Attr{Name: "kind", Value: "src"}

@@ -196,7 +196,39 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV14(db); err != nil {
 		return err
 	}
+	if err := migrateV15(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV15 adds timeline_events.reply_to_id: a comment answering another
+// comment on the same card. Threads are deliberately ONE level deep — replying
+// to a reply attaches to its root (handleAddComment resolves it), so a thread is
+// always a flat run under one parent and the modal that shows it needs no
+// indentation, no recursion, and no ordering rules beyond "oldest first".
+//
+// It also scrubs payload_enc from already-tombstoned comments. Deleting a
+// comment now clears its text rather than merely hiding it, because a deleted
+// parent that still has replies is RENDERED (as «комментарий удалён») to keep
+// the discussion reachable — and a tombstone that still carried its ciphertext
+// would hand the client text the author asked to destroy.
+func migrateV15(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 15`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+alter table timeline_events add column reply_to_id integer references timeline_events(id);
+create index if not exists idx_timeline_reply on timeline_events(reply_to_id);
+update timeline_events set payload_enc = x'', is_excerpt = 0 where deleted_at is not null;
+insert or ignore into schema_versions(version, applied_at)
+  values(15, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV14 makes comments editable/deletable and lets a comment or an

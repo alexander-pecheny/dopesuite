@@ -434,6 +434,28 @@
 /* in-place comment editor (board.js#startCommentEdit) */
 .tl-editbox { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-1); }
 .tl-editrow { display: flex; gap: var(--space-2); }
+/* replies: kept in the flat лента (nothing is hidden from the card's history),
+   marked with a left rule and a link up to what they answer */
+/* indented AND ruled: the лента is newest-first, so a reply usually sits ABOVE
+   the comment it answers and cannot rely on adjacency to read as subordinate */
+.tl-event.tl-reply { margin-left: var(--space-5); border-left: 2px solid var(--blue); }
+.tl-sep { color: var(--muted); }
+.tl-replyto {
+  border: none; background: none; padding: 0; cursor: var(--cursor-action);
+  font: inherit; font-size: var(--text-2xs); color: var(--blue);
+}
+.tl-replyto:hover { text-decoration: underline; }
+/* a comment whose text was deleted but whose thread survives */
+.tl-event.tl-deleted { color: var(--muted); font-style: italic; }
+.tl-thread {
+  margin-top: var(--space-1); border: none; background: none; padding: 0;
+  cursor: var(--cursor-action); font: inherit; font-size: var(--text-2xs); color: var(--blue);
+}
+.tl-thread:hover { text-decoration: underline; }
+/* thread modal: one exchange, oldest first — the root set off from its replies */
+.thread { display: flex; flex-direction: column; gap: var(--space-2); max-height: 55vh; overflow-y: auto; }
+.thread-item { padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--page); }
+.thread-item.thread-root { background: var(--structure); }
 /* flash a comment when arrived at via a direct link */
 .tl-event.tl-highlight { animation: tl-flash 2.5s ease-out; }
 @keyframes tl-flash { 0%, 40% { background: var(--success-soft); border-color: var(--success); } 100% { background: var(--page); } }

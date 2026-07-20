@@ -559,13 +559,14 @@ function groupNumbering(lists) {
   return map;
 }
 
-// questionCountLabel declines "вопрос" for n: 1 вопрос, 2 вопроса, 12 вопросов.
-function questionCountLabel(n) {
+// plural picks the Russian declension for n: 1 вопрос, 2 вопроса, 12 вопросов.
+function plural(n, one, few, many) {
   const m10 = n % 10, m100 = n % 100;
-  const word = m100 >= 11 && m100 <= 14 ? "вопросов"
-    : m10 === 1 ? "вопрос"
-    : m10 >= 2 && m10 <= 4 ? "вопроса" : "вопросов";
-  return `${n} ${word}`;
+  return m100 >= 11 && m100 <= 14 ? many : m10 === 1 ? one : m10 >= 2 && m10 <= 4 ? few : many;
+}
+
+function questionCountLabel(n) {
+  return `${n} ${plural(n, "вопрос", "вопроса", "вопросов")}`;
 }
 
 function render() {
@@ -3518,6 +3519,9 @@ async function copyCardExtras(srcCardId, targetDk, newCardId) {
     let text;
     try { text = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) { continue; }
     comments.push({
+      // src ids travel so the server can rebuild threading under fresh ids
+      src_id: ev.id,
+      reply_to_src_id: ev.reply_to_id != null ? ev.reply_to_id : null,
       author_user_id: ev.author_user_id != null ? ev.author_user_id : null,
       created_at: ev.created_at,
       is_excerpt: !!ev.is_excerpt,
@@ -3734,7 +3738,8 @@ cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverla
 // those without also closing the card.
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape" || cardOverlay.hidden) return;
-  if (!pasteOverlay.hidden || !excerptsOverlay.hidden || document.querySelector(".label-add-popup")) return;
+  if (!pasteOverlay.hidden || !excerptsOverlay.hidden || !threadOverlay.hidden
+      || document.querySelector(".label-add-popup")) return;
   cardBack();
 });
 
@@ -4055,10 +4060,33 @@ function renderEvent(ev, payload) {
   const meta = (rest) => (author ? `${author} · ${rest}` : rest);
   const wrap = el("div", { class: "tl-event tl-" + ev.type });
   if (ev.type === "comment") {
+    // A tombstone: the text is gone from the server, but the comment is still
+    // rendered because replies hang off it — losing the anchor would orphan them.
+    if (ev.deleted) {
+      wrap.classList.add("tl-deleted");
+      wrap.id = "tlev-" + ev.id;
+      const row = el("div", { class: "tl-meta" }, "комментарий удалён");
+      if (ev.reply_count > 0) row.append(threadButton(ev));
+      wrap.append(row);
+      return wrap;
+    }
     const metaRow = el("div", { class: "tl-meta" }, meta(when + (ev.edited_at ? " · изменён" : "")));
     if (ev.is_excerpt) {
       wrap.classList.add("tl-excerpt");
       metaRow.append(el("span", { class: "tl-badge", text: "выписка" }));
+    }
+    // A reply keeps its place in the flat лента (it is part of the card's
+    // history) but says what it answers, and links up to it. Added BEFORE
+    // .tl-actions, which is margin-left:auto and would otherwise push this to
+    // the far right of the row.
+    if (ev.reply_to_id) {
+      wrap.classList.add("tl-reply");
+      const parent = (openCardEvents || []).find((e) => e.id === ev.reply_to_id);
+      const who = parent ? (parent.deleted ? "удалённый комментарий" : eventAuthor(parent)) : "комментарий";
+      metaRow.append(el("span", { class: "tl-sep", text: "·" }), el("button", {
+        class: "tl-replyto", type: "button", title: "Открыть ветку",
+        text: `↳ в ответ ${who}`, onclick: () => openThread(ev.reply_to_id),
+      }));
     }
     // Synced comments have a stable event id → offer a copyable direct link, the
     // edit/delete/выписка menu, and an anchor target. Pending (offline) comments
@@ -4078,6 +4106,7 @@ function renderEvent(ev, payload) {
         })));
     }
     wrap.append(metaRow, el("div", { class: "tl-comment", text: payload }));
+    if (ev.reply_count > 0) wrap.append(threadButton(ev));
   } else if (ev.type === "desc_edit") {
     let diff = {};
     try { diff = JSON.parse(payload); } catch (_) {}
@@ -4112,6 +4141,69 @@ function renderEvent(ev, payload) {
   return wrap;
 }
 
+// ---- reply threads ----
+// Threads are one level deep and live in a modal: the лента stays flat and
+// newest-first (it is a history), while a thread reads oldest-first (it is a
+// conversation). Replies appear in BOTH — the лента never hides a comment.
+let threadRootId = null;
+
+function threadButton(ev) {
+  return el("button", {
+    class: "tl-thread", type: "button",
+    text: `💬 ${ev.reply_count} ${plural(ev.reply_count, "ответ", "ответа", "ответов")}`,
+    onclick: () => openThread(ev.id),
+  });
+}
+
+const threadOverlay = document.getElementById("threadOverlay");
+function closeThread() { threadOverlay.hidden = true; threadRootId = null; }
+
+// openThread renders the root comment and its replies, oldest first, from the
+// events already loaded for the open card — no extra round trip.
+async function openThread(rootId) {
+  threadRootId = rootId;
+  const events = openCardEvents || [];
+  const root = events.find((e) => e.id === rootId);
+  const replies = events.filter((e) => e.reply_to_id === rootId).sort((a, b) => a.id - b.id);
+  const body = document.getElementById("threadBody");
+  const frag = document.createDocumentFragment();
+  for (const ev of [root, ...replies]) {
+    if (!ev) continue;
+    let text = "";
+    if (!ev.deleted) { try { text = await xyCrypto.decField(dk, ev.payload_enc); } catch (_) {} }
+    const node = el("div", { class: "thread-item" + (ev.id === rootId ? " thread-root" : "") },
+      el("div", { class: "tl-meta" },
+        ev.deleted ? "комментарий удалён"
+          : `${eventAuthor(ev)} · ${new Date(ev.created_at).toLocaleString("ru-RU")}${ev.edited_at ? " · изменён" : ""}`,
+        ev.is_excerpt ? el("span", { class: "tl-badge", text: "выписка" }) : null),
+      ev.deleted ? null : el("div", { class: "tl-comment", text }));
+    frag.append(node);
+  }
+  body.replaceChildren(frag);
+  document.getElementById("threadMessage").textContent = "";
+  threadOverlay.hidden = false;
+}
+
+document.getElementById("threadForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = document.getElementById("threadInput");
+  const text = input.value.trim();
+  if (!text || !openCardId || !threadRootId) return;
+  const msg = document.getElementById("threadMessage");
+  try {
+    await post("comment", `/api/cards/${openCardId}/comments`, {
+      payload_enc: await xyCrypto.encField(dk, text), reply_to_id: threadRootId,
+    });
+    input.value = "";
+    await loadTimeline(openCardId);
+    await openThread(threadRootId); // re-render the thread with the new reply
+  } catch (err) { msg.textContent = err.message; }
+});
+
+document.getElementById("threadClose").addEventListener("click", closeThread);
+threadOverlay.addEventListener("pointerdown", (e) => { if (e.target === threadOverlay) closeThread(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !threadOverlay.hidden) closeThread(); });
+
 // ---- comment edit / delete / выписка ----
 // Rewriting or removing a comment is the author's business; flagging one as a
 // выписка is curation any member may do (the server draws the same line in
@@ -4120,7 +4212,9 @@ function renderEvent(ev, payload) {
 // outbox has no reason to learn.
 function commentMenu(anchor, ev, payload) {
   const mine = state.me && ev.author_user_id === state.me.user_id;
-  const items = [];
+  // Replying opens the thread (with its composer) — for a comment with no
+  // replies yet, that is just the comment plus an empty answer box.
+  const items = [{ label: "↩️ Ответить", onClick: () => openThread(ev.reply_to_id || ev.id) }];
   if (mine) {
     items.push({ label: "✏️ Редактировать", onClick: () => startCommentEdit(ev, payload) });
     items.push({ label: "🗑 Удалить", onClick: () => deleteComment(ev) });
