@@ -5,7 +5,8 @@ description: Drive the xy or dope UI in headless Chrome with rodney (CLI browser
 
 # Verifying xy / dope in a real browser
 
-`rodney` (installed at `/opt/homebrew/bin/rodney`) drives a persistent headless
+`rodney` (installed at `/opt/homebrew/bin/rodney` on macOS, `~/go/bin/rodney`
+on the Linux box — `go install github.com/simonw/rodney@latest`) drives a persistent headless
 Chrome from the shell. `rodney start` once, then each command talks to the same
 browser; `rodney stop` when done. `rodney --help` lists everything. Exit codes:
 0 ok, 1 check failed (`exists`/`visible`/`assert`), 2 error/timeout.
@@ -72,9 +73,12 @@ rodney js '(()=>{const o=unlockOverlay;if(!o.hidden){unlockPass.value="board-pas
 rodney input '.klist-add .kadd-form input[type=text]' 'Тур 1'
 rodney js 'document.querySelector(".klist-add .kadd-form").requestSubmit()'
 
-# add a card: list ⋯ → «Добавить карточку» → switch to the ТЕКСТ tab first!
+# add a card: list ⋯ → «Добавить карточку» → switch to the raw-text tab first!
 # cardSave reads the *active view*; in the default "fields" view setting
 # #cardDesc does nothing → "Введите описание."
+# Click the tabs by id (cardTabText / cardTabFields) — the visible labels are
+# «Просмотр» / «Поля» / «Формат 4s», so a find-by-text on "Текст" matches the
+# "+ Текст вопроса" field pill instead and you click the wrong thing.
 rodney js '(async()=>{
   document.querySelector(".klist:not(.klist-add) .kadd").click();
   await new Promise(r=>setTimeout(r,300));
