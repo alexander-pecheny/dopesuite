@@ -783,7 +783,9 @@ const aliasOf = (card) => ((card && card.alias) || "").trim();
 // cardTitle is the plain-text form (move/copy dialogs, titles); renderCardTitle
 // below is the DOM form.
 function cardTitle(card, number) {
-  if (card.kind === "test") return testTitle(card.desc);
+  // The alias input is on every card's detail, so it must win on every kind —
+  // a test card that ignored its alias would be a silent no-op for the user.
+  if (card.kind === "test") return aliasOf(card) || testTitle(card.desc);
   const body = cardBody(card);
   if (card.kind === "question" && number) return `${number}. ${body}`;
   return body;
@@ -2477,8 +2479,10 @@ function addCard(list) {
   cardFieldReaders = null;
   cardDraft = "";
   cardDraftMeta = null;
+  cardDraftAlias = null;
   cardImageNames = [];
   document.getElementById("cardDesc").value = "";
+  document.getElementById("cardAlias").value = "";
   document.getElementById("cardKind").hidden = false;
   document.getElementById("cardKind").value = "question";
   document.getElementById("cardMessage").textContent = "";
@@ -2747,6 +2751,11 @@ function suggestWrap(input, values, onPick) {
 // captureDraft folds the currently-visible view's edits back into the draft so
 // switching views never loses unsaved input.
 function captureDraft() {
+  // The alias is not a 4s field and belongs to no view: its input lives above
+  // the tabs, so it is read on every capture, whichever view is active (and for
+  // test cards too, which return early below).
+  const aliasInput = document.getElementById("cardAlias");
+  if (aliasInput) cardDraftAlias = aliasInput.value.trim() || null;
   if (isTestCard()) {
     // Test cards keep their canonical JSON ({datetime,title,testers}) in
     // cardDraft; both views edit only the testers list (datetime/title are set
@@ -2763,7 +2772,6 @@ function captureDraft() {
     const r = readCardFields();
     cardDraft = r.desc;
     cardDraftMeta = r.meta;
-    cardDraftAlias = r.alias;
   }
 }
 
@@ -2990,10 +2998,6 @@ function renderCardFields() {
   const box = document.getElementById("cardFields");
   box.replaceChildren();
   const R = {};
-  // Алиас sits first: it's the card's name, and when set it's what the board
-  // shows instead of the question/answer text. Bound to cardDraftAlias (its own
-  // encrypted column), not to the 4s — see migrateV12.
-  R.alias = buildField("Алиас", "input", cardDraftAlias);
   R.handout = buildHandoutField(f.handout);
   R.question = buildField("Текст вопроса", "area", f.question, { open: fresh });
   R.answer = buildField("Ответ", "area", f.answer, { open: fresh });
@@ -3003,7 +3007,7 @@ function renderCardFields() {
   R.sources = buildSourcesField(f.sources, boardSources());
   R.authors = buildAuthorsField(f.authors, boardAuthors());
   R.hndt = buildField("Доп. разметка для генерации раздаток", "area", cardDraftMeta, { muted: true });
-  for (const k of ["alias", "handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"]) box.append(R[k].node);
+  for (const k of ["handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"]) box.append(R[k].node);
   // Size pre-filled fields now they're in the live DOM (scrollHeight is 0 while
   // detached, so the fit during buildField is a no-op for visible content).
   for (const ta of box.querySelectorAll("textarea")) fitTextarea(ta);
@@ -3026,7 +3030,7 @@ function readCardFields() {
     authors: R.authors.read(),
     extra: cardFieldsExtra,
   };
-  return { desc: xyChgk.composeFields(rec), meta: R.hndt.read(), alias: R.alias.read() };
+  return { desc: xyChgk.composeFields(rec), meta: R.hndt.read() };
 }
 
 // ---- test card "Поля" editor: one row per tester, each a name input + a
@@ -3263,6 +3267,7 @@ async function openCard(card, opts = {}) {
   cardDraft = card.desc;
   cardDraftMeta = card.handoutMeta != null ? card.handoutMeta : null;
   cardDraftAlias = card.alias != null ? card.alias : null;
+  document.getElementById("cardAlias").value = cardDraftAlias || "";
   savedDesc = cardDraft;
   savedMeta = cardDraftMeta;
   savedAlias = cardDraftAlias;
@@ -3795,11 +3800,15 @@ document.getElementById("cardFields").addEventListener("keydown", saveOnCmdEnter
 // Re-evaluate the save button on every edit. Typing fires "input"; the Поля
 // view's +/× field pills and the tool buttons change the draft via clicks, which
 // bubble here after their own handlers have run.
-for (const id of ["cardDesc", "cardFields"]) {
+// cardAlias is in the list because it sits outside the view panels — its edits
+// reach the draft through captureDraft like any other, but no panel handler
+// covers it.
+for (const id of ["cardDesc", "cardFields", "cardAlias"]) {
   const node = document.getElementById(id);
   node.addEventListener("input", refreshSaveState);
   node.addEventListener("click", refreshSaveState);
 }
+document.getElementById("cardAlias").addEventListener("keydown", saveOnCmdEnter);
 
 document.getElementById("cardDelete").addEventListener("click", async () => {
   const card = state.cards.find((c) => c.id === openCardId);

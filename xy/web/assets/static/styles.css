@@ -224,6 +224,10 @@
   line-clamp: var(--kcard-lines);
   overflow: hidden;
 }
+/* The alias sits below the view panels, between Метки and Вложения: it belongs
+   to the card rather than to any one view, so it stays put as the tabs change. */
+#cardAliasRow { margin-bottom: var(--space-2); }
+
 /* An alias is the card's name, not an excerpt of it: it's already short, so the
    --kcard-lines clamp has nothing to do, and the weight marks it as deliberate
    (someone typed it) rather than derived from the question text. */

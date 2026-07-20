@@ -76,6 +76,16 @@ page title="Доска · xy" kind="board" scripts="board.js timer.js"
       colorfield id="newLabelColor" value="#4477aa"
       button small submit title="Создать и добавить метку" "➕"
 
+    -- Алиас: the card's short name, shown in the list instead of its text. NOT a
+    -- 4s field (its own encrypted column), so it lives out here below the views
+    -- rather than inside Поля, and captureDraft reads it whichever view is open.
+    -- Deliberately NOT data-edit-only, unlike every other section down here: those
+    -- need a persisted card (labels, attachments, timeline), an alias does not, and
+    -- hiding it would make it unsettable on the card-creation screen.
+    label id="cardAliasLabel" "Алиас"
+    row id="cardAliasRow" gap="sm" align="center"
+      textfield id="cardAlias" placeholder="короткое имя карточки — показывается в списке вместо текста" autocomplete="off" maxlength="200" grow
+
     label data-edit-only "Вложения"
     mount id="attachments" kind="attachments" data-edit-only
     row gap="sm" align="center" wrap data-edit-only
