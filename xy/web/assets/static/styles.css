@@ -408,7 +408,9 @@
 /* timeline */
 .timeline { display: flex; flex-direction: column; gap: var(--space-2); max-height: 320px; overflow-y: auto; }
 .tl-event { padding: var(--space-2) var(--space-3); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--page); }
-.tl-meta { font-size: var(--text-2xs); color: var(--muted); display: flex; align-items: center; gap: var(--space-1); }
+/* wraps: on a phone the author·time, the «в ответ» link and the actions cannot
+   share a line, and unwrapped the pieces stretched apart around a stranded «·» */
+.tl-meta { font-size: var(--text-2xs); color: var(--muted); display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }
 .tl-comment { white-space: pre-wrap; font-size: var(--text-sm); margin-top: var(--space-1); }
 /* copy-link affordance on a comment; revealed on hover/focus to stay quiet */
 .tl-link { border: none; background: none; cursor: pointer; padding: 0; font-size: var(--text-2xs); line-height: 1; opacity: 0; transition: opacity 0.1s; }
@@ -588,12 +590,29 @@
    the shared centre line. Same fix as .handouts-doc's. */
 .feed-doc .section-label,
 .card-detail .u-row > .section-label { margin: 0; }
+/* This head carries four controls (two labelled selects + the close button),
+   which no phone fits on one line — unwrapped they ran 117px off a 375px screen,
+   taking «Порядок» with them. The other doc overlays keep their single line;
+   only this one is crowded enough to need wrapping. */
+/* .preview-head-actions is flex:none, i.e. always its max-content width, so its
+   children could never be asked to wrap however the head itself wrapped. It has
+   to be allowed to shrink first. */
+.feed-doc .preview-head { flex-wrap: wrap; }
+.feed-doc .preview-head-actions {
+  flex: 1 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end;
+}
+.feed-doc .preview-head-actions select { max-width: 100%; }
 .feed-grid {
   flex: 1; min-height: 0; overflow: auto;
   column-width: 340px; column-gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
 }
 .feed-grid .tl-event { break-inside: avoid; margin-bottom: var(--space-2); }
+/* one column on a phone: 340px columns in a 375px viewport leave no margin, and
+   scrolling a feed sideways is worse than scrolling it down */
+@media (max-width: 560px) {
+  .feed-grid { column-width: auto; column-count: 1; padding: var(--space-3); }
+}
 /* a column-broken .tl-diff turns into two unreadable slivers */
 .feed-grid .tl-diff { grid-template-columns: 1fr; }
 

@@ -5,11 +5,50 @@ description: Drive the xy or dope UI in headless Chrome with rodney (CLI browser
 
 # Verifying xy / dope in a real browser
 
-`rodney` (installed at `/opt/homebrew/bin/rodney` on macOS, `~/go/bin/rodney`
-on the Linux box — `go install github.com/simonw/rodney@latest`) drives a persistent headless
+`rodney` (`~/go/bin/rodney` on the Linux box) drives a persistent headless
 Chrome from the shell. `rodney start` once, then each command talks to the same
 browser; `rodney stop` when done. `rodney --help` lists everything. Exit codes:
 0 ok, 1 check failed (`exists`/`visible`/`assert`), 2 error/timeout.
+
+**Use our fork, not upstream.** The build on this box adds `rodney emulate`
+(phone mode — see below), which upstream lacks. It lives at
+[code.pecheny.me/pecheny/rodney](https://code.pecheny.me/pecheny/rodney).
+Rebuild with `go build -o ~/go/bin/rodney .` from a checkout;
+`go install github.com/simonw/rodney@latest` would clobber it with the upstream
+binary that has no `emulate`.
+
+## Always test phone mode before releasing
+
+xy is used on phones and desktop layouts silently overflow there (a header of
+selects running off a 375px screen, e.g.). So for any UI change, verify at BOTH
+sizes before you ship:
+
+```bash
+rodney emulate iphone        # 375x812 @3x, touch, iPhone UA — real device mode,
+                             # persists across every later command until cleared
+# … open, unlock, drive to the changed surface …
+rodney js 'JSON.stringify({vw:innerWidth, bodyOverflow:document.body.scrollWidth-innerWidth})'
+# bodyOverflow must be 0. Also check the specific surface's scrollWidth vs innerWidth.
+rodney screenshot $SP/phone.png   # captured at the emulated size (1125x2436 for iphone)
+rodney emulate clear         # back to desktop; re-verify the desktop layout too
+```
+
+- `rodney emulate <device>` sets Chrome's device mode (metrics + touch + UA),
+  not just a viewport — so hover-only CSS and UA sniffing behave as on a phone.
+  It persists in the state file and re-applies on every command (a bare CDP
+  override would die with each one-shot command's session). Devices: `iphone`,
+  `iphonese`, `pixel2`, `ipad`, `galaxyfold`, `surfaceduo`, … (`emulate` with a
+  bad name prints the list); `-l`/`--landscape` for landscape.
+- **Assert overflow numerically, don't trust the eye:** an element can overflow
+  its container while the page looks fine because the container itself scrolls.
+  Check `el.scrollWidth - el.clientWidth === 0` on the header/row you changed.
+- **Element screenshots (`screenshot-el`) are unreliable under emulation** — at
+  DPR≠1 rod's clip rect and capture region disagree and you get the wrong
+  slice. Full-page `rodney screenshot` is correct under emulation; for a
+  specific element, scroll it into view and full-page shot, or drop to
+  `rodney emulate clear` first.
+- `screenshot -w/-h` overrides emulation (explicit size wins) and resets DPR to
+  1 — handy for a quick narrow-but-not-mobile check, but not a real phone.
 
 ```bash
 rodney start
