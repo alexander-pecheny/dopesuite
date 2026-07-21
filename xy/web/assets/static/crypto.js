@@ -66,10 +66,10 @@ function randomInt(n) {
 
 // generatePassphrase builds an xkcd-style passphrase: `nWords` words drawn
 // uniformly from WORDLIST and joined by "-" (an accepted word separator).
-// Default 4 words ≈ 32 bits of entropy; repeats are allowed, keeping it exactly
-// nWords·log2(len). Re-rolls until it clears validatePassphrase — 4 short words
-// can fall under the 16-char floor, and the generator must never hand back
-// something the create form would reject.
+// Default 4 words ≈ 51.7 bits of entropy (7772-word EFF list); repeats are
+// allowed, keeping it exactly nWords·log2(len). Re-rolls until it clears
+// validatePassphrase — 4 short words can fall under the 16-char floor, and the
+// generator must never hand back something the create form would reject.
 function generatePassphrase(nWords = 4) {
   let pass;
   do {
