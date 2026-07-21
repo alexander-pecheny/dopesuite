@@ -1,82 +1,99 @@
 ---
 name: verify
-description: Drive the xy or dope UI in headless Chrome with rodney (CLI browser automation) to verify a change end-to-end — boot a throwaway server, log in, click through the flow, assert, screenshot. Use when verifying any frontend change or flow a user reaches through the browser, in either app.
+description: Drive the xy or dope UI in headless Chrome with agent-browser (CLI browser automation) to verify a change end-to-end — boot a throwaway server, log in, click through the flow, assert, screenshot. Use when verifying any frontend change or flow a user reaches through the browser, in either app.
 ---
 
 # Verifying xy / dope in a real browser
 
-`rodney` (`~/go/bin/rodney` on the Linux box) drives a persistent headless
-Chrome from the shell. `rodney start` once, then each command talks to the same
-browser; `rodney stop` when done. `rodney --help` lists everything. Exit codes:
-0 ok, 1 check failed (`exists`/`visible`/`assert`), 2 error/timeout.
+`agent-browser` drives a persistent headless Chrome from the shell via a native
+daemon. The first `agent-browser open` auto-launches the browser; every later
+command talks to the same one; `agent-browser close` when done. `--help` (or
+`agent-browser skills get core --full`) lists everything. Exit code is 0 even on
+a failed check — read the `✗`/`✓` line or the returned value, don't trust `$?`.
 
-**Use our fork, not upstream.** The build on this box adds `rodney emulate`
-(phone mode — see below), which upstream lacks. It lives at
-[code.pecheny.me/pecheny/rodney](https://code.pecheny.me/pecheny/rodney).
-Rebuild with `go build -o ~/go/bin/rodney .` from a checkout;
-`go install github.com/simonw/rodney@latest` would clobber it with the upstream
-binary that has no `emulate`.
+**This box needs `--no-sandbox`.** It's set once in
+`~/.agent-browser/config.json` (`{"args":"--no-sandbox"}`) so every launch picks
+it up. Without it Chrome dies with *"No usable sandbox … without writing
+DevToolsActivePort"*. If you ever see that, the config is missing — restore it.
+
+## The two workflows
+
+- **Snapshot + refs** (agent-browser's native style): `agent-browser snapshot -i`
+  prints interactive elements as `@e1`, `@e2` refs; act on them (`click @e3`,
+  `fill @e4 "text"`). Refs go **stale on any page change** — re-snapshot first.
+- **eval-driven** (what most of the flows below use): `agent-browser eval '…'`.
+  Both apps are id-heavy and their crypto/sync is async, so poking known ids and
+  asserting computed state is usually more reliable than snapshotting. `eval`
+  accepts **bare statements** (`const x=…; x*2` is fine) — no IIFE wrapper
+  needed. Promises are awaited, so an `(async()=>{…})()` with internal sleeps
+  works for multi-step flows.
+
+Command cheatsheet: `open <url>` · `fill <sel> <text>` (clears then types real
+keys → input events fire) · `type <sel> <text>` (append) · `click <sel>` ·
+`eval <js>` · `get text|html|value|attr|count <sel>` · `is visible|enabled <sel>`
+· `wait <sel>` (until visible; `--state hidden` for gone; `--text`, `--url`,
+`--load networkidle`, `--fn` variants) · `wait <ms>` (dumb sleep, last resort) ·
+`screenshot [selector] [path]` · `close`. Default timeout 25s.
 
 ## Always test phone mode before releasing
 
 xy is used on phones and desktop layouts silently overflow there (a header of
-selects running off a 375px screen, e.g.). So for any UI change, verify at BOTH
+selects running off a 393px screen, e.g.). So for any UI change, verify at BOTH
 sizes before you ship:
 
 ```bash
-rodney emulate iphone        # 375x812 @3x, touch, iPhone UA — real device mode,
-                             # persists across every later command until cleared
+agent-browser set device "iPhone 16"   # 393x852 @3x, iPhone UA — persists across
+                                        # every later command until reset
 # … open, unlock, drive to the changed surface …
-rodney js 'JSON.stringify({vw:innerWidth, bodyOverflow:document.body.scrollWidth-innerWidth})'
+agent-browser eval 'JSON.stringify({vw:innerWidth, bodyOverflow:document.body.scrollWidth-innerWidth})'
 # bodyOverflow must be 0. Also check the specific surface's scrollWidth vs innerWidth.
-rodney screenshot $SP/phone.png   # captured at the emulated size (1125x2436 for iphone)
-rodney emulate clear         # back to desktop; re-verify the desktop layout too
+agent-browser screenshot $SP/phone.png   # captured at the emulated size
+agent-browser set viewport 1280 800 1    # back to desktop; re-verify desktop too
 ```
 
-- `rodney emulate <device>` sets Chrome's device mode (metrics + touch + UA),
-  not just a viewport — so hover-only CSS and UA sniffing behave as on a phone.
-  It persists in the state file and re-applies on every command (a bare CDP
-  override would die with each one-shot command's session). Devices: `iphone`,
-  `iphonese`, `pixel2`, `ipad`, `galaxyfold`, `surfaceduo`, … (`emulate` with a
-  bad name prints the list); `-l`/`--landscape` for landscape.
+- `set device <name>` sets Chrome's metrics + DPR + UA. Valid names (a bad one
+  prints the list): `iPhone 15`, `iPhone 16`, `iPhone 16 Pro`, `iPhone 17`,
+  `iPad`, `iPad Pro`, `Pixel 9`, `Galaxy S25`. It persists in the daemon and
+  re-applies on every command; reset with `set viewport <w> <h> <scale>`.
+- **`set device` does NOT enable touch** (`navigator.maxTouchPoints` stays 0, no
+  `ontouchstart`). It's a layout/DPR/UA emulation, not a real touch device — fine
+  for catching overflow, not for testing touch-only handlers.
 - **Assert overflow numerically, don't trust the eye:** an element can overflow
   its container while the page looks fine because the container itself scrolls.
   Check `el.scrollWidth - el.clientWidth === 0` on the header/row you changed.
-- **Element screenshots (`screenshot-el`) are unreliable under emulation** — at
-  DPR≠1 rod's clip rect and capture region disagree and you get the wrong
-  slice. Full-page `rodney screenshot` is correct under emulation; for a
-  specific element, scroll it into view and full-page shot, or drop to
-  `rodney emulate clear` first.
-- `screenshot -w/-h` overrides emulation (explicit size wins) and resets DPR to
-  1 — handy for a quick narrow-but-not-mobile check, but not a real phone.
+- For a single element, `screenshot '<css-selector>' out.png` clips to it
+  (scroll it into view first with `scrollintoview`). Full-page `--full`.
 
 ```bash
-rodney start
-rodney open http://127.0.0.1:9681/login && rodney waitload
-rodney input '#loginUsername' tester          # types real keys → input events fire
-rodney js 'usernameForm.requestSubmit()'
-rodney screenshot $SP/shot.png                # also: screenshot-el, html, text, count
-rodney assert 'document.title' 'Мои доски · xy'
-rodney stop
+agent-browser open http://127.0.0.1:9681/login
+agent-browser fill '#loginUsername' tester          # types real keys → input events fire
+agent-browser eval 'usernameForm.requestSubmit()'
+agent-browser screenshot $SP/shot.png                # also: get html/text/count
+agent-browser eval 'document.title'                  # → "Мои доски · xy" — assert in the shell
+agent-browser close
 ```
 
-## rodney gotchas (each cost a debugging round)
+## agent-browser gotchas
 
-- **Never `rodney submit`** — it's native `form.submit()`, which bypasses JS
-  submit handlers. Both apps' forms are JS-driven: always
-  `rodney js 'theForm.requestSubmit()'`.
-- `rodney js` evaluates an **expression** — a bare `const` is a syntax error.
-  Wrap statements in `(()=>{...})()`. Promises are awaited, so
-  `(async()=>{...})()` works, including multi-step flows with internal sleeps.
-- The profile persists in `~/.rodney/chrome-data` across start/stop — a second
-  run starts logged in (`/login` redirects, the form ids are absent). For a
-  clean slate: `rodney stop && rm -rf ~/.rodney/chrome-data`.
-- `rodney wait` waits for *visible* and panics with a goroutine dump on
-  timeout — that's just exit 2, not a rodney bug.
-- Headless pages are unfocused: `.focus()` updates `document.activeElement`
-  but fires no `focus`/`focusin`, so focus-tracking handlers silently see
-  nothing. Dispatch the event yourself:
-  `rodney js 'el.focus();el.dispatchEvent(new FocusEvent("focusin",{bubbles:true}))'`.
+- **Never native `form.submit()`** — it bypasses JS submit handlers. Both apps'
+  forms are JS-driven: always `agent-browser eval 'theForm.requestSubmit()'`.
+- **Keep inline `eval` simple.** A multi-line `eval '…'` with nested quotes,
+  backticks or object literals is easily mangled by the shell into a
+  `SyntaxError`. For anything non-trivial, pipe it: `echo '<js>' | agent-browser
+  eval --stdin` (or `eval -b <base64>`). One-liners returning a `JSON.stringify`
+  of a `.map(...)` are the sweet spot.
+- **Focus events only fire through real input.** `agent-browser
+  focus/click/fill` use CDP input and fire `focus`/`focusin`, so focus-tracking
+  handlers see them. But a `.focus()` done inside `eval` on a headless page fires
+  nothing — if you must, dispatch it yourself:
+  `agent-browser eval 'el.focus();el.dispatchEvent(new FocusEvent("focusin",{bubbles:true}))'`.
+- **Sessions are ephemeral by default** — each daemon launch is a fresh profile,
+  so no "logged-in second run" surprise and nothing to wipe between runs. Pass
+  `--profile <dir>` / `--restore` only if you deliberately want persistence.
+- `wait <sel>` waits for *visible*; on timeout it's just exit-nonzero, not a bug.
+- Crashes when a page loads a **PDF into an iframe** (the xy handouts preview) —
+  the browser dies. Test PDF-frame geometry with an `about:blank` iframe of the
+  same class instead.
 
 Both apps share the login UI: two JS steps — `#loginUsername` +
 `usernameForm.requestSubmit()`, then `#passwordValue` +
@@ -99,18 +116,18 @@ Flows that took trial and error:
 ```bash
 # create a board; passphrase MUST be ≥16 chars — a short one just parks a
 # message in #createMessage and never navigates, which reads like a hang
-rodney js 'newBoardBtn.click()'
-rodney input '#boardName' 'Тестовая доска'
-rodney input '#boardPass' 'board-pass-16chars'
-rodney js 'createForm.requestSubmit()'
-rodney sleep 4        # scrypt KEK derivation is deliberately slow
+agent-browser eval 'newBoardBtn.click()'
+agent-browser fill '#boardName' 'Тестовая доска'
+agent-browser fill '#boardPass' 'board-pass-16chars'
+agent-browser eval 'createForm.requestSubmit()'
+agent-browser wait 4000        # scrypt KEK derivation is deliberately slow
 
 # unlock after EVERY open — everything on a board is behind the overlay
-rodney js '(()=>{const o=unlockOverlay;if(!o.hidden){unlockPass.value="board-pass-16chars";unlockForm.requestSubmit()}})()'
+agent-browser eval '(()=>{const o=unlockOverlay;if(!o.hidden){unlockPass.value="board-pass-16chars";unlockForm.requestSubmit()}})()'
 
 # add a list
-rodney input '.klist-add .kadd-form input[type=text]' 'Тур 1'
-rodney js 'document.querySelector(".klist-add .kadd-form").requestSubmit()'
+agent-browser fill '.klist-add .kadd-form input[type=text]' 'Тур 1'
+agent-browser eval 'document.querySelector(".klist-add .kadd-form").requestSubmit()'
 
 # add a card: list ⋯ → «Добавить карточку» → switch to the raw-text tab first!
 # cardSave reads the *active view*; in the default "fields" view setting
@@ -118,7 +135,7 @@ rodney js 'document.querySelector(".klist-add .kadd-form").requestSubmit()'
 # Click the tabs by id (cardTabText / cardTabFields) — the visible labels are
 # «Просмотр» / «Поля» / «Формат 4s», so a find-by-text on "Текст" matches the
 # "+ Текст вопроса" field pill instead and you click the wrong thing.
-rodney js '(async()=>{
+agent-browser eval '(async()=>{
   document.querySelector(".klist:not(.klist-add) .kadd").click();
   await new Promise(r=>setTimeout(r,300));
   [...document.querySelectorAll("button")].find(b=>b.textContent.includes("Добавить карточку")).click();
@@ -129,21 +146,21 @@ rodney js '(async()=>{
   cardSave.click();
 })()'
 # leave the card overlay:
-rodney js 'document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape"}))'
+agent-browser eval 'document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape"}))'
 
 # board ☰ menu is `.menu-trigger` (SVG hamburger — matching "☰" text fails)
-rodney js 'document.querySelector(".menu-trigger").click()'
+agent-browser eval 'document.querySelector(".menu-trigger").click()'
 ```
 
 - Board data is encrypted — no SQL seeding; seed through the UI.
 - Crypto + IndexedDB + sync are async: poll for the element/state you expect
-  (`rodney wait` / `assert`), don't trust one sleep.
-- Assert computed state via `rodney js` (`getComputedStyle(...)`,
+  (`wait` / re-`eval` the assertion), don't trust one sleep.
+- Assert computed state via `eval` (`getComputedStyle(...)`,
   `localStorage.getItem(...)`), not just screenshots.
 - Display prefs (list width / card height) live in `localStorage["xy.sizes"]`;
   clear between runs or you inherit the previous run's sizes.
-- Setting `.value` on sliders/inputs fires nothing — prefer `rodney input`, or
-  `dispatchEvent(new Event("input",{bubbles:true}))` after.
+- Setting `.value` on sliders/inputs from `eval` fires nothing — prefer
+  `agent-browser fill`, or `dispatchEvent(new Event("input",{bubbles:true}))`.
 
 ## dope
 

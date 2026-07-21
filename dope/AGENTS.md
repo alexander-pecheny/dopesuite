@@ -34,7 +34,7 @@ dope/                    # module root (go.mod: module "dope")
 scripts/
   loadtest/              # Real SSE load testing suite
   ek_restore/            # DB restoration tools
-  cdp.py                 # Chrome DevTools Protocol driver (see "Testing UI Changes")
+  cdp.py                 # Chrome DevTools Protocol driver (legacy; UI testing now via the verify skill)
 justfile                 # All task runner commands
 .env.example             # Config template
 ../deploy.py             # SSH deployment — the monorepo's shared script
@@ -114,10 +114,9 @@ Server listens on port **9672** by default (override with `$PORT`). Database def
 **Game types**: EK, OD, KSI implemented as pluggable modules with independent question/match state.
 
 ## Testing UI Changes
-Use the `verify` skill (repo root `.claude/skills/verify/`): `rodney` drives a
-persistent headless Chrome from the shell. For mobile-device emulation only,
-`dope/scripts/cdp.py device iphone` against Comet on port 9222 still works
-(`/Applications/Comet.app/Contents/MacOS/Comet --remote-debugging-port=9222`).
+Use the `verify` skill (repo root `.claude/skills/verify/`): `agent-browser`
+drives a persistent headless Chrome from the shell (login/flow/screenshot/mobile
+emulation all documented there).
 
 ## UI markup (DopeUIKit)
 No hand-written HTML anywhere. **DopeUIKit** (`pecheny.me/dopeuikit`, vendored via

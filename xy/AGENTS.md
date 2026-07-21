@@ -293,8 +293,8 @@ and the offline sync engine (temp-id remapping, snapshot apply, and a full
 offline→online resync against an in-memory IndexedDB).
 
 **Browser testing**: use the `verify` skill (repo root `.claude/skills/verify/`) —
-`rodney` drives a persistent headless Chrome from the shell, with the xy login /
-board-create / unlock / card flows and their gotchas documented there.
+`agent-browser` drives a persistent headless Chrome from the shell, with the xy
+login / board-create / unlock / card flows and their gotchas documented there.
 Run the built binary from `/tmp` (not the repo dir) to get embed mode + `?v=`
 asset versioning. Still worth a manual pass before release: the full board/card
 UI flows and service-worker install/offline behaviour.
