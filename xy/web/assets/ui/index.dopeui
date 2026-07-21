@@ -10,7 +10,12 @@ page title="Мои доски · xy" kind="full" scripts="index.js"
   modal id="createOverlay" label="Новая доска" title="Новая доска"
     form id="createForm" dir="col"
       textfield id="boardName" placeholder="Название доски" required
-      password id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required
+      -- textfield (not password) so the passphrase is visible while creating a board:
+      -- typing it once, unmasked, in a private moment beats a blind mistake you can't recover from.
+      -- «🎲» fills a strong xkcd-style passphrase and copies it to the clipboard.
+      row gap="sm" align="center"
+        textfield id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required grow
+        button kind="ghost" id="genPassBtn" "🎲 Сгенерировать"
       hint "Пароль шифрует все данные доски на вашем устройстве. Запомните его — восстановить нельзя. Делитесь им с соавторами вне xy."
       row gap="sm" wrap
         button submit "Создать"

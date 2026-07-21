@@ -19,6 +19,8 @@ dope/        tournament management (EK/OD/KSI) + realtime web UI
   (`dope-server`, `dope-bot`, `xy-server`, `xy-bot`) naming each unit's module,
   package, binary, systemd unit and **host** — xy is on `vps-he`, dope on
   `vps2day-ee`. Each app's `just deploy` calls it with its own targets.
+  If you are already on the target production host, do **not** `ssh` to it —
+  run the commands directly.
 - Full pre-merge history is preserved under each subdirectory (git log/blame
   work with subdir paths).
 - Plan of record: when the DSL engine matures, `dopeuikit/ui` (engine only,

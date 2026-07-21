@@ -59,6 +59,24 @@ test("validatePassphrase enforces length and word count on set", () => {
   assert.match(ok(""), /16 символов/);
 });
 
+test("generatePassphrase yields valid, varied, unlockable passphrases", async () => {
+  const gen = xyCrypto.generatePassphrase;
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) {
+    const p = gen();
+    assert.equal(p.split("-").length, 6);          // default 6 words
+    assert.equal(xyCrypto.validatePassphrase(p), null); // clears the floor
+    seen.add(p);
+  }
+  assert.ok(seen.size > 190, "generated passphrases should almost never collide");
+  assert.equal(gen(4).split("-").length, 4);       // honours the word count
+  // A generated passphrase actually works as a board passphrase.
+  const p = gen();
+  const { keymeta, dk } = await xyCrypto.createBoardKeys(p);
+  const ct = await xyCrypto.encField(dk, "тест");
+  assert.equal(await xyCrypto.decField(await xyCrypto.unlockBoard(p, keymeta), ct), "тест");
+});
+
 test("bytes round-trip for attachments", async () => {
   const { dk } = await xyCrypto.createBoardKeys("pw");
   const data = new Uint8Array([0, 1, 2, 250, 255]);

@@ -6,6 +6,7 @@
 // Loaded as an ES module (CSP script-src 'self'); consumers import from it or
 // read window.xyCrypto.
 import { scrypt } from "./vendor/scrypt.js";
+import { WORDLIST } from "./wordlist.js";
 
 const subtle = globalThis.crypto.subtle;
 const te = new TextEncoder();
@@ -52,6 +53,23 @@ function randomBytes(n) {
   const b = new Uint8Array(n);
   globalThis.crypto.getRandomValues(b);
   return b;
+}
+
+// randomInt returns a uniform integer in [0, n) using rejection sampling over a
+// 16-bit draw — no modulo bias (unlike `rand % n`). n must be ≤ 65536.
+function randomInt(n) {
+  const limit = 65536 - (65536 % n);
+  let x;
+  do { const b = randomBytes(2); x = (b[0] << 8) | b[1]; } while (x >= limit);
+  return x % n;
+}
+
+// generatePassphrase builds an xkcd-style passphrase: `nWords` words drawn
+// uniformly from WORDLIST and joined by "-" (an accepted word separator, so it
+// clears validatePassphrase). Default 6 words ≈ 48 bits of entropy. Repeats are
+// allowed — that keeps the entropy exactly nWords·log2(len).
+function generatePassphrase(nWords = 6) {
+  return Array.from({ length: nWords }, () => WORDLIST[randomInt(WORDLIST.length)]).join("-");
 }
 
 // ---- base64 (over the wire) ----
@@ -216,7 +234,7 @@ async function forgetDK(boardId) {
 
 export const xyCrypto = {
   toB64, fromB64,
-  createBoardKeys, unlockBoard, rewrapKey, validatePassphrase,
+  createBoardKeys, unlockBoard, rewrapKey, validatePassphrase, generatePassphrase,
   encField, decField, encBytes, decBytes,
   cacheDK, loadCachedDK, forgetDK,
   // low-level, exposed for tests
