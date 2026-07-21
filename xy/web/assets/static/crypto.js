@@ -65,11 +65,17 @@ function randomInt(n) {
 }
 
 // generatePassphrase builds an xkcd-style passphrase: `nWords` words drawn
-// uniformly from WORDLIST and joined by "-" (an accepted word separator, so it
-// clears validatePassphrase). Default 6 words ≈ 48 bits of entropy. Repeats are
-// allowed — that keeps the entropy exactly nWords·log2(len).
-function generatePassphrase(nWords = 6) {
-  return Array.from({ length: nWords }, () => WORDLIST[randomInt(WORDLIST.length)]).join("-");
+// uniformly from WORDLIST and joined by "-" (an accepted word separator).
+// Default 4 words ≈ 32 bits of entropy; repeats are allowed, keeping it exactly
+// nWords·log2(len). Re-rolls until it clears validatePassphrase — 4 short words
+// can fall under the 16-char floor, and the generator must never hand back
+// something the create form would reject.
+function generatePassphrase(nWords = 4) {
+  let pass;
+  do {
+    pass = Array.from({ length: nWords }, () => WORDLIST[randomInt(WORDLIST.length)]).join("-");
+  } while (validatePassphrase(pass));
+  return pass;
 }
 
 // ---- base64 (over the wire) ----

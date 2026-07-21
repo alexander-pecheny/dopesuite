@@ -891,6 +891,11 @@ input[type="radio"]:focus-visible {
   font-size: var(--text-sm);
 }
 
+/* danger variant: a warning that must not read as quiet helper text */
+.hint-danger {
+  color: var(--danger-text);
+}
+
 /* the empty primitive: an "nothing here yet" placeholder line */
 .empty {
   margin: 0;

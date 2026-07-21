@@ -9,6 +9,7 @@
     "form-dir":       { "prefix": "Dir",      "values": ["row", "col"] },
     "editor-kind":    { "prefix": "Editor",   "values": ["plain"] },
     "checkbox-kind":  { "prefix": "Check",    "values": ["plain"] },
+    "hint-kind":      { "prefix": "Hint",     "values": ["danger"] },
     "modal-variant":  { "prefix": "ModalVar", "values": ["plain", "lists", "sizes", "wide"] },
     "mount-kind":     { "prefix": "Mount",    "values": [] }
   },
@@ -66,7 +67,7 @@
     { "name": "section", "props": [], "children": "any" },
 
     { "name": "text", "props": [], "children": "text" },
-    { "name": "hint", "props": [], "children": "text" },
+    { "name": "hint", "props": [{ "name": "kind", "enum": "hint-kind" }], "children": "text" },
     { "name": "subhead", "props": [], "children": "text" },
     { "name": "empty", "props": [], "children": "text" },
     { "name": "label", "props": [{ "name": "for" }], "children": "text" },

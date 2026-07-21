@@ -116,23 +116,14 @@ document.getElementById("newBoardBtn").addEventListener("click", () => {
   overlay.hidden = false;
   document.getElementById("boardName").focus();
 });
-// «🎲 Сгенерировать»: fill the field with a fresh xkcd-style passphrase and copy
-// it, so the one place it's ever shown in the clear (creation) doubles as the
-// moment you stash it somewhere safe.
+// «🎲»: fill the field with a fresh xkcd-style passphrase and copy it, so the one
+// place it's ever shown in the clear (creation) doubles as the moment you stash
+// it somewhere safe. Feedback lands in #passMessage, right under the field.
 const boardPass = document.getElementById("boardPass");
-document.getElementById("genPassBtn").addEventListener("click", async () => {
-  const pass = xyCrypto.generatePassphrase();
-  boardPass.value = pass;
-  boardPass.focus();
-  // Confirm the fill up front — don't gate it on the clipboard promise, which
-  // can hang or reject (no focus / non-secure ctx). Upgrade the note if the copy
-  // lands; either way the passphrase is right there in the field.
-  createMessage.textContent = "Пароль сгенерирован. Сохраните его — восстановить нельзя.";
-  try {
-    await navigator.clipboard.writeText(pass);
-    createMessage.textContent = "Пароль сгенерирован и скопирован в буфер обмена. Сохраните его — восстановить нельзя.";
-  } catch (_) { /* clipboard unavailable/denied — the passphrase is visible in the field */ }
-});
+xyApp.wireGenPassphrase(
+  document.getElementById("genPassBtn"), boardPass,
+  document.getElementById("passMessage"), xyCrypto.generatePassphrase,
+);
 
 document.getElementById("createCancel").addEventListener("click", () => { overlay.hidden = true; });
 overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) overlay.hidden = true; });

@@ -64,7 +64,7 @@ test("generatePassphrase yields valid, varied, unlockable passphrases", async ()
   const seen = new Set();
   for (let i = 0; i < 200; i++) {
     const p = gen();
-    assert.equal(p.split("-").length, 6);          // default 6 words
+    assert.equal(p.split("-").length, 4);          // default 4 words
     assert.equal(xyCrypto.validatePassphrase(p), null); // clears the floor
     seen.add(p);
   }

@@ -159,9 +159,28 @@ function swapPlusIcon(btn) {
   btn.replaceChildren(plusIcon(), ...(rest ? [" " + rest] : []));
 }
 
+// wireGenPassphrase makes `button` fill `input` with a fresh passphrase and copy
+// it, reporting to `message` right below the field. Shared by the board-create
+// and Trello-import flows (both mint a new board from a passphrase). `generate`
+// is injected so this module stays free of the crypto dependency. The confirm
+// shows up front — never gated on the clipboard promise, which can hang or
+// reject (no focus / non-secure ctx); either way the passphrase is in the field.
+function wireGenPassphrase(button, input, message, generate) {
+  button.addEventListener("click", async () => {
+    const pass = generate();
+    input.value = pass;
+    input.focus();
+    message.textContent = "Пароль сгенерирован.";
+    try {
+      await navigator.clipboard.writeText(pass);
+      message.textContent = "Сгенерированный пароль скопирован в буфер обмена.";
+    } catch (_) { /* clipboard unavailable/denied — the passphrase is visible in the field */ }
+  });
+}
+
 export const xySizes = { DEFAULT: SIZES_DEFAULT, ...SIZES_RANGE, sanitize: sanitizeSizes, apply: applySizes };
 
-export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin, plusIcon, swapPlusIcon };
+export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin, plusIcon, swapPlusIcon, wireGenPassphrase };
 if (typeof window !== "undefined") {
   window.xyApp = xyApp;
   window.xySizes = xySizes;

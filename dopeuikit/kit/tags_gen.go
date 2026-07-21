@@ -461,6 +461,7 @@ var CheckPlain = Attr{Name: "kind", Value: "plain"}
 var EditorPlain = Attr{Name: "kind", Value: "plain"}
 var DirRow = Attr{Name: "dir", Value: "row"}
 var DirCol = Attr{Name: "dir", Value: "col"}
+var HintDanger = Attr{Name: "kind", Value: "danger"}
 var JustifyStart = Attr{Name: "justify", Value: "start"}
 var JustifyCenter = Attr{Name: "justify", Value: "center"}
 var JustifyEnd = Attr{Name: "justify", Value: "end"}

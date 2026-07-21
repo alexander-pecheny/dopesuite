@@ -37,6 +37,12 @@ const msg = document.getElementById("importMessage");
 const form = document.getElementById("importForm");
 const importBtn = document.getElementById("importBtn");
 
+// «🎲»: fill + copy a fresh passphrase, feedback under the field (see app.js).
+xyApp.wireGenPassphrase(
+  document.getElementById("genPassBtn"), document.getElementById("boardPass"),
+  document.getElementById("passMessage"), xyCrypto.generatePassphrase,
+);
+
 function setStatus(s) {
   statusNode.dataset.state = s;
 }

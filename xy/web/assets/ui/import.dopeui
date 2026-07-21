@@ -31,8 +31,14 @@ page title="Импорт из Trello · xy" kind="wide" scripts="import.js"
       filefield id="trelloFile" accept=".json,application/json"
 
     textfield id="boardName" placeholder="Название доски (по умолчанию — из Trello)"
-    password id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required
-    hint "Пароль шифрует все данные доски. Запомните его — восстановить нельзя."
+    -- textfield (not password): board creation is the one safe moment to show the
+    -- passphrase; «🎲» fills a strong one and copies it. Mirrors the create dialog.
+    row gap="sm" align="center"
+      textfield id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required grow
+      iconbtn id="genPassBtn" label="Сгенерировать пароль" "🎲"
+    hint "Пароль нужен для E2E-шифрования."
+    hint kind="danger" "Сохраните его прямо сейчас, его нельзя будет восстановить"
+    message id="passMessage"
     row gap="sm" wrap
       button submit id="importBtn" "Импортировать"
       button kind="ghost" href="/" "Отмена"

@@ -5,8 +5,8 @@
 // co-author. crypto.js#generatePassphrase draws from it uniformly.
 //
 // Entropy is `words × log2(len)`; at 248 words that's ~7.95 bits/word, so the
-// default 6-word passphrase carries ~48 bits — well above what a human picks,
-// and behind scrypt each guess is already expensive.
+// default 4-word passphrase carries ~32 bits — behind scrypt each guess is
+// already expensive, and it stays short enough to dictate.
 export const WORDLIST = [
   // animals
   "ant", "badger", "bat", "bear", "beaver", "bison", "camel", "cobra",
