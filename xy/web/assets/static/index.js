@@ -69,7 +69,6 @@ function renderBoards(boards) {
       el("span", { class: "board-card-name-wrap" },
         el("span", { class: "board-card-name", text: title })),
       el("span", { class: "board-card-role", text: b.role === "owner" ? "владелец" : "редактор" }),
-      el("span", { class: "popover board-card-name-popover", text: title }),
     );
     if (b.unread) {
       card.classList.add("has-unread");
@@ -95,27 +94,63 @@ function renderBoards(boards) {
   measureNames();
 }
 
-// A long title clamps to two lines with a fade; only when it actually overflows do
-// we flag the card so the fade + full-name popover switch on (dope's -truncated flag).
 function setCardName(card, text) {
   card.querySelector(".board-card-name").textContent = text;
-  card.querySelector(".board-card-name-popover").textContent = text;
   measureNames();
 }
+// Flag every card whose one-line title overflows, so the CSS fade turns on only
+// there (dope's -truncated flag) — and so hover knows which cards get a tooltip.
 function measureNames() {
   requestAnimationFrame(() => {
     for (const card of listNode.querySelectorAll(".board-card")) {
       const name = card.querySelector(".board-card-name");
-      card.classList.toggle("board-card-name-truncated", name.scrollHeight > name.clientHeight + 1);
+      card.classList.toggle("board-card-name-truncated", name.scrollWidth > name.clientWidth + 1);
     }
   });
 }
 let measureRaf = false;
 window.addEventListener("resize", () => {
+  hideTip();
   if (measureRaf) return;
   measureRaf = true;
   requestAnimationFrame(() => { measureRaf = false; measureNames(); });
 });
+
+// The full name floats in one shared node appended to <body> (position:fixed), so
+// the grid's scroll clip and neighbouring tiles never crop it — dope's floating
+// popover, pared to xy's single trigger. Shown below the title, flipped above when
+// it would fall off the bottom, clamped into the viewport.
+let tipEl = null, tipCard = null;
+function showTip(card) {
+  if (tipCard === card) return;
+  tipCard = card;
+  const name = card.querySelector(".board-card-name");
+  if (!tipEl) { tipEl = el("div", { class: "popover board-card-name-popover" }); document.body.append(tipEl); }
+  tipEl.textContent = name.textContent;
+  tipEl.classList.add("visible");
+  const r = name.getBoundingClientRect();
+  const left = Math.max(8, Math.min(r.left, window.innerWidth - tipEl.offsetWidth - 8));
+  let top = r.bottom + 2;
+  if (top + tipEl.offsetHeight > window.innerHeight - 8) top = r.top - tipEl.offsetHeight - 2;
+  tipEl.style.left = `${left}px`;
+  tipEl.style.top = `${top}px`;
+}
+function hideTip() { if (tipEl) tipEl.classList.remove("visible"); tipCard = null; }
+
+listNode.addEventListener("pointerover", (e) => {
+  const card = e.target.closest(".board-card");
+  if (card && card.classList.contains("board-card-name-truncated")) showTip(card);
+});
+listNode.addEventListener("pointerout", (e) => {
+  const card = e.target.closest(".board-card");
+  if (card && !card.contains(e.relatedTarget)) hideTip();
+});
+listNode.addEventListener("focusin", (e) => {
+  const card = e.target.closest(".board-card");
+  if (card && card.classList.contains("board-card-name-truncated")) showTip(card);
+});
+listNode.addEventListener("focusout", hideTip);
+window.addEventListener("scroll", hideTip, true);
 
 async function decryptName(b) {
   try {

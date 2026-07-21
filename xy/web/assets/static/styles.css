@@ -51,40 +51,38 @@
   position: relative; /* anchors the unread dot and the title popover */
 }
 .board-card:hover { background: var(--action-bg); }
-/* A long title clamps to two lines and fades out (no ellipsis) with the full name
-   in a hover/focus popover — xy's take on dope's truncated-cell fade+popover. The
-   fade is a mask on the text itself, so it needs no bg-matched gradient and stays
-   clean across themes and the hover fill. The .board-card-name-truncated flag (set
-   by index.js only when the name overflows) is the single switch for fade+popover. */
-.board-card-name-wrap { position: relative; min-width: 0; }
+/* dope's truncated-cell fade+popover: a long title stays on one line, clipped
+   (no ellipsis) with a right-edge fade; the .board-card-name-truncated flag (set
+   by index.js only when it overflows) turns the fade on, and index.js floats the
+   full name below on hover/focus. The fade is a mask on the text so it needs no
+   bg-matched gradient and survives the tile/hover/dark fills paper rows never see. */
+.board-card-name-wrap { position: relative; display: block; min-width: 0; }
 .board-card-name {
   display: block;
   font-weight: var(--fw-semibold);
   font-size: var(--text-lg);
-  line-height: var(--leading-snug);
-  max-height: calc(var(--text-lg) * var(--leading-snug) * 2);
   overflow: hidden;
-  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 .board-card-name-truncated .board-card-name {
-  -webkit-mask-image: linear-gradient(to bottom, var(--paper) 70%, transparent);
-  mask-image: linear-gradient(to bottom, var(--paper) 70%, transparent);
+  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
 }
+/* One shared node, appended to <body> and positioned by index.js (position:fixed),
+   so the grid's scroll clip and neighbouring tiles never crop it. */
 .board-card-name-popover {
-  position: absolute;
-  top: var(--space-3);
-  left: var(--space-3);
-  right: var(--space-3);
+  position: fixed;
+  z-index: var(--z-tooltip);
   display: none;
+  max-width: min(420px, calc(100vw - var(--space-4)));
   padding: var(--space-1) var(--space-2);
   font-weight: var(--fw-semibold);
-  font-size: var(--text-lg);
-  line-height: var(--leading-snug);
   white-space: normal;
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
-.board-card-name-truncated:hover .board-card-name-popover,
-.board-card-name-truncated:focus-within .board-card-name-popover { display: block; }
+.board-card-name-popover.visible { display: block; }
 .board-card-role { font-size: var(--text-xs); color: var(--muted); }
 /* blue "unread" dot — a board has changes by another member the user hasn't
    read. The kit's .unread-dot(-corner); a touch bigger on the large tile. */
