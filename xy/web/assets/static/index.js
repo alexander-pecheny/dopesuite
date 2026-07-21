@@ -64,9 +64,12 @@ function renderBoards(boards) {
     // Migrated (v2) boards carry a plaintext name — shown with no key needed. Legacy
     // (v1) boards still need the cached DK, so start with a 🔒 placeholder.
     const migrated = b.schema_version >= 2;
+    const title = migrated ? b.name : "🔒 доска #" + b.id;
     const card = el("a", { class: "board-card", href: `/board/${b.id}` },
-      el("span", { class: "board-card-name", text: migrated ? b.name : "🔒 доска #" + b.id }),
+      el("span", { class: "board-card-name-wrap" },
+        el("span", { class: "board-card-name", text: title })),
       el("span", { class: "board-card-role", text: b.role === "owner" ? "владелец" : "редактор" }),
+      el("span", { class: "popover board-card-name-popover", text: title }),
     );
     if (b.unread) {
       card.classList.add("has-unread");
@@ -77,19 +80,42 @@ function renderBoards(boards) {
       // the plaintext — opportunistically migrate the board off name_enc.
       decryptName(b).then((name) => {
         if (!name) return;
-        card.querySelector(".board-card-name").textContent = name;
+        setCardName(card, name);
         migrateName(b.id, name);
       });
     } else {
       // The name is readable without a key, but opening the board still needs its
       // DK — mark boards that will ask for the passphrase.
       xyCrypto.loadCachedDK(b.id).then((dk) => {
-        if (!dk) card.querySelector(".board-card-name").textContent = "🔒 " + b.name;
+        if (!dk) setCardName(card, "🔒 " + b.name);
       }).catch(() => {});
     }
     listNode.append(card);
   }
+  measureNames();
 }
+
+// A long title clamps to two lines with a fade; only when it actually overflows do
+// we flag the card so the fade + full-name popover switch on (dope's -truncated flag).
+function setCardName(card, text) {
+  card.querySelector(".board-card-name").textContent = text;
+  card.querySelector(".board-card-name-popover").textContent = text;
+  measureNames();
+}
+function measureNames() {
+  requestAnimationFrame(() => {
+    for (const card of listNode.querySelectorAll(".board-card")) {
+      const name = card.querySelector(".board-card-name");
+      card.classList.toggle("board-card-name-truncated", name.scrollHeight > name.clientHeight + 1);
+    }
+  });
+}
+let measureRaf = false;
+window.addEventListener("resize", () => {
+  if (measureRaf) return;
+  measureRaf = true;
+  requestAnimationFrame(() => { measureRaf = false; measureNames(); });
+});
 
 async function decryptName(b) {
   try {

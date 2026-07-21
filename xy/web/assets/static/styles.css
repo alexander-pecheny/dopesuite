@@ -48,10 +48,43 @@
   background: var(--board-tile);
   text-decoration: none;
   color: var(--text);
+  position: relative; /* anchors the unread dot and the title popover */
 }
 .board-card:hover { background: var(--action-bg); }
-.board-card.has-unread { position: relative; }
-.board-card-name { font-weight: var(--fw-semibold); font-size: var(--text-lg); }
+/* A long title clamps to two lines and fades out (no ellipsis) with the full name
+   in a hover/focus popover — xy's take on dope's truncated-cell fade+popover. The
+   fade is a mask on the text itself, so it needs no bg-matched gradient and stays
+   clean across themes and the hover fill. The .board-card-name-truncated flag (set
+   by index.js only when the name overflows) is the single switch for fade+popover. */
+.board-card-name-wrap { position: relative; min-width: 0; }
+.board-card-name {
+  display: block;
+  font-weight: var(--fw-semibold);
+  font-size: var(--text-lg);
+  line-height: var(--leading-snug);
+  max-height: calc(var(--text-lg) * var(--leading-snug) * 2);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.board-card-name-truncated .board-card-name {
+  -webkit-mask-image: linear-gradient(to bottom, var(--paper) 70%, transparent);
+  mask-image: linear-gradient(to bottom, var(--paper) 70%, transparent);
+}
+.board-card-name-popover {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  right: var(--space-3);
+  display: none;
+  padding: var(--space-1) var(--space-2);
+  font-weight: var(--fw-semibold);
+  font-size: var(--text-lg);
+  line-height: var(--leading-snug);
+  white-space: normal;
+  pointer-events: none;
+}
+.board-card-name-truncated:hover .board-card-name-popover,
+.board-card-name-truncated:focus-within .board-card-name-popover { display: block; }
 .board-card-role { font-size: var(--text-xs); color: var(--muted); }
 /* blue "unread" dot — a board has changes by another member the user hasn't
    read. The kit's .unread-dot(-corner); a touch bigger on the large tile. */
