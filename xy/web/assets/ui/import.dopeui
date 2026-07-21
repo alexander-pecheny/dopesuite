@@ -38,7 +38,6 @@ page title="Импорт из Trello · xy" kind="wide" scripts="import.js"
       iconbtn id="genPassBtn" label="Сгенерировать пароль" "🎲"
     hint "Пароль нужен для E2E-шифрования."
     hint kind="danger" "Сохраните его прямо сейчас, его нельзя будет восстановить"
-    message id="passMessage"
     row gap="sm" wrap
       button submit id="importBtn" "Импортировать"
       button kind="ghost" href="/" "Отмена"

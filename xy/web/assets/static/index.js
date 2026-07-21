@@ -118,12 +118,9 @@ document.getElementById("newBoardBtn").addEventListener("click", () => {
 });
 // «🎲»: fill the field with a fresh xkcd-style passphrase and copy it, so the one
 // place it's ever shown in the clear (creation) doubles as the moment you stash
-// it somewhere safe. Feedback lands in #passMessage, right under the field.
+// it somewhere safe.
 const boardPass = document.getElementById("boardPass");
-xyApp.wireGenPassphrase(
-  document.getElementById("genPassBtn"), boardPass,
-  document.getElementById("passMessage"), xyCrypto.generatePassphrase,
-);
+xyApp.wireGenPassphrase(document.getElementById("genPassBtn"), boardPass, xyCrypto.generatePassphrase);
 
 document.getElementById("createCancel").addEventListener("click", () => { overlay.hidden = true; });
 overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) overlay.hidden = true; });

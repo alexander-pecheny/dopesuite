@@ -160,20 +160,17 @@ function swapPlusIcon(btn) {
 }
 
 // wireGenPassphrase makes `button` fill `input` with a fresh passphrase and copy
-// it, reporting to `message` right below the field. Shared by the board-create
-// and Trello-import flows (both mint a new board from a passphrase). `generate`
-// is injected so this module stays free of the crypto dependency. The confirm
-// shows up front — never gated on the clipboard promise, which can hang or
-// reject (no focus / non-secure ctx); either way the passphrase is in the field.
-function wireGenPassphrase(button, input, message, generate) {
+// it to the clipboard. Shared by the board-create and Trello-import flows (both
+// mint a new board from a passphrase). `generate` is injected so this module
+// stays free of the crypto dependency. No status text — the field visibly
+// changing on each click is confirmation enough, and the copy is silent.
+function wireGenPassphrase(button, input, generate) {
   button.addEventListener("click", async () => {
     const pass = generate();
     input.value = pass;
     input.focus();
-    message.textContent = "Пароль сгенерирован.";
     try {
       await navigator.clipboard.writeText(pass);
-      message.textContent = "Сгенерированный пароль скопирован в буфер обмена.";
     } catch (_) { /* clipboard unavailable/denied — the passphrase is visible in the field */ }
   });
 }

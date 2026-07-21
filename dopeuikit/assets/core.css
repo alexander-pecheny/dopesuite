@@ -861,12 +861,19 @@ input[type="radio"]:focus-visible {
   padding: var(--space-4);
 }
 
-/* the message primitive: a status/result line that preserves line breaks */
+/* the message primitive: a status/result line that preserves line breaks. The
+   min-height reserves the line so text appearing doesn't shift the layout; when
+   empty it collapses instead of leaving a dead gap at the end of a dialog. */
 .message {
   min-height: 24px;
   margin: 0;
   color: var(--muted);
   white-space: pre-wrap;
+}
+
+.message:empty {
+  min-height: 0;
+  display: none;
 }
 
 /* the section primitive: a form/step column (login, register, profile stages).
@@ -1203,7 +1210,7 @@ input[type="radio"]:focus-visible {
 }
 
 .appearance-modal {
-  width: min(360px, 100%);
+  width: min(420px, 100%);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);

@@ -18,7 +18,6 @@ page title="Мои доски · xy" kind="full" scripts="index.js"
         iconbtn id="genPassBtn" label="Сгенерировать пароль" "🎲"
       hint "Пароль нужен для E2E-шифрования."
       hint kind="danger" "Сохраните его прямо сейчас, его нельзя будет восстановить"
-      message id="passMessage"
       row gap="sm" wrap
         button submit "Создать"
         button kind="ghost" id="createCancel" "Отмена"
