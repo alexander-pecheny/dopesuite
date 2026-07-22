@@ -85,8 +85,9 @@ func HasCookie(r *http.Request) bool {
 
 // StartRegisterResponse is returned when a registration is initiated.
 type StartRegisterResponse struct {
-	Code      string `json:"code"`
-	ExpiresAt string `json:"expires_at"`
+	Code        string `json:"code"`
+	ExpiresAt   string `json:"expires_at"`
+	BotUsername string `json:"bot_username,omitempty"`
 }
 
 // RegisterStatusResponse reports the status of a pending registration.

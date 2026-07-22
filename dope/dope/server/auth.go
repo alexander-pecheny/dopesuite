@@ -65,6 +65,15 @@ func (s *server) handleAuthTgStart(w http.ResponseWriter, r *http.Request) {
 	writeJSONValue(w, resp)
 }
 
+// botUsername is the login bot's @handle, used to build the t.me deep link the
+// login page offers. DOPE_BOT_NAME overrides the default.
+func botUsername() string {
+	if v := strings.TrimSpace(os.Getenv("DOPE_BOT_NAME")); v != "" {
+		return v
+	}
+	return "dope_pecheny_bot"
+}
+
 // tgStart mints a bot code for the telegram handshake — no username up front. Who
 // the visitor is (and, for a new account, the username) is settled afterwards by
 // tgStatus / tgClaim.
@@ -94,7 +103,7 @@ values(?, 'register', ?, ?)`, code, now.Format(time.RFC3339), expires.Format(tim
 			if err := tx.Commit(); err != nil {
 				return session.StartRegisterResponse{}, err
 			}
-			return session.StartRegisterResponse{Code: code, ExpiresAt: expires.Format(time.RFC3339)}, nil
+			return session.StartRegisterResponse{Code: code, ExpiresAt: expires.Format(time.RFC3339), BotUsername: botUsername()}, nil
 		}
 		if !util.IsUniqueViolation(err) {
 			return session.StartRegisterResponse{}, err

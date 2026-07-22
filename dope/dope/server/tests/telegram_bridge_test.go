@@ -126,13 +126,11 @@ func TestTelegramBridgeIssueLogin(t *testing.T) {
 	s := newAuthTestServer(t)
 	ctx := context.Background()
 
-	// Unknown telegram account -> told to register.
-	if got := s.TgBridge().TelegramIssueLogin(ctx, 9999, "ghost"); got != telegrambridge.TelegramBridgeLoginNeedInvite {
-		t.Fatalf("unknown user = %q, want need-invite", got)
+	// A bare /start (no code) points the user at the site code, whether or not
+	// the telegram account exists — login and registration share that flow.
+	if got := s.TgBridge().TelegramIssueLogin(ctx, 9999, "ghost"); got != telegrambridge.TelegramBridgeLoginOnSite {
+		t.Fatalf("unknown user = %q, want on-site pointer", got)
 	}
-
-	// A known telegram account is pointed back to the website (login now starts
-	// there and mints the code the user forwards to the bot).
 	seedTelegramUser(t, s, 4242, "bob")
 	if got := s.TgBridge().TelegramIssueLogin(ctx, 4242, "bob"); got != telegrambridge.TelegramBridgeLoginOnSite {
 		t.Fatalf("issue login = %q, want on-site pointer", got)

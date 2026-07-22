@@ -8,8 +8,9 @@ page title="Вход · xy" kind="sheet" classicscripts="login.js"
     message id="methodMessage"
 
   section id="step-code" hidden
-    hint "Отправьте этот код боту в Telegram:"
-    bigcode id="tgCode"
+    hint "Для входа пройдите по ссылке:"
+    button id="tgDeepLink" href="#" "t.me/…"
+    hint "Если ссылка не открывается, напишите боту " (strong id="tgBotName" "@…") " и пришлите код " (strong id="tgCode" "…") "."
     hint "Жду подтверждения от бота…"
     message id="codeMessage"
 

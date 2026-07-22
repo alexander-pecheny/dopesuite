@@ -53,29 +53,86 @@ func main() {
 	}
 }
 
+// intentKind is what an incoming message asks the bot to do.
+type intentKind int
+
+const (
+	intentIgnore   intentKind = iota // empty message
+	intentLogin                      // /login or a bare /start: point at the site
+	intentRegister                   // consume a code (pasted, or from a /start deep link)
+)
+
+type intent struct {
+	kind intentKind
+	code string // set when kind == intentRegister
+}
+
+// classify decides what a message means. A deep-link /start arrives as
+// "/start <code>" (t.me/<bot>?start=<code>), and in a group as
+// "/start@<bot> <code>" — the code MUST be pulled from the command argument, or
+// the /start prefix keeps it out of the plain-code branch and it is silently
+// dropped. Anything else that isn't a pasted code is a request for the site.
+func classify(text string) intent {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return intent{kind: intentIgnore}
+	}
+	if strings.HasPrefix(text, "/") {
+		if commandName(text) == "/start" {
+			if arg := commandArg(text); arg != "" {
+				return intent{kind: intentRegister, code: strings.ToUpper(arg)}
+			}
+		}
+		return intent{kind: intentLogin}
+	}
+	return intent{kind: intentRegister, code: strings.ToUpper(text)}
+}
+
 func handler(bridge *tgbot.Bridge) tgbot.Handler {
 	return func(ctx context.Context, c *tgbot.Client, u tgbot.Update) {
-		text := strings.TrimSpace(u.Message.Text)
+		act := classify(u.Message.Text)
+		if act.kind == intentIgnore {
+			return
+		}
 		from := u.Message.From
-
 		var reply string
-		switch {
-		case text == "/login" || text == "/start":
+		switch act.kind {
+		case intentLogin:
 			reply = call(ctx, bridge, "/api/telegram/login", map[string]any{
 				"telegram_user_id": from.ID, "telegram_username": from.Username, "telegram_name": from.DisplayName(),
 			})
-		case strings.HasPrefix(text, "/start "):
-			code := strings.TrimSpace(strings.TrimPrefix(text, "/start "))
-			reply = register(ctx, bridge, code, from)
-		default:
-			// A bare token is treated as a registration code.
-			reply = register(ctx, bridge, text, from)
+		case intentRegister:
+			reply = register(ctx, bridge, act.code, from)
 		}
 		if reply == "" {
 			reply = fallbackMessage
 		}
 		c.Send(ctx, u.Message.Chat.ID, reply)
 	}
+}
+
+// commandName returns the leading /command, lowercased and stripped of any
+// @botname suffix (Telegram appends it in groups).
+func commandName(text string) string {
+	parts := strings.Fields(text)
+	if len(parts) == 0 {
+		return ""
+	}
+	cmd := parts[0]
+	if i := strings.Index(cmd, "@"); i >= 0 {
+		cmd = cmd[:i]
+	}
+	return strings.ToLower(cmd)
+}
+
+// commandArg returns the first whitespace-separated argument after the command
+// word, or "" when there is none.
+func commandArg(text string) string {
+	parts := strings.Fields(text)
+	if len(parts) < 2 {
+		return ""
+	}
+	return parts[1]
 }
 
 func register(ctx context.Context, bridge *tgbot.Bridge, code string, from *tgbot.User) string {
