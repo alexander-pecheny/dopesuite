@@ -6,6 +6,7 @@ import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
 import { xyDiff } from "./diff.js";
 import { xySync } from "./sync.js";
+import { xyCardDraft } from "./carddraft.js";
 
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, plusIcon, swapPlusIcon } = xyApp;
 const { keyBetween } = xyRank;
@@ -2499,9 +2500,7 @@ function addCard(list) {
   openCardId = null;
   cardView = "";
   cardFieldReaders = null;
-  cardDraft = "";
-  cardDraftMeta = null;
-  cardDraftAlias = null;
+  draft.blank();
   cardImageNames = [];
   document.getElementById("cardDesc").value = "";
   document.getElementById("cardAlias").value = "";
@@ -2654,12 +2653,10 @@ let commentsObserver = null;
 // when the user clicks ✎ / double-clicks the preview.
 let cardView = "";
 let lastEditView = "fields";
-let cardDraft = "";          // unsaved working 4s description
-let cardDraftMeta = null;    // unsaved handout-generation settings (string|null)
-let cardDraftAlias = null;   // unsaved alias (string|null) — its own column, not 4s
-let savedDesc = "";          // last-persisted desc — the baseline for the dirty check
-let savedMeta = null;        // last-persisted handout settings (string|null)
-let savedAlias = null;       // last-persisted alias (string|null)
+// The card's working draft (4s desc + handout meta + alias) and its persisted
+// baseline live in carddraft.js so the dirty check is unit-tested; this file
+// keeps the DOM and drives `draft`.
+const draft = xyCardDraft.create();
 let cardFieldReaders = null; // per-field read() closures for the Поля view
 // Blocks the Поля editor doesn't render but must not eat: the pre-question
 // markup (№/№№ and friends) and anything else unmodelled. Both are captured at
@@ -2777,23 +2774,23 @@ function captureDraft() {
   // the tabs, so it is read on every capture, whichever view is active (and for
   // test cards too, which return early below).
   const aliasInput = document.getElementById("cardAlias");
-  if (aliasInput) cardDraftAlias = aliasInput.value.trim() || null;
+  if (aliasInput) draft.alias = aliasInput.value.trim() || null;
   if (isTestCard()) {
     // Test cards keep their canonical JSON ({datetime,title,testers}) in
-    // cardDraft; both views edit only the testers list (datetime/title are set
-    // at creation), so re-read them from cardDraft and fold the rows back in.
-    const cur = xyChgk.parseTestCard(cardDraft);
+    // draft.desc; both views edit only the testers list (datetime/title are set
+    // at creation), so re-read them from draft.desc and fold the rows back in.
+    const cur = xyChgk.parseTestCard(draft.desc);
     let testers = null;
     if (cardView === "text") testers = xyChgk.testersFromText(document.getElementById("cardDesc").value);
     else if (cardView === "fields" && testerReaders) testers = readTesterRows();
-    if (testers) cardDraft = xyChgk.serializeTestCard({ datetime: cur.datetime, title: cur.title, testers });
+    if (testers) draft.desc = xyChgk.serializeTestCard({ datetime: cur.datetime, title: cur.title, testers });
     return;
   }
-  if (cardView === "text") cardDraft = document.getElementById("cardDesc").value;
+  if (cardView === "text") draft.desc = document.getElementById("cardDesc").value;
   else if (cardView === "fields" && cardFieldReaders) {
     const r = readCardFields();
-    cardDraft = r.desc;
-    cardDraftMeta = r.meta;
+    draft.desc = r.desc;
+    draft.meta = r.meta;
   }
 }
 
@@ -2807,9 +2804,7 @@ function refreshSaveState() {
   // button (refreshAliasState). «Сохранить» is about the card's 4s content —
   // on a NEW card that content still carries the alias along (see cardSave), so
   // the alias only counts as "dirty" here while creating.
-  const dirty = pendingList
-    ? cardDraft.trim() !== "" || (cardDraftAlias || null) !== null
-    : cardDraft !== savedDesc || (cardDraftMeta || null) !== (savedMeta || null);
+  const dirty = draft.contentDirty(!!pendingList);
   btn.disabled = !dirty;
   // Просмотр is read-only, so nothing can be dirty there; the button hides.
   btn.hidden = cardView === "preview" && !dirty;
@@ -2826,7 +2821,7 @@ function refreshAliasState() {
   const btn = document.getElementById("cardAliasSave");
   if (!btn || pendingList) return;
   const cur = document.getElementById("cardAlias").value.trim() || null;
-  btn.disabled = cur === (savedAlias || null);
+  btn.disabled = !draft.aliasDirty(cur);
 }
 
 function setCardView(view) {
@@ -2859,7 +2854,7 @@ function setCardView(view) {
   document.getElementById("cardDescLabel").textContent = test ? "Тестировали (- игрок, -T команда)" : "Описание";
   if (view === "text") {
     const ta = document.getElementById("cardDesc");
-    ta.value = test ? xyChgk.testersToText(xyChgk.parseTestCard(cardDraft).testers) : cardDraft;
+    ta.value = test ? xyChgk.testersToText(xyChgk.parseTestCard(draft.desc).testers) : draft.desc;
     // A brand-new question opens on an empty editor, which says nothing about what
     // the format wants. Seed the markers so the writer fills in blanks instead of
     // recalling 4s from memory; the caret lands after the "?". "Empty" includes
@@ -3025,12 +3020,12 @@ function buildAuthorsField(initial, suggestions) {
 }
 
 // renderCardFields rebuilds the Поля editor from the current draft (and handout
-// settings). The last field (handout-gen markup) binds to cardDraftMeta, not the 4s.
+// settings). The last field (handout-gen markup) binds to draft.meta, not the 4s.
 function renderCardFields() {
-  const f = xyChgk.splitFields(cardDraft);
+  const f = xyChgk.splitFields(draft.desc);
   // A brand-new card pre-fills the user's default author (a /profile setting)
   // and opens the two fields every question has, ready to type into.
-  const fresh = pendingList && !cardDraft.trim();
+  const fresh = pendingList && !draft.desc.trim();
   if (fresh && f.authors == null && state.defaultAuthor) f.authors = [state.defaultAuthor];
   cardFieldsPre = f.preMarkup;
   cardFieldsExtra = f.extra;
@@ -3045,7 +3040,7 @@ function renderCardFields() {
   R.comment = buildField("Комментарий", "area", f.comment);
   R.sources = buildSourcesField(f.sources, boardSources());
   R.authors = buildAuthorsField(f.authors, boardAuthors());
-  R.hndt = buildField("Доп. разметка для генерации раздаток", "area", cardDraftMeta, { muted: true });
+  R.hndt = buildField("Доп. разметка для генерации раздаток", "area", draft.meta, { muted: true });
   for (const k of ["handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"]) box.append(R[k].node);
   // Size pre-filled fields now they're in the live DOM (scrollHeight is 0 while
   // detached, so the fit during buildField is a no-op for visible content).
@@ -3079,7 +3074,7 @@ let testerReaders = null; // () => [{text,type}] for the current tester rows
 function renderTesterFields() {
   const box = document.getElementById("cardFields");
   box.replaceChildren();
-  const m = xyChgk.parseTestCard(cardDraft);
+  const m = xyChgk.parseTestCard(draft.desc);
   // fld-wide: .card-fields wraps pills side by side now, so a stacked block
   // must claim the full row explicitly.
   const wrap = el("div", { class: "fld fld-wide" });
@@ -3116,9 +3111,9 @@ function readTesterRows() { return testerReaders ? testerReaders() : []; }
 // version of the list preview). Read-only; double-click jumps back to editing.
 async function renderCardPreview() {
   const body = document.getElementById("cardPreviewBody");
-  if (!cardDraft.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: "Пусто." })); return; }
+  if (!draft.desc.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: "Пусто." })); return; }
   const c = openCardCard();
-  const card = { id: c ? c.id : 0, kind: draftKind(), desc: cardDraft, listId: c ? c.listId : (pendingList ? pendingList.id : 0) };
+  const card = { id: c ? c.id : 0, kind: draftKind(), desc: draft.desc, listId: c ? c.listId : (pendingList ? pendingList.id : 0) };
   const number = card.kind === "question" ? questionNumberFor(card) : null;
   const reqId = openCardId;
   const screen = document.getElementById("cardPreviewScreen").checked;
@@ -3192,7 +3187,7 @@ document.getElementById("cardInsStress").addEventListener("click", () => {
 // the pass is the Go port on the server (it never keeps the text).
 document.getElementById("cardTypo").addEventListener("click", async () => {
   captureDraft();
-  if (!cardDraft.trim()) return;
+  if (!draft.desc.trim()) return;
   if (!xySync.isOnline()) { alert("Типографика доступна только онлайн."); return; }
   setStatus("saving");
   try {
@@ -3200,12 +3195,12 @@ document.getElementById("cardTypo").addEventListener("click", async () => {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: cardDraft }),
+      body: JSON.stringify({ text: draft.desc }),
     });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const { text } = await res.json();
     setStatus("saved");
-    cardDraft = text;
+    draft.desc = text;
     // In Текст the user is looking at the raw 4s, so type it back into the editor
     // (undo intact); in Поля the fields are a view of the draft, so rebuild them.
     if (cardView === "text") replaceField(document.getElementById("cardDesc"), text);
@@ -3303,13 +3298,10 @@ async function openCard(card, opts = {}) {
   reflectCardInUrl(card.id);
   cardView = "";
   cardFieldReaders = null;
-  cardDraft = card.desc;
-  cardDraftMeta = card.handoutMeta != null ? card.handoutMeta : null;
-  cardDraftAlias = card.alias != null ? card.alias : null;
-  document.getElementById("cardAlias").value = cardDraftAlias || "";
-  savedDesc = cardDraft;
-  savedMeta = cardDraftMeta;
-  savedAlias = cardDraftAlias;
+  const openMeta = card.handoutMeta != null ? card.handoutMeta : null;
+  const openAlias = card.alias != null ? card.alias : null;
+  draft.open(card.desc, openMeta, openAlias);
+  document.getElementById("cardAlias").value = openAlias || "";
   document.querySelector(".card-detail").classList.remove("creating");
   document.getElementById("cardDesc").value = card.desc;
   document.getElementById("cardMessage").textContent = "";
@@ -3762,18 +3754,18 @@ document.addEventListener("keydown", (e) => {
 });
 
 document.getElementById("cardSave").addEventListener("click", async () => {
-  captureDraft(); // fold the active view's edits into cardDraft / cardDraftMeta
+  captureDraft(); // fold the active view's edits into draft.desc / draft.meta
   const msg = document.getElementById("cardMessage");
   // create mode: persist a new card with the composed description, then switch to
   // the full edit view.
   if (pendingList) {
-    const text = cardDraft;
+    const text = draft.desc;
     const list = pendingList;
     const kind = document.getElementById("cardKind").value || "question";
     const existing = cardsOf(list.id);
     const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
-    const meta = cardDraftMeta && cardDraftMeta.trim() ? cardDraftMeta : null;
-    const alias = cardDraftAlias && cardDraftAlias.trim() ? cardDraftAlias.trim() : null;
+    const meta = draft.normalizedMeta();
+    const alias = draft.normalizedAlias();
     try {
       const reqBody = { description_enc: await xyCrypto.encField(dk, text), rank, kind };
       if (meta) reqBody.handout_meta_enc = await xyCrypto.encField(dk, meta);
@@ -3789,8 +3781,8 @@ document.getElementById("cardSave").addEventListener("click", async () => {
   }
   const card = state.cards.find((c) => c.id === openCardId);
   if (!card) return;
-  const newDesc = cardDraft;
-  const newMeta = cardDraftMeta && cardDraftMeta.trim() ? cardDraftMeta : null;
+  const newDesc = draft.desc;
+  const newMeta = draft.normalizedMeta();
   // The alias is deliberately absent here — it saves on its own button
   // (saveAlias). «Сохранить» touches the card's 4s content only.
   msg.textContent = "";
@@ -3806,8 +3798,7 @@ document.getElementById("cardSave").addEventListener("click", async () => {
     await patch("patchCard", `/api/cards/${card.id}`, body);
     card.desc = newDesc;
     card.handoutMeta = newMeta;
-    savedDesc = newDesc;
-    savedMeta = newMeta;
+    draft.commitContent(newDesc, newMeta);
     render();
     await loadTimeline(card.id);
     document.getElementById("cardDesc").value = newDesc;
@@ -3856,13 +3847,12 @@ async function saveAlias() {
   if (!card) return;
   const btn = document.getElementById("cardAliasSave");
   const next = document.getElementById("cardAlias").value.trim() || null;
-  if (next === (savedAlias || null)) return;
+  if (!draft.aliasDirty(next)) return;
   try {
     const body = { alias_enc: next ? await xyCrypto.encField(dk, next) : "" };
     await patch("patchCard", `/api/cards/${card.id}`, body);
     card.alias = next;
-    savedAlias = next;
-    cardDraftAlias = next;
+    draft.commitAlias(next);
     render(); // the board card previews the alias
     btn.disabled = true;
     btn.textContent = "✓";
