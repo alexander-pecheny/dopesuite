@@ -7,6 +7,7 @@ import { xyChgk } from "./chgk.js";
 import { xyDiff } from "./diff.js";
 import { xySync } from "./sync.js";
 import { xyCardDraft } from "./carddraft.js";
+import { xyHandoutSession } from "./handoutsession.js";
 
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, plusIcon, swapPlusIcon } = xyApp;
 const { keyBetween } = xyRank;
@@ -1845,8 +1846,8 @@ function openHandouts(list) {
   handoutsOverlay.hidden = false;
   // Pre-stage the referenced images now (in the background) so the first PDF /
   // split_fit generation doesn't pay the gather+upload, and start heartbeating.
-  ensureStaged(source).catch(() => {});
-  startHandoutHeartbeat();
+  handoutSession.ensure(source).catch(() => {});
+  handoutSession.startHeartbeat();
 }
 
 // WebKit won't render a PDF inside an <iframe> in a standalone web app (macOS
@@ -1903,7 +1904,7 @@ async function persistHandoutMeta() {
 
 async function closeHandouts() {
   handoutsOverlay.hidden = true;
-  unstageHandouts(); // stop heartbeat + delete the staged images server-side
+  handoutSession.close(); // stop heartbeat + delete the staged images server-side
   await persistHandoutMeta();
   clearHandoutsPdf();
   handoutsCtx = null;
@@ -1944,8 +1945,6 @@ async function generateHandoutsPdf() {
 // aren't re-decrypted + re-uploaded each time (which dominated the latency). A 5s
 // heartbeat keeps the session alive; the server reaps it after ~1 min of silence
 // (tab closed / backgrounded), and we re-stage on demand if it lapsed.
-const handoutsStage = { sessionId: null, names: null, inflight: null, heartbeat: null };
-
 function wantedImages(source) {
   const wanted = new Set();
   for (const m of source.matchAll(/^\s*image:\s*(.+?)\s*$/gm)) wanted.add(m[1]);
@@ -1954,63 +1953,42 @@ function wantedImages(source) {
 }
 
 // stageImages gathers + decrypts the referenced images and uploads them to a new
-// server session, returning its id (null when there are none / on error).
+// server session, returning { session, names } (null when there are none / on
+// error). The session lifecycle around it lives in handoutSession.
 async function stageImages(source) {
   const wanted = wantedImages(source);
-  if (!wanted.size) { handoutsStage.sessionId = null; handoutsStage.names = new Set(); return null; }
+  if (!wanted.size) return null;
   const fd = new FormData();
   const found = await appendImages(fd, handoutsCtx.cards, wanted);
   try {
     const res = await fetch("/api/handouts/stage", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const { session } = await res.json();
-    handoutsStage.sessionId = session;
-    handoutsStage.names = found;
-    return session;
-  } catch (_) { handoutsStage.sessionId = null; return null; }
+    return { session, names: found };
+  } catch (_) { return null; }
 }
 
-// ensureStaged returns a session id whose staged images cover the source's
-// references, staging once if needed (deduped). null when the source has none.
-async function ensureStaged(source) {
-  const wanted = wantedImages(source);
-  if (!wanted.size) return null;
-  if (handoutsStage.sessionId && handoutsStage.names && [...wanted].every((n) => handoutsStage.names.has(n))) {
-    return handoutsStage.sessionId;
-  }
-  if (handoutsStage.inflight) return handoutsStage.inflight;
-  handoutsStage.inflight = stageImages(source).finally(() => { handoutsStage.inflight = null; });
-  return handoutsStage.inflight;
-}
-
-// sendHeartbeat pings the session; returns false (and clears it) when the server
-// reaped it, so the next ensureStaged re-stages.
-async function sendHeartbeat() {
-  if (!handoutsStage.sessionId) return false;
+async function heartbeatPing(sessionId) {
   try {
     const fd = new FormData();
-    fd.append("session", handoutsStage.sessionId);
+    fd.append("session", sessionId);
     const res = await fetch("/api/handouts/heartbeat", { method: "POST", credentials: "same-origin", body: fd });
-    if (res.ok) return true;
-    handoutsStage.sessionId = null;
-    return false;
+    return res.ok;
   } catch (_) { return false; }
 }
 
-function startHandoutHeartbeat() {
-  stopHandoutHeartbeat();
-  handoutsStage.heartbeat = setInterval(sendHeartbeat, 5000);
+async function unstageSession(sessionId) {
+  try { await fetch(`/api/handouts/stage?session=${encodeURIComponent(sessionId)}`, { method: "DELETE", credentials: "same-origin" }); } catch (_) {}
 }
-function stopHandoutHeartbeat() {
-  if (handoutsStage.heartbeat) { clearInterval(handoutsStage.heartbeat); handoutsStage.heartbeat = null; }
-}
-async function unstageHandouts() {
-  stopHandoutHeartbeat();
-  const sid = handoutsStage.sessionId;
-  handoutsStage.sessionId = null;
-  handoutsStage.names = null;
-  if (sid) { try { await fetch(`/api/handouts/stage?session=${encodeURIComponent(sid)}`, { method: "DELETE", credentials: "same-origin" }); } catch (_) {} }
-}
+
+// handoutSession owns the stage-once/heartbeat/reap/cleanup lifecycle (see
+// handoutsession.js); the callbacks above are the board-specific network ops.
+const handoutSession = xyHandoutSession.create({
+  wantedNames: wantedImages,
+  stage: stageImages,
+  heartbeat: heartbeatPing,
+  unstage: unstageSession,
+});
 
 // handoutsBody builds the generate request body: the source + (when there are
 // images) the staged session id, so images aren't re-sent each generate.
@@ -2018,7 +1996,7 @@ async function handoutsBody(source) {
   const fd = new FormData();
   fd.append("source", source);
   fd.append("filename", handoutsCtx.title || handoutsCtx.list.title || "handouts");
-  const sid = await ensureStaged(source);
+  const sid = await handoutSession.ensure(source);
   if (sid) fd.append("session", sid);
   return fd;
 }
@@ -2027,7 +2005,7 @@ async function handoutsBody(source) {
 // heartbeats may have lapsed and the server reaped it).
 document.addEventListener("visibilitychange", async () => {
   if (document.visibilityState !== "visible" || handoutsOverlay.hidden || !handoutsCtx) return;
-  if (!(await sendHeartbeat())) ensureStaged(document.getElementById("handoutsSource").value).catch(() => {});
+  if (!(await handoutSession.beat())) handoutSession.ensure(document.getElementById("handoutsSource").value).catch(() => {});
 });
 
 // appendImages resolves each wanted image to its decrypted bytes and appends it
