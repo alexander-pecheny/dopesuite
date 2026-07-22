@@ -3,6 +3,7 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/matchedit"
 	"dope/dope/domain/resolver"
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
@@ -417,60 +418,53 @@ func (s *server) loadMatchViewByIDLocked(festID, gameID, matchID int64) (store.M
 	return matchViewFromDBState(match), nil
 }
 
+// applyMatchEditTx validates the request through the pure domain/matchedit rules,
+// then applies the resulting plan as SQL (which needs the tx, so it stays here).
 func applyMatchEditTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState, req updateRequest) error {
-	if req.Action != "" {
-		if hasTeamEdit(req) {
-			return errors.New("action update must be standalone")
-		}
-		switch req.Action {
-		case actionAddShootoutTheme:
-			return addShootoutThemeTx(ctx, tx, match.MatchID, match.TeamIDs)
-		case actionRemoveShootoutTheme:
-			return removeShootoutThemeTx(ctx, tx, match.MatchID)
-		default:
-			return errors.New("bad action")
-		}
+	plan, err := matchedit.Validate(len(match.TeamIDs), func(i int) bool { return match.TeamIDs[i] != 0 }, len(store.QuestionValues), matchedit.Request{
+		Action:      req.Action,
+		HasTeamEdit: hasTeamEdit(req),
+		Team:        req.Team,
+		Tiebreak:    req.Tiebreak,
+		Place:       req.Place,
+		Theme:       req.Theme,
+		Shootout:    req.Shootout,
+		Answer:      req.Answer,
+		Mark:        req.Mark,
+		Player:      req.Player,
+	})
+	if err != nil {
+		return err
 	}
 
-	if req.Team < 0 || req.Team >= len(match.TeamIDs) || match.TeamIDs[req.Team] == 0 {
-		return errors.New("bad team index")
+	switch plan.Action {
+	case matchedit.ActionAddShootoutTheme:
+		return addShootoutThemeTx(ctx, tx, match.MatchID, match.TeamIDs)
+	case matchedit.ActionRemoveShootoutTheme:
+		return removeShootoutThemeTx(ctx, tx, match.MatchID)
 	}
+
 	teamID := match.TeamIDs[req.Team]
 
-	if req.Tiebreak != nil {
-		return errors.New("shootout total is calculated")
-	}
-	if req.Place != nil {
-		if *req.Place < 0 {
-			return errors.New("bad place")
-		}
+	if plan.Place != nil {
 		if _, err := tx.ExecContext(ctx, `
 insert into match_results(match_id, team_id, place)
 values(?, ?, ?)
-on conflict(match_id, team_id) do update set place = excluded.place`, match.MatchID, teamID, *req.Place); err != nil {
+on conflict(match_id, team_id) do update set place = excluded.place`, match.MatchID, teamID, *plan.Place); err != nil {
 			return err
 		}
 	}
 
-	if req.Theme != nil || req.Player != nil || req.Answer != nil || req.Mark != nil || req.Shootout != nil {
-		isShootout := req.Shootout != nil && *req.Shootout
-		kind := "regular"
-		if isShootout {
-			kind = "shootout"
-		}
-		if req.Theme == nil || *req.Theme < 0 {
-			return errors.New("bad theme index")
-		}
-		themeID, err := store.LookupThemeID(ctx, tx, match.MatchID, teamID, kind, *req.Theme)
+	if plan.Theme != nil {
+		themeID, err := store.LookupThemeID(ctx, tx, match.MatchID, teamID, plan.Theme.Kind, plan.Theme.Index)
 		if err != nil {
 			return err
 		}
 
-		if req.Player != nil {
-			player := strings.TrimSpace(*req.Player)
+		if plan.Theme.Player != nil {
 			var playerID any
-			if player != "" {
-				id, err := lookupRosterPlayerID(ctx, tx, match.GameID, match.RosterSource, teamID, player)
+			if *plan.Theme.Player != "" {
+				id, err := lookupRosterPlayerID(ctx, tx, match.GameID, match.RosterSource, teamID, *plan.Theme.Player)
 				if err != nil {
 					return err
 				}
@@ -481,17 +475,11 @@ on conflict(match_id, team_id) do update set place = excluded.place`, match.Matc
 			}
 		}
 
-		if req.Answer != nil || req.Mark != nil {
-			if req.Answer == nil || *req.Answer < 0 || *req.Answer >= len(store.QuestionValues) {
-				return errors.New("bad answer index")
-			}
-			if req.Mark == nil {
-				return errors.New("missing mark")
-			}
+		if plan.Theme.Answer != nil {
 			if _, err := tx.ExecContext(ctx, `
 insert into answers(theme_id, answer_index, mark)
 values(?, ?, ?)
-on conflict(theme_id, answer_index) do update set mark = excluded.mark`, themeID, *req.Answer, store.NormalizeMark(*req.Mark)); err != nil {
+on conflict(theme_id, answer_index) do update set mark = excluded.mark`, themeID, plan.Theme.Answer.Index, store.NormalizeMark(plan.Theme.Answer.Mark)); err != nil {
 				return err
 			}
 		}
