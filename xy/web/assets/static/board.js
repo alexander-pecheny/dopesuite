@@ -8,6 +8,7 @@ import { xyDiff } from "./diff.js";
 import { xySync } from "./sync.js";
 import { xyCardDraft } from "./carddraft.js";
 import { xyHandoutSession } from "./handoutsession.js";
+import { createBoardMembers } from "./boardmembers.js";
 
 const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, plusIcon, swapPlusIcon } = xyApp;
 const { keyBetween } = xyRank;
@@ -121,7 +122,7 @@ window.dopeMenu?.setExtras([{
 }, {
   label: "👥 Участники доски",
   title: "Поделиться доской: добавить или убрать участников",
-  onClick: () => openMembers(),
+  onClick: () => boardMembers.open(),
 }, {
   label: "🧹 Исправить оформление Trello",
   title: "Убрать артефакты Trello (двойные переносы, экранирование, смарт-ссылки) во всех карточках",
@@ -219,98 +220,13 @@ async function fixTrelloFormattingBoard() {
 }
 
 // ---- members / sharing ----
-// Membership is plaintext server-side metadata (not board-encrypted), so the
-// sharing modal works without the data key. Owners can add/remove editors;
-// everyone else sees a read-only roster. The roster also feeds author names into
-// the card timeline (member user_id → username), so we cache it on board load.
-async function fetchMembers() {
-  const members = await fetchJSON(`/api/boards/${boardId}/members`);
-  state.members = members;
-  state.memberNames = {};
-  for (const m of members) state.memberNames[m.user_id] = m.username || `#${m.user_id}`;
-  return members;
-}
-
-async function loadMembers() {
-  if (!xySync.isOnline()) return;
-  try { await fetchMembers(); } catch (_) {}
-  if (!state.me) {
-    try { state.me = await fetchJSON(`/api/auth/me`); } catch (_) {}
-  }
-}
-
-function openMembers() {
-  document.getElementById("membersMessage").textContent = "";
-  document.getElementById("membersOverlay").hidden = false;
-  renderMembers();
-}
-
-function closeMembers() { document.getElementById("membersOverlay").hidden = true; }
-
-async function renderMembers() {
-  const listNode = document.getElementById("membersList");
-  const addForm = document.getElementById("addMemberForm");
-  const msg = document.getElementById("membersMessage");
-  listNode.replaceChildren();
-  let members;
-  try {
-    members = await fetchMembers();
-  } catch (_) {
-    msg.textContent = "Не удалось загрузить участников — нужно подключение к сети.";
-    addForm.hidden = true;
-    return;
-  }
-  const isOwner = state.role === "owner";
-  addForm.hidden = !isOwner;
-  for (const m of members) {
-    const row = el("div", { class: "member-row" },
-      el("span", { class: "member-name", text: m.username || `#${m.user_id}` }),
-      el("span", { class: "member-role", text: m.role === "owner" ? "владелец" : "редактор" }),
-    );
-    if (isOwner && m.role !== "owner") {
-      row.append(el("button", {
-        class: "attach-del member-del", type: "button", title: "Убрать из доски", text: "×",
-        onclick: () => removeMember(m),
-      }));
-    }
-    listNode.append(row);
-  }
-}
-
-async function removeMember(m) {
-  if (!confirm(`Убрать ${m.username || "участника"} из доски?`)) return;
-  try {
-    await jdelete(`/api/boards/${boardId}/members/${m.user_id}`);
-    await renderMembers();
-  } catch (e) {
-    document.getElementById("membersMessage").textContent = e.message;
-  }
-}
-
-document.getElementById("addMemberForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const input = document.getElementById("addMemberName");
-  const msg = document.getElementById("membersMessage");
-  const name = input.value.trim();
-  msg.textContent = "";
-  if (!name) return;
-  try {
-    await jpost(`/api/boards/${boardId}/members`, { username: name });
-    input.value = "";
-    await renderMembers();
-  } catch (e) {
-    msg.textContent = e.message;
-  }
-});
-
-document.getElementById("membersClose").addEventListener("click", closeMembers);
-document.getElementById("membersOverlay").addEventListener("pointerdown", (e) => {
-  if (e.target.id === "membersOverlay") closeMembers();
-});
+// The members/sharing seam lives in boardmembers.js; it caches the roster onto
+// `state` (memberNames feeds the timeline's author names) and owns its overlay.
+const boardMembers = createBoardMembers(state, boardId);
 
 // ---- read markers (blue dots) + 🔔 activity bell ----
 // Every user wants to read every OTHER user's changes; own edits never count.
-// Read-tracking is online-only best-effort (like loadMembers above): it never
+// Read-tracking is online-only best-effort (like the members roster load): it never
 // goes through the sync outbox, so it's simply skipped offline.
 const notifToggle = document.getElementById("notifToggle");
 const notifBadge = document.getElementById("notifBadge");
@@ -508,7 +424,7 @@ async function load() {
     render();
     renderNotifBadge();
     setStatus("saved");
-    loadMembers(); // best-effort: populate the author-name map for timelines (online only)
+    boardMembers.load(); // best-effort: populate the author-name map for timelines (online only)
     maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
     pingVisit(); // stamp last-visit so the board list can order by it (online-only, once)
   } catch (e) {
