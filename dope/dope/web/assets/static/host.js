@@ -391,7 +391,7 @@ function connectEvents() {
     // On the stats page, fold match edits into the cache in place and recompute
     // from memory — no refetch. Other scopes don't affect the aggregate.
     if (route.mode === "stats") {
-      if (message.scope?.startsWith("match:")) applyStatsMatchEvent(message);
+      if (message.scope?.startsWith("match:")) statsSync.applyMatchEvent(message);
       return;
     }
     if (consumeLocalMatchEcho(message)) {
@@ -612,73 +612,18 @@ function scheduleReload() {
   }, 120);
 }
 
-// applyStatsMatchEvent keeps the stats page live the same way the bracket does:
-// it folds a match-scoped SSE event into the shared stage cache in place (a
-// chained delta, or a full snapshot) and recomputes the table from memory — no
-// refetch. A delta that can't chain (missing base / seq gap) means we dropped an
-// event, so we resync the bracket once, mirroring the bracket's own gap path.
-function applyStatsMatchEvent(message) {
-  const code = matchCodeFromScope(message.scope);
-  if (Array.isArray(message.ops)) {
-    const base = stageCache.matchState(code);
-    const prev = Number(message.prevSeq) || 0;
-    if (base && (Number(message.seq) || 0) <= (Number(base.seq) || 0)) return; // already applied
-    if (!base || (Number(base.seq) || 0) !== prev) {
-      scheduleStatsResync();
-      return;
-    }
-    const next = gameTable.applyDeltaOps(base, message.ops);
-    next.seq = Number(message.seq) || prev;
-    stageCache.applyMatchUpdate(next);
-  } else if (message.data?.code) {
-    const view = message.data;
-    view.seq = Number(message.seq) || 0;
-    stageCache.applyMatchUpdate(view);
-  } else {
-    scheduleStatsResync();
-    return;
-  }
-  scheduleStatsRerender();
-}
-
-// scheduleStatsRerender throttles the in-memory recompute to once per ~400ms
-// (leading + trailing) so a burst of cell deltas rebuilds the table a few times
-// a second at most, while staying near-live.
-let statsRerenderTimer = null;
-let statsRerenderPending = false;
-function scheduleStatsRerender() {
-  if (route.mode !== "stats") return;
-  if (statsRerenderTimer) {
-    statsRerenderPending = true;
-    return;
-  }
-  rerenderStatsTable();
-  statsRerenderTimer = window.setTimeout(function tick() {
-    if (statsRerenderPending && route.mode === "stats") {
-      statsRerenderPending = false;
-      rerenderStatsTable();
-      statsRerenderTimer = window.setTimeout(tick, 400);
-    } else {
-      statsRerenderTimer = null;
-    }
-  }, 400);
-}
-
-// scheduleStatsResync refetches the bracket once after a dropped SSE event (a
-// seq gap), then recomputes. Debounced so a fleet that all gap together doesn't
-// stampede the bulk endpoint.
-let statsResyncTimer = null;
-function scheduleStatsResync() {
-  if (statsResyncTimer) return;
-  statsResyncTimer = window.setTimeout(() => {
-    statsResyncTimer = null;
-    stageCache.prefetchAllStages()
-      .then(() => {
-        if (route.mode === "stats") rerenderStatsTable();
-      })
-      .catch((error) => console.error(error));
-  }, 400);
-}
+// statsSync keeps the stats page live off the same SSE stream the bracket uses:
+// each match-scoped event folds into the shared stage cache and the table
+// recomputes from memory (throttled); a seq gap resyncs the bracket once
+// (debounced). The loop lives in stats-sync.js so it is shared with viewer.js
+// and unit-tested; this file supplies the page-specific pieces.
+const statsSync = window.DopeStatsSync.create({
+  stageCache,
+  gameTable,
+  matchCodeFromScope,
+  isActive: () => route.mode === "stats",
+  rerender: rerenderStatsTable,
+});
 
 function matchScopeFor(matchCode) {
   return `match:${route.gameID}:${matchCode}`;
