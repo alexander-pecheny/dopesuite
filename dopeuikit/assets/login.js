@@ -19,6 +19,8 @@ const tgLoginBtn = document.getElementById("tgLoginBtn");
 const pwLoginBtn = document.getElementById("pwLoginBtn");
 const methodMessage = document.getElementById("methodMessage");
 
+const tgDeepLink = document.getElementById("tgDeepLink");
+const tgBotName = document.getElementById("tgBotName");
 const tgCode = document.getElementById("tgCode");
 const codeMessage = document.getElementById("codeMessage");
 
@@ -61,13 +63,16 @@ pwLoginBtn.addEventListener("click", () => {
   showStep("password");
 });
 
+makeCopyable(tgBotName);
+makeCopyable(tgCode);
+
 async function startTelegram() {
   setText(methodMessage, "");
   setStatus("saving");
   try {
     const res = await fetchJSON("/api/auth/tg/start", {method: "POST"});
     code = res.code;
-    tgCode.textContent = res.code;
+    showCode(res.bot_username || "");
     setText(codeMessage, "");
     showStep("code");
     setStatus("saved");
@@ -76,6 +81,46 @@ async function startTelegram() {
     setText(methodMessage, error.message);
     setStatus("error");
   }
+}
+
+function showCode(bot) {
+  tgCode.textContent = code;
+  if (bot) {
+    tgBotName.textContent = "@" + bot;
+    tgDeepLink.textContent = "t.me/" + bot;
+    tgDeepLink.href = "https://t.me/" + bot + "?start=" + encodeURIComponent(code);
+    tgDeepLink.target = "_blank";
+    tgDeepLink.rel = "noopener";
+    tgDeepLink.hidden = false;
+  } else {
+    tgDeepLink.hidden = true;
+  }
+}
+
+// makeCopyable turns an inline token into a click-to-copy control that flashes a
+// «скопировано» confirmation (the .copied CSS tooltip).
+function makeCopyable(el) {
+  if (!el) return;
+  el.classList.add("copyable");
+  el.setAttribute("role", "button");
+  el.setAttribute("tabindex", "0");
+  const copy = async () => {
+    const text = el.textContent.replace(/^@/, "");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      return;
+    }
+    el.classList.add("copied");
+    setTimeout(() => el.classList.remove("copied"), 1000);
+  };
+  el.addEventListener("click", copy);
+  el.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      copy();
+    }
+  });
 }
 
 async function poll() {

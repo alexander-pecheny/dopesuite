@@ -1344,6 +1344,12 @@ input[type="radio"]:focus-visible {
    directly rather than the transparent --border. */
 .bigcode { font-family: var(--font-mono); font-size: var(--text-2xl); font-weight: var(--fw-bold); letter-spacing: 0.08em; text-align: center; padding: var(--space-3); border: 1px dashed var(--grid-dark); border-radius: var(--radius-md); }
 
+/* Click-to-copy inline token (login: bot handle + code). The dashed underline
+   marks it actionable; .copied (set by JS for ~1s) floats a confirmation. */
+.copyable { font-family: var(--font-mono); font-weight: var(--fw-bold); cursor: pointer; border-bottom: 1px dashed var(--grid-dark); position: relative; }
+.copyable::after { content: "скопировано"; position: absolute; left: 50%; bottom: calc(100% + var(--space-1)); transform: translateX(-50%); padding: var(--space-0-5) var(--space-1); font-family: var(--font-sans); font-size: var(--text-xs); font-weight: var(--fw-regular); white-space: nowrap; color: var(--surface); background: var(--text-strong); border-radius: var(--radius-sm); opacity: 0; pointer-events: none; z-index: var(--z-tooltip); }
+.copyable.copied::after { opacity: 1; }
+
 .subhead { margin: 0; font-size: var(--text-md); font-weight: var(--fw-semibold); color: var(--text-strong); }
 
 /* ── segmented control ────────────────────────────────────────────────────

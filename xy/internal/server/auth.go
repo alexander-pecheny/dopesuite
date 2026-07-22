@@ -138,8 +138,18 @@ func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
 // ---- telegram login / registration (one handshake) ----
 
 type tgStartResponse struct {
-	Code      string `json:"code"`
-	ExpiresAt string `json:"expires_at"`
+	Code        string `json:"code"`
+	ExpiresAt   string `json:"expires_at"`
+	BotUsername string `json:"bot_username,omitempty"`
+}
+
+// botUsername is the login bot's @handle, used to build the t.me deep link the
+// login page offers. XY_BOT_NAME overrides the default.
+func botUsername() string {
+	if v := strings.TrimSpace(os.Getenv("XY_BOT_NAME")); v != "" {
+		return v
+	}
+	return "xy_pecheny_bot"
 }
 
 // handleTgStart mints a bot code for the telegram handshake. The visitor sends it
@@ -164,7 +174,7 @@ insert into telegram_login_codes(code, kind, created_at, expires_at)
 values(?, 'register', ?, ?)`, code, rfc3339(now), rfc3339(expiresAt)); err != nil {
 			return err
 		}
-		out = tgStartResponse{Code: code, ExpiresAt: rfc3339(expiresAt)}
+		out = tgStartResponse{Code: code, ExpiresAt: rfc3339(expiresAt), BotUsername: botUsername()}
 		return nil
 	})
 	if handleErr(w, err) {

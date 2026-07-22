@@ -36,22 +36,6 @@ func jumpViewerNav() []ui.Item {
 	}
 }
 
-// hostLoggedOutDoc builds the /host landing shown to anonymous visitors: a prompt
-// to log in or register.
-func hostLoggedOutDoc() *ui.Doc {
-	page := []ui.Item{ui.Title("Вход для организаторов · Фест"), ui.PagePublic}
-	page = append(page, jumpViewerNav()...)
-	page = append(page,
-		ui.Publictopbar(ui.Title("Организаторы")),
-		ui.Paragraph(ui.Text("Чтобы создавать фесты и проводить бои, нужно войти.")),
-		ui.List(
-			ui.Listrow(ui.Href("/login"), ui.Listtitle(ui.Text("Вход"))),
-			ui.Listrow(ui.Href("/register"), ui.Listtitle(ui.Text("Регистрация по приглашению"))),
-		),
-	)
-	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
-}
-
 // hostLoggedInDoc builds the /host landing for a signed-in organizer: their fests
 // grouped into current/future/past disclosures, and the create-fest form.
 func hostLoggedInDoc(data hostLandingData) *ui.Doc {
@@ -155,7 +139,7 @@ func (s *Server) HandleHostLanding(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderHostLanding(w http.ResponseWriter, r *http.Request, errMsg string) {
 	user, ok := s.h.Engine().LookupSession(r)
 	if !ok {
-		pages.RenderDoc(w, s.h.Engine().AssetETags, hostLoggedOutDoc())
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
 	fests, err := s.loadHostFests(r.Context(), user.UserID)
