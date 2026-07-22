@@ -1,3 +1,3 @@
-page title="Ведущий · ОД" kind="od" init="__GAME_INIT__" classicscripts="init.js match-table.js od.js"
+page title="Ведущий · ОД" kind="od" init="__GAME_INIT__" classicscripts="init.js match-table.js entry-model.js od.js"
   gametopbar tabsid="odTabs" progressid="odProgress"
   mount kind="table-host" id="odTable"

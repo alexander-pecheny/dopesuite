@@ -6,6 +6,7 @@ const progressNode = document.getElementById("odProgress");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = window.DopeTable;
+const entryModel = window.DopeEntryModel;
 const {th, td, option} = gameTable;
 const setStatus = gameTable.createStatusReporter(statusNode);
 const viewerCounter = gameTable.createViewerCounter(statusNode);
@@ -803,17 +804,8 @@ function invertEntryColumn(qIndex) {
     .map((_, i) => teamNumber(i))
     .filter((n) => Number.isInteger(n) && n > 0);
   const current = state.entries[qIndex] || [];
-  const present = new Set(current.filter((v) => Number.isInteger(v) && v > 0));
-  const complement = allNumbers.filter((n) => !present.has(n)).sort((a, b) => a - b);
-  const next = new Array(state.teams.length).fill(0);
-  complement.forEach((n, i) => {
-    if (i < next.length) next[i] = n;
-  });
-  let same = current.length === next.length;
-  for (let i = 0; same && i < next.length; i++) {
-    if ((current[i] || 0) !== next[i]) same = false;
-  }
-  if (same) return;
+  const next = entryModel.invertColumn(current, allNumbers, state.teams.length);
+  if (next === null) return; // invert is a no-op — column already the complement
   const previous = current.slice();
   while (previous.length < state.teams.length) previous.push(0);
   closeEntryEditor();
@@ -897,32 +889,13 @@ function focusEntrySelection() {
   });
 }
 
-function parseEntryClipboard(text) {
-  const normalized = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const lines = normalized.split("\n");
-  if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
-  return lines.map((line) => line.split("\t"));
-}
-
-function clipboardValueToEntry(raw) {
-  const value = String(raw || "").trim();
-  if (value === "") return 0;
-  if (/^\d+$/.test(value)) return Number(value);
-  const lower = value.toLocaleLowerCase("ru");
-  for (let teamIndex = 0; teamIndex < state.teams.length; teamIndex++) {
-    if (teamLabel(teamIndex).toLocaleLowerCase("ru") === lower) {
-      return teamNumber(teamIndex);
-    }
-  }
-  return 0;
-}
-
 function pasteEntryClipboard(text) {
   const selection = normalizedEntrySelection();
   if (!selection || viewer) return;
-  const rows = parseEntryClipboard(text);
+  const rows = entryModel.parseClipboard(text);
   if (rows.length === 0) return;
   closeEntryEditor();
+  const teams = state.teams.map((_, i) => ({label: teamLabel(i), number: teamNumber(i)}));
   const startQ = selection.qStart;
   const startRow = selection.rowStart;
   const changedCells = [];
@@ -935,7 +908,7 @@ function pasteEntryClipboard(text) {
     for (let colOffset = 0; colOffset < cols.length; colOffset++) {
       const qIndex = startQ + colOffset;
       if (qIndex >= totalQuestions) break;
-      const value = clipboardValueToEntry(cols[colOffset]);
+      const value = entryModel.coerceValue(cols[colOffset], teams);
       if (state.entries[qIndex][rowIndex] !== value) {
         state.entries[qIndex][rowIndex] = value;
         changedCells.push([qIndex, rowIndex, value]);
