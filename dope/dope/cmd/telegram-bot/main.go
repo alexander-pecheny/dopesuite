@@ -22,14 +22,11 @@ const (
 
 	defaultServerURL = "http://localhost:8090"
 
-	registerURL = "https://dope.pecheny.me/register"
-	loginURL    = "https://dope.pecheny.me/login"
+	loginURL = "https://dope.pecheny.me/login"
 )
 
-const startMessage = "Этот бот выдает одноразовые коды для входа на dope.pecheny.me.\n\n" +
-	"• Зарегистрироваться: " + registerURL + "\n" +
-	"• Войти в существующий аккаунт: " + loginURL + "\n\n" +
-	"После регистрации на сайте пришли мне код, который он покажет. Чтобы войти — введи логин на сайте; если выберешь код, я пришлю его сюда."
+const startMessage = "Этот бот подтверждает вход на dope.pecheny.me.\n\n" +
+	"Откройте " + loginURL + ", нажмите «Войти через телеграм» и пришлите мне код, который покажет сайт."
 
 // botErrorMessage is shown when the bot can't reach the server bridge (network
 // error / non-200). The bridge itself returns its own user-facing messages.
@@ -75,43 +72,93 @@ func getenvDefault(key, fallback string) string {
 	return fallback
 }
 
+// intentKind is what an incoming message asks the bot to do.
+type intentKind int
+
+const (
+	intentIgnore   intentKind = iota // empty message
+	intentHelp                       // greet / show usage
+	intentLogin                      // /login: point at the site
+	intentRegister                   // consume a code (pasted, or from a /start deep link)
+)
+
+type intent struct {
+	kind intentKind
+	code string // set when kind == intentRegister
+}
+
+// classify decides what a message means. A deep-link /start arrives as
+// "/start <code>" (t.me/<bot>?start=<code>) — the code MUST be pulled from its
+// argument, since the /start prefix keeps it out of the plain-code branch. This
+// is the bug the earlier bot had: /start<space><code> fell through to the help
+// text and the code was dropped.
+func classify(text string) intent {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return intent{kind: intentIgnore}
+	}
+	if strings.HasPrefix(text, "/") {
+		switch commandName(text) {
+		case "/login":
+			return intent{kind: intentLogin}
+		case "/start":
+			if arg := commandArg(text); arg != "" {
+				return classifyCode(arg)
+			}
+			return intent{kind: intentHelp}
+		default:
+			return intent{kind: intentHelp}
+		}
+	}
+	return classifyCode(text)
+}
+
+// classifyCode accepts a bare code (pasted or a /start argument), or falls back
+// to help when it doesn't look like one — no server round-trip for obvious junk.
+func classifyCode(raw string) intent {
+	code := strings.ToUpper(strings.TrimSpace(raw))
+	if !looksLikeCode(code) {
+		return intent{kind: intentHelp}
+	}
+	return intent{kind: intentRegister, code: code}
+}
+
 func handler(bridge *tgbot.Bridge) tgbot.Handler {
 	return func(ctx context.Context, c *tgbot.Client, u tgbot.Update) {
-		text := strings.TrimSpace(u.Message.Text)
-		if text == "" {
+		act := classify(u.Message.Text)
+		if act.kind == intentIgnore {
 			return
 		}
 		chatID := u.Message.Chat.ID
 		from := u.Message.From
-
-		if strings.HasPrefix(text, "/") {
-			switch commandName(text) {
-			case "/login":
-				c.SendHTML(ctx, chatID, call(ctx, bridge, "/api/telegram/login", map[string]any{
-					"telegram_user_id":  from.ID,
-					"telegram_username": from.Username,
-					"telegram_name":     from.DisplayName(),
-				}))
-			default:
-				c.Send(ctx, chatID, startMessage)
-			}
-			return
-		}
-
-		// Plain text is treated as a register code. Triage locally so obvious
-		// non-codes get the help text without a server round-trip.
-		code := strings.ToUpper(text)
-		if !looksLikeCode(code) {
+		switch act.kind {
+		case intentLogin:
+			c.SendHTML(ctx, chatID, call(ctx, bridge, "/api/telegram/login", map[string]any{
+				"telegram_user_id":  from.ID,
+				"telegram_username": from.Username,
+				"telegram_name":     from.DisplayName(),
+			}))
+		case intentRegister:
+			c.Send(ctx, chatID, call(ctx, bridge, "/api/telegram/register", map[string]any{
+				"code":              act.code,
+				"telegram_user_id":  from.ID,
+				"telegram_username": from.Username,
+				"telegram_name":     from.DisplayName(),
+			}))
+		default:
 			c.Send(ctx, chatID, startMessage)
-			return
 		}
-		c.Send(ctx, chatID, call(ctx, bridge, "/api/telegram/register", map[string]any{
-			"code":              code,
-			"telegram_user_id":  from.ID,
-			"telegram_username": from.Username,
-			"telegram_name":     from.DisplayName(),
-		}))
 	}
+}
+
+// commandArg returns the first whitespace-separated argument after the command
+// word, or "" when there is none.
+func commandArg(text string) string {
+	parts := strings.Fields(text)
+	if len(parts) < 2 {
+		return ""
+	}
+	return parts[1]
 }
 
 func call(ctx context.Context, bridge *tgbot.Bridge, path string, payload map[string]any) string {

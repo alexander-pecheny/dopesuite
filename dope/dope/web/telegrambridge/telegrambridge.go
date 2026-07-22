@@ -23,17 +23,16 @@ import (
 // the co-located bot can drive them. Behavior mirrors the bot's old SQL exactly.
 
 const (
-	TelegramBridgeRegisterURL = "https://dope.pecheny.me/register"
+	TelegramBridgeLoginURL = "https://dope.pecheny.me/login"
 
 	TelegramBridgeGenericError    = "Произошла ошибка. Попробуй еще раз через минуту."
 	TelegramBridgeRegisterSuccess = "Готово! Вернись на сайт — там уже видна твоя регистрация."
-	TelegramBridgeLoginNeedInvite = "Сначала зарегистрируйся на сайте: " + TelegramBridgeRegisterURL
-	TelegramBridgeLoginOnSite     = "Чтобы войти, открой https://dope.pecheny.me/login и нажми «Войти через телеграм» — сайт выдаст код, пришли его мне."
+	TelegramBridgeLoginOnSite     = "Пришлите код со страницы входа. Если его нет — откройте " + TelegramBridgeLoginURL + " и нажмите «Войти через телеграм»."
 
 	TelegramBridgeCodeMissing  = "Такого кода нет. Проверь, что скопировал его без пробелов и не дольше минуты прошло."
 	TelegramBridgeCodeConsumed = "Этот код уже использован. Запроси новый на сайте."
-	TelegramBridgeCodeWrong    = "Этот код не для регистрации. Открой " + TelegramBridgeRegisterURL + " и начни заново."
-	TelegramBridgeCodeExpired  = "Срок действия кода истек. Запроси новый на " + TelegramBridgeRegisterURL + "."
+	TelegramBridgeCodeWrong    = "Этот код не для входа. Открой " + TelegramBridgeLoginURL + " и начни заново."
+	TelegramBridgeCodeExpired  = "Срок действия кода истек. Запроси новый на " + TelegramBridgeLoginURL + "."
 )
 
 // The wire protocol — request/response shapes, the shared-secret gate, the SQL —
@@ -137,19 +136,11 @@ select kind, consumed_at from telegram_login_codes where code = ?`, code).Scan(&
 	return TelegramBridgeCodeExpired
 }
 
-// TelegramIssueLogin answers /start and /login sent to the bot. Login now begins
-// on the website (which mints the code the user forwards here), so there is no
-// server-issued login code to hand back — point registered users at /login and
-// unknown telegram accounts at registration.
+// TelegramIssueLogin answers a bare /start or /login (no code) sent to the bot —
+// including a deep-link /start whose payload the client dropped (a known Telegram
+// behavior for users who already started the bot). Login and registration both
+// run through the code the site shows, so there is nothing to hand back: point
+// the user at that code, whether or not they already have an account.
 func (s *Server) TelegramIssueLogin(ctx context.Context, tgUserID int64, tgUsername string) string {
-	var userID int64
-	err := s.h.DB().QueryRowContext(ctx, `select id from users where telegram_user_id = ? and is_system = 0`, tgUserID).Scan(&userID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return TelegramBridgeLoginNeedInvite
-	}
-	if err != nil {
-		log.Printf("telegram login lookup user %d: %v", tgUserID, err)
-		return TelegramBridgeGenericError
-	}
 	return TelegramBridgeLoginOnSite
 }

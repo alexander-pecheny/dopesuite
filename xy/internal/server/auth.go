@@ -691,9 +691,10 @@ func (s *server) handleTelegramRegister(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, tgbridge.Response{Message: msg})
 }
 
-// handleTelegramLogin answers /start and /login sent to the bot. Login now begins
-// on the website (which mints the code the user forwards here), so there is no
-// server-issued login code to hand back — just point them at /login.
+// handleTelegramLogin answers a bare /start or /login (no code) sent to the bot —
+// including a deep-link /start whose payload the client dropped (a known Telegram
+// behavior for users who already started the bot). The code the site shows is the
+// only thing that binds this chat to the browser, so point them back at it.
 func (s *server) handleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 	if !s.requireBotSecret(w, r) {
 		return
@@ -702,7 +703,7 @@ func (s *server) handleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	writeJSON(w, tgbridge.Response{Message: "Чтобы войти, открой https://xy.pecheny.me/login и нажми «Войти через телеграм» — сайт выдаст код, пришли его мне."})
+	writeJSON(w, tgbridge.Response{Message: "Пришлите код со страницы входа. Если его нет — откройте https://xy.pecheny.me/login и нажмите «Войти через телеграм»."})
 }
 
 func nullStr(s string) sql.NullString {
