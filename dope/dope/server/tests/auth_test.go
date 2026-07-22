@@ -65,35 +65,6 @@ where code = ? and kind = 'register' and consumed_at is null`,
 	}
 }
 
-func botIssueLoginCode(t *testing.T, db *sql.DB, userID, tgUserID int64, tgUsername string) string {
-	t.Helper()
-	code, err := dopeserver.NewTelegramLoginCode()
-	if err != nil {
-		t.Fatalf("new code: %v", err)
-	}
-	now := time.Now().UTC()
-	_, err = db.Exec(`
-insert into telegram_login_codes(code, kind, user_id, telegram_user_id, telegram_username, created_at, expires_at)
-values(?, 'login', ?, ?, ?, ?, ?)`,
-		code, userID, tgUserID, tgUsername, now.Format(time.RFC3339), now.Add(time.Minute).Format(time.RFC3339))
-	if err != nil {
-		t.Fatalf("issue login: %v", err)
-	}
-	return code
-}
-
-func isShortLoginCode(s string) bool {
-	if len(s) != dopeserver.TelegramLoginCodeLen {
-		return false
-	}
-	for _, r := range s {
-		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
-			return false
-		}
-	}
-	return true
-}
-
 func sessionCookieFromHeader(t *testing.T, w *httptest.ResponseRecorder) string {
 	t.Helper()
 	for _, raw := range w.Result().Header.Values("Set-Cookie") {
@@ -679,350 +650,184 @@ func TestHiddenAttributeCSSOverridesLayoutClasses(t *testing.T) {
 	}
 }
 
-func TestRegisterRedirectsCompletedUserToHost(t *testing.T) {
-	srv := newAuthTestServer(t)
-	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := srv.Eng().DB.Exec(`
-insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
-values(null, null, ?, 0, ?, ?)`, "done_user", now, now)
-	if err != nil {
-		t.Fatalf("insert user: %v", err)
-	}
-	userID, _ := res.LastInsertId()
-	cookie := createTestSession(t, srv, userID)
-
-	req := httptest.NewRequest(http.MethodGet, "/register", nil)
-	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
-	resp := httptest.NewRecorder()
-	srv.PageServer().HandleRegisterPage(resp, req)
-	if resp.Code != http.StatusSeeOther {
-		t.Fatalf("register status = %d, want 303", resp.Code)
-	}
-	if got := resp.Header().Get("Location"); got != "/host" {
-		t.Fatalf("register redirect = %q, want /host", got)
-	}
-}
-
 func TestRegisterFlowHappyPath(t *testing.T) {
 	srv := newAuthTestServer(t)
-	systemID := systemUserID(t, srv.Eng().DB)
-	invite, err := dopeserver.CreateInvite(context.Background(), srv.Eng().DB, systemID)
-	if err != nil {
-		t.Fatalf("create invite: %v", err)
-	}
 
-	// Step 1: site issues register code.
-	startBody, _ := json.Marshal(dopeserver.StartRegisterRequest{InviteCode: invite})
-	startReq := httptest.NewRequest(http.MethodPost, "/api/auth/register/start", bytes.NewReader(startBody))
+	// Telegram handshake -> code.
 	startResp := httptest.NewRecorder()
-	srv.HandleAuthRegisterStart(startResp, startReq)
+	srv.HandleAuthTgStart(startResp, httptest.NewRequest(http.MethodPost, "/api/auth/tg/start", nil))
 	if startResp.Code != http.StatusOK {
 		t.Fatalf("start: status %d, body %s", startResp.Code, startResp.Body.String())
 	}
-	startData := decodeJSON[session.StartRegisterResponse](t, startResp)
-	if startData.Code == "" {
+	code := decodeJSON[session.StartRegisterResponse](t, startResp).Code
+	if code == "" {
 		t.Fatalf("start: empty code")
 	}
 
-	// Polling before bot consumes returns pending.
-	pendingReq := httptest.NewRequest(http.MethodGet, "/api/auth/register/status?code="+startData.Code, nil)
+	// Polling before the bot confirms returns pending.
 	pendingResp := httptest.NewRecorder()
-	srv.HandleAuthRegisterStatus(pendingResp, pendingReq)
-	if pendingResp.Code != http.StatusOK {
-		t.Fatalf("pending status: %d", pendingResp.Code)
-	}
+	srv.HandleAuthTgStatus(pendingResp, httptest.NewRequest(http.MethodGet, "/api/auth/tg/status?code="+code, nil))
 	if got := decodeJSON[session.RegisterStatusResponse](t, pendingResp).Status; got != "pending" {
-		t.Fatalf("status before consume = %q, want pending", got)
+		t.Fatalf("status before confirm = %q, want pending", got)
 	}
 
-	// Step 2: bot consumes the register code.
-	botConsumeRegister(t, srv.Eng().DB, startData.Code, 555, "tg_alice")
+	// Bot confirms a new telegram account.
+	botConsumeRegister(t, srv.Eng().DB, code, 555, "tg_alice")
 
-	// Step 3: site polls again, gets ready + session cookie + no username yet.
-	readyReq := httptest.NewRequest(http.MethodGet, "/api/auth/register/status?code="+startData.Code, nil)
-	readyResp := httptest.NewRecorder()
-	srv.HandleAuthRegisterStatus(readyResp, readyReq)
-	if readyResp.Code != http.StatusOK {
-		t.Fatalf("ready status: %d, body %s", readyResp.Code, readyResp.Body.String())
-	}
-	ready := decodeJSON[session.RegisterStatusResponse](t, readyResp)
-	if ready.Status != "ready" {
-		t.Fatalf("status = %q, want ready", ready.Status)
-	}
-	if ready.Username != nil {
-		t.Fatalf("username should be nil after register, got %q", *ready.Username)
-	}
-	cookie := sessionCookieFromHeader(t, readyResp)
-
-	// Invite is now used.
-	var usedBy sql.NullInt64
-	if err := srv.Eng().DB.QueryRow(`select used_by from invites where code = ?`, invite).Scan(&usedBy); err != nil {
-		t.Fatalf("invite check: %v", err)
-	}
-	if !usedBy.Valid {
-		t.Fatalf("invite still unused after register")
+	// Status now reports choose_username (account not yet created).
+	statusResp := httptest.NewRecorder()
+	srv.HandleAuthTgStatus(statusResp, httptest.NewRequest(http.MethodGet, "/api/auth/tg/status?code="+code, nil))
+	if got := decodeJSON[session.RegisterStatusResponse](t, statusResp).Status; got != "choose_username" {
+		t.Fatalf("status = %q, want choose_username", got)
 	}
 
-	// Step 4: set username.
-	usernameBody, _ := json.Marshal(dopeserver.UsernameRequest{Username: "alice"})
-	usernameReq := httptest.NewRequest(http.MethodPost, "/api/auth/username", bytes.NewReader(usernameBody))
-	usernameReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
-	usernameResp := httptest.NewRecorder()
-	srv.HandleAuthUsername(usernameResp, usernameReq)
-	if usernameResp.Code != http.StatusOK {
-		t.Fatalf("username: status %d, body %s", usernameResp.Code, usernameResp.Body.String())
+	// Claim the username -> ready + session cookie.
+	claimResp := tgClaim(t, srv, code, "alice", "")
+	ready := decodeJSON[session.RegisterStatusResponse](t, claimResp)
+	if ready.Status != "ready" || ready.Username == nil || *ready.Username != "alice" {
+		t.Fatalf("claim = %+v, want ready/alice", ready)
 	}
+	cookie := sessionCookieFromHeader(t, claimResp)
 
-	// Username is now immutable: second attempt fails.
-	rejectReq := httptest.NewRequest(http.MethodPost, "/api/auth/username", bytes.NewReader(usernameBody))
-	rejectReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
-	rejectResp := httptest.NewRecorder()
-	srv.HandleAuthUsername(rejectResp, rejectReq)
-	if rejectResp.Code != http.StatusConflict {
-		t.Fatalf("second username attempt: status %d, want 409", rejectResp.Code)
-	}
-
-	// /api/auth/me reflects new state.
+	// /api/auth/me reflects the new account.
 	meReq := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
 	meReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
 	meResp := httptest.NewRecorder()
 	srv.HandleAuthMe(meResp, meReq)
-	if meResp.Code != http.StatusOK {
-		t.Fatalf("me: status %d", meResp.Code)
-	}
 	me := decodeJSON[dopeserver.MeResponse](t, meResp)
 	if me.Username == nil || *me.Username != "alice" {
 		t.Fatalf("me.username = %v, want alice", me.Username)
 	}
 }
 
-func TestRegisterRejectsExpiredInvite(t *testing.T) {
-	srv := newAuthTestServer(t)
-	now := time.Now().UTC()
-	if _, err := srv.Eng().DB.Exec(`
-insert into invites(code, created_by, created_at, expires_at)
-values('OLD', ?, ?, ?)`, systemUserID(t, srv.Eng().DB), now.Add(-2*time.Hour).Format(time.RFC3339), now.Add(-time.Hour).Format(time.RFC3339)); err != nil {
-		t.Fatalf("seed invite: %v", err)
-	}
-	body, _ := json.Marshal(dopeserver.StartRegisterRequest{InviteCode: "OLD"})
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/register/start", bytes.NewReader(body))
+// tgClaim POSTs a username claim (optionally with a password) and returns the recorder.
+func tgClaim(t *testing.T, srv *dopeserver.Server, code, username, password string) *httptest.ResponseRecorder {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"code": code, "username": username, "password": password})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/tg/claim", bytes.NewReader(body))
 	resp := httptest.NewRecorder()
-	srv.HandleAuthRegisterStart(resp, req)
-	if resp.Code != http.StatusGone {
-		t.Fatalf("status = %d, want 410", resp.Code)
+	srv.HandleAuthTgClaim(resp, req)
+	return resp
+}
+
+func TestRegisterLinkPasswordAccount(t *testing.T) {
+	srv := newAuthTestServer(t)
+	hash, err := dopeserver.HashPassword("dopevetpass1")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := srv.Eng().DB.Exec(`
+insert into users(username, password_hash, password_salt, is_system, created_at, updated_at)
+values('dpvet', ?, '', 0, ?, ?)`, hash, now, now); err != nil {
+		t.Fatalf("seed pw user: %v", err)
+	}
+
+	startResp := httptest.NewRecorder()
+	srv.HandleAuthTgStart(startResp, httptest.NewRequest(http.MethodPost, "/api/auth/tg/start", nil))
+	code := decodeJSON[session.StartRegisterResponse](t, startResp).Code
+	botConsumeRegister(t, srv.Eng().DB, code, 800500, "vt")
+
+	// Claim the password account's name with no password -> password_required.
+	if got := decodeJSON[session.RegisterStatusResponse](t, tgClaim(t, srv, code, "dpvet", "")).Status; got != "password_required" {
+		t.Fatalf("status = %q, want password_required", got)
+	}
+	// Wrong password rejected.
+	if resp := tgClaim(t, srv, code, "dpvet", "wrong"); resp.Code == http.StatusOK {
+		t.Fatalf("wrong password accepted: %d", resp.Code)
+	}
+	// Correct password links + logs in.
+	linked := tgClaim(t, srv, code, "dpvet", "dopevetpass1")
+	if got := decodeJSON[session.RegisterStatusResponse](t, linked); got.Status != "ready" || got.Username == nil || *got.Username != "dpvet" {
+		t.Fatalf("link = %+v, want ready/dpvet", got)
+	}
+	var tg sql.NullInt64
+	if err := srv.Eng().DB.QueryRow(`select telegram_user_id from users where username = 'dpvet'`).Scan(&tg); err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if !tg.Valid || tg.Int64 != 800500 {
+		t.Fatalf("telegram_user_id = %v, want 800500", tg)
+	}
+}
+
+func TestTgClaimRejectsSystemAccount(t *testing.T) {
+	srv := newAuthTestServer(t)
+	hash, err := dopeserver.HashPassword("syspass12345")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := srv.Eng().DB.Exec(`
+insert into users(username, password_hash, password_salt, is_system, created_at, updated_at)
+values('sys', ?, '', 1, ?, ?)`, hash, now, now); err != nil {
+		t.Fatalf("seed system user: %v", err)
+	}
+	startResp := httptest.NewRecorder()
+	srv.HandleAuthTgStart(startResp, httptest.NewRequest(http.MethodPost, "/api/auth/tg/start", nil))
+	code := decodeJSON[session.StartRegisterResponse](t, startResp).Code
+	botConsumeRegister(t, srv.Eng().DB, code, 700700, "sys_tg")
+	// Even with the correct password, a system account is not linkable.
+	if got := decodeJSON[session.RegisterStatusResponse](t, tgClaim(t, srv, code, "sys", "syspass12345")).Status; got != "username_taken" {
+		t.Fatalf("status = %q, want username_taken (system account not linkable)", got)
+	}
+}
+
+func TestRegisterRejectsTakenPasswordlessUsername(t *testing.T) {
+	srv := newAuthTestServer(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := srv.Eng().DB.Exec(`
+insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
+values(999, 'tg', 'taken', 0, ?, ?)`, now, now); err != nil { // telegram-only, no password
+		t.Fatalf("seed user: %v", err)
+	}
+	startResp := httptest.NewRecorder()
+	srv.HandleAuthTgStart(startResp, httptest.NewRequest(http.MethodPost, "/api/auth/tg/start", nil))
+	code := decodeJSON[session.StartRegisterResponse](t, startResp).Code
+	botConsumeRegister(t, srv.Eng().DB, code, 1001, "newbie")
+	if got := decodeJSON[session.RegisterStatusResponse](t, tgClaim(t, srv, code, "taken", "")).Status; got != "username_taken" {
+		t.Fatalf("status = %q, want username_taken", got)
 	}
 }
 
 func TestRegisterStatusReportsExpiry(t *testing.T) {
 	srv := newAuthTestServer(t)
-	invite, err := dopeserver.CreateInvite(context.Background(), srv.Eng().DB, systemUserID(t, srv.Eng().DB))
-	if err != nil {
-		t.Fatalf("invite: %v", err)
-	}
-	body, _ := json.Marshal(dopeserver.StartRegisterRequest{InviteCode: invite})
-	startReq := httptest.NewRequest(http.MethodPost, "/api/auth/register/start", bytes.NewReader(body))
 	startResp := httptest.NewRecorder()
-	srv.HandleAuthRegisterStart(startResp, startReq)
-	if startResp.Code != http.StatusOK {
-		t.Fatalf("start: %d", startResp.Code)
-	}
-	startData := decodeJSON[session.StartRegisterResponse](t, startResp)
+	srv.HandleAuthTgStart(startResp, httptest.NewRequest(http.MethodPost, "/api/auth/tg/start", nil))
+	code := decodeJSON[session.StartRegisterResponse](t, startResp).Code
 
-	// Backdate the expiry.
 	if _, err := srv.Eng().DB.Exec(`update telegram_login_codes set expires_at = ? where code = ?`,
-		time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), startData.Code); err != nil {
+		time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), code); err != nil {
 		t.Fatalf("expire: %v", err)
 	}
-
-	statusReq := httptest.NewRequest(http.MethodGet, "/api/auth/register/status?code="+startData.Code, nil)
 	statusResp := httptest.NewRecorder()
-	srv.HandleAuthRegisterStatus(statusResp, statusReq)
+	srv.HandleAuthTgStatus(statusResp, httptest.NewRequest(http.MethodGet, "/api/auth/tg/status?code="+code, nil))
 	if got := decodeJSON[session.RegisterStatusResponse](t, statusResp).Status; got != "expired" {
 		t.Fatalf("status = %q, want expired", got)
 	}
 }
 
-func TestLoginFlow(t *testing.T) {
+func TestPasswordLogin(t *testing.T) {
 	srv := newAuthTestServer(t)
-	systemID := systemUserID(t, srv.Eng().DB)
-
-	// Pre-existing user already linked to telegram.
-	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := srv.Eng().DB.Exec(`
-insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
-values(?, ?, ?, 0, ?, ?)`, 777, "tg_bob", "bob", now, now)
+	hash, err := dopeserver.HashPassword("s3cretpassword")
 	if err != nil {
-		t.Fatalf("insert user: %v", err)
+		t.Fatalf("hash: %v", err)
 	}
-	userID, _ := res.LastInsertId()
-
-	code := botIssueLoginCode(t, srv.Eng().DB, userID, 777, "tg_bob")
-
-	body, _ := json.Marshal(dopeserver.LoginRequest{Code: code})
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))
-	resp := httptest.NewRecorder()
-	srv.HandleAuthLogin(resp, req)
-	if resp.Code != http.StatusOK {
-		t.Fatalf("login: status %d, body %s", resp.Code, resp.Body.String())
-	}
-	cookie := sessionCookieFromHeader(t, resp)
-	me := decodeJSON[dopeserver.MeResponse](t, resp)
-	if me.Username == nil || *me.Username != "bob" {
-		t.Fatalf("me.username = %v, want bob", me.Username)
-	}
-
-	// Re-using the login code fails.
-	reuseReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))
-	reuseResp := httptest.NewRecorder()
-	srv.HandleAuthLogin(reuseResp, reuseReq)
-	if reuseResp.Code != http.StatusGone {
-		t.Fatalf("login reuse status = %d, want 410", reuseResp.Code)
-	}
-
-	// System user cannot log in even if a stale login code exists.
-	badCode := botIssueLoginCode(t, srv.Eng().DB, systemID, 0, "")
-	badBody, _ := json.Marshal(dopeserver.LoginRequest{Code: badCode})
-	badReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(badBody))
-	badResp := httptest.NewRecorder()
-	srv.HandleAuthLogin(badResp, badReq)
-	if badResp.Code != http.StatusForbidden {
-		t.Fatalf("system login status = %d, want 403", badResp.Code)
-	}
-
-	// Logout deletes the session.
-	logoutReq := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
-	logoutReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
-	logoutResp := httptest.NewRecorder()
-	srv.HandleAuthLogout(logoutResp, logoutReq)
-	if logoutResp.Code != http.StatusNoContent {
-		t.Fatalf("logout status = %d, want 204", logoutResp.Code)
-	}
-
-	// /api/auth/me without a valid cookie -> 401.
-	meReq := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
-	meReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
-	meResp := httptest.NewRecorder()
-	srv.HandleAuthMe(meResp, meReq)
-	if meResp.Code != http.StatusUnauthorized {
-		t.Fatalf("me after logout = %d, want 401", meResp.Code)
-	}
-}
-
-func TestLoginStartSendsCodeWhenPasswordIsMissing(t *testing.T) {
-	srv := newAuthTestServer(t)
-	var sentChatID int64
-	var sentText string
-	srv.SendTelegram = func(ctx context.Context, chatID int64, text string) error {
-		sentChatID = chatID
-		sentText = text
-		return nil
-	}
-
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := srv.Eng().DB.Exec(`
-insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
-values(?, ?, ?, 0, ?, ?)`, 888, "tg_code", "code_only", now, now)
-	if err != nil {
-		t.Fatalf("insert user: %v", err)
-	}
-	userID, _ := res.LastInsertId()
-
-	body, _ := json.Marshal(dopeserver.LoginStartRequest{Username: "code_only"})
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login/start", bytes.NewReader(body))
-	resp := httptest.NewRecorder()
-	srv.HandleAuthLoginStart(resp, req)
-	if resp.Code != http.StatusOK {
-		t.Fatalf("login start: status %d, body %s", resp.Code, resp.Body.String())
-	}
-	start := decodeJSON[dopeserver.LoginStartResponse](t, resp)
-	if start.HasPassword {
-		t.Fatalf("has_password = true, want false")
-	}
-	if !start.CodeSent {
-		t.Fatalf("code_sent = false, want true")
-	}
-	if sentChatID != 888 {
-		t.Fatalf("sent chat = %d, want 888", sentChatID)
-	}
-
-	var code string
-	if err := srv.Eng().DB.QueryRow(`
-select code from telegram_login_codes where user_id = ? and kind = 'login'`, userID).Scan(&code); err != nil {
-		t.Fatalf("read code: %v", err)
-	}
-	if code == "" || !strings.Contains(sentText, code) {
-		t.Fatalf("telegram text %q does not contain issued code %q", sentText, code)
-	}
-	if !isShortLoginCode(code) {
-		t.Fatalf("login code = %q, want [A-Z0-9]{%d}", code, dopeserver.TelegramLoginCodeLen)
-	}
-	if !strings.Contains(sentText, "<code>"+code+"</code>") {
-		t.Fatalf("telegram text %q does not render code as monospace", sentText)
-	}
-
-	loginBody, _ := json.Marshal(dopeserver.LoginRequest{Code: code})
-	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(loginBody))
-	loginResp := httptest.NewRecorder()
-	srv.HandleAuthLogin(loginResp, loginReq)
-	if loginResp.Code != http.StatusOK {
-		t.Fatalf("login with issued code: status %d, body %s", loginResp.Code, loginResp.Body.String())
-	}
-	_ = sessionCookieFromHeader(t, loginResp)
-}
-
-func TestLoginStartPasswordUserRequestsCodeExplicitly(t *testing.T) {
-	srv := newAuthTestServer(t)
-	var sent int
-	srv.SendTelegram = func(ctx context.Context, chatID int64, text string) error {
-		sent++
-		if chatID != 999 {
-			t.Fatalf("sent chat = %d, want 999", chatID)
-		}
-		return nil
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	pwHash, err := dopeserver.HashPassword("secret")
-	if err != nil {
-		t.Fatalf("hash password: %v", err)
-	}
 	if _, err := srv.Eng().DB.Exec(`
-insert into users(telegram_user_id, telegram_username, username, password_hash, password_salt, is_system, created_at, updated_at)
-values(?, ?, ?, ?, null, 0, ?, ?)`, 999, "tg_pass", "passy", pwHash, now, now); err != nil {
-		t.Fatalf("insert user: %v", err)
+insert into users(username, password_hash, password_salt, is_system, created_at, updated_at)
+values('boss', ?, '', 0, ?, ?)`, hash, now, now); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
-
-	body, _ := json.Marshal(dopeserver.LoginStartRequest{Username: "passy"})
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login/start", bytes.NewReader(body))
+	body, _ := json.Marshal(map[string]string{"username": "boss", "password": "s3cretpassword"})
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login-password", bytes.NewReader(body))
 	resp := httptest.NewRecorder()
-	srv.HandleAuthLoginStart(resp, req)
+	srv.HandleAuthLoginPassword(resp, req)
 	if resp.Code != http.StatusOK {
-		t.Fatalf("login start: status %d, body %s", resp.Code, resp.Body.String())
+		t.Fatalf("login-password: status %d, body %s", resp.Code, resp.Body.String())
 	}
-	start := decodeJSON[dopeserver.LoginStartResponse](t, resp)
-	if !start.HasPassword {
-		t.Fatalf("has_password = false, want true")
-	}
-	if start.CodeSent {
-		t.Fatalf("code_sent = true, want false")
-	}
-	if sent != 0 {
-		t.Fatalf("sent codes = %d, want 0", sent)
-	}
-
-	codeBody, _ := json.Marshal(dopeserver.LoginStartRequest{Username: "passy", SendCode: true})
-	codeReq := httptest.NewRequest(http.MethodPost, "/api/auth/login/start", bytes.NewReader(codeBody))
-	codeResp := httptest.NewRecorder()
-	srv.HandleAuthLoginStart(codeResp, codeReq)
-	if codeResp.Code != http.StatusOK {
-		t.Fatalf("login code start: status %d, body %s", codeResp.Code, codeResp.Body.String())
-	}
-	codeStart := decodeJSON[dopeserver.LoginStartResponse](t, codeResp)
-	if !codeStart.HasPassword || !codeStart.CodeSent {
-		t.Fatalf("response = %+v, want password user with sent code", codeStart)
-	}
-	if sent != 1 {
-		t.Fatalf("sent codes = %d, want 1", sent)
+	me := decodeJSON[dopeserver.MeResponse](t, resp)
+	if me.Username == nil || *me.Username != "boss" {
+		t.Fatalf("me = %+v, want boss", me)
 	}
 }
 

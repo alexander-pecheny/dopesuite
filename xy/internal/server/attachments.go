@@ -134,6 +134,9 @@ func (s *server) handleCreateAttachment(w http.ResponseWriter, r *http.Request) 
 	}
 	var id int64
 	err := s.withWriteTx(r.Context(), "create-attachment", func(ctx context.Context, tx *sql.Tx) error {
+		if err := enforceQuota(ctx, tx, bid, size); err != nil {
+			return err
+		}
 		res, err := tx.ExecContext(ctx, `
 insert into attachments(board_id, card_id, filename_enc, mime, size, lossless, is_excerpt, blob_ref, created_at)
 values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, bid, cardID, filenameEnc, meta.Mime, size, boolInt(meta.Lossless), boolInt(meta.IsExcerpt), ref, rfc3339(time.Now()))
@@ -170,10 +173,10 @@ func (s *server) handleReplaceAttachment(w http.ResponseWriter, r *http.Request)
 	if !okp {
 		return
 	}
-	var bid, cardID int64
+	var bid, cardID, oldSize int64
 	var oldRef string
 	err := s.db.QueryRowContext(r.Context(), `
-select board_id, card_id, blob_ref from attachments where id = ? and deleted_at is null`, attID).Scan(&bid, &cardID, &oldRef)
+select board_id, card_id, blob_ref, size from attachments where id = ? and deleted_at is null`, attID).Scan(&bid, &cardID, &oldRef, &oldSize)
 	if errors.Is(err, sql.ErrNoRows) {
 		httpError(w, http.StatusNotFound, "вложение не найдено")
 		return
@@ -189,6 +192,9 @@ select board_id, card_id, blob_ref from attachments where id = ? and deleted_at 
 		return
 	}
 	err = s.withWriteTx(r.Context(), "replace-attachment", func(ctx context.Context, tx *sql.Tx) error {
+		if err := enforceQuota(ctx, tx, bid, size-oldSize); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `
 update attachments set filename_enc = ?, mime = ?, size = ?, lossless = ?, blob_ref = ?, rev = rev + 1
 where id = ?`, filenameEnc, meta.Mime, size, boolInt(meta.Lossless), ref, attID); err != nil {

@@ -1,6 +1,11 @@
 package dopeserver
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+
+	"pecheny.me/dopecore/session"
+)
 
 // dopeCSP locks pages to same-origin scripts and styles: no inline script, no
 // eval, no third-party origins. dope emits no inline <script> (the per-request
@@ -31,6 +36,25 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// slideSessionCookie re-emits the session cookie on every request that carries
+// one, so its browser MaxAge tracks the sliding server session instead of dying
+// 30 days after login however active the user is (the DB session already slides;
+// the cookie did not). Handlers that set their own session cookie (login,
+// register, logout) run after and their later Set-Cookie header wins.
+func slideSessionCookie(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip cacheable static assets and the SSE streams: adding Set-Cookie to a
+		// static response defeats shared caching, and the app-page/API responses
+		// that actually carry the session already slide it.
+		p := r.URL.Path
+		if c, err := r.Cookie(session.CookieName); err == nil && c.Value != "" &&
+			!strings.HasPrefix(p, "/static/") && p != "/events" && p != "/host-events" {
+			session.SetCookie(w, c.Value)
+		}
 		next.ServeHTTP(w, r)
 	})
 }

@@ -26,7 +26,7 @@ import (
 const (
 	defaultServerURL = "http://localhost:9673"
 
-	fallbackMessage   = "Не понял. Пришли код-приглашение или /login."
+	fallbackMessage   = "Не понял. Пришли код регистрации с сайта или /login."
 	serverDownMessage = "Сервер недоступен, попробуй позже."
 )
 
@@ -62,7 +62,7 @@ func handler(bridge *tgbot.Bridge) tgbot.Handler {
 		switch {
 		case text == "/login" || text == "/start":
 			reply = call(ctx, bridge, "/api/telegram/login", map[string]any{
-				"telegram_user_id": from.ID, "telegram_username": from.Username,
+				"telegram_user_id": from.ID, "telegram_username": from.Username, "telegram_name": from.DisplayName(),
 			})
 		case strings.HasPrefix(text, "/start "):
 			code := strings.TrimSpace(strings.TrimPrefix(text, "/start "))
@@ -80,7 +80,7 @@ func handler(bridge *tgbot.Bridge) tgbot.Handler {
 
 func register(ctx context.Context, bridge *tgbot.Bridge, code string, from *tgbot.User) string {
 	return call(ctx, bridge, "/api/telegram/register", map[string]any{
-		"code": code, "telegram_user_id": from.ID, "telegram_username": from.Username,
+		"code": code, "telegram_user_id": from.ID, "telegram_username": from.Username, "telegram_name": from.DisplayName(),
 	})
 }
 

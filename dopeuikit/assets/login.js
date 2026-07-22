@@ -1,24 +1,44 @@
+// Shared login for the dopesuite apps. One /login page, two ways in:
+//   • «Войти через телеграм» — mint a code, forward it to the bot, poll. A known
+//     telegram logs straight in; a brand-new one picks a username (and, if that
+//     username is an existing password account, proves the password to link it).
+//   • «Войти по паролю» — username + password, existing accounts only.
+// Registration is not a separate flow: the telegram button creates the account.
+
 const statusNode = document.getElementById("status");
-const stepUsername = document.getElementById("step-username");
-const stepPassword = document.getElementById("step-password");
-const stepCode = document.getElementById("step-code");
+
+const steps = {
+  method: document.getElementById("step-method"),
+  code: document.getElementById("step-code"),
+  username: document.getElementById("step-username"),
+  link: document.getElementById("step-link"),
+  password: document.getElementById("step-password"),
+};
+
+const tgLoginBtn = document.getElementById("tgLoginBtn");
+const pwLoginBtn = document.getElementById("pwLoginBtn");
+const methodMessage = document.getElementById("methodMessage");
+
+const tgCode = document.getElementById("tgCode");
+const codeMessage = document.getElementById("codeMessage");
 
 const usernameForm = document.getElementById("usernameForm");
-const loginUsername = document.getElementById("loginUsername");
+const tgUsername = document.getElementById("tgUsername");
 const usernameMessage = document.getElementById("usernameMessage");
 
-const passwordLogin = document.getElementById("passwordLogin");
+const linkForm = document.getElementById("linkForm");
+const linkPassword = document.getElementById("linkPassword");
+const linkMessage = document.getElementById("linkMessage");
+const linkCancelBtn = document.getElementById("linkCancelBtn");
+
 const passwordForm = document.getElementById("passwordForm");
-const passwordValue = document.getElementById("passwordValue");
+const pwUsername = document.getElementById("pwUsername");
+const pwPassword = document.getElementById("pwPassword");
 const passwordMessage = document.getElementById("passwordMessage");
-const requestCodeButton = document.getElementById("requestCodeButton");
 
-const codeLogin = document.getElementById("codeLogin");
-const codeForm = document.getElementById("codeForm");
-const codeInput = document.getElementById("loginCode");
-const message = document.getElementById("loginMessage");
-
-let currentUsername = "";
+let code = "";
+let username = "";
+let polling = false;
 
 bootstrap();
 
@@ -32,39 +52,124 @@ async function bootstrap() {
   } catch (_) {
     // not logged in — fine
   }
-  showStep(stepUsername);
+  showStep("method");
+}
+
+tgLoginBtn.addEventListener("click", startTelegram);
+pwLoginBtn.addEventListener("click", () => {
+  setText(passwordMessage, "");
+  showStep("password");
+});
+
+async function startTelegram() {
+  setText(methodMessage, "");
+  setStatus("saving");
+  try {
+    const res = await fetchJSON("/api/auth/tg/start", {method: "POST"});
+    code = res.code;
+    tgCode.textContent = res.code;
+    setText(codeMessage, "");
+    showStep("code");
+    setStatus("saved");
+    poll();
+  } catch (error) {
+    setText(methodMessage, error.message);
+    setStatus("error");
+  }
+}
+
+async function poll() {
+  if (polling) return;
+  polling = true;
+  const forCode = code;
+  for (let i = 0; i < 120 && forCode === code; i++) {
+    await sleep(1500);
+    let st;
+    try {
+      st = await fetchJSON("/api/auth/tg/status?code=" + encodeURIComponent(forCode));
+    } catch (_) {
+      continue;
+    }
+    if (st.status === "ready") {
+      redirectToHost();
+      polling = false;
+      return;
+    }
+    if (st.status === "choose_username") {
+      showStep("username");
+      polling = false;
+      return;
+    }
+    if (st.status === "expired" || st.status === "not_found") {
+      setText(codeMessage, "Код истёк. Начните вход заново.");
+      polling = false;
+      return;
+    }
+  }
+  polling = false;
+  setText(codeMessage, "Время ожидания вышло. Обновите страницу.");
 }
 
 usernameForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const username = loginUsername.value.trim();
+  username = tgUsername.value.trim();
+  await claim("", usernameMessage);
+});
+
+linkForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await claim(linkPassword.value, linkMessage);
+});
+
+linkCancelBtn.addEventListener("click", () => {
+  linkPassword.value = "";
+  setText(linkMessage, "");
+  setText(usernameMessage, "");
+  showStep("username");
+});
+
+async function claim(password, messageNode) {
+  setText(messageNode, "");
   setStatus("saving");
-  clearMessages();
   try {
-    const result = await startLogin(username, false);
-    currentUsername = result.username || username;
-    if (result.has_password) {
-      showPasswordStep();
-    } else {
-      showCodeStep();
+    const res = await fetchJSON("/api/auth/tg/claim", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({code, username, password}),
+    });
+    if (res.status === "ready") {
+      redirectToHost();
+      return;
     }
-    setStatus("saved");
+    if (res.status === "password_required") {
+      linkPassword.value = "";
+      showStep("link");
+      setStatus("saved");
+      return;
+    }
+    if (res.status === "username_taken") {
+      setText(usernameMessage, "Логин занят, выберите другой.");
+      showStep("username");
+      setStatus("error");
+      return;
+    }
+    setText(messageNode, "Что-то пошло не так, попробуйте снова.");
+    setStatus("error");
   } catch (error) {
-    setText(usernameMessage, error.message);
+    setText(messageNode, error.message);
     setStatus("error");
   }
-});
+}
 
 passwordForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   setStatus("saving");
   setText(passwordMessage, "");
   try {
-    const password = passwordValue.value;
     await fetchJSON("/api/auth/login-password", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({username: currentUsername, password}),
+      body: JSON.stringify({username: pwUsername.value.trim(), password: pwPassword.value}),
     });
     setStatus("saved");
     redirectToHost();
@@ -74,75 +179,21 @@ passwordForm.addEventListener("submit", async (event) => {
   }
 });
 
-requestCodeButton.addEventListener("click", async () => {
-  setStatus("saving");
-  setText(passwordMessage, "");
-  try {
-    const result = await startLogin(currentUsername, true);
-    currentUsername = result.username || currentUsername;
-    showCodeStep();
-    setStatus("saved");
-  } catch (error) {
-    setText(passwordMessage, error.message);
-    setStatus("error");
+function showStep(name) {
+  for (const [key, node] of Object.entries(steps)) {
+    if (node) node.hidden = key !== name;
   }
-});
-
-codeForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  setStatus("saving");
-  setText(message, "");
-  try {
-    const code = codeInput.value.trim().toUpperCase();
-    await fetchJSON("/api/auth/login", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({code}),
-    });
-    setStatus("saved");
-    redirectToHost();
-  } catch (error) {
-    setText(message, error.message);
-    setStatus("error");
-  }
-});
-
-async function startLogin(username, sendCode) {
-  return fetchJSON("/api/auth/login/start", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({username, send_code: sendCode}),
-  });
-}
-
-function showPasswordStep() {
-  passwordLogin.textContent = currentUsername;
-  passwordValue.value = "";
-  showStep(stepPassword);
-}
-
-function showCodeStep() {
-  codeLogin.textContent = currentUsername;
-  codeInput.value = "";
-  setText(message, "Введите код из Telegram.");
-  showStep(stepCode);
-}
-
-function showStep(target) {
-  for (const step of [stepUsername, stepPassword, stepCode]) {
-    step.hidden = step !== target;
-  }
-  const input = target.querySelector("input");
-  if (input) {
-    requestAnimationFrame(() => input.focus());
-  }
+  const input = steps[name] && steps[name].querySelector("input");
+  if (input) requestAnimationFrame(() => input.focus());
 }
 
 function redirectToHost() {
-  // Where a successful login lands is the app's call: the login page marks an
-  // element with data-login-redirect (dope's step-username → "/host"); default "/".
   const marked = document.querySelector("[data-login-redirect]");
   window.location.replace(marked?.getAttribute("data-login-redirect") || "/");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function fetchJSON(url, init) {
@@ -155,17 +206,12 @@ async function fetchJSON(url, init) {
   return response.json();
 }
 
-function clearMessages() {
-  for (const node of [usernameMessage, passwordMessage, message]) {
-    setText(node, "");
-  }
-}
-
 function setText(node, text) {
-  node.textContent = text;
+  if (node) node.textContent = text;
 }
 
 function setStatus(state) {
+  if (!statusNode) return;
   const labels = {saved: "Готово", saving: "Подождите", error: "Ошибка"};
   statusNode.dataset.state = state;
   statusNode.setAttribute("aria-label", labels[state] || labels.saved);

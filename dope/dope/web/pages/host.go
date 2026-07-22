@@ -41,11 +41,6 @@ type Host interface {
 	// RequireSameOrigin enforces the CSRF same-origin check on unsafe methods,
 	// writing 403 and returning false when it fails.
 	RequireSameOrigin(w http.ResponseWriter, r *http.Request) bool
-	// StartRegister begins a registration from an invite code.
-	StartRegister(ctx context.Context, invite string) (session.StartRegisterResponse, error)
-	// FinalizeRegister completes a pending registration, returning the new
-	// session token.
-	FinalizeRegister(ctx context.Context, code string) (session.RegisterStatusResponse, string, error)
 	// WriteExec runs a single audited write statement in an implicit transaction.
 	WriteExec(ctx context.Context, query string, args ...any) (sql.Result, error)
 	// WithWriteTx runs fn inside a bounded, audited write transaction (conn

@@ -21,8 +21,6 @@ type Host interface {
 	// BotSecret returns the configured shared secret gating the bridge (empty
 	// disables it).
 	BotSecret() string
-	// NewTelegramLoginCode returns a fresh opaque login/register code.
-	NewTelegramLoginCode() (string, error)
 	// WriteJSONValue marshals value and writes it as a JSON response.
 	WriteJSONValue(w http.ResponseWriter, value any)
 }

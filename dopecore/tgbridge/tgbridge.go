@@ -25,12 +25,14 @@ type RegisterRequest struct {
 	Code             string `json:"code"`
 	TelegramUserID   int64  `json:"telegram_user_id"`
 	TelegramUsername string `json:"telegram_username"`
+	TelegramName     string `json:"telegram_name"`
 }
 
 // LoginRequest is the bot's POST body when a registered user asks for a login code.
 type LoginRequest struct {
 	TelegramUserID   int64  `json:"telegram_user_id"`
 	TelegramUsername string `json:"telegram_username"`
+	TelegramName     string `json:"telegram_name"`
 }
 
 // Response is what the server sends back: the text the bot echoes to the user.
@@ -50,19 +52,13 @@ func SecretOK(r *http.Request, secret string) (ok, configured bool) {
 }
 
 // ConsumeRegisterSQL marks a pending 'register' code as consumed by the telegram
-// account that sent it. Params: telegram_user_id, telegram_username, now, code, now.
-// It affects one row exactly when the code exists, is a register code, is unused,
-// and has not expired — so RowsAffected() == 1 is the success signal.
+// account that sent it. Params: telegram_user_id, telegram_username, telegram_name,
+// now, code, now. It affects one row exactly when the code exists, is a register
+// code, is unused, and has not expired — so RowsAffected() == 1 is the success signal.
 const ConsumeRegisterSQL = `
 update telegram_login_codes
-set telegram_user_id = ?, telegram_username = ?, consumed_at = ?
+set telegram_user_id = ?, telegram_username = ?, telegram_name = ?, consumed_at = ?
 where code = ? and kind = 'register' and consumed_at is null and expires_at > ?`
-
-// IssueLoginSQL inserts a fresh one-time login code. Params: code, user_id,
-// telegram_user_id, telegram_username, created_at, expires_at.
-const IssueLoginSQL = `
-insert into telegram_login_codes(code, kind, user_id, telegram_user_id, telegram_username, created_at, expires_at)
-values(?, 'login', ?, ?, ?, ?, ?)`
 
 // LooksLikeRegisterCode is a cheap shape check (base32 alphabet, sane length) so
 // an obviously-bogus message never reaches the database.

@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"xy/internal/blobstore"
 )
@@ -39,10 +38,10 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("GET /profile/tokens", srv.servePage("ui/tokens.dopeui"))
 	mux.HandleFunc("GET /board/{id}", srv.servePage("ui/board.dopeui"))
 	mux.HandleFunc("GET /import", srv.servePage("ui/import.dopeui"))
-	mux.HandleFunc("POST /api/auth/register/start", srv.handleRegisterStart)
-	mux.HandleFunc("GET /api/auth/register/status", srv.handleRegisterStatus)
-	mux.HandleFunc("POST /api/auth/login/start", srv.handleLoginStart)
-	mux.HandleFunc("POST /api/auth/login", srv.handleLoginCode)
+	mux.HandleFunc("POST /api/auth/tg/start", srv.handleTgStart)
+	mux.HandleFunc("GET /api/auth/tg/status", srv.handleTgStatus)
+	mux.HandleFunc("POST /api/auth/tg/claim", srv.handleTgClaim)
+	mux.HandleFunc("GET /api/auth/storage", srv.handleStorage)
 	mux.HandleFunc("POST /api/auth/login-password", srv.handleLoginPassword)
 	mux.HandleFunc("POST /api/auth/logout", srv.handleLogout)
 	mux.HandleFunc("GET /api/auth/me", srv.handleMe)
@@ -154,38 +153,40 @@ func TestFullFlow(t *testing.T) {
 	ts, srv := newTestServer(t)
 	ctx := context.Background()
 
-	// Mint an invite directly (as the `invite` subcommand would).
-	invite, err := srv.mintInvite(ctx, 24*time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	c := &apiClient{t: t, base: ts.URL}
 
-	// register/start with the invite -> register code
-	resp := c.do("POST", "/api/auth/register/start", map[string]string{"invite_code": invite})
+	// telegram handshake -> code
+	resp := c.do("POST", "/api/auth/tg/start", nil)
 	mustStatus(t, resp, 200)
-	var rs registerStartResponse
+	var rs tgStartResponse
 	c.decode(resp, &rs)
 	if rs.Code == "" {
-		t.Fatal("no register code")
+		t.Fatal("no code")
 	}
 
-	// Simulate the telegram bot consuming the register code.
+	// Simulate the telegram bot confirming a new telegram account.
 	if err := srv.simulateBotRegister(ctx, rs.Code, 555001, "tester"); err != nil {
-		t.Fatalf("bot register: %v", err)
+		t.Fatalf("bot confirm: %v", err)
 	}
 
-	// register/status -> ready + session cookie
-	resp = c.do("GET", "/api/auth/register/status?code="+rs.Code, nil)
+	// status -> choose_username (new telegram)
+	resp = c.do("GET", "/api/auth/tg/status?code="+rs.Code, nil)
 	mustStatus(t, resp, 200)
-	var st registerStatusResponse
+	var st tgStatusResponse
+	c.decode(resp, &st)
+	if st.Status != "choose_username" {
+		t.Fatalf("status = %q, want choose_username", st.Status)
+	}
+
+	// claim the username -> ready + session cookie
+	resp = c.do("POST", "/api/auth/tg/claim", map[string]string{"code": rs.Code, "username": "tester"})
+	mustStatus(t, resp, 200)
 	c.decode(resp, &st)
 	if st.Status != "ready" {
-		t.Fatalf("status = %q, want ready", st.Status)
+		t.Fatalf("claim status = %q, want ready", st.Status)
 	}
 
-	// /api/auth/me should now resolve
+	// /api/auth/me should now resolve with the chosen username
 	resp = c.do("GET", "/api/auth/me", nil)
 	mustStatus(t, resp, 200)
 	var me meResponse
@@ -194,9 +195,7 @@ func TestFullFlow(t *testing.T) {
 		t.Fatal("no user id")
 	}
 
-	// set a username, then a password, then login by password in a fresh client
-	resp = c.do("POST", "/api/auth/username", map[string]string{"username": "tester"})
-	mustStatus(t, resp, 204)
+	// set a password, then login by password in a fresh client
 	resp = c.do("POST", "/api/auth/password", map[string]string{"new_password": "hunter2hunter"})
 	mustStatus(t, resp, 204)
 

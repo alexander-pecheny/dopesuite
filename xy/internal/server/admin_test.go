@@ -43,16 +43,13 @@ func TestAdminCreateUsers(t *testing.T) {
 
 	// A non-admin, logged-in user gets a 404 (page existence hidden).
 	plain := registerUser(t, srv, ts, 880001, "plainuser")
-	resp := plain.do("POST", "/api/auth/username", map[string]string{"username": "plainuser"})
-	mustStatus(t, resp, 204)
-	resp = plain.do("GET", "/admin/create_users", nil)
+	resp := plain.do("GET", "/admin/create_users", nil)
 	mustStatus(t, resp, 404)
 
-	// Make "boss" the admin and register that account.
-	t.Setenv("XY_ADMIN_USER", "boss")
+	// Register "boss" first, then designate it the admin — open signup won't
+	// mint the reserved admin username, so the account must exist beforehand.
 	admin := registerUser(t, srv, ts, 880002, "boss")
-	resp = admin.do("POST", "/api/auth/username", map[string]string{"username": "boss"})
-	mustStatus(t, resp, 204)
+	t.Setenv("XY_ADMIN_USER", "boss")
 
 	// GET the form.
 	resp = admin.do("GET", "/admin/create_users", nil)

@@ -100,24 +100,24 @@ func TestTelegramBridgeConsumeRegisterReasons(t *testing.T) {
 	ctx := context.Background()
 
 	// Unknown code.
-	if got := s.TgBridge().TelegramConsumeRegister(ctx, "ZZZZ2345", 1, "x"); got != telegrambridge.TelegramBridgeCodeMissing {
+	if got := s.TgBridge().TelegramConsumeRegister(ctx, "ZZZZ2345", 1, "x", ""); got != telegrambridge.TelegramBridgeCodeMissing {
 		t.Fatalf("unknown = %q, want missing", got)
 	}
 	// Non-code shape -> missing (never hits the DB).
-	if got := s.TgBridge().TelegramConsumeRegister(ctx, "!!", 1, "x"); got != telegrambridge.TelegramBridgeCodeMissing {
+	if got := s.TgBridge().TelegramConsumeRegister(ctx, "!!", 1, "x", ""); got != telegrambridge.TelegramBridgeCodeMissing {
 		t.Fatalf("bogus = %q, want missing", got)
 	}
 	// Expired.
 	seedRegisterCode(t, s, "EXPIRED2", time.Now().Add(-time.Minute))
-	if got := s.TgBridge().TelegramConsumeRegister(ctx, "EXPIRED2", 1, "x"); got != telegrambridge.TelegramBridgeCodeExpired {
+	if got := s.TgBridge().TelegramConsumeRegister(ctx, "EXPIRED2", 1, "x", ""); got != telegrambridge.TelegramBridgeCodeExpired {
 		t.Fatalf("expired = %q, want expired", got)
 	}
 	// Success then already-consumed.
 	seedRegisterCode(t, s, "FRESH234", time.Now().Add(time.Minute))
-	if got := s.TgBridge().TelegramConsumeRegister(ctx, "FRESH234", 5, "y"); got != telegrambridge.TelegramBridgeRegisterSuccess {
+	if got := s.TgBridge().TelegramConsumeRegister(ctx, "FRESH234", 5, "y", ""); got != telegrambridge.TelegramBridgeRegisterSuccess {
 		t.Fatalf("first consume = %q, want success", got)
 	}
-	if got := s.TgBridge().TelegramConsumeRegister(ctx, "FRESH234", 5, "y"); got != telegrambridge.TelegramBridgeCodeConsumed {
+	if got := s.TgBridge().TelegramConsumeRegister(ctx, "FRESH234", 5, "y", ""); got != telegrambridge.TelegramBridgeCodeConsumed {
 		t.Fatalf("second consume = %q, want consumed", got)
 	}
 }
@@ -131,17 +131,18 @@ func TestTelegramBridgeIssueLogin(t *testing.T) {
 		t.Fatalf("unknown user = %q, want need-invite", got)
 	}
 
+	// A known telegram account is pointed back to the website (login now starts
+	// there and mints the code the user forwards to the bot).
 	seedTelegramUser(t, s, 4242, "bob")
-	msg := s.TgBridge().TelegramIssueLogin(ctx, 4242, "bob")
-	if !strings.Contains(msg, "<code>") {
-		t.Fatalf("issue login = %q, want a code", msg)
+	if got := s.TgBridge().TelegramIssueLogin(ctx, 4242, "bob"); got != telegrambridge.TelegramBridgeLoginOnSite {
+		t.Fatalf("issue login = %q, want on-site pointer", got)
 	}
-	// A login code row must now exist for the user.
+	// No login code is issued anymore.
 	var n int
-	if err := s.Eng().DB.QueryRow(`select count(*) from telegram_login_codes where kind='login' and telegram_user_id=4242 and consumed_at is null`).Scan(&n); err != nil {
+	if err := s.Eng().DB.QueryRow(`select count(*) from telegram_login_codes where kind='login' and telegram_user_id=4242`).Scan(&n); err != nil {
 		t.Fatalf("count login codes: %v", err)
 	}
-	if n != 1 {
-		t.Fatalf("login codes = %d, want 1", n)
+	if n != 0 {
+		t.Fatalf("login codes = %d, want 0", n)
 	}
 }

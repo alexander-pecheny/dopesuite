@@ -100,16 +100,6 @@ func (s *server) RequireSameOrigin(w http.ResponseWriter, r *http.Request) bool 
 	return RequireSameOriginUnsafe(w, r)
 }
 
-// StartRegister begins a registration from an invite code.
-func (s *server) StartRegister(ctx context.Context, invite string) (session.StartRegisterResponse, error) {
-	return s.startRegister(ctx, invite)
-}
-
-// FinalizeRegister completes a pending registration, returning the new session token.
-func (s *server) FinalizeRegister(ctx context.Context, code string) (session.RegisterStatusResponse, string, error) {
-	return s.finalizeRegister(ctx, code)
-}
-
 // WriteExec runs a single audited write statement in an implicit transaction.
 func (s *server) WriteExec(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return s.eng.WriteExec(ctx, query, args...)
@@ -190,6 +180,3 @@ func (s *server) Unlock() { s.eng.Mu.Unlock() }
 
 // BotSecret returns the configured Telegram bridge shared secret.
 func (s *server) BotSecret() string { return s.eng.BotSecret }
-
-// NewTelegramLoginCode returns a fresh opaque login/register code.
-func (s *server) NewTelegramLoginCode() (string, error) { return authcred.NewTelegramLoginCode() }

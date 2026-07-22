@@ -17,6 +17,9 @@ func (e *appError) Error() string { return e.msg }
 func errBadRequest(msg string) error { return &appError{status: http.StatusBadRequest, msg: msg} }
 func errForbidden(msg string) error  { return &appError{status: http.StatusForbidden, msg: msg} }
 func errNotFound(msg string) error   { return &appError{status: http.StatusNotFound, msg: msg} }
+func errTooLarge(msg string) error {
+	return &appError{status: http.StatusRequestEntityTooLarge, msg: msg}
+}
 
 // handleErr writes an error response if err != nil and reports whether it did.
 // appErrors map to their status + message; anything else is a logged 500.

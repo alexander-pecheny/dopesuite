@@ -27,7 +27,7 @@ const PRECACHE = [
   "/static/styles.css",
   "/static/app.js", "/static/crypto.js", "/static/rank.js", "/static/chgk.js",
   "/static/diff.js", "/static/board.js", "/static/timer.js", "/static/index.js", "/static/menu.js", "/static/pwa.js",
-  "/static/login.js", "/static/profile.js", "/static/register.js", "/static/import.js",
+  "/static/login.js", "/static/profile.js", "/static/import.js",
   "/static/store.js", "/static/sync.js",
   "/static/ding.mp3",
   "/static/vendor/scrypt.js", "/static/vendor/_assert.js", "/static/vendor/_md.js",

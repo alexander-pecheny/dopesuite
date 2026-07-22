@@ -27,26 +27,6 @@ const (
 	passwordMaxLen = 72
 )
 
-type startRegisterRequest struct {
-	InviteCode string `json:"invite_code"`
-}
-
-type loginRequest struct {
-	Code string `json:"code"`
-}
-
-type loginStartRequest struct {
-	Username string `json:"username"`
-	SendCode bool   `json:"send_code,omitempty"`
-}
-
-type loginStartResponse struct {
-	Username    string `json:"username"`
-	HasPassword bool   `json:"has_password"`
-	CodeSent    bool   `json:"code_sent"`
-	ExpiresAt   string `json:"expires_at,omitempty"`
-}
-
 type loginPasswordRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -69,7 +49,7 @@ type meResponse struct {
 
 type telegramSender func(ctx context.Context, chatID int64, text string) error
 
-func (s *server) handleAuthRegisterStart(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleAuthTgStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -77,20 +57,7 @@ func (s *server) handleAuthRegisterStart(w http.ResponseWriter, r *http.Request)
 	if !RequireSameOriginUnsafe(w, r) {
 		return
 	}
-	defer r.Body.Close()
-
-	var req startRegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
-	}
-	invite := strings.TrimSpace(strings.ToUpper(req.InviteCode))
-	if invite == "" {
-		http.Error(w, "missing invite code", http.StatusBadRequest)
-		return
-	}
-
-	resp, err := s.startRegister(r.Context(), invite)
+	resp, err := s.tgStart(r.Context())
 	if err != nil {
 		writeAuthError(w, err)
 		return
@@ -98,7 +65,10 @@ func (s *server) handleAuthRegisterStart(w http.ResponseWriter, r *http.Request)
 	writeJSONValue(w, resp)
 }
 
-func (s *server) startRegister(ctx context.Context, invite string) (session.StartRegisterResponse, error) {
+// tgStart mints a bot code for the telegram handshake — no username up front. Who
+// the visitor is (and, for a new account, the username) is settled afterwards by
+// tgStatus / tgClaim.
+func (s *server) tgStart(ctx context.Context) (session.StartRegisterResponse, error) {
 	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
 		return session.StartRegisterResponse{}, err
@@ -106,25 +76,11 @@ func (s *server) startRegister(ctx context.Context, invite string) (session.Star
 	defer tx.Rollback()
 
 	now := time.Now().UTC()
-	var inviteID int64
-	var usedBy sql.NullInt64
-	var expiresAt string
-	err = tx.QueryRowContext(ctx, `
-select id, used_by, expires_at from invites where code = ?`, invite).Scan(&inviteID, &usedBy, &expiresAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return session.StartRegisterResponse{}, authError{code: http.StatusNotFound, msg: "invite not found"}
-	}
-	if err != nil {
+	// Opportunistically reap lapsed codes so consumed-but-abandoned rows don't
+	// linger as replay fodder.
+	if _, err := tx.ExecContext(ctx, `delete from telegram_login_codes where expires_at < ?`, now.Format(time.RFC3339)); err != nil {
 		return session.StartRegisterResponse{}, err
 	}
-	if usedBy.Valid {
-		return session.StartRegisterResponse{}, authError{code: http.StatusGone, msg: "invite already used"}
-	}
-	expiry, err := time.Parse(time.RFC3339, expiresAt)
-	if err == nil && now.After(expiry) {
-		return session.StartRegisterResponse{}, authError{code: http.StatusGone, msg: "invite expired"}
-	}
-
 	expires := now.Add(session.TelegramAuthLifetime)
 	for attempt := 0; attempt < 3; attempt++ {
 		code, err := authcred.NewTelegramAuthCode()
@@ -132,8 +88,8 @@ select id, used_by, expires_at from invites where code = ?`, invite).Scan(&invit
 			return session.StartRegisterResponse{}, err
 		}
 		_, err = tx.ExecContext(ctx, `
-insert into telegram_login_codes(code, kind, invite_id, created_at, expires_at)
-values(?, 'register', ?, ?, ?)`, code, inviteID, now.Format(time.RFC3339), expires.Format(time.RFC3339))
+insert into telegram_login_codes(code, kind, created_at, expires_at)
+values(?, 'register', ?, ?)`, code, now.Format(time.RFC3339), expires.Format(time.RFC3339))
 		if err == nil {
 			if err := tx.Commit(); err != nil {
 				return session.StartRegisterResponse{}, err
@@ -144,10 +100,10 @@ values(?, 'register', ?, ?, ?)`, code, inviteID, now.Format(time.RFC3339), expir
 			return session.StartRegisterResponse{}, err
 		}
 	}
-	return session.StartRegisterResponse{}, errors.New("could not allocate register code")
+	return session.StartRegisterResponse{}, errors.New("could not allocate code")
 }
 
-func (s *server) handleAuthRegisterStatus(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleAuthTgStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -157,8 +113,7 @@ func (s *server) handleAuthRegisterStatus(w http.ResponseWriter, r *http.Request
 		http.Error(w, "missing code", http.StatusBadRequest)
 		return
 	}
-
-	resp, token, err := s.finalizeRegister(r.Context(), code)
+	resp, token, err := s.tgStatus(r.Context(), code)
 	if err != nil {
 		writeAuthError(w, err)
 		return
@@ -169,117 +124,7 @@ func (s *server) handleAuthRegisterStatus(w http.ResponseWriter, r *http.Request
 	writeJSONValue(w, resp)
 }
 
-func (s *server) finalizeRegister(ctx context.Context, code string) (session.RegisterStatusResponse, string, error) {
-	tx, err := s.eng.BeginWriteTx(ctx)
-	if err != nil {
-		return session.RegisterStatusResponse{}, "", err
-	}
-	defer tx.Rollback()
-
-	now := time.Now().UTC()
-	var (
-		codeID     int64
-		kind       string
-		inviteID   sql.NullInt64
-		userID     sql.NullInt64
-		tgUserID   sql.NullInt64
-		tgUsername sql.NullString
-		expiresAt  string
-		consumedAt sql.NullString
-	)
-	err = tx.QueryRowContext(ctx, `
-select id, kind, invite_id, user_id, telegram_user_id, telegram_username, expires_at, consumed_at
-from telegram_login_codes where code = ?`, code).Scan(
-		&codeID, &kind, &inviteID, &userID, &tgUserID, &tgUsername, &expiresAt, &consumedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return session.RegisterStatusResponse{Status: "not_found"}, "", nil
-	}
-	if err != nil {
-		return session.RegisterStatusResponse{}, "", err
-	}
-	if kind != "register" {
-		return session.RegisterStatusResponse{Status: "not_found"}, "", nil
-	}
-	expiry, _ := time.Parse(time.RFC3339, expiresAt)
-	if !consumedAt.Valid {
-		if !expiry.IsZero() && now.After(expiry) {
-			return session.RegisterStatusResponse{Status: "expired"}, "", nil
-		}
-		return session.RegisterStatusResponse{Status: "pending"}, "", nil
-	}
-	if !tgUserID.Valid {
-		return session.RegisterStatusResponse{Status: "pending"}, "", nil
-	}
-	if !inviteID.Valid {
-		return session.RegisterStatusResponse{}, "", errors.New("register code missing invite")
-	}
-
-	var inviteUsedBy sql.NullInt64
-	var inviteExpiresAt string
-	if err := tx.QueryRowContext(ctx, `
-select used_by, expires_at from invites where id = ?`, inviteID.Int64).Scan(&inviteUsedBy, &inviteExpiresAt); err != nil {
-		return session.RegisterStatusResponse{}, "", err
-	}
-
-	var resolvedUserID int64
-	if userID.Valid {
-		resolvedUserID = userID.Int64
-	} else {
-		var existing int64
-		err := tx.QueryRowContext(ctx, `select id from users where telegram_user_id = ?`, tgUserID.Int64).Scan(&existing)
-		if err == nil {
-			resolvedUserID = existing
-			if _, err := tx.ExecContext(ctx, `
-update users set telegram_username = ?, updated_at = ? where id = ?`, tgUsername, now.Format(time.RFC3339), existing); err != nil {
-				return session.RegisterStatusResponse{}, "", err
-			}
-		} else if errors.Is(err, sql.ErrNoRows) {
-			id, err := store.InsertReturningID(ctx, tx, `
-insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
-values(?, ?, null, 0, ?, ?)`, tgUserID.Int64, tgUsername, now.Format(time.RFC3339), now.Format(time.RFC3339))
-			if err != nil {
-				return session.RegisterStatusResponse{}, "", err
-			}
-			resolvedUserID = id
-		} else {
-			return session.RegisterStatusResponse{}, "", err
-		}
-
-		if _, err := tx.ExecContext(ctx, `
-update telegram_login_codes set user_id = ? where id = ?`, resolvedUserID, codeID); err != nil {
-			return session.RegisterStatusResponse{}, "", err
-		}
-
-		if !inviteUsedBy.Valid {
-			if _, err := tx.ExecContext(ctx, `
-update invites set used_by = ?, used_at = ? where id = ? and used_by is null`,
-				resolvedUserID, now.Format(time.RFC3339), inviteID.Int64); err != nil {
-				return session.RegisterStatusResponse{}, "", err
-			}
-		}
-	}
-
-	token, err := createSessionTx(ctx, tx, resolvedUserID, now)
-	if err != nil {
-		return session.RegisterStatusResponse{}, "", err
-	}
-
-	var username sql.NullString
-	if err := tx.QueryRowContext(ctx, `select username from users where id = ?`, resolvedUserID).Scan(&username); err != nil {
-		return session.RegisterStatusResponse{}, "", err
-	}
-	if err := tx.Commit(); err != nil {
-		return session.RegisterStatusResponse{}, "", err
-	}
-	resp := session.RegisterStatusResponse{Status: "ready"}
-	if username.Valid {
-		v := username.String
-		resp.Username = &v
-	}
-	return resp, token, nil
-}
-
-func (s *server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleAuthTgClaim(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -288,195 +133,219 @@ func (s *server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-	var req loginRequest
+	var req struct {
+		Code     string `json:"code"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
 	}
-	code := strings.TrimSpace(strings.ToUpper(req.Code))
-	if code == "" {
-		http.Error(w, "missing code", http.StatusBadRequest)
-		return
-	}
-
-	token, user, err := s.consumeLoginCode(r.Context(), code)
+	resp, token, err := s.tgClaim(r.Context(), strings.TrimSpace(strings.ToUpper(req.Code)), strings.TrimSpace(req.Username), req.Password)
 	if err != nil {
 		writeAuthError(w, err)
 		return
 	}
-	session.SetCookie(w, token)
-	writeJSONValue(w, meResponseFor(user))
-}
-
-func (s *server) handleAuthLoginStart(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !RequireSameOriginUnsafe(w, r) {
-		return
-	}
-	defer r.Body.Close()
-	var req loginStartRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
-	}
-	username := strings.TrimSpace(req.Username)
-	if username == "" {
-		http.Error(w, "missing username", http.StatusBadRequest)
-		return
-	}
-
-	resp, err := s.startLogin(r.Context(), username, req.SendCode)
-	if err != nil {
-		writeAuthError(w, err)
-		return
+	if token != "" {
+		session.SetCookie(w, token)
 	}
 	writeJSONValue(w, resp)
 }
 
-func (s *server) startLogin(ctx context.Context, username string, sendCode bool) (loginStartResponse, error) {
-	var (
-		userID     int64
-		tgUserID   sql.NullInt64
-		tgUsername sql.NullString
-		hash       sql.NullString
-		salt       sql.NullString
-		isSystem   int
-	)
-	err := s.eng.DB.QueryRowContext(ctx, `
-select id, telegram_user_id, telegram_username, password_hash, password_salt, is_system
-from users where username = ?`, username).Scan(&userID, &tgUserID, &tgUsername, &hash, &salt, &isSystem)
-	if errors.Is(err, sql.ErrNoRows) {
-		return loginStartResponse{}, authError{code: http.StatusNotFound, msg: "user not found"}
-	}
-	if err != nil {
-		return loginStartResponse{}, err
-	}
-	if isSystem == 1 {
-		return loginStartResponse{}, authError{code: http.StatusForbidden, msg: "system user cannot log in"}
-	}
-
-	// bcrypt hashes carry their own salt, so a non-null hash is enough.
-	// Legacy SHA256 entries still have salt.Valid; both are accepted at
-	// verify time by verifyPassword.
-	hasPassword := hash.Valid && strings.TrimSpace(hash.String) != ""
-	_ = salt
-	resp := loginStartResponse{Username: username, HasPassword: hasPassword}
-	if hasPassword && !sendCode {
-		return resp, nil
-	}
-	if !tgUserID.Valid {
-		return loginStartResponse{}, authError{code: http.StatusConflict, msg: "telegram account is not linked"}
-	}
-
-	code, expiresAt, err := s.issueLoginCode(ctx, userID, tgUserID.Int64, tgUsername)
-	if err != nil {
-		return loginStartResponse{}, err
-	}
-	if err := s.sendLoginCode(ctx, tgUserID.Int64, code); err != nil {
-		_, _ = s.eng.DB.ExecContext(ctx, `
-delete from telegram_login_codes where code = ? and consumed_at is null`, code)
-		return loginStartResponse{}, authError{code: http.StatusServiceUnavailable, msg: "could not send telegram code"}
-	}
-	resp.CodeSent = true
-	resp.ExpiresAt = expiresAt
-	return resp, nil
-}
-
-func (s *server) issueLoginCode(ctx context.Context, userID int64, tgUserID int64, tgUsername sql.NullString) (string, string, error) {
-	now := time.Now().UTC()
-	expires := now.Add(session.TelegramAuthLifetime).Format(time.RFC3339)
-	createdAt := now.Format(time.RFC3339)
-	for attempt := 0; attempt < 3; attempt++ {
-		code, err := authcred.NewTelegramLoginCode()
-		if err != nil {
-			return "", "", err
-		}
-		_, err = s.eng.DB.ExecContext(ctx, `
-insert into telegram_login_codes(code, kind, user_id, telegram_user_id, telegram_username, created_at, expires_at)
-values(?, 'login', ?, ?, ?, ?, ?)`, code, userID, tgUserID, tgUsername, createdAt, expires)
-		if err == nil {
-			return code, expires, nil
-		}
-		if !util.IsUniqueViolation(err) {
-			return "", "", err
-		}
-	}
-	return "", "", errors.New("could not allocate login code")
-}
-
-func (s *server) sendLoginCode(ctx context.Context, chatID int64, code string) error {
-	sender := s.SendTelegram
-	if sender == nil {
-		sender = sendTelegramMessageFromEnv
-	}
-	return sender(ctx, chatID, loginCodeTelegramMessage(code))
-}
-
-func loginCodeTelegramMessage(code string) string {
-	return "Твой код для входа:\n<code>" + code + "</code>\nВведи его на странице входа в течение минуты."
-}
-
-func (s *server) consumeLoginCode(ctx context.Context, code string) (string, session.User, error) {
+// tgStatus resolves a confirmed handshake code. A known telegram logs straight in
+// (ready); a brand-new telegram returns choose_username, and its account is
+// created later by tgClaim. Statuses: ready, choose_username, pending, expired,
+// not_found.
+func (s *server) tgStatus(ctx context.Context, code string) (session.RegisterStatusResponse, string, error) {
 	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
-		return "", session.User{}, err
+		return session.RegisterStatusResponse{}, "", err
 	}
 	defer tx.Rollback()
 
 	now := time.Now().UTC()
 	var (
-		codeID     int64
 		kind       string
-		userID     sql.NullInt64
+		tgUserID   sql.NullInt64
+		tgUsername sql.NullString
 		expiresAt  string
 		consumedAt sql.NullString
 	)
 	err = tx.QueryRowContext(ctx, `
-select id, kind, user_id, expires_at, consumed_at from telegram_login_codes where code = ?`, code).Scan(
-		&codeID, &kind, &userID, &expiresAt, &consumedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", session.User{}, authError{code: http.StatusNotFound, msg: "code not found"}
+select kind, telegram_user_id, telegram_username, expires_at, consumed_at
+from telegram_login_codes where code = ?`, code).Scan(&kind, &tgUserID, &tgUsername, &expiresAt, &consumedAt)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && kind != "register") {
+		return session.RegisterStatusResponse{Status: "not_found"}, "", nil
 	}
 	if err != nil {
-		return "", session.User{}, err
+		return session.RegisterStatusResponse{}, "", err
 	}
-	if kind != "login" {
-		return "", session.User{}, authError{code: http.StatusBadRequest, msg: "wrong code kind"}
-	}
-	if consumedAt.Valid {
-		return "", session.User{}, authError{code: http.StatusGone, msg: "code already used"}
-	}
+	// Expiry bounds the whole handshake, consumed or not — a code leaked via the
+	// status URL can't be replayed into a session once it lapses.
 	expiry, _ := time.Parse(time.RFC3339, expiresAt)
 	if !expiry.IsZero() && now.After(expiry) {
-		return "", session.User{}, authError{code: http.StatusGone, msg: "code expired"}
+		return session.RegisterStatusResponse{Status: "expired"}, "", nil
 	}
-	if !userID.Valid {
-		return "", session.User{}, errors.New("login code missing user")
-	}
-
-	if _, err := tx.ExecContext(ctx, `
-update telegram_login_codes set consumed_at = ? where id = ?`, now.Format(time.RFC3339), codeID); err != nil {
-		return "", session.User{}, err
+	if !consumedAt.Valid || !tgUserID.Valid {
+		return session.RegisterStatusResponse{Status: "pending"}, "", nil
 	}
 
-	user, err := loadUserTx(ctx, tx, userID.Int64)
+	var uid int64
+	var uname sql.NullString
+	switch err := tx.QueryRowContext(ctx, `select id, username from users where telegram_user_id = ? and is_system = 0`, tgUserID.Int64).Scan(&uid, &uname); {
+	case err == nil:
+		if _, err := tx.ExecContext(ctx, `update users set telegram_username = ?, updated_at = ? where id = ?`,
+			tgUsername, now.Format(time.RFC3339), uid); err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		token, err := createSessionTx(ctx, tx, uid, now)
+		if err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		// Burn the code so it can't be replayed for another session.
+		if _, err := tx.ExecContext(ctx, `delete from telegram_login_codes where code = ?`, code); err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		if err := tx.Commit(); err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		resp := session.RegisterStatusResponse{Status: "ready"}
+		if uname.Valid {
+			v := uname.String
+			resp.Username = &v
+		}
+		return resp, token, nil
+	case errors.Is(err, sql.ErrNoRows):
+		return session.RegisterStatusResponse{Status: "choose_username"}, "", nil
+	default:
+		return session.RegisterStatusResponse{}, "", err
+	}
+}
+
+// tgClaim finishes a brand-new telegram account: the visitor picks a username.
+// Free → create + log in. An existing password account → link once the password
+// is proven (password_required until then). Taken by another telegram →
+// username_taken.
+func (s *server) tgClaim(ctx context.Context, code, username, password string) (session.RegisterStatusResponse, string, error) {
+	if !util.ValidUsername(username) {
+		return session.RegisterStatusResponse{}, "", authError{code: http.StatusBadRequest, msg: "invalid username"}
+	}
+	tx, err := s.eng.BeginWriteTx(ctx)
 	if err != nil {
-		return "", session.User{}, err
+		return session.RegisterStatusResponse{}, "", err
 	}
-	if user.IsSystem {
-		return "", session.User{}, authError{code: http.StatusForbidden, msg: "system user cannot log in"}
+	defer tx.Rollback()
+
+	now := time.Now().UTC()
+	var (
+		tgUserID   sql.NullInt64
+		tgUsername sql.NullString
+		tgName     sql.NullString
+	)
+	err = tx.QueryRowContext(ctx, `
+select telegram_user_id, telegram_username, telegram_name
+from telegram_login_codes
+where code = ? and kind = 'register' and consumed_at is not null and expires_at > ?`, code, now.Format(time.RFC3339)).Scan(
+		&tgUserID, &tgUsername, &tgName)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !tgUserID.Valid) {
+		return session.RegisterStatusResponse{}, "", authError{code: http.StatusBadRequest, msg: "code not found"}
 	}
-	token, err := createSessionTx(ctx, tx, user.UserID, now)
 	if err != nil {
-		return "", session.User{}, err
+		return session.RegisterStatusResponse{}, "", err
 	}
-	if err := tx.Commit(); err != nil {
-		return "", session.User{}, err
+	// delCode burns the code on any successful login/link so it can't be replayed.
+	delCode := func() error {
+		_, e := tx.ExecContext(ctx, `delete from telegram_login_codes where code = ?`, code)
+		return e
 	}
-	return token, user, nil
+
+	// This telegram may already resolve to an account (double-submit / race).
+	var euid int64
+	var euname sql.NullString
+	switch err := tx.QueryRowContext(ctx, `select id, username from users where telegram_user_id = ? and is_system = 0`, tgUserID.Int64).Scan(&euid, &euname); {
+	case err == nil:
+		token, err := createSessionTx(ctx, tx, euid, now)
+		if err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		if err := delCode(); err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		if err := tx.Commit(); err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		v := username
+		if euname.Valid {
+			v = euname.String
+		}
+		return session.RegisterStatusResponse{Status: "ready", Username: &v}, token, nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return session.RegisterStatusResponse{}, "", err
+	}
+
+	var uid int64
+	var hash, salt sql.NullString
+	switch err := tx.QueryRowContext(ctx, `select id, password_hash, password_salt from users where username = ? and is_system = 0`, username).Scan(&uid, &hash, &salt); {
+	case errors.Is(err, sql.ErrNoRows):
+		nid, ierr := store.InsertReturningID(ctx, tx, `
+insert into users(telegram_user_id, telegram_username, telegram_name, username, is_system, created_at, updated_at)
+values(?, ?, ?, ?, 0, ?, ?)`, tgUserID.Int64, tgUsername, tgName, username, now.Format(time.RFC3339), now.Format(time.RFC3339))
+		if util.IsUniqueViolation(ierr) {
+			return session.RegisterStatusResponse{Status: "username_taken"}, "", nil
+		}
+		if ierr != nil {
+			return session.RegisterStatusResponse{}, "", ierr
+		}
+		token, terr := createSessionTx(ctx, tx, nid, now)
+		if terr != nil {
+			return session.RegisterStatusResponse{}, "", terr
+		}
+		if err := delCode(); err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		if err := tx.Commit(); err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		v := username
+		return session.RegisterStatusResponse{Status: "ready", Username: &v}, token, nil
+	case err != nil:
+		return session.RegisterStatusResponse{}, "", err
+	case hash.Valid && hash.String != "":
+		// Existing password account: link only once the password is proven.
+		if password == "" {
+			return session.RegisterStatusResponse{Status: "password_required"}, "", nil
+		}
+		ok, _, verr := authcred.VerifyPasswordUpgrading(hash.String, salt.String, password)
+		if verr != nil {
+			return session.RegisterStatusResponse{}, "", verr
+		}
+		if !ok {
+			return session.RegisterStatusResponse{}, "", authError{code: http.StatusUnauthorized, msg: "wrong password"}
+		}
+		if _, err := tx.ExecContext(ctx, `
+update users set telegram_user_id = ?, telegram_username = ?, telegram_name = ?, updated_at = ? where id = ?`,
+			tgUserID.Int64, tgUsername, tgName, now.Format(time.RFC3339), uid); err != nil {
+			if util.IsUniqueViolation(err) {
+				return session.RegisterStatusResponse{}, "", authError{code: http.StatusConflict, msg: "telegram already linked"}
+			}
+			return session.RegisterStatusResponse{}, "", err
+		}
+		token, terr := createSessionTx(ctx, tx, uid, now)
+		if terr != nil {
+			return session.RegisterStatusResponse{}, "", terr
+		}
+		if err := delCode(); err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		if err := tx.Commit(); err != nil {
+			return session.RegisterStatusResponse{}, "", err
+		}
+		v := username
+		return session.RegisterStatusResponse{Status: "ready", Username: &v}, token, nil
+	default:
+		return session.RegisterStatusResponse{Status: "username_taken"}, "", nil
+	}
 }
 
 func (s *server) handleAuthLoginPassword(w http.ResponseWriter, r *http.Request) {

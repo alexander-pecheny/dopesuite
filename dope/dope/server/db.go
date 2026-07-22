@@ -673,6 +673,21 @@ end`); err != nil {
 	}); err != nil {
 		return err
 	}
+	// Open Telegram registration: the visitor's public name (so the operator can
+	// reach them via the bot). No storage quota — dope has no user uploads.
+	// desired_username stays nullable and unused (the handshake collects the
+	// username at claim time); it remains only because this step already shipped.
+	if err := store.AddColumnsIfMissing(db, "users", []store.ColumnSpec{
+		{Name: "telegram_name", Type: "TEXT"},
+	}); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "telegram_login_codes", []store.ColumnSpec{
+		{Name: "telegram_name", Type: "TEXT"},
+		{Name: "desired_username", Type: "TEXT"},
+	}); err != nil {
+		return err
+	}
 	return nil
 }
 

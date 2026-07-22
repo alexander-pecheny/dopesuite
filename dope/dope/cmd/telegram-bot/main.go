@@ -27,7 +27,7 @@ const (
 )
 
 const startMessage = "Этот бот выдает одноразовые коды для входа на dope.pecheny.me.\n\n" +
-	"• Зарегистрироваться по инвайту: " + registerURL + "\n" +
+	"• Зарегистрироваться: " + registerURL + "\n" +
 	"• Войти в существующий аккаунт: " + loginURL + "\n\n" +
 	"После регистрации на сайте пришли мне код, который он покажет. Чтобы войти — введи логин на сайте; если выберешь код, я пришлю его сюда."
 
@@ -90,6 +90,7 @@ func handler(bridge *tgbot.Bridge) tgbot.Handler {
 				c.SendHTML(ctx, chatID, call(ctx, bridge, "/api/telegram/login", map[string]any{
 					"telegram_user_id":  from.ID,
 					"telegram_username": from.Username,
+					"telegram_name":     from.DisplayName(),
 				}))
 			default:
 				c.Send(ctx, chatID, startMessage)
@@ -108,6 +109,7 @@ func handler(bridge *tgbot.Bridge) tgbot.Handler {
 			"code":              code,
 			"telegram_user_id":  from.ID,
 			"telegram_username": from.Username,
+			"telegram_name":     from.DisplayName(),
 		}))
 	}
 }

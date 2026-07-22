@@ -86,10 +86,12 @@ func expandLink(c *base.ExpandCtx, p *base.Element) []base.Node {
 	return one(inlineLink(c, p).(*base.Element))
 }
 
-// expandCodeDisplay renders a prominent server-rendered code line (register's
-// telegram code): <p class="code-display">…</p>.
+// expandCodeDisplay renders a prominent code line (the login telegram code):
+// <p class="code-display">…</p>. It carries an id so the login JS can fill it in.
 func expandCodeDisplay(c *base.ExpandCtx, p *base.Element) []base.Node {
-	return one(&base.Element{Tag: "p", Attrs: []base.Attr{base.ClassAttr("code-display")}, Inline: c.Items(p.Inline)})
+	attrs := []base.Attr{base.ClassAttr("code-display")}
+	attrs = append(attrs, base.IDAttr(p)...)
+	return one(&base.Element{Tag: "p", Attrs: attrs, Inline: c.Items(p.Inline)})
 }
 
 // expandNote renders a muted notice paragraph: <p class="muted">…</p> (the

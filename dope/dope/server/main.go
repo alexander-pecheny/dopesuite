@@ -153,9 +153,9 @@ func Main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", srv.handlePublicIndex)
 	mux.HandleFunc("/fest/", srv.handleFestRouter)
-	mux.HandleFunc("/register", srv.pageServer().HandleRegisterPage)
-	mux.HandleFunc("/register/invite", srv.pageServer().HandleRegisterInviteSubmit)
-	mux.HandleFunc("/register/username", srv.pageServer().HandleRegisterUsernameSubmit)
+	mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/login", http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("/login", srv.serveCompiledPage("static/login.html"))
 	mux.HandleFunc("/profile", srv.hostPageServer().HandleProfilePage)
 	mux.HandleFunc("/profile/logout", srv.hostPageServer().HandleProfileLogout)
@@ -166,10 +166,9 @@ func Main() {
 	mux.HandleFunc("/admin/create_users", srv.pageServer().HandleAdminCreateUsers)
 	mux.HandleFunc("/admin/users", srv.pageServer().HandleAdminUsers)
 	mux.HandleFunc("/api/fest/", srv.handleScopedAPI)
-	mux.HandleFunc("/api/auth/register/start", srv.handleAuthRegisterStart)
-	mux.HandleFunc("/api/auth/register/status", srv.handleAuthRegisterStatus)
-	mux.HandleFunc("/api/auth/login/start", srv.handleAuthLoginStart)
-	mux.HandleFunc("/api/auth/login", srv.handleAuthLogin)
+	mux.HandleFunc("/api/auth/tg/start", srv.handleAuthTgStart)
+	mux.HandleFunc("/api/auth/tg/status", srv.handleAuthTgStatus)
+	mux.HandleFunc("/api/auth/tg/claim", srv.handleAuthTgClaim)
 	mux.HandleFunc("/api/auth/login-password", srv.handleAuthLoginPassword)
 	mux.HandleFunc("/api/auth/logout", srv.handleAuthLogout)
 	mux.HandleFunc("/api/auth/me", srv.handleAuthMe)
@@ -229,7 +228,7 @@ func Main() {
 	srv.metrics.Init()
 
 	httpSrv := &http.Server{
-		Handler:           securityHeaders(auditmw.ContextMiddleware(&srv.eng, webassets.Gzip(mux, "/events", "/host-events"))),
+		Handler:           securityHeaders(auditmw.ContextMiddleware(&srv.eng, webassets.Gzip(slideSessionCookie(mux), "/events", "/host-events"))),
 		ReadHeaderTimeout: 5 * time.Second,
 		// No WriteTimeout: SSE responses are intentionally long-lived.
 		IdleTimeout: 120 * time.Second,

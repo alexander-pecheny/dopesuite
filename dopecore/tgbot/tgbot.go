@@ -33,8 +33,15 @@ type Message struct {
 }
 
 type User struct {
-	ID       int64  `json:"id"`
-	Username string `json:"username"`
+	ID        int64  `json:"id"`
+	Username  string `json:"username"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
+// DisplayName is the user's public first/last name, "" when Telegram sent neither.
+func (u *User) DisplayName() string {
+	return strings.TrimSpace(u.FirstName + " " + u.LastName)
 }
 
 type Chat struct {

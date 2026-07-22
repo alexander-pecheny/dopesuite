@@ -199,7 +199,40 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV15(db); err != nil {
 		return err
 	}
+	if err := migrateV16(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV16 backs open Telegram registration and per-user storage quotas.
+//
+// users.quota_bytes caps the encrypted content + attachment bytes across a
+// user's own boards (default 25 MiB; raise per user with a single UPDATE, and
+// the admin account is exempt in code). users.telegram_name keeps the public
+// first/last name so the operator can reach a registrant through the bot.
+//
+// telegram_login_codes.telegram_name rides along from the bot so the new user
+// row can keep it. desired_username is kept nullable and unused: the login
+// handshake collects the username at claim time (in the request body), not up
+// front — the column remains only because this migration already shipped.
+func migrateV16(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 16`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+alter table users add column quota_bytes integer not null default 26214400;
+alter table users add column telegram_name text;
+alter table telegram_login_codes add column telegram_name text;
+alter table telegram_login_codes add column desired_username text;
+insert or ignore into schema_versions(version, applied_at)
+  values(16, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV15 adds timeline_events.reply_to_id: a comment answering another

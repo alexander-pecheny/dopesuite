@@ -1,26 +1,37 @@
 page title="Вход · Фест" kind="sheet" classicscripts="login.js"
   topbar title="Вход"
-    iconlink href="/register" label="Регистрация" "→"
 
-  section id="step-username" data-login-redirect="/host"
-    hint "Введите логин."
-    form id="usernameForm" autocomplete="on"
-      textfield id="loginUsername" name="username" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required autofocus grow
-      button submit "Дальше"
-    message id="usernameMessage"
-
-  section id="step-password" hidden
-    hint "Вход для " (strong id="passwordLogin") "."
-    form id="passwordForm" dir="col" autocomplete="on"
-      password id="passwordValue" name="password" placeholder="Пароль" autocomplete="current-password" required
-      row gap="sm" wrap
-        button submit "Войти по паролю"
-        button id="requestCodeButton" "Получить код в телеграм"
-    message id="passwordMessage"
+  section id="step-method" data-login-redirect="/host"
+    hint "Войдите, чтобы продолжить."
+    button id="tgLoginBtn" "Войти через телеграм"
+    button kind="ghost" id="pwLoginBtn" "Войти по паролю"
+    message id="methodMessage"
 
   section id="step-code" hidden
-    hint "Код отправлен в Telegram для " (strong id="codeLogin") "."
-    form id="codeForm" autocomplete="on"
-      textfield id="loginCode" name="code" placeholder="Код из Telegram" autocomplete="one-time-code" spellcheck="false" autocapitalize="characters" required grow
+    hint "Отправьте этот код боту в Telegram:"
+    codedisplay id="tgCode"
+    hint "Жду подтверждения от бота…"
+    message id="codeMessage"
+
+  section id="step-username" hidden
+    hint "Придумайте никнейм. Изменить его потом нельзя."
+    form id="usernameForm"
+      textfield id="tgUsername" placeholder="Логин" autocapitalize="none" autocomplete="username" spellcheck="false" required autofocus grow
+      button submit "Продолжить"
+    message id="usernameMessage"
+
+  section id="step-link" hidden
+    hint "Такой пользователь уже существует. Если это вы, введите пароль, чтобы привязать аккаунт."
+    form id="linkForm"
+      password id="linkPassword" placeholder="Пароль" autocomplete="current-password" required grow
+      button submit "Привязать"
+    button kind="ghost" id="linkCancelBtn" "Это не я, выберу другой логин"
+    message id="linkMessage"
+
+  section id="step-password" hidden
+    hint "Вход по паролю."
+    form id="passwordForm" dir="col" autocomplete="on"
+      textfield id="pwUsername" name="username" placeholder="Логин" autocomplete="username" spellcheck="false" autocapitalize="none" required grow
+      password id="pwPassword" name="password" placeholder="Пароль" autocomplete="current-password" required
       button submit "Войти"
-    message id="loginMessage"
+    message id="passwordMessage"

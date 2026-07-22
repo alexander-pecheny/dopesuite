@@ -5,17 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"pecheny.me/dopecore/tgbridge"
-
-	"dope/dope/platform/util"
-
-	"pecheny.me/dopecore/session"
 )
 
 // telegram_bridge.go is the server side of the Telegram login/registration
@@ -32,9 +27,8 @@ const (
 
 	TelegramBridgeGenericError    = "Произошла ошибка. Попробуй еще раз через минуту."
 	TelegramBridgeRegisterSuccess = "Готово! Вернись на сайт — там уже видна твоя регистрация."
-	TelegramBridgeLoginNeedInvite = "Сначала зарегистрируйся по инвайту: " + TelegramBridgeRegisterURL
-	TelegramBridgeLoginExhausted  = "Не получилось выдать код, попробуй еще раз."
-	TelegramBridgeLoginCodeMsg    = "Твой код для входа:\n<code>%s</code>\nВведи его на странице входа после логина в течение минуты."
+	TelegramBridgeLoginNeedInvite = "Сначала зарегистрируйся на сайте: " + TelegramBridgeRegisterURL
+	TelegramBridgeLoginOnSite     = "Чтобы войти, открой https://dope.pecheny.me/login и нажми «Войти через телеграм» — сайт выдаст код, пришли его мне."
 
 	TelegramBridgeCodeMissing  = "Такого кода нет. Проверь, что скопировал его без пробелов и не дольше минуты прошло."
 	TelegramBridgeCodeConsumed = "Этот код уже использован. Запроси новый на сайте."
@@ -75,7 +69,7 @@ func (s *Server) HandleTelegramRegister(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return
 	}
-	msg := s.TelegramConsumeRegister(r.Context(), strings.ToUpper(strings.TrimSpace(req.Code)), req.TelegramUserID, req.TelegramUsername)
+	msg := s.TelegramConsumeRegister(r.Context(), strings.ToUpper(strings.TrimSpace(req.Code)), req.TelegramUserID, req.TelegramUsername, req.TelegramName)
 	s.h.WriteJSONValue(w, TelegramBridgeResponse{Message: msg})
 }
 
@@ -99,7 +93,7 @@ func (s *Server) HandleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 
 // TelegramConsumeRegister marks a pending 'register' code as consumed by the
 // telegram account that sent it. Returns the user-facing reply text.
-func (s *Server) TelegramConsumeRegister(ctx context.Context, code string, tgUserID int64, tgUsername string) string {
+func (s *Server) TelegramConsumeRegister(ctx context.Context, code string, tgUserID int64, tgUsername, tgName string) string {
 	if !tgbridge.LooksLikeRegisterCode(code) {
 		return TelegramBridgeCodeMissing
 	}
@@ -109,7 +103,7 @@ func (s *Server) TelegramConsumeRegister(ctx context.Context, code string, tgUse
 	s.h.Lock()
 	defer s.h.Unlock()
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.h.DB().ExecContext(ctx, tgbridge.ConsumeRegisterSQL, tgUserID, tgUsername, now, code, now)
+	res, err := s.h.DB().ExecContext(ctx, tgbridge.ConsumeRegisterSQL, tgUserID, tgUsername, tgName, now, code, now)
 	if err != nil {
 		log.Printf("telegram register consume %s: %v", code, err)
 		return TelegramBridgeGenericError
@@ -143,13 +137,11 @@ select kind, consumed_at from telegram_login_codes where code = ?`, code).Scan(&
 	return TelegramBridgeCodeExpired
 }
 
-// TelegramIssueLogin issues a fresh one-time login code for a registered
-// telegram account. Returns the user-facing reply text.
+// TelegramIssueLogin answers /start and /login sent to the bot. Login now begins
+// on the website (which mints the code the user forwards here), so there is no
+// server-issued login code to hand back — point registered users at /login and
+// unknown telegram accounts at registration.
 func (s *Server) TelegramIssueLogin(ctx context.Context, tgUserID int64, tgUsername string) string {
-	// Hold the global write mutex across the read-modify-write (lookup user,
-	// then insert the code), matching the game-state path's serialization.
-	s.h.Lock()
-	defer s.h.Unlock()
 	var userID int64
 	err := s.h.DB().QueryRowContext(ctx, `select id from users where telegram_user_id = ? and is_system = 0`, tgUserID).Scan(&userID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -159,25 +151,5 @@ func (s *Server) TelegramIssueLogin(ctx context.Context, tgUserID int64, tgUsern
 		log.Printf("telegram login lookup user %d: %v", tgUserID, err)
 		return TelegramBridgeGenericError
 	}
-
-	now := time.Now().UTC()
-	createdAt := now.Format(time.RFC3339)
-	expires := now.Add(session.TelegramAuthLifetime).Format(time.RFC3339)
-
-	for attempt := 0; attempt < 3; attempt++ {
-		code, err := s.h.NewTelegramLoginCode()
-		if err != nil {
-			log.Printf("telegram login gen code: %v", err)
-			return TelegramBridgeGenericError
-		}
-		_, err = s.h.DB().ExecContext(ctx, tgbridge.IssueLoginSQL, code, userID, tgUserID, tgUsername, createdAt, expires)
-		if err == nil {
-			return fmt.Sprintf(TelegramBridgeLoginCodeMsg, code)
-		}
-		if !util.IsUniqueViolation(err) {
-			log.Printf("telegram login issue: %v", err)
-			return TelegramBridgeGenericError
-		}
-	}
-	return TelegramBridgeLoginExhausted
+	return TelegramBridgeLoginOnSite
 }

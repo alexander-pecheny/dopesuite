@@ -23,8 +23,8 @@ func TestRealPagesCompile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("glob: %v", err)
 	}
-	if len(pages) != 7 {
-		t.Fatalf("expected 7 app pages, found %d: %v", len(pages), pages)
+	if len(pages) != 6 {
+		t.Fatalf("expected 6 app pages, found %d: %v", len(pages), pages)
 	}
 	for _, path := range pages {
 		src, err := os.ReadFile(path)

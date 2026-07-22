@@ -41,7 +41,9 @@ func Main() {
 	// ---- HTML pages ----
 	mux.HandleFunc("GET /", srv.handleIndex)
 	mux.HandleFunc("GET /login", srv.servePage("ui/login.dopeui"))
-	mux.HandleFunc("GET /register", srv.servePage("ui/register.dopeui"))
+	mux.HandleFunc("GET /register", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/login", http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("GET /profile", srv.servePage("ui/profile.dopeui"))
 	mux.HandleFunc("GET /profile/tokens", srv.servePage("ui/tokens.dopeui"))
 	mux.HandleFunc("GET /board/{id}", srv.servePage("ui/board.dopeui"))
@@ -63,13 +65,13 @@ func Main() {
 		"static/favicon.ico", "image/x-icon", "public, max-age=86400", nil))
 
 	// ---- auth API ----
-	mux.HandleFunc("POST /api/auth/register/start", srv.handleRegisterStart)
-	mux.HandleFunc("GET /api/auth/register/status", srv.handleRegisterStatus)
-	mux.HandleFunc("POST /api/auth/login/start", srv.handleLoginStart)
-	mux.HandleFunc("POST /api/auth/login", srv.handleLoginCode)
+	mux.HandleFunc("POST /api/auth/tg/start", srv.handleTgStart)
+	mux.HandleFunc("GET /api/auth/tg/status", srv.handleTgStatus)
+	mux.HandleFunc("POST /api/auth/tg/claim", srv.handleTgClaim)
 	mux.HandleFunc("POST /api/auth/login-password", srv.handleLoginPassword)
 	mux.HandleFunc("POST /api/auth/logout", srv.handleLogout)
 	mux.HandleFunc("GET /api/auth/me", srv.handleMe)
+	mux.HandleFunc("GET /api/auth/storage", srv.handleStorage)
 	mux.HandleFunc("POST /api/auth/username", srv.handleSetUsername)
 	mux.HandleFunc("POST /api/auth/password", srv.handleSetPassword)
 	mux.HandleFunc("POST /api/auth/sizes", srv.handleSetSizes)

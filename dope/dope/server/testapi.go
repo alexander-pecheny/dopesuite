@@ -50,17 +50,13 @@ func (s *Server) Metrics() *metrics.Recorder { return &s.metrics }
 // ----- exported type aliases (request/response + scope types) -----
 
 type (
-	FestScope            = festScope
-	MatchScope           = matchScope
-	UpdateRequest        = updateRequest
-	LoginRequest         = loginRequest
-	LoginStartRequest    = loginStartRequest
-	LoginStartResponse   = loginStartResponse
-	MeResponse           = meResponse
-	PasswordRequest      = passwordRequest
-	StartRegisterRequest = startRegisterRequest
-	UsernameRequest      = usernameRequest
-	VenueUpdateRequest   = venueUpdateRequest
+	FestScope          = festScope
+	MatchScope         = matchScope
+	UpdateRequest      = updateRequest
+	MeResponse         = meResponse
+	PasswordRequest    = passwordRequest
+	UsernameRequest    = usernameRequest
+	VenueUpdateRequest = venueUpdateRequest
 )
 
 // ----- exported const aliases -----
@@ -71,7 +67,6 @@ const (
 	DefaultVenueTitle         = defaultVenueTitle
 	ActionAddShootoutTheme    = actionAddShootoutTheme
 	ActionRemoveShootoutTheme = actionRemoveShootoutTheme
-	TelegramLoginCodeLen      = authcred.TelegramLoginCodeLen
 	TrustedOriginHostsEnv     = trustedOriginHostsEnv
 )
 
@@ -98,7 +93,6 @@ var (
 	LoadActiveContext         = loadActiveContext
 	NewInviteCode             = authcred.NewInviteCode
 	NewSessionToken           = authcred.NewSessionToken
-	NewTelegramLoginCode      = authcred.NewTelegramLoginCode
 	SqliteTableExists         = sqliteTableExists
 	VerifyPassword            = authcred.VerifyPasswordUpgrading
 	EnvInt64                  = envInt64
@@ -123,20 +117,22 @@ func (s *Server) CalculateScopedReseed(ctx context.Context, scope FestScope, sta
 	return s.calculateScopedReseed(ctx, scope, stageCode)
 }
 
-func (s *Server) HandleAuthLogin(w http.ResponseWriter, r *http.Request) { s.handleAuthLogin(w, r) }
-func (s *Server) HandleAuthLoginStart(w http.ResponseWriter, r *http.Request) {
-	s.handleAuthLoginStart(w, r)
+func (s *Server) HandleAuthLoginPassword(w http.ResponseWriter, r *http.Request) {
+	s.handleAuthLoginPassword(w, r)
 }
 func (s *Server) HandleAuthLogout(w http.ResponseWriter, r *http.Request) { s.handleAuthLogout(w, r) }
 func (s *Server) HandleAuthMe(w http.ResponseWriter, r *http.Request)     { s.handleAuthMe(w, r) }
 func (s *Server) HandleAuthPassword(w http.ResponseWriter, r *http.Request) {
 	s.handleAuthPassword(w, r)
 }
-func (s *Server) HandleAuthRegisterStart(w http.ResponseWriter, r *http.Request) {
-	s.handleAuthRegisterStart(w, r)
+func (s *Server) HandleAuthTgStart(w http.ResponseWriter, r *http.Request) {
+	s.handleAuthTgStart(w, r)
 }
-func (s *Server) HandleAuthRegisterStatus(w http.ResponseWriter, r *http.Request) {
-	s.handleAuthRegisterStatus(w, r)
+func (s *Server) HandleAuthTgStatus(w http.ResponseWriter, r *http.Request) {
+	s.handleAuthTgStatus(w, r)
+}
+func (s *Server) HandleAuthTgClaim(w http.ResponseWriter, r *http.Request) {
+	s.handleAuthTgClaim(w, r)
 }
 func (s *Server) HandleAuthUsername(w http.ResponseWriter, r *http.Request) {
 	s.handleAuthUsername(w, r)

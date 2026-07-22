@@ -14,7 +14,7 @@ func TestPagesServe(t *testing.T) {
 	anon := &apiClient{t: t, base: ts.URL}
 
 	for _, path := range []string{
-		"/login", "/register", "/profile", "/profile/tokens", "/import", "/board/1", "/",
+		"/login", "/profile", "/profile/tokens", "/import", "/board/1", "/",
 	} {
 		resp := anon.do("GET", path, nil)
 		mustStatus(t, resp, 200)

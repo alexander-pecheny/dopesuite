@@ -44,23 +44,23 @@ on conflict(board_id, user_id) do nothing`, boardID, userID)
 	}
 }
 
-// registerUser provisions a fresh logged-in client via an invite + simulated bot.
+// registerUser provisions a fresh logged-in client via the telegram handshake:
+// mint a code, the simulated bot confirms it (a new telegram), then claim `name`
+// as the username.
 func registerUser(t *testing.T, srv *server, ts *httptest.Server, tgUserID int64, name string) *apiClient {
 	t.Helper()
 	ctx := context.Background()
-	invite, err := srv.mintInvite(ctx, 24*time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
 	c := &apiClient{t: t, base: ts.URL}
-	resp := c.do("POST", "/api/auth/register/start", map[string]string{"invite_code": invite})
+	resp := c.do("POST", "/api/auth/tg/start", nil)
 	mustStatus(t, resp, 200)
-	var rs registerStartResponse
+	var rs tgStartResponse
 	c.decode(resp, &rs)
 	if err := srv.simulateBotRegister(ctx, rs.Code, tgUserID, name); err != nil {
 		t.Fatal(err)
 	}
-	resp = c.do("GET", "/api/auth/register/status?code="+rs.Code, nil)
+	resp = c.do("GET", "/api/auth/tg/status?code="+rs.Code, nil)
+	mustStatus(t, resp, 200)
+	resp = c.do("POST", "/api/auth/tg/claim", map[string]string{"code": rs.Code, "username": name})
 	mustStatus(t, resp, 200)
 	return c
 }

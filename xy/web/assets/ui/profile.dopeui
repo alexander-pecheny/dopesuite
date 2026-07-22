@@ -4,6 +4,9 @@ page title="Профиль · xy" kind="sheet" scripts="profile.js"
   section
     hint "Вы вошли как " (strong id="whoami" "…") "."
 
+  section
+    hint "Хранилище: " (strong id="storageUsed" "…") "."
+
   section id="usernameSection" hidden
     hint "Задайте логин (один раз)."
     form id="usernameForm"

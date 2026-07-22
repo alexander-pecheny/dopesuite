@@ -42,8 +42,24 @@ async function boot() {
   sizes = xySizes.sanitize(me.sizes);
   defaultAuthor = me.default_author || "";
   cardTitle = me.card_title || "question";
+  loadStorage();
 }
 const booted = boot();
+
+const MB = 1024 * 1024;
+function fmtMB(bytes) { return (bytes / MB).toFixed(1) + " МБ"; }
+
+async function loadStorage() {
+  const node = document.getElementById("storageUsed");
+  try {
+    const s = await fetchJSON("/api/auth/storage");
+    node.textContent = s.unlimited
+      ? fmtMB(s.used_bytes) + " (без лимита)"
+      : fmtMB(s.used_bytes) + " из " + fmtMB(s.quota_bytes);
+  } catch (_) {
+    node.textContent = "—";
+  }
+}
 
 usernameForm.addEventListener("submit", async (e) => {
   e.preventDefault();

@@ -42,7 +42,6 @@ func newAssets() *webassets.Assets {
 // compiles them all up front in embed mode.
 var pagePaths = []string{
 	"ui/login.dopeui",
-	"ui/register.dopeui",
 	"ui/profile.dopeui",
 	"ui/tokens.dopeui",
 	"ui/import.dopeui",

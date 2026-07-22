@@ -59,6 +59,9 @@ where s.token_hash = ?`, hash)
 				rfc3339(now), rfc3339(now.Add(session.Lifetime)), u.SessionID)
 			return err
 		})
+		// Slide the browser cookie's MaxAge with the server session, else the
+		// cookie dies 30 days after login however active the user is.
+		session.SetCookie(w, c.Value)
 	}
 	return u, true
 }
@@ -132,57 +135,36 @@ func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---- registration ----
+// ---- telegram login / registration (one handshake) ----
 
-type registerStartRequest struct {
-	InviteCode string `json:"invite_code"`
-}
-type registerStartResponse struct {
+type tgStartResponse struct {
 	Code      string `json:"code"`
 	ExpiresAt string `json:"expires_at"`
 }
 
-func (s *server) handleRegisterStart(w http.ResponseWriter, r *http.Request) {
-	var req registerStartRequest
-	if !readJSON(w, r, &req) {
-		return
-	}
-	code := strings.TrimSpace(req.InviteCode)
-	if code == "" {
-		httpError(w, http.StatusBadRequest, "invite code required")
-		return
-	}
-	var out registerStartResponse
+// handleTgStart mints a bot code for the telegram handshake. The visitor sends it
+// to the bot; handleTgStatus then resolves who they are — no username needed up
+// front (that comes later, and only for a brand-new telegram account).
+func (s *server) handleTgStart(w http.ResponseWriter, r *http.Request) {
+	var out tgStartResponse
 	now := time.Now()
-	err := s.withWriteTx(r.Context(), "register-start", func(ctx context.Context, tx *sql.Tx) error {
-		var inviteID int64
-		var usedBy sql.NullInt64
-		var expiresStr string
-		row := tx.QueryRowContext(ctx, `select id, used_by, expires_at from invites where code = ?`, code)
-		if err := row.Scan(&inviteID, &usedBy, &expiresStr); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return errBadRequest("неверный код приглашения")
-			}
+	err := s.withWriteTx(r.Context(), "tg-start", func(ctx context.Context, tx *sql.Tx) error {
+		// Opportunistically reap lapsed codes so consumed-but-abandoned rows don't
+		// linger as replay fodder.
+		if _, err := tx.ExecContext(ctx, `delete from telegram_login_codes where expires_at < ?`, rfc3339(now)); err != nil {
 			return err
 		}
-		if usedBy.Valid {
-			return errBadRequest("код приглашения уже использован")
-		}
-		if expires, _ := time.Parse(time.RFC3339, expiresStr); now.After(expires) {
-			return errBadRequest("срок действия кода истёк")
-		}
-		regCode, err := authcred.NewTelegramAuthCode()
+		code, err := authcred.NewTelegramAuthCode()
 		if err != nil {
 			return err
 		}
 		expiresAt := now.Add(session.TelegramAuthLifetime)
-		_, err = tx.ExecContext(ctx, `
-insert into telegram_login_codes(code, kind, invite_id, created_at, expires_at)
-values(?, 'register', ?, ?, ?)`, regCode, inviteID, rfc3339(now), rfc3339(expiresAt))
-		if err != nil {
+		if _, err := tx.ExecContext(ctx, `
+insert into telegram_login_codes(code, kind, created_at, expires_at)
+values(?, 'register', ?, ?)`, code, rfc3339(now), rfc3339(expiresAt)); err != nil {
 			return err
 		}
-		out = registerStartResponse{Code: regCode, ExpiresAt: rfc3339(expiresAt)}
+		out = tgStartResponse{Code: code, ExpiresAt: rfc3339(expiresAt)}
 		return nil
 	})
 	if handleErr(w, err) {
@@ -191,15 +173,15 @@ values(?, 'register', ?, ?, ?)`, regCode, inviteID, rfc3339(now), rfc3339(expire
 	writeJSON(w, out)
 }
 
-type registerStatusResponse struct {
+type tgStatusResponse struct {
 	Status   string  `json:"status"`
 	Username *string `json:"username,omitempty"`
 }
 
-// handleRegisterStatus polls a pending registration. Once the bot has consumed
-// the code (filling in telegram_user_id), it provisions the user, marks the
-// invite used, creates a session, and returns status=ready.
-func (s *server) handleRegisterStatus(w http.ResponseWriter, r *http.Request) {
+// handleTgStatus polls the handshake. Once the bot fills in the telegram identity,
+// a known telegram account logs straight in (ready); a brand-new one returns
+// choose_username, and its account is created later by handleTgClaim.
+func (s *server) handleTgStatus(w http.ResponseWriter, r *http.Request) {
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
 	if code == "" {
 		httpError(w, http.StatusBadRequest, "code required")
@@ -211,52 +193,53 @@ func (s *server) handleRegisterStatus(w http.ResponseWriter, r *http.Request) {
 		username *string
 		token    string
 	)
-	err := s.withWriteTx(r.Context(), "register-status", func(ctx context.Context, tx *sql.Tx) error {
+	err := s.withWriteTx(r.Context(), "tg-status", func(ctx context.Context, tx *sql.Tx) error {
 		var (
-			id          int64
-			inviteID    sql.NullInt64
 			tgUserID    sql.NullInt64
 			tgUsername  sql.NullString
+			tgName      sql.NullString
 			expiresStr  string
 			consumedStr sql.NullString
 		)
 		row := tx.QueryRowContext(ctx, `
-select id, invite_id, telegram_user_id, telegram_username, expires_at, consumed_at
+select telegram_user_id, telegram_username, telegram_name, expires_at, consumed_at
 from telegram_login_codes where code = ? and kind = 'register'`, code)
-		if err := row.Scan(&id, &inviteID, &tgUserID, &tgUsername, &expiresStr, &consumedStr); err != nil {
+		if err := row.Scan(&tgUserID, &tgUsername, &tgName, &expiresStr, &consumedStr); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				status = "not_found"
 				return nil
 			}
 			return err
 		}
-		if !consumedStr.Valid || !tgUserID.Valid {
-			if expires, _ := time.Parse(time.RFC3339, expiresStr); now.After(expires) {
-				status = "expired"
-			}
+		// Expiry bounds the whole handshake, consumed or not — so a code leaked
+		// via the status URL can't be replayed into a session once it lapses.
+		if expires, _ := time.Parse(time.RFC3339, expiresStr); now.After(expires) {
+			status = "expired"
 			return nil
 		}
-		// Provision (or fetch existing) user keyed by telegram_user_id.
-		uid, uname, err := upsertTelegramUser(ctx, tx, tgUserID.Int64, tgUsername, now)
-		if err != nil {
-			return err
+		if !consumedStr.Valid || !tgUserID.Valid {
+			return nil // pending
 		}
-		if inviteID.Valid {
-			if _, err := tx.ExecContext(ctx, `
-update invites set used_by = ?, used_at = ? where id = ? and used_by is null`,
-				uid, rfc3339(now), inviteID.Int64); err != nil {
+		var euid int64
+		var euname sql.NullString
+		switch err := tx.QueryRowContext(ctx, `select id, username from users where telegram_user_id = ?`, tgUserID.Int64).Scan(&euid, &euname); {
+		case err == nil:
+			if _, err := tx.ExecContext(ctx, `update users set telegram_username = ?, telegram_name = ?, updated_at = ? where id = ?`,
+				tgUsername, tgName, rfc3339(now), euid); err != nil {
 				return err
 			}
-		}
-		token, err = s.createSessionTx(ctx, tx, uid, now)
-		if err != nil {
+			var terr error
+			if token, terr = s.createSessionTx(ctx, tx, euid, now); terr != nil {
+				return terr
+			}
+			if _, err := tx.ExecContext(ctx, `delete from telegram_login_codes where code = ?`, code); err != nil {
+				return err
+			}
+			status, username = "ready", firstNonNull(euname, tgUsername)
+		case errors.Is(err, sql.ErrNoRows):
+			status = "choose_username"
+		default:
 			return err
-		}
-		status = "ready"
-		if uname.Valid {
-			username = &uname.String
-		} else if tgUsername.Valid {
-			username = &tgUsername.String
 		}
 		return nil
 	})
@@ -266,153 +249,151 @@ update invites set used_by = ?, used_at = ? where id = ? and used_by is null`,
 	if token != "" {
 		session.SetCookie(w, token)
 	}
-	writeJSON(w, registerStatusResponse{Status: status, Username: username})
+	writeJSON(w, tgStatusResponse{Status: status, Username: username})
 }
 
-func upsertTelegramUser(ctx context.Context, tx *sql.Tx, tgUserID int64, tgUsername sql.NullString, now time.Time) (int64, sql.NullString, error) {
-	var (
-		uid   int64
-		uname sql.NullString
-	)
-	row := tx.QueryRowContext(ctx, `select id, username from users where telegram_user_id = ?`, tgUserID)
-	err := row.Scan(&uid, &uname)
-	if err == nil {
-		_, uerr := tx.ExecContext(ctx, `update users set telegram_username = ?, updated_at = ? where id = ?`,
-			tgUsername, rfc3339(now), uid)
-		return uid, uname, uerr
+// handleTgClaim finishes a brand-new telegram account: the visitor picks a
+// username. Free → create + log in. An existing password account → link it once
+// they prove the password (password_required until they do). Taken by another
+// telegram account → username_taken.
+func (s *server) handleTgClaim(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Code     string `json:"code"`
+		Username string `json:"username"`
+		Password string `json:"password"`
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, uname, err
-	}
-	res, err := tx.ExecContext(ctx, `
-insert into users(telegram_user_id, telegram_username, created_at, updated_at)
-values(?, ?, ?, ?)`, tgUserID, tgUsername, rfc3339(now), rfc3339(now))
-	if err != nil {
-		return 0, uname, err
-	}
-	uid, err = res.LastInsertId()
-	return uid, sql.NullString{}, err
-}
-
-// ---- login ----
-
-type loginStartRequest struct {
-	Username string `json:"username"`
-	SendCode bool   `json:"send_code"`
-}
-type loginStartResponse struct {
-	Username    string `json:"username"`
-	HasPassword bool   `json:"has_password"`
-	CodeSent    bool   `json:"code_sent"`
-	ExpiresAt   string `json:"expires_at,omitempty"`
-}
-
-func (s *server) handleLoginStart(w http.ResponseWriter, r *http.Request) {
-	var req loginStartRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
+	code := strings.TrimSpace(req.Code)
 	uname := strings.TrimSpace(req.Username)
-	if uname == "" {
-		httpError(w, http.StatusBadRequest, "логин обязателен")
-		return
-	}
-	now := time.Now()
-	var out loginStartResponse
-	out.Username = uname
-	err := s.withWriteTx(r.Context(), "login-start", func(ctx context.Context, tx *sql.Tx) error {
-		var (
-			uid      int64
-			pwHash   sql.NullString
-			tgUserID sql.NullInt64
-		)
-		row := tx.QueryRowContext(ctx, `select id, password_hash, telegram_user_id from users where username = ?`, uname)
-		if err := row.Scan(&uid, &pwHash, &tgUserID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return errBadRequest("пользователь не найден")
-			}
-			return err
-		}
-		out.HasPassword = pwHash.Valid && pwHash.String != ""
-		// Issue a telegram login code if requested or if no password is set.
-		if req.SendCode || !out.HasPassword {
-			if !tgUserID.Valid {
-				return errBadRequest("нет привязанного телеграма для входа по коду")
-			}
-			code, err := authcred.NewTelegramLoginCode()
-			if err != nil {
-				return err
-			}
-			expiresAt := now.Add(session.TelegramAuthLifetime)
-			_, err = tx.ExecContext(ctx, `
-insert into telegram_login_codes(code, kind, user_id, telegram_user_id, created_at, expires_at)
-values(?, 'login', ?, ?, ?, ?)`, code, uid, tgUserID.Int64, rfc3339(now), rfc3339(expiresAt))
-			if err != nil {
-				return err
-			}
-			out.CodeSent = true
-			out.ExpiresAt = rfc3339(expiresAt)
-		}
-		return nil
-	})
-	if handleErr(w, err) {
-		return
-	}
-	writeJSON(w, out)
-}
-
-type loginCodeRequest struct {
-	Code string `json:"code"`
-}
-
-func (s *server) handleLoginCode(w http.ResponseWriter, r *http.Request) {
-	var req loginCodeRequest
-	if !readJSON(w, r, &req) {
-		return
-	}
-	code := strings.ToUpper(strings.TrimSpace(req.Code))
-	if code == "" {
-		httpError(w, http.StatusBadRequest, "код обязателен")
+	if !validNewUsername(uname) {
+		httpError(w, http.StatusBadRequest, "логин: 3–64 символа, латиница, цифры, . _ -")
 		return
 	}
 	now := time.Now()
 	var (
-		token string
-		me    meResponse
+		status   string
+		username *string
+		token    string
 	)
-	err := s.withWriteTx(r.Context(), "login-code", func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `
-update telegram_login_codes set consumed_at = ?
-where code = ? and kind = 'login' and consumed_at is null and expires_at > ?`,
-			rfc3339(now), code, rfc3339(now))
-		if err != nil {
+	err := s.withWriteTx(r.Context(), "tg-claim", func(ctx context.Context, tx *sql.Tx) error {
+		var (
+			tgUserID   sql.NullInt64
+			tgUsername sql.NullString
+			tgName     sql.NullString
+		)
+		row := tx.QueryRowContext(ctx, `
+select telegram_user_id, telegram_username, telegram_name
+from telegram_login_codes
+where code = ? and kind = 'register' and consumed_at is not null and expires_at > ?`, code, rfc3339(now))
+		if err := row.Scan(&tgUserID, &tgUsername, &tgName); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errBadRequest("код не найден, начните заново")
+			}
 			return err
 		}
-		if n, _ := res.RowsAffected(); n != 1 {
-			return errBadRequest("неверный или просроченный код")
+		if !tgUserID.Valid {
+			return errBadRequest("код не найден, начните заново")
+		}
+		// delCode burns the code on any successful login/link so it can't be replayed.
+		delCode := func() error {
+			_, e := tx.ExecContext(ctx, `delete from telegram_login_codes where code = ?`, code)
+			return e
+		}
+		// This telegram may already resolve to an account (double-submit / race).
+		var euid int64
+		var euname sql.NullString
+		switch err := tx.QueryRowContext(ctx, `select id, username from users where telegram_user_id = ?`, tgUserID.Int64).Scan(&euid, &euname); {
+		case err == nil:
+			if token, err = s.createSessionTx(ctx, tx, euid, now); err != nil {
+				return err
+			}
+			if err := delCode(); err != nil {
+				return err
+			}
+			status, username = "ready", firstNonNull(euname, tgUsername)
+			return nil
+		case !errors.Is(err, sql.ErrNoRows):
+			return err
 		}
 		var uid int64
-		var uname, tg sql.NullString
-		row := tx.QueryRowContext(ctx, `
-select u.id, u.username, u.telegram_username
-from telegram_login_codes c join users u on u.id = c.user_id
-where c.code = ?`, code)
-		if err := row.Scan(&uid, &uname, &tg); err != nil {
+		var pwHash sql.NullString
+		switch err := tx.QueryRowContext(ctx, `select id, password_hash from users where username = ?`, uname).Scan(&uid, &pwHash); {
+		case errors.Is(err, sql.ErrNoRows):
+			if isAdminUsername(uname) {
+				return errForbidden("этот логин зарезервирован")
+			}
+			res, ierr := tx.ExecContext(ctx, `
+insert into users(telegram_user_id, telegram_username, telegram_name, username, created_at, updated_at)
+values(?, ?, ?, ?, ?, ?)`, tgUserID.Int64, tgUsername, tgName, uname, rfc3339(now), rfc3339(now))
+			if sqlitex.IsUniqueViolation(ierr) {
+				status, username = "username_taken", &uname
+				return nil
+			}
+			if ierr != nil {
+				return ierr
+			}
+			nid, _ := res.LastInsertId()
+			if token, ierr = s.createSessionTx(ctx, tx, nid, now); ierr != nil {
+				return ierr
+			}
+			if ierr := delCode(); ierr != nil {
+				return ierr
+			}
+			status, username = "ready", &uname
+		case err != nil:
 			return err
+		case pwHash.Valid && pwHash.String != "":
+			// Existing password account: link only once the password is proven.
+			if req.Password == "" {
+				status, username = "password_required", &uname
+				return nil
+			}
+			if !authcred.VerifyPassword(pwHash.String, req.Password) {
+				return errBadRequest("неверный пароль")
+			}
+			if _, err := tx.ExecContext(ctx, `
+update users set telegram_user_id = ?, telegram_username = ?, telegram_name = ?, updated_at = ? where id = ?`,
+				tgUserID.Int64, tgUsername, tgName, rfc3339(now), uid); err != nil {
+				if sqlitex.IsUniqueViolation(err) {
+					return errBadRequest("этот телеграм уже привязан к другому аккаунту")
+				}
+				return err
+			}
+			if token, err = s.createSessionTx(ctx, tx, uid, now); err != nil {
+				return err
+			}
+			if err := delCode(); err != nil {
+				return err
+			}
+			status, username = "ready", &uname
+		default:
+			status, username = "username_taken", &uname
 		}
-		token, err = s.createSessionTx(ctx, tx, uid, now)
-		if err != nil {
-			return err
-		}
-		me = meOf(session.User{UserID: uid, Username: uname, Telegram: tg})
 		return nil
 	})
 	if handleErr(w, err) {
 		return
 	}
-	session.SetCookie(w, token)
-	writeJSON(w, me)
+	if token != "" {
+		session.SetCookie(w, token)
+	}
+	writeJSON(w, tgStatusResponse{Status: status, Username: username})
 }
+
+// firstNonNull returns a pointer to the first valid string, else nil.
+func firstNonNull(vals ...sql.NullString) *string {
+	for _, v := range vals {
+		if v.Valid && v.String != "" {
+			s := v.String
+			return &s
+		}
+	}
+	return nil
+}
+
+// ---- login (password; telegram login goes through the tg handshake above) ----
 
 type loginPasswordRequest struct {
 	Username string `json:"username"`
@@ -683,14 +664,14 @@ func (s *server) handleTelegramRegister(w http.ResponseWriter, r *http.Request) 
 	var msg string
 	err := s.withWriteTx(r.Context(), "tg-register", func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, tgbridge.ConsumeRegisterSQL,
-			req.TelegramUserID, nullStr(req.TelegramUsername), rfc3339(now), code, rfc3339(now))
+			req.TelegramUserID, nullStr(req.TelegramUsername), nullStr(req.TelegramName), rfc3339(now), code, rfc3339(now))
 		if err != nil {
 			return err
 		}
 		if n, _ := res.RowsAffected(); n == 1 {
-			msg = "Готово! Вернись на сайт — там уже видна твоя регистрация."
+			msg = "Готово! Вернись на сайт — вход подтверждён."
 		} else {
-			msg = "Код не найден или истёк. Начни регистрацию на сайте заново."
+			msg = "Код не найден или истёк. Начни вход на сайте заново."
 		}
 		return nil
 	})
@@ -700,6 +681,9 @@ func (s *server) handleTelegramRegister(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, tgbridge.Response{Message: msg})
 }
 
+// handleTelegramLogin answers /start and /login sent to the bot. Login now begins
+// on the website (which mints the code the user forwards here), so there is no
+// server-issued login code to hand back — just point them at /login.
 func (s *server) handleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 	if !s.requireBotSecret(w, r) {
 		return
@@ -708,34 +692,7 @@ func (s *server) handleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	now := time.Now()
-	var msg string
-	err := s.withWriteTx(r.Context(), "tg-login", func(ctx context.Context, tx *sql.Tx) error {
-		var uid int64
-		row := tx.QueryRowContext(ctx, `select id from users where telegram_user_id = ?`, req.TelegramUserID)
-		if err := row.Scan(&uid); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				msg = "Сначала зарегистрируйся на сайте по коду-приглашению."
-				return nil
-			}
-			return err
-		}
-		code, err := authcred.NewTelegramLoginCode()
-		if err != nil {
-			return err
-		}
-		_, err = tx.ExecContext(ctx, tgbridge.IssueLoginSQL,
-			code, uid, req.TelegramUserID, nullStr(req.TelegramUsername), rfc3339(now), rfc3339(now.Add(session.TelegramAuthLifetime)))
-		if err != nil {
-			return err
-		}
-		msg = "Твой код для входа:\n" + code + "\nВведи его на странице входа в течение минуты."
-		return nil
-	})
-	if handleErr(w, err) {
-		return
-	}
-	writeJSON(w, tgbridge.Response{Message: msg})
+	writeJSON(w, tgbridge.Response{Message: "Чтобы войти, открой https://xy.pecheny.me/login и нажми «Войти через телеграм» — сайт выдаст код, пришли его мне."})
 }
 
 func nullStr(s string) sql.NullString {
