@@ -21,7 +21,9 @@
 // plain classic worker script.)
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
-const CACHE = "xy-shell-v10";
+// v11: main's trello-import shell (v10) and the ESM-rewrite shell (also v10)
+// diverged; the merge needs its own name so a deployed v10 cache gets cleared.
+const CACHE = "xy-shell-v11";
 
 // App shell precache: entry modules, styles, fonts, vendored crypto, icons, and
 // the static page routes. Unversioned URLs; versioned requests are cached
@@ -33,7 +35,7 @@ const PRECACHE: string[] = [
   "/static/styles.css",
   "/static/dist/app.js", "/static/dist/crypto.js", "/static/dist/rank.js", "/static/dist/chgk.js",
   "/static/dist/diff.js", "/static/dist/board.js", "/static/dist/carddraft.js", "/static/dist/handoutsession.js", "/static/dist/boardmembers.js", "/static/dist/timer.js", "/static/dist/index.js", "/static/menu.js", "/static/dist/pwa.js",
-  "/static/login.js", "/static/dist/profile.js", "/static/dist/import.js",
+  "/static/login.js", "/static/dist/profile.js", "/static/dist/import.js", "/static/dist/trellomodel.js",
   "/static/dist/store.js", "/static/dist/sync.js",
   "/static/ding.mp3",
   "/static/vendor/scrypt.js", "/static/vendor/_assert.js", "/static/vendor/_md.js",

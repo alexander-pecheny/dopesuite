@@ -1034,41 +1034,50 @@ where id = ? and type = 'comment' and deleted_at is null`, id).Scan(&bid, &cardI
 	return u.UserID, id, bid, cardID, author, true
 }
 
-type importCommentsRequest struct {
-	Comments []importedComment `json:"comments"`
+type importEventsRequest struct {
+	Events []importedEvent `json:"events"`
 }
 
-type importedComment struct {
+type importedEvent struct {
 	// SrcID / ReplyToSrcID are the SOURCE card's event ids, used only to rebuild
 	// threading: the copy gets fresh ids, so a reply's parent is resolved through
 	// a src→new map as the batch is inserted (oldest first, so a parent is always
 	// already mapped by the time its reply arrives).
 	SrcID        int64  `json:"src_id"`
 	ReplyToSrcID *int64 `json:"reply_to_src_id"`
+	Type         string `json:"type"` // "comment" (default) or "desc_edit"
 	AuthorUserID *int64 `json:"author_user_id"`
 	CreatedAt    string `json:"created_at"`
 	IsExcerpt    bool   `json:"is_excerpt"`
 	PayloadEnc   string `json:"payload_enc"`
 }
 
-// handleImportComments bulk-inserts comment events while preserving their
+// handleImportEvents bulk-inserts timeline events while preserving their
 // original author + timestamp — used by the copy/move path so a duplicated card
 // keeps its discussion intact instead of re-stamping every comment to the copier
-// and "now". Authorship here is advisory display metadata (the same trust model
+// and "now", and by the Trello import for a card's comments and its description
+// history. Authorship here is advisory display metadata (the same trust model
 // as the rest of the board: any editor can already write arbitrary encrypted
 // content); author_user_id, when present, must reference a real user (FK).
-func (s *server) handleImportComments(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleImportEvents(w http.ResponseWriter, r *http.Request) {
 	_, cardID, bid, ok := s.requireChildAccess(w, r, boardOfCard)
 	if !ok {
 		return
 	}
-	var req importCommentsRequest
+	var req importEventsRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
-	err := s.withWriteTx(r.Context(), "import-comments", func(ctx context.Context, tx *sql.Tx) error {
-		newID := make(map[int64]int64, len(req.Comments))
-		for _, c := range req.Comments {
+	err := s.withWriteTx(r.Context(), "import-events", func(ctx context.Context, tx *sql.Tx) error {
+		newID := make(map[int64]int64, len(req.Events))
+		for _, c := range req.Events {
+			typ := c.Type
+			if typ == "" {
+				typ = "comment"
+			}
+			if typ != "comment" && typ != "desc_edit" {
+				return errBadRequest("bad event type")
+			}
 			payload, err := unb64(c.PayloadEnc)
 			if err != nil {
 				return errBadRequest("invalid payload_enc")
@@ -1091,7 +1100,7 @@ func (s *server) handleImportComments(w http.ResponseWriter, r *http.Request) {
 			}
 			res, err := tx.ExecContext(ctx, `
 insert into timeline_events(board_id, card_id, type, author_user_id, created_at, is_excerpt, payload_enc, reply_to_id)
-values(?, ?, 'comment', ?, ?, ?, ?, ?)`, bid, cardID, author, created, boolInt(c.IsExcerpt), payload, replyTo)
+values(?, ?, ?, ?, ?, ?, ?, ?)`, bid, cardID, typ, author, created, boolInt(c.IsExcerpt), payload, replyTo)
 			if err != nil {
 				return err
 			}

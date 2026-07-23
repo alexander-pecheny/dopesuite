@@ -294,10 +294,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       wrap.append(metaRow, el("div", { class: "tl-comment", text: payload }));
       if ((ev.reply_count || 0) > 0) wrap.append(threadButton(ev));
     } else if (ev.type === "desc_edit") {
-      let diff: { before?: string; after?: string } = {};
-      try { diff = JSON.parse(payload) as { before?: string; after?: string }; } catch (_) {}
+      let diff: { before?: string; after?: string; author?: string } = {};
+      try { diff = JSON.parse(payload) as { before?: string; after?: string; author?: string }; } catch (_) {}
       const ops = xyDiff.diffTokens(diff.before || "", diff.after || "");
-      wrap.append(el("div", { class: "tl-meta", text: meta("правка описания · " + when) }),
+      // An imported edit (Trello history) names its author inside the payload —
+      // they are not an xy user, so author_user_id has nobody to point at.
+      const editor = diff.author ? `${diff.author} · ` : meta("");
+      wrap.append(el("div", { class: "tl-meta", text: editor + "правка описания · " + when }),
         diffView() === "brief" ? renderBriefDiff(ops) : renderFullDiff(ops));
     } else {
       let info: { label?: string; file?: string } = {};

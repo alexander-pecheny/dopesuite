@@ -484,10 +484,10 @@ func TestExportDocxRejectsEmpty(t *testing.T) {
 	mustStatus(t, resp, 400)
 }
 
-// TestImportCommentsPreservesAuthorAndTime covers the bulk comment-import path
-// used by copy/move: it keeps each comment's original author + created_at instead
-// of re-stamping them to the caller + now.
-func TestImportCommentsPreservesAuthorAndTime(t *testing.T) {
+// TestImportEventsPreservesAuthorAndTime covers the bulk timeline-import path
+// used by copy/move and the Trello import: it keeps each event's original author
+// + created_at instead of re-stamping them to the caller + now.
+func TestImportEventsPreservesAuthorAndTime(t *testing.T) {
 	c, _, listID := boardWithList(t)
 
 	resp := c.do("GET", "/api/auth/me", nil)
@@ -504,8 +504,8 @@ func TestImportCommentsPreservesAuthorAndTime(t *testing.T) {
 	cardID := itoa(card.ID)
 
 	const t0, t1 = "2021-01-02T03:04:05Z", "2022-06-07T08:09:10Z"
-	resp = c.do("POST", "/api/cards/"+cardID+"/comments/import", map[string]any{
-		"comments": []map[string]any{
+	resp = c.do("POST", "/api/cards/"+cardID+"/timeline/import", map[string]any{
+		"events": []map[string]any{
 			{"author_user_id": me.UserID, "created_at": t0, "payload_enc": enc("first")},
 			{"author_user_id": nil, "created_at": t1, "payload_enc": enc("second")},
 		},
@@ -533,10 +533,29 @@ func TestImportCommentsPreservesAuthorAndTime(t *testing.T) {
 	}
 
 	// A garbled timestamp falls back to a server stamp rather than being rejected.
-	resp = c.do("POST", "/api/cards/"+cardID+"/comments/import", map[string]any{
-		"comments": []map[string]any{{"author_user_id": me.UserID, "created_at": "not-a-time", "payload_enc": enc("third")}},
+	resp = c.do("POST", "/api/cards/"+cardID+"/timeline/import", map[string]any{
+		"events": []map[string]any{{"author_user_id": me.UserID, "created_at": "not-a-time", "payload_enc": enc("third")}},
 	})
 	mustStatus(t, resp, 204)
+
+	// Description history (the Trello import) rides the same endpoint; anything
+	// but a comment or a desc_edit is refused.
+	resp = c.do("POST", "/api/cards/"+cardID+"/timeline/import", map[string]any{
+		"events": []map[string]any{{"type": "desc_edit", "created_at": t0, "payload_enc": enc(`{"before":"a","after":"b"}`)}},
+	})
+	mustStatus(t, resp, 204)
+	resp = c.do("POST", "/api/cards/"+cardID+"/timeline/import", map[string]any{
+		"events": []map[string]any{{"type": "label_add", "created_at": t0, "payload_enc": enc("{}")}},
+	})
+	mustStatus(t, resp, 400)
+
+	resp = c.do("GET", "/api/cards/"+cardID+"/timeline", nil)
+	mustStatus(t, resp, 200)
+	tl = nil
+	c.decode(resp, &tl)
+	if len(tl) != 4 || tl[3].Type != "desc_edit" || tl[3].CreatedAt != t0 {
+		t.Fatalf("timeline = %+v, want a 4th event desc_edit @ %s", tl, t0)
+	}
 }
 
 // TestCardAliasRoundTrip covers cards.alias_enc (migrateV12): the optional

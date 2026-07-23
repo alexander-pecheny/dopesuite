@@ -1218,7 +1218,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // created destination card (labels are reconciled separately by the callers). The
   // source card is always on the current board, so its content is read under `dk`
   // and re-encrypted under the destination key `targetDk`. Comments are imported
-  // preserving their original author + timestamp (the bulk /comments/import
+  // preserving their original author + timestamp (the bulk /timeline/import
   // endpoint); attachments are downloaded, decrypted, re-encrypted and re-uploaded
   // (preserving mime + lossless flag). Copy/move is an online-only operation, so
   // this runs straight against the API (no sync outbox / temp ids).
@@ -1245,7 +1245,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       });
     }
     if (comments.length) {
-      try { await jpost(`/api/cards/${newCardId}/comments/import`, { comments }); } catch (_) {}
+      try { await jpost(`/api/cards/${newCardId}/timeline/import`, { events: comments }); } catch (_) {}
     }
     // Attachments: re-encrypt the ciphertext bytes under the destination key.
     let atts: AttachmentDTO[] = [];

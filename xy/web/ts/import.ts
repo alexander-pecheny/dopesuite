@@ -18,12 +18,15 @@
 //  - lists whose name ends in "tests" become xy test-lists; their cards become
 //    test cards (date from the card name, testers kept as a comment), and the
 //    card's green/red labels are mapped to test_taken/test_missed kinds.
-//  - other cards are classified via the chgksuite parser (heading/meta/question).
+//  - other cards are mapped by trellomodel.js: title → alias, body → 4s text,
+//    kind from its chgksuite markers, description history → desc_edit events.
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import type { DataKey } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
+import { xyTrello } from "./trellomodel.js";
+import type { RawDescEdit } from "./trellomodel.js";
 
 const { fetchJSON, jpost, jput } = xyApp;
 const { keyBetween } = xyRank;
@@ -50,7 +53,7 @@ interface TrelloAction {
   id: string;
   type?: string;
   date?: string;
-  data?: { text?: string; card?: { id?: string } };
+  data?: { text?: string; card?: { id?: string }; old?: { desc?: string } };
   memberCreator?: { fullName?: string; username?: string };
 }
 interface TrelloBoard {
@@ -63,13 +66,18 @@ interface TrelloBoard {
 interface TrelloBoardRef { id: string; name?: string; closed?: boolean }
 
 interface CardComment { text: string; date: string; author: string }
+interface History {
+  comments: Map<string, CardComment[]>;
+  descEdits: Map<string, RawDescEdit[]>;
+}
 interface ImportSource {
   board: TrelloBoard;
-  commentsByCard: Map<string, CardComment[]>;
+  history: History;
   downloadAttachment: (cardId: string, att: TrelloAttachment) => Promise<Uint8Array<ArrayBuffer> | null>;
 }
+interface ImportedCard { id: number; kind: string; desc: string }
 type EncFn = (s: string) => Promise<string>;
-interface Tally { comments: number; attachments: number }
+interface Tally { comments: number; edits: number; attachments: number }
 
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -146,40 +154,57 @@ async function trelloGet(token: string, path: string, params?: Record<string, st
   return res.json();
 }
 
-// fetchAllComments walks /boards/{id}/actions?filter=commentCard past Trello's
-// 1000-per-response cap using the `before` cursor (actions come newest→oldest;
-// `before=<oldest id>` fetches the next older page). Returns a Map keyed by the
-// Trello card id, each list ordered oldest→newest.
-async function fetchAllComments(token: string, boardId: string): Promise<Map<string, CardComment[]>> {
-  const byCard = new Map<string, CardComment[]>();
+// collectActions folds Trello actions into the two per-card histories xy keeps:
+// comments and description edits. Trello has no "description was edited" action
+// — every card change is an updateCard, and a description edit is one carrying
+// the replaced text in data.old.desc.
+function collectActions(actions: TrelloAction[] | undefined, history: History): void {
+  for (const a of (actions || [])) {
+    const data = a.data || {};
+    const cid = data.card && data.card.id;
+    if (!cid) continue;
+    const mc = a.memberCreator || {};
+    const author = mc.fullName || mc.username || "";
+    if (a.type === "commentCard") {
+      push(history.comments, cid, { text: data.text || "", date: a.date || "", author });
+    } else if (a.type === "updateCard" && typeof (data.old || {}).desc === "string") {
+      push(history.descEdits, cid, { before: data.old!.desc!, date: a.date || "", author });
+    }
+  }
+}
+
+function push<T>(map: Map<string, T[]>, key: string, item: T): void {
+  if (!map.has(key)) map.set(key, []);
+  map.get(key)!.push(item);
+}
+
+// emptyHistory: comments end up oldest→newest, description edits stay newest
+// first — the order xyTrello.descEdits walks the chain of replaced texts in.
+const emptyHistory = (): History => ({ comments: new Map(), descEdits: new Map() });
+
+// fetchHistory walks /boards/{id}/actions past Trello's 1000-per-response cap
+// using the `before` cursor (actions come newest→oldest; `before=<oldest id>`
+// fetches the next older page).
+async function fetchHistory(token: string, boardId: string): Promise<History> {
+  const history = emptyHistory();
   let before: string | null = null;
-  let total = 0;
+  let seen = 0;
   for (;;) {
     const params: Record<string, string> = {
-      filter: "commentCard", limit: "1000",
+      filter: "commentCard,updateCard", limit: "1000",
       memberCreator: "true", memberCreator_fields: "fullName,username",
     };
     if (before) params.before = before;
     const page = (await trelloGet(token, `/boards/${boardId}/actions`, params)) as TrelloAction[];
     if (!Array.isArray(page) || page.length === 0) break;
-    for (const a of page) {
-      const cid = a.data && a.data.card && a.data.card.id;
-      if (!cid) continue;
-      const mc = a.memberCreator || {};
-      if (!byCard.has(cid)) byCard.set(cid, []);
-      byCard.get(cid)!.push({
-        text: (a.data && a.data.text) || "",
-        date: a.date || "",
-        author: mc.fullName || mc.username || "",
-      });
-      total++;
-    }
-    log(`Загружаю комментарии из Trello… (${total})`);
+    collectActions(page, history);
+    seen += page.length;
+    log(`Загружаю историю из Trello… (${seen} событий)`);
     if (page.length < 1000) break;
     before = page[page.length - 1].id;
   }
-  for (const arr of byCard.values()) arr.reverse();
-  return byCard;
+  for (const arr of history.comments.values()) arr.reverse();
+  return history;
 }
 
 // trelloDownload fetches an uploaded attachment's bytes. The filename segment is
@@ -191,7 +216,7 @@ async function trelloDownload(token: string, cardId: string, att: TrelloAttachme
   return new Uint8Array(await res.arrayBuffer());
 }
 
-// trelloSource pulls a whole board (one nested GET) plus all its comments.
+// trelloSource pulls a whole board (one nested GET) plus all its history.
 async function trelloSource(token: string, boardId: string): Promise<ImportSource> {
   const board = (await trelloGet(token, `/boards/${boardId}`, {
     fields: "name",
@@ -200,32 +225,17 @@ async function trelloSource(token: string, boardId: string): Promise<ImportSourc
     card_attachments: "true", card_attachment_fields: "all",
     labels: "all", label_fields: "all",
   })) as TrelloBoard;
-  const commentsByCard = await fetchAllComments(token, boardId);
-  return {
-    board,
-    commentsByCard,
-    downloadAttachment: (cardId, att) => trelloDownload(token, cardId, att),
-  };
+  const history = await fetchHistory(token, boardId);
+  return { board, history, downloadAttachment: (cardId, att) => trelloDownload(token, cardId, att) };
 }
 
-// fileSource reads a Trello "Export as JSON" file: comments come from its
+// fileSource reads a Trello "Export as JSON" file: history comes from its
 // `actions` array (Trello caps that export at ~1000); attachments aren't in it.
 function fileSource(board: TrelloBoard): ImportSource {
-  const byCard = new Map<string, CardComment[]>();
-  for (const a of (board.actions || [])) {
-    if (a.type !== "commentCard") continue;
-    const cid = a.data && a.data.card && a.data.card.id;
-    if (!cid) continue;
-    const mc = a.memberCreator || {};
-    if (!byCard.has(cid)) byCard.set(cid, []);
-    byCard.get(cid)!.push({
-      text: (a.data && a.data.text) || "",
-      date: a.date || "",
-      author: mc.fullName || mc.username || "",
-    });
-  }
-  for (const arr of byCard.values()) arr.reverse();
-  return { board, commentsByCard: byCard, downloadAttachment: async () => null };
+  const history = emptyHistory();
+  collectActions(board.actions, history);
+  for (const arr of history.comments.values()) arr.reverse();
+  return { board, history, downloadAttachment: async () => null };
 }
 
 // ============================= import core =============================
@@ -290,10 +300,10 @@ async function runImport(source: ImportSource, name: string, pass: string): Prom
     labelMap.set(l.id, res.id);
   }
 
-  // 5. cards (+ their comments and attachments)
+  // 5. cards (+ their history and attachments)
   const total = [...cardsByList.values()].reduce((n, a) => n + a.length, 0);
   let done = 0;
-  const tally: Tally = { comments: 0, attachments: 0 };
+  const tally: Tally = { comments: 0, edits: 0, attachments: 0 };
   const errors: string[] = [];
   for (const l of openLists) {
     const info = listMap.get(l.id)!;
@@ -302,10 +312,10 @@ async function runImport(source: ImportSource, name: string, pass: string): Prom
     for (const c of cards) {
       cardRank = keyBetween(cardRank, null);
       try {
-        const cardId = info.test
+        const card = info.test
           ? await importTestCard(boardId, info.id, c, cardRank, enc, labelMap)
           : await importNormalCard(boardId, info.id, c, cardRank, enc, labelMap);
-        await importCardExtras(cardId, c, source, enc, dk, tally, errors);
+        await importCardExtras(card, c, source, enc, dk, tally, errors);
       } catch (e) {
         errors.push(`«${c.name || c.id}»: ${errMsg(e)}`);
       }
@@ -316,7 +326,7 @@ async function runImport(source: ImportSource, name: string, pass: string): Prom
 
   setStatus("saved");
   let summary = `Готово: ${done} карточек, ${listMap.size} списков, ${labelMap.size} меток, `
-    + `${tally.comments} комментариев, ${tally.attachments} вложений.`;
+    + `${tally.comments} комментариев, ${tally.edits} правок, ${tally.attachments} вложений.`;
   if (errors.length) summary += `\n\nОшибки (${errors.length}):\n` + errors.slice(0, 20).join("\n");
   log(summary);
   return { id: boardId, summary };
@@ -346,21 +356,21 @@ async function runImportAll(token: string, pass: string): Promise<void> {
   log(`Импортировано досок: ${boards.length - failed} из ${boards.length}.\n\n` + report.join("\n\n"));
 }
 
-// importNormalCard: classify by chgksuite markup, store the question/heading/meta
-// text as the card description, assign its labels.
-async function importNormalCard(boardId: number, listId: number, c: TrelloCard, rank: string, enc: EncFn, labelMap: Map<string, number>): Promise<number> {
-  const desc = xyChgk.fixTrelloFormatting((c.desc && c.desc.trim()) ? c.desc : (c.name || ""));
-  const kind = detectKind(desc);
-  const res = (await jpost(`/api/lists/${listId}/cards`, {
-    description_enc: await enc(desc), rank, kind,
-  })) as { id: number };
+// importNormalCard: map the Trello card (title → alias, body → 4s text, kind
+// from its markers), then assign its labels. Returns the xy card so the extras
+// step can match its description history against the text just stored.
+async function importNormalCard(boardId: number, listId: number, c: TrelloCard, rank: string, enc: EncFn, labelMap: Map<string, number>): Promise<ImportedCard> {
+  const { desc, alias, kind } = xyTrello.mapCard(c.name, c.desc);
+  const body: Record<string, unknown> = { description_enc: await enc(desc), rank, kind };
+  if (alias) body.alias_enc = await enc(alias);
+  const res = (await jpost(`/api/lists/${listId}/cards`, body)) as { id: number };
   await assignLabels(res.id, c, labelMap);
-  return res.id;
+  return { id: res.id, kind, desc };
 }
 
 // importTestCard: a test session. Date comes from the card name; testers (the
 // card body) are preserved as a comment rather than parsed.
-async function importTestCard(boardId: number, listId: number, c: TrelloCard, rank: string, enc: EncFn, labelMap: Map<string, number>): Promise<number> {
+async function importTestCard(boardId: number, listId: number, c: TrelloCard, rank: string, enc: EncFn, labelMap: Map<string, number>): Promise<ImportedCard> {
   const datetime = (c.name || "").trim() || "тест-сессия";
   const descJson = JSON.stringify({ datetime, players: [] });
   const res = (await jpost(`/api/lists/${listId}/cards`, {
@@ -371,28 +381,42 @@ async function importTestCard(boardId: number, listId: number, c: TrelloCard, ra
   if (testers) {
     await jpost(`/api/cards/${res.id}/comments`, { payload_enc: await enc("Тестировали: " + testers) });
   }
-  return res.id;
+  return { id: res.id, kind: "test", desc: "" };
 }
 
-// importCardExtras carries a Trello card's comments (preserving author +
-// timestamp) and uploaded attachments (files + photos) onto the new xy card.
-// Comments and attachments never abort the card: each failure is recorded.
-async function importCardExtras(xyCardId: number, c: TrelloCard, source: ImportSource, enc: EncFn, dk: DataKey, tally: Tally, errors: string[]): Promise<void> {
-  // Comments — oldest→newest, re-encrypted, author name folded into the body
-  // since Trello authors aren't xy users (author_user_id stays null).
-  const cms = source.commentsByCard.get(c.id) || [];
-  if (cms.length) {
-    const comments: { author_user_id: null; created_at: string; payload_enc: string }[] = [];
-    for (const cm of cms) {
-      const body = xyChgk.fixTrelloFormatting(cm.text || "");
-      const text = cm.author ? `${cm.author}:\n${body}` : body;
-      comments.push({ author_user_id: null, created_at: cm.date || "", payload_enc: await enc(text) });
+// importCardExtras carries a Trello card's comments and description history
+// (both preserving author + timestamp) and its uploaded attachments (files +
+// photos) onto the new xy card. Neither ever aborts the card: each failure is
+// recorded.
+async function importCardExtras(card: ImportedCard, c: TrelloCard, source: ImportSource, enc: EncFn, dk: DataKey, tally: Tally, errors: string[]): Promise<void> {
+  const xyCardId = card.id;
+  // Comments and description edits share one timeline, so they go in one batch,
+  // ordered by date (the server hands out ids in array order and the timeline
+  // reads back in that order). Trello authors aren't xy users, so their names
+  // are folded into the payload and author_user_id stays null.
+  const events: { type: string; created_at: string; author_user_id: null; payload_enc: string }[] = [];
+  for (const cm of (source.history.comments.get(c.id) || [])) {
+    const body = xyChgk.fixTrelloFormatting(cm.text || "");
+    const text = cm.author ? `${cm.author}:\n${body}` : body;
+    events.push({ type: "comment", created_at: cm.date || "", author_user_id: null, payload_enc: await enc(text) });
+  }
+  const comments = events.length;
+  // Description history is a question's editing record; on a heading or a note
+  // it is noise, so only question cards carry it over.
+  if (card.kind === "question") {
+    for (const e of xyTrello.descEdits(source.history.descEdits.get(c.id), card.desc)) {
+      const payload = JSON.stringify({ before: e.before, after: e.after, author: e.author });
+      events.push({ type: "desc_edit", created_at: e.date, author_user_id: null, payload_enc: await enc(payload) });
     }
+  }
+  if (events.length) {
+    events.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
     try {
-      await jpost(`/api/cards/${xyCardId}/comments/import`, { comments });
-      tally.comments += comments.length;
+      await jpost(`/api/cards/${xyCardId}/timeline/import`, { events });
+      tally.comments += comments;
+      tally.edits += events.length - comments;
     } catch (e) {
-      errors.push(`«${c.name || c.id}» комментарии: ${errMsg(e)}`);
+      errors.push(`«${c.name || c.id}» история: ${errMsg(e)}`);
     }
   }
 
@@ -435,14 +459,6 @@ async function uploadAttachment(xyCardId: number, name: string, bytes: Uint8Arra
 async function assignLabels(cardId: number, c: TrelloCard, labelMap: Map<string, number>): Promise<void> {
   const ids = (c.labels || []).map((l) => labelMap.get(l.id)).filter((x) => x != null);
   if (ids.length) await jput(`/api/cards/${cardId}/labels`, { label_ids: ids });
-}
-
-// detectKind picks the xy card kind from the leading chgksuite marker.
-function detectKind(desc: string): string {
-  const first = xyChgk.parseBlocks(desc)[0];
-  if (first && first.type === "heading") return "heading";
-  if (first && first.type === "meta") return "meta";
-  return "question";
 }
 
 // ============================= Trello connect (OAuth) =============================
