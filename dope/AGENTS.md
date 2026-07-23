@@ -6,7 +6,7 @@ Tournament/championship management system with real-time web UI and Telegram bot
 ## Stack
 - **Backend**: Go 1.26, SQLite 3 (WAL mode, modernc.org/sqlite)
 - **Frontend**: strict-TypeScript ES modules (root ADR-0001), sources in `dope/web/ts/`; the shared root toolchain (`just build-web`, esbuild + native tsc) bundles them into the gitignored `dist/` embedded at go-build time — per-page game bundles plus self-contained builder-page bundles. No framework.
-- **Frontend tests**: node (`node --test`, in `dope/web/jstest/`)
+- **Frontend tests**: deno (`deno test --parallel`, in `dope/web/jstest/`)
 - **Build/run**: `justfile` (see commands below)
 - **Deploy**: `just deploy`, which calls the monorepo's `../deploy.py` (SSH-based)
 - **Production** is at `ssh vps2day-ee`, use it to run commands on production server

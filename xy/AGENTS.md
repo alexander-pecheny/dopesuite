@@ -26,7 +26,7 @@ Russian-language UI.
   boardmembers.ts — each a `create(deps)` factory with jstest coverage).
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, **no WASM** → runs
   under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto.
-- **Tests**: Go (`go test`) + frontend (`node --test jstest/*.test.js`).
+- **Tests**: Go (`go test`) + frontend (`deno test --parallel jstest/`).
 - **Build/run**: `justfile`.
 - **UI markup**: no hand-written HTML (or CSS classes) anywhere. **DopeUIKit**
   (`pecheny.me/dopeuikit`, vendored via `replace => ../dopeuikit`) has two layers:
@@ -229,7 +229,7 @@ web/assets/            //go:embed static + ui (package assets)
     tokens.js          /profile/tokens — create/revoke API tokens for the Trello API
     styles.css         dope design system (copied) + xy board/card section at the end
     vendor/            self-hosted @noble/hashes (scrypt + deps), WebCrypto shim
-jstest/                node --test: crypto round-trips, rank ordering, offline sync engine
+jstest/                deno test: crypto round-trips, rank ordering, offline sync engine
 ```
 
 ## Offline / PWA

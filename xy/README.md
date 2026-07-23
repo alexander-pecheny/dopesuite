@@ -9,8 +9,8 @@ list is readable without unlocking every board (see the trust model in `AGENTS.m
 
 - **Backend**: Go 1.26, SQLite (WAL, `modernc.org/sqlite`, pure Go, no cgo).
 - **Frontend**: strict-TypeScript ES modules (sources `web/ts/`, built to
-  `static/dist/` by the shared root toolchain — root ADR-0001) + the dope
-  design system, embedded in the binary.
+  `static/dist/` by the shared root toolchain, pure Go esbuild — root ADR-0001)
+  + the dope design system, embedded in the binary.
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, no WASM) +
   AES-256-GCM via WebCrypto.
 - **Offline / PWA**: installable, works offline and resyncs on reconnect. A
@@ -38,16 +38,12 @@ register/login needs `XY_BOT_SECRET` set on both server and bot.
 
 ### Browser testing
 
-There is no `playwright`/`puppeteer` npm package, but Playwright's Chromium
-binaries are cached under `~/.cache/ms-playwright/`. Drive them over CDP with
-Node's built-in `WebSocket` (Node 24, no deps): launch `chrome-headless-shell`
-with `--remote-debugging-port=9222 --user-data-dir=…`, `fetch` a tab from
-`http://127.0.0.1:9222/json/new?<url>`, then issue `Page.navigate`,
-`Runtime.evaluate` (with `awaitPromise` for async page code) and
-`Page.captureScreenshot`. Run the **built binary from `/tmp`** (not the repo dir)
-so `staticSource()` falls back to embed mode with `?v=` asset versioning and
-ETags, matching production. The `/profile/tokens` UI and the token→Trello-API
-flow were verified this way.
+UI flows are verified with the `agent-browser` CLI, which drives a persistent
+headless Chromium from the shell — login, clicks, asserts, screenshots, mobile
+emulation. The full workflow (boot a throwaway server, walk the flow, assert)
+is documented in the repo's `.claude/skills/verify/` skill. Run the **built
+binary from `/tmp`** (not the repo dir) so `staticSource()` falls back to embed
+mode with `?v=` asset versioning and ETags, matching production.
 
 Bootstrap a password account (registration is otherwise telegram-only):
 

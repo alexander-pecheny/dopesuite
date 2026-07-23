@@ -1,13 +1,8 @@
 {
   "name": "dopesuite-web",
   "private": true,
-  "description": "Shared frontend toolchain (root ADR-0001): tsc typechecks every module's TS, esbuild emits per-target output via scripts/webbuild.mjs.",
-  "scripts": {
-    "build": "node scripts/webbuild.mjs",
-    "typecheck": "tsc -p dopeuikit && tsc -p dope && tsc -p xy && tsc -p xy/tsconfig.sw.json"
-  },
+  "description": "Delivers the native tsc binary (root ADR-0001); installed by `deno install`, invoked directly by `just typecheck`.",
   "devDependencies": {
-    "esbuild": "^0.24.0",
     "typescript": "^7.0.0"
   }
 }

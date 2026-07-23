@@ -5,7 +5,7 @@
 default:
     @just --list
 
-# Go tests + frontend (node) tests, all four modules.
+# Go tests + frontend (deno) tests, all four modules.
 test: test-core test-uikit
     cd xy && just test
     cd dope && just test
@@ -23,14 +23,26 @@ pre-commit: pre-commit-core pre-commit-uikit
     cd xy && just pre-commit
     cd dope && just pre-commit
 
-# Typecheck + esbuild the frontend targets (shared toolchain, docs/adr/0001).
-# No args = all targets; `just build-web dope` builds one.
+# esbuild the frontend targets (shared toolchain, docs/adr/0001) — pure Go, no
+# JS runtime. No args = all targets; `just build-web dope uikit` builds some.
 build-web *targets:
+    go -C scripts/webbuild run . {{targets}}
+
+# Typecheck every tsconfig project in parallel with the native tsc binary,
+# exec'd directly (deno only fetches it — no JS runtime in the loop). A test
+# gate, deliberately not part of build-web: esbuild strips types unchecked, so
+# the dev loop stays fast and types are enforced where tests run.
+typecheck:
     #!/usr/bin/env bash
     set -euo pipefail
-    [ -d node_modules ] || npm install --no-audit --no-fund
-    npm run --silent typecheck
-    node scripts/webbuild.mjs {{targets}}
+    [ -d node_modules ] || deno install --quiet
+    tsc=$(find node_modules -path '*@typescript/typescript-*/lib/tsc' -type f | head -1)
+    [ -n "$tsc" ] || { echo "native tsc not found — run 'deno install'" >&2; exit 1; }
+    pids=()
+    for p in dopeuikit dope xy xy/tsconfig.sw.json; do "$tsc" -p "$p" & pids+=($!); done
+    rc=0
+    for pid in "${pids[@]}"; do wait "$pid" || rc=1; done
+    exit $rc
 
 ## dopecore ###################################################################
 
@@ -56,9 +68,9 @@ pre-commit-core: fmt-core vet-core tidy-check-core test-core
 
 # The kit embeds its built assets/dist (root ADR-0001), so every recipe that
 # compiles dopeuikit depends on build-web.
-test-uikit: build-web
+test-uikit: build-web typecheck
     cd dopeuikit && go test ./...
-    node --test dopeuikit/jstest/*.test.js
+    deno test --parallel dopeuikit/jstest/
 
 vet-uikit: build-web
     cd dopeuikit && go vet ./...

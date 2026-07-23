@@ -5,13 +5,14 @@ default: dev
 # esbuild-bundle the TypeScript game pages into web/assets/static/dist
 # (ADR-0003; toolchain shared at the repo root, root docs/adr/0001).
 # Everything that builds or serves the server depends on it — the bundles are
-# gitignored build artifacts, embedded at go-build time.
+# gitignored build artifacts, embedded at go-build time. uikit too: the pages
+# embed the kit's built menu/login.
 build-web:
-    cd .. && just build-web
+    cd .. && just build-web dope uikit
 
 # Rebuild bundles on change (run beside dev-web-only for the frontend loop).
 watch-web:
-    cd .. && node scripts/webbuild.mjs dope --watch
+    cd .. && go -C scripts/webbuild run . dope uikit --watch
 
 dev-web-only: build-web
     go run ./dope/cmd/dope-server
@@ -33,14 +34,15 @@ fmt:
     mapfile -t files < <(find dope -type f -name '*.go')
     ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
 
-# Go tests + frontend (node) tests.
+# Go tests + frontend (deno) tests; typecheck gates here, not in build-web.
 test: build-web
+    cd .. && just typecheck
     go test ./...
-    node --test dope/web/jstest/*.test.js
+    deno test --parallel dope/web/jstest/
 
-# Frontend unit tests only (node's built-in runner; reads dope/web/assets/static/*.js).
+# Frontend unit tests only (runs against the built dist — see build-web).
 test-js:
-    node --test dope/web/jstest/*.test.js
+    deno test --parallel dope/web/jstest/
 
 vet:
     go vet ./...

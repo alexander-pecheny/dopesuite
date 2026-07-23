@@ -13,10 +13,10 @@ wasm_path := "internal/chgk/typstwasm/typst.wasm"
 build: wasm build-web
     CGO_ENABLED=0 go build -o xy-server ./cmd/xy-server
 
-# The shared toolchain (root ADR-0001) builds the kit's gitignored assets/dist,
-# which the Go tree embeds — so every compiling recipe depends on this.
+# The shared toolchain (root ADR-0001) builds the gitignored dist trees the Go
+# build embeds (xy's own + the kit's) — so every compiling recipe depends on it.
 build-web:
-    cd .. && just build-web
+    cd .. && just build-web xy uikit
 
 # Compile typst to wasm32-wasip1 and drop the artifact where //go:embed wants it.
 # Needs Rust: rustup target add wasm32-wasip1
@@ -68,14 +68,15 @@ vet: wasm build-web
 tidy-check:
     go mod tidy -diff
 
-# Go tests + frontend (node) tests.
+# Go tests + frontend (deno) tests; typecheck gates here, not in build-web.
 test: wasm build-web
+    cd .. && just typecheck
     go test ./...
-    node --test jstest/*.test.js
+    deno test --parallel jstest/
 
 # Frontend unit tests only (run against the built dist — see build-web).
 test-js: build-web
-    node --test jstest/*.test.js
+    deno test --parallel jstest/
 
 pre-commit:
     just fmt
