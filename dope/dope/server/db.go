@@ -318,24 +318,6 @@ create table if not exists match_slots(
   unique(match_id, slot_index)
 );
 
-create table if not exists themes(
-  id integer primary key,
-  match_id integer not null references matches(id) on delete cascade,
-  team_id integer not null references teams(id) on delete cascade,
-  kind text not null,
-  theme_index integer not null,
-  player_id integer references players(id),
-  unique(match_id, team_id, kind, theme_index)
-);
-
-create table if not exists answers(
-  id integer primary key,
-  theme_id integer not null references themes(id) on delete cascade,
-  answer_index integer not null,
-  mark text not null default '',
-  unique(theme_id, answer_index)
-);
-
 create table if not exists match_results(
   match_id integer not null references matches(id) on delete cascade,
   team_id integer not null references teams(id) on delete cascade,

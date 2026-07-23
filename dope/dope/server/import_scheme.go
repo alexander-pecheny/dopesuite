@@ -436,8 +436,6 @@ func clearImportedData(ctx context.Context, tx *sql.Tx) error {
 		"journal",
 		"reseed_entries",
 		"match_results",
-		"answers",
-		"themes",
 		"match_slots",
 		"matches",
 		"stages",

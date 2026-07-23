@@ -7,8 +7,39 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"dope/dope/storage/journal"
 	"dope/dope/storage/store"
 )
+
+// A checkpoint's themes/answers row dumps fold into its matches rows'
+// state_json; the legacy keys disappear so restores reproduce the unified
+// shape.
+func TestFoldCheckpointThemes(t *testing.T) {
+	cp := &journal.GameCheckpoint{Tables: map[string][]map[string]any{
+		"matches": {{"id": int64(1), "code": "A", "state_json": "{}"}},
+		"themes": {
+			{"id": int64(10), "match_id": int64(1), "team_id": int64(7), "kind": "regular", "theme_index": int64(0), "player_id": int64(55)},
+		},
+		"answers": {
+			{"id": int64(1), "theme_id": int64(10), "answer_index": int64(2), "mark": "right"},
+		},
+	}}
+	if !foldCheckpointThemes(cp) {
+		t.Fatal("legacy rows not detected")
+	}
+	if cp.Tables["themes"] != nil || cp.Tables["answers"] != nil {
+		t.Fatal("legacy keys not removed")
+	}
+	raw, _ := cp.Tables["matches"][0]["state_json"].(string)
+	blob, err := store.ParseMatchBlob(raw)
+	if err != nil {
+		t.Fatalf("folded blob: %v", err)
+	}
+	team := blob.Teams["7"]
+	if team == nil || team.Themes[0].Player != 55 || team.Themes[0].Answers[2] != "right" {
+		t.Fatalf("folded blob = %s", raw)
+	}
+}
 
 // A legacy EK match (relational themes/answers rows) converts into the
 // team-id-keyed state blob: marks land under the right team/theme/answer,

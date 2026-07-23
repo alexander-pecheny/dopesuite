@@ -76,8 +76,6 @@ var gameRelSpecs = []gameRelSpec{
 	{"stages", `select * from stages where game_id = ?`, []string{"id"}},
 	{"matches", `select * from matches where game_id = ?`, []string{"id"}},
 	{"match_slots", `select * from match_slots where match_id in (select id from matches where game_id = ?)`, []string{"id"}},
-	{"themes", `select * from themes where match_id in (select id from matches where game_id = ?)`, []string{"id"}},
-	{"answers", `select * from answers where theme_id in (select th.id from themes th join matches m on m.id = th.match_id where m.game_id = ?)`, []string{"id"}},
 	{"match_results", `select * from match_results where match_id in (select id from matches where game_id = ?)`, []string{"match_id", "team_id"}},
 	{"reseed_entries", `select * from reseed_entries where stage_id in (select id from stages where game_id = ?)`, []string{"stage_id", "rank"}},
 	{"game_teams", `select * from game_teams where game_id = ?`, []string{"game_id", "team_id"}},

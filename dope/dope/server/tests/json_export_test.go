@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"dope/dope/export/gameexport"
@@ -84,11 +85,16 @@ func TestScopedGameArchive(t *testing.T) {
 	if archive.Fest == nil {
 		t.Fatalf("archive fest context missing")
 	}
-	// The edit must surface in the game's relational state (answers carry marks).
-	// The before/after audit trail is retired; edit history now lives in the
-	// per-game journal, not the archive.
-	if len(archive.Rows["answers"]) == 0 {
-		t.Fatalf("archive rows.answers is empty after an edit (rows keys: %v)", keysOf(archive.Rows))
+	// The edit must surface in the match state blob (marks live in
+	// matches.state_json under the unified model).
+	marked := false
+	for _, row := range archive.Rows["matches"] {
+		if blob, err := json.Marshal(row["state_json"]); err == nil && strings.Contains(string(blob), `"right"`) {
+			marked = true
+		}
+	}
+	if !marked {
+		t.Fatalf("no match blob carries the edit's mark (rows keys: %v)", keysOf(archive.Rows))
 	}
 }
 

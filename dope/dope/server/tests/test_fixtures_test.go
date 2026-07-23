@@ -130,15 +130,28 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 			playerIDs[fullName] = playerID
 		}
 
-		for themeIndex, theme := range team.Themes {
-			if err := store.InsertTheme(ctx, tx, matchID, teamID, "regular", themeIndex, playerIDs[theme.Player], theme.Answers); err != nil {
-				t.Fatalf("insert regular theme: %v", err)
+		if _, err := store.MutateMatchBlobTx(ctx, tx, matchID, func(blob *store.MatchBlob) error {
+			for themeIndex, theme := range team.Themes {
+				if id := playerIDs[theme.Player]; id != 0 {
+					blob.SetPlayer(teamID, "regular", themeIndex, id)
+				}
+				blob.EnsureTheme(teamID, "regular", themeIndex)
+				for ai, mark := range theme.Answers {
+					blob.SetAnswer(teamID, "regular", themeIndex, ai, mark)
+				}
 			}
-		}
-		for themeIndex, theme := range team.ShootoutThemes {
-			if err := store.InsertTheme(ctx, tx, matchID, teamID, "shootout", themeIndex, playerIDs[theme.Player], theme.Answers); err != nil {
-				t.Fatalf("insert shootout theme: %v", err)
+			for themeIndex, theme := range team.ShootoutThemes {
+				if id := playerIDs[theme.Player]; id != 0 {
+					blob.SetPlayer(teamID, "shootout", themeIndex, id)
+				}
+				blob.EnsureTheme(teamID, "shootout", themeIndex)
+				for ai, mark := range theme.Answers {
+					blob.SetAnswer(teamID, "shootout", themeIndex, ai, mark)
+				}
 			}
+			return nil
+		}); err != nil {
+			t.Fatalf("write match blob: %v", err)
 		}
 		if _, err := tx.ExecContext(ctx, `
 insert into match_results(match_id, team_id, place)

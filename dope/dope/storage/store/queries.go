@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -30,19 +29,6 @@ func ResolveFestID(ctx context.Context, q Queryer, ref string) (int64, error) {
 		return 0, err
 	}
 	return id, nil
-}
-
-// LookupThemeID returns the id of the theme row for a given match/team/kind and
-// theme index, or an error if no such theme exists.
-func LookupThemeID(ctx context.Context, q Queryer, matchID, teamID int64, kind string, themeIndex int) (int64, error) {
-	var id int64
-	err := q.QueryRowContext(ctx, `
-select id from themes
-where match_id = ? and team_id = ? and kind = ? and theme_index = ?`, matchID, teamID, kind, themeIndex).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, errors.New("bad theme index")
-	}
-	return id, err
 }
 
 // RecalculateMatchResultsForStateTx recomputes and upserts the match_results

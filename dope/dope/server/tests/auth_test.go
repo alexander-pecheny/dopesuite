@@ -317,7 +317,7 @@ func TestHostClearGameResetsToPristine(t *testing.T) {
 		}
 		return n
 	}
-	themesQ := `select count(*) from themes th join matches m on m.id = th.match_id where m.game_id = ?`
+	themesQ := `select count(*) from matches m where m.game_id = ? and m.state_json != '{}'`
 	resultsQ := `select count(*) from match_results r join matches m on m.id = r.match_id where m.game_id = ?`
 	assignQ := `select count(*) from game_assignments where game_id = ?`
 	matchesQ := `select count(*) from matches where game_id = ?`

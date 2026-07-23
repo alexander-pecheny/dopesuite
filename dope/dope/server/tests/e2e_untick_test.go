@@ -6,7 +6,6 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/platform/realtime"
 	dopeserver "dope/dope/server"
-	"fmt"
 	"os"
 	"testing"
 )
@@ -106,25 +105,20 @@ func mapsEqual(a, b map[string]string) bool {
 func gameAnswersExcept(t *testing.T, db *sql.DB, gameID int64, exceptCode string) map[string]string {
 	t.Helper()
 	rows, err := db.QueryContext(context.Background(), `
-select m.code, th.team_id, th.kind, th.theme_index, a.answer_index, a.mark
-from answers a
-join themes th on th.id = a.theme_id
-join matches m on m.id = th.match_id
+select m.code, m.state_json from matches m
 where m.game_id = ? and m.code <> ?
-order by m.code, th.team_id, th.kind, th.theme_index, a.answer_index`, gameID, exceptCode)
+order by m.code`, gameID, exceptCode)
 	if err != nil {
-		t.Fatalf("snapshot answers: %v", err)
+		t.Fatalf("snapshot blobs: %v", err)
 	}
 	defer rows.Close()
 	out := map[string]string{}
 	for rows.Next() {
-		var code, kind, mark string
-		var team int64
-		var ti, ai int
-		if err := rows.Scan(&code, &team, &kind, &ti, &ai, &mark); err != nil {
+		var code, blob string
+		if err := rows.Scan(&code, &blob); err != nil {
 			t.Fatalf("scan: %v", err)
 		}
-		out[fmt.Sprintf("%s/%d/%s/%d/%d", code, team, kind, ti, ai)] = mark
+		out[code] = blob
 	}
 	return out
 }
