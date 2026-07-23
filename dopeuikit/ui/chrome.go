@@ -27,10 +27,10 @@ type Chrome struct {
 	// (deferred by the browser) — for app chrome that doesn't need to block
 	// first paint the way the theme boot does.
 	ModuleBootScripts []string
-	PageKinds    map[string]PageKind
-	DefaultKind  string
-	TopbarSync   SyncSpec
-	HeadHook     func(ctx *ExpandCtx, p *Element) []Node
+	PageKinds         map[string]PageKind
+	DefaultKind       string
+	TopbarSync        SyncSpec
+	HeadHook          func(ctx *ExpandCtx, p *Element) []Node
 }
 
 func (c Chrome) withDefaults() Chrome {

@@ -23,7 +23,7 @@ var coreExpanders = map[string]ExpandFunc{
 	"section": func(c *ExpandCtx, p *Element) []Node {
 		return one(El("section", RootAttrs([]string{"section"}, p), c.Nodes(p.Block)...))
 	},
-	"text":    func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "p", nil, nil, p)) },
+	"text": func(c *ExpandCtx, p *Element) []Node { return one(Leaf(c, "p", nil, nil, p)) },
 	"hint": func(c *ExpandCtx, p *Element) []Node {
 		classes := []string{"hint"}
 		if k, _ := Get(p, "kind"); k == "danger" {
