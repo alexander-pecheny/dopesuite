@@ -9,3 +9,4 @@ dist/
 ek_restore_backups/
 .prod-backups/
 /test.db*
+node_modules/

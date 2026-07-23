@@ -1,3 +1,3 @@
-page title="Зритель · Фест" kind="viewer" init="__VIEWER_INIT__" classicscripts="init.js fest-grid.js match-table.js stage-cache.js stats-sync.js viewer.js"
+page title="Зритель · Фест" kind="viewer" init="__VIEWER_INIT__" classicscripts="dist/viewer.js"
   gametopbar viewer heading="Фест" tabsid="viewerTabs" ektabs
   mount kind="table-host" id="viewerTable"

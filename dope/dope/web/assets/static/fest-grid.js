@@ -487,3 +487,11 @@ function el(tagName, className, text, attrs = {}) {
   Object.assign(node, attrs);
   return node;
 }
+
+// The dist bundles load this file in module scope, where top-level functions
+// no longer leak into the page's global scope — export the surface host.js /
+// viewer.js call explicitly, matching how the other shared libs publish
+// themselves (window.DopeTable, window.DopeStageCache).
+window.parseScheme = parseScheme;
+window.buildFestGrid = buildFestGrid;
+window.buildReseedStagePanel = buildReseedStagePanel;

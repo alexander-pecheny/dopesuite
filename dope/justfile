@@ -2,7 +2,21 @@ set dotenv-load := true
 
 default: dev
 
-dev-web-only:
+# esbuild-bundle the TypeScript game pages into web/assets/static/dist
+# (ADR-0003). Everything that builds or serves the server depends on it —
+# the bundles are gitignored build artifacts, embedded at go-build time.
+build-web:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -d node_modules ] || npm install --no-audit --no-fund
+    npm run --silent typecheck
+    npm run --silent build
+
+# Rebuild bundles on change (run beside dev-web-only for the frontend loop).
+watch-web:
+    node scripts/webbuild.mjs --watch
+
+dev-web-only: build-web
     go run ./dope/cmd/dope-server
 
 bot:
@@ -23,7 +37,7 @@ fmt:
     ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
 
 # Go tests + frontend (node) tests.
-test:
+test: build-web
     go test ./...
     node --test dope/web/jstest/*.test.js
 
@@ -39,7 +53,7 @@ tidy-check:
 
 # A later --target wins: `just deploy --target dope-bot` deploys the bot instead.
 # Build + deploy the dope server via the monorepo's ../deploy.py.
-deploy *args:
+deploy *args: build-web
     python3 ../deploy.py --target dope-server {{args}}
 
 # Drive a realtime load test (wraps scripts/loadtest/realtime_demo.sh).
