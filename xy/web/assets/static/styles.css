@@ -32,6 +32,9 @@
 .board-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  /* the grid is also the page's flex-filling scroller (above); without this,
+     align-content:stretch inflates a lone row of tiles to the viewport height */
+  align-content: start;
   gap: var(--space-4);
   padding: var(--space-4) 0;
 }
