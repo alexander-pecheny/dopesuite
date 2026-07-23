@@ -761,12 +761,18 @@ kanban.addEventListener("drop", (e) => {
 function renderAddList(): HTMLElement {
   const wrap = el("div", { class: "klist klist-add" });
   const form = el("form", { class: "kadd-form" });
-  const input = el("input", { class: "input", type: "text", placeholder: "+ Новый список" }) as HTMLInputElement;
+  const input = el("input", { class: "input u-grow", type: "text", placeholder: "+ Новый список" }) as HTMLInputElement;
+  // Android's soft keyboard has no Enter on this field, so a visible ✓ submit
+  // appears as soon as there is a name to create.
+  const okBtn = el("button", {
+    class: "kadd kadd-ok", type: "submit", title: "Создать список", "aria-label": "Создать список", text: "✓", hidden: true,
+  }) as HTMLButtonElement;
+  input.addEventListener("input", () => { okBtn.hidden = !input.value.trim(); });
   const typeSel = el("select", { class: "input", "aria-label": "Тип списка" },
     el("option", { value: "normal", text: "вопросы" }),
     el("option", { value: "test", text: "тесты" })) as HTMLSelectElement;
   const typeRow = el("label", { class: "attach-lossless" }, "Тип:", typeSel);
-  form.append(input, typeRow);
+  form.append(el("div", { class: "u-row u-gap-sm" }, input, okBtn), typeRow);
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const title = input.value.trim();
@@ -779,6 +785,7 @@ function renderAddList(): HTMLElement {
       const res = await create("createList", `/api/boards/${boardId}/lists`, { title_enc: titleEnc, rank, type });
       state.lists.push({ id: res.id as number, type, rank, groupId: null, title });
       input.value = "";
+      okBtn.hidden = true;
       typeSel.value = "normal";
       render();
     } catch (err) { setStatus("error"); }
@@ -916,6 +923,21 @@ async function onMoveListBoardChange(): Promise<void> {
 async function doMoveListCopy(remove: boolean): Promise<void> {
   const src = listMoveSrc, ctx = listMoveCtx;
   if (!src || !ctx) return;
+  // A cross-board copy re-encrypts every card, comment and attachment — seconds
+  // during which the modal stays open; a second click used to start a second
+  // copy and leave a duplicated list on the target board.
+  const copyBtn = byId<HTMLButtonElement>("moveListCopyBtn");
+  const moveBtn = byId<HTMLButtonElement>("moveListMoveBtn");
+  if (copyBtn.disabled) return;
+  copyBtn.disabled = moveBtn.disabled = true;
+  try {
+    await moveListCopyLocked(remove, src, ctx);
+  } finally {
+    copyBtn.disabled = moveBtn.disabled = false;
+  }
+}
+
+async function moveListCopyLocked(remove: boolean, src: BoardList, ctx: MoveCtx): Promise<void> {
   const targetBid = ctx.boardId;
   const sameBoard = targetBid === boardId;
   const msg = byId("moveListMessage");
