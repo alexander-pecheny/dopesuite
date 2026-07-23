@@ -27,10 +27,12 @@ type MatchOutcome struct {
 
 // SlotOutcome is one seat's result in a match: who sat there, the effective
 // place (scorer's ranking with any host override applied) and the protocol's
-// metrics (e.g. "taken", "total").
+// metrics (e.g. "taken", "total"). Place is fractional because shared places
+// are (e.g. EK's 1.5); 0 = not placed. The Protocol scorer leaves Participant
+// zero — seats are the Structure layer's knowledge, joined in by the caller.
 type SlotOutcome struct {
 	Participant int64 // 0 = empty seat
-	Place       int   // 1-based; 0 = not placed
+	Place       float64
 	Metrics     map[string]float64
 }
 

@@ -135,8 +135,8 @@ func codes(matches []store.SchemeMatch) []string {
 
 func h2h(code string, finished bool, teamA, teamB int64, takenA, takenB int, placeA, placeB int) MatchOutcome {
 	return MatchOutcome{Code: code, Finished: finished, Slots: []SlotOutcome{
-		{Participant: teamA, Place: placeA, Metrics: map[string]float64{"taken": float64(takenA)}},
-		{Participant: teamB, Place: placeB, Metrics: map[string]float64{"taken": float64(takenB)}},
+		{Participant: teamA, Place: float64(placeA), Metrics: map[string]float64{"taken": float64(takenA)}},
+		{Participant: teamB, Place: float64(placeB), Metrics: map[string]float64{"taken": float64(takenB)}},
 	}}
 }
 
