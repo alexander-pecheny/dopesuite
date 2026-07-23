@@ -17,6 +17,7 @@ import (
 	"dope/dope/storage/auditmw"
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/journal"
+	"dope/dope/storage/migrate"
 	"dope/dope/storage/store"
 )
 
@@ -33,7 +34,17 @@ const (
 // must land on a single connection — then widens the pool for runtime reads.
 func openFestDB(path string) (*sql.DB, error) {
 	return sqlitex.Open(path, func(db *sql.DB) error {
+		// Disarm the journal row-op triggers for the whole schema-migration +
+		// data-conversion window: structural churn is not an edit and must never
+		// journal. EnsureTriggers reinstalls them before any live write can occur
+		// (bootstrap is single-threaded).
+		if err := journal.DropTriggers(db); err != nil {
+			return err
+		}
 		if err := migrateDB(db); err != nil {
+			return err
+		}
+		if err := migrate.RunUnifyConversion(db); err != nil {
 			return err
 		}
 		if err := journal.EnsureTriggers(db); err != nil {

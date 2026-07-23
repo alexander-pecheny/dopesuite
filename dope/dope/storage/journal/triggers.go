@@ -177,7 +177,33 @@ func EnsureTriggers(db *sql.DB) error {
 		return nil
 	}
 
-	// Drop any existing journal_* triggers, then rebuild.
+	if err := DropTriggers(db); err != nil {
+		return err
+	}
+	for _, t := range journalGameTables {
+		shape := shapes[t.table]
+		for _, op := range []string{"insert", "update", "delete"} {
+			if _, err := db.Exec(buildJournalRowTrigger(t.table, shape[0], shape[1], op, t.gameVia)); err != nil {
+				return fmt.Errorf("install journal trigger %s/%s: %w", t.table, op, err)
+			}
+		}
+	}
+	if _, err := db.Exec(`insert or replace into journal_trigger_state(id, fingerprint) values(1, ?)`, sum); err != nil {
+		return err
+	}
+	return nil
+}
+
+// DropTriggers removes every journal row-op trigger and clears the stored
+// fingerprint, so the next EnsureTriggers reinstalls from scratch. Data
+// conversions call this first so their churn is never journaled as edits.
+func DropTriggers(db *sql.DB) error {
+	if _, err := db.Exec(`create table if not exists journal_trigger_state(
+  id integer primary key check(id = 1),
+  fingerprint text not null default ''
+);`); err != nil {
+		return err
+	}
 	rows, err := db.Query(`select name from sqlite_master where type='trigger' and name like 'journal\_%' escape '\'`)
 	if err != nil {
 		return err
@@ -192,21 +218,14 @@ func EnsureTriggers(db *sql.DB) error {
 		drop = append(drop, n)
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
 	for _, n := range drop {
 		if _, err := db.Exec(`drop trigger if exists ` + storeutil.QuoteIdent(n)); err != nil {
 			return err
 		}
 	}
-	for _, t := range journalGameTables {
-		shape := shapes[t.table]
-		for _, op := range []string{"insert", "update", "delete"} {
-			if _, err := db.Exec(buildJournalRowTrigger(t.table, shape[0], shape[1], op, t.gameVia)); err != nil {
-				return fmt.Errorf("install journal trigger %s/%s: %w", t.table, op, err)
-			}
-		}
-	}
-	if _, err := db.Exec(`insert or replace into journal_trigger_state(id, fingerprint) values(1, ?)`, sum); err != nil {
-		return err
-	}
-	return nil
+	_, err = db.Exec(`delete from journal_trigger_state where id = 1`)
+	return err
 }

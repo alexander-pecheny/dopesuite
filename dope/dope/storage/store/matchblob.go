@@ -98,6 +98,12 @@ func (t *TeamBlob) SetPlayer(kind string, themeIndex int, playerID int64) {
 	t.theme(kind, themeIndex).Player = playerID
 }
 
+// EnsureTheme guarantees the theme exists (padding the grid up to its index)
+// without setting anything on it.
+func (t *TeamBlob) EnsureTheme(kind string, themeIndex int) {
+	t.theme(kind, themeIndex)
+}
+
 // AddShootoutTheme appends one shootout theme for every listed team and
 // returns its index (teams stay in lockstep; existing sections pad).
 func (b *MatchBlob) AddShootoutTheme(teamIDs []int64) int {
