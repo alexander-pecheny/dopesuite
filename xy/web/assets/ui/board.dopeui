@@ -1,4 +1,4 @@
-page title="Доска · xy" kind="board" scripts="board.js timer.js"
+page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
   topbar title="Доска" titleid="boardTitle" home="/"
     iconbtn id="notifToggle" label="События" title="События других участников" badgeid="notifBadge" aria-haspopup="true" aria-expanded="false" "🔔"
     iconbtn id="timerToggle" label="Таймер" title="Таймер ЧГК" aria-pressed="false" "⏰"

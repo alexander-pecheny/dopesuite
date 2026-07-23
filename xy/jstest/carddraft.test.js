@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyCardDraft } from "../web/assets/static/carddraft.js";
+import { xyCardDraft } from "../web/assets/static/dist/carddraft.js";
 
 const { create, contentDirty, aliasDirty, normalizeMeta, normalizeAlias } = xyCardDraft;
 

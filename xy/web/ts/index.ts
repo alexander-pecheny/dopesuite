@@ -1,21 +1,39 @@
-// index.js — board list + create-board flow.
+// index.ts — board list + create-board flow.
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
+import type { SyncStatus } from "./sync.js";
 
 const { fetchJSON, jpost, el, escapeHtml } = xyApp;
 
-const statusNode = document.getElementById("status");
-const listNode = document.getElementById("boardList");
-const message = document.getElementById("message");
-const overlay = document.getElementById("createOverlay");
-const createForm = document.getElementById("createForm");
-const createMessage = document.getElementById("createMessage");
+interface BoardListItem {
+  id: number;
+  name: string;
+  name_enc: string;
+  role: string;
+  schema_version: number;
+  unread?: boolean;
+}
 
-let lastOp = "saved";
-let syncState = { online: true, pending: 0, syncing: false };
-function refreshBadge() {
-  let state, title;
+function byId<T extends HTMLElement>(id: string): T {
+  const node = document.getElementById(id);
+  if (!node) throw new Error(`page is missing #${id}`);
+  return node as T;
+}
+
+const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+const statusNode = byId("status");
+const listNode = byId("boardList");
+const message = byId("message");
+const overlay = byId("createOverlay");
+const createForm = byId<HTMLFormElement>("createForm");
+const createMessage = byId("createMessage");
+
+let lastOp: "saved" | "saving" | "error" = "saved";
+let syncState: Pick<SyncStatus, "online" | "pending" | "syncing"> = { online: true, pending: 0, syncing: false };
+function refreshBadge(): void {
+  let state: string, title: string;
   if (!syncState.online) { state = "offline"; title = syncState.pending ? `Офлайн · ${syncState.pending} изм. ждут отправки` : "Офлайн"; }
   else if (syncState.syncing || syncState.pending > 0) { state = "pending"; title = syncState.pending ? `Синхронизация · осталось ${syncState.pending}` : "Синхронизация…"; }
   else if (lastOp === "error") { state = "error"; title = "Ошибка"; }
@@ -24,19 +42,19 @@ function refreshBadge() {
   statusNode.dataset.state = state;
   statusNode.title = title;
 }
-function setStatus(state) { lastOp = state; refreshBadge(); }
+function setStatus(state: "saved" | "saving" | "error"): void { lastOp = state; refreshBadge(); }
 
-async function boot() {
+async function boot(): Promise<void> {
   if (!(await xyApp.requireLogin())) return;
   xySync.start();
   xySync.onStatus((st) => { syncState = st; refreshBadge(); });
   await refresh();
 }
 
-async function refresh() {
+async function refresh(): Promise<void> {
   setStatus("saving");
   try {
-    const boards = await fetchJSON("/api/boards");
+    const boards = (await fetchJSON("/api/boards")) as BoardListItem[];
     await xySync.putBoardList(boards);
     renderBoards(boards);
     setStatus("saved");
@@ -44,16 +62,16 @@ async function refresh() {
     // Offline (or the server is unreachable): fall back to the cached board list.
     const cached = await xySync.getBoardList().catch(() => null);
     if (cached) {
-      renderBoards(cached);
+      renderBoards(cached as BoardListItem[]);
       setStatus("saved");
     } else {
-      message.textContent = e.message;
+      message.textContent = errMsg(e);
       setStatus("error");
     }
   }
 }
 
-function renderBoards(boards) {
+function renderBoards(boards: BoardListItem[]): void {
   listNode.replaceChildren();
   if (!boards.length) {
     listNode.append(el("p", { class: "empty", text: "Пока нет досок. Нажмите + чтобы создать." }));
@@ -94,16 +112,16 @@ function renderBoards(boards) {
   measureNames();
 }
 
-function setCardName(card, text) {
-  card.querySelector(".board-card-name").textContent = text;
+function setCardName(card: HTMLElement, text: string): void {
+  card.querySelector(".board-card-name")!.textContent = text;
   measureNames();
 }
 // Flag every card whose one-line title overflows, so the CSS fade turns on only
 // there (dope's -truncated flag) — and so hover knows which cards get a tooltip.
-function measureNames() {
+function measureNames(): void {
   requestAnimationFrame(() => {
     for (const card of listNode.querySelectorAll(".board-card")) {
-      const name = card.querySelector(".board-card-name");
+      const name = card.querySelector(".board-card-name")!;
       card.classList.toggle("board-card-name-truncated", name.scrollWidth > name.clientWidth + 1);
     }
   });
@@ -120,11 +138,11 @@ window.addEventListener("resize", () => {
 // the grid's scroll clip and neighbouring tiles never crop it — dope's floating
 // popover, pared to xy's single trigger. Shown below the title, flipped above when
 // it would fall off the bottom, clamped into the viewport.
-let tipEl = null, tipCard = null;
-function showTip(card) {
+let tipEl: HTMLElement | null = null, tipCard: HTMLElement | null = null;
+function showTip(card: HTMLElement): void {
   if (tipCard === card) return;
   tipCard = card;
-  const name = card.querySelector(".board-card-name");
+  const name = card.querySelector(".board-card-name")!;
   if (!tipEl) { tipEl = el("div", { class: "popover board-card-name-popover" }); document.body.append(tipEl); }
   tipEl.textContent = name.textContent;
   tipEl.classList.add("visible");
@@ -135,24 +153,24 @@ function showTip(card) {
   tipEl.style.left = `${left}px`;
   tipEl.style.top = `${top}px`;
 }
-function hideTip() { if (tipEl) tipEl.classList.remove("visible"); tipCard = null; }
+function hideTip(): void { if (tipEl) tipEl.classList.remove("visible"); tipCard = null; }
 
 listNode.addEventListener("pointerover", (e) => {
-  const card = e.target.closest(".board-card");
+  const card = e.target instanceof Element ? e.target.closest<HTMLElement>(".board-card") : null;
   if (card && card.classList.contains("board-card-name-truncated")) showTip(card);
 });
 listNode.addEventListener("pointerout", (e) => {
-  const card = e.target.closest(".board-card");
-  if (card && !card.contains(e.relatedTarget)) hideTip();
+  const card = e.target instanceof Element ? e.target.closest<HTMLElement>(".board-card") : null;
+  if (card && !card.contains(e.relatedTarget instanceof Node ? e.relatedTarget : null)) hideTip();
 });
 listNode.addEventListener("focusin", (e) => {
-  const card = e.target.closest(".board-card");
+  const card = e.target instanceof Element ? e.target.closest<HTMLElement>(".board-card") : null;
   if (card && card.classList.contains("board-card-name-truncated")) showTip(card);
 });
 listNode.addEventListener("focusout", hideTip);
 window.addEventListener("scroll", hideTip, true);
 
-async function decryptName(b) {
+async function decryptName(b: BoardListItem): Promise<string | null> {
   try {
     const dk = await xyCrypto.loadCachedDK(b.id);
     if (!dk) return null;
@@ -164,32 +182,32 @@ async function decryptName(b) {
 
 // Backfill a legacy board's plaintext name once we've decrypted it. Best-effort and
 // online-only; the server ignores it if the board is already migrated (no clobber).
-async function migrateName(id, name) {
+async function migrateName(id: number, name: string): Promise<void> {
   if (!xySync.isOnline()) return;
   try { await jpost(`/api/boards/${id}/migrate-name`, { name }); } catch (_) {}
 }
 
 // ---- create board ----
-xyApp.swapPlusIcon(document.getElementById("newBoardBtn")); // emoji ➕ → SVG plus
-document.getElementById("newBoardBtn").addEventListener("click", () => {
+xyApp.swapPlusIcon(byId("newBoardBtn")); // emoji ➕ → SVG plus
+byId("newBoardBtn").addEventListener("click", () => {
   createMessage.textContent = "";
   createForm.reset();
   overlay.hidden = false;
-  document.getElementById("boardName").focus();
+  byId("boardName").focus();
 });
 // «🎲»: fill the field with a fresh xkcd-style passphrase and copy it, so the one
 // place it's ever shown in the clear (creation) doubles as the moment you stash
 // it somewhere safe.
-const boardPass = document.getElementById("boardPass");
-xyApp.wireGenPassphrase(document.getElementById("genPassBtn"), boardPass, xyCrypto.generatePassphrase);
+const boardPass = byId<HTMLInputElement>("boardPass");
+xyApp.wireGenPassphrase(byId("genPassBtn"), boardPass, xyCrypto.generatePassphrase);
 
-document.getElementById("createCancel").addEventListener("click", () => { overlay.hidden = true; });
+byId("createCancel").addEventListener("click", () => { overlay.hidden = true; });
 overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) overlay.hidden = true; });
 
 createForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   createMessage.textContent = "";
-  const name = document.getElementById("boardName").value.trim();
+  const name = byId<HTMLInputElement>("boardName").value.trim();
   const pass = boardPass.value;
   if (!name || !pass) return;
   const passErr = xyCrypto.validatePassphrase(pass);
@@ -199,11 +217,11 @@ createForm.addEventListener("submit", async (e) => {
     // The passphrase still mints the board's data key (lists/cards stay encrypted);
     // only the name travels in the clear now.
     const { keymeta, dk } = await xyCrypto.createBoardKeys(pass);
-    const res = await jpost("/api/boards", { ...keymeta, name });
+    const res = (await jpost("/api/boards", { ...keymeta, name })) as { id: number };
     await xyCrypto.cacheDK(res.id, dk);
     window.location.href = `/board/${res.id}`;
   } catch (err) {
-    createMessage.textContent = err.message;
+    createMessage.textContent = errMsg(err);
   }
 });
 

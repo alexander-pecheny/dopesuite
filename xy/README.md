@@ -8,8 +8,9 @@ ciphertext plus the structural metadata needed to order, sync, and authorize.
 list is readable without unlocking every board (see the trust model in `AGENTS.md`).
 
 - **Backend**: Go 1.26, SQLite (WAL, `modernc.org/sqlite`, pure Go, no cgo).
-- **Frontend**: vanilla JS ES modules (no bundler) + the dope design system,
-  embedded in the binary.
+- **Frontend**: strict-TypeScript ES modules (sources `web/ts/`, built to
+  `static/dist/` by the shared root toolchain — root ADR-0001) + the dope
+  design system, embedded in the binary.
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, no WASM) +
   AES-256-GCM via WebCrypto.
 - **Offline / PWA**: installable, works offline and resyncs on reconnect. A

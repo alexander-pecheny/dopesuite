@@ -23,6 +23,10 @@ type Chrome struct {
 	Stylesheets  []string
 	FontPreloads []string
 	BootScripts  []string
+	// ModuleBootScripts load on every page like BootScripts but as ES modules
+	// (deferred by the browser) — for app chrome that doesn't need to block
+	// first paint the way the theme boot does.
+	ModuleBootScripts []string
 	PageKinds    map[string]PageKind
 	DefaultKind  string
 	TopbarSync   SyncSpec

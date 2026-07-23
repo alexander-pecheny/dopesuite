@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyBoardMembers } from "../web/assets/static/boardmembers.js";
+import { xyBoardMembers } from "../web/assets/static/dist/boardmembers.js";
 
 const { memberName, roleLabel } = xyBoardMembers;
 

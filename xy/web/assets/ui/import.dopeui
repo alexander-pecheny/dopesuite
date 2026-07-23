@@ -1,4 +1,4 @@
-page title="Импорт из Trello · xy" kind="wide" scripts="import.js"
+page title="Импорт из Trello · xy" kind="wide" scripts="dist/import.js"
   topbar title="Импорт из Trello"
     iconlink href="/" label="Все доски" "⬅️"
 

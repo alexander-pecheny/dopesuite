@@ -1,4 +1,4 @@
-// boardmembers.js — the board's members/sharing seam, lifted out of board.js as
+// boardmembers.ts — the board's members/sharing seam, lifted out of board.js as
 // a first step in splitting that monolith into per-feature ES modules.
 //
 // Membership is plaintext server-side metadata (not board-encrypted), so the
@@ -8,47 +8,63 @@
 // The module writes members/memberNames/me onto the shared board `state` object
 // board.js passes in, and owns the members overlay's DOM + listeners.
 import { xyApp } from "./app.js";
+import type { AuthMe } from "./app.js";
 import { xySync } from "./sync.js";
 
 const { fetchJSON, jpost, jdelete, el } = xyApp;
 
+export interface BoardMember {
+  user_id: number;
+  username?: string | null;
+  role: string;
+}
+
+// The slice of board.js's shared state this module reads (role) and writes
+// (members / memberNames / me).
+export interface MembersState {
+  role?: string | null;
+  members?: BoardMember[];
+  memberNames?: Record<number, string>;
+  me?: AuthMe | null;
+}
+
 // memberName / roleLabel are the pure display helpers (unit-tested).
-export function memberName(m) { return m.username || `#${m.user_id}`; }
-export function roleLabel(role) { return role === "owner" ? "владелец" : "редактор"; }
+export function memberName(m: BoardMember): string { return m.username || `#${m.user_id}`; }
+export function roleLabel(role: string): string { return role === "owner" ? "владелец" : "редактор"; }
 
 // createBoardMembers wires the members overlay against the shared board state and
 // board id, and returns { load, open } for board.js to call.
-export function createBoardMembers(state, boardId) {
-  async function fetchMembers() {
-    const members = await fetchJSON(`/api/boards/${boardId}/members`);
+export function createBoardMembers(state: MembersState, boardId: number | string): { load: () => Promise<void>; open: () => void } {
+  async function fetchMembers(): Promise<BoardMember[]> {
+    const members = (await fetchJSON(`/api/boards/${boardId}/members`)) as BoardMember[];
     state.members = members;
     state.memberNames = {};
     for (const m of members) state.memberNames[m.user_id] = memberName(m);
     return members;
   }
 
-  async function load() {
+  async function load(): Promise<void> {
     if (!xySync.isOnline()) return;
     try { await fetchMembers(); } catch (_) {}
     if (!state.me) {
-      try { state.me = await fetchJSON(`/api/auth/me`); } catch (_) {}
+      try { state.me = (await fetchJSON(`/api/auth/me`)) as AuthMe; } catch (_) {}
     }
   }
 
-  function open() {
-    document.getElementById("membersMessage").textContent = "";
-    document.getElementById("membersOverlay").hidden = false;
+  function open(): void {
+    document.getElementById("membersMessage")!.textContent = "";
+    document.getElementById("membersOverlay")!.hidden = false;
     render();
   }
 
-  function close() { document.getElementById("membersOverlay").hidden = true; }
+  function close(): void { document.getElementById("membersOverlay")!.hidden = true; }
 
-  async function render() {
-    const listNode = document.getElementById("membersList");
-    const addForm = document.getElementById("addMemberForm");
-    const msg = document.getElementById("membersMessage");
+  async function render(): Promise<void> {
+    const listNode = document.getElementById("membersList")!;
+    const addForm = document.getElementById("addMemberForm")!;
+    const msg = document.getElementById("membersMessage")!;
     listNode.replaceChildren();
-    let members;
+    let members: BoardMember[];
     try {
       members = await fetchMembers();
     } catch (_) {
@@ -73,20 +89,20 @@ export function createBoardMembers(state, boardId) {
     }
   }
 
-  async function removeMember(m) {
+  async function removeMember(m: BoardMember): Promise<void> {
     if (!confirm(`Убрать ${m.username || "участника"} из доски?`)) return;
     try {
       await jdelete(`/api/boards/${boardId}/members/${m.user_id}`);
       await render();
     } catch (e) {
-      document.getElementById("membersMessage").textContent = e.message;
+      document.getElementById("membersMessage")!.textContent = e instanceof Error ? e.message : String(e);
     }
   }
 
-  document.getElementById("addMemberForm").addEventListener("submit", async (e) => {
+  document.getElementById("addMemberForm")!.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const input = document.getElementById("addMemberName");
-    const msg = document.getElementById("membersMessage");
+    const input = document.getElementById("addMemberName") as HTMLInputElement;
+    const msg = document.getElementById("membersMessage")!;
     const name = input.value.trim();
     msg.textContent = "";
     if (!name) return;
@@ -95,18 +111,16 @@ export function createBoardMembers(state, boardId) {
       input.value = "";
       await render();
     } catch (err) {
-      msg.textContent = err.message;
+      msg.textContent = err instanceof Error ? err.message : String(err);
     }
   });
 
-  document.getElementById("membersClose").addEventListener("click", close);
-  document.getElementById("membersOverlay").addEventListener("pointerdown", (e) => {
-    if (e.target.id === "membersOverlay") close();
+  document.getElementById("membersClose")!.addEventListener("click", close);
+  document.getElementById("membersOverlay")!.addEventListener("pointerdown", (e) => {
+    if (e.target instanceof Element && e.target.id === "membersOverlay") close();
   });
 
   return { load, open };
 }
 
 export const xyBoardMembers = { createBoardMembers, memberName, roleLabel };
-
-if (typeof window !== "undefined") window.xyBoardMembers = xyBoardMembers;

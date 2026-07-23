@@ -90,7 +90,7 @@ globalThis.fetch = async (path, init) => {
   };
 };
 
-const { xySync } = await import("../web/assets/static/sync.js");
+const { xySync } = await import("../web/assets/static/dist/sync.js");
 
 test("offline creates queue with temp ids, flush remaps them to real ids", async () => {
   // Seed a mirror snapshot so applyToMirror has something to update.

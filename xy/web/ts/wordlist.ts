@@ -1,4 +1,4 @@
-// wordlist.js — the vocabulary for xkcd-style ("correct-horse-battery-staple")
+// wordlist.ts — the vocabulary for xkcd-style ("correct-horse-battery-staple")
 // generated passphrases. Data only, no logic. crypto.js#generatePassphrase draws
 // from it uniformly.
 //

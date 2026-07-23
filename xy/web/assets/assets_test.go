@@ -13,8 +13,8 @@ func TestUnderscoreFilesEmbedded(t *testing.T) {
 		"static/vendor/_assert.js",
 		"static/vendor/_md.js",
 		"static/vendor/scrypt.js",
-		"static/crypto.js",
-		"static/index.js",
+		"static/dist/crypto.js",
+		"static/dist/index.js",
 	} {
 		if _, err := fs.Stat(FS, name); err != nil {
 			t.Errorf("not embedded: %s (%v)", name, err)

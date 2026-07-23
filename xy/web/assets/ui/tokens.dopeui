@@ -1,4 +1,4 @@
-page title="API-токены · xy" kind="sheet" scripts="tokens.js"
+page title="API-токены · xy" kind="sheet" scripts="dist/tokens.js"
   topbar title="API-токены"
     iconlink href="/profile" label="Профиль" "⬅️"
 

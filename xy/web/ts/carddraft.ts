@@ -1,4 +1,4 @@
-// carddraft.js — the card editor's draft/dirty kernel, lifted out of board.js.
+// carddraft.ts — the card editor's draft/dirty kernel, lifted out of board.js.
 //
 // The card detail view carries a working draft of a card's 4s description, its
 // handout-generation settings (meta) and its alias, against the last-persisted
@@ -12,15 +12,25 @@
 // normalizeMeta / normalizeAlias mirror the server's optBlob convention: a blank
 // string means "no value". Meta is kept verbatim when non-blank; the alias is
 // also trimmed (it is a short label, meta is free markup).
-export function normalizeMeta(v) { return v && v.trim() ? v : null; }
-export function normalizeAlias(v) { return v && v.trim() ? v.trim() : null; }
+export function normalizeMeta(v: string | null | undefined): string | null { return v && v.trim() ? v : null; }
+export function normalizeAlias(v: string | null | undefined): string | null { return v && v.trim() ? v.trim() : null; }
+
+// The state contentDirty judges: the working draft next to its baseline.
+export interface DraftState {
+  isNew: boolean;
+  desc: string;
+  savedDesc: string;
+  meta: string | null;
+  savedMeta: string | null;
+  alias: string | null;
+}
 
 // contentDirty decides whether «Сохранить» is enabled. A new card (isNew) is
 // dirty once it has any 4s content or an alias; an existing card is dirty when
 // its description or handout settings differ from the persisted baseline. The
 // alias is deliberately excluded from the existing-card check — it saves on its
 // own button (see aliasDirty).
-export function contentDirty(s) {
+export function contentDirty(s: DraftState): boolean {
   return s.isNew
     ? s.desc.trim() !== "" || (s.alias || null) !== null
     : s.desc !== s.savedDesc || (s.meta || null) !== (s.savedMeta || null);
@@ -28,15 +38,32 @@ export function contentDirty(s) {
 
 // aliasDirty compares an already-normalized (string|null) alias against the
 // persisted one.
-export function aliasDirty(current, savedAlias) {
+export function aliasDirty(current: string | null, savedAlias: string | null): boolean {
   return (current || null) !== (savedAlias || null);
+}
+
+// The shape create() returns — one card's draft + baseline, driven by board.js.
+export interface CardDraft {
+  desc: string;
+  meta: string | null;
+  alias: string | null;
+  readonly savedAlias: string | null;
+  open(desc: string, meta: string | null, alias: string | null): void;
+  blank(): void;
+  contentDirty(isNew: boolean): boolean;
+  aliasDirty(current: string | null): boolean;
+  commitContent(desc: string, meta: string | null): void;
+  commitAlias(alias: string | null): void;
+  normalizedMeta(): string | null;
+  normalizedAlias(): string | null;
 }
 
 // create() holds one card's draft + baseline. board.js drives it: open() on a
 // persisted card, blank() for a new one, the desc/meta/alias setters as the
 // views change, commit* after a successful save.
-export function create() {
-  const st = { desc: "", meta: null, alias: null, savedDesc: "", savedMeta: null, savedAlias: null };
+export function create(): CardDraft {
+  const st: { desc: string; meta: string | null; alias: string | null; savedDesc: string; savedMeta: string | null; savedAlias: string | null } =
+    { desc: "", meta: null, alias: null, savedDesc: "", savedMeta: null, savedAlias: null };
   return {
     get desc() { return st.desc; },
     set desc(v) { st.desc = v; },
@@ -62,5 +89,3 @@ export function create() {
 }
 
 export const xyCardDraft = { create, contentDirty, aliasDirty, normalizeMeta, normalizeAlias };
-
-if (typeof window !== "undefined") window.xyCardDraft = xyCardDraft;

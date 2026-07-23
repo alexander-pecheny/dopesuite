@@ -17,8 +17,13 @@ Russian-language UI.
   **No external runtime dependencies**: docx/import/handouts are all in-process,
   and typst is linked in as a wasm module run under wazero (pure Go, so the binary
   stays CGO_ENABLED=0 and cross-compilable).
-- **Frontend**: vanilla JS ES modules (no bundler) + the dope design system
-  (`styles.css`), embedded in the binary.
+- **Frontend**: strict-TypeScript ES modules (root ADR-0001) + the dope design
+  system (`styles.css`), embedded in the binary. Sources in `web/ts/*.ts`; the
+  shared root toolchain (`just build-web`, esbuild per-file transform + native
+  tsc) emits same-named ESM into the gitignored `web/assets/static/dist/`,
+  which the pages load and the SW precaches. board.ts is a thin orchestrator
+  over extracted kernels (unlock.ts, dragrank.ts, carddetail.ts, timeline.ts,
+  boardmembers.ts — each a `create(deps)` factory with jstest coverage).
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, **no WASM** → runs
   under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto.
 - **Tests**: Go (`go test`) + frontend (`node --test jstest/*.test.js`).
@@ -277,8 +282,9 @@ Config via `.env` (see `.env.example`). Telegram register/login needs
 
 ## Conventions
 - **Reuse the design system** (`styles.css` CSS variables, components) — extend
-  it, don't inline one-off styles. Frontend modules attach to `window.xy*` and
-  also `export`.
+  it, don't inline one-off styles. Frontend modules are strict-TS ES modules in
+  `web/ts/` — exports are the wiring, no `window.xy*` globals; the jstest suite
+  imports the built `static/dist/*.js`.
 - **Write discipline**: every mutation goes through `s.withWriteTx` (pulls the
   pooled conn before the lock, bounds the tx). Ported from dope.
 - **Server never sees plaintext content**: content columns are `_enc` BLOB

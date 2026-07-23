@@ -10,3 +10,5 @@
 /telegram-bot
 # built by `just build-wasm` (30 MB); the Rust source is typst-wasm/
 /internal/chgk/typstwasm/typst.wasm
+# built by `just build-web` (root ADR-0001)
+/web/assets/static/dist/

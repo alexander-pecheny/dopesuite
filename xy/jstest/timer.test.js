@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyTimer } from "../web/assets/static/timer.js";
+import { xyTimer } from "../web/assets/static/dist/timer.js";
 
 const { _parseCustom: parseCustom, _presets: presets } = xyTimer;
 

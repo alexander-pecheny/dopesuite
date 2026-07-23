@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyRank } from "../web/assets/static/rank.js";
+import { xyRank } from "../web/assets/static/dist/rank.js";
 
 const { keyBetween, nKeysBetween } = xyRank;
 

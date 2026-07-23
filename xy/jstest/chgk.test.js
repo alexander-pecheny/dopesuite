@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyChgk } from "../web/assets/static/chgk.js";
+import { xyChgk } from "../web/assets/static/dist/chgk.js";
 
 const { questionText, blockText, numberQuestionCards, parseBlocks, numberDirective,
   removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem } = xyChgk;

@@ -1,4 +1,4 @@
-page title="Мои доски · xy" kind="full" scripts="index.js"
+page title="Мои доски · xy" kind="full" scripts="dist/index.js"
   topbar title="Доски"
     iconlink href="/import" label="Импорт из Trello" "📥"
     iconbtn id="newBoardBtn" label="Новая доска" "➕"

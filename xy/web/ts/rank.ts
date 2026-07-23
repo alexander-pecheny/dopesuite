@@ -1,15 +1,13 @@
-// rank.js — fractional indexing (LexoRank-style) so a drag updates only the
+// rank.ts — fractional indexing (LexoRank-style) so a drag updates only the
 // moved item's rank. A faithful port of the public-domain `fractional-indexing`
 // algorithm (rocicorp/fractional-indexing, MIT). Keys are base-62 strings that
 // sort lexicographically; `keyBetween(a, b)` returns a key strictly between a
 // and b (null = open end).
-//
-// ES module + window.xyRank global.
 
 const DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const ZERO = DIGITS[0];
 
-function midpoint(a, b) {
+function midpoint(a: string, b: string | null): string {
   if (b !== null && a >= b) throw new Error(`${a} >= ${b}`);
   if (a.slice(-1) === ZERO || (b && b.slice(-1) === ZERO)) throw new Error("trailing zero");
   if (b) {
@@ -27,27 +25,27 @@ function midpoint(a, b) {
   return DIGITS[digitA] + midpoint(a.slice(1), null);
 }
 
-function validateInteger(int) {
+function validateInteger(int: string): void {
   if (int.length !== getIntegerLength(int[0])) throw new Error(`invalid integer part: ${int}`);
 }
-function getIntegerLength(head) {
+function getIntegerLength(head: string): number {
   if (head >= "a" && head <= "z") return head.charCodeAt(0) - "a".charCodeAt(0) + 2;
   if (head >= "A" && head <= "Z") return "Z".charCodeAt(0) - head.charCodeAt(0) + 2;
   throw new Error("invalid order key head: " + head);
 }
-function getIntegerPart(key) {
+function getIntegerPart(key: string): string {
   const integerPartLength = getIntegerLength(key[0]);
   if (integerPartLength > key.length) throw new Error("invalid order key: " + key);
   return key.slice(0, integerPartLength);
 }
-function validateOrderKey(key) {
+function validateOrderKey(key: string): void {
   if (key === "A" + ZERO.repeat(26)) throw new Error("invalid order key: " + key);
   const i = getIntegerPart(key);
   const f = key.slice(i.length);
   if (f.slice(-1) === ZERO) throw new Error("invalid order key: " + key);
 }
 
-function incrementInteger(x) {
+function incrementInteger(x: string): string | null {
   validateInteger(x);
   const [head, ...digs] = x.split("");
   let carry = true;
@@ -66,7 +64,7 @@ function incrementInteger(x) {
   }
   return head + digs.join("");
 }
-function decrementInteger(x) {
+function decrementInteger(x: string): string | null {
   validateInteger(x);
   const [head, ...digs] = x.split("");
   let borrow = true;
@@ -87,12 +85,12 @@ function decrementInteger(x) {
 }
 
 // keyBetween returns a key strictly between a and b (null open ends).
-function keyBetween(a, b) {
+function keyBetween(a: string | null, b: string | null): string {
   if (a !== null) validateOrderKey(a);
   if (b !== null) validateOrderKey(b);
   if (a !== null && b !== null && a >= b) throw new Error(`${a} >= ${b}`);
-  if (a === null && b === null) return "a" + ZERO;
   if (a === null) {
+    if (b === null) return "a" + ZERO;
     const ib = getIntegerPart(b);
     const fb = b.slice(ib.length);
     if (ib === "A" + ZERO.repeat(26)) return ib + midpoint("", fb);
@@ -119,7 +117,7 @@ function keyBetween(a, b) {
 }
 
 // nKeysBetween returns n evenly distributed keys strictly between a and b.
-function nKeysBetween(a, b, n) {
+function nKeysBetween(a: string | null, b: string | null, n: number): string[] {
   if (n === 0) return [];
   if (n === 1) return [keyBetween(a, b)];
   if (b === null) {
@@ -141,4 +139,3 @@ function nKeysBetween(a, b, n) {
 }
 
 export const xyRank = { keyBetween, nKeysBetween };
-if (typeof window !== "undefined") window.xyRank = xyRank;

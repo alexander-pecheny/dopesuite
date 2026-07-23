@@ -1,0 +1,8 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2021", "webworker"],
+    "isolatedModules": false
+  },
+  "include": ["web/ts/sw.ts"]
+}

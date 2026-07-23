@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xySync } from "../web/assets/static/sync.js";
+import { xySync } from "../web/assets/static/dist/sync.js";
 
 const { _substituteValue, _substitutePath, _applyOpToSnapshot, _pendingTimeline } = xySync;
 

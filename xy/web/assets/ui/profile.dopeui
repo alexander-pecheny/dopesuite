@@ -1,4 +1,4 @@
-page title="Профиль · xy" kind="sheet" scripts="profile.js"
+page title="Профиль · xy" kind="sheet" scripts="dist/profile.js"
   topbar title="Профиль" home="/"
 
   section

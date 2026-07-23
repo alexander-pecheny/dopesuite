@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyDiff } from "../web/assets/static/diff.js";
+import { xyDiff } from "../web/assets/static/dist/diff.js";
 
 const { diffTokens } = xyDiff;
 

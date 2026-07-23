@@ -1,4 +1,4 @@
-// sw.js — xy's service worker: caches the app shell so the PWA loads and runs
+// sw.ts — xy's service worker: caches the app shell so the PWA loads and runs
 // with no network. Data offline is handled in app code (sync.js + IndexedDB);
 // the worker only deals with static assets and HTML navigations. It never caches
 // /api responses — those carry encrypted, user- and session-specific data and
@@ -15,20 +15,26 @@
 //     online while staying offline-capable.
 //   - everything else (/api/…): straight to network, untouched.
 
-const CACHE = "xy-shell-v9";
+// The webworker lib types `self` as a plain worker scope; alias it once as the
+// service-worker scope so skipWaiting/clients and the SW event map are typed.
+// (This stays a script file — no import/export — so the served /sw.js is a
+// plain classic worker script.)
+const sw = self as unknown as ServiceWorkerGlobalScope;
+
+const CACHE = "xy-shell-v10";
 
 // App shell precache: entry modules, styles, fonts, vendored crypto, icons, and
 // the static page routes. Unversioned URLs; versioned requests are cached
 // per-URL at runtime. Failures here don't abort install (allSettled).
-const PRECACHE = [
+const PRECACHE: string[] = [
   "/",
   "/login", "/register", "/profile", "/import",
   "/manifest.webmanifest",
   "/static/styles.css",
-  "/static/app.js", "/static/crypto.js", "/static/rank.js", "/static/chgk.js",
-  "/static/diff.js", "/static/board.js", "/static/carddraft.js", "/static/handoutsession.js", "/static/boardmembers.js", "/static/timer.js", "/static/index.js", "/static/menu.js", "/static/pwa.js",
-  "/static/login.js", "/static/profile.js", "/static/import.js",
-  "/static/store.js", "/static/sync.js",
+  "/static/dist/app.js", "/static/dist/crypto.js", "/static/dist/rank.js", "/static/dist/chgk.js",
+  "/static/dist/diff.js", "/static/dist/board.js", "/static/dist/carddraft.js", "/static/dist/handoutsession.js", "/static/dist/boardmembers.js", "/static/dist/timer.js", "/static/dist/index.js", "/static/menu.js", "/static/dist/pwa.js",
+  "/static/login.js", "/static/dist/profile.js", "/static/dist/import.js",
+  "/static/dist/store.js", "/static/dist/sync.js",
   "/static/ding.mp3",
   "/static/vendor/scrypt.js", "/static/vendor/_assert.js", "/static/vendor/_md.js",
   "/static/vendor/hmac.js", "/static/vendor/pbkdf2.js", "/static/vendor/sha256.js",
@@ -39,32 +45,32 @@ const PRECACHE = [
   "/static/apple-touch-icon.png", "/static/favicon.svg", "/favicon.ico",
 ];
 
-self.addEventListener("install", (event) => {
+sw.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE);
       await Promise.allSettled(PRECACHE.map((u) => cache.add(new Request(u, { cache: "reload" }))));
-      await self.skipWaiting();
+      await sw.skipWaiting();
     })()
   );
 });
 
-self.addEventListener("activate", (event) => {
+sw.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       const names = await caches.keys();
       await Promise.all(names.filter((n) => n !== CACHE).map((n) => caches.delete(n)));
-      await self.clients.claim();
+      await sw.clients.claim();
     })()
   );
 });
 
-function isStatic(url) {
+function isStatic(url: URL): boolean {
   return url.pathname.startsWith("/static/") ||
     url.pathname === "/manifest.webmanifest";
 }
 
-async function networkFirstNavigation(request) {
+async function networkFirstNavigation(request: Request): Promise<Response> {
   const cache = await caches.open(CACHE);
   try {
     const resp = await fetch(request);
@@ -87,7 +93,7 @@ async function networkFirstNavigation(request) {
   }
 }
 
-async function cacheFirst(request) {
+async function cacheFirst(request: Request): Promise<Response> {
   const cache = await caches.open(CACHE);
   const cached = await cache.match(request);
   if (cached) return cached;
@@ -111,7 +117,7 @@ async function cacheFirst(request) {
 // networkFirstStatic keeps unversioned modules fresh online (so a deploy lands on
 // the next load, not the one after) while still serving the precached copy when
 // the network is unavailable.
-async function networkFirstStatic(request) {
+async function networkFirstStatic(request: Request): Promise<Response> {
   const cache = await caches.open(CACHE);
   try {
     const resp = await fetch(request);
@@ -123,11 +129,11 @@ async function networkFirstStatic(request) {
   }
 }
 
-self.addEventListener("fetch", (event) => {
+sw.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== sw.location.origin) return;
 
   if (request.mode === "navigate") {
     event.respondWith(networkFirstNavigation(request));

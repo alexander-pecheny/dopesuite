@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyHandoutSession } from "../web/assets/static/handoutsession.js";
+import { xyHandoutSession } from "../web/assets/static/dist/handoutsession.js";
 
 // harness wires the session to fake network + timer primitives and records calls.
 function harness(over = {}) {

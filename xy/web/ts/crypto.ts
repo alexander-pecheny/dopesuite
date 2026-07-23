@@ -1,12 +1,36 @@
-// crypto.js — xy's client-side encryption layer. Sole owner of the wire
+// crypto.ts — xy's client-side encryption layer. Sole owner of the wire
 // envelope format and the per-board key lifecycle. Pure JS scrypt (vendored
 // @noble/hashes, no WASM → runs under iOS Lockdown Mode) + native AES-256-GCM
 // via WebCrypto.
 //
-// Loaded as an ES module (CSP script-src 'self'); consumers import from it or
-// read window.xyCrypto.
-import { scrypt } from "./vendor/scrypt.js";
+// Loaded as an ES module (CSP script-src 'self'); consumers import from it.
+import { scrypt } from "../vendor/scrypt.js";
 import { WORDLIST } from "./wordlist.js";
+
+// scrypt KDF parameters, stored (JSON-encoded) per board.
+export interface KdfParams {
+  kdf?: string;
+  N: number;
+  r: number;
+  p: number;
+  dkLen?: number;
+}
+
+// The persisted key material for a board: everything needed to unwrap its data
+// key given the passphrase.
+export interface BoardKeymeta {
+  kdf_salt: string;
+  kdf_params: string; // JSON-encoded KdfParams
+  wrapped_key: string;
+  verify_token: string;
+}
+
+// A live board data key: the imported WebCrypto handle plus the raw bytes
+// (kept for caching and passphrase re-wraps).
+export interface DataKey {
+  key: CryptoKey;
+  raw: Uint8Array<ArrayBuffer>;
+}
 
 const subtle = globalThis.crypto.subtle;
 const te = new TextEncoder();
@@ -23,7 +47,7 @@ const HEADER_LEN = MAGIC.length + 1 + NONCE_LEN;
 // boards and passphrase re-wraps pick up a bumped N). N=2^16 needs 128*N*r =
 // 64 MiB and ~0.2s desktop / ~1s low-end-mobile per derive — paid once per
 // unlock (the DK is then cached), so a cheap Android tab stays within budget.
-const DEFAULT_KDF = { kdf: "scrypt", N: 65536, r: 8, p: 1, dkLen: 32 };
+const DEFAULT_KDF: KdfParams = { kdf: "scrypt", N: 65536, r: 8, p: 1, dkLen: 32 };
 const VERIFY_PLAINTEXT = "xy-verify-v1";
 
 // Minimum board-passphrase strength. The passphrase is the ONLY secret guarding
@@ -38,7 +62,7 @@ const PASSPHRASE_MIN_WORDS = 3;
 // validatePassphrase returns a human error string, or null when the passphrase
 // clears the floor: at least PASSPHRASE_MIN_LEN characters AND PASSPHRASE_MIN_WORDS
 // non-empty words separated by space, "-" or "_".
-function validatePassphrase(passphrase) {
+function validatePassphrase(passphrase: string | null | undefined): string | null {
   const pass = (passphrase || "").normalize("NFKC");
   if ([...pass].length < PASSPHRASE_MIN_LEN) {
     return `Пароль доски должен быть не короче ${PASSPHRASE_MIN_LEN} символов.`;
@@ -49,7 +73,7 @@ function validatePassphrase(passphrase) {
   return null;
 }
 
-function randomBytes(n) {
+function randomBytes(n: number): Uint8Array<ArrayBuffer> {
   const b = new Uint8Array(n);
   globalThis.crypto.getRandomValues(b);
   return b;
@@ -57,9 +81,9 @@ function randomBytes(n) {
 
 // randomInt returns a uniform integer in [0, n) using rejection sampling over a
 // 16-bit draw — no modulo bias (unlike `rand % n`). n must be ≤ 65536.
-function randomInt(n) {
+function randomInt(n: number): number {
   const limit = 65536 - (65536 % n);
-  let x;
+  let x: number;
   do { const b = randomBytes(2); x = (b[0] << 8) | b[1]; } while (x >= limit);
   return x % n;
 }
@@ -70,8 +94,8 @@ function randomInt(n) {
 // allowed, keeping it exactly nWords·log2(len). Re-rolls until it clears
 // validatePassphrase — 4 short words can fall under the 16-char floor, and the
 // generator must never hand back something the create form would reject.
-function generatePassphrase(nWords = 4) {
-  let pass;
+function generatePassphrase(nWords = 4): string {
+  let pass: string;
   do {
     pass = Array.from({ length: nWords }, () => WORDLIST[randomInt(WORDLIST.length)]).join("-");
   } while (validatePassphrase(pass));
@@ -79,12 +103,12 @@ function generatePassphrase(nWords = 4) {
 }
 
 // ---- base64 (over the wire) ----
-function toB64(bytes) {
+function toB64(bytes: Uint8Array): string {
   let s = "";
   for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
   return btoa(s);
 }
-function fromB64(b64) {
+function fromB64(b64: string): Uint8Array<ArrayBuffer> {
   const s = atob(b64);
   const out = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
@@ -92,7 +116,7 @@ function fromB64(b64) {
 }
 
 // ---- KEK derivation ----
-async function deriveKEK(passphrase, salt, params) {
+async function deriveKEK(passphrase: string, salt: Uint8Array<ArrayBuffer>, params: KdfParams): Promise<CryptoKey> {
   const raw = scrypt(te.encode(passphrase.normalize("NFKC")), salt, {
     N: params.N, r: params.r, p: params.p, dkLen: params.dkLen || 32,
   });
@@ -100,7 +124,7 @@ async function deriveKEK(passphrase, salt, params) {
 }
 
 // ---- envelope encrypt/decrypt with a raw AES-GCM key (CryptoKey) ----
-async function seal(key, plaintextBytes) {
+async function seal(key: CryptoKey, plaintextBytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   const nonce = randomBytes(NONCE_LEN);
   const ct = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, plaintextBytes));
   const out = new Uint8Array(HEADER_LEN + ct.length);
@@ -110,7 +134,7 @@ async function seal(key, plaintextBytes) {
   out.set(ct, HEADER_LEN);
   return out;
 }
-async function open(key, envelope) {
+async function open(key: CryptoKey, envelope: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   if (envelope.length < HEADER_LEN) throw new Error("envelope too short");
   for (let i = 0; i < MAGIC.length; i++) {
     if (envelope[i] !== MAGIC[i]) throw new Error("bad envelope magic");
@@ -122,7 +146,7 @@ async function open(key, envelope) {
 }
 
 // ---- data-key (DK) import ----
-async function importDK(raw) {
+async function importDK(raw: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   return subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
@@ -130,7 +154,7 @@ async function importDK(raw) {
 
 // createBoardKeys generates a fresh DK and wraps it under a passphrase-derived
 // KEK. Returns the keymeta to persist plus the live DK (CryptoKey + raw).
-async function createBoardKeys(passphrase) {
+async function createBoardKeys(passphrase: string): Promise<{ keymeta: BoardKeymeta; dk: DataKey }> {
   const params = { ...DEFAULT_KDF };
   const salt = randomBytes(16);
   const dkRaw = randomBytes(32);
@@ -151,11 +175,11 @@ async function createBoardKeys(passphrase) {
 
 // unlockBoard derives the KEK, unwraps DK, and verifies the token. Throws on a
 // wrong passphrase.
-async function unlockBoard(passphrase, keymeta) {
-  const params = JSON.parse(keymeta.kdf_params);
+async function unlockBoard(passphrase: string, keymeta: BoardKeymeta): Promise<DataKey> {
+  const params = JSON.parse(keymeta.kdf_params) as KdfParams;
   const salt = fromB64(keymeta.kdf_salt);
   const kek = await deriveKEK(passphrase, salt, params);
-  let dkRaw;
+  let dkRaw: Uint8Array<ArrayBuffer>;
   try {
     dkRaw = await open(kek, fromB64(keymeta.wrapped_key));
   } catch (_) {
@@ -173,7 +197,7 @@ async function unlockBoard(passphrase, keymeta) {
 
 // rewrapKey produces new keymeta (salt/params/wrapped_key) for a passphrase
 // change, re-wrapping the SAME dk. Board data is never re-encrypted.
-async function rewrapKey(newPassphrase, dk) {
+async function rewrapKey(newPassphrase: string, dk: DataKey): Promise<Omit<BoardKeymeta, "verify_token">> {
   const params = { ...DEFAULT_KDF };
   const salt = randomBytes(16);
   const kek = await deriveKEK(newPassphrase, salt, params);
@@ -182,16 +206,16 @@ async function rewrapKey(newPassphrase, dk) {
 }
 
 // ---- field helpers (string <-> base64 envelope) ----
-async function encField(dk, str) {
+async function encField(dk: DataKey, str: string): Promise<string> {
   return toB64(await seal(dk.key, te.encode(str)));
 }
-async function decField(dk, b64) {
+async function decField(dk: DataKey, b64: string): Promise<string> {
   return td.decode(await open(dk.key, fromB64(b64)));
 }
-async function encBytes(dk, bytes) {
+async function encBytes(dk: DataKey, bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   return await seal(dk.key, bytes);
 }
-async function decBytes(dk, bytes) {
+async function decBytes(dk: DataKey, bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   return await open(dk.key, bytes);
 }
 
@@ -199,7 +223,7 @@ async function decBytes(dk, bytes) {
 const DB_NAME = "xy-keys";
 const STORE = "dk";
 
-function idb() {
+function idb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => req.result.createObjectStore(STORE);
@@ -207,33 +231,33 @@ function idb() {
     req.onerror = () => reject(req.error);
   });
 }
-async function cacheDK(boardId, dk) {
+async function cacheDK(boardId: number | string, dk: DataKey): Promise<void> {
   const db = await idb();
-  await new Promise((res, rej) => {
+  await new Promise<void>((res, rej) => {
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).put(dk.raw, String(boardId));
-    tx.oncomplete = res;
+    tx.oncomplete = () => res();
     tx.onerror = () => rej(tx.error);
   });
 }
-async function loadCachedDK(boardId) {
+async function loadCachedDK(boardId: number | string): Promise<DataKey | null> {
   const db = await idb();
-  const raw = await new Promise((res, rej) => {
+  const raw = await new Promise<Uint8Array<ArrayBuffer> | ArrayBuffer | undefined>((res, rej) => {
     const tx = db.transaction(STORE, "readonly");
     const req = tx.objectStore(STORE).get(String(boardId));
-    req.onsuccess = () => res(req.result);
+    req.onsuccess = () => res(req.result as Uint8Array<ArrayBuffer> | ArrayBuffer | undefined);
     req.onerror = () => rej(req.error);
   });
   if (!raw) return null;
   const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
   return { key: await importDK(bytes), raw: bytes };
 }
-async function forgetDK(boardId) {
+async function forgetDK(boardId: number | string): Promise<void> {
   const db = await idb();
-  await new Promise((res, rej) => {
+  await new Promise<void>((res, rej) => {
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).delete(String(boardId));
-    tx.oncomplete = res;
+    tx.oncomplete = () => res();
     tx.onerror = () => rej(tx.error);
   });
 }
@@ -247,6 +271,3 @@ export const xyCrypto = {
   _seal: seal, _open: open, _deriveKEK: deriveKEK, _importDK: importDK,
   DEFAULT_KDF,
 };
-
-// Also expose as a window global for classic scripts.
-if (typeof window !== "undefined") window.xyCrypto = xyCrypto;

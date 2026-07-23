@@ -1,19 +1,29 @@
-// diff.js — a tiny word-level diff used to highlight what changed between two
+// diff.ts — a tiny word-level diff used to highlight what changed between two
 // versions of a card description (timeline desc_edit events). Token-level LCS
 // over word/whitespace runs, so insertions and deletions are shown inline
 // instead of as two opaque before/after blocks.
 //
-// ES module + window.xyDiff global. Pure, dependency-free; unit-tested in
-// jstest/diff.test.js.
+// Pure, dependency-free; unit-tested in jstest/diff.test.js.
+
+export interface DiffOp {
+  type: "eq" | "add" | "del";
+  text: string;
+}
+
+// briefOps output: diff ops plus the "gap" markers that stand in for elided text.
+export interface BriefOp {
+  type: "eq" | "add" | "del" | "gap";
+  text: string;
+}
 
 // tokenize splits text into alternating word and whitespace runs, preserving
 // everything so the original is exactly reconstructable by concatenation.
-function tokenize(s) {
+function tokenize(s: string | null | undefined): string[] {
   return (s || "").match(/\s+|[^\s]+/g) || [];
 }
 
 // lcs builds the longest-common-subsequence length table for token arrays a, b.
-function lcsTable(a, b) {
+function lcsTable(a: string[], b: string[]): Uint32Array[] {
   const n = a.length, m = b.length;
   const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
   for (let i = n - 1; i >= 0; i--) {
@@ -26,11 +36,11 @@ function lcsTable(a, b) {
 
 // diffTokens returns a list of {type: "eq"|"add"|"del", text} ops that turn
 // `before` into `after`. Adjacent ops of the same type are coalesced.
-function diffTokens(before, after) {
+function diffTokens(before: string | null | undefined, after: string | null | undefined): DiffOp[] {
   const a = tokenize(before), b = tokenize(after);
   const dp = lcsTable(a, b);
-  const ops = [];
-  const push = (type, text) => {
+  const ops: DiffOp[] = [];
+  const push = (type: DiffOp["type"], text: string): void => {
     const last = ops[ops.length - 1];
     if (last && last.type === type) last.text += text;
     else ops.push({ type, text });
@@ -48,7 +58,7 @@ function diffTokens(before, after) {
 
 // takeWords returns the leading (or, with fromEnd, trailing) `n` word tokens of
 // a token run, whitespace included, so the slice reads as natural text.
-function takeWords(toks, n, fromEnd) {
+function takeWords(toks: string[], n: number, fromEnd: boolean): string {
   if (n <= 0) return "";
   let count = 0;
   if (fromEnd) {
@@ -75,14 +85,14 @@ function takeWords(toks, n, fromEnd) {
 // Pieces are rejoined with single spaces: the whitespace between them belonged
 // to the ops being absorbed, and a summary line does not owe the original its
 // line breaks.
-function clusterChanges(ops) {
-  const isWs = (op) => op.type === "eq" && !/\S/.test(op.text);
-  const join = (parts) => parts.map((t) => t.trim()).filter(Boolean).join(" ");
-  const out = [];
+function clusterChanges(ops: DiffOp[]): DiffOp[] {
+  const isWs = (op: DiffOp): boolean => op.type === "eq" && !/\S/.test(op.text);
+  const join = (parts: string[]): string => parts.map((t) => t.trim()).filter(Boolean).join(" ");
+  const out: DiffOp[] = [];
   let i = 0;
   while (i < ops.length) {
     if (ops[i].type === "eq") { out.push(ops[i]); i++; continue; }
-    const dels = [], adds = [];
+    const dels: string[] = [], adds: string[] = [];
     let j = i, lastChange = i;
     while (j < ops.length && (ops[j].type !== "eq" || isWs(ops[j]))) {
       if (ops[j].type === "del") { dels.push(ops[j].text); lastChange = j; }
@@ -109,13 +119,13 @@ function clusterChanges(ops) {
 // nearest the PREVIOUS change (its head) and the NEXT one (its tail) are kept,
 // and only the middle is dropped. The leading run has nothing before it and the
 // trailing run nothing after, so each keeps only its inner side.
-function briefOps(rawOps, context = 4) {
+function briefOps(rawOps: DiffOp[], context = 4): BriefOp[] {
   const ops = clusterChanges(rawOps);
-  const out = [];
+  const out: BriefOp[] = [];
   // A gap is emitted even as the very first op — the leading run of a long
   // question is exactly what gets dropped, and starting mid-sentence with no …
   // reads as if that were the whole text.
-  const pushGap = () => {
+  const pushGap = (): void => {
     const last = out[out.length - 1];
     if (!last || last.type !== "gap") out.push({ type: "gap", text: "…" });
   };
@@ -136,4 +146,3 @@ function briefOps(rawOps, context = 4) {
 }
 
 export const xyDiff = { tokenize, diffTokens, clusterChanges, briefOps };
-if (typeof window !== "undefined") window.xyDiff = xyDiff;

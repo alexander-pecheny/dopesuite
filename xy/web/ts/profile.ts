@@ -1,58 +1,68 @@
-// profile.js — username management, logout, and the three settings dialogs:
+// profile.ts — username management, logout, and the three settings dialogs:
 // change password, board sizes (with a pseudo-board preview), default author.
 import { xyApp, xySizes } from "./app.js";
+import type { AuthMe, Sizes } from "./app.js";
 
 const { fetchJSON, jpost, fetchVoid, el } = xyApp;
 
-const whoami = document.getElementById("whoami");
-const usernameSection = document.getElementById("usernameSection");
-const usernameForm = document.getElementById("usernameForm");
-const usernameMessage = document.getElementById("usernameMessage");
-const passwordForm = document.getElementById("passwordForm");
-const passwordMessage = document.getElementById("passwordMessage");
+function byId<T extends HTMLElement>(id: string): T {
+  const node = document.getElementById(id);
+  if (!node) throw new Error(`page is missing #${id}`);
+  return node as T;
+}
 
-function setText(node, t) { node.textContent = t; }
+const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+const whoami = byId("whoami");
+const usernameSection = byId("usernameSection");
+const usernameForm = byId<HTMLFormElement>("usernameForm");
+const usernameMessage = byId("usernameMessage");
+const passwordForm = byId<HTMLFormElement>("passwordForm");
+const passwordMessage = byId("passwordMessage");
+
+function setText(node: HTMLElement, t: string): void { node.textContent = t; }
 
 // ---- modal plumbing (openBtn → overlay; close on Отмена, backdrop, Escape) ----
 // onOpen runs after the overlay unhides (it may need layout — the sizes preview
 // measures itself) and may await the /api/auth/me load.
-function wireModal(overlayId, openBtnId, cancelBtnId, onOpen) {
-  const overlay = document.getElementById(overlayId);
-  document.getElementById(openBtnId).addEventListener("click", async () => {
+function wireModal(overlayId: string, openBtnId: string, cancelBtnId: string | null, onOpen?: () => void | Promise<void>): { overlay: HTMLElement; close: () => void } {
+  const overlay = byId(overlayId);
+  byId(openBtnId).addEventListener("click", async () => {
     overlay.hidden = false;
     if (onOpen) await onOpen();
   });
-  const close = () => { overlay.hidden = true; };
-  if (cancelBtnId) document.getElementById(cancelBtnId).addEventListener("click", close);
+  const close = (): void => { overlay.hidden = true; };
+  if (cancelBtnId) byId(cancelBtnId).addEventListener("click", close);
   overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !overlay.hidden) close(); });
   return { overlay, close };
 }
 
 // ---- state loaded from /api/auth/me ----
-let sizes = { ...xySizes.DEFAULT };
+let sizes: Sizes = { ...xySizes.DEFAULT };
 let defaultAuthor = "";
 let cardTitle = "question"; // which field a card's board preview shows
 
-async function boot() {
+async function boot(): Promise<void> {
   const me = await xyApp.requireLogin();
   if (!me) return;
-  whoami.textContent = me.username || me.telegram || ("#" + me.user_id);
-  if (!me.username) usernameSection.hidden = false;
-  sizes = xySizes.sanitize(me.sizes);
-  defaultAuthor = me.default_author || "";
-  cardTitle = me.card_title || "question";
+  const m: Partial<AuthMe> & { telegram?: string | null } = "user_id" in me ? me : {};
+  whoami.textContent = m.username || m.telegram || ("#" + m.user_id);
+  if (!m.username) usernameSection.hidden = false;
+  sizes = xySizes.sanitize(m.sizes);
+  defaultAuthor = m.default_author || "";
+  cardTitle = m.card_title || "question";
   loadStorage();
 }
 const booted = boot();
 
 const MB = 1024 * 1024;
-function fmtMB(bytes) { return (bytes / MB).toFixed(1) + " МБ"; }
+function fmtMB(bytes: number): string { return (bytes / MB).toFixed(1) + " МБ"; }
 
-async function loadStorage() {
-  const node = document.getElementById("storageUsed");
+async function loadStorage(): Promise<void> {
+  const node = byId("storageUsed");
   try {
-    const s = await fetchJSON("/api/auth/storage");
+    const s = (await fetchJSON("/api/auth/storage")) as { unlimited?: boolean; used_bytes: number; quota_bytes: number };
     node.textContent = s.unlimited
       ? fmtMB(s.used_bytes) + " (без лимита)"
       : fmtMB(s.used_bytes) + " из " + fmtMB(s.quota_bytes);
@@ -65,10 +75,10 @@ usernameForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setText(usernameMessage, "");
   try {
-    await jpost("/api/auth/username", { username: document.getElementById("usernameValue").value.trim() });
+    await jpost("/api/auth/username", { username: byId<HTMLInputElement>("usernameValue").value.trim() });
     window.location.reload();
   } catch (err) {
-    setText(usernameMessage, err.message);
+    setText(usernameMessage, errMsg(err));
   }
 });
 
@@ -81,34 +91,34 @@ wireModal("passwordOverlay", "passwordBtn", "passwordCancel", () => {
 passwordForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setText(passwordMessage, "");
-  const newPassword = document.getElementById("newPassword").value;
-  const confirm = document.getElementById("confirmPassword").value;
+  const newPassword = byId<HTMLInputElement>("newPassword").value;
+  const confirm = byId<HTMLInputElement>("confirmPassword").value;
   if (newPassword !== confirm) {
     setText(passwordMessage, "Пароли не совпадают.");
     return;
   }
-  const body = { new_password: newPassword };
-  const cur = document.getElementById("currentPassword").value;
+  const body: { new_password: string; current_password?: string } = { new_password: newPassword };
+  const cur = byId<HTMLInputElement>("currentPassword").value;
   if (cur) body.current_password = cur;
   try {
     await jpost("/api/auth/password", body);
     passwordForm.reset();
     setText(passwordMessage, "Пароль сохранён.");
   } catch (err) {
-    setText(passwordMessage, err.message);
+    setText(passwordMessage, errMsg(err));
   }
 });
 
 // ---- board sizes (workspace width / list width / card height) ----
-// The values live in users.sizes (see xySizes in app.js for defaults/ranges);
+// The values live in users.sizes (see xySizes in app.ts for defaults/ranges);
 // there is no board on this page, so the effect is shown on a pseudo-board:
 // a to-scale wireframe of a monitor with lists of "text line" bars.
 
-const sizesBoardW = document.getElementById("sizesBoardW");
-const sizesListW = document.getElementById("sizesListW");
-const sizesCardH = document.getElementById("sizesCardH");
-const sizesCardFont = document.getElementById("sizesCardFont");
-const preview = document.getElementById("sizesPreview");
+const sizesBoardW = byId<HTMLInputElement>("sizesBoardW");
+const sizesListW = byId<HTMLInputElement>("sizesListW");
+const sizesCardH = byId<HTMLInputElement>("sizesCardH");
+const sizesCardFont = byId<HTMLInputElement>("sizesCardFont");
+const preview = byId("sizesPreview");
 
 // The pretend monitor the preview scales against: wide enough that the default
 // 1512px board visibly centres, and «вся ширина» visibly fills.
@@ -117,7 +127,7 @@ const PREVIEW_SCREEN_W = 2000;
 // clamp visibly cuts some cards and not others.
 const PREVIEW_CARDS = [3, 6, 1, 9, 2, 4, 7, 2];
 
-function renderPreview() {
+function renderPreview(): void {
   const k = (preview.clientWidth || 360) / PREVIEW_SCREEN_W;
   preview.style.setProperty("--pv-board-w", sizes.boardW == null ? "none" : Math.round(sizes.boardW * k) + "px");
   preview.style.setProperty("--pv-list-w", Math.round(sizes.listW * k) + "px");
@@ -141,23 +151,23 @@ function renderPreview() {
   preview.replaceChildren(el("div", { class: "pvb-screen" }, el("div", { class: "pvb-board" }, lists)));
 }
 
-function syncSizesUI() {
+function syncSizesUI(): void {
   const s = sizes;
   sizesBoardW.value = String(s.boardW == null ? xySizes.BOARD_W_MAX : s.boardW);
   sizesListW.value = String(s.listW);
   sizesCardH.value = String(s.cardLines == null ? xySizes.CARD_LINES_MAX : s.cardLines);
   sizesCardFont.value = String(s.cardFont);
-  document.getElementById("sizesBoardWVal").textContent = s.boardW == null ? "вся ширина" : s.boardW + " px";
-  document.getElementById("sizesListWVal").textContent = s.listW + " px";
-  document.getElementById("sizesCardHVal").textContent =
+  byId("sizesBoardWVal").textContent = s.boardW == null ? "вся ширина" : s.boardW + " px";
+  byId("sizesListWVal").textContent = s.listW + " px";
+  byId("sizesCardHVal").textContent =
     s.cardLines == null ? "весь текст" : s.cardLines + (s.cardLines === 1 ? " строка" : s.cardLines < 5 ? " строки" : " строк");
-  document.getElementById("sizesCardFontVal").textContent = s.cardFont + " px";
+  byId("sizesCardFontVal").textContent = s.cardFont + " px";
   renderPreview();
 }
 
 // Debounce the save so dragging a slider fires one request, not one per pixel.
-let sizesSaveTimer = null;
-function scheduleSizesSave() {
+let sizesSaveTimer: number | null = null;
+function scheduleSizesSave(): void {
   if (sizesSaveTimer) clearTimeout(sizesSaveTimer);
   sizesSaveTimer = setTimeout(async () => {
     sizesSaveTimer = null;
@@ -166,7 +176,7 @@ function scheduleSizesSave() {
   }, 400);
 }
 
-function commitSizes() {
+function commitSizes(): void {
   const boardW = Number(sizesBoardW.value), lines = Number(sizesCardH.value);
   sizes = {
     boardW: boardW >= xySizes.BOARD_W_MAX ? null : boardW,
@@ -182,7 +192,7 @@ sizesBoardW.addEventListener("input", commitSizes);
 sizesListW.addEventListener("input", commitSizes);
 sizesCardH.addEventListener("input", commitSizes);
 sizesCardFont.addEventListener("input", commitSizes);
-document.getElementById("sizesReset").addEventListener("click", () => {
+byId("sizesReset").addEventListener("click", () => {
   sizes = { ...xySizes.DEFAULT };
   syncSizesUI();
   scheduleSizesSave();
@@ -192,34 +202,34 @@ const sizesModal = wireModal("sizesOverlay", "sizesBtn", null, async () => {
   await booted;
   syncSizesUI();
 });
-document.getElementById("sizesClose").addEventListener("click", sizesModal.close);
+byId("sizesClose").addEventListener("click", sizesModal.close);
 
 // ---- default author ----
-const authorForm = document.getElementById("authorForm");
-const authorMessage = document.getElementById("authorMessage");
+const authorForm = byId<HTMLFormElement>("authorForm");
+const authorMessage = byId("authorMessage");
 const authorModal = wireModal("authorOverlay", "authorBtn", "authorCancel", async () => {
   await booted;
-  document.getElementById("authorValue").value = defaultAuthor;
+  byId<HTMLInputElement>("authorValue").value = defaultAuthor;
   setText(authorMessage, "");
 });
 
 authorForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   setText(authorMessage, "");
-  const v = document.getElementById("authorValue").value.trim();
+  const v = byId<HTMLInputElement>("authorValue").value.trim();
   try {
     await jpost("/api/auth/default-author", { default_author: v });
     defaultAuthor = v;
     authorModal.close();
   } catch (err) {
-    setText(authorMessage, err.message);
+    setText(authorMessage, errMsg(err));
   }
 });
 
 // ---- card title (question text vs answer) ----
-const cardTitleForm = document.getElementById("cardTitleForm");
-const cardTitleMessage = document.getElementById("cardTitleMessage");
-const cardTitleRadios = () => cardTitleForm.querySelectorAll('input[name="cardTitle"]');
+const cardTitleForm = byId<HTMLFormElement>("cardTitleForm");
+const cardTitleMessage = byId("cardTitleMessage");
+const cardTitleRadios = () => cardTitleForm.querySelectorAll<HTMLInputElement>('input[name="cardTitle"]');
 const cardTitleModal = wireModal("cardTitleOverlay", "cardTitleBtn", "cardTitleCancel", async () => {
   await booted;
   for (const r of cardTitleRadios()) r.checked = r.value === cardTitle;
@@ -236,11 +246,11 @@ cardTitleForm.addEventListener("submit", async (e) => {
     cardTitle = v;
     cardTitleModal.close();
   } catch (err) {
-    setText(cardTitleMessage, err.message);
+    setText(cardTitleMessage, errMsg(err));
   }
 });
 
-document.getElementById("logoutBtn").addEventListener("click", async () => {
+byId("logoutBtn").addEventListener("click", async () => {
   try { await fetchVoid("/api/auth/logout", { method: "POST" }); } catch (_) {}
   window.location.replace("/login");
 });

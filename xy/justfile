@@ -73,8 +73,8 @@ test: wasm build-web
     go test ./...
     node --test jstest/*.test.js
 
-# Frontend unit tests only.
-test-js:
+# Frontend unit tests only (run against the built dist — see build-web).
+test-js: build-web
     node --test jstest/*.test.js
 
 pre-commit:

@@ -2,6 +2,14 @@
 // sources to its shipped output; `node scripts/webbuild.mjs [target...]
 // [--watch]` builds the named targets (default: all).
 import esbuild from 'esbuild';
+import { readdirSync } from 'node:fs';
+
+// xy ships native ES modules: every source transforms per-file (no bundling)
+// so the emitted graph mirrors the source graph.
+const xySources = () =>
+  readdirSync('xy/web/ts')
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts'))
+    .map((f) => `xy/web/ts/${f}`);
 
 const targets = {
   dope: [
@@ -30,6 +38,13 @@ const targets = {
       entryPoints: { 'menu-model': 'dopeuikit/assets/ts/menu-model.ts' },
       format: 'esm',
       outdir: 'dopeuikit/assets/dist/esm',
+    },
+  ],
+  xy: [
+    {
+      entryPoints: xySources(),
+      format: 'esm',
+      outdir: 'xy/web/assets/static/dist',
     },
   ],
 };

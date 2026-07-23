@@ -1,6 +1,6 @@
-// sync.js — xy's offline sync engine. Turns every board mutation into an
+// sync.ts — xy's offline sync engine. Turns every board mutation into an
 // idempotent, replayable op: when online it goes straight to the server, when
-// offline (or the request fails) it lands in an ordered outbox (store.js) and is
+// offline (or the request fails) it lands in an ordered outbox (store.ts) and is
 // flushed on reconnect.
 //
 // Identity model. Server ids are positive autoincrement integers. An entity
@@ -15,11 +15,35 @@
 // The pure functions (substitute*, applyOpToSnapshot, pendingTimeline) carry the
 // tricky logic and take no globals, so jstest can exercise them without IndexedDB.
 import { xyStore } from "./store.js";
+import type { BoardSnapshot, OpBody, OutboxOp, TimelineEvent } from "./store.js";
+
+// The server's JSON reply to a mutation, as far as the engine reads it.
+interface MutationResult {
+  id?: number | null;
+}
+
+// An HTTP error the server actively returned (non-2xx), tagged with its status.
+export interface HttpError extends Error {
+  httpStatus?: number;
+}
+
+export interface DeadLetter {
+  kind: string;
+  path: string;
+  error: string;
+}
+
+export interface SyncStatus {
+  online: boolean;
+  pending: number;
+  syncing: boolean;
+  deadletters: DeadLetter[];
+}
 
 // OfflineError marks a fetch that failed because the network is unreachable (vs.
 // an HTTP error the server actively returned, which is a real failure).
-class OfflineError extends Error {
-  constructor(msg) { super(msg); this.name = "OfflineError"; }
+export class OfflineError extends Error {
+  constructor(msg: string) { super(msg); this.name = "OfflineError"; }
 }
 
 // ---- pure: id substitution ----
@@ -27,10 +51,10 @@ class OfflineError extends Error {
 // substituteValue deep-clones v, replacing any negative integer that has a
 // mapping in `idmap` with its real id. Positive numbers (player ids, ranks are
 // strings) and other values pass through untouched.
-function substituteValue(v, idmap) {
+function substituteValue(v: unknown, idmap: Record<number, number>): unknown {
   if (Array.isArray(v)) return v.map((x) => substituteValue(x, idmap));
   if (v && typeof v === "object") {
-    const out = {};
+    const out: Record<string, unknown> = {};
     for (const [k, val] of Object.entries(v)) out[k] = substituteValue(val, idmap);
     return out;
   }
@@ -42,7 +66,7 @@ function substituteValue(v, idmap) {
 
 // substitutePath rewrites negative-id path segments (e.g. "/api/cards/-5") to
 // their real ids using the idmap.
-function substitutePath(path, idmap) {
+function substitutePath(path: string, idmap: Record<string, number>): string {
   return path
     .split("/")
     .map((seg) => (/^-\d+$/.test(seg) && Object.prototype.hasOwnProperty.call(idmap, seg) ? String(idmap[seg]) : seg))
@@ -52,46 +76,50 @@ function substitutePath(path, idmap) {
 // ---- pure: apply an op to a cached snapshot ----
 
 // pathIds extracts the numeric ids embedded in a "/api/.../{id}/..." path.
-function pathIds(path) {
+function pathIds(path: string): number[] {
   return path.split("/").filter((s) => /^-?\d+$/.test(s)).map(Number);
 }
 
 // applyOpToSnapshot mutates `snap` (a GET /api/boards/{id} payload) to reflect
 // `op`, using `resultId` as the id of any newly-created entity. Keeps the local
 // mirror current so a fresh offline open renders pending edits. Returns snap.
-function applyOpToSnapshot(snap, op, resultId) {
+function applyOpToSnapshot(
+  snap: BoardSnapshot | null | undefined,
+  op: OutboxOp,
+  resultId?: number | null,
+): BoardSnapshot | null | undefined {
   if (!snap) return snap;
-  snap.lists = snap.lists || [];
-  snap.cards = snap.cards || [];
-  snap.labels = snap.labels || [];
-  snap.card_labels = snap.card_labels || {};
-  const body = op.body || {};
+  const lists = (snap.lists = snap.lists || []);
+  const cards = (snap.cards = snap.cards || []);
+  const labels = (snap.labels = snap.labels || []);
+  const cardLabels = (snap.card_labels = snap.card_labels || {});
+  const body: OpBody = op.body || {};
   const ids = pathIds(op.path);
   switch (op.kind) {
     case "createList":
-      snap.lists.push({ id: resultId, type: body.type || "normal", title_enc: body.title_enc, rank: body.rank });
+      lists.push({ id: resultId as number, type: body.type || "normal", title_enc: body.title_enc, rank: body.rank });
       break;
     case "patchList": {
-      const l = snap.lists.find((x) => x.id === ids[0]);
+      const l = lists.find((x) => x.id === ids[0]);
       if (l) { if (body.title_enc != null) l.title_enc = body.title_enc; if (body.rank != null) l.rank = body.rank; }
       break;
     }
     case "deleteList": {
       const lid = ids[0];
-      snap.lists = snap.lists.filter((x) => x.id !== lid);
-      snap.cards = snap.cards.filter((c) => c.list_id !== lid);
+      snap.lists = lists.filter((x) => x.id !== lid);
+      snap.cards = cards.filter((c) => c.list_id !== lid);
       break;
     }
     case "createCard":
-      snap.cards.push({
-        id: resultId, list_id: ids[0], kind: body.kind || "normal",
+      cards.push({
+        id: resultId as number, list_id: ids[0], kind: body.kind || "normal",
         description_enc: body.description_enc, rank: body.rank,
         ...(body.handout_meta_enc ? { handout_meta_enc: body.handout_meta_enc } : {}),
         ...(body.alias_enc ? { alias_enc: body.alias_enc } : {}),
       });
       break;
     case "patchCard": {
-      const c = snap.cards.find((x) => x.id === ids[0]);
+      const c = cards.find((x) => x.id === ids[0]);
       if (c) {
         if (body.description_enc != null) c.description_enc = body.description_enc;
         if (body.rank != null) c.rank = body.rank;
@@ -110,28 +138,28 @@ function applyOpToSnapshot(snap, op, resultId) {
     }
     case "deleteCard": {
       const cid = ids[0];
-      snap.cards = snap.cards.filter((x) => x.id !== cid);
-      delete snap.card_labels[cid];
+      snap.cards = cards.filter((x) => x.id !== cid);
+      delete cardLabels[cid];
       break;
     }
     case "createLabel":
-      snap.labels.push({ id: resultId, name_enc: body.name_enc, color_enc: body.color_enc, kind: body.kind || "normal" });
+      labels.push({ id: resultId as number, name_enc: body.name_enc, color_enc: body.color_enc, kind: body.kind || "normal" });
       break;
     case "patchLabel": {
-      const l = snap.labels.find((x) => x.id === ids[0]);
+      const l = labels.find((x) => x.id === ids[0]);
       if (l) { if (body.name_enc != null) l.name_enc = body.name_enc; if (body.color_enc != null) l.color_enc = body.color_enc; }
       break;
     }
     case "deleteLabel": {
       const lid = ids[0];
-      snap.labels = snap.labels.filter((x) => x.id !== lid);
-      for (const k of Object.keys(snap.card_labels)) {
-        snap.card_labels[k] = (snap.card_labels[k] || []).filter((id) => id !== lid);
+      snap.labels = labels.filter((x) => x.id !== lid);
+      for (const k of Object.keys(cardLabels)) {
+        cardLabels[k] = (cardLabels[k] || []).filter((id) => id !== lid);
       }
       break;
     }
     case "setCardLabels":
-      snap.card_labels[ids[0]] = (body.label_ids || []).slice();
+      cardLabels[ids[0]] = (body.label_ids || []).slice();
       break;
     case "patchBoard":
       // Board names are plaintext now; a rename bumps the board to schema_version 2.
@@ -148,13 +176,13 @@ function applyOpToSnapshot(snap, op, resultId) {
 // pendingTimeline builds timeline-event DTOs (matching the server's shape) for a
 // card from queued ops that carry payloads, so the card view shows un-synced
 // comments/edits/label changes. Ids are negative and ordered after server events.
-function pendingTimeline(ops, cardId) {
-  const out = [];
+function pendingTimeline(ops: OutboxOp[], cardId: number): TimelineEvent[] {
+  const out: TimelineEvent[] = [];
   let n = -1;
   for (const op of ops) {
     const ids = pathIds(op.path);
     if (ids[0] !== cardId) continue;
-    const body = op.body || {};
+    const body: OpBody = op.body || {};
     const when = op.ts || "";
     if (op.kind === "comment" && body.payload_enc) {
       // reply_to_id is always a REAL (synced) id — a reply can only be composed
@@ -181,8 +209,8 @@ function pendingTimeline(ops, cardId) {
 // rawSend issues the actual HTTP request. Throws OfflineError when the fetch
 // itself fails (no network); throws a normal Error with .httpStatus on a non-2xx
 // response (the server rejected it).
-async function rawSend(method, path, body) {
-  let res;
+async function rawSend(method: string, path: string, body: unknown): Promise<unknown> {
+  let res: Response;
   try {
     res = await fetch(path, {
       method,
@@ -191,11 +219,11 @@ async function rawSend(method, path, body) {
       body: body != null ? JSON.stringify(body) : undefined,
     });
   } catch (e) {
-    throw new OfflineError(e.message || "network error");
+    throw new OfflineError((e instanceof Error && e.message) || "network error");
   }
   if (!res.ok) {
     const text = (await res.text()).trim();
-    const err = new Error(text || `HTTP ${res.status}`);
+    const err: HttpError = new Error(text || `HTTP ${res.status}`);
     err.httpStatus = res.status;
     throw err;
   }
@@ -206,29 +234,33 @@ async function rawSend(method, path, body) {
 
 // ---- status broadcasting ----
 
-const listeners = new Set();
+const listeners = new Set<(st: SyncStatus) => void>();
 let pending = 0; // outbox length (cached for synchronous status reads)
-const deadletters = []; // ops the server rejected (surfaced once)
+const deadletters: DeadLetter[] = []; // ops the server rejected (surfaced once)
 
-function isOnline() {
+function isOnline(): boolean {
   return typeof navigator === "undefined" ? true : navigator.onLine !== false;
 }
-function status() {
+function status(): SyncStatus {
   return { online: isOnline(), pending, syncing: flushing, deadletters: deadletters.slice() };
 }
-function onStatus(cb) { listeners.add(cb); cb(status()); return () => listeners.delete(cb); }
-function emit() { const st = status(); for (const cb of listeners) { try { cb(st); } catch (_) {} } }
+function onStatus(cb: (st: SyncStatus) => void): () => void {
+  listeners.add(cb); cb(status()); return () => listeners.delete(cb);
+}
+function emit(): void { const st = status(); for (const cb of listeners) { try { cb(st); } catch (_) {} } }
 
 // ---- the engine ----
 
 let flushing = false;
-const boardListeners = new Set(); // notified (with boardId) when a board's queue drains
+const boardListeners = new Set<(boardId: number) => void>(); // notified (with boardId) when a board's queue drains
 
-function onBoardSynced(cb) { boardListeners.add(cb); return () => boardListeners.delete(cb); }
-function emitBoardSynced(boardId) { for (const cb of boardListeners) { try { cb(boardId); } catch (_) {} } }
+function onBoardSynced(cb: (boardId: number) => void): () => void {
+  boardListeners.add(cb); return () => boardListeners.delete(cb);
+}
+function emitBoardSynced(boardId: number): void { for (const cb of boardListeners) { try { cb(boardId); } catch (_) {} } }
 
 // applyToMirror updates the cached snapshot for op.board, if one exists.
-async function applyToMirror(op, resultId) {
+async function applyToMirror(op: OutboxOp, resultId?: number | null): Promise<void> {
   if (!op.board) return;
   const snap = await xyStore.getSnapshot(op.board);
   if (!snap) return;
@@ -238,8 +270,8 @@ async function applyToMirror(op, resultId) {
 
 // enqueue persists an op, allocating a temp id for create ops. Returns the temp
 // id (or null). Updates the local mirror so reloads stay consistent.
-async function enqueue(op) {
-  let tempId = null;
+async function enqueue(op: OutboxOp): Promise<number | null> {
+  let tempId: number | null = null;
   if (op.mint) { tempId = await xyStore.nextTempId(); op.tempId = tempId; }
   op.ts = op.ts || nowISO();
   await xyStore.addOp(op);
@@ -252,7 +284,7 @@ async function enqueue(op) {
 
 // nowISO returns an ISO timestamp; the engine never depends on it for ordering
 // (the outbox seq does that) — only for displaying pending timeline events.
-function nowISO() {
+function nowISO(): string {
   try { return new Date().toISOString(); } catch (_) { return ""; }
 }
 
@@ -260,13 +292,13 @@ function nowISO() {
 //   { kind, method, path, body, board, mint }
 // Returns { id } — a real id when sent immediately, a negative temp id when
 // queued. Non-create ops return { id: null }.
-async function mutate(op) {
+async function mutate(op: OutboxOp): Promise<{ id: number | null }> {
   // Preserve ordering: if anything is already queued we must queue too, even
   // when online, so dependent ops never overtake their creates.
   const queued = pending > 0 || (await xyStore.countOps()) > 0;
   if (isOnline() && !queued) {
     try {
-      const res = await rawSend(op.method, op.path, op.body);
+      const res = (await rawSend(op.method, op.path, op.body)) as MutationResult | null;
       await applyToMirror(op, res && res.id);
       return { id: res && res.id != null ? res.id : null };
     } catch (e) {
@@ -279,7 +311,7 @@ async function mutate(op) {
 }
 
 let flushScheduled = false;
-function scheduleFlush() {
+function scheduleFlush(): void {
   if (flushScheduled) return;
   flushScheduled = true;
   Promise.resolve().then(() => { flushScheduled = false; flush(); });
@@ -288,15 +320,15 @@ function scheduleFlush() {
 // flush drains the outbox in order while online, remapping temp ids as creates
 // resolve. Stops on the first OfflineError (retry later); drops ops the server
 // rejects to a dead-letter list so the queue can't wedge.
-async function flush() {
+async function flush(): Promise<void> {
   if (flushing || !isOnline()) return;
   flushing = true;
   emit();
-  const drainedBoards = new Set();
+  const drainedBoards = new Set<number>();
   try {
-    let idmap = await xyStore.allIdMap();
+    const idmap = await xyStore.allIdMap();
     // negative-string keys for path substitution
-    const idmapStr = {};
+    const idmapStr: Record<string, number> = {};
     for (const [k, v] of Object.entries(idmap)) idmapStr["-" + Math.abs(Number(k))] = v;
 
     while (isOnline()) {
@@ -305,14 +337,15 @@ async function flush() {
       const op = ops[0];
       const path = substitutePath(op.path, idmapStr);
       const body = op.body ? substituteValue(op.body, idmap) : op.body;
-      let res;
+      let res: MutationResult | null;
       try {
-        res = await rawSend(op.method, path, body);
+        res = (await rawSend(op.method, path, body)) as MutationResult | null;
       } catch (e) {
         if (e instanceof OfflineError) break; // network dropped — resume on reconnect
         // server rejected this op: drop it, record, keep going
-        deadletters.push({ kind: op.kind, path, error: e.message });
-        try { console.warn("xy sync: server rejected queued op, dropping", op.kind, path, e.message); } catch (_) {}
+        const msg = e instanceof Error ? e.message : String(e);
+        deadletters.push({ kind: op.kind, path, error: msg });
+        try { console.warn("xy sync: server rejected queued op, dropping", op.kind, path, msg); } catch (_) {}
         await xyStore.deleteOp(op.seq);
         if (op.board) drainedBoards.add(op.board);
         pending = await xyStore.countOps();
@@ -341,28 +374,28 @@ async function flush() {
 
 // ---- snapshot mirror helpers (used by board.js) ----
 
-async function saveSnapshot(boardId, snap) { await xyStore.putSnapshot(boardId, snap); }
-async function loadSnapshot(boardId) { return xyStore.getSnapshot(boardId); }
-async function pendingCount() { pending = await xyStore.countOps(); return pending; }
-async function pendingCountForBoard(board) {
+async function saveSnapshot(boardId: number | string, snap: BoardSnapshot): Promise<void> { await xyStore.putSnapshot(boardId, snap); }
+async function loadSnapshot(boardId: number | string): Promise<BoardSnapshot | undefined> { return xyStore.getSnapshot(boardId); }
+async function pendingCount(): Promise<number> { pending = await xyStore.countOps(); return pending; }
+async function pendingCountForBoard(board: number): Promise<number> {
   const ops = await xyStore.allOps();
   return ops.filter((o) => o.board === board).length;
 }
-async function pendingOps() { return xyStore.allOps(); }
+async function pendingOps(): Promise<OutboxOp[]> { return xyStore.allOps(); }
 
 // timelineFor returns the cached server timeline for a card merged with any
 // pending (un-synced) events derived from the outbox, oldest→newest.
-async function timelineFor(cardId) {
+async function timelineFor(cardId: number | string): Promise<TimelineEvent[]> {
   const cached = (await xyStore.getTimeline(cardId)) || [];
   const ops = await xyStore.allOps();
   return cached.concat(pendingTimeline(ops, Number(cardId)));
 }
-async function cacheTimeline(cardId, events) { await xyStore.putTimeline(cardId, events); }
+async function cacheTimeline(cardId: number | string, events: TimelineEvent[]): Promise<void> { await xyStore.putTimeline(cardId, events); }
 
 // ---- lifecycle ----
 
 let started = false;
-function start() {
+function start(): void {
   if (started || typeof window === "undefined") return;
   started = true;
   window.addEventListener("online", () => { emit(); flush(); });
@@ -383,5 +416,3 @@ export const xySync = {
   _applyOpToSnapshot: applyOpToSnapshot, _pendingTimeline: pendingTimeline,
   OfflineError,
 };
-
-if (typeof window !== "undefined") window.xySync = xySync;

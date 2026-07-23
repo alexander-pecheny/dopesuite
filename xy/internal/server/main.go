@@ -56,7 +56,7 @@ func Main() {
 
 	// ---- PWA: service worker + manifest at the site root (scope '/') ----
 	mux.HandleFunc("GET /sw.js", srv.serveRootAsset(
-		"static/sw.js", "text/javascript; charset=utf-8", "no-cache",
+		"static/dist/sw.js", "text/javascript; charset=utf-8", "no-cache",
 		map[string]string{"Service-Worker-Allowed": "/"}))
 	mux.HandleFunc("GET /manifest.webmanifest", srv.serveRootAsset(
 		"static/manifest.webmanifest", "application/manifest+json; charset=utf-8",

@@ -2,7 +2,7 @@
 // (or `just test-js`). Uses node's built-in test runner + global WebCrypto.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyCrypto } from "../web/assets/static/crypto.js";
+import { xyCrypto } from "../web/assets/static/dist/crypto.js";
 
 test("board create → unlock round-trips a field", async () => {
   const { keymeta, dk } = await xyCrypto.createBoardKeys("correct horse");

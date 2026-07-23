@@ -1,4 +1,4 @@
-// timer.js — a ЧГК (trivia) play timer that floats bottom-right of the board.
+// timer.ts — a ЧГК (trivia) play timer that floats bottom-right of the board.
 // Toggled by the ⏰ button in the header. Counts a question's minute (or its
 // duplet/blitz sub-segments) down to zero with audible cues, then runs the
 // 10-second answer-writing countdown. The cues are one shipped bell sample
@@ -8,13 +8,18 @@
 import { xyApp } from "./app.js";
 const { el } = xyApp;
 
+declare global {
+  interface Window { webkitAudioContext?: typeof AudioContext }
+}
+
 // ---- presets ----------------------------------------------------------------
 // Each preset is an ordered list of segment durations (seconds). A single 60s
 // segment is an ordinary question; multi-segment presets are duplets/blitzes,
 // where each segment is played (and re-Started) in turn. Only the LAST segment
 // of any preset gets the 10-second warning beep and the answer countdown; the
 // earlier ones simply end on a long beep.
-const PRESETS = {
+export interface TimerPreset { label: string; segments: number[] }
+const PRESETS: Record<string, TimerPreset> = {
   regular: { label: "Обычный вопрос (60 с)", segments: [60] },
   duplet: { label: "Дуплет (30 + 30)", segments: [30, 30] },
   blitz: { label: "Блиц (20 + 20 + 20)", segments: [20, 20, 20] },
@@ -24,12 +29,12 @@ const ANSWER_SEC = 10; // post-question window to write the answer down
 const WARN_AT = 10; // seconds-left at which the single warning beep fires
 
 // ---- WebAudio bell ----------------------------------------------------------
-let audioCtx = null;
-let dingBuf = null; // decoded ding.mp3; null until it arrives (tones fall back)
-let dingReq = null;
+let audioCtx: AudioContext | null = null;
+let dingBuf: AudioBuffer | null = null; // decoded ding.mp3; null until it arrives (tones fall back)
+let dingReq: Promise<void> | null = null;
 // ensureAudio lazily builds the context and resumes it. Must be called from a
 // user gesture (Start click) the first time, or iOS keeps it suspended.
-function ensureAudio() {
+function ensureAudio(): AudioContext | null {
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
@@ -41,7 +46,7 @@ function ensureAudio() {
     return null;
   }
 }
-function loadDing(ac) {
+function loadDing(ac: AudioContext): void {
   if (dingReq) return;
   dingReq = fetch("/static/ding.mp3")
     .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer(); })
@@ -51,7 +56,7 @@ function loadDing(ac) {
 }
 // ding plays the bell once; rate shifts pitch and length together (2 = the
 // answer ticks an octave up and half as long, 0.5 = the end an octave down).
-function ding(rate, gain, fallback) {
+function ding(rate: number, gain: number, fallback: () => void): void {
   const ac = ensureAudio();
   if (!ac) return;
   if (!dingBuf) { fallback(); return; }
@@ -66,7 +71,7 @@ function ding(rate, gain, fallback) {
 }
 // tone schedules a single shaped oscillator burst (attack/release envelope so it
 // doesn't click). Frequencies/lengths are chosen to be distinguishable by ear.
-function tone(freq, dur, type = "square", gain = 0.18) {
+function tone(freq: number, dur: number, type: OscillatorType = "square", gain = 0.18): void {
   const ac = ensureAudio();
   if (!ac) return;
   const t = ac.currentTime;
@@ -83,9 +88,9 @@ function tone(freq, dur, type = "square", gain = 0.18) {
   osc.start(t);
   osc.stop(t + dur + 0.02);
 }
-const warningBeep = () => ding(1, 0.7, () => tone(880, 0.22, "square", 0.18)); // "10 seconds left"
-const tickBeep = () => ding(2, 0.35, () => tone(1040, 0.085, "square", 0.16)); // answer-countdown tick
-const longBeep = () => ding(0.5, 1, () => tone(587, 0.85, "sawtooth", 0.2)); // segment / answer end
+const warningBeep = (): void => ding(1, 0.7, () => tone(880, 0.22, "square", 0.18)); // "10 seconds left"
+const tickBeep = (): void => ding(2, 0.35, () => tone(1040, 0.085, "square", 0.16)); // answer-countdown tick
+const longBeep = (): void => ding(0.5, 1, () => tone(587, 0.85, "sawtooth", 0.2)); // segment / answer end
 
 // ---- state machine ----------------------------------------------------------
 // phase: ready    → press Start to run the current segment
@@ -93,7 +98,19 @@ const longBeep = () => ding(0.5, 1, () => tone(587, 0.85, "sawtooth", 0.2)); // 
 //        paused   → frozen (resumePhase remembers what to resume into)
 //        answer   → counting the 10s answer window (last segment only)
 //        done     → whole preset finished; Reset to play again
-const m = {
+type Phase = "ready" | "running" | "paused" | "answer" | "done";
+interface TimerState {
+  presetKey: string;
+  segments: number[];
+  segIdx: number;
+  phase: Phase;
+  resumePhase: "running" | "answer";
+  remaining: number;
+  deadline: number;
+  shown: number;
+  raf: number;
+}
+const m: TimerState = {
   presetKey: "regular",
   segments: PRESETS.regular.segments.slice(),
   segIdx: 0,
@@ -104,24 +121,24 @@ const m = {
   shown: 60, // last integer shown (drives beep-on-change + display)
   raf: 0,
 };
-const isLast = () => m.segIdx === m.segments.length - 1;
+const isLast = (): boolean => m.segIdx === m.segments.length - 1;
 
-function stopLoop() {
+function stopLoop(): void {
   if (m.raf) cancelAnimationFrame(m.raf);
   m.raf = 0;
 }
-function startLoop() {
+function startLoop(): void {
   stopLoop();
   m.raf = requestAnimationFrame(loop);
 }
-function loop() {
+function loop(): void {
   m.raf = requestAnimationFrame(loop);
   const rem = (m.deadline - performance.now()) / 1000;
   step(rem);
 }
 
 // step advances the display and fires the audio cues for one animation frame.
-function step(rem) {
+function step(rem: number): void {
   const disp = Math.max(0, Math.ceil(rem - 1e-3));
   if (disp !== m.shown) {
     if (m.phase === "answer") {
@@ -136,7 +153,7 @@ function step(rem) {
 }
 
 // endCountdown handles a countdown reaching zero, branching on phase/segment.
-function endCountdown() {
+function endCountdown(): void {
   if (m.phase === "running") {
     if (isLast()) {
       // Question's up → roll straight into the answer-writing window. The first
@@ -169,7 +186,7 @@ function endCountdown() {
 }
 
 // ---- controls ---------------------------------------------------------------
-function beginRun(kind) {
+function beginRun(kind: "running" | "answer"): void {
   m.phase = kind;
   m.deadline = performance.now() + m.remaining * 1000;
   m.shown = Math.max(0, Math.ceil(m.remaining - 1e-3));
@@ -177,13 +194,13 @@ function beginRun(kind) {
   renderControls();
   startLoop();
 }
-function start() {
+function start(): void {
   ensureAudio(); // warm/resume the context inside this user gesture
   if (m.phase === "ready") beginRun("running");
   else if (m.phase === "paused") beginRun(m.resumePhase);
   // running / answer / done → no-op
 }
-function pause() {
+function pause(): void {
   if (m.phase !== "running" && m.phase !== "answer") return;
   stopLoop();
   m.remaining = Math.max(0, (m.deadline - performance.now()) / 1000);
@@ -191,7 +208,7 @@ function pause() {
   m.phase = "paused";
   renderControls();
 }
-function reset() {
+function reset(): void {
   stopLoop();
   m.segIdx = 0;
   m.remaining = m.segments[0] || 0;
@@ -200,7 +217,7 @@ function reset() {
   renderTime();
   renderControls();
 }
-function selectPreset(key) {
+function selectPreset(key: string): void {
   m.presetKey = key;
   if (key !== "custom") m.segments = PRESETS[key].segments.slice();
   else m.segments = parseCustom(customInput && customInput.value);
@@ -208,7 +225,7 @@ function selectPreset(key) {
 }
 // parseCustom reads a plus-separated list of positive integers ("40+20" →
 // [40,20]); falls back to a single 60s segment when nothing usable is entered.
-function parseCustom(raw) {
+function parseCustom(raw: string | null | undefined): number[] {
   const parts = String(raw || "")
     .split("+")
     .map((s) => parseInt(s.trim(), 10))
@@ -217,13 +234,15 @@ function parseCustom(raw) {
 }
 
 // ---- DOM --------------------------------------------------------------------
-let overlay, timeNode, labelNode, startBtn, pauseBtn, presetSel, customWrap, customInput;
+let overlay!: HTMLElement, timeNode!: HTMLElement, labelNode!: HTMLElement,
+  startBtn!: HTMLButtonElement, pauseBtn!: HTMLButtonElement,
+  presetSel!: HTMLSelectElement, customWrap!: HTMLElement, customInput!: HTMLInputElement;
 
 // Inline SVG button icons (Feather shapes, currentColor). Font glyphs were the
 // first take, but ↺ renders half the size of ▶/⏸ and varies per platform —
 // drawn paths keep the three buttons visually equal everywhere.
 const SVG_NS = "http://www.w3.org/2000/svg";
-function icon(...shapes) {
+function icon(...shapes: Array<[string, Record<string, string>]>): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "timer-ico");
   svg.setAttribute("viewBox", "0 0 24 24");
@@ -235,19 +254,20 @@ function icon(...shapes) {
   }
   return svg;
 }
-const stroked = (extra) => ({ fill: "none", stroke: "currentColor", "stroke-width": "2.5", "stroke-linecap": "round", "stroke-linejoin": "round", ...extra });
-const playIcon = () => icon(["polygon", { points: "7 4 20 12 7 20", fill: "currentColor" }]);
-const pauseIcon = () => icon(
+const stroked = (extra: Record<string, string>): Record<string, string> =>
+  ({ fill: "none", stroke: "currentColor", "stroke-width": "2.5", "stroke-linecap": "round", "stroke-linejoin": "round", ...extra });
+const playIcon = (): SVGSVGElement => icon(["polygon", { points: "7 4 20 12 7 20", fill: "currentColor" }]);
+const pauseIcon = (): SVGSVGElement => icon(
   ["rect", { x: "6", y: "4", width: "4", height: "16", rx: "1", fill: "currentColor" }],
   ["rect", { x: "14", y: "4", width: "4", height: "16", rx: "1", fill: "currentColor" }],
 );
-const resetIcon = () => icon(
+const resetIcon = (): SVGSVGElement => icon(
   ["polyline", stroked({ points: "1.5 4 1.5 10 7.5 10" })],
   ["path", stroked({ d: "M3.8 15a9 9 0 1 0 2.1-9.4L1.5 10" })],
 );
 
-function build() {
-  presetSel = el("select", { class: "input timer-preset", "aria-label": "Режим таймера" });
+function build(): void {
+  presetSel = el("select", { class: "input timer-preset", "aria-label": "Режим таймера" }) as HTMLSelectElement;
   for (const [key, p] of Object.entries(PRESETS)) presetSel.append(el("option", { value: key, text: p.label }));
   presetSel.addEventListener("change", () => {
     customWrap.hidden = presetSel.value !== "custom";
@@ -260,8 +280,8 @@ function build() {
     inputmode: "numeric",
     placeholder: "напр. 40+20",
     "aria-label": "Свои длительности, через +",
-  });
-  const applyCustom = () => { if (m.presetKey === "custom") selectPreset("custom"); };
+  }) as HTMLInputElement;
+  const applyCustom = (): void => { if (m.presetKey === "custom") selectPreset("custom"); };
   customInput.addEventListener("change", applyCustom);
   customInput.addEventListener("input", applyCustom);
   customWrap = el("div", { class: "timer-custom", hidden: true }, customInput);
@@ -271,8 +291,8 @@ function build() {
 
   // Icons, not captions — three worded buttons overflowed the 240px box
   // («Продолжить» alone nearly filled it). The word lives in title/aria-label.
-  startBtn = el("button", { class: "btn btn-small", type: "button", title: "Старт", "aria-label": "Старт", onclick: start }, playIcon());
-  pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Пауза", "aria-label": "Пауза", onclick: pause }, pauseIcon());
+  startBtn = el("button", { class: "btn btn-small", type: "button", title: "Старт", "aria-label": "Старт", onclick: start }, playIcon()) as HTMLButtonElement;
+  pauseBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Пауза", "aria-label": "Пауза", onclick: pause }, pauseIcon()) as HTMLButtonElement;
   const resetBtn = el("button", { class: "btn btn-small btn-ghost", type: "button", title: "Сброс", "aria-label": "Сброс", onclick: reset }, resetIcon());
 
   overlay = el(
@@ -294,25 +314,27 @@ function build() {
 // cover the question being played; the spot is remembered per browser.
 const POS_KEY = "xyTimerPos";
 
-function savedPos() {
+function savedPos(): unknown {
   try { return JSON.parse(localStorage.getItem(POS_KEY) || "null"); } catch (_) { return null; }
 }
 // applyPos pins the overlay at left/top (switching it off its default
 // bottom-right anchor), clamped so at least the whole box stays on screen.
-function applyPos(pos) {
-  if (!pos || typeof pos.left !== "number" || typeof pos.top !== "number") return;
-  const left = Math.max(0, Math.min(pos.left, window.innerWidth - overlay.offsetWidth));
-  const top = Math.max(0, Math.min(pos.top, window.innerHeight - overlay.offsetHeight));
+function applyPos(pos: unknown): void {
+  if (!pos || typeof pos !== "object") return;
+  const p = pos as { left?: unknown; top?: unknown };
+  if (typeof p.left !== "number" || typeof p.top !== "number") return;
+  const left = Math.max(0, Math.min(p.left, window.innerWidth - overlay.offsetWidth));
+  const top = Math.max(0, Math.min(p.top, window.innerHeight - overlay.offsetHeight));
   overlay.classList.add("timer-moved");
   overlay.style.left = left + "px";
   overlay.style.top = top + "px";
 }
 
-function wireDrag() {
-  let drag = null; // pointer offset inside the box while a drag is live
+function wireDrag(): void {
+  let drag: { dx: number; dy: number } | null = null; // pointer offset inside the box while a drag is live
   overlay.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
-    if (e.target.closest("button, select, input")) return; // controls are not drag handles
+    if ((e.target as Element).closest("button, select, input")) return; // controls are not drag handles
     const r = overlay.getBoundingClientRect();
     drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
     try { overlay.setPointerCapture(e.pointerId); } catch (_) {} // synthetic events have no active pointer
@@ -323,7 +345,7 @@ function wireDrag() {
     if (!drag) return;
     applyPos({ left: e.clientX - drag.dx, top: e.clientY - drag.dy });
   });
-  const end = () => {
+  const end = (): void => {
     if (!drag) return;
     drag = null;
     overlay.classList.remove("timer-dragging");
@@ -340,7 +362,7 @@ function wireDrag() {
   });
 }
 
-function renderTime() {
+function renderTime(): void {
   if (!timeNode) return;
   timeNode.textContent = String(m.shown);
   const answer = m.phase === "answer" || (m.phase === "paused" && m.resumePhase === "answer");
@@ -354,7 +376,7 @@ function renderTime() {
   labelNode.textContent = label;
 }
 
-function renderControls() {
+function renderControls(): void {
   if (!startBtn) return;
   const canStart = m.phase === "ready" || m.phase === "paused";
   const canPause = m.phase === "running" || m.phase === "answer";
@@ -366,7 +388,7 @@ function renderControls() {
 }
 
 // ---- toggle wiring ----------------------------------------------------------
-function toggle() {
+function toggle(): void {
   if (!overlay) build();
   const show = overlay.hidden;
   overlay.hidden = !show;
@@ -378,7 +400,7 @@ function toggle() {
   }
 }
 
-function init() {
+function init(): void {
   const btn = document.getElementById("timerToggle");
   if (btn) btn.addEventListener("click", toggle);
 }
@@ -389,4 +411,3 @@ if (typeof document !== "undefined") {
 }
 
 export const xyTimer = { _presets: PRESETS, _parseCustom: parseCustom };
-if (typeof window !== "undefined") window.xyTimer = xyTimer;

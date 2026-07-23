@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { xyApp } from "../web/assets/static/app.js";
+import { xyApp } from "../web/assets/static/dist/app.js";
 
 const { deriveTitle } = xyApp;
 

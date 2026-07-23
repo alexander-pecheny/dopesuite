@@ -22,6 +22,9 @@ func expandPage(ctx *ExpandCtx, p *Element) []Node {
 	for _, src := range ch.BootScripts {
 		head = append(head, El("script", []Attr{At("src", src)}))
 	}
+	for _, src := range ch.ModuleBootScripts {
+		head = append(head, El("script", []Attr{At("type", "module"), At("src", src)}))
+	}
 	if ch.HeadHook != nil {
 		head = append(head, ch.HeadHook(ctx, p)...)
 	}

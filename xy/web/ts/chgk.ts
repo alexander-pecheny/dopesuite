@@ -1,15 +1,28 @@
-// chgk.js — minimal client-side parser for the chgksuite "4s" markup, used to
+// chgk.ts — minimal client-side parser for the chgksuite "4s" markup, used to
 // derive readable card previews (question text + number, headings, meta) from a
 // card's raw description. Mirrors chgksuite's line-leading markers
 // (see chgksuite/common.py `types_mapping`). Display-only: the editor keeps the
 // raw 4s source; this module never rewrites it.
 //
-// ES module + window.xyChgk global.
+// ES module.
+
+// The block types produced by the line-leading markers, plus "pre" for leading
+// lines before any marker.
+export type MarkerType =
+  | "numnum" | "num" | "ljheading" | "heading" | "section" | "editor" | "date"
+  | "meta" | "question" | "nezachet" | "answer" | "zachet" | "source"
+  | "comment" | "author" | "handout";
+export type BlockType = MarkerType | "pre";
+
+export interface Block { type: BlockType; text: string }
+
+// A card as this module needs to see it: its kind + raw 4s description.
+export interface ChgkCard { kind: string; desc: string }
 
 // Line-leading markers, longest/most-specific first so e.g. "№№" wins over "№"
 // and "###" over "#". A marker matches a line that equals it or starts with
 // "<marker> ".
-const MARKERS = [
+const MARKERS: Array<[string, MarkerType]> = [
   ["№№", "numnum"],
   ["№", "num"],
   ["###LJ", "ljheading"],
@@ -28,7 +41,7 @@ const MARKERS = [
   [">", "handout"],
 ];
 
-function matchMarker(line) {
+function matchMarker(line: string): { type: MarkerType; rest: string } | null {
   for (const [marker, type] of MARKERS) {
     if (line === marker) return { type, rest: "" };
     if (line.startsWith(marker + " ")) return { type, rest: line.slice(marker.length + 1) };
@@ -40,10 +53,10 @@ function matchMarker(line) {
 // a marker continue the current block (multi-line questions/answers). Leading
 // lines before any marker form a "pre" block (a question card whose author
 // didn't prefix "? ").
-function parseBlocks(desc) {
+function parseBlocks(desc: string | null | undefined): Block[] {
   const lines = (desc || "").split(/\r?\n/);
-  const blocks = [];
-  let cur = null;
+  const blocks: Block[] = [];
+  let cur: Block | null = null;
   for (const line of lines) {
     const m = matchMarker(line);
     if (m) {
@@ -63,7 +76,7 @@ function parseBlocks(desc) {
 // numberDirective returns the explicit number directive of a question, if any:
 // {value, base} where base=true for "№№" (sets the auto-numbering base) and
 // false for a plain "№".
-function numberDirective(blocks) {
+function numberDirective(blocks: Block[]): { value: string; base: boolean } | null {
   for (const b of blocks) {
     if (b.type === "numnum") return { value: b.text, base: true };
     if (b.type === "num") return { value: b.text, base: false };
@@ -73,7 +86,7 @@ function numberDirective(blocks) {
 
 // questionText returns the displayable question text (the "? " block, or the
 // preamble, or the whole description) — never including the "? " marker.
-function questionText(desc) {
+function questionText(desc: string | null | undefined): string {
   const blocks = parseBlocks(desc);
   const q = blocks.find((b) => b.type === "question");
   if (q) return q.text;
@@ -84,7 +97,7 @@ function questionText(desc) {
 
 // blockText returns the first block of `type`, falling back to preamble / whole
 // text. Used for meta (# ) and heading (### ) cards.
-function blockText(desc, type) {
+function blockText(desc: string | null | undefined, type: BlockType): string {
   const blocks = parseBlocks(desc);
   const b = blocks.find((x) => x.type === type);
   if (b) return b.text;
@@ -97,7 +110,7 @@ function blockText(desc, type) {
 // separate from blockText, whose preamble/whole-text fallback is right for meta
 // and heading cards but would make an answerless question preview as its own
 // question text under a heading that says "ответ".
-function answerText(desc) {
+function answerText(desc: string | null | undefined): string {
   const b = parseBlocks(desc).find((x) => x.type === "answer");
   return b ? b.text : "";
 }
@@ -108,7 +121,7 @@ function answerText(desc) {
 // (users.card_title): "answer" previews a question by its answer, which is often
 // the faster way to recognize it. An answerless question falls back to its text —
 // a blank card is worse than the old default.
-function previewText(kind, desc, mode) {
+function previewText(kind: string, desc: string | null | undefined, mode: string | null | undefined): string {
   if (kind === "question" && mode === "answer") {
     const a = answerText(desc);
     if (a !== "") return a;
@@ -122,7 +135,7 @@ function previewText(kind, desc, mode) {
 // isZeroNumber mirrors chgksuite's is_zero: a number that starts with "0" or
 // isn't an integer (e.g. a warm-up "0" / "разминка") — it's shown verbatim and
 // does not advance the auto-counter.
-function isZeroNumber(value) {
+function isZeroNumber(value: string | number): boolean {
   const s = String(value).trim();
   return s.startsWith("0") || !/^\d+$/.test(s);
 }
@@ -133,13 +146,13 @@ function isZeroNumber(value) {
 // carry no number of their own, but a standalone "№№ N" on them resets the base
 // for the questions that follow (chgksuite's setcounter). "Other" and test cards
 // are ignored entirely. Returns an array aligned with `cards`.
-function numberQuestionCards(cards) {
+function numberQuestionCards(cards: ReadonlyArray<ChgkCard>): Array<string | null> {
   let next = 1;
-  const out = [];
+  const out: Array<string | null> = [];
   for (const c of cards) {
     if (c.kind === "question") {
       const dir = numberDirective(parseBlocks(c.desc));
-      let num;
+      let num: string;
       if (dir && dir.value !== "") {
         const n = parseInt(dir.value, 10);
         if (dir.base) {
@@ -179,13 +192,13 @@ function numberQuestionCards(cards) {
 // begins with "Раздат" (in any letter case) is a handout, not a host note.
 const HANDOUT_SHORT = /^Р[Аа][Зз][Дд][Аа][Тт]/;
 
-function isEscapedBracket(s, i) {
+function isEscapedBracket(s: string, i: number): boolean {
   return s[i] === "\\" && i + 1 < s.length && (s[i + 1] === "[" || s[i + 1] === "]");
 }
 
 // findMatchingBracket returns the index of the "]" closing the "[" at `i`
 // (respecting nesting and escaped brackets), or -1 if unbalanced.
-function findMatchingBracket(s, i) {
+function findMatchingBracket(s: string, i: number): number {
   if (i >= s.length || s[i] !== "[") return -1;
   let depth = 0;
   while (i < s.length) {
@@ -199,7 +212,7 @@ function findMatchingBracket(s, i) {
 
 // bracketSpans yields [start, endExclusive, body] for each top-level "[...]"
 // span, skipping escaped brackets (\[ \]).
-function* bracketSpans(s) {
+function* bracketSpans(s: string): Generator<[number, number, string]> {
   let i = 0;
   while (i < s.length) {
     if (isEscapedBracket(s, i)) { i += 2; continue; }
@@ -211,11 +224,11 @@ function* bracketSpans(s) {
   }
 }
 
-const isHandoutBody = (body) => HANDOUT_SHORT.test(body);
+const isHandoutBody = (body: string): boolean => HANDOUT_SHORT.test(body);
 
 // removeAccents strips combining stress marks everywhere except inside handout
 // brackets (which are shown verbatim to players).
-function removeAccents(s) {
+function removeAccents(s: string): string {
   let result = "", prev = 0;
   for (const [start, end] of bracketSpans(s)) {
     if (!isHandoutBody(s.slice(start + 1, end - 1))) continue;
@@ -229,7 +242,7 @@ function removeAccents(s) {
 
 // removeSquareBrackets drops host-only "[...]" notes; handout brackets are kept,
 // escaped brackets (\[ \]) are unescaped to literal brackets.
-function removeSquareBrackets(s) {
+function removeSquareBrackets(s: string): string {
   let result = "", i = 0, removed = false;
   while (i < s.length) {
     if (isEscapedBracket(s, i)) { result += s.slice(i, i + 2); i += 2; continue; }
@@ -257,12 +270,15 @@ function removeSquareBrackets(s) {
 // instead of leaking through verbatim. value is a string except for "screen"
 // runs, which carry {for_print, for_screen}.
 
-const UNDERSCORE_PLACEHOLDER = "UNDERSCORE";
-const TILDE_PLACEHOLDER = "TILDE";
+export interface ScreenValue { for_print: string; for_screen: string }
+export type Run = [type: string, value: string | ScreenValue];
+
+const UNDERSCORE_PLACEHOLDER = "UNDERSCORE";
+const TILDE_PLACEHOLDER = "TILDE";
 
 // backtickReplace: a backtick before a Cyrillic letter is shorthand for a
 // combining stress accent on that letter (chgksuite `backtick_replace`).
-function backtickReplace(el) {
+function backtickReplace(el: string): string {
   while (el.includes("`")) {
     const idx = el.indexOf("`");
     if (idx + 1 >= el.length) { el = el.replace("`", ""); continue; }
@@ -280,7 +296,7 @@ function backtickReplace(el) {
 
 // iterHttpUrlSpans yields [start, end) spans of bare http(s) URLs, so their
 // underscores aren't mistaken for italic markers (chgksuite `_iter_http_url_spans`).
-function* iterHttpUrlSpans(s) {
+function* iterHttpUrlSpans(s: string): Generator<[number, number]> {
   let i = 0;
   while (i < s.length) {
     if (s.startsWith("http://", i) || s.startsWith("https://", i)) {
@@ -298,7 +314,7 @@ function* iterHttpUrlSpans(s) {
 }
 
 // findMatchingClosingBracket: index of the ")" closing the bracket at `index`.
-function findMatchingClosingBracket(s, index) {
+function findMatchingClosingBracket(s: string, index: number): number | null {
   const ob = s[index];
   const cb = ob === "(" ? ")" : ob === "[" ? "]" : ob === "{" ? "}" : null;
   if (cb === null) return null;
@@ -310,7 +326,7 @@ function findMatchingClosingBracket(s, index) {
   return null;
 }
 
-function findNextUnescaped(ss, index, length) {
+function findNextUnescaped(ss: string, index: number, length: number): number {
   let j = index + length;
   while (j < ss.length) {
     if (ss[j] === "\\" && j + 2 < ss.length) j += 2;
@@ -320,14 +336,14 @@ function findNextUnescaped(ss, index, length) {
   return -1;
 }
 
-function partition(s, indices) {
+function partition(s: string, indices: number[]): string[] {
   const bounds = [0, ...indices, s.length];
-  const out = [];
+  const out: string[] = [];
   for (let k = 0; k < bounds.length - 1; k++) out.push(s.slice(bounds[k], bounds[k + 1]));
   return out;
 }
 
-function parse4sElem(s) {
+function parse4sElem(s: string): Run[] {
   s = s.replace(/\\_/g, UNDERSCORE_PLACEHOLDER).replace(/\\~/g, TILDE_PLACEHOLDER);
 
   // protect underscores/tildes inside URLs
@@ -349,7 +365,7 @@ function parse4sElem(s) {
   }
 
   let i = 0;
-  const topart = [];
+  const topart: number[] = [];
   while (i < s.length) {
     if (s[i] === "_" || s[i] === "~") {
       let j = i + 1;
@@ -397,16 +413,16 @@ function parse4sElem(s) {
   }
 
   topart.sort((a, b) => a - b);
-  const parts = partition(s, topart).map((x) => ["", x.replace(/敥/g, "")]);
+  const parts: Run[] = partition(s, topart).map((x): Run => ["", x.replace(/敥/g, "")]);
 
-  const process = (str) => String(str)
+  const process = (str: unknown): string => String(str)
     .replace(/\\_/g, "_")
     .replace(/\\\./g, ".")
     .split(UNDERSCORE_PLACEHOLDER).join("_")
     .split(TILDE_PLACEHOLDER).join("~");
 
   for (const part of parts) {
-    if (!part[1]) continue;
+    if (typeof part[1] !== "string" || !part[1]) continue;
     try {
       if (part[1].startsWith("_") && part[1].endsWith("_")) {
         let j = 1;
@@ -454,12 +470,12 @@ function parse4sElem(s) {
 // mode): the for_screen side of (screen …), (LINEBREAK) → newline, images and
 // page breaks dropped, all other runs as their stripped text (chgksuite docx
 // screen-mode `token_text`).
-function renderRunsForScreen(runs) {
+function renderRunsForScreen(runs: Run[]): string {
   let res = "";
   for (const [type, val] of runs) {
     if (type === "linebreak") res += "\n";
     else if (type === "pagebreak" || type === "img") continue;
-    else if (type === "screen") res += val.for_screen;
+    else if (type === "screen") res += typeof val === "string" ? val : val.for_screen;
     else res += val;
   }
   return res;
@@ -468,7 +484,7 @@ function renderRunsForScreen(runs) {
 // screenText applies the screen-mode transforms (accents first, then brackets,
 // matching chgksuite's order), resolves backtick stress, then parses inline
 // directives and composes the player-facing plain text.
-function screenText(s) {
+function screenText(s: string | null | undefined): string {
   s = removeSquareBrackets(removeAccents(s || ""));
   s = backtickReplace(s);
   return renderRunsForScreen(parse4sElem(s));
@@ -480,7 +496,7 @@ function screenText(s) {
 // from the value. Mirrors chgksuite_parser's OVERRIDE_PREFIX handling (applies to
 // question/answer/zachet/nezachet/comment/source/author). Returns {label, text}
 // with label === null when there is no override.
-function applyOverride(text) {
+function applyOverride(text: string | null | undefined): { label: string | null; text: string } {
   const s = text || "";
   const idx = s.indexOf(" ");
   if (idx === -1) return { label: null, text: s };
@@ -489,13 +505,16 @@ function applyOverride(text) {
   return { label: first.slice(2).replace(/~/g, " "), text: s.slice(idx + 1) };
 }
 
+// The per-field screen-mode switches renderRuns takes (see below).
+export interface RenderRunsOpts { accents?: boolean; brackets?: boolean }
+
 // renderRuns prepares a 4s text element for HTML rendering and returns its inline
 // directive runs. Mirrors format_docx_element's preamble: optionally strip stress
 // accents and/or host-only square brackets (screen mode), else unescape \[ \]
 // (replace_escaped), then resolve backtick stress and parse. opts.accents /
 // opts.brackets follow the per-field screen-mode rules (e.g. answers/zachet keep
 // brackets even on screen). Used by the in-app list preview.
-function renderRuns(text, opts = {}) {
+function renderRuns(text: string | null | undefined, opts: RenderRunsOpts = {}): Run[] {
   let s = text || "";
   if (opts.accents) s = removeAccents(s);
   if (opts.brackets) s = removeSquareBrackets(s);
@@ -505,7 +524,7 @@ function renderRuns(text, opts = {}) {
 }
 
 // printRuns is the host/print-mode shorthand (keeps accents and host brackets).
-function printRuns(text) {
+function printRuns(text: string | null | undefined): Run[] {
   return renderRuns(text, { accents: false, brackets: false });
 }
 
@@ -521,10 +540,10 @@ const NB_RIGHT = ["а", "без", "в", "во", "где", "для", "же", "з�
   "к", "как", "на", "над", "не", "ни", "но", "о", "от", "по", "под", "при", "с", "со", "то", "у", "что", "перед"];
 const NB_LEFT = ["бы", "ли", "же", "—", "–"];
 
-function reEscape(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
-function capFirst(w) { return w ? w.charAt(0).toUpperCase() + w.slice(1) : w; }
+function reEscape(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+function capFirst(w: string): string { return w ? w.charAt(0).toUpperCase() + w.slice(1) : w; }
 
-function nbSegment(s) {
+function nbSegment(s: string): string {
   for (const w of NB_RIGHT) {
     for (const v of new Set([w, capFirst(w)])) {
       s = s.replace(new RegExp("(^|[ \\u00a0])" + reEscape(v) + " ", "g"), "$1" + v + NBSP);
@@ -538,7 +557,7 @@ function nbSegment(s) {
   // short hyphenated words (из-за, что-то, кто-то…): require a letter on each side
   // so a stray spaced "-" can't turn every hyphen non-breaking.
   const re = /(^|[^а-яё])([а-яё]{1,3}-[а-яё]{1,3})([^а-яё]|$)/i;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = re.exec(s))) {
     const word = m[2];
     s = s.split(word).join(word.replace(/-/g, NB_HYPHEN));
@@ -547,7 +566,7 @@ function nbSegment(s) {
 }
 
 // replaceNoBreak applies nbSegment to every non-URL span of the text.
-function replaceNoBreak(text) {
+function replaceNoBreak(text: string | null | undefined): string {
   const s = text || "";
   const spans = [...iterHttpUrlSpans(s)];
   if (!spans.length) return nbSegment(s);
@@ -566,14 +585,14 @@ function replaceNoBreak(text) {
 // items (rendered as a numbered 1./2./… list); any text before the first "-" is a
 // preamble. A lone "-" item is NOT a list (the marker is just stripped). Returns
 // { preamble, items } with items === null when there is no multi-item list.
-function splitList(text) {
+function splitList(text: string | null | undefined): { preamble: string; items: string[] | null } {
   const s = text || "";
   if (!s.includes("-")) return { preamble: s, items: null };
   const sp = s.split("\n");
-  const markers = [];
+  const markers: number[] = [];
   for (let i = 0; i < sp.length; i++) if (sp[i].startsWith("-")) markers.push(i);
   if (!markers.length) return { preamble: s, items: null };
-  const items = [];
+  const items: string[] = [];
   for (let n = 0; n < markers.length; n++) {
     const end = n + 1 < markers.length ? markers[n + 1] : sp.length;
     // drop the leading "-" then any spaces after it (chgksuite slices [1:] + rew)
@@ -592,7 +611,7 @@ function splitList(text) {
 // `[https://…](https://… )`. fixTrelloFormatting undoes all of this, mirroring
 // chgksuite's `fix_trello_new_editor` cleanup (chgksuite/trello.py) so the
 // chgksuite markers survive and smart links collapse to plain URLs.
-function fixTrelloFormatting(s) {
+function fixTrelloFormatting(s: string | null | undefined): string {
   s = String(s || "");
   s = s.replace(/\n\n/g, "\n").replace(/\\@/g, "@");
   s = s.replace(/\n +/g, "\n");
@@ -607,7 +626,7 @@ function fixTrelloFormatting(s) {
 // walking out to the matching `[` and `)` (bracket-aware, like chgksuite's
 // find_and_parse_link). Returns the span bounds + the bare URL when both the
 // text and the target start with "http" (a Trello smart-link), else null link.
-function parseTrelloLink(s, i) {
+function parseTrelloLink(s: string, i: number): { start: number; end: number; link: string | null } | null {
   let mvr = i, level = 0, found = false;
   while (mvr > 0) {
     mvr -= 1;
@@ -631,7 +650,7 @@ function parseTrelloLink(s, i) {
 }
 
 // fixTrelloLinks collapses every Trello smart-link `[url](url)` to the bare url.
-function fixTrelloLinks(desc) {
+function fixTrelloLinks(desc: string): string {
   let result = "";
   let idx = desc.indexOf("](");
   while (idx !== -1) {
@@ -651,9 +670,9 @@ function fixTrelloLinks(desc) {
 // shareText builds the plain text handed to testers over chat: the screen-mode
 // question (prefixed "Вопрос N.") plus any handout block, so what the players
 // would see is reproduced. `number` comes from numberQuestionCards.
-function shareText(desc, number) {
+function shareText(desc: string | null | undefined, number: string | number | null | undefined): string {
   const blocks = parseBlocks(desc);
-  const parts = [];
+  const parts: string[] = [];
   for (const b of blocks) {
     if (b.type === "handout") parts.push("Раздаточный материал:\n" + screenText(b.text));
   }
@@ -669,27 +688,44 @@ function shareText(desc, number) {
 // ABSENT and a value (possibly "") when the marker is PRESENT but empty — the UI
 // renders the absent state as a "+" pill and the present state as an input.
 
+// A question's handout: an image attachment reference or free text.
+export type Handout = { kind: "image"; name: string } | { kind: "text"; text: string };
+
+// The flat field record splitFields produces and composeFields consumes.
+export interface CardFields {
+  preMarkup: string | null;
+  handout: Handout | null;
+  question: string | null;
+  answer: string | null;
+  zachet: string | null;
+  nezachet: string | null;
+  comment: string | null;
+  sources: string[] | null;
+  authors: string[] | null;
+  extra: string | null;
+}
+
 // Reverse of MARKERS: block type → its leading marker (first/most-specific win).
-const TYPE_MARKER = (() => {
-  const m = {};
+const TYPE_MARKER: Partial<Record<BlockType, string>> = (() => {
+  const m: Partial<Record<BlockType, string>> = {};
   for (const [marker, type] of MARKERS) if (!(type in m)) m[type] = marker;
   return m;
 })();
 
 // Block types that, when they precede the question, are "pre-markup" (numbering
 // directives / meta / headings hosted before the question — field #1).
-const PRE_TYPES = new Set(["numnum", "num", "meta", "section", "heading", "ljheading", "editor", "date"]);
+const PRE_TYPES = new Set<BlockType>(["numnum", "num", "meta", "section", "heading", "ljheading", "editor", "date"]);
 
 // rawLine reconstructs the 4s source of a parsed block (marker + text). A block's
 // continuation lines are plain, so a multi-line text round-trips verbatim.
-function rawLine(b) {
+function rawLine(b: Block): string {
   const marker = TYPE_MARKER[b.type];
   if (!marker) return b.text;
   return b.text ? marker + " " + b.text : marker;
 }
 
 // imgInText returns the (img …) filename referenced in a string, or null.
-function imgInText(s) {
+function imgInText(s: string | null | undefined): string | null {
   const m = /\(img\b([^)]*)\)/.exec(s || "");
   if (!m) return null;
   const toks = m[1].trim().split(/\s+/).filter(Boolean);
@@ -698,7 +734,7 @@ function imgInText(s) {
 
 // parseHandoutBlock classifies a "> …" handout block as an image (a single
 // (img …) directive) or free text.
-function parseHandoutBlock(text) {
+function parseHandoutBlock(text: string | null | undefined): Handout {
   const name = imgInText(text);
   if (name) return { kind: "image", name };
   return { kind: "text", text: text || "" };
@@ -707,7 +743,7 @@ function parseHandoutBlock(text) {
 // handoutBracketContent: the text after the "Раздат…" label's colon, "" for a
 // label-only bracket — which is the position ANCHOR the pair of functions
 // below uses to keep a mid-question handout in its place.
-function handoutBracketContent(body) {
+function handoutBracketContent(body: string): string {
   const idx = body.indexOf(":");
   return idx >= 0 ? body.slice(idx + 1).trim() : "";
 }
@@ -720,7 +756,7 @@ const HANDOUT_ANCHOR = "[Раздаточный материал]";
 // text) is removed outright; a mid-question bracket is replaced by the bare
 // [Раздаточный материал] anchor, so the spot survives question edits and the
 // compose side can put the handout back exactly where the author had it.
-function extractInlineHandout(q) {
+function extractInlineHandout(q: string | null | undefined): { handout: Handout; rest: string } | null {
   const t = q || "";
   let cursor = 0, leading = true;
   for (const [start, end, body] of bracketSpans(t)) {
@@ -728,8 +764,8 @@ function extractInlineHandout(q) {
     if (!isHandoutBody(body)) { cursor = end; continue; }
     const text = handoutBracketContent(body);
     const name = imgInText(text);
-    const handout = name ? { kind: "image", name } : { kind: "text", text };
-    let rest;
+    const handout: Handout = name ? { kind: "image", name } : { kind: "text", text };
+    let rest: string;
     if (leading) {
       const before = t.slice(0, start).replace(/\s+$/, "");
       const after = t.slice(end).replace(/^\s+/, "");
@@ -746,7 +782,7 @@ function extractInlineHandout(q) {
 // marks the handout's home and is swapped for the real bracket (or tidied away
 // when the field was removed); with no anchor the bracket lands after any
 // leading host-note brackets, before the question text itself.
-function insertInlineHandout(q, inline) {
+function insertInlineHandout(q: string | null | undefined, inline: string): string {
   const t = q || "";
   for (const [start, end, body] of bracketSpans(t)) {
     if (!isHandoutBody(body) || handoutBracketContent(body) !== "") continue;
@@ -769,7 +805,7 @@ function insertInlineHandout(q, inline) {
 // mid-sentence bracket round-trips verbatim), the block form for multi-line
 // text. "" for an empty handout: unlike the other fields there is no
 // bare-marker form, so present-but-empty does not survive a recompose.
-function composeInlineHandout(h) {
+function composeInlineHandout(h: Handout | null | undefined): string {
   if (!h) return "";
   if (h.kind === "image") return h.name ? `[Раздаточный материал: (img ${h.name})]` : "";
   if (!h.text) return "";
@@ -780,7 +816,7 @@ function composeInlineHandout(h) {
 
 // sourcesFromBlock splits a "^" source block into individual source lines,
 // stripping any "- " list markers. An empty block yields [""] (present-empty).
-function sourcesFromBlock(text) {
+function sourcesFromBlock(text: string | null | undefined): string[] {
   const t = (text || "").trim();
   if (t === "") return [""];
   const lines = t.split("\n").map((l) => l.replace(/^-\s*/, "").trim()).filter((l) => l !== "");
@@ -789,17 +825,17 @@ function sourcesFromBlock(text) {
 
 // authorsFromText splits an "@" author block into individual names on commas
 // (the conventional separator), so the tag UI can manage them.
-function authorsFromText(text) {
+function authorsFromText(text: string | null | undefined): string[] {
   return (text || "").split(",").map((s) => s.trim()).filter((s) => s !== "");
 }
 
-function splitFields(desc) {
+function splitFields(desc: string | null | undefined): CardFields {
   const blocks = parseBlocks(desc);
-  const res = {
+  const res: CardFields = {
     preMarkup: null, handout: null, question: null, answer: null, zachet: null,
     nezachet: null, comment: null, sources: null, authors: null, extra: null,
   };
-  const preLines = [], extraLines = [], authorList = [];
+  const preLines: string[] = [], extraLines: string[] = [], authorList: string[] = [];
   let seenQuestion = false, sawAuthor = false;
   for (const b of blocks) {
     const t = b.type;
@@ -826,7 +862,7 @@ function splitFields(desc) {
 
 // composeSources renders the source field: a single "^ x", or a "^" list of
 // "- x" items when there are several, or a bare "^" when present-empty.
-function composeSources(arr) {
+function composeSources(arr: ReadonlyArray<string> | null | undefined): string {
   const items = (arr || []).map((s) => s.trim()).filter((s) => s !== "");
   if (items.length === 0) return "^";
   if (items.length === 1) return `^ ${items[0]}`;
@@ -837,9 +873,9 @@ function composeSources(arr) {
 // Fields whose value is null are omitted; present-but-empty fields keep their
 // bare marker. Unrecognized content captured in `extra` is appended verbatim so
 // the round-trip is lossless for anything the structured editor doesn't model.
-function composeFields(f) {
-  const out = [];
-  const marker = (m, v) => out.push(v ? `${m} ${v}` : m);
+function composeFields(f: Partial<CardFields>): string {
+  const out: string[] = [];
+  const marker = (m: string, v: string): void => { out.push(v ? `${m} ${v}` : m); };
   if (f.preMarkup && f.preMarkup.trim()) out.push(f.preMarkup.trim());
   // The handout rides INSIDE the question text as the chgksuite-style
   // "[Раздаточный материал: …]" bracket. The old standalone "> " block sat
@@ -872,7 +908,7 @@ const HNDT_RESERVED = new Set([
 ]);
 const HNDT_DEFAULT_META = "columns: 3";
 
-function postprocessHandout(s) {
+function postprocessHandout(s: string | null | undefined): string {
   return (s || "").replace(/\\_/g, "_");
 }
 
@@ -880,7 +916,7 @@ function postprocessHandout(s) {
 // "[Раздаточный материал: …]" bracket in the question (chgksuite-native, what
 // 4s2hndt scans, and what the Поля editor composes) or a legacy standalone
 // "> …" block. Returns {kind:'image',name} | {kind:'text',text} | null.
-function handoutForCard(desc) {
+function handoutForCard(desc: string | null | undefined): Handout | null {
   const blocks = parseBlocks(desc);
   const h = blocks.find((b) => b.type === "handout");
   if (h) {
@@ -904,7 +940,7 @@ function handoutForCard(desc) {
 // hndtBlock formats one .hndt block: a for_question header, the saved per-question
 // settings (or the default), a blank line, then the live handout content (text or
 // an `image: file` line).
-function hndtBlock(number, handout, metaText) {
+function hndtBlock(number: string | number, handout: Handout, metaText: string | null | undefined): string {
   const meta = (metaText && metaText.trim()) ? metaText.trim() : HNDT_DEFAULT_META;
   const header = `for_question: ${number}\n${meta}`;
   const content = handout.kind === "image" ? `image: ${handout.name}` : handout.text;
@@ -916,13 +952,18 @@ function hndtBlock(number, handout, metaText) {
 // `metas` a map cardId → saved handout settings text. Only question cards that
 // actually carry a handout produce a block; blocks are joined with "\n---\n"
 // (chgksuite's delimiter).
-function generateHndt(cards, numbers, metas = {}) {
-  const blocks = [];
+function generateHndt(
+  cards: ReadonlyArray<ChgkCard & { id: number }>,
+  numbers: ReadonlyArray<string | null>,
+  metas: Record<number, string> = {},
+): string {
+  const blocks: string[] = [];
   cards.forEach((c, i) => {
     if (c.kind !== "question") return;
     const handout = handoutForCard(c.desc);
     if (!handout) return;
-    const number = numbers[i] != null ? numbers[i] : i + 1;
+    const n = numbers[i];
+    const number = n != null ? n : i + 1;
     blocks.push(hndtBlock(number, handout, metas[c.id]));
   });
   return blocks.join("\n---\n");
@@ -930,9 +971,9 @@ function generateHndt(cards, numbers, metas = {}) {
 
 // splitHndtBlocks splits a .hndt document on lines that are exactly "---"
 // (chgksuite split_blocks).
-function splitHndtBlocks(text) {
-  const parts = [];
-  let cur = [];
+function splitHndtBlocks(text: string | null | undefined): string[] {
+  const parts: string[] = [];
+  let cur: string[] = [];
   for (const line of String(text || "").split(/\r?\n/)) {
     if (line.trim() === "---") { parts.push(cur.join("\n")); cur = []; }
     else cur.push(line);
@@ -944,9 +985,9 @@ function splitHndtBlocks(text) {
 // parseHndtBlock pulls {forQuestion, meta} out of one .hndt block: the
 // for_question target plus the persistable settings (reserved keys other than
 // for_question and the image content line), as `key: value` lines.
-function parseHndtBlock(blockText) {
-  let forQuestion = null;
-  const meta = [];
+function parseHndtBlock(blockText: string | null | undefined): { forQuestion: string | null; meta: string } {
+  let forQuestion: string | null = null;
+  const meta: string[] = [];
   for (const line of String(blockText || "").split("\n")) {
     const i = line.indexOf(":");
     if (i < 0) continue;
@@ -962,8 +1003,8 @@ function parseHndtBlock(blockText) {
 
 // parseHndtMetaByQuestion maps each block's for_question number → its settings
 // text, so the modal can persist edited settings back onto the matching cards.
-function parseHndtMetaByQuestion(text) {
-  const out = {};
+function parseHndtMetaByQuestion(text: string | null | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
   for (const block of splitHndtBlocks(text)) {
     if (!block.trim()) continue;
     const { forQuestion, meta } = parseHndtBlock(block);
@@ -979,48 +1020,65 @@ function parseHndtMetaByQuestion(text) {
 // parseTestCard folds that legacy shape forward, turning each id into a
 // player-typed string so nothing is silently dropped on migration.
 
+export type TesterType = "player" | "team";
+export interface Tester { text: string; type: TesterType }
+export interface TestCardModel { datetime: string; title: string; testers: Tester[] }
+
+// The lax shape serializeTestCard/testersToText/testerCopyText accept: anything
+// tester-ish, normalized on the way through.
+export interface TesterLike { text?: string | null; type?: string | null }
+export interface TestCardDraft {
+  datetime?: string | null;
+  title?: string | null;
+  testers?: ReadonlyArray<TesterLike> | null;
+}
+
 // parseTestCard: JSON desc → {datetime, title, testers:[{text,type}]}.
-function parseTestCard(desc) {
-  let m;
+function parseTestCard(desc: string): TestCardModel {
+  let m: unknown;
   try {
     m = JSON.parse(desc);
   } catch (_) {
     m = null;
   }
-  if (!m || typeof m !== "object") m = {};
-  let testers = Array.isArray(m.testers) ? m.testers : null;
+  const obj: Record<string, unknown> = m && typeof m === "object" ? (m as Record<string, unknown>) : {};
+  let testers: unknown[] | null = Array.isArray(obj.testers) ? (obj.testers as unknown[]) : null;
   if (!testers) {
     // legacy {players:[ids]} → player-typed strings (see note above).
-    const legacy = Array.isArray(m.players) ? m.players : [];
+    const legacy: unknown[] = Array.isArray(obj.players) ? (obj.players as unknown[]) : [];
     testers = legacy.map((p) => ({ text: String(p == null ? "" : p), type: "player" }));
   }
-  testers = testers
-    .filter((t) => t && typeof t === "object")
-    .map((t) => ({ text: String(t.text == null ? "" : t.text), type: t.type === "team" ? "team" : "player" }));
-  return { datetime: m.datetime || "", title: m.title || "", testers };
+  const clean = testers
+    .filter((t): t is Record<string, unknown> => Boolean(t) && typeof t === "object")
+    .map((t): Tester => ({ text: String(t.text == null ? "" : t.text), type: t.type === "team" ? "team" : "player" }));
+  return {
+    datetime: typeof obj.datetime === "string" ? obj.datetime : "",
+    title: typeof obj.title === "string" ? obj.title : "",
+    testers: clean,
+  };
 }
 
 // serializeTestCard: {datetime, title, testers} → JSON desc, dropping blank rows.
-function serializeTestCard(m) {
+function serializeTestCard(m: TestCardDraft): string {
   const testers = (m.testers || [])
-    .map((t) => ({ text: (t.text || "").trim(), type: t.type === "team" ? "team" : "player" }))
+    .map((t): Tester => ({ text: (t.text || "").trim(), type: t.type === "team" ? "team" : "player" }))
     .filter((t) => t.text);
   return JSON.stringify({ datetime: m.datetime || "", title: m.title || "", testers });
 }
 
 // testersToText: testers[] → plaintext, "- name" (player) / "-T name" (team).
-function testersToText(testers) {
+function testersToText(testers: ReadonlyArray<TesterLike> | null | undefined): string {
   return (testers || []).map((t) => (t.type === "team" ? "-T " : "- ") + (t.text || "")).join("\n");
 }
 
 // testersFromText: plaintext → testers[]. A "-T" prefix (Latin or Cyrillic T,
 // followed by whitespace) marks a team; any other leading dash marks a player.
-function testersFromText(text) {
-  const out = [];
+function testersFromText(text: string | null | undefined): Tester[] {
+  const out: Tester[] = [];
   for (const raw of String(text == null ? "" : text).split("\n")) {
     const line = raw.trim();
     if (!line) continue;
-    let type = "player", body = line;
+    let type: TesterType = "player", body = line;
     if (/^-[TtТт](?=\s|$)/.test(line)) { type = "team"; body = line.slice(2); }
     else if (line[0] === "-") { body = line.slice(1); }
     body = body.trim();
@@ -1032,7 +1090,7 @@ function testersFromText(text) {
 // testerSortKey returns the [surname, given] comparison key for a player name:
 // the last whitespace-separated word is the surname, the rest the given name(s),
 // so "Александр Иванов" sorts under "Иванов", then "Александр".
-function testerSortKey(name) {
+function testerSortKey(name: string | null | undefined): [string, string] {
   const words = String(name || "").trim().split(/\s+/).filter(Boolean);
   if (!words.length) return ["", ""];
   const surname = words[words.length - 1];
@@ -1042,13 +1100,13 @@ function testerSortKey(name) {
 // testerCopyText flattens testers (across all cards in a test list) into the
 // shareable line: players sorted by surname-then-given, teams alphabetically,
 // each list deduped. Returns "" when there are no testers.
-function testerCopyText(testers) {
-  const seen = { player: new Set(), team: new Set() };
-  const players = [], teams = [];
+function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): string {
+  const seen: Record<TesterType, Set<string>> = { player: new Set(), team: new Set() };
+  const players: string[] = [], teams: string[] = [];
   for (const t of testers || []) {
-    const text = (t && t.text || "").trim();
+    const text = ((t && t.text) || "").trim();
     if (!text) continue;
-    const type = t.type === "team" ? "team" : "player";
+    const type: TesterType = t.type === "team" ? "team" : "player";
     if (seen[type].has(text)) continue;
     seen[type].add(text);
     (type === "team" ? teams : players).push(text);
@@ -1074,4 +1132,3 @@ export const xyChgk = {
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
   parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText,
 };
-if (typeof window !== "undefined") window.xyChgk = xyChgk;

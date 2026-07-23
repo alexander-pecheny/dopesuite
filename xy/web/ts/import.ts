@@ -1,4 +1,4 @@
-// import.js — import a Trello board into a new encrypted xy board.
+// import.ts — import a Trello board into a new encrypted xy board.
 //
 // Two sources, one import core:
 //  - Trello (primary): the user authorizes read access (Trello's implicit OAuth
@@ -21,6 +21,7 @@
 //  - other cards are classified via the chgksuite parser (heading/meta/question).
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import type { DataKey } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { xyChgk } from "./chgk.js";
 
@@ -32,51 +33,97 @@ const { keyBetween } = xyRank;
 // needs no OAuth secret.
 const TRELLO_KEY = "1d4fe71dd193855686196e7768aa4b05";
 
-const statusNode = document.getElementById("status");
-const msg = document.getElementById("importMessage");
-const form = document.getElementById("importForm");
-const importBtn = document.getElementById("importBtn");
+interface TrelloLabel { id: string; name?: string; color?: string | null }
+interface TrelloAttachment { id: string; name?: string; fileName?: string; isUpload?: boolean; bytes?: number; mimeType?: string }
+interface TrelloCard {
+  id: string;
+  name?: string;
+  desc?: string;
+  closed?: boolean;
+  idList: string;
+  pos?: number;
+  labels?: TrelloLabel[];
+  attachments?: TrelloAttachment[];
+}
+interface TrelloList { id: string; name?: string; closed?: boolean; pos?: number }
+interface TrelloAction {
+  id: string;
+  type?: string;
+  date?: string;
+  data?: { text?: string; card?: { id?: string } };
+  memberCreator?: { fullName?: string; username?: string };
+}
+interface TrelloBoard {
+  name?: string;
+  lists?: TrelloList[];
+  cards?: TrelloCard[];
+  labels?: TrelloLabel[];
+  actions?: TrelloAction[];
+}
+interface TrelloBoardRef { id: string; name?: string; closed?: boolean }
 
-// «🎲»: fill + copy a fresh passphrase (see app.js).
+interface CardComment { text: string; date: string; author: string }
+interface ImportSource {
+  board: TrelloBoard;
+  commentsByCard: Map<string, CardComment[]>;
+  downloadAttachment: (cardId: string, att: TrelloAttachment) => Promise<Uint8Array<ArrayBuffer> | null>;
+}
+type EncFn = (s: string) => Promise<string>;
+interface Tally { comments: number; attachments: number }
+
+function byId<T extends HTMLElement>(id: string): T {
+  const node = document.getElementById(id);
+  if (!node) throw new Error(`page is missing #${id}`);
+  return node as T;
+}
+
+const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+const statusNode = byId("status");
+const msg = byId("importMessage");
+const form = byId<HTMLFormElement>("importForm");
+const importBtn = byId<HTMLButtonElement>("importBtn");
+
+// «🎲»: fill + copy a fresh passphrase (see app.ts).
 xyApp.wireGenPassphrase(
-  document.getElementById("genPassBtn"), document.getElementById("boardPass"), xyCrypto.generatePassphrase,
+  byId("genPassBtn"), byId<HTMLInputElement>("boardPass"), xyCrypto.generatePassphrase,
 );
 
-function setStatus(s) {
+function setStatus(s: string): void {
   statusNode.dataset.state = s;
 }
 // logPrefix labels every progress line when several boards are imported in a row
 // ("Доска 2/7 «Синхрон»: …"); empty for a single board.
 let logPrefix = "";
-function log(line) {
+function log(line: string): void {
   msg.textContent = line ? logPrefix + line : "";
 }
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 // ---- Trello label colors → hex. Green/red match xy's auto test labels so an
 // imported package looks identical to one built in xy. ----
-const TRELLO_COLORS = {
+const TRELLO_COLORS: Record<string, string> = {
   green: "#3aa657", lime: "#51e898", yellow: "#f2d600", orange: "#ff9f1a",
   red: "#dd3322", purple: "#c377e0", blue: "#0079bf", sky: "#00c2e0",
   pink: "#ff78cb", black: "#344563", grey: "#b3bac5", gray: "#b3bac5",
 };
-function colorHex(c) {
+function colorHex(c: string | null | undefined): string {
   if (!c) return "#b3bac5";
   const base = String(c).split("_")[0];
   return TRELLO_COLORS[base] || "#b3bac5";
 }
-const isGreen = (c) => /^(green|lime)/.test(String(c || ""));
-const isRed = (c) => /^red/.test(String(c || ""));
+const isGreen = (c: string | null | undefined): boolean => /^(green|lime)/.test(String(c || ""));
+const isRed = (c: string | null | undefined): boolean => /^red/.test(String(c || ""));
 
 // A list is a test-list if its name ends with "tests" (e.g. "harmony2025_tests").
-const isTestList = (name) => /tests$/i.test(String(name || "").trim());
+const isTestList = (name: string | null | undefined): boolean => /tests$/i.test(String(name || "").trim());
 
-const byPos = (a, b) => (a.pos || 0) - (b.pos || 0);
+const byPos = (a: { pos?: number }, b: { pos?: number }): number => (a.pos || 0) - (b.pos || 0);
 
 // ======================= Trello API (via the server proxy) =======================
 
 // proxyFetch GETs a Trello API path through our server, retrying on rate limits.
-async function proxyFetch(token, path, params) {
+async function proxyFetch(token: string, path: string, params?: Record<string, string>): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch("/api/import/trello/proxy", {
       method: "POST",
@@ -93,7 +140,7 @@ async function proxyFetch(token, path, params) {
   }
 }
 
-async function trelloGet(token, path, params) {
+async function trelloGet(token: string, path: string, params?: Record<string, string>): Promise<unknown> {
   const res = await proxyFetch(token, path, params);
   if (!res.ok) throw new Error(`Trello ${res.status}`);
   return res.json();
@@ -103,24 +150,24 @@ async function trelloGet(token, path, params) {
 // 1000-per-response cap using the `before` cursor (actions come newest→oldest;
 // `before=<oldest id>` fetches the next older page). Returns a Map keyed by the
 // Trello card id, each list ordered oldest→newest.
-async function fetchAllComments(token, boardId) {
-  const byCard = new Map();
-  let before = null;
+async function fetchAllComments(token: string, boardId: string): Promise<Map<string, CardComment[]>> {
+  const byCard = new Map<string, CardComment[]>();
+  let before: string | null = null;
   let total = 0;
   for (;;) {
-    const params = {
+    const params: Record<string, string> = {
       filter: "commentCard", limit: "1000",
       memberCreator: "true", memberCreator_fields: "fullName,username",
     };
     if (before) params.before = before;
-    const page = await trelloGet(token, `/boards/${boardId}/actions`, params);
+    const page = (await trelloGet(token, `/boards/${boardId}/actions`, params)) as TrelloAction[];
     if (!Array.isArray(page) || page.length === 0) break;
     for (const a of page) {
       const cid = a.data && a.data.card && a.data.card.id;
       if (!cid) continue;
       const mc = a.memberCreator || {};
       if (!byCard.has(cid)) byCard.set(cid, []);
-      byCard.get(cid).push({
+      byCard.get(cid)!.push({
         text: (a.data && a.data.text) || "",
         date: a.date || "",
         author: mc.fullName || mc.username || "",
@@ -137,7 +184,7 @@ async function fetchAllComments(token, boardId) {
 
 // trelloDownload fetches an uploaded attachment's bytes. The filename segment is
 // cosmetic (Trello ignores it) but must not smuggle ".." past the proxy guard.
-async function trelloDownload(token, cardId, att) {
+async function trelloDownload(token: string, cardId: string, att: TrelloAttachment): Promise<Uint8Array<ArrayBuffer>> {
   const safe = String(att.fileName || att.name || "file").replace(/[^\w.-]/g, "_").replace(/\.\./g, "_");
   const res = await proxyFetch(token, `/cards/${cardId}/attachments/${att.id}/download/${encodeURIComponent(safe)}`, {});
   if (!res.ok) throw new Error(`attachment ${res.status}`);
@@ -145,14 +192,14 @@ async function trelloDownload(token, cardId, att) {
 }
 
 // trelloSource pulls a whole board (one nested GET) plus all its comments.
-async function trelloSource(token, boardId) {
-  const board = await trelloGet(token, `/boards/${boardId}`, {
+async function trelloSource(token: string, boardId: string): Promise<ImportSource> {
+  const board = (await trelloGet(token, `/boards/${boardId}`, {
     fields: "name",
     lists: "all", list_fields: "all",
     cards: "all", card_fields: "all",
     card_attachments: "true", card_attachment_fields: "all",
     labels: "all", label_fields: "all",
-  });
+  })) as TrelloBoard;
   const commentsByCard = await fetchAllComments(token, boardId);
   return {
     board,
@@ -163,15 +210,15 @@ async function trelloSource(token, boardId) {
 
 // fileSource reads a Trello "Export as JSON" file: comments come from its
 // `actions` array (Trello caps that export at ~1000); attachments aren't in it.
-function fileSource(board) {
-  const byCard = new Map();
+function fileSource(board: TrelloBoard): ImportSource {
+  const byCard = new Map<string, CardComment[]>();
   for (const a of (board.actions || [])) {
     if (a.type !== "commentCard") continue;
     const cid = a.data && a.data.card && a.data.card.id;
     if (!cid) continue;
     const mc = a.memberCreator || {};
     if (!byCard.has(cid)) byCard.set(cid, []);
-    byCard.get(cid).push({
+    byCard.get(cid)!.push({
       text: (a.data && a.data.text) || "",
       date: a.date || "",
       author: mc.fullName || mc.username || "",
@@ -183,7 +230,7 @@ function fileSource(board) {
 
 // ============================= import core =============================
 
-async function runImport(source, name, pass) {
+async function runImport(source: ImportSource, name: string, pass: string): Promise<{ id: number; summary: string }> {
   const board = source.board;
   setStatus("saving");
   log("Создаю доску…");
@@ -191,40 +238,40 @@ async function runImport(source, name, pass) {
   // 1. fresh board key + board row
   const { keymeta, dk } = await xyCrypto.createBoardKeys(pass);
   const boardName = name || board.name || "Импорт из Trello";
-  const created = await jpost("/api/boards", { ...keymeta, name: boardName });
+  const created = (await jpost("/api/boards", { ...keymeta, name: boardName })) as { id: number };
   const boardId = created.id;
   await xyCrypto.cacheDK(boardId, dk);
 
-  const enc = (s) => xyCrypto.encField(dk, s);
+  const enc: EncFn = (s) => xyCrypto.encField(dk, s);
 
   // 2. lists (skip closed), remember test-ness, keep a trello→xy id map
   const openLists = (board.lists || []).filter((l) => !l.closed).sort(byPos);
-  const listMap = new Map(); // trelloListId -> { id, test }
-  let listRank = null;
+  const listMap = new Map<string, { id: number; test: boolean }>(); // trelloListId -> { id, test }
+  let listRank: string | null = null;
   for (const l of openLists) {
     const test = isTestList(l.name);
     listRank = keyBetween(listRank, null);
-    const res = await jpost(`/api/boards/${boardId}/lists`, {
+    const res = (await jpost(`/api/boards/${boardId}/lists`, {
       title_enc: await enc(l.name || "(без названия)"), rank: listRank, type: test ? "test" : "normal",
-    });
+    })) as { id: number };
     listMap.set(l.id, { id: res.id, test });
   }
 
   // group open cards by their (open) list, in board order
-  const cardsByList = new Map();
+  const cardsByList = new Map<string, TrelloCard[]>();
   for (const c of (board.cards || [])) {
     if (c.closed || !listMap.has(c.idList)) continue;
     if (!cardsByList.has(c.idList)) cardsByList.set(c.idList, []);
-    cardsByList.get(c.idList).push(c);
+    cardsByList.get(c.idList)!.push(c);
   }
   for (const arr of cardsByList.values()) arr.sort(byPos);
 
   // 3. decide each label's kind: scan test-list cards, where a green label means
   // "взяли" (test_taken) and a red one "не взяли" (test_missed).
-  const labelKind = new Map(); // trelloLabelId -> 'normal' | 'test_taken' | 'test_missed'
+  const labelKind = new Map<string, string>(); // trelloLabelId -> 'normal' | 'test_taken' | 'test_missed'
   for (const l of (board.labels || [])) labelKind.set(l.id, "normal");
   for (const [listId, cards] of cardsByList) {
-    if (!listMap.get(listId).test) continue;
+    if (!listMap.get(listId)!.test) continue;
     for (const c of cards) {
       for (const lab of (c.labels || [])) {
         if (isGreen(lab.color)) labelKind.set(lab.id, "test_taken");
@@ -234,24 +281,24 @@ async function runImport(source, name, pass) {
   }
 
   // 4. create labels, mapping trello→xy id
-  const labelMap = new Map(); // trelloLabelId -> xyLabelId
+  const labelMap = new Map<string, number>(); // trelloLabelId -> xyLabelId
   for (const l of (board.labels || [])) {
     const nm = l.name || `метка (${l.color || "без цвета"})`;
-    const res = await jpost(`/api/boards/${boardId}/labels`, {
+    const res = (await jpost(`/api/boards/${boardId}/labels`, {
       name_enc: await enc(nm), color_enc: await enc(colorHex(l.color)), kind: labelKind.get(l.id) || "normal",
-    });
+    })) as { id: number };
     labelMap.set(l.id, res.id);
   }
 
   // 5. cards (+ their comments and attachments)
   const total = [...cardsByList.values()].reduce((n, a) => n + a.length, 0);
   let done = 0;
-  const tally = { comments: 0, attachments: 0 };
-  const errors = [];
+  const tally: Tally = { comments: 0, attachments: 0 };
+  const errors: string[] = [];
   for (const l of openLists) {
-    const info = listMap.get(l.id);
+    const info = listMap.get(l.id)!;
     const cards = cardsByList.get(l.id) || [];
-    let cardRank = null;
+    let cardRank: string | null = null;
     for (const c of cards) {
       cardRank = keyBetween(cardRank, null);
       try {
@@ -260,7 +307,7 @@ async function runImport(source, name, pass) {
           : await importNormalCard(boardId, info.id, c, cardRank, enc, labelMap);
         await importCardExtras(cardId, c, source, enc, dk, tally, errors);
       } catch (e) {
-        errors.push(`«${c.name || c.id}»: ${e.message}`);
+        errors.push(`«${c.name || c.id}»: ${errMsg(e)}`);
       }
       done++;
       log(`Импортировано ${done}/${total} карточек…`);
@@ -278,9 +325,9 @@ async function runImport(source, name, pass) {
 // runImportAll imports every open Trello board, one xy board each, all under the
 // same passphrase. The board-name field is ignored — names come from Trello. One
 // board's failure never stops the rest; the final report lists every board.
-async function runImportAll(token, pass) {
+async function runImportAll(token: string, pass: string): Promise<void> {
   const boards = openBoards.slice();
-  const report = [];
+  const report: string[] = [];
   for (let i = 0; i < boards.length; i++) {
     const b = boards[i];
     logPrefix = `[${i + 1}/${boards.length}] «${b.name || b.id}» — `;
@@ -290,7 +337,7 @@ async function runImportAll(token, pass) {
       const { summary } = await runImport(source, b.name || "", pass);
       report.push(`«${b.name || b.id}» — ${summary}`);
     } catch (err) {
-      report.push(`«${b.name || b.id}» — НЕ ИМПОРТИРОВАНА: ${err.message}`);
+      report.push(`«${b.name || b.id}» — НЕ ИМПОРТИРОВАНА: ${errMsg(err)}`);
     }
   }
   logPrefix = "";
@@ -301,24 +348,24 @@ async function runImportAll(token, pass) {
 
 // importNormalCard: classify by chgksuite markup, store the question/heading/meta
 // text as the card description, assign its labels.
-async function importNormalCard(boardId, listId, c, rank, enc, labelMap) {
+async function importNormalCard(boardId: number, listId: number, c: TrelloCard, rank: string, enc: EncFn, labelMap: Map<string, number>): Promise<number> {
   const desc = xyChgk.fixTrelloFormatting((c.desc && c.desc.trim()) ? c.desc : (c.name || ""));
   const kind = detectKind(desc);
-  const res = await jpost(`/api/lists/${listId}/cards`, {
+  const res = (await jpost(`/api/lists/${listId}/cards`, {
     description_enc: await enc(desc), rank, kind,
-  });
+  })) as { id: number };
   await assignLabels(res.id, c, labelMap);
   return res.id;
 }
 
 // importTestCard: a test session. Date comes from the card name; testers (the
 // card body) are preserved as a comment rather than parsed.
-async function importTestCard(boardId, listId, c, rank, enc, labelMap) {
+async function importTestCard(boardId: number, listId: number, c: TrelloCard, rank: string, enc: EncFn, labelMap: Map<string, number>): Promise<number> {
   const datetime = (c.name || "").trim() || "тест-сессия";
   const descJson = JSON.stringify({ datetime, players: [] });
-  const res = await jpost(`/api/lists/${listId}/cards`, {
+  const res = (await jpost(`/api/lists/${listId}/cards`, {
     description_enc: await enc(descJson), rank, kind: "test",
-  });
+  })) as { id: number };
   await assignLabels(res.id, c, labelMap);
   const testers = (c.desc || "").trim();
   if (testers) {
@@ -330,12 +377,12 @@ async function importTestCard(boardId, listId, c, rank, enc, labelMap) {
 // importCardExtras carries a Trello card's comments (preserving author +
 // timestamp) and uploaded attachments (files + photos) onto the new xy card.
 // Comments and attachments never abort the card: each failure is recorded.
-async function importCardExtras(xyCardId, c, source, enc, dk, tally, errors) {
+async function importCardExtras(xyCardId: number, c: TrelloCard, source: ImportSource, enc: EncFn, dk: DataKey, tally: Tally, errors: string[]): Promise<void> {
   // Comments — oldest→newest, re-encrypted, author name folded into the body
   // since Trello authors aren't xy users (author_user_id stays null).
   const cms = source.commentsByCard.get(c.id) || [];
   if (cms.length) {
-    const comments = [];
+    const comments: { author_user_id: null; created_at: string; payload_enc: string }[] = [];
     for (const cm of cms) {
       const body = xyChgk.fixTrelloFormatting(cm.text || "");
       const text = cm.author ? `${cm.author}:\n${body}` : body;
@@ -345,7 +392,7 @@ async function importCardExtras(xyCardId, c, source, enc, dk, tally, errors) {
       await jpost(`/api/cards/${xyCardId}/comments/import`, { comments });
       tally.comments += comments.length;
     } catch (e) {
-      errors.push(`«${c.name || c.id}» комментарии: ${e.message}`);
+      errors.push(`«${c.name || c.id}» комментарии: ${errMsg(e)}`);
     }
   }
 
@@ -363,14 +410,14 @@ async function importCardExtras(xyCardId, c, source, enc, dk, tally, errors) {
       await uploadAttachment(xyCardId, nm, bytes, att.mimeType, dk);
       tally.attachments++;
     } catch (e) {
-      errors.push(`«${nm}» вложение: ${e.message}`);
+      errors.push(`«${nm}» вложение: ${errMsg(e)}`);
     }
   }
 }
 
 // uploadAttachment encrypts the plain bytes under the board key and POSTs them as
-// a new xy attachment (mirrors board.js#copyCardExtras).
-async function uploadAttachment(xyCardId, name, bytes, mime, dk) {
+// a new xy attachment (mirrors board.ts#copyCardExtras).
+async function uploadAttachment(xyCardId: number, name: string, bytes: Uint8Array<ArrayBuffer>, mime: string | undefined, dk: DataKey): Promise<void> {
   const recipher = await xyCrypto.encBytes(dk, bytes);
   const lossless = /^image\/(png|gif|webp|bmp|svg)/i.test(mime || "");
   const fd = new FormData();
@@ -385,13 +432,13 @@ async function uploadAttachment(xyCardId, name, bytes, mime, dk) {
   if (!res.ok) throw new Error(`upload ${res.status}`);
 }
 
-async function assignLabels(cardId, c, labelMap) {
+async function assignLabels(cardId: number, c: TrelloCard, labelMap: Map<string, number>): Promise<void> {
   const ids = (c.labels || []).map((l) => labelMap.get(l.id)).filter((x) => x != null);
   if (ids.length) await jput(`/api/cards/${cardId}/labels`, { label_ids: ids });
 }
 
 // detectKind picks the xy card kind from the leading chgksuite marker.
-function detectKind(desc) {
+function detectKind(desc: string): string {
   const first = xyChgk.parseBlocks(desc)[0];
   if (first && first.type === "heading") return "heading";
   if (first && first.type === "meta") return "meta";
@@ -403,7 +450,7 @@ function detectKind(desc) {
 // No return_url: the chgksuite app key allows only wildcard origins, which Trello
 // no longer accepts for redirects. So we use the manual flow — Trello displays
 // the token, the user copies it and pastes it back (same as chgksuite).
-function authorizeURL() {
+function authorizeURL(): string {
   const p = new URLSearchParams({
     expiration: "1day", scope: "read", response_type: "token", name: "xy", key: TRELLO_KEY,
   });
@@ -413,14 +460,14 @@ function authorizeURL() {
 // ALL_BOARDS is the picker's synthetic first option: import every open board,
 // each into its own xy board (all sharing the one passphrase typed below).
 const ALL_BOARDS = "__all__";
-let openBoards = []; // the picker's boards, kept for the ALL_BOARDS run
+let openBoards: TrelloBoardRef[] = []; // the picker's boards, kept for the ALL_BOARDS run
 
-async function loadBoards(token) {
-  const boards = await trelloGet(token, "/members/me/boards", { fields: "name,closed", filter: "open" });
-  const sel = document.getElementById("trelloBoard");
+async function loadBoards(token: string): Promise<void> {
+  const boards = (await trelloGet(token, "/members/me/boards", { fields: "name,closed", filter: "open" })) as TrelloBoardRef[];
+  const sel = byId<HTMLSelectElement>("trelloBoard");
   sel.innerHTML = "";
   openBoards = (boards || []).filter((b) => !b.closed);
-  const option = (value, text) => {
+  const option = (value: string, text: string): void => {
     const o = document.createElement("option");
     o.value = value;
     o.textContent = text;
@@ -436,13 +483,13 @@ async function loadBoards(token) {
 
 // stage switches the connect area between: "connect" (offer the button),
 // "token" (paste the token Trello showed), "picker" (choose a board).
-function stage(s) {
-  document.getElementById("trelloConnectBtn").hidden = s === "picker";
-  document.getElementById("trelloTokenArea").hidden = s !== "token";
-  document.getElementById("trelloPickArea").hidden = s !== "picker";
+function stage(s: "connect" | "token" | "picker"): void {
+  byId("trelloConnectBtn").hidden = s === "picker";
+  byId("trelloTokenArea").hidden = s !== "token";
+  byId("trelloPickArea").hidden = s !== "picker";
 }
 
-async function useToken(token) {
+async function useToken(token: string): Promise<void> {
   sessionStorage.setItem("trelloToken", token);
   await loadBoards(token); // throws on a bad/expired token
   stage("picker");
@@ -454,8 +501,8 @@ async function useToken(token) {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   log("");
-  const pass = document.getElementById("boardPass").value;
-  const name = document.getElementById("boardName").value.trim();
+  const pass = byId<HTMLInputElement>("boardPass").value;
+  const name = byId<HTMLInputElement>("boardName").value.trim();
   const passErr = xyCrypto.validatePassphrase(pass);
   if (passErr) {
     log(passErr);
@@ -463,9 +510,9 @@ form.addEventListener("submit", async (e) => {
   }
 
   const token = sessionStorage.getItem("trelloToken");
-  const boardSel = document.getElementById("trelloBoard");
-  const pickerActive = !document.getElementById("trelloPickArea").hidden;
-  const file = document.getElementById("trelloFile").files[0];
+  const boardSel = byId<HTMLSelectElement>("trelloBoard");
+  const pickerActive = !byId("trelloPickArea").hidden;
+  const file = byId<HTMLInputElement>("trelloFile").files?.[0];
 
   // "Все доски": import each open board in turn, under the one passphrase. A
   // board that fails is reported and the rest still go through.
@@ -476,13 +523,13 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
-  let source;
+  let source: ImportSource;
   try {
     if (token && pickerActive && boardSel.value) {
       log("Загружаю доску из Trello…");
       source = await trelloSource(token, boardSel.value);
     } else if (file) {
-      const board = JSON.parse(await file.text());
+      const board = JSON.parse(await file.text()) as TrelloBoard;
       if (!board || !Array.isArray(board.lists)) {
         log("Это не похоже на экспорт доски Trello (нет массива lists).");
         return;
@@ -494,7 +541,7 @@ form.addEventListener("submit", async (e) => {
     }
   } catch (err) {
     setStatus("error");
-    log("Не удалось загрузить доску из Trello: " + err.message);
+    log("Не удалось загрузить доску из Trello: " + errMsg(err));
     return;
   }
 
@@ -504,7 +551,7 @@ form.addEventListener("submit", async (e) => {
     setTimeout(() => { window.location.href = `/board/${id}`; }, 1500);
   } catch (err) {
     setStatus("error");
-    log("Импорт прерван: " + err.message);
+    log("Импорт прерван: " + errMsg(err));
     importBtn.disabled = false;
   }
 });
@@ -513,14 +560,14 @@ form.addEventListener("submit", async (e) => {
   await xyApp.requireLogin();
 
   // Connect opens Trello's authorize page in a new tab and reveals the paste box.
-  const connectBtn = document.getElementById("trelloConnectBtn");
+  const connectBtn = byId<HTMLAnchorElement>("trelloConnectBtn");
   connectBtn.href = authorizeURL();
   connectBtn.target = "_blank";
   connectBtn.rel = "noopener";
   connectBtn.addEventListener("click", () => stage("token"));
 
-  const tokenInput = document.getElementById("trelloTokenInput");
-  const confirmToken = async () => {
+  const tokenInput = byId<HTMLInputElement>("trelloTokenInput");
+  const confirmToken = async (): Promise<void> => {
     const tok = tokenInput.value.trim();
     if (!tok) { log("Вставьте токен из Trello."); return; }
     try {
@@ -530,12 +577,12 @@ form.addEventListener("submit", async (e) => {
       log("Токен не подошёл. Проверьте и вставьте снова.");
     }
   };
-  document.getElementById("trelloTokenBtn").addEventListener("click", confirmToken);
+  byId("trelloTokenBtn").addEventListener("click", confirmToken);
   tokenInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); confirmToken(); }
   });
 
-  document.getElementById("trelloResetBtn").addEventListener("click", () => {
+  byId("trelloResetBtn").addEventListener("click", () => {
     sessionStorage.removeItem("trelloToken");
     window.location.href = "/import";
   });
