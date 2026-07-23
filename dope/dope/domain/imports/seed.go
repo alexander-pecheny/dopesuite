@@ -461,14 +461,14 @@ select team_id from match_slots where match_id = ? and team_id is not null`,
 	if err != nil {
 		return err
 	}
-	return store.MutateMatchBlobTx(ctx, tx, matchID, func(blob *store.MatchBlob) error {
+	return festwrite.MutateMatchBlobTx(ctx, tx, matchID, func(blob *store.MatchBlob) error {
 		keep := map[string]bool{}
 		for _, id := range seated {
 			keep[strconv.FormatInt(id, 10)] = true
 		}
 		for key := range blob.Teams {
 			if !keep[key] {
-				delete(blob.Teams, key)
+				blob.RemoveTeam(key)
 			}
 		}
 		return nil

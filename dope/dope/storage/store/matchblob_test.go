@@ -9,10 +9,9 @@ import (
 // and journal patches address a stable path. Sections appear on first touch.
 func TestMatchBlobRoundTrip(t *testing.T) {
 	blob := MatchBlob{}
-	team := blob.Team(17)
-	team.SetAnswer("regular", 2, 4, "right")
-	team.SetAnswer("regular", 2, 4, "right") // idempotent
-	team.SetPlayer("regular", 0, 55)
+	blob.SetAnswer(17, "regular", 2, 4, "right")
+	blob.SetAnswer(17, "regular", 2, 4, "right") // idempotent
+	blob.SetPlayer(17, "regular", 0, 55)
 
 	raw, err := json.Marshal(blob)
 	if err != nil {
@@ -48,7 +47,7 @@ func TestMatchBlobShootout(t *testing.T) {
 	if n := blob.AddShootoutTheme([]int64{1, 2}); n != 1 {
 		t.Fatalf("second shootout index = %d, want 1", n)
 	}
-	blob.Team(1).SetAnswer("shootout", 1, 0, "wrong")
+	blob.SetAnswer(1, "shootout", 1, 0, "wrong")
 	if err := blob.RemoveShootoutTheme(); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
@@ -69,10 +68,10 @@ func TestMatchBlobShootout(t *testing.T) {
 // marks normalise — so BuildView and every downstream consumer are unchanged.
 func TestTeamStateFromBlob(t *testing.T) {
 	blob := MatchBlob{}
-	section := blob.Team(7)
-	section.SetPlayer("regular", 1, 55)
-	section.SetAnswer("regular", 1, 0, "+")
-	section.SetAnswer("shootout", 0, 2, "Q")
+	blob.SetPlayer(7, "regular", 1, 55)
+	blob.SetAnswer(7, "regular", 1, 0, "+")
+	blob.SetAnswer(7, "shootout", 0, 2, "Q")
+	section := blob.Teams["7"]
 
 	names := map[int64]string{55: "Анна Б."}
 	team := TeamStateFromBlob(section, "Команда", []string{"Анна Б."}, 2.0,

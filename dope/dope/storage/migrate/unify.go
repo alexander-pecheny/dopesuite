@@ -78,9 +78,8 @@ func convertOneMatch(ctx context.Context, db *sql.DB, matchID int64) error {
 	}
 	blob := store.MatchBlob{}
 	for _, theme := range themes {
-		section := blob.Team(theme.teamID)
 		if theme.player != 0 {
-			section.SetPlayer(theme.kind, theme.index, theme.player)
+			blob.SetPlayer(theme.teamID, theme.kind, theme.index, theme.player)
 		}
 		type answerRow struct {
 			index int
@@ -95,9 +94,9 @@ func convertOneMatch(ctx context.Context, db *sql.DB, matchID int64) error {
 		if err != nil {
 			return err
 		}
-		section.EnsureTheme(theme.kind, theme.index)
+		blob.EnsureTheme(theme.teamID, theme.kind, theme.index)
 		for _, a := range answers {
-			section.SetAnswer(theme.kind, theme.index, a.index, a.mark)
+			blob.SetAnswer(theme.teamID, theme.kind, theme.index, a.index, a.mark)
 		}
 	}
 	encoded, err := blob.JSON()

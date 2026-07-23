@@ -53,6 +53,7 @@ const (
 	OpFinish      Op = 19 // finish a match
 	OpUnfinish    Op = 20 // unfinish a match
 	OpGamePatch   Op = 21 // JSON-pointer set/remove ops on a game's state_json
+	OpMatchPatch  Op = 22 // JSON-pointer set/remove ops on a match's state blob (ADR-0004)
 )
 
 var opNames = map[Op]string{
@@ -65,6 +66,7 @@ var opNames = map[Op]string{
 	OpFinish:      "FINISH",
 	OpUnfinish:    "UNFINISH",
 	OpGamePatch:   "GPATCH",
+	OpMatchPatch:  "MPATCH",
 }
 
 func (op Op) String() string {

@@ -18,7 +18,7 @@ import (
 // per-game derived revert. Forward-only: INSERT stores the full row, UPDATE the
 // changed columns, DELETE just the primary key.
 
-const journalTriggerTemplateVersion = 2
+const journalTriggerTemplateVersion = 3
 
 // journalGameTables are the audited tables a game owns, with the SQL expression
 // that derives the owning game_id from a NEW/OLD row.
@@ -126,6 +126,27 @@ func buildJournalRowTrigger(table string, cols, pks []string, op string, gameVia
 			name, table, insertSelect(g, "INSERT", rowJSON("new"), "new"))
 	case "update":
 		g := gameVia("new")
+		// matches.state_json changes are journaled semantically (OpMatchPatch by
+		// the blob write path), never as row deltas: the column is excluded from
+		// the payload and a state-only update emits no record at all.
+		if table == "matches" {
+			var otherChanged []string
+			filtered := make([]string, 0, len(cols))
+			for _, c := range cols {
+				if c == "state_json" {
+					continue
+				}
+				filtered = append(filtered, c)
+				otherChanged = append(otherChanged, fmt.Sprintf("old.%s is not new.%s",
+					storeutil.QuoteIdent(c), storeutil.QuoteIdent(c)))
+			}
+			savedCols := cols
+			cols = filtered
+			body := insertSelect(g, "UPDATE", changedRowJSON("new"), "new")
+			cols = savedCols
+			return fmt.Sprintf("create trigger %s after update on %s\nwhen %s\nbegin\n  %s\nend",
+				name, table, strings.Join(otherChanged, " or "), body)
+		}
 		return fmt.Sprintf("create trigger %s after update on %s\nbegin\n  %s\nend",
 			name, table, insertSelect(g, "UPDATE", changedRowJSON("new"), "new"))
 	case "delete":

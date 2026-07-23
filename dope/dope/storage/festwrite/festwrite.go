@@ -24,6 +24,7 @@ import (
 
 	"dope/dope/platform/util"
 	"dope/dope/storage/journal"
+	"dope/dope/storage/store"
 )
 
 type auditCtxKey string
@@ -185,6 +186,44 @@ func AppendJournalTx(ctx context.Context, tx *sql.Tx, festID, seq int64, eventTy
 	requestID := RequestIDFromContext(ctx)
 	gameID, _ := GameIDFromContext(ctx)
 	return journal.AppendTx(ctx, tx, festID, seq, eventType, payload, actorID, requestID, gameID, util.UtcNow())
+}
+
+// JournalMatchPatchTx appends the OpMatchPatch record for a match-blob edit —
+// the semantic replacement for the row trigger, which deliberately ignores
+// matches.state_json. Attribution (fest/game/seq) derives from the match row,
+// actor/request from the context, mirroring what the trigger would stamp.
+func JournalMatchPatchTx(ctx context.Context, tx *sql.Tx, matchID int64, ops []store.BlobOp) error {
+	if len(ops) == 0 {
+		return nil
+	}
+	actorID, _ := ActorFromContext(ctx)
+	var actor any
+	if actorID != 0 {
+		actor = actorID
+	}
+	var request any
+	if id := RequestIDFromContext(ctx); id != "" {
+		request = id
+	}
+	now := util.UtcNow()
+	_, err := tx.ExecContext(ctx, `
+insert into journal(fest_id, game_id, seq, ts, actor_user_id, request_id, op, payload, created_at)
+select m.fest_id, m.game_id, coalesce(f.revision, 0), ?, ?, ?, ?, ?, ?
+from matches m join fests f on f.id = m.fest_id
+where m.id = ?`,
+		now, actor, request, int(journal.OpMatchPatch), journal.EncodeMatchPatch(matchID, ops), now, matchID)
+	return err
+}
+
+// MutateMatchBlobTx applies fn to a match's state blob and journals the
+// recorded ops — the audited counterpart of store.MutateMatchBlobTx that every
+// live edit path uses.
+func MutateMatchBlobTx(ctx context.Context, tx *sql.Tx, matchID int64, fn func(*store.MatchBlob) error) error {
+	ops, err := store.MutateMatchBlobTx(ctx, tx, matchID, fn)
+	if err != nil {
+		return err
+	}
+	return JournalMatchPatchTx(ctx, tx, matchID, ops)
 }
 
 // BumpFestRevisionTx increments a fest's revision, records a semantic journal

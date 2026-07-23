@@ -160,15 +160,14 @@ on conflict(match_id, team_id) do update set place = excluded.place`,
 			}
 		}
 	}
-	if err := store.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
+	if err := festwrite.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
 		for _, t := range pm.Teams {
-			section := blob.Team(t.TeamID)
 			for _, th := range t.Themes {
 				if th.PlayerID != nil {
-					section.SetPlayer("regular", th.ThemeIndex, *th.PlayerID)
+					blob.SetPlayer(t.TeamID, "regular", th.ThemeIndex, *th.PlayerID)
 				}
 				for ai, mark := range th.Marks {
-					section.SetAnswer("regular", th.ThemeIndex, ai, mark)
+					blob.SetAnswer(t.TeamID, "regular", th.ThemeIndex, ai, mark)
 				}
 			}
 		}

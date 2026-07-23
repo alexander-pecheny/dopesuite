@@ -439,12 +439,12 @@ func applyMatchEditTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState,
 
 	switch plan.Action {
 	case matchedit.ActionAddShootoutTheme:
-		return store.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
+		return festwrite.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
 			blob.AddShootoutTheme(match.TeamIDs)
 			return nil
 		})
 	case matchedit.ActionRemoveShootoutTheme:
-		return store.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
+		return festwrite.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
 			return blob.RemoveShootoutTheme()
 		})
 	}
@@ -469,13 +469,12 @@ on conflict(match_id, team_id) do update set place = excluded.place`, match.Matc
 			}
 			playerID = id
 		}
-		return store.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
-			section := blob.Team(teamID)
+		return festwrite.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
 			if plan.Theme.Player != nil {
-				section.SetPlayer(plan.Theme.Kind, plan.Theme.Index, playerID)
+				blob.SetPlayer(teamID, plan.Theme.Kind, plan.Theme.Index, playerID)
 			}
 			if plan.Theme.Answer != nil {
-				section.SetAnswer(plan.Theme.Kind, plan.Theme.Index, plan.Theme.Answer.Index, plan.Theme.Answer.Mark)
+				blob.SetAnswer(teamID, plan.Theme.Kind, plan.Theme.Index, plan.Theme.Answer.Index, plan.Theme.Answer.Mark)
 			}
 			return nil
 		})

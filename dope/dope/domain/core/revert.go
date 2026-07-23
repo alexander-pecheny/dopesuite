@@ -23,10 +23,11 @@ import (
 
 // gameRowOp is a decoded forward row-op for replay.
 type gameRowOp struct {
-	id    int64
-	op    journal.Op
-	table string
-	row   map[string]any
+	id      int64
+	op      journal.Op
+	table   string
+	row     map[string]any
+	payload []byte // raw payload for semantic ops (OpMatchPatch)
 }
 
 // loadGameRowOpsBetween returns a game's row-ops with id in (afterID, throughID],
@@ -36,8 +37,9 @@ type gameRowOp struct {
 func loadGameRowOpsBetween(ctx context.Context, q store.Queryer, gameID, afterID, throughID int64) ([]gameRowOp, error) {
 	rows, err := q.QueryContext(ctx, `
 select id, op, payload from journal
-where game_id = ? and id > ? and id <= ? and op in (?, ?, ?)
-order by id`, gameID, afterID, throughID, int(journal.OpRowIns), int(journal.OpRowSet), int(journal.OpRowDel))
+where game_id = ? and id > ? and id <= ? and op in (?, ?, ?, ?)
+order by id`, gameID, afterID, throughID,
+		int(journal.OpRowIns), int(journal.OpRowSet), int(journal.OpRowDel), int(journal.OpMatchPatch))
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +53,10 @@ order by id`, gameID, afterID, throughID, int(journal.OpRowIns), int(journal.OpR
 		)
 		if err := rows.Scan(&id, &op, &payload); err != nil {
 			return nil, err
+		}
+		if journal.Op(op) == journal.OpMatchPatch {
+			out = append(out, gameRowOp{id: id, op: journal.Op(op), payload: append([]byte(nil), payload...)})
+			continue
 		}
 		table, row, err := journal.DecodeRowOpJSON(payload)
 		if err != nil {
@@ -108,6 +114,12 @@ func ReconstructGameStateAt(ctx context.Context, tx *sql.Tx, gameID, throughID i
 	}
 	rp := journal.NewReplayer(nil)
 	for _, o := range ops {
+		if o.op == journal.OpMatchPatch {
+			if err := journal.ApplyMatchPatch(ctx, tx, o.payload); err != nil {
+				return fmt.Errorf("replay match patch %d: %w", o.id, err)
+			}
+			continue
+		}
 		if err := rp.ApplyRowMap(ctx, tx, o.op, o.table, o.row); err != nil {
 			return fmt.Errorf("replay row op %d (%s %s): %w", o.id, o.op, o.table, err)
 		}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 )
 
 // The per-match Protocol state blob (matches.state_json, ADR-0002). Team
@@ -14,6 +15,19 @@ import (
 // players are stored as player ids; display names resolve at load time.
 // Places are NOT here: they live in match_results (with place_override) as
 // the Structure-facing output.
+//
+// Every mutation records a BlobOp; MutateMatchBlobTx returns them so the
+// caller can journal the edit semantically (OpMatchPatch) instead of the row
+// trigger capturing the whole blob.
+
+// BlobOp is one recorded pointer operation on a match blob — the unit of the
+// OpMatchPatch journal record. Kinds: "set", "remove", "ensure" (pad a theme
+// list so the index exists, never overwriting).
+type BlobOp struct {
+	Kind  string `json:"k"`
+	Path  string `json:"p"`
+	Value any    `json:"v,omitempty"`
+}
 
 // BlobTheme is one theme's state in a match blob: the fielded player (id,
 // 0 = none) and the raw answer marks.
@@ -28,9 +42,12 @@ type TeamBlob struct {
 	ShootoutThemes []BlobTheme `json:"shootoutThemes,omitempty"`
 }
 
-// MatchBlob is the decoded matches.state_json document.
+// MatchBlob is the decoded matches.state_json document plus the ops recorded
+// by mutations since parse.
 type MatchBlob struct {
 	Teams map[string]*TeamBlob `json:"teams,omitempty"`
+
+	Ops []BlobOp `json:"-"`
 }
 
 // ParseMatchBlob decodes a matches.state_json document (” and '{}' are the
@@ -46,18 +63,37 @@ func ParseMatchBlob(raw string) (MatchBlob, error) {
 	return blob, nil
 }
 
-// JSON encodes the blob for storage.
+// JSON encodes the blob for storage in canonical form (sorted object keys, via
+// a map round-trip), so a blob written live is byte-identical to the same blob
+// reconstructed by journal replay.
 func (b *MatchBlob) JSON() (string, error) {
 	raw, err := json.Marshal(b)
 	if err != nil {
 		return "", err
 	}
-	return string(raw), nil
+	var doc any
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	dec.UseNumber()
+	if err := dec.Decode(&doc); err != nil {
+		return "", err
+	}
+	canonical, err := json.Marshal(doc)
+	if err != nil {
+		return "", err
+	}
+	return string(canonical), nil
 }
 
-// Team returns the team's section, creating it on first touch.
+func (b *MatchBlob) record(kind, path string, value any) {
+	b.Ops = append(b.Ops, BlobOp{Kind: kind, Path: path, Value: value})
+}
+
+func teamKey(teamID int64) string { return strconv.FormatInt(teamID, 10) }
+
+// Team returns the team's section, creating it on first touch. Reading access
+// only — mutations go through the MatchBlob methods below so ops record.
 func (b *MatchBlob) Team(teamID int64) *TeamBlob {
-	key := strconv.FormatInt(teamID, 10)
+	key := teamKey(teamID)
 	if b.Teams == nil {
 		b.Teams = map[string]*TeamBlob{}
 	}
@@ -67,6 +103,13 @@ func (b *MatchBlob) Team(teamID int64) *TeamBlob {
 	section := &TeamBlob{}
 	b.Teams[key] = section
 	return section
+}
+
+func kindSegment(kind string) string {
+	if kind == "shootout" {
+		return "shootoutThemes"
+	}
+	return "themes"
 }
 
 func (t *TeamBlob) themes(kind string) *[]BlobTheme {
@@ -84,24 +127,45 @@ func (t *TeamBlob) theme(kind string, index int) *BlobTheme {
 	return &(*list)[index]
 }
 
-// SetAnswer sets one answer mark (normalised) on a theme, growing the grid as
-// needed.
-func (t *TeamBlob) SetAnswer(kind string, themeIndex, answerIndex int, mark string) {
+// SetAnswer sets one answer mark (normalised) on a team's theme, growing the
+// grid as needed.
+func (b *MatchBlob) SetAnswer(teamID int64, kind string, themeIndex, answerIndex int, mark string) {
 	if answerIndex < 0 || answerIndex >= len(QuestionValues) {
 		return
 	}
-	t.theme(kind, themeIndex).Answers[answerIndex] = NormalizeMark(mark)
+	normalized := NormalizeMark(mark)
+	b.Team(teamID).theme(kind, themeIndex).Answers[answerIndex] = normalized
+	b.record("set",
+		"/teams/"+teamKey(teamID)+"/"+kindSegment(kind)+"/"+strconv.Itoa(themeIndex)+"/answers/"+strconv.Itoa(answerIndex),
+		normalized)
 }
 
-// SetPlayer assigns the fielded player (by id, 0 clears) on a theme.
-func (t *TeamBlob) SetPlayer(kind string, themeIndex int, playerID int64) {
-	t.theme(kind, themeIndex).Player = playerID
+// SetPlayer assigns the fielded player (by id, 0 clears) on a team's theme.
+func (b *MatchBlob) SetPlayer(teamID int64, kind string, themeIndex int, playerID int64) {
+	b.Team(teamID).theme(kind, themeIndex).Player = playerID
+	path := "/teams/" + teamKey(teamID) + "/" + kindSegment(kind) + "/" + strconv.Itoa(themeIndex) + "/player"
+	if playerID == 0 {
+		b.record("remove", path, nil)
+	} else {
+		b.record("set", path, playerID)
+	}
 }
 
-// EnsureTheme guarantees the theme exists (padding the grid up to its index)
-// without setting anything on it.
-func (t *TeamBlob) EnsureTheme(kind string, themeIndex int) {
-	t.theme(kind, themeIndex)
+// EnsureTheme guarantees a team's theme exists (padding the grid up to its
+// index) without setting anything on it.
+func (b *MatchBlob) EnsureTheme(teamID int64, kind string, themeIndex int) {
+	b.Team(teamID).theme(kind, themeIndex)
+	b.record("ensure",
+		"/teams/"+teamKey(teamID)+"/"+kindSegment(kind)+"/"+strconv.Itoa(themeIndex), nil)
+}
+
+// RemoveTeam drops a team's whole section (a team that lost its seat).
+func (b *MatchBlob) RemoveTeam(key string) {
+	if _, ok := b.Teams[key]; !ok {
+		return
+	}
+	delete(b.Teams, key)
+	b.record("remove", "/teams/"+key, nil)
 }
 
 // AddShootoutTheme appends one shootout theme for every listed team and
@@ -120,7 +184,7 @@ func (b *MatchBlob) AddShootoutTheme(teamIDs []int64) int {
 		if id == 0 {
 			continue
 		}
-		b.Team(id).theme("shootout", index)
+		b.EnsureTheme(id, "shootout", index)
 	}
 	return index
 }
@@ -136,37 +200,42 @@ func (b *MatchBlob) RemoveShootoutTheme() error {
 	if last == 0 {
 		return errors.New("no shootout themes to remove")
 	}
-	for _, section := range b.Teams {
+	for key, section := range b.Teams {
 		if len(section.ShootoutThemes) == last {
 			section.ShootoutThemes = section.ShootoutThemes[:last-1]
+			b.record("remove", "/teams/"+key+"/shootoutThemes/"+strconv.Itoa(last-1), nil)
 		}
 	}
 	return nil
 }
 
-// MutateMatchBlobTx loads a match's state blob, applies fn, and persists the
-// result — the single write path for per-match Protocol state.
-func MutateMatchBlobTx(ctx context.Context, tx *sql.Tx, matchID int64, fn func(*MatchBlob) error) error {
+// MutateMatchBlobTx loads a match's state blob, applies fn, persists the
+// result, and returns the recorded ops — the single write path for per-match
+// Protocol state. The caller journals the returned ops (OpMatchPatch); the
+// matches row trigger deliberately ignores state_json.
+func MutateMatchBlobTx(ctx context.Context, tx *sql.Tx, matchID int64, fn func(*MatchBlob) error) ([]BlobOp, error) {
 	var raw string
 	if err := tx.QueryRowContext(ctx, `select state_json from matches where id = ?`, matchID).Scan(&raw); err != nil {
-		return err
+		return nil, err
 	}
 	blob, err := ParseMatchBlob(raw)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := fn(&blob); err != nil {
-		return err
+		return nil, err
 	}
 	encoded, err := blob.JSON()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if encoded == raw {
-		return nil
+		return nil, nil
 	}
-	_, err = tx.ExecContext(ctx, `update matches set state_json = ? where id = ?`, encoded, matchID)
-	return err
+	if _, err := tx.ExecContext(ctx, `update matches set state_json = ? where id = ?`, encoded, matchID); err != nil {
+		return nil, err
+	}
+	return blob.Ops, nil
 }
 
 // TeamStateFromBlob projects one team's blob section into the legacy TeamState
