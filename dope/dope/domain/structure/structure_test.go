@@ -125,6 +125,22 @@ func TestSingleElimStandings(t *testing.T) {
 	})
 }
 
+// The manual kind: its schedule is exactly the authored match list, and it
+// ranks nobody — advancement out of it is by fromMatch refs alone.
+func TestManualKindPassesThroughAuthoredMatches(t *testing.T) {
+	matches := mustSchedule(t, "matches", `{"matches":[
+		{"code":"f-1","title":"Финал","participantCount":4,"slots":["seed-1","seed-2","seed-3","seed-4"]}
+	]}`, nil)
+	if len(matches) != 1 || matches[0].Code != "f-1" || len(matches[0].Slots) != 4 {
+		t.Fatalf("got %+v, want the single authored match f-1 with 4 slots", matches)
+	}
+	kind, _ := Kind("matches")
+	ranked, err := kind.Standings(json.RawMessage(`{}`), nil)
+	if err != nil || ranked != nil {
+		t.Fatalf("manual standings = %v, %v; want nil, nil", ranked, err)
+	}
+}
+
 // Worked example: two finished semis. Team 1 won m1 with total 100, team 3 won
 // m2 with 90, team 4 lost m2 with 95, team 2 lost m1 with 60. Sorting by
 // place_sum asc then total desc seats them 1, 3, 4, 2. Ranks are seat orders:

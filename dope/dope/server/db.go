@@ -688,6 +688,48 @@ end`); err != nil {
 	}); err != nil {
 		return err
 	}
+	// v17: the unified-model schema (docs/unified-model.md, ADR-0001/0002).
+	// Stages carry a registered kind (backfilled from the legacy stage_type,
+	// whose values 'matches'/'reseed' are both registered kinds), matches carry
+	// the per-match Protocol state blob, match_results gains the host place
+	// override (auto places with manual pin), games declare their participant
+	// kind, and stage_standings generalises reseed_entries to every ranking
+	// stage.
+	if err := store.AddColumnsIfMissing(db, "stages", []store.ColumnSpec{
+		{Name: "kind", Type: "TEXT NOT NULL DEFAULT ''"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`update stages set kind = stage_type where kind = ''`); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "matches", []store.ColumnSpec{
+		{Name: "state_json", Type: "TEXT NOT NULL DEFAULT '{}'"},
+	}); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "match_results", []store.ColumnSpec{
+		{Name: "place_override", Type: "REAL"},
+	}); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{
+		{Name: "participant_kind", Type: "TEXT NOT NULL DEFAULT 'team'"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`
+create table if not exists stage_standings(
+  stage_id integer not null references stages(id) on delete cascade,
+  rank integer not null,
+  participant_id integer not null,
+  metrics_json text not null default '{}',
+  primary key(stage_id, rank))`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(17, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
 	return nil
 }
 
