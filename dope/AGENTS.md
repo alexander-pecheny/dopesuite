@@ -5,7 +5,7 @@ Tournament/championship management system with real-time web UI and Telegram bot
 
 ## Stack
 - **Backend**: Go 1.26, SQLite 3 (WAL mode, modernc.org/sqlite)
-- **Frontend**: Vanilla JS + HTML/CSS, no framework, embedded in binary
+- **Frontend**: game pages are TypeScript-bundled (esbuild, `just build-web`, gitignored `dist/` embedded at go-build time) over the legacy vanilla-JS libs; chrome (menu.js, pageforms.js) stays classic. No framework.
 - **Frontend tests**: node (`node --test`, in `dope/web/jstest/`)
 - **Build/run**: `justfile` (see commands below)
 - **Deploy**: `just deploy`, which calls the monorepo's `../deploy.py` (SSH-based)
@@ -82,7 +82,7 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 | `login.js` | 170 | Multi-step auth UI — username → password/code branch, redirect on success |
 | `profile.js` | 49 | Password change form (new password vs change password modes) |
 
-**No module system**: files communicate via `window` globals (`DopeTable`, `DopeStageCache`, `dopeMenu`) and DOM events. Dependency order in page templates matters.
+**Module seam (ADR-0003)**: each game page loads ONE `dist/<page>.js` bundle built from `dope/web/ts/pages/<page>.ts` — the TS shell (`web/ts/shell/`, typed contracts + `window.DopeShell`) plus the legacy scripts as side-effect imports in load order. Legacy files still communicate via `window` globals (`DopeTable`, `DopeStageCache`, `dopeMenu`); anything shared ACROSS files in one bundle must be an explicit `window.*` export (module scope no longer leaks top-level functions). Port a page by replacing its side-effect imports with a registered `ProtocolRenderer`.
 
 ## How to Run / Build / Test
 ```bash

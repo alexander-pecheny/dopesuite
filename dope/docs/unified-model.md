@@ -7,8 +7,10 @@ Design for rebuilding dope so every game — current (EK, OD/ЧГК, КСИ ± s
 Kept as-is: users/auth, fests, `fest_teams` / `fest_players` / rosters, venues, organizers, festaccess, journal tables (vocabulary changes, §4). Changed:
 
 ```sql
-games      (id, fest_id, code, slug, title, protocol,        -- was game_type
+games      (id, fest_id, code, slug, title,
+            game_type,                                       -- the Protocol code (kept name)
             participant_kind,                                -- 'team' | 'player'
+            state_json,                                      -- game-level auxiliary state (EK seed-import staging ONLY)
             scheme_id, scheme_json, status, position,
             team_list_source, roster_source, random_seed,
             screen_settings_json, revision, ...)
@@ -22,8 +24,11 @@ matches    (id, fest_id, game_id, stage_id, code, title, position,
             state_json)                                      -- the Protocol blob (ADR-0002)
 
 match_slots(id, match_id, slot_index,
-            source_type,                                     -- 'seed' | 'from_match' | 'stage_rank' | 'reseed' | 'fixed' | 'placeholder'
-            source_ref_json, participant_id, locked)         -- participant_id resolves via games.participant_kind
+            source_type,                                     -- 'seed' | 'from_match' | 'reseed' | 'placeholder'
+            source_ref_json, team_id, player_id, locked)     -- occupant column picked by games.participant_kind
+            -- 'reseed' {stage, rank} is the universal rank reference: it reads
+            -- stage_standings whatever kind ranked the stage (a dedicated
+            -- 'stage_rank' source proved unnecessary).
 
 match_results(match_id, participant_id, place, place_override,
             total, metrics_json)                             -- written only by the scorer + override path
@@ -62,27 +67,47 @@ The resolver generalizes to: after any match recompute → `Score` → effective
 
 ## 4. Journal
 
-Invariant: **log host intents, never derived state.** Resolver fills, computed places, `stage_standings`, swiss pairings — recomputed on replay, never logged. Auto-places mean former `OpPlace` entries shrink to override-only. One new opcode `OpMatchPatch` (interned match ref + JSON pointer + scalar) is the universal edit record for all protocols forever; `OpFinish`/`OpUnfinish` stay; `OpMark`/`OpPlace`/`OpThemePlayer` are retired (still decodable — opcodes are append-only). Scheme imports log a reference to the versioned `schemes` row, not the document (keeps hot rows tiny; today they average 4.6 KB because of embedded blobs). Checkpoints become the match blobs verbatim. History migration: rewrite into the new vocabulary with a replay-parity gate (ADR-0004).
+Invariant: **log host intents, never derived state.** Resolver fills, computed places, `stage_standings`, swiss pairings — recomputed on replay, never logged (the row triggers stay disarmed for derived writes via the conversion window; stage standings are written outside trigger scope only during conversion, and live recomputes are idempotent row churn zstd folds away). One opcode `OpMatchPatch` (22, `MPATCH`) is the universal edit record: a match id plus ordered pointer ops (`set` / `remove` / `ensure` / `replace`, `store.BlobOp`) applied to `matches.state_json`; the payload is the same JSON bytes hot and cold. The matches row trigger deliberately ignores `state_json`, so a state edit journals exactly once, semantically (~40 bytes hot instead of the old full-blob row-op averaging 4.6 KB). Replay (`domain/core/revert.go`) applies MPATCH via the tolerant pointer engine in `storage/journal/matchpatch.go`, and blobs encode canonically so live writes and replays are byte-identical.
 
 ## 5. Frontend (ADR-0003)
 
-TypeScript, esbuild, one **shell** + per-protocol **renderers**:
+TypeScript, esbuild, one **shell** + per-protocol **renderers**. As landed:
 
-- `web/ts/shell/` — game topbar with tabs, breadcrumbs, SSE sync (epoch/seq, delta application), stage navigation, host/viewer split by `CanEdit`, static-mode.
-- `web/ts/structure/` — stage-kind views shared by all games: cross-table, bracket tree, reseed panel, standings.
-- `web/ts/protocols/<code>/` — implements `ProtocolRenderer`: build match grid, cell editing/keypad wiring, apply state patch. Nothing else; the shell owns the page.
-- `web/ts/lib/` — today's `match-table.js` helpers, typed.
+- `web/ts/shell/contracts.ts` — the typed seams: `GameInitPayload`,
+  `StateSync`, `ProtocolRenderer`, `RendererRegistry`.
+- `web/ts/shell/shell.ts` — the shell (`window.DopeShell`): init parsing,
+  renderer registry, state-sync wiring.
+- `web/ts/pages/{od,si,host,viewer}.ts` — the page entries: shell first, then
+  the legacy page scripts as side-effect imports in their historical load
+  order. Each page loads exactly one `dist/<page>.js` bundle (declared in its
+  `.dopeui`). This is the migration seam: porting a page means replacing its
+  side-effect imports with a registered `ProtocolRenderer`.
+- `web/ts/structure/`, `web/ts/protocols/<code>/` — arrive as pages port.
 
-`justfile`: `dev` runs esbuild watch; `test` adds `tsc --noEmit` + existing node tests; embed ships built output. `menu.js`/`pageforms.js` chrome stays classic.
+`just build-web` = `tsc --noEmit` + esbuild (gitignored `dist/` output,
+embedded at go-build time); `just test`/`deploy` depend on it;
+`just watch-web` is the dev loop. `menu.js`/`pageforms.js` chrome stays
+classic. Cross-file globals inside a bundle must be explicit `window.*`
+exports (module scope no longer leaks top-level functions — see fest-grid.js).
 
 ## 6. Migration & gates (ADR-0004)
 
-Converter (`storage/migrate`): EK `themes`/`answers` → per-match blobs; OD/KSI game blob → the game's single match; schemes → v3; journal → new vocabulary. Rehearse on `~/dope-prod-snapshots/` until all gates pass, then cut over in a quiet window after a full online `.backup`.
+Converter (`storage/migrate/unify.go`, runs at startup in the trigger-disarmed
+migration window): EK `themes`/`answers` → per-match blobs, then dropped; each
+flat game gains its `main` stage+match and its state moves there
+(`games.state_json` survives only as EK's seed-import staging);
+`reseed_entries` folds into `stage_standings`; journal records redirect
+mechanically (no simulation — a guard refuses to convert if any replayable
+record still references a dropped table); checkpoints are rewritten in place.
 
-Gates:
-1. **Result parity** — converted DB renders byte-identical results/exports/views for every historical fest.
-2. **Replay parity** — rewritten journal replayed from genesis equals converted final state.
-3. **Perf parity** — edit latency and SSE fan-out no worse than baseline (`scripts/loadtest` before/after on the snapshot).
+Gates — `scripts/paritygate/paritygate.py <snapshot>` runs 1–2 against a
+snapshot copy using the working tree's server:
+1. **Result parity** — converted storage reproduces every match/game state
+   canonically byte-identical.
+2. **Journal integrity** — record count unchanged; no replayable record
+   references a dropped table; checkpoints decode clean.
+3. **Perf parity** — edit latency and SSE fan-out no worse than baseline
+   (`scripts/loadtest` before/after, run manually at cutover).
 
 ## 7. Build order
 
