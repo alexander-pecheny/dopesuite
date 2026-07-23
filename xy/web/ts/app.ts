@@ -154,17 +154,18 @@ function applySizes(s: Sizes, root: HTMLElement = document.documentElement): voi
   root.style.setProperty("--kcard-font", s.cardFont + "px");
 }
 
-// plusIcon draws the "+" the UI used to spell with the ➕ emoji: an inline SVG
-// stroked in currentColor, so it follows the button's text color — the emoji
-// glyph is dark on every platform and all but disappears on the dark theme.
-function plusIcon(): SVGSVGElement {
+// strokeIcon draws a glyph the UI used to spell with an emoji (➕, ✓): an inline
+// SVG stroked in currentColor, so it follows the button's text color — an emoji
+// glyph keeps its own colors on every platform (dark plus, glossy green check)
+// and ignores the theme.
+function strokeIcon(d: string): SVGSVGElement {
   const NS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("class", "plus-ico");
+  svg.setAttribute("class", "stroke-ico");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
   const p = document.createElementNS(NS, "path");
-  p.setAttribute("d", "M12 5v14M5 12h14");
+  p.setAttribute("d", d);
   p.setAttribute("fill", "none");
   p.setAttribute("stroke", "currentColor");
   p.setAttribute("stroke-width", "2.5");
@@ -172,6 +173,9 @@ function plusIcon(): SVGSVGElement {
   svg.append(p);
   return svg;
 }
+
+const plusIcon = (): SVGSVGElement => strokeIcon("M12 5v14M5 12h14");
+const checkIcon = (): SVGSVGElement => strokeIcon("M5 13l4.5 4.5L19 8");
 
 // swapPlusIcon replaces a compiled page button's leading ➕ with plusIcon().
 // The .dopeui vocabulary has no svg primitive, so the pages ship the emoji as
@@ -199,4 +203,4 @@ function wireGenPassphrase(button: HTMLElement, input: HTMLInputElement, generat
 
 export const xySizes = { DEFAULT: SIZES_DEFAULT, ...SIZES_RANGE, sanitize: sanitizeSizes, apply: applySizes };
 
-export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin, plusIcon, swapPlusIcon, wireGenPassphrase };
+export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin, plusIcon, checkIcon, swapPlusIcon, wireGenPassphrase };

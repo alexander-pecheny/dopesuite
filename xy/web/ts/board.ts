@@ -20,7 +20,7 @@ import type { MembersState } from "./boardmembers.js";
 import type { MenuItem, Timeline } from "./timeline.js";
 import type { MoveCtx, PreviewCardLike } from "./carddetail.js";
 
-const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, plusIcon, swapPlusIcon } = xyApp;
+const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, plusIcon, checkIcon, swapPlusIcon } = xyApp;
 const { keyBetween } = xyRank;
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -765,8 +765,8 @@ function renderAddList(): HTMLElement {
   // Android's soft keyboard has no Enter on this field, so a visible ✓ submit
   // appears as soon as there is a name to create.
   const okBtn = el("button", {
-    class: "kadd kadd-ok", type: "submit", title: "Создать список", "aria-label": "Создать список", text: "✓", hidden: true,
-  }) as HTMLButtonElement;
+    class: "kadd kadd-ok", type: "submit", title: "Создать список", "aria-label": "Создать список", hidden: true,
+  }, checkIcon()) as HTMLButtonElement;
   input.addEventListener("input", () => { okBtn.hidden = !input.value.trim(); });
   const typeSel = el("select", { class: "input", "aria-label": "Тип списка" },
     el("option", { value: "normal", text: "вопросы" }),
