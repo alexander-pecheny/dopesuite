@@ -1,8 +1,65 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {loadStaticModule, fakeIndex, fakeLocalStorage} from "./browser-module.js";
+import {DopeTable as T} from "./dist/match-table.js";
 
-const T = loadStaticModule("match-table.js").DopeTable;
+// The module reads window/document lazily (never at import time); give it one
+// shared fake window here. Tests that exercise env-dependent paths assign
+// window.localStorage / window.__GAME_INIT__ / window.parent themselves.
+globalThis.window = {};
+globalThis.document = {activeElement: null, createElement: () => fakeCell()};
+
+// fakeLocalStorage is an in-memory Storage stand-in for testing persistence;
+// assign it to window.localStorage before exercising code that reads it.
+function fakeLocalStorage() {
+  const store = new Map();
+  return {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+    get length() {
+      return store.size;
+    },
+  };
+}
+
+// fakeCell is a minimal stand-in for a DOM node: textContent + classList + value.
+function fakeCell() {
+  const classes = new Set();
+  return {
+    textContent: "",
+    dataset: {},
+    value: "",
+    classList: {
+      add: (...xs) => xs.forEach((x) => classes.add(x)),
+      remove: (...xs) => xs.forEach((x) => classes.delete(x)),
+      contains: (x) => classes.has(x),
+    },
+    // Minimal stubs for syncs that walk the DOM (e.g. the player popover lookup);
+    // tests that need real traversal assert on the node directly instead.
+    closest: () => null,
+  };
+}
+
+// fakeIndex mimics what createScoreTableIndex returns, without a DOM: it carries
+// the real `specs` (pass T.scoreCellSpecs(...) so patchScoreTable runs the real
+// per-cell sync logic) and lets a test register cells under a spec name with
+// their data-* coordinates. register() returns the cell so the test can assert
+// what the sync wrote; eachNode/get drive patchScoreTable and lookups.
+function fakeIndex(specs = []) {
+  const byName = new Map(); // name -> [cell, ...]
+  return {
+    specs,
+    register: (name, dataset = {}) => {
+      const cell = fakeCell();
+      for (const [k, v] of Object.entries(dataset)) cell.dataset[k] = String(v);
+      if (!byName.has(name)) byName.set(name, []);
+      byName.get(name).push(cell);
+      return cell;
+    },
+    eachNode: (name, cb) => (byName.get(name) || []).forEach(cb),
+    get: (name) => (byName.get(name) || [])[0] || null,
+  };
+}
 
 const SCORE_OPTS = {entity: "team", shootout: true};
 
@@ -171,9 +228,8 @@ test("createPendingOps.has marks cells under a coarse ancestor op (OD whole-arra
 });
 
 test("createPendingOps persists un-acked edits and rehydrates them on a fresh instance", () => {
-  const mod = loadStaticModule("match-table.js");
-  mod.localStorage = fakeLocalStorage();
-  const ops = mod.DopeTable.createPendingOps;
+  window.localStorage = fakeLocalStorage();
+  const ops = T.createPendingOps;
   const key = "dope.pending:game-state:2";
 
   const p1 = ops({storageKey: key});
@@ -194,19 +250,20 @@ test("createPendingOps persists un-acked edits and rehydrates them on a fresh in
 });
 
 test("createPendingOps drops persisted edits past the TTL (no resurrecting ancient sessions)", () => {
-  const mod = loadStaticModule("match-table.js");
-  mod.localStorage = fakeLocalStorage();
+  window.localStorage = fakeLocalStorage();
   const key = "dope.pending:game-state:9";
   // Pre-seed an ancient op (ts near epoch) directly in storage.
-  mod.localStorage.setItem(key, JSON.stringify([{op: "set", path: ["a"], value: 1, ts: 1}]));
-  const p = mod.DopeTable.createPendingOps({storageKey: key, ttlMs: 1000});
+  window.localStorage.setItem(key, JSON.stringify([{op: "set", path: ["a"], value: 1, ts: 1}]));
+  const p = T.createPendingOps({storageKey: key, ttlMs: 1000});
   assert.equal(p.queued(), 0, "stale op past TTL is not recovered");
-  assert.equal(mod.localStorage.getItem(key), null, "and the stale entry is purged");
+  assert.equal(window.localStorage.getItem(key), null, "and the stale entry is purged");
 });
 
 test("createClientRecorder is a safe no-op when localStorage is unavailable", () => {
-  // The test window has no localStorage; the recorder must degrade to disabled
-  // and never throw, so it can never break a page where storage is blocked.
+  // With no localStorage the recorder must degrade to disabled and never throw,
+  // so it can never break a page where storage is blocked. (The window is shared
+  // across tests now, so drop the storage an earlier test installed.)
+  window.localStorage = undefined;
   const rec = T.createClientRecorder({scope: "game-state:2"});
   assert.equal(rec.enabled, false);
   assert.doesNotThrow(() => {
@@ -290,30 +347,25 @@ test("computeEKPlayerStats team-share zeroes out non-helpers", () => {
 });
 
 test("createLocalCache round-trips JSON and degrades safely", () => {
-  const win = loadStaticModule("match-table.js");
-  const T = win.DopeTable;
-  win.localStorage = fakeLocalStorage();
+  window.localStorage = fakeLocalStorage();
   const cache = T.createLocalCache("slot");
   assert.equal(cache.read(), null, "empty slot reads as null");
   cache.write({a: 1});
   assert.deepEqual(cache.read(), {a: 1});
   cache.write(null); // null is a no-op, must not clobber the stored value
   assert.deepEqual(cache.read(), {a: 1});
-  win.localStorage.setItem("slot", "{not json");
+  window.localStorage.setItem("slot", "{not json");
   assert.equal(cache.read(), null, "corrupt JSON reads as null, not a throw");
 });
 
 test("gameEventsURL includes game_id only when present, encoded", () => {
-  const T = loadStaticModule("match-table.js").DopeTable;
   assert.equal(T.gameEventsURL("f1"), "/events?fest_id=f1");
   assert.equal(T.gameEventsURL("f 1", "g/2"), "/events?fest_id=f%201&game_id=g%2F2");
 });
 
 test("createGameDataLoader hydrates from __GAME_INIT__, caches it, and revalidates", async () => {
-  const win = loadStaticModule("match-table.js");
-  const T = win.DopeTable;
-  win.localStorage = fakeLocalStorage();
-  win.__GAME_INIT__ = {scheme: {s: 1}, state: {t: 2}, fest: {f: 3}, seq: 5};
+  window.localStorage = fakeLocalStorage();
+  window.__GAME_INIT__ = {scheme: {s: 1}, state: {t: 2}, fest: {f: 3}, seq: 5};
   const adopted = [];
   let revalidated = 0;
   const loader = T.createGameDataLoader({
@@ -326,17 +378,15 @@ test("createGameDataLoader hydrates from __GAME_INIT__, caches it, and revalidat
   assert.equal(adopted.length, 1);
   assert.equal(adopted[0].source, "init");
   assert.equal(adopted[0].snap.init.seq, 5, "raw init payload forwarded on the init path");
-  assert.equal(win.__GAME_INIT__, null, "init payload consumed");
+  assert.equal(window.__GAME_INIT__, null, "init payload consumed");
   assert.deepEqual(loader.cache.read(), {scheme: {s: 1}, state: {t: 2}, fest: {f: 3}}, "snapshot cached without the init envelope");
   for (let i = 0; i < 3; i++) await Promise.resolve(); // flush the detached revalidation
   assert.equal(revalidated, 1);
 });
 
 test("createGameDataLoader falls back to the localStorage snapshot", async () => {
-  const win = loadStaticModule("match-table.js");
-  const T = win.DopeTable;
-  win.localStorage = fakeLocalStorage();
-  win.__GAME_INIT__ = null;
+  window.localStorage = fakeLocalStorage();
+  window.__GAME_INIT__ = null;
   const route = {festID: "f", gameID: "g", apiBase: "/api"};
   T.createGameDataLoader({route, cachePrefix: "si", adopt: () => {}, revalidate: () => {}})
     .cache.write({scheme: {s: 1}, state: {t: 2}, fest: null});
@@ -355,7 +405,6 @@ test("createGameDataLoader falls back to the localStorage snapshot", async () =>
 });
 
 test("markNameOverflow flags only cells whose name is clipped", () => {
-  const T = loadStaticModule("match-table.js").DopeTable;
   function cell(scrollWidth, clientWidth) {
     const classes = new Set();
     return {
@@ -373,13 +422,11 @@ test("markNameOverflow flags only cells whose name is clipped", () => {
 });
 
 test("computePlaces ranks by total with shared-rank ranges", () => {
-  const T = loadStaticModule("match-table.js").DopeTable;
   // 30, 20, 20, 10 -> "1", "2–3", "2–3", "4"
   assert.deepEqual(T.computePlaces([10, 20, 30, 20]), ["4", "2–3", "1", "2–3"]);
 });
 
 test("computePlaces breaks ties with the supplied comparator", () => {
-  const T = loadStaticModule("match-table.js").DopeTable;
   // Equal totals (20,20) split by tiebreak: lower tiebreak ranks higher.
   // compareTiebreak(a,b) > 0 means a ranks below b.
   const places = T.computePlaces([20, 20, 10], {
@@ -393,7 +440,6 @@ test("computePlaces breaks ties with the supplied comparator", () => {
 });
 
 test("createEpochTracker baselines the first epoch and flags real changes", () => {
-  const T = loadStaticModule("match-table.js").DopeTable;
   const tracker = T.createEpochTracker();
   assert.equal(tracker.changed({epoch: ""}), false, "empty epoch ignored");
   assert.equal(tracker.changed({epoch: "a"}), false, "first epoch becomes baseline");
@@ -404,14 +450,12 @@ test("createEpochTracker baselines the first epoch and flags real changes", () =
 });
 
 test("notifyEmbeddedResize stays a no-op outside an embed", () => {
-  const win = loadStaticModule("match-table.js");
-  const T = win.DopeTable;
   let posted = 0;
-  win.requestAnimationFrame = (cb) => cb();
-  win.parent = {postMessage: () => posted++}; // a distinct parent frame...
+  window.requestAnimationFrame = (cb) => cb();
+  window.parent = {postMessage: () => posted++}; // a distinct parent frame...
   T.notifyEmbeddedResize(false); // ...but the page isn't the embed view
   assert.equal(posted, 0, "not embedded -> no postMessage");
-  win.parent = win; // embed flag set, but there is no outer frame to message
+  window.parent = window; // embed flag set, but there is no outer frame to message
   T.notifyEmbeddedResize(true);
   assert.equal(posted, 0, "no parent frame -> no postMessage");
 });

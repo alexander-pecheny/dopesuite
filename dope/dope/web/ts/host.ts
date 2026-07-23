@@ -1,86 +1,250 @@
-const hostRoot = document.getElementById("hostTable");
-const statusNode = document.getElementById("status");
-const pageHeading = document.querySelector(".host-top h1");
+// host.ts — the EK host editor page: match score editing, undo/redo, stage
+// tabs, SSE sync. Converted from the legacy host.js side-effect script; it
+// boots at load (browser-only, bundled by pages/host.ts).
+
+import { DopeTable } from "./match-table.js";
+import type {
+  CellCoord,
+  CellEdit,
+  CellNavBar,
+  CellRangeSelection,
+  ClientRecorder,
+  HostPresence,
+  NodeIndex,
+  PendingOp,
+  PendingOps,
+  ScopedEventMessage,
+  TeamView,
+  ThemeView,
+  Venue,
+} from "./match-table.js";
+import { createStageCache } from "./stage-cache.js";
+import type { MatchDescriptor, MatchView as CachedMatchView, StageData } from "./stage-cache.js";
+import { create as createStatsSync } from "./stats-sync.js";
+import type { StatsMatchEvent, StatsSyncGameTable } from "./stats-sync.js";
+import { buildFestGrid, buildReseedStagePanel, parseScheme } from "./fest-grid.js";
+import type { ReseedEntry } from "./fest-grid.js";
+
+type HostMode = "grid" | "venues" | "roster" | "stats" | "seedImport" | "match" | "stage" | "missing";
+
+interface HostRoute {
+  mode: HostMode;
+  festID: string;
+  gameID: string;
+  base: string;
+  viewerBase: string;
+  apiBase: string;
+  festApi: string;
+  matchCode?: string;
+  stageCode?: string;
+}
+
+interface HostThemeView extends ThemeView {
+  player: string;
+  answers: string[];
+}
+
+interface HostTeamView extends TeamView {
+  roster?: string[];
+  themes: HostThemeView[];
+  shootoutThemes?: HostThemeView[];
+  correctCounts: number[];
+}
+
+interface HostMatchView extends CachedMatchView {
+  title?: string;
+  finished: boolean;
+  revision?: number;
+  stageCode?: string;
+  venue?: {number: number; title?: string} | null;
+  questionValues: number[];
+  teams: HostTeamView[];
+}
+
+type HostStageMatch = {
+  code?: string;
+  title?: string;
+};
+
+type HostStage = {
+  code: string;
+  title?: string;
+  stage_type?: string;
+  type?: string;
+  status?: string;
+  config?: unknown;
+  reseedReady?: boolean;
+  reseedEntries?: ReseedEntry[];
+  matches?: HostStageMatch[];
+};
+
+type HostFestView = {
+  slug?: string;
+  title?: string;
+  gameName?: string;
+  revision?: number;
+  schemaJson?: unknown;
+  venues?: Venue[];
+  stages?: HostStage[];
+};
+
+type SeedImportRow = {
+  teamID?: number;
+  seedNumber?: number;
+  name?: string;
+  city?: string;
+  declined?: boolean;
+  waitlist?: boolean;
+};
+
+type SeedImportView = {
+  rows?: SeedImportRow[];
+  activeCount?: number;
+  drawSize?: number;
+};
+
+interface HostInitPayload {
+  route?: {mode?: string; matchCode?: string; stageCode?: string};
+  fest?: HostFestView | null;
+  match?: HostMatchView | null;
+  seedImport?: SeedImportView | null;
+  teamsUnnumbered?: boolean;
+  canEdit?: boolean;
+}
+
+interface HostPageGlobals {
+  __HOST_INIT__?: HostInitPayload | null;
+}
+
+type ActiveCell = {matchCode: string; team: number; shootout: boolean; theme: number; answer: number};
+
+type StagePane = HTMLElement & {
+  _stageObserver?: IntersectionObserver | null;
+  _stageSelection?: CellRangeSelection | null;
+};
+
+type StageFrame = HTMLElement & {
+  __scoreIndex?: NodeIndex;
+  __matchState?: HostMatchView;
+};
+
+type EKCellPayload = {
+  team: number;
+  theme?: number;
+  answer?: number;
+  mark?: string;
+  player?: string;
+  place?: number;
+  shootout?: boolean;
+};
+
+type EKUpdatePayload = EKCellPayload | {finished: boolean} | {action: string} | {edits: EKCellPayload[]};
+
+type EKPendingEntry = {ops: PendingOps; inFlight: boolean; timer: number | null};
+
+type UndoEditItem = {team: number; theme: number; answer: number; shootout: boolean; previous: string};
+type UndoGroup = {matchCode: string; items: UndoEditItem[]};
+type UndoEntry = {
+  kind: "match-edits";
+  groups: UndoGroup[];
+  selection: {anchor: CellCoord; focus: CellCoord} | null;
+};
+type UndoContext = {mode: string; matchCode: string | null; stageCode: string | null};
+
+type HostPresenceCursor = {
+  app?: string;
+  kind?: string;
+  gameID?: unknown;
+  matchCode?: string;
+  team?: number;
+  shootout?: boolean;
+  theme?: number;
+  answer?: number;
+};
+
+const hostRoot = document.getElementById("hostTable") as HTMLElement;
+const statusNode = document.getElementById("status") as HTMLElement;
+const pageHeading = document.querySelector<HTMLElement>(".host-top h1");
 const ekTabsRoot = document.getElementById("ekTabs");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const gameTable = window.DopeTable;
+const gameTable = DopeTable;
 const {formatVenue, formatBattleVenue, statusLabel, formatNumber, formatPlace, clamp, cssEscape, th, td} = gameTable;
 const viewerCounter = gameTable.createViewerCounter(statusNode);
 let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
-const canEdit = Boolean(window.__HOST_INIT__?.canEdit);
+const canEdit = Boolean((window as Window & HostPageGlobals).__HOST_INIT__?.canEdit);
 if (!embedded && route.apiBase) gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
-let state = null;
-let fest = null;
-let venues = [];
-let stageSelection = null;            // points at the active pane's selection helper
-const stageCache = window.DopeStageCache.create({
+let state: HostMatchView | null = null;
+let fest: HostFestView | null = null;
+let venues: Venue[] = [];
+let stageSelection: CellRangeSelection | null = null;            // points at the active pane's selection helper
+const stageCache = createStageCache({
   container: hostRoot,
   apiBase: () => route.apiBase,
   schemeStages: () => (fest ? ekSchemeStages() : []),
   findStage: (code) => findStage(fest, code),
-  stageType: (stage) => stageType(stage),
-  getMatches: (stage) => stage?.matches || [],
+  stageType: (stage) => stageType(stage as HostStage | null | undefined),
+  getMatches: (stage) => (stage as HostStage | null | undefined)?.matches || [],
   // Re-overlay un-acked local edits onto every MatchView the cache stores, so a
   // background refetch (prefetchStage/prefetchAllStages) or an SSE update can
   // never wipe an optimistically-marked cell before the server confirms it.
-  overlayMatch: (view) => overlayPendingMatch(view?.code, view),
+  overlayMatch: (view) => overlayPendingMatch(view?.code, view as HostMatchView),
   buildPaneContent: ({pane, stageCode, stage, data}) => {
-    if (stageType(stage) === "reseed") {
+    if (stageType(stage as HostStage | null | undefined) === "reseed") {
       pane.appendChild(buildHostReseedStagePanel(mergedStage(fest, stageCode)));
       return;
     }
     pane.appendChild(buildStageTableStack(data));
     setupStageTableObserver(pane);
-    pane._stageSelection = attachStageSelection(pane.querySelector(".stage-table-stack"));
+    (pane as StagePane)._stageSelection = attachStageSelection(pane.querySelector<HTMLElement>(".stage-table-stack"));
   },
   onStageDataChanged: ({pane, stageCode, data}) => {
     refreshPaneFrames(pane, data);
   },
   onMatchUpdated: ({frame, matchState}) => {
-    if (frame.dataset.rendered === "1" || frame.dataset.nearViewport === "1") {
-      updateStageFrame(frame, matchState);
+    if ((frame as StageFrame).dataset.rendered === "1" || (frame as StageFrame).dataset.nearViewport === "1") {
+      updateStageFrame(frame as StageFrame, matchState as HostMatchView);
     }
   },
   onPaneShown: ({pane, stageCode}) => {
-    stageSelection = pane._stageSelection || null;
+    stageSelection = (pane as StagePane)._stageSelection || null;
     bindStageOverflowScroll();
     scheduleEKTeamNameOverflowUpdate(pane);
   },
   cleanupPane: ({pane}) => {
-    pane._stageObserver?.disconnect();
-    pane._stageObserver = null;
-    pane._stageSelection?.unbind();
-    pane._stageSelection = null;
+    (pane as StagePane)._stageObserver?.disconnect();
+    (pane as StagePane)._stageObserver = null;
+    (pane as StagePane)._stageSelection?.unbind();
+    (pane as StagePane)._stageSelection = null;
   },
 });
-let renderMatchCode = null;
-let activeCell = {matchCode: "", team: 0, shootout: false, theme: 0, answer: 0};
-let reloadTimer = null;
-const localMatchEchoes = new Set();
-let matchTableIndex = null;
-let activeAnswerNode = null;
-let recorder = null;
+let renderMatchCode: string | null = null;
+let activeCell: ActiveCell = {matchCode: "", team: 0, shootout: false, theme: 0, answer: 0};
+let reloadTimer: number | null = null;
+const localMatchEchoes = new Set<string>();
+let matchTableIndex: NodeIndex | null = null;
+let activeAnswerNode: HTMLElement | null = null;
+let recorder: ClientRecorder | null = null;
 // Live SSE stream, kept at module scope so the visibility/online recovery below
 // can tear down a dead connection and re-establish it. null while disconnected.
-let events = null;
-let activeTeamRows = [];
-const matchSelections = new Map();
-const undoStack = [];
+let events: EventSource | null = null;
+let activeTeamRows: HTMLElement[] = [];
+const matchSelections = new Map<string, CellRangeSelection>();
+const undoStack: UndoEntry[] = [];
 const UNDO_LIMIT = 200;
-let undoStackContext = null;
+let undoStackContext: UndoContext | null = null;
 let undoApplying = false;
-let presence = null;
-let seedImport = null;
+let presence: HostPresence | null = null;
+let seedImport: SeedImportView | null = null;
 let seedImportNotice = "";
 let gridNameOverflowFrame = 0;
 let ekTeamNameOverflowFrame = 0;
 let resultsTeamNameOverflowFrame = 0;
-let stageOverflowScrollFrame = null;
-let stageOverflowScrollListener = null;
-let statsScrollFadeFrame = null;
-let playerSelectMeasureContext = null;
+let stageOverflowScrollFrame: Element | null = null;
+let stageOverflowScrollListener: (() => void) | null = null;
+let statsScrollFadeFrame: Element | null = null;
+let playerSelectMeasureContext: CanvasRenderingContext2D | null = null;
 let ekTabsFadeFrame = 0;
 
 const floatingPopoverSpecs = [
@@ -123,7 +287,7 @@ window.addEventListener("resize", () => {
   scheduleEKTabsFadeUpdate();
 });
 
-async function loadCurrent() {
+async function loadCurrent(): Promise<void> {
   if (consumeHostInit()) {
     recoverMatchPendingEdits();
     return;
@@ -154,9 +318,9 @@ async function loadCurrent() {
 // navigates between games client-side, so resolve it lazily per call.
 const festCache = () => gameTable.createLocalCache(`host:fest:${route.festID}:${route.gameID}`);
 const readFestCache = () => festCache().read();
-const writeFestCache = (view) => festCache().write(view);
+const writeFestCache = (view: HostFestView | null) => festCache().write(view);
 
-function adoptFestView(view) {
+function adoptFestView(view: HostFestView): void {
   fest = view;
   if (Array.isArray(view?.venues)) venues = view.venues;
   stageCache.adoptFest(view);
@@ -164,9 +328,9 @@ function adoptFestView(view) {
 
 // hydrateFestFromCache returns true if it managed to populate `fest` from
 // either memory or localStorage (without hitting the network).
-function hydrateFestFromCache() {
+function hydrateFestFromCache(): boolean {
   if (fest) return true;
-  const cached = readFestCache();
+  const cached = readFestCache() as HostFestView | null;
   if (!cached) return false;
   adoptFestView(cached);
   return true;
@@ -176,8 +340,8 @@ function hydrateFestFromCache() {
 // window.__HOST_INIT__ payload, skipping the API round trips that loadX would
 // otherwise make. Returns true on success; on any shape mismatch, falls back
 // to the normal fetch path.
-function consumeHostInit() {
-  const init = window.__HOST_INIT__;
+function consumeHostInit(): boolean {
+  const init = (window as Window & HostPageGlobals).__HOST_INIT__;
   if (!init || !init.route || !init.fest) return false;
   if (init.route.mode !== route.mode) return false;
   // Don't compare festID/gameID: the server resolves slugs to numeric ids, so
@@ -187,7 +351,7 @@ function consumeHostInit() {
   if (route.mode === "match" && init.route.matchCode !== route.matchCode) return false;
   if (route.mode === "stage" && init.route.stageCode !== route.stageCode) return false;
   if (init.teamsUnnumbered) gameTable.mountUnnumberedBanner(route.festID);
-  window.__HOST_INIT__ = null;
+  (window as Window & HostPageGlobals).__HOST_INIT__ = null;
 
   adoptFestView(init.fest);
   writeFestCache(init.fest);
@@ -218,22 +382,22 @@ function consumeHostInit() {
   return true;
 }
 
-async function loadFest() {
+async function loadFest(): Promise<void> {
   const cached = hydrateFestFromCache();
   if (cached) renderFest();
   const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
-  const fresh = await response.json();
+  const fresh = await response.json() as HostFestView;
   const changed = !cached || fresh.revision !== fest?.revision;
   adoptFestView(fresh);
   writeFestCache(fresh);
   if (changed || !cached) renderFest();
 }
 
-async function loadStage() {
+async function loadStage(): Promise<void> {
   const cached = hydrateFestFromCache();
   if (cached) renderStage();
-  const stageCode = route.stageCode;
+  const stageCode = route.stageCode!;
   // Revalidate fest+venues and fetch this stage's matches in parallel.
   // adoptFestView routes through the cache, which clears caches on revision bump.
   const festPromise = Promise.all([
@@ -242,8 +406,8 @@ async function loadStage() {
   ]).then(async ([response, venuesResponse]) => {
     if (!response.ok) throw new Error(await response.text());
     if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
-    const fresh = await response.json();
-    const freshVenues = await venuesResponse.json();
+    const fresh = await response.json() as HostFestView;
+    const freshVenues = await venuesResponse.json() as Venue[];
     venues = freshVenues;
     adoptFestView(fresh);
     writeFestCache(fresh);
@@ -257,26 +421,26 @@ async function loadStage() {
   stageCache.prefetchAllStages();
 }
 
-async function loadMatch() {
+async function loadMatch(): Promise<void> {
   // Match state changes per cell edit, so we don't cache it — the match table
   // still waits on its fetch.
   hydrateFestFromCache();
   const [matchResponse, venuesResponse, festResponse] = await Promise.all([
-    fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode)}`),
+    fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode!)}`),
     fetch(`${route.festApi}/venues`),
     fetch(route.apiBase),
   ]);
   if (!matchResponse.ok) throw new Error(await matchResponse.text());
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  state = overlayPendingMatch(route.matchCode, await matchResponse.json());
-  venues = await venuesResponse.json();
-  adoptFestView(await festResponse.json());
+  state = overlayPendingMatch(route.matchCode, await matchResponse.json() as HostMatchView);
+  venues = await venuesResponse.json() as Venue[];
+  adoptFestView(await festResponse.json() as HostFestView);
   writeFestCache(fest);
   render();
 }
 
-async function loadStats() {
+async function loadStats(): Promise<void> {
   // Stats are an aggregate of every battle, computed from the shared stage
   // cache — the same per-match MatchViews the bracket pages hold. We warm it
   // once here (a single /stages/matches request, deduped with the bracket
@@ -285,7 +449,7 @@ async function loadStats() {
   hydrateFestFromCache();
   const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
-  adoptFestView(await response.json());
+  adoptFestView(await response.json() as HostFestView);
   writeFestCache(fest);
   await stageCache.prefetchAllStages();
   if (route.mode !== "stats") return;
@@ -295,14 +459,14 @@ async function loadStats() {
 // statsStagesFromCache shapes the live stage cache into the
 // [{code, matches:[MatchView]}] form computeEKPlayerStats expects, pulling the
 // current in-memory MatchView for every match that has one.
-function statsStagesFromCache() {
-  const stages = [];
+function statsStagesFromCache(): Array<{code: string; matches: HostMatchView[]}> {
+  const stages: Array<{code: string; matches: HostMatchView[]}> = [];
   for (const stage of ekSchemeStages()) {
     const data = stageCache.getData(stage.code);
     if (!data) continue;
-    const matches = [];
+    const matches: HostMatchView[] = [];
     for (const match of data.matches || []) {
-      const ms = data.stateByCode.get(match.code);
+      const ms = data.stateByCode.get(match.code ?? "") as HostMatchView | undefined;
       if (ms) matches.push(ms);
     }
     stages.push({code: stage.code, matches});
@@ -310,7 +474,7 @@ function statsStagesFromCache() {
   return stages;
 }
 
-async function loadRoster() {
+async function loadRoster(): Promise<void> {
   // The roster view fetches the fest-level team→players list itself; here we only
   // need the fest view for the heading/breadcrumbs. Render from cache immediately,
   // then revalidate the fest in the background.
@@ -318,13 +482,13 @@ async function loadRoster() {
   if (cached) renderRoster();
   const response = await fetch(route.apiBase);
   if (!response.ok) throw new Error(await response.text());
-  adoptFestView(await response.json());
+  adoptFestView(await response.json() as HostFestView);
   writeFestCache(fest);
   if (route.mode !== "roster") return;
   renderRoster();
 }
 
-async function loadVenuesPage() {
+async function loadVenuesPage(): Promise<void> {
   const cached = hydrateFestFromCache();
   if (cached) renderVenues();
   const [venuesResponse, festResponse] = await Promise.all([
@@ -333,8 +497,8 @@ async function loadVenuesPage() {
   ]);
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  const freshVenues = await venuesResponse.json();
-  const freshFest = await festResponse.json();
+  const freshVenues = await venuesResponse.json() as Venue[];
+  const freshFest = await festResponse.json() as HostFestView;
   const changed = !cached || JSON.stringify(freshVenues) !== JSON.stringify(venues);
   venues = freshVenues;
   adoptFestView(freshFest);
@@ -342,7 +506,7 @@ async function loadVenuesPage() {
   if (changed) renderVenues();
 }
 
-async function loadSeedImportPage() {
+async function loadSeedImportPage(): Promise<void> {
   // Seed-import payload is small and not cached separately.
   hydrateFestFromCache();
   const [seedResponse, festResponse] = await Promise.all([
@@ -351,8 +515,8 @@ async function loadSeedImportPage() {
   ]);
   if (!seedResponse.ok) throw new Error(await seedResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  seedImport = await seedResponse.json();
-  adoptFestView(await festResponse.json());
+  seedImport = await seedResponse.json() as SeedImportView;
+  adoptFestView(await festResponse.json() as HostFestView);
   writeFestCache(fest);
   renderSeedImport();
 }
@@ -366,7 +530,7 @@ async function loadSeedImportPage() {
 const epochTracker = gameTable.createEpochTracker();
 let epochReloadScheduled = false;
 
-function scheduleEpochReload() {
+function scheduleEpochReload(): void {
   if (epochReloadScheduled) return;
   epochReloadScheduled = true;
   recorder?.event("epoch-reload", {mode: route.mode, from: epochTracker.epoch});
@@ -375,13 +539,13 @@ function scheduleEpochReload() {
   gameTable.scheduleStaticReload();
 }
 
-function connectEvents() {
+function connectEvents(): void {
   if (events) {
     try { events.close(); } catch (_err) { /* already closed */ }
   }
   events = new EventSource(gameTable.gameEventsURL(route.festID, route.gameID));
   events.addEventListener("state", (event) => {
-    const message = gameTable.parseScopedEvent(event.data);
+    const message = gameTable.parseScopedEvent((event as MessageEvent<string>).data);
     // A changed server epoch means a restart reset the seq space; reload to
     // re-seed instead of silently dropping every post-restart delta by seq.
     if (epochTracker.changed(message)) {
@@ -391,7 +555,7 @@ function connectEvents() {
     // On the stats page, fold match edits into the cache in place and recompute
     // from memory — no refetch. Other scopes don't affect the aggregate.
     if (route.mode === "stats") {
-      if (message.scope?.startsWith("match:")) statsSync.applyMatchEvent(message);
+      if (message.scope?.startsWith("match:")) statsSync.applyMatchEvent(message as StatsMatchEvent);
       return;
     }
     if (consumeLocalMatchEcho(message)) {
@@ -410,8 +574,8 @@ function connectEvents() {
         applyMatchDelta(message, matchScope);
         return;
       }
-      if (message.data?.code) {
-        const view = message.data;
+      const view = message.data as HostMatchView | null | undefined;
+      if (view?.code) {
         view.seq = Number(message.seq) || 0;
         const result = stageCache.applyMatchUpdate(view);
         if (route.mode === "match" && message.scope === matchScope) {
@@ -425,13 +589,14 @@ function connectEvents() {
       return;
     }
     if (route.mode === "venues" && message.scope === venuesScope) {
-      venues = message.data;
+      venues = message.data as Venue[];
       renderVenues();
       setStatus("saved");
       return;
     }
-    if (message.scope?.startsWith("fest:") && message.data?.stages) {
-      applyFestViewEvent(message.data);
+    const festView = message.data as HostFestView | null | undefined;
+    if (message.scope?.startsWith("fest:") && festView?.stages) {
+      applyFestViewEvent(festView);
       setStatus("saved");
       return;
     }
@@ -439,7 +604,7 @@ function connectEvents() {
   });
   events.addEventListener("viewers", (event) => {
     try {
-      viewerCounter.setCount(JSON.parse(event.data)?.count);
+      viewerCounter.setCount((JSON.parse((event as MessageEvent<string>).data) as {count?: unknown} | null)?.count);
     } catch (_err) {
       // ignore malformed viewer-count payloads
     }
@@ -457,7 +622,7 @@ function connectEvents() {
 // "reconnecting", so it spins forever. On regaining visibility/network, drop any
 // non-OPEN stream and re-seed from a fresh fetch. Guarding on readyState === OPEN
 // keeps a healthy stream untouched, so the steady-state cost is zero.
-function recoverLive() {
+function recoverLive(): void {
   if (epochReloadScheduled) return;
   if (document.visibilityState !== "visible") return;
   if (events && events.readyState === EventSource.OPEN) return;
@@ -478,7 +643,7 @@ document.addEventListener("visibilitychange", recoverLive);
 window.addEventListener("pageshow", recoverLive);
 window.addEventListener("online", recoverLive);
 
-function applyFestViewEvent(view) {
+function applyFestViewEvent(view: HostFestView): void {
   adoptFestView(view);
   writeFestCache(fest);
   if (route.mode === "stage") {
@@ -494,23 +659,23 @@ function applyFestViewEvent(view) {
 
 // matchCodeFromScope extracts the match code from a "match:<gameID>:<code>"
 // scope (codes never contain ':', but join the tail defensively).
-function matchCodeFromScope(scope) {
-  return scope.split(":").slice(2).join(":");
+function matchCodeFromScope(scope: unknown): string {
+  return (scope as string).split(":").slice(2).join(":");
 }
 
 // matchBase returns the cached full view a delta should apply onto: the focused
 // match's `state` when we're on it, else the stage cache. null means we have no
 // base (e.g. a match in a stage we haven't fetched yet).
-function matchBase(code) {
+function matchBase(code: string): HostMatchView | null {
   if (route.mode === "match" && state?.code === code) return state;
-  return stageCache.matchState(code);
+  return stageCache.matchState(code) as HostMatchView | null;
 }
 
 // matchVisible reports whether a match is currently on screen — the focused
 // match in match mode, or any match of the open stage in stage mode. A delta we
 // can't apply (no base / seq gap) only needs a reload when it would change what
 // the user is looking at; otherwise evicting the stale cache entry is enough.
-function matchVisible(code) {
+function matchVisible(code: string): boolean {
   if (route.mode === "match") return code === route.matchCode;
   if (route.mode === "stage") return stageCache.stageCodeForMatch(code) === route.stageCode;
   return false;
@@ -524,7 +689,7 @@ function matchVisible(code) {
 // skeleton for an off-screen stage. This is the host-side mirror of viewer.js's
 // handleMatchEvent: without it, delta events (the default for EK) fall through
 // to a full reload, flashing the stage skeleton on every edit.
-function applyMatchDelta(message, matchScope) {
+function applyMatchDelta(message: ScopedEventMessage, matchScope: string): void {
   const code = matchCodeFromScope(message.scope);
   const base = matchBase(code);
   const prev = Number(message.prevSeq) || 0;
@@ -541,7 +706,7 @@ function applyMatchDelta(message, matchScope) {
     setStatus("saved");
     return;
   }
-  const next = gameTable.applyDeltaOps(base, message.ops);
+  const next = gameTable.applyDeltaOps(base, message.ops) as HostMatchView;
   next.seq = Number(message.seq) || prev;
   stageCache.applyMatchUpdate(next);
   if (route.mode === "match" && message.scope === matchScope) {
@@ -554,14 +719,14 @@ function applyMatchDelta(message, matchScope) {
 // #ekTabs, update history, re-parse the route, and re-run loadCurrent. Keeps
 // the EventSource and presence connections alive across tab switches, so the
 // only work on switch is the data fetch and DOM rebuild for the new view.
-function bindSPANavigation() {
+function bindSPANavigation(): void {
   if (embedded) return;
   ekTabsRoot?.addEventListener("click", (event) => {
     if (event.defaultPrevented) return;
     if (event.button !== 0) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const link = event.target?.closest?.("a[href]");
-    if (!link || !ekTabsRoot.contains(link)) return;
+    const link = (event.target as Element | null)?.closest?.<HTMLAnchorElement>("a[href]");
+    if (!link || !ekTabsRoot!.contains(link)) return;
     if (link.target && link.target !== "" && link.target !== "_self") return;
     const href = link.getAttribute("href");
     if (!href || href.startsWith("#")) return;
@@ -584,12 +749,12 @@ function bindSPANavigation() {
   });
 }
 
-function navigateTo(target) {
+function navigateTo(target: string): void {
   history.pushState(null, "", target);
   runCurrentRoute();
 }
 
-function runCurrentRoute() {
+function runCurrentRoute(): void {
   route = currentRoute();
   setStatus("saving");
   loadCurrent()
@@ -600,8 +765,8 @@ function runCurrentRoute() {
     });
 }
 
-function scheduleReload() {
-  window.clearTimeout(reloadTimer);
+function scheduleReload(): void {
+  window.clearTimeout(reloadTimer ?? undefined);
   reloadTimer = window.setTimeout(() => {
     loadCurrent()
       .then(() => setStatus("saved"))
@@ -617,28 +782,28 @@ function scheduleReload() {
 // recomputes from memory (throttled); a seq gap resyncs the bracket once
 // (debounced). The loop lives in stats-sync.js so it is shared with viewer.js
 // and unit-tested; this file supplies the page-specific pieces.
-const statsSync = window.DopeStatsSync.create({
+const statsSync = createStatsSync({
   stageCache,
-  gameTable,
+  gameTable: gameTable as StatsSyncGameTable,
   matchCodeFromScope,
   isActive: () => route.mode === "stats",
   rerender: rerenderStatsTable,
 });
 
-function matchScopeFor(matchCode) {
+function matchScopeFor(matchCode: string): string {
   return `match:${route.gameID}:${matchCode}`;
 }
 
-function matchEchoKey(scope, revision) {
+function matchEchoKey(scope: string, revision: number | undefined): string {
   return `${scope}:${revision || 0}`;
 }
 
-function rememberLocalMatchEcho(matchCode, updated) {
+function rememberLocalMatchEcho(matchCode: string, updated: HostMatchView): void {
   if (!updated?.revision) return;
   localMatchEchoes.add(matchEchoKey(matchScopeFor(matchCode), updated.revision));
 }
 
-function consumeLocalMatchEcho(message) {
+function consumeLocalMatchEcho(message: ScopedEventMessage): boolean {
   if (!message?.scope?.startsWith("match:")) return false;
   const key = matchEchoKey(message.scope, message.revision);
   if (!localMatchEchoes.has(key)) return false;
@@ -646,8 +811,8 @@ function consumeLocalMatchEcho(message) {
   return true;
 }
 
-function setStatus(state) {
-  const labels = {
+function setStatus(state: string): void {
+  const labels: Record<string, string> = {
     saved: "Синхронизировано",
     saving: "Синхронизация",
     reconnecting: "Переподключение",
@@ -658,19 +823,19 @@ function setStatus(state) {
   statusNode.title = labels[state] || labels.saving;
 }
 
-async function sendUpdateRaw(payload, matchCode) {
+async function sendUpdateRaw(payload: EKUpdatePayload, matchCode: string): Promise<HostMatchView> {
   const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}/update`, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(await response.text());
-  const updated = await response.json();
+  const updated = await response.json() as HostMatchView;
   rememberLocalMatchEcho(matchCode, updated);
   return updated;
 }
 
-async function sendUpdate(payload, matchCode = currentMatchCode()) {
+async function sendUpdate(payload: EKUpdatePayload, matchCode: string = currentMatchCode()): Promise<void> {
   setStatus("saving");
   try {
     const updated = await sendUpdateRaw(payload, matchCode);
@@ -690,7 +855,7 @@ async function sendUpdate(payload, matchCode = currentMatchCode()) {
 // re-clicks, producing the finished/active flapping seen under load. The pending
 // intent is cleared only when its OWN write settles and no newer toggle has since
 // superseded it (token check), so rapid re-toggles converge to the last intent.
-async function setMatchFinished(matchCode, value) {
+async function setMatchFinished(matchCode: string, value: boolean): Promise<void> {
   const scope = matchScopeFor(matchCode);
   const token = ++ekFinishedToken;
   recorder?.event("ek-finished", {matchCode, value, token});
@@ -726,7 +891,7 @@ async function setMatchFinished(matchCode, value) {
 // Ops to the same cell coalesce (last write wins). Structural edits (finished /
 // add/removeShootoutTheme) aren't cell edits — they go straight to sendUpdate.
 const EK_EDIT_DEBOUNCE_MS = 150;
-const ekPending = new Map(); // matchScope -> {ops, inFlight, timer}
+const ekPending = new Map<string, EKPendingEntry>(); // matchScope -> {ops, inFlight, timer}
 
 // ekPendingFinished tracks an un-acked finish/unfinish per match so it survives
 // incoming MatchViews until the server confirms it. The finished flag is sent
@@ -734,10 +899,10 @@ const ekPending = new Map(); // matchScope -> {ops, inFlight, timer}
 // so under load a slow finish-write plus a co-incident broadcast would visually
 // revert the tick — which is what made operators re-click it repeatedly. Tokened
 // so an older write completing late never clears a newer toggle's intent.
-const ekPendingFinished = new Map(); // matchScope -> {value: boolean, token: number}
+const ekPendingFinished = new Map<string, {value: boolean; token: number}>(); // matchScope -> {value: boolean, token: number}
 let ekFinishedToken = 0;
 
-function ekEntry(matchCode) {
+function ekEntry(matchCode: string): EKPendingEntry {
   const scope = matchScopeFor(matchCode);
   let entry = ekPending.get(scope);
   if (!entry) {
@@ -751,14 +916,14 @@ function ekEntry(matchCode) {
 
 // overlayPendingMatch re-applies a match's un-acked local edits on top of a
 // MatchView. Used everywhere a MatchView enters the render pipeline.
-function overlayPendingMatch(matchCode, view) {
+function overlayPendingMatch(matchCode: string | undefined, view: HostMatchView): HostMatchView {
   if (!view || !matchCode) return view;
   const scope = matchScopeFor(matchCode);
   const entry = ekPending.get(scope);
   const pendingFinished = ekPendingFinished.get(scope);
   const hasCellOps = entry && entry.ops.size() > 0;
   if (!hasCellOps && !pendingFinished) return view;
-  const out = hasCellOps ? entry.ops.overlay(view) : {...view};
+  const out = hasCellOps ? entry!.ops.overlay(view) as HostMatchView : {...view};
   if (pendingFinished) out.finished = pendingFinished.value;
   return out;
 }
@@ -767,14 +932,14 @@ function overlayPendingMatch(matchCode, view) {
 // match's answer cells from that match's un-acked edits — the EK analogue of
 // si.js/od.js refreshPendingMarkers. Called after a match renders and after an
 // edit/ack so a cell stays marked until the server confirms it.
-function refreshMatchPendingMarkers(matchCode) {
+function refreshMatchPendingMarkers(matchCode: string | undefined): void {
   if (!matchCode) return;
   const entry = ekPending.get(matchScopeFor(matchCode));
   // Scope to THIS match's cells: in a stage view many battles are on screen at
   // once and every battle has cells at the same (team-slot, theme, answer)
   // coordinates, so an unscoped selector would mark — and never clear — the
   // same-positioned cells in every other battle.
-  hostRoot.querySelectorAll(`.answer-cell[data-match-code="${cssEscape(matchCode)}"]`).forEach((cell) => {
+  hostRoot.querySelectorAll<HTMLElement>(`.answer-cell[data-match-code="${cssEscape(matchCode)}"]`).forEach((cell) => {
     let pending = false;
     if (entry) {
       const team = Number(cell.dataset.team);
@@ -793,7 +958,7 @@ function refreshMatchPendingMarkers(matchCode) {
 // un-acked edits persisted by a previous page load (ekEntry reads them from
 // localStorage), re-renders the match with them overlaid — showing their pending
 // spinner — and re-sends them. No-op when there is nothing to recover.
-function recoverMatchPendingEdits() {
+function recoverMatchPendingEdits(): void {
   if (route.mode !== "match" || !state || !state.code) return;
   const entry = ekEntry(state.code); // creates + rehydrates persisted ops
   if (entry.ops.size() === 0) return;
@@ -806,15 +971,15 @@ function recoverMatchPendingEdits() {
 // payloadToOpPath maps an /update cell payload to its MatchView path (matching
 // the server's matchDeltaOps shape). Returns null for non-cell (structural)
 // payloads, which must not be overlay-tracked.
-function payloadToOpPath(payload) {
+function payloadToOpPath(payload: EKCellPayload): Array<string | number> | null {
   if (payload.place !== undefined) return ["teams", payload.team, "place"];
   const themesKey = payload.shootout ? "shootoutThemes" : "themes";
-  if (payload.player !== undefined) return ["teams", payload.team, themesKey, payload.theme, "player"];
-  if (payload.mark !== undefined) return ["teams", payload.team, themesKey, payload.theme, "answers", payload.answer];
+  if (payload.player !== undefined) return ["teams", payload.team, themesKey, payload.theme!, "player"];
+  if (payload.mark !== undefined) return ["teams", payload.team, themesKey, payload.theme!, "answers", payload.answer!];
   return null;
 }
 
-function payloadToOpValue(payload) {
+function payloadToOpValue(payload: EKCellPayload): unknown {
   if (payload.place !== undefined) return payload.place;
   if (payload.player !== undefined) return payload.player;
   return payload.mark;
@@ -822,16 +987,16 @@ function payloadToOpValue(payload) {
 
 // opToPayload is the inverse: rebuild the /update payload from a queued op so a
 // coalesced batch can be POSTed as {edits: [...]}.
-function opToPayload(op) {
+function opToPayload(op: PendingOp): EKCellPayload {
   const [, team, key, theme, leaf, answer] = op.path;
-  if (op.path.length === 3) return {team, place: op.value}; // ["teams", team, "place"]
+  if (op.path.length === 3) return {team: team as number, place: op.value as number}; // ["teams", team, "place"]
   const shootout = key === "shootoutThemes";
   if (leaf === "player") {
-    const payload = {team, theme, player: op.value};
+    const payload: EKCellPayload = {team: team as number, theme: theme as number, player: op.value as string};
     if (shootout) payload.shootout = true;
     return payload;
   }
-  const payload = {team, theme, answer, mark: op.value};
+  const payload: EKCellPayload = {team: team as number, theme: theme as number, answer: answer as number, mark: op.value as string};
   if (shootout) payload.shootout = true;
   return payload;
 }
@@ -839,7 +1004,7 @@ function opToPayload(op) {
 // queueEKEdits records cell edits as pending ops and schedules a batched flush.
 // Non-cell (structural) payloads can't be expressed as a tracked op, so they are
 // sent immediately to preserve their ordering relative to nothing else.
-function queueEKEdits(matchCode, payloads) {
+function queueEKEdits(matchCode: string, payloads: EKCellPayload[]): void {
   const entry = ekEntry(matchCode);
   let queued = false;
   for (const payload of payloads) {
@@ -855,16 +1020,16 @@ function queueEKEdits(matchCode, payloads) {
   }
 }
 
-function scheduleEKFlush(matchCode, delay) {
+function scheduleEKFlush(matchCode: string, delay: number): void {
   const entry = ekEntry(matchCode);
-  window.clearTimeout(entry.timer);
+  window.clearTimeout(entry.timer ?? undefined);
   entry.timer = window.setTimeout(() => {
     entry.timer = null;
     void flushEKEdits(matchCode);
   }, delay);
 }
 
-async function flushEKEdits(matchCode) {
+async function flushEKEdits(matchCode: string): Promise<void> {
   const entry = ekEntry(matchCode);
   if (entry.inFlight || entry.ops.queued() === 0) return;
   const ops = entry.ops.take();
@@ -894,7 +1059,7 @@ async function flushEKEdits(matchCode) {
   }
 }
 
-async function sendVenueChange(number, matchCode = currentMatchCode()) {
+async function sendVenueChange(number: number, matchCode: string = currentMatchCode()): Promise<void> {
   setStatus("saving");
   try {
     const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}/venue`, {
@@ -903,7 +1068,7 @@ async function sendVenueChange(number, matchCode = currentMatchCode()) {
       body: JSON.stringify({number}),
     });
     if (!response.ok) throw new Error(await response.text());
-    const updated = await response.json();
+    const updated = await response.json() as HostMatchView;
     rememberLocalMatchEcho(matchCode, updated);
     applyUpdatedMatch(updated, matchCode);
     setStatus("saved");
@@ -913,7 +1078,7 @@ async function sendVenueChange(number, matchCode = currentMatchCode()) {
   }
 }
 
-async function updateVenueTitle(number, title) {
+async function updateVenueTitle(number: number, title: string): Promise<void> {
   setStatus("saving");
   try {
     const response = await fetch(`${route.festApi}/venues/${encodeURIComponent(number)}`, {
@@ -922,7 +1087,7 @@ async function updateVenueTitle(number, title) {
       body: JSON.stringify({title}),
     });
     if (!response.ok) throw new Error(await response.text());
-    venues = await response.json();
+    venues = await response.json() as Venue[];
     renderVenues();
     setStatus("saved");
   } catch (error) {
@@ -931,7 +1096,7 @@ async function updateVenueTitle(number, title) {
   }
 }
 
-async function calculateReseed(stageCode) {
+async function calculateReseed(stageCode: string | undefined): Promise<void> {
   if (!stageCode) return;
   setStatus("saving");
   try {
@@ -939,7 +1104,7 @@ async function calculateReseed(stageCode) {
       method: "POST",
     });
     if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось рассчитать пересев");
-    const fresh = await response.json();
+    const fresh = await response.json() as HostFestView;
     adoptFestView(fresh);
     writeFestCache(fest);
     renderStage();
@@ -950,7 +1115,7 @@ async function calculateReseed(stageCode) {
   }
 }
 
-function buildHostReseedStagePanel(stage) {
+function buildHostReseedStagePanel(stage: HostStage): HTMLElement {
   return buildReseedStagePanel(stage, {
     editable: true,
     canCalculate: Boolean(stage?.reseedReady),
@@ -958,7 +1123,7 @@ function buildHostReseedStagePanel(stage) {
   });
 }
 
-function renderFest() {
+function renderFest(): void {
   if (!fest) return;
   resetMatchTableIndex();
   setHostMode("grid");
@@ -971,10 +1136,10 @@ function renderFest() {
   refreshPresence();
 }
 
-function renderStage() {
+function renderStage(): void {
   if (!fest) return;
   resetMatchTableIndex();
-  const stageCode = route.stageCode;
+  const stageCode = route.stageCode!;
   const stage = mergedStage(fest, stageCode);
   setHostMode("grid");
   setHeading("ЭК");
@@ -989,7 +1154,7 @@ function renderStage() {
   refreshPresence();
 }
 
-function renderVenues() {
+function renderVenues(): void {
   resetMatchTableIndex();
   setHostMode("grid");
   setHeading("ЭК");
@@ -1000,7 +1165,7 @@ function renderVenues() {
   refreshPresence();
 }
 
-function renderRoster() {
+function renderRoster(): void {
   resetMatchTableIndex();
   setHostMode("grid");
   setHeading("ЭК");
@@ -1011,7 +1176,7 @@ function renderRoster() {
   refreshPresence();
 }
 
-function renderStats() {
+function renderStats(): void {
   resetMatchTableIndex();
   setHostMode("grid");
   setHeading("ЭК");
@@ -1026,13 +1191,13 @@ function renderStats() {
 // rerenderStatsTable recomputes the table from the live stage cache and swaps it
 // in. Cheap (in-memory over the cached MatchViews); no network. Re-runs the
 // results-name overflow pass so long player/team names get the fade + popover.
-function rerenderStatsTable() {
+function rerenderStatsTable(): void {
   const rows = gameTable.computeEKPlayerStats(statsStagesFromCache());
   hostRoot.replaceChildren(gameTable.buildEKStatsTable(rows));
   scheduleResultsTeamNameOverflowUpdate();
 }
 
-function renderSeedImport() {
+function renderSeedImport(): void {
   resetMatchTableIndex();
   setHostMode("grid");
   setHeading("ЭК");
@@ -1044,12 +1209,12 @@ function renderSeedImport() {
   refreshPresence();
 }
 
-function render() {
+function render(): void {
   if (!state) return;
   setHostMode("match");
   normalizeActiveCell();
   setHeading("ЭК");
-  setViewerLink(`${route.viewerBase}/matches/${encodeURIComponent(state.code || route.matchCode)}`, "Открыть зрительский бой");
+  setViewerLink(`${route.viewerBase}/matches/${encodeURIComponent(state.code || route.matchCode!)}`, "Открыть зрительский бой");
   document.title = pageTitle();
   renderEKTabs();
 
@@ -1059,7 +1224,7 @@ function render() {
   matchTableIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
   activeAnswerNode = state.finished ? null : matchTableIndex.get("answer", activeCell);
   markActiveTeamRows(activeAnswerNode);
-  attachMatchSelection(table, state, state.code || route.matchCode);
+  attachMatchSelection(table, state, state.code || route.matchCode!);
   if (embedded) {
     hostRoot.replaceChildren(table);
     gameTable.notifyEmbeddedResize(embedded);
@@ -1081,7 +1246,7 @@ function render() {
   focusActiveCell({preventScroll: true});
 }
 
-function gameSubnavItems() {
+function gameSubnavItems(): Array<{href: string; label: string; key: string}> {
   const items = [
     {href: route.base + "/", label: "Сетка", key: "grid"},
     {href: route.base + "/venues", label: "Площадки", key: "venues"},
@@ -1100,7 +1265,7 @@ function gameSubnavItems() {
   return items;
 }
 
-function renderEKTabs() {
+function renderEKTabs(): void {
   if (!ekTabsRoot || embedded) return;
   ekTabsRoot.replaceChildren();
   const active = activeTabKey();
@@ -1116,7 +1281,7 @@ function renderEKTabs() {
   bindEKTabsScrollFade();
 }
 
-function bindEKTabsScrollFade() {
+function bindEKTabsScrollFade(): void {
   if (!ekTabsRoot) return;
   if (ekTabsRoot.dataset.scrollFadeBound !== "1") {
     ekTabsRoot.addEventListener("scroll", scheduleEKTabsFadeUpdate, {passive: true});
@@ -1125,7 +1290,7 @@ function bindEKTabsScrollFade() {
   scheduleEKTabsFadeUpdate();
 }
 
-function scheduleEKTabsFadeUpdate() {
+function scheduleEKTabsFadeUpdate(): void {
   if (!ekTabsRoot || embedded) return;
   if (ekTabsFadeFrame) cancelAnimationFrame(ekTabsFadeFrame);
   ekTabsFadeFrame = requestAnimationFrame(() => {
@@ -1134,7 +1299,7 @@ function scheduleEKTabsFadeUpdate() {
   });
 }
 
-function updateEKTabsScrollFade() {
+function updateEKTabsScrollFade(): void {
   if (!ekTabsRoot) return;
   const hasLeft = ekTabsRoot.scrollLeft > 1;
   const hasRight = ekTabsRoot.scrollLeft + ekTabsRoot.clientWidth < ekTabsRoot.scrollWidth - 1;
@@ -1142,7 +1307,7 @@ function updateEKTabsScrollFade() {
   ekTabsRoot.classList.toggle("tabs-scroll-right", hasRight);
 }
 
-function activeTabKey() {
+function activeTabKey(): string {
   if (route.mode === "stage") return `stage:${route.stageCode}`;
   if (route.mode === "match") {
     const stageCode = state?.stageCode || stageCodeForMatch(route.matchCode);
@@ -1155,7 +1320,7 @@ function activeTabKey() {
   return "grid";
 }
 
-function stageCodeForMatch(matchCode) {
+function stageCodeForMatch(matchCode: string | undefined): string {
   if (!matchCode) return "";
   for (const stage of ekSchemeStages()) {
     if ((stage.matches || []).some((match) => match.code === matchCode)) return stage.code;
@@ -1163,12 +1328,12 @@ function stageCodeForMatch(matchCode) {
   return "";
 }
 
-function ekSchemeStages() {
+function ekSchemeStages(): HostStage[] {
   const scheme = parseScheme(fest?.schemaJson);
-  return scheme?.stages?.length ? scheme.stages : fest?.stages || [];
+  return (scheme?.stages?.length ? scheme.stages : fest?.stages || []) as HostStage[];
 }
 
-function scheduleGridNameOverflowUpdate(root = hostRoot) {
+function scheduleGridNameOverflowUpdate(root: ParentNode = hostRoot): void {
   if (gridNameOverflowFrame) cancelAnimationFrame(gridNameOverflowFrame);
   gridNameOverflowFrame = requestAnimationFrame(() => {
     gridNameOverflowFrame = 0;
@@ -1176,7 +1341,7 @@ function scheduleGridNameOverflowUpdate(root = hostRoot) {
   });
 }
 
-function updateGridNameOverflow(root = hostRoot) {
+function updateGridNameOverflow(root: ParentNode = hostRoot): void {
   gameTable.markNameOverflow(root, {
     cellSelector: ".grid-slot-team",
     nameSelector: ".grid-slot-team-name",
@@ -1184,7 +1349,7 @@ function updateGridNameOverflow(root = hostRoot) {
   });
 }
 
-function scheduleEKTeamNameOverflowUpdate(root = hostRoot) {
+function scheduleEKTeamNameOverflowUpdate(root: ParentNode = hostRoot): void {
   if (ekTeamNameOverflowFrame) cancelAnimationFrame(ekTeamNameOverflowFrame);
   ekTeamNameOverflowFrame = requestAnimationFrame(() => {
     ekTeamNameOverflowFrame = 0;
@@ -1192,15 +1357,15 @@ function scheduleEKTeamNameOverflowUpdate(root = hostRoot) {
   });
 }
 
-function updateEKTeamNameOverflow(root = hostRoot) {
+function updateEKTeamNameOverflow(root: ParentNode = hostRoot): void {
   updatePlayerSelectOverflow(root);
-  const cells = Array.from(root.querySelectorAll(".ek-team-cell"));
-  const stageCells = [];
-  const stageNames = [];
-  const detailedCells = [];
-  const detailedReadings = [];
+  const cells = Array.from(root.querySelectorAll<HTMLElement>(".ek-team-cell"));
+  const stageCells: HTMLElement[] = [];
+  const stageNames: Array<HTMLElement | null> = [];
+  const detailedCells: HTMLElement[] = [];
+  const detailedReadings: boolean[] = [];
   for (const cell of cells) {
-    const name = cell.querySelector(".od-detailed-team-name");
+    const name = cell.querySelector<HTMLElement>(".od-detailed-team-name");
     if (cell.closest(".ek-stage-table")) {
       if (isVisibleInScrollFrame(cell)) {
         stageCells.push(cell);
@@ -1219,13 +1384,13 @@ function updateEKTeamNameOverflow(root = hostRoot) {
   }
 }
 
-function updatePlayerSelectOverflow(root = hostRoot) {
-  const wraps = root.querySelectorAll(".player-select-wrap");
-  const measurements = [];
+function updatePlayerSelectOverflow(root: ParentNode = hostRoot): void {
+  const wraps = root.querySelectorAll<HTMLElement>(".player-select-wrap");
+  const measurements: Array<{wrap: HTMLElement; popover: HTMLElement | null; label: string; truncated: boolean}> = [];
   for (const wrap of wraps) {
     if (wrap.closest(".ek-stage-table") && !isVisibleInScrollFrame(wrap)) continue;
-    const select = wrap.querySelector(".player-select");
-    const popover = wrap.querySelector(".player-select-popover");
+    const select = wrap.querySelector<HTMLSelectElement>(".player-select");
+    const popover = wrap.querySelector<HTMLElement>(".player-select-popover");
     const label = selectedPlayerLabel(select);
     measurements.push({wrap, popover, label, truncated: Boolean(label && playerSelectTextOverflows(select, label))});
   }
@@ -1235,12 +1400,12 @@ function updatePlayerSelectOverflow(root = hostRoot) {
   }
 }
 
-function selectedPlayerLabel(select) {
+function selectedPlayerLabel(select: HTMLSelectElement | null): string {
   if (!select) return "";
   return select.selectedOptions?.[0]?.textContent || select.value || "";
 }
 
-function playerSelectTextOverflows(select, label) {
+function playerSelectTextOverflows(select: HTMLSelectElement | null, label: string): boolean {
   if (!select || !label) return false;
   const style = getComputedStyle(select);
   const available = select.clientWidth - parseFloat(style.paddingLeft || "0") - parseFloat(style.paddingRight || "0");
@@ -1250,14 +1415,14 @@ function playerSelectTextOverflows(select, label) {
   return context.measureText(label).width > available + 1;
 }
 
-function playerTextMeasureContext() {
+function playerTextMeasureContext(): CanvasRenderingContext2D {
   if (!playerSelectMeasureContext) {
     playerSelectMeasureContext = document.createElement("canvas").getContext("2d");
   }
-  return playerSelectMeasureContext;
+  return playerSelectMeasureContext!;
 }
 
-function bindStageOverflowScroll() {
+function bindStageOverflowScroll(): void {
   const scrollFrame = hostRoot.closest(".sheet-frame");
   if (!scrollFrame) return;
   updateStageScrollState(scrollFrame);
@@ -1273,12 +1438,12 @@ function bindStageOverflowScroll() {
 
 // Toggles the scrolled-under fade on the frozen-column boundary (see the
 // .stage-scroll-left rule in styles.css), mirroring OD/KSI behaviour.
-function updateStageScrollState(frame) {
+function updateStageScrollState(frame: Element | null): void {
   if (!frame) return;
   frame.classList.toggle("stage-scroll-left", frame.scrollLeft > 1);
 }
 
-function unbindStageOverflowScroll() {
+function unbindStageOverflowScroll(): void {
   if (!stageOverflowScrollFrame || !stageOverflowScrollListener) return;
   stageOverflowScrollFrame.removeEventListener("scroll", stageOverflowScrollListener);
   stageOverflowScrollFrame = null;
@@ -1289,7 +1454,7 @@ function unbindStageOverflowScroll() {
 // column. The .sheet-frame is static, so bind the listener once and leave it —
 // the toggle is a harmless no-op on routes without an ek-stats-table. (Viewer
 // binds the same thing globally via bindStageScrollFade.)
-function bindStatsScrollFade() {
+function bindStatsScrollFade(): void {
   const scrollFrame = hostRoot.closest(".sheet-frame");
   if (!scrollFrame) return;
   updateStageScrollState(scrollFrame);
@@ -1298,7 +1463,7 @@ function bindStatsScrollFade() {
   statsScrollFadeFrame = scrollFrame;
 }
 
-function isVisibleInScrollFrame(element) {
+function isVisibleInScrollFrame(element: Element): boolean {
   const scrollFrame = element.closest(".sheet-frame");
   if (!scrollFrame) return true;
   const rect = element.getBoundingClientRect();
@@ -1306,12 +1471,12 @@ function isVisibleInScrollFrame(element) {
   return rect.bottom >= frameRect.top && rect.top <= frameRect.bottom;
 }
 
-function fitEKStageTeamName(cell, name) {
+function fitEKStageTeamName(cell: HTMLElement, name: HTMLElement | null): void {
   const truncated = gameTable.fitEKStageTeamName(cell, name);
   cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
 }
 
-function scheduleResultsTeamNameOverflowUpdate(root = hostRoot) {
+function scheduleResultsTeamNameOverflowUpdate(root: ParentNode = hostRoot): void {
   if (resultsTeamNameOverflowFrame) cancelAnimationFrame(resultsTeamNameOverflowFrame);
   resultsTeamNameOverflowFrame = requestAnimationFrame(() => {
     resultsTeamNameOverflowFrame = 0;
@@ -1319,7 +1484,7 @@ function scheduleResultsTeamNameOverflowUpdate(root = hostRoot) {
   });
 }
 
-function updateResultsTeamNameOverflow(root = hostRoot) {
+function updateResultsTeamNameOverflow(root: ParentNode = hostRoot): void {
   gameTable.markNameOverflow(root, {
     cellSelector: ".results-team",
     nameSelector: ".results-team-name",
@@ -1327,7 +1492,7 @@ function updateResultsTeamNameOverflow(root = hostRoot) {
   });
 }
 
-function buildSeedImportPanel() {
+function buildSeedImportPanel(): HTMLElement {
   const panel = document.createElement("section");
   panel.className = "results-wrapper seed-import-panel";
 
@@ -1359,7 +1524,7 @@ function buildSeedImportPanel() {
 
   const meta = document.createElement("p");
   meta.className = "muted";
-  meta.textContent = `В основном посеве: ${Math.min(seedImport.activeCount || 0, seedImport.drawSize || 0)} из ${seedImport.drawSize || 0}. Всего активных команд: ${seedImport.activeCount || 0}.`;
+  meta.textContent = `В основном посеве: ${Math.min(seedImport!.activeCount || 0, seedImport!.drawSize || 0)} из ${seedImport!.drawSize || 0}. Всего активных команд: ${seedImport!.activeCount || 0}.`;
   panel.appendChild(meta);
 
   const table = document.createElement("table");
@@ -1441,25 +1606,25 @@ function buildSeedImportPanel() {
   return panel;
 }
 
-async function importSeedsFromKSI() {
+async function importSeedsFromKSI(): Promise<void> {
   setStatus("saving");
   seedImportNotice = "";
   try {
     const response = await fetch(`${route.apiBase}/seed-import/ksi`, {method: "POST"});
     if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось импортировать команды");
-    seedImport = await response.json();
+    seedImport = await response.json() as SeedImportView;
     seedImportNotice = `Импортировано команд: ${seedImport.rows?.length || 0}.`;
     renderSeedImport();
     setStatus("saved");
   } catch (error) {
-    seedImportNotice = `Ошибка: ${error.message}`;
+    seedImportNotice = `Ошибка: ${(error as Error).message}`;
     renderSeedImport();
     setStatus("error");
     throw error;
   }
 }
 
-async function setSeedDeclined(teamID, declined) {
+async function setSeedDeclined(teamID: number | undefined, declined: boolean): Promise<void> {
   setStatus("saving");
   seedImportNotice = "";
   try {
@@ -1469,21 +1634,21 @@ async function setSeedDeclined(teamID, declined) {
       body: JSON.stringify({teamID, declined}),
     });
     if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось сохранить отказ");
-    seedImport = await response.json();
+    seedImport = await response.json() as SeedImportView;
     renderSeedImport();
     setStatus("saved");
   } catch (error) {
-    seedImportNotice = `Ошибка: ${error.message}`;
+    seedImportNotice = `Ошибка: ${(error as Error).message}`;
     renderSeedImport();
     setStatus("error");
     throw error;
   }
 }
 
-function buildStageTableStack(data) {
+function buildStageTableStack(data: StageData | undefined): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "stage-table-stack stage-table-stack-lazy";
-  const matches = data?.matches || [];
+  const matches = (data?.matches || []) as HostStageMatch[];
   if (matches.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty";
@@ -1501,7 +1666,7 @@ function buildStageTableStack(data) {
   return wrapper;
 }
 
-function buildStageMatchPlaceholder(match) {
+function buildStageMatchPlaceholder(match: HostStageMatch): HTMLElement {
   const placeholder = document.createElement("div");
   placeholder.className = "stage-match-placeholder";
   placeholder.textContent = match.title || `Бой ${match.code}`;
@@ -1511,8 +1676,8 @@ function buildStageMatchPlaceholder(match) {
 // setupStageTableObserver installs a per-pane IntersectionObserver that defers
 // DOM construction for off-screen match tables. Stored on the pane element so
 // cleanupPane (from the cache) can disconnect it on revision invalidation.
-function setupStageTableObserver(pane) {
-  const frames = Array.from(pane.querySelectorAll(".stage-match-frame"));
+function setupStageTableObserver(pane: StagePane): void {
+  const frames = Array.from(pane.querySelectorAll<HTMLElement>(".stage-match-frame"));
   if (frames.length === 0) return;
   if (!("IntersectionObserver" in window)) {
     frames.forEach((frame) => renderStageMatchFrameIfReady(pane, frame, {force: true}));
@@ -1520,10 +1685,10 @@ function setupStageTableObserver(pane) {
   }
   const root = hostRoot.closest(".sheet-frame");
   const observer = new IntersectionObserver((entries) => {
-    const visibleFrames = [];
+    const visibleFrames: HTMLElement[] = [];
     entries.forEach((entry) => {
       if (!entry.isIntersecting) return;
-      const frame = entry.target;
+      const frame = entry.target as HTMLElement;
       frame.dataset.nearViewport = "1";
       visibleFrames.push(frame);
     });
@@ -1541,16 +1706,16 @@ function setupStageTableObserver(pane) {
 // refreshPaneFrames re-runs the frame paint pass after the cache's stage-data
 // fetch lands. Frames already rendered or near-viewport pick up the new state
 // immediately; the rest stay as placeholders until the observer fires.
-function refreshPaneFrames(pane, data) {
+function refreshPaneFrames(pane: StagePane, data: StageData): void {
   if (!pane || !data) return;
-  const stage = mergedStage(fest, pane.dataset.stageCode);
+  const stage = mergedStage(fest, pane.dataset.stageCode!);
   if (stageType(stage) === "reseed") {
     pane.replaceChildren(buildHostReseedStagePanel(stage));
     return;
   }
   let rebuilt = false;
-  pane.querySelectorAll(".stage-match-frame").forEach((frame) => {
-    const matchState = data.stateByCode.get(frame.dataset.matchCode || "");
+  pane.querySelectorAll<HTMLElement>(".stage-match-frame").forEach((frame) => {
+    const matchState = data.stateByCode.get(frame.dataset.matchCode || "") as HostMatchView | undefined;
     if (!matchState) return;
     if (frame.dataset.rendered === "1" || frame.dataset.nearViewport === "1") {
       rebuilt = updateStageFrame(frame, matchState) || rebuilt;
@@ -1559,14 +1724,14 @@ function refreshPaneFrames(pane, data) {
   if (rebuilt) scheduleEKTeamNameOverflowUpdate(pane);
 }
 
-function renderStageMatchFrameIfReady(pane, frame, options = {}) {
-  const data = stageCache.getData(pane.dataset.stageCode);
-  const matchState = data?.stateByCode.get(frame.dataset.matchCode || "");
+function renderStageMatchFrameIfReady(pane: StagePane, frame: StageFrame, options: {force?: boolean} = {}): boolean {
+  const data = stageCache.getData(pane.dataset.stageCode!);
+  const matchState = data?.stateByCode.get(frame.dataset.matchCode || "") as HostMatchView | undefined;
   if (!matchState) return false;
   return renderStageMatchFrame(frame, matchState, options);
 }
 
-function renderStageMatchFrame(frame, matchState, options = {}) {
+function renderStageMatchFrame(frame: StageFrame, matchState: HostMatchView, options: {force?: boolean} = {}): boolean {
   if (!frame || (!options.force && frame.dataset.rendered === "1")) return false;
   const hadFocus = document.activeElement?.closest?.(".stage-match-frame") === frame;
   frame.dataset.rendered = "1";
@@ -1589,7 +1754,7 @@ function renderStageMatchFrame(frame, matchState, options = {}) {
 // for a score edit) and falling back to a full rebuild only on a shape change.
 // Patching preserves the DOM, so the edited cell keeps focus and team names
 // don't re-fit — no flicker.
-function updateStageFrame(frame, matchState) {
+function updateStageFrame(frame: StageFrame, matchState: HostMatchView): boolean {
   if (!frame || !matchState) return false;
   if (frame.dataset.rendered === "1" && frame.__scoreIndex && frame.__matchState &&
       canPatchMatchShape(frame.__matchState, matchState)) {
@@ -1600,18 +1765,18 @@ function updateStageFrame(frame, matchState) {
   return renderStageMatchFrame(frame, matchState, {force: frame.dataset.rendered === "1"});
 }
 
-function stageMatchFrame(matchCode) {
+function stageMatchFrame(matchCode: string): StageFrame | null {
   const stageCode = stageCache.stageCodeForMatch(matchCode);
   if (!stageCode) return null;
   const pane = stageCache.getPane(stageCode);
-  return pane?.querySelector(`.stage-match-frame[data-match-code="${cssEscape(matchCode)}"]`) || null;
+  return pane?.querySelector<HTMLElement>(`.stage-match-frame[data-match-code="${cssEscape(matchCode)}"]`) || null;
 }
 
-function withMatchState(matchState, callback) {
+function withMatchState<T>(matchState: HostMatchView, callback: () => T): T {
   const previousState = state;
   const previousCode = renderMatchCode;
   state = matchState;
-  renderMatchCode = matchState.code || route.matchCode;
+  renderMatchCode = matchState.code || route.matchCode!;
   try {
     return callback();
   } finally {
@@ -1620,25 +1785,25 @@ function withMatchState(matchState, callback) {
   }
 }
 
-function currentMatchCode() {
-  return renderMatchCode || activeCell.matchCode || route.matchCode;
+function currentMatchCode(): string {
+  return renderMatchCode || activeCell.matchCode || route.matchCode!;
 }
 
-function currentStageMatches() {
-  return stageCache.getData(route.stageCode)?.matches || [];
+function currentStageMatches(): MatchDescriptor[] {
+  return stageCache.getData(route.stageCode!)?.matches || [];
 }
 
-function currentStageStateByCode() {
-  return stageCache.getData(route.stageCode)?.stateByCode || null;
+function currentStageStateByCode(): Map<string, HostMatchView> | null {
+  return (stageCache.getData(route.stageCode!)?.stateByCode || null) as Map<string, HostMatchView> | null;
 }
 
-function activeMatchState() {
+function activeMatchState(): HostMatchView | null {
   if (route.mode === "stage") {
     const byCode = currentStageStateByCode();
     if (!byCode) return null;
-    if (activeCell.matchCode && byCode.has(activeCell.matchCode)) return byCode.get(activeCell.matchCode);
+    if (activeCell.matchCode && byCode.has(activeCell.matchCode)) return byCode.get(activeCell.matchCode)!;
     for (const match of currentStageMatches()) {
-      const ms = byCode.get(match.code);
+      const ms = byCode.get(match.code ?? "");
       if (ms) return ms;
     }
     return null;
@@ -1646,12 +1811,12 @@ function activeMatchState() {
   return state;
 }
 
-function matchStateFor(matchCode) {
+function matchStateFor(matchCode: string): HostMatchView | null {
   if (route.mode === "stage") return currentStageStateByCode()?.get(matchCode) || null;
   return state;
 }
 
-function applyUpdatedMatch(updated, matchCode) {
+function applyUpdatedMatch(updated: HostMatchView, matchCode: string | undefined): void {
   // Re-apply any still-un-acked local edits on top, so a server view that
   // predates them (out-of-order response, delta from another editor, refetch)
   // never regresses an optimistic cell. No-op once everything is acked.
@@ -1686,7 +1851,7 @@ function applyUpdatedMatch(updated, matchCode) {
 // editable table renders the title/venue in a header, so a change there needs a
 // rebuild; place is an editable input, so a place change is patched in place
 // (unlike the viewer, which rebuilds on place change).
-function canPatchMatchShape(previous, next) {
+function canPatchMatchShape(previous: HostMatchView | null | undefined, next: HostMatchView | null | undefined): boolean {
   if (!previous || !next) return false;
   if (previous.title !== next.title) return false;
   if (formatVenue(previous.venue) !== formatVenue(next.venue)) return false;
@@ -1698,7 +1863,7 @@ function canPatchMatchShape(previous, next) {
 // selects, which skip a focused control so a live update never steals the cursor
 // — lives in the shared scoreCellSpecs; the host only injects the callback that
 // refreshes a synced select's overflow chrome.
-function patchHostScoreTable(index, matchState) {
+function patchHostScoreTable(index: NodeIndex | null | undefined, matchState: HostMatchView): void {
   gameTable.patchScoreTable(index, matchState, {
     formatNumber,
     onPlayerSelectSynced: (select) =>
@@ -1706,12 +1871,12 @@ function patchHostScoreTable(index, matchState) {
   });
 }
 
-function indexedNode(name, values) {
+function indexedNode(name: string, values: Record<string, unknown>): HTMLElement | null {
   if (route.mode !== "match") return null;
   return matchTableIndex?.get(name, values) || null;
 }
 
-function resetMatchTableIndex() {
+function resetMatchTableIndex(): void {
   matchTableIndex = null;
   activeAnswerNode = null;
   clearActiveTeamRows();
@@ -1724,41 +1889,41 @@ function resetMatchTableIndex() {
   if (route.mode !== "stage") unbindStageOverflowScroll();
 }
 
-function stageRowOffset(matchIndex) {
+function stageRowOffset(matchIndex: number): number {
   const matches = currentStageMatches();
   const byCode = currentStageStateByCode();
   let offset = 0;
   for (let i = 0; i < matchIndex && i < matches.length; i++) {
-    const s = byCode?.get(matches[i]?.code);
+    const s = byCode?.get(matches[i]?.code ?? "");
     offset += s?.teams?.length || 0;
   }
   return offset;
 }
 
-function stageCoordOf(cell) {
-  const team = Number(cell.dataset.team);
-  const theme = Number(cell.dataset.theme);
-  const answer = Number(cell.dataset.answer);
+function stageCoordOf(cell: Element): CellCoord | null {
+  const team = Number((cell as HTMLElement).dataset.team);
+  const theme = Number((cell as HTMLElement).dataset.theme);
+  const answer = Number((cell as HTMLElement).dataset.answer);
   if (!Number.isInteger(team) || !Number.isInteger(theme) || !Number.isInteger(answer)) return null;
-  const matchCode = cell.dataset.matchCode;
+  const matchCode = (cell as HTMLElement).dataset.matchCode;
   const matches = currentStageMatches();
   const matchIndex = matches.findIndex((m) => m.code === matchCode);
   if (matchIndex < 0) return null;
-  const matchState = currentStageStateByCode()?.get(matchCode);
+  const matchState = currentStageStateByCode()?.get(matchCode!);
   if (!matchState) return null;
   const answers = answerCountFor(matchState);
   if (answers <= 0) return null;
-  const shootout = cell.dataset.shootout === "1";
+  const shootout = (cell as HTMLElement).dataset.shootout === "1";
   const themeOrder = shootout ? regularThemeCountFor(matchState) + theme : theme;
   return {row: stageRowOffset(matchIndex) + team, col: themeOrder * answers + answer};
 }
 
-function stageCellAtCoord(coord) {
+function stageCellAtCoord(coord: CellCoord | null): HTMLElement | null {
   if (!coord) return null;
   let remaining = coord.row;
   const byCode = currentStageStateByCode();
   for (const match of currentStageMatches()) {
-    const matchState = byCode?.get(match.code);
+    const matchState = byCode?.get(match.code ?? "");
     if (!matchState) continue;
     const teamCount = matchState.teams?.length || 0;
     if (remaining < teamCount) {
@@ -1770,9 +1935,9 @@ function stageCellAtCoord(coord) {
       const answer = coord.col % answers;
       const shootout = themeOrder >= regular;
       const theme = shootout ? themeOrder - regular : themeOrder;
-      const frame = stageMatchFrame(match.code);
-      return frame?.querySelector(
-        `.answer-cell[data-team="${cssEscape(team)}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(theme)}"][data-answer="${cssEscape(answer)}"]`,
+      const frame = stageMatchFrame(match.code ?? "");
+      return frame?.querySelector<HTMLElement>(
+        `.answer-cell[data-team="${cssEscape(String(team))}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(String(theme))}"][data-answer="${cssEscape(String(answer))}"]`,
       ) || null;
     }
     remaining -= teamCount;
@@ -1780,23 +1945,23 @@ function stageCellAtCoord(coord) {
   return null;
 }
 
-function stageApplyValues(edits) {
+function stageApplyValues(edits: CellEdit[]): void {
   const byCode = currentStageStateByCode();
   // Group edits by match so each match's cells are applied through a single
   // ekApplyValues call (and thus a single coalesced re-render), rather than one
   // call — and one re-render — per cell.
-  const groupsByCode = new Map();
+  const groupsByCode = new Map<string, {matchState: HostMatchView; items: CellEdit[]}>();
   for (const {cell, value} of edits) {
-    const matchCode = cell.dataset.matchCode;
+    const matchCode = (cell as HTMLElement).dataset.matchCode;
     if (!matchCode) continue;
     const matchState = byCode?.get(matchCode);
     if (!matchState || matchState.finished) continue;
     if (!groupsByCode.has(matchCode)) groupsByCode.set(matchCode, {matchState, items: []});
-    groupsByCode.get(matchCode).items.push({cell, value});
+    groupsByCode.get(matchCode)!.items.push({cell, value});
   }
   if (groupsByCode.size === 0) return;
   if (!undoApplying) {
-    const groups = [];
+    const groups: UndoGroup[] = [];
     for (const [matchCode, {items}] of groupsByCode) {
       const reverse = snapshotMatchEdits(matchCode, items);
       if (reverse.length > 0) groups.push({matchCode, items: reverse});
@@ -1814,7 +1979,7 @@ function stageApplyValues(edits) {
   }
 }
 
-function attachStageSelection(container) {
+function attachStageSelection(container: HTMLElement | null): CellRangeSelection | null {
   if (!container) return null;
   const helper = gameTable.createCellRangeSelection({
     root: container,
@@ -1842,15 +2007,15 @@ function attachStageSelection(container) {
   return helper;
 }
 
-function answerCountFor(matchState) {
+function answerCountFor(matchState: HostMatchView | null | undefined): number {
   return matchState?.questionValues?.length || 0;
 }
 
-function regularThemeCountFor(matchState) {
+function regularThemeCountFor(matchState: HostMatchView | null | undefined): number {
   return matchState?.teams?.[0]?.themes?.length || 0;
 }
 
-function ekCoordOf(cell, matchState) {
+function ekCoordOf(cell: {dataset: DOMStringMap}, matchState: HostMatchView): CellCoord | null {
   const team = Number(cell.dataset.team);
   const theme = Number(cell.dataset.theme);
   const answer = Number(cell.dataset.answer);
@@ -1862,7 +2027,7 @@ function ekCoordOf(cell, matchState) {
   return {row: team, col: themeOrder * answers + answer};
 }
 
-function ekCellAtCoord(table, coord, matchState) {
+function ekCellAtCoord(table: HTMLElement, coord: CellCoord | null, matchState: HostMatchView): HTMLElement | null {
   if (!coord) return null;
   const answers = answerCountFor(matchState);
   if (answers <= 0) return null;
@@ -1871,25 +2036,25 @@ function ekCellAtCoord(table, coord, matchState) {
   const regular = regularThemeCountFor(matchState);
   const shootout = themeOrder >= regular;
   const theme = shootout ? themeOrder - regular : themeOrder;
-  return table.querySelector(
-    `.answer-cell[data-team="${cssEscape(coord.row)}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(theme)}"][data-answer="${cssEscape(answer)}"]`,
+  return table.querySelector<HTMLElement>(
+    `.answer-cell[data-team="${cssEscape(String(coord.row))}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(String(theme))}"][data-answer="${cssEscape(String(answer))}"]`,
   );
 }
 
-function ekSerializeMark(cell) {
-  if (cell.classList.contains("right")) return "+";
-  if (cell.classList.contains("wrong")) return "-";
+function ekSerializeMark(cell: Element | null | undefined): string {
+  if (cell!.classList.contains("right")) return "+";
+  if (cell!.classList.contains("wrong")) return "-";
   return "";
 }
 
 // Touch tap cycle: empty → right → wrong → empty.
-function ekCycleMark(cell) {
+function ekCycleMark(cell: Element): string {
   if (cell.classList.contains("right")) return "wrong";
   if (cell.classList.contains("wrong")) return "";
   return "right";
 }
 
-function parseMarkText(text) {
+function parseMarkText(text: string): string {
   const value = String(text || "").trim().toLowerCase();
   if (value === "") return "";
   if (["+", "1", "right", "y", "yes", "✓", "v", "да", "п", "п."].includes(value)) return "right";
@@ -1897,7 +2062,7 @@ function parseMarkText(text) {
   return "";
 }
 
-function ekApplyValues(matchCode, matchState, edits, options = {}) {
+function ekApplyValues(matchCode: string, matchState: HostMatchView, edits: CellEdit[], options: {recordUndo?: boolean} = {}): void {
   if (options.recordUndo !== false && !undoApplying) {
     const reverse = snapshotMatchEdits(matchCode, edits);
     if (reverse.length > 0) {
@@ -1909,31 +2074,31 @@ function ekApplyValues(matchCode, matchState, edits, options = {}) {
       });
     }
   }
-  const payloads = [];
+  const payloads: EKCellPayload[] = [];
   for (const {cell, value} of edits) {
     const mark = value === "right" ? "right" : value === "wrong" ? "wrong" : "";
     gameTable.setMarkClass(cell, mark);
-    const team = Number(cell.dataset.team);
-    const theme = Number(cell.dataset.theme);
-    const answer = Number(cell.dataset.answer);
-    const shootout = cell.dataset.shootout === "1";
+    const team = Number((cell as HTMLElement).dataset.team);
+    const theme = Number((cell as HTMLElement).dataset.theme);
+    const answer = Number((cell as HTMLElement).dataset.answer);
+    const shootout = (cell as HTMLElement).dataset.shootout === "1";
     const target = shootout ? shootoutThemesFor(matchState.teams[team])[theme] : matchState.teams[team]?.themes?.[theme];
     if (target?.answers) target.answers[answer] = mark;
-    const payload = {team, theme, answer, mark};
+    const payload: EKCellPayload = {team, theme, answer, mark};
     if (shootout) payload.shootout = true;
     payloads.push(payload);
   }
   queueEKEdits(matchCode, payloads);
 }
 
-function snapshotMatchEdits(matchCode, edits) {
-  const out = [];
+function snapshotMatchEdits(matchCode: string, edits: CellEdit[]): UndoEditItem[] {
+  const out: UndoEditItem[] = [];
   for (const {cell, value} of edits) {
-    const team = Number(cell.dataset.team);
-    const theme = Number(cell.dataset.theme);
-    const answer = Number(cell.dataset.answer);
+    const team = Number((cell as HTMLElement).dataset.team);
+    const theme = Number((cell as HTMLElement).dataset.theme);
+    const answer = Number((cell as HTMLElement).dataset.answer);
     if (!Number.isInteger(team) || !Number.isInteger(theme) || !Number.isInteger(answer)) continue;
-    const shootout = cell.dataset.shootout === "1";
+    const shootout = (cell as HTMLElement).dataset.shootout === "1";
     const previous = cell.classList.contains("right") ? "right"
       : cell.classList.contains("wrong") ? "wrong" : "";
     const target = value === "right" ? "right" : value === "wrong" ? "wrong" : "";
@@ -1943,7 +2108,7 @@ function snapshotMatchEdits(matchCode, edits) {
   return out;
 }
 
-function captureSelectionFromHelper(helper) {
+function captureSelectionFromHelper(helper: CellRangeSelection | null): {anchor: CellCoord; focus: CellCoord} | null {
   if (!helper) return null;
   const anchor = helper.anchor;
   const focus = helper.focus;
@@ -1954,13 +2119,13 @@ function captureSelectionFromHelper(helper) {
   };
 }
 
-function currentUndoContext() {
+function currentUndoContext(): UndoContext | null {
   if (route.mode === "match") return {mode: "match", matchCode: route.matchCode || null, stageCode: null};
   if (route.mode === "stage") return {mode: "stage", matchCode: null, stageCode: route.stageCode || null};
   return null;
 }
 
-function ensureUndoContext() {
+function ensureUndoContext(): UndoContext | null {
   const next = currentUndoContext();
   if (!next) {
     undoStack.length = 0;
@@ -1977,13 +2142,13 @@ function ensureUndoContext() {
   return next;
 }
 
-function pushUndoEntry(entry) {
+function pushUndoEntry(entry: UndoEntry): void {
   if (!ensureUndoContext()) return;
   undoStack.push(entry);
   while (undoStack.length > UNDO_LIMIT) undoStack.shift();
 }
 
-function performUndo() {
+function performUndo(): boolean {
   if (!ensureUndoContext() || undoStack.length === 0) return false;
   const entry = undoStack.pop();
   if (!entry || entry.kind !== "match-edits") return false;
@@ -1993,7 +2158,7 @@ function performUndo() {
       const matchCode = group.matchCode;
       const matchState = matchStateFor(matchCode);
       if (!matchState) continue;
-      const edits = [];
+      const edits: CellEdit[] = [];
       for (const item of group.items) {
         const cell = findAnswerCell(matchCode, item);
         if (cell) edits.push({cell, value: item.previous});
@@ -2007,34 +2172,34 @@ function performUndo() {
   return true;
 }
 
-function findAnswerCell(matchCode, {team, theme, answer, shootout}) {
+function findAnswerCell(matchCode: string, {team, theme, answer, shootout}: UndoEditItem): HTMLElement | null {
   if (route.mode === "match") {
     const node = indexedNode("answer", {team, theme, answer, shootout: shootout ? "1" : "0"});
     if (node) return node;
   }
-  return document.querySelector(
-    `.answer-cell[data-match-code="${cssEscape(matchCode)}"][data-team="${cssEscape(team)}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(theme)}"][data-answer="${cssEscape(answer)}"]`,
+  return document.querySelector<HTMLElement>(
+    `.answer-cell[data-match-code="${cssEscape(matchCode)}"][data-team="${cssEscape(String(team))}"][data-shootout="${shootout ? "1" : "0"}"][data-theme="${cssEscape(String(theme))}"][data-answer="${cssEscape(String(answer))}"]`,
   );
 }
 
-function restoreSelectionFromUndoEntry(entry) {
+function restoreSelectionFromUndoEntry(entry: UndoEntry): void {
   if (!entry.selection) return;
   const helper = route.mode === "stage" ? stageSelection : matchSelections.get(undoStackContext?.matchCode || currentMatchCode());
   if (!helper) return;
   helper.setSelection(entry.selection.anchor, entry.selection.focus, {focus: true});
 }
 
-function attachMatchSelection(table, matchState, matchCode) {
+function attachMatchSelection(table: HTMLTableElement, matchState: HostMatchView, matchCode: string): CellRangeSelection | undefined {
   if (!table || !matchState) return;
   if (matchSelections.has(matchCode)) {
-    matchSelections.get(matchCode).unbind();
+    matchSelections.get(matchCode)!.unbind();
     matchSelections.delete(matchCode);
   }
   const helper = gameTable.createCellRangeSelection({
     root: table,
     cellSelector: ".answer-cell",
     readonly: () => Boolean(matchState.finished),
-    coordOf: (cell) => ekCoordOf(cell, matchState),
+    coordOf: (cell) => ekCoordOf(cell as HTMLElement, matchState),
     cellAtCoord: (coord) => ekCellAtCoord(table, coord, matchState),
     serialize: ekSerializeMark,
     parse: parseMarkText,
@@ -2056,12 +2221,12 @@ function attachMatchSelection(table, matchState, matchCode) {
   return helper;
 }
 
-function activeMatchSelection() {
+function activeMatchSelection(): CellRangeSelection | null {
   if (route.mode === "stage") return stageSelection;
   return matchSelections.get(activeCell.matchCode || currentMatchCode()) || null;
 }
 
-function activeSelectionCoord() {
+function activeSelectionCoord(): CellCoord | null {
   if (route.mode === "stage") {
     const matchCode = activeCell.matchCode || currentMatchCode();
     const matchIndex = currentStageMatches().findIndex((m) => m.code === matchCode);
@@ -2085,7 +2250,7 @@ function activeSelectionCoord() {
   }, matchState);
 }
 
-function syncSelectionToActiveCell() {
+function syncSelectionToActiveCell(): void {
   const helper = activeMatchSelection();
   if (!helper) return;
   const coord = activeSelectionCoord();
@@ -2093,13 +2258,13 @@ function syncSelectionToActiveCell() {
   helper.setSelection(coord, coord, {focus: false});
 }
 
-function buildTable(options = {}) {
+function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
   const matchCode = currentMatchCode();
   const hasShootout = shootoutThemeCount() > 0;
   const showPlaceColumn = true;
   const themes = renderedThemeHeaders();
-  const rows = state.teams.map((team, teamIndex) => {
-    const themeCellsList = [];
+  const rows = state!.teams.map((team, teamIndex) => {
+    const themeCellsList: ScoreTableThemeRowSpec[] = [];
     team.themes.forEach((theme, themeIndex) => {
       themeCellsList.push(themeCells(team, teamIndex, theme, themeIndex, false));
     });
@@ -2129,16 +2294,23 @@ function buildTable(options = {}) {
     rows,
     gapRowClassName: "team-gap-row",
   });
-  table.classList.toggle("match-finished", state.finished);
+  table.classList.toggle("match-finished", state!.finished);
   return table;
 }
 
-function renderedThemeHeaders() {
+function renderedThemeHeaders(): Array<{
+  label: string;
+  questionLabels: number[];
+  questionClassName?: string;
+  labelClassName?: string;
+  gapHeaderClassName: string;
+  gapClassName: string;
+}> {
   const themes = [];
   for (let theme = 0; theme < regularThemeCount(); theme++) {
     themes.push({
       label: `Т${theme + 1}`,
-      questionLabels: state.questionValues,
+      questionLabels: state!.questionValues,
       gapHeaderClassName: isLastRenderedTheme(false, theme) ? "gap-head shootout-adjacent-gap-head" : "gap-head",
       gapClassName: isLastRenderedTheme(false, theme) ? "gap shootout-adjacent-gap" : "gap",
     });
@@ -2146,7 +2318,7 @@ function renderedThemeHeaders() {
   for (let theme = 0; theme < shootoutThemeCount(); theme++) {
     themes.push({
       label: `П${theme + 1}`,
-      questionLabels: state.questionValues,
+      questionLabels: state!.questionValues,
       questionClassName: "question-head shootout-head",
       labelClassName: "theme-head shootout-head",
       gapHeaderClassName: isLastRenderedTheme(true, theme) ? "gap-head shootout-adjacent-gap-head" : "gap-head",
@@ -2156,8 +2328,8 @@ function renderedThemeHeaders() {
   return themes;
 }
 
-function trailingHeaders(hasShootout) {
-  const headers = [shootoutControlsHeader()];
+function trailingHeaders(hasShootout: boolean): Array<HTMLElement | {content: string | number; className: string}> {
+  const headers: Array<HTMLElement | {content: string | number; className: string}> = [shootoutControlsHeader()];
   if (hasShootout) headers.push({content: "П", className: "number"});
   headers.push({content: "Σ+", className: "number"});
   for (const value of [50, 40, 30, 20, 10]) {
@@ -2166,7 +2338,7 @@ function trailingHeaders(hasShootout) {
   return headers;
 }
 
-function teamNameCell(team, teamIndex) {
+function teamNameCell(team: HostTeamView, teamIndex: number): HTMLElement {
   const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: 2});
   cell.dataset.team = String(teamIndex);
   const labelText = team.name || "";
@@ -2191,19 +2363,19 @@ function teamNameCell(team, teamIndex) {
   return cell;
 }
 
-function totalCell(team, teamIndex) {
+function totalCell(team: HostTeamView, teamIndex: number): HTMLElement {
   const cell = td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2});
   cell.dataset.team = String(teamIndex);
   return cell;
 }
 
-function placeCell(team, teamIndex, matchCode) {
+function placeCell(team: HostTeamView, teamIndex: number, matchCode: string): HTMLElement {
   const input = document.createElement("input");
   input.type = "text";
   input.inputMode = "decimal";
   input.value = formatPlace(team.place);
   input.className = "place-input";
-  input.disabled = state.finished;
+  input.disabled = state!.finished;
   input.dataset.matchCode = matchCode;
   input.dataset.team = String(teamIndex);
   input.dataset.committedPlace = String(team.place || 0);
@@ -2231,7 +2403,7 @@ function placeCell(team, teamIndex, matchCode) {
     if (!commitPlace()) return;
     if (isForward || isBackward) {
       const direction = isForward ? 1 : -1;
-      const nextTeam = clamp(teamIndex + direction, 0, state.teams.length - 1);
+      const nextTeam = clamp(teamIndex + direction, 0, state!.teams.length - 1);
       focusPlaceInput(nextTeam, {select: true, matchCode});
     }
   });
@@ -2243,10 +2415,10 @@ function placeCell(team, teamIndex, matchCode) {
   return cell;
 }
 
-function themeCells(team, teamIndex, theme, themeIndex, isShootout) {
+function themeCells(team: HostTeamView, teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean): ScoreTableThemeRowSpec {
   const matchCode = currentMatchCode();
   const playerCell = document.createElement("td");
-  playerCell.colSpan = state.questionValues.length;
+  playerCell.colSpan = state!.questionValues.length;
   playerCell.className = "player-cell theme-block theme-block-top-left";
   if (isShootout) {
     playerCell.classList.add("shootout-block");
@@ -2270,9 +2442,9 @@ function themeCells(team, teamIndex, theme, themeIndex, isShootout) {
     select.appendChild(option(theme.player, theme.player));
   }
   select.value = theme.player;
-  select.disabled = state.finished;
+  select.disabled = state!.finished;
   select.addEventListener("change", () => {
-    const payload = {team: teamIndex, theme: themeIndex, player: select.value};
+    const payload: EKCellPayload = {team: teamIndex, theme: themeIndex, player: select.value};
     if (isShootout) payload.shootout = true;
     updatePlayerSelectOverflow(selectWrap);
     queueEKEdits(matchCode, [payload]);
@@ -2304,17 +2476,17 @@ function themeCells(team, teamIndex, theme, themeIndex, isShootout) {
     if (answerIndex === 0) {
       cell.classList.add("theme-block-bottom-left");
     }
-    if (!state.finished && isActiveCell(teamIndex, isShootout, themeIndex, answerIndex)) {
+    if (!state!.finished && isActiveCell(teamIndex, isShootout, themeIndex, answerIndex)) {
       cell.classList.add("active");
     }
-    cell.tabIndex = state.finished ? -1 : 0;
+    cell.tabIndex = state!.finished ? -1 : 0;
     cell.dataset.team = String(teamIndex);
     cell.dataset.matchCode = matchCode;
     cell.dataset.shootout = isShootout ? "1" : "0";
     cell.dataset.theme = String(themeIndex);
     cell.dataset.answer = String(answerIndex);
-    cell.title = `${team.name}, ${isShootout ? "П" : "Т"}${themeIndex + 1}, ${state.questionValues[answerIndex]}`;
-    if (!state.finished) {
+    cell.title = `${team.name}, ${isShootout ? "П" : "Т"}${themeIndex + 1}, ${state!.questionValues[answerIndex]}`;
+    if (!state!.finished) {
       cell.addEventListener("click", () => {
         selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {matchCode});
       });
@@ -2328,7 +2500,7 @@ function themeCells(team, teamIndex, theme, themeIndex, isShootout) {
   return {playerCell, scoreCell, gapClassName: gapClass, answers};
 }
 
-function trailingCells(team, teamIndex, hasShootout) {
+function trailingCells(team: HostTeamView, teamIndex: number, hasShootout: boolean): HTMLElement[] {
   const cells = [td("", "shootout-controls-cell", {rowSpan: 2})];
   if (hasShootout) {
     const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
@@ -2348,7 +2520,7 @@ function trailingCells(team, teamIndex, hasShootout) {
   return cells;
 }
 
-function battleHeader() {
+function battleHeader(): HTMLElement {
   const matchCode = currentMatchCode();
   const node = document.createElement("th");
   node.className = "sticky sticky-name battle";
@@ -2358,7 +2530,7 @@ function battleHeader() {
 
   const title = document.createElement("span");
   title.className = "battle-title";
-  title.textContent = state.title || matchTitle();
+  title.textContent = state!.title || matchTitle();
   layout.appendChild(title);
 
   if (venues.length > 0) {
@@ -2382,7 +2554,7 @@ function battleHeader() {
   checkbox.type = "checkbox";
   checkbox.className = "finish-toggle";
   checkbox.dataset.matchCode = matchCode;
-  checkbox.checked = Boolean(state.finished);
+  checkbox.checked = Boolean(state!.finished);
   checkbox.addEventListener("change", () => {
     setMatchFinished(matchCode, checkbox.checked);
   });
@@ -2392,7 +2564,7 @@ function battleHeader() {
   return node;
 }
 
-function openVenueDialog(matchCode) {
+function openVenueDialog(matchCode: string): void {
   const matchState = matchStateFor(matchCode);
   if (!matchState) return;
   const dialog = document.createElement("dialog");
@@ -2442,7 +2614,7 @@ function openVenueDialog(matchCode) {
   select.focus();
 }
 
-function shootoutControlsHeader() {
+function shootoutControlsHeader(): HTMLElement {
   const matchCode = currentMatchCode();
   const node = document.createElement("th");
   node.className = "shootout-controls-head";
@@ -2453,7 +2625,7 @@ function shootoutControlsHeader() {
   addShootout.textContent = "+П";
   addShootout.title = "Добавить тему перестрелки";
   addShootout.setAttribute("aria-label", "Добавить тему перестрелки");
-  addShootout.disabled = state.finished;
+  addShootout.disabled = state!.finished;
   addShootout.addEventListener("click", () => {
     const ms = matchStateFor(matchCode);
     if (!ms) return;
@@ -2471,7 +2643,7 @@ function shootoutControlsHeader() {
     deleteButton.textContent = "−П";
     deleteButton.title = "Удалить тему перестрелки";
     deleteButton.setAttribute("aria-label", "Удалить тему перестрелки");
-    deleteButton.disabled = state.finished;
+    deleteButton.disabled = state!.finished;
     deleteButton.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -2486,7 +2658,9 @@ function shootoutControlsHeader() {
   return node;
 }
 
-function handleGlobalKeydown(event) {
+type ScoreTableThemeRowSpec = {playerCell: HTMLElement; scoreCell: HTMLElement; gapClassName: string; answers: HTMLElement[]};
+
+function handleGlobalKeydown(event: KeyboardEvent): void {
   if ((route.mode !== "match" && route.mode !== "stage") || isFormControl(event.target)) return;
   // event.code is the physical key (layout-independent), so Cmd/Ctrl-Z fires on a
   // Russian layout too — there the Z key reports event.key "я", which the old
@@ -2526,7 +2700,7 @@ function handleGlobalKeydown(event) {
   });
 }
 
-function setMarkForSelection(mark) {
+function setMarkForSelection(mark: string): void {
   if (state?.finished && route.mode === "match") return;
   const helper = activeMatchSelection();
   const cells = helper?.selectedCells() || [];
@@ -2543,11 +2717,11 @@ function setMarkForSelection(mark) {
   setActiveMark(mark);
 }
 
-function isFormControl(target) {
+function isFormControl(target: unknown): boolean {
   return gameTable.isFormControl(target);
 }
 
-function selectAnswerCell(team, shootout, theme, answer, options = {}) {
+function selectAnswerCell(team: number, shootout: boolean, theme: number, answer: number, options: {matchCode?: string; focus?: boolean; syncSelection?: boolean} = {}): void {
   activeCell = {matchCode: options.matchCode || currentMatchCode(), team, shootout, theme, answer};
   markActiveCell();
   publishPresence();
@@ -2557,9 +2731,9 @@ function selectAnswerCell(team, shootout, theme, answer, options = {}) {
   if (options.syncSelection) syncSelectionToActiveCell();
 }
 
-function moveActiveCell(teamDelta, answerDelta, extend = false) {
-  const maxTeam = state.teams.length - 1;
-  const maxColumn = totalThemeCount() * state.questionValues.length - 1;
+function moveActiveCell(teamDelta: number, answerDelta: number, extend = false): void {
+  const maxTeam = state!.teams.length - 1;
+  const maxColumn = totalThemeCount() * state!.questionValues.length - 1;
   const column = activeCellColumn();
   let nextTeam = activeCell.team + teamDelta;
   let nextColumn = column + answerDelta;
@@ -2597,19 +2771,19 @@ function moveActiveCell(teamDelta, answerDelta, extend = false) {
   }
 }
 
-function adjacentStageMatch(matchCode, direction) {
+function adjacentStageMatch(matchCode: string, direction: number): {code: string; state: HostMatchView} | null {
   if (route.mode !== "stage") return null;
   const matches = currentStageMatches();
   const index = matches.findIndex((match) => match.code === matchCode);
   if (index < 0) return null;
   const targetMatch = matches[index + direction];
   if (!targetMatch) return null;
-  const targetState = currentStageStateByCode()?.get(targetMatch.code);
+  const targetState = currentStageStateByCode()?.get(targetMatch.code ?? "");
   if (!targetState) return null;
-  return {code: targetMatch.code, state: targetState};
+  return {code: targetMatch.code!, state: targetState};
 }
 
-function extendSelectionToActiveCell() {
+function extendSelectionToActiveCell(): void {
   const helper = activeMatchSelection();
   if (!helper) return;
   const coord = activeSelectionCoord();
@@ -2618,8 +2792,8 @@ function extendSelectionToActiveCell() {
   helper.setSelection(currentAnchor, coord, {focus: false});
 }
 
-function setActiveMark(mark) {
-  if (state.finished) return;
+function setActiveMark(mark: string): void {
+  if (state!.finished) return;
   const matchCode = currentMatchCode();
   const matchState = matchStateFor(matchCode);
   const cell = findActiveCell();
@@ -2627,7 +2801,7 @@ function setActiveMark(mark) {
     ekApplyValues(matchCode, matchState, [{cell, value: mark}]);
     return;
   }
-  const payload = {
+  const payload: EKCellPayload = {
     team: activeCell.team,
     theme: activeCell.theme,
     answer: activeCell.answer,
@@ -2637,7 +2811,7 @@ function setActiveMark(mark) {
   queueEKEdits(matchCode, [payload]);
 }
 
-function markActiveCell() {
+function markActiveCell(): void {
   clearActiveTeamRows();
   if (route.mode === "match" && activeAnswerNode) {
     activeAnswerNode.classList.remove("active");
@@ -2653,13 +2827,13 @@ function markActiveCell() {
   }
 }
 
-function isActiveMatchRow(matchCode, teamIndex) {
-  return !state.finished &&
+function isActiveMatchRow(matchCode: string, teamIndex: number): boolean {
+  return !state!.finished &&
     activeCell.matchCode === matchCode &&
     activeCell.team === teamIndex;
 }
 
-function clearActiveTeamRows() {
+function clearActiveTeamRows(): void {
   if (activeTeamRows.length > 0) {
     activeTeamRows.forEach((row) => row.classList.remove("active-team-row"));
     activeTeamRows = [];
@@ -2668,13 +2842,13 @@ function clearActiveTeamRows() {
   hostRoot.querySelectorAll(".active-team-row").forEach((row) => row.classList.remove("active-team-row"));
 }
 
-function markActiveTeamRows(cell) {
+function markActiveTeamRows(cell: HTMLElement | null): void {
   clearActiveTeamRows();
   if (!cell) return;
   const table = cell.closest(".match-table");
   const team = cell.dataset.team;
   if (!table || team == null) return;
-  const rows = new Set();
+  const rows = new Set<HTMLTableRowElement>();
   table.querySelectorAll(`[data-team="${cssEscape(team)}"]`).forEach((node) => {
     const row = node.closest("tr");
     if (row?.parentElement?.tagName === "TBODY") rows.add(row);
@@ -2683,15 +2857,15 @@ function markActiveTeamRows(cell) {
   activeTeamRows.forEach((row) => row.classList.add("active-team-row"));
 }
 
-function focusActiveCell(options = {}) {
+function focusActiveCell(options: FocusOptions = {}): void {
   const cell = findActiveCell();
   if (cell) cell.focus(options);
 }
 
-function focusPlaceInput(team, options = {}) {
+function focusPlaceInput(team: number, options: {select?: boolean; preventScroll?: boolean; matchCode?: string} = {}): void {
   const matchCode = options.matchCode || currentMatchCode();
-  const input = indexedNode("placeInput", {team}) ||
-    document.querySelector(`.place-input[data-match-code="${cssEscape(matchCode)}"][data-team="${team}"]`);
+  const input = (indexedNode("placeInput", {team}) ||
+    document.querySelector(`.place-input[data-match-code="${cssEscape(matchCode)}"][data-team="${team}"]`)) as HTMLInputElement | null;
   if (!input) return;
   input.focus({preventScroll: options.preventScroll});
   if (options.select) input.select();
@@ -2701,8 +2875,8 @@ function focusPlaceInput(team, options = {}) {
 // so this floating ↑/↓ bar is the only way to step between teams without
 // dismissing the keypad. Touch-only (installCellNavBar no-ops on desktop, where
 // Enter/Tab/arrows already navigate). Shown while a place input is focused.
-let ekNavBar = null;
-function ensureEKNavBar() {
+let ekNavBar: CellNavBar | null = null;
+function ensureEKNavBar(): CellNavBar {
   if (ekNavBar) return ekNavBar;
   ekNavBar = gameTable.installCellNavBar({
     onPrev: () => advanceActivePlaceInput(-1),
@@ -2711,7 +2885,7 @@ function ensureEKNavBar() {
   return ekNavBar;
 }
 
-function advanceActivePlaceInput(direction) {
+function advanceActivePlaceInput(direction: number): void {
   const input = document.activeElement;
   if (!(input instanceof HTMLInputElement) || !input.classList.contains("place-input")) return;
   input.dispatchEvent(new Event("change")); // commit current value before moving
@@ -2740,12 +2914,12 @@ document.addEventListener("focusout", (event) => {
   }, 0);
 });
 
-function focusFinishToggle(options = {}) {
-  const input = document.querySelector(".finish-toggle");
+function focusFinishToggle(options: {preventScroll?: boolean} = {}): void {
+  const input = document.querySelector<HTMLElement>(".finish-toggle");
   if (input) input.focus({preventScroll: options.preventScroll});
 }
 
-function focusedPlaceTeamIndex() {
+function focusedPlaceTeamIndex(): number | null {
   const element = document.activeElement;
   if (!(element instanceof HTMLInputElement) || !element.classList.contains("place-input")) {
     return null;
@@ -2754,12 +2928,12 @@ function focusedPlaceTeamIndex() {
   return Number.isInteger(team) ? team : null;
 }
 
-function isFinishToggleFocused() {
+function isFinishToggleFocused(): boolean {
   const element = document.activeElement;
   return element instanceof HTMLInputElement && element.classList.contains("finish-toggle");
 }
 
-function findActiveCell() {
+function findActiveCell(): HTMLElement | null {
   const matchCode = currentMatchCode();
   const indexed = indexedNode("answer", {
     team: activeCell.team,
@@ -2768,12 +2942,12 @@ function findActiveCell() {
     answer: activeCell.answer,
   });
   if (indexed) return indexed;
-  return document.querySelector(
+  return document.querySelector<HTMLElement>(
     `.answer-cell[data-match-code="${cssEscape(matchCode)}"][data-team="${activeCell.team}"][data-shootout="${activeCell.shootout ? "1" : "0"}"][data-theme="${activeCell.theme}"][data-answer="${activeCell.answer}"]`,
   );
 }
 
-function isActiveCell(team, shootout, theme, answer) {
+function isActiveCell(team: number, shootout: boolean, theme: number, answer: number): boolean {
   return activeCell.matchCode === currentMatchCode() &&
     activeCell.team === team &&
     activeCell.shootout === shootout &&
@@ -2781,30 +2955,30 @@ function isActiveCell(team, shootout, theme, answer) {
     activeCell.answer === answer;
 }
 
-function normalizeActiveCell() {
+function normalizeActiveCell(): void {
   if (!state?.teams?.length || totalThemeCount() === 0) return;
   const team = clamp(activeCell.team, 0, state.teams.length - 1);
   const column = clamp(activeCellColumn(), 0, totalThemeCount() * state.questionValues.length - 1);
   activeCell = cellFromColumn(team, column);
 }
 
-function activeCellColumn() {
+function activeCellColumn(): number {
   const themeOffset = activeCell.shootout
     ? regularThemeCount() + activeCell.theme
     : activeCell.theme;
-  return themeOffset * state.questionValues.length + activeCell.answer;
+  return themeOffset * state!.questionValues.length + activeCell.answer;
 }
 
-function cellFromColumn(team, column) {
-  const themeOffset = Math.floor(column / state.questionValues.length);
-  const answer = column % state.questionValues.length;
+function cellFromColumn(team: number, column: number): ActiveCell {
+  const themeOffset = Math.floor(column / state!.questionValues.length);
+  const answer = column % state!.questionValues.length;
   if (themeOffset < regularThemeCount()) {
     return {matchCode: currentMatchCode(), team, shootout: false, theme: themeOffset, answer};
   }
   return {matchCode: currentMatchCode(), team, shootout: true, theme: themeOffset - regularThemeCount(), answer};
 }
 
-function removeLastShootoutTheme(matchCode = currentMatchCode()) {
+function removeLastShootoutTheme(matchCode: string = currentMatchCode()): void {
   const lastTheme = shootoutThemeCount() - 1;
   if (lastTheme < 0) return;
   activeCell = {...activeCell, matchCode};
@@ -2818,34 +2992,34 @@ function removeLastShootoutTheme(matchCode = currentMatchCode()) {
   sendUpdate({action: "removeShootoutTheme"}, matchCode);
 }
 
-function regularThemeCount() {
-  return state.teams[0].themes.length;
+function regularThemeCount(): number {
+  return state!.teams[0].themes.length;
 }
 
-function shootoutThemeCount() {
-  return shootoutThemesFor(state.teams[0]).length;
+function shootoutThemeCount(): number {
+  return shootoutThemesFor(state!.teams[0]).length;
 }
 
-function totalThemeCount() {
+function totalThemeCount(): number {
   return regularThemeCount() + shootoutThemeCount();
 }
 
-function shootoutThemesFor(team) {
+function shootoutThemesFor(team: HostTeamView): HostThemeView[] {
   return team.shootoutThemes || [];
 }
 
-function isLastRenderedTheme(isShootout, themeIndex) {
+function isLastRenderedTheme(isShootout: boolean, themeIndex: number): boolean {
   if (isShootout) {
     return themeIndex === shootoutThemeCount() - 1;
   }
   return shootoutThemeCount() === 0 && themeIndex === regularThemeCount() - 1;
 }
 
-function currentRoute() {
+function currentRoute(): HostRoute {
   const path = window.location.pathname;
   const prefix = path.match(/^\/host\/fest\/([^/]+)\/game\/([^/]+)/);
   if (!prefix) {
-    return {mode: "missing"};
+    return {mode: "missing"} as HostRoute;
   }
   const festID = prefix[1];
   const gameID = prefix[2];
@@ -2865,22 +3039,22 @@ function currentRoute() {
   if (match) return {mode: "match", matchCode: decodeURIComponent(match[1]), festID, gameID, base, viewerBase, apiBase, festApi};
   const stage = rest.match(/^\/stage\/([^/]+)$/);
   if (stage) return {mode: "stage", stageCode: decodeURIComponent(stage[1]), festID, gameID, base, viewerBase, apiBase, festApi};
-  return {mode: "missing"};
+  return {mode: "missing"} as HostRoute;
 }
 
-function findStage(data, code) {
-  const scheme = parseScheme(data.schemaJson);
-  const stages = scheme?.stages?.length ? scheme.stages : data.stages || [];
+function findStage(data: HostFestView | null, code: string): HostStage | undefined {
+  const scheme = parseScheme(data!.schemaJson);
+  const stages = (scheme?.stages?.length ? scheme.stages : data!.stages || []) as HostStage[];
   return stages.find((stage) => stage.code === code);
 }
 
-function findLiveStage(data, code) {
+function findLiveStage(data: HostFestView | null, code: string): HostStage | undefined {
   return (data?.stages || []).find((stage) => stage.code === code);
 }
 
-function mergedStage(data, code) {
-  const schemeStage = findStage(data, code) || {};
-  const liveStage = findLiveStage(data, code) || {};
+function mergedStage(data: HostFestView | null, code: string): HostStage {
+  const schemeStage = findStage(data, code) || ({} as HostStage);
+  const liveStage = findLiveStage(data, code) || ({} as HostStage);
   return {
     ...schemeStage,
     ...liveStage,
@@ -2891,7 +3065,7 @@ function mergedStage(data, code) {
 
 const stageType = gameTable.stageType;
 
-function setHeading(text) {
+function setHeading(text: string): void {
   if (pageHeading) {
     pageHeading.textContent = "";
     pageHeading.hidden = true;
@@ -2899,7 +3073,7 @@ function setHeading(text) {
   renderGameBreadcrumbs();
 }
 
-function renderGameBreadcrumbs() {
+function renderGameBreadcrumbs(): void {
   if (!breadcrumbsNode || !route.festID) return;
   const gameTitle = fest?.gameName || currentGameTitle() || "ЭК";
   gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
@@ -2911,45 +3085,45 @@ function renderGameBreadcrumbs() {
   });
 }
 
-function breadcrumbCurrentTitle(gameTitle) {
+function breadcrumbCurrentTitle(gameTitle: string): string {
   if (route.mode === "grid") return "";
   if (route.mode === "venues") return "Площадки";
   if (route.mode === "stats") return "Статистика";
   if (route.mode === "seedImport") return "Импорт команд";
   if (route.mode === "match") return state?.title || route.matchCode || "";
-  if (route.mode === "stage") return findStage(fest, route.stageCode)?.title || route.stageCode || "";
+  if (route.mode === "stage") return findStage(fest, route.stageCode!)?.title || route.stageCode || "";
   return gameTitle;
 }
 
-function setViewerLink(href, title) {
+function setViewerLink(href: string, title: string): void {
   // Folded into the ☰ menu (menu.js): register the context-aware jump
   // with the precise per-mode viewer href instead of a standalone 👀 icon.
   window.dopeMenu?.setJump({label: "Страница зрителя", href, title, external: true});
 }
 
-function setHostMode(mode) {
+function setHostMode(mode: string): void {
   hostRoot.classList.toggle("grid-host", mode === "grid");
   hostRoot.classList.toggle("fight-host", mode === "match");
 }
 
-function pageTitle(primary = "") {
+function pageTitle(primary = ""): string {
   const main = String(primary || currentGameTitle() || state?.title || "").trim();
   const festTitle = String(fest?.title || "").trim();
   if (main && festTitle) return `${main} · ${festTitle}`;
   return main || festTitle || "Фест";
 }
 
-function currentGameTitle() {
-  const scheme = parseScheme(fest?.schemaJson);
+function currentGameTitle(): string {
+  const scheme = parseScheme(fest?.schemaJson) as {title?: unknown} | null;
   return String(scheme?.title || "").trim();
 }
 
-function matchTitle(matchState = state) {
+function matchTitle(matchState: HostMatchView = state!): string {
   const venue = matchState.venue ? ` · ${formatBattleVenue(matchState.venue)}` : "";
   return `${matchState.title}${venue}`;
 }
 
-function parsePlace(value) {
+function parsePlace(value: string): number | null {
   const normalized = value.trim().replace(",", ".");
   if (normalized === "") return 0;
   const place = Number(normalized);
@@ -2957,7 +3131,7 @@ function parsePlace(value) {
   return place;
 }
 
-function connectPresence() {
+function connectPresence(): void {
   if (presence || embedded || !route.festID) return;
   presence = gameTable.createHostPresence({
     root: hostRoot,
@@ -2970,15 +3144,15 @@ function connectPresence() {
   presence.connect();
 }
 
-function refreshPresence() {
+function refreshPresence(): void {
   presence?.refresh();
 }
 
-function publishPresence() {
+function publishPresence(): void {
   presence?.publishCurrent();
 }
 
-function currentHostPresenceCursor() {
+function currentHostPresenceCursor(): HostPresenceCursor | null {
   const focused = hostPresenceCursorFromElement(document.activeElement);
   if (focused) return focused;
   if (route.mode !== "match" && route.mode !== "stage") return null;
@@ -2994,8 +3168,8 @@ function currentHostPresenceCursor() {
   };
 }
 
-function hostPresenceCursorFromElement(element) {
-  const target = element?.closest?.(".answer-cell,.player-select,.place-input,.finish-toggle,.venue-edit-button");
+function hostPresenceCursorFromElement(element: Element | EventTarget | null): HostPresenceCursor | null {
+  const target = (element as Element | null)?.closest?.<HTMLElement>(".answer-cell,.player-select,.place-input,.finish-toggle,.venue-edit-button");
   if (!target || !hostRoot.contains(target)) return null;
   const matchCode = target.dataset.matchCode || currentMatchCode();
   if (target.classList.contains("answer-cell")) {
@@ -3033,20 +3207,21 @@ function hostPresenceCursorFromElement(element) {
   return null;
 }
 
-function findHostPresenceTarget(cursor) {
+function findHostPresenceTarget(cursorValue: unknown): Element | null {
+  const cursor = cursorValue as HostPresenceCursor | null | undefined;
   if (!cursor || cursor.app !== "ek" || String(cursor.gameID) !== String(route.gameID)) return null;
   const matchCode = cssEscape(cursor.matchCode || route.matchCode || "");
   switch (cursor.kind) {
   case "answer":
     return hostRoot.querySelector(
-      `.answer-cell[data-match-code="${matchCode}"][data-team="${cssEscape(cursor.team)}"][data-shootout="${cursor.shootout ? "1" : "0"}"][data-theme="${cssEscape(cursor.theme)}"][data-answer="${cssEscape(cursor.answer)}"]`,
+      `.answer-cell[data-match-code="${matchCode}"][data-team="${cssEscape(String(cursor.team))}"][data-shootout="${cursor.shootout ? "1" : "0"}"][data-theme="${cssEscape(String(cursor.theme))}"][data-answer="${cssEscape(String(cursor.answer))}"]`,
     );
   case "player":
     return hostRoot.querySelector(
-      `.player-select[data-match-code="${matchCode}"][data-team="${cssEscape(cursor.team)}"][data-shootout="${cursor.shootout ? "1" : "0"}"][data-theme="${cssEscape(cursor.theme)}"]`,
+      `.player-select[data-match-code="${matchCode}"][data-team="${cssEscape(String(cursor.team))}"][data-shootout="${cursor.shootout ? "1" : "0"}"][data-theme="${cssEscape(String(cursor.theme))}"]`,
     );
   case "place":
-    return hostRoot.querySelector(`.place-input[data-match-code="${matchCode}"][data-team="${cssEscape(cursor.team)}"]`);
+    return hostRoot.querySelector(`.place-input[data-match-code="${matchCode}"][data-team="${cssEscape(String(cursor.team))}"]`);
   case "finish":
     return hostRoot.querySelector(`.finish-toggle[data-match-code="${matchCode}"]`);
   case "venue":
@@ -3056,7 +3231,7 @@ function findHostPresenceTarget(cursor) {
   }
 }
 
-function option(value, label) {
+function option(value: string | number, label: unknown): HTMLOptionElement {
   return gameTable.option(value, label);
 }
 

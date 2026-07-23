@@ -5,7 +5,7 @@ Tournament/championship management system with real-time web UI and Telegram bot
 
 ## Stack
 - **Backend**: Go 1.26, SQLite 3 (WAL mode, modernc.org/sqlite)
-- **Frontend**: game pages are TypeScript-bundled (esbuild, `just build-web`, gitignored `dist/` embedded at go-build time) over the legacy vanilla-JS libs; chrome (menu.js, pageforms.js) stays classic. No framework.
+- **Frontend**: strict-TypeScript ES modules (root ADR-0001), sources in `dope/web/ts/`; the shared root toolchain (`just build-web`, esbuild + native tsc) bundles them into the gitignored `dist/` embedded at go-build time — per-page game bundles plus self-contained builder-page bundles. No framework.
 - **Frontend tests**: node (`node --test`, in `dope/web/jstest/`)
 - **Build/run**: `justfile` (see commands below)
 - **Deploy**: `just deploy`, which calls the monorepo's `../deploy.py` (SSH-based)
@@ -65,24 +65,24 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 `export/*` (xlsx/json export). Audit-log undo/redo lives in `domain/core` +
 `storage/auditmw`/`migrate`.
 
-### Frontend (`dope/web/assets/static/`)
+### Frontend (sources `dope/web/ts/`; `assets/static/` keeps only styles.css + dist/)
 
 | File | Lines | Purpose |
 |------|-------|---------|
 | `styles.css` | ~4500 | dope's **app CSS layer** only (tournament tables/grids/screen/stickers + dope vars + dark overrides). The shared design system — tokens, controls, buttons, chrome, utilities, themes — lives in DopeUIKit's `assets/core.css` (~1030 lines); the server serves `/static/styles.css` as core + this layer concatenated (`dope/server/css.go`). The tournament domain used to live in `core.css`; it was moved down here, so **do not add tournament-specific rules to the kit** — they belong in this file. |
-| `pageforms.js` | ~60 | Shared behaviour for the server-rendered builder pages, replacing the inline `on*` handlers they used to carry (CSP-friendly, data-attribute driven: `[data-confirm]`, `[data-select-all]`, `[data-autosubmit]`, `[data-dialog-open="id"]`, `[data-dialog-close]`) |
-| `host.js` | 3153 | EK host editor — match score editing, undo/redo, stage tabs, SSE sync. Depends on `match-table.js` + `stage-cache.js` |
-| `od.js` | 3012 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync. Depends on `match-table.js` |
-| `match-table.js` | 2839 | **Core shared library** (`window.DopeTable`) — table builders, cell helpers, SSE parsing, state sync, floating popovers, virtual keypads, overflow controller. Used by all game pages |
-| `si.js` | 1464 | KSI (team jeopardy) page — question/answer tables, team/player rows, detailed/results/refusals tabs. Depends on `match-table.js` |
-| `viewer.js` | 1285 | Read-only spectator view — stages/venues/stats, floating popovers. Depends on `match-table.js` + `stage-cache.js` |
-| `fest-grid.js` | 489 | Festival grid visualization — renders multiple stages horizontally, reseed panels, truncated team names |
-| `menu.js` | 335 | Site-wide chrome (`window.dopeMenu`) — theme/contrast toggle, hamburger menu, account links. Loaded on every page |
-| `stage-cache.js` | 289 | Shared pane cache (`window.DopeStageCache`) for EK — per-stage match state, deduped prefetch, SSE routing. Used by `host.js` + `viewer.js` |
-| `login.js` | 170 | Multi-step auth UI — username → password/code branch, redirect on success |
-| `profile.js` | 49 | Password change form (new password vs change password modes) |
+| `pageforms.ts` | ~60 | Shared behaviour for the server-rendered builder pages, replacing the inline `on*` handlers they used to carry (CSP-friendly, data-attribute driven: `[data-confirm]`, `[data-select-all]`, `[data-autosubmit]`, `[data-dialog-open="id"]`, `[data-dialog-close]`) |
+| `host.ts` | 3153 | EK host editor — match score editing, undo/redo, stage tabs, SSE sync. imports `match-table.ts` + `stage-cache.ts` |
+| `od.ts` | 3012 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync. imports `match-table.ts` |
+| `match-table.ts` | 2839 | **Core shared library** (exported `DopeTable`) — table builders, cell helpers, SSE parsing, state sync, floating popovers, virtual keypads, overflow controller. Used by all game pages |
+| `si.ts` | 1464 | KSI (team jeopardy) page — question/answer tables, team/player rows, detailed/results/refusals tabs. imports `match-table.ts` |
+| `viewer.ts` | 1285 | Read-only spectator view — stages/venues/stats, floating popovers. imports `match-table.ts` + `stage-cache.ts` |
+| `fest-grid.ts` | 489 | Festival grid visualization — renders multiple stages horizontally, reseed panels, truncated team names |
+| `menu.ts` (kit) | — | Site-wide chrome (`window.dopeMenu`) — theme/contrast toggle, hamburger menu, account links. Lives in dopeuikit (`assets/ts/`), served at `/static/menu.js`, loaded on every page |
+| `stage-cache.ts` | 289 | Shared pane cache (`createStageCache`) for EK — per-stage match state, deduped prefetch, SSE routing. Used by `host.ts` + `viewer.ts` |
+| `login.ts` (kit) | — | Multi-step auth UI — username → password/code branch, redirect on success (dopeuikit `assets/ts/`) |
+| `profile.ts` | 49 | Password change form (new password vs change password modes) |
 
-**Module seam (ADR-0003)**: each game page loads ONE `dist/<page>.js` bundle built from `dope/web/ts/pages/<page>.ts` — the TS shell (`web/ts/shell/`, typed contracts + `window.DopeShell`) plus the legacy scripts as side-effect imports in load order. Legacy files still communicate via `window` globals (`DopeTable`, `DopeStageCache`, `dopeMenu`); anything shared ACROSS files in one bundle must be an explicit `window.*` export (module scope no longer leaks top-level functions). Port a page by replacing its side-effect imports with a registered `ProtocolRenderer`.
+**Module seam (ADR-0003, amended by root ADR-0001)**: each game page loads ONE `dist/<page>.js` bundle built from `dope/web/ts/pages/<page>.ts` — the TS shell (`web/ts/shell/`, typed contracts + `window.DopeShell`), the init-payload boot, then the self-booting page module. Cross-file wiring is ES imports (`DopeTable` from `match-table.ts`, `createStageCache`, fest-grid exports); the only published globals are `window.dopeMenu`/`window.dopeMenuConfig` (typed in dopeuikit's `globals.d.ts`) and the server-inlined init payloads. Port a page by replacing its side-effect import with a registered `ProtocolRenderer`. Frontend tests import per-file ESM emitted to `web/jstest/dist/`.
 
 ## How to Run / Build / Test
 ```bash
@@ -139,17 +139,18 @@ thin **overlay** on the kit (imports `pecheny.me/dopeuikit/kit`).
   inline `on*` handlers moved to `pageforms.js`, keyed on `data-*` attributes
   (`data-confirm`/`data-autosubmit`/`data-dialog-open`/…) — never re-add inline
   handlers (CSP forbids them).
-- **Scripts** are classic (not ES modules): the `page` `classicscripts` prop lists
-  them; `menu.js` boots first. The vocabulary is closed — unknown primitive/prop,
-  bad enum value, or duplicate id is a compile error.
+- **Scripts**: sources are strict-TS ES modules; pages load built bundles via the
+  `page` `classicscripts` prop (`dist/<name>.js`), `menu.js` boots first. The
+  vocabulary is closed — unknown primitive/prop, bad enum value, or duplicate id
+  is a compile error.
 
 ## Design System
 When building a new page or UI component, you MUST use the existing design system —
 DopeUIKit's `assets/core.css` (shared tokens/controls/buttons/chrome/utilities/
 themes) plus dope's `styles.css` layer (tournament-specific classes) — its CSS
 variables (colors, spacing, typography), layout grids, table styles, and component
-classes, and the shared JS building blocks (`window.DopeTable` in `match-table.js`,
-`window.dopeMenu` in `menu.js`, etc.). Do not introduce bespoke one-off styles or
+classes, and the shared JS building blocks (`DopeTable` from `match-table.ts`,
+`window.dopeMenu` from the kit's `menu.ts`, etc.). Do not introduce bespoke one-off styles or
 hand-rolled widgets when a design-system equivalent exists.
 
 Order of preference, strictly:

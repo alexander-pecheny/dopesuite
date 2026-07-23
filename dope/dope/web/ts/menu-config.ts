@@ -5,3 +5,5 @@ window.dopeMenuConfig = {
   loginHref: "/host",
   loginLabel: "Вход для ведущего",
 };
+
+export {};

@@ -1,8 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {loadStaticModule} from "./browser-module.js";
-
-const {DopeStatsSync} = loadStaticModule("stats-sync.js");
+import {DopeStatsSync} from "./dist/stats-sync.js";
 
 // A fake clock: setTimeout queues a job; runAll() runs the jobs queued so far
 // (jobs a callback schedules land in the next runAll, so a self-rescheduling

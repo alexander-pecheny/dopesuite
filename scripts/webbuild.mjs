@@ -21,6 +21,29 @@ const targets = {
       format: 'iife',
       outdir: 'dope/dope/web/assets/static/dist',
     },
+    // Builder-page classic scripts: self-contained IIFE bundles, one per script.
+    {
+      entryPoints: Object.fromEntries(
+        ['pageforms', 'menu-config', 'gamecreate', 'numbers', 'profile', 'roster'].map((p) => [
+          p,
+          `dope/dope/web/ts/${p}.ts`,
+        ]),
+      ),
+      bundle: true,
+      format: 'iife',
+      outdir: 'dope/dope/web/assets/static/dist',
+    },
+    // Library modules as ESM for node --test (not embedded, not served).
+    {
+      entryPoints: Object.fromEntries(
+        ['entry-model', 'match-table', 'stage-cache', 'stats-sync', 'fest-grid'].map((p) => [
+          p,
+          `dope/dope/web/ts/${p}.ts`,
+        ]),
+      ),
+      format: 'esm',
+      outdir: 'dope/dope/web/jstest/dist',
+    },
   ],
   // menu/login ship as classic bundles (menu must run blocking in <head> —
   // theme before first paint); the pure kernels also emit as ESM for node --test.

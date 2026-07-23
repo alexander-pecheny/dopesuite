@@ -67,7 +67,7 @@ type hostDashMessages struct {
 func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 	ref := data.Fest.Ref()
 	page := []dopeui.Item{
-		dopeui.Title(data.Fest.Title + " · ведущий"), dopeui.PagePublic, dopeui.Classicscripts("pageforms.js"),
+		dopeui.Title(data.Fest.Title + " · ведущий"), dopeui.PagePublic, dopeui.Classicscripts("dist/pageforms.js"),
 	}
 	if data.Fest.IsPublic {
 		page = append(page,

@@ -40,7 +40,7 @@ func TestHostPlayersDocRenders(t *testing.T) {
 		`name="game_id"`, `data-dialog-open="playerOverrideEdit-3-4-9"`,
 		`id="playerOverrideEdit-3-4-9"`, `name="mode" value="edit"`,
 		`name="delete" value="1"`, `data-confirm="Удалить оверрайд?"`,
-		`/static/roster.js`, `/static/pageforms.js`,
+		`/static/dist/roster.js`, `/static/dist/pageforms.js`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("players page missing %q", want)

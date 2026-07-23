@@ -104,7 +104,7 @@ func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
 	main = append(main, createUsersFormSection())
 
 	page := []ui.Item{
-		ui.Title("Создать пользователей · Админка"), ui.PagePublic, ui.Classicscripts("pageforms.js"),
+		ui.Title("Создать пользователей · Админка"), ui.PagePublic, ui.Classicscripts("dist/pageforms.js"),
 		ui.Publictopbar(ui.Title("Создать пользователей"), ui.User("/admin"), ui.Userlabel("Админка")),
 	}
 	page = append(page, main...)

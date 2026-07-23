@@ -2,17 +2,49 @@
 // number-import <dialog> modals (paste → confirm → apply). Extracted verbatim
 // from the page's former inline <script>; keyed on the #numbers-* ids and
 // #numbers-form's data-has-numbers.
+
+// Wire types of pages/numbers_import.go (importMatchResponse / importApplyResponse).
+interface ImportTeamOption {
+  id: number;
+  label: string;
+}
+
+interface ImportMatch {
+  line: number;
+  number: number;
+  raw: string;
+  teamId: number;
+  distance: number;
+  exact: boolean;
+}
+
+interface ImportMatchResponse {
+  teams: ImportTeamOption[] | null;
+  matches: ImportMatch[] | null;
+  errors: string[] | null;
+}
+
+interface ImportApplyResponse {
+  ok: boolean;
+  error?: string;
+}
+
 (() => {
   const form = document.getElementById("numbers-form");
   if (!form) return;
+  const byId = <T extends HTMLElement>(id: string): T => {
+    const node = document.getElementById(id);
+    if (!node) throw new Error(`numbers page is missing #${id}`);
+    return node as T;
+  };
   const hasNumbers = form.dataset.hasNumbers === "1";
   const editBtn = document.getElementById("numbers-edit-btn");
   const autoBtn = document.getElementById("numbers-auto-btn");
   const clearBtn = document.getElementById("numbers-clear-btn");
   const cancelBtn = document.getElementById("numbers-cancel-btn");
-  const help = document.getElementById("numbers-help");
-  const save = document.getElementById("numbers-save");
-  const numInputs = form.querySelectorAll(".number-row-num");
+  const help = byId("numbers-help");
+  const save = byId("numbers-save");
+  const numInputs = form.querySelectorAll<HTMLInputElement>(".number-row-num");
 
   const enterEdit = () => {
     form.classList.add("editing");
@@ -45,7 +77,7 @@
   const importBtn = document.getElementById("numbers-import-btn");
   const baseAction = form.getAttribute("action");
 
-  const closeDialog = (dialog) => {
+  const closeDialog = (dialog: HTMLDialogElement) => {
     if (dialog && dialog.parentNode) dialog.close();
   };
 
@@ -89,22 +121,22 @@
       }
       submit.disabled = true;
       err.hidden = true;
-      fetch(baseAction + "/import/match", {
+      fetch(`${baseAction}/import/match`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ text }),
       })
         .then((resp) => {
           if (!resp.ok) throw new Error("Ошибка сервера (" + resp.status + ").");
-          return resp.json();
+          return resp.json() as Promise<ImportMatchResponse>;
         })
         .then((data) => {
           closeDialog(dialog);
           openConfirmDialog(data);
         })
-        .catch((e) => {
+        .catch((e: unknown) => {
           submit.disabled = false;
-          err.textContent = e.message || "Не удалось сопоставить.";
+          err.textContent = (e instanceof Error && e.message) || "Не удалось сопоставить.";
           err.hidden = false;
         });
     });
@@ -115,7 +147,7 @@
     textarea.focus();
   };
 
-  const openConfirmDialog = (data) => {
+  const openConfirmDialog = (data: ImportMatchResponse) => {
     const teams = (data && data.teams) || [];
     const matches = (data && data.matches) || [];
     const errors = (data && data.errors) || [];
@@ -147,7 +179,7 @@
       dform.appendChild(empty);
     }
 
-    const buildSelect = (selectedId) => {
+    const buildSelect = (selectedId: number) => {
       const select = document.createElement("select");
       select.className = "numbers-import-select";
       const skip = document.createElement("option");
@@ -164,7 +196,7 @@
       return select;
     };
 
-    const rowEls = [];
+    const rowEls: Array<{ number: number; select: HTMLSelectElement }> = [];
     if (matches.length) {
       const list = document.createElement("ol");
       list.className = "numbers-import-list";
@@ -176,7 +208,7 @@
 
         const num = document.createElement("span");
         num.className = "numbers-import-num";
-        num.textContent = m.number;
+        num.textContent = String(m.number);
 
         const raw = document.createElement("span");
         raw.className = "numbers-import-raw";
@@ -226,8 +258,8 @@
 
     dform.addEventListener("submit", (event) => {
       event.preventDefault();
-      const assignments = [];
-      const usedTeams = new Set();
+      const assignments: Array<{ teamId: number; number: number }> = [];
+      const usedTeams = new Set<number>();
       for (const row of rowEls) {
         const val = row.select.value;
         if (!val) continue;
@@ -247,19 +279,19 @@
       }
       apply.disabled = true;
       err.hidden = true;
-      fetch(baseAction + "/import/apply", {
+      fetch(`${baseAction}/import/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignments }),
       })
-        .then((resp) => resp.json())
+        .then((resp) => resp.json() as Promise<ImportApplyResponse>)
         .then((res) => {
           if (!res.ok) throw new Error(res.error || "Не удалось сохранить.");
           location.reload();
         })
-        .catch((e) => {
+        .catch((e: unknown) => {
           apply.disabled = false;
-          err.textContent = e.message || "Не удалось сохранить.";
+          err.textContent = (e instanceof Error && e.message) || "Не удалось сохранить.";
           err.hidden = false;
         });
     });
@@ -272,3 +304,5 @@
 
   if (importBtn) importBtn.addEventListener("click", openImportDialog);
 })();
+
+export {};

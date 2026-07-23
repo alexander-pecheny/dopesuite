@@ -1,5 +1,4 @@
-// The КСИ page bundle (see od.ts for the migration seam).
+// The КСИ page bundle (see od.ts).
 import '../shell/shell';
-import '../../assets/static/init.js';
-import '../../assets/static/match-table.js';
-import '../../assets/static/si.js';
+import '../init.js';
+import '../si.js';

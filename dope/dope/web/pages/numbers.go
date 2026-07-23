@@ -39,7 +39,7 @@ type hostFestNumbersData struct {
 func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	ref := data.Fest.Ref()
 	page := []ui.Item{
-		ui.Title(data.Fest.Title + " · номера команд"), ui.PagePublic, ui.Classicscripts("numbers.js"),
+		ui.Title(data.Fest.Title + " · номера команд"), ui.PagePublic, ui.Classicscripts("dist/numbers.js"),
 		ui.Publictopbar(ui.Title("Номера команд"), ui.Back("/host/fest/"+ref)),
 	}
 	if data.Error != "" {

@@ -750,7 +750,7 @@ func journalDoc(festID, gameID int64, title, errMsg, notice string, groups []jou
 	}
 
 	page := []ui.Item{
-		ui.Title("История игры · " + title), ui.PagePublic, ui.Classicscripts("pageforms.js"),
+		ui.Title("История игры · " + title), ui.PagePublic, ui.Classicscripts("dist/pageforms.js"),
 		ui.Publictopbar(ui.Title("История · "+title), ui.Back(fmt.Sprintf("/host/fest/%d/audit", festID))),
 	}
 	page = append(page, main...)

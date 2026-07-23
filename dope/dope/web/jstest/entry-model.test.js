@@ -1,9 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {loadStaticModule} from "./browser-module.js";
-
-const {DopeEntryModel} = loadStaticModule("entry-model.js");
-const {parseClipboard, coerceValue, invertColumn} = DopeEntryModel;
+import {parseClipboard, coerceValue, invertColumn} from "./dist/entry-model.js";
 
 test("parseClipboard splits rows by newline and cols by tab", () => {
   assert.deepEqual(parseClipboard("1\t2\t3\n4\t5\t6"), [["1", "2", "3"], ["4", "5", "6"]]);

@@ -3,12 +3,18 @@
 // the player and the team resolve to an id. Dialog open/close, the delete confirm,
 // and the edit-row dialogs are handled by pageforms.js data-attributes.
 (() => {
-  const form = document.querySelector("[data-player-override-form]");
+  const form = document.querySelector<HTMLElement>("[data-player-override-form]");
   if (!form) return;
-  const bindSuggest = (inputSelector, hiddenSelector, listID) => {
-    const input = form.querySelector(inputSelector);
-    const hidden = form.querySelector(hiddenSelector);
-    const options = Array.from(document.getElementById(listID)?.options || []);
+  const query = <T extends Element>(selector: string): T => {
+    const node = form.querySelector<T>(selector);
+    if (!node) throw new Error(`players page is missing ${selector}`);
+    return node;
+  };
+  const bindSuggest = (inputSelector: string, hiddenSelector: string, listID: string) => {
+    const input = query<HTMLInputElement>(inputSelector);
+    const hidden = query<HTMLInputElement>(hiddenSelector);
+    const list = document.getElementById(listID) as HTMLDataListElement | null;
+    const options = Array.from(list?.options || []);
     const sync = () => {
       const found = options.find((option) => option.value === input.value);
       hidden.value = found?.dataset.id || "";
@@ -28,3 +34,5 @@
     (syncPlayer.hidden.value ? syncTeam.input : syncPlayer.input).reportValidity();
   });
 })();
+
+export {};

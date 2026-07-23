@@ -32,7 +32,7 @@ func TestHostNumbersDocRenders(t *testing.T) {
 		`id="numbers-auto-btn"`, `id="numbers-import-btn"`, `id="numbers-edit-btn"`,
 		`id="numbers-help"`, `id="numbers-save"`, `id="numbers-cancel-btn"`,
 		`class="number-row-num"`, `name="num_1"`, `name="team_label_1"`, `name="team_id_1"`, `value="11"`,
-		`/static/numbers.js`,
+		`/static/dist/numbers.js`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("numbers page missing %q", want)

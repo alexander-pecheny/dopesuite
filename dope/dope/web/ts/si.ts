@@ -1,10 +1,87 @@
-const siRoot = document.getElementById("siTable");
+// The КСИ (team jeopardy) page (ADR-0001): question/answer tables, team/player
+// rows, detailed/results/refusals tabs. Converted from the legacy si.js; a
+// self-booting side-effect module bundled by pages/si.ts.
+
+import {DopeTable} from "./match-table.js";
+import type {
+  AdoptedGameSnapshot,
+  CellCoord,
+  CellEdit,
+  CellRangeSelection,
+  ClientRecorder,
+  GameInitLike,
+  HostPresence,
+  NodeIndex,
+  StateSync,
+} from "./match-table.js";
+
+// Page globals the bundle environment provides (the server-inlined
+// __GAME_INIT__). Accessed via a structural cast, same as match-table.ts.
+interface PageGlobals {
+  __GAME_INIT__?: GameInitLike | null;
+}
+
+const pageWindow = window as Window & PageGlobals;
+
+interface StickerType {
+  id: string;
+  label: string;
+  color: string;
+  max: number | null;
+}
+
+interface KSIScheme {
+  gameType?: string;
+  title?: string;
+  themes?: unknown;
+  participants?: string[];
+  teams?: Array<{name?: string}>;
+  stickers?: {types?: Array<{id?: unknown; label?: unknown; color?: unknown; max?: unknown} | null | undefined>} | null;
+  [key: string]: unknown;
+}
+
+type ParticipantEntry = string | {number?: unknown; name?: unknown} | null | undefined;
+
+interface KSIState {
+  participants: ParticipantEntry[];
+  themes: Array<{answers: string[][]}>;
+  finished: boolean;
+  declined: Record<string, boolean>;
+  stickers?: string[][];
+  [key: string]: unknown;
+}
+
+interface FestInfo {
+  title?: string;
+  gameName?: string;
+  [key: string]: unknown;
+}
+
+interface ScoreCache {
+  themeScores: number[][];
+  themeScored: boolean[][];
+  totals: number[];
+  places: string[];
+}
+
+type ActiveCell = {player: number; theme: number; answer: number};
+
+type SIPresenceCursor = {
+  app: string;
+  kind: string;
+  gameID?: string;
+  player?: number;
+  theme?: number;
+  answer?: number;
+};
+
+const siRoot = document.getElementById("siTable")!;
 const siTabsRoot = document.getElementById("siTabs");
 const statusNode = document.getElementById("status");
-const pageHeading = document.querySelector(".host-top h1");
+const pageHeading = document.querySelector<HTMLElement>(".host-top h1");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const gameTable = window.DopeTable;
+const gameTable = DopeTable;
 const setStatus = gameTable.createStatusReporter(statusNode);
 const viewerCounter = gameTable.createViewerCounter(statusNode);
 const teamNameOverflow = gameTable.createTeamNameOverflowController({
@@ -41,10 +118,10 @@ const STICKER_PEEL_FACTOR = 0.78;
 
 // Returns the sticker colour a shade darker for the peel corner. The main face
 // keeps the exact picked hex, so what an organizer picks is what renders.
-function darkenHex(hex, factor) {
-  const ch = (i) => Math.max(0, Math.min(255,
+function darkenHex(hex: string, factor: number): string {
+  const ch = (i: number) => Math.max(0, Math.min(255,
     Math.round(parseInt(hex.slice(i, i + 2), 16) * factor)));
-  const h = (n) => n.toString(16).padStart(2, "0");
+  const h = (n: number) => n.toString(16).padStart(2, "0");
   return "#" + h(ch(1)) + h(ch(3)) + h(ch(5));
 }
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
@@ -64,52 +141,52 @@ let scopeGameID = route.gameID;
 // staticMode: served as a precomputed snapshot under DDoS lockdown. Skip the SSE
 // connection and refresh by reloading on a jitter. Captured before the loader
 // nulls window.__GAME_INIT__.
-const staticMode = Boolean(window.__GAME_INIT__?.static);
-const canEdit = Boolean(window.__GAME_INIT__?.canEdit);
+const staticMode = Boolean(pageWindow.__GAME_INIT__?.static);
+const canEdit = Boolean(pageWindow.__GAME_INIT__?.canEdit);
 document.body.classList.toggle("viewer-readonly", viewer);
 if (viewer) {
-  if (canEdit) gameTable.mountEditorLink(statusNode);
+  if (canEdit) gameTable.mountEditorLink();
 } else {
-  gameTable.mountViewerLink(statusNode);
+  gameTable.mountViewerLink();
 }
 gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
-let scheme = null;
-let state = null;
-let fest = null;
+let scheme: KSIScheme | null = null;
+let state: KSIState | null = null;
+let fest: FestInfo | null = null;
 let initialStateSeq = 0; // game-state scope seq at page render; seeds the SSE client's lastSeq
 let initialStateEpoch = ""; // server epoch at page render; seeds the SSE client's epoch baseline
-let participants = [];
+let participants: string[] = [];
 let themesCount = 8;
 // Sticker configuration for the "KSI with stickers" variant, parsed from
 // scheme.stickers. Empty for plain KSI/SI games (stickersEnabled() is false).
-let stickerTypes = [];
-let stickerById = new Map();
-let activeCell = {player: 0, theme: 0, answer: 0};
-let renderedTable = null;
-let renderedTab = null;
+let stickerTypes: StickerType[] = [];
+let stickerById = new Map<string, StickerType>();
+let activeCell: ActiveCell = {player: 0, theme: 0, answer: 0};
+let renderedTable: HTMLElement | null = null;
+let renderedTab: string | null = null;
 let activeTab = tabFromHash() || "detailed";
-let tableIndex = null;
-let scoreCache = null;
-let detailedOrderCache = null;
+let tableIndex: NodeIndex | null = null;
+let scoreCache: ScoreCache | null = null;
+let detailedOrderCache: number[] | null = null;
 // Client-local row order for the «Подробно» sheet: "name" (default) or "number".
 // Editors pick whichever identity they read off the floor; never synced.
-let detailedSort = "name";
-let activeAnswerNode = null;
-let activePlayerRows = [];
-let stateSync = null;
-let recorder = null;
-let presence = null;
-let cellSelection = null;
-const tabScroll = new Map();
+let detailedSort: "name" | "number" = "name";
+let activeAnswerNode: HTMLElement | null = null;
+let activePlayerRows: HTMLElement[] = [];
+let stateSync: StateSync | null = null;
+let recorder: ClientRecorder | null = null;
+let presence: HostPresence | null = null;
+let cellSelection: CellRangeSelection | null = null;
+const tabScroll = new Map<string, {top: number; left: number}>();
 
 // The «Отказы» (refusals) tab is a host-only control surface; its effect — declined
 // teams dropping out of the «Итог» ranking — is visible to spectators in that tab, so
 // they never need the management list itself.
-function visibleTabs() {
+function visibleTabs(): Array<{key: string; label: string}> {
   return KSI_TABS.filter((t) => t.key !== "refusals" || !viewer);
 }
 
-function tabFromHash() {
+function tabFromHash(): string | null {
   const key = (window.location.hash || "").replace(/^#/, "");
   return visibleTabs().some((t) => t.key === key) ? key : null;
 }
@@ -141,22 +218,22 @@ const gameLoader = gameTable.createGameDataLoader({
 // and renders the first frame. On the "init" path the snapshot also carries the
 // raw __GAME_INIT__ payload, the only source with the SSE seq/epoch baseline and
 // the unnumbered-teams flag.
-function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}) {
+function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}: AdoptedGameSnapshot): void {
   if (init) {
     if (init.gameID != null) scopeGameID = String(init.gameID);
     if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
     if (init.epoch != null) initialStateEpoch = String(init.epoch);
     if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
   }
-  scheme = nextScheme;
-  state = nextState;
-  fest = nextFest || null;
+  scheme = nextScheme as KSIScheme;
+  state = nextState as KSIState;
+  fest = (nextFest as FestInfo | null) || null;
   initFromScheme();
   ensureState();
   render();
 }
 
-async function revalidateAll() {
+async function revalidateAll(): Promise<void> {
   const prevSchemeJSON = JSON.stringify(scheme);
   const prevStateJSON = JSON.stringify(state);
   const prevFestJSON = JSON.stringify(fest);
@@ -164,9 +241,9 @@ async function revalidateAll() {
   const freshSchemeJSON = JSON.stringify(fresh.scheme);
   const freshStateJSON = JSON.stringify(fresh.state);
   const freshFestJSON = JSON.stringify(fresh.fest);
-  scheme = fresh.scheme;
-  state = fresh.state;
-  fest = fresh.fest;
+  scheme = fresh.scheme as KSIScheme;
+  state = fresh.state as KSIState;
+  fest = fresh.fest as FestInfo | null;
   gameLoader.writeSnapshot(fresh);
   if (freshSchemeJSON === prevSchemeJSON && freshStateJSON === prevStateJSON && freshFestJSON === prevFestJSON) return;
   initFromScheme();
@@ -174,19 +251,19 @@ async function revalidateAll() {
   render();
 }
 
-function initFromScheme() {
+function initFromScheme(): void {
   participants = schemeParticipants();
-  themesCount = Number(scheme.themes) > 0 ? Number(scheme.themes) : (isTeamMode() ? KSI_THEMES : 8);
+  themesCount = Number(scheme!.themes) > 0 ? Number(scheme!.themes) : (isTeamMode() ? KSI_THEMES : 8);
   initStickers();
 }
 
-function initStickers() {
+function initStickers(): void {
   stickerTypes = [];
   stickerById = new Map();
   const types = scheme?.stickers && Array.isArray(scheme.stickers.types) ? scheme.stickers.types : [];
   for (const raw of types) {
     if (!raw || typeof raw.id !== "string" || !raw.id) continue;
-    const type = {
+    const type: StickerType = {
       id: raw.id,
       label: typeof raw.label === "string" && raw.label ? raw.label : raw.id,
       color: typeof raw.color === "string" ? raw.color : "",
@@ -200,28 +277,28 @@ function initStickers() {
 
 // stickersEnabled gates the whole sticker UI/scoring path: only KSI team games
 // that actually carry a sticker configuration.
-function stickersEnabled() {
+function stickersEnabled(): boolean {
   return isTeamMode() && stickerTypes.length > 0;
 }
 
-function stickerValue(player, theme) {
-  const id = state.stickers?.[theme]?.[player];
+function stickerValue(player: number, theme: number): string {
+  const id = state!.stickers?.[theme]?.[player];
   return typeof id === "string" ? id : "";
 }
 
-function schemeParticipants() {
-  if (Array.isArray(scheme.participants) && scheme.participants.length > 0) {
-    return scheme.participants.slice();
+function schemeParticipants(): string[] {
+  if (Array.isArray(scheme!.participants) && scheme!.participants.length > 0) {
+    return scheme!.participants.slice();
   }
-  if (isTeamMode() && Array.isArray(scheme.teams) && scheme.teams.length > 0) {
-    return scheme.teams.map((team) => team.name || "");
+  if (isTeamMode() && Array.isArray(scheme!.teams) && scheme!.teams.length > 0) {
+    return scheme!.teams.map((team) => team.name || "");
   }
   if (isTeamMode()) return [];
   return ["Игрок 1", "Игрок 2", "Игрок 3", "Игрок 4"];
 }
 
-function ensureState() {
-  if (!state || typeof state !== "object") state = {};
+function ensureState(): void {
+  if (!state || typeof state !== "object") state = {} as KSIState;
   if (!Array.isArray(state.participants) || state.participants.length === 0) {
     state.participants = participants.slice();
   }
@@ -229,9 +306,9 @@ function ensureState() {
   while (state.themes.length < themesCount) state.themes.push({answers: []});
   state.themes = state.themes.slice(0, themesCount).map((theme) => {
     const answers = Array.isArray(theme.answers) ? theme.answers : [];
-    const padded = [];
-    for (let p = 0; p < state.participants.length; p++) {
-      const row = Array.isArray(answers[p]) ? answers[p].slice(0, QUESTION_VALUES.length) : [];
+    const padded: string[][] = [];
+    for (let p = 0; p < state!.participants.length; p++) {
+      const row: string[] = Array.isArray(answers[p]) ? answers[p].slice(0, QUESTION_VALUES.length) : [];
       while (row.length < QUESTION_VALUES.length) row.push("");
       padded.push(row);
     }
@@ -253,23 +330,23 @@ function ensureState() {
 // ensureStickerGrid normalises state.stickers to a themesCount × participants
 // grid of sticker ids (""=unset). Only meaningful for stickers games; left
 // untouched otherwise.
-function ensureStickerGrid() {
+function ensureStickerGrid(): void {
   if (!stickersEnabled()) return;
-  const grid = Array.isArray(state.stickers) ? state.stickers : [];
-  const next = [];
+  const grid: string[][] = Array.isArray(state!.stickers) ? state!.stickers : [];
+  const next: string[][] = [];
   for (let t = 0; t < themesCount; t++) {
-    const row = Array.isArray(grid[t]) ? grid[t] : [];
-    const padded = [];
-    for (let p = 0; p < state.participants.length; p++) {
+    const row: string[] = Array.isArray(grid[t]) ? grid[t] : [];
+    const padded: string[] = [];
+    for (let p = 0; p < state!.participants.length; p++) {
       const id = row[p];
       padded.push(typeof id === "string" && stickerById.has(id) ? id : "");
     }
     next.push(padded);
   }
-  state.stickers = next;
+  state!.stickers = next;
 }
 
-function render(options = {}) {
+function render(options: {preserveScroll?: boolean} = {}): void {
   if (!scheme || !state) return;
   const defaultTitle = gameTitleFallback();
   normalizeActiveCell();
@@ -311,7 +388,7 @@ function render(options = {}) {
   refreshPresence();
 }
 
-function buildTable() {
+function buildTable(): HTMLTableElement {
   const scores = getScoreCache();
   const showPlaceColumn = false;
   const themes = Array.from({length: themesCount}, (_, index) => ({
@@ -327,7 +404,7 @@ function buildTable() {
       : null,
     themes: themes.map((_, themeIndex) => ({
       answers: QUESTION_VALUES.map((__, answerIndex) => {
-        const mark = state.themes[themeIndex].answers[playerIndex][answerIndex];
+        const mark = state!.themes[themeIndex].answers[playerIndex][answerIndex];
         return answerCell(playerIndex, themeIndex, answerIndex, mark);
       }),
       scoreCell: indexedCell(
@@ -356,14 +433,14 @@ function buildTable() {
       change: handleTableChange,
     },
   });
-  table.classList.toggle("match-finished", state.finished);
+  table.classList.toggle("match-finished", state!.finished);
   tableIndex = gameTable.createScoreTableIndex(table, {entity: "player"});
-  activeAnswerNode = state.finished || viewer ? null : tableIndex.get("answer", activeCell);
+  activeAnswerNode = state!.finished || viewer ? null : tableIndex.get("answer", activeCell);
   attachKSISelection(table);
   return table;
 }
 
-function attachKSISelection(table) {
+function attachKSISelection(table: HTMLTableElement): void {
   if (cellSelection) {
     cellSelection.unbind();
     cellSelection = null;
@@ -375,7 +452,7 @@ function attachKSISelection(table) {
     readonly: () => Boolean(state?.finished),
     coordOf: ksiCoordOf,
     cellAtCoord: ksiCellAtCoord,
-    serialize: ksiSerializeMark,
+    serialize: ksiSerializeMark as (cell: Element | null | undefined) => string,
     parse: parseKSIMarkText,
     cycle: ksiCycleMark,
     applyValues: applyKSIEdits,
@@ -391,10 +468,10 @@ function attachKSISelection(table) {
   cellSelection.bind();
 }
 
-function ksiCoordOf(cell) {
-  const player = Number(cell.dataset.player);
-  const theme = Number(cell.dataset.theme);
-  const answer = Number(cell.dataset.answer);
+function ksiCoordOf(cell: Element): CellCoord | null {
+  const player = Number((cell as HTMLElement).dataset.player);
+  const theme = Number((cell as HTMLElement).dataset.theme);
+  const answer = Number((cell as HTMLElement).dataset.answer);
   if (!Number.isInteger(player) || !Number.isInteger(theme) || !Number.isInteger(answer)) return null;
   const order = detailedPlayerOrder();
   const row = order.indexOf(player);
@@ -402,7 +479,7 @@ function ksiCoordOf(cell) {
   return {row, col: theme * QUESTION_VALUES.length + answer};
 }
 
-function ksiCellAtCoord(coord) {
+function ksiCellAtCoord(coord: CellCoord | null): HTMLElement | null {
   if (!coord) return null;
   const order = detailedPlayerOrder();
   const player = order[coord.row];
@@ -411,25 +488,25 @@ function ksiCellAtCoord(coord) {
   const theme = Math.floor(coord.col / answers);
   const answer = coord.col % answers;
   return tableIndex?.get("answer", {player, theme, answer})
-    || siRoot.querySelector(
-      `.answer-cell[data-player="${gameTable.cssEscape(player)}"][data-theme="${gameTable.cssEscape(theme)}"][data-answer="${gameTable.cssEscape(answer)}"]`,
+    || siRoot.querySelector<HTMLElement>(
+      `.answer-cell[data-player="${gameTable.cssEscape(String(player))}"][data-theme="${gameTable.cssEscape(String(theme))}"][data-answer="${gameTable.cssEscape(String(answer))}"]`,
     );
 }
 
-function ksiSerializeMark(cell) {
+function ksiSerializeMark(cell: Element): string {
   if (cell.classList.contains("right")) return "+";
   if (cell.classList.contains("wrong")) return "-";
   return "";
 }
 
 // Touch tap cycle: empty → right → wrong → empty.
-function ksiCycleMark(cell) {
+function ksiCycleMark(cell: Element): string {
   if (cell.classList.contains("right")) return "wrong";
   if (cell.classList.contains("wrong")) return "";
   return "right";
 }
 
-function parseKSIMarkText(text) {
+function parseKSIMarkText(text: string): string {
   const value = String(text || "").trim().toLowerCase();
   if (value === "") return "";
   if (["+", "1", "right", "y", "yes", "✓", "v", "да"].includes(value)) return "right";
@@ -437,15 +514,15 @@ function parseKSIMarkText(text) {
   return "";
 }
 
-function applyKSIEdits(edits) {
+function applyKSIEdits(edits: CellEdit[]): void {
   if (state?.finished || viewer) return;
   for (const {cell, value} of edits) {
-    const player = Number(cell.dataset.player);
-    const theme = Number(cell.dataset.theme);
-    const answer = Number(cell.dataset.answer);
+    const player = Number((cell as HTMLElement).dataset.player);
+    const theme = Number((cell as HTMLElement).dataset.theme);
+    const answer = Number((cell as HTMLElement).dataset.answer);
     if (!Number.isInteger(player) || !Number.isInteger(theme) || !Number.isInteger(answer)) continue;
     const mark = value === "right" ? "right" : value === "wrong" ? "wrong" : "";
-    const row = state.themes[theme]?.answers?.[player];
+    const row = state!.themes[theme]?.answers?.[player];
     if (!row) continue;
     const previousMark = row[answer];
     if (previousMark === mark) continue;
@@ -458,7 +535,7 @@ function applyKSIEdits(edits) {
   }
 }
 
-function buildResultsTable() {
+function buildResultsTable(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper";
   wrapper.appendChild(buildResultsTableInner());
@@ -469,8 +546,8 @@ function buildResultsTable() {
 // all visitors). Its content never depends on game state, so the view node is
 // built once and reused across renders — avoiding a re-fetch flash on every SSE
 // delta while this tab is open.
-let siRosterView = null;
-function rosterView() {
+let siRosterView: HTMLElement | null = null;
+function rosterView(): HTMLElement {
   if (!siRosterView) siRosterView = gameTable.buildRosterView(route.festID);
   return siRosterView;
 }
@@ -478,11 +555,11 @@ function rosterView() {
 // The «Отказы» tab: every team with a checkbox to mark it as having refused to play.
 // Mirrors the EK seed-import decline list; a checked team drops out of the «Итог»
 // ranking. Reuses the seed-import table styling for a consistent look.
-function buildRefusalsTable() {
+function buildRefusalsTable(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper";
 
-  const order = state.participants.map((_, index) => index).sort(compareParticipantNumbers);
+  const order = state!.participants.map((_, index) => index).sort(compareParticipantNumbers);
 
   const table = document.createElement("table");
   table.className = "results-table seed-import-table ksi-refusals-table";
@@ -544,7 +621,7 @@ function buildRefusalsTable() {
   return wrapper;
 }
 
-function buildResultsTableInner() {
+function buildResultsTableInner(): HTMLTableElement {
   const rows = rankedResultRows();
   const table = document.createElement("table");
   table.className = "results-table ksi-results-table";
@@ -596,11 +673,24 @@ function buildResultsTableInner() {
   return table;
 }
 
-function rankedResultRows() {
+interface ResultMetrics {
+  total: number;
+  plus: number;
+  correct: Record<number, number>;
+}
+
+interface ResultRow {
+  index: number;
+  name: string;
+  metrics: ResultMetrics;
+  placeText: string;
+}
+
+function rankedResultRows(): ResultRow[] {
   // Teams that refused to play are excluded from the ranking entirely — they take no
   // place and don't shift anyone else, mirroring how declined teams are skipped in EK
   // seeding. They appear only in the «Отказы» tab.
-  const rows = state.participants
+  const rows = state!.participants
     .map((_, index) => ({
       index,
       name: participantLabel(index),
@@ -620,7 +710,7 @@ function rankedResultRows() {
   return rows;
 }
 
-function compareResultRows(a, b) {
+function compareResultRows(a: ResultRow, b: ResultRow): number {
   if (b.metrics.total !== a.metrics.total) return b.metrics.total - a.metrics.total;
   if (b.metrics.plus !== a.metrics.plus) return b.metrics.plus - a.metrics.plus;
   for (const value of RESULT_VALUES) {
@@ -630,7 +720,7 @@ function compareResultRows(a, b) {
   return teamNameCollator.compare(a.name, b.name) || a.index - b.index;
 }
 
-function sameResultMetrics(a, b) {
+function sameResultMetrics(a: ResultMetrics, b: ResultMetrics): boolean {
   if (a.total !== b.total || a.plus !== b.plus) return false;
   for (const value of RESULT_VALUES) {
     if ((a.correct[value] || 0) !== (b.correct[value] || 0)) return false;
@@ -638,8 +728,8 @@ function sameResultMetrics(a, b) {
   return true;
 }
 
-function resultMetrics(playerIndex) {
-  const correct = {};
+function resultMetrics(playerIndex: number): ResultMetrics {
+  const correct: Record<number, number> = {};
   for (const value of QUESTION_VALUES) correct[value] = 0;
   let total = 0;
   let plus = 0;
@@ -649,7 +739,7 @@ function resultMetrics(playerIndex) {
       stickerId = stickerValue(playerIndex, themeIndex);
       if (!stickerId) continue; // unscored theme excluded from the ranking
     }
-    const row = state.themes[themeIndex]?.answers?.[playerIndex] || [];
+    const row = state!.themes[themeIndex]?.answers?.[playerIndex] || [];
     for (let answerIndex = 0; answerIndex < QUESTION_VALUES.length; answerIndex++) {
       const value = QUESTION_VALUES[answerIndex];
       const mark = row[answerIndex];
@@ -662,7 +752,7 @@ function resultMetrics(playerIndex) {
   return {total, plus, correct};
 }
 
-function renderTabs() {
+function renderTabs(): void {
   if (!siTabsRoot) return;
   siTabsRoot.replaceChildren();
   if (!isTeamMode()) {
@@ -689,17 +779,17 @@ function renderTabs() {
   }
 }
 
-function scrollFrame() {
+function scrollFrame(): Element | null {
   return siRoot.closest(".sheet-frame");
 }
 
-function rememberTabScroll(tab) {
+function rememberTabScroll(tab: string | null): void {
   const frame = scrollFrame();
   if (!tab || !frame) return;
   tabScroll.set(tab, {top: frame.scrollTop, left: frame.scrollLeft});
 }
 
-function restoreTabScroll(tab) {
+function restoreTabScroll(tab: string): void {
   const frame = scrollFrame();
   if (!frame) return;
   const pos = tabScroll.get(tab) || {top: 0, left: 0};
@@ -707,16 +797,16 @@ function restoreTabScroll(tab) {
   frame.scrollLeft = pos.left;
 }
 
-function updateResultsScrollState() {
+function updateResultsScrollState(): void {
   const frame = scrollFrame();
   if (!frame) return;
   frame.classList.toggle("results-scroll-left", isTeamMode() && activeTab === "results" && frame.scrollLeft > 1);
   frame.classList.toggle("detailed-scroll-left", isTeamMode() && activeTab === "detailed" && frame.scrollLeft > 1);
 }
 
-function detailedPlayerOrder() {
+function detailedPlayerOrder(): number[] {
   if (detailedOrderCache) return detailedOrderCache;
-  let order = state.participants.map((_, index) => index);
+  let order = state!.participants.map((_, index) => index);
   if (isTeamMode()) {
     // Teams that refused to play are dropped from the «Подробно» sheet entirely.
     order = order.filter((index) => !participantDeclined(index));
@@ -726,12 +816,12 @@ function detailedPlayerOrder() {
   return detailedOrderCache;
 }
 
-function compareParticipantNames(a, b) {
+function compareParticipantNames(a: number, b: number): number {
   const byName = teamNameCollator.compare(participantLabel(a), participantLabel(b));
   return byName || a - b;
 }
 
-function compareParticipantNumbers(a, b) {
+function compareParticipantNumbers(a: number, b: number): number {
   const na = participantNumber(a);
   const nb = participantNumber(b);
   // Numbered teams ascending; unnumbered fall to the bottom, then by name so the
@@ -744,7 +834,7 @@ function compareParticipantNumbers(a, b) {
 // setDetailedSort changes the local row order of the «Подробно» sheet and
 // re-renders. Purely a view concern — no state write, no broadcast — so it is
 // available to viewers too.
-function setDetailedSort(key) {
+function setDetailedSort(key: string): void {
   if (key !== "number" && key !== "name") return;
   if (detailedSort === key) return;
   detailedSort = key;
@@ -755,38 +845,38 @@ function setDetailedSort(key) {
 // Participants are stored as {number, name} objects in team mode — number is the
 // universal team identity — but as bare name strings in player mode / legacy
 // states. These read either shape.
-function participantName(index) {
-  const p = state.participants?.[index];
+function participantName(index: number): string {
+  const p = state!.participants?.[index];
   if (typeof p === "string") return p;
   return p && typeof p === "object" ? String(p.name ?? "") : "";
 }
 
-function participantNumber(index) {
-  const p = state.participants?.[index];
+function participantNumber(index: number): number {
+  const p = state!.participants?.[index];
   return p && typeof p === "object" ? Number(p.number) || 0 : 0;
 }
 
 // Identity key for the refused-to-play map: the team number when known (the stable
 // identity that survives roster reorders/renames), else a name fallback for legacy
 // number-less states. Returns "" when there's nothing to key on.
-function declinedKey(index) {
+function declinedKey(index: number): string {
   const number = participantNumber(index);
   if (number > 0) return `n${number}`;
   const name = participantName(index).trim().toLowerCase();
   return name ? `s${name}` : "";
 }
 
-function participantDeclined(index) {
+function participantDeclined(index: number): boolean {
   const key = declinedKey(index);
-  return key ? Boolean(state.declined?.[key]) : false;
+  return key ? Boolean(state!.declined?.[key]) : false;
 }
 
-function setParticipantDeclined(index, declined) {
+function setParticipantDeclined(index: number, declined: boolean): void {
   if (viewer) return;
   const key = declinedKey(index);
   if (!key) return;
-  if (!state.declined || typeof state.declined !== "object") state.declined = {};
-  state.declined[key] = declined;
+  if (!state!.declined || typeof state!.declined !== "object") state!.declined = {};
+  state!.declined[key] = declined;
   invalidateDetailedOrder();
   render();
   saveState(["declined", key], declined);
@@ -795,21 +885,21 @@ function setParticipantDeclined(index, declined) {
 // participantsEqual compares two participant arrays by identity (number + name),
 // tolerating both shapes, so in-place patching isn't defeated by fresh object
 // references arriving on every delta.
-function participantsEqual(a, b) {
+function participantsEqual(a: ParticipantEntry[] | null | undefined, b: ParticipantEntry[] | null | undefined): boolean {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-  const key = (p) => (typeof p === "string" ? `n:${p}` : `${p?.number || 0}:${p?.name ?? ""}`);
+  const key = (p: ParticipantEntry) => (typeof p === "string" ? `n:${p}` : `${p?.number || 0}:${p?.name ?? ""}`);
   for (let i = 0; i < a.length; i++) {
     if (key(a[i]) !== key(b[i])) return false;
   }
   return true;
 }
 
-function participantLabel(index) {
+function participantLabel(index: number): string {
   const name = participantName(index).trim();
   return name || participantFallback(index);
 }
 
-function nameCell(name, playerIndex) {
+function nameCell(name: string, playerIndex: number): HTMLElement {
   const cell = document.createElement("td");
   cell.className = "sticky sticky-name team-name";
   if (isTeamMode()) {
@@ -847,12 +937,12 @@ function nameCell(name, playerIndex) {
   input.dataset.player = String(playerIndex);
   input.value = name;
   input.placeholder = participantFallback(playerIndex);
-  input.disabled = state.finished || viewer;
+  input.disabled = state!.finished || viewer;
   cell.appendChild(input);
   return cell;
 }
 
-function indexedCell(content, className, dataset = {}) {
+function indexedCell(content: unknown, className: string, dataset: Record<string, string | number> = {}): HTMLElement {
   const cell = document.createElement("td");
   cell.className = className;
   cell.textContent = gameTable.formatDisplayText(content);
@@ -862,15 +952,15 @@ function indexedCell(content, className, dataset = {}) {
   return cell;
 }
 
-function answerCell(playerIndex, themeIndex, answerIndex, mark) {
+function answerCell(playerIndex: number, themeIndex: number, answerIndex: number, mark: string): HTMLElement {
   const cell = document.createElement("td");
   cell.className = `answer-cell theme-block ${mark}`;
-  cell.tabIndex = state.finished || viewer ? -1 : 0;
+  cell.tabIndex = state!.finished || viewer ? -1 : 0;
   cell.dataset.player = String(playerIndex);
   cell.dataset.theme = String(themeIndex);
   cell.dataset.answer = String(answerIndex);
   cell.title = answerTitle(playerIndex, themeIndex, answerIndex);
-  if (isActive(playerIndex, themeIndex, answerIndex) && !state.finished && !viewer) {
+  if (isActive(playerIndex, themeIndex, answerIndex) && !state!.finished && !viewer) {
     cell.classList.add("active");
   }
   return cell;
@@ -879,7 +969,7 @@ function answerCell(playerIndex, themeIndex, answerIndex, mark) {
 // stickerSelectCell builds the per-(team, theme) sticker picker that sits in
 // the theme's spacer column. Unselected: plain chevron. Selected: SVG icon in
 // sticker colour. A transparent <select> overlay handles interaction.
-function stickerSelectCell(playerIndex, themeIndex) {
+function stickerSelectCell(playerIndex: number, themeIndex: number): HTMLElement {
   const cell = document.createElement("td");
   cell.className = "gap ksi-sticker-cell";
   cell.dataset.player = String(playerIndex);
@@ -897,7 +987,7 @@ function stickerSelectCell(playerIndex, themeIndex) {
   select.className = "ksi-sticker-select";
   select.dataset.player = String(playerIndex);
   select.dataset.theme = String(themeIndex);
-  select.disabled = state.finished || viewer;
+  select.disabled = state!.finished || viewer;
   select.title = `${participantLabel(playerIndex)}, Т${themeIndex + 1}: стикер`;
 
   const blank = document.createElement("option");
@@ -920,10 +1010,10 @@ function stickerSelectCell(playerIndex, themeIndex) {
   return cell;
 }
 
-function applyStickerColor(select, stickerId) {
+function applyStickerColor(select: HTMLSelectElement, stickerId: string): void {
   const type = stickerId ? stickerById.get(stickerId) : null;
   const wrap = select.closest(".ksi-sticker-wrap");
-  const icon = wrap?.querySelector(".ksi-sticker-icon");
+  const icon = wrap?.querySelector<HTMLElement>(".ksi-sticker-icon");
   const svg = icon?.querySelector("svg");
   if (type && type.color) {
     if (svg) {
@@ -943,12 +1033,12 @@ function applyStickerColor(select, stickerId) {
   }
 }
 
-function setSticker(player, theme, rawId) {
-  if (!stickersEnabled() || state.finished || viewer) return;
+function setSticker(player: number, theme: number, rawId: string): void {
+  if (!stickersEnabled() || state!.finished || viewer) return;
   const id = stickerById.has(rawId) ? rawId : "";
-  if (!Array.isArray(state.stickers[theme])) return;
-  if (state.stickers[theme][player] === id) return;
-  state.stickers[theme][player] = id;
+  if (!Array.isArray(state!.stickers![theme])) return;
+  if (state!.stickers![theme][player] === id) return;
+  state!.stickers![theme][player] = id;
   recomputeTheme(player, theme);
   const scores = getScoreCache();
   gameTable.setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
@@ -963,23 +1053,23 @@ function setSticker(player, theme, rawId) {
   saveState(["stickers", theme, player], id);
 }
 
-function stickerCellNode(player, theme) {
-  return siRoot.querySelector(
-    `.ksi-sticker-cell[data-player="${gameTable.cssEscape(player)}"][data-theme="${gameTable.cssEscape(theme)}"]`,
+function stickerCellNode(player: number, theme: number): HTMLElement | null {
+  return siRoot.querySelector<HTMLElement>(
+    `.ksi-sticker-cell[data-player="${gameTable.cssEscape(String(player))}"][data-theme="${gameTable.cssEscape(String(theme))}"]`,
   );
 }
 
-function stickerSelectNode(player, theme) {
-  return siRoot.querySelector(
-    `.ksi-sticker-select[data-player="${gameTable.cssEscape(player)}"][data-theme="${gameTable.cssEscape(theme)}"]`,
+function stickerSelectNode(player: number, theme: number): HTMLSelectElement | null {
+  return siRoot.querySelector<HTMLSelectElement>(
+    `.ksi-sticker-select[data-player="${gameTable.cssEscape(String(player))}"][data-theme="${gameTable.cssEscape(String(theme))}"]`,
   );
 }
 
 // refreshStickerLimits flags a team's themes whose sticker type is used more
 // than the configured max, so organizers can spot a miscounted sheet.
-function refreshStickerLimits(player) {
+function refreshStickerLimits(player: number): void {
   if (!stickersEnabled()) return;
-  const counts = {};
+  const counts: Record<string, number> = {};
   for (let theme = 0; theme < themesCount; theme++) {
     const id = stickerValue(player, theme);
     if (id) counts[id] = (counts[id] || 0) + 1;
@@ -992,12 +1082,12 @@ function refreshStickerLimits(player) {
   }
 }
 
-function refreshAllStickerLimits() {
+function refreshAllStickerLimits(): void {
   if (!stickersEnabled()) return;
-  state.participants.forEach((_, player) => refreshStickerLimits(player));
+  state!.participants.forEach((_, player) => refreshStickerLimits(player));
 }
 
-function battleHeader() {
+function battleHeader(): HTMLElement {
   if (isTeamMode()) {
     const node = document.createElement("th");
     node.className = "sticky sticky-name battle od-detailed-team-head";
@@ -1010,7 +1100,7 @@ function battleHeader() {
   layout.className = "battle-layout";
   const title = document.createElement("span");
   title.className = "battle-title";
-  title.textContent = scheme.title || "Бой";
+  title.textContent = scheme!.title || "Бой";
   layout.appendChild(title);
 
   const label = document.createElement("label");
@@ -1018,7 +1108,7 @@ function battleHeader() {
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
   checkbox.className = "finish-toggle";
-  checkbox.checked = Boolean(state.finished);
+  checkbox.checked = Boolean(state!.finished);
   checkbox.disabled = viewer;
   const text = document.createElement("span");
   text.textContent = "Закончен";
@@ -1028,7 +1118,7 @@ function battleHeader() {
   return node;
 }
 
-function detailedNameHeader() {
+function detailedNameHeader(): HTMLElement {
   const layout = document.createElement("span");
   layout.className = "od-detailed-team-layout od-detailed-team-head-layout";
 
@@ -1054,22 +1144,22 @@ function detailedNameHeader() {
   return layout;
 }
 
-function handleTableClick(event) {
-  const cell = event.target.closest?.(".answer-cell");
-  if (!cell || state.finished || viewer) return;
+function handleTableClick(event: Event): void {
+  const cell = (event.target as HTMLElement | null)?.closest?.<HTMLElement>(".answer-cell");
+  if (!cell || state!.finished || viewer) return;
   selectCellFromNode(cell);
 }
 
-function handleTableFocusIn(event) {
-  const cell = event.target.closest?.(".answer-cell");
-  if (!cell || state.finished || viewer) return;
+function handleTableFocusIn(event: Event): void {
+  const cell = (event.target as HTMLElement | null)?.closest?.<HTMLElement>(".answer-cell");
+  if (!cell || state!.finished || viewer) return;
   selectCellFromNode(cell, {focus: false});
 }
 
-function handleTableChange(event) {
+function handleTableChange(event: Event): void {
   const target = event.target;
   if (target instanceof HTMLSelectElement && target.classList.contains("ksi-sticker-select")) {
-    if (viewer || state.finished) return;
+    if (viewer || state!.finished) return;
     const player = Number(target.dataset.player);
     const theme = Number(target.dataset.theme);
     if (!Number.isInteger(player) || !Number.isInteger(theme)) return;
@@ -1078,7 +1168,7 @@ function handleTableChange(event) {
   }
   if (target instanceof HTMLInputElement && target.classList.contains("finish-toggle")) {
     if (viewer) return;
-    state.finished = target.checked;
+    state!.finished = target.checked;
     saveState(["finished"], target.checked);
     render({preserveScroll: true});
     return;
@@ -1086,16 +1176,16 @@ function handleTableChange(event) {
   if (target instanceof HTMLInputElement && target.classList.contains("venue-input")) {
     if (viewer || isTeamMode()) return;
     const playerIndex = Number(target.dataset.player);
-    if (!Number.isInteger(playerIndex) || playerIndex < 0 || playerIndex >= state.participants.length) return;
+    if (!Number.isInteger(playerIndex) || playerIndex < 0 || playerIndex >= state!.participants.length) return;
     const name = target.value.trim();
-    state.participants[playerIndex] = name;
+    state!.participants[playerIndex] = name;
     invalidateDetailedOrder();
     saveState(["participants", playerIndex], name);
     if (isTeamMode()) render({preserveScroll: true});
   }
 }
 
-function selectCellFromNode(cell, options = {}) {
+function selectCellFromNode(cell: HTMLElement, options: {focus?: boolean} = {}): void {
   const player = Number(cell.dataset.player);
   const theme = Number(cell.dataset.theme);
   const answer = Number(cell.dataset.answer);
@@ -1103,15 +1193,15 @@ function selectCellFromNode(cell, options = {}) {
   selectCell(player, theme, answer, options);
 }
 
-function getScoreCache() {
+function getScoreCache(): ScoreCache {
   if (scoreCache) return scoreCache;
-  const themeScores = state.participants.map(() => Array(themesCount).fill(0));
+  const themeScores: number[][] = state!.participants.map(() => Array(themesCount).fill(0));
   // themeScored tracks whether a theme counts yet: in a stickers game a theme is
   // not scored until its (team, theme) sticker is chosen, so it stays blank and
   // is excluded from the total.
-  const themeScored = state.participants.map(() => Array(themesCount).fill(true));
-  const totals = state.participants.map(() => 0);
-  for (let playerIndex = 0; playerIndex < state.participants.length; playerIndex++) {
+  const themeScored: boolean[][] = state!.participants.map(() => Array(themesCount).fill(true));
+  const totals: number[] = state!.participants.map(() => 0);
+  for (let playerIndex = 0; playerIndex < state!.participants.length; playerIndex++) {
     for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
       const {value, scored} = computeThemeValue(playerIndex, themeIndex);
       themeScores[playerIndex][themeIndex] = value;
@@ -1123,15 +1213,15 @@ function getScoreCache() {
   return scoreCache;
 }
 
-function invalidateScores() {
+function invalidateScores(): void {
   scoreCache = null;
 }
 
-function invalidateDetailedOrder() {
+function invalidateDetailedOrder(): void {
   detailedOrderCache = null;
 }
 
-function resetTableIndex() {
+function resetTableIndex(): void {
   tableIndex = null;
   activeAnswerNode = null;
   clearActivePlayerRows();
@@ -1140,7 +1230,7 @@ function resetTableIndex() {
 // markContribution is the signed value of one answer mark under a sticker. It
 // mirrors games.KSIStickerMarkValue on the server so client and server scoring
 // can't drift.
-function markContribution(stickerId, mark, answerIndex) {
+function markContribution(stickerId: string, mark: string, answerIndex: number): number {
   const value = QUESTION_VALUES[answerIndex];
   switch (stickerId) {
     case "x2":
@@ -1157,8 +1247,8 @@ function markContribution(stickerId, mark, answerIndex) {
 // computeThemeValue returns one team's value for one theme and whether it is
 // scored. Plain KSI scores every theme under neutral rules; a stickers game
 // leaves a theme unscored (scored=false) until its sticker is selected.
-function computeThemeValue(player, theme) {
-  const row = state.themes[theme]?.answers?.[player] || [];
+function computeThemeValue(player: number, theme: number): {value: number; scored: boolean} {
+  const row = state!.themes[theme]?.answers?.[player] || [];
   let stickerId = STICKER_NEUTRAL;
   if (stickersEnabled()) {
     stickerId = stickerValue(player, theme);
@@ -1175,7 +1265,7 @@ function computeThemeValue(player, theme) {
 // that player's total/places — used after a mark or sticker change. Sticker
 // scoring isn't a simple per-cell delta (e.g. "empty = wrong"), so the whole
 // theme is recomputed rather than diffed.
-function recomputeTheme(player, theme) {
+function recomputeTheme(player: number, theme: number): void {
   const scores = getScoreCache();
   const prevContribution = scores.themeScored[player][theme] ? scores.themeScores[player][theme] : 0;
   const {value, scored} = computeThemeValue(player, theme);
@@ -1190,11 +1280,11 @@ function recomputeTheme(player, theme) {
 
 // themeScoreDisplay is the text shown in a theme's score cell: the value, or
 // blank for an unscored (sticker not yet chosen) theme.
-function themeScoreDisplay(scores, player, theme) {
+function themeScoreDisplay(scores: ScoreCache, player: number, theme: number): number | string {
   return scores.themeScored[player][theme] ? scores.themeScores[player][theme] : "";
 }
 
-function selectCell(player, theme, answer, options = {}) {
+function selectCell(player: number, theme: number, answer: number, options: {focus?: boolean} = {}): void {
   activeCell = {player, theme, answer};
   markActive();
   if (options.focus !== false) {
@@ -1202,13 +1292,13 @@ function selectCell(player, theme, answer, options = {}) {
   }
 }
 
-function markActive() {
+function markActive(): void {
   clearActivePlayerRows();
   if (activeAnswerNode) {
     activeAnswerNode.classList.remove("active");
     activeAnswerNode = null;
   }
-  if (state.finished || viewer || !isDetailedTabActive()) return;
+  if (state!.finished || viewer || !isDetailedTabActive()) return;
   activeAnswerNode = findActive();
   if (activeAnswerNode) {
     activeAnswerNode.classList.add("active");
@@ -1216,14 +1306,14 @@ function markActive() {
   }
 }
 
-function isActivePlayerRow(playerIndex) {
-  return !state.finished &&
+function isActivePlayerRow(playerIndex: number): boolean {
+  return !state!.finished &&
     !viewer &&
     isDetailedTabActive() &&
     activeCell.player === playerIndex;
 }
 
-function clearActivePlayerRows() {
+function clearActivePlayerRows(): void {
   if (activePlayerRows.length > 0) {
     activePlayerRows.forEach((row) => row.classList.remove("active-team-row"));
     activePlayerRows = [];
@@ -1232,28 +1322,28 @@ function clearActivePlayerRows() {
   siRoot.querySelectorAll(".active-team-row").forEach((row) => row.classList.remove("active-team-row"));
 }
 
-function markActivePlayerRows(cell) {
+function markActivePlayerRows(cell: HTMLElement | null): void {
   const row = cell?.closest?.("tr");
   if (!row) return;
   row.classList.add("active-team-row");
   activePlayerRows = [row];
 }
 
-function findActive() {
+function findActive(): HTMLElement | null {
   const indexed = tableIndex?.get("answer", activeCell);
   if (indexed) return indexed;
-  return siRoot.querySelector(
-    `.answer-cell[data-player="${gameTable.cssEscape(activeCell.player)}"][data-theme="${gameTable.cssEscape(activeCell.theme)}"][data-answer="${gameTable.cssEscape(activeCell.answer)}"]`,
+  return siRoot.querySelector<HTMLElement>(
+    `.answer-cell[data-player="${gameTable.cssEscape(String(activeCell.player))}"][data-theme="${gameTable.cssEscape(String(activeCell.theme))}"][data-answer="${gameTable.cssEscape(String(activeCell.answer))}"]`,
   );
 }
 
-function isActive(p, t, a) {
+function isActive(p: number, t: number, a: number): boolean {
   return activeCell.player === p && activeCell.theme === t && activeCell.answer === a;
 }
 
-function setMark(mark) {
-  if (state.finished || viewer || !isDetailedTabActive()) return;
-  const row = state.themes[activeCell.theme].answers[activeCell.player];
+function setMark(mark: string): void {
+  if (state!.finished || viewer || !isDetailedTabActive()) return;
+  const row = state!.themes[activeCell.theme].answers[activeCell.player];
   const previousMark = row[activeCell.answer];
   if (previousMark === mark) return;
   getScoreCache();
@@ -1264,15 +1354,15 @@ function setMark(mark) {
   saveState(["themes", activeCell.theme, "answers", activeCell.player, activeCell.answer], mark);
 }
 
-function updateAnswerCell(player, theme, answer, mark) {
+function updateAnswerCell(player: number, theme: number, answer: number, mark: string): void {
   const cell = tableIndex?.get("answer", {player, theme, answer}) ||
-    siRoot.querySelector(`.answer-cell[data-player="${gameTable.cssEscape(player)}"][data-theme="${gameTable.cssEscape(theme)}"][data-answer="${gameTable.cssEscape(answer)}"]`);
+    siRoot.querySelector<HTMLElement>(`.answer-cell[data-player="${gameTable.cssEscape(String(player))}"][data-theme="${gameTable.cssEscape(String(theme))}"][data-answer="${gameTable.cssEscape(String(answer))}"]`);
   if (!cell) return;
   gameTable.setMarkClass(cell, mark);
   cell.title = answerTitle(player, theme, answer);
 }
 
-function refreshScores() {
+function refreshScores(): void {
   if (!state?.participants) return;
   const scores = getScoreCache();
   state.participants.forEach((_, playerIndex) => {
@@ -1287,14 +1377,14 @@ function refreshScores() {
   });
 }
 
-function refreshChangedScores(player, theme) {
+function refreshChangedScores(player: number, theme: number): void {
   const scores = getScoreCache();
   gameTable.setNodeText(scoreNode("total", {player}), scores.totals[player]);
   gameTable.setNodeText(scoreNode("themeScore", {player, theme}), themeScoreDisplay(scores, player, theme));
   refreshPlaces(scores.places);
 }
 
-function refreshChangedScoreSet(changedThemes) {
+function refreshChangedScoreSet(changedThemes: Map<number, Set<number>>): void {
   if (!changedThemes || changedThemes.size === 0) return;
   const scores = getScoreCache();
   for (const [player, themes] of changedThemes.entries()) {
@@ -1306,29 +1396,29 @@ function refreshChangedScoreSet(changedThemes) {
   refreshPlaces(scores.places);
 }
 
-function refreshPlaces(places) {
-  state.participants.forEach((_, playerIndex) => {
+function refreshPlaces(places: string[]): void {
+  state!.participants.forEach((_, playerIndex) => {
     gameTable.setNodeText(scoreNode("place", {player: playerIndex}), places[playerIndex] || "");
   });
 }
 
-function scoreNode(name, values) {
+function scoreNode(name: string, values: Record<string, unknown>): HTMLElement | null | undefined {
   return tableIndex?.get(name, values);
 }
 
-function patchTable(previous = null) {
+function patchTable(previous: KSIState | null = null): boolean {
   if (!renderedTable || !tableIndex) return false;
-  const participantNamesChanged = previous?.participants && !participantsEqual(previous.participants, state.participants);
-  const changedThemes = new Map();
-  state.participants.forEach((_, playerIndex) => {
-    const input = tableIndex.get("input", {player: playerIndex});
+  const participantNamesChanged = previous?.participants && !participantsEqual(previous.participants, state!.participants);
+  const changedThemes = new Map<number, Set<number>>();
+  state!.participants.forEach((_, playerIndex) => {
+    const input = tableIndex!.get("input", {player: playerIndex}) as HTMLInputElement | null;
     if (input) {
       if (document.activeElement !== input) input.value = participantName(playerIndex);
       input.placeholder = participantFallback(playerIndex);
     }
     for (let themeIndex = 0; themeIndex < themesCount; themeIndex++) {
       for (let answerIndex = 0; answerIndex < QUESTION_VALUES.length; answerIndex++) {
-        const mark = state.themes[themeIndex].answers[playerIndex][answerIndex];
+        const mark = state!.themes[themeIndex].answers[playerIndex][answerIndex];
         const previousMark = previous?.themes?.[themeIndex]?.answers?.[playerIndex]?.[answerIndex];
         if (!previous || participantNamesChanged || previousMark !== mark) {
           updateAnswerCell(playerIndex, themeIndex, answerIndex, mark);
@@ -1345,7 +1435,7 @@ function patchTable(previous = null) {
   return true;
 }
 
-function rememberChangedTheme(changedThemes, player, theme) {
+function rememberChangedTheme(changedThemes: Map<number, Set<number>>, player: number, theme: number): void {
   let themes = changedThemes.get(player);
   if (!themes) {
     themes = new Set();
@@ -1354,7 +1444,7 @@ function rememberChangedTheme(changedThemes, player, theme) {
   themes.add(theme);
 }
 
-function canPatchState(previous, next) {
+function canPatchState(previous: KSIState | null, next: KSIState | null): boolean {
   if (!renderedTable || !previous || !next) return false;
   if (previous.finished !== next.finished) return false;
   // A sticker change re-scores whole themes and re-selects dropdowns; rebuild
@@ -1379,33 +1469,33 @@ function canPatchState(previous, next) {
   return true;
 }
 
-function answerTitle(playerIndex, themeIndex, answerIndex) {
+function answerTitle(playerIndex: number, themeIndex: number, answerIndex: number): string {
   return `${participantLabel(playerIndex)}, Т${themeIndex + 1}, ${QUESTION_VALUES[answerIndex]}`;
 }
 
-function isTeamMode() {
+function isTeamMode(): boolean {
   return scheme?.gameType === "ksi";
 }
 
-function isDetailedTabActive() {
+function isDetailedTabActive(): boolean {
   return !isTeamMode() || activeTab === "detailed";
 }
 
-function gameTitleFallback() {
+function gameTitleFallback(): string {
   return isTeamMode() ? "КСИ" : "СИ";
 }
 
-function pageTitle() {
+function pageTitle(): string {
   const gameTitle = String(scheme?.title || gameTitleFallback()).trim() || gameTitleFallback();
   const festTitle = String(fest?.title || "").trim();
   return festTitle ? `${gameTitle} · ${festTitle}` : gameTitle;
 }
 
-function participantFallback(index) {
+function participantFallback(index: number): string {
   return `${isTeamMode() ? "Команда" : "Игрок"} ${index + 1}`;
 }
 
-function handleKeydown(event) {
+function handleKeydown(event: KeyboardEvent): void {
   if (viewer) return;
   if (!isDetailedTabActive()) return;
   if (gameTable.isFormControl(event.target)) return;
@@ -1434,7 +1524,7 @@ function handleKeydown(event) {
   }
 }
 
-function setMarkForSelection(mark) {
+function setMarkForSelection(mark: string): void {
   if (state?.finished || viewer || !isDetailedTabActive()) return;
   const cells = cellSelection?.selectedCells() || [];
   if (cells.length > 1) {
@@ -1444,7 +1534,7 @@ function setMarkForSelection(mark) {
   setMark(mark);
 }
 
-function moveCell(dPlayer, dAnswer, extend = false) {
+function moveCell(dPlayer: number, dAnswer: number, extend = false): void {
   const playerOrder = detailedPlayerOrder();
   const players = playerOrder.length;
   const totalCols = themesCount * QUESTION_VALUES.length;
@@ -1467,13 +1557,13 @@ function moveCell(dPlayer, dAnswer, extend = false) {
   if (cellSelection) cellSelection.setSelection({row: nextPosition, col: column}, {row: nextPosition, col: column}, {focus: false});
 }
 
-function ksiCoordForActive() {
+function ksiCoordForActive(): CellCoord {
   const order = detailedPlayerOrder();
   const row = order.indexOf(activeCell.player);
   return {row: row < 0 ? 0 : row, col: activeCell.theme * QUESTION_VALUES.length + activeCell.answer};
 }
 
-function normalizeActiveCell() {
+function normalizeActiveCell(): void {
   if (!state?.participants?.length || themesCount <= 0) return;
   const maxColumn = themesCount * QUESTION_VALUES.length - 1;
   const column = gameTable.clamp(activeCell.theme * QUESTION_VALUES.length + activeCell.answer, 0, maxColumn);
@@ -1484,7 +1574,7 @@ function normalizeActiveCell() {
   };
 }
 
-function saveState(path, value) {
+function saveState(path: Array<string | number>, value: unknown): void {
   if (Array.isArray(path)) {
     syncState().patch(path, value);
     // Mark the just-edited answer cell as pending right away; it clears when the
@@ -1498,31 +1588,31 @@ function saveState(path, value) {
   syncState().save();
 }
 
-function answerCellNode(player, theme, answer) {
+function answerCellNode(player: string | number, theme: string | number, answer: string | number): HTMLElement | null | undefined {
   return tableIndex?.get("answer", {player, theme, answer}) ||
-    siRoot.querySelector(`.answer-cell[data-player="${gameTable.cssEscape(player)}"][data-theme="${gameTable.cssEscape(theme)}"][data-answer="${gameTable.cssEscape(answer)}"]`);
+    siRoot.querySelector<HTMLElement>(`.answer-cell[data-player="${gameTable.cssEscape(String(player))}"][data-theme="${gameTable.cssEscape(String(theme))}"][data-answer="${gameTable.cssEscape(String(answer))}"]`);
 }
 
 // refreshPendingMarkers reconciles the per-cell "pending" highlight with the
 // sync controller's un-acked edits: a cell stays marked until its own PATCH is
 // confirmed, then clears. Called after any remote update / ack and after a full
 // re-render (which rebuilds cells without the class).
-function refreshPendingMarkers() {
+function refreshPendingMarkers(): void {
   if (viewer || !stateSync?.isPending) return;
-  siRoot.querySelectorAll(".answer-cell").forEach((cell) => {
+  siRoot.querySelectorAll<HTMLElement>(".answer-cell").forEach((cell) => {
     const player = Number(cell.dataset.player);
     const theme = Number(cell.dataset.theme);
     const answer = Number(cell.dataset.answer);
-    cell.classList.toggle("pending", stateSync.isPending(["themes", theme, "answers", player, answer]));
+    cell.classList.toggle("pending", stateSync!.isPending(["themes", theme, "answers", player, answer]));
   });
 }
 
-function setHeading(text) {
+function setHeading(text: string): void {
   if (pageHeading) pageHeading.textContent = text;
   renderGameBreadcrumbs(text);
 }
 
-function renderGameBreadcrumbs(gameTitle) {
+function renderGameBreadcrumbs(gameTitle: string): void {
   if (!breadcrumbsNode || !route.festID) return;
   gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
     festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
@@ -1531,7 +1621,7 @@ function renderGameBreadcrumbs(gameTitle) {
   });
 }
 
-function connectEvents() {
+function connectEvents(): void {
   if (staticMode) {
     gameTable.scheduleStaticReload();
     return;
@@ -1539,7 +1629,7 @@ function connectEvents() {
   syncState().connect();
 }
 
-function syncState() {
+function syncState(): StateSync {
   if (stateSync) return stateSync;
   recorder = gameTable.installClientRecorder({
     scope: `game-state:${scopeGameID}`,
@@ -1551,7 +1641,7 @@ function syncState() {
   stateSync = gameTable.createStateSync({
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
-    eventsURL: gameTable.gameEventsURL(route.festID, route.gameID),
+    eventsURL: gameTable.gameEventsURL(route.festID!, route.gameID),
     scope: `game-state:${scopeGameID}`,
     getState: () => state,
     getInitialSeq: () => initialStateSeq,
@@ -1566,7 +1656,7 @@ function syncState() {
   return stateSync;
 }
 
-function connectPresence() {
+function connectPresence(): void {
   if (viewer || presence || !route.festID) return;
   presence = gameTable.createHostPresence({
     root: siRoot,
@@ -1574,16 +1664,16 @@ function connectPresence() {
     presenceURL: `/api/fest/${route.festID}/presence`,
     cursorFromElement: siPresenceCursorFromElement,
     getCursor: currentSIPresenceCursor,
-    findTarget: findSIPresenceTarget,
+    findTarget: findSIPresenceTarget as (cursor: unknown) => Element | null,
   });
   presence.connect();
 }
 
-function refreshPresence() {
+function refreshPresence(): void {
   presence?.refresh();
 }
 
-function currentSIPresenceCursor() {
+function currentSIPresenceCursor(): SIPresenceCursor | null {
   const focused = siPresenceCursorFromElement(document.activeElement);
   if (focused) return focused;
   if (!isDetailedTabActive()) return null;
@@ -1597,8 +1687,8 @@ function currentSIPresenceCursor() {
   };
 }
 
-function siPresenceCursorFromElement(element) {
-  const target = element?.closest?.(".answer-cell,.venue-input,.finish-toggle");
+function siPresenceCursorFromElement(element: Element | EventTarget | null): SIPresenceCursor | null {
+  const target = (element as HTMLElement | null)?.closest?.<HTMLElement>(".answer-cell,.venue-input,.finish-toggle");
   if (!target || !siRoot.contains(target)) return null;
   if (target.classList.contains("answer-cell")) {
     return {
@@ -1619,15 +1709,15 @@ function siPresenceCursorFromElement(element) {
   return null;
 }
 
-function findSIPresenceTarget(cursor) {
+function findSIPresenceTarget(cursor: SIPresenceCursor | null | undefined): Element | null {
   if (!cursor || cursor.app !== "si" || String(cursor.gameID) !== String(route.gameID)) return null;
   if (cursor.kind === "answer") {
     return siRoot.querySelector(
-      `.answer-cell[data-player="${gameTable.cssEscape(cursor.player)}"][data-theme="${gameTable.cssEscape(cursor.theme)}"][data-answer="${gameTable.cssEscape(cursor.answer)}"]`,
+      `.answer-cell[data-player="${gameTable.cssEscape(String(cursor.player))}"][data-theme="${gameTable.cssEscape(String(cursor.theme))}"][data-answer="${gameTable.cssEscape(String(cursor.answer))}"]`,
     );
   }
   if (cursor.kind === "participant") {
-    return siRoot.querySelector(`.venue-input[data-player="${gameTable.cssEscape(cursor.player)}"]`);
+    return siRoot.querySelector(`.venue-input[data-player="${gameTable.cssEscape(String(cursor.player))}"]`);
   }
   if (cursor.kind === "finish") {
     return siRoot.querySelector(".finish-toggle");
@@ -1635,9 +1725,9 @@ function findSIPresenceTarget(cursor) {
   return null;
 }
 
-function applyRemoteState(nextState) {
+function applyRemoteState(nextState: unknown): void {
   const previous = state;
-  state = nextState;
+  state = nextState as KSIState;
   ensureState();
   if (canPatchState(previous, state) && patchTable(previous)) {
     refreshPendingMarkers();
@@ -1655,7 +1745,9 @@ gameLoader.load()
     connectEvents();
     connectPresence();
   })
-  .catch((error) => {
+  .catch((error: unknown) => {
     setStatus("error");
     console.error(error);
   });
+
+export {};

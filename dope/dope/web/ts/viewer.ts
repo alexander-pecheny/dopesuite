@@ -1,54 +1,144 @@
-const viewerRoot = document.getElementById("viewerTable");
+// The EK spectator page (ADR-0001): read-only stages/venues/stats views with
+// floating popovers. Converted from the legacy viewer.js; a self-booting
+// side-effect module bundled by pages/viewer.ts.
+
+import {DopeTable} from "./match-table.js";
+import type {
+  CellSpec,
+  ClientRecorder,
+  EKStage,
+  NodeIndex,
+  ScopedEventMessage,
+  ScoreTableTheme,
+  ScoreTableThemeRow,
+  TeamView,
+  ThemeView,
+  Venue,
+  VenueLike,
+} from "./match-table.js";
+import {createStageCache} from "./stage-cache.js";
+import type {MatchView as CachedMatchView, StageData} from "./stage-cache.js";
+import {DopeStatsSync} from "./stats-sync.js";
+import type {StatsMatchEvent, StatsSyncGameTable} from "./stats-sync.js";
+import {buildFestGrid, buildReseedStagePanel, parseScheme} from "./fest-grid.js";
+import type {FestGridMatch, FestGridStage, FestScheme} from "./fest-grid.js";
+
+interface FestView {
+  revision?: unknown;
+  schemaJson?: unknown;
+  stages?: FestGridStage[];
+  venues?: Venue[];
+  title?: string;
+  gameName?: string;
+  [key: string]: unknown;
+}
+
+type ViewerTheme = Omit<ThemeView, "answers"> & {answers: Array<string | null | undefined>};
+
+type ViewerTeam = Omit<TeamView, "themes" | "shootoutThemes" | "correctCounts"> & {
+  themes: ViewerTheme[];
+  shootoutThemes?: ViewerTheme[];
+  correctCounts: number[];
+};
+
+type ViewerMatchView = {
+  code: string;
+  seq?: number;
+  title?: string;
+  stageCode?: string;
+  venue?: VenueLike;
+  finished?: boolean;
+  questionValues: Array<string | number>;
+  teams: ViewerTeam[];
+  [key: string]: unknown;
+};
+
+type ViewerStageMatch = FestGridMatch & {[key: string]: unknown};
+
+type ViewerStage = Omit<FestGridStage, "code" | "matches"> & {code: string; matches?: ViewerStageMatch[]; [key: string]: unknown};
+
+type ViewerRoute = {
+  mode: string;
+  festID?: string;
+  gameID?: string;
+  base?: string;
+  apiBase?: string;
+  matchCode?: string;
+  stageCode?: string;
+};
+
+// Stage frames carry their rendered match state / score index as expando
+// properties, so a live update can patch the existing table in place.
+type StageFrameElement = HTMLElement & {
+  __matchState?: ViewerMatchView | null;
+  __scoreIndex?: NodeIndex | null;
+};
+
+// Page globals the bundle environment provides (the server-inlined
+// __VIEWER_INIT__). Accessed via a structural cast, same as match-table.ts.
+interface ViewerInit {
+  canEdit?: boolean;
+  static?: boolean;
+  route?: {mode?: string; matchCode?: string; stageCode?: string; gameID?: unknown};
+  fest?: FestView | null;
+  venues?: Venue[];
+  match?: ViewerMatchView | null;
+  [key: string]: unknown;
+}
+
+const pageWindow = window as Window & {__VIEWER_INIT__?: ViewerInit | null};
+
+const viewerRoot = document.getElementById("viewerTable")!;
 const statusNode = document.getElementById("status");
-const pageHeading = document.querySelector(".host-top h1");
+const pageHeading = document.querySelector<HTMLElement>(".host-top h1");
 const viewerTabsRoot = document.getElementById("viewerTabs");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const gameTable = window.DopeTable;
+const gameTable = DopeTable;
 const setStatus = gameTable.createStatusReporter(statusNode);
 const viewerCounter = gameTable.createViewerCounter(statusNode);
 const {formatVenue, formatBattleVenue, formatBattleVenueShort, statusLabel, formatNumber, formatPlace, cssEscape, th, td} = gameTable;
 let route = currentRoute();
 const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
-const canEdit = Boolean(window.__VIEWER_INIT__?.canEdit);
+const canEdit = Boolean(pageWindow.__VIEWER_INIT__?.canEdit);
 // staticMode: served as a precomputed snapshot under DDoS lockdown. Skip the SSE
 // connection entirely and refresh by reloading the page on a jitter. Captured at
 // load time because consumeViewerInit nulls window.__VIEWER_INIT__.
-const staticMode = Boolean(window.__VIEWER_INIT__?.static);
+const staticMode = Boolean(pageWindow.__VIEWER_INIT__?.static);
 // The server scopes SSE events by NUMERIC game id (`match:<id>:<code>`), but the
 // URL only carries the game slug. Take the numeric id from the inlined init so
 // match-scope comparisons match and the focused match patches in place.
-const scopeGameID = window.__VIEWER_INIT__?.route?.gameID != null
-  ? String(window.__VIEWER_INIT__.route.gameID)
+const scopeGameID = pageWindow.__VIEWER_INIT__?.route?.gameID != null
+  ? String(pageWindow.__VIEWER_INIT__.route.gameID)
   : route.gameID;
-const editorLink = canEdit && !embedded ? gameTable.mountEditorLink(statusNode) : null;
+const editorLink = canEdit && !embedded ? gameTable.mountEditorLink() : null;
 if (!embedded && route.apiBase) gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
-let state = null;
-let recorder = null;
+let state: ViewerMatchView | null = null;
+let recorder: ClientRecorder | null = null;
 // Live SSE stream, kept at module scope so the visibility/online recovery below
 // can tear down a dead connection and re-establish it. null while disconnected.
-let events = null;
-let fest = null;
-let venues = [];
-const stageCache = window.DopeStageCache.create({
+let events: EventSource | null = null;
+let fest: FestView | null = null;
+let venues: Venue[] = [];
+const stageCache = createStageCache({
   container: viewerRoot,
-  apiBase: () => route.apiBase,
+  apiBase: () => route.apiBase!,
   schemeStages: () => (fest ? viewerStages() : []),
-  findStage: (code) => findStage(fest, code),
-  stageType: (stage) => stageType(stage),
-  getMatches: (stage) => stage?.matches || [],
+  findStage: (code) => findStage(fest!, code),
+  stageType: (stage) => stageType(stage as ViewerStage | null | undefined),
+  getMatches: (stage) => (stage as ViewerStage | null | undefined)?.matches || [],
   buildPaneContent: ({pane, stageCode, stage, data}) => {
-    if (stageType(stage) === "reseed") {
-      pane.appendChild(buildReseedStagePanel(mergedStage(fest, stageCode)));
+    if (stageType(stage as ViewerStage | null | undefined) === "reseed") {
+      pane.appendChild(buildReseedStagePanel(mergedStage(fest!, stageCode)));
     } else {
-      pane.appendChild(buildReadonlyStageTables(data));
+      pane.appendChild(buildReadonlyStageTables(data!));
     }
   },
   onStageDataChanged: ({pane, stageCode, data}) => {
     repaintStagePane(pane, stageCode, data);
   },
   onMatchUpdated: ({pane, frame, matchState, descriptor}) => {
-    paintStageFrame(frame, matchState, descriptor);
+    paintStageFrame(frame as StageFrameElement, matchState as ViewerMatchView, descriptor as ViewerStageMatch | null);
     if (pane.isConnected && !pane.hidden) scheduleReadonlyNameOverflowUpdate(frame);
   },
   onPaneShown: ({pane}) => {
@@ -56,8 +146,8 @@ const stageCache = window.DopeStageCache.create({
     updateStageScrollState(viewerRoot.closest(".sheet-frame"));
   },
 });
-let reloadTimer = null;
-let readonlyTableIndex = null;
+let reloadTimer: number | undefined;
+let readonlyTableIndex: NodeIndex | null = null;
 let viewerTabsFadeFrame = 0;
 let readonlyNameOverflowFrame = 0;
 
@@ -98,7 +188,7 @@ window.addEventListener("resize", () => {
   scheduleViewerTabsFadeUpdate();
 });
 
-async function loadCurrent() {
+async function loadCurrent(): Promise<void> {
   if (consumeViewerInit()) return;
   if (route.mode === "match") {
     await loadMatch();
@@ -118,15 +208,15 @@ async function loadCurrent() {
 // consumeViewerInit renders the first frame from server-inlined
 // window.__VIEWER_INIT__, skipping the cold API round trips. Returns true on
 // success; mismatched routes fall back to the network path.
-function consumeViewerInit() {
-  const init = window.__VIEWER_INIT__;
+function consumeViewerInit(): boolean {
+  const init = pageWindow.__VIEWER_INIT__;
   if (!init || !init.route || !init.fest) return false;
   if (init.route.mode !== route.mode) return false;
   // See consumeHostInit: don't compare festID/gameID. Server resolved slugs
   // to numeric ids, which won't string-match the URL slug.
   if (route.mode === "match" && init.route.matchCode !== route.matchCode) return false;
   if (route.mode === "stage" && init.route.stageCode !== route.stageCode) return false;
-  window.__VIEWER_INIT__ = null;
+  pageWindow.__VIEWER_INIT__ = null;
 
   adoptFestView(init.fest);
   if (Array.isArray(init.venues)) venues = init.venues;
@@ -156,43 +246,43 @@ function consumeViewerInit() {
 // navigates between games client-side, so resolve it lazily per call.
 const festCache = () => gameTable.createLocalCache(`viewer:fest:${route.festID || ""}:${route.gameID || ""}`);
 const readFestCache = () => festCache().read();
-const writeFestCache = (view) => festCache().write(view);
+const writeFestCache = (view: unknown) => festCache().write(view);
 
-function adoptFestView(view) {
+function adoptFestView(view: FestView): void {
   fest = view;
   if (Array.isArray(view?.venues)) venues = view.venues;
   stageCache.adoptFest(view);
 }
 
-function hydrateFestFromCache() {
+function hydrateFestFromCache(): boolean {
   if (fest) return true;
   const cached = readFestCache();
   if (!cached) return false;
-  adoptFestView(cached);
+  adoptFestView(cached as FestView);
   return true;
 }
 
-async function loadFest() {
+async function loadFest(): Promise<void> {
   const cached = hydrateFestFromCache();
   if (cached) renderFest();
-  const response = await fetch(route.apiBase);
+  const response = await fetch(route.apiBase!);
   if (!response.ok) throw new Error(await response.text());
-  const fresh = await response.json();
+  const fresh = (await response.json()) as FestView;
   const changed = !cached || fresh.revision !== fest?.revision;
   adoptFestView(fresh);
   writeFestCache(fresh);
   if (changed) renderFest();
 }
 
-async function loadStage() {
+async function loadStage(): Promise<void> {
   const cached = hydrateFestFromCache();
   if (cached) renderStage();
-  const stageCode = route.stageCode;
+  const stageCode = route.stageCode!;
   // Revalidate fest and fetch this stage's matches in parallel.
   // adoptFestView clears stage caches if the revision changed.
-  const festPromise = fetch(route.apiBase).then(async (response) => {
+  const festPromise = fetch(route.apiBase!).then(async (response) => {
     if (!response.ok) throw new Error(await response.text());
-    const fresh = await response.json();
+    const fresh = (await response.json()) as FestView;
     adoptFestView(fresh);
     writeFestCache(fresh);
   });
@@ -205,22 +295,22 @@ async function loadStage() {
   stageCache.prefetchAllStages();
 }
 
-function repaintStagePane(pane, stageCode, data) {
-  const stage = mergedStage(fest, stageCode);
+function repaintStagePane(pane: HTMLElement, stageCode: string, data: StageData): void {
+  const stage = mergedStage(fest!, stageCode);
   if (stageType(stage) === "reseed") {
     pane.replaceChildren(buildReseedStagePanel(stage));
     return;
   }
-  const frames = pane.querySelectorAll(".stage-match-frame");
+  const frames = pane.querySelectorAll<StageFrameElement>(".stage-match-frame");
   for (const frame of frames) {
     const code = frame.dataset.matchCode || "";
     const descriptor = data.matches.find((m) => m.code === code);
-    paintStageFrame(frame, data.stateByCode.get(code), descriptor);
+    paintStageFrame(frame, data.stateByCode.get(code) as ViewerMatchView | undefined, descriptor as ViewerStageMatch | undefined);
   }
   if (pane.isConnected && !pane.hidden) scheduleReadonlyNameOverflowUpdate(pane);
 }
 
-function paintStageFrame(frame, matchState, descriptor) {
+function paintStageFrame(frame: StageFrameElement, matchState: ViewerMatchView | null | undefined, descriptor: ViewerStageMatch | null | undefined): void {
   if (matchState) {
     // Patch scores/marks into the existing table when only those changed, so a
     // live update doesn't tear down and re-render the whole battle. Fall back
@@ -244,49 +334,49 @@ function paintStageFrame(frame, matchState, descriptor) {
   frame.replaceChildren(placeholder);
 }
 
-function buildReadonlyStageTables(data) {
+function buildReadonlyStageTables(data: StageData): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "stage-table-stack";
   for (const match of data.matches) {
-    const frame = document.createElement("section");
+    const frame = document.createElement("section") as StageFrameElement;
     frame.className = "stage-match-frame";
     frame.dataset.matchCode = match.code || "";
-    paintStageFrame(frame, data.stateByCode.get(match.code), match);
+    paintStageFrame(frame, data.stateByCode.get(match.code!) as ViewerMatchView | undefined, match as ViewerStageMatch);
     wrapper.appendChild(frame);
   }
   return wrapper;
 }
 
-async function loadMatch() {
+async function loadMatch(): Promise<void> {
   hydrateFestFromCache();
   const [matchResponse, festResponse] = await Promise.all([
-    fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode)}`),
-    fetch(route.apiBase),
+    fetch(`${route.apiBase}/matches/${encodeURIComponent(route.matchCode!)}`),
+    fetch(route.apiBase!),
   ]);
   if (!matchResponse.ok) throw new Error(await matchResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  state = await matchResponse.json();
-  adoptFestView(await festResponse.json());
+  state = (await matchResponse.json()) as ViewerMatchView;
+  adoptFestView((await festResponse.json()) as FestView);
   writeFestCache(fest);
   render();
 }
 
-async function loadRoster() {
+async function loadRoster(): Promise<void> {
   // The roster view fetches the fest-level team→players list itself; here we only
   // need the fest view for the heading/tabs. Render from cache immediately, then
   // revalidate the fest in the background.
   const cached = hydrateFestFromCache();
   if (cached) renderRoster();
-  const response = await fetch(route.apiBase);
+  const response = await fetch(route.apiBase!);
   if (!response.ok) throw new Error(await response.text());
-  const freshFest = await response.json();
+  const freshFest = (await response.json()) as FestView;
   adoptFestView(freshFest);
   writeFestCache(freshFest);
   if (route.mode !== "roster") return;
   renderRoster();
 }
 
-function renderRoster() {
+function renderRoster(): void {
   resetReadonlyTableIndex();
   setViewerMode("grid");
   setHeading("ЭК");
@@ -295,17 +385,17 @@ function renderRoster() {
   viewerRoot.replaceChildren(gameTable.buildRosterView(route.festID));
 }
 
-async function loadVenuesPage() {
+async function loadVenuesPage(): Promise<void> {
   const cached = hydrateFestFromCache();
   if (cached) renderVenues();
   const [venuesResponse, festResponse] = await Promise.all([
     fetch(`/api/fest/${route.festID}/venues`),
-    fetch(route.apiBase),
+    fetch(route.apiBase!),
   ]);
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  const freshVenues = await venuesResponse.json();
-  const freshFest = await festResponse.json();
+  const freshVenues = (await venuesResponse.json()) as Venue[];
+  const freshFest = (await festResponse.json()) as FestView;
   const changed = !cached || JSON.stringify(freshVenues) !== JSON.stringify(venues);
   venues = freshVenues;
   adoptFestView(freshFest);
@@ -313,15 +403,15 @@ async function loadVenuesPage() {
   if (changed) renderVenues();
 }
 
-async function loadStats() {
+async function loadStats(): Promise<void> {
   // Stats are an aggregate of every battle, computed from the shared stage
   // cache (the same per-match MatchViews the bracket holds). Warm it once with a
   // single /stages/matches request, deduped with the bracket prefetch; SSE
   // deltas then keep it live and renderStats reads from memory — no refetch.
   hydrateFestFromCache();
-  const response = await fetch(route.apiBase);
+  const response = await fetch(route.apiBase!);
   if (!response.ok) throw new Error(await response.text());
-  adoptFestView(await response.json());
+  adoptFestView((await response.json()) as FestView);
   writeFestCache(fest);
   await stageCache.prefetchAllStages();
   if (route.mode !== "stats") return;
@@ -330,22 +420,22 @@ async function loadStats() {
 
 // statsStagesFromCache shapes the live stage cache into the
 // [{code, matches:[MatchView]}] form computeEKPlayerStats expects.
-function statsStagesFromCache() {
-  const stages = [];
+function statsStagesFromCache(): EKStage[] {
+  const stages: EKStage[] = [];
   for (const stage of viewerStages()) {
     const data = stageCache.getData(stage.code);
     if (!data) continue;
-    const matches = [];
+    const matches: ViewerMatchView[] = [];
     for (const match of data.matches || []) {
-      const ms = data.stateByCode.get(match.code);
-      if (ms) matches.push(ms);
+      const ms = data.stateByCode.get(match.code!);
+      if (ms) matches.push(ms as ViewerMatchView);
     }
     stages.push({code: stage.code, matches});
   }
   return stages;
 }
 
-function renderStats() {
+function renderStats(): void {
   resetReadonlyTableIndex();
   setViewerMode("grid");
   setHeading("ЭК");
@@ -357,7 +447,7 @@ function renderStats() {
 // rerenderStatsTable recomputes the table from the live stage cache and swaps it
 // in. Cheap (in-memory over the cached MatchViews); no network. Re-runs the
 // name overflow pass so long player/team names get the fade + popover.
-function rerenderStatsTable() {
+function rerenderStatsTable(): void {
   const rows = gameTable.computeEKPlayerStats(statsStagesFromCache());
   viewerRoot.replaceChildren(gameTable.buildEKStatsTable(rows));
   scheduleReadonlyNameOverflowUpdate();
@@ -371,7 +461,7 @@ function rerenderStatsTable() {
 const epochTracker = gameTable.createEpochTracker();
 let epochReloadScheduled = false;
 
-function connectEvents() {
+function connectEvents(): void {
   if (staticMode) {
     gameTable.scheduleStaticReload();
     return;
@@ -379,15 +469,15 @@ function connectEvents() {
   if (events) {
     try { events.close(); } catch (_err) { /* already closed */ }
   }
-  events = new EventSource(gameTable.gameEventsURL(route.festID, route.gameID));
+  events = new EventSource(gameTable.gameEventsURL(route.festID!, route.gameID));
   events.addEventListener("lockdown", () => {
     // Server entered static mode: drop the stream and reload into the static
     // page (otherwise native EventSource would just auto-reconnect).
-    events.close();
+    events!.close();
     gameTable.scheduleStaticReload();
   });
   events.addEventListener("state", (event) => {
-    const message = gameTable.parseScopedEvent(event.data);
+    const message = gameTable.parseScopedEvent((event as MessageEvent<string>).data);
     // A changed server epoch means a restart reset the seq space; reload to
     // re-seed rather than silently dropping every post-restart delta by seq.
     if (epochTracker.changed(message) && !epochReloadScheduled) {
@@ -399,7 +489,7 @@ function connectEvents() {
     // On the stats page, fold match edits into the cache in place and recompute
     // from memory — no refetch. Other scopes don't affect the aggregate.
     if (route.mode === "stats") {
-      if (message.scope?.startsWith("match:")) statsSync.applyMatchEvent(message);
+      if (message.scope?.startsWith("match:")) statsSync.applyMatchEvent(message as unknown as StatsMatchEvent);
       return;
     }
     const matchScope = `match:${scopeGameID}:${route.matchCode}`;
@@ -413,13 +503,13 @@ function connectEvents() {
       return;
     }
     if (route.mode === "venues" && message.scope === venuesScope) {
-      venues = message.data;
+      venues = message.data as Venue[];
       renderVenues();
       setLive(true);
       return;
     }
-    if (message.scope?.startsWith("fest:") && message.data?.stages) {
-      applyFestViewEvent(message.data);
+    if (message.scope?.startsWith("fest:") && (message.data as FestView | null | undefined)?.stages) {
+      applyFestViewEvent(message.data as FestView);
       setLive(true);
       return;
     }
@@ -433,7 +523,7 @@ function connectEvents() {
   });
   events.addEventListener("viewers", (event) => {
     try {
-      viewerCounter.setCount(JSON.parse(event.data)?.count);
+      viewerCounter.setCount((JSON.parse((event as MessageEvent<string>).data) as {count?: unknown} | null)?.count);
     } catch (_err) {
       // ignore malformed viewer-count payloads
     }
@@ -450,7 +540,7 @@ function connectEvents() {
 // recovers on resume — it sits in CONNECTING while onerror has already flipped
 // the status to "error", so the spinner spins forever. On regaining
 // visibility/network, drop any non-OPEN stream and re-seed from a fresh fetch.
-function recoverLive() {
+function recoverLive(): void {
   if (staticMode || epochReloadScheduled) return;
   if (document.visibilityState !== "visible") return;
   if (events && events.readyState === EventSource.OPEN) return;
@@ -461,7 +551,7 @@ function recoverLive() {
       setLive(true);
       connectEvents();
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       setLive(false);
       console.error(error);
     });
@@ -473,7 +563,7 @@ if (!staticMode) {
   window.addEventListener("online", recoverLive);
 }
 
-function applyFestViewEvent(view) {
+function applyFestViewEvent(view: FestView): void {
   adoptFestView(view);
   writeFestCache(fest);
   if (route.mode === "stage") {
@@ -489,14 +579,14 @@ function applyFestViewEvent(view) {
 // stage tables (see the .stage-scroll-left rule in styles.css), mirroring the
 // OD/KSI behaviour. The .sheet-frame is static, so we bind the scroll listener
 // once and let updateStageScrollState run on every scroll.
-function bindStageScrollFade() {
+function bindStageScrollFade(): void {
   const scrollFrame = viewerRoot.closest(".sheet-frame");
   if (!scrollFrame) return;
   updateStageScrollState(scrollFrame);
   scrollFrame.addEventListener("scroll", () => updateStageScrollState(scrollFrame), {passive: true});
 }
 
-function updateStageScrollState(frame) {
+function updateStageScrollState(frame: Element | null): void {
   if (!frame) return;
   frame.classList.toggle("stage-scroll-left", frame.scrollLeft > 1);
 }
@@ -504,14 +594,14 @@ function updateStageScrollState(frame) {
 // SPA navigation for the viewer tab strip: same pattern as the host EK page.
 // Intercepts same-origin clicks within #viewerTabs, pushes the URL, and runs
 // loadCurrent without reloading the page.
-function bindViewerSPANavigation() {
+function bindViewerSPANavigation(): void {
   if (embedded) return;
   viewerTabsRoot?.addEventListener("click", (event) => {
     if (event.defaultPrevented) return;
     if (event.button !== 0) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const link = event.target?.closest?.("a[href]");
-    if (!link || !viewerTabsRoot.contains(link)) return;
+    const link = (event.target as Element | null)?.closest?.<HTMLAnchorElement>("a[href]");
+    if (!link || !viewerTabsRoot!.contains(link)) return;
     if (link.target && link.target !== "" && link.target !== "_self") return;
     const href = link.getAttribute("href");
     if (!href || href.startsWith("#")) return;
@@ -535,25 +625,25 @@ function bindViewerSPANavigation() {
   });
 }
 
-function runViewerCurrentRoute() {
+function runViewerCurrentRoute(): void {
   route = currentRoute();
   setStatus("saving");
   editorLink?.refresh();
   loadCurrent()
     .then(() => setLive(true))
-    .catch((error) => {
+    .catch((error: unknown) => {
       setLive(false);
       console.error(error);
     });
 }
 
-function scheduleReload() {
+function scheduleReload(): void {
   recorder?.event("reload", {mode: route.mode, matchCode: route.matchCode});
   window.clearTimeout(reloadTimer);
   reloadTimer = window.setTimeout(() => {
     loadCurrent()
       .then(() => setLive(true))
-      .catch((error) => {
+      .catch((error: unknown) => {
         setLive(false);
         console.error(error);
       });
@@ -565,19 +655,19 @@ function scheduleReload() {
 // recomputes from memory (throttled); a seq gap resyncs the bracket once
 // (debounced). The loop lives in stats-sync.js so it is shared with host.js and
 // unit-tested; this file supplies the page-specific pieces.
-const statsSync = window.DopeStatsSync.create({
+const statsSync = DopeStatsSync.create({
   stageCache,
-  gameTable,
-  matchCodeFromScope,
+  gameTable: gameTable as unknown as StatsSyncGameTable,
+  matchCodeFromScope: matchCodeFromScope as (scope: unknown) => string,
   isActive: () => route.mode === "stats",
   rerender: rerenderStatsTable,
 });
 
-function setLive(ok) {
+function setLive(ok: boolean): void {
   setStatus(ok ? "saved" : "error");
 }
 
-function renderFest() {
+function renderFest(): void {
   if (!fest) return;
   resetReadonlyTableIndex();
   setViewerMode("grid");
@@ -587,7 +677,7 @@ function renderFest() {
   viewerRoot.replaceChildren(buildFestGrid(fest, {viewer: true, basePath: route.base}));
 }
 
-function renderStage() {
+function renderStage(): void {
   if (!fest) return;
   const stageCode = route.stageCode;
   if (!stageCode) return;
@@ -603,7 +693,7 @@ function renderStage() {
   }
 }
 
-function renderVenues() {
+function renderVenues(): void {
   resetReadonlyTableIndex();
   setViewerMode("grid");
   setHeading("ЭК");
@@ -612,7 +702,7 @@ function renderVenues() {
   viewerRoot.replaceChildren(gameTable.buildVenuesTable(venues));
 }
 
-function render() {
+function render(): void {
   if (!state) return;
   setViewerMode("match");
   setHeading("ЭК");
@@ -630,7 +720,7 @@ function render() {
   updateStageScrollState(viewerRoot.closest(".sheet-frame"));
 }
 
-function applyUpdatedMatch(updated) {
+function applyUpdatedMatch(updated: ViewerMatchView): void {
   const previous = state;
   state = updated;
   if (readonlyTableIndex && canPatchMatchTable(previous, updated)) {
@@ -640,7 +730,7 @@ function applyUpdatedMatch(updated) {
   render();
 }
 
-function applyReadonlyStageMatchUpdate(updated) {
+function applyReadonlyStageMatchUpdate(updated: ViewerMatchView): void {
   const result = stageCache.applyMatchUpdate(updated);
   if (!result.found) {
     // Match not in any known stage — fest scheme probably changed.
@@ -650,11 +740,11 @@ function applyReadonlyStageMatchUpdate(updated) {
 
 // matchCodeFromScope extracts the match code from a "match:<gameID>:<code>"
 // scope (codes never contain ':', but join the tail defensively).
-function matchCodeFromScope(scope) {
+function matchCodeFromScope(scope: string): string {
   return scope.split(":").slice(2).join(":");
 }
 
-function isFocusedMatch(code) {
+function isFocusedMatch(code: string): boolean {
   return route.mode === "match" && code === route.matchCode;
 }
 
@@ -662,7 +752,7 @@ function isFocusedMatch(code) {
 // in match mode, or any match of the open stage in stage mode. A seq gap on a
 // displayed match must trigger a resync so the visible pane refreshes; a gap on
 // an off-screen match only needs its cache evicted (refetched on navigation).
-function isDisplayed(code) {
+function isDisplayed(code: string): boolean {
   if (isFocusedMatch(code)) return true;
   if (route.mode === "stage") return stageCache.stageCodeForMatch(code) === route.stageCode;
   return false;
@@ -671,9 +761,9 @@ function isDisplayed(code) {
 // matchBase returns the cached full view a delta should apply onto: the focused
 // match's `state` when we're on it, else the stage cache. null means we have no
 // base (e.g. a match in a stage we haven't fetched yet).
-function matchBase(code) {
+function matchBase(code: string): ViewerMatchView | null {
   if (isFocusedMatch(code) && state?.code === code) return state;
-  return stageCache.matchState(code);
+  return stageCache.matchState(code) as ViewerMatchView | null;
 }
 
 // handleMatchEvent applies a match-scope SSE event — a scoped delta when ops are
@@ -683,7 +773,7 @@ function matchBase(code) {
 // (forcing a fresh fetch) and resync the match we're actually showing. This
 // keeps the cached view correct-or-absent — a bug degrades to a refetch, never
 // a wrong bracket.
-function handleMatchEvent(message, matchScope) {
+function handleMatchEvent(message: ScopedEventMessage, matchScope: string): void {
   if (Array.isArray(message.ops)) {
     const code = matchCodeFromScope(message.scope);
     const base = matchBase(code);
@@ -696,13 +786,13 @@ function handleMatchEvent(message, matchScope) {
       if (isDisplayed(code)) scheduleReload();
       return;
     }
-    const next = gameTable.applyDeltaOps(base, message.ops);
+    const next = gameTable.applyDeltaOps(base, message.ops) as ViewerMatchView;
     next.seq = Number(message.seq) || prev;
     applyMatchView(next, message.scope, matchScope);
     return;
   }
-  if (message.data?.code) {
-    const view = message.data;
+  if ((message.data as ViewerMatchView | null | undefined)?.code) {
+    const view = message.data as ViewerMatchView;
     view.seq = Number(message.seq) || 0;
     applyMatchView(view, message.scope, matchScope);
     return;
@@ -713,7 +803,7 @@ function handleMatchEvent(message, matchScope) {
 
 // applyMatchView warms the stage cache for any match and re-renders the focused
 // match in place when the event is for the one we're viewing.
-function applyMatchView(view, scope, matchScope) {
+function applyMatchView(view: ViewerMatchView, scope: string, matchScope: string): void {
   applyReadonlyStageMatchUpdate(view);
   if (route.mode === "match" && scope === matchScope) {
     applyUpdatedMatch(view);
@@ -727,7 +817,7 @@ function applyMatchView(view, scope, matchScope) {
 // canPatchMatchTable: shared shape check plus the viewer's structural extras —
 // the read-only table renders the venue/title in a header and place as text
 // (with medal styling), so a change there needs a rebuild rather than a patch.
-function canPatchMatchTable(previous, next) {
+function canPatchMatchTable(previous: ViewerMatchView | null | undefined, next: ViewerMatchView | null | undefined): boolean {
   if (!previous || !next) return false;
   if (matchTitleFor(previous) !== matchTitleFor(next)) return false;
   if (!gameTable.canPatchScoreShape(previous, next)) return false;
@@ -739,21 +829,21 @@ function canPatchMatchTable(previous, next) {
   return true;
 }
 
-function patchMatchTable(index, matchState) {
+function patchMatchTable(index: NodeIndex, matchState: ViewerMatchView): void {
   gameTable.patchScoreTable(index, matchState, {formatNumber});
   // A patched player name may now overflow (or stop overflowing); refresh the
   // truncation/popover chrome. rAF-throttled, so cheap on frequent mark patches.
   scheduleReadonlyNameOverflowUpdate();
 }
 
-function resetReadonlyTableIndex() {
+function resetReadonlyTableIndex(): void {
   readonlyTableIndex = null;
 }
 
-function viewerTabItems() {
+function viewerTabItems(): Array<{href: string; label: string; key: string}> {
   const items = [
-    {href: route.base + "/", label: "Сетка", key: "grid"},
-    {href: route.base + "/venues", label: "Площадки", key: "venues"},
+    {href: route.base! + "/", label: "Сетка", key: "grid"},
+    {href: route.base! + "/venues", label: "Площадки", key: "venues"},
   ];
   viewerStages().forEach((stage) => {
     items.push({
@@ -763,16 +853,16 @@ function viewerTabItems() {
     });
   });
   // Статистика and Составы sit at the very end, after all stage tabs.
-  items.push({href: route.base + "/stats", label: "Статистика", key: "stats"});
-  items.push({href: route.base + "/roster", label: "Составы", key: "roster"});
+  items.push({href: route.base! + "/stats", label: "Статистика", key: "stats"});
+  items.push({href: route.base! + "/roster", label: "Составы", key: "roster"});
   return items;
 }
 
-function renderViewerTabs() {
+function renderViewerTabs(): void {
   if (!viewerTabsRoot || embedded || !fest) return;
   viewerTabsRoot.replaceChildren();
   const active = activeViewerTabKey();
-  let activeLink = null;
+  let activeLink: HTMLAnchorElement | null = null;
   for (const item of viewerTabItems()) {
     const link = document.createElement("a");
     link.className = "match-tab" + (item.key === active ? " active" : "");
@@ -787,7 +877,7 @@ function renderViewerTabs() {
   scrollActiveViewerTabIntoView(activeLink);
 }
 
-function activeViewerTabKey() {
+function activeViewerTabKey(): string {
   if (route.mode === "stage") return `stage:${route.stageCode}`;
   if (route.mode === "match") {
     const stageCode = state?.stageCode || stageCodeForMatch(route.matchCode);
@@ -799,7 +889,7 @@ function activeViewerTabKey() {
   return "grid";
 }
 
-function bindViewerTabsScrollFade() {
+function bindViewerTabsScrollFade(): void {
   if (!viewerTabsRoot) return;
   if (viewerTabsRoot.dataset.scrollFadeBound !== "1") {
     viewerTabsRoot.addEventListener("scroll", scheduleViewerTabsFadeUpdate, {passive: true});
@@ -808,7 +898,7 @@ function bindViewerTabsScrollFade() {
   scheduleViewerTabsFadeUpdate();
 }
 
-function scrollActiveViewerTabIntoView(activeLink) {
+function scrollActiveViewerTabIntoView(activeLink: HTMLAnchorElement | null): void {
   if (!viewerTabsRoot || !activeLink) return;
   requestAnimationFrame(() => {
     const margin = 8;
@@ -828,7 +918,7 @@ function scrollActiveViewerTabIntoView(activeLink) {
   });
 }
 
-function scheduleViewerTabsFadeUpdate() {
+function scheduleViewerTabsFadeUpdate(): void {
   if (!viewerTabsRoot || embedded) return;
   if (viewerTabsFadeFrame) cancelAnimationFrame(viewerTabsFadeFrame);
   viewerTabsFadeFrame = requestAnimationFrame(() => {
@@ -837,7 +927,7 @@ function scheduleViewerTabsFadeUpdate() {
   });
 }
 
-function updateViewerTabsScrollFade() {
+function updateViewerTabsScrollFade(): void {
   if (!viewerTabsRoot) return;
   const hasLeft = viewerTabsRoot.scrollLeft > 1;
   const hasRight = viewerTabsRoot.scrollLeft + viewerTabsRoot.clientWidth < viewerTabsRoot.scrollWidth - 1;
@@ -845,7 +935,7 @@ function updateViewerTabsScrollFade() {
   viewerTabsRoot.classList.toggle("tabs-scroll-right", hasRight);
 }
 
-function withMatchState(matchState, callback) {
+function withMatchState<T>(matchState: ViewerMatchView, callback: () => T): T {
   const previousState = state;
   state = matchState;
   try {
@@ -855,11 +945,11 @@ function withMatchState(matchState, callback) {
   }
 }
 
-function buildReadonlyTable() {
+function buildReadonlyTable(): HTMLTableElement {
   const hasShootout = shootoutThemeCount() > 0;
   const themes = readonlyThemeHeaders();
-  const rows = state.teams.map((team, teamIndex) => {
-    const themeCells = [];
+  const rows = state!.teams.map((team, teamIndex) => {
+    const themeCells: ScoreTableThemeRow[] = [];
     team.themes.forEach((theme, themeIndex) => {
       themeCells.push(readonlyThemeCells(teamIndex, theme, themeIndex, false));
     });
@@ -877,7 +967,7 @@ function buildReadonlyTable() {
 
   return gameTable.buildTwoRowScoreTable({
     className: "match-table compact-score-table ek-stage-table readonly-table",
-    nameHeader: {content: readonlyBattleTitleNode(state), className: "sticky sticky-name battle readonly-battle-head readonly-battle-with-popover"},
+    nameHeader: {content: readonlyBattleTitleNode(state!), className: "sticky sticky-name battle readonly-battle-head readonly-battle-with-popover"},
     themes,
     afterThemeHeaders: readonlyTrailingHeaders(hasShootout),
     rows,
@@ -885,7 +975,7 @@ function buildReadonlyTable() {
   });
 }
 
-function readonlyTeamNameCell(team, teamIndex) {
+function readonlyTeamNameCell(team: ViewerTeam, teamIndex: number): HTMLElement {
   const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: 2, dataset: {team: teamIndex}});
   const labelText = team.name || "";
   const layout = document.createElement("span");
@@ -907,7 +997,7 @@ function readonlyTeamNameCell(team, teamIndex) {
   return cell;
 }
 
-function scheduleReadonlyNameOverflowUpdate(root = viewerRoot) {
+function scheduleReadonlyNameOverflowUpdate(root: ParentNode = viewerRoot): void {
   if (readonlyNameOverflowFrame) cancelAnimationFrame(readonlyNameOverflowFrame);
   readonlyNameOverflowFrame = requestAnimationFrame(() => {
     readonlyNameOverflowFrame = 0;
@@ -915,10 +1005,10 @@ function scheduleReadonlyNameOverflowUpdate(root = viewerRoot) {
   });
 }
 
-function updateReadonlyNameOverflow(root = viewerRoot) {
-  const ekCells = root.querySelectorAll(".ek-team-cell");
+function updateReadonlyNameOverflow(root: ParentNode = viewerRoot): void {
+  const ekCells = root.querySelectorAll<HTMLElement>(".ek-team-cell");
   for (const cell of ekCells) {
-    const name = cell.querySelector(".od-detailed-team-name");
+    const name = cell.querySelector<HTMLElement>(".od-detailed-team-name");
     const truncated = gameTable.fitEKStageTeamName(cell, name);
     cell.classList.toggle("od-detailed-team-cell-truncated", truncated);
   }
@@ -934,15 +1024,15 @@ function updateReadonlyNameOverflow(root = viewerRoot) {
   });
 }
 
-function readonlyThemeHeaders() {
-  const themes = [];
+function readonlyThemeHeaders(): ScoreTableTheme[] {
+  const themes: ScoreTableTheme[] = [];
   for (let theme = 0; theme < regularThemeCount(); theme++) {
-    themes.push({label: `Т${theme + 1}`, questionLabels: state.questionValues});
+    themes.push({label: `Т${theme + 1}`, questionLabels: state!.questionValues});
   }
   for (let theme = 0; theme < shootoutThemeCount(); theme++) {
     themes.push({
       label: `П${theme + 1}`,
-      questionLabels: state.questionValues,
+      questionLabels: state!.questionValues,
       questionClassName: "question-head shootout-head",
       labelClassName: "theme-head shootout-head",
     });
@@ -950,8 +1040,8 @@ function readonlyThemeHeaders() {
   return themes;
 }
 
-function readonlyTrailingHeaders(hasShootout) {
-  const headers = [];
+function readonlyTrailingHeaders(hasShootout: boolean): CellSpec[] {
+  const headers: CellSpec[] = [];
   if (hasShootout) headers.push({content: "П", className: "number"});
   headers.push({content: "Σ+", className: "number"});
   for (const value of [50, 40, 30, 20, 10]) {
@@ -960,9 +1050,9 @@ function readonlyTrailingHeaders(hasShootout) {
   return headers;
 }
 
-function readonlyThemeCells(teamIndex, theme, themeIndex, isShootout) {
+function readonlyThemeCells(teamIndex: number, theme: ViewerTheme, themeIndex: number, isShootout: boolean): ScoreTableThemeRow {
   const playerCell = document.createElement("td");
-  playerCell.colSpan = state.questionValues.length;
+  playerCell.colSpan = state!.questionValues.length;
   playerCell.className = "readonly-player theme-block theme-block-top-left";
   if (isShootout) {
     playerCell.classList.add("shootout-block");
@@ -1010,8 +1100,8 @@ function readonlyThemeCells(teamIndex, theme, themeIndex, isShootout) {
   };
 }
 
-function readonlyTrailingCells(team, teamIndex, hasShootout) {
-  const cells = [];
+function readonlyTrailingCells(team: ViewerTeam, teamIndex: number, hasShootout: boolean): HTMLElement[] {
+  const cells: HTMLElement[] = [];
   if (hasShootout) {
     const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
     cells.push(td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2, dataset: {team: teamIndex}}));
@@ -1026,23 +1116,23 @@ function readonlyTrailingCells(team, teamIndex, hasShootout) {
   return cells;
 }
 
-function regularThemeCount() {
-  return state.teams[0].themes.length;
+function regularThemeCount(): number {
+  return state!.teams[0].themes.length;
 }
 
-function shootoutThemeCount() {
-  return shootoutThemesFor(state.teams[0]).length;
+function shootoutThemeCount(): number {
+  return shootoutThemesFor(state!.teams[0]).length;
 }
 
-function totalThemeCount() {
+function totalThemeCount(): number {
   return regularThemeCount() + shootoutThemeCount();
 }
 
-function shootoutThemesFor(team) {
+function shootoutThemesFor(team: ViewerTeam): ViewerTheme[] {
   return team.shootoutThemes || [];
 }
 
-function currentRoute() {
+function currentRoute(): ViewerRoute {
   const path = window.location.pathname;
   const prefix = path.match(/^\/fest\/([^/]+)\/game\/([^/]+)/);
   if (!prefix) {
@@ -1071,25 +1161,25 @@ function currentRoute() {
   return {mode: "missing"};
 }
 
-function viewerStages() {
+function viewerStages(): ViewerStage[] {
   const scheme = parseScheme(fest?.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : fest?.stages || [];
-  return stages;
+  return stages as ViewerStage[];
 }
 
-function findStage(data, code) {
+function findStage(data: FestView, code: string): ViewerStage | undefined {
   const scheme = parseScheme(data.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : data.stages || [];
-  return stages.find((stage) => stage.code === code);
+  return (stages as ViewerStage[]).find((stage) => stage.code === code);
 }
 
-function findLiveStage(data, code) {
+function findLiveStage(data: FestView | null, code: string): FestGridStage | undefined {
   return (data?.stages || []).find((stage) => stage.code === code);
 }
 
-function mergedStage(data, code) {
-  const schemeStage = findStage(data, code) || {};
-  const liveStage = findLiveStage(data, code) || {};
+function mergedStage(data: FestView, code: string): FestGridStage {
+  const schemeStage: FestGridStage = findStage(data, code) || {};
+  const liveStage: FestGridStage = findLiveStage(data, code) || {};
   return {
     ...schemeStage,
     ...liveStage,
@@ -1098,7 +1188,7 @@ function mergedStage(data, code) {
   };
 }
 
-function stageCodeForMatch(matchCode) {
+function stageCodeForMatch(matchCode: string | undefined): string {
   if (!matchCode) return "";
   for (const stage of viewerStages()) {
     if ((stage.matches || []).some((match) => match.code === matchCode)) return stage.code;
@@ -1108,7 +1198,7 @@ function stageCodeForMatch(matchCode) {
 
 const stageType = gameTable.stageType;
 
-function setHeading(text) {
+function setHeading(text: string): void {
   if (pageHeading) {
     pageHeading.textContent = "";
     pageHeading.hidden = true;
@@ -1116,7 +1206,7 @@ function setHeading(text) {
   renderGameBreadcrumbs();
 }
 
-function renderGameBreadcrumbs() {
+function renderGameBreadcrumbs(): void {
   if (!breadcrumbsNode || !route.festID) return;
   const gameTitle = fest?.gameName || currentGameTitle() || "ЭК";
   gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
@@ -1128,33 +1218,33 @@ function renderGameBreadcrumbs() {
   });
 }
 
-function breadcrumbCurrentTitle(gameTitle) {
+function breadcrumbCurrentTitle(gameTitle: string): string {
   if (route.mode === "grid") return "";
   if (route.mode === "venues") return "Площадки";
   if (route.mode === "stats") return "Статистика";
   if (route.mode === "match") return state?.title || route.matchCode || "";
-  if (route.mode === "stage") return findStage(fest, route.stageCode)?.title || route.stageCode || "";
+  if (route.mode === "stage") return findStage(fest!, route.stageCode!)?.title || route.stageCode || "";
   return gameTitle;
 }
 
-function setViewerMode(mode) {
+function setViewerMode(mode: string): void {
   viewerRoot.classList.toggle("grid-host", mode === "grid");
   viewerRoot.classList.toggle("fight-host", mode === "match");
 }
 
-function pageTitle(primary = "") {
+function pageTitle(primary = ""): string {
   const main = String(primary || currentGameTitle() || state?.title || "").trim();
   const festTitle = String(fest?.title || "").trim();
   if (main && festTitle) return `${main} · ${festTitle}`;
   return main || festTitle || "Фест";
 }
 
-function currentGameTitle() {
-  const scheme = parseScheme(fest?.schemaJson);
+function currentGameTitle(): string {
+  const scheme = parseScheme(fest?.schemaJson) as (FestScheme & {title?: unknown}) | null;
   return String(scheme?.title || "").trim();
 }
 
-function readonlyBattleTitleNode(matchState) {
+function readonlyBattleTitleNode(matchState: ViewerMatchView): HTMLElement {
   const fullLabel = matchTitleFor(matchState);
   const title = document.createElement("span");
   title.className = "readonly-battle-title";
@@ -1185,7 +1275,7 @@ function readonlyBattleTitleNode(matchState) {
   return title;
 }
 
-function matchTitleFor(matchState) {
+function matchTitleFor(matchState: ViewerMatchView | null | undefined): string {
   const venueLabel = formatBattleVenue(matchState?.venue);
   const venue = venueLabel ? ` · ${venueLabel}` : "";
   return `${matchState?.title || ""}${venue}`;
@@ -1204,7 +1294,9 @@ loadCurrent()
     setLive(true);
     connectEvents();
   })
-  .catch((error) => {
+  .catch((error: unknown) => {
     setLive(false);
     console.error(error);
   });
+
+export {};

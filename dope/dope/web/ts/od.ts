@@ -1,12 +1,127 @@
-const odRoot = document.getElementById("odTable");
-const odTabsRoot = document.getElementById("odTabs");
+// od.ts — the ОД/ЧГК game page (host + viewer): tabbed results/input sheets,
+// entry-cell navigation, shootout rounds, the Экран projector board, SSE state
+// sync. Converted from the legacy od.js; boots itself on import (ADR-0001).
+import { DopeTable } from "./match-table.js";
+import { DopeEntryModel } from "./entry-model.js";
+import type {
+  AdoptedGameSnapshot,
+  ClientRecorder,
+  GameInitLike,
+  HostPresence,
+  PatchPath,
+  ScoreTableRow,
+  ScoreTableTheme,
+  ScoreTableThemeRow,
+  StateSync,
+  VirtualKeypad,
+} from "./match-table.js";
+
+interface ODPageGlobals {
+  __GAME_INIT__?: GameInitLike | null;
+}
+
+interface ODTeam {
+  name: string;
+  city: string;
+  number?: number;
+}
+
+type ShootoutMark = "right" | "";
+
+interface ShootoutRound {
+  teams: number[];
+  entries: number[][];
+  completed: boolean[];
+  answers: ShootoutMark[][];
+}
+
+interface ODState {
+  teams: ODTeam[];
+  entries: number[][];
+  completed: boolean[];
+  shootoutRounds: ShootoutRound[];
+  answers?: unknown;
+  finished?: unknown;
+}
+
+interface ODScheme {
+  title?: string;
+  tourComp?: unknown;
+  teams?: Array<{name?: string; city?: string}>;
+  nTeams?: number;
+}
+
+interface FestInfo {
+  title?: string;
+  gameName?: string;
+}
+
+interface QuestionStat {
+  completed: boolean;
+  counts: Map<number, number>;
+  validCount: number;
+}
+
+interface EntrySelection {
+  anchorQ: number;
+  anchorRow: number;
+  focusQ: number;
+  focusRow: number;
+}
+
+interface EntryDragSelection extends EntrySelection {
+  moved: boolean;
+}
+
+interface EntrySuggestOption {
+  number: number;
+  label: string;
+}
+
+interface EntrySuggestState {
+  input: HTMLInputElement;
+  list: HTMLDivElement;
+  items: EntrySuggestOption[];
+  active: number;
+}
+
+interface UndoEntry {
+  kind: "entry-column";
+  qIndex: number;
+  previous: number[];
+}
+
+interface RankKey {
+  index: number;
+  total: number;
+  tiebreak: number[];
+}
+
+interface ScreenRowItem {
+  tr: HTMLTableRowElement;
+  group: number;
+}
+
+interface ScreenWrapper extends HTMLDivElement {
+  _screenRows?: ScreenRowItem[];
+  _screenTourLabel?: string;
+  _screenSettingsBtn?: HTMLButtonElement;
+  _screenChromeBtn?: HTMLButtonElement;
+}
+
+function closestFromTarget(target: EventTarget | null, selector: string): HTMLElement | null {
+  return target instanceof Element ? target.closest<HTMLElement>(selector) : null;
+}
+
+const odRoot = document.getElementById("odTable") as HTMLElement;
+const odTabsRoot = document.getElementById("odTabs") as HTMLElement;
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector(".host-top h1");
 const progressNode = document.getElementById("odProgress");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
-const gameTable = window.DopeTable;
-const entryModel = window.DopeEntryModel;
+const gameTable = DopeTable;
+const entryModel = DopeEntryModel;
 const {th, td, option} = gameTable;
 const setStatus = gameTable.createStatusReporter(statusNode);
 const viewerCounter = gameTable.createViewerCounter(statusNode);
@@ -35,49 +150,50 @@ let scopeGameID = route.gameID;
 // staticMode: served as a precomputed snapshot under DDoS lockdown. Skip the SSE
 // connection and refresh by reloading on a jitter. Captured before the loader
 // nulls window.__GAME_INIT__.
-const staticMode = Boolean(window.__GAME_INIT__?.static);
-const canEdit = Boolean(window.__GAME_INIT__?.canEdit);
+const gameInit = (window as Window & ODPageGlobals).__GAME_INIT__;
+const staticMode = Boolean(gameInit?.static);
+const canEdit = Boolean(gameInit?.canEdit);
 // Экран (projector board) settings ship in the init payload (shared per game so
 // every host sees the same board). Capture before the loader nulls __GAME_INIT__.
-const initScreenSettings = (window.__GAME_INIT__?.screenSettings &&
-  typeof window.__GAME_INIT__.screenSettings === "object")
-  ? window.__GAME_INIT__.screenSettings
+const initScreenSettings: unknown = (gameInit?.screenSettings &&
+  typeof gameInit.screenSettings === "object")
+  ? gameInit.screenSettings
   : {};
 document.body.classList.toggle("viewer-readonly", viewer);
 if (viewer) {
-  if (canEdit) gameTable.mountEditorLink(statusNode);
+  if (canEdit) gameTable.mountEditorLink();
 } else {
-  gameTable.mountViewerLink(statusNode);
+  gameTable.mountViewerLink();
 }
 gameTable.mountGameDownloads({apiBase: route.apiBase, canEdit});
-let scheme = null;
-let state = null;
-let fest = null;
+let scheme!: ODScheme;
+let state!: ODState;
+let fest: FestInfo | null = null;
 let initialStateSeq = 0; // game-state scope seq at page render; seeds the SSE client's lastSeq
 let initialStateEpoch = ""; // server epoch at page render; seeds the SSE client's epoch baseline
-let tourLengths = [];
+let tourLengths: number[] = [];
 let totalQuestions = 0;
-let renderedTab = null;
-let questionStatsCache = null;
-let activeEntryEditor = null;
-let activeEntryRows = [];
-let stateSync = null;
-let recorder = null;
-let presence = null;
-const tabCache = new Map();
-const tabScroll = new Map();
-const resultsExpandedTours = new Set();
-const resultsExpandedShootouts = new Set();
-let numberToIndexCache = null;
-let entrySuggest = null;
-let entrySelection = null;
-let entryDragSelection = null;
+let renderedTab: string | null = null;
+let questionStatsCache: QuestionStat[] | null = null;
+let activeEntryEditor: {cell: HTMLElement; input: HTMLInputElement} | null = null;
+let activeEntryRows: Element[] = [];
+let stateSync: StateSync | null = null;
+let recorder: ClientRecorder | null = null;
+let presence: HostPresence | null = null;
+const tabCache = new Map<string, HTMLElement>();
+const tabScroll = new Map<string, {top: number; left: number}>();
+const resultsExpandedTours = new Set<number>();
+const resultsExpandedShootouts = new Set<number>();
+let numberToIndexCache: Map<number, number> | null = null;
+let entrySuggest: EntrySuggestState | null = null;
+let entrySelection: EntrySelection | null = null;
+let entryDragSelection: EntryDragSelection | null = null;
 let entrySuppressClickSelection = false;
-let invertOverlay = null; // floating yin-yang "Инвертировать" button, positioned over the active column
-let entryKeypad = null; // floating virtual numeric keypad shown for cell entry on touch devices
+let invertOverlay: HTMLButtonElement | null = null; // floating yin-yang "Инвертировать" button, positioned over the active column
+let entryKeypad: VirtualKeypad | null = null; // floating virtual numeric keypad shown for cell entry on touch devices
 const coarsePointer = typeof window.matchMedia === "function" &&
   window.matchMedia("(pointer: coarse)").matches;
-const undoStack = [];
+const undoStack: UndoEntry[] = [];
 
 // Two-tone yin-yang for the "Инвертировать" button. The dark lobe/dot use
 // currentColor and the light lobe/dot use the surface colour, so it reads on
@@ -99,7 +215,7 @@ const ENTRY_SELECTION_CLASSES = [
   "entry-selection-right",
 ];
 
-const TABS = [
+const TABS: Array<{key: string; label: string}> = [
   {key: "results", label: "Итог"},
   {key: "detailed", label: "Подробно"},
   {key: "input", label: "Ввод"},
@@ -111,7 +227,7 @@ const TABS = [
   {key: "roster", label: "Составы"},
 ];
 
-function tabFromHash() {
+function tabFromHash(): string | null {
   const key = (window.location.hash || "").replace(/^#/, "");
   return TABS.some((t) => t.key === key) ? key : null;
 }
@@ -135,7 +251,7 @@ window.addEventListener("resize", () => {
 // (Replaces the old auto-detect-fullscreen heuristic — projection is now an
 // intentional toggle, not something inferred from window geometry.)
 let chromeHidden = false;
-function setChromeHidden(on) {
+function setChromeHidden(on: boolean): void {
   chromeHidden = on;
   document.body.classList.toggle("is-fullscreen", on);
   if (renderedTab === "screen") {
@@ -143,7 +259,7 @@ function setChromeHidden(on) {
     updateScreenControls();
   }
 }
-async function toggleChrome() {
+async function toggleChrome(): Promise<void> {
   if (!chromeHidden) {
     setChromeHidden(true);
     try {
@@ -179,31 +295,31 @@ const gameLoader = gameTable.createGameDataLoader({
 // and renders the first frame. On the "init" path the snapshot also carries the
 // raw __GAME_INIT__ payload, the only source with the SSE seq/epoch baseline and
 // the unnumbered-teams flag.
-function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}) {
+function adoptGameSnapshot({scheme: nextScheme, state: nextState, fest: nextFest, init}: AdoptedGameSnapshot): void {
   if (init) {
     if (init.gameID != null) scopeGameID = String(init.gameID);
     if (init.seq != null) initialStateSeq = Number(init.seq) || 0;
     if (init.epoch != null) initialStateEpoch = String(init.epoch);
     if (init.teamsUnnumbered && !viewer) gameTable.mountUnnumberedBanner(route.festID);
   }
-  scheme = nextScheme;
-  state = nextState;
-  fest = nextFest || null;
+  scheme = nextScheme as ODScheme;
+  state = nextState as ODState;
+  fest = (nextFest as FestInfo | null) || null;
   initFromScheme();
   ensureState();
   invalidateAllCaches();
   render();
 }
 
-async function revalidateAll() {
+async function revalidateAll(): Promise<void> {
   const prevSchemeJSON = JSON.stringify(scheme);
   const prevStateJSON = JSON.stringify(state);
   const fresh = await gameTable.fetchGameData(route);
   const freshSchemeJSON = JSON.stringify(fresh.scheme);
   const freshStateJSON = JSON.stringify(fresh.state);
-  scheme = fresh.scheme;
-  state = fresh.state;
-  fest = fresh.fest;
+  scheme = fresh.scheme as ODScheme;
+  state = fresh.state as ODState;
+  fest = (fresh.fest as FestInfo | null) || null;
   gameLoader.writeSnapshot(fresh);
   if (freshSchemeJSON === prevSchemeJSON && freshStateJSON === prevStateJSON) return;
   initFromScheme();
@@ -212,15 +328,15 @@ async function revalidateAll() {
   render();
 }
 
-function initFromScheme() {
+function initFromScheme(): void {
   tourLengths = parseTourComp(scheme.tourComp);
   totalQuestions = tourLengths.reduce((acc, n) => acc + n, 0);
 }
 
-function parseTourComp(value) {
+function parseTourComp(value: unknown): number[] {
   if (Array.isArray(value)) return value.map((n) => Number(n) || 0).filter((n) => n > 0);
   if (typeof value === "string") {
-    const out = [];
+    const out: number[] = [];
     for (const segment of value.split(",")) {
       const seg = segment.trim();
       if (!seg) continue;
@@ -239,8 +355,8 @@ function parseTourComp(value) {
   return [15];
 }
 
-function ensureState() {
-  if (!state || typeof state !== "object") state = {};
+function ensureState(): void {
+  if (!state || typeof state !== "object") state = {} as ODState;
   if (!Array.isArray(state.teams)) {
     state.teams = (scheme.teams || []).map((team) => ({name: team.name || "", city: team.city || ""}));
   }
@@ -252,7 +368,7 @@ function ensureState() {
   if (!Array.isArray(state.entries)) state.entries = [];
   while (state.entries.length < totalQuestions) state.entries.push([]);
   state.entries = state.entries.slice(0, totalQuestions).map((row) => {
-    const arr = Array.isArray(row) ? row.slice(0, n) : [];
+    const arr: unknown[] = Array.isArray(row) ? row.slice(0, n) : [];
     while (arr.length < n) arr.push(0);
     return arr.map((v) => {
       const num = Number(v);
@@ -270,11 +386,17 @@ function ensureState() {
   delete state.finished;
 }
 
-function normalizeShootoutRound(round) {
-  const source = round && typeof round === "object" ? round : {};
-  const seen = new Set();
-  const teams = [];
-  const rawTeams = Array.isArray(source.teams) ? source.teams : [];
+function normalizeShootoutRound(round: unknown): ShootoutRound {
+  const source = (round && typeof round === "object" ? round : {}) as {
+    teams?: unknown;
+    answers?: unknown;
+    questions?: unknown;
+    entries?: unknown;
+    completed?: unknown;
+  };
+  const seen = new Set<number>();
+  const teams: number[] = [];
+  const rawTeams: unknown[] = Array.isArray(source.teams) ? source.teams : [];
   for (const value of rawTeams) {
     const number = Number(value);
     if (!Number.isInteger(number) || number <= 0 || seen.has(number)) continue;
@@ -282,28 +404,28 @@ function normalizeShootoutRound(round) {
     teams.push(number);
   }
 
-  let rawAnswers = Array.isArray(source.answers) ? source.answers : [];
+  let rawAnswers: unknown[] = Array.isArray(source.answers) ? source.answers : [];
   if (rawAnswers.length === 0 && Array.isArray(source.questions)) rawAnswers = source.questions;
   const answers = rawAnswers.map((row) => {
-    const values = Array.isArray(row) ? row.slice(0, teams.length) : [];
+    const values: unknown[] = Array.isArray(row) ? row.slice(0, teams.length) : [];
     while (values.length < teams.length) values.push("");
     return values.map(normalizeShootoutMark);
   });
-  let rawEntries = Array.isArray(source.entries) ? source.entries : [];
+  let rawEntries: unknown[] = Array.isArray(source.entries) ? source.entries : [];
   if (rawEntries.length === 0 && answers.length > 0) {
     rawEntries = answers.map((row) =>
       teams.filter((_, index) => normalizeShootoutMark(row?.[index]) === "right"));
   }
   const questionCount = Math.max(teams.length > 0 ? 1 : 0, answers.length, rawEntries.length);
   while (answers.length < questionCount) {
-    answers.push(Array(teams.length).fill(""));
+    answers.push(Array<ShootoutMark>(teams.length).fill(""));
   }
-  const entries = [];
+  const entries: number[][] = [];
   for (let questionIndex = 0; questionIndex < questionCount; questionIndex++) {
-    const rawRow = Array.isArray(rawEntries[questionIndex]) ? rawEntries[questionIndex] : [];
+    const rawRow: unknown[] = Array.isArray(rawEntries[questionIndex]) ? rawEntries[questionIndex] as unknown[] : [];
     entries.push(normalizeShootoutEntryRowForTeams(rawRow, teams));
   }
-  let completed;
+  let completed: boolean[];
   if (Array.isArray(source.completed)) {
     completed = source.completed.slice(0, questionCount).map(Boolean);
     while (completed.length < questionCount) completed.push(false);
@@ -311,19 +433,19 @@ function normalizeShootoutRound(round) {
     completed = answers.map((row) => (row || []).some((mark) => normalizeShootoutMark(mark) === "right"));
     while (completed.length < questionCount) completed.push(false);
   }
-  const normalized = {teams, entries, completed, answers};
+  const normalized: ShootoutRound = {teams, entries, completed, answers};
   for (let questionIndex = 0; questionIndex < entries.length; questionIndex++) {
     syncShootoutAnswersFromEntries(normalized, questionIndex);
   }
   return normalized;
 }
 
-function normalizeShootoutMark(value) {
+function normalizeShootoutMark(value: unknown): ShootoutMark {
   return value === "right" ? "right" : "";
 }
 
-function normalizeShootoutEntryRow(row, length) {
-  const values = Array.isArray(row) ? row.slice(0, length) : [];
+function normalizeShootoutEntryRow(row: unknown, length: number): number[] {
+  const values: unknown[] = Array.isArray(row) ? row.slice(0, length) : [];
   while (values.length < length) values.push(0);
   return values.map((value) => {
     const number = Number(value);
@@ -331,8 +453,8 @@ function normalizeShootoutEntryRow(row, length) {
   });
 }
 
-function normalizeShootoutEntryRowForTeams(row, teams) {
-  const out = Array(teams.length).fill(0);
+function normalizeShootoutEntryRowForTeams(row: unknown, teams: number[]): number[] {
+  const out = Array<number>(teams.length).fill(0);
   for (const value of normalizeShootoutEntryRow(row, teams.length)) {
     if (!value) continue;
     const participantIndex = teams.indexOf(value);
@@ -341,14 +463,14 @@ function normalizeShootoutEntryRowForTeams(row, teams) {
   return out;
 }
 
-function syncShootoutAnswersFromEntries(round, questionIndex) {
+function syncShootoutAnswersFromEntries(round: ShootoutRound | null | undefined, questionIndex: number): void {
   if (!round) return;
   const row = normalizeShootoutEntryRowForTeams(round.entries?.[questionIndex], round.teams);
   if (!Array.isArray(round.entries)) round.entries = [];
   round.entries[questionIndex] = row;
   if (!Array.isArray(round.answers)) round.answers = [];
-  while (round.answers.length <= questionIndex) round.answers.push(Array(round.teams.length).fill(""));
-  const answerRow = Array(round.teams.length).fill("");
+  while (round.answers.length <= questionIndex) round.answers.push(Array<ShootoutMark>(round.teams.length).fill(""));
+  const answerRow = Array<ShootoutMark>(round.teams.length).fill("");
   for (const number of row) {
     if (!number) continue;
     const participantIndex = round.teams.indexOf(number);
@@ -357,7 +479,7 @@ function syncShootoutAnswersFromEntries(round, questionIndex) {
   round.answers[questionIndex] = answerRow;
 }
 
-function invalidateAllCaches() {
+function invalidateAllCaches(): void {
   rememberTabScroll(activeTab);
   activeEntryEditor = null;
   closeEntrySuggest();
@@ -367,21 +489,21 @@ function invalidateAllCaches() {
   tabCache.clear();
 }
 
-function invalidateScoreCaches() {
+function invalidateScoreCaches(): void {
   questionStatsCache = null;
   invalidateTabCache("detailed", "results", "screen");
 }
 
-function invalidateShootoutCaches() {
+function invalidateShootoutCaches(): void {
   invalidateTabCache("input", "detailed", "results", "screen");
 }
 
-function teamNumber(teamIndex) {
+function teamNumber(teamIndex: number): number {
   const value = Number(state.teams[teamIndex]?.number);
   return Number.isInteger(value) && value > 0 ? value : 0;
 }
 
-function allTeamsNumbered() {
+function allTeamsNumbered(): boolean {
   if (!state.teams.length) return false;
   for (let i = 0; i < state.teams.length; i++) {
     if (!teamNumber(i)) return false;
@@ -389,7 +511,7 @@ function allTeamsNumbered() {
   return true;
 }
 
-function teamIndexByNumber(number) {
+function teamIndexByNumber(number: number): number {
   if (!Number.isInteger(number) || number < 1) return -1;
   if (!numberToIndexCache) {
     numberToIndexCache = new Map();
@@ -402,12 +524,12 @@ function teamIndexByNumber(number) {
   return found === undefined ? -1 : found;
 }
 
-function numbersPageURL() {
+function numbersPageURL(): string {
   if (!route.festID) return "#";
   return `/host/fest/${route.festID}/numbers`;
 }
 
-function invalidateTabCache(...tabs) {
+function invalidateTabCache(...tabs: string[]): void {
   if (tabs.includes(activeTab)) rememberTabScroll(activeTab);
   for (const tab of tabs) {
     const pane = tabCache.get(tab);
@@ -416,11 +538,11 @@ function invalidateTabCache(...tabs) {
   }
 }
 
-function questionStats() {
+function questionStats(): QuestionStat[] {
   if (questionStatsCache) return questionStatsCache;
   questionStatsCache = [];
   for (let q = 0; q < totalQuestions; q++) {
-    const counts = new Map();
+    const counts = new Map<number, number>();
     if (state.completed[q]) {
       const entries = state.entries[q] || [];
       for (const value of entries) {
@@ -438,14 +560,14 @@ function questionStats() {
   return questionStatsCache;
 }
 
-function teamTookQuestion(teamIndex, qIndex, stats = questionStats()) {
+function teamTookQuestion(teamIndex: number, qIndex: number, stats: QuestionStat[] = questionStats()): boolean {
   return Boolean(stats[qIndex]?.counts.has(teamIndex));
 }
 
-function render() {
+function render(): void {
   if (!state || !scheme) return;
   if (renderedTab === "input" && activeTab !== "input") closeEntryEditor();
-  const renderedPane = tabCache.get(renderedTab);
+  const renderedPane = renderedTab === null ? undefined : tabCache.get(renderedTab);
   if (renderedPane?.isConnected) rememberTabScroll(renderedTab);
   setHeading(scheme.title || "ОД");
   document.title = pageTitle();
@@ -467,7 +589,7 @@ function render() {
   refreshPresence();
 }
 
-function getTabPane(tab) {
+function getTabPane(tab: string): HTMLElement {
   const cached = tabCache.get(tab);
   if (cached) return cached;
   let node;
@@ -484,17 +606,17 @@ function getTabPane(tab) {
   return pane;
 }
 
-function scrollFrame() {
-  return document.querySelector(".sheet-frame");
+function scrollFrame(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(".sheet-frame");
 }
 
-function rememberTabScroll(tab) {
+function rememberTabScroll(tab: string | null): void {
   const frame = scrollFrame();
   if (!tab || !frame) return;
   tabScroll.set(tab, {top: frame.scrollTop, left: frame.scrollLeft});
 }
 
-function restoreTabScroll(tab) {
+function restoreTabScroll(tab: string): void {
   const frame = scrollFrame();
   if (!frame) return;
   const pos = tabScroll.get(tab) || {top: 0, left: 0};
@@ -502,20 +624,20 @@ function restoreTabScroll(tab) {
   frame.scrollLeft = pos.left;
 }
 
-function updateResultsScrollState() {
+function updateResultsScrollState(): void {
   const frame = scrollFrame();
   if (!frame) return;
   frame.classList.toggle("results-scroll-left", activeTab === "results" && frame.scrollLeft > 1);
   frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && frame.scrollLeft > 1);
 }
 
-function pageTitle() {
+function pageTitle(): string {
   const gameTitle = String(fest?.gameName || scheme?.title || "ОД").trim() || "ОД";
   const festTitle = String(fest?.title || "").trim();
   return festTitle ? `${gameTitle} · ${festTitle}` : gameTitle;
 }
 
-function toggleResultsTour(tourIndex) {
+function toggleResultsTour(tourIndex: number): void {
   if (resultsExpandedTours.has(tourIndex)) resultsExpandedTours.delete(tourIndex);
   else resultsExpandedTours.add(tourIndex);
   rememberTabScroll("results");
@@ -523,7 +645,7 @@ function toggleResultsTour(tourIndex) {
   render();
 }
 
-function toggleResultsShootout(roundIndex) {
+function toggleResultsShootout(roundIndex: number): void {
   if (resultsExpandedShootouts.has(roundIndex)) resultsExpandedShootouts.delete(roundIndex);
   else resultsExpandedShootouts.add(roundIndex);
   rememberTabScroll("results");
@@ -531,13 +653,13 @@ function toggleResultsShootout(roundIndex) {
   render();
 }
 
-function updateHeaderProgress() {
+function updateHeaderProgress(): void {
   if (!progressNode) return;
   const lastQ = lastEnteredQuestion();
   progressNode.textContent = lastQ ? `Введён вопрос ${lastQ}` : "Игра не началась";
 }
 
-function renderTabs() {
+function renderTabs(): void {
   odTabsRoot.replaceChildren();
   for (const tab of TABS) {
     const btn = document.createElement("button");
@@ -560,15 +682,15 @@ function renderTabs() {
 
 // === Ввод ===
 
-function countValidEntries(qIndex, stats = questionStats()) {
+function countValidEntries(qIndex: number, stats: QuestionStat[] = questionStats()): number {
   return stats[qIndex]?.validCount || 0;
 }
 
-function questionCounts(qIndex) {
+function questionCounts(qIndex: number): number {
   return state.completed[qIndex] ? countValidEntries(qIndex) : 0;
 }
 
-function buildInputView() {
+function buildInputView(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "od-input-wrap";
   if (!allTeamsNumbered()) {
@@ -585,11 +707,11 @@ function buildInputView() {
   return wrapper;
 }
 
-function updateEntrySelectionSoon() {
+function updateEntrySelectionSoon(): void {
   window.requestAnimationFrame(updateEntrySelectionUI);
 }
 
-function updateEntrySelectionUI() {
+function updateEntrySelectionUI(): void {
   odRoot.querySelectorAll(".entry-cell.entry-selected, .entry-cell.entry-selection-anchor, .entry-cell.entry-selection-top, .entry-cell.entry-selection-bottom, .entry-cell.entry-selection-left, .entry-cell.entry-selection-right").forEach((cell) => {
     cell.classList.remove(...ENTRY_SELECTION_CLASSES);
   });
@@ -606,7 +728,7 @@ function updateEntrySelectionUI() {
         if (q === selection.qEnd) cell.classList.add("entry-selection-right");
       }
     }
-    const anchor = entryCellNode(entrySelection.anchorQ, entrySelection.anchorRow);
+    const anchor = entryCellNode(entrySelection!.anchorQ, entrySelection!.anchorRow);
     if (anchor) anchor.classList.add("entry-selection-anchor");
   }
   positionInvertOverlay();
@@ -616,7 +738,7 @@ function updateEntrySelectionUI() {
 // <body> (fixed-positioned) so it can sit in the slim gap above the question
 // numbers without the entry table's `contain: paint` clipping it, and survives
 // table re-renders so its spin animation isn't cut short.
-function ensureInvertOverlay() {
+function ensureInvertOverlay(): HTMLButtonElement {
   if (invertOverlay) return invertOverlay;
   const button = document.createElement("button");
   button.type = "button";
@@ -644,15 +766,15 @@ function ensureInvertOverlay() {
 // column's number, or hides it when there's no eligible target (not the input
 // tab, no cursor, a locked column, viewer mode, or the column scrolled out of
 // the table's visible width).
-function positionInvertOverlay() {
+function positionInvertOverlay(): void {
   const overlay = invertOverlay;
   if (!overlay) return;
   const hide = () => { overlay.hidden = true; };
   if (viewer || activeTab !== "input" || !entrySelection) return hide();
   const q = entrySelection.focusQ;
   if (!Number.isInteger(q) || q < 0 || q >= totalQuestions || state.completed[q]) return hide();
-  const head = odRoot.querySelector(
-    `.entry-table:not(.od-shootout-entry-table) thead tr:first-child th[data-q="${gameTable.cssEscape(q)}"]`);
+  const head = odRoot.querySelector<HTMLElement>(
+    `.entry-table:not(.od-shootout-entry-table) thead tr:first-child th[data-q="${gameTable.cssEscape(String(q))}"]`);
   const frame = scrollFrame();
   if (!head || !frame) return hide();
   const r = head.getBoundingClientRect();
@@ -678,7 +800,7 @@ function positionInvertOverlay() {
 // steps between cells and its digit keys type into the active editor —
 // mirroring the physical-keyboard paths in handleEntryKeydown/handleEntryInput
 // so the keypad and a hardware keyboard stay interchangeable.
-function ensureEntryKeypad() {
+function ensureEntryKeypad(): VirtualKeypad {
   if (entryKeypad) return entryKeypad;
   entryKeypad = gameTable.installVirtualKeypad({
     onDigit: typeIntoActiveEditor,
@@ -690,7 +812,7 @@ function ensureEntryKeypad() {
 
 // navigateActiveEntryEditor moves the open editor by (dCol, dRow). Shootout
 // cells step by round/question; normal cells by question column / team row.
-function navigateActiveEntryEditor(dCol, dRow) {
+function navigateActiveEntryEditor(dCol: number, dRow: number): void {
   if (!activeEntryEditor) return;
   const {cell} = activeEntryEditor;
   const rowIndex = Number(cell.dataset.row);
@@ -705,7 +827,7 @@ function navigateActiveEntryEditor(dCol, dRow) {
 // typeIntoActiveEditor / backspaceActiveEditor mutate the focused input the way
 // a key press would (respecting the caret/selection) and dispatch a synthetic
 // `input` event so handleEntryInput validates and persists the value as usual.
-function typeIntoActiveEditor(ch) {
+function typeIntoActiveEditor(ch: string): void {
   const input = activeEntryEditor?.input;
   if (!input) return;
   const start = input.selectionStart ?? input.value.length;
@@ -716,7 +838,7 @@ function typeIntoActiveEditor(ch) {
   input.dispatchEvent(new Event("input", {bubbles: true}));
 }
 
-function backspaceActiveEditor() {
+function backspaceActiveEditor(): void {
   const input = activeEntryEditor?.input;
   if (!input) return;
   let start = input.selectionStart ?? input.value.length;
@@ -731,7 +853,7 @@ function backspaceActiveEditor() {
 }
 
 let invertListenersAttached = false;
-function attachInvertListeners() {
+function attachInvertListeners(): void {
   if (invertListenersAttached) return;
   invertListenersAttached = true;
   // Capture-phase catches the table's own horizontal scroll so the button
@@ -740,7 +862,7 @@ function attachInvertListeners() {
   window.addEventListener("resize", positionInvertOverlay);
 }
 
-function normalizedEntrySelection() {
+function normalizedEntrySelection(): {qStart: number; qEnd: number; rowStart: number; rowEnd: number} | null {
   if (!entrySelection) return null;
   const qStart = Math.max(0, Math.min(entrySelection.anchorQ, entrySelection.focusQ));
   const qEnd = Math.min(totalQuestions - 1, Math.max(entrySelection.anchorQ, entrySelection.focusQ));
@@ -750,7 +872,7 @@ function normalizedEntrySelection() {
   return {qStart, qEnd, rowStart, rowEnd};
 }
 
-function setEntrySelection(anchorQ, anchorRow, focusQ = anchorQ, focusRow = anchorRow, options = {}) {
+function setEntrySelection(anchorQ: number, anchorRow: number, focusQ: number = anchorQ, focusRow: number = anchorRow, options: {focus?: boolean; preventScroll?: boolean} = {}): void {
   if (viewer) return;
   anchorQ = gameTable.clamp(Number(anchorQ), 0, totalQuestions - 1);
   focusQ = gameTable.clamp(Number(focusQ), 0, totalQuestions - 1);
@@ -765,11 +887,11 @@ function setEntrySelection(anchorQ, anchorRow, focusQ = anchorQ, focusRow = anch
   }
 }
 
-function entryCellNode(qIndex, rowIndex) {
-  return odRoot.querySelector(`.entry-cell[data-q="${gameTable.cssEscape(qIndex)}"][data-row="${gameTable.cssEscape(rowIndex)}"]:not([data-entry-kind="shootout"])`);
+function entryCellNode(qIndex: number, rowIndex: number): HTMLElement | null {
+  return odRoot.querySelector<HTMLElement>(`.entry-cell[data-q="${gameTable.cssEscape(String(qIndex))}"][data-row="${gameTable.cssEscape(String(rowIndex))}"]:not([data-entry-kind="shootout"])`);
 }
 
-function entryCellPosition(cell) {
+function entryCellPosition(cell: HTMLElement | null | undefined): {q: number; row: number} | null {
   if (!cell || isShootoutEntryCell(cell)) return null;
   const q = Number(cell.dataset.q);
   const row = Number(cell.dataset.row);
@@ -777,12 +899,12 @@ function entryCellPosition(cell) {
   return {q, row};
 }
 
-function selectedEntryText() {
+function selectedEntryText(): string {
   const selection = normalizedEntrySelection();
   if (!selection) return "";
-  const lines = [];
+  const lines: string[] = [];
   for (let row = selection.rowStart; row <= selection.rowEnd; row++) {
-    const cols = [];
+    const cols: string[] = [];
     for (let q = selection.qStart; q <= selection.qEnd; q++) {
       const value = state.entries[q]?.[row] || 0;
       cols.push(value ? String(value) : "");
@@ -796,7 +918,7 @@ function selectedEntryText() {
 // numbered teams: a column holding {2,4,5} of ten teams becomes {1,3,6,7,8,9,10}.
 // It is its own inverse, so a second invert restores the original — no
 // confirmation needed. Triggered by the per-column yin-yang header button.
-function invertEntryColumn(qIndex) {
+function invertEntryColumn(qIndex: number): void {
   if (viewer) return;
   if (!Number.isInteger(qIndex) || qIndex < 0 || qIndex >= totalQuestions) return;
   if (state.completed[qIndex]) return;
@@ -819,12 +941,12 @@ function invertEntryColumn(qIndex) {
   focusEntrySelection();
 }
 
-function pushUndoEntry(entry) {
+function pushUndoEntry(entry: UndoEntry): void {
   undoStack.push(entry);
   while (undoStack.length > UNDO_LIMIT) undoStack.shift();
 }
 
-function performUndo() {
+function performUndo(): boolean {
   if (viewer || undoStack.length === 0) return false;
   const entry = undoStack.pop();
   if (!entry) return false;
@@ -853,11 +975,11 @@ function performUndo() {
   return false;
 }
 
-function clearSelectedEntryCells() {
+function clearSelectedEntryCells(): void {
   const selection = normalizedEntrySelection();
   if (!selection || viewer) return;
   closeEntryEditor();
-  const cleared = [];
+  const cleared: Array<[number, number]> = [];
   for (let q = selection.qStart; q <= selection.qEnd; q++) {
     for (let row = selection.rowStart; row <= selection.rowEnd; row++) {
       if (state.entries[q]?.[row]) {
@@ -877,10 +999,10 @@ function clearSelectedEntryCells() {
   focusEntrySelection();
 }
 
-function focusEntrySelection() {
+function focusEntrySelection(): void {
   if (!entrySelection) return;
   window.requestAnimationFrame(() => {
-    const cell = entryCellNode(entrySelection.focusQ, entrySelection.focusRow);
+    const cell = entryCellNode(entrySelection!.focusQ, entrySelection!.focusRow);
     if (cell) {
       cell.focus({preventScroll: true});
       markActiveEntryRow(cell);
@@ -889,7 +1011,7 @@ function focusEntrySelection() {
   });
 }
 
-function pasteEntryClipboard(text) {
+function pasteEntryClipboard(text: string): void {
   const selection = normalizedEntrySelection();
   if (!selection || viewer) return;
   const rows = entryModel.parseClipboard(text);
@@ -898,7 +1020,7 @@ function pasteEntryClipboard(text) {
   const teams = state.teams.map((_, i) => ({label: teamLabel(i), number: teamNumber(i)}));
   const startQ = selection.qStart;
   const startRow = selection.rowStart;
-  const changedCells = [];
+  const changedCells: Array<[number, number, number]> = [];
   let lastQ = startQ;
   let lastRow = startRow;
   for (let rowOffset = 0; rowOffset < rows.length; rowOffset++) {
@@ -928,7 +1050,7 @@ function pasteEntryClipboard(text) {
   focusEntrySelection();
 }
 
-function startEntryEditWithText(cell, text) {
+function startEntryEditWithText(cell: HTMLElement, text: string): void {
   const pos = entryCellPosition(cell);
   if (!pos) return;
   openEntryEditor(cell);
@@ -939,7 +1061,7 @@ function startEntryEditWithText(cell, text) {
   activeEntryEditor.input.setSelectionRange(activeEntryEditor.input.value.length, activeEntryEditor.input.value.length);
 }
 
-function moveEntrySelection(dRow, dQ, extend) {
+function moveEntrySelection(dRow: number, dQ: number, extend: boolean): void {
   if (!entrySelection) {
     setEntrySelection(0, 0);
     return;
@@ -950,10 +1072,10 @@ function moveEntrySelection(dRow, dQ, extend) {
   else setEntrySelection(nextQ, nextRow);
 }
 
-function handleEntryMouseDown(event) {
+function handleEntryMouseDown(event: MouseEvent): void {
   if (viewer || event.button !== 0) return;
   if (event.target instanceof HTMLInputElement) return;
-  const cell = event.target.closest?.(".entry-cell");
+  const cell = closestFromTarget(event.target, ".entry-cell");
   const pos = entryCellPosition(cell);
   if (!pos) return;
   event.preventDefault();
@@ -967,9 +1089,9 @@ function handleEntryMouseDown(event) {
   document.addEventListener("mouseup", handleEntryMouseUp, {once: true});
 }
 
-function handleEntryMouseOver(event) {
+function handleEntryMouseOver(event: MouseEvent): void {
   if (!entryDragSelection || viewer) return;
-  const pos = entryCellPosition(event.target.closest?.(".entry-cell"));
+  const pos = entryCellPosition(closestFromTarget(event.target, ".entry-cell"));
   if (!pos) return;
   if (pos.q !== entryDragSelection.focusQ || pos.row !== entryDragSelection.focusRow) {
     entryDragSelection.moved = true;
@@ -979,18 +1101,18 @@ function handleEntryMouseOver(event) {
   }
 }
 
-function handleEntryMouseUp() {
+function handleEntryMouseUp(): void {
   entryDragSelection = null;
 }
 
-function handleEntryDoubleClick(event) {
+function handleEntryDoubleClick(event: MouseEvent): void {
   if (viewer) return;
-  const cell = event.target.closest?.(".entry-cell");
-  if (!entryCellPosition(cell)) return;
+  const cell = closestFromTarget(event.target, ".entry-cell");
+  if (!cell || !entryCellPosition(cell)) return;
   openEntryEditor(cell);
 }
 
-function handleEntryCopy(event) {
+function handleEntryCopy(event: ClipboardEvent): void {
   if (viewer) return;
   if (event.target instanceof HTMLInputElement) return;
   const text = selectedEntryText();
@@ -999,7 +1121,7 @@ function handleEntryCopy(event) {
   event.clipboardData?.setData("text/plain", text);
 }
 
-function handleEntryPaste(event) {
+function handleEntryPaste(event: ClipboardEvent): void {
   if (viewer) return;
   if (event.target instanceof HTMLInputElement) return;
   const text = event.clipboardData?.getData("text/plain") || "";
@@ -1008,7 +1130,7 @@ function handleEntryPaste(event) {
   pasteEntryClipboard(text);
 }
 
-function handleEntryCellKeydown(event, cell) {
+function handleEntryCellKeydown(event: KeyboardEvent, cell: HTMLElement): void {
   if (viewer) return;
   if (!entryCellPosition(cell)) return;
   if (event.key === "ArrowLeft") {
@@ -1055,7 +1177,7 @@ function handleEntryCellKeydown(event, cell) {
 
 // entryQuestionHeadCell renders a question-number header tagged with its column
 // index, which the floating invert button (positionInvertOverlay) targets.
-function entryQuestionHeadCell(qIndex, displayNumber, className, stat) {
+function entryQuestionHeadCell(qIndex: number, displayNumber: number, className: string, stat: QuestionStat | undefined): HTMLElement {
   const cell = th("", className);
   cell.dataset.q = String(qIndex);
   applyEntryQuestionHeadContent(cell, displayNumber, stat);
@@ -1065,7 +1187,7 @@ function entryQuestionHeadCell(qIndex, displayNumber, className, stat) {
 // applyEntryQuestionHeadContent stacks the number of teams that took the
 // question above the question number once it's ticked (completed) — mirroring
 // the Подробно page's column headers. Before it's ticked, just the number shows.
-function applyEntryQuestionHeadContent(cell, displayNumber, stat) {
+function applyEntryQuestionHeadContent(cell: HTMLElement, displayNumber: number, stat: QuestionStat | undefined): void {
   cell.textContent = "";
   if (stat?.completed) {
     cell.appendChild(detailedQuestionHeadLabel(displayNumber, stat));
@@ -1076,14 +1198,14 @@ function applyEntryQuestionHeadContent(cell, displayNumber, stat) {
 
 // refreshEntryQuestionHead re-renders one Ввод column header in place (the input
 // pane is cached and not rebuilt when a column is ticked or its entries change).
-function refreshEntryQuestionHead(qIndex) {
+function refreshEntryQuestionHead(qIndex: number): void {
   if (!Number.isInteger(qIndex)) return;
-  const cell = odRoot.querySelector(`.entry-q-head[data-q="${gameTable.cssEscape(qIndex)}"]`);
+  const cell = odRoot.querySelector<HTMLElement>(`.entry-q-head[data-q="${gameTable.cssEscape(String(qIndex))}"]`);
   if (!cell) return;
   applyEntryQuestionHeadContent(cell, qIndex + 1, questionStats()[qIndex]);
 }
 
-function buildInputTable() {
+function buildInputTable(): HTMLTableElement {
   const n = state.teams.length;
   if (!viewer) {
     ensureInvertOverlay();
@@ -1164,7 +1286,7 @@ function buildInputTable() {
   return table;
 }
 
-function buildInputShootoutTable() {
+function buildInputShootoutTable(): HTMLElement | null {
   if (!allTeamsNumbered() || state.shootoutRounds.length === 0) return null;
   const wrap = document.createElement("div");
   wrap.className = "od-shootout-entry-wrap";
@@ -1253,8 +1375,17 @@ function buildInputShootoutTable() {
   return wrap;
 }
 
-function shootoutInputQuestions() {
-  const questions = [];
+interface ShootoutInputQuestion {
+  round: ShootoutRound;
+  roundIndex: number;
+  questionIndex: number;
+  number: number;
+  firstInRound: boolean;
+  lastInRound: boolean;
+}
+
+function shootoutInputQuestions(): ShootoutInputQuestion[] {
+  const questions: ShootoutInputQuestion[] = [];
   let number = 1;
   state.shootoutRounds.forEach((round, roundIndex) => {
     const count = round.entries?.length || 0;
@@ -1273,9 +1404,9 @@ function shootoutInputQuestions() {
   return questions;
 }
 
-function shootoutInputTeamNumbers() {
-  const seen = new Set();
-  const numbers = [];
+function shootoutInputTeamNumbers(): number[] {
+  const seen = new Set<number>();
+  const numbers: number[] = [];
   for (const round of state.shootoutRounds) {
     for (const number of round.teams || []) {
       if (!number || seen.has(number)) continue;
@@ -1286,7 +1417,7 @@ function shootoutInputTeamNumbers() {
   return numbers;
 }
 
-function shootoutMetaCell() {
+function shootoutMetaCell(): HTMLTableCellElement {
   const cell = document.createElement("th");
   cell.className = "od-shootout-meta-cell";
   const inner = document.createElement("div");
@@ -1299,7 +1430,7 @@ function shootoutMetaCell() {
   return cell;
 }
 
-function shootoutThemeHeaders() {
+function shootoutThemeHeaders(): ScoreTableTheme[] {
   let questionNumber = 1;
   return state.shootoutRounds.map((round, roundIndex) => {
     const questionLabels = round.answers.map(() => questionNumber++);
@@ -1312,7 +1443,7 @@ function shootoutThemeHeaders() {
   });
 }
 
-function shootoutControlsHeaderCell(attrs = {}, options = {}) {
+function shootoutControlsHeaderCell(attrs: {rowSpan?: number} = {}, options: {includeAddRound?: boolean; roundIndex?: number} = {}): HTMLTableCellElement {
   const cell = document.createElement("th");
   cell.className = "od-shootout-controls-head";
   if (attrs.rowSpan) cell.rowSpan = attrs.rowSpan;
@@ -1333,7 +1464,7 @@ function shootoutControlsHeaderCell(attrs = {}, options = {}) {
   }
 
   const roundIndexes = Number.isInteger(options.roundIndex)
-    ? [options.roundIndex]
+    ? [options.roundIndex as number]
     : state.shootoutRounds.map((_, index) => index);
   roundIndexes.forEach((roundIndex) => {
     const round = state.shootoutRounds[roundIndex];
@@ -1367,11 +1498,11 @@ function shootoutControlsHeaderCell(attrs = {}, options = {}) {
   return cell;
 }
 
-function shootoutControlsBodyCell() {
+function shootoutControlsBodyCell(): HTMLElement {
   return td("", "od-shootout-controls-cell");
 }
 
-function shootoutTeamCell(number) {
+function shootoutTeamCell(number: number): HTMLTableCellElement {
   const cell = document.createElement("td");
   cell.className = "od-shootout-team-cell";
   const teamIndex = teamIndexByNumber(number);
@@ -1382,11 +1513,11 @@ function shootoutTeamCell(number) {
   return cell;
 }
 
-function shootoutExcludedCell(tourEnd) {
+function shootoutExcludedCell(tourEnd: boolean): HTMLElement {
   return td("", "od-shootout-excluded" + (tourEnd ? " entry-tour-end" : ""));
 }
 
-function shootoutLockCell(roundIndex, questionIndex, className) {
+function shootoutLockCell(roundIndex: number, questionIndex: number, className: string): HTMLTableCellElement {
   const cell = document.createElement("th");
   cell.className = className;
   const label = document.createElement("label");
@@ -1404,7 +1535,7 @@ function shootoutLockCell(roundIndex, questionIndex, className) {
   return cell;
 }
 
-function shootoutEntryCell(roundIndex, questionIndex, rowIndex, validationCounts, tourEnd = false) {
+function shootoutEntryCell(roundIndex: number, questionIndex: number, rowIndex: number, validationCounts: Map<number, number> | undefined, tourEnd = false): HTMLTableCellElement {
   const cell = document.createElement("td");
   cell.className = "entry-cell od-shootout-check-cell" + (tourEnd ? " entry-tour-end" : "");
   cell.dataset.entryKind = "shootout";
@@ -1431,7 +1562,7 @@ function shootoutEntryCell(roundIndex, questionIndex, rowIndex, validationCounts
   return cell;
 }
 
-function buildInputGate() {
+function buildInputGate(): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "od-input-gate";
   const msg = document.createElement("p");
@@ -1449,7 +1580,7 @@ function buildInputGate() {
   return wrap;
 }
 
-function lockCell(qIndex, className) {
+function lockCell(qIndex: number, className: string): HTMLTableCellElement {
   const cell = document.createElement("th");
   cell.className = className;
   const label = document.createElement("label");
@@ -1465,25 +1596,25 @@ function lockCell(qIndex, className) {
   return cell;
 }
 
-function makeViewerCheckboxReadonly(checkbox) {
+function makeViewerCheckboxReadonly(checkbox: HTMLInputElement): void {
   if (!viewer) return;
   checkbox.setAttribute("aria-disabled", "true");
   checkbox.addEventListener("click", preventViewerCheckboxToggle);
   checkbox.addEventListener("keydown", preventViewerCheckboxKeydown);
 }
 
-function preventViewerCheckboxToggle(event) {
+function preventViewerCheckboxToggle(event: Event): void {
   event.preventDefault();
   event.stopPropagation();
 }
 
-function preventViewerCheckboxKeydown(event) {
+function preventViewerCheckboxKeydown(event: KeyboardEvent): void {
   if (event.key !== " " && event.key !== "Enter") return;
   event.preventDefault();
   event.stopPropagation();
 }
 
-function entryCell(qIndex, rowIndex, tourEnd, validationCounts) {
+function entryCell(qIndex: number, rowIndex: number, tourEnd: boolean, validationCounts: Map<number, number>): HTMLTableCellElement {
   const td = document.createElement("td");
   td.className = "entry-cell" + (tourEnd ? " entry-tour-end" : "");
   td.dataset.q = String(qIndex);
@@ -1495,11 +1626,11 @@ function entryCell(qIndex, rowIndex, tourEnd, validationCounts) {
   return td;
 }
 
-function entryCellShowsCoffin(qIndex, rowIndex) {
+function entryCellShowsCoffin(qIndex: number, rowIndex: number): boolean {
   return rowIndex === 0 && Boolean(state.completed[qIndex]) && countValidEntries(qIndex) === 0;
 }
 
-function applyEntryCellDisplay(td, qIndex, rowIndex) {
+function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number): void {
   if (entryCellShowsCoffin(qIndex, rowIndex)) {
     td.textContent = "⚰️";
     td.classList.add("entry-coffin");
@@ -1510,7 +1641,7 @@ function applyEntryCellDisplay(td, qIndex, rowIndex) {
   td.textContent = value ? String(value) : "";
 }
 
-function refreshEntryColumnCoffin(qIndex) {
+function refreshEntryColumnCoffin(qIndex: number): void {
   if (!Number.isInteger(qIndex)) return;
   if (activeEntryEditor) {
     const editorCell = activeEntryEditor.cell;
@@ -1520,14 +1651,14 @@ function refreshEntryColumnCoffin(qIndex) {
   if (cell) applyEntryCellDisplay(cell, qIndex, 0);
 }
 
-function buildInputValidationCounts() {
-  const counts = [];
+function buildInputValidationCounts(): Array<Map<number, number>> {
+  const counts: Array<Map<number, number>> = [];
   for (let q = 0; q < totalQuestions; q++) counts.push(inputValidationCounts(q));
   return counts;
 }
 
-function inputValidationCounts(qIndex) {
-  const counts = new Map();
+function inputValidationCounts(qIndex: number): Map<number, number> {
+  const counts = new Map<number, number>();
   const list = state.entries[qIndex] || [];
   for (const value of list) {
     if (!value) continue;
@@ -1536,7 +1667,7 @@ function inputValidationCounts(qIndex) {
   return counts;
 }
 
-function markEntryCellValidity(cell, qIndex, counts = inputValidationCounts(qIndex)) {
+function markEntryCellValidity(cell: HTMLElement, qIndex: number, counts: Map<number, number> = inputValidationCounts(qIndex)): void {
   if (isShootoutEntryCell(cell)) {
     markShootoutEntryCellValidity(cell);
     return;
@@ -1557,14 +1688,14 @@ function markEntryCellValidity(cell, qIndex, counts = inputValidationCounts(qInd
   syncActiveEditorValidity(cell);
 }
 
-function buildShootoutInputValidationCounts(roundIndex) {
+function buildShootoutInputValidationCounts(roundIndex: number): Array<Map<number, number>> {
   const round = state.shootoutRounds[roundIndex];
   if (!round) return [];
   return round.entries.map((_, questionIndex) => shootoutInputValidationCounts(roundIndex, questionIndex));
 }
 
-function shootoutInputValidationCounts(roundIndex, questionIndex) {
-  const counts = new Map();
+function shootoutInputValidationCounts(roundIndex: number, questionIndex: number): Map<number, number> {
+  const counts = new Map<number, number>();
   const round = state.shootoutRounds[roundIndex];
   const list = round?.entries?.[questionIndex] || [];
   for (const value of list) {
@@ -1574,7 +1705,7 @@ function shootoutInputValidationCounts(roundIndex, questionIndex) {
   return counts;
 }
 
-function markShootoutEntryCellValidity(cell, counts = null) {
+function markShootoutEntryCellValidity(cell: HTMLElement, counts: Map<number, number> | null | undefined = null): void {
   const roundIndex = Number(cell.dataset.round);
   const questionIndex = Number(cell.dataset.question);
   const rowIndex = Number(cell.dataset.row);
@@ -1597,50 +1728,50 @@ function markShootoutEntryCellValidity(cell, counts = null) {
   syncShootoutCheckValidity(cell);
 }
 
-function syncActiveEditorValidity(cell) {
+function syncActiveEditorValidity(cell: Element): void {
   if (!activeEntryEditor || activeEntryEditor.cell !== cell) return;
   activeEntryEditor.input.classList.toggle("entry-input-bad", cell.classList.contains("entry-input-bad"));
   activeEntryEditor.input.classList.toggle("entry-input-dup", cell.classList.contains("entry-input-dup"));
 }
 
-function syncShootoutCheckValidity(cell) {
+function syncShootoutCheckValidity(cell: Element): void {
   const checkbox = cell.querySelector(".shootout-entry-checkbox");
   if (!checkbox) return;
   checkbox.classList.toggle("entry-input-bad", cell.classList.contains("entry-input-bad"));
   checkbox.classList.toggle("entry-input-dup", cell.classList.contains("entry-input-dup"));
 }
 
-function updateInputValidity(qIndex = null) {
+function updateInputValidity(qIndex: number | null = null): void {
   const selector = qIndex === null ? ".entry-cell" : `.entry-cell[data-q="${qIndex}"]`;
-  const cells = odRoot.querySelectorAll(selector);
+  const cells = odRoot.querySelectorAll<HTMLElement>(selector);
   const counts = qIndex === null ? buildInputValidationCounts() : inputValidationCounts(qIndex);
   for (const cell of cells) {
     if (isShootoutEntryCell(cell)) {
       markShootoutEntryCellValidity(cell);
     } else {
       const qi = Number(cell.dataset.q);
-      markEntryCellValidity(cell, qi, qIndex === null ? counts[qi] : counts);
+      markEntryCellValidity(cell, qi, Array.isArray(counts) ? counts[qi] : counts);
     }
   }
 }
 
-function updateShootoutInputValidity(roundIndex, questionIndex) {
-  const selector = `.entry-cell[data-entry-kind="shootout"][data-round="${gameTable.cssEscape(roundIndex)}"][data-question="${gameTable.cssEscape(questionIndex)}"]`;
+function updateShootoutInputValidity(roundIndex: number, questionIndex: number): void {
+  const selector = `.entry-cell[data-entry-kind="shootout"][data-round="${gameTable.cssEscape(String(roundIndex))}"][data-question="${gameTable.cssEscape(String(questionIndex))}"]`;
   const counts = shootoutInputValidationCounts(roundIndex, questionIndex);
-  for (const cell of odRoot.querySelectorAll(selector)) {
+  for (const cell of odRoot.querySelectorAll<HTMLElement>(selector)) {
     markShootoutEntryCellValidity(cell, counts);
   }
 }
 
-function isShootoutEntryCell(cell) {
-  return cell?.classList?.contains("od-shootout-check-cell");
+function isShootoutEntryCell(cell: Element | null | undefined): boolean {
+  return Boolean(cell?.classList?.contains("od-shootout-check-cell"));
 }
 
-function shootoutEntryValue(roundIndex, questionIndex, rowIndex) {
+function shootoutEntryValue(roundIndex: number, questionIndex: number, rowIndex: number): number {
   return state.shootoutRounds[roundIndex]?.entries?.[questionIndex]?.[rowIndex] || 0;
 }
 
-function setShootoutEntryValue(roundIndex, questionIndex, rowIndex, value) {
+function setShootoutEntryValue(roundIndex: number, questionIndex: number, rowIndex: number, value: number): boolean {
   const round = state.shootoutRounds[roundIndex];
   if (!round?.entries?.[questionIndex]) return false;
   round.entries[questionIndex][rowIndex] = value;
@@ -1648,28 +1779,28 @@ function setShootoutEntryValue(roundIndex, questionIndex, rowIndex, value) {
   return true;
 }
 
-function shootoutQuestionCompleted(roundIndex, questionIndex) {
+function shootoutQuestionCompleted(roundIndex: number, questionIndex: number): boolean {
   return Boolean(state.shootoutRounds[roundIndex]?.completed?.[questionIndex]);
 }
 
-function handleEntryClick(event) {
+function handleEntryClick(event: MouseEvent): void {
   if (event.target instanceof HTMLInputElement && event.target.classList.contains("entry-input")) return;
   if (event.target instanceof HTMLInputElement && event.target.classList.contains("shootout-entry-checkbox")) return;
-  const cell = event.target.closest?.(".entry-cell");
+  const cell = closestFromTarget(event.target, ".entry-cell");
   if (!cell || viewer) return;
   if (entrySuppressClickSelection) {
     entrySuppressClickSelection = false;
     return;
   }
   if (isShootoutEntryCell(cell)) {
-    cell.querySelector(".shootout-entry-checkbox")?.focus();
+    cell.querySelector<HTMLElement>(".shootout-entry-checkbox")?.focus();
     return;
   }
   const pos = entryCellPosition(cell);
   if (pos) setEntrySelection(pos.q, pos.row, pos.q, pos.row, {preventScroll: true});
 }
 
-function handleEntryInput(event) {
+function handleEntryInput(event: Event): void {
   const input = event.target;
   if (!(input instanceof HTMLInputElement) || !input.classList.contains("entry-input")) return;
   const parsed = parseEntryInput(input);
@@ -1706,13 +1837,13 @@ function handleEntryInput(event) {
   saveState(["entries", qIndex, rowIndex], parsed.value);
 }
 
-function handleEntryKeydown(event) {
+function handleEntryKeydown(event: KeyboardEvent): void {
   const input = event.target;
   if (input instanceof HTMLInputElement && input.classList.contains("entry-lock-checkbox")) {
     handleEntryLockKeydown(event, input);
     return;
   }
-  const cell = event.target.closest?.(".entry-cell");
+  const cell = closestFromTarget(event.target, ".entry-cell");
   if (!(input instanceof HTMLInputElement) && cell) {
     handleEntryCellKeydown(event, cell);
     return;
@@ -1780,7 +1911,7 @@ function handleEntryKeydown(event) {
 // handleEntryLockKeydown drives the column lock (tickbox) from the keyboard:
 // Space toggles it natively; Enter toggles too (native checkboxes ignore Enter);
 // ArrowDown drops back into the column's top entry cell.
-function handleEntryLockKeydown(event, checkbox) {
+function handleEntryLockKeydown(event: KeyboardEvent, checkbox: HTMLInputElement): void {
   if (viewer) return;
   if (event.key === "Enter") {
     event.preventDefault();
@@ -1800,9 +1931,9 @@ function handleEntryLockKeydown(event, checkbox) {
 }
 
 // focusLockCheckbox moves keyboard focus to a (non-shootout) column's tickbox.
-function focusLockCheckbox(qIndex) {
-  const cb = odRoot.querySelector(
-    `.entry-lock-checkbox[data-q="${gameTable.cssEscape(qIndex)}"]:not([data-entry-kind="shootout"])`);
+function focusLockCheckbox(qIndex: number): boolean {
+  const cb = odRoot.querySelector<HTMLInputElement>(
+    `.entry-lock-checkbox[data-q="${gameTable.cssEscape(String(qIndex))}"]:not([data-entry-kind="shootout"])`);
   if (!cb) return false;
   // Moving onto the tickbox is a move, not a copy: drop the cell cursor so it
   // doesn't stay highlighted on the row below.
@@ -1813,7 +1944,7 @@ function focusLockCheckbox(qIndex) {
   return true;
 }
 
-function handleEntryDocumentKeydown(event) {
+function handleEntryDocumentKeydown(event: KeyboardEvent): void {
   if (viewer || event.defaultPrevented || activeTab !== "input" || !entrySelection) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   if (event.key !== "Backspace" && event.key !== "Delete" && event.key !== " ") return;
@@ -1821,9 +1952,9 @@ function handleEntryDocumentKeydown(event) {
   const editable = target instanceof HTMLInputElement
     || target instanceof HTMLTextAreaElement
     || target instanceof HTMLSelectElement
-    || Boolean(target?.isContentEditable);
+    || Boolean(target instanceof HTMLElement && target.isContentEditable);
   if (editable) return;
-  if (target !== document.body && target !== document.documentElement && !odRoot.contains(target)) return;
+  if (target !== document.body && target !== document.documentElement && !(target instanceof Node && odRoot.contains(target))) return;
   event.preventDefault();
   clearSelectedEntryCells();
 }
@@ -1831,7 +1962,7 @@ function handleEntryDocumentKeydown(event) {
 document.addEventListener("keydown", handleEntryDocumentKeydown);
 document.addEventListener("keydown", handleUndoKeydown);
 
-function handleUndoKeydown(event) {
+function handleUndoKeydown(event: KeyboardEvent): void {
   if (viewer || event.defaultPrevented) return;
   if (!event.metaKey && !event.ctrlKey) return;
   if (event.shiftKey || event.altKey) return;
@@ -1840,12 +1971,12 @@ function handleUndoKeydown(event) {
   const editable = target instanceof HTMLInputElement
     || target instanceof HTMLTextAreaElement
     || target instanceof HTMLSelectElement
-    || Boolean(target?.isContentEditable);
+    || Boolean(target instanceof HTMLElement && target.isContentEditable);
   if (editable) return;
   if (performUndo()) event.preventDefault();
 }
 
-function handleEntryFocus(event) {
+function handleEntryFocus(event: FocusEvent): void {
   const target = event.target;
   if (target instanceof HTMLInputElement && target.classList.contains("shootout-entry-checkbox")) {
     markActiveEntryRow(target.closest("td"));
@@ -1856,7 +1987,7 @@ function handleEntryFocus(event) {
     target.select();
     return;
   }
-  const cell = target.closest?.(".entry-cell");
+  const cell = closestFromTarget(target, ".entry-cell");
   if (cell && !viewer) {
     markActiveEntryRow(cell);
     const pos = entryCellPosition(cell);
@@ -1864,14 +1995,14 @@ function handleEntryFocus(event) {
   }
 }
 
-function handleEntryFocusOut(event) {
+function handleEntryFocusOut(event: FocusEvent): void {
   if (!activeEntryEditor || event.target !== activeEntryEditor.input) return;
-  if (entrySuggest?.list?.contains(event.relatedTarget)) return;
-  if (activeEntryEditor.cell.contains(event.relatedTarget)) return;
+  if (entrySuggest?.list?.contains(event.relatedTarget as Node | null)) return;
+  if (activeEntryEditor.cell.contains(event.relatedTarget as Node | null)) return;
   closeEntryEditor();
 }
 
-function openEntryEditor(cell) {
+function openEntryEditor(cell: HTMLElement): void {
   if (viewer) return;
   if (activeEntryEditor?.cell === cell) {
     activeEntryEditor.input.focus();
@@ -1924,7 +2055,7 @@ function openEntryEditor(cell) {
 // scrollCellAboveKeypad nudges the active cell out from behind the fixed
 // keypad. The browser auto-scrolls focused inputs above the OS keyboard, but our
 // keypad is just an overlay, so we do it ourselves within the sheet scroller.
-function scrollCellAboveKeypad(cell) {
+function scrollCellAboveKeypad(cell: HTMLElement): void {
   const padHeight = entryKeypad?.height?.() || 0;
   if (!padHeight) return;
   const frame = scrollFrame();
@@ -1939,7 +2070,7 @@ function scrollCellAboveKeypad(cell) {
   }
 }
 
-function closeEntryEditor() {
+function closeEntryEditor(): void {
   if (!activeEntryEditor) return;
   closeEntrySuggest();
   const {cell, input} = activeEntryEditor;
@@ -1960,7 +2091,7 @@ function closeEntryEditor() {
   entryKeypad?.hide();
 }
 
-function parseEntryInput(input) {
+function parseEntryInput(input: HTMLInputElement): {display: string; value: number; pending: boolean} {
   const raw = input.value.trim();
   if (/^\d*$/.test(raw)) {
     return {display: raw, value: raw === "" ? 0 : Number(raw), pending: false};
@@ -1968,24 +2099,24 @@ function parseEntryInput(input) {
   return {display: raw, value: 0, pending: true};
 }
 
-function entrySuggestOptions(input) {
+function entrySuggestOptions(input: HTMLInputElement): EntrySuggestOption[] {
   const shootout = input.dataset.entryKind === "shootout";
   if (shootout) {
     const round = state.shootoutRounds[Number(input.dataset.round)];
-    return (round?.teams || []).map(entrySuggestOptionForNumber).filter(Boolean);
+    return (round?.teams || []).map(entrySuggestOptionForNumber).filter((option): option is EntrySuggestOption => Boolean(option));
   }
   return state.teams
     .map((_, teamIndex) => entrySuggestOptionForNumber(teamNumber(teamIndex)))
-    .filter(Boolean);
+    .filter((option): option is EntrySuggestOption => Boolean(option));
 }
 
-function entrySuggestOptionForNumber(number) {
+function entrySuggestOptionForNumber(number: number): EntrySuggestOption | null {
   const teamIndex = teamIndexByNumber(number);
   if (teamIndex < 0) return null;
   return {number, label: teamLabel(teamIndex)};
 }
 
-function updateEntrySuggest(input) {
+function updateEntrySuggest(input: HTMLInputElement): void {
   const query = input.value.trim().toLocaleLowerCase("ru");
   if (!query || /^\d+$/.test(query)) {
     closeEntrySuggest();
@@ -2012,7 +2143,7 @@ function updateEntrySuggest(input) {
   renderEntrySuggest();
 }
 
-function renderEntrySuggest() {
+function renderEntrySuggest(): void {
   if (!entrySuggest) return;
   const {input, list, items, active} = entrySuggest;
   list.replaceChildren();
@@ -2040,13 +2171,13 @@ function renderEntrySuggest() {
   list.style.width = `${Math.max(220, Math.round(rect.width))}px`;
 }
 
-function closeEntrySuggest() {
+function closeEntrySuggest(): void {
   if (!entrySuggest) return;
   entrySuggest.list.remove();
   entrySuggest = null;
 }
 
-function handleEntrySuggestKeydown(event, input) {
+function handleEntrySuggestKeydown(event: KeyboardEvent, input: HTMLInputElement): boolean {
   if (!entrySuggest || entrySuggest.input !== input) return false;
   if (event.key === "ArrowDown") {
     event.preventDefault();
@@ -2073,7 +2204,7 @@ function handleEntrySuggestKeydown(event, input) {
   return false;
 }
 
-function chooseEntrySuggest(index) {
+function chooseEntrySuggest(index: number): void {
   if (!entrySuggest) return;
   const option = entrySuggest.items[index];
   const input = entrySuggest.input;
@@ -2085,7 +2216,7 @@ function chooseEntrySuggest(index) {
   input.select();
 }
 
-function handleEntryChange(event) {
+function handleEntryChange(event: Event): void {
   const shootoutCheckbox = event.target;
   if (shootoutCheckbox instanceof HTMLInputElement && shootoutCheckbox.classList.contains("shootout-entry-checkbox")) {
     const roundIndex = Number(shootoutCheckbox.dataset.round);
@@ -2121,7 +2252,7 @@ function handleEntryChange(event) {
   saveState(["completed", qIndex], cb.checked);
 }
 
-function focusInput(qIndex, rowIndex) {
+function focusInput(qIndex: number, rowIndex: number): void {
   if (qIndex === totalQuestions && state.shootoutRounds.length > 0) {
     focusShootoutInput(0, 0, rowIndex);
     return;
@@ -2129,11 +2260,11 @@ function focusInput(qIndex, rowIndex) {
   if (qIndex < 0 || qIndex >= totalQuestions) return;
   if (rowIndex < 0 || rowIndex >= state.teams.length) return;
   const sel = `.entry-cell[data-q="${qIndex}"][data-row="${rowIndex}"]`;
-  const cell = odRoot.querySelector(sel);
+  const cell = odRoot.querySelector<HTMLElement>(sel);
   if (cell) openEntryEditor(cell);
 }
 
-function focusShootoutInput(roundIndex, questionIndex, rowIndex) {
+function focusShootoutInput(roundIndex: number, questionIndex: number, rowIndex: number): void {
   const round = state.shootoutRounds[roundIndex];
   if (!round) return;
   if (questionIndex < 0 && roundIndex > 0) {
@@ -2147,13 +2278,13 @@ function focusShootoutInput(roundIndex, questionIndex, rowIndex) {
   }
   if (questionIndex < 0 || questionIndex >= round.entries.length) return;
   if (rowIndex < 0 || rowIndex >= round.teams.length) return;
-  const sel = `.entry-cell[data-entry-kind="shootout"][data-round="${gameTable.cssEscape(roundIndex)}"][data-question="${gameTable.cssEscape(questionIndex)}"][data-row="${gameTable.cssEscape(rowIndex)}"]`;
-  const cell = odRoot.querySelector(sel);
-  const checkbox = cell?.querySelector(".shootout-entry-checkbox");
+  const sel = `.entry-cell[data-entry-kind="shootout"][data-round="${gameTable.cssEscape(String(roundIndex))}"][data-question="${gameTable.cssEscape(String(questionIndex))}"][data-row="${gameTable.cssEscape(String(rowIndex))}"]`;
+  const cell = odRoot.querySelector<HTMLElement>(sel);
+  const checkbox = cell?.querySelector<HTMLElement>(".shootout-entry-checkbox");
   if (checkbox && !viewer) checkbox.focus();
 }
 
-function clearActiveEntryRows() {
+function clearActiveEntryRows(): void {
   if (activeEntryRows.length > 0) {
     activeEntryRows.forEach((row) => row.classList.remove("active-entry-row"));
     activeEntryRows = [];
@@ -2162,7 +2293,7 @@ function clearActiveEntryRows() {
   odRoot.querySelectorAll(".active-entry-row").forEach((row) => row.classList.remove("active-entry-row"));
 }
 
-function markActiveEntryRow(cell) {
+function markActiveEntryRow(cell: Element | null): void {
   if (!cell || viewer) return;
   clearActiveEntryRows();
   const row = cell.closest("tr");
@@ -2173,7 +2304,7 @@ function markActiveEntryRow(cell) {
 
 // === Подробно ===
 
-function buildDetailedTable() {
+function buildDetailedTable(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "od-detailed-wrap";
   wrapper.appendChild(buildDetailedScoreTable());
@@ -2183,7 +2314,7 @@ function buildDetailedTable() {
 // detailedQuestionHeadLabel stacks the number of teams that took the question
 // (muted, smaller) above the question number, mirroring how the yin-yang sits in
 // the free space above the active column on the Ввод page.
-function detailedQuestionHeadLabel(displayNumber, stat) {
+function detailedQuestionHeadLabel(displayNumber: number, stat: QuestionStat | undefined): HTMLElement {
   const wrap = document.createElement("span");
   wrap.className = "od-detailed-qhead";
   const count = document.createElement("span");
@@ -2198,12 +2329,12 @@ function detailedQuestionHeadLabel(displayNumber, stat) {
   return wrap;
 }
 
-function buildDetailedScoreTable() {
+function buildDetailedScoreTable(): HTMLTableElement {
   const stats = questionStats();
-  const themes = [];
+  const themes: ScoreTableTheme[] = [];
   let qNum = 1;
   tourLengths.forEach((tourSize, tourIndex) => {
-    const questionLabels = [];
+    const questionLabels: HTMLElement[] = [];
     for (let i = 0; i < tourSize; i++) {
       questionLabels.push(detailedQuestionHeadLabel(qNum, stats[qNum - 1]));
       qNum++;
@@ -2214,7 +2345,7 @@ function buildDetailedScoreTable() {
 
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const placeMap = computePlaces(totals);
-  const rows = detailedTeamOrder().map((teamIndex) => {
+  const rows = detailedTeamOrder().map((teamIndex): ScoreTableRow => {
     const team = state.teams[teamIndex];
     let qIndex = 0;
     return {
@@ -2227,7 +2358,7 @@ function buildDetailedScoreTable() {
         content: placeMap[teamIndex] || "",
         className: "sticky sticky-place number place-cell",
       },
-      themes: tourLengths.map((tourSize) => {
+      themes: tourLengths.map((tourSize): ScoreTableThemeRow => {
         let tourSum = 0;
         const answers = [];
         for (let i = 0; i < tourSize; i++) {
@@ -2264,10 +2395,10 @@ function buildDetailedScoreTable() {
   });
 }
 
-function shootoutThemeCells(teamIndex, options = {}) {
+function shootoutThemeCells(teamIndex: number, options: {editable?: boolean} = {}): ScoreTableThemeRow[] {
   void options;
   const number = teamNumber(teamIndex);
-  return state.shootoutRounds.map((round, roundIndex) => {
+  return state.shootoutRounds.map((round, roundIndex): ScoreTableThemeRow => {
     const participantIndex = round.teams.indexOf(number);
     let score = 0;
     const answers = round.answers.map((_, questionIndex) => {
@@ -2291,7 +2422,7 @@ function shootoutThemeCells(teamIndex, options = {}) {
   });
 }
 
-function shootoutAnswerCell(teamIndex, roundIndex, questionIndex, mark, options = {}) {
+function shootoutAnswerCell(teamIndex: number, roundIndex: number, questionIndex: number, mark: ShootoutMark, options: {participating?: boolean} = {}): HTMLTableCellElement {
   const participating = Boolean(options.participating);
   const cell = document.createElement("td");
   const classes = ["answer-cell", "theme-block", "od-shootout-cell", "readonly"];
@@ -2309,7 +2440,7 @@ function shootoutAnswerCell(teamIndex, roundIndex, questionIndex, mark, options 
   return cell;
 }
 
-function detailedTeamOrder() {
+function detailedTeamOrder(): number[] {
   return state.teams
     .map((_, index) => index)
     .sort((a, b) => {
@@ -2322,12 +2453,12 @@ function detailedTeamOrder() {
     });
 }
 
-function teamLabel(index) {
+function teamLabel(index: number): string {
   const name = String(state.teams[index]?.name || "").trim();
   return name || `Команда ${index + 1}`;
 }
 
-function nameCell(teamIndex) {
+function nameCell(teamIndex: number): HTMLTableCellElement {
   const cell = document.createElement("td");
   cell.className = "sticky sticky-name team-name od-detailed-team-cell";
   const label = teamLabel(teamIndex);
@@ -2359,7 +2490,7 @@ function nameCell(teamIndex) {
   return cell;
 }
 
-function detailedNameHeader() {
+function detailedNameHeader(): HTMLElement {
   const layout = document.createElement("span");
   layout.className = "od-detailed-team-layout od-detailed-team-head-layout";
   const numberSpace = document.createElement("span");
@@ -2371,7 +2502,7 @@ function detailedNameHeader() {
   return layout;
 }
 
-function openShootoutRoundDialog() {
+function openShootoutRoundDialog(): void {
   if (viewer || !allTeamsNumbered() || state.teams.length < 2) return;
   const dialog = document.createElement("dialog");
   dialog.className = "modal-dialog od-shootout-dialog";
@@ -2428,7 +2559,7 @@ function openShootoutRoundDialog() {
   actions.append(cancel, submit);
   form.appendChild(actions);
 
-  const selectedNumbers = () => Array.from(list.querySelectorAll("input:checked"))
+  const selectedNumbers = () => Array.from(list.querySelectorAll<HTMLInputElement>("input:checked"))
     .map((input) => Number(input.value))
     .filter((number) => Number.isInteger(number) && number > 0);
   const syncSubmit = () => {
@@ -2455,8 +2586,8 @@ function openShootoutRoundDialog() {
   }
 }
 
-function createShootoutRound(numbers) {
-  const seen = new Set();
+function createShootoutRound(numbers: number[]): void {
+  const seen = new Set<number>();
   const teams = numbers.filter((number) => {
     if (!Number.isInteger(number) || number <= 0 || seen.has(number)) return false;
     if (teamIndexByNumber(number) < 0) return false;
@@ -2464,11 +2595,11 @@ function createShootoutRound(numbers) {
     return true;
   });
   if (teams.length < 2) return;
-  const round = {
+  const round: ShootoutRound = {
     teams,
-    entries: [Array(teams.length).fill(0)],
+    entries: [Array<number>(teams.length).fill(0)],
     completed: [false],
-    answers: [Array(teams.length).fill("")],
+    answers: [Array<ShootoutMark>(teams.length).fill("")],
   };
   rememberTabScroll(activeTab);
   state.shootoutRounds.push(round);
@@ -2482,14 +2613,14 @@ function createShootoutRound(numbers) {
   focusShootoutInput(state.shootoutRounds.length - 1, 0, 0);
 }
 
-function addShootoutQuestion(roundIndex) {
+function addShootoutQuestion(roundIndex: number): void {
   if (viewer) return;
   const round = state.shootoutRounds[roundIndex];
   if (!round) return;
   if (!Array.isArray(round.entries)) round.entries = [];
   if (!Array.isArray(round.completed)) round.completed = [];
-  round.answers.push(Array(round.teams.length).fill(""));
-  round.entries.push(Array(round.teams.length).fill(0));
+  round.answers.push(Array<ShootoutMark>(round.teams.length).fill(""));
+  round.entries.push(Array<number>(round.teams.length).fill(0));
   round.completed.push(false);
   rememberTabScroll(activeTab);
   invalidateShootoutCaches();
@@ -2498,7 +2629,7 @@ function addShootoutQuestion(roundIndex) {
   focusShootoutInput(roundIndex, round.entries.length - 1, 0);
 }
 
-function removeShootoutQuestion(roundIndex) {
+function removeShootoutQuestion(roundIndex: number): void {
   if (viewer) return;
   const round = state.shootoutRounds[roundIndex];
   if (!round || round.answers.length === 0) return;
@@ -2521,7 +2652,7 @@ function removeShootoutQuestion(roundIndex) {
 
 // === Итог ===
 
-function lastEnteredQuestion() {
+function lastEnteredQuestion(): number {
   for (let q = state.completed.length - 1; q >= 0; q--) {
     if (state.completed[q]) return q + 1;
   }
@@ -2533,14 +2664,14 @@ function lastEnteredQuestion() {
 // Экран board tailor it: opts.showCity=false drops the city line, opts.flag
 // prepends a country flag (or globe) emoji to the name. Defaults keep the Итог
 // behaviour untouched.
-function resultsTeamCell(index, opts = {}) {
+function resultsTeamCell(index: number, opts: {showCity?: boolean; flag?: string} = {}): HTMLTableCellElement {
   const showCity = opts.showCity !== false;
   const flag = opts.flag || "";
   const team = state.teams[index];
   const nameTd = document.createElement("td");
   nameTd.className = "results-team";
   const teamLabelText = team.name || `Команда ${index + 1}`;
-  const displayText = flag ? `${flag} ${teamLabelText}` : teamLabelText;
+  const displayText = flag ? `${flag} ${teamLabelText}` : teamLabelText;
   const nameWrap = document.createElement("span");
   nameWrap.className = "results-team-name-wrap";
   const nameSpan = document.createElement("span");
@@ -2573,7 +2704,17 @@ function resultsTeamCell(index, opts = {}) {
 // the screen. The board is host-customisable (colours, font scale, column count,
 // city/country toggles); settings are shared per game (saved server-side).
 
-const SCREEN_DEFAULTS = {
+interface ScreenSettings {
+  bg: string;
+  fg: string;
+  muted: string;
+  fontScale: number;
+  columns: number;
+  showCity: boolean;
+  showCountry: boolean;
+}
+
+const SCREEN_DEFAULTS: ScreenSettings = {
   bg: "#ffffff", // background colour
   fg: "#000000", // primary text colour
   muted: "#5f6b7a", // secondary (city) text colour
@@ -2583,16 +2724,17 @@ const SCREEN_DEFAULTS = {
   showCountry: false,
 };
 
-function normalizeScreenSettings(raw) {
+function normalizeScreenSettings(raw: unknown): ScreenSettings {
   const s = {...SCREEN_DEFAULTS};
   if (raw && typeof raw === "object") {
-    if (typeof raw.bg === "string") s.bg = raw.bg;
-    if (typeof raw.fg === "string") s.fg = raw.fg;
-    if (typeof raw.muted === "string") s.muted = raw.muted;
-    if (Number.isFinite(raw.fontScale)) s.fontScale = Math.min(Math.max(raw.fontScale, 0.4), 2);
-    if (Number.isFinite(raw.columns)) s.columns = Math.max(0, Math.round(raw.columns));
-    if (typeof raw.showCity === "boolean") s.showCity = raw.showCity;
-    if (typeof raw.showCountry === "boolean") s.showCountry = raw.showCountry;
+    const r = raw as {bg?: unknown; fg?: unknown; muted?: unknown; fontScale?: unknown; columns?: unknown; showCity?: unknown; showCountry?: unknown};
+    if (typeof r.bg === "string") s.bg = r.bg;
+    if (typeof r.fg === "string") s.fg = r.fg;
+    if (typeof r.muted === "string") s.muted = r.muted;
+    if (typeof r.fontScale === "number" && Number.isFinite(r.fontScale)) s.fontScale = Math.min(Math.max(r.fontScale, 0.4), 2);
+    if (typeof r.columns === "number" && Number.isFinite(r.columns)) s.columns = Math.max(0, Math.round(r.columns));
+    if (typeof r.showCity === "boolean") s.showCity = r.showCity;
+    if (typeof r.showCountry === "boolean") s.showCountry = r.showCountry;
   }
   return s;
 }
@@ -2604,7 +2746,7 @@ let screenPanelOpen = false;
 // tournaments are mostly RU/CIS with the occasional international team; unknown
 // cities simply get no flag (and a team whose name/city mentions "сборная" gets
 // a globe instead — see teamFlagEmoji). Extend freely as new cities appear.
-const CITY_COUNTRY = {
+const CITY_COUNTRY: Record<string, string> = {
   "москва": "RU", "мск": "RU", "санкт-петербург": "RU", "спб": "RU", "петербург": "RU",
   "питер": "RU", "новосибирск": "RU", "екатеринбург": "RU", "казань": "RU",
   "нижний новгород": "RU", "челябинск": "RU", "самара": "RU", "омск": "RU",
@@ -2661,7 +2803,7 @@ const CITY_COUNTRY = {
 };
 
 // flagEmoji turns a 2-letter ISO country code into its regional-indicator flag.
-function flagEmoji(cc) {
+function flagEmoji(cc: string): string {
   return cc.toUpperCase().replace(/[A-Z]/g, (c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
@@ -2669,8 +2811,8 @@ function flagEmoji(cc) {
 // on: a globe for a "сборная" (national/all-star side — rating.chgk gives such
 // teams the town "сборная"), otherwise the flag of the team's city's country,
 // or "" when the city is unknown.
-function teamFlagEmoji(index) {
-  const team = state.teams[index] || {};
+function teamFlagEmoji(index: number): string {
+  const team: Partial<ODTeam> = state.teams[index] || {};
   const hay = `${team.name || ""} ${team.city || ""}`.toLowerCase();
   if (hay.includes("сборн")) return "🌍";
   const cc = CITY_COUNTRY[String(team.city || "").trim().toLowerCase()];
@@ -2680,7 +2822,7 @@ function teamFlagEmoji(index) {
 // saveScreenSettings persists the current settings to the server (shared per
 // game) on a short debounce, so dragging a colour/slider doesn't spam writes.
 let screenSaveTimer = 0;
-function saveScreenSettings() {
+function saveScreenSettings(): void {
   if (viewer) return;
   if (screenSaveTimer) clearTimeout(screenSaveTimer);
   screenSaveTimer = setTimeout(() => {
@@ -2695,7 +2837,7 @@ function saveScreenSettings() {
 
 // applyScreenColors pushes the palette onto the wrapper as inline CSS vars; the
 // .screen-table rules read them (with the theme-independent defaults as fallback).
-function applyScreenColors(wrapper) {
+function applyScreenColors(wrapper: HTMLElement): void {
   wrapper.style.setProperty("--screen-bg", screenSettings.bg || SCREEN_DEFAULTS.bg);
   wrapper.style.setProperty("--screen-fg", screenSettings.fg || SCREEN_DEFAULTS.fg);
   wrapper.style.setProperty("--screen-muted", screenSettings.muted || SCREEN_DEFAULTS.muted);
@@ -2705,23 +2847,23 @@ function applyScreenColors(wrapper) {
 // in the top-right ninth of the board (a 3×3 grid), so it never sits on the
 // projection — except while the settings panel is open, when it stays put so the
 // host can keep interacting with it.
-function screenPointerInCorner(wrapper, e) {
+function screenPointerInCorner(wrapper: HTMLElement, e: MouseEvent): boolean {
   const r = wrapper.getBoundingClientRect();
   const x = e.clientX - r.left;
   const y = e.clientY - r.top;
   return x >= r.width * (2 / 3) && x <= r.width && y >= 0 && y <= r.height / 3;
 }
-function setScreenOverlayActive(wrapper, corner) {
+function setScreenOverlayActive(wrapper: HTMLElement, corner: boolean): void {
   wrapper.classList.toggle("screen-overlay-active", corner || screenPanelOpen);
 }
 
 // updateScreenControls syncs the floating controls/panel with the current state
 // (panel open/closed, chrome-hide button label, overlay visibility).
-function updateScreenControls() {
+function updateScreenControls(): void {
   const pane = tabCache.get("screen");
-  const wrapper = pane?.querySelector(".screen-wrapper");
+  const wrapper = pane?.querySelector<ScreenWrapper>(".screen-wrapper");
   if (!wrapper) return;
-  const panel = wrapper.querySelector(".screen-panel");
+  const panel = wrapper.querySelector<HTMLElement>(".screen-panel");
   if (panel) panel.hidden = !screenPanelOpen;
   if (wrapper._screenSettingsBtn) {
     wrapper._screenSettingsBtn.setAttribute("aria-expanded", screenPanelOpen ? "true" : "false");
@@ -2736,7 +2878,7 @@ function updateScreenControls() {
 
 // buildScreenOverlay stacks the controls bar above the (collapsible) settings
 // panel in one top-right container, so they never overlap.
-function buildScreenOverlay(wrapper) {
+function buildScreenOverlay(wrapper: ScreenWrapper): HTMLElement {
   const overlay = document.createElement("div");
   overlay.className = "screen-overlay";
 
@@ -2764,13 +2906,13 @@ function buildScreenOverlay(wrapper) {
   return overlay;
 }
 
-function buildScreenPanel(wrapper) {
+function buildScreenPanel(wrapper: ScreenWrapper): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "screen-panel";
   panel.hidden = !screenPanelOpen;
   const s = screenSettings;
 
-  const colorField = (label, key) => {
+  const colorField = (label: string, key: "bg" | "fg" | "muted") => {
     const f = document.createElement("label");
     f.className = "field screen-field";
     const span = document.createElement("span");
@@ -2830,7 +2972,7 @@ function buildScreenPanel(wrapper) {
   colField.append(colSpan, colInput);
   panel.appendChild(colField);
 
-  const checkbox = (label, key, onToggle) => {
+  const checkbox = (label: string, key: "showCity" | "showCountry", onToggle: () => void) => {
     const l = document.createElement("label");
     l.className = "checkbox screen-check";
     const input = document.createElement("input");
@@ -2868,7 +3010,7 @@ function buildScreenPanel(wrapper) {
 
 // currentTourIndex returns the 0-based tour that the last entered question
 // belongs to, or 0 before the game starts (so the board shows T1).
-function currentTourIndex() {
+function currentTourIndex(): number {
   if (!tourLengths.length) return -1;
   const lastQ = lastEnteredQuestion();
   if (lastQ <= 0) return 0;
@@ -2886,7 +3028,7 @@ function currentTourIndex() {
 // groups (so same-place teams stay glued and different places get breathing
 // room, like Итог). A group that doesn't fit a column simply continues in the
 // next one — the column break falls between rows with no gap.
-function makeScreenColumn(tourLabel, rowItems) {
+function makeScreenColumn(tourLabel: string | undefined, rowItems: ScreenRowItem[]): HTMLTableElement {
   const table = document.createElement("table");
   table.className = "results-table od-results-table screen-table";
   const thead = document.createElement("thead");
@@ -2916,8 +3058,8 @@ function makeScreenColumn(tourLabel, rowItems) {
 // layoutScreen() rebalances once it can measure. Split out from buildScreenView
 // so toggles that change row content (city/country) can refresh without
 // rebuilding the floating controls/panel.
-function populateScreenRows(wrapper) {
-  const cols = wrapper.querySelector(".screen-cols");
+function populateScreenRows(wrapper: ScreenWrapper): void {
+  const cols = wrapper.querySelector<HTMLElement>(".screen-cols")!;
   applyScreenColors(wrapper);
 
   if (!state.teams.length) {
@@ -2941,7 +3083,7 @@ function populateScreenRows(wrapper) {
   const placeMap = computePlaces(totals);
 
   // Group consecutive teams that share a place, like buildResultsTableInner.
-  const placeGroups = [];
+  const placeGroups: Array<{placeText: string; keys: RankKey[]}> = [];
   sortKeys.forEach((key) => {
     const placeText = placeMap[key.index] || "—";
     const last = placeGroups[placeGroups.length - 1];
@@ -2951,7 +3093,7 @@ function populateScreenRows(wrapper) {
 
   // Flatten into row items tagged with their group index, so the packer can wrap
   // a group across columns when needed while keeping same-group rows glued.
-  const rowItems = [];
+  const rowItems: ScreenRowItem[] = [];
   placeGroups.forEach(({placeText, keys}, groupIdx) => {
     keys.forEach(({index, total}, rowIdx) => {
       const tr = document.createElement("tr");
@@ -2978,8 +3120,8 @@ function populateScreenRows(wrapper) {
   cols.replaceChildren(makeScreenColumn(tourLabel, rowItems));
 }
 
-function buildScreenView() {
-  const wrapper = document.createElement("div");
+function buildScreenView(): HTMLElement {
+  const wrapper = document.createElement("div") as ScreenWrapper;
   wrapper.className = "screen-wrapper";
   // The board is a host-only tool; only hosts get the configure/project controls.
   if (!viewer) {
@@ -2996,22 +3138,22 @@ function buildScreenView() {
 
 // refreshScreen rebuilds the rows in place (settings that change row content)
 // and relays out, leaving the floating controls/panel untouched.
-function refreshScreen() {
+function refreshScreen(): void {
   const pane = tabCache.get("screen");
-  const wrapper = pane?.querySelector(".screen-wrapper");
+  const wrapper = pane?.querySelector<ScreenWrapper>(".screen-wrapper");
   if (!wrapper) return;
   populateScreenRows(wrapper);
   scheduleScreenFit();
 }
 
 let screenFitRAF = 0;
-function scheduleScreenFit() {
+function scheduleScreenFit(): void {
   if (screenFitRAF) cancelAnimationFrame(screenFitRAF);
   screenFitRAF = requestAnimationFrame(() => {
     screenFitRAF = 0;
     const pane = tabCache.get("screen");
     if (!pane || pane.hidden) return;
-    const wrapper = pane.querySelector(".screen-wrapper");
+    const wrapper = pane.querySelector<ScreenWrapper>(".screen-wrapper");
     if (!wrapper) return;
     layoutScreen(wrapper);
     // Fade + popover for names too long for the (fixed-width) team column,
@@ -3025,9 +3167,9 @@ function scheduleScreenFit() {
 // column once the running body height would exceed maxBodyH. A gap is counted
 // before a row whose group differs from the previous row in the same column.
 // Returns the array of per-column rowItem lists.
-function packRows(rowItems, rowH, gapH, maxBodyH) {
-  const columns = [];
-  let current = [];
+function packRows(rowItems: ScreenRowItem[], rowH: number, gapH: number, maxBodyH: number): ScreenRowItem[][] {
+  const columns: ScreenRowItem[][] = [];
+  let current: ScreenRowItem[] = [];
   let bodyH = 0;
   for (const item of rowItems) {
     const needGap = current.length > 0 && item.group !== current[current.length - 1].group;
@@ -3054,9 +3196,9 @@ function packRows(rowItems, rowH, gapH, maxBodyH) {
 // leftover horizontal space (height-bound layouts) is then spent by widening the
 // team-name column, and screenSettings.fontScale finally scales the result.
 const SCREEN_BASE_TEAM_COL = 160; // px; matches --screen-team-col default in styles.css
-function layoutScreen(wrapper) {
+function layoutScreen(wrapper: ScreenWrapper): void {
   const rowItems = wrapper._screenRows;
-  const cols = wrapper.querySelector(".screen-cols");
+  const cols = wrapper.querySelector<HTMLElement>(".screen-cols");
   const frame = scrollFrame();
   if (!cols || !frame || !rowItems || !rowItems.length) return;
 
@@ -3078,9 +3220,9 @@ function layoutScreen(wrapper) {
   // Measure one natural column holding every row (zoom reset so rects are CSS px).
   cols.style.zoom = "1";
   cols.replaceChildren(makeScreenColumn(wrapper._screenTourLabel, rowItems));
-  const probe = cols.firstChild;
-  const headH = probe.querySelector("thead").getBoundingClientRect().height;
-  const rowH = probe.querySelector("tbody tr.results-row").getBoundingClientRect().height;
+  const probe = cols.firstChild as HTMLTableElement;
+  const headH = probe.querySelector("thead")!.getBoundingClientRect().height;
+  const rowH = probe.querySelector("tbody tr.results-row")!.getBoundingClientRect().height;
   const gapRow = probe.querySelector("tbody tr.results-group-gap");
   const gapH = gapRow ? gapRow.getBoundingClientRect().height : 0;
   const colW = probe.getBoundingClientRect().width;
@@ -3089,9 +3231,9 @@ function layoutScreen(wrapper) {
   const groupCount = rowItems[n - 1].group + 1;
   const totalBodyH = n * rowH + (groupCount - 1) * gapH;
 
-  const columnsNeeded = (maxBodyH) => packRows(rowItems, rowH, gapH, maxBodyH).length;
+  const columnsNeeded = (maxBodyH: number) => packRows(rowItems, rowH, gapH, maxBodyH).length;
   // bodyHForColumns: smallest column body height that still packs into c columns.
-  const bodyHForColumns = (c) => {
+  const bodyHForColumns = (c: number): number => {
     if (columnsNeeded(rowH) <= c) return rowH; // a single row per column suffices
     let lo = rowH;
     let hi = totalBodyH;
@@ -3103,7 +3245,7 @@ function layoutScreen(wrapper) {
     return hi;
   };
 
-  let chosen;
+  let chosen: {c: number; bodyH: number};
   if (forcedCols) {
     const c = Math.min(Math.max(1, forcedCols), n);
     chosen = {c, bodyH: bodyHForColumns(c)};
@@ -3143,14 +3285,14 @@ function layoutScreen(wrapper) {
   cols.style.zoom = String(finalZoom);
 }
 
-function buildResultsTable() {
+function buildResultsTable(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper";
   wrapper.appendChild(buildResultsTableInner());
   return wrapper;
 }
 
-function buildResultsTableInner() {
+function buildResultsTableInner(): HTMLTableElement {
   const stats = questionStats();
   const totals = state.teams.map((_, i) => sumRow(i, stats));
   const shootoutRoundTotals = state.teams.map((_, teamIndex) =>
@@ -3197,7 +3339,7 @@ function buildResultsTableInner() {
 
   const colCount = 4 + tourLengths.length + shootoutRoundCount +
     expandedResultsQuestionCount() + expandedResultsShootoutQuestionCount();
-  const groups = [];
+  const groups: Array<{placeText: string; rows: RankKey[]}> = [];
   sortKeys.forEach((row) => {
     const placeText = placeMap[row.index] || "—";
     const last = groups[groups.length - 1];
@@ -3249,7 +3391,7 @@ function buildResultsTableInner() {
   return table;
 }
 
-function resultsTourHeader(tourIndex) {
+function resultsTourHeader(tourIndex: number): HTMLElement {
   const expanded = resultsExpandedTours.has(tourIndex);
   const button = document.createElement("button");
   button.type = "button";
@@ -3261,7 +3403,7 @@ function resultsTourHeader(tourIndex) {
   return th(button, "results-tour-head results-tour-toggle-head" + (expanded ? " expanded" : ""));
 }
 
-function resultsShootoutHeader(roundIndex) {
+function resultsShootoutHeader(roundIndex: number): HTMLElement {
   const expanded = resultsExpandedShootouts.has(roundIndex);
   const button = document.createElement("button");
   button.type = "button";
@@ -3273,7 +3415,7 @@ function resultsShootoutHeader(roundIndex) {
   return th(button, "results-num-head results-tour-toggle-head results-shootout-toggle-head" + (expanded ? " expanded" : ""));
 }
 
-function resultsAnswerCell(teamIndex, qIndex, stats, tourQuestionIndex, tourSize) {
+function resultsAnswerCell(teamIndex: number, qIndex: number, stats: QuestionStat[], tourQuestionIndex: number, tourSize: number): HTMLElement {
   const answered = teamTookQuestion(teamIndex, qIndex, stats);
   const classes = ["results-answer"];
   if (tourQuestionIndex === 0) classes.push("results-answer-left");
@@ -3287,7 +3429,7 @@ function resultsAnswerCell(teamIndex, qIndex, stats, tourQuestionIndex, tourSize
   return cell;
 }
 
-function resultsShootoutAnswerCell(teamIndex, roundIndex, questionIndex) {
+function resultsShootoutAnswerCell(teamIndex: number, roundIndex: number, questionIndex: number): HTMLElement {
   const round = state.shootoutRounds[roundIndex];
   const questionCount = (round?.answers || []).length;
   const number = teamNumber(teamIndex);
@@ -3295,7 +3437,7 @@ function resultsShootoutAnswerCell(teamIndex, roundIndex, questionIndex) {
   const participating = participantIndex >= 0;
   const completed = shootoutQuestionCompleted(roundIndex, questionIndex);
   const mark = participating && completed
-    ? normalizeShootoutMark(round.answers[questionIndex]?.[participantIndex])
+    ? normalizeShootoutMark(round?.answers[questionIndex]?.[participantIndex])
     : "";
   const classes = ["results-answer", "results-shootout-answer"];
   if (questionIndex === 0) classes.push("results-answer-left");
@@ -3310,8 +3452,8 @@ function resultsShootoutAnswerCell(teamIndex, roundIndex, questionIndex) {
   return cell;
 }
 
-function tourStartIndexes() {
-  const starts = [];
+function tourStartIndexes(): number[] {
+  const starts: number[] = [];
   let qIndex = 0;
   for (const size of tourLengths) {
     starts.push(qIndex);
@@ -3320,7 +3462,7 @@ function tourStartIndexes() {
   return starts;
 }
 
-function tourHasStarted(tourIndex) {
+function tourHasStarted(tourIndex: number): boolean {
   const start = tourStartIndexes()[tourIndex] || 0;
   const end = start + (tourLengths[tourIndex] || 0);
   for (let q = start; q < end; q++) {
@@ -3329,7 +3471,7 @@ function tourHasStarted(tourIndex) {
   return false;
 }
 
-function expandedResultsQuestionCount() {
+function expandedResultsQuestionCount(): number {
   let count = 0;
   for (const tourIndex of resultsExpandedTours) {
     count += tourLengths[tourIndex] || 0;
@@ -3337,7 +3479,7 @@ function expandedResultsQuestionCount() {
   return count;
 }
 
-function expandedResultsShootoutQuestionCount() {
+function expandedResultsShootoutQuestionCount(): number {
   let count = 0;
   for (const roundIndex of resultsExpandedShootouts) {
     count += (state.shootoutRounds[roundIndex]?.answers || []).length;
@@ -3345,7 +3487,7 @@ function expandedResultsShootoutQuestionCount() {
   return count;
 }
 
-function shootoutQuestionNumber(roundIndex, questionIndex) {
+function shootoutQuestionNumber(roundIndex: number, questionIndex: number): number {
   let number = questionIndex + 1;
   for (let i = 0; i < roundIndex; i++) {
     number += (state.shootoutRounds[i]?.answers || []).length;
@@ -3355,7 +3497,7 @@ function shootoutQuestionNumber(roundIndex, questionIndex) {
 
 // === scoring helpers ===
 
-function sumRow(teamIndex, stats = questionStats()) {
+function sumRow(teamIndex: number, stats: QuestionStat[] = questionStats()): number {
   let s = 0;
   for (let q = 0; q < totalQuestions; q++) {
     if (teamTookQuestion(teamIndex, q, stats)) s++;
@@ -3363,8 +3505,8 @@ function sumRow(teamIndex, stats = questionStats()) {
   return s;
 }
 
-function tourSumsForTeam(teamIndex, stats = questionStats()) {
-  const out = [];
+function tourSumsForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number[] {
+  const out: number[] = [];
   let qi = 0;
   for (const size of tourLengths) {
     let s = 0;
@@ -3377,7 +3519,7 @@ function tourSumsForTeam(teamIndex, stats = questionStats()) {
   return out;
 }
 
-function ratingForTeam(teamIndex, stats = questionStats()) {
+function ratingForTeam(teamIndex: number, stats: QuestionStat[] = questionStats()): number {
   const teamCount = state.teams.length;
   let r = 0;
   for (let q = 0; q < totalQuestions; q++) {
@@ -3388,10 +3530,10 @@ function ratingForTeam(teamIndex, stats = questionStats()) {
   return r;
 }
 
-function shootoutTiebreakForTeam(teamIndex) {
+function shootoutTiebreakForTeam(teamIndex: number): number[] {
   // Per-round scores for lexicographic comparison; -1 marks rounds the team didn't play,
   // so an early-exit team isn't overtaken by teams who continued accumulating points.
-  const result = [];
+  const result: number[] = [];
   for (let roundIndex = 0; roundIndex < state.shootoutRounds.length; roundIndex++) {
     const roundTotal = shootoutRoundTotalForTeam(teamIndex, roundIndex);
     result.push(roundTotal != null ? roundTotal : -1);
@@ -3399,7 +3541,7 @@ function shootoutTiebreakForTeam(teamIndex) {
   return result;
 }
 
-function compareShootoutTiebreaks(a, b) {
+function compareShootoutTiebreaks(a: number[], b: number[]): number {
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
     const av = a[i] ?? -1;
@@ -3413,7 +3555,7 @@ function compareShootoutTiebreaks(a, b) {
 // the shootout tiebreak, then original index as a stable fallback. Shared by the
 // «Итог» and «Экран» sheets so their row order always matches (the place LABELS
 // come from computePlaces; this is just the row ordering).
-function rankedTeamOrder(totals, tiebreaks) {
+function rankedTeamOrder(totals: number[], tiebreaks: number[][]): RankKey[] {
   return state.teams
     .map((_, index) => ({index, total: totals[index], tiebreak: tiebreaks[index]}))
     .sort((a, b) => {
@@ -3424,7 +3566,7 @@ function rankedTeamOrder(totals, tiebreaks) {
     });
 }
 
-function shootoutRoundTotalForTeam(teamIndex, roundIndex) {
+function shootoutRoundTotalForTeam(teamIndex: number, roundIndex: number): number | null {
   const number = teamNumber(teamIndex);
   if (!number) return null;
   const round = state.shootoutRounds[roundIndex];
@@ -3439,13 +3581,13 @@ function shootoutRoundTotalForTeam(teamIndex, roundIndex) {
   return total;
 }
 
-function teamHasShootoutRound(teamIndex) {
+function teamHasShootoutRound(teamIndex: number): boolean {
   const number = teamNumber(teamIndex);
   if (!number) return false;
   return (state.shootoutRounds || []).some((round) => round.teams.includes(number));
 }
 
-function anyShootoutMarked() {
+function anyShootoutMarked(): boolean {
   for (const round of state.shootoutRounds || []) {
     for (let questionIndex = 0; questionIndex < (round.answers || []).length; questionIndex++) {
       if (!round.completed?.[questionIndex]) continue;
@@ -3457,7 +3599,7 @@ function anyShootoutMarked() {
   return false;
 }
 
-function anyQuestionCompleted(stats = questionStats()) {
+function anyQuestionCompleted(stats: QuestionStat[] = questionStats()): boolean {
   for (const stat of stats) if (stat.completed) return true;
   return false;
 }
@@ -3465,15 +3607,18 @@ function anyQuestionCompleted(stats = questionStats()) {
 // OD ranks on game total, breaking ties on the shootout result. Before any
 // question or shootout is marked there's nothing to rank, so the board stays
 // blank; otherwise defer to the shared placer with the shootout tiebreak.
-function computePlaces(totals) {
-  if (!anyQuestionCompleted() && !anyShootoutMarked()) return new Array(totals.length).fill("");
+function computePlaces(totals: number[]): string[] {
+  if (!anyQuestionCompleted() && !anyShootoutMarked()) return new Array<string>(totals.length).fill("");
   const tiebreaks = state.teams.map((_, index) => shootoutTiebreakForTeam(index));
-  return gameTable.computePlaces(totals, {tiebreaks, compareTiebreak: compareShootoutTiebreaks});
+  return gameTable.computePlaces(totals, {
+    tiebreaks,
+    compareTiebreak: (a, b) => compareShootoutTiebreaks(a as number[], b as number[]),
+  });
 }
 
 // === persistence ===
 
-function saveState(path, value) {
+function saveState(path: PatchPath, value: unknown): void {
   if (Array.isArray(path)) {
     syncState().patch(path, value);
     refreshPendingMarkers();
@@ -3487,13 +3632,13 @@ function saveState(path, value) {
 // covering it is confirmed (isPending is ancestor-aware, so a whole-column or
 // whole-grid patch marks the cells under it too). Driven from saveState (edit)
 // and applyRemoteState (ack / any remote update, incl. after a full rebuild).
-function refreshPendingMarkers() {
+function refreshPendingMarkers(): void {
   if (viewer || !stateSync || !stateSync.isPending) return;
-  odRoot.querySelectorAll(".entry-cell").forEach((cell) => {
+  odRoot.querySelectorAll<HTMLElement>(".entry-cell").forEach((cell) => {
     const q = Number(cell.dataset.q);
     const row = Number(cell.dataset.row);
     const pending = Number.isInteger(q) && Number.isInteger(row) &&
-      stateSync.isPending(["entries", q, row]);
+      stateSync!.isPending(["entries", q, row]);
     cell.classList.toggle("pending", Boolean(pending));
   });
   const shootoutPending = stateSync.isPending(["shootoutRounds"]);
@@ -3502,12 +3647,12 @@ function refreshPendingMarkers() {
   });
 }
 
-function setHeading(text) {
+function setHeading(text: string): void {
   if (pageHeading) pageHeading.textContent = text;
   renderGameBreadcrumbs(text);
 }
 
-function renderGameBreadcrumbs(gameTitle) {
+function renderGameBreadcrumbs(gameTitle: string): void {
   if (!breadcrumbsNode || !route.festID) return;
   gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
     festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
@@ -3516,7 +3661,7 @@ function renderGameBreadcrumbs(gameTitle) {
   });
 }
 
-function connectEvents() {
+function connectEvents(): void {
   if (staticMode) {
     gameTable.scheduleStaticReload();
     return;
@@ -3524,7 +3669,7 @@ function connectEvents() {
   syncState().connect();
 }
 
-function syncState() {
+function syncState(): StateSync {
   if (stateSync) return stateSync;
   recorder = gameTable.installClientRecorder({
     scope: `game-state:${scopeGameID}`,
@@ -3534,7 +3679,7 @@ function syncState() {
   stateSync = gameTable.createStateSync({
     readonly: viewer,
     stateURL: `${route.apiBase}/state`,
-    eventsURL: gameTable.gameEventsURL(route.festID, route.gameID),
+    eventsURL: gameTable.gameEventsURL(route.festID!, route.gameID),
     scope: `game-state:${scopeGameID}`,
     getState: () => state,
     getInitialSeq: () => initialStateSeq,
@@ -3549,7 +3694,7 @@ function syncState() {
   return stateSync;
 }
 
-function connectPresence() {
+function connectPresence(): void {
   if (viewer || presence || !route.festID) return;
   presence = gameTable.createHostPresence({
     root: odRoot,
@@ -3562,18 +3707,18 @@ function connectPresence() {
   presence.connect();
 }
 
-function refreshPresence() {
+function refreshPresence(): void {
   presence?.refresh();
 }
 
-function currentODPresenceCursor() {
+function currentODPresenceCursor(): Record<string, unknown> | null {
   const focused = odPresenceCursorFromElement(document.activeElement);
   if (focused) return focused;
   return null;
 }
 
-function odPresenceCursorFromElement(element) {
-  const entry = element?.closest?.(".entry-input,.entry-cell,.shootout-entry-checkbox");
+function odPresenceCursorFromElement(element: Element | EventTarget | null): Record<string, unknown> | null {
+  const entry = closestFromTarget(element, ".entry-input,.entry-cell,.shootout-entry-checkbox");
   if (entry && odRoot.contains(entry)) {
     if (entry.dataset.entryKind === "shootout") {
       return {
@@ -3593,31 +3738,32 @@ function odPresenceCursorFromElement(element) {
       row: Number(entry.dataset.row),
     };
   }
-  const teamName = element?.closest?.(".venue-input");
+  const teamName = closestFromTarget(element, ".venue-input");
   if (teamName && odRoot.contains(teamName)) {
     return {app: "od", kind: "team-name", gameID: route.gameID, team: Number(teamName.dataset.team)};
   }
   return null;
 }
 
-function findODPresenceTarget(cursor) {
-  if (!cursor || cursor.app !== "od" || String(cursor.gameID) !== String(route.gameID)) return null;
-  if (cursor.kind === "entry") {
-    return odRoot.querySelector(`.entry-cell[data-q="${gameTable.cssEscape(cursor.q)}"][data-row="${gameTable.cssEscape(cursor.row)}"]`);
+function findODPresenceTarget(cursor: unknown): Element | null {
+  const c = cursor as {app?: unknown; gameID?: unknown; kind?: unknown; q?: unknown; row?: unknown; round?: unknown; question?: unknown; team?: unknown} | null;
+  if (!c || c.app !== "od" || String(c.gameID) !== String(route.gameID)) return null;
+  if (c.kind === "entry") {
+    return odRoot.querySelector(`.entry-cell[data-q="${gameTable.cssEscape(String(c.q))}"][data-row="${gameTable.cssEscape(String(c.row))}"]`);
   }
-  if (cursor.kind === "shootout-entry") {
+  if (c.kind === "shootout-entry") {
     return odRoot.querySelector(
-      `.entry-cell[data-entry-kind="shootout"][data-round="${gameTable.cssEscape(cursor.round)}"][data-question="${gameTable.cssEscape(cursor.question)}"][data-row="${gameTable.cssEscape(cursor.row)}"]`,
+      `.entry-cell[data-entry-kind="shootout"][data-round="${gameTable.cssEscape(String(c.round))}"][data-question="${gameTable.cssEscape(String(c.question))}"][data-row="${gameTable.cssEscape(String(c.row))}"]`,
     );
   }
-  if (cursor.kind === "team-name") {
-    return odRoot.querySelector(`.venue-input[data-team="${gameTable.cssEscape(cursor.team)}"]`);
+  if (c.kind === "team-name") {
+    return odRoot.querySelector(`.venue-input[data-team="${gameTable.cssEscape(String(c.team))}"]`);
   }
   return null;
 }
 
-function applyRemoteState(nextState) {
-  const active = document.activeElement;
+function applyRemoteState(nextState: unknown): void {
+  const active = document.activeElement as HTMLElement | null;
   const editingInput = active && active.classList.contains("entry-input");
   const focusedLock = Boolean(active && active.classList.contains("entry-lock-checkbox"));
   const editingShootout = active && (
@@ -3627,12 +3773,12 @@ function applyRemoteState(nextState) {
   // A focused (non-shootout) column tickbox must keep focus across a remote
   // update — otherwise the echo of the operator's own toggle rebuilds the table
   // and the cursor vanishes, so a second Space/Enter can't untick it.
-  const focusedLockCol = focusedLock && active.dataset.entryKind !== "shootout";
+  const focusedLockCol = focusedLock && active?.dataset.entryKind !== "shootout";
   // A selected entry cell should keep keyboard focus too: the re-render below
   // replaces its node, so re-focus the cursor afterwards (else arrow keys, which
   // are handled on the focused cell, stop working after a remote update).
   const focusedCell = Boolean(active && active.classList.contains("entry-cell") && !isShootoutEntryCell(active));
-  state = nextState;
+  state = nextState as ODState;
   ensureState();
   updateHeaderProgress();
   if (editingInput || editingShootout || focusedLockCol) {
@@ -3654,7 +3800,7 @@ gameLoader.load()
     connectEvents();
     connectPresence();
   })
-  .catch((error) => {
+  .catch((error: unknown) => {
     setStatus("error");
     console.error(error);
   });

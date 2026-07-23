@@ -7,6 +7,13 @@
 //     selects, which saved on change via an inline onchange before).
 //   - [data-dialog-open="id"] on a button: showModal() that <dialog>.
 //   - [data-dialog-close] on a button inside a <dialog>: close it.
+
+type SelectableField = HTMLElement & { select?: () => void };
+type FormControl = HTMLElement & {
+  form?: (HTMLFormElement & { requestSubmit?: () => void }) | null;
+};
+type DialogLike = HTMLElement & { showModal?: () => void; close?: () => void };
+
 document.addEventListener("submit", (event) => {
   const form = event.target;
   const message =
@@ -17,10 +24,11 @@ document.addEventListener("submit", (event) => {
   }
 });
 
-function selectAll(event) {
+function selectAll(event: Event): void {
   const el = event.target;
-  if (el instanceof HTMLElement && el.hasAttribute("data-select-all") && typeof el.select === "function") {
-    el.select();
+  if (el instanceof HTMLElement && el.hasAttribute("data-select-all")) {
+    const field: SelectableField = el;
+    if (typeof field.select === "function") field.select();
   }
 }
 document.addEventListener("focus", selectAll, true);
@@ -28,8 +36,9 @@ document.addEventListener("click", selectAll, true);
 
 document.addEventListener("change", (event) => {
   const el = event.target;
-  if (el instanceof HTMLElement && el.hasAttribute("data-autosubmit") && el.form) {
-    el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit();
+  if (el instanceof HTMLElement && el.hasAttribute("data-autosubmit")) {
+    const form = (el as FormControl).form;
+    if (form) form.requestSubmit ? form.requestSubmit() : form.submit();
   }
 });
 
@@ -38,7 +47,8 @@ document.addEventListener("click", (event) => {
   if (!(target instanceof Element)) return;
   const opener = target.closest("[data-dialog-open]");
   if (opener) {
-    const dialog = document.getElementById(opener.getAttribute("data-dialog-open"));
+    const id = opener.getAttribute("data-dialog-open");
+    const dialog: DialogLike | null = id ? document.getElementById(id) : null;
     if (dialog) {
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
@@ -47,10 +57,12 @@ document.addEventListener("click", (event) => {
   }
   const closer = target.closest("[data-dialog-close]");
   if (closer) {
-    const dialog = closer.closest("dialog");
+    const dialog: DialogLike | null = closer.closest("dialog");
     if (dialog) {
       if (typeof dialog.close === "function") dialog.close();
       else dialog.removeAttribute("open");
     }
   }
 });
+
+export {};

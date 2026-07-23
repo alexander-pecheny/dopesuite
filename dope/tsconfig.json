@@ -1,4 +1,4 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["dope/web/ts/**/*.ts"]
+  "include": ["dope/web/ts/**/*.ts", "../dopeuikit/assets/ts/globals.d.ts"]
 }

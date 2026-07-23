@@ -107,7 +107,7 @@ func profileDoc(data profileData) *ui.Doc {
 		ui.Button(ui.Submit(), ui.Text(action)),
 	)
 	return &ui.Doc{Nodes: []ui.Node{
-		ui.Page(ui.Title("Профиль"), ui.PagePublic, ui.Classicscripts("profile.js"),
+		ui.Page(ui.Title("Профиль"), ui.PagePublic, ui.Classicscripts("dist/profile.js"),
 			ui.Publictopbar(ui.Title("Профиль")),
 			ui.List(ui.Listrow(ui.Href("/host"), ui.Listtitle(ui.Text("← Назад к списку турниров")))),
 			ui.Section(

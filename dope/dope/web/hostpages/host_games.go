@@ -110,7 +110,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 	ref := data.Fest.Ref()
 	sel := data.SelectedType
 	page := []dopeui.Item{
-		dopeui.Title(data.Fest.Title + " · новая игра"), dopeui.PagePublic, dopeui.Classicscripts("gamecreate.js"),
+		dopeui.Title(data.Fest.Title + " · новая игра"), dopeui.PagePublic, dopeui.Classicscripts("dist/gamecreate.js"),
 		dopeui.Publictopbar(dopeui.Title("Добавить игру"), dopeui.Back("/host/fest/"+ref)),
 	}
 	if data.Error != "" {

@@ -1,21 +1,29 @@
-const passwordForm = document.getElementById("passwordForm");
-const passwordMessage = document.getElementById("passwordMessage");
+// Profile password form (new password vs change password modes).
+
+function byId<T extends HTMLElement>(id: string): T {
+  const node = document.getElementById(id);
+  if (!node) throw new Error(`profile page is missing #${id}`);
+  return node as T;
+}
+
+const passwordForm = byId<HTMLFormElement>("passwordForm");
+const passwordMessage = byId("passwordMessage");
 const hasPassword = passwordForm.dataset.hasPassword === "1";
 
 passwordForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   setText(passwordMessage, "");
 
-  const newPassword = document.getElementById("newPassword").value;
-  const confirmPassword = document.getElementById("confirmPassword").value;
+  const newPassword = byId<HTMLInputElement>("newPassword").value;
+  const confirmPassword = byId<HTMLInputElement>("confirmPassword").value;
   if (newPassword !== confirmPassword) {
     setText(passwordMessage, "Пароли не совпадают.");
     return;
   }
 
-  const body = {new_password: newPassword};
+  const body: { new_password: string; current_password?: string } = { new_password: newPassword };
   if (hasPassword) {
-    body.current_password = document.getElementById("currentPassword").value;
+    body.current_password = byId<HTMLInputElement>("currentPassword").value;
   }
 
   try {
@@ -32,11 +40,11 @@ passwordForm.addEventListener("submit", async (event) => {
       window.location.reload();
     }
   } catch (error) {
-    setText(passwordMessage, error.message);
+    setText(passwordMessage, error instanceof Error ? error.message : String(error));
   }
 });
 
-async function fetchVoid(url, init) {
+async function fetchVoid(url: string, init: RequestInit): Promise<void> {
   const response = await fetch(url, init);
   if (!response.ok) {
     const text = (await response.text()).trim();
@@ -44,6 +52,8 @@ async function fetchVoid(url, init) {
   }
 }
 
-function setText(node, text) {
+function setText(node: HTMLElement, text: string): void {
   node.textContent = text;
 }
+
+export {};

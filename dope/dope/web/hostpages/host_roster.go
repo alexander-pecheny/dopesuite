@@ -92,7 +92,7 @@ func optionalID(id int64) string {
 func hostPlayersDoc(data hostFestRosterData) *dopeui.Doc {
 	ref := data.Fest.Ref()
 	page := []dopeui.Item{
-		dopeui.Title(data.Fest.Title + " · игроки"), dopeui.PagePublic, dopeui.Classicscripts("pageforms.js roster.js"),
+		dopeui.Title(data.Fest.Title + " · игроки"), dopeui.PagePublic, dopeui.Classicscripts("dist/pageforms.js dist/roster.js"),
 		dopeui.Publictopbar(dopeui.Title("Игроки"), dopeui.Back("/host/fest/"+ref)),
 	}
 	if data.Error != "" {

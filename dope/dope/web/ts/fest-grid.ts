@@ -1,11 +1,103 @@
+export interface FestGridVenueObject {
+  number?: unknown;
+  Number?: unknown;
+  title?: unknown;
+  Title?: unknown;
+}
+
+export type FestGridVenue = number | string | FestGridVenueObject | null | undefined;
+
+export interface FestGridSlotObject {
+  label?: string;
+  seed?: { number?: number | string; position?: number | string; basket?: number | string };
+  fromMatch?: { match?: string | number; place?: string | number };
+  reseed?: { rank?: number | string };
+  team?: { name?: string; label?: string; id?: string };
+  placeholder?: string;
+}
+
+export type FestGridSlot = string | FestGridSlotObject;
+
+export interface FestGridLiveTeam {
+  name?: string;
+  source?: string;
+  total?: unknown;
+  place?: number;
+}
+
+export interface FestGridMatch {
+  code?: string;
+  title?: string;
+  status?: string;
+  venue?: FestGridVenue;
+  slots?: FestGridSlot[];
+  teams?: FestGridLiveTeam[];
+  participantCount?: number | string;
+}
+
+export interface ReseedSortRule {
+  metric?: string;
+  dir?: string;
+}
+
+export interface ReseedEntry {
+  rank?: number;
+  name?: string;
+  metrics?: Record<string, unknown>;
+}
+
+export interface FestGridStage {
+  code?: string;
+  title?: string;
+  stage_type?: string;
+  type?: string;
+  layout?: { columns?: number };
+  matches?: FestGridMatch[];
+  reseedEntries?: ReseedEntry[];
+  reseedBlockedMessage?: string;
+  reseedPendingMatches?: Array<string | number | null | undefined>;
+  config?: unknown;
+  configJson?: unknown;
+}
+
+export interface FestGridData {
+  schemaJson?: unknown;
+  stages?: FestGridStage[];
+}
+
+export interface FestScheme {
+  stages?: FestGridStage[];
+}
+
+export interface FestGridOptions {
+  basePath?: string;
+  viewer?: boolean;
+  editable?: boolean;
+  canCalculate?: boolean;
+  blockedMessage?: string;
+  onCalculate?: () => void;
+  stageHeaderLink?: boolean;
+  matchTitleLink?: boolean;
+  hiddenVenueMatches?: Set<string | undefined>;
+  hideVenue?: boolean;
+}
+
 let festGridNameOverflowFrame = 0;
-let activeFestGridRoot = null;
+let activeFestGridRoot: HTMLElement | null = null;
+let resizeListenerBound = false;
 
-window.addEventListener("resize", () => {
-  if (activeFestGridRoot) scheduleFestGridNameOverflowUpdate(activeFestGridRoot);
-});
+// Registered lazily on the first buildFestGrid so the module stays importable
+// under plain node; before a grid exists the listener would no-op anyway.
+function bindFestGridResizeListener(): void {
+  if (resizeListenerBound) return;
+  resizeListenerBound = true;
+  window.addEventListener("resize", () => {
+    if (activeFestGridRoot) scheduleFestGridNameOverflowUpdate(activeFestGridRoot);
+  });
+}
 
-function buildFestGrid(data, options = {}) {
+export function buildFestGrid(data: FestGridData, options: FestGridOptions = {}): HTMLElement {
+  bindFestGridResizeListener();
   const root = document.createElement("div");
   root.className = "fest-grid";
 
@@ -15,7 +107,7 @@ function buildFestGrid(data, options = {}) {
   const scheme = parseScheme(data.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : data.stages || [];
   const liveStages = new Map((data.stages || []).map((stage) => [stage.code, stage]));
-  const previousVenueByRow = new Map();
+  const previousVenueByRow = new Map<number, string>();
 
   stages.forEach((stage) => {
     const liveStage = liveStages.get(stage.code) || stage;
@@ -32,7 +124,10 @@ function buildFestGrid(data, options = {}) {
   return root;
 }
 
-function buildReseedStagePanel(stage, options = {}) {
+export function buildReseedStagePanel(
+  stage: FestGridStage | null | undefined,
+  options: FestGridOptions = {},
+): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "results-wrapper reseed-results-wrapper";
 
@@ -60,7 +155,9 @@ function buildReseedStagePanel(stage, options = {}) {
   const sortRules = reseedSortRules(stage);
   const hasSourceMatch = entries.some((entry) => entry.metrics?.match);
   const metricColumns = sortRules.length > 0
-    ? sortRules.map((rule) => rule.metric).filter((metric, index, values) => metric && values.indexOf(metric) === index)
+    ? sortRules
+        .map((rule) => rule.metric)
+        .filter((metric, index, values): metric is string => Boolean(metric) && values.indexOf(metric) === index)
     : fallbackReseedMetrics(entries);
 
   const table = document.createElement("table");
@@ -108,7 +205,7 @@ function buildReseedStagePanel(stage, options = {}) {
   return wrapper;
 }
 
-function reseedBlockedMessage(stage, options = {}) {
+function reseedBlockedMessage(stage: FestGridStage | null | undefined, options: FestGridOptions = {}): string {
   const fromOptions = String(options.blockedMessage || "").trim();
   if (fromOptions) return fromOptions;
   const fromStage = String(stage?.reseedBlockedMessage || "").trim();
@@ -121,7 +218,7 @@ function reseedBlockedMessage(stage, options = {}) {
   return "";
 }
 
-function buildMatchesStage(stage, liveStage, options = {}) {
+function buildMatchesStage(stage: FestGridStage, liveStage: FestGridStage, options: FestGridOptions = {}): HTMLElement {
   const section = document.createElement("section");
   section.className = "grid-stage";
   if (stage.code) section.classList.add(`grid-stage-${stageClassSuffix(stage.code)}`);
@@ -150,7 +247,7 @@ function buildMatchesStage(stage, liveStage, options = {}) {
   return section;
 }
 
-function buildMatchBox(match, liveMatch, options = {}) {
+function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefined, options: FestGridOptions = {}): HTMLElement {
   const box = document.createElement("article");
   box.className = `grid-match ${liveMatch?.status || "pending"}`;
   box.dataset.matchCode = match.code || "";
@@ -164,7 +261,7 @@ function buildMatchBox(match, liveMatch, options = {}) {
   const liveTeams = liveMatch?.teams || [];
   const slots = match.slots || [];
   const rowCount = gridSlotRowCount(match, slots);
-  const realRows = [];
+  const realRows: HTMLElement[][] = [];
   for (let index = 0; index < rowCount; index += 1) {
     const slot = slots[index];
     if (!slot) {
@@ -185,23 +282,23 @@ function buildMatchBox(match, liveMatch, options = {}) {
   return box;
 }
 
-function gridSlotRowCount(match, slots) {
+function gridSlotRowCount(match: FestGridMatch, slots: FestGridSlot[]): number {
   const declared = Number(match.participantCount);
   const rowCount = Math.max(slots.length, Number.isFinite(declared) ? declared : 0);
   return rowCount === 3 ? 4 : rowCount;
 }
 
-function gridHeadCell(className, text) {
+function gridHeadCell(className: string, text: string): HTMLElement {
   const cell = gridCell(`grid-slot-head ${className}`, "");
   cell.appendChild(el("span", "grid-head-metric", text));
   return cell;
 }
 
-function gridCell(className, text) {
+function gridCell(className: string, text: string): HTMLElement {
   return el("div", `grid-slot-cell ${className}`, text);
 }
 
-function phantomSlotCells() {
+function phantomSlotCells(): HTMLElement[] {
   return [
     gridCell("slot-source grid-slot-phantom-cell", ""),
     gridCell("slot-total grid-slot-phantom-cell", ""),
@@ -212,7 +309,7 @@ function phantomSlotCells() {
   });
 }
 
-function decorateGridSlotRows(rows) {
+function decorateGridSlotRows(rows: HTMLElement[][]): void {
   if (rows.length === 0) return;
   rows[0][0].classList.add("grid-slot-top-left");
   rows[0][2].classList.add("grid-slot-top-right");
@@ -222,7 +319,7 @@ function decorateGridSlotRows(rows) {
   last[2].classList.add("grid-slot-bottom-right");
 }
 
-function matchHeadCell(match, venue, options = {}) {
+function matchHeadCell(match: FestGridMatch, venue: {number: number; title: string} | null, options: FestGridOptions = {}): HTMLElement {
   const cell = gridCell("grid-slot-head grid-match-head-cell", "");
   const layout = document.createElement("span");
   layout.className = "grid-match-head-layout";
@@ -235,7 +332,7 @@ function matchHeadCell(match, venue, options = {}) {
   return cell;
 }
 
-function matchTitleNode(match, options = {}) {
+function matchTitleNode(match: FestGridMatch, options: FestGridOptions = {}): HTMLElement {
   if (!options.basePath || options.matchTitleLink === false) {
     return el("span", "grid-match-title", matchLabel(match));
   }
@@ -244,8 +341,12 @@ function matchTitleNode(match, options = {}) {
   return link;
 }
 
-function repeatedVenueMatches(stage, liveStage, previousVenueByRow) {
-  const hidden = new Set();
+function repeatedVenueMatches(
+  stage: FestGridStage,
+  liveStage: FestGridStage,
+  previousVenueByRow: Map<number, string>,
+): Set<string | undefined> {
+  const hidden = new Set<string | undefined>();
   const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
   (stage.matches || []).forEach((match, index) => {
     const liveMatch = liveMatches.get(match.code);
@@ -259,34 +360,37 @@ function repeatedVenueMatches(stage, liveStage, previousVenueByRow) {
   return hidden;
 }
 
-function parseScheme(raw) {
+export function parseScheme(raw: unknown): FestScheme | null {
   if (!raw) return null;
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw as string) as FestScheme;
   } catch (error) {
     return null;
   }
 }
 
-function reseedSortRules(stage) {
+function reseedSortRules(stage: FestGridStage | null | undefined): ReseedSortRule[] {
   const config = parseObject(stage?.config) || parseObject(stage?.configJson);
-  return Array.isArray(config?.sort) ? config.sort.filter((rule) => rule?.metric) : [];
+  const sort = config?.sort;
+  return Array.isArray(sort)
+    ? (sort as ReseedSortRule[]).filter((rule) => rule?.metric)
+    : [];
 }
 
-function parseObject(value) {
+function parseObject(value: unknown): Record<string, unknown> | null {
   if (!value) return null;
-  if (typeof value === "object") return value;
+  if (typeof value === "object") return value as Record<string, unknown>;
   if (typeof value !== "string") return null;
   try {
-    return JSON.parse(value);
+    return JSON.parse(value) as Record<string, unknown>;
   } catch (error) {
     return null;
   }
 }
 
-function fallbackReseedMetrics(entries) {
+function fallbackReseedMetrics(entries: ReseedEntry[]): string[] {
   const preferred = ["place_sum", "total", "plus", "correct_50", "correct_40", "correct_30", "correct_20", "draw"];
-  const present = new Set();
+  const present = new Set<string>();
   entries.forEach((entry) => {
     Object.keys(entry.metrics || {}).forEach((metric) => {
       if (metric !== "match") present.add(metric);
@@ -299,14 +403,14 @@ function fallbackReseedMetrics(entries) {
   return ordered;
 }
 
-function reseedMetricHeader(metric, sortRules) {
+function reseedMetricHeader(metric: string, sortRules: ReseedSortRule[]): string {
   const rule = sortRules.find((item) => item.metric === metric);
   const direction = rule?.dir === "asc" ? "↑" : rule?.dir === "desc" ? "↓" : "";
   return direction ? `${reseedMetricLabel(metric)} ${direction}` : reseedMetricLabel(metric);
 }
 
-function reseedMetricLabel(metric) {
-  const labels = {
+function reseedMetricLabel(metric: string): string {
+  const labels: Record<string, string> = {
     place_sum: "Σ мест",
     total: "Σ",
     plus: "Σ+",
@@ -326,14 +430,14 @@ function reseedMetricLabel(metric) {
   return labels[metric] || metric;
 }
 
-function reseedMetricValue(value) {
+function reseedMetricValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
   const number = Number(value);
   if (Number.isFinite(number) && String(value).trim() !== "") return scoreText(number);
   return String(value);
 }
 
-function reseedTeamCell(name) {
+function reseedTeamCell(name: string): HTMLElement {
   const cell = tableCell("td", "", "results-team reseed-team");
   const wrap = document.createElement("span");
   wrap.className = "results-team-name-wrap";
@@ -351,39 +455,39 @@ function reseedTeamCell(name) {
   return cell;
 }
 
-function tableCell(tagName, text, className) {
+function tableCell(tagName: "td" | "th", text: unknown, className?: string): HTMLTableCellElement {
   const node = document.createElement(tagName);
   if (className) node.className = className;
-  node.textContent = text == null ? "" : String(text).replace(/^-/, "\u2212");
+  node.textContent = text == null ? "" : String(text).replace(/^-/, "−");
   return node;
 }
 
-function preferredColumns(count) {
+function preferredColumns(count: number): number {
   if (count >= 6) return 6;
   if (count >= 4) return 4;
   if (count >= 2) return 2;
   return 1;
 }
 
-function stageHref(stage, options = {}) {
-  return `${basePath(options)}/stage/${encodeURIComponent(stage.code)}`;
+function stageHref(stage: FestGridStage, options: FestGridOptions = {}): string {
+  return `${basePath(options)}/stage/${encodeURIComponent(String(stage.code))}`;
 }
 
-function matchHref(match, options = {}) {
-  return `${basePath(options)}/matches/${encodeURIComponent(match.code)}`;
+function matchHref(match: FestGridMatch, options: FestGridOptions = {}): string {
+  return `${basePath(options)}/matches/${encodeURIComponent(String(match.code))}`;
 }
 
-function basePath(options = {}) {
+function basePath(options: FestGridOptions = {}): string {
   return options.basePath || "";
 }
 
-function matchLabel(match) {
+function matchLabel(match: FestGridMatch): string {
   const defaultTitle = `Бой ${match.code}`;
   if (!match.title || match.title === defaultTitle) return `Бой ${match.code}`;
   return match.title;
 }
 
-function slotTeamCell(label) {
+function slotTeamCell(label: string): HTMLElement {
   const cell = gridCell("slot-source grid-slot-team", "");
   const name = document.createElement("span");
   name.className = "grid-slot-team-name";
@@ -398,7 +502,7 @@ function slotTeamCell(label) {
   return cell;
 }
 
-function scheduleFestGridNameOverflowUpdate(root) {
+function scheduleFestGridNameOverflowUpdate(root: HTMLElement): void {
   if (festGridNameOverflowFrame) cancelAnimationFrame(festGridNameOverflowFrame);
   festGridNameOverflowFrame = requestAnimationFrame(() => {
     festGridNameOverflowFrame = 0;
@@ -406,9 +510,9 @@ function scheduleFestGridNameOverflowUpdate(root) {
   });
 }
 
-function updateFestGridNameOverflow(root) {
+function updateFestGridNameOverflow(root: HTMLElement): void {
   const cells = root.querySelectorAll(".grid-slot-team");
-  const readings = new Array(cells.length);
+  const readings = new Array<boolean>(cells.length);
   for (let i = 0; i < cells.length; i++) {
     const name = cells[i].querySelector(".grid-slot-team-name");
     readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
@@ -418,7 +522,7 @@ function updateFestGridNameOverflow(root) {
   }
 }
 
-function slotLabel(slot, live = {}) {
+function slotLabel(slot: FestGridSlot, live: FestGridLiveTeam = {}): string {
   if (typeof slot === "string") return slot;
   if (live.name && live.name !== live.source) return live.name;
   if (slot.label) return slot.label;
@@ -434,18 +538,18 @@ function slotLabel(slot, live = {}) {
   return live.source || "";
 }
 
-function reseedLabel(reseed) {
+function reseedLabel(reseed: { rank?: number | string }): string {
   const rank = Number(reseed.rank);
   return Number.isFinite(rank) && rank > 0 ? `Пересев-${rank}` : "Пересев";
 }
 
-function venueText(venue) {
+function venueText(venue: FestGridVenue | {number: number; title: string} | null): string {
   const normalized = normalizeVenue(venue);
   if (!normalized) return "";
   return normalized.title ? `пл. ${normalized.number} (${normalized.title})` : `пл. ${normalized.number}`;
 }
 
-function firstVenue(...venues) {
+function firstVenue(...venues: FestGridVenue[]): {number: number; title: string} | null {
   for (const venue of venues) {
     const normalized = normalizeVenue(venue);
     if (normalized) return normalized;
@@ -453,7 +557,7 @@ function firstVenue(...venues) {
   return null;
 }
 
-function normalizeVenue(venue) {
+function normalizeVenue(venue: FestGridVenue): {number: number; title: string} | null {
   if (!venue) return null;
   if (typeof venue === "number" || typeof venue === "string") {
     const number = Number(venue);
@@ -465,33 +569,30 @@ function normalizeVenue(venue) {
   return {number, title};
 }
 
-function stageClassSuffix(code) {
+function stageClassSuffix(code: string): string {
   return String(code).replace(/[^a-z0-9_-]/gi, "-");
 }
 
-function scoreText(value) {
+function scoreText(value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
   const number = Number(value);
   if (!Number.isFinite(number)) return "";
-  return String(value).replace(/^-/, "\u2212");
+  return String(value).replace(/^-/, "−");
 }
 
-function placeText(value) {
-  return value > 0 ? String(value) : "";
+function placeText(value: number | null | undefined): string {
+  return value != null && value > 0 ? String(value) : "";
 }
 
-function el(tagName, className, text, attrs = {}) {
+function el<K extends keyof HTMLElementTagNameMap>(
+  tagName: K,
+  className: string,
+  text: string | null | undefined,
+  attrs: Record<string, unknown> = {},
+): HTMLElementTagNameMap[K] {
   const node = document.createElement(tagName);
   if (className) node.className = className;
-  node.textContent = text;
+  node.textContent = text ?? null;
   Object.assign(node, attrs);
   return node;
 }
-
-// The dist bundles load this file in module scope, where top-level functions
-// no longer leak into the page's global scope — export the surface host.js /
-// viewer.js call explicitly, matching how the other shared libs publish
-// themselves (window.DopeTable, window.DopeStageCache).
-window.parseScheme = parseScheme;
-window.buildFestGrid = buildFestGrid;
-window.buildReseedStagePanel = buildReseedStagePanel;

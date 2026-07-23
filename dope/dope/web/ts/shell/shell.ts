@@ -1,8 +1,8 @@
 // The game-page shell (ADR-0003): owns everything format-independent — the
-// init payload, SSE state sync, and renderer resolution. Legacy pages (od.js,
-// si.js, host.js, viewer.js) still boot themselves from the bundled globals;
-// new Protocol pages register a ProtocolRenderer and call runGamePage, and the
-// legacy pages migrate onto the same seam renderer by renderer.
+// init payload, SSE state sync, and renderer resolution. The page modules
+// (od.ts, si.ts, host.ts, viewer.ts) still boot themselves on import; new
+// Protocol pages register a ProtocolRenderer and call runGamePage, and the
+// page modules migrate onto the same seam renderer by renderer.
 
 import type { GameInitPayload, ProtocolRenderer, RendererRegistry, StateOp, StateSync } from './contracts';
 
@@ -10,10 +10,6 @@ declare global {
   interface Window {
     __GAME_INIT__?: unknown;
     DopeShell: { registry: RendererRegistry; runGamePage(code: string, mountId: string): void };
-    DopeTable: {
-      createStateSync(options: Record<string, unknown>): { state: unknown; onRender(cb: () => void): void };
-      gameEventsURL(festID: number, gameID: number): string;
-    };
   }
 }
 

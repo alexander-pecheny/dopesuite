@@ -1,8 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {loadStaticModule} from "./browser-module.js";
-
-const createStageCache = loadStaticModule("stage-cache.js").DopeStageCache.create;
+import {createStageCache} from "./dist/stage-cache.js";
 
 // makeCache wires a cache to a mutable stage list with no real DOM (no pane is
 // built, so the DOM-touching paths are never reached). setStages swaps the

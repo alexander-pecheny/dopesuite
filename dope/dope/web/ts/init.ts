@@ -7,8 +7,10 @@
 // page scripts that read the globals — it is the first classicscript on each page.
 for (const el of document.querySelectorAll('script[type="application/json"][data-dope-init]')) {
   try {
-    window[el.id] = JSON.parse(el.textContent);
+    (window as unknown as Record<string, unknown>)[el.id] = JSON.parse(el.textContent!);
   } catch (_) {
-    window[el.id] = null;
+    (window as unknown as Record<string, unknown>)[el.id] = null;
   }
 }
+
+export {};
