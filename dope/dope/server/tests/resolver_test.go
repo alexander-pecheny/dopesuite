@@ -256,8 +256,8 @@ func (r reseedRow) num(key string) float64 {
 func reseedEntries(t *testing.T, db *sql.DB, gameID int64, stageCode string) []reseedRow {
 	t.Helper()
 	rows, err := db.QueryContext(context.Background(), `
-select re.team_id, re.metrics_json
-from reseed_entries re
+select re.participant_id, re.metrics_json
+from stage_standings re
 join stages s on s.id = re.stage_id
 where s.game_id = ? and s.code = ?
 order by re.rank`, gameID, stageCode)

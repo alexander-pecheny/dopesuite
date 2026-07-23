@@ -29,9 +29,9 @@ order by number`, []any{festID}, func(rows *sql.Rows) (VenueView, error) {
 // LoadReseedEntries returns a stage's reseed entries ordered by rank.
 func LoadReseedEntries(ctx context.Context, q Queryer, stageID int64) ([]ReseedEntryView, error) {
 	return CollectRows(ctx, q, `
-select re.rank, re.team_id, coalesce(t.name, ''), re.metrics_json
-from reseed_entries re
-left join teams t on t.id = re.team_id
+select re.rank, re.participant_id, coalesce(t.name, ''), re.metrics_json
+from stage_standings re
+left join teams t on t.id = re.participant_id
 where re.stage_id = ?
 order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error) {
 		var entry ReseedEntryView

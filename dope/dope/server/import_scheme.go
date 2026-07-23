@@ -434,7 +434,7 @@ func clearFestImportData(ctx context.Context, tx *sql.Tx, festID int64) error {
 func clearImportedData(ctx context.Context, tx *sql.Tx) error {
 	tables := []string{
 		"journal",
-		"reseed_entries",
+		"stage_standings",
 		"match_results",
 		"match_slots",
 		"matches",

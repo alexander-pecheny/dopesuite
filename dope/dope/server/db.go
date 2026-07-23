@@ -329,14 +329,6 @@ create table if not exists match_results(
   primary key(match_id, team_id)
 );
 
-create table if not exists reseed_entries(
-  stage_id integer not null references stages(id) on delete cascade,
-  rank integer not null,
-  team_id integer not null references teams(id) on delete cascade,
-  metrics_json text not null,
-  primary key(stage_id, rank)
-);
-
 -- journal is the single forward edit log: it is BOTH the durable, replayable
 -- record of every mutation AND the source of the events streamed to viewers
 -- (it replaces the old write-only "events" table). Each row is one edit, keyed

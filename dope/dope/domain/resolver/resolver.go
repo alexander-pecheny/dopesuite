@@ -228,8 +228,8 @@ func teamAtReseedRank(ctx context.Context, q store.Queryer, gameID int64, stageC
 	}
 	var teamID int64
 	err := q.QueryRowContext(ctx, `
-select re.team_id
-from reseed_entries re
+select re.participant_id
+from stage_standings re
 join stages s on s.id = re.stage_id
 where s.game_id = ? and s.code = ? and re.rank = ?`,
 		gameID, stageCode, rank).Scan(&teamID)
@@ -440,7 +440,7 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 	}
 
 	clear := func() error {
-		_, err := tx.ExecContext(ctx, `delete from reseed_entries where stage_id = ?`, stageID)
+		_, err := tx.ExecContext(ctx, `delete from stage_standings where stage_id = ?`, stageID)
 		return err
 	}
 
@@ -515,7 +515,7 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 			out[key] = int(entry.metrics[key])
 		}
 		if _, err := tx.ExecContext(ctx, `
-insert into reseed_entries(stage_id, rank, team_id, metrics_json)
+insert into stage_standings(stage_id, rank, participant_id, metrics_json)
 values(?, ?, ?, ?)`, stageID, rank+1, entry.teamID, util.MustJSON(out)); err != nil {
 			return err
 		}

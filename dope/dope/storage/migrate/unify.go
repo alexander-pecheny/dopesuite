@@ -24,7 +24,7 @@ import (
 // the drop).
 func RunUnifyConversion(db *sql.DB) error {
 	ctx := context.Background()
-	var hasThemes, flatPending int
+	var hasThemes, flatPending, hasReseedEntries int
 	if err := db.QueryRowContext(ctx,
 		`select count(*) from sqlite_master where type = 'table' and name = 'themes'`).Scan(&hasThemes); err != nil {
 		return err
@@ -35,7 +35,11 @@ where g.game_type in ('od', 'ksi', 'si')
   and not exists (select 1 from matches m where m.game_id = g.id and m.code = 'main')`).Scan(&flatPending); err != nil {
 		return err
 	}
-	if hasThemes == 0 && flatPending == 0 {
+	if err := db.QueryRowContext(ctx,
+		`select count(*) from sqlite_master where type = 'table' and name = 'reseed_entries'`).Scan(&hasReseedEntries); err != nil {
+		return err
+	}
+	if hasThemes == 0 && flatPending == 0 && hasReseedEntries == 0 {
 		return nil
 	}
 	if err := journal.DropTriggers(db); err != nil {
@@ -59,6 +63,107 @@ where g.game_type in ('od', 'ksi', 'si')
 	}
 	if flatPending != 0 {
 		if err := convertFlatGames(ctx, db); err != nil {
+			return err
+		}
+	}
+	if hasReseedEntries != 0 {
+		if err := convertStageStandings(ctx, db); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// convertStageStandings folds the legacy reseed_entries table into
+// stage_standings (its generalisation: every ranking stage writes here, keyed
+// by participant instead of team). Journal records and checkpoints rename
+// mechanically — same rows, new table and column names.
+func convertStageStandings(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx, `
+insert or replace into stage_standings(stage_id, rank, participant_id, metrics_json)
+select stage_id, rank, team_id, metrics_json from reseed_entries`); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `drop table reseed_entries`); err != nil {
+		return err
+	}
+	type rec struct {
+		id      int64
+		payload string
+	}
+	records, err := store.CollectRows(ctx, db, `
+select id, payload from journal where json_extract(payload, '$.t') = 'reseed_entries'`,
+		nil, func(rows *sql.Rows) (rec, error) {
+			var r rec
+			return r, rows.Scan(&r.id, &r.payload)
+		})
+	if err != nil {
+		return err
+	}
+	for _, r := range records {
+		var decoded struct {
+			Table string         `json:"t"`
+			Row   map[string]any `json:"r"`
+		}
+		if err := json.Unmarshal([]byte(r.payload), &decoded); err != nil {
+			continue
+		}
+		if teamID, ok := decoded.Row["team_id"]; ok {
+			decoded.Row["participant_id"] = teamID
+			delete(decoded.Row, "team_id")
+		}
+		out, err := json.Marshal(map[string]any{"t": "stage_standings", "r": decoded.Row})
+		if err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, `update journal set payload = ? where id = ?`, string(out), r.id); err != nil {
+			return err
+		}
+	}
+	return rewriteCheckpointStandings(ctx, db)
+}
+
+// rewriteCheckpointStandings renames the reseed_entries table dump inside every
+// stored checkpoint to the stage_standings shape.
+func rewriteCheckpointStandings(ctx context.Context, db *sql.DB) error {
+	type cpRow struct {
+		gameID int64
+		seq    int64
+		blob   []byte
+	}
+	rows, err := store.CollectRows(ctx, db,
+		`select game_id, seq, state_blob from journal_checkpoint`, nil,
+		func(rows *sql.Rows) (cpRow, error) {
+			var r cpRow
+			return r, rows.Scan(&r.gameID, &r.seq, &r.blob)
+		})
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		cp, err := journal.DecodeGameCheckpoint(row.blob)
+		if err != nil {
+			return fmt.Errorf("checkpoint game %d seq %d: %w", row.gameID, row.seq, err)
+		}
+		entries, ok := cp.Tables["reseed_entries"]
+		if !ok {
+			continue
+		}
+		for _, entry := range entries {
+			if teamID, exists := entry["team_id"]; exists {
+				entry["participant_id"] = teamID
+				delete(entry, "team_id")
+			}
+		}
+		cp.Tables["stage_standings"] = entries
+		delete(cp.Tables, "reseed_entries")
+		encoded, err := journal.EncodeGameCheckpoint(cp)
+		if err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx,
+			`update journal_checkpoint set state_blob = ? where game_id = ? and seq = ?`,
+			encoded, row.gameID, row.seq); err != nil {
 			return err
 		}
 	}
