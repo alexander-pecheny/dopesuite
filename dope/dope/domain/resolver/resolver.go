@@ -273,33 +273,7 @@ func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, curre
 	if _, err := tx.ExecContext(ctx, `update match_slots set team_id = ? where id = ?`, nullableInt64(desired), slotID); err != nil {
 		return false, err
 	}
-	if gameType == "ek" {
-		if err := EnsureRegularThemes(ctx, tx, matchID, desired); err != nil {
-			return false, err
-		}
-	}
 	return true, nil
-}
-
-// EnsureRegularThemes makes sure a team has all of its regular themes in a
-// match, inserting any that are missing. It is idempotent.
-func EnsureRegularThemes(ctx context.Context, tx *sql.Tx, matchID, teamID int64) error {
-	for themeIndex := 0; themeIndex < store.ThemeCount; themeIndex++ {
-		var exists int
-		if err := tx.QueryRowContext(ctx, `
-select count(*) from themes
-where match_id = ? and team_id = ? and kind = 'regular' and theme_index = ?`,
-			matchID, teamID, themeIndex).Scan(&exists); err != nil {
-			return err
-		}
-		if exists > 0 {
-			continue
-		}
-		if err := store.InsertTheme(ctx, tx, matchID, teamID, "regular", themeIndex, 0, [5]string{}); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // --- reseed computation --------------------------------------------------

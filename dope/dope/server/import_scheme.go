@@ -221,13 +221,6 @@ insert into match_slots(match_id, slot_index, source_type, source_ref_json, team
 values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, util.NullableInt64(resolvedTeamID)); err != nil {
 					return store.FestView{}, err
 				}
-				if resolvedTeamID > 0 {
-					for themeIndex := 0; themeIndex < store.ThemeCount; themeIndex++ {
-						if err := store.InsertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
-							return store.FestView{}, err
-						}
-					}
-				}
 			}
 		}
 	}
@@ -401,13 +394,6 @@ values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Co
 insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
 values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, util.NullableInt64(resolvedTeamID)); err != nil {
 					return err
-				}
-				if resolvedTeamID > 0 && gameType == "ek" {
-					for themeIndex := 0; themeIndex < store.ThemeCount; themeIndex++ {
-						if err := store.InsertTheme(ctx, tx, matchID, resolvedTeamID, "regular", themeIndex, 0, [5]string{}); err != nil {
-							return err
-						}
-					}
 				}
 			}
 		}

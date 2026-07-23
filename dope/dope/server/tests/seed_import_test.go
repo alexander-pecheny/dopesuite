@@ -12,6 +12,7 @@ import (
 	"dope/dope/web/hostpages"
 	"encoding/json"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -304,32 +305,38 @@ order by ms.slot_index`, gameID)
 
 func seedImportRegularThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
 	t.Helper()
-	var count int
-	if err := db.QueryRowContext(context.Background(), `
-select count(*)
-from themes th
-join matches m on m.id = th.match_id
-where m.game_id = ? and m.code = 'A' and th.kind = 'regular'`, gameID).Scan(&count); err != nil {
-		t.Fatalf("count regular themes: %v", err)
+	match, err := store.LoadDBMatchStateWhere(context.Background(), db, `m.game_id = ? and m.code = 'A'`, gameID)
+	if err != nil {
+		t.Fatalf("load match state: %v", err)
+	}
+	count := 0
+	for i, id := range match.TeamIDs {
+		if id != 0 {
+			count += len(match.State.Teams[i].Themes)
+		}
 	}
 	return count
 }
 
+// seedImportExtraThemeCount counts state-blob team sections that no longer
+// have a seat in the match — the pruning invariant after a decline reshuffle.
 func seedImportExtraThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
 	t.Helper()
-	var count int
-	if err := db.QueryRowContext(context.Background(), `
-select count(*)
-from themes th
-join matches m on m.id = th.match_id
-where m.game_id = ? and m.code = 'A'
-  and not exists (
-    select 1
-    from match_slots ms
-    where ms.match_id = th.match_id
-      and ms.team_id = th.team_id
-  )`, gameID).Scan(&count); err != nil {
-		t.Fatalf("count extra themes: %v", err)
+	match, err := store.LoadDBMatchStateWhere(context.Background(), db, `m.game_id = ? and m.code = 'A'`, gameID)
+	if err != nil {
+		t.Fatalf("load match state: %v", err)
+	}
+	seated := map[string]bool{}
+	for _, id := range match.TeamIDs {
+		if id != 0 {
+			seated[strconv.FormatInt(id, 10)] = true
+		}
+	}
+	count := 0
+	for key := range match.Blob.Teams {
+		if !seated[key] {
+			count++
+		}
 	}
 	return count
 }

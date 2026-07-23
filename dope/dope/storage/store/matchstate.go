@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -28,6 +30,7 @@ type DBMatchState struct {
 	StageTitle   string
 	Venue        *VenueView
 	State        MatchState
+	Blob         MatchBlob
 	TeamIDs      []int64
 	RosterSource string
 }
@@ -116,8 +119,9 @@ func LoadDBMatchStateWhere(ctx context.Context, q Queryer, where string, args ..
 	var updatedAt string
 	var venueNumber sql.NullInt64
 	var venueTitle sql.NullString
+	var stateJSON string
 	if err := q.QueryRowContext(ctx, `
-select m.id, m.game_id, m.code, m.title, m.status, m.revision,
+select m.id, m.game_id, m.code, m.title, m.status, m.revision, m.state_json,
        t.revision, t.updated_at, s.code, s.title, v.number, v.title, g.roster_source
 from matches m
 join fests t on t.id = m.fest_id
@@ -125,10 +129,15 @@ join games g on g.id = m.game_id
 join stages s on s.id = m.stage_id
 left join venues v on v.id = m.venue_id
 where `+where, args...).
-		Scan(&match.MatchID, &match.GameID, &match.Code, &match.Title, &match.Status, &match.Revision,
+		Scan(&match.MatchID, &match.GameID, &match.Code, &match.Title, &match.Status, &match.Revision, &stateJSON,
 			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle, &match.RosterSource); err != nil {
 		return DBMatchState{}, err
 	}
+	blob, err := ParseMatchBlob(stateJSON)
+	if err != nil {
+		return DBMatchState{}, fmt.Errorf("match %d state: %w", match.MatchID, err)
+	}
+	match.Blob = blob
 	match.UpdatedAt = ParseDBTime(updatedAt)
 	if venueNumber.Valid {
 		match.Venue = &VenueView{Number: int(venueNumber.Int64), Title: venueTitle.String}
@@ -186,6 +195,10 @@ order by ms.slot_index`, match.MatchID)
 	if err := slotRows.Close(); err != nil {
 		return DBMatchState{}, err
 	}
+	playerName, err := blobPlayerNames(ctx, q, match.Blob)
+	if err != nil {
+		return DBMatchState{}, err
+	}
 	for _, slot := range slots {
 		for len(match.State.Teams) <= slot.Index {
 			match.State.Teams = append(match.State.Teams, TeamState{})
@@ -198,25 +211,65 @@ order by ms.slot_index`, match.MatchID)
 			}
 			continue
 		}
-		team, err := LoadTeamState(ctx, q, match.GameID, match.RosterSource, match.MatchID, slot.TeamID.Int64, slot.Name, slot.Place)
+		roster, err := LoadTeamRoster(ctx, q, match.GameID, match.RosterSource, slot.TeamID.Int64)
 		if err != nil {
 			return DBMatchState{}, err
 		}
-		match.State.Teams[slot.Index] = team
+		match.State.Teams[slot.Index] = TeamStateFromBlob(
+			match.Blob.Teams[strconv.FormatInt(slot.TeamID.Int64, 10)],
+			slot.Name, roster, slot.Place, playerName)
 		match.TeamIDs[slot.Index] = slot.TeamID.Int64
 	}
 	NormalizeState(&match.State)
 	return match, nil
 }
 
-// LoadTeamState loads one team's roster and theme answers for a match.
-func LoadTeamState(ctx context.Context, q Queryer, gameID int64, rosterSource string, matchID, teamID int64, name string, place float64) (TeamState, error) {
-	team := TeamState{
-		Name:   name,
-		Place:  place,
-		Themes: make([]ThemeEntry, ThemeCount),
+// blobPlayerNames batch-resolves every player id referenced by a match blob to
+// its display name.
+func blobPlayerNames(ctx context.Context, q Queryer, blob MatchBlob) (func(int64) string, error) {
+	ids := map[int64]bool{}
+	for _, section := range blob.Teams {
+		for _, theme := range section.Themes {
+			if theme.Player != 0 {
+				ids[theme.Player] = true
+			}
+		}
+		for _, theme := range section.ShootoutThemes {
+			if theme.Player != 0 {
+				ids[theme.Player] = true
+			}
+		}
 	}
+	names := map[int64]string{}
+	if len(ids) > 0 {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+		args := make([]any, 0, len(ids))
+		for id := range ids {
+			args = append(args, id)
+		}
+		rows, err := q.QueryContext(ctx, `select id, first_name, last_name from players where id in (`+placeholders+`)`, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id int64
+			var first, last string
+			if err := rows.Scan(&id, &first, &last); err != nil {
+				return nil, err
+			}
+			names[id] = JoinPlayerName(first, last)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return func(id int64) string { return names[id] }, nil
+}
 
+// LoadTeamRoster loads one team's roster names, from the fest-wide roster or
+// the game-scoped one per the game's roster_source.
+func LoadTeamRoster(ctx context.Context, q Queryer, gameID int64, rosterSource string, teamID int64) ([]string, error) {
 	rosterQuery := `
 select p.first_name, p.last_name
 from team_players tp
@@ -233,119 +286,11 @@ where gtp.game_id = ? and gtp.team_id = ?
 order by gtp.roster_order`
 		rosterArgs = []any{gameID, teamID}
 	}
-	rosterRows, err := q.QueryContext(ctx, rosterQuery, rosterArgs...)
-	if err != nil {
-		return TeamState{}, err
-	}
-	for rosterRows.Next() {
+	return CollectRows(ctx, q, rosterQuery, rosterArgs, func(rows *sql.Rows) (string, error) {
 		var firstName, lastName string
-		if err := rosterRows.Scan(&firstName, &lastName); err != nil {
-			_ = rosterRows.Close()
-			return TeamState{}, err
+		if err := rows.Scan(&firstName, &lastName); err != nil {
+			return "", err
 		}
-		team.Roster = append(team.Roster, JoinPlayerName(firstName, lastName))
-	}
-	if err := rosterRows.Close(); err != nil {
-		return TeamState{}, err
-	}
-
-	themeRows, err := q.QueryContext(ctx, `
-select th.id, th.kind, th.theme_index, coalesce(p.first_name, ''), coalesce(p.last_name, '')
-from themes th
-left join players p on p.id = th.player_id
-where th.match_id = ? and th.team_id = ?
-order by case th.kind when 'regular' then 0 else 1 end, th.theme_index`, matchID, teamID)
-	if err != nil {
-		return TeamState{}, err
-	}
-	defer themeRows.Close()
-
-	type themeRecord struct {
-		ID        int64
-		Kind      string
-		Index     int
-		FirstName string
-		LastName  string
-	}
-	var themeRecords []themeRecord
-	for themeRows.Next() {
-		var themeID int64
-		var kind string
-		var themeIndex int
-		var firstName, lastName string
-		if err := themeRows.Scan(&themeID, &kind, &themeIndex, &firstName, &lastName); err != nil {
-			return TeamState{}, err
-		}
-		themeRecords = append(themeRecords, themeRecord{
-			ID:        themeID,
-			Kind:      kind,
-			Index:     themeIndex,
-			FirstName: firstName,
-			LastName:  lastName,
-		})
-	}
-	if err := themeRows.Err(); err != nil {
-		return TeamState{}, err
-	}
-	if err := themeRows.Close(); err != nil {
-		return TeamState{}, err
-	}
-
-	shootout := make(map[int]ThemeEntry)
-	maxShootout := -1
-	for _, record := range themeRecords {
-		entry := ThemeEntry{
-			Player:  JoinPlayerName(record.FirstName, record.LastName),
-			Answers: [5]string{},
-		}
-		answers, err := LoadThemeAnswers(ctx, q, record.ID)
-		if err != nil {
-			return TeamState{}, err
-		}
-		entry.Answers = answers
-		switch record.Kind {
-		case "regular":
-			if record.Index >= 0 && record.Index < len(team.Themes) {
-				team.Themes[record.Index] = entry
-			}
-		case "shootout":
-			if record.Index >= 0 {
-				shootout[record.Index] = entry
-				if record.Index > maxShootout {
-					maxShootout = record.Index
-				}
-			}
-		}
-	}
-	if maxShootout >= 0 {
-		team.ShootoutThemes = make([]ThemeEntry, maxShootout+1)
-		for index, entry := range shootout {
-			team.ShootoutThemes[index] = entry
-		}
-	}
-	return team, nil
-}
-
-// LoadThemeAnswers loads the 5 answer marks for a theme, normalised.
-func LoadThemeAnswers(ctx context.Context, q Queryer, themeID int64) ([5]string, error) {
-	var answers [5]string
-	rows, err := q.QueryContext(ctx, `
-select answer_index, mark from answers
-where theme_id = ?
-order by answer_index`, themeID)
-	if err != nil {
-		return answers, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var index int
-		var mark string
-		if err := rows.Scan(&index, &mark); err != nil {
-			return answers, err
-		}
-		if index >= 0 && index < len(answers) {
-			answers[index] = NormalizeMark(mark)
-		}
-	}
-	return answers, rows.Err()
+		return JoinPlayerName(firstName, lastName), nil
+	})
 }

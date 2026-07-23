@@ -13,10 +13,8 @@ import (
 	"dope/dope/web/hostpages"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -342,45 +340,32 @@ order by ms.slot_index`, gameID, matchCode)
 
 func regularThemeCount(t *testing.T, db *sql.DB, gameID int64, matchCode string, teamID int64) int {
 	t.Helper()
-	var count int
-	if err := db.QueryRowContext(context.Background(), `
-select count(*)
-from themes th
-join matches m on m.id = th.match_id
-where m.game_id = ? and m.code = ? and th.team_id = ? and th.kind = 'regular'`,
-		gameID, matchCode, teamID).Scan(&count); err != nil {
-		t.Fatalf("count themes: %v", err)
+	match, err := store.LoadDBMatchStateWhere(context.Background(), db, `m.game_id = ? and m.code = ?`, gameID, matchCode)
+	if err != nil {
+		t.Fatalf("load match state: %v", err)
 	}
-	return count
+	for i, id := range match.TeamIDs {
+		if id == teamID {
+			return len(match.State.Teams[i].Themes)
+		}
+	}
+	return 0
 }
 
-// matchAnswerSnapshot returns a stable, comparable dump of every answer mark in a
-// match (joined through its themes), so a test can assert protocol data is
-// byte-identical before and after an operation.
+// matchAnswerSnapshot returns a match's protocol state blob verbatim — a
+// stable, comparable dump so a test can assert protocol data is byte-identical
+// before and after an operation. Empty when no marks were ever entered.
 func matchAnswerSnapshot(t *testing.T, db *sql.DB, gameID int64, matchCode string) string {
 	t.Helper()
-	rows, err := db.QueryContext(context.Background(), `
-select th.team_id, th.kind, th.theme_index, a.answer_index, a.mark
-from answers a
-join themes th on th.id = a.theme_id
-join matches m on m.id = th.match_id
-where m.game_id = ? and m.code = ?
-order by th.team_id, th.kind, th.theme_index, a.answer_index`, gameID, matchCode)
-	if err != nil {
-		t.Fatalf("snapshot answers: %v", err)
+	var raw string
+	if err := db.QueryRowContext(context.Background(), `
+select state_json from matches where game_id = ? and code = ?`, gameID, matchCode).Scan(&raw); err != nil {
+		t.Fatalf("snapshot state: %v", err)
 	}
-	defer rows.Close()
-	var b strings.Builder
-	for rows.Next() {
-		var team int64
-		var kind, mark string
-		var ti, ai int
-		if err := rows.Scan(&team, &kind, &ti, &ai, &mark); err != nil {
-			t.Fatalf("scan answer: %v", err)
-		}
-		fmt.Fprintf(&b, "%d/%s/%d/%d=%q\n", team, kind, ti, ai, mark)
+	if raw == "{}" {
+		return ""
 	}
-	return b.String()
+	return raw
 }
 
 // TestUntickEditRetickPreservesDownstream is the headline guarantee: with a

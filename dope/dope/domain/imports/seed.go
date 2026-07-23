@@ -6,7 +6,6 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/domain/overrides"
-	"dope/dope/domain/resolver"
 	rosterpkg "dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
@@ -15,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -431,11 +431,6 @@ order by ms.id`, []any{gameID}, func(rows *sql.Rows) (slotRecord, error) {
 		if _, err := tx.ExecContext(ctx, `update match_slots set team_id = ? where id = ?`, util.NullableInt64(teamID), slot.ID); err != nil {
 			return err
 		}
-		if teamID > 0 {
-			if err := resolver.EnsureRegularThemes(ctx, tx, slot.MatchID, teamID); err != nil {
-				return err
-			}
-		}
 	}
 	for matchID := range touchedMatches {
 		if err := pruneMatchStateToSlots(ctx, tx, matchID); err != nil {
@@ -457,16 +452,27 @@ where match_id = ?
   )`, matchID); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `
-delete from themes
-where match_id = ?
-  and not exists (
-    select 1
-    from match_slots ms
-    where ms.match_id = themes.match_id
-      and ms.team_id = themes.team_id
-  )`, matchID)
-	return err
+	seated, err := store.CollectRows(ctx, tx, `
+select team_id from match_slots where match_id = ? and team_id is not null`,
+		[]any{matchID}, func(rows *sql.Rows) (int64, error) {
+			var id int64
+			return id, rows.Scan(&id)
+		})
+	if err != nil {
+		return err
+	}
+	return store.MutateMatchBlobTx(ctx, tx, matchID, func(blob *store.MatchBlob) error {
+		keep := map[string]bool{}
+		for _, id := range seated {
+			keep[strconv.FormatInt(id, 10)] = true
+		}
+		for key := range blob.Teams {
+			if !keep[key] {
+				delete(blob.Teams, key)
+			}
+		}
+		return nil
+	})
 }
 
 func maxSeedNumber(ctx context.Context, q store.Queryer, gameID int64) (int, error) {

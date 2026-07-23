@@ -439,9 +439,14 @@ func applyMatchEditTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState,
 
 	switch plan.Action {
 	case matchedit.ActionAddShootoutTheme:
-		return addShootoutThemeTx(ctx, tx, match.MatchID, match.TeamIDs)
+		return store.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
+			blob.AddShootoutTheme(match.TeamIDs)
+			return nil
+		})
 	case matchedit.ActionRemoveShootoutTheme:
-		return removeShootoutThemeTx(ctx, tx, match.MatchID)
+		return store.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
+			return blob.RemoveShootoutTheme()
+		})
 	}
 
 	teamID := match.TeamIDs[req.Team]
@@ -456,81 +461,27 @@ on conflict(match_id, team_id) do update set place = excluded.place`, match.Matc
 	}
 
 	if plan.Theme != nil {
-		themeID, err := store.LookupThemeID(ctx, tx, match.MatchID, teamID, plan.Theme.Kind, plan.Theme.Index)
-		if err != nil {
-			return err
-		}
-
-		if plan.Theme.Player != nil {
-			var playerID any
-			if *plan.Theme.Player != "" {
-				id, err := lookupRosterPlayerID(ctx, tx, match.GameID, match.RosterSource, teamID, *plan.Theme.Player)
-				if err != nil {
-					return err
-				}
-				playerID = id
-			}
-			if _, err := tx.ExecContext(ctx, `update themes set player_id = ? where id = ?`, playerID, themeID); err != nil {
+		var playerID int64
+		if plan.Theme.Player != nil && *plan.Theme.Player != "" {
+			id, err := lookupRosterPlayerID(ctx, tx, match.GameID, match.RosterSource, teamID, *plan.Theme.Player)
+			if err != nil {
 				return err
 			}
+			playerID = id
 		}
-
-		if plan.Theme.Answer != nil {
-			if _, err := tx.ExecContext(ctx, `
-insert into answers(theme_id, answer_index, mark)
-values(?, ?, ?)
-on conflict(theme_id, answer_index) do update set mark = excluded.mark`, themeID, plan.Theme.Answer.Index, store.NormalizeMark(plan.Theme.Answer.Mark)); err != nil {
-				return err
+		return store.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
+			section := blob.Team(teamID)
+			if plan.Theme.Player != nil {
+				section.SetPlayer(plan.Theme.Kind, plan.Theme.Index, playerID)
 			}
-		}
+			if plan.Theme.Answer != nil {
+				section.SetAnswer(plan.Theme.Kind, plan.Theme.Index, plan.Theme.Answer.Index, plan.Theme.Answer.Mark)
+			}
+			return nil
+		})
 	}
 
 	return nil
-}
-
-func addShootoutThemeTx(ctx context.Context, tx *sql.Tx, matchID int64, teamIDs []int64) error {
-	var next sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `
-select max(theme_index) + 1 from themes
-where match_id = ? and kind = 'shootout'`, matchID).Scan(&next); err != nil {
-		return err
-	}
-	themeIndex := 0
-	if next.Valid {
-		themeIndex = int(next.Int64)
-	}
-	for _, teamID := range teamIDs {
-		if teamID == 0 {
-			continue
-		}
-		if err := store.InsertTheme(ctx, tx, matchID, teamID, "shootout", themeIndex, 0, [5]string{}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func removeShootoutThemeTx(ctx context.Context, tx *sql.Tx, matchID int64) error {
-	var themeIndex sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `
-select max(theme_index) from themes
-where match_id = ? and kind = 'shootout'`, matchID).Scan(&themeIndex); err != nil {
-		return err
-	}
-	if !themeIndex.Valid {
-		return errors.New("no shootout themes to remove")
-	}
-	if _, err := tx.ExecContext(ctx, `
-delete from answers
-where theme_id in (
-  select id from themes where match_id = ? and kind = 'shootout' and theme_index = ?
-)`, matchID, themeIndex.Int64); err != nil {
-		return err
-	}
-	_, err := tx.ExecContext(ctx, `
-delete from themes
-where match_id = ? and kind = 'shootout' and theme_index = ?`, matchID, themeIndex.Int64)
-	return err
 }
 
 func lookupRosterPlayerID(ctx context.Context, q store.Queryer, gameID int64, rosterSource string, teamID int64, player string) (int64, error) {
