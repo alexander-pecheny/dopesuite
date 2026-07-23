@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"dope/dope/domain/core"
 	"dope/dope/domain/resolver"
+	"dope/dope/domain/scoring"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 	"encoding/json"
@@ -188,7 +189,7 @@ on conflict(match_id, team_id) do update set place = excluded.place`,
 	if err != nil {
 		return err
 	}
-	if err := store.RecalculateMatchResultsForStateTx(ctx, tx, match); err != nil {
+	if err := scoring.RecalculateMatchResultsTx(ctx, tx, match); err != nil {
 		return err
 	}
 	if _, err := resolver.ResolveGameSlotsTx(ctx, tx, plan.GameID); err != nil {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"dope/dope/domain/matchedit"
 	"dope/dope/domain/resolver"
+	"dope/dope/domain/scoring"
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
@@ -359,7 +360,7 @@ func (s *server) applyMatchUpdateUsing(
 		}
 	}
 
-	if err := store.RecalculateMatchResultsForStateTx(ctx, tx, match); err != nil {
+	if err := scoring.RecalculateMatchResultsTx(ctx, tx, match); err != nil {
 		return store.MatchView{}, nil, nil, err
 	}
 	affected, err := resolver.ResolveGameSlotsTx(ctx, tx, match.GameID)
@@ -528,7 +529,7 @@ func recalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, festID int64, co
 	if err != nil {
 		return err
 	}
-	return store.RecalculateMatchResultsForStateTx(ctx, tx, match)
+	return scoring.RecalculateMatchResultsTx(ctx, tx, match)
 }
 
 func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, festID, matchID int64, eventType, payload string) (int64, error) {
