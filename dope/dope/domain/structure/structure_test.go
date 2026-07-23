@@ -125,6 +125,79 @@ func TestSingleElimStandings(t *testing.T) {
 	})
 }
 
+// Worked example: two finished semis. Team 1 won m1 with total 100, team 3 won
+// m2 with 90, team 4 lost m2 with 95, team 2 lost m1 with 60. Sorting by
+// place_sum asc then total desc seats them 1, 3, 4, 2. Ranks are seat orders:
+// always distinct, never shared.
+func TestReseedStandings(t *testing.T) {
+	kind, ok := Kind("reseed")
+	if !ok {
+		t.Fatal("reseed kind not registered")
+	}
+	cfg := json.RawMessage(`{"sort":[{"metric":"place_sum","dir":"asc"},{"metric":"total","dir":"desc"}]}`)
+	outcome := func(code string, teamA, teamB int64, placeA, placeB float64, totalA, totalB float64) MatchOutcome {
+		return MatchOutcome{Code: code, Finished: true, Slots: []SlotOutcome{
+			{Participant: teamA, Place: placeA, Metrics: map[string]float64{"total": totalA}},
+			{Participant: teamB, Place: placeB, Metrics: map[string]float64{"total": totalB}},
+		}}
+	}
+	ranked, err := kind.Standings(cfg, []MatchOutcome{
+		outcome("s-1", 1, 2, 1, 2, 100, 60),
+		outcome("s-2", 3, 4, 1, 2, 90, 95),
+	})
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	assertRanked(t, ranked, []RankedEntry{
+		{Rank: 1, Participant: 1, Metrics: map[string]float64{"place_sum": 1, "total": 100}},
+		{Rank: 2, Participant: 3, Metrics: map[string]float64{"place_sum": 1, "total": 90}},
+		{Rank: 3, Participant: 4, Metrics: map[string]float64{"place_sum": 2, "total": 95}},
+		{Rank: 4, Participant: 2, Metrics: map[string]float64{"place_sum": 2, "total": 60}},
+	})
+
+	schedule := mustSchedule(t, "reseed", string(cfg), nil)
+	if len(schedule) != 0 {
+		t.Fatalf("reseed scheduled %d matches, want none", len(schedule))
+	}
+}
+
+// True ties get deterministic Жребий lots from the configured seed: the order
+// is stable across recomputes and independent of input order, both lots land
+// in [1, 1e6], and untied teams keep draw 0.
+func TestReseedDrawLots(t *testing.T) {
+	kind, _ := Kind("reseed")
+	cfg := json.RawMessage(`{"seed":"s1","sort":[{"metric":"place_sum","dir":"asc"},{"metric":"draw","dir":"asc"}]}`)
+	tied := func(order [2]int64) []MatchOutcome {
+		return []MatchOutcome{
+			{Code: "m1", Finished: true, Slots: []SlotOutcome{
+				{Participant: order[0], Place: 1, Metrics: map[string]float64{"total": 50}}}},
+			{Code: "m2", Finished: true, Slots: []SlotOutcome{
+				{Participant: order[1], Place: 1, Metrics: map[string]float64{"total": 50}},
+				{Participant: 9, Place: 2, Metrics: map[string]float64{"total": 10}}}},
+		}
+	}
+	first, err := kind.Standings(cfg, tied([2]int64{5, 6}))
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	swapped, err := kind.Standings(cfg, tied([2]int64{6, 5}))
+	if err != nil {
+		t.Fatalf("Standings (swapped): %v", err)
+	}
+	if first[0].Participant != swapped[0].Participant || first[1].Participant != swapped[1].Participant {
+		t.Errorf("lot order depends on input order: %v vs %v", first, swapped)
+	}
+	for _, e := range first[:2] {
+		lot := e.Metrics["draw"]
+		if lot < 1 || lot > 1_000_000 {
+			t.Errorf("team %d lot = %v, want in [1, 1e6]", e.Participant, lot)
+		}
+	}
+	if first[2].Participant != 9 || first[2].Metrics["draw"] != 0 {
+		t.Errorf("untied team = %+v, want participant 9 with draw 0", first[2])
+	}
+}
+
 func codes(matches []store.SchemeMatch) []string {
 	out := make([]string, len(matches))
 	for i, m := range matches {
