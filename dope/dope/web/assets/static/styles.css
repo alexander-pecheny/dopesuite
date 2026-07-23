@@ -77,6 +77,18 @@
   min-height: 100%;
 }
 
+/* a title plus three buttons can't fit a phone: the link takes its own line,
+   the buttons line up beneath it */
+@media (max-width: 760px) {
+  .list-action-row {
+    flex-wrap: wrap;
+  }
+
+  .list-action-row .list-row {
+    flex-basis: 100%;
+  }
+}
+
 .game-type-fieldset {
   margin: 0;
   padding: 0;

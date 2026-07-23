@@ -876,12 +876,17 @@ input[type="radio"]:focus-visible {
   display: none;
 }
 
-/* the section primitive: a form/step column (login, register, profile stages).
+/* the section primitive: a titled column of page content.
    Inputs use .input, submit buttons use .btn — see design system above. */
 .section {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+/* on sheet pages (login, register, profile stages) a section is a form/step
+   column and keeps the narrow column measure */
+.sheet-frame .section {
   max-width: 420px;
 }
 
