@@ -3407,7 +3407,7 @@ async function cardCopyBody(src, rank, key) {
 // created destination card (labels are reconciled separately by the callers). The
 // source card is always on the current board, so its content is read under `dk`
 // and re-encrypted under the destination key `targetDk`. Comments are imported
-// preserving their original author + timestamp (the bulk /comments/import
+// preserving their original author + timestamp (the bulk /timeline/import
 // endpoint); attachments are downloaded, decrypted, re-encrypted and re-uploaded
 // (preserving mime + lossless flag). Copy/move is an online-only operation, so
 // this runs straight against the API (no sync outbox / temp ids).
@@ -3433,7 +3433,7 @@ async function copyCardExtras(srcCardId, targetDk, newCardId) {
     });
   }
   if (comments.length) {
-    try { await jpost(`/api/cards/${newCardId}/comments/import`, { comments }); } catch (_) {}
+    try { await jpost(`/api/cards/${newCardId}/timeline/import`, { events: comments }); } catch (_) {}
   }
   // Attachments: re-encrypt the ciphertext bytes under the destination key.
   let atts = [];
@@ -4063,7 +4063,10 @@ function renderEvent(ev, payload) {
     let diff = {};
     try { diff = JSON.parse(payload); } catch (_) {}
     const ops = xyDiff.diffTokens(diff.before || "", diff.after || "");
-    wrap.append(el("div", { class: "tl-meta", text: meta("правка описания · " + when) }),
+    // An imported edit (Trello history) names its author inside the payload —
+    // they are not an xy user, so author_user_id has nobody to point at.
+    const who = diff.author ? `${diff.author} · ` : meta("");
+    wrap.append(el("div", { class: "tl-meta", text: who + "правка описания · " + when }),
       diffView() === "brief" ? renderBriefDiff(ops) : renderFullDiff(ops));
   } else {
     let info = {};

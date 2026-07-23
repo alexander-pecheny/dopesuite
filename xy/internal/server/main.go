@@ -123,7 +123,7 @@ func Main() {
 	mux.HandleFunc("PUT /api/cards/{id}/labels", srv.handleSetCardLabels)
 	mux.HandleFunc("GET /api/cards/{id}/timeline", srv.handleGetTimeline)
 	mux.HandleFunc("POST /api/cards/{id}/comments", srv.handleAddComment)
-	mux.HandleFunc("POST /api/cards/{id}/comments/import", srv.handleImportComments)
+	mux.HandleFunc("POST /api/cards/{id}/timeline/import", srv.handleImportEvents)
 	mux.HandleFunc("PATCH /api/comments/{id}", srv.handlePatchComment)
 	mux.HandleFunc("DELETE /api/comments/{id}", srv.handleDeleteComment)
 
