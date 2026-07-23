@@ -3,18 +3,15 @@ set dotenv-load := true
 default: dev
 
 # esbuild-bundle the TypeScript game pages into web/assets/static/dist
-# (ADR-0003). Everything that builds or serves the server depends on it —
-# the bundles are gitignored build artifacts, embedded at go-build time.
+# (ADR-0003; toolchain shared at the repo root, root docs/adr/0001).
+# Everything that builds or serves the server depends on it — the bundles are
+# gitignored build artifacts, embedded at go-build time.
 build-web:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    [ -d node_modules ] || npm install --no-audit --no-fund
-    npm run --silent typecheck
-    npm run --silent build
+    cd .. && just build-web dope
 
 # Rebuild bundles on change (run beside dev-web-only for the frontend loop).
 watch-web:
-    node scripts/webbuild.mjs --watch
+    cd .. && node scripts/webbuild.mjs dope --watch
 
 dev-web-only: build-web
     go run ./dope/cmd/dope-server

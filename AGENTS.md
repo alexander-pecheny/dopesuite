@@ -33,7 +33,9 @@ dope/        tournament management (EK/OD/KSI) + realtime web UI
 
 - **Go** ≥ 1.26 — all three modules.
 - **just** — the task runner (root + per-app justfiles).
-- **node** ≥ 21 — the frontend tests, both apps (`node --test`, no npm deps).
+- **node** ≥ 21 + npm — the shared frontend toolchain (root `package.json`:
+  typescript + esbuild, `just build-web [target]`, see `docs/adr/0001`) and the
+  frontend tests (`node --test`).
 - **Rust** + the `wasm32-wasip1` target — xy only, and only to build typst into
   `xy/internal/chgk/typstwasm/typst.wasm` (`cd xy && just build-wasm`): a 30 MB
   artifact that is `//go:embed`-ed but not in git, so every xy Go recipe fails

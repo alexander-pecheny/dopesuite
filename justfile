@@ -23,6 +23,15 @@ pre-commit: pre-commit-core pre-commit-uikit
     cd xy && just pre-commit
     cd dope && just pre-commit
 
+# Typecheck + esbuild the frontend targets (shared toolchain, docs/adr/0001).
+# No args = all targets; `just build-web dope` builds one.
+build-web *targets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -d node_modules ] || npm install --no-audit --no-fund
+    npm run --silent typecheck
+    node scripts/webbuild.mjs {{targets}}
+
 ## dopecore ###################################################################
 
 test-core:

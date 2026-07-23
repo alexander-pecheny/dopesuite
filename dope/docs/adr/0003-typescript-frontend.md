@@ -7,6 +7,13 @@ date: 2026-07-23
 
 The game pages are rebuilt as one shared **shell** that owns everything format-independent (tabbed game topbar, breadcrumbs, SSE sync/epoch handling, stage navigation, cross-table/bracket/standings views, DopeUIKit styling) plus small per-Protocol **renderer** modules that only build the match grid and handle its edits. The rewrite is in full TypeScript with an esbuild step — ending the no-build, ordered-`<script>`, window-globals convention for game pages. We chose full TS over ES modules + JSDoc because the shell/renderer/scorer contracts are the load-bearing interfaces of the whole design and deserve real checked types; the first brain attempt failed precisely by drifting from unchecked conventions.
 
+## Amendment (2026-07-23, root ADR-0001)
+
+The toolchain moved to the repo root (shared package.json/tsconfig/webbuild),
+and the migration pacing changed from renderer-by-renderer to a big-bang
+conversion of all legacy scripts to strict-TS ES modules — including the chrome
+scripts the scope note below exempted. See `../../docs/adr/0001`.
+
 ## Consequences
 
 - `justfile` dev/test/embed gain an esbuild step; dev hot-reload becomes esbuild watch; embedded assets are built output.
