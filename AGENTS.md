@@ -49,3 +49,17 @@ dope/        tournament management (EK/OD/KSI) + realtime web UI
 
 Plain `git`. Branch, commit and merge with raw git commands — no `gitbutler`, no
 `graphite`, no wrapper scripts.
+
+## Agent skills
+
+### Issue tracker
+
+Forgejo issues on code.pecheny.me, via the `fj` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary; label string = role name. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Multi-context: root `CONTEXT-MAP.md` pointing at per-module `CONTEXT.md` files. See `docs/agents/domain.md`.
