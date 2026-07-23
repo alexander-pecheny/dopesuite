@@ -31,7 +31,9 @@ func HandleScopedGameResults(s Host, w http.ResponseWriter, r *http.Request, fes
 	seq := s.CurrentStateSeq(fmt.Sprintf("game-state:%d", gameID))
 	var gameType, schemeJSON, stateJSON string
 	err := s.DB().QueryRowContext(r.Context(), `
-select game_type, scheme_json, state_json from games where fest_id = ? and id = ?`,
+select game_type, scheme_json,
+       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), coalesce(state_json, '{}'))
+from games where fest_id = ? and id = ?`,
 		festID, gameID).Scan(&gameType, &schemeJSON, &stateJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)

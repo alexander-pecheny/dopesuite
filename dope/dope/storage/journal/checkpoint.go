@@ -48,11 +48,12 @@ type rowQuerier interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
-// CaptureGameCheckpoint snapshots a game's full mutable state.
+// CaptureGameCheckpoint snapshots a game's full mutable state. StateJSON is
+// the game-level auxiliary blob (EK seed-import staging); protocol state lives
+// on matches rows and is captured with the tables.
 func CaptureGameCheckpoint(ctx context.Context, q rowQuerier, gameID int64) (*GameCheckpoint, error) {
 	cp := &GameCheckpoint{Tables: map[string][]map[string]any{}}
 
-	// state_json (the only part of the games row that is mutable state).
 	srow, err := q.QueryContext(ctx, `select coalesce(state_json, '{}') from games where id = ?`, gameID)
 	if err != nil {
 		return nil, err
@@ -170,8 +171,12 @@ func RestoreGameCheckpoint(ctx context.Context, tx *sql.Tx, gameID int64, cp *Ga
 			}
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `update games set state_json = ? where id = ?`, cp.StateJSON, gameID); err != nil {
-		return err
+	// Converted flat-game checkpoints carry their state on the match row and
+	// blank StateJSON; only restore the game-level auxiliary blob when set.
+	if cp.StateJSON != "" {
+		if _, err := tx.ExecContext(ctx, `update games set state_json = ? where id = ?`, cp.StateJSON, gameID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

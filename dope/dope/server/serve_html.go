@@ -245,7 +245,9 @@ func (s *server) buildGameInit(ctx context.Context, scope festScope) (gameInitPa
 	payload := gameInitPayload{FestID: scope.FestID, GameID: scope.GameID}
 	var schemeJSON, stateJSON, screenSettingsJSON string
 	if err := s.eng.DB.QueryRowContext(ctx, `
-select coalesce(scheme_json, ''), coalesce(state_json, ''), coalesce(screen_settings_json, '')
+select coalesce(scheme_json, ''),
+       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}'),
+       coalesce(screen_settings_json, '')
 from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&schemeJSON, &stateJSON, &screenSettingsJSON); err != nil {
 		return payload, err
 	}

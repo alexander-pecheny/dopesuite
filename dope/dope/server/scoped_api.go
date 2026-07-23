@@ -480,7 +480,9 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		seq := s.eng.CurrentStateSeq(fmt.Sprintf("game-state:%d", scope.GameID))
 		var stateJSON string
 		err := s.eng.DB.QueryRowContext(r.Context(), `
-	select state_json from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&stateJSON)
+	select coalesce(m.state_json, coalesce(g.state_json, '{}'))
+	from games g left join matches m on m.game_id = g.id and m.code = 'main'
+	where g.fest_id = ? and g.id = ?`, scope.FestID, scope.GameID).Scan(&stateJSON)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -596,30 +598,34 @@ func (s *server) replaceGameState(reqCtx context.Context, scope festScope, raw [
 	var revision int64
 	err := s.eng.WithWriteTx(reqCtx, scope.FestID, "game-state-put", func(ctx context.Context, tx *sql.Tx) error {
 		var gameType, stateJSON string
+		var matchID sql.NullInt64
 		if err := tx.QueryRowContext(ctx, `
-select game_type, state_json from games where fest_id = ? and id = ?`,
-			scope.FestID, scope.GameID).Scan(&gameType, &stateJSON); err != nil {
+select g.game_type, m.id, coalesce(m.state_json, coalesce(g.state_json, '{}'))
+from games g left join matches m on m.game_id = g.id and m.code = 'main'
+where g.fest_id = ? and g.id = ?`,
+			scope.FestID, scope.GameID).Scan(&gameType, &matchID, &stateJSON); err != nil {
 			return err
 		}
 		if err := validateImmutableRatingRosterState(gameType, []byte(stateJSON), raw); err != nil {
 			return err
 		}
-
-		result, err := tx.ExecContext(ctx, `
+		if matchID.Valid {
+			if err := festwrite.SetFlatGameStateTx(ctx, tx, matchID.Int64, string(raw)); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `
+update games set updated_at = ? where fest_id = ? and id = ?`,
+				util.UtcNow(), scope.FestID, scope.GameID); err != nil {
+				return err
+			}
+		} else if _, err := tx.ExecContext(ctx, `
 update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
-			string(raw), util.UtcNow(), scope.FestID, scope.GameID)
-		if err != nil {
+			string(raw), util.UtcNow(), scope.FestID, scope.GameID); err != nil {
 			return err
 		}
-		n, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if n == 0 {
-			return sql.ErrNoRows
-		}
-		revision, err = festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, "game:state", string(raw))
-		return err
+		var bumpErr error
+		revision, bumpErr = festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, "game:state", string(raw))
+		return bumpErr
 	})
 	return revision, err
 }

@@ -3,6 +3,7 @@ package migrate
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"dope/dope/storage/journal"
@@ -23,28 +24,259 @@ import (
 // the drop).
 func RunUnifyConversion(db *sql.DB) error {
 	ctx := context.Background()
-	var hasThemes int
+	var hasThemes, flatPending int
 	if err := db.QueryRowContext(ctx,
 		`select count(*) from sqlite_master where type = 'table' and name = 'themes'`).Scan(&hasThemes); err != nil {
 		return err
 	}
-	if hasThemes == 0 {
-		return nil
-	}
-	if err := guardNoReplayableLegacyRecords(ctx, db); err != nil {
+	if err := db.QueryRowContext(ctx, `
+select count(*) from games g
+where g.game_type in ('od', 'ksi', 'si')
+  and not exists (select 1 from matches m where m.game_id = g.id and m.code = 'main')`).Scan(&flatPending); err != nil {
 		return err
+	}
+	if hasThemes == 0 && flatPending == 0 {
+		return nil
 	}
 	if err := journal.DropTriggers(db); err != nil {
 		return err
 	}
-	if err := rewriteCheckpoints(ctx, db); err != nil {
+	if hasThemes != 0 {
+		if err := guardNoReplayableLegacyRecords(ctx, db); err != nil {
+			return err
+		}
+		if err := rewriteCheckpoints(ctx, db); err != nil {
+			return err
+		}
+		if err := ConvertEKMatchBlobs(ctx, db); err != nil {
+			return err
+		}
+		for _, stmt := range []string{`drop table if exists answers`, `drop table if exists themes`} {
+			if _, err := db.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+	}
+	if flatPending != 0 {
+		if err := convertFlatGames(ctx, db); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// convertFlatGames gives every ЧГК-family game (od/ksi/si) its unified shape:
+// one stage (kind 'matches', code 'main') holding one match whose state_json
+// carries what used to live on games.state_json. Journal records touching a
+// flat game's state redirect onto the match row; checkpoints fold their
+// StateJSON into the injected match row. games.state_json itself survives as
+// the game-level auxiliary blob (EK seed-import staging) and is blanked for
+// converted flat games.
+func convertFlatGames(ctx context.Context, db *sql.DB) error {
+	type flatGame struct {
+		id     int64
+		festID int64
+		title  string
+		state  string
+		status string
+	}
+	games, err := store.CollectRows(ctx, db, `
+select id, fest_id, title, coalesce(state_json, '{}'), status from games
+where game_type in ('od', 'ksi', 'si')`, nil,
+		func(rows *sql.Rows) (flatGame, error) {
+			var g flatGame
+			return g, rows.Scan(&g.id, &g.festID, &g.title, &g.state, &g.status)
+		})
+	if err != nil {
 		return err
 	}
-	if err := ConvertEKMatchBlobs(ctx, db); err != nil {
+	matchOf := map[int64]int64{}
+	stageOf := map[int64]int64{}
+	for _, g := range games {
+		stageID, matchID, err := ensureFlatMatch(ctx, db, g.id, g.festID, g.title, g.status)
+		if err != nil {
+			return fmt.Errorf("flat match for game %d: %w", g.id, err)
+		}
+		matchOf[g.id] = matchID
+		stageOf[g.id] = stageID
+		if _, err := db.ExecContext(ctx,
+			`update matches set state_json = ? where id = ?`, g.state, matchID); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx,
+			`update games set state_json = '{}' where id = ?`, g.id); err != nil {
+			return err
+		}
+	}
+	if err := rewriteGameStateRecords(ctx, db, matchOf); err != nil {
 		return err
 	}
-	for _, stmt := range []string{`drop table if exists answers`, `drop table if exists themes`} {
-		if _, err := db.ExecContext(ctx, stmt); err != nil {
+	return rewriteFlatCheckpoints(ctx, db, stageOf, matchOf)
+}
+
+// ensureFlatMatch creates (or finds) the single stage+match of a flat game.
+func ensureFlatMatch(ctx context.Context, db *sql.DB, gameID, festID int64, title, status string) (int64, int64, error) {
+	var stageID int64
+	err := db.QueryRowContext(ctx,
+		`select id from stages where game_id = ? and code = 'main'`, gameID).Scan(&stageID)
+	if err == sql.ErrNoRows {
+		res, insErr := db.ExecContext(ctx, `
+insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json)
+values(?, ?, 'main', '', 'matches', 'matches', 1, 'active', '{}')`, festID, gameID)
+		if insErr != nil {
+			return 0, 0, insErr
+		}
+		stageID, insErr = res.LastInsertId()
+		if insErr != nil {
+			return 0, 0, insErr
+		}
+	} else if err != nil {
+		return 0, 0, err
+	}
+	var matchID int64
+	matchStatus := "active"
+	if status == "finished" {
+		matchStatus = "finished"
+	}
+	err = db.QueryRowContext(ctx,
+		`select id from matches where game_id = ? and code = 'main'`, gameID).Scan(&matchID)
+	if err == sql.ErrNoRows {
+		res, insErr := db.ExecContext(ctx, `
+insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, status, revision, state_json)
+values(?, ?, ?, 'main', ?, 1, 0, ?, 0, '{}')`, festID, gameID, stageID, title, matchStatus)
+		if insErr != nil {
+			return 0, 0, insErr
+		}
+		matchID, insErr = res.LastInsertId()
+		if insErr != nil {
+			return 0, 0, insErr
+		}
+	} else if err != nil {
+		return 0, 0, err
+	}
+	return stageID, matchID, nil
+}
+
+// rewriteGameStateRecords redirects every flat game's state_json row-op in the
+// hot journal onto its match row (EK games keep theirs — the column remains
+// their seed-import staging).
+func rewriteGameStateRecords(ctx context.Context, db *sql.DB, matchOf map[int64]int64) error {
+	type rec struct {
+		id      int64
+		payload string
+	}
+	records, err := store.CollectRows(ctx, db, `
+select id, payload from journal
+where json_extract(payload, '$.t') = 'games' and json_extract(payload, '$.r.state_json') is not null`,
+		nil, func(rows *sql.Rows) (rec, error) {
+			var r rec
+			return r, rows.Scan(&r.id, &r.payload)
+		})
+	if err != nil {
+		return err
+	}
+	for _, r := range records {
+		var decoded struct {
+			Table string         `json:"t"`
+			Row   map[string]any `json:"r"`
+		}
+		if err := json.Unmarshal([]byte(r.payload), &decoded); err != nil {
+			continue
+		}
+		gameID, ok := asInt(decoded.Row["id"])
+		if !ok {
+			continue
+		}
+		matchID, flat := matchOf[gameID]
+		if !flat {
+			continue
+		}
+		state, _ := decoded.Row["state_json"].(string)
+		delete(decoded.Row, "state_json")
+		var out []byte
+		if state != "" {
+			out, err = json.Marshal(map[string]any{
+				"t": "matches",
+				"r": map[string]any{"id": matchID, "state_json": state},
+			})
+		} else {
+			out, err = json.Marshal(map[string]any{"t": decoded.Table, "r": decoded.Row})
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, `update journal set payload = ? where id = ?`, string(out), r.id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// rewriteFlatCheckpoints folds each flat game's checkpoint StateJSON into an
+// injected stage+match row, so restoring an old checkpoint recreates the
+// unified shape instead of resurrecting games.state_json.
+func rewriteFlatCheckpoints(ctx context.Context, db *sql.DB, stageOf, matchOf map[int64]int64) error {
+	for gameID, matchID := range matchOf {
+		type cpRow struct {
+			seq  int64
+			blob []byte
+		}
+		cpRows, err := store.CollectRows(ctx, db, `
+select seq, state_blob from journal_checkpoint where game_id = ?`, []any{gameID},
+			func(rows *sql.Rows) (cpRow, error) {
+				var r cpRow
+				return r, rows.Scan(&r.seq, &r.blob)
+			})
+		if err != nil {
+			return err
+		}
+		for _, row := range cpRows {
+			if err := rewriteOneFlatCheckpoint(ctx, db, gameID, matchID, stageOf[gameID], row.seq, row.blob); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func rewriteOneFlatCheckpoint(ctx context.Context, db *sql.DB, gameID, matchID, stageID, seq int64, blob []byte) error {
+	{
+		cp, err := journal.DecodeGameCheckpoint(blob)
+		if err != nil {
+			return fmt.Errorf("checkpoint game %d: %w", gameID, err)
+		}
+		var festID int64
+		if err := db.QueryRowContext(ctx, `select fest_id from games where id = ?`, gameID).Scan(&festID); err != nil {
+			return err
+		}
+		var matchTitle, matchStatus string
+		_ = db.QueryRowContext(ctx, `select title, status from matches where id = ?`, matchID).Scan(&matchTitle, &matchStatus)
+		if len(cp.Tables["stages"]) == 0 {
+			cp.Tables["stages"] = []map[string]any{{
+				"id": stageID, "fest_id": festID, "game_id": gameID, "code": "main", "title": "",
+				"stage_type": "matches", "kind": "matches", "position": int64(1), "status": "active", "config_json": "{}",
+			}}
+		}
+		if len(cp.Tables["matches"]) == 0 {
+			cp.Tables["matches"] = []map[string]any{{
+				"id": matchID, "fest_id": festID, "game_id": gameID, "stage_id": stageID,
+				"code": "main", "title": matchTitle, "position": int64(1), "participant_count": int64(0),
+				"status": matchStatus, "revision": int64(0), "state_json": cp.StateJSON,
+			}}
+		} else {
+			for _, row := range cp.Tables["matches"] {
+				if id, ok := asInt(row["id"]); ok && id == matchID {
+					row["state_json"] = cp.StateJSON
+				}
+			}
+		}
+		cp.StateJSON = ""
+		encoded, err := journal.EncodeGameCheckpoint(cp)
+		if err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx,
+			`update journal_checkpoint set state_blob = ? where game_id = ? and seq = ?`, encoded, gameID, seq); err != nil {
 			return err
 		}
 	}

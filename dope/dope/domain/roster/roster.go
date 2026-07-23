@@ -15,6 +15,7 @@ import (
 
 	"dope/dope/domain/games"
 	"dope/dope/platform/util"
+	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
 )
 
@@ -66,7 +67,8 @@ func SortedFestRosterImportTeams(teams []FestRosterImportTeam) []FestRosterImpor
 
 func PropagateRosterToChGKTx(ctx context.Context, tx *sql.Tx, festID int64, teams []FestRosterImportTeam, entryRemap map[int]int) ([]GameStateBroadcast, error) {
 	rows, err := tx.QueryContext(ctx, `
-select id, coalesce(scheme_json, '{}'), coalesce(state_json, '{}')
+select id, coalesce(scheme_json, '{}'),
+       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}')
 from games
 where fest_id = ? and game_type = 'od'
 order by position, id`, festID)
@@ -106,8 +108,15 @@ order by position, id`, festID)
 			return nil, fmt.Errorf("game %d state: %w", game.ID, err)
 		}
 		if _, err := tx.ExecContext(ctx, `
-update games set scheme_json = ?, state_json = ?, updated_at = ?
-where id = ? and fest_id = ?`, string(schemeJSON), string(stateJSON), util.UtcNow(), game.ID, festID); err != nil {
+update games set scheme_json = ?, updated_at = ?
+where id = ? and fest_id = ?`, string(schemeJSON), util.UtcNow(), game.ID, festID); err != nil {
+			return nil, err
+		}
+		matchID, err := store.FlatMatchID(ctx, tx, game.ID)
+		if err != nil {
+			return nil, err
+		}
+		if err := festwrite.SetFlatGameStateTx(ctx, tx, matchID, string(stateJSON)); err != nil {
 			return nil, err
 		}
 		updates = append(updates, GameStateBroadcast{GameID: game.ID, StateJSON: stateJSON})
@@ -117,7 +126,8 @@ where id = ? and fest_id = ?`, string(schemeJSON), string(stateJSON), util.UtcNo
 
 func PropagateRosterToKSITx(ctx context.Context, tx *sql.Tx, festID int64, teams []FestRosterImportTeam) ([]GameStateBroadcast, error) {
 	rows, err := tx.QueryContext(ctx, `
-select id, coalesce(scheme_json, '{}'), coalesce(state_json, '{}')
+select id, coalesce(scheme_json, '{}'),
+       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}')
 from games
 where fest_id = ? and game_type = 'ksi'
 order by position, id`, festID)
@@ -157,8 +167,15 @@ order by position, id`, festID)
 			return nil, fmt.Errorf("game %d state: %w", game.ID, err)
 		}
 		if _, err := tx.ExecContext(ctx, `
-update games set scheme_json = ?, state_json = ?, updated_at = ?
-where id = ? and fest_id = ?`, string(schemeJSON), string(stateJSON), util.UtcNow(), game.ID, festID); err != nil {
+update games set scheme_json = ?, updated_at = ?
+where id = ? and fest_id = ?`, string(schemeJSON), util.UtcNow(), game.ID, festID); err != nil {
+			return nil, err
+		}
+		matchID, err := store.FlatMatchID(ctx, tx, game.ID)
+		if err != nil {
+			return nil, err
+		}
+		if err := festwrite.SetFlatGameStateTx(ctx, tx, matchID, string(stateJSON)); err != nil {
 			return nil, err
 		}
 		updates = append(updates, GameStateBroadcast{GameID: game.ID, StateJSON: stateJSON})

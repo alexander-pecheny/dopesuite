@@ -464,11 +464,22 @@ select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and
 	}
 
 	if _, err := tx.ExecContext(r.Context(), `
-update games set scheme_json = ?, state_json = ?, status = ?,
+update games set scheme_json = ?, state_json = '{}', status = ?,
   team_list_source = 'fest', roster_source = 'fest', revision = revision + 1, updated_at = ?
-where id = ? and fest_id = ?`, string(newScheme), string(newState), status, now, gameID, festID); err != nil {
+where id = ? and fest_id = ?`, string(newScheme), status, now, gameID, festID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if gameType != "ek" {
+		matchID, err := store.FlatMatchID(r.Context(), tx, gameID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := festwrite.SetFlatGameStateTx(r.Context(), tx, matchID, string(newState)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	var nextMatchCode sql.NullString
@@ -750,10 +761,32 @@ values(?, ?, 2, ?, ?)`, uniqueSchemeSlug(identity.Code), identity.Title, string(
 	if err != nil {
 		return 0, err
 	}
-	return store.InsertReturningID(ctx, tx, `
+	gameID, err := store.InsertReturningID(ctx, tx, `
 insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?, ?, ?, 'active', 'fest', 'fest', 1, ?, ?)`,
-		festID, identity.Code, identity.Title, gameType, identity.Position, schemeID, string(schemeJSON), string(stateJSON), now, now)
+values(?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
+		festID, identity.Code, identity.Title, gameType, identity.Position, schemeID, string(schemeJSON), now, now)
+	if err != nil {
+		return 0, err
+	}
+	if err := insertFlatMatchTx(ctx, tx, festID, gameID, identity.Title, string(stateJSON), now); err != nil {
+		return 0, err
+	}
+	return gameID, nil
+}
+
+// insertFlatMatchTx creates a flat game's unified structure: one 'main' stage
+// (kind matches) holding one 'main' match that carries the whole game state.
+func insertFlatMatchTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, title, stateJSON, now string) error {
+	stageID, err := store.InsertReturningID(ctx, tx, `
+insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json)
+values(?, ?, 'main', '', 'matches', 'matches', 1, 'active', '{}')`, festID, gameID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `
+insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, status, revision, state_json)
+values(?, ?, ?, 'main', ?, 1, 0, 'active', 0, ?)`, festID, gameID, stageID, title, stateJSON)
+	return err
 }
 
 func CreateEKGameTx(ctx context.Context, tx *sql.Tx, festID int64, scheme store.FestScheme) (int64, error) {

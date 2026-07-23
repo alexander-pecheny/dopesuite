@@ -35,7 +35,8 @@ func HandleScopedGameExport(s Host, w http.ResponseWriter, r *http.Request, fest
 	var gameType, schemeJSON, stateJSON string
 	var gameSlug, festSlug sql.NullString
 	err := s.DB().QueryRowContext(r.Context(), `
-select g.game_type, g.slug, coalesce(g.scheme_json, ''), coalesce(g.state_json, ''), f.slug
+select g.game_type, g.slug, coalesce(g.scheme_json, ''),
+       coalesce((select m.state_json from matches m where m.game_id = g.id and m.code = 'main'), coalesce(g.state_json, '')), f.slug
 from games g join fests f on f.id = g.fest_id
 where g.fest_id = ? and g.id = ?`, festID, gameID).
 		Scan(&gameType, &gameSlug, &schemeJSON, &stateJSON, &festSlug)

@@ -105,6 +105,12 @@ func splitPointer(path string) []string {
 // empty strings inside an "answers" segment) for a numeric one. Remove splices
 // arrays and deletes object keys; missing paths no-op.
 func applyBlobOp(doc any, op store.BlobOp) any {
+	if op.Kind == "replace" {
+		if op.Value == nil {
+			return map[string]any{}
+		}
+		return op.Value
+	}
 	parts := splitPointer(op.Path)
 	if len(parts) == 0 {
 		return doc
@@ -130,11 +136,29 @@ func applyBlobOp(doc any, op store.BlobOp) any {
 	return doc
 }
 
+// isIndex reports whether a numeric segment addresses an array position given
+// the node it lands on: an existing container decides by its own type; a
+// missing one falls back to the schema heuristic (directly under "teams" the
+// EK blob keys an object by team id, everywhere else numbers index arrays).
+func isIndex(node any, key string, parentKey string) (int, bool) {
+	index, err := strconv.Atoi(key)
+	if err != nil {
+		return 0, false
+	}
+	switch node.(type) {
+	case []any:
+		return index, true
+	case map[string]any:
+		return 0, false
+	}
+	return index, parentKey != "teams"
+}
+
 // ensurePath pads containers along the way so the addressed theme exists,
 // never overwriting anything that is already there.
 func ensurePath(node any, parts []string, parentKey string) any {
 	key := parts[0]
-	if index, err := strconv.Atoi(key); err == nil && parentKey != "teams" {
+	if index, ok := isIndex(node, key, parentKey); ok {
 		arr, ok := node.([]any)
 		if !ok {
 			arr = []any{}
@@ -176,7 +200,7 @@ func ensurePath(node any, parts []string, parentKey string) any {
 // where team-id keys are numeric strings inside an object.
 func setPath(node any, parts []string, value any, parentKey string) any {
 	key := parts[0]
-	if index, err := strconv.Atoi(key); err == nil && parentKey != "teams" {
+	if index, ok := isIndex(node, key, parentKey); ok {
 		inAnswers := parentKey == "answers"
 		arr, ok := node.([]any)
 		if !ok {
@@ -236,7 +260,7 @@ func emptyAnswers() []any {
 
 func removePath(node any, parts []string, parentKey string) any {
 	key := parts[0]
-	if index, err := strconv.Atoi(key); err == nil && parentKey != "teams" {
+	if index, ok := isIndex(node, key, parentKey); ok {
 		arr, ok := node.([]any)
 		if !ok || index < 0 || index >= len(arr) {
 			return node

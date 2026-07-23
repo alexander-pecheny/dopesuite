@@ -44,7 +44,10 @@ type journalOpRow struct {
 
 func (s *Server) loadGameJournalGroups(ctx context.Context, gameID int64) ([]journalChange, error) {
 	var gameType, stateJSON string
-	_ = s.h.DB().QueryRowContext(ctx, `select game_type, coalesce(state_json, '{}') from games where id = ?`, gameID).
+	_ = s.h.DB().QueryRowContext(ctx, `
+select game_type,
+       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), coalesce(state_json, '{}'))
+from games where id = ?`, gameID).
 		Scan(&gameType, &stateJSON)
 
 	rows, err := s.h.DB().QueryContext(ctx, `

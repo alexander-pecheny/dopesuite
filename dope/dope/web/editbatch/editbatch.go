@@ -32,6 +32,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,7 +43,24 @@ import (
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
+	"dope/dope/storage/store"
 )
+
+// pointerFromSegments renders a parsed patch path as the JSON pointer an
+// OpMatchPatch record carries.
+func pointerFromSegments(path []edit.JSONPathSegment) string {
+	var b strings.Builder
+	for _, seg := range path {
+		b.WriteByte('/')
+		if seg.IsIndex {
+			b.WriteString(strconv.Itoa(seg.Index))
+			continue
+		}
+		escaped := strings.ReplaceAll(seg.Key, "~", "~0")
+		b.WriteString(strings.ReplaceAll(escaped, "/", "~1"))
+	}
+	return b.String()
+}
 
 // editBatchWindow bounds how long game-state edits buffer before the batch is
 // applied. Matches the viewer-side deltaCoalesceWindow so editor and viewer
@@ -324,10 +343,15 @@ func (b *Batcher) applyOneEditTx(ctx context.Context, tx *sql.Tx, scope core.Fes
 		sample.Ops = len(req.Ops)
 	}
 
+	// Flat games keep their state on the 'main' match; a game without one (EK)
+	// PATCHes its game-level auxiliary blob instead.
 	var gameType, stateJSON string
+	var matchID sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `
-select game_type, state_json from games where fest_id = ? and id = ?`,
-		scope.FestID, scope.GameID).Scan(&gameType, &stateJSON); err != nil {
+select g.game_type, m.id, coalesce(m.state_json, coalesce(g.state_json, '{}'))
+from games g left join matches m on m.game_id = g.id and m.code = 'main'
+where g.fest_id = ? and g.id = ?`,
+		scope.FestID, scope.GameID).Scan(&gameType, &matchID, &stateJSON); err != nil {
 		return nil, 0, nil, err
 	}
 	if stateJSON == "" {
@@ -346,6 +370,7 @@ select game_type, state_json from games where fest_id = ? and id = ?`,
 		root = map[string]any{}
 	}
 
+	blobOps := make([]store.BlobOp, 0, len(req.Ops))
 	for _, op := range req.Ops {
 		if op.Op != "" && op.Op != "set" {
 			return nil, 0, nil, fmt.Errorf("unsupported patch op %q", op.Op)
@@ -365,6 +390,7 @@ select game_type, state_json from games where fest_id = ? and id = ?`,
 		if err != nil {
 			return nil, 0, nil, err
 		}
+		blobOps = append(blobOps, store.BlobOp{Kind: "set", Path: pointerFromSegments(path), Value: value})
 	}
 
 	tMarshal := metrics.NowIf(metricsOn)
@@ -376,18 +402,31 @@ select game_type, state_json from games where fest_id = ? and id = ?`,
 	if metricsOn {
 		sample.Marshal = tDB.Sub(tMarshal)
 	}
-	result, err := tx.ExecContext(ctx, `
+	if matchID.Valid {
+		if _, err := tx.ExecContext(ctx, `
+update matches set state_json = ? where id = ?`, string(next), matchID.Int64); err != nil {
+			return nil, 0, nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `
+update games set updated_at = ? where fest_id = ? and id = ?`,
+			util.UtcNow(), scope.FestID, scope.GameID); err != nil {
+			return nil, 0, nil, err
+		}
+		if err := festwrite.JournalMatchPatchTx(ctx, tx, matchID.Int64, blobOps); err != nil {
+			return nil, 0, nil, err
+		}
+	} else {
+		result, err := tx.ExecContext(ctx, `
 update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
-		string(next), util.UtcNow(), scope.FestID, scope.GameID)
-	if err != nil {
-		return nil, 0, nil, err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return nil, 0, nil, err
-	}
-	if n == 0 {
-		return nil, 0, nil, sql.ErrNoRows
+			string(next), util.UtcNow(), scope.FestID, scope.GameID)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		if n, err := result.RowsAffected(); err != nil {
+			return nil, 0, nil, err
+		} else if n == 0 {
+			return nil, 0, nil, sql.ErrNoRows
+		}
 	}
 	revision, err := festwrite.BumpFestRevisionTx(ctx, tx, scope.FestID, "game:state-patch", payload)
 	if err != nil {

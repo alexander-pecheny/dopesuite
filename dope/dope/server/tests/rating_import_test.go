@@ -131,7 +131,7 @@ func TestImportRatingRosterRemapsKSIScoresByTeam(t *testing.T) {
 	}
 	grid[idx["Гамма"]][2] = "right"
 	grid[idx["Эхо"]][4] = "wrong"
-	if _, err := db.Exec(`update games set state_json = ? where id = ?`, util.MustJSON(map[string]any{
+	if _, err := db.Exec(`update matches set state_json = ? where game_id = ? and code = 'main'`, util.MustJSON(map[string]any{
 		"participants": before.Participants,
 		"themes":       []map[string]any{{"answers": grid}},
 		"finished":     false,
@@ -174,7 +174,7 @@ func TestImportRatingRosterRemapsKSIScoresByTeam(t *testing.T) {
 func loadKSIState(t *testing.T, db *sql.DB, gameID int64) ksiTestState {
 	t.Helper()
 	var raw string
-	if err := db.QueryRow(`select state_json from games where id = ?`, gameID).Scan(&raw); err != nil {
+	if err := db.QueryRow(`select coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}') from games where id = ?`, gameID).Scan(&raw); err != nil {
 		t.Fatalf("load ksi state: %v", err)
 	}
 	var st ksiTestState

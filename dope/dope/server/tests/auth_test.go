@@ -564,7 +564,9 @@ func TestHostCreateGameFlow(t *testing.T) {
 	}
 	var odSchemeJSON, odStateJSON string
 	if err := srv.Eng().DB.QueryRow(`
-select scheme_json, state_json from games where fest_id = ? and game_type = 'od' order by id desc limit 1`, festID).Scan(&odSchemeJSON, &odStateJSON); err != nil {
+select scheme_json,
+       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}')
+from games where fest_id = ? and game_type = 'od' order by id desc limit 1`, festID).Scan(&odSchemeJSON, &odStateJSON); err != nil {
 		t.Fatalf("load od game: %v", err)
 	}
 	var odScheme struct {
@@ -596,7 +598,9 @@ select scheme_json, state_json from games where fest_id = ? and game_type = 'od'
 	}
 	var ksiSchemeJSON, ksiStateJSON string
 	if err := srv.Eng().DB.QueryRow(`
-select scheme_json, state_json from games where fest_id = ? and game_type = 'ksi' order by id desc limit 1`, festID).Scan(&ksiSchemeJSON, &ksiStateJSON); err != nil {
+select scheme_json,
+       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}')
+from games where fest_id = ? and game_type = 'ksi' order by id desc limit 1`, festID).Scan(&ksiSchemeJSON, &ksiStateJSON); err != nil {
 		t.Fatalf("load ksi game: %v", err)
 	}
 	var ksiScheme struct {

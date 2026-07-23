@@ -740,7 +740,7 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 	}
 
 	var schemeJSON, stateJSON string
-	if err := db.QueryRow(`select scheme_json, state_json from games where id = ?`, chgkGameID).Scan(&schemeJSON, &stateJSON); err != nil {
+	if err := db.QueryRow(`select scheme_json, coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}') from games where id = ?`, chgkGameID).Scan(&schemeJSON, &stateJSON); err != nil {
 		t.Fatalf("load chgk json: %v", err)
 	}
 	var scheme struct {
@@ -767,7 +767,7 @@ limit 1`, festID).Scan(&firstTeam, &firstPlayer); err != nil {
 		t.Fatalf("state entries first row len = %d, want 2", len(state.Entries[0]))
 	}
 
-	if err := db.QueryRow(`select scheme_json, state_json from games where id = ?`, ksiGameID).Scan(&schemeJSON, &stateJSON); err != nil {
+	if err := db.QueryRow(`select scheme_json, coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}') from games where id = ?`, ksiGameID).Scan(&schemeJSON, &stateJSON); err != nil {
 		t.Fatalf("load ksi json: %v", err)
 	}
 	var ksiScheme struct {
@@ -1243,7 +1243,7 @@ func TestFestNumbersFlow(t *testing.T) {
 
 	// Verify OD state.teams now carries the assigned numbers.
 	var stateJSON string
-	if err := db.QueryRow(`select state_json from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
+	if err := db.QueryRow(`select coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}') from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
 		t.Fatalf("load od state: %v", err)
 	}
 	var state struct {
@@ -1279,7 +1279,7 @@ func TestFestNumbersFlow(t *testing.T) {
 	if allSet {
 		t.Fatalf("after clear: allSet should be false")
 	}
-	if err := db.QueryRow(`select state_json from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
+	if err := db.QueryRow(`select coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}') from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
 		t.Fatalf("load od state after clear: %v", err)
 	}
 	state = struct {
@@ -1422,7 +1422,7 @@ func TestHostFestNumbersPage(t *testing.T) {
 
 	// Verify state.teams in the chgk game contains the reassigned numbers.
 	var stateJSON string
-	if err := srv.Eng().DB.QueryRow(`select state_json from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
+	if err := srv.Eng().DB.QueryRow(`select coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}') from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
 		t.Fatalf("load chgk state: %v", err)
 	}
 	var state struct {
@@ -1485,9 +1485,9 @@ func TestFestNumbersRemapEntries(t *testing.T) {
 	}}
 	shootoutRoundsJSON, _ := json.Marshal(shootoutRounds)
 	if _, err := db.Exec(`
-update games
+update matches
 set state_json = json_set(state_json, '$.entries', json(?), '$.shootoutRounds', json(?))
-where id = ?`, string(entriesJSON), string(shootoutRoundsJSON), chgkGameID); err != nil {
+where game_id = ? and code = 'main'`, string(entriesJSON), string(shootoutRoundsJSON), chgkGameID); err != nil {
 		t.Fatalf("seed entries: %v", err)
 	}
 
@@ -1498,7 +1498,7 @@ where id = ?`, string(entriesJSON), string(shootoutRoundsJSON), chgkGameID); err
 	}
 
 	var stateJSON string
-	if err := db.QueryRow(`select state_json from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
+	if err := db.QueryRow(`select coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}') from games where id = ?`, chgkGameID).Scan(&stateJSON); err != nil {
 		t.Fatalf("load state: %v", err)
 	}
 	var got struct {
@@ -1562,9 +1562,9 @@ func TestFestNumbersPropagateToKSI(t *testing.T) {
 
 	// Mark a right answer for Боря (alphabetical row 1) before renumbering.
 	if _, err := db.Exec(`
-update games
+update matches
 set state_json = json_set(state_json, '$.themes[0].answers', json(?))
-where id = ?`, `[["",""],["right",""],["",""]]`, ksiGameID); err != nil {
+where game_id = ? and code = 'main'`, `[["",""],["right",""],["",""]]`, ksiGameID); err != nil {
 		t.Fatalf("seed answers: %v", err)
 	}
 
@@ -1584,7 +1584,7 @@ where id = ?`, `[["",""],["right",""],["",""]]`, ksiGameID); err != nil {
 	}
 
 	var stateJSON string
-	if err := db.QueryRow(`select state_json from games where id = ?`, ksiGameID).Scan(&stateJSON); err != nil {
+	if err := db.QueryRow(`select coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}') from games where id = ?`, ksiGameID).Scan(&stateJSON); err != nil {
 		t.Fatalf("load ksi state: %v", err)
 	}
 	var got struct {

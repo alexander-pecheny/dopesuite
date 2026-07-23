@@ -249,8 +249,23 @@ values(?, ?, 2, ?, ?)`, "fixture-"+code, title, schemeJSON, now)
 	if err != nil {
 		return 0, err
 	}
-	return store.InsertReturningID(ctx, tx, `
+	gameID, err := store.InsertReturningID(ctx, tx, `
 insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?, ?, ?, 'active', 'game', 'game', 1, ?, ?)`,
-		festID, code, title, gameType, position, schemeID, schemeJSON, stateJSON, now, now)
+values(?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'game', 'game', 1, ?, ?)`,
+		festID, code, title, gameType, position, schemeID, schemeJSON, now, now)
+	if err != nil {
+		return 0, err
+	}
+	stageID, err := store.InsertReturningID(ctx, tx, `
+insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json)
+values(?, ?, 'main', '', 'matches', 'matches', 1, 'active', '{}')`, festID, gameID)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, status, revision, state_json)
+values(?, ?, ?, 'main', ?, 1, 0, 'active', 0, ?)`, festID, gameID, stageID, title, stateJSON); err != nil {
+		return 0, err
+	}
+	return gameID, nil
 }

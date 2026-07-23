@@ -31,6 +31,26 @@ func ResolveFestID(ctx context.Context, q Queryer, ref string) (int64, error) {
 	return id, nil
 }
 
+// FlatMatchID returns the id of the single match (code 'main') hosting a flat
+// (ЧГК-family) game's state under the unified model.
+func FlatMatchID(ctx context.Context, q Queryer, gameID int64) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx,
+		`select id from matches where game_id = ? and code = 'main'`, gameID).Scan(&id)
+	return id, err
+}
+
+// FlatGameStateJSON reads a flat game's state document from its match.
+func FlatGameStateJSON(ctx context.Context, q Queryer, gameID int64) (string, error) {
+	var state string
+	err := q.QueryRowContext(ctx,
+		`select state_json from matches where game_id = ? and code = 'main'`, gameID).Scan(&state)
+	if state == "" {
+		state = "{}"
+	}
+	return state, err
+}
+
 // RecalculateMatchResultsForStateTx recomputes and upserts the match_results
 // rows (place/total/plus/tiebreak/metrics) for every occupied slot of a match
 // from its in-memory state.

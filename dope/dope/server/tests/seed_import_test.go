@@ -113,7 +113,7 @@ func declineKSIParticipant(t *testing.T, db *sql.DB, festID int64, key string) {
 	var gameID int64
 	var raw string
 	if err := db.QueryRowContext(context.Background(), `
-select id, coalesce(state_json, '{}') from games where fest_id = ? and game_type = 'ksi'`, festID).Scan(&gameID, &raw); err != nil {
+select id, coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}') from games where fest_id = ? and game_type = 'ksi'`, festID).Scan(&gameID, &raw); err != nil {
 		t.Fatalf("load ksi game: %v", err)
 	}
 	obj := map[string]json.RawMessage{}
@@ -125,7 +125,7 @@ select id, coalesce(state_json, '{}') from games where fest_id = ? and game_type
 	if err != nil {
 		t.Fatalf("encode ksi state: %v", err)
 	}
-	if _, err := db.ExecContext(context.Background(), `update games set state_json = ? where id = ?`, string(next), gameID); err != nil {
+	if _, err := db.ExecContext(context.Background(), `update matches set state_json = ? where game_id = ? and code = 'main'`, string(next), gameID); err != nil {
 		t.Fatalf("update ksi state: %v", err)
 	}
 }

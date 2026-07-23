@@ -517,7 +517,8 @@ func loadKSISeedCandidates(ctx context.Context, q store.Queryer, festID int64) (
 	var sourceGameID int64
 	var schemeJSON, stateJSON string
 	if err := q.QueryRowContext(ctx, `
-select id, coalesce(scheme_json, '{}'), coalesce(state_json, '{}')
+select id, coalesce(scheme_json, '{}'),
+       coalesce((select m.state_json from matches m where m.game_id = games.id and m.code = 'main'), '{}')
 from games
 where fest_id = ? and game_type = 'ksi'
 order by position, id

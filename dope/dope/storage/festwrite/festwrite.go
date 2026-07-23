@@ -18,6 +18,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -224,6 +225,29 @@ func MutateMatchBlobTx(ctx context.Context, tx *sql.Tx, matchID int64, fn func(*
 		return err
 	}
 	return JournalMatchPatchTx(ctx, tx, matchID, ops)
+}
+
+// SetFlatGameStateTx replaces a flat game's whole state document (canonical
+// key order) on its match row and journals it as one OpMatchPatch replace, so
+// replay reproduces the write byte-for-byte.
+func SetFlatGameStateTx(ctx context.Context, tx *sql.Tx, matchID int64, stateJSON string) error {
+	var doc any
+	dec := json.NewDecoder(strings.NewReader(stateJSON))
+	dec.UseNumber()
+	if err := dec.Decode(&doc); err != nil {
+		return err
+	}
+	canonical, err := json.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`update matches set state_json = ? where id = ?`, string(canonical), matchID); err != nil {
+		return err
+	}
+	return JournalMatchPatchTx(ctx, tx, matchID, []store.BlobOp{
+		{Kind: "replace", Path: "", Value: json.RawMessage(canonical)},
+	})
 }
 
 // BumpFestRevisionTx increments a fest's revision, records a semantic journal
