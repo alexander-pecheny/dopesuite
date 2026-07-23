@@ -142,7 +142,7 @@ func BuildKSISheets(f *excelize.File, schemeJSON, stateJSON string) error {
 	if err := buildKSIDetailedSheet(f, &state); err != nil {
 		return err
 	}
-	return buildKSIResultsSheet(f, &state)
+	return buildKSIResultsSheet(f, &state, schemeJSON, stateJSON)
 }
 
 func ksiSchemeHasStickers(schemeJSON string) bool {
@@ -253,7 +253,7 @@ func buildKSIDetailedSheet(f *excelize.File, state *ksiExportState) error {
 	return nil
 }
 
-func buildKSIResultsSheet(f *excelize.File, state *ksiExportState) error {
+func buildKSIResultsSheet(f *excelize.File, state *ksiExportState, schemeJSON, stateJSON string) error {
 	sheet := uniqueSheetName(f, "Итог")
 	if _, err := f.NewSheet(sheet); err != nil {
 		return err
@@ -272,72 +272,14 @@ func buildKSIResultsSheet(f *excelize.File, state *ksiExportState) error {
 		return err
 	}
 
-	type metrics struct {
-		index   int
-		name    string
-		total   int
-		plus    int
-		correct map[int]int
+	ranked, err := games.ComputeKSIResults(schemeJSON, stateJSON, store.QuestionValues[:])
+	if err != nil {
+		return err
 	}
-	// Teams that refused to play are excluded from the ranking, matching the KSI
-	// «Итог» tab and the EK seed import.
-	rows := make([]metrics, 0, len(state.Participants))
-	for p := range state.Participants {
-		if games.KSIParticipantDeclined(state.Declined, state.Participants[p]) {
-			continue
-		}
-		m := metrics{index: p, name: participantExportName(state.Participants, p), correct: map[int]int{}}
-		for t := 0; t < len(state.Themes); t++ {
-			sticker, scored := ksiThemeSticker(state, t, p)
-			if !scored {
-				continue
-			}
-			for a := 0; a < len(store.QuestionValues); a++ {
-				v := store.QuestionValues[a]
-				mark := ksiMark(state, t, p, a)
-				cv := games.KSIStickerMarkValue(sticker, mark, v)
-				m.total += cv
-				if cv > 0 {
-					m.plus += cv
-				}
-				if mark == "right" {
-					m.correct[v]++
-				}
-			}
-		}
-		rows = append(rows, m)
-	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		a, b := rows[i], rows[j]
-		if a.total != b.total {
-			return a.total > b.total
-		}
-		if a.plus != b.plus {
-			return a.plus > b.plus
-		}
-		for _, v := range resultValues {
-			if a.correct[v] != b.correct[v] {
-				return a.correct[v] > b.correct[v]
-			}
-		}
-		return a.index < b.index
-	})
-
 	// Tie-grouped place labels ("1", "2–4", ...), matching rankedResultRows.
-	sameMetrics := func(a, b metrics) bool {
-		if a.total != b.total || a.plus != b.plus {
-			return false
-		}
-		for _, v := range resultValues {
-			if a.correct[v] != b.correct[v] {
-				return false
-			}
-		}
-		return true
-	}
-	for i := 0; i < len(rows); {
+	for i := 0; i < len(ranked); {
 		j := i
-		for j+1 < len(rows) && sameMetrics(rows[i], rows[j+1]) {
+		for j+1 < len(ranked) && ranked[j+1].Place == ranked[i].Place {
 			j++
 		}
 		place := strconv.Itoa(i + 1)
@@ -345,9 +287,9 @@ func buildKSIResultsSheet(f *excelize.File, state *ksiExportState) error {
 			place = fmt.Sprintf("%d–%d", i+1, j+1)
 		}
 		for k := i; k <= j; k++ {
-			cells := []interface{}{place, rows[k].name, rows[k].total, rows[k].plus}
+			cells := []interface{}{place, participantExportName(state.Participants, ranked[k].Index), ranked[k].Total, ranked[k].Plus}
 			for _, v := range resultValues {
-				cells = append(cells, rows[k].correct[v])
+				cells = append(cells, ranked[k].Correct[v])
 			}
 			if err := setRow(f, sheet, 2+k, cells); err != nil {
 				return err
