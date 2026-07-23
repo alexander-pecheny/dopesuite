@@ -452,10 +452,14 @@ func applyMatchEditTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState,
 	teamID := match.TeamIDs[req.Team]
 
 	if plan.Place != nil {
+		// A host place edit is a pin: it lands in place_override (winning over
+		// the scorer's place at every recompute) and mirrors into place so the
+		// view is right before the recompute runs.
 		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, team_id, place)
-values(?, ?, ?)
-on conflict(match_id, team_id) do update set place = excluded.place`, match.MatchID, teamID, *plan.Place); err != nil {
+insert into match_results(match_id, team_id, place, place_override)
+values(?, ?, ?, ?)
+on conflict(match_id, team_id) do update set place = excluded.place, place_override = excluded.place_override`,
+			match.MatchID, teamID, *plan.Place, *plan.Place); err != nil {
 			return err
 		}
 	}

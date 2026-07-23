@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -32,6 +34,13 @@ func (ek) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	state := store.MatchState{Teams: make([]store.TeamState, conf.Participants)}
 	store.NormalizeState(&state)
 	return json.Marshal(state)
+}
+
+// WriteResultsTx keeps EK's legacy match_results shape (places from state,
+// metrics_json with correctCounts arrays) byte-for-byte — the parity gate
+// depends on it. It satisfies scoring.LegacyResultWriter.
+func (ek) WriteResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState) error {
+	return store.RecalculateMatchResultsForStateTx(ctx, tx, match)
 }
 
 func (ek) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {

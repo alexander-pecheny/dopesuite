@@ -61,11 +61,12 @@ func RecalculateMatchResultsForStateTx(ctx context.Context, tx *sql.Tx, match DB
 			continue
 		}
 		metrics := matchMetricsJSON(team)
+		// A host-pinned place_override beats the state's place (ADR-0001).
 		if _, err := tx.ExecContext(ctx, `
 insert into match_results(match_id, team_id, place, total, plus, tiebreak, metrics_json)
 values(?, ?, ?, ?, ?, ?, ?)
 on conflict(match_id, team_id) do update set
-  place = excluded.place,
+  place = coalesce(match_results.place_override, excluded.place),
   total = excluded.total,
   plus = excluded.plus,
   tiebreak = excluded.tiebreak,

@@ -7,6 +7,7 @@ package resolver
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/structure"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	"encoding/json"
@@ -96,11 +97,11 @@ func resolveGameSlotsWithReseedModeTx(ctx context.Context, tx *sql.Tx, gameID in
 	}
 
 	stages, err := store.CollectRows(ctx, tx, `
-select id, code, stage_type, status, config_json
+select id, code, stage_type, kind, status, config_json
 from stages where game_id = ? order by position, id`,
 		[]any{gameID}, func(rows *sql.Rows) (resolverStage, error) {
 			var st resolverStage
-			return st, rows.Scan(&st.id, &st.code, &st.stageType, &st.status, &st.config)
+			return st, rows.Scan(&st.id, &st.code, &st.stageType, &st.kind, &st.status, &st.config)
 		})
 	if err != nil {
 		return nil, err
@@ -122,6 +123,14 @@ from stages where game_id = ? order by position, id`,
 				err = syncReseedReadinessTx(ctx, tx, stage, gameID)
 			}
 			if err != nil {
+				return nil, err
+			}
+		} else if isRankedKind(stage.kind) {
+			// A registered Stage Kind (rr group, elimination bracket, …) ranks
+			// live on every recompute: standings display updates as bouts land;
+			// downstream rank slots stay gated on stage completeness (see
+			// teamAtReseedRank).
+			if err := recomputeKindStandingsTx(ctx, tx, stage, gameID); err != nil {
 				return nil, err
 			}
 		}
@@ -146,8 +155,143 @@ type resolverStage struct {
 	id        int64
 	code      string
 	stageType string
+	kind      string
 	status    string
 	config    []byte
+}
+
+// isRankedKind reports whether a stage's kind carries its own Standings
+// computation (everything registered except the manual list and the
+// calculate-gated reseed, which keep their legacy flows).
+func isRankedKind(kind string) bool {
+	if kind == "" || kind == "matches" || kind == "reseed" {
+		return false
+	}
+	_, ok := structure.Kind(kind)
+	return ok
+}
+
+// recomputeKindStandingsTx ranks a kind stage from its matches' current
+// results and replaces its stage_standings rows.
+func recomputeKindStandingsTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
+	kind, ok := structure.Kind(stage.kind)
+	if !ok {
+		return nil
+	}
+	outcomes, _, err := stageMatchOutcomesTx(ctx, tx, stage.id)
+	if err != nil {
+		return err
+	}
+	seed, err := gameRandomSeed(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	ranked, err := kind.Standings(kindStageConfig(stage.config, seed), outcomes)
+	if err != nil {
+		return fmt.Errorf("stage %s standings: %w", stage.code, err)
+	}
+	if _, err := tx.ExecContext(ctx, `delete from stage_standings where stage_id = ?`, stage.id); err != nil {
+		return err
+	}
+	for seat, entry := range ranked {
+		// The stored rank is the distinct seat order (rank refs must resolve
+		// uniquely); the kind's shared display place travels in the metrics.
+		metrics := map[string]float64{"place": float64(entry.Rank)}
+		for key, value := range entry.Metrics {
+			metrics[key] = value
+		}
+		if _, err := tx.ExecContext(ctx, `
+insert into stage_standings(stage_id, rank, participant_id, metrics_json)
+values(?, ?, ?, ?)`, stage.id, seat+1, entry.Participant, util.MustJSON(metrics)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// kindStageConfig unwraps the persisted stage config (storeutil nests the
+// scheme's config under "config") and injects the game's deterministic seed
+// for tie lots.
+func kindStageConfig(raw []byte, seed string) json.RawMessage {
+	var outer struct {
+		Config map[string]any `json:"config"`
+	}
+	cfg := map[string]any{}
+	if err := json.Unmarshal(raw, &outer); err == nil && outer.Config != nil {
+		cfg = outer.Config
+	} else {
+		_ = json.Unmarshal(raw, &cfg)
+	}
+	if cfg == nil {
+		cfg = map[string]any{}
+	}
+	cfg["seed"] = seed
+	return json.RawMessage(util.MustJSON(cfg))
+}
+
+// stageMatchOutcomesTx loads a stage's matches as structure.MatchOutcome (slot
+// results in slot order) and reports whether every match is finished.
+func stageMatchOutcomesTx(ctx context.Context, tx *sql.Tx, stageID int64) ([]structure.MatchOutcome, bool, error) {
+	type matchRow struct {
+		id     int64
+		code   string
+		status string
+	}
+	matches, err := store.CollectRows(ctx, tx, `
+select id, code, status from matches where stage_id = ? order by position, id`,
+		[]any{stageID}, func(rows *sql.Rows) (matchRow, error) {
+			var m matchRow
+			return m, rows.Scan(&m.id, &m.code, &m.status)
+		})
+	if err != nil {
+		return nil, false, err
+	}
+	allFinished := true
+	outcomes := make([]structure.MatchOutcome, 0, len(matches))
+	for _, m := range matches {
+		finished := m.status == "finished"
+		if !finished {
+			allFinished = false
+		}
+		type slotRes struct {
+			teamID  int64
+			place   float64
+			total   float64
+			plus    float64
+			metrics string
+		}
+		slots, err := store.CollectRows(ctx, tx, `
+select coalesce(ms.team_id, 0), coalesce(mr.place, 0), coalesce(mr.total, 0), coalesce(mr.plus, 0), coalesce(mr.metrics_json, '{}')
+from match_slots ms
+left join match_results mr on mr.match_id = ms.match_id and mr.team_id = ms.team_id
+where ms.match_id = ?
+order by ms.slot_index`, []any{m.id}, func(rows *sql.Rows) (slotRes, error) {
+			var s slotRes
+			return s, rows.Scan(&s.teamID, &s.place, &s.total, &s.plus, &s.metrics)
+		})
+		if err != nil {
+			return nil, false, err
+		}
+		outcome := structure.MatchOutcome{Code: m.code, Finished: finished}
+		for _, s := range slots {
+			metrics := map[string]float64{"total": s.total, "plus": s.plus}
+			var parsed map[string]any
+			if json.Unmarshal([]byte(s.metrics), &parsed) == nil {
+				for key, value := range parsed {
+					if n, ok := value.(float64); ok {
+						metrics[key] = n
+					}
+				}
+			}
+			outcome.Slots = append(outcome.Slots, structure.SlotOutcome{
+				Participant: s.teamID,
+				Place:       s.place,
+				Metrics:     metrics,
+			})
+		}
+		outcomes = append(outcomes, outcome)
+	}
+	return outcomes, allFinished, nil
 }
 
 // resolveStageSlotsTx resolves every from_match/reseed slot of one stage and
@@ -226,13 +370,34 @@ func teamAtReseedRank(ctx context.Context, q store.Queryer, gameID int64, stageC
 	if stageCode == "" || rank <= 0 {
 		return 0, nil
 	}
-	var teamID int64
+	// Kind-ranked stages (rr groups, brackets) recompute standings live, so a
+	// rank ref must not leak provisional order downstream: it resolves only
+	// once every bout of the source stage is finished. Reseed stages keep
+	// their explicit-calculate gate (standings exist only when calculated).
+	var stageID int64
+	var kind string
 	err := q.QueryRowContext(ctx, `
-select re.participant_id
-from stage_standings re
-join stages s on s.id = re.stage_id
-where s.game_id = ? and s.code = ? and re.rank = ?`,
-		gameID, stageCode, rank).Scan(&teamID)
+select id, kind from stages where game_id = ? and code = ?`, gameID, stageCode).Scan(&stageID, &kind)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if isRankedKind(kind) {
+		var unfinished int
+		if err := q.QueryRowContext(ctx, `
+select count(*) from matches where stage_id = ? and status != 'finished'`, stageID).Scan(&unfinished); err != nil {
+			return 0, err
+		}
+		if unfinished > 0 {
+			return 0, nil
+		}
+	}
+	var teamID int64
+	err = q.QueryRowContext(ctx, `
+select participant_id from stage_standings where stage_id = ? and rank = ?`,
+		stageID, rank).Scan(&teamID)
 	if err == sql.ErrNoRows {
 		return 0, nil
 	}
