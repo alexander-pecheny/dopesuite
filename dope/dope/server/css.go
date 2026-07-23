@@ -21,12 +21,12 @@ func newAssets() *webassets.Assets {
 		Shared: []webassets.SharedFile{{
 			Path:        "/static/login.js",
 			Bytes:       kit.LoginJS,
-			DiskPath:    "../dopeuikit/assets/login.js",
+			DiskPath:    "../dopeuikit/assets/dist/login.js",
 			ContentType: "text/javascript; charset=utf-8",
 		}, {
 			Path:        "/static/menu.js",
 			Bytes:       kit.MenuJS,
-			DiskPath:    "../dopeuikit/assets/menu.js",
+			DiskPath:    "../dopeuikit/assets/dist/menu.js",
 			ContentType: "text/javascript; charset=utf-8",
 		}},
 	})

@@ -187,7 +187,7 @@ func jsCorpus(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kitJS, err := filepath.Glob("../../../dopeuikit/assets/*.js")
+	kitJS, err := filepath.Glob("../../../dopeuikit/assets/dist/*.js")
 	if err != nil || len(kitJS) == 0 {
 		t.Fatalf("no kit JS assets found: %v", err)
 	}

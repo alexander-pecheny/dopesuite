@@ -4,7 +4,7 @@
   "description": "Shared frontend toolchain (root ADR-0001): tsc typechecks every module's TS, esbuild emits per-target output via scripts/webbuild.mjs.",
   "scripts": {
     "build": "node scripts/webbuild.mjs",
-    "typecheck": "tsc -p dope"
+    "typecheck": "tsc -p dopeuikit && tsc -p dope"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

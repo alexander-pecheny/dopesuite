@@ -10,8 +10,13 @@ default: dev
 wasm_path := "internal/chgk/typstwasm/typst.wasm"
 
 # Build the app. Assumes the typst wasm is already built (see `just build-wasm`).
-build: wasm
+build: wasm build-web
     CGO_ENABLED=0 go build -o xy-server ./cmd/xy-server
+
+# The shared toolchain (root ADR-0001) builds the kit's gitignored assets/dist,
+# which the Go tree embeds — so every compiling recipe depends on this.
+build-web:
+    cd .. && just build-web
 
 # Compile typst to wasm32-wasip1 and drop the artifact where //go:embed wants it.
 # Needs Rust: rustup target add wasm32-wasip1
@@ -36,14 +41,14 @@ wasm:
     exit 1
 
 # Server only (hot-reloads assets from disk). Use this unless testing the bot.
-dev-web-only: wasm
+dev-web-only: wasm build-web
     go run ./cmd/xy-server
 
 bot:
     go run ./cmd/telegram-bot
 
 # Run server + bot concurrently.
-dev: wasm
+dev: wasm build-web
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'kill 0' EXIT INT TERM
@@ -57,14 +62,14 @@ fmt:
     mapfile -t files < <(find cmd internal -type f -name '*.go')
     ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
 
-vet: wasm
+vet: wasm build-web
     go vet ./...
 
 tidy-check:
     go mod tidy -diff
 
 # Go tests + frontend (node) tests.
-test: wasm
+test: wasm build-web
     go test ./...
     node --test jstest/*.test.js
 
@@ -79,10 +84,10 @@ pre-commit:
     just test
 
 # Mint a one-shot registration invite and print it. Usage: just invite [days]
-invite days='7': wasm
+invite days='7': wasm build-web
     go run ./cmd/xy-server invite {{days}}
 
 # A later --target wins: `just deploy --target xy-server` deploys the server alone.
 # Build + deploy both xy units (server + bot) via the monorepo's ../deploy.py.
-deploy *args: wasm
+deploy *args: wasm build-web
     python3 ../deploy.py --target xy-server,xy-bot {{args}}

@@ -5,59 +5,65 @@
 //   • «Войти по паролю» — username + password, existing accounts only.
 // Registration is not a separate flow: the telegram button creates the account.
 
+function byId<T extends HTMLElement>(id: string): T {
+  const node = document.getElementById(id);
+  if (!node) throw new Error(`login page is missing #${id}`);
+  return node as T;
+}
+
 const statusNode = document.getElementById("status");
 
-const steps = {
-  method: document.getElementById("step-method"),
-  code: document.getElementById("step-code"),
-  username: document.getElementById("step-username"),
-  link: document.getElementById("step-link"),
-  password: document.getElementById("step-password"),
+const steps: Record<string, HTMLElement> = {
+  method: byId("step-method"),
+  code: byId("step-code"),
+  username: byId("step-username"),
+  link: byId("step-link"),
+  password: byId("step-password"),
 };
 
-const tgLoginBtn = document.getElementById("tgLoginBtn");
-const pwLoginBtn = document.getElementById("pwLoginBtn");
-const methodMessage = document.getElementById("methodMessage");
+const tgLoginBtn = byId<HTMLButtonElement>("tgLoginBtn");
+const pwLoginBtn = byId<HTMLButtonElement>("pwLoginBtn");
+const methodMessage = byId("methodMessage");
 
-const tgDeepLink = document.getElementById("tgDeepLink");
-const tgBotName = document.getElementById("tgBotName");
-const tgCode = document.getElementById("tgCode");
-const codeMessage = document.getElementById("codeMessage");
+const tgDeepLink = byId<HTMLAnchorElement>("tgDeepLink");
+const tgBotName = byId("tgBotName");
+const tgCode = byId("tgCode");
+const codeMessage = byId("codeMessage");
 
-const usernameForm = document.getElementById("usernameForm");
-const tgUsername = document.getElementById("tgUsername");
-const usernameMessage = document.getElementById("usernameMessage");
+const usernameForm = byId<HTMLFormElement>("usernameForm");
+const tgUsername = byId<HTMLInputElement>("tgUsername");
+const usernameMessage = byId("usernameMessage");
 
-const linkForm = document.getElementById("linkForm");
-const linkPassword = document.getElementById("linkPassword");
-const linkMessage = document.getElementById("linkMessage");
-const linkCancelBtn = document.getElementById("linkCancelBtn");
+const linkForm = byId<HTMLFormElement>("linkForm");
+const linkPassword = byId<HTMLInputElement>("linkPassword");
+const linkMessage = byId("linkMessage");
+const linkCancelBtn = byId<HTMLButtonElement>("linkCancelBtn");
 
-const passwordForm = document.getElementById("passwordForm");
-const pwUsername = document.getElementById("pwUsername");
-const pwPassword = document.getElementById("pwPassword");
-const passwordMessage = document.getElementById("passwordMessage");
+const passwordForm = byId<HTMLFormElement>("passwordForm");
+const pwUsername = byId<HTMLInputElement>("pwUsername");
+const pwPassword = byId<HTMLInputElement>("pwPassword");
+const passwordMessage = byId("passwordMessage");
 
 let code = "";
 let username = "";
 let polling = false;
 
-bootstrap();
+void bootstrap();
 
-async function bootstrap() {
+async function bootstrap(): Promise<void> {
   try {
     const me = await fetchJSON("/api/auth/me");
-    if (me && me.user_id) {
+    if (me && (me as { user_id?: number }).user_id) {
       redirectToHost();
       return;
     }
-  } catch (_) {
+  } catch {
     // not logged in — fine
   }
   showStep("method");
 }
 
-tgLoginBtn.addEventListener("click", startTelegram);
+tgLoginBtn.addEventListener("click", () => void startTelegram());
 pwLoginBtn.addEventListener("click", () => {
   setText(passwordMessage, "");
   showStep("password");
@@ -66,24 +72,27 @@ pwLoginBtn.addEventListener("click", () => {
 makeCopyable(tgBotName);
 makeCopyable(tgCode);
 
-async function startTelegram() {
+async function startTelegram(): Promise<void> {
   setText(methodMessage, "");
   setStatus("saving");
   try {
-    const res = await fetchJSON("/api/auth/tg/start", {method: "POST"});
+    const res = (await fetchJSON("/api/auth/tg/start", { method: "POST" })) as {
+      code: string;
+      bot_username?: string;
+    };
     code = res.code;
     showCode(res.bot_username || "");
     setText(codeMessage, "");
     showStep("code");
     setStatus("saved");
-    poll();
+    void poll();
   } catch (error) {
-    setText(methodMessage, error.message);
+    setText(methodMessage, errorMessage(error));
     setStatus("error");
   }
 }
 
-function showCode(bot) {
+function showCode(bot: string): void {
   tgCode.textContent = code;
   if (bot) {
     tgBotName.textContent = "@" + bot;
@@ -99,40 +108,41 @@ function showCode(bot) {
 
 // makeCopyable turns an inline token into a click-to-copy control that flashes a
 // «скопировано» confirmation (the .copied CSS tooltip).
-function makeCopyable(el) {
-  if (!el) return;
+function makeCopyable(el: HTMLElement): void {
   el.classList.add("copyable");
   el.setAttribute("role", "button");
   el.setAttribute("tabindex", "0");
-  const copy = async () => {
-    const text = el.textContent.replace(/^@/, "");
+  const copy = async (): Promise<void> => {
+    const text = (el.textContent ?? "").replace(/^@/, "");
     try {
       await navigator.clipboard.writeText(text);
-    } catch (_) {
+    } catch {
       return;
     }
     el.classList.add("copied");
     setTimeout(() => el.classList.remove("copied"), 1000);
   };
-  el.addEventListener("click", copy);
+  el.addEventListener("click", () => void copy());
   el.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      copy();
+      void copy();
     }
   });
 }
 
-async function poll() {
+async function poll(): Promise<void> {
   if (polling) return;
   polling = true;
   const forCode = code;
   for (let i = 0; i < 120 && forCode === code; i++) {
     await sleep(1500);
-    let st;
+    let st: { status?: string };
     try {
-      st = await fetchJSON("/api/auth/tg/status?code=" + encodeURIComponent(forCode));
-    } catch (_) {
+      st = (await fetchJSON("/api/auth/tg/status?code=" + encodeURIComponent(forCode))) as {
+        status?: string;
+      };
+    } catch {
       continue;
     }
     if (st.status === "ready") {
@@ -155,15 +165,15 @@ async function poll() {
   setText(codeMessage, "Время ожидания вышло. Обновите страницу.");
 }
 
-usernameForm.addEventListener("submit", async (event) => {
+usernameForm.addEventListener("submit", (event) => {
   event.preventDefault();
   username = tgUsername.value.trim();
-  await claim("", usernameMessage);
+  void claim("", usernameMessage);
 });
 
-linkForm.addEventListener("submit", async (event) => {
+linkForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  await claim(linkPassword.value, linkMessage);
+  void claim(linkPassword.value, linkMessage);
 });
 
 linkCancelBtn.addEventListener("click", () => {
@@ -173,15 +183,15 @@ linkCancelBtn.addEventListener("click", () => {
   showStep("username");
 });
 
-async function claim(password, messageNode) {
+async function claim(password: string, messageNode: HTMLElement): Promise<void> {
   setText(messageNode, "");
   setStatus("saving");
   try {
-    const res = await fetchJSON("/api/auth/tg/claim", {
+    const res = (await fetchJSON("/api/auth/tg/claim", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({code, username, password}),
-    });
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, username, password }),
+    })) as { status?: string };
     if (res.status === "ready") {
       redirectToHost();
       return;
@@ -201,47 +211,49 @@ async function claim(password, messageNode) {
     setText(messageNode, "Что-то пошло не так, попробуйте снова.");
     setStatus("error");
   } catch (error) {
-    setText(messageNode, error.message);
+    setText(messageNode, errorMessage(error));
     setStatus("error");
   }
 }
 
-passwordForm.addEventListener("submit", async (event) => {
+passwordForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  setStatus("saving");
-  setText(passwordMessage, "");
-  try {
-    await fetchJSON("/api/auth/login-password", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({username: pwUsername.value.trim(), password: pwPassword.value}),
-    });
-    setStatus("saved");
-    redirectToHost();
-  } catch (error) {
-    setText(passwordMessage, error.message);
-    setStatus("error");
-  }
+  void (async (): Promise<void> => {
+    setStatus("saving");
+    setText(passwordMessage, "");
+    try {
+      await fetchJSON("/api/auth/login-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: pwUsername.value.trim(), password: pwPassword.value }),
+      });
+      setStatus("saved");
+      redirectToHost();
+    } catch (error) {
+      setText(passwordMessage, errorMessage(error));
+      setStatus("error");
+    }
+  })();
 });
 
-function showStep(name) {
+function showStep(name: string): void {
   for (const [key, node] of Object.entries(steps)) {
-    if (node) node.hidden = key !== name;
+    node.hidden = key !== name;
   }
-  const input = steps[name] && steps[name].querySelector("input");
+  const input = steps[name]?.querySelector("input");
   if (input) requestAnimationFrame(() => input.focus());
 }
 
-function redirectToHost() {
+function redirectToHost(): void {
   const marked = document.querySelector("[data-login-redirect]");
   window.location.replace(marked?.getAttribute("data-login-redirect") || "/");
 }
 
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchJSON(url, init) {
+async function fetchJSON(url: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(url, init);
   if (!response.ok) {
     const text = (await response.text()).trim();
@@ -251,14 +263,18 @@ async function fetchJSON(url, init) {
   return response.json();
 }
 
-function setText(node, text) {
-  if (node) node.textContent = text;
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
-function setStatus(state) {
+function setText(node: HTMLElement, text: string): void {
+  node.textContent = text;
+}
+
+function setStatus(state: "saved" | "saving" | "error"): void {
   if (!statusNode) return;
-  const labels = {saved: "Готово", saving: "Подождите", error: "Ошибка"};
+  const labels = { saved: "Готово", saving: "Подождите", error: "Ошибка" };
   statusNode.dataset.state = state;
-  statusNode.setAttribute("aria-label", labels[state] || labels.saved);
-  statusNode.title = labels[state] || labels.saved;
+  statusNode.setAttribute("aria-label", labels[state]);
+  statusNode.title = labels[state];
 }

@@ -7,7 +7,7 @@ default: dev
 # Everything that builds or serves the server depends on it — the bundles are
 # gitignored build artifacts, embedded at go-build time.
 build-web:
-    cd .. && just build-web dope
+    cd .. && just build-web
 
 # Rebuild bundles on change (run beside dev-web-only for the frontend loop).
 watch-web:

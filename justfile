@@ -54,10 +54,13 @@ pre-commit-core: fmt-core vet-core tidy-check-core test-core
 
 ## dopeuikit ##################################################################
 
-test-uikit:
+# The kit embeds its built assets/dist (root ADR-0001), so every recipe that
+# compiles dopeuikit depends on build-web.
+test-uikit: build-web
     cd dopeuikit && go test ./...
+    node --test dopeuikit/jstest/*.test.js
 
-vet-uikit:
+vet-uikit: build-web
     cd dopeuikit && go vet ./...
 
 fmt-uikit:
@@ -73,7 +76,7 @@ tidy-check-uikit:
 # Nothing else regenerates kit/tags_gen.go, so a kit/vocab.json edit that forgets
 # `go generate` ships a typed builder that doesn't match the vocabulary.
 # Fail if kit/tags_gen.go is stale w.r.t. kit/vocab.json.
-generate-check:
+generate-check: build-web
     #!/usr/bin/env bash
     set -euo pipefail
     cd dopeuikit

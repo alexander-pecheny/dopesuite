@@ -13,7 +13,7 @@ const (
 	realPagesDir = "../assets/ui"
 	staticDir    = "../assets/static"
 	// kit-owned scripts (login.js) are served under /static/ but live in the kit
-	kitAssetsDir = "../../../../dopeuikit/assets"
+	kitAssetsDir = "../../../../dopeuikit/assets/dist"
 )
 
 // TestRealPagesCompile compiles every real app page (web/assets/ui/*.dopeui) — the
