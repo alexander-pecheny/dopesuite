@@ -12,16 +12,20 @@ import (
 
 // Unified-model data conversion (docs/unified-model.md, ADR-0004): legacy
 // relational EK state (themes/answers rows) becomes the per-match state blob.
-// Idempotent — a match whose legacy rows are gone, or that never had any, is
-// left untouched, so the converter can run at every startup until the legacy
-// tables are finally dropped.
+// Runs once, as schema version 18 (server/db.go); each sub-step still checks
+// its legacy shape so the one run is safe on any database state.
+//
+// Journal scans gate json_extract behind the row-op check via iif (guaranteed
+// evaluation order, unlike AND terms): only row ops (1-3) carry the {"t","r"}
+// JSON deltas — event records (op >= 64) may be non-JSON (OpEvGeneric
+// length-prefixes the event type), and json_extract on one aborts the scan.
 
 // RunUnifyConversion performs the unified-model data conversion on a legacy
-// database: EK relational state and checkpoints become match blobs, and the
-// themes/answers tables are dropped. No-op once the tables are gone. Journal
-// triggers are dropped first so conversion churn is never journaled as edits;
-// the caller's bootstrap reinstalls them right after (fingerprint cleared by
-// the drop).
+// database: EK relational state and checkpoints become match blobs, the
+// themes/answers tables are dropped, and legacy records are rewritten in the
+// hot journal, the checkpoints and the cold segments. Journal triggers are
+// dropped first so conversion churn is never journaled as edits; the caller's
+// bootstrap reinstalls them right after (fingerprint cleared by the drop).
 func RunUnifyConversion(db *sql.DB) error {
 	ctx := context.Background()
 	var hasThemes, flatPending, hasReseedEntries int
@@ -40,7 +44,7 @@ where g.game_type in ('od', 'ksi', 'si')
 		return err
 	}
 	if hasThemes == 0 && flatPending == 0 && hasReseedEntries == 0 {
-		return nil
+		return convertSegments(ctx, db)
 	}
 	if err := journal.DropTriggers(db); err != nil {
 		return err
@@ -71,7 +75,7 @@ where g.game_type in ('od', 'ksi', 'si')
 			return err
 		}
 	}
-	return nil
+	return convertSegments(ctx, db)
 }
 
 // convertStageStandings folds the legacy reseed_entries table into
@@ -92,7 +96,8 @@ select stage_id, rank, team_id, metrics_json from reseed_entries`); err != nil {
 		payload string
 	}
 	records, err := store.CollectRows(ctx, db, `
-select id, payload from journal where json_extract(payload, '$.t') = 'reseed_entries'`,
+select id, payload from journal
+where iif(op in (1, 2, 3), json_extract(payload, '$.t'), null) = 'reseed_entries'`,
 		nil, func(rows *sql.Rows) (rec, error) {
 			var r rec
 			return r, rows.Scan(&r.id, &r.payload)
@@ -272,7 +277,8 @@ func rewriteGameStateRecords(ctx context.Context, db *sql.DB, matchOf map[int64]
 	}
 	records, err := store.CollectRows(ctx, db, `
 select id, payload from journal
-where json_extract(payload, '$.t') = 'games' and json_extract(payload, '$.r.state_json') is not null`,
+where iif(op in (1, 2, 3), json_extract(payload, '$.t'), null) = 'games'
+  and iif(op in (1, 2, 3), json_extract(payload, '$.r.state_json'), null) is not null`,
 		nil, func(rows *sql.Rows) (rec, error) {
 			var r rec
 			return r, rows.Scan(&r.id, &r.payload)
@@ -398,7 +404,7 @@ func guardNoReplayableLegacyRecords(ctx context.Context, db *sql.DB) error {
 	var count int
 	err := db.QueryRowContext(ctx, `
 select count(*) from journal j
-where (json_extract(j.payload, '$.t') in ('themes', 'answers'))
+where iif(j.op in (1, 2, 3), json_extract(j.payload, '$.t'), null) in ('themes', 'answers')
   and j.game_id is not null
   and j.id > coalesce((select min(seq) from journal_checkpoint c where c.game_id = j.game_id), j.id)`).Scan(&count)
 	if err != nil {

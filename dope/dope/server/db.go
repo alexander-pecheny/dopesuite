@@ -44,9 +44,6 @@ func openFestDB(path string) (*sql.DB, error) {
 		if err := migrateDB(db); err != nil {
 			return err
 		}
-		if err := migrate.RunUnifyConversion(db); err != nil {
-			return err
-		}
 		if err := journal.EnsureTriggers(db); err != nil {
 			return err
 		}
@@ -714,6 +711,22 @@ create table if not exists stage_standings(
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(17, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
+	}
+	// v18: the unified-model data conversion (ADR-0004) — a one-shot rewrite of
+	// legacy relational state, journal records, checkpoints and cold segments.
+	// The heavy lifting lives in storage/migrate; unlike the idempotent DDL
+	// steps above it is gated on its version row so it runs exactly once.
+	var unified int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 18`).Scan(&unified); err != nil {
+		return err
+	}
+	if unified == 0 {
+		if err := migrate.RunUnifyConversion(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(18, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
 	}
 	return nil
 }
