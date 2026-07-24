@@ -2813,11 +2813,9 @@ body:not(.embedded-match) .grid-match {
   max-width: var(--team-col);
 }
 
-.match-table.od-detailed:not(.ksi-detailed) .sticky-place,
-.match-table.od-detailed:not(.ksi-detailed) .sticky-place-gap {
-  position: static;
-  z-index: auto;
-}
+/* OD Подробно freezes the same four columns every other match-table does. It
+   used to drop place/place-gap to `position: static`, which left the М header
+   sliding under the frozen Команда and Σ as the sheet scrolled sideways. */
 
 .match-table.compact-score-table,
 .match-table.compact-score-table th,
