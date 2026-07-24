@@ -16,14 +16,43 @@ type ThemeEntry struct {
 	Answers [5]string `json:"answers"`
 }
 
+// RosterMember is one roster entry. The id travels to the client because blob
+// paths address theme players by id, so an editor must send an id, never a name
+// for the server to resolve (ADR-0005).
+type RosterMember struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// RosterOf builds an id-less roster from bare names, for the demo state and
+// fixtures that have no players table behind them.
+func RosterOf(names ...string) []RosterMember {
+	roster := make([]RosterMember, len(names))
+	for i, name := range names {
+		roster[i] = RosterMember{Name: name}
+	}
+	return roster
+}
+
+// HasRosterName reports whether roster lists a member by that display name.
+func HasRosterName(roster []RosterMember, name string) bool {
+	for _, member := range roster {
+		if member.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // TeamState is one team's persisted match state.
 type TeamState struct {
-	Name           string       `json:"name"`
-	Roster         []string     `json:"roster"`
-	Themes         []ThemeEntry `json:"themes"`
-	ShootoutThemes []ThemeEntry `json:"shootoutThemes,omitempty"`
-	Tiebreak       int          `json:"tiebreak"`
-	Place          float64      `json:"place"`
+	ID             int64          `json:"id,omitempty"`
+	Name           string         `json:"name"`
+	Roster         []RosterMember `json:"roster"`
+	Themes         []ThemeEntry   `json:"themes"`
+	ShootoutThemes []ThemeEntry   `json:"shootoutThemes,omitempty"`
+	Tiebreak       int            `json:"tiebreak"`
+	Place          float64        `json:"place"`
 }
 
 // MatchState is the persisted state of a single match.
@@ -44,17 +73,18 @@ type ThemeView struct {
 
 // TeamView is a team's scored, client-facing projection.
 type TeamView struct {
-	Name           string      `json:"name"`
-	Roster         []string    `json:"roster"`
-	Themes         []ThemeView `json:"themes"`
-	ShootoutThemes []ThemeView `json:"shootoutThemes"`
-	Total          int         `json:"total"`
-	Place          float64     `json:"place"`
-	Plus           int         `json:"plus"`
-	ShootoutTotal  int         `json:"shootoutTotal"`
-	Tiebreak       int         `json:"tiebreak"`
-	CorrectCounts  [5]int      `json:"correctCounts"`
-	WrongCounts    [5]int      `json:"wrongCounts"`
+	ID             int64          `json:"id,omitempty"`
+	Name           string         `json:"name"`
+	Roster         []RosterMember `json:"roster"`
+	Themes         []ThemeView    `json:"themes"`
+	ShootoutThemes []ThemeView    `json:"shootoutThemes"`
+	Total          int            `json:"total"`
+	Place          float64        `json:"place"`
+	Plus           int            `json:"plus"`
+	ShootoutTotal  int            `json:"shootoutTotal"`
+	Tiebreak       int            `json:"tiebreak"`
+	CorrectCounts  [5]int         `json:"correctCounts"`
+	WrongCounts    [5]int         `json:"wrongCounts"`
 }
 
 // StandingView is one row of a match's standings.

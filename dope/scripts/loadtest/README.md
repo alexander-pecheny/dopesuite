@@ -81,6 +81,28 @@ ssh vps2day-ee 'watch -n1 "ss -s; journalctl -u dope.service --since \"1 min ago
 | `propagation_ms_p95` | sub-second | seconds → CPU saturated or viewers backed up |
 | `viewers_failed` | 0 | hitting nginx `worker_connections` or upstream accept limits |
 
+## EK editors (the tournament path)
+
+Every EK edit is a blob-path set-op `PATCH .../matches/{code}/state` (ADR-0005),
+batched server-side into one write per game per 150 ms window. Add EK editors
+alongside the flat ones — they share the token pool:
+
+```bash
+go run ./scripts/loadtest -base https://dopetest.pecheny.me \
+  -fest <slug> -fest-id <id> -game <gid> \
+  -viewers 100 -editors 3 -ek-editors 6 -ek-matches A,B,C \
+  -edit-interval 2s -duration 15m -tokens <toks> -out report.json
+```
+
+EK propagation is correlated by `(scope, revision)` rather than by an in-band
+marker: the broadcast is a server-computed MatchView, not the editor's payload,
+so the revision both the response and the broadcast name is what joins them.
+It reports as a separate `ek` block.
+
+To prove the per-window commit cap, point every EK editor at one match and edit
+far above human rate: `-ek-editors 8 -ek-matches A -edit-interval 50ms`. Writes
+should stay flat near ~6/s for that game no matter how fast the editors type.
+
 ## Suggested scenario ladder
 
 Start small, confirm clean, then climb until something bends:

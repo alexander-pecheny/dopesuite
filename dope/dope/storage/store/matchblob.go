@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"strconv"
 	"strings"
 )
@@ -13,8 +12,8 @@ import (
 // sections are keyed by decimal team id — never by slot order — so reseeds
 // can't reshuffle state and journal patches address a stable path. Theme
 // players are stored as player ids; display names resolve at load time.
-// Places are NOT here: they live in match_results (with place_override) as
-// the Structure-facing output.
+// A host's manual place is a Pin and lives here as Protocol state (ADR-0005);
+// match_results is the scorer's Structure-facing output, never a host's input.
 //
 // Every mutation records a BlobOp; MutateMatchBlobTx returns them so the
 // caller can journal the edit semantically (OpMatchPatch) instead of the row
@@ -41,10 +40,12 @@ type BlobTheme struct {
 	Answers [5]string `json:"answers"`
 }
 
-// TeamBlob is one team's section of a match blob.
+// TeamBlob is one team's section of a match blob. Pin, when set, is the host's
+// manual place, which beats the scorer's at every recompute.
 type TeamBlob struct {
 	Themes         []BlobTheme `json:"themes,omitempty"`
 	ShootoutThemes []BlobTheme `json:"shootoutThemes,omitempty"`
+	Pin            *float64    `json:"pin,omitempty"`
 }
 
 // MatchBlob is the decoded matches.state_json document plus the ops recorded
@@ -156,6 +157,28 @@ func (b *MatchBlob) SetPlayer(teamID int64, kind string, themeIndex int, playerI
 	}
 }
 
+// SetPin sets (or, with nil, clears) a team's manual place.
+func (b *MatchBlob) SetPin(teamID int64, place *float64) {
+	section := b.Team(teamID)
+	path := "/teams/" + teamKey(teamID) + "/pin"
+	if place == nil {
+		section.Pin = nil
+		b.record("remove", path, nil)
+		return
+	}
+	value := *place
+	section.Pin = &value
+	b.record("set", path, value)
+}
+
+// Pin returns a team's manual place, or nil when unpinned.
+func (b *MatchBlob) Pin(teamID int64) *float64 {
+	if section, ok := b.Teams[teamKey(teamID)]; ok {
+		return section.Pin
+	}
+	return nil
+}
+
 // EnsureTheme guarantees a team's theme exists (padding the grid up to its
 // index) without setting anything on it.
 func (b *MatchBlob) EnsureTheme(teamID int64, kind string, themeIndex int) {
@@ -173,45 +196,20 @@ func (b *MatchBlob) RemoveTeam(key string) {
 	b.record("remove", "/teams/"+key, nil)
 }
 
-// AddShootoutTheme appends one shootout theme for every listed team and
-// returns its index (teams stay in lockstep; existing sections pad).
-func (b *MatchBlob) AddShootoutTheme(teamIDs []int64) int {
-	index := 0
-	for _, id := range teamIDs {
-		if id == 0 {
-			continue
-		}
-		if n := len(b.Team(id).ShootoutThemes); n > index {
-			index = n
-		}
+// RemoveTheme drops one theme from a team's list, splicing the ones after it
+// down. Out-of-range indices no-op.
+func (b *MatchBlob) RemoveTheme(teamID int64, kind string, themeIndex int) {
+	section, ok := b.Teams[teamKey(teamID)]
+	if !ok {
+		return
 	}
-	for _, id := range teamIDs {
-		if id == 0 {
-			continue
-		}
-		b.EnsureTheme(id, "shootout", index)
+	list := section.themes(kind)
+	if themeIndex < 0 || themeIndex >= len(*list) {
+		return
 	}
-	return index
-}
-
-// RemoveShootoutTheme drops the last shootout theme from every team section.
-func (b *MatchBlob) RemoveShootoutTheme() error {
-	last := 0
-	for _, section := range b.Teams {
-		if n := len(section.ShootoutThemes); n > last {
-			last = n
-		}
-	}
-	if last == 0 {
-		return errors.New("no shootout themes to remove")
-	}
-	for key, section := range b.Teams {
-		if len(section.ShootoutThemes) == last {
-			section.ShootoutThemes = section.ShootoutThemes[:last-1]
-			b.record("remove", "/teams/"+key+"/shootoutThemes/"+strconv.Itoa(last-1), nil)
-		}
-	}
-	return nil
+	*list = append((*list)[:themeIndex], (*list)[themeIndex+1:]...)
+	b.record("remove",
+		"/teams/"+teamKey(teamID)+"/"+kindSegment(kind)+"/"+strconv.Itoa(themeIndex), nil)
 }
 
 // MutateMatchBlobTx loads a match's state blob, applies fn, persists the
@@ -247,11 +245,15 @@ func MutateMatchBlobTx(ctx context.Context, tx *sql.Tx, matchID int64, fn func(*
 // shape consumed by BuildView and the whole view layer: identity fields join
 // in from the relational side, theme players resolve id → name via playerName,
 // the grid pads to ThemeCount and marks normalise (NormalizeState runs later
-// on the whole match and is idempotent over this).
-func TeamStateFromBlob(section *TeamBlob, name string, roster []string, place float64, playerName func(int64) string) TeamState {
-	team := TeamState{Name: name, Roster: roster, Place: place, Themes: make([]ThemeEntry, ThemeCount)}
+// on the whole match and is idempotent over this). A pinned place wins over the
+// scored one the caller read back from match_results.
+func TeamStateFromBlob(section *TeamBlob, teamID int64, name string, roster []RosterMember, place float64, playerName func(int64) string) TeamState {
+	team := TeamState{ID: teamID, Name: name, Roster: roster, Place: place, Themes: make([]ThemeEntry, ThemeCount)}
 	if section == nil {
 		return team
+	}
+	if section.Pin != nil {
+		team.Place = *section.Pin
 	}
 	project := func(themes []BlobTheme, out []ThemeEntry) []ThemeEntry {
 		for i, theme := range themes {

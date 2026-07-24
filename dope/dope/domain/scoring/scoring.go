@@ -1,7 +1,7 @@
 // Package scoring materialises a match's Protocol outcome into match_results —
 // the only rows the Structure layer reads (docs/unified-model.md §2). Places
-// are the scorer's, unless the host pinned a place_override (ADR-0001:
-// auto-places with manual override).
+// are the scorer's, unless the host pinned one in the match's state blob
+// (ADR-0005: auto-places with manual override, the Pin being Protocol state).
 package scoring
 
 import (
@@ -24,8 +24,7 @@ type LegacyResultWriter interface {
 }
 
 // RecalculateMatchResultsTx scores a match through its game's registered
-// Protocol and upserts match_results for every occupied slot, honouring
-// place_override.
+// Protocol and upserts match_results for every occupied slot, honouring pins.
 func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState) error {
 	var protocolCode string
 	if err := tx.QueryRowContext(ctx,
@@ -51,9 +50,9 @@ func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMa
 		if index >= len(match.TeamIDs) || match.TeamIDs[index] == 0 {
 			continue
 		}
-		place, err := effectivePlace(ctx, tx, match.MatchID, match.TeamIDs[index], outcome.Place)
-		if err != nil {
-			return err
+		place := outcome.Place
+		if pin := match.Blob.Pin(match.TeamIDs[index]); pin != nil {
+			place = *pin
 		}
 		metrics := map[string]any{}
 		for key, value := range outcome.Metrics {
@@ -73,20 +72,4 @@ on conflict(match_id, team_id) do update set
 		}
 	}
 	return nil
-}
-
-// effectivePlace applies the host's pin: a non-null place_override beats the
-// scorer's place.
-func effectivePlace(ctx context.Context, tx *sql.Tx, matchID, teamID int64, scored float64) (float64, error) {
-	var override sql.NullFloat64
-	err := tx.QueryRowContext(ctx,
-		`select place_override from match_results where match_id = ? and team_id = ?`,
-		matchID, teamID).Scan(&override)
-	if err != nil && err != sql.ErrNoRows {
-		return 0, err
-	}
-	if override.Valid {
-		return override.Float64, nil
-	}
-	return scored, nil
 }

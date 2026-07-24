@@ -409,9 +409,9 @@ func removePath(node any, parts []string, parentKey string) any {
 	return obj
 }
 
-// pruneEmptyTeams drops team sections whose themes and shootoutThemes are both
-// gone or empty, and the teams container itself when it empties — normalising
-// spliced-away history to the converter's shape.
+// pruneEmptyTeams drops team sections that carry nothing — no themes, no
+// shootout themes, no pin — and the teams container itself when it empties,
+// normalising spliced-away history to the converter's shape.
 func pruneEmptyTeams(doc any) {
 	obj, ok := doc.(map[string]any)
 	if !ok {
@@ -430,7 +430,7 @@ func pruneEmptyTeams(doc any) {
 		if !ok {
 			continue
 		}
-		if empty(sec["themes"]) && empty(sec["shootoutThemes"]) {
+		if empty(sec["themes"]) && empty(sec["shootoutThemes"]) && sec["pin"] == nil {
 			delete(teams, key)
 		} else {
 			if empty(sec["themes"]) {

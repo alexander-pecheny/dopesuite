@@ -12,7 +12,7 @@ import (
 
 // TestE2EUntickEditRetickRealDB drives the real operator workflow — untick a
 // finished EK bout, edit a score, re-tick it — against an external database via
-// the exact server write path (applyScopedMatchUpdate), and asserts that every
+// the exact server write path (the edit batcher), and asserts that every
 // OTHER bout in the game keeps its protocol data byte-for-byte. It is gated on
 // E2E_DB so it only runs against a copy of a real DB; without it, it skips.
 //
@@ -44,13 +44,12 @@ func TestE2EUntickEditRetickRealDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scope %s: %v", matchCode, err)
 	}
-	apply := func(req dopeserver.UpdateRequest, what string) {
+	finish := func(value bool, what string) {
 		t.Helper()
-		if _, _, _, _, err := srv.ApplyScopedMatchUpdate(ctx, scope, []dopeserver.UpdateRequest{req}); err != nil {
+		if _, err := srv.SubmitMatchFinish(ctx, scope, value); err != nil {
 			t.Fatalf("%s on %s: %v", what, matchCode, err)
 		}
 	}
-	tr, fa := true, false
 
 	// 1) A pure untick→retick (no edit) must be a true no-op: every other bout's
 	//    protocol data is byte-identical afterwards.
@@ -58,8 +57,8 @@ func TestE2EUntickEditRetickRealDB(t *testing.T) {
 	if len(base) == 0 {
 		t.Fatalf("no protocol data found for game %d (besides %s)", gameID, matchCode)
 	}
-	apply(dopeserver.UpdateRequest{Finished: &fa}, "untick")
-	apply(dopeserver.UpdateRequest{Finished: &tr}, "retick")
+	finish(false, "untick")
+	finish(true, "retick")
 	if got := gameAnswersExcept(t, db, gameID, matchCode); !mapsEqual(base, got) {
 		t.Fatalf("pure untick→retick of %s was not a no-op downstream", matchCode)
 	}
@@ -69,10 +68,9 @@ func TestE2EUntickEditRetickRealDB(t *testing.T) {
 	//    themes downstream — that is correct reactive behavior — but no previously
 	//    entered row may disappear. The old resolver wiped it; this one must not.
 	before := gameAnswersExcept(t, db, gameID, matchCode)
-	theme, ans, mark := 0, 4, "wrong"
-	apply(dopeserver.UpdateRequest{Finished: &fa}, "untick")
-	apply(dopeserver.UpdateRequest{Team: 0, Theme: &theme, Answer: &ans, Mark: &mark}, "edit")
-	apply(dopeserver.UpdateRequest{Finished: &tr}, "retick")
+	finish(false, "untick")
+	editMark(t, srv, scope, 0, 0, 4, "wrong")
+	finish(true, "retick")
 	after := gameAnswersExcept(t, db, gameID, matchCode)
 
 	var removed int

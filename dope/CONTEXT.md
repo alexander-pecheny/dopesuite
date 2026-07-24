@@ -35,5 +35,8 @@ One seat in a Match. Declares where its occupant comes from (seed, a place in a 
 **Participant**:
 Whoever occupies a Slot — a team in team formats, an individual player in individual formats (individual СИ).
 
+**Pin**:
+A host's manual place assignment for a Slot, part of the Match's Protocol state. A Pin beats the scorer's computed place at every recompute until the host clears it.
+
 **Reseed**:
 A Stage that re-ranks Participants from prior results (with deterministic lots for true ties) so later Stages can seat by rank.

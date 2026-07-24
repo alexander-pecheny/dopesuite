@@ -1,6 +1,9 @@
 package store
 
-import "time"
+import (
+	"sort"
+	"time"
+)
 
 // The scorer turns a persisted MatchState into the scored, client-facing
 // MatchView: per-answer marks become signed point values on the QuestionValues
@@ -40,8 +43,9 @@ func BuildView(state MatchState) MatchView {
 // ScoreTeam scores one team's themes and shootout themes into a TeamView.
 func ScoreTeam(team TeamState) TeamView {
 	view := TeamView{
+		ID:             team.ID,
 		Name:           team.Name,
-		Roster:         append([]string(nil), team.Roster...),
+		Roster:         append([]RosterMember(nil), team.Roster...),
 		Themes:         make([]ThemeView, len(team.Themes)),
 		ShootoutThemes: make([]ThemeView, len(team.ShootoutThemes)),
 		Place:          team.Place,
@@ -93,6 +97,41 @@ func ScoreTheme(theme ThemeEntry) ThemeView {
 		}
 	}
 	return view
+}
+
+// AssignComputedPlaces ranks the teams by score and writes 1..n into their
+// places. Finishing a match runs it, turning the live grid into a result; a
+// pinned place overrides it again at scoring time.
+func AssignComputedPlaces(state *MatchState) {
+	ranked := make([]int, len(state.Teams))
+	views := make([]TeamView, len(state.Teams))
+	for index, team := range state.Teams {
+		ranked[index], views[index] = index, ScoreTeam(team)
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		return teamRanksHigher(views[ranked[i]], views[ranked[j]])
+	})
+	for place, index := range ranked {
+		state.Teams[index].Place = float64(place + 1)
+	}
+}
+
+func teamRanksHigher(a, b TeamView) bool {
+	if a.Total != b.Total {
+		return a.Total > b.Total
+	}
+	if a.ShootoutTotal != b.ShootoutTotal {
+		return a.ShootoutTotal > b.ShootoutTotal
+	}
+	if a.Plus != b.Plus {
+		return a.Plus > b.Plus
+	}
+	for i := len(a.CorrectCounts) - 1; i >= 0; i-- {
+		if a.CorrectCounts[i] != b.CorrectCounts[i] {
+			return a.CorrectCounts[i] > b.CorrectCounts[i]
+		}
+	}
+	return false
 }
 
 // ManualStandings orders teams by their manual place (placed first, sorted),

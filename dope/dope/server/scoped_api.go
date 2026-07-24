@@ -28,6 +28,7 @@ import (
 	"dope/dope/storage/festaccess"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
+	"dope/dope/web/editbatch"
 
 	"pecheny.me/dopecore/session"
 )
@@ -58,7 +59,7 @@ type matchScope struct {
 }
 
 func matchScopeKey(scope matchScope) string {
-	return fmt.Sprintf("match:%d:%s", scope.GameID, scope.Code)
+	return editbatch.MatchScopeKey(scope.GameID, scope.Code)
 }
 
 func festViewScopeKey(scope festScope) string {
@@ -86,6 +87,32 @@ func (s *server) broadcastMatchCascade(festID, gameID int64, cascaded []store.Ma
 		scopeKey := matchScopeKey(matchScope{festScope: festScope{FestID: festID, GameID: gameID}, Code: cv.Code})
 		s.eng.BroadcastState(festID, scopeKey, cv.Revision, data)
 	}
+}
+
+// matchEditScope runs the guards every match write shares — editor role,
+// numbered teams, and the match belonging to this game — and reports the
+// resolved scope, having already written the response when it says no.
+func (s *server) matchEditScope(w http.ResponseWriter, r *http.Request, scope festScope, code string) (matchScope, bool) {
+	if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
+		return matchScope{}, false
+	}
+	if !s.requireNumberedTeams(w, r, scope.FestID) {
+		return matchScope{}, false
+	}
+	mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
+	if err != nil {
+		s.writeMatchScopeError(w, r, err)
+		return matchScope{}, false
+	}
+	return mscope, true
+}
+
+func (s *server) writeMatchScopeError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, errMatchNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 var errMatchNotFound = errors.New("match not found in this game")
@@ -1095,64 +1122,54 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 		}
 		view.Seq = s.eng.CurrentStateSeq(matchScopeKey(mscope))
 		writeJSONValue(w, view)
-	case "update":
-		if r.Method != http.MethodPost {
+	case "state":
+		if r.Method != http.MethodPatch {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
+		mscope, ok := s.matchEditScope(w, r, scope, code)
+		if !ok {
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
-			return
-		}
-		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
-		if err != nil {
-			if errors.Is(err, errMatchNotFound) {
-				http.NotFound(w, r)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		// Edit-path timing: tE2E marks request-in; we stamp e2e at response-out so
+		// the per-edit line spans the whole handler, not just the locked section.
+		var sample metrics.Sample
+		tE2E := metrics.NowIf(s.metrics.On)
 		defer r.Body.Close()
-		var req updateRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "bad json", http.StatusBadRequest)
-			return
-		}
-		// A request may carry a batch of edits to apply atomically (range
-		// clear/fill); otherwise the request itself is the single edit.
-		reqs := req.Edits
-		if len(reqs) == 0 {
-			reqs = []updateRequest{req}
-		}
-		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(r.Context(), mscope, reqs)
+		raw, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		view.Seq = s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
-		s.broadcastMatchCascade(scope.FestID, mscope.GameID, cascaded)
-		writeJSONValue(w, view)
+		var req edit.PatchRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		if len(req.Ops) == 0 {
+			http.Error(w, "missing patch ops", http.StatusBadRequest)
+			return
+		}
+		// Ops are coalesced with every other edit to this game into a 150ms window
+		// and applied in one locked transaction; the call returns once that window
+		// has committed, with the match view (and seq) the flusher broadcast.
+		data, _, err := s.editor().SubmitMatchEdit(r.Context(), core.FestScope(scope), mscope.MatchID, code, req, string(raw), &sample)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, data)
+		if s.metrics.On {
+			sample.E2E = time.Since(tE2E)
+			s.metrics.RecordEdit(sample)
+		}
 	case "finish":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
-			return
-		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
-			return
-		}
-		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
-		if err != nil {
-			if errors.Is(err, errMatchNotFound) {
-				http.NotFound(w, r)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		mscope, ok := s.matchEditScope(w, r, scope, code)
+		if !ok {
 			return
 		}
 		defer r.Body.Close()
@@ -1165,15 +1182,12 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 			http.Error(w, "missing finished", http.StatusBadRequest)
 			return
 		}
-		view, data, ops, cascaded, err := s.applyScopedMatchUpdate(r.Context(), mscope, []updateRequest{{Finished: req.Finished}})
+		data, _, err := s.editor().SubmitMatchFinish(r.Context(), core.FestScope(scope), mscope.MatchID, code, *req.Finished)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		view.Seq = s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
-		s.broadcastMatchCascade(scope.FestID, mscope.GameID, cascaded)
-		s.broadcastFestView(scope, view.Revision)
-		writeJSONValue(w, view)
+		writeJSON(w, data)
 	case "venue":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1184,11 +1198,7 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 		}
 		mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
 		if err != nil {
-			if errors.Is(err, errMatchNotFound) {
-				http.NotFound(w, r)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			s.writeMatchScopeError(w, r, err)
 			return
 		}
 		defer r.Body.Close()
@@ -1201,13 +1211,12 @@ func (s *server) handleScopedMatches(w http.ResponseWriter, r *http.Request, sco
 		if number == 0 {
 			number = req.VenueNumber
 		}
-		view, data, ops, err := s.updateScopedMatchVenue(r.Context(), mscope, number)
+		data, _, err := s.editor().SubmitMatchVenue(r.Context(), core.FestScope(scope), mscope.MatchID, code, number)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		view.Seq = s.broadcastMatchView(scope.FestID, mscope, view.Revision, ops, data)
-		writeJSONValue(w, view)
+		writeJSON(w, data)
 	default:
 		http.NotFound(w, r)
 	}

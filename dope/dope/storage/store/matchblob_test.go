@@ -36,30 +36,46 @@ func TestMatchBlobRoundTrip(t *testing.T) {
 	}
 }
 
-// Shootout themes append and remove across every seated team in lockstep.
+// Shootout themes are added and removed per team at an index; the editor keeps
+// the grid in lockstep by touching every seated team at the same index.
 func TestMatchBlobShootout(t *testing.T) {
 	blob := MatchBlob{}
-	blob.Team(1)
-	blob.Team(2)
-	if n := blob.AddShootoutTheme([]int64{1, 2}); n != 0 {
-		t.Fatalf("first shootout index = %d, want 0", n)
-	}
-	if n := blob.AddShootoutTheme([]int64{1, 2}); n != 1 {
-		t.Fatalf("second shootout index = %d, want 1", n)
+	for _, index := range []int{0, 1} {
+		blob.EnsureTheme(1, "shootout", index)
+		blob.EnsureTheme(2, "shootout", index)
 	}
 	blob.SetAnswer(1, "shootout", 1, 0, "wrong")
-	if err := blob.RemoveShootoutTheme(); err != nil {
-		t.Fatalf("remove: %v", err)
-	}
+	blob.RemoveTheme(1, "shootout", 1)
+	blob.RemoveTheme(2, "shootout", 1)
 	if len(blob.Teams["1"].ShootoutThemes) != 1 || len(blob.Teams["2"].ShootoutThemes) != 1 {
 		t.Fatalf("shootout counts after remove: %d/%d, want 1/1",
 			len(blob.Teams["1"].ShootoutThemes), len(blob.Teams["2"].ShootoutThemes))
 	}
-	if err := blob.RemoveShootoutTheme(); err != nil {
-		t.Fatalf("remove second: %v", err)
+	blob.RemoveTheme(1, "shootout", 5) // out of range no-ops
+	if len(blob.Teams["1"].ShootoutThemes) != 1 {
+		t.Fatal("out-of-range remove should no-op")
 	}
-	if blob.RemoveShootoutTheme() == nil {
-		t.Fatal("removing from empty shootout should error")
+}
+
+// A pin is the host's manual place and rides in the blob as Protocol state, so
+// it survives the round trip and wins over the scored place at projection time.
+func TestMatchBlobPin(t *testing.T) {
+	blob := MatchBlob{}
+	place := 1.0
+	blob.SetPin(7, &place)
+	if got := blob.Pin(7); got == nil || *got != 1 {
+		t.Fatalf("pin = %v, want 1", got)
+	}
+	team := TeamStateFromBlob(blob.Teams["7"], 7, "Команда", nil, 3.0, nil)
+	if team.Place != 1 {
+		t.Fatalf("pinned place = %v, want 1 (scored place was 3)", team.Place)
+	}
+	blob.SetPin(7, nil)
+	if blob.Pin(7) != nil {
+		t.Fatal("cleared pin should read back nil")
+	}
+	if team := TeamStateFromBlob(blob.Teams["7"], 7, "Команда", nil, 3.0, nil); team.Place != 3 {
+		t.Fatalf("unpinned place = %v, want the scored 3", team.Place)
 	}
 }
 
@@ -74,7 +90,7 @@ func TestTeamStateFromBlob(t *testing.T) {
 	section := blob.Teams["7"]
 
 	names := map[int64]string{55: "Анна Б."}
-	team := TeamStateFromBlob(section, "Команда", []string{"Анна Б."}, 2.0,
+	team := TeamStateFromBlob(section, 7, "Команда", RosterOf("Анна Б."), 2.0,
 		func(id int64) string { return names[id] })
 	if team.Name != "Команда" || team.Place != 2.0 || len(team.Roster) != 1 {
 		t.Fatalf("identity fields: %+v", team)

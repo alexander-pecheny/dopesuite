@@ -30,8 +30,8 @@ match_slots(id, match_id, slot_index,
             -- stage_standings whatever kind ranked the stage (a dedicated
             -- 'stage_rank' source proved unnecessary).
 
-match_results(match_id, participant_id, place, place_override,
-            total, metrics_json)                             -- written only by the scorer + override path
+match_results(match_id, participant_id, place,
+            total, metrics_json)                             -- written only by the scorer (pins live in the state blob, ADR-0005)
 
 stage_standings(stage_id, rank, participant_id, metrics_json) -- generalizes reseed_entries to every ranking stage
 ```

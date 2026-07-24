@@ -232,18 +232,11 @@ func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 		t.Fatalf("venue = %#v, want number 1", view.Venue)
 	}
 
-	theme := 0
-	answer := 0
-	mark := "right"
-	view, _, err = srv.ApplyMatchUpdate(festID, dopeserver.DefaultMatchCode, dopeserver.UpdateRequest{
-		Team:   2,
-		Theme:  &theme,
-		Answer: &answer,
-		Mark:   &mark,
-	})
+	scope, err := srv.VerifyMatchInScope(t.Context(), dopeserver.FestScope{FestID: festID, GameID: gameID}, dopeserver.DefaultMatchCode)
 	if err != nil {
-		t.Fatalf("update answer: %v", err)
+		t.Fatalf("scope: %v", err)
 	}
+	view = editMark(t, srv, scope, 2, 0, 0, "right")
 	if view.Teams[2].Total != 10 {
 		t.Fatalf("updated total = %d, want 10", view.Teams[2].Total)
 	}

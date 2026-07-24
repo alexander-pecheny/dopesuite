@@ -44,8 +44,14 @@ interface HostThemeView extends ThemeView {
   answers: string[];
 }
 
+interface HostRosterMember {
+  id: number;
+  name: string;
+}
+
 interface HostTeamView extends TeamView {
-  roster?: string[];
+  id?: number;
+  roster?: HostRosterMember[];
   themes: HostThemeView[];
   shootoutThemes?: HostThemeView[];
   correctCounts: number[];
@@ -138,7 +144,11 @@ type EKCellPayload = {
   shootout?: boolean;
 };
 
-type EKUpdatePayload = EKCellPayload | {finished: boolean} | {action: string} | {edits: EKCellPayload[]};
+// BlobOp is one wire operation against a match's Protocol state blob: a path of
+// object keys / array indices, and the value to set there. Team sections are
+// keyed by team id (a string), theme players are player ids, and a host's place
+// is a pin — the server resolves nothing by name (ADR-0005).
+type BlobOp = {op?: "set" | "remove"; path: Array<string | number>; value?: unknown};
 
 type EKPendingEntry = {ops: PendingOps; inFlight: boolean; timer: number | null};
 
@@ -771,11 +781,14 @@ function setStatus(state: string): void {
   statusNode.title = labels[state] || labels.saving;
 }
 
-async function sendUpdateRaw(payload: EKUpdatePayload, matchCode: string): Promise<HostMatchView> {
-  const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}/update`, {
-    method: "POST",
+// postMatch drives one of the match's write endpoints. Protocol edits go to
+// /state as blob-path set-ops; the two Structure transitions keep their own
+// endpoints. All three land in the same server-side batching window.
+async function postMatch(matchCode: string, suffix: string, method: string, body: unknown): Promise<HostMatchView> {
+  const response = await fetch(`${route.apiBase}/matches/${encodeURIComponent(matchCode)}/${suffix}`, {
+    method,
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await response.text());
   const updated = await response.json() as HostMatchView;
@@ -783,11 +796,32 @@ async function sendUpdateRaw(payload: EKUpdatePayload, matchCode: string): Promi
   return updated;
 }
 
-async function sendUpdate(payload: EKUpdatePayload, matchCode: string = currentMatchCode()): Promise<void> {
+function sendMatchOps(matchCode: string, ops: BlobOp[]): Promise<HostMatchView> {
+  return postMatch(matchCode, "state", "PATCH", {ops});
+}
+
+// shootoutThemeOps builds the ops that add or drop one shootout theme across
+// every team of a match — the grid stays in lockstep, so one theme index is
+// touched on every team at once.
+function shootoutThemeOps(matchCode: string, themeIndex: number, remove: boolean): BlobOp[] {
+  const view = matchBase(matchCode);
+  const ops: BlobOp[] = [];
+  for (const team of view?.teams || []) {
+    if (!team.id) continue;
+    const path = ["teams", String(team.id), "shootoutThemes", themeIndex];
+    ops.push(remove ? {op: "remove", path} : {path, value: {answers: ["", "", "", "", ""]}});
+  }
+  return ops;
+}
+
+// sendStructuralOps applies ops that aren't tracked cell edits (adding or
+// dropping a shootout theme) — they have no optimistic overlay, so they go out
+// on their own rather than through the pending queue.
+async function sendStructuralOps(matchCode: string, ops: BlobOp[]): Promise<void> {
+  if (ops.length === 0) return;
   setStatus("saving");
   try {
-    const updated = await sendUpdateRaw(payload, matchCode);
-    applyUpdatedMatch(updated, matchCode);
+    applyUpdatedMatch(await sendMatchOps(matchCode, ops), matchCode);
     setStatus("saved");
   } catch (error) {
     setStatus("error");
@@ -795,7 +829,7 @@ async function sendUpdate(payload: EKUpdatePayload, matchCode: string = currentM
   }
 }
 
-// setMatchFinished toggles a match's finished flag. Unlike a plain sendUpdate it
+// setMatchFinished toggles a match's finished flag. Unlike a plain edit it
 // (a) applies the new value optimistically so the tick reflects intent at once,
 // and (b) records it in ekPendingFinished so overlayPendingMatch re-asserts it on
 // every MatchView that lands while the write is in flight — without this, a slow
@@ -814,8 +848,7 @@ async function setMatchFinished(matchCode: string, value: boolean): Promise<void
   }
   setStatus("saving");
   try {
-    const updated = await sendUpdateRaw({finished: value}, matchCode);
-    applyUpdatedMatch(updated, matchCode);
+    applyUpdatedMatch(await postMatch(matchCode, "finish", "POST", {finished: value}), matchCode);
     setStatus("saved");
   } catch (error) {
     setStatus("error");
@@ -834,10 +867,10 @@ async function setMatchFinished(matchCode: string, value: boolean): Promise<void
 //     (POST response, SSE delta, or full refetch) via overlayPendingMatch, so an
 //     optimistically-marked cell never regresses before the server confirms it —
 //     even when a slow server makes the write take seconds.
-//   - batching: rapid edits coalesce into ONE atomic /update POST per match per
+//   - batching: rapid edits coalesce into ONE atomic /state PATCH per match per
 //     debounce window (one DB write, one broadcast) instead of one per cell.
 // Ops to the same cell coalesce (last write wins). Structural edits (finished /
-// add/removeShootoutTheme) aren't cell edits — they go straight to sendUpdate.
+// add/removeShootoutTheme) aren't cell edits and are sent on their own.
 const EK_EDIT_DEBOUNCE_MS = 150;
 const ekPending = new Map<string, EKPendingEntry>(); // matchScope -> {ops, inFlight, timer}
 
@@ -856,7 +889,7 @@ function ekEntry(matchCode: string): EKPendingEntry {
   if (!entry) {
     // Persist per-match so a mid-sync refresh recovers un-acked EK edits
     // (recoverMatchPendingEdits re-overlays + re-sends them on the next load).
-    entry = {ops: gameTable.createPendingOps({storageKey: `dope.pending:${scope}`}), inFlight: false, timer: null};
+    entry = {ops: gameTable.createPendingOps({storageKey: `dope.pending.v2:${scope}`}), inFlight: false, timer: null};
     ekPending.set(scope, entry);
   }
   return entry;
@@ -933,31 +966,38 @@ function payloadToOpValue(payload: EKCellPayload): unknown {
   return payload.mark;
 }
 
-// opToPayload is the inverse: rebuild the /update payload from a queued op so a
-// coalesced batch can be POSTed as {edits: [...]}.
-function opToPayload(op: PendingOp): EKCellPayload {
-  const [, team, key, theme, leaf, answer] = op.path;
-  if (op.path.length === 3) return {team: team as number, place: op.value as number}; // ["teams", team, "place"]
-  const shootout = key === "shootoutThemes";
-  if (leaf === "player") {
-    const payload: EKCellPayload = {team: team as number, theme: theme as number, player: op.value as string};
-    if (shootout) payload.shootout = true;
-    return payload;
+// opToBlobOp translates a queued view-path op into the blob path the server
+// stores it at: the team's slot index becomes its id, a place becomes a pin,
+// and a player name becomes that player's id. Returns null when the view the op
+// was queued against no longer holds that team — the op is then unsendable and
+// is dropped rather than retried forever.
+function opToBlobOp(op: PendingOp, view: HostMatchView): BlobOp | null {
+  const [, slot, key, theme, leaf, answer] = op.path;
+  const team = view.teams?.[slot as number];
+  if (!team?.id) return null;
+  const teamKey = String(team.id);
+  if (op.path.length === 3) {
+    // Emptying the place box clears the pin rather than pinning zero, handing
+    // the place back to the scorer at the next recompute.
+    const path = ["teams", teamKey, "pin"];
+    return op.value ? {path, value: op.value} : {op: "remove", path};
   }
-  const payload: EKCellPayload = {team: team as number, theme: theme as number, answer: answer as number, mark: op.value as string};
-  if (shootout) payload.shootout = true;
-  return payload;
+  if (leaf === "player") {
+    const name = op.value as string;
+    const member = (team.roster || []).find((player) => player.name === name);
+    if (name && !member) return null;
+    return {path: ["teams", teamKey, key as string, theme as number, "player"], value: member?.id ?? 0};
+  }
+  return {path: ["teams", teamKey, key as string, theme as number, "answers", answer as number], value: op.value};
 }
 
 // queueEKEdits records cell edits as pending ops and schedules a batched flush.
-// Non-cell (structural) payloads can't be expressed as a tracked op, so they are
-// sent immediately to preserve their ordering relative to nothing else.
 function queueEKEdits(matchCode: string, payloads: EKCellPayload[]): void {
   const entry = ekEntry(matchCode);
   let queued = false;
   for (const payload of payloads) {
     const path = payloadToOpPath(payload);
-    if (!path) { sendUpdate(payload, matchCode); continue; }
+    if (!path) continue;
     entry.ops.add(path, payloadToOpValue(payload));
     queued = true;
   }
@@ -980,13 +1020,22 @@ function scheduleEKFlush(matchCode: string, delay: number): void {
 async function flushEKEdits(matchCode: string): Promise<void> {
   const entry = ekEntry(matchCode);
   if (entry.inFlight || entry.ops.queued() === 0) return;
+  const view = matchBase(matchCode);
+  if (!view) return; // no base to resolve team/player ids against; retry on reload
   const ops = entry.ops.take();
-  const payloads = ops.map(opToPayload);
+  const blobOps = ops.map((op) => opToBlobOp(op, view)).filter((op): op is BlobOp => op !== null);
+  if (blobOps.length === 0) {
+    // Nothing addressable survived (the slot lost its team, or a player left the
+    // roster): drop these rather than retry an op the server can never accept.
+    entry.ops.ack(ops);
+    refreshMatchPendingMarkers(matchCode);
+    setStatus("saved");
+    return;
+  }
   entry.inFlight = true;
   let saved = false;
   try {
-    const body = payloads.length === 1 ? payloads[0] : {edits: payloads};
-    const updated = await sendUpdateRaw(body, matchCode);
+    const updated = await sendMatchOps(matchCode, blobOps);
     entry.ops.ack(ops);
     applyUpdatedMatch(updated, matchCode);
     saved = true;
@@ -2385,8 +2434,8 @@ function themeCells(team: HostTeamView, teamIndex: number, theme: HostThemeView,
   select.dataset.theme = String(themeIndex);
   select.appendChild(option("", ""));
   const roster = team.roster || [];
-  roster.forEach((player) => select.appendChild(option(player, player)));
-  if (theme.player && !roster.includes(theme.player)) {
+  roster.forEach((player) => select.appendChild(option(player.name, player.name)));
+  if (theme.player && !roster.some((player) => player.name === theme.player)) {
     select.appendChild(option(theme.player, theme.player));
   }
   select.value = theme.player;
@@ -2579,7 +2628,7 @@ function shootoutControlsHeader(): HTMLElement {
     if (!ms) return;
     withMatchState(ms, () => {
       activeCell = {matchCode, team: 0, shootout: true, theme: shootoutThemeCount(), answer: 0};
-      sendUpdate({action: "addShootoutTheme"}, matchCode);
+      void sendStructuralOps(matchCode, shootoutThemeOps(matchCode, shootoutThemeCount(), false));
     });
   });
   node.appendChild(addShootout);
@@ -2937,7 +2986,7 @@ function removeLastShootoutTheme(matchCode: string = currentMatchCode()): void {
       activeCell = {matchCode: currentMatchCode(), team: activeCell.team, shootout: false, theme: regularThemeCount() - 1, answer: 0};
     }
   }
-  sendUpdate({action: "removeShootoutTheme"}, matchCode);
+  void sendStructuralOps(matchCode, shootoutThemeOps(matchCode, lastTheme, true));
 }
 
 function regularThemeCount(): number {

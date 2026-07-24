@@ -43,6 +43,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -67,6 +68,8 @@ type config struct {
 	outPath      string
 	insecure     bool
 	stages       []stageCfg
+	ekEditors    int
+	ekMatches    []string
 }
 
 // eventEnvelope mirrors the server's SSE payload wrapper (db.go eventEnvelope).
@@ -94,7 +97,7 @@ func main() {
 
 func parseFlags() config {
 	var cfg config
-	var tokens, stages string
+	var tokens, stages, ekMatches string
 	var viewers int
 	var duration time.Duration
 	flag.StringVar(&cfg.base, "base", "https://dope.pecheny.me", "server base URL")
@@ -111,6 +114,8 @@ func parseFlags() config {
 	flag.IntVar(&cfg.payloadBytes, "payload-bytes", 1200, "approximate edit payload size, padded to model a real game-state blob")
 	flag.StringVar(&cfg.outPath, "out", "", "optional path to write the JSON report")
 	flag.BoolVar(&cfg.insecure, "insecure", false, "skip TLS verification")
+	flag.IntVar(&cfg.ekEditors, "ek-editors", 0, "concurrent EK editors PATCHing per-match state ops (spread over -ek-matches)")
+	flag.StringVar(&ekMatches, "ek-matches", "", "comma-separated EK match codes the EK editors mark cells in")
 	flag.Parse()
 
 	if cfg.festID == "" {
@@ -121,6 +126,15 @@ func parseFlags() config {
 			cfg.tokens = append(cfg.tokens, t)
 		}
 	}
+	for _, code := range strings.Split(ekMatches, ",") {
+		if code = strings.TrimSpace(code); code != "" {
+			cfg.ekMatches = append(cfg.ekMatches, code)
+		}
+	}
+	if cfg.ekEditors > 0 && len(cfg.ekMatches) == 0 {
+		fmt.Fprintln(os.Stderr, "loadtest: -ek-matches is required when -ek-editors > 0")
+		os.Exit(2)
+	}
 	if stages != "" {
 		cfg.stages = parseStages(stages)
 	} else {
@@ -130,7 +144,7 @@ func parseFlags() config {
 		fmt.Fprintln(os.Stderr, "loadtest: -fest and -game are required")
 		os.Exit(2)
 	}
-	if cfg.editors > 0 && len(cfg.tokens) == 0 {
+	if (cfg.editors > 0 || cfg.ekEditors > 0) && len(cfg.tokens) == 0 {
 		fmt.Fprintln(os.Stderr, "loadtest: -tokens is required when -editors > 0")
 		os.Exit(2)
 	}
@@ -183,8 +197,8 @@ func run(cfg config) error {
 	stats := newStats(cfg.stages)
 	var wg sync.WaitGroup
 
-	viewerClient := newHTTPClient(cfg, 0, maxViewers+cfg.editors+10)
-	editorClient := newHTTPClient(cfg, 30*time.Second, cfg.editors+4)
+	viewerClient := newHTTPClient(cfg, 0, maxViewers+cfg.editors+cfg.ekEditors+10)
+	editorClient := newHTTPClient(cfg, 30*time.Second, cfg.editors+cfg.ekEditors+4)
 
 	// Editors run for the whole test, attributing each edit to whatever stage
 	// is current when it completes.
@@ -197,8 +211,20 @@ func run(cfg config) error {
 		}(i, token)
 	}
 
-	fmt.Printf("running: %d editors, %d stages, %s total, target %s\n",
-		cfg.editors, len(cfg.stages), total, cfg.base)
+	// EK editors drive the per-match state PATCH — the path the whole tournament
+	// runs on — one per match code, round-robined when there are more editors.
+	for i := 0; i < cfg.ekEditors; i++ {
+		token := cfg.tokens[i%len(cfg.tokens)]
+		code := cfg.ekMatches[i%len(cfg.ekMatches)]
+		wg.Add(1)
+		go func(id int, tok, code string) {
+			defer wg.Done()
+			runEKEditor(ctx, cfg, editorClient, stats, id, tok, code, rand.New(rand.NewSource(int64(id)+1001)))
+		}(i, token, code)
+	}
+
+	fmt.Printf("running: %d flat + %d EK editors, %d stages, %s total, target %s\n",
+		cfg.editors, cfg.ekEditors, len(cfg.stages), total, cfg.base)
 	done := make(chan struct{})
 	go progress(ctx, stats, done)
 
@@ -368,6 +394,98 @@ func runEditor(ctx context.Context, cfg config, client *http.Client, stats *stat
 	}
 }
 
+// runEKEditor drives the per-match Protocol write path (ADR-0005): every edit is
+// a blob-path set-op PATCH, exactly what a host's keyboard produces. It reads the
+// match once to learn its team ids — the client speaks ids, never names — then
+// marks a rotating cell, alternating right/blank so the state actually changes.
+func runEKEditor(ctx context.Context, cfg config, client *http.Client, stats *stats, id int, token, code string, rng *rand.Rand) {
+	base := strings.TrimRight(cfg.base, "/")
+	matchURL := fmt.Sprintf("%s/api/fest/%s/games/%s/matches/%s", base, cfg.festRef, cfg.gameID, code)
+	teamIDs, err := loadMatchTeamIDs(ctx, client, matchURL, token)
+	if err != nil || len(teamIDs) == 0 {
+		fmt.Fprintf(os.Stderr, "loadtest: EK editor %d cannot read match %s: %v\n", id, code, err)
+		return
+	}
+	scope := fmt.Sprintf("match:%s:%s", cfg.gameID, code)
+	marks := [2]string{"right", ""}
+	for n := 0; ; n++ {
+		jitter := time.Duration(rng.Int63n(int64(cfg.editInterval)/2+1)) - cfg.editInterval/4
+		select {
+		case <-time.After(cfg.editInterval + jitter):
+		case <-ctx.Done():
+			return
+		}
+
+		team := teamIDs[rng.Intn(len(teamIDs))]
+		body, _ := json.Marshal(map[string]any{"ops": []any{map[string]any{
+			"path":  []any{"teams", strconv.FormatInt(team, 10), "themes", rng.Intn(12), "answers", rng.Intn(5)},
+			"value": marks[n%2],
+		}}})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, matchURL+"/state", bytes.NewReader(body))
+		if err != nil {
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Cookie", "session="+token)
+
+		start := time.Now()
+		resp, err := client.Do(req)
+		elapsed := time.Since(start)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			stats.recordEdit(elapsed, 0)
+			continue
+		}
+		payload, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		stats.recordEdit(elapsed, resp.StatusCode)
+		if resp.StatusCode/100 != 2 {
+			continue
+		}
+		// The response carries the revision this edit committed at; viewers see
+		// the same revision on the broadcast, which is what correlates the two.
+		var view struct {
+			Revision int64 `json:"revision"`
+		}
+		if json.Unmarshal(payload, &view) == nil && view.Revision > 0 {
+			stats.recordSend(scope, view.Revision, start)
+		}
+	}
+}
+
+func loadMatchTeamIDs(ctx context.Context, client *http.Client, matchURL, token string) ([]int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, matchURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Cookie", "session="+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	var view struct {
+		Teams []struct {
+			ID int64 `json:"id"`
+		} `json:"teams"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&view); err != nil {
+		return nil, err
+	}
+	var ids []int64
+	for _, team := range view.Teams {
+		if team.ID != 0 {
+			ids = append(ids, team.ID)
+		}
+	}
+	return ids, nil
+}
+
 func buildPayload(m marker, pad string) []byte {
 	obj := map[string]any{
 		"_lt_seq":    m.Seq,
@@ -408,10 +526,45 @@ type stats struct {
 	stages    []*stageStat
 	curStage  atomic.Int32
 	startTime time.Time
+
+	// EK edits carry no in-band marker: their broadcast is a server-computed
+	// MatchView, not the editor's payload. Correlation is by (scope, revision)
+	// instead — the response and the broadcast name the same one — joined at the
+	// end so a broadcast that beats its own HTTP response is still counted.
+	revMu      sync.Mutex
+	revSends   map[string][]time.Time
+	revArrives map[string][]time.Time
+}
+
+// revTrackLimit bounds the correlation maps so a long soak can't grow unbounded.
+const revTrackLimit = 400_000
+
+func revKey(scope string, revision int64) string {
+	return scope + "#" + strconv.FormatInt(revision, 10)
+}
+
+func (s *stats) recordSend(scope string, revision int64, at time.Time) {
+	s.revMu.Lock()
+	defer s.revMu.Unlock()
+	if len(s.revSends) < revTrackLimit {
+		s.revSends[revKey(scope, revision)] = append(s.revSends[revKey(scope, revision)], at)
+	}
+}
+
+func (s *stats) recordArrival(scope string, revision int64, at time.Time) {
+	s.revMu.Lock()
+	defer s.revMu.Unlock()
+	if len(s.revArrives) < revTrackLimit {
+		s.revArrives[revKey(scope, revision)] = append(s.revArrives[revKey(scope, revision)], at)
+	}
 }
 
 func newStats(cfgStages []stageCfg) *stats {
-	s := &stats{startTime: time.Now()}
+	s := &stats{
+		startTime:  time.Now(),
+		revSends:   map[string][]time.Time{},
+		revArrives: map[string][]time.Time{},
+	}
 	for range cfgStages {
 		s.stages = append(s.stages, &stageStat{})
 	}
@@ -444,6 +597,9 @@ func (s *stats) recordEvent(data []byte) {
 	if err := json.Unmarshal(data, &env); err != nil || len(env.Data) == 0 {
 		return
 	}
+	if strings.HasPrefix(env.Scope, "match:") && env.Revision > 0 {
+		s.recordArrival(env.Scope, env.Revision, time.Now())
+	}
 	var m marker
 	if err := json.Unmarshal(env.Data, &m); err != nil || m.TSNano == 0 {
 		return
@@ -475,10 +631,23 @@ type stageReport struct {
 	PropMax        float64 `json:"propagation_ms_max"`
 }
 
+// ekReport covers the per-match Protocol write path, correlated by revision
+// rather than by an in-band marker (see stats.revSends).
+type ekReport struct {
+	Editors       int     `json:"editors"`
+	Edits         int64   `json:"edits"`
+	DeliveryRatio float64 `json:"delivery_ratio"`
+	PropP50       float64 `json:"propagation_ms_p50"`
+	PropP95       float64 `json:"propagation_ms_p95"`
+	PropP99       float64 `json:"propagation_ms_p99"`
+	PropMax       float64 `json:"propagation_ms_max"`
+}
+
 type report struct {
 	DurationSec float64       `json:"duration_sec"`
 	Editors     int           `json:"editors"`
 	Stages      []stageReport `json:"stages"`
+	EK          *ekReport     `json:"ek,omitempty"`
 }
 
 func (s *stats) finalize(cfg config, total time.Duration) report {
@@ -515,7 +684,52 @@ func (s *stats) finalize(cfg config, total time.Duration) report {
 			PropMax:        propMax,
 		})
 	}
+	if cfg.ekEditors > 0 {
+		r.EK = s.finalizeEK(cfg)
+	}
 	return r
+}
+
+// finalizeEK joins EK sends to viewer arrivals on (scope, revision). Latency
+// samples are capped per revision so a long soak stays bounded; the delivery
+// ratio still counts every pair.
+func (s *stats) finalizeEK(cfg config) *ekReport {
+	const samplesPerRevision = 20
+	viewers := int64(0)
+	for _, st := range s.stages {
+		if st.connectedAtEnd > viewers {
+			viewers = st.connectedAtEnd
+		}
+	}
+	s.revMu.Lock()
+	defer s.revMu.Unlock()
+
+	var latencies []float64
+	var edits, delivered int64
+	for key, sends := range s.revSends {
+		edits += int64(len(sends))
+		arrivals := s.revArrives[key]
+		delivered += int64(len(sends)) * int64(len(arrivals))
+		for i, arrival := range arrivals {
+			if i >= samplesPerRevision {
+				break
+			}
+			for _, sent := range sends {
+				if ms := float64(arrival.Sub(sent)) / 1e6; ms >= 0 {
+					latencies = append(latencies, ms)
+				}
+			}
+		}
+	}
+	p50, p95, p99, max := percentiles(latencies)
+	ratio := 0.0
+	if expected := edits * viewers; expected > 0 {
+		ratio = float64(delivered) / float64(expected)
+	}
+	return &ekReport{
+		Editors: cfg.ekEditors, Edits: edits, DeliveryRatio: ratio,
+		PropP50: p50, PropP95: p95, PropP99: p99, PropMax: max,
+	}
 }
 
 func percentiles(v []float64) (p50, p95, p99, max float64) {
@@ -542,6 +756,10 @@ func (r report) print() {
 			s.EditP50, s.EditP95, s.EditMax,
 			s.DeliveryRatio,
 			s.PropP50, s.PropP95, s.PropP99, s.PropMax)
+	}
+	if r.EK != nil {
+		fmt.Printf("\nEK match-state PATCH (%d editors): %d edits, delivery %.4f, prop_ms %.0f /%.0f /%.0f /%.0f\n",
+			r.EK.Editors, r.EK.Edits, r.EK.DeliveryRatio, r.EK.PropP50, r.EK.PropP95, r.EK.PropP99, r.EK.PropMax)
 	}
 	fmt.Println("==============================================================================")
 	fmt.Println("conn = SSE viewers connected at stage end; deliver_ratio = markers_seen / (edits_ok * conn).")

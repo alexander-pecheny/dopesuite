@@ -49,22 +49,17 @@ func TestDerivedRevertReproducesGameState(t *testing.T) {
 	tx0.Commit()
 	truth0 := mustCapture(t, db, gameID)
 
-	apply := func(code string, req dopeserver.UpdateRequest) {
+	apply := func(code string, slot, theme, answer int) {
 		t.Helper()
 		scope, err := srv.VerifyMatchInScope(ctx, scopeBase, code)
 		if err != nil {
 			t.Fatalf("scope %s: %v", code, err)
 		}
-		if _, _, _, _, err := srv.ApplyScopedMatchUpdate(ctx, scope, []dopeserver.UpdateRequest{req}); err != nil {
-			t.Fatalf("apply %s: %v", code, err)
-		}
+		editMark(t, srv, scope, slot, theme, answer, "right")
 	}
 
-	theme, answer := 0, 4
-	right := "right"
-
 	// Edit 1.
-	apply("A", dopeserver.UpdateRequest{Team: 0, Theme: &theme, Answer: &answer, Mark: &right})
+	apply("A", 0, 0, 4)
 	p1 := maxID()
 	truth1 := mustCapture(t, db, gameID)
 	if checkpointKey(t, truth1) == checkpointKey(t, truth0) {
@@ -72,8 +67,7 @@ func TestDerivedRevertReproducesGameState(t *testing.T) {
 	}
 
 	// Edit 2.
-	answer2 := 3
-	apply("A", dopeserver.UpdateRequest{Team: 1, Theme: &theme, Answer: &answer2, Mark: &right})
+	apply("A", 1, 0, 3)
 	truth2 := mustCapture(t, db, gameID)
 	if checkpointKey(t, truth2) == checkpointKey(t, truth1) {
 		t.Fatalf("second edit did not change game state")

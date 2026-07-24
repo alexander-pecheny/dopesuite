@@ -48,15 +48,11 @@ func TestMatchEditJournalsAsMatchPatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	theme, ans, right := 0, 4, "right"
 	scope, err := srv.VerifyMatchInScope(t.Context(), scopeBase, "A")
 	if err != nil {
 		t.Fatalf("scope: %v", err)
 	}
-	if _, _, _, _, err := srv.ApplyScopedMatchUpdate(t.Context(), scope,
-		[]dopeserver.UpdateRequest{{Team: 0, Theme: &theme, Answer: &ans, Mark: &right}}); err != nil {
-		t.Fatalf("apply: %v", err)
-	}
+	editMark(t, srv, scope, 0, 0, 4, "right")
 
 	rows, err := db.Query(`select op, payload from journal where id > ?`, beforeID)
 	if err != nil {

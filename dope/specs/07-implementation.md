@@ -46,7 +46,7 @@ API:
 - `GET /api/fest/{tid}` — метаданные турнира (snapshot, как раньше отдавал `/api/fest`).
 - `GET /api/fest/{tid}/games/{gid}` — то же самое, привязанное к конкретной игре.
 - `GET /api/fest/{tid}/venues`, `PUT /api/fest/{tid}/venues/{n}`.
-- `GET /api/fest/{tid}/games/{gid}/matches/{code}`, `POST .../update`, `POST .../finish`, `POST .../venue`.
+- `GET /api/fest/{tid}/games/{gid}/matches/{code}`, `PATCH .../state`, `POST .../finish`, `POST .../venue`.
 - API-права проверяются на сервере: публичные турниры читаются без сессии, приватные читаются только организаторами, любые `POST`/`PUT` требуют сессию организатора.
 
 SSE `/events?fest_id={tid}` отдает события только для авторизованного турнира. Каждое событие приходит в конверте `{scope, revision, data}`. Скоупы теперь содержат идентификаторы: `match:{game_id}:{code}`, `venues:{fest_id}`, `game-state:{game_id}`. Клиенты фильтруют по своему скоупу.

@@ -673,10 +673,8 @@ end`); err != nil {
 	// v17: the unified-model schema (docs/unified-model.md, ADR-0001/0002).
 	// Stages carry a registered kind (backfilled from the legacy stage_type,
 	// whose values 'matches'/'reseed' are both registered kinds), matches carry
-	// the per-match Protocol state blob, match_results gains the host place
-	// override (auto places with manual pin), games declare their participant
-	// kind, and stage_standings generalises reseed_entries to every ranking
-	// stage.
+	// the per-match Protocol state blob, games declare their participant kind,
+	// and stage_standings generalises reseed_entries to every ranking stage.
 	if err := store.AddColumnsIfMissing(db, "stages", []store.ColumnSpec{
 		{Name: "kind", Type: "TEXT NOT NULL DEFAULT ''"},
 	}); err != nil {
@@ -690,6 +688,8 @@ end`); err != nil {
 	}); err != nil {
 		return err
 	}
+	// place_override was v17's home for host pins; v19 drains it into the state
+	// blob. The column stays so an old DB still parses — nothing writes it.
 	if err := store.AddColumnsIfMissing(db, "match_results", []store.ColumnSpec{
 		{Name: "place_override", Type: "REAL"},
 	}); err != nil {
@@ -725,6 +725,21 @@ create table if not exists stage_standings(
 			return err
 		}
 		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(18, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
+	// v19: pins become Protocol state (ADR-0005). Host place overrides move out of
+	// match_results and into the per-match state blob, one match per transaction,
+	// leaving match_results as the scorer's output alone.
+	var pinned int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 19`).Scan(&pinned); err != nil {
+		return err
+	}
+	if pinned == 0 {
+		if err := migrate.RunPinBackfill(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(19, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 			return err
 		}
 	}

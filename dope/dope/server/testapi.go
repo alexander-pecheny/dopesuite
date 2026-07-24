@@ -8,13 +8,16 @@ package dopeserver
 
 import (
 	"context"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 
 	"pecheny.me/dopecore/authcred"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/edit"
 	"dope/dope/platform/metrics"
+	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	"dope/dope/web/assets"
 	"dope/dope/web/hostpages"
@@ -85,7 +88,6 @@ var (
 	EnsureSystemUser          = ensureSystemUser
 	RecalculateMatchResultsTx = recalculateMatchResultsTx
 	SplitPlayerName           = splitPlayerName
-	ApplyMatchEditTx          = applyMatchEditTx
 	CreateInvite              = createInvite
 	CreateSessionTx           = createSessionTx
 	HashPassword              = authcred.HashPassword
@@ -96,21 +98,39 @@ var (
 	SqliteTableExists         = sqliteTableExists
 	VerifyPassword            = authcred.VerifyPasswordUpgrading
 	EnvInt64                  = envInt64
-	Contains                  = contains
 )
 
 // ----- exported method wrappers (one per unexported method tests invoke) -----
 
-func (s *Server) ApplyMatchUpdate(festID int64, code string, req UpdateRequest) (store.MatchView, []byte, error) {
-	return s.applyMatchUpdate(festID, code, req)
-}
-
-func (s *Server) ApplyScopedMatchUpdate(ctx context.Context, scope MatchScope, reqs []UpdateRequest) (store.MatchView, []byte, []byte, []store.MatchView, error) {
-	return s.applyScopedMatchUpdate(ctx, scope, reqs)
-}
-
+// ApplyUpdate drives the DB-less demo path's in-memory edit vocabulary.
 func (s *Server) ApplyUpdate(req UpdateRequest) (store.MatchView, []byte, error) {
-	return s.applyUpdate(req)
+	return s.applyLegacyUpdate(req)
+}
+
+// SubmitMatchEdit / SubmitMatchFinish / SubmitMatchVenue drive the batcher the
+// match endpoints sit on, returning the committed MatchView.
+func (s *Server) SubmitMatchEdit(ctx context.Context, scope MatchScope, ops []edit.PatchOp) (store.MatchView, error) {
+	req := edit.PatchRequest{Ops: ops}
+	data, _, err := s.editor().SubmitMatchEdit(ctx, core.FestScope(scope.festScope), scope.MatchID, scope.Code, req, util.MustJSON(req), nil)
+	return decodeMatchView(data, err)
+}
+
+func (s *Server) SubmitMatchFinish(ctx context.Context, scope MatchScope, finished bool) (store.MatchView, error) {
+	data, _, err := s.editor().SubmitMatchFinish(ctx, core.FestScope(scope.festScope), scope.MatchID, scope.Code, finished)
+	return decodeMatchView(data, err)
+}
+
+func (s *Server) SubmitMatchVenue(ctx context.Context, scope MatchScope, number int) (store.MatchView, error) {
+	data, _, err := s.editor().SubmitMatchVenue(ctx, core.FestScope(scope.festScope), scope.MatchID, scope.Code, number)
+	return decodeMatchView(data, err)
+}
+
+func decodeMatchView(data []byte, err error) (store.MatchView, error) {
+	if err != nil {
+		return store.MatchView{}, err
+	}
+	var view store.MatchView
+	return view, json.Unmarshal(data, &view)
 }
 
 func (s *Server) CalculateScopedReseed(ctx context.Context, scope FestScope, stageCode string) ([]byte, []store.MatchView, int64, error) {

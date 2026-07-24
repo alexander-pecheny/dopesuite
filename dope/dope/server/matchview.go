@@ -3,11 +3,9 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
-	"dope/dope/domain/matchedit"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/scoring"
 	"dope/dope/platform/metrics"
-	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/store"
@@ -174,7 +172,7 @@ func (s *server) loadMatchViewLocked(festID int64, code string) (store.MatchView
 	if err != nil {
 		return store.MatchView{}, err
 	}
-	return matchViewFromDBState(match), nil
+	return store.MatchViewFrom(match), nil
 }
 
 func (s *server) loadScopedMatchViewLocked(scope matchScope) (store.MatchView, error) {
@@ -193,7 +191,7 @@ func (s *server) loadScopedMatchViewUsing(q store.Queryer, scope matchScope) (st
 	if err != nil {
 		return store.MatchView{}, err
 	}
-	return matchViewFromDBState(match), nil
+	return store.MatchViewFrom(match), nil
 }
 
 // loadScopedMatchViewSnapshot reads a match view on a read-only transaction
@@ -215,195 +213,6 @@ func loadDBMatchStateByScope(ctx context.Context, q store.Queryer, scope matchSc
 	return store.LoadDBMatchStateWhere(ctx, q, `m.id = ? and m.fest_id = ? and m.game_id = ?`, scope.MatchID, scope.FestID, scope.GameID)
 }
 
-func matchViewFromDBState(match store.DBMatchState) store.MatchView {
-	view := store.BuildView(match.State)
-	view.Code = match.Code
-	view.StageCode = match.StageCode
-	view.StageTitle = match.StageTitle
-	view.Venue = match.Venue
-	return view
-}
-
-func (s *server) applyMatchUpdate(festID int64, code string, req updateRequest) (store.MatchView, []byte, error) {
-	if s.eng.DB == nil {
-		return s.applyLegacyUpdate(req)
-	}
-	// Legacy single-fest path: no SSE fan-out, so cascade + delta are discarded.
-	view, data, _, err := s.applyMatchUpdateUsing(context.Background(), festID, []updateRequest{req},
-		func(ctx context.Context, q store.Queryer) (store.DBMatchState, error) {
-			return store.LoadDBMatchState(ctx, q, festID, code)
-		},
-		func() (store.MatchView, error) {
-			return s.loadMatchViewLocked(festID, code)
-		}, nil)
-	return view, data, err
-}
-
-// applyScopedMatchUpdate applies a match edit and additionally returns deltaOps:
-// the set-ops that turn the pre-edit view into the new one, when broadcasting
-// them is cheaper than the full view (else nil — caller broadcasts full state).
-func (s *server) applyScopedMatchUpdate(ctx context.Context, scope matchScope, reqs []updateRequest) (store.MatchView, []byte, []byte, []store.MatchView, error) {
-	if s.eng.DB == nil {
-		var view store.MatchView
-		var data []byte
-		var err error
-		for _, req := range reqs {
-			if view, data, err = s.applyLegacyUpdate(req); err != nil {
-				return view, data, nil, nil, err
-			}
-		}
-		return view, data, nil, nil, err
-	}
-	var oldData []byte
-	view, data, cascaded, err := s.applyMatchUpdateUsing(ctx, scope.FestID, reqs,
-		func(ctx context.Context, q store.Queryer) (store.DBMatchState, error) {
-			return loadDBMatchStateByScope(ctx, q, scope)
-		},
-		func() (store.MatchView, error) {
-			return s.loadScopedMatchViewLocked(scope)
-		}, &oldData)
-	if err != nil {
-		return view, data, nil, cascaded, err
-	}
-	deltaOps, _ := realtime.MatchDeltaOps(oldData, data)
-	return view, data, deltaOps, cascaded, nil
-}
-
-// applyMatchUpdateUsing applies one match edit and returns the edited match's
-// view plus `cascaded`: the views of any OTHER matches whose slots changed when
-// the edit resolved the bracket (e.g. finishing a bout advances teams into the
-// next round). The handler broadcasts those too, so spectators see downstream
-// matches update live instead of only on reload.
-func (s *server) applyMatchUpdateUsing(
-	reqCtx context.Context,
-	festID int64,
-	reqs []updateRequest,
-	loadMatch func(context.Context, store.Queryer) (store.DBMatchState, error),
-	loadView func() (store.MatchView, error),
-	oldDataOut *[]byte,
-) (store.MatchView, []byte, []store.MatchView, error) {
-	// Carry the request's audit attribution (actor/request/fest) into the write
-	// tx, detached from the request's cancellation, so this match edit is
-	// recorded in audit_log against the right user and fest. The ctx carries a
-	// festwrite.WriteTxTimeout so the write can never hold s.eng.Mu indefinitely.
-	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
-	defer cancel()
-	// Acquire the pooled connection BEFORE taking the lock: the pool wait is the
-	// one step that can block unbounded under connection starvation, so keep it
-	// off s.eng.Mu (see the 2026-06-13 site-wide freeze). ctx bounds the wait.
-	conn, err := s.eng.AcquireWriteConn(ctx, "match-update")
-	if err != nil {
-		return store.MatchView{}, nil, nil, err
-	}
-	defer conn.Close()
-
-	defer s.eng.LockWrite("match-update")()
-
-	// Capture the committed pre-image of this match under our exclusive lock,
-	// before the mutation commits, so the caller can broadcast a minimal delta
-	// against it. Atomic with the mutation (same lock hold) — no TOCTOU window.
-	// Best-effort: on any failure oldDataOut stays empty and the caller falls
-	// back to a full-state broadcast.
-	if oldDataOut != nil {
-		if oldView, oerr := loadView(); oerr == nil {
-			*oldDataOut, _ = json.Marshal(oldView)
-		}
-	}
-
-	tx, err := s.eng.BeginWriteTxConn(ctx, conn)
-	if err != nil {
-		return store.MatchView{}, nil, nil, err
-	}
-	defer tx.Rollback()
-
-	match, err := loadMatch(ctx, tx)
-	if err != nil {
-		return store.MatchView{}, nil, nil, err
-	}
-
-	dataEdited := false
-	for _, req := range reqs {
-		if req.Finished != nil {
-			if len(reqs) > 1 || hasMatchEdit(req) {
-				return store.MatchView{}, nil, nil, errors.New("finished update must be standalone")
-			}
-			status := "active"
-			if *req.Finished {
-				status = "finished"
-			}
-			if _, err := tx.ExecContext(ctx, `update matches set status = ? where id = ?`, status, match.MatchID); err != nil {
-				return store.MatchView{}, nil, nil, err
-			}
-			if *req.Finished {
-				assignComputedPlaces(&match.State)
-			}
-			continue
-		}
-		if match.State.Finished {
-			return store.MatchView{}, nil, nil, errors.New("match is finished")
-		}
-		if err := applyMatchEditTx(ctx, tx, match, req); err != nil {
-			return store.MatchView{}, nil, nil, err
-		}
-		dataEdited = true
-	}
-
-	// applyMatchEditTx writes answer/theme rows, not the in-memory match.State,
-	// so reload before recalc/slot resolution to compute results from the edited
-	// rows — otherwise a batch would persist results that lag every edit. The
-	// finished branch instead computes places into match.State in memory and
-	// relies on the recalc to persist them, so it must keep the in-memory state.
-	if dataEdited {
-		match, err = loadMatch(ctx, tx)
-		if err != nil {
-			return store.MatchView{}, nil, nil, err
-		}
-	}
-
-	if err := scoring.RecalculateMatchResultsTx(ctx, tx, match); err != nil {
-		return store.MatchView{}, nil, nil, err
-	}
-	affected, err := resolver.ResolveGameSlotsTx(ctx, tx, match.GameID)
-	if err != nil {
-		return store.MatchView{}, nil, nil, err
-	}
-	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:update", util.MustJSON(reqs))
-	if err != nil {
-		return store.MatchView{}, nil, nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return store.MatchView{}, nil, nil, err
-	}
-
-	view, err := loadView()
-	if err != nil {
-		return store.MatchView{}, nil, nil, err
-	}
-	if revision > 0 {
-		view.Revision = util.MaxInt64(view.Revision, revision)
-	}
-	data, err := json.Marshal(view)
-	if err != nil {
-		return store.MatchView{}, nil, nil, err
-	}
-
-	// Load the views of downstream matches that changed, skipping the edited
-	// match itself (already returned as `view`). Failures here are non-fatal —
-	// the edit is committed; a missed cascade broadcast just costs a reload.
-	var cascaded []store.MatchView
-	for _, mid := range affected {
-		if mid == match.MatchID {
-			continue
-		}
-		cv, err := s.loadMatchViewByIDLocked(festID, match.GameID, mid)
-		if err != nil || cv.Code == "" {
-			continue
-		}
-		cascaded = append(cascaded, cv)
-	}
-	return view, data, cascaded, nil
-}
-
 // loadMatchViewByIDLocked loads a match view by its numeric id (used to render
 // downstream matches touched by a bracket cascade). Caller holds s.eng.Mu.
 func (s *server) loadMatchViewByIDLocked(festID, gameID, matchID int64) (store.MatchView, error) {
@@ -416,112 +225,7 @@ func (s *server) loadMatchViewByIDLocked(festID, gameID, matchID int64) (store.M
 	if err != nil {
 		return store.MatchView{}, err
 	}
-	return matchViewFromDBState(match), nil
-}
-
-// applyMatchEditTx validates the request through the pure domain/matchedit rules,
-// then applies the resulting plan as SQL (which needs the tx, so it stays here).
-func applyMatchEditTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState, req updateRequest) error {
-	plan, err := matchedit.Validate(len(match.TeamIDs), func(i int) bool { return match.TeamIDs[i] != 0 }, len(store.QuestionValues), matchedit.Request{
-		Action:      req.Action,
-		HasTeamEdit: hasTeamEdit(req),
-		Team:        req.Team,
-		Tiebreak:    req.Tiebreak,
-		Place:       req.Place,
-		Theme:       req.Theme,
-		Shootout:    req.Shootout,
-		Answer:      req.Answer,
-		Mark:        req.Mark,
-		Player:      req.Player,
-	})
-	if err != nil {
-		return err
-	}
-
-	switch plan.Action {
-	case matchedit.ActionAddShootoutTheme:
-		return festwrite.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
-			blob.AddShootoutTheme(match.TeamIDs)
-			return nil
-		})
-	case matchedit.ActionRemoveShootoutTheme:
-		return festwrite.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
-			return blob.RemoveShootoutTheme()
-		})
-	}
-
-	teamID := match.TeamIDs[req.Team]
-
-	if plan.Place != nil {
-		// A host place edit is a pin: it lands in place_override (winning over
-		// the scorer's place at every recompute) and mirrors into place so the
-		// view is right before the recompute runs.
-		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, team_id, place, place_override)
-values(?, ?, ?, ?)
-on conflict(match_id, team_id) do update set place = excluded.place, place_override = excluded.place_override`,
-			match.MatchID, teamID, *plan.Place, *plan.Place); err != nil {
-			return err
-		}
-	}
-
-	if plan.Theme != nil {
-		var playerID int64
-		if plan.Theme.Player != nil && *plan.Theme.Player != "" {
-			id, err := lookupRosterPlayerID(ctx, tx, match.GameID, match.RosterSource, teamID, *plan.Theme.Player)
-			if err != nil {
-				return err
-			}
-			playerID = id
-		}
-		return festwrite.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
-			if plan.Theme.Player != nil {
-				blob.SetPlayer(teamID, plan.Theme.Kind, plan.Theme.Index, playerID)
-			}
-			if plan.Theme.Answer != nil {
-				blob.SetAnswer(teamID, plan.Theme.Kind, plan.Theme.Index, plan.Theme.Answer.Index, plan.Theme.Answer.Mark)
-			}
-			return nil
-		})
-	}
-
-	return nil
-}
-
-func lookupRosterPlayerID(ctx context.Context, q store.Queryer, gameID int64, rosterSource string, teamID int64, player string) (int64, error) {
-	rosterQuery := `
-select p.id, p.first_name, p.last_name
-from team_players tp
-join players p on p.id = tp.player_id
-where tp.team_id = ?`
-	rosterArgs := []any{teamID}
-	if rosterSource == "game" {
-		rosterQuery = `
-select p.id, p.first_name, p.last_name
-from game_team_players gtp
-join players p on p.id = gtp.player_id
-where gtp.game_id = ? and gtp.team_id = ?`
-		rosterArgs = []any{gameID, teamID}
-	}
-	rows, err := q.QueryContext(ctx, rosterQuery, rosterArgs...)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id int64
-		var firstName, lastName string
-		if err := rows.Scan(&id, &firstName, &lastName); err != nil {
-			return 0, err
-		}
-		if store.JoinPlayerName(firstName, lastName) == player {
-			return id, nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-	return 0, errors.New("player is not in roster")
+	return store.MatchViewFrom(match), nil
 }
 
 func recalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, festID int64, code string) error {
@@ -548,93 +252,6 @@ func bumpMatchRevisionTx(ctx context.Context, tx *sql.Tx, festID, matchID int64,
 		return 0, err
 	}
 	return revision, nil
-}
-
-// updateScopedMatchVenue updates a match's venue and additionally returns
-// deltaOps (set-ops vs the pre-edit view) when a delta broadcast beats the full
-// view; nil otherwise.
-func (s *server) updateScopedMatchVenue(ctx context.Context, scope matchScope, number int) (store.MatchView, []byte, []byte, error) {
-	var oldData []byte
-	view, data, err := s.updateMatchVenueUsing(ctx, scope.FestID, number,
-		func(ctx context.Context, q store.Queryer) (store.DBMatchState, error) {
-			return loadDBMatchStateByScope(ctx, q, scope)
-		},
-		func() (store.MatchView, error) {
-			return s.loadScopedMatchViewLocked(scope)
-		}, &oldData)
-	if err != nil {
-		return view, data, nil, err
-	}
-	deltaOps, _ := realtime.MatchDeltaOps(oldData, data)
-	return view, data, deltaOps, nil
-}
-
-func (s *server) updateMatchVenueUsing(
-	reqCtx context.Context,
-	festID int64,
-	number int,
-	loadMatch func(context.Context, store.Queryer) (store.DBMatchState, error),
-	loadView func() (store.MatchView, error),
-	oldDataOut *[]byte,
-) (store.MatchView, []byte, error) {
-	if number <= 0 {
-		return store.MatchView{}, nil, errors.New("bad venue number")
-	}
-	// Bounded, attributed write context + off-lock pool acquisition (see
-	// applyMatchUpdateUsing / the 2026-06-13 freeze).
-	ctx, cancel := festwrite.AuditDetachedContext(reqCtx, festID)
-	defer cancel()
-	conn, err := s.eng.AcquireWriteConn(ctx, "match-venue")
-	if err != nil {
-		return store.MatchView{}, nil, err
-	}
-	defer conn.Close()
-
-	defer s.eng.LockWrite("match-venue")()
-
-	// Pre-image under the exclusive lock for a minimal delta broadcast (see
-	// applyMatchUpdateUsing). Best-effort; empty → caller sends full state.
-	if oldDataOut != nil {
-		if oldView, oerr := loadView(); oerr == nil {
-			*oldDataOut, _ = json.Marshal(oldView)
-		}
-	}
-
-	tx, err := s.eng.BeginWriteTxConn(ctx, conn)
-	if err != nil {
-		return store.MatchView{}, nil, err
-	}
-	defer tx.Rollback()
-
-	match, err := loadMatch(ctx, tx)
-	if err != nil {
-		return store.MatchView{}, nil, err
-	}
-	var venueID int64
-	if err := tx.QueryRowContext(ctx, `
-select id from venues where fest_id = ? and number = ?`, festID, number).Scan(&venueID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return store.MatchView{}, nil, errors.New("unknown venue")
-		}
-		return store.MatchView{}, nil, err
-	}
-	if _, err := tx.ExecContext(ctx, `update matches set venue_id = ? where id = ?`, venueID, match.MatchID); err != nil {
-		return store.MatchView{}, nil, err
-	}
-	revision, err := bumpMatchRevisionTx(ctx, tx, festID, match.MatchID, "match:venue", util.MustJSON(map[string]any{"code": match.Code, "venue": number}))
-	if err != nil {
-		return store.MatchView{}, nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return store.MatchView{}, nil, err
-	}
-	view, err := loadView()
-	if err != nil {
-		return store.MatchView{}, nil, err
-	}
-	view.Revision = util.MaxInt64(view.Revision, revision)
-	data, err := json.Marshal(view)
-	return view, data, err
 }
 
 func (s *server) updateVenue(reqCtx context.Context, festID int64, number int, title string) ([]store.VenueView, int64, error) {

@@ -91,6 +91,11 @@ func (s *server) editor() *editbatch.Batcher {
 		if s.editBatcher == nil {
 			s.editBatcher = editbatch.NewBatcher(&s.eng, &s.metrics)
 		}
+		// Finishing a match changes the fest grid (places, advancement), which the
+		// server caches — the batcher can't know that, so it calls back.
+		s.editBatcher.OnFestChanged = func(festID, gameID, revision int64) {
+			s.broadcastFestView(festScope{FestID: festID, GameID: gameID}, revision)
+		}
 	})
 	return s.editBatcher
 }
@@ -483,13 +488,9 @@ func (s *server) isFestEditor(r *http.Request, festID int64) bool {
 	return roles.CanEditGameTables(role)
 }
 
-func (s *server) applyUpdate(req updateRequest) (store.MatchView, []byte, error) {
-	if s.eng.DB != nil {
-		return s.applyMatchUpdate(s.eng.FestID, s.eng.ActiveMatchCode, req)
-	}
-	return s.applyLegacyUpdate(req)
-}
-
+// applyLegacyUpdate edits the single in-memory match of the DB-less demo mode.
+// Fest-backed edits go through the batcher as state patches (ADR-0005); this
+// path has no matches table to patch and keeps its own command vocabulary.
 func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, error) {
 	s.eng.Mu.Lock()
 	defer s.eng.Mu.Unlock()
@@ -565,7 +566,7 @@ func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, 
 
 		if req.Player != nil {
 			player := strings.TrimSpace(*req.Player)
-			if player != "" && !contains(team.Roster, player) {
+			if player != "" && !store.HasRosterName(team.Roster, player) {
 				return store.MatchView{}, nil, errors.New("player is not in roster")
 			}
 			theme.Player = player
@@ -654,15 +655,6 @@ func teamRanksHigher(a, b store.TeamView) bool {
 	return false
 }
 
-func contains(list []string, value string) bool {
-	for _, item := range list {
-		if item == value {
-			return true
-		}
-	}
-	return false
-}
-
 func writeJSON(w http.ResponseWriter, data []byte) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(data)
@@ -682,7 +674,7 @@ func defaultMatch() store.MatchState {
 		Teams: []store.TeamState{
 			{
 				Name:   "ВШЭстером",
-				Roster: []string{"Юлия Лапшина", "Савелий Кардашин", "Мария Крамкова", "Дамир Хамидуллин", "Андрей Акимов", "Максим Бобровицкий", "Захар Куренков"},
+				Roster: store.RosterOf("Юлия Лапшина", "Савелий Кардашин", "Мария Крамкова", "Дамир Хамидуллин", "Андрей Акимов", "Максим Бобровицкий", "Захар Куренков"),
 				Place:  3,
 				Themes: []store.ThemeEntry{
 					{Player: "Андрей Акимов", Answers: [5]string{"", "", "", "", ""}},
@@ -701,7 +693,7 @@ func defaultMatch() store.MatchState {
 			},
 			{
 				Name:   "Тина Терияки",
-				Roster: []string{"Анна Гордеева", "Егор Абрамов", "Олег Шукаев", "Алексей Сазонов", "Кирилл Тищенко", "Андрей Кислуха"},
+				Roster: store.RosterOf("Анна Гордеева", "Егор Абрамов", "Олег Шукаев", "Алексей Сазонов", "Кирилл Тищенко", "Андрей Кислуха"),
 				Place:  2,
 				Themes: []store.ThemeEntry{
 					{Player: "Олег Шукаев", Answers: [5]string{"", "right", "", "right", ""}},
@@ -720,7 +712,7 @@ func defaultMatch() store.MatchState {
 			},
 			{
 				Name:   "Вина России",
-				Roster: []string{"Илья Пикалов", "Павел Соколов", "Дмитрий Федоров", "Никита Мирошин", "Евгения Королева", "Елена Трифонова", "Ольга Антропова"},
+				Roster: store.RosterOf("Илья Пикалов", "Павел Соколов", "Дмитрий Федоров", "Никита Мирошин", "Евгения Королева", "Елена Трифонова", "Ольга Антропова"),
 				Place:  4,
 				Themes: []store.ThemeEntry{
 					{Player: "Илья Пикалов", Answers: [5]string{"", "", "", "", ""}},
@@ -739,7 +731,7 @@ func defaultMatch() store.MatchState {
 			},
 			{
 				Name:   "Злая щитоспинка",
-				Roster: []string{"Егор Дементьев", "Таисия Кирпикова", "Денис Красюк", "Михаил Московченко", "Амгалан Цыбенов", "Анна Рябикина"},
+				Roster: store.RosterOf("Егор Дементьев", "Таисия Кирпикова", "Денис Красюк", "Михаил Московченко", "Амгалан Цыбенов", "Анна Рябикина"),
 				Place:  1,
 				Themes: []store.ThemeEntry{
 					{Player: "Егор Дементьев", Answers: [5]string{"right", "", "right", "", ""}},

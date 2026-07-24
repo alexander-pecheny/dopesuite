@@ -184,8 +184,7 @@ func TestFinishAssignsPlaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("match scope: %v", err)
 	}
-	finished := true
-	view, _, _, _, err := srv.ApplyScopedMatchUpdate(t.Context(), scope, []dopeserver.UpdateRequest{{Finished: &finished}})
+	view, err := srv.SubmitMatchFinish(t.Context(), scope, true)
 	if err != nil {
 		t.Fatalf("finish match: %v", err)
 	}

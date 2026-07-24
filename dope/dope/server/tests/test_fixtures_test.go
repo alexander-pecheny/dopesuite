@@ -114,7 +114,8 @@ values(?, ?, 'seed', ?, ?, 0)`, matchID, teamIndex, util.MustJSON(map[string]any
 		}
 
 		playerIDs := make(map[string]int64, len(team.Roster))
-		for rosterOrder, fullName := range team.Roster {
+		for rosterOrder, member := range team.Roster {
+			fullName := member.Name
 			firstName, lastName := dopeserver.SplitPlayerName(fullName)
 			playerID, err := store.InsertReturningID(ctx, tx, `
 insert into players(fest_id, first_name, last_name)

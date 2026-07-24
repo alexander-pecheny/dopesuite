@@ -35,6 +35,17 @@ type DBMatchState struct {
 	RosterSource string
 }
 
+// MatchViewFrom scores a loaded match into its client-facing view, joining the
+// header fields BuildView doesn't see.
+func MatchViewFrom(match DBMatchState) MatchView {
+	view := BuildView(match.State)
+	view.Code = match.Code
+	view.StageCode = match.StageCode
+	view.StageTitle = match.StageTitle
+	view.Venue = match.Venue
+	return view
+}
+
 // ParseDBTime parses an RFC3339 timestamp, falling back to now on error.
 func ParseDBTime(value string) time.Time {
 	parsed, err := time.Parse(time.RFC3339, value)
@@ -217,7 +228,7 @@ order by ms.slot_index`, match.MatchID)
 		}
 		match.State.Teams[slot.Index] = TeamStateFromBlob(
 			match.Blob.Teams[strconv.FormatInt(slot.TeamID.Int64, 10)],
-			slot.Name, roster, slot.Place, playerName)
+			slot.TeamID.Int64, slot.Name, roster, slot.Place, playerName)
 		match.TeamIDs[slot.Index] = slot.TeamID.Int64
 	}
 	NormalizeState(&match.State)
@@ -267,11 +278,11 @@ func blobPlayerNames(ctx context.Context, q Queryer, blob MatchBlob) (func(int64
 	return func(id int64) string { return names[id] }, nil
 }
 
-// LoadTeamRoster loads one team's roster names, from the fest-wide roster or
-// the game-scoped one per the game's roster_source.
-func LoadTeamRoster(ctx context.Context, q Queryer, gameID int64, rosterSource string, teamID int64) ([]string, error) {
+// LoadTeamRoster loads one team's roster, from the fest-wide roster or the
+// game-scoped one per the game's roster_source.
+func LoadTeamRoster(ctx context.Context, q Queryer, gameID int64, rosterSource string, teamID int64) ([]RosterMember, error) {
 	rosterQuery := `
-select p.first_name, p.last_name
+select p.id, p.first_name, p.last_name
 from team_players tp
 join players p on p.id = tp.player_id
 where tp.team_id = ?
@@ -279,18 +290,20 @@ order by tp.roster_order`
 	rosterArgs := []any{teamID}
 	if rosterSource == "game" {
 		rosterQuery = `
-select p.first_name, p.last_name
+select p.id, p.first_name, p.last_name
 from game_team_players gtp
 join players p on p.id = gtp.player_id
 where gtp.game_id = ? and gtp.team_id = ?
 order by gtp.roster_order`
 		rosterArgs = []any{gameID, teamID}
 	}
-	return CollectRows(ctx, q, rosterQuery, rosterArgs, func(rows *sql.Rows) (string, error) {
+	return CollectRows(ctx, q, rosterQuery, rosterArgs, func(rows *sql.Rows) (RosterMember, error) {
+		var member RosterMember
 		var firstName, lastName string
-		if err := rows.Scan(&firstName, &lastName); err != nil {
-			return "", err
+		if err := rows.Scan(&member.ID, &firstName, &lastName); err != nil {
+			return RosterMember{}, err
 		}
-		return JoinPlayerName(firstName, lastName), nil
+		member.Name = JoinPlayerName(firstName, lastName)
+		return member, nil
 	})
 }

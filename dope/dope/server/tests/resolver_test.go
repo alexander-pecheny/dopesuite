@@ -51,7 +51,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		if err != nil {
 			t.Fatalf("scope %s: %v", code, err)
 		}
-		if _, _, _, _, err := srv.ApplyScopedMatchUpdate(t.Context(), scope, []dopeserver.UpdateRequest{{Finished: &finished}}); err != nil {
+		if _, err := srv.SubmitMatchFinish(t.Context(), scope, finished); err != nil {
 			t.Fatalf("finish %s=%v: %v", code, finished, err)
 		}
 	}
@@ -68,9 +68,7 @@ func TestResolverPropagatesBracket(t *testing.T) {
 		if err != nil {
 			t.Fatalf("scope %s: %v", code, err)
 		}
-		if _, _, _, _, err := srv.ApplyScopedMatchUpdate(t.Context(), scope, []dopeserver.UpdateRequest{{Team: teamIndex, Theme: &theme, Answer: &answer, Mark: &value}}); err != nil {
-			t.Fatalf("mark %s team %d: %v", code, teamIndex, err)
-		}
+		editMark(t, srv, scope, teamIndex, theme, answer, value)
 	}
 
 	// One correct +50 (answer index 4) in the 1/16 — its pair in the 1/8 is
@@ -179,38 +177,27 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 		t.Fatalf("import seeds: %v", err)
 	}
 
-	apply := func(code string, req dopeserver.UpdateRequest) []store.MatchView {
+	play := func(code string) {
 		t.Helper()
 		scope, err := srv.VerifyMatchInScope(t.Context(), scopeBase, code)
 		if err != nil {
 			t.Fatalf("scope %s: %v", code, err)
 		}
-		_, _, _, cascaded, err := srv.ApplyScopedMatchUpdate(t.Context(), scope, []dopeserver.UpdateRequest{req})
-		if err != nil {
-			t.Fatalf("apply %s: %v", code, err)
-		}
-		return cascaded
-	}
-	tr := true
-	theme, answer := 0, 4
-	right := "right"
-
-	// Only the 1/16 done so far — the 1/4 reseed needs both games, so C stays
-	// unresolved and must NOT appear in any cascade yet.
-	apply("A", dopeserver.UpdateRequest{Team: 0, Theme: &theme, Answer: &answer, Mark: &right})
-	for _, v := range apply("A", dopeserver.UpdateRequest{Finished: &tr}) {
-		if v.Code == "C" {
-			t.Fatalf("1/4 match C cascaded before its reseed could compute")
+		editMark(t, srv, scope, 0, 0, 4, "right")
+		if _, err := srv.SubmitMatchFinish(t.Context(), scope, true); err != nil {
+			t.Fatalf("finish %s: %v", code, err)
 		}
 	}
 
-	// Finishing the 1/8 completes both games, but the 1/4 reseed slots stay empty
-	// until the explicit calculate action.
-	apply("B", dopeserver.UpdateRequest{Team: 0, Theme: &theme, Answer: &answer, Mark: &right})
-	for _, v := range apply("B", dopeserver.UpdateRequest{Finished: &tr}) {
-		if v.Code == "C" {
-			t.Fatalf("1/4 match C cascaded before manual reseed calculation")
-		}
+	// The 1/4 reseed needs both source games, and even then only the explicit
+	// calculate action fills C's slots — so no finish may resolve them.
+	play("A")
+	if !allZero(slotTeams(t, db, gameID, "C")) {
+		t.Fatal("1/4 match C resolved before its reseed could compute")
+	}
+	play("B")
+	if !allZero(slotTeams(t, db, gameID, "C")) {
+		t.Fatal("1/4 match C resolved before manual reseed calculation")
 	}
 	_, cascaded, _, err := srv.CalculateScopedReseed(t.Context(), scopeBase, "rs")
 	if err != nil {
@@ -390,40 +377,42 @@ func TestUntickEditRetickPreservesDownstream(t *testing.T) {
 		t.Fatalf("import seeds: %v", err)
 	}
 
-	apply := func(code string, req dopeserver.UpdateRequest) {
+	scopeFor := func(code string) dopeserver.MatchScope {
 		t.Helper()
 		scope, err := srv.VerifyMatchInScope(t.Context(), scopeBase, code)
 		if err != nil {
 			t.Fatalf("scope %s: %v", code, err)
 		}
-		if _, _, _, _, err := srv.ApplyScopedMatchUpdate(t.Context(), scope, []dopeserver.UpdateRequest{req}); err != nil {
-			t.Fatalf("apply %s: %v", code, err)
+		return scope
+	}
+	finish := func(code string, finished bool) {
+		t.Helper()
+		if _, err := srv.SubmitMatchFinish(t.Context(), scopeFor(code), finished); err != nil {
+			t.Fatalf("finish %s=%v: %v", code, finished, err)
 		}
 	}
-	tr, fa := true, false
-	theme, ans, right, wrong := 0, 4, "right", "wrong"
 
 	// Finish both source bouts and calculate the reseed so the 1/4 (C) resolves.
-	apply("A", dopeserver.UpdateRequest{Team: 0, Theme: &theme, Answer: &ans, Mark: &right})
-	apply("A", dopeserver.UpdateRequest{Finished: &tr})
-	apply("B", dopeserver.UpdateRequest{Team: 0, Theme: &theme, Answer: &ans, Mark: &right})
-	apply("B", dopeserver.UpdateRequest{Finished: &tr})
+	editMark(t, srv, scopeFor("A"), 0, 0, 4, "right")
+	finish("A", true)
+	editMark(t, srv, scopeFor("B"), 0, 0, 4, "right")
+	finish("B", true)
 	if _, _, _, err := srv.CalculateScopedReseed(t.Context(), scopeBase, "rs"); err != nil {
 		t.Fatalf("calculate reseed: %v", err)
 	}
 
 	// Enter protocol data into the downstream 1/4 bout C, then snapshot it.
-	apply("C", dopeserver.UpdateRequest{Team: 0, Theme: &theme, Answer: &ans, Mark: &right})
-	apply("C", dopeserver.UpdateRequest{Finished: &tr})
+	editMark(t, srv, scopeFor("C"), 0, 0, 4, "right")
+	finish("C", true)
 	before := matchAnswerSnapshot(t, db, gameID, "C")
 	if before == "" {
 		t.Fatal("no downstream protocol data captured for C")
 	}
 
 	// The operator workflow: untick A, edit a score, re-tick A — no recalculation.
-	apply("A", dopeserver.UpdateRequest{Finished: &fa})
-	apply("A", dopeserver.UpdateRequest{Team: 1, Theme: &theme, Answer: &ans, Mark: &wrong})
-	apply("A", dopeserver.UpdateRequest{Finished: &tr})
+	finish("A", false)
+	editMark(t, srv, scopeFor("A"), 1, 0, 4, "wrong")
+	finish("A", true)
 
 	after := matchAnswerSnapshot(t, db, gameID, "C")
 	if before != after {

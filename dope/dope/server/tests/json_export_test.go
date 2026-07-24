@@ -39,8 +39,9 @@ func TestScopedGameArchive(t *testing.T) {
 	// An audited cell edit so the archive's history has something game-scoped to
 	// capture (writes answers + match_results + a matches revision bump).
 	theme, answer, mark := 0, 0, "right"
-	updatePath := fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/update", festID, gameID, dopeserver.DefaultMatchCode)
-	upd := scopedAPIRequest(t, srv, http.MethodPost, updatePath, dopeserver.UpdateRequest{Team: 0, Theme: &theme, Answer: &answer, Mark: &mark}, organizerToken)
+	updatePath := matchStatePath(festID, gameID, dopeserver.DefaultMatchCode)
+	upd := scopedAPIRequest(t, srv, http.MethodPatch, updatePath,
+		markBody(t, srv, festID, dopeserver.DefaultMatchCode, 0, theme, answer, mark), organizerToken)
 	if upd.Code != http.StatusOK {
 		t.Fatalf("seed cell update status = %d, body %s", upd.Code, upd.Body.String())
 	}

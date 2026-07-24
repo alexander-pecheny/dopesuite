@@ -127,21 +127,18 @@ func TestScopedAPIRequiresOrganizerForPrivateReadsAndWrites(t *testing.T) {
 		t.Fatalf("private organizer read status = %d, body %s", privateOrganizerRead.Code, privateOrganizerRead.Body.String())
 	}
 
-	theme := 0
-	answer := 0
-	mark := "right"
-	updatePath := fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/update", festID, gameID, dopeserver.DefaultMatchCode)
-	payload := dopeserver.UpdateRequest{Team: 0, Theme: &theme, Answer: &answer, Mark: &mark}
+	updatePath := matchStatePath(festID, gameID, dopeserver.DefaultMatchCode)
+	payload := markBody(t, srv, festID, dopeserver.DefaultMatchCode, 0, 0, 0, "right")
 
-	anonymousWrite := scopedAPIRequest(t, srv, http.MethodPost, updatePath, payload, "")
+	anonymousWrite := scopedAPIRequest(t, srv, http.MethodPatch, updatePath, payload, "")
 	if anonymousWrite.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous write status = %d, want 401", anonymousWrite.Code)
 	}
-	nonOrganizerWrite := scopedAPIRequest(t, srv, http.MethodPost, updatePath, payload, nonOrganizerToken)
+	nonOrganizerWrite := scopedAPIRequest(t, srv, http.MethodPatch, updatePath, payload, nonOrganizerToken)
 	if nonOrganizerWrite.Code != http.StatusForbidden {
 		t.Fatalf("non-organizer write status = %d, want 403", nonOrganizerWrite.Code)
 	}
-	organizerWrite := scopedAPIRequest(t, srv, http.MethodPost, updatePath, payload, organizerToken)
+	organizerWrite := scopedAPIRequest(t, srv, http.MethodPatch, updatePath, payload, organizerToken)
 	if organizerWrite.Code != http.StatusOK {
 		t.Fatalf("organizer write status = %d, body %s", organizerWrite.Code, organizerWrite.Body.String())
 	}
@@ -208,16 +205,9 @@ func TestHostRoleCanEditGameTablesOnly(t *testing.T) {
 	hostID, hostToken := createAPITestSession(t, srv, "table-host")
 	addAPITestRole(t, srv, festID, hostID, roles.Host)
 
-	theme := 0
-	answer := 0
-	mark := "right"
-	updatePath := fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/update", festID, gameID, dopeserver.DefaultMatchCode)
-	updateResp := scopedAPIRequest(t, srv, http.MethodPost, updatePath, dopeserver.UpdateRequest{
-		Team:   0,
-		Theme:  &theme,
-		Answer: &answer,
-		Mark:   &mark,
-	}, hostToken)
+	updatePath := matchStatePath(festID, gameID, dopeserver.DefaultMatchCode)
+	updateResp := scopedAPIRequest(t, srv, http.MethodPatch, updatePath,
+		markBody(t, srv, festID, dopeserver.DefaultMatchCode, 0, 0, 0, "right"), hostToken)
 	if updateResp.Code != http.StatusOK {
 		t.Fatalf("host match update status = %d, body %s", updateResp.Code, updateResp.Body.String())
 	}
@@ -461,13 +451,11 @@ func TestScopedMatchUpdateResponseCarriesBroadcastSeq(t *testing.T) {
 		}
 	}
 
-	theme := 0
-	mark := "right"
-	updatePath := fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/update", festID, gameID, dopeserver.DefaultMatchCode)
+	updatePath := matchStatePath(festID, gameID, dopeserver.DefaultMatchCode)
 	edit := func(ans int) store.MatchView {
 		t.Helper()
-		a := ans
-		resp := scopedAPIRequest(t, srv, http.MethodPost, updatePath, dopeserver.UpdateRequest{Team: 0, Theme: &theme, Answer: &a, Mark: &mark}, token)
+		body := markBody(t, srv, festID, dopeserver.DefaultMatchCode, 0, 0, ans, "right")
+		resp := scopedAPIRequest(t, srv, http.MethodPatch, updatePath, body, token)
 		if resp.Code != http.StatusOK {
 			t.Fatalf("update status = %d, body %s", resp.Code, resp.Body.String())
 		}
