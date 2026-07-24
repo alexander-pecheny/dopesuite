@@ -71,6 +71,7 @@ type config struct {
 	ekEditors    int
 	ekMatches    []string
 	editMode     string
+	settle       time.Duration
 }
 
 // eventEnvelope mirrors the server's SSE payload wrapper (db.go eventEnvelope).
@@ -125,6 +126,7 @@ func parseFlags() config {
 	flag.IntVar(&cfg.payloadBytes, "payload-bytes", 1200, "approximate edit payload size, padded to model a real game-state blob")
 	flag.StringVar(&cfg.outPath, "out", "", "optional path to write the JSON report")
 	flag.BoolVar(&cfg.insecure, "insecure", false, "skip TLS verification")
+	flag.DurationVar(&cfg.settle, "settle", 3*time.Second, "stop editors this long before the run ends, so in-flight broadcasts can land while viewers still listen")
 	flag.StringVar(&cfg.editMode, "edit-mode", "patch", "how flat-game editors write: patch (set-ops, the real client path) or put (whole state)")
 	flag.IntVar(&cfg.ekEditors, "ek-editors", 0, "concurrent EK editors PATCHing per-match state ops (spread over -ek-matches)")
 	flag.StringVar(&ekMatches, "ek-matches", "", "comma-separated EK match codes the EK editors mark cells in")
@@ -209,6 +211,20 @@ func run(cfg config) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), total+5*time.Second)
 	defer cancel()
+	// Editors stop before the viewers do: an edit made in the last instants of a
+	// run has no chance to be delivered, and counting it would understate
+	// delivery exactly as the ramp used to overstate latency.
+	editCtx, stopEditors := context.WithCancel(ctx)
+	defer stopEditors()
+	if cfg.settle > 0 && cfg.settle < total {
+		go func() {
+			select {
+			case <-time.After(total - cfg.settle):
+				stopEditors()
+			case <-ctx.Done():
+			}
+		}()
+	}
 
 	stats := newStats(cfg.stages)
 	var wg sync.WaitGroup
@@ -223,7 +239,7 @@ func run(cfg config) error {
 		wg.Add(1)
 		go func(id int, tok string) {
 			defer wg.Done()
-			runEditor(ctx, cfg, editorClient, stats, id, tok, rand.New(rand.NewSource(int64(id)+1)))
+			runEditor(editCtx, cfg, editorClient, stats, id, tok, rand.New(rand.NewSource(int64(id)+1)))
 		}(i, token)
 	}
 
@@ -235,7 +251,7 @@ func run(cfg config) error {
 		wg.Add(1)
 		go func(id int, tok, code string) {
 			defer wg.Done()
-			runEKEditor(ctx, cfg, editorClient, stats, id, tok, code, rand.New(rand.NewSource(int64(id)+1001)))
+			runEKEditor(editCtx, cfg, editorClient, stats, id, tok, code, rand.New(rand.NewSource(int64(id)+1001)))
 		}(i, token, code)
 	}
 
