@@ -178,6 +178,7 @@ export interface CardDetail {
   loadMoveBoard(bid: number): Promise<MoveCtx>;
   cardCopyBody(src: BoardCard, rank: string, key: DataKey): Promise<OpBody>;
   copyCardExtras(srcCardId: number, targetDk: DataKey, newCardId: number): Promise<void>;
+  reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, targetLabels: MoveLabel[]): Promise<number[]>;
 }
 
 interface FieldReader<T> { node: HTMLElement; read(): T }
@@ -1272,6 +1273,29 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     }
   }
 
+  // reconcileLabels maps a source card's labels onto the target board by
+  // decrypted name+color, creating any missing label there. targetLabels is the
+  // running target-board list — mutated so a batch of copies reuses labels it
+  // just created instead of duplicating them.
+  async function reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, targetLabels: MoveLabel[]): Promise<number[]> {
+    const srcIds = state().cardLabels[srcCardId] || [];
+    const targetIds: number[] = [];
+    for (const sid of srcIds) {
+      const sl = deps.labelById(sid);
+      if (!sl) continue;
+      let match = targetLabels.find((t) => t.name === sl.name && t.color === sl.color);
+      if (!match) {
+        const lr = (await jpost(`/api/boards/${targetBid}/labels`, {
+          name_enc: await xyCrypto.encField(targetDk, sl.name), color_enc: await xyCrypto.encField(targetDk, sl.color), kind: sl.kind,
+        })) as { id: number };
+        match = { id: lr.id, name: sl.name, color: sl.color };
+        targetLabels.push(match);
+      }
+      targetIds.push(match.id);
+    }
+    return targetIds;
+  }
+
   async function doMoveCopy(remove: boolean): Promise<void> {
     const card = state().cards.find((c) => c.id === openCardId);
     if (!card || !moveCtx) return;
@@ -1305,26 +1329,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       } else {
         const tdk = moveCtx.dk;
         const res = (await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, tdk))) as { id: number };
-        // reconcile labels by decrypted name+color
-        const srcIds = state().cardLabels[card.id] || [];
-        if (srcIds.length) {
-          const tLabels = moveCtx.labels.slice();
-          const targetIds: number[] = [];
-          for (const sid of srcIds) {
-            const sl = deps.labelById(sid);
-            if (!sl) continue;
-            let match = tLabels.find((t) => t.name === sl.name && t.color === sl.color);
-            if (!match) {
-              const lr = (await jpost(`/api/boards/${targetBid}/labels`, {
-                name_enc: await xyCrypto.encField(tdk, sl.name), color_enc: await xyCrypto.encField(tdk, sl.color), kind: sl.kind,
-              })) as { id: number };
-              match = { id: lr.id, name: sl.name, color: sl.color };
-              tLabels.push(match);
-            }
-            targetIds.push(match.id);
-          }
-          if (targetIds.length) await jput(`/api/cards/${res.id}/labels`, { label_ids: targetIds });
-        }
+        const targetIds = await reconcileLabels(card.id, targetBid, tdk, moveCtx.labels.slice());
+        if (targetIds.length) await jput(`/api/cards/${res.id}/labels`, { label_ids: targetIds });
         await copyCardExtras(card.id, tdk, res.id);
         if (remove) {
           await jdelete(`/api/cards/${card.id}`);
@@ -1591,6 +1597,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     copyTesterList,
     loadMoveBoard,
     cardCopyBody,
-    copyCardExtras,
+    copyCardExtras, reconcileLabels,
   };
 }
