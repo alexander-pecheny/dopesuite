@@ -228,7 +228,6 @@ let activeAnswerNode: HTMLElement | null = null;
 let recorder: ClientRecorder | null = null;
 // Live SSE stream, kept at module scope so the visibility/online recovery below
 // can tear down a dead connection and re-establish it. null while disconnected.
-let events: EventSource | null = null;
 let activeTeamRows: HTMLElement[] = [];
 const matchSelections = new Map<string, CellRangeSelection>();
 const undoStack: UndoEntry[] = [];
@@ -521,127 +520,76 @@ async function loadSeedImportPage(): Promise<void> {
   renderSeedImport();
 }
 
-// The epoch tracker spots a server restart (the seq space resets to 0; cached
-// MatchViews keep a high seq the new space never reaches, so every post-restart
-// delta would read as "seq <= base.seq" and be silently dropped, leaving the
-// editor diverged). On a changed epoch the cleanest recovery — given the stage
-// cache's monotonic-by-seq merge — is a full reload, which re-seeds everything.
-// Un-acked edits survive via durable pending storage.
-const epochTracker = gameTable.createEpochTracker();
-let epochReloadScheduled = false;
+// SSE lifecycle — stream, epoch-reload latch, iOS wake recovery — lives in
+// createLiveEvents (state-sync.ts); this page only dispatches scoped messages.
+// Un-acked edits survive the epoch reload via durable pending storage.
+const liveEvents = gameTable.createLiveEvents({
+  eventsURL: () => gameTable.gameEventsURL(route.festID, route.gameID),
+  onMessage: dispatchStateMessage,
+  onViewers: (count) => viewerCounter.setCount(count),
+  reload: () => loadCurrent(),
+  onDown: () => setStatus("reconnecting"),
+  onUp: () => setStatus("saved"),
+  onRecoverError: (error) => {
+    setStatus("error");
+    console.error(error);
+  },
+  onStreamError: () => setStatus("reconnecting"),
+  recorder: () => recorder,
+  recorderTags: () => ({mode: route.mode, matchCode: route.matchCode}),
+});
 
-function scheduleEpochReload(): void {
-  if (epochReloadScheduled) return;
-  epochReloadScheduled = true;
-  recorder?.event("epoch-reload", {mode: route.mode, from: epochTracker.epoch});
-  // Jittered so a fleet of editors doesn't reload the cold post-restart server
-  // in lockstep (same spread the viewer page uses).
-  gameTable.scheduleStaticReload();
-}
-
-function connectEvents(): void {
-  if (events) {
-    try { events.close(); } catch (_err) { /* already closed */ }
+function dispatchStateMessage(message: ScopedEventMessage): void {
+  // On the stats page, fold match edits into the cache in place and recompute
+  // from memory — no refetch. Other scopes don't affect the aggregate.
+  if (route.mode === "stats") {
+    if (message.scope?.startsWith("match:")) statsSync.applyMatchEvent(message as StatsMatchEvent);
+    return;
   }
-  events = new EventSource(gameTable.gameEventsURL(route.festID, route.gameID));
-  events.addEventListener("state", (event) => {
-    const message = gameTable.parseScopedEvent((event as MessageEvent<string>).data);
-    // A changed server epoch means a restart reset the seq space; reload to
-    // re-seed instead of silently dropping every post-restart delta by seq.
-    if (epochTracker.changed(message)) {
-      scheduleEpochReload();
+  if (consumeLocalMatchEcho(message)) {
+    setStatus("saved");
+    return;
+  }
+  const matchScope = `match:${route.gameID}:${route.matchCode}`;
+  const venuesScope = `venues:${route.festID}`;
+  // Match-scoped events: always route into cached stage data, regardless of
+  // which page we're on. Keeps cached panes for other stages live so a later
+  // tab switch sees fresh data without a fetch. Events arrive either as a
+  // scoped delta (ops) — the common case since EK broadcasts deltas — or as a
+  // full-state snapshot.
+  if (message.scope?.startsWith("match:")) {
+    if (Array.isArray(message.ops)) {
+      applyMatchDelta(message, matchScope);
       return;
     }
-    // On the stats page, fold match edits into the cache in place and recompute
-    // from memory — no refetch. Other scopes don't affect the aggregate.
-    if (route.mode === "stats") {
-      if (message.scope?.startsWith("match:")) statsSync.applyMatchEvent(message as StatsMatchEvent);
-      return;
-    }
-    if (consumeLocalMatchEcho(message)) {
-      setStatus("saved");
-      return;
-    }
-    const matchScope = `match:${route.gameID}:${route.matchCode}`;
-    const venuesScope = `venues:${route.festID}`;
-    // Match-scoped events: always route into cached stage data, regardless of
-    // which page we're on. Keeps cached panes for other stages live so a later
-    // tab switch sees fresh data without a fetch. Events arrive either as a
-    // scoped delta (ops) — the common case since EK broadcasts deltas — or as a
-    // full-state snapshot.
-    if (message.scope?.startsWith("match:")) {
-      if (Array.isArray(message.ops)) {
-        applyMatchDelta(message, matchScope);
-        return;
+    const view = message.data as HostMatchView | null | undefined;
+    if (view?.code) {
+      view.seq = Number(message.seq) || 0;
+      const result = stageCache.applyMatchUpdate(view);
+      if (route.mode === "match" && message.scope === matchScope) {
+        applyUpdatedMatch(view, route.matchCode);
       }
-      const view = message.data as HostMatchView | null | undefined;
-      if (view?.code) {
-        view.seq = Number(message.seq) || 0;
-        const result = stageCache.applyMatchUpdate(view);
-        if (route.mode === "match" && message.scope === matchScope) {
-          applyUpdatedMatch(view, route.matchCode);
-        }
-        if (!result.found && route.mode === "stage") scheduleReload();
-        setStatus("saved");
-        return;
-      }
-      scheduleReload();
-      return;
-    }
-    if (route.mode === "venues" && message.scope === venuesScope) {
-      venues = message.data as Venue[];
-      renderVenues();
-      setStatus("saved");
-      return;
-    }
-    const festView = message.data as HostFestView | null | undefined;
-    if (message.scope?.startsWith("fest:") && festView?.stages) {
-      applyFestViewEvent(festView);
+      if (!result.found && route.mode === "stage") scheduleReload();
       setStatus("saved");
       return;
     }
     scheduleReload();
-  });
-  events.addEventListener("viewers", (event) => {
-    try {
-      viewerCounter.setCount((JSON.parse((event as MessageEvent<string>).data) as {count?: unknown} | null)?.count);
-    } catch (_err) {
-      // ignore malformed viewer-count payloads
-    }
-  });
-  events.addEventListener("open", () => recorder?.event("sse-open", {mode: route.mode, matchCode: route.matchCode}));
-  events.onerror = () => {
-    setStatus("reconnecting");
-    recorder?.event("sse-error", {mode: route.mode, matchCode: route.matchCode});
-  };
+    return;
+  }
+  if (route.mode === "venues" && message.scope === venuesScope) {
+    venues = message.data as Venue[];
+    renderVenues();
+    setStatus("saved");
+    return;
+  }
+  const festView = message.data as HostFestView | null | undefined;
+  if (message.scope?.startsWith("fest:") && festView?.stages) {
+    applyFestViewEvent(festView);
+    setStatus("saved");
+    return;
+  }
+  scheduleReload();
 }
-
-// iOS aggressively freezes backgrounded tabs, silently killing the SSE socket.
-// Native EventSource auto-reconnect frequently never recovers on resume — it
-// sits in CONNECTING while onerror has already flipped the status to a spinning
-// "reconnecting", so it spins forever. On regaining visibility/network, drop any
-// non-OPEN stream and re-seed from a fresh fetch. Guarding on readyState === OPEN
-// keeps a healthy stream untouched, so the steady-state cost is zero.
-function recoverLive(): void {
-  if (epochReloadScheduled) return;
-  if (document.visibilityState !== "visible") return;
-  if (events && events.readyState === EventSource.OPEN) return;
-  recorder?.event("sse-recover", {mode: route.mode, readyState: events?.readyState ?? null});
-  setStatus("reconnecting");
-  loadCurrent()
-    .then(() => {
-      setStatus("saved");
-      connectEvents();
-    })
-    .catch((error) => {
-      setStatus("error");
-      console.error(error);
-    });
-}
-
-document.addEventListener("visibilitychange", recoverLive);
-window.addEventListener("pageshow", recoverLive);
-window.addEventListener("online", recoverLive);
 
 function applyFestViewEvent(view: HostFestView): void {
   adoptFestView(view);
@@ -3243,7 +3191,7 @@ recorder = gameTable.installClientRecorder({
 loadCurrent()
   .then(() => {
     setStatus("saved");
-    connectEvents();
+    liveEvents.connect();
     connectPresence();
   })
   .catch((error) => {

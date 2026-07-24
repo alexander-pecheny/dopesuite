@@ -28,3 +28,14 @@ pass — decided 2026-07-24.
 - A protocol renderer cannot ship a page without the standard chrome — conventions become structural, not aspirational.
 - One shell serves host and viewer, differing by `CanEdit`.
 - Non-game chrome (`menu.js`, `pageforms.js`) may stay classic scripts; only the game-page stack is in scope.
+
+## Amendment (2026-07-24): the DopeShell shim is gone; the real seam is state-sync
+
+`web/ts/shell/` (ProtocolRenderer registry, `window.DopeShell`, its own
+StateSync) never gained a call site — every page imported it for side effect
+only while re-implementing SSE/epoch/reconnect by hand, three times. The shim
+is deleted. The load-bearing seam this ADR wanted now exists as `state-sync.ts`:
+one sync engine (`createStateSync` for flat-game state, `createLiveEvents` for
+host/viewer scoped dispatch) with an injectable stream adapter, tested through
+that interface. A future protocol page builds on state-sync + the shared page
+modules rather than a renderer registry.
