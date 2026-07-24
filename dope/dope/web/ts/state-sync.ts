@@ -1103,3 +1103,351 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
 
   return {connect};
 }
+
+export interface HostPresenceOptions {
+  root?: HTMLElement;
+  eventsURL?: string;
+  presenceURL?: string;
+  postDelayMs?: number;
+  heartbeatMs?: number;
+  staleMs?: number;
+  cursorFromElement?: (element: Element | EventTarget | null) => unknown;
+  getCursor?: () => unknown;
+  findTarget?: (cursor: unknown) => Element | null | undefined;
+}
+
+export interface HostPresence {
+  connect(): void;
+  disconnect(): void;
+  publish(cursor: unknown): void;
+  publishCurrent(): void;
+  publishFromElement(element: Element | EventTarget | null): void;
+  refresh(): void;
+}
+
+interface PresenceMessage {
+  userID?: number | string;
+  username?: string;
+  color?: string;
+  active?: boolean;
+  cursor?: unknown;
+}
+
+interface RemotePresence {
+  userID: number | string;
+  username: string;
+  color: string;
+  cursor: unknown;
+  seenAt: number;
+  node?: HTMLElement;
+}
+
+export function createHostPresence(options: HostPresenceOptions): HostPresence {
+  const root = options.root || document.body;
+  const postDelayMs = typeof options.postDelayMs === "number" && Number.isFinite(options.postDelayMs) ? options.postDelayMs : 80;
+  const heartbeatMs = typeof options.heartbeatMs === "number" && Number.isFinite(options.heartbeatMs) ? options.heartbeatMs : 5000;
+  const staleMs = typeof options.staleMs === "number" && Number.isFinite(options.staleMs) ? options.staleMs : 16000;
+  const remotes = new Map<number | string, RemotePresence>();
+  let selfUserID: number | string | null = null;
+  let source: EventSource | null = null;
+  let layer: HTMLElement | null = null;
+  let publishTimer: number | null = null;
+  let heartbeatTimer: number | null = null;
+  let staleTimer: number | null = null;
+  let lastCursor: unknown = null;
+  let connected = false;
+  let refreshFrame = 0;
+  let stickyStyleCache: WeakMap<Element, CSSStyleDeclaration> | null = null;
+
+  function connect(): void {
+    if (connected || !options.eventsURL || !options.presenceURL) return;
+    connected = true;
+    ensureLayer();
+    void loadSelf();
+    source = new EventSource(options.eventsURL);
+    source.addEventListener("presence", (event) => {
+      try {
+        applyPresence(JSON.parse((event as MessageEvent<string>).data) as PresenceMessage | null);
+      } catch (error) {
+        console.error(error);
+      }
+    });
+    root.addEventListener("focusin", handleFocusOrClick, true);
+    root.addEventListener("click", handleFocusOrClick, true);
+    document.addEventListener("keydown", handleKeydown, true);
+    document.addEventListener("scroll", scheduleRefresh, {capture: true, passive: true});
+    window.addEventListener("scroll", scheduleRefresh, {passive: true});
+    window.addEventListener("resize", scheduleRefresh);
+    window.addEventListener("beforeunload", sendInactive);
+    heartbeatTimer = window.setInterval(() => {
+      if (lastCursor) void postPresence(true, lastCursor);
+    }, heartbeatMs);
+    staleTimer = window.setInterval(pruneStale, 1000);
+    publishCurrentSoon();
+  }
+
+  async function loadSelf(): Promise<void> {
+    try {
+      const response = await fetch("/api/auth/me", {headers: {"Accept": "application/json"}});
+      if (!response.ok) return;
+      const me = await response.json() as {user_id?: number | string; userID?: number | string};
+      selfUserID = me.user_id || me.userID || null;
+      if (selfUserID && remotes.has(selfUserID)) {
+        removeRemote(selfUserID);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  function handleFocusOrClick(event: Event): void {
+    publishFromElement(event.target);
+  }
+
+  function handleKeydown(): void {
+    window.requestAnimationFrame(publishCurrent);
+  }
+
+  function publishFromElement(element: Element | EventTarget | null): void {
+    const cursor = options.cursorFromElement?.(element);
+    if (cursor) publish(cursor);
+  }
+
+  function publishCurrentSoon(): void {
+    window.requestAnimationFrame(publishCurrent);
+  }
+
+  function publishCurrent(): void {
+    const cursor = options.getCursor?.() || options.cursorFromElement?.(document.activeElement);
+    if (cursor) publish(cursor);
+  }
+
+  function publish(cursor: unknown): void {
+    if (!cursor) return;
+    lastCursor = cursor;
+    window.clearTimeout(publishTimer ?? undefined);
+    publishTimer = window.setTimeout(() => {
+      publishTimer = null;
+      void postPresence(true, cursor);
+    }, postDelayMs);
+  }
+
+  async function postPresence(active: boolean, cursor?: unknown): Promise<void> {
+    if (!options.presenceURL) return;
+    const body = active ? {active: true, cursor} : {active: false};
+    try {
+      await fetch(options.presenceURL, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  function sendInactive(): void {
+    if (!options.presenceURL) return;
+    const payload = JSON.stringify({active: false});
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(options.presenceURL, new Blob([payload], {type: "application/json"}));
+      return;
+    }
+    void fetch(options.presenceURL, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: payload,
+      keepalive: true,
+    });
+  }
+
+  function applyPresence(message: PresenceMessage | null): void {
+    if (!message || !message.userID) return;
+    if (selfUserID && message.userID === selfUserID) return;
+    if (!message.active || !message.cursor) {
+      removeRemote(message.userID);
+      return;
+    }
+    const remote = remotes.get(message.userID) || ({} as RemotePresence);
+    remote.userID = message.userID;
+    remote.username = message.username || `user-${message.userID}`;
+    remote.color = message.color || "var(--blue)";
+    remote.cursor = message.cursor;
+    remote.seenAt = Date.now();
+    remotes.set(message.userID, remote);
+    renderRemote(remote);
+  }
+
+  function ensureLayer(): HTMLElement {
+    if (layer) return layer;
+    layer = document.createElement("div");
+    layer.className = "collab-cursor-layer";
+    document.body.appendChild(layer);
+    return layer;
+  }
+
+  function renderRemote(remote: RemotePresence): void {
+    ensureLayer();
+    const target = options.findTarget?.(remote.cursor);
+    const node = ensureRemoteNode(remote);
+    if (!target || !document.documentElement.contains(target)) {
+      node.hidden = true;
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0 || rect.bottom < 0 || rect.right < 0 || rect.top > window.innerHeight || rect.left > window.innerWidth) {
+      node.hidden = true;
+      return;
+    }
+    if (isHiddenByScrollFrame(target, rect) || isHiddenByStickyLayer(target, rect)) {
+      node.hidden = true;
+      return;
+    }
+    node.hidden = false;
+    node.style.left = `${Math.round(rect.left)}px`;
+    node.style.top = `${Math.round(rect.top)}px`;
+    node.style.width = `${Math.round(rect.width)}px`;
+    node.style.height = `${Math.round(rect.height)}px`;
+    node.style.setProperty("--cursor-color", remote.color);
+    const marker = node.querySelector<HTMLElement>(".collab-cursor-marker");
+    const label = node.querySelector<HTMLElement>(".collab-cursor-label");
+    if (marker) marker.title = remote.username;
+    if (label) label.textContent = remote.username;
+  }
+
+  function ensureRemoteNode(remote: RemotePresence): HTMLElement {
+    if (remote.node) return remote.node;
+    const node = document.createElement("div");
+    node.className = "collab-cursor";
+    const marker = document.createElement("span");
+    marker.className = "collab-cursor-marker";
+    const label = document.createElement("span");
+    label.className = "collab-cursor-label";
+    marker.appendChild(label);
+    node.appendChild(marker);
+    ensureLayer().appendChild(node);
+    remote.node = node;
+    return node;
+  }
+
+  function isHiddenByScrollFrame(target: Element, rect: DOMRect): boolean {
+    const frame = target.closest?.(".sheet-frame");
+    if (!frame) return false;
+    const frameRect = frame.getBoundingClientRect();
+    return rect.left < frameRect.left - 1 ||
+      rect.right > frameRect.right + 1 ||
+      rect.top < frameRect.top - 1 ||
+      rect.bottom > frameRect.bottom + 1;
+  }
+
+  function isHiddenByStickyLayer(target: Element, rect: DOMRect): boolean {
+    const frame = target.closest?.(".sheet-frame");
+    if (!frame || target.closest?.(".sticky")) return false;
+    const frameRect = frame.getBoundingClientRect();
+    let stickyRight = frameRect.left;
+    let stickyBottom = frameRect.top;
+    const probes = stickyProbes(frame);
+    for (const probe of probes) {
+      const sticky = probe.node;
+      if (sticky === target || sticky.contains(target) || target.contains(sticky)) continue;
+      const style = probe.style;
+      if (style.position !== "sticky") continue;
+      const stickyRect = sticky.getBoundingClientRect();
+      if (stickyRect.width <= 0 || stickyRect.height <= 0) continue;
+      if (stickyRect.right <= frameRect.left || stickyRect.left >= frameRect.right || stickyRect.bottom <= frameRect.top || stickyRect.top >= frameRect.bottom) continue;
+
+      const overlapsY = stickyRect.top < rect.bottom && stickyRect.bottom > rect.top;
+      const isLeftSticky = style.left !== "auto" && stickyRect.left >= frameRect.left - 2 && stickyRect.left < frameRect.right;
+      if (overlapsY && isLeftSticky) {
+        stickyRight = Math.max(stickyRight, stickyRect.right);
+      }
+
+      const overlapsX = stickyRect.left < rect.right && stickyRect.right > rect.left;
+      const isTopSticky = style.top !== "auto" && stickyRect.top >= frameRect.top - 2 && stickyRect.top < frameRect.bottom;
+      if (overlapsX && isTopSticky) {
+        stickyBottom = Math.max(stickyBottom, stickyRect.bottom);
+      }
+    }
+    return rect.left < stickyRight - 1 || rect.top < stickyBottom - 1;
+  }
+
+  function scheduleRefresh(): void {
+    if (refreshFrame) return;
+    refreshFrame = requestAnimationFrame(() => {
+      refreshFrame = 0;
+      refresh();
+    });
+  }
+
+  function refresh(): void {
+    stickyStyleCache = new WeakMap();
+    try {
+      for (const remote of remotes.values()) {
+        renderRemote(remote);
+      }
+    } finally {
+      stickyStyleCache = null;
+    }
+  }
+
+  function stickyProbes(frame: Element): Array<{node: Element; style: CSSStyleDeclaration}> {
+    const nodes = frame.querySelectorAll(".sticky, thead th");
+    const out: Array<{node: Element; style: CSSStyleDeclaration}> = [];
+    const cache = stickyStyleCache;
+    for (const node of nodes) {
+      let style: CSSStyleDeclaration;
+      if (cache) {
+        const cached = cache.get(node);
+        if (cached) {
+          style = cached;
+        } else {
+          style = window.getComputedStyle(node);
+          cache.set(node, style);
+        }
+      } else {
+        style = window.getComputedStyle(node);
+      }
+      out.push({node, style});
+    }
+    return out;
+  }
+
+  function pruneStale(): void {
+    const cutoff = Date.now() - staleMs;
+    for (const [userID, remote] of remotes.entries()) {
+      if (remote.seenAt < cutoff) {
+        removeRemote(userID);
+      }
+    }
+  }
+
+  function removeRemote(userID: number | string): void {
+    const remote = remotes.get(userID);
+    if (remote?.node) remote.node.remove();
+    remotes.delete(userID);
+  }
+
+  function disconnect(): void {
+    if (!connected) return;
+    connected = false;
+    window.clearTimeout(publishTimer ?? undefined);
+    window.clearInterval(heartbeatTimer ?? undefined);
+    window.clearInterval(staleTimer ?? undefined);
+    if (refreshFrame) {
+      cancelAnimationFrame(refreshFrame);
+      refreshFrame = 0;
+    }
+    source?.close();
+    source = null;
+    sendInactive();
+    root.removeEventListener("focusin", handleFocusOrClick, true);
+    root.removeEventListener("click", handleFocusOrClick, true);
+    document.removeEventListener("keydown", handleKeydown, true);
+    document.removeEventListener("scroll", scheduleRefresh, {capture: true});
+    window.removeEventListener("scroll", scheduleRefresh);
+    window.removeEventListener("resize", scheduleRefresh);
+    for (const userID of Array.from(remotes.keys())) removeRemote(userID);
+  }
+
+  return {connect, disconnect, publish, publishCurrent, publishFromElement, refresh: scheduleRefresh};
+}
