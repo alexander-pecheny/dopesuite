@@ -2,24 +2,59 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createStateSync, createLiveEvents} from "./dist/state-sync.js";
 
-// The engine reads window/document lazily; give it fakes with immediate timers
-// so debounce/jitter never make a test wait.
+// The engine reads window/document lazily. Sub-second waits (the resync jitter,
+// the save debounce) fire straight away so no test ever waits; the wake-recovery
+// backoff is queued instead, for runTimers() to release deliberately.
+const timers = new Map();
+let nextTimer = 0;
+const lifecycle = new Map();
+
+function bindLifecycle(type, fn) {
+  if (!lifecycle.has(type)) lifecycle.set(type, []);
+  lifecycle.get(type).push(fn);
+}
+
 globalThis.window = {
-  setTimeout: (fn) => {
-    fn();
-    return 0;
+  setTimeout: (fn, ms) => {
+    if (!ms || ms < 1000) {
+      fn();
+      return 0;
+    }
+    nextTimer += 1;
+    timers.set(nextTimer, fn);
+    return nextTimer;
   },
-  clearTimeout: () => {},
-  addEventListener: () => {},
+  clearTimeout: (id) => timers.delete(id),
+  addEventListener: bindLifecycle,
 };
-globalThis.document = {addEventListener: () => {}, visibilityState: "visible"};
+globalThis.document = {addEventListener: bindLifecycle, visibilityState: "visible"};
+
+// runTimers releases the queued timers, awaiting the async recovery they start.
+async function runTimers() {
+  const due = [...timers.values()];
+  timers.clear();
+  for (const fn of due) fn();
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+async function fire(type) {
+  for (const fn of lifecycle.get(type) || []) fn();
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+function resetEnv() {
+  timers.clear();
+  lifecycle.clear();
+  globalThis.document.visibilityState = "visible";
+}
 
 // fakeStream is the substitutable EventSource adapter: tests emit server events
-// by calling the captured listeners.
-function fakeStream() {
+// by calling the captured listeners. readyState is settable so a test can stage
+// a live stream (1), one still connecting (0) or a dead one (2).
+function fakeStream(readyState = 1) {
   const listeners = new Map();
   return {
-    readyState: 1,
+    readyState,
     onerror: null,
     addEventListener(type, fn) {
       listeners.set(type, fn);
@@ -33,11 +68,14 @@ function fakeStream() {
   };
 }
 
+// Answers each call from `responses` in order (an exhausted list keeps answering
+// with an empty 200). A null entry rejects, standing in for an offline attempt.
 function fakeFetch(responses) {
   const calls = [];
   globalThis.fetch = (url, init) => {
     calls.push({url, init});
-    const r = responses.shift() || {};
+    const r = responses.length ? responses.shift() : {};
+    if (r === null) return Promise.reject(new Error("offline"));
     return Promise.resolve({
       ok: true,
       headers: {get: (name) => r.headers?.[name] ?? null},
@@ -49,8 +87,10 @@ function fakeFetch(responses) {
 }
 
 function connectSync(overrides = {}) {
-  const stream = fakeStream();
+  resetEnv();
+  const streams = [];
   const states = [];
+  const statuses = [];
   const sync = createStateSync({
     scope: "game-state:1",
     stateURL: "/state",
@@ -60,11 +100,16 @@ function connectSync(overrides = {}) {
     getInitialSeq: () => 5,
     getInitialEpoch: () => "e1",
     onRemoteState: (state) => states.push(state),
-    newEventSource: () => stream,
+    setStatus: (state) => statuses.push(state),
+    newEventSource: () => {
+      const s = fakeStream();
+      streams.push(s);
+      return s;
+    },
     ...overrides,
   });
   sync.connect();
-  return {stream, states, sync};
+  return {stream: streams[0], streams, states, statuses, sync};
 }
 
 test("delta chaining onto the seeded seq applies ops", () => {
@@ -119,7 +164,78 @@ test("foreign-scope events are ignored", () => {
   assert.deepEqual(states, []);
 });
 
-test("createLiveEvents dispatches after the epoch guard and latches on reset", () => {
+test("a dead stream is re-opened and re-seeded when the tab returns", async () => {
+  const calls = fakeFetch([{headers: {"X-State-Seq": "9"}, body: {v: 42}}]);
+  const {stream, streams, states, statuses} = connectSync();
+  stream.close();
+  await fire("visibilitychange");
+  assert.equal(streams.length, 2);
+  assert.deepEqual(states, [{v: 42}]);
+  assert.equal(calls.length, 1);
+  assert.equal(statuses.at(-1), "saved");
+});
+
+test("a live stream is left alone when the tab returns", async () => {
+  const calls = fakeFetch([]);
+  const {streams} = connectSync();
+  await fire("visibilitychange");
+  assert.equal(streams.length, 1);
+  assert.equal(calls.length, 0);
+});
+
+test("recovery keeps retrying until the state is re-seeded", async () => {
+  // The iOS case: the tab wakes with the radio still down, so the first attempts
+  // fail and no further visibility event is coming to trigger another.
+  const calls = fakeFetch([null, null, {headers: {"X-State-Seq": "9"}, body: {v: 42}}]);
+  const {stream, states, statuses} = connectSync();
+  stream.close();
+  await fire("visibilitychange");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(states, []);
+  await runTimers();
+  assert.equal(calls.length, 2);
+  await runTimers();
+  assert.equal(calls.length, 3);
+  assert.deepEqual(states, [{v: 42}]);
+  assert.equal(statuses.at(-1), "saved");
+  await runTimers();
+  assert.equal(calls.length, 3, "a re-seeded page ends the retry chain");
+});
+
+test("a stream that reconnects on its own is still re-seeded", async () => {
+  const calls = fakeFetch([null, {headers: {"X-State-Seq": "9"}, body: {v: 42}}]);
+  const {stream, streams, states} = connectSync();
+  stream.close();
+  await fire("visibilitychange");
+  // Native EventSource retry brings the socket back mid-chain. It looks live,
+  // but the page is still on the state it never re-fetched, so recovery goes on.
+  streams.at(-1).readyState = 1;
+  await runTimers();
+  assert.equal(calls.length, 2);
+  assert.deepEqual(states, [{v: 42}]);
+});
+
+test("recovery stays off while the tab is hidden", async () => {
+  const calls = fakeFetch([]);
+  const {stream, streams} = connectSync();
+  stream.close();
+  globalThis.document.visibilityState = "hidden";
+  await fire("visibilitychange");
+  assert.equal(streams.length, 1);
+  assert.equal(calls.length, 0);
+});
+
+test("recovery stays off after the server locks down", async () => {
+  const calls = fakeFetch([]);
+  const {stream, streams} = connectSync({onLockdown: () => {}});
+  stream.emit("lockdown", {});
+  await fire("visibilitychange");
+  assert.equal(streams.length, 1);
+  assert.equal(calls.length, 0);
+});
+
+test("createLiveEvents dispatches after the epoch guard and latches on reset", async () => {
+  resetEnv();
   const stream = fakeStream();
   const seen = [];
   let reloads = 0;
@@ -134,13 +250,46 @@ test("createLiveEvents dispatches after the epoch guard and latches on reset", (
   stream.emit("state", {scope: "match:1:a", data: {}, epoch: "e1"});
   stream.emit("state", {scope: "match:1:b", data: {}, epoch: "e1"});
   assert.deepEqual(seen, ["match:1:a", "match:1:b"]);
-  // Epoch flip: reload scheduled (immediately, with the fake timer), no dispatch.
+  // Epoch flip: a jittered reload is scheduled, and nothing more is dispatched.
   stream.emit("state", {scope: "match:1:c", data: {}, epoch: "e2"});
   assert.deepEqual(seen, ["match:1:a", "match:1:b"]);
+  await runTimers();
   assert.equal(reloads, 1);
 });
 
+test("createLiveEvents retries a reload that failed on wake", async () => {
+  resetEnv();
+  const streams = [];
+  let fail = true;
+  let ups = 0;
+  let errors = 0;
+  const live = createLiveEvents({
+    eventsURL: () => "/events",
+    onMessage: () => {},
+    onUp: () => ups++,
+    onRecoverError: () => errors++,
+    reload: () => (fail ? Promise.reject(new Error("offline")) : Promise.resolve()),
+    // The tab wakes on a stream that is still connecting; the re-opened one is live.
+    newEventSource: () => {
+      const s = fakeStream(streams.length ? 1 : 0);
+      streams.push(s);
+      return s;
+    },
+  });
+  live.connect();
+  await fire("visibilitychange");
+  assert.equal(errors, 1);
+  assert.equal(streams.length, 1, "a failed reload opens no stream");
+  fail = false;
+  await runTimers();
+  assert.equal(ups, 1);
+  assert.equal(streams.length, 2);
+  await runTimers();
+  assert.equal(streams.length, 2, "a re-seeded page ends the retry chain");
+});
+
 test("createLiveEvents lockdown closes the stream and notifies", () => {
+  resetEnv();
   const stream = fakeStream();
   let locked = 0;
   const live = createLiveEvents({
