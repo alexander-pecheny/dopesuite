@@ -14,6 +14,7 @@ import type {
   PendingOp,
   PendingOps,
   ScopedEventMessage,
+  ScrollEdgeBinding,
   TeamView,
   ThemeView,
   Venue,
@@ -251,10 +252,9 @@ let gridNameOverflowFrame = 0;
 let ekTeamNameOverflowFrame = 0;
 let resultsTeamNameOverflowFrame = 0;
 let stageOverflowScrollFrame: Element | null = null;
-let stageOverflowScrollListener: (() => void) | null = null;
-let statsScrollFadeFrame: Element | null = null;
+let stageScroll: ScrollEdgeBinding | null = null;
+let ekTabsScroll: ScrollEdgeBinding | null = null;
 let playerSelectMeasureContext: CanvasRenderingContext2D | null = null;
-let ekTabsFadeFrame = 0;
 
 const floatingPopoverSpecs = [
   {
@@ -280,7 +280,7 @@ const floatingPopoverSpecs = [
   {
     trigger: ".player-select-truncated",
     popover: ".player-select-popover",
-    anchor: ".player-select",
+    anchor: "[data-player-select]",
   },
 ];
 
@@ -293,7 +293,7 @@ window.addEventListener("resize", () => {
   if (route.mode === "match" || route.mode === "stage") scheduleEKTeamNameOverflowUpdate();
   if (route.mode === "seedImport" || route.mode === "stats") scheduleResultsTeamNameOverflowUpdate();
   floatingPopover.position();
-  scheduleEKTabsFadeUpdate();
+  ekTabsScroll?.refresh();
 });
 
 async function loadCurrent(): Promise<void> {
@@ -1279,29 +1279,15 @@ function renderEKTabs(): void {
 }
 
 function bindEKTabsScrollFade(): void {
-  if (!ekTabsRoot) return;
-  if (ekTabsRoot.dataset.scrollFadeBound !== "1") {
-    ekTabsRoot.addEventListener("scroll", scheduleEKTabsFadeUpdate, {passive: true});
-    ekTabsRoot.dataset.scrollFadeBound = "1";
-  }
-  scheduleEKTabsFadeUpdate();
-}
-
-function scheduleEKTabsFadeUpdate(): void {
   if (!ekTabsRoot || embedded) return;
-  if (ekTabsFadeFrame) cancelAnimationFrame(ekTabsFadeFrame);
-  ekTabsFadeFrame = requestAnimationFrame(() => {
-    ekTabsFadeFrame = 0;
-    updateEKTabsScrollFade();
-  });
-}
-
-function updateEKTabsScrollFade(): void {
-  if (!ekTabsRoot) return;
-  const hasLeft = ekTabsRoot.scrollLeft > 1;
-  const hasRight = ekTabsRoot.scrollLeft + ekTabsRoot.clientWidth < ekTabsRoot.scrollWidth - 1;
-  ekTabsRoot.classList.toggle("tabs-scroll-left", hasLeft);
-  ekTabsRoot.classList.toggle("tabs-scroll-right", hasRight);
+  if (!ekTabsScroll) {
+    ekTabsScroll = DopeTable.bindScrollEdges(ekTabsRoot, ({left, right}, tabs) => {
+      tabs.classList.toggle("tabs-scroll-left", left);
+      tabs.classList.toggle("tabs-scroll-right", right);
+    });
+    return;
+  }
+  ekTabsScroll.refresh();
 }
 
 function activeTabKey(): string {
@@ -1371,7 +1357,7 @@ function updateEKTeamNameOverflow(root: ParentNode = hostRoot): void {
       continue;
     }
     detailedCells.push(cell);
-    detailedReadings.push(Boolean(name && name.scrollWidth > name.clientWidth + 1));
+    detailedReadings.push(gameTable.isClipped(name));
   }
   for (let i = 0; i < detailedCells.length; i++) {
     detailedCells[i].classList.toggle("od-detailed-team-cell-truncated", detailedReadings[i]);
@@ -1386,7 +1372,7 @@ function updatePlayerSelectOverflow(root: ParentNode = hostRoot): void {
   const measurements: Array<{wrap: HTMLElement; popover: HTMLElement | null; label: string; truncated: boolean}> = [];
   for (const wrap of wraps) {
     if (wrap.closest(".ek-stage-table") && !isVisibleInScrollFrame(wrap)) continue;
-    const select = wrap.querySelector<HTMLSelectElement>(".player-select");
+    const select = wrap.querySelector<HTMLSelectElement>("[data-player-select]");
     const popover = wrap.querySelector<HTMLElement>(".player-select-popover");
     const label = selectedPlayerLabel(select);
     measurements.push({wrap, popover, label, truncated: Boolean(label && playerSelectTextOverflows(select, label))});
@@ -1422,42 +1408,29 @@ function playerTextMeasureContext(): CanvasRenderingContext2D {
 function bindStageOverflowScroll(): void {
   const scrollFrame = hostRoot.closest(".sheet-frame");
   if (!scrollFrame) return;
-  updateStageScrollState(scrollFrame);
-  if (stageOverflowScrollFrame === scrollFrame) return;
+  if (stageOverflowScrollFrame === scrollFrame) {
+    stageScroll?.refresh();
+    return;
+  }
   unbindStageOverflowScroll();
-  stageOverflowScrollListener = () => {
+  stageScroll = DopeTable.bindScrollEdges(scrollFrame, ({left}, frame) => {
     scheduleEKTeamNameOverflowUpdate(hostRoot);
-    updateStageScrollState(scrollFrame);
-  };
-  scrollFrame.addEventListener("scroll", stageOverflowScrollListener, {passive: true});
+    frame.classList.toggle("stage-scroll-left", left);
+  });
   stageOverflowScrollFrame = scrollFrame;
 }
 
-// Toggles the scrolled-under fade on the frozen-column boundary (see the
-// .stage-scroll-left rule in styles.css), mirroring OD/KSI behaviour.
-function updateStageScrollState(frame: Element | null): void {
-  if (!frame) return;
-  frame.classList.toggle("stage-scroll-left", frame.scrollLeft > 1);
-}
-
 function unbindStageOverflowScroll(): void {
-  if (!stageOverflowScrollFrame || !stageOverflowScrollListener) return;
-  stageOverflowScrollFrame.removeEventListener("scroll", stageOverflowScrollListener);
+  stageScroll?.dispose();
+  stageScroll = null;
   stageOverflowScrollFrame = null;
-  stageOverflowScrollListener = null;
 }
 
-// Stats page reuses the .stage-scroll-left fade cue for its frozen player
-// column. The .sheet-frame is static, so bind the listener once and leave it —
-// the toggle is a harmless no-op on routes without an ek-stats-table. (Viewer
-// binds the same thing globally via bindStageScrollFade.)
+// The stats page wants the same .stage-scroll-left cue for its frozen player
+// column, on the same .sheet-frame — so it reuses the one binding rather than
+// adding a second listener that toggles the same class and is never removed.
 function bindStatsScrollFade(): void {
-  const scrollFrame = hostRoot.closest(".sheet-frame");
-  if (!scrollFrame) return;
-  updateStageScrollState(scrollFrame);
-  if (statsScrollFadeFrame === scrollFrame) return;
-  scrollFrame.addEventListener("scroll", () => updateStageScrollState(scrollFrame), {passive: true});
-  statsScrollFadeFrame = scrollFrame;
+  bindStageOverflowScroll();
 }
 
 function isVisibleInScrollFrame(element: Element): boolean {
@@ -1494,7 +1467,7 @@ function buildSeedImportPanel(): HTMLElement {
   panel.className = "results-wrapper seed-import-panel";
 
   const actions = document.createElement("div");
-  actions.className = "cluster seed-import-actions";
+  actions.className = "cluster";
   const importButton = document.createElement("button");
   importButton.type = "button";
   importButton.className = "btn";
@@ -1540,7 +1513,6 @@ function buildSeedImportPanel(): HTMLElement {
     if (row.waitlist && !waitlistInserted) {
       waitlistInserted = true;
       const divider = document.createElement("tr");
-      divider.className = "seed-waitlist-row";
       divider.appendChild(td("Лист ожидания", "seed-waitlist-cell", {colSpan: 3}));
       tbody.appendChild(divider);
     }
@@ -1560,7 +1532,7 @@ function buildSeedImportPanel(): HTMLElement {
     tr.appendChild(td(row.seedNumber || "", "results-place seed-number-cell"));
 
     const teamCell = document.createElement("td");
-    teamCell.className = "results-team seed-team-cell";
+    teamCell.className = "results-team";
     const nameWrap = document.createElement("span");
     nameWrap.className = "results-team-name-wrap";
     const teamLabel = row.name || "";
@@ -1572,13 +1544,13 @@ function buildSeedImportPanel(): HTMLElement {
     nameWrap.appendChild(name);
     if (row.city) {
       const city = document.createElement("span");
-      city.className = "results-team-city seed-team-city";
+      city.className = "results-team-city";
       city.textContent = row.city;
       nameWrap.appendChild(city);
     }
     teamCell.appendChild(nameWrap);
     const fullName = document.createElement("span");
-    fullName.className = "popover results-team-name-popover";
+    fullName.className = "popover popover-inline results-team-name-popover";
     fullName.textContent = teamLabel;
     teamCell.appendChild(fullName);
     tr.appendChild(teamCell);
@@ -1644,7 +1616,7 @@ async function setSeedDeclined(teamID: number | undefined, declined: boolean): P
 
 function buildStageTableStack(data: StageData | undefined): HTMLElement {
   const wrapper = document.createElement("div");
-  wrapper.className = "stage-table-stack stage-table-stack-lazy";
+  wrapper.className = "stage-table-stack";
   const matches = (data?.matches || []) as HostStageMatch[];
   if (matches.length === 0) {
     const empty = document.createElement("p");
@@ -2345,7 +2317,7 @@ function teamNameCell(team: HostTeamView, teamIndex: number): HTMLElement {
   const nameWrap = document.createElement("span");
   nameWrap.className = "od-detailed-team-name-wrap";
   const label = document.createElement("span");
-  label.className = "readonly-team-name od-detailed-team-name";
+  label.className = "od-detailed-team-name";
   label.textContent = labelText;
   label.tabIndex = 0;
   label.setAttribute("aria-label", labelText);
@@ -2354,7 +2326,7 @@ function teamNameCell(team: HostTeamView, teamIndex: number): HTMLElement {
   cell.appendChild(layout);
 
   const fullName = document.createElement("span");
-  fullName.className = "popover od-detailed-team-name-popover";
+  fullName.className = "popover popover-inline od-detailed-team-name-popover";
   fullName.textContent = labelText;
   cell.appendChild(fullName);
   return cell;
@@ -2417,9 +2389,6 @@ function themeCells(team: HostTeamView, teamIndex: number, theme: HostThemeView,
   const playerCell = document.createElement("td");
   playerCell.colSpan = state!.questionValues.length;
   playerCell.className = "player-cell theme-block theme-block-top-left";
-  if (isShootout) {
-    playerCell.classList.add("shootout-block");
-  }
 
   const editor = document.createElement("div");
   editor.className = "player-editor";
@@ -2427,7 +2396,7 @@ function themeCells(team: HostTeamView, teamIndex: number, theme: HostThemeView,
   const selectWrap = document.createElement("span");
   selectWrap.className = "player-select-wrap";
   const select = document.createElement("select");
-  select.className = "player-select";
+  select.dataset.playerSelect = "";
   select.dataset.matchCode = matchCode;
   select.dataset.team = String(teamIndex);
   select.dataset.shootout = isShootout ? "1" : "0";
@@ -2452,7 +2421,7 @@ function themeCells(team: HostTeamView, teamIndex: number, theme: HostThemeView,
   });
   selectWrap.appendChild(select);
   const playerPopover = document.createElement("span");
-  playerPopover.className = "popover player-select-popover";
+  playerPopover.className = "popover popover-inline player-select-popover";
   playerPopover.textContent = selectedPlayerLabel(select);
   selectWrap.appendChild(playerPopover);
   editor.appendChild(selectWrap);
@@ -2467,9 +2436,6 @@ function themeCells(team: HostTeamView, teamIndex: number, theme: HostThemeView,
   const answers = theme.answers.map((mark, answerIndex) => {
     const cell = document.createElement("td");
     cell.className = `answer-cell theme-block ${mark}`;
-    if (isShootout) {
-      cell.classList.add("shootout-block");
-    }
     if (answerIndex === 0) {
       cell.classList.add("theme-block-bottom-left");
     }
@@ -3169,7 +3135,7 @@ function currentHostPresenceCursor(): HostPresenceCursor | null {
 }
 
 function hostPresenceCursorFromElement(element: Element | EventTarget | null): HostPresenceCursor | null {
-  const target = (element as Element | null)?.closest?.<HTMLElement>(".answer-cell,.player-select,.place-input,.finish-toggle,.venue-edit-button");
+  const target = (element as Element | null)?.closest?.<HTMLElement>(".answer-cell,[data-player-select],.place-input,.finish-toggle,.venue-edit-button");
   if (!target || !hostRoot.contains(target)) return null;
   const matchCode = target.dataset.matchCode || currentMatchCode();
   if (target.classList.contains("answer-cell")) {
@@ -3184,7 +3150,7 @@ function hostPresenceCursorFromElement(element: Element | EventTarget | null): H
       answer: Number(target.dataset.answer),
     };
   }
-  if (target.classList.contains("player-select")) {
+  if (target.dataset.playerSelect !== undefined) {
     return {
       app: "ek",
       kind: "player",
@@ -3218,7 +3184,7 @@ function findHostPresenceTarget(cursorValue: unknown): Element | null {
     );
   case "player":
     return hostRoot.querySelector(
-      `.player-select[data-match-code="${matchCode}"][data-team="${cssEscape(String(cursor.team))}"][data-shootout="${cursor.shootout ? "1" : "0"}"][data-theme="${cssEscape(String(cursor.theme))}"]`,
+      `[data-player-select][data-match-code="${matchCode}"][data-team="${cssEscape(String(cursor.team))}"][data-shootout="${cursor.shootout ? "1" : "0"}"][data-theme="${cssEscape(String(cursor.theme))}"]`,
     );
   case "place":
     return hostRoot.querySelector(`.place-input[data-match-code="${matchCode}"][data-team="${cssEscape(String(cursor.team))}"]`);

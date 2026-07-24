@@ -102,7 +102,7 @@ interface ImportApplyResponse {
     actions.className = "modal-actions";
     const cancel = document.createElement("button");
     cancel.type = "button";
-    cancel.className = "btn btn-secondary";
+    cancel.className = "btn";
     cancel.textContent = "Отмена";
     cancel.addEventListener("click", () => closeDialog(dialog));
     const submit = document.createElement("button");
@@ -242,7 +242,7 @@ interface ImportApplyResponse {
     actions.className = "modal-actions";
     const back = document.createElement("button");
     back.type = "button";
-    back.className = "btn btn-secondary";
+    back.className = "btn";
     back.textContent = "Назад";
     back.addEventListener("click", () => {
       closeDialog(dialog);

@@ -85,9 +85,16 @@ loadtest *args:
 generate-check:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Compare the regenerated file against what was on disk, NOT against HEAD:
+    # a git diff also fires when vocab.json and tags_gen.go are both edited
+    # correctly but not yet committed, which makes pre-commit unusable mid-change.
+    before=$(mktemp)
+    trap 'rm -f "$before"' EXIT
+    cp dope/web/ui/tags_gen.go "$before"
     go generate ./dope/web/ui
-    if ! git diff --exit-code -- dope/web/ui/tags_gen.go; then
-      echo "dope/web/ui/tags_gen.go is stale: regenerated from vocab.json, commit the result" >&2
+    if ! diff -q "$before" dope/web/ui/tags_gen.go >/dev/null; then
+      echo "dope/web/ui/tags_gen.go is stale w.r.t. vocab.json: run 'go generate ./dope/web/ui'" >&2
+      diff "$before" dope/web/ui/tags_gen.go >&2 || true
       exit 1
     fi
 

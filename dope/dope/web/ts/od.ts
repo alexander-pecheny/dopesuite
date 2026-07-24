@@ -208,7 +208,6 @@ const UNDO_LIMIT = 100;
 
 const ENTRY_SELECTION_CLASSES = [
   "entry-selected",
-  "entry-selection-anchor",
   "entry-selection-top",
   "entry-selection-bottom",
   "entry-selection-left",
@@ -282,7 +281,6 @@ async function toggleChrome(): Promise<void> {
 document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement && chromeHidden) setChromeHidden(false);
 });
-document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
 const gameLoader = gameTable.createGameDataLoader({
   route,
@@ -629,11 +627,13 @@ function restoreTabScroll(tab: string): void {
   frame.scrollLeft = pos.left;
 }
 
+const resultsScroll = DopeTable.bindScrollEdges(document.querySelector(".sheet-frame"), ({left}, frame) => {
+  frame.classList.toggle("results-scroll-left", activeTab === "results" && left);
+  frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && left);
+});
+
 function updateResultsScrollState(): void {
-  const frame = scrollFrame();
-  if (!frame) return;
-  frame.classList.toggle("results-scroll-left", activeTab === "results" && frame.scrollLeft > 1);
-  frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && frame.scrollLeft > 1);
+  resultsScroll.refresh();
 }
 
 function pageTitle(): string {
@@ -719,7 +719,7 @@ function updateEntrySelectionSoon(): void {
 }
 
 function updateEntrySelectionUI(): void {
-  odRoot.querySelectorAll(".entry-cell.entry-selected, .entry-cell.entry-selection-anchor, .entry-cell.entry-selection-top, .entry-cell.entry-selection-bottom, .entry-cell.entry-selection-left, .entry-cell.entry-selection-right").forEach((cell) => {
+  odRoot.querySelectorAll(".entry-cell.entry-selected, .entry-cell.entry-selection-top, .entry-cell.entry-selection-bottom, .entry-cell.entry-selection-left, .entry-cell.entry-selection-right").forEach((cell) => {
     cell.classList.remove(...ENTRY_SELECTION_CLASSES);
   });
   const selection = normalizedEntrySelection();
@@ -735,8 +735,6 @@ function updateEntrySelectionUI(): void {
         if (q === selection.qEnd) cell.classList.add("entry-selection-right");
       }
     }
-    const anchor = entryCellNode(entrySelection!.anchorQ, entrySelection!.anchorRow);
-    if (anchor) anchor.classList.add("entry-selection-anchor");
   }
   positionInvertOverlay();
 }
@@ -1462,7 +1460,7 @@ function shootoutControlsHeaderCell(attrs: {rowSpan?: number} = {}, options: {in
   if (includeAddRound) {
     const addRound = document.createElement("button");
     addRound.type = "button";
-    addRound.className = "btn od-add-shootout-round";
+    addRound.className = "btn";
     addRound.textContent = "Добавить раунд перестрелки";
     addRound.disabled = !allTeamsNumbered() || state.teams.length < 2;
     addRound.title = addRound.disabled ? "Сначала заполните номера команд" : "Добавить раунд перестрелки";
@@ -1514,7 +1512,6 @@ function shootoutTeamCell(number: number): HTMLTableCellElement {
   cell.className = "od-shootout-team-cell";
   const teamIndex = teamIndexByNumber(number);
   const name = document.createElement("span");
-  name.className = "readonly-team-name";
   name.textContent = teamIndex >= 0 ? teamLabel(teamIndex) : String(number || "");
   cell.appendChild(name);
   return cell;
@@ -1661,10 +1658,8 @@ function entryCellShowsCoffin(qIndex: number, rowIndex: number): boolean {
 function applyEntryCellDisplay(td: HTMLElement, qIndex: number, rowIndex: number): void {
   if (entryCellShowsCoffin(qIndex, rowIndex)) {
     td.textContent = "⚰️";
-    td.classList.add("entry-coffin");
     return;
   }
-  td.classList.remove("entry-coffin");
   const value = state.entries[qIndex]?.[rowIndex] || 0;
   td.textContent = value ? String(value) : "";
 }
@@ -2351,7 +2346,6 @@ function detailedQuestionHeadLabel(displayNumber: number, stat: QuestionStat | u
   // it's 0; before that the slot stays empty.
   count.textContent = stat?.completed ? String(stat.validCount || 0) : "";
   const num = document.createElement("span");
-  num.className = "od-detailed-qnum";
   num.textContent = String(displayNumber);
   wrap.append(count, num);
   return wrap;
@@ -2502,7 +2496,7 @@ function nameCell(teamIndex: number): HTMLTableCellElement {
   const nameWrap = document.createElement("span");
   nameWrap.className = "od-detailed-team-name-wrap";
   const name = document.createElement("span");
-  name.className = "readonly-team-name od-detailed-team-name";
+  name.className = "od-detailed-team-name";
   name.textContent = label;
   name.tabIndex = 0;
   name.setAttribute("aria-label", label);
@@ -2511,7 +2505,7 @@ function nameCell(teamIndex: number): HTMLTableCellElement {
   cell.appendChild(layout);
 
   const fullName = document.createElement("span");
-  fullName.className = "popover od-detailed-team-name-popover";
+  fullName.className = "popover popover-inline od-detailed-team-name-popover";
   fullName.textContent = label;
   cell.appendChild(fullName);
 
@@ -2716,7 +2710,7 @@ function resultsTeamCell(index: number, opts: {showCity?: boolean; flag?: string
   }
   nameTd.appendChild(nameWrap);
   const fullName = document.createElement("span");
-  fullName.className = "popover results-team-name-popover";
+  fullName.className = "popover popover-inline results-team-name-popover";
   fullName.textContent = displayText;
   nameTd.appendChild(fullName);
   return nameTd;
@@ -2923,7 +2917,7 @@ function buildScreenOverlay(wrapper: ScreenWrapper): HTMLElement {
   });
   const chromeBtn = document.createElement("button");
   chromeBtn.type = "button";
-  chromeBtn.className = "btn screen-btn screen-chrome-btn";
+  chromeBtn.className = "btn screen-btn";
   chromeBtn.textContent = chromeHidden ? "Показать оформление" : "Скрыть оформление";
   chromeBtn.addEventListener("click", toggleChrome);
   bar.append(settingsBtn, chromeBtn);

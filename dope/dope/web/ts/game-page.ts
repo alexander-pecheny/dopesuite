@@ -53,7 +53,6 @@ export function renderGameBreadcrumbs(root: HTMLElement | null | undefined, opti
   root.replaceChildren();
 
   const festLink = document.createElement("a");
-  festLink.className = "game-breadcrumbs-fest";
   festLink.href = options.festHref || "/";
   festLink.textContent = festTitle;
   root.appendChild(festLink);
@@ -105,9 +104,9 @@ function editorHrefForCurrentLocation(): string {
 // result editing until every team is numbered (409); this points the host at
 // the numbers page. Idempotent — re-mounting is a no-op while the banner is up.
 export function mountUnnumberedBanner(festID: string | number | null | undefined): HTMLElement | null {
-  if (!festID || document.querySelector(".dope-unnumbered-banner")) return null;
+  if (!festID || document.querySelector("[data-unnumbered-banner]")) return null;
   const bar = document.createElement("div");
-  bar.className = "dope-unnumbered-banner";
+  bar.dataset.unnumberedBanner = "";
   Object.assign(bar.style, {
     position: "sticky",
     top: "0",

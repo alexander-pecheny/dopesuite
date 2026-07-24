@@ -456,7 +456,6 @@ var AlignStretch = Attr{Name: "align", Value: "stretch"}
 var Primary = Attr{Name: "kind", Value: "primary"}
 var Ghost = Attr{Name: "kind", Value: "ghost"}
 var Danger = Attr{Name: "kind", Value: "danger"}
-var Secondary = Attr{Name: "kind", Value: "secondary"}
 var CheckPlain = Attr{Name: "kind", Value: "plain"}
 var EditorPlain = Attr{Name: "kind", Value: "plain"}
 var DirRow = Attr{Name: "dir", Value: "row"}

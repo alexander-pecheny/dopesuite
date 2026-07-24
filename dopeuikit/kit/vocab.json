@@ -4,7 +4,7 @@
     "space":          { "prefix": "Space",    "values": ["none", "xs", "sm", "md", "lg", "xl"] },
     "align":          { "prefix": "Align",    "values": ["start", "center", "end", "stretch"] },
     "justify":        { "prefix": "Justify",  "values": ["start", "center", "end", "between"] },
-    "button-kind":    { "prefix": "",         "values": ["primary", "ghost", "danger", "secondary"] },
+    "button-kind":    { "prefix": "",         "values": ["primary", "ghost", "danger"] },
     "page-kind":      { "prefix": "Page",     "values": ["sheet", "full"] },
     "form-dir":       { "prefix": "Dir",      "values": ["row", "col"] },
     "editor-kind":    { "prefix": "Editor",   "values": ["plain"] },

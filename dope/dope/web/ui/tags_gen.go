@@ -143,7 +143,6 @@ var AlignStretch = base.AlignStretch
 var Primary = base.Primary
 var Ghost = base.Ghost
 var Danger = base.Danger
-var Secondary = base.Secondary
 var CheckPlain = base.CheckPlain
 var EditorPlain = base.EditorPlain
 var DirRow = base.DirRow
@@ -264,10 +263,6 @@ func Heading(v string) Attr {
 
 func Progressid(v string) Attr {
 	return Attr{Name: "progressid", Value: v}
-}
-
-func Viewer() Attr {
-	return Attr{Name: "viewer", Bare: true}
 }
 
 func Back(v string) Attr {

@@ -92,7 +92,7 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 		ui.Numberlist(rows...),
 		ui.Row(ui.ID("numbers-save"), ui.Hidden(),
 			ui.Button(ui.Submit(), ui.Text("Сохранить")),
-			ui.Button(ui.Secondary, ui.ID("numbers-cancel-btn"), ui.Text("Отмена")),
+			ui.Button(ui.ID("numbers-cancel-btn"), ui.Text("Отмена")),
 		),
 	)
 	page = append(page, ui.Numbersform(form...))

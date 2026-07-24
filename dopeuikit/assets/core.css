@@ -772,11 +772,6 @@ input[type="radio"]:focus-visible {
   position: relative; /* anchors .notif-panel under the 🔔 bell */
 }
 
-.divider {
-  width: 1px;
-  height: var(--space-5-5);
-  background: var(--grid-dark);
-}
 
 .sync-status {
   display: inline-grid;

@@ -24,7 +24,7 @@ page title="Core catalog" kind="full"
       row gap="sm" justify="between"
         button submit "Сохранить"
         button kind="danger" "Удалить"
-        button kind="secondary" "Отмена"
+        button "Отмена"
         button kind="ghost" small "…"
 
     empty "Ничего нет"

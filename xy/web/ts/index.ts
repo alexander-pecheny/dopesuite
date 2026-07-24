@@ -89,7 +89,6 @@ function renderBoards(boards: BoardListItem[]): void {
       el("span", { class: "board-card-role", text: b.role === "owner" ? "владелец" : "редактор" }),
     );
     if (b.unread) {
-      card.classList.add("has-unread");
       card.append(el("span", { class: "unread-dot unread-dot-corner board-card-unread", title: "Есть непрочитанные изменения" }));
     }
     if (!migrated) {
