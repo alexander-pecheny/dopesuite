@@ -79,6 +79,8 @@ type config struct {
 type eventEnvelope struct {
 	Scope    string          `json:"scope"`
 	Revision int64           `json:"revision"`
+	Seq      uint64          `json:"seq"`
+	PrevSeq  uint64          `json:"prevSeq"`
 	Data     json.RawMessage `json:"data"`
 	Ops      []envelopeOp    `json:"ops"`
 }
@@ -343,7 +345,9 @@ func runViewer(ctx context.Context, cfg config, client *http.Client, stats *stat
 	defer stats.viewerConnected.Add(-1)
 
 	var feed []scopedEvent
-	defer func() { stats.recordViewerFeed(feed) }()
+	lastSeq := map[string]uint64{}
+	connectedAt := time.Now()
+	defer func() { stats.recordViewerFeed(viewerFeed{connectedAt: connectedAt, arrivals: feed}) }()
 
 	reader := bufio.NewReaderSize(resp.Body, 64*1024)
 	var dataBuf bytes.Buffer
@@ -359,7 +363,7 @@ func runViewer(ctx context.Context, cfg config, client *http.Client, stats *stat
 		switch {
 		case line == "":
 			if dataBuf.Len() > 0 {
-				stats.recordEvent(dataBuf.Bytes(), &feed)
+				stats.recordEvent(dataBuf.Bytes(), &feed, lastSeq)
 				dataBuf.Reset()
 			}
 		case strings.HasPrefix(line, "data:"):
@@ -550,6 +554,11 @@ type stageStat struct {
 	eventsReceived atomic.Int64
 	markersSeen    atomic.Int64
 	viewerFailed   atomic.Int64
+	// seqGaps counts deltas whose prevSeq does not chain onto the last one this
+	// viewer saw for that scope — i.e. the server dropped an event for it. A real
+	// client resyncs here; the driver just keeps reading, so a gap inflates the
+	// measured propagation tail by however long the next broadcast takes.
+	seqGaps atomic.Int64
 
 	mu     sync.Mutex
 	editMS []float64
@@ -574,7 +583,16 @@ type stats struct {
 	// broadcast that beats its own HTTP response still counts.
 	revMu       sync.Mutex
 	sends       []scopedEvent
-	viewerFeeds [][]scopedEvent
+	viewerFeeds []viewerFeed
+}
+
+// viewerFeed is one viewer's match-scope arrivals plus when it connected. An
+// edit made before a viewer connected was never that viewer's to receive, so
+// the join must not charge it — otherwise every edit during the ramp measures
+// as seconds of "latency" against every viewer still connecting.
+type viewerFeed struct {
+	connectedAt time.Time
+	arrivals    []scopedEvent
 }
 
 // scopedEvent is one edit sent, or one broadcast received, on a match scope.
@@ -596,8 +614,8 @@ func (s *stats) recordSend(scope string, revision int64, at time.Time) {
 	}
 }
 
-func (s *stats) recordViewerFeed(feed []scopedEvent) {
-	if len(feed) == 0 {
+func (s *stats) recordViewerFeed(feed viewerFeed) {
+	if len(feed.arrivals) == 0 {
 		return
 	}
 	s.revMu.Lock()
@@ -635,12 +653,20 @@ func (s *stats) recordEdit(elapsed time.Duration, status int) {
 // recordEvent classifies one SSE envelope. Match-scope envelopes append to the
 // caller's own feed — delta envelopes carry `ops` and no `data`, so this must
 // happen before the marker gate below drops them.
-func (s *stats) recordEvent(data []byte, feed *[]scopedEvent) {
+func (s *stats) recordEvent(data []byte, feed *[]scopedEvent, lastSeq map[string]uint64) {
 	st := s.stage()
 	st.eventsReceived.Add(1)
 	var env eventEnvelope
 	if err := json.Unmarshal(data, &env); err != nil {
 		return
+	}
+	if env.PrevSeq > 0 {
+		if last, seen := lastSeq[env.Scope]; seen && last != env.PrevSeq {
+			st.seqGaps.Add(1)
+		}
+	}
+	if env.Seq > 0 {
+		lastSeq[env.Scope] = env.Seq
 	}
 	if strings.HasPrefix(env.Scope, "match:") && env.Revision > 0 && len(*feed) < eventTrackLimit {
 		*feed = append(*feed, scopedEvent{env.Scope, env.Revision, time.Now()})
@@ -698,6 +724,7 @@ type stageReport struct {
 	EditP95        float64 `json:"edit_ms_p95"`
 	EditMax        float64 `json:"edit_ms_max"`
 	EventsReceived int64   `json:"sse_events_received"`
+	SeqGaps        int64   `json:"sse_seq_gaps"`
 	MarkersSeen    int64   `json:"sse_markers_seen"`
 	DeliveryRatio  float64 `json:"delivery_ratio"`
 	PropP50        float64 `json:"propagation_ms_p50"`
@@ -751,6 +778,7 @@ func (s *stats) finalize(cfg config, total time.Duration) report {
 			EditP95:        editP95,
 			EditMax:        editMax,
 			EventsReceived: st.eventsReceived.Load(),
+			SeqGaps:        st.seqGaps.Load(),
 			MarkersSeen:    st.markersSeen.Load(),
 			DeliveryRatio:  ratio,
 			PropP50:        propP50,
@@ -782,10 +810,10 @@ func (s *stats) finalizeEK(cfg config) *ekReport {
 	}
 
 	var latencies []float64
-	var delivered int64
+	var delivered, expected int64
 	for _, feed := range s.viewerFeeds {
 		arrivalsByScope := map[string][]scopedEvent{}
-		for _, arrival := range feed {
+		for _, arrival := range feed.arrivals {
 			arrivalsByScope[arrival.scope] = append(arrivalsByScope[arrival.scope], arrival)
 		}
 		for scope, sends := range sendsByScope {
@@ -796,6 +824,10 @@ func (s *stats) finalizeEK(cfg config) *ekReport {
 				for next < len(arrivals) && arrivals[next].revision < send.revision {
 					next++
 				}
+				if send.at.Before(feed.connectedAt) {
+					continue // this viewer was not watching yet
+				}
+				expected++
 				if next == len(arrivals) {
 					break // this viewer never saw a broadcast at or past this edit
 				}
@@ -807,10 +839,9 @@ func (s *stats) finalizeEK(cfg config) *ekReport {
 		}
 	}
 
-	viewers := int64(len(s.viewerFeeds))
 	p50, p95, p99, max := percentiles(latencies)
 	ratio := 0.0
-	if expected := int64(len(s.sends)) * viewers; expected > 0 {
+	if expected > 0 {
 		ratio = float64(delivered) / float64(expected)
 	}
 	return &ekReport{
@@ -843,6 +874,11 @@ func (r report) print() {
 			s.EditP50, s.EditP95, s.EditMax,
 			s.DeliveryRatio,
 			s.PropP50, s.PropP95, s.PropP99, s.PropMax)
+	}
+	for _, st := range r.Stages {
+		if st.SeqGaps > 0 {
+			fmt.Printf("seq gaps (dropped events, a real client would resync): %d over %d events\n", st.SeqGaps, st.EventsReceived)
+		}
 	}
 	if r.EK != nil {
 		fmt.Printf("\nEK match-state PATCH (%d editors): %d edits, delivery %.4f, prop_ms %.0f /%.0f /%.0f /%.0f\n",
