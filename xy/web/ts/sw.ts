@@ -21,34 +21,16 @@
 // plain classic worker script.)
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
-// v12: precache the whole board module graph (unlock/dragrank/carddetail/
-// timeline/wordlist were missing, so a fresh offline install 504'd board.js's
-// imports and the board page rendered with no JS).
-const CACHE = "xy-shell-v12";
-
 // App shell precache: entry modules, styles, fonts, vendored crypto, icons, and
-// the static page routes. Unversioned URLs; versioned requests are cached
-// per-URL at runtime. Failures here don't abort install (allSettled).
-const PRECACHE: string[] = [
-  "/",
-  "/login", "/register", "/profile", "/import",
-  "/manifest.webmanifest",
-  "/static/styles.css",
-  "/static/dist/app.js", "/static/dist/crypto.js", "/static/dist/rank.js", "/static/dist/chgk.js",
-  "/static/dist/diff.js", "/static/dist/board.js", "/static/dist/unlock.js", "/static/dist/dragrank.js",
-  "/static/dist/carddetail.js", "/static/dist/timeline.js", "/static/dist/wordlist.js",
-  "/static/dist/carddraft.js", "/static/dist/handoutsession.js", "/static/dist/boardmembers.js", "/static/dist/timer.js", "/static/dist/index.js", "/static/menu.js", "/static/dist/pwa.js",
-  "/static/login.js", "/static/dist/profile.js", "/static/dist/import.js", "/static/dist/trellomodel.js",
-  "/static/dist/store.js", "/static/dist/sync.js",
-  "/static/ding.mp3",
-  "/static/vendor/scrypt.js", "/static/vendor/_assert.js", "/static/vendor/_md.js",
-  "/static/vendor/hmac.js", "/static/vendor/pbkdf2.js", "/static/vendor/sha256.js",
-  "/static/vendor/utils.js", "/static/vendor/crypto.js",
-  "/static/fonts/noto-sans-var.woff2", "/static/fonts/noto-sans-var-italic.woff2",
-  "/static/fonts/jetbrains-mono-var.woff2",
-  "/static/icon-192.png", "/static/icon-512.png", "/static/icon-maskable.png",
-  "/static/apple-touch-icon.png", "/static/favicon.svg", "/favicon.ico",
-];
+// the static page routes. Both constants are baked in by the build (webbuild's
+// xySWBuild): the manifest is derived from the module graph + asset dirs and the
+// cache name from their content hash, so neither can drift from what ships.
+// Unversioned URLs; versioned requests are cached per-URL at runtime. Failures
+// here don't abort install (allSettled).
+declare const __PRECACHE__: string[];
+declare const __SHELL_VERSION__: string;
+const CACHE = __SHELL_VERSION__;
+const PRECACHE: string[] = __PRECACHE__;
 
 sw.addEventListener("install", (event) => {
   event.waitUntil(

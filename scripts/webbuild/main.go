@@ -5,8 +5,13 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -21,7 +26,8 @@ func entries(dir string, names ...string) []api.EntryPoint {
 }
 
 // xy ships native ES modules: every source transforms per-file (no bundling)
-// so the emitted graph mirrors the source graph.
+// so the emitted graph mirrors the source graph. sw.ts builds separately —
+// it gets the derived precache manifest baked in (xySWBuild).
 func xySources() []string {
 	files, err := os.ReadDir("xy/web/ts")
 	if err != nil {
@@ -30,11 +36,102 @@ func xySources() []string {
 	var out []string
 	for _, f := range files {
 		name := f.Name()
-		if strings.HasSuffix(name, ".ts") && !strings.HasSuffix(name, ".d.ts") {
+		if strings.HasSuffix(name, ".ts") && !strings.HasSuffix(name, ".d.ts") && name != "sw.ts" {
 			out = append(out, "xy/web/ts/"+name)
 		}
 	}
 	return out
+}
+
+// xyPrecache derives the service worker's app-shell manifest from the build
+// graph and the shipped asset dirs, plus a content-hash cache version — the
+// hand-typed list it replaces had already shipped one offline-504 regression
+// (modules missing from the precache).
+func xyPrecache() (urls []string, version string) {
+	h := sha256.New()
+	addURL := func(u string) {
+		urls = append(urls, u)
+		io.WriteString(h, u+"\x00")
+	}
+	hashFile := func(p string) {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			fatal(err.Error())
+		}
+		h.Write(b)
+	}
+	addDir := func(fsDir, urlPrefix string) {
+		ents, err := os.ReadDir(fsDir)
+		if err != nil {
+			fatal(err.Error())
+		}
+		for _, e := range ents {
+			if e.IsDir() {
+				continue
+			}
+			addURL(urlPrefix + e.Name())
+			hashFile(fsDir + "/" + e.Name())
+		}
+	}
+
+	for _, r := range []string{"/", "/login", "/register", "/profile", "/import"} {
+		addURL(r)
+	}
+	addURL("/manifest.webmanifest")
+	hashFile("xy/web/assets/static/manifest.webmanifest")
+	addURL("/static/styles.css")
+	hashFile("dopeuikit/assets/core.css")
+	hashFile("xy/web/assets/static/styles.css")
+	for _, src := range xySources() {
+		name := strings.TrimSuffix(filepath.Base(src), ".ts")
+		addURL("/static/dist/" + name + ".js")
+		hashFile(src)
+	}
+	addURL("/static/menu.js")
+	addURL("/static/login.js")
+	kitTS, err := filepath.Glob("dopeuikit/assets/ts/*.ts")
+	if err != nil || len(kitTS) == 0 {
+		fatal("no kit ts sources found for the precache hash")
+	}
+	for _, p := range kitTS {
+		hashFile(p)
+	}
+	addDir("xy/web/assets/static/vendor", "/static/vendor/")
+	addDir("dopeuikit/assets/fonts", "/static/fonts/")
+	ents, err := os.ReadDir("xy/web/assets/static")
+	if err != nil {
+		fatal(err.Error())
+	}
+	for _, e := range ents {
+		name := e.Name()
+		if e.IsDir() || name == "styles.css" || name == "manifest.webmanifest" {
+			continue
+		}
+		if name == "favicon.ico" {
+			addURL("/favicon.ico")
+		} else {
+			addURL("/static/" + name)
+		}
+		hashFile("xy/web/assets/static/" + name)
+	}
+	return urls, "xy-shell-" + hex.EncodeToString(h.Sum(nil))[:10]
+}
+
+func xySWBuild() api.BuildOptions {
+	urls, version := xyPrecache()
+	manifest, err := json.Marshal(urls)
+	if err != nil {
+		fatal(err.Error())
+	}
+	return api.BuildOptions{
+		EntryPoints: []string{"xy/web/ts/sw.ts"},
+		Format:      api.FormatESModule,
+		Outdir:      "xy/web/assets/static/dist",
+		Define: map[string]string{
+			"__PRECACHE__":      string(manifest),
+			"__SHELL_VERSION__": fmt.Sprintf("%q", version),
+		},
+	}
 }
 
 type target struct {
@@ -88,6 +185,7 @@ func targets() []target {
 				Format:      api.FormatESModule,
 				Outdir:      "xy/web/assets/static/dist",
 			},
+			xySWBuild(),
 		}},
 	}
 }
