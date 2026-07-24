@@ -390,7 +390,7 @@ where g.fest_id = ? and g.id = ?`,
 		if err != nil {
 			return nil, 0, nil, err
 		}
-		blobOps = append(blobOps, store.BlobOp{Kind: "set", Path: pointerFromSegments(path), Value: value})
+		blobOps = append(blobOps, store.BlobOp{Kind: "set", Path: pointerFromSegments(path), Value: value, Parts: op.Path})
 	}
 
 	tMarshal := metrics.NowIf(metricsOn)

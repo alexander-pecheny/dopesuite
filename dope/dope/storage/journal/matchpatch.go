@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"dope/dope/domain/edit"
 	"dope/dope/storage/store"
 )
 
@@ -40,9 +41,15 @@ func DecodeMatchPatch(payload []byte) (int64, []store.BlobOp, error) {
 }
 
 // ApplyMatchPatch replays one OpMatchPatch record: it loads the match's state
-// blob, applies the pointer ops, prunes emptied team sections, and stores the
-// result. Paths through missing containers are tolerated no-ops (a remove may
-// have preceded), so replay of rewritten history never hard-fails mid-stream.
+// blob, applies the pointer ops, and stores the result. Paths through missing
+// containers are tolerated no-ops (a remove may have preceded), so replay of
+// rewritten history never hard-fails mid-stream.
+//
+// Semantics dispatch on the match's Protocol: EK blobs replay through the
+// EK-shaped applier (answers bound, theme padding, team pruning — the
+// converter-parity behaviour), everything else replays with the same generic
+// JSON-set semantics the live editbatch path uses, so live writes and replays
+// stay byte-identical for flat games too.
 func ApplyMatchPatch(ctx context.Context, tx interface {
 	pkQuerier
 	execer
@@ -51,13 +58,16 @@ func ApplyMatchPatch(ctx context.Context, tx interface {
 	if err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, `select state_json from matches where id = ?`, matchID)
+	rows, err := tx.QueryContext(ctx, `
+select m.state_json, coalesce(g.game_type, '')
+from matches m left join games g on g.id = m.game_id
+where m.id = ?`, matchID)
 	if err != nil {
 		return err
 	}
-	var raw string
+	var raw, gameType string
 	if rows.Next() {
-		if err := rows.Scan(&raw); err != nil {
+		if err := rows.Scan(&raw, &gameType); err != nil {
 			rows.Close()
 			return err
 		}
@@ -67,25 +77,139 @@ func ApplyMatchPatch(ctx context.Context, tx interface {
 	}
 	rows.Close()
 
-	var doc any = map[string]any{}
-	if raw != "" && raw != "{}" {
-		dec := json.NewDecoder(strings.NewReader(raw))
-		dec.UseNumber()
-		if err := dec.Decode(&doc); err != nil {
-			return fmt.Errorf("match %d blob: %w", matchID, err)
+	var encoded []byte
+	if gameType == "" || gameType == "ek" {
+		var doc any = map[string]any{}
+		if raw != "" && raw != "{}" {
+			dec := json.NewDecoder(strings.NewReader(raw))
+			dec.UseNumber()
+			if err := dec.Decode(&doc); err != nil {
+				return fmt.Errorf("match %d blob: %w", matchID, err)
+			}
 		}
-	}
-	for _, op := range ops {
-		doc = applyBlobOp(doc, op)
-	}
-	pruneEmptyTeams(doc)
-	encoded, err := json.Marshal(doc)
-	if err != nil {
-		return err
+		for _, op := range ops {
+			doc = applyBlobOp(doc, op)
+		}
+		pruneEmptyTeams(doc)
+		if encoded, err = json.Marshal(doc); err != nil {
+			return err
+		}
+	} else {
+		var doc any
+		if raw != "" {
+			if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+				return fmt.Errorf("match %d blob: %w", matchID, err)
+			}
+		}
+		if doc == nil {
+			doc = map[string]any{}
+		}
+		for _, op := range ops {
+			doc = applyFlatOp(doc, op)
+		}
+		if encoded, err = json.Marshal(doc); err != nil {
+			return err
+		}
 	}
 	_, err = tx.ExecContext(ctx, `update matches set state_json = ? where id = ?`, string(encoded), matchID)
 	return err
 }
+
+// applyFlatOp replays one op on a flat game's document. When the record
+// carries the client's raw path parts, replay goes through the exact live
+// engine (edit.ApplyJSONSet). Records journaled before parts existed only
+// have the pointer string, which erased index-vs-key typing for numeric
+// segments — there the existing container decides, and a missing one defaults
+// to an array (right for everything except a numeric string key set into a
+// container the same replay hasn't created yet, e.g. KSI's declined map —
+// unrecoverable from the pointer alone). Failures no-op: the live path would
+// have rejected the edit before journaling it.
+func applyFlatOp(doc any, op store.BlobOp) any {
+	switch op.Kind {
+	case "replace":
+		if op.Value == nil {
+			return map[string]any{}
+		}
+		return op.Value
+	case "set":
+		if len(op.Parts) > 0 {
+			path, err := edit.ParseJSONPatchPath(op.Parts)
+			if err != nil {
+				return doc
+			}
+			next, err := edit.ApplyJSONSet(doc, path, op.Value)
+			if err != nil {
+				return doc
+			}
+			return next
+		}
+		return flatSetPath(doc, splitPointer(op.Path), op.Value)
+	case "remove":
+		return flatRemovePath(doc, splitPointer(op.Path))
+	}
+	return doc
+}
+
+func flatSetPath(node any, parts []string, value any) any {
+	if len(parts) == 0 {
+		return value
+	}
+	key := parts[0]
+	index, numErr := strconv.Atoi(key)
+	switch cur := node.(type) {
+	case []any:
+		if numErr != nil || index < 0 || index > maxFlatIndex {
+			return cur
+		}
+		for len(cur) <= index {
+			cur = append(cur, nil)
+		}
+		cur[index] = flatSetPath(cur[index], parts[1:], value)
+		return cur
+	case map[string]any:
+		cur[key] = flatSetPath(cur[key], parts[1:], value)
+		return cur
+	default:
+		if numErr == nil && index >= 0 && index <= maxFlatIndex {
+			arr := make([]any, index+1)
+			arr[index] = flatSetPath(nil, parts[1:], value)
+			return arr
+		}
+		return map[string]any{key: flatSetPath(nil, parts[1:], value)}
+	}
+}
+
+func flatRemovePath(node any, parts []string) any {
+	if len(parts) == 0 {
+		return node
+	}
+	key := parts[0]
+	switch cur := node.(type) {
+	case []any:
+		index, err := strconv.Atoi(key)
+		if err != nil || index < 0 || index >= len(cur) {
+			return cur
+		}
+		if len(parts) == 1 {
+			return append(cur[:index], cur[index+1:]...)
+		}
+		cur[index] = flatRemovePath(cur[index], parts[1:])
+		return cur
+	case map[string]any:
+		if len(parts) == 1 {
+			delete(cur, key)
+			return cur
+		}
+		if child, exists := cur[key]; exists {
+			cur[key] = flatRemovePath(child, parts[1:])
+		}
+		return cur
+	}
+	return node
+}
+
+// maxFlatIndex mirrors the live path's maxPatchArrayIndex bound.
+const maxFlatIndex = 4096
 
 func splitPointer(path string) []string {
 	trimmed := strings.TrimPrefix(path, "/")

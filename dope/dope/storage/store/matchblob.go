@@ -22,11 +22,16 @@ import (
 
 // BlobOp is one recorded pointer operation on a match blob — the unit of the
 // OpMatchPatch journal record. Kinds: "set", "remove", "ensure" (pad a theme
-// list so the index exists, never overwriting).
+// list so the index exists, never overwriting), "replace" (whole document).
+// Parts, when present, preserves the client's raw patch-path segments: the
+// pointer string erases whether a numeric segment was an array index (JSON
+// number) or an object key (JSON string), and flat-game replay needs that
+// distinction back.
 type BlobOp struct {
-	Kind  string `json:"k"`
-	Path  string `json:"p"`
-	Value any    `json:"v,omitempty"`
+	Kind  string            `json:"k"`
+	Path  string            `json:"p"`
+	Value any               `json:"v,omitempty"`
+	Parts []json.RawMessage `json:"pp,omitempty"`
 }
 
 // BlobTheme is one theme's state in a match blob: the fielded player (id,
