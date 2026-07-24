@@ -17,6 +17,7 @@ import (
 	"dope/dope/domain/edit"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/numbering"
+	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
 	"dope/dope/export/gameexport"
@@ -631,7 +632,7 @@ update games set state_json = ?, updated_at = ? where fest_id = ? and id = ?`,
 }
 
 func validateImmutableRatingRosterState(gameType string, previousRaw, nextRaw []byte) error {
-	key, ok := edit.ImmutableRatingRosterStateKey(gameType)
+	key, ok := protocol.RatingRosterStateKey(gameType)
 	if !ok {
 		return nil
 	}

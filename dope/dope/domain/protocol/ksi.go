@@ -18,6 +18,8 @@ type ksi struct{}
 
 func (ksi) Code() string { return "ksi" }
 
+func (ksi) RatingRosterStateKey() string { return "participants" }
+
 func (ksi) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	var conf struct {
 		Themes   int             `json:"themes"`

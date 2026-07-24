@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+
+	"dope/dope/domain/protocol"
 )
 
 // ErrRatingRosterImmutable is returned when a patch tries to mutate a roster
@@ -19,24 +21,10 @@ type JSONPathSegment struct {
 	IsIndex bool
 }
 
-// ImmutableRatingRosterStateKey returns the top-level state key whose roster is
-// owned by a rating.chgk.info import for the given game type (and whether one
-// exists).
-func ImmutableRatingRosterStateKey(gameType string) (string, bool) {
-	switch gameType {
-	case "od":
-		return "teams", true
-	case "ksi":
-		return "participants", true
-	default:
-		return "", false
-	}
-}
-
 // PatchPathTouchesRatingRoster reports whether a patch path would mutate the
-// immutable rating-imported roster for the game type.
+// immutable rating-imported roster the game's Protocol declares.
 func PatchPathTouchesRatingRoster(gameType string, path []JSONPathSegment) bool {
-	key, ok := ImmutableRatingRosterStateKey(gameType)
+	key, ok := protocol.RatingRosterStateKey(gameType)
 	return ok && len(path) > 0 && !path[0].IsIndex && path[0].Key == key
 }
 

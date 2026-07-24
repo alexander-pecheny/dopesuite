@@ -43,3 +43,21 @@ func Get(code string) (Protocol, bool) {
 	p, ok := registry[code]
 	return p, ok
 }
+
+// RatingRosterOwner is implemented by protocols whose state embeds a roster
+// owned by a rating.chgk.info import: the named top-level state key is
+// immutable under host edits (re-import to change it).
+type RatingRosterOwner interface {
+	RatingRosterStateKey() string
+}
+
+// RatingRosterStateKey returns the protocol's immutable rating-roster state
+// key, if the protocol declares one.
+func RatingRosterStateKey(code string) (string, bool) {
+	if p, ok := Get(code); ok {
+		if owner, ok := p.(RatingRosterOwner); ok {
+			return owner.RatingRosterStateKey(), true
+		}
+	}
+	return "", false
+}

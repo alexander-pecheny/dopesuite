@@ -18,6 +18,8 @@ type od struct{}
 
 func (od) Code() string { return "od" }
 
+func (od) RatingRosterStateKey() string { return "teams" }
+
 func (od) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	_, stateJSON := games.ODEmptyGameJSON("", "", games.ParseTourComp(string(cfg)))
 	return stateJSON, nil
