@@ -88,7 +88,7 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 ```bash
 just dev-web-only     # Server only. Usually you should run this unless you need to test changes related to bot
 just dev              # Run server + bot concurrently (hot reload from disk)
-just test             # Go tests + node JS tests
+just test             # Go tests + deno JS tests
 just test-js          # Frontend tests only
 just fmt              # gofmt
 just vet              # go vet

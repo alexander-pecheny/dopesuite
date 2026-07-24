@@ -75,7 +75,7 @@ is what made the decomposition possible without import cycles.
 - `editbatch` — coalesces per-game PATCH edits into one locked write tx per window.
 - `telegrambridge` — shared-secret endpoints the bot calls instead of opening the DB.
 - `assets` — the `//go:embed static` package; the FS keeps the `static/` prefix.
-  Frontend source lives under `web/assets/static/`; node tests under `web/jstest/`.
+  Frontend source lives under `web/ts/` (built into `static/dist/`); deno tests under `web/jstest/`.
 
 ### `domain/` — game + festival domain logic
 

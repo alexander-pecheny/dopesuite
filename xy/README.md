@@ -10,7 +10,7 @@ list is readable without unlocking every board (see the trust model in `AGENTS.m
 - **Backend**: Go 1.26, SQLite (WAL, `modernc.org/sqlite`, pure Go, no cgo).
 - **Frontend**: strict-TypeScript ES modules (sources `web/ts/`, built to
   `static/dist/` by the shared root toolchain, pure Go esbuild — root ADR-0001)
-  + the dope design system, embedded in the binary.
+  + the DopeUIKit design system, embedded in the binary.
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, no WASM) +
   AES-256-GCM via WebCrypto.
 - **Offline / PWA**: installable, works offline and resyncs on reconnect. A
@@ -27,7 +27,7 @@ conventions.
 ```sh
 just dev-web-only   # server only (assets hot-read from disk)
 just dev            # server + telegram bot
-just test           # go test + node frontend tests
+just test           # go test + deno frontend tests
 just pre-commit     # fmt + vet + tidy-check + test
 just invite 7       # mint a one-shot registration invite
 ```
@@ -71,7 +71,7 @@ is shown once.
 Because the board's data is end-to-end encrypted, its encrypted text fields
 (list/card/label name and card `desc`) are returned as the **base64 ciphertext
 envelope** — the same bytes the web client gets — and are decrypted locally with
-the board passphrase (the `crypto.js` envelope format). The **board `name` is
+the board passphrase (the `crypto.ts` envelope format). The **board `name` is
 plaintext** (migrated boards; legacy boards still return the ciphertext envelope
 until backfilled). Uploads are symmetric: `desc` must already be such an envelope
 (a plaintext `desc` is rejected), so the server never sees encrypted content in
@@ -167,7 +167,8 @@ Two deliberate choices worth knowing:
   Deletion in xy is a 14-day tombstone, then a reaper destroys rows and blobs
   (`xy-server gc` runs the same pass on demand). The backup follows: `sync`
   MOVES a locally-deleted blob into a dated `blobs-trash/` prefix rather than
-  deleting it, and the same timer prunes trash older than 14 days. So both
+  deleting it, and the same timer prunes trash prefixes whose *date* is older
+  than 14 days (not object age — a reaped blob is always ≥14 days old). So both
   halves share one recovery window — a tombstone restores by SQL, a
   mistakenly-purged blob restores from trash — and truly deleted data leaves R2
   within ~28 days of the user's delete.

@@ -17,7 +17,7 @@ The bracket of a Game: an ordered composition of Stages that creates Matches, se
 One instance of a Stage Kind inside a Structure. A flat game (ЧГК, КСИ) is a degenerate Structure: one Stage, one Match seating everyone.
 
 **Stage Kind**:
-A registered structural primitive — round-robin group, swiss, single/double-elimination bracket, reseed. A Stage Kind owns two separable concerns: producing the Stage's Match schedule (possibly incrementally, possibly from hand-authored pairings) and ranking the Stage's Participants from Match outcomes.
+A registered structural primitive — today round-robin (`rr`), single-elimination (`se`), reseed, and manual hand-authored pairings (`matches`); swiss and double-elim are planned, the schema is born ready for them. A Stage Kind owns two separable concerns: producing the Stage's Match schedule (possibly incrementally, possibly from hand-authored pairings) and ranking the Stage's Participants from Match outcomes.
 
 **Scheme**:
 The declarative document describing a Game's Structure — its Stages, Matches, and Slot sources. The source of truth for authoring: hand-written, imported, or emitted by a parameterized generator.
@@ -27,7 +27,7 @@ One sitting of Participants scored together under one Protocol. The unit the Str
 _Avoid_: bout as a distinct concept — бой is just the brain-format word for a Match.
 
 **Protocol**:
-The in-match ruleset: state shape, scoring, and rendering for what happens inside one Match (EK's 12 themes, brain's K buzzer questions, КСИ's grid, ЧГК's question grid). Registered once; the Structure only consumes its output (place + metrics per Slot).
+The in-match ruleset: state shape, scoring, and rendering for what happens inside one Match (EK's 12 themes, КСИ's grid, ЧГК's question grid via the `od` protocol; brain's K buzzer questions once it ships). Registered once; the Structure only consumes its output (place + metrics per Slot).
 
 **Slot**:
 One seat in a Match. Declares where its occupant comes from (seed, a place in a prior Match, a rank in a Stage or reseed) and who currently sits in it.

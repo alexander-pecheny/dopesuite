@@ -17,13 +17,14 @@ Russian-language UI.
   **No external runtime dependencies**: docx/import/handouts are all in-process,
   and typst is linked in as a wasm module run under wazero (pure Go, so the binary
   stays CGO_ENABLED=0 and cross-compilable).
-- **Frontend**: strict-TypeScript ES modules (root ADR-0001) + the dope design
-  system (`styles.css`), embedded in the binary. Sources in `web/ts/*.ts`; the
+- **Frontend**: strict-TypeScript ES modules (root ADR-0001) + the DopeUIKit
+  design system, embedded in the binary. Sources in `web/ts/*.ts`; the
   shared root toolchain (`just build-web`, esbuild per-file transform + native
   tsc) emits same-named ESM into the gitignored `web/assets/static/dist/`,
   which the pages load and the SW precaches. board.ts is a thin orchestrator
-  over extracted kernels (unlock.ts, dragrank.ts, carddetail.ts, timeline.ts,
-  boardmembers.ts — each a `create(deps)` factory with jstest coverage).
+  over extracted kernels (unlock.ts, dragrank.ts, carddetail.ts, carddraft.ts,
+  timeline.ts, boardmembers.ts, handoutsession.ts — each a `create(deps)`
+  factory with jstest coverage).
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, **no WASM** → runs
   under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto.
 - **Tests**: Go (`go test`) + frontend (`deno test --parallel jstest/`).
@@ -153,24 +154,24 @@ internal/blobstore/    attachment bytes ON DISK (random-ref, sharded, write-once
                        stores only a blob_ref. NB: backups therefore have two halves — litestream
                        replicates xy.db, an hourly `rclone sync --backup-dir` replicates blobs/ (deletions go to a dated trash prefix, pruned after 14d). Restore the DB
                        alone and every attachment is a dangling ref. See README "Deployment & backups".
-web/assets/            //go:embed static + ui (package assets)
-  ui/                  the 7 app pages as .dopeui (index, board, login, register,
-                       profile, tokens, import) — compiled to HTML by
-                       internal/ui at server startup (per-request in dev disk mode)
-  static/
-    crypto.js          envelope format + board key lifecycle + IndexedDB key cache
-    store.js           offline IndexedDB layer: snapshot/timeline/attachment mirror,
+web/ts/                strict-TS ES-module sources; built by `just build-web` into
+                       the gitignored web/assets/static/dist/ (see Stack above)
+    crypto.ts          envelope format + board key lifecycle + IndexedDB key cache
+    store.ts           offline IndexedDB layer: snapshot/timeline/attachment mirror,
                        mutation outbox, temp-id↔real-id map (DB "xy-offline")
-    sync.js            offline engine: mutate()/flush() outbox replay with negative
+    sync.ts            offline engine: mutate()/flush() outbox replay with negative
                        temp-id remapping, snapshot apply, pending-timeline synthesis,
                        online/offline status events (PWA resync)
-    sw.js              service worker — app-shell caching (served at root, scope '/')
-    manifest.webmanifest  PWA manifest (served at root); icons icon-*.png/apple-touch-icon
-    rank.js            fractional indexing (LexoRank-style keyBetween)
-    app.js             shared fetch/DOM helpers, derived titles, offline-tolerant requireLogin
-    diff.js            word-level token diff for desc_edit timeline highlighting
-    index.js           board list + create-board (passphrase) flow; offline board-list cache
-    board.js           kanban: unlock, drag-reorder, card detail, timeline, labels,
+    sw.ts              service worker — app-shell caching (served at root, scope '/')
+    rank.ts            fractional indexing (LexoRank-style keyBetween)
+    app.ts             shared fetch/DOM helpers, derived titles, offline-tolerant requireLogin
+    diff.ts            word-level token diff for desc_edit timeline highlighting
+    index.ts           board list + create-board (passphrase) flow; offline board-list cache
+    board.ts           kanban orchestrator over the extracted kernels (unlock.ts =
+                       boot/unlock/snapshot-load, dragrank.ts, carddetail.ts,
+                       carddraft.ts = draft/dirty rules, timeline.ts,
+                       boardmembers.ts, handoutsession.ts = handout image staging
+                       session): drag-reorder, card detail, timeline, labels,
                        the card editor's tools row (under the Просмотр/Поля/Текст tabs):
                        ударение types a stress accent (U+0301) into whichever field the
                        caret was last in — a button steals focus on mousedown, so the field
@@ -188,8 +189,8 @@ web/assets/            //go:embed static + ui (package assets)
                        `exportList(list, format)`); direct links to a card
                        (?card=) and a comment (&comment=, copied from the timeline 🔗);
                        «Управление списками» modal groups consecutive lists into a
-                       list_of_lists (☰ menu); all mutations via sync.js (offline-capable);
-                       display sizes (users.sizes, edited on /profile — see profile.js) are
+                       list_of_lists (☰ menu); all mutations via sync.ts (offline-capable);
+                       display sizes (users.sizes, edited on /profile — see profile.ts) are
                        delivered in the board snapshot and applied as CSS vars on <html>:
                        --kanban-max-w (the board is a centred column, so a wide monitor
                        doesn't strand the reader at the screen edge), --klist-w,
@@ -219,18 +220,36 @@ web/assets/            //go:embed static + ui (package assets)
                        each (img …) attached to the card that references it. A .docx (a lossy
                        heuristic parse) first opens the verification screen: editable 4s on the
                        left, the live list preview on the right. .4s/.zip import straight.
-    menu.js            theme boot + ☰ menu; also injects PWA <head> tags + registers sw.js
-    login/register     auth UI (login/menu ported from dope)
-    profile.js         /profile: username set-once, logout, and four dialogs — change
+    pwa.ts             PWA boot on every page: manifest/install <head> tags + sw
+                       registration + zoom lockdown (theme boot + ☰ menu come from
+                       the kit's shared menu module)
+    timer.ts           floating ЧГК play timer (⏰ in the board header): question
+                       minute + 10s answer countdown, WebAudio bell cues
+    chgk.ts            client-side 4s parser for card previews (display-only,
+                       never rewrites the source)
+    import.ts          Trello board import → new encrypted board (implicit OAuth,
+                       server proxy /api/import/trello/proxy, comments past the
+                       1000-action cap, attachments); the pure Trello-card→xy-card
+                       rules live in trellomodel.ts (jstest-covered, no DOM)
+    wordlist.ts        EFF diceware list for generated passphrases (data only)
+    profile.ts         /profile: username set-once, logout, and four dialogs — change
                        password, board sizes (three sliders + a to-scale pseudo-board
                        preview, wireframe bars for text; defaults 1512px / 280px / 3
                        lines, max slider position = unlimited/null; debounced POST
                        /api/auth/sizes), default author (POST /api/auth/default-author),
                        card title (POST /api/auth/card-title — question text vs answer).
-                       Shared defaults/ranges/sanitize/apply live in app.js (xySizes)
-                       so this write path and board.js's read path agree
-    tokens.js          /profile/tokens — create/revoke API tokens for the Trello API
-    styles.css         dope design system (copied) + xy board/card section at the end
+                       Shared defaults/ranges/sanitize/apply live in app.ts (xySizes)
+                       so this write path and board.ts's read path agree
+    tokens.ts          /profile/tokens — create/revoke API tokens for the Trello API
+web/assets/            //go:embed static + ui (package assets)
+  ui/                  the 6 app pages as .dopeui (index, board, login, profile,
+                       tokens, import) — compiled to HTML by internal/ui at server
+                       startup (per-request in dev disk mode)
+  static/              built dist/ (gitignored ESM output), icons +
+                       manifest.webmanifest, ding.mp3, plus:
+    styles.css         the xy-only CSS layer (kanban/card/board + xy vars + PWA
+                       overrides); the shared design system is DopeUIKit's core.css,
+                       served concatenated ahead of it (see Stack → CSS)
     vendor/            self-hosted @noble/hashes (scrypt + deps), WebCrypto shim
 jstest/                deno test: crypto round-trips, rank ordering, offline sync engine
 ```
@@ -240,15 +259,15 @@ The app is an installable PWA that works offline and resyncs on reconnect.
 - **App shell**: `sw.js` (served at `/sw.js`, scope `/`) precaches the static
   assets + page routes; navigations are network-first→cache, versioned `?v=`
   assets cache-first, others stale-while-revalidate. `/api/*` is never SW-cached.
-- **Data mirror**: `store.js` keeps a per-board ciphertext snapshot, per-card
+- **Data mirror**: `store.ts` keeps a per-board ciphertext snapshot, per-card
   timelines, the board list and downloaded attachment bytes in IndexedDB
   (DB `xy-offline`). Everything stored is ciphertext (same as the server) except
   plaintext board names; the cached DK in `xy-keys` decrypts the rest. No
   encrypted *content* is persisted in the clear.
-- **Outbox + resync**: every board mutation flows through `sync.js#mutate`. Online
+- **Outbox + resync**: every board mutation flows through `sync.ts#mutate`. Online
   with an empty queue it's sent immediately; otherwise it's queued. Entities
   created offline get **negative temp ids** (which flow transparently through the
-  numeric-id code in board.js); on `flush` each create's response yields temp→real,
+  numeric-id code in board.ts); on `flush` each create's response yields temp→real,
   and later ops have their temp-id references (URL path + JSON body) rewritten
   before sending. After a board's queue drains, the UI reloads a fresh snapshot.
   Cross-board copy/move, board creation, and attachment upload/delete stay online-only.
@@ -258,7 +277,7 @@ Each board has a random 32-byte data key (DK). The passphrase derives a KEK
 (scrypt) that only wraps/unwraps DK; a `verify_token` lets the client confirm a
 passphrase on unlock. Changing the passphrase re-wraps DK (no data re-encrypt).
 DK is cached per board in IndexedDB. Wire envelope: `magic("xy1") | alg(1) |
-nonce(12) | ct+tag`, base64 over JSON. `crypto.js` is the sole owner of this
+nonce(12) | ct+tag`, base64 over JSON. `crypto.ts` is the sole owner of this
 format. **XSS = total compromise**, so the app serves a strict CSP (script-src
 'self', no inline/eval/wasm, no third-party origins); the one JS dependency is
 vendored same-origin under that CSP.
@@ -273,7 +292,7 @@ just dev            # server + bot
 just invite 7       # mint a registration invite
 # bootstrap a password account (registration is otherwise telegram-only):
 printf '<password>' | XY_DB=… xy-server adduser <username>   # password via stdin
-just test           # go test + node frontend tests
+just test           # go test + deno frontend tests
 # XY_TYPST_TEST_BIN=/path/to/typst  → also runs the typst-CLI parity tests (the
 #   oracle the in-process wasm typst is checked against). typst is NOT needed to
 #   run xy — only to run those tests.
@@ -297,7 +316,7 @@ Config via `.env` (see `.env.example`). Telegram register/login needs
 ## Testing
 Go integration tests (`internal/server/*_test.go`) cover the full
 register→board→card→label→timeline→attachment flow + ACL rejection;
-node tests (`jstest/`) cover crypto round-trips/tamper/rewrap, rank ordering,
+deno tests (`jstest/`) cover crypto round-trips/tamper/rewrap, rank ordering,
 and the offline sync engine (temp-id remapping, snapshot apply, and a full
 offline→online resync against an in-memory IndexedDB).
 
@@ -319,7 +338,7 @@ sequence and a combined export. Schema: `list_groups(name_enc)` + nullable
 list carries `group_id`. Endpoints: `POST /api/boards/{id}/list-groups`
 {name_enc, list_ids} (≥2 lists, folds them in), `PATCH /api/list-groups/{id}`
 (rename), `DELETE` (dissolve → members released to group_id NULL). The
-«Управление списками» modal (☰ menu, `board.js`) is the editing surface: one row
+«Управление списками» modal (☰ menu, `board.ts`) is the editing surface: one row
 per list, drag / position-input reorder, multi-select move-together, and
 🔗 Связать when the checked rows are consecutive ungrouped lists. Orderable units
 are standalone lists and whole groups (a group always moves as one block, keeping

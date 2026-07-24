@@ -1,20 +1,24 @@
 # dopesuite — monorepo
 
-Three Go modules, one repo. Each has its own `AGENTS.md`; start there.
+Four Go modules, one repo: two apps (xy, dope) on two shared layers
+(dopeuikit, dopecore). The apps have their own `AGENTS.md`; start there.
 
 ```
 dopeuikit/   pecheny.me/dopeuikit — the shared UI system:
              ui/ = generic DSL engine (no design opinions), kit/ = the design
              system (core vocabulary + expansions + core.css + fonts)
+dopecore/    pecheny.me/dopecore — the shared platform layer extracted out of
+             xy and dope (no AGENTS/CONTEXT of its own)
 xy/          ЧГК question-editing boards (encrypted, Trello-style)
 dope/        tournament management (EK/OD/KSI) + realtime web UI
 ```
 
-- xy and dope consume dopeuikit via `replace pecheny.me/dopeuikit => ../dopeuikit`
-  — the monorepo preserves the sibling layout, so builds need nothing extra.
+- xy and dope consume the shared layers via `replace pecheny.me/dopeuikit =>
+  ../dopeuikit` and `replace pecheny.me/dopecore => ../dopecore` — the monorepo
+  preserves the sibling layout, so builds need nothing extra.
 - xy and dope each keep a `justfile` (`just dev`, `just test`, `just pre-commit`);
-  dopeuikit has none — its recipes live in the root `justfile`, which also fans
-  `test`/`fmt`/`vet`/`pre-commit` out across all three.
+  dopeuikit and dopecore have none — their recipes live in the root `justfile`,
+  which also fans `test`/`fmt`/`vet`/`pre-commit` out across all four.
 - **Deploy** is one script for the whole repo: `deploy.py`, a target table
   (`dope-server`, `dope-bot`, `xy-server`, `xy-bot`) naming each unit's module,
   package, binary, systemd unit and **host** — xy is on `vps-he`, dope on
@@ -31,7 +35,7 @@ dope/        tournament management (EK/OD/KSI) + realtime web UI
 
 ## Toolchain
 
-- **Go** ≥ 1.26 — all three modules.
+- **Go** ≥ 1.26 — all four modules.
 - **just** — the task runner (root + per-app justfiles).
 - **deno** ≥ 2 — fetches the native tsc binary (`deno install`, root
   `package.json`) and runs the frontend tests (`deno test --parallel`). Bundling

@@ -105,10 +105,11 @@ becomes `<header>`; `placement:"overlay"` children render after `</main>`.
 its `data-state`. `HeadHook` is the seam for an extension to splice head nodes
 positionally (dope's `init` marker: `<script>window.__HOST_INIT__=null;</script>`).
 
-**Scripts convention**: page JS that talks over `window` globals with no imports
-(dope's whole frontend, xy's `menu.js`) is listed in `classicscripts` (emitted as
-`<script defer>`, boot order preserved); genuine ES modules go in `scripts`
-(emitted `type=module`). A page mixes both freely.
+**Scripts convention**: bundles that boot via `window` globals rather than
+imports (dope's per-page IIFE bundles, the kit's menu/login on some pages) are
+listed in `classicscripts` (emitted as `<script defer>`, boot order preserved);
+per-file ES modules (xy's frontend) go in `scripts` (emitted `type=module`).
+A page mixes both freely.
 
 ## .dopeui grammar
 

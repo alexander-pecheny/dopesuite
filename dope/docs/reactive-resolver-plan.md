@@ -1,5 +1,11 @@
 # Reactive bracket resolution — implementation plan
 
+> **Status: landed, historical.** The non-destructive resolver and deterministic
+> lots (`games.random_seed`) shipped; file paths below predate the 7-group
+> reorg (now `dope/domain/resolver/resolver.go`, `dope/server/db.go`). One
+> decision was later superseded: `reseed_entries` was NOT kept — the unified
+> model generalised it into `stage_standings` (ADR-0001/0004, unified-model.md).
+
 ## Problem
 
 A finished EK match was missing one minus. Fixing it required the only available
@@ -74,6 +80,7 @@ occupant, `current == 0`) is unchanged.
 
 - `reseed_entries` table is **kept** (as a derived cache) rather than dropped —
   dropping an audited table is unnecessary for the goal and adds audit churn.
+  *(Superseded: the unified model later folded it into `stage_standings`.)*
 - Manual reseed "calculate" workflow is kept (no auto-recompute-on-edit), avoiding
   a surprise auto-advance behavior change on a live multi-fest system.
 
@@ -102,5 +109,3 @@ occupant, `current == 0`) is unchanged.
   score, re-tick — assert downstream themes/answers/results and reseed entries are
   unchanged (byte-identical where advancement is unchanged).
 - Deploy; backup first.
-</content>
-</invoke>

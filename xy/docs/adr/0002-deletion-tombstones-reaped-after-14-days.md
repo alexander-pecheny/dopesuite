@@ -17,7 +17,9 @@ un-tombstone; past it, the data is gone everywhere.
   the blob lives until the tombstone reaps.
 - The blob backup timer flips from `rclone copy` (append-only, the README's old
   rationale) to `rclone sync --backup-dir` into a dated R2 trash prefix, pruned
-  by the same timer after 14 days (`rclone delete --min-age 14d` — the R2 keys
+  by the same timer after 14 days (by the date in the prefix name — `--min-age`
+  filters on object mtime, which R2 preserves from the original upload, so it
+  would prune every reaper-deleted blob immediately; the R2 keys
   are object-scoped, so a bucket lifecycle rule wasn't settable). Physical
   erasure everywhere is therefore worst-case ~28 days (14 tombstone + 14 trash).
 - Quota SQL counts live data only: it must exclude tombstoned boards' content

@@ -14,6 +14,14 @@ and the migration pacing changed from renderer-by-renderer to a big-bang
 conversion of all legacy scripts to strict-TS ES modules — including the chrome
 scripts the scope note below exempted. See `../../docs/adr/0001`.
 
+## Amendment (2026-07-24): bundle emission flips to ESM per ported page
+
+Dope's page bundles stay IIFE + `classicscripts` until a page boots via
+`registry.register()` instead of side-effect imports; that porting moment is
+when the page's bundle flips to `type=module` ESM (and eventually unlocks
+esbuild code-splitting for `match-table.ts`). No standalone emission-conversion
+pass — decided 2026-07-24.
+
 ## Consequences
 
 - `justfile` dev/test/embed gain an esbuild step; dev hot-reload becomes esbuild watch; embedded assets are built output.

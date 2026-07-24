@@ -11,7 +11,8 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 
 ## File structure
 
-This is a multi-context repo — three Go modules, each its own bounded context:
+This is a multi-context repo — three bounded contexts (dopeuikit, xy, dope);
+`dopecore` is a shared platform layer with no glossary of its own:
 
 ```
 /
@@ -20,6 +21,7 @@ This is a multi-context repo — three Go modules, each its own bounded context:
 ├── dopeuikit/
 │   ├── CONTEXT.md
 │   └── docs/adr/
+├── dopecore/            ← platform layer, no CONTEXT.md
 ├── xy/
 │   ├── CONTEXT.md
 │   └── docs/adr/

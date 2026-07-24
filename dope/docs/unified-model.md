@@ -84,11 +84,14 @@ TypeScript, esbuild, one **shell** + per-protocol **renderers**. As landed:
   side-effect imports with a registered `ProtocolRenderer`.
 - `web/ts/structure/`, `web/ts/protocols/<code>/` — arrive as pages port.
 
-`just build-web` = `tsc --noEmit` + esbuild (gitignored `dist/` output,
-embedded at go-build time); `just test`/`deploy` depend on it;
-`just watch-web` is the dev loop. `menu.js`/`pageforms.js` chrome stays
-classic. Cross-file globals inside a bundle must be explicit `window.*`
-exports (module scope no longer leaks top-level functions — see fest-grid.js).
+`just build-web` = esbuild only (pure Go, shared root toolchain; gitignored
+`dist/` output, embedded at go-build time); typechecking is a separate
+`just typecheck` gate run from `test`/`pre-commit`, deliberately not from
+build-web (root ADR-0001). `just test`/`deploy` depend on build-web;
+`just watch-web` is the dev loop. Since the big-bang strict-TS conversion
+(root ADR-0001) the chrome (`menu.ts`, `pageforms.ts`) is ES modules too;
+cross-file wiring is imports, and the few deliberately published globals
+are declared in dopeuikit's `globals.d.ts`.
 
 ## 6. Migration & gates (ADR-0004)
 
