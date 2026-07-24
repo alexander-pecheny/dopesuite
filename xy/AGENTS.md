@@ -23,7 +23,7 @@ Russian-language UI.
   tsc) emits same-named ESM into the gitignored `web/assets/static/dist/`,
   which the pages load and the SW precaches. board.ts is a thin orchestrator
   over extracted kernels (unlock.ts, dragrank.ts, carddetail.ts, carddraft.ts,
-  timeline.ts, boardmembers.ts, handoutsession.ts — each a `create(deps)`
+  timeline.ts, boardmembers.ts, handoutsession.ts, attachments.ts — each a `create(deps)`
   factory with jstest coverage).
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, **no WASM** → runs
   under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto.
@@ -170,7 +170,7 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     board.ts           kanban orchestrator over the extracted kernels (unlock.ts =
                        boot/unlock/snapshot-load, dragrank.ts, carddetail.ts,
                        carddraft.ts = draft/dirty rules, timeline.ts,
-                       boardmembers.ts, handoutsession.ts = handout image staging
+                       boardmembers.ts, attachments.ts = attachment kernel (caches, upload/replace/delete, paste-to-attach, lightbox), handoutsession.ts = handout image staging
                        session): drag-reorder, card detail, timeline, labels,
                        the card editor's tools row (under the Просмотр/Поля/Текст tabs):
                        ударение types a stress accent (U+0301) into whichever field the
