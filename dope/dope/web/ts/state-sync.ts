@@ -12,6 +12,108 @@ function defaultEventSource(url: string): EventSource {
   return new EventSource(url);
 }
 
+// Backoff between wake-recovery attempts, in ms; the last entry repeats.
+const WAKE_RETRY_MS = [3000, 6000, 12000, 30000];
+
+interface WakeRecoveryOptions {
+  // live reports a stream that needs no recovery, so a tab switch on a working
+  // page costs nothing.
+  live: () => boolean;
+  // paused reports a state where the page deliberately has no stream (server
+  // lockdown, static snapshot, a latched epoch reload).
+  paused: () => boolean;
+  // recover re-opens the stream and re-seeds the state, and reports whether that
+  // worked; it is retried until it does.
+  recover: () => Promise<boolean>;
+}
+
+interface WakeRecovery {
+  bind(): void;
+}
+
+// createWakeRecovery pulls a dead SSE stream back up when the tab or the network
+// returns. iOS freezes backgrounded tabs and silently kills the socket, while
+// native EventSource auto-reconnect sits in CONNECTING forever — so a resumed
+// page spins on "reconnecting" until something re-opens the stream.
+//
+// One attempt is not enough, which is what left the spinner running for good:
+// iOS wakes the tab with the radio still down, that attempt fails, and no
+// further visibility event is coming to trigger another. So once recovery is
+// needed the helper retries on a backoff until an attempt actually succeeds —
+// it deliberately does not stop at a stream that looks OPEN again, because a
+// natively re-connected socket still leaves the page on state it never re-seeded
+// (and on the spinner that says so).
+function createWakeRecovery(options: WakeRecoveryOptions): WakeRecovery {
+  let timer: number | null = null;
+  let attempt = 0;
+  let running = false;
+  let recovering = false;
+
+  function cancelRetry(): void {
+    if (timer !== null) {
+      window.clearTimeout(timer);
+      timer = null;
+    }
+  }
+
+  function scheduleRetry(): void {
+    cancelRetry();
+    const delay = WAKE_RETRY_MS[Math.min(attempt, WAKE_RETRY_MS.length - 1)];
+    attempt += 1;
+    timer = window.setTimeout(() => {
+      timer = null;
+      void attemptRecover();
+    }, delay);
+  }
+
+  async function attemptRecover(): Promise<void> {
+    if (running) return;
+    // A hidden tab is about to be frozen again: hold the chain (recovering stays
+    // latched) and pick it up when the page comes back.
+    if (options.paused() || document.visibilityState !== "visible") {
+      cancelRetry();
+      return;
+    }
+    if (!recovering && options.live()) {
+      cancelRetry();
+      return;
+    }
+    recovering = true;
+    running = true;
+    let recovered = false;
+    try {
+      recovered = await options.recover();
+    } catch (_error) {
+      // recover() reports the failure; retrying is the handling.
+    } finally {
+      running = false;
+    }
+    if (recovered) {
+      recovering = false;
+      attempt = 0;
+      cancelRetry();
+      return;
+    }
+    scheduleRetry();
+  }
+
+  // kick restarts the backoff from zero: a tab or network event is fresh news,
+  // not the continuation of a chain that has been failing for a while.
+  function kick(): void {
+    attempt = 0;
+    cancelRetry();
+    void attemptRecover();
+  }
+
+  return {
+    bind(): void {
+      document.addEventListener("visibilitychange", kick);
+      window.addEventListener("pageshow", kick);
+      window.addEventListener("online", kick);
+    },
+  };
+}
+
 // The wire shape of one scoped SSE delta op / pending set-op path segment list.
 export type PatchPath = ReadonlyArray<string | number>;
 
@@ -325,6 +427,11 @@ export function createStateSync(options: StateSyncOptions): StateSync {
   // so we resync to adopt the new epoch+seq instead of ignoring the deltas.
   let lastEpoch = "";
   let lastEpochSeeded = false;
+  const wake = createWakeRecovery({
+    live: () => stream !== null && stream.readyState === SSE_OPEN,
+    paused: () => lockedDown,
+    recover: () => recoverStream(),
+  });
 
   // epochReset adopts the first epoch we see as the baseline and reports a
   // reset only on a genuine change. An empty epoch (older server build) is
@@ -642,44 +749,39 @@ export function createStateSync(options: StateSyncOptions): StateSync {
       // being navigated away from, so the 250ms debounce window can't swallow
       // the operator's last edits on reload. Paired with keepalive on the
       // PATCH, the flushed request still completes during unload.
-      if (document.visibilityState === "hidden") {
-        if (patchTimer) { window.clearTimeout(patchTimer); patchTimer = null; }
-        if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
-        void flushPatch();
-        void flushSave();
-        return;
-      }
-      recoverStream();
+      if (document.visibilityState !== "hidden") return;
+      if (patchTimer) { window.clearTimeout(patchTimer); patchTimer = null; }
+      if (saveTimer) { window.clearTimeout(saveTimer); saveTimer = null; }
+      void flushPatch();
+      void flushSave();
     });
-    window.addEventListener("pageshow", recoverStream);
-    window.addEventListener("online", recoverStream);
+    wake.bind();
   }
 
-  // recoverStream re-opens a dead SSE stream and resyncs. iOS aggressively
-  // freezes backgrounded tabs, silently killing the socket; native
-  // EventSource auto-reconnect frequently never recovers on resume, leaving
-  // the status stuck on a spinning "reconnecting". Guarding on
-  // readyState === OPEN keeps a healthy stream from ever being churned, so
-  // the steady-state cost is zero — we only act on a genuinely dead stream.
-  function recoverStream(): void {
-    if (lockedDown) return;
-    if (document.visibilityState !== "visible") return;
-    if (stream && stream.readyState === SSE_OPEN) return;
+  // recoverStream re-opens a dead stream and re-seeds from a fresh fetch; the
+  // wake helper decides when to run it and how often to retry.
+  async function recoverStream(): Promise<boolean> {
     options.recorder?.event("sse-recover", {scope: options.scope, readyState: stream?.readyState ?? null});
     openStream();
-    void resync();
+    return resync();
   }
 
   // resync refetches the full state after a gap and realigns lastSeq from the
   // X-State-Seq header so the next delta chains. Jittered so a fleet of viewers
-  // that all gap on the same dropped event don't refetch in lockstep.
-  async function resync(): Promise<void> {
-    if (resyncing || !options.stateURL) return;
+  // that all gap on the same dropped event don't refetch in lockstep. Reports
+  // whether the state was re-seeded, which is what wake recovery retries on.
+  async function resync(): Promise<boolean> {
+    if (resyncing || !options.stateURL) return true;
     resyncing = true;
+    // A frozen tab can leave this fetch hanging with no reply and no error; the
+    // deadline matters because deltas are dropped while resyncing, so a stuck
+    // refetch would wedge the page for good.
+    const abort = new AbortController();
+    const deadline = window.setTimeout(() => abort.abort(), 20000);
     try {
       await new Promise((r) => window.setTimeout(r, Math.floor(Math.random() * 400)));
-      const response = await fetch(options.stateURL);
-      if (!response.ok) return;
+      const response = await fetch(options.stateURL, {signal: abort.signal});
+      if (!response.ok) return false;
       const seqHeader = response.headers.get("X-State-Seq");
       const epochHeader = response.headers.get("X-State-Epoch");
       const data: unknown = await response.json();
@@ -693,9 +795,12 @@ export function createStateSync(options: StateSyncOptions): StateSync {
       options.recorder?.event("resync", {scope: options.scope, seq: lastSeq, epoch: lastEpoch});
       options.onRemoteState?.(pending.overlay(data), {scope: options.scope, resync: true});
       if (!hasPendingSave()) setSyncStatus("saved");
+      return true;
     } catch (error) {
       console.error(error);
+      return false;
     } finally {
+      window.clearTimeout(deadline);
       resyncing = false;
     }
   }
@@ -1024,10 +1129,8 @@ export interface LiveEvents {
 // state blob (createStateSync). It carries the shared invariants: a changed
 // server epoch means the seq space reset, so the page reloads to re-seed
 // (jittered, latched — cached views merge monotonically by seq and can't adopt
-// the lower fresh seqs); iOS freezes backgrounded tabs and silently kills the
-// socket while native auto-reconnect sits in CONNECTING forever, so on
-// visibility/network return any non-OPEN stream is dropped and re-seeded from a
-// fresh fetch. Guarding on readyState === OPEN keeps a healthy stream untouched.
+// the lower fresh seqs); and any non-OPEN stream is dropped and re-seeded from a
+// fresh fetch by the shared wake recovery (see createWakeRecovery).
 export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
   const epochTracker = createEpochTracker();
   const recorder = () => options.recorder?.();
@@ -1081,25 +1184,25 @@ export function createLiveEvents(options: LiveEventsOptions): LiveEvents {
     };
   }
 
-  function recover(): void {
-    if (epochReloadScheduled || options.staticMode?.()) return;
-    if (document.visibilityState !== "visible") return;
-    if (stream && stream.readyState === SSE_OPEN) return;
+  async function recover(): Promise<boolean> {
     recorder()?.event("sse-recover", {...tags(), readyState: stream?.readyState ?? null});
     options.onDown?.();
-    options.reload()
-      .then(() => {
-        options.onUp?.();
-        connect();
-      })
-      .catch((error: unknown) => {
-        options.onRecoverError?.(error);
-      });
+    try {
+      await options.reload();
+    } catch (error: unknown) {
+      options.onRecoverError?.(error);
+      return false;
+    }
+    options.onUp?.();
+    connect();
+    return true;
   }
 
-  document.addEventListener("visibilitychange", recover);
-  window.addEventListener("pageshow", recover);
-  window.addEventListener("online", recover);
+  createWakeRecovery({
+    live: () => stream !== null && stream.readyState === SSE_OPEN,
+    paused: () => epochReloadScheduled || Boolean(options.staticMode?.()),
+    recover,
+  }).bind();
 
   return {connect};
 }

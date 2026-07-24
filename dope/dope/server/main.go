@@ -185,6 +185,7 @@ func Main() {
 	mux.HandleFunc("/api/telegram/login", srv.tgBridge().HandleTelegramLogin)
 	mux.HandleFunc("/events", srv.handleEvents)
 	mux.HandleFunc("/host-events", srv.handleHostEvents)
+	mux.HandleFunc("/favicon.ico", srv.assets.ServeRoot("favicon.ico", "image/x-icon"))
 	mux.HandleFunc("/static/styles.css", srv.assets.ServeStylesheet())
 	mux.HandleFunc("/static/login.js", srv.assets.ServeShared("/static/login.js"))
 	mux.HandleFunc("/static/menu.js", srv.assets.ServeShared("/static/menu.js"))
