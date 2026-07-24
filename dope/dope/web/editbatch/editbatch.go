@@ -310,11 +310,6 @@ func (b *Batcher) applyEditBatch(batch *editBatch) {
 		b.Rec.WriteWaiters.Add(-int64(len(jobs)))
 	}
 
-	// Pre-images of every match this window will touch, captured under our
-	// exclusive lock before the mutation commits, so each broadcast can be a
-	// minimal delta. Best-effort: an empty pre-image just means a full snapshot.
-	order, byMatch := b.preImages(txCtx, scope, jobs)
-
 	tx, err := b.Eng.BeginWriteTxConn(txCtx, conn)
 	if err != nil {
 		unlock()
@@ -324,6 +319,12 @@ func (b *Batcher) applyEditBatch(batch *editBatch) {
 	// Safety net: a no-op after Commit, but guarantees the tx is finalized on any
 	// early return below before the conn is returned to the pool.
 	defer tx.Rollback()
+
+	// Pre-images of every match this window will touch, read through our own tx
+	// before it writes anything — that is exactly the committed state, and it
+	// costs no extra pool acquisition while we hold the lock. Each broadcast
+	// diffs against its pre-image; an empty one just means a full snapshot.
+	order, byMatch := b.preImages(txCtx, tx, scope, jobs)
 
 	results := make([]editResult, len(jobs))
 	var mergedOps [][]byte
@@ -393,7 +394,7 @@ func (b *Batcher) applyEditBatch(batch *editBatch) {
 
 	// Post-images, still under the lock (as the per-edit path did), so the views
 	// we broadcast are exactly the ones this window committed.
-	cascaded := b.postImages(txCtx, scope, order, byMatch, cascadedIDs)
+	cascaded := postImages(txCtx, conn, scope, order, byMatch, cascadedIDs)
 	hold := time.Since(acquired)
 	unlock()
 
@@ -472,7 +473,7 @@ func MatchScopeKey(gameID int64, code string) string {
 
 // preImages registers every match the window touches and reads its committed
 // view, in first-touch order.
-func (b *Batcher) preImages(ctx context.Context, scope core.FestScope, jobs []*editJob) ([]int64, map[int64]*touched) {
+func (b *Batcher) preImages(ctx context.Context, q store.Queryer, scope core.FestScope, jobs []*editJob) ([]int64, map[int64]*touched) {
 	var order []int64
 	byMatch := map[int64]*touched{}
 	for _, job := range jobs {
@@ -480,7 +481,7 @@ func (b *Batcher) preImages(ctx context.Context, scope core.FestScope, jobs []*e
 			continue
 		}
 		t := &touched{matchID: job.matchID, code: job.code}
-		if view, err := b.loadMatchView(ctx, scope, job.matchID); err == nil {
+		if view, err := loadMatchView(ctx, q, scope, job.matchID); err == nil {
 			t.oldData, _ = json.Marshal(view)
 		}
 		byMatch[job.matchID] = t
@@ -491,12 +492,14 @@ func (b *Batcher) preImages(ctx context.Context, scope core.FestScope, jobs []*e
 
 // postImages reloads the committed view of every touched match and of the
 // downstream matches the resolver advanced, skipping the touched ones (already
-// reloaded). Failures are non-fatal: the edit is committed, and a missed
-// cascade broadcast only costs a reload.
-func (b *Batcher) postImages(ctx context.Context, scope core.FestScope, order []int64, byMatch map[int64]*touched, cascadedIDs []int64) []store.MatchView {
+// reloaded). It reads through the connection the window already holds, so it
+// never queues for the pool while the write lock is still ours. Failures are
+// non-fatal: the edit is committed, and a missed cascade broadcast only costs
+// a reload.
+func postImages(ctx context.Context, q store.Queryer, scope core.FestScope, order []int64, byMatch map[int64]*touched, cascadedIDs []int64) []store.MatchView {
 	for _, matchID := range order {
 		t := byMatch[matchID]
-		view, err := b.loadMatchView(ctx, scope, matchID)
+		view, err := loadMatchView(ctx, q, scope, matchID)
 		if err != nil {
 			continue
 		}
@@ -509,7 +512,7 @@ func (b *Batcher) postImages(ctx context.Context, scope core.FestScope, order []
 		if byMatch[matchID] != nil {
 			continue
 		}
-		view, err := b.loadMatchView(ctx, scope, matchID)
+		view, err := loadMatchView(ctx, q, scope, matchID)
 		if err != nil || view.Code == "" {
 			continue
 		}
@@ -518,8 +521,8 @@ func (b *Batcher) postImages(ctx context.Context, scope core.FestScope, order []
 	return cascaded
 }
 
-func (b *Batcher) loadMatchView(ctx context.Context, scope core.FestScope, matchID int64) (store.MatchView, error) {
-	match, err := store.LoadDBMatchStateWhere(ctx, b.Eng.DB,
+func loadMatchView(ctx context.Context, q store.Queryer, scope core.FestScope, matchID int64) (store.MatchView, error) {
+	match, err := store.LoadDBMatchStateWhere(ctx, q,
 		`m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, scope.FestID, scope.GameID)
 	if err != nil {
 		return store.MatchView{}, err
