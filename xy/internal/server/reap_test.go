@@ -353,3 +353,31 @@ func TestTombstoneNeverRestamps(t *testing.T) {
 		t.Fatalf("cascade re-delete reset the reap clock: deleted_at = %s, want %s", got, old)
 	}
 }
+
+// Comment deletion bypasses tombstone() (it must also scrub payload_enc), so
+// its hand-written stamp carries its own only-if-live guard — verify a
+// re-delete request can't reset a comment tombstone's reap clock either.
+func TestCommentRedeleteKeepsReapClock(t *testing.T) {
+	ts, srv := newTestServer(t)
+	c := registerUser(t, srv, ts, 771007, "comment-restamp-user")
+	_, _, cardID := makeBoardCard(t, c, "comment-restamp")
+	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{"payload_enc": enc("bye")}), 204)
+	var evID int64
+	if err := srv.db.QueryRow(
+		`select max(id) from timeline_events where card_id = ? and type = 'comment'`, cardID).Scan(&evID); err != nil {
+		t.Fatal(err)
+	}
+	mustStatus(t, c.do("DELETE", "/api/comments/"+itoa(evID), nil), 204)
+	const old = "2000-01-01T00:00:00Z"
+	if _, err := srv.db.Exec(`update timeline_events set deleted_at = ? where id = ?`, old, evID); err != nil {
+		t.Fatal(err)
+	}
+	c.do("DELETE", "/api/comments/"+itoa(evID), nil)
+	var got string
+	if err := srv.db.QueryRow(`select deleted_at from timeline_events where id = ?`, evID).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != old {
+		t.Fatalf("comment re-delete reset the reap clock: deleted_at = %s, want %s", got, old)
+	}
+}

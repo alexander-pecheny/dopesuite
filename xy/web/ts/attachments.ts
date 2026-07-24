@@ -40,6 +40,40 @@ export interface Attachment {
 }
 export type NamedAttachment = Attachment & { name: string };
 
+// gatherTargets maps wanted image names to the first attachment bearing each
+// name, in card order — shared by resolveImages (object URLs for previews) and
+// the handouts request assembly (multipart blobs).
+export function gatherTargets(lists: ReadonlyArray<ReadonlyArray<NamedAttachment>>, wanted: ReadonlySet<string>): Map<string, NamedAttachment> {
+  const targets = new Map<string, NamedAttachment>();
+  for (const atts of lists) {
+    for (const att of atts) {
+      if (att.name && wanted.has(att.name) && !targets.has(att.name)) targets.set(att.name, att);
+    }
+  }
+  return targets;
+}
+
+export function humanSize(n: number): string {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1024 / 1024).toFixed(1) + " MB";
+}
+
+export function extFromMime(m: string): string {
+  const map: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/bmp": "bmp", "image/svg+xml": "svg" };
+  if (map[m]) return map[m];
+  const sub = (m || "").split("/")[1];
+  return sub ? sub.replace(/[^a-z0-9]+/gi, "") : "png";
+}
+
+export // withExt drops any extension the user typed and forces the one that matches the
+// stored format (webp when compressing, else the source image's type), so the
+// filename never claims a type the bytes aren't.
+function withExt(name: string, ext: string): string {
+  const base = name.replace(/\.[^./\\]+$/, "").trim();
+  return `${base || "вставка"}.${ext}`;
+}
+
 export interface AttachmentsDeps {
   mustDK(): DataKey;
   openCardId(): number | null;
@@ -112,12 +146,7 @@ async function resolveImages(cards: ReadonlyArray<{ id: number }>, wanted: Set<s
   const map = new Map<string, string>();
   if (!wanted.size || !xySync.isOnline()) return map;
   const lists = await Promise.all(cards.map((c) => cardAttachments(c.id)));
-  const targets = new Map<string, NamedAttachment>(); // name → attachment (first match wins, in card order)
-  for (const atts of lists) {
-    for (const att of atts) {
-      if (att.name && wanted.has(att.name) && !targets.has(att.name)) targets.set(att.name, att);
-    }
-  }
+  const targets = gatherTargets(lists, wanted);
   await Promise.all([...targets].map(async ([name, att]) => {
     try {
       const url = await attachmentUrl(att);
@@ -219,11 +248,6 @@ function pickReplacement(att: NamedAttachment, name: string): void {
   picker.click();
 }
 
-function humanSize(n: number): string {
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
-  return (n / 1024 / 1024).toFixed(1) + " MB";
-}
 
 // recompressToWebp re-encodes an image File to WebP q70. Opt-in (see
 // uploadAttachment): the default is to store what the user uploaded.
@@ -290,20 +314,7 @@ let pastedFile: File | null = null;
 const pasteOverlay = byId("pasteOverlay");
 const cardOverlay = byId("cardOverlay");
 
-function extFromMime(m: string): string {
-  const map: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/bmp": "bmp", "image/svg+xml": "svg" };
-  if (map[m]) return map[m];
-  const sub = (m || "").split("/")[1];
-  return sub ? sub.replace(/[^a-z0-9]+/gi, "") : "png";
-}
 
-// withExt drops any extension the user typed and forces the one that matches the
-// stored format (webp when compressing, else the source image's type), so the
-// filename never claims a type the bytes aren't.
-function withExt(name: string, ext: string): string {
-  const base = name.replace(/\.[^./\\]+$/, "").trim();
-  return `${base || "вставка"}.${ext}`;
-}
 
 function closePasteModal(): void { pasteOverlay.hidden = true; pastedFile = null; }
 

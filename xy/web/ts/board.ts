@@ -8,7 +8,7 @@ import { xySync } from "./sync.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { createBoardMembers } from "./boardmembers.js";
 import { create as createAttachments } from "./attachments.js";
-import type { NamedAttachment } from "./attachments.js";
+import { gatherTargets } from "./attachments.js";
 import { createUnlock } from "./unlock.js";
 import { byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from "./dragrank.js";
 import { createTimeline, eventAuthor } from "./timeline.js";
@@ -1863,12 +1863,7 @@ async function appendImages(fd: FormData, cards: ReadonlyArray<{ id: number }>, 
   const found = new Set<string>();
   if (!wanted.size) return found;
   const lists = await Promise.all(cards.map((c) => attachments.cardAttachments(c.id)));
-  const targets = new Map<string, NamedAttachment>(); // name → attachment (first match wins)
-  for (const atts of lists) {
-    for (const att of atts) {
-      if (att.name && wanted.has(att.name) && !targets.has(att.name)) targets.set(att.name, att);
-    }
-  }
+  const targets = gatherTargets(lists, wanted);
   await Promise.all([...targets].map(async ([name, att]) => {
     try {
       const res = await fetch(`/api/attachments/${att.id}`, { credentials: "same-origin" });

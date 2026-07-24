@@ -74,7 +74,7 @@ func xyPrecache() (urls []string, version string) {
 		}
 	}
 
-	for _, r := range []string{"/", "/login", "/register", "/profile", "/import"} {
+	for _, r := range []string{"/", "/login", "/register", "/profile", "/profile/tokens", "/import"} {
 		addURL(r)
 	}
 	addURL("/manifest.webmanifest")
@@ -96,23 +96,35 @@ func xyPrecache() (urls []string, version string) {
 	for _, p := range kitTS {
 		hashFile(p)
 	}
-	addDir("xy/web/assets/static/vendor", "/static/vendor/")
 	addDir("dopeuikit/assets/fonts", "/static/fonts/")
-	ents, err := os.ReadDir("xy/web/assets/static")
+	// Walk static/ recursively so a future subdirectory can't silently miss the
+	// shell (the 504 class this derivation exists to kill). dist/ is skipped —
+	// its URLs derive from xySources above; styles.css/manifest have their own
+	// composite entries.
+	err = filepath.WalkDir("xy/web/assets/static", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel := strings.TrimPrefix(filepath.ToSlash(path), "xy/web/assets/static")
+		if d.IsDir() {
+			if rel == "/dist" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		switch rel {
+		case "/styles.css", "/manifest.webmanifest":
+			return nil
+		case "/favicon.ico":
+			addURL("/favicon.ico")
+		default:
+			addURL("/static" + rel)
+		}
+		hashFile(path)
+		return nil
+	})
 	if err != nil {
 		fatal(err.Error())
-	}
-	for _, e := range ents {
-		name := e.Name()
-		if e.IsDir() || name == "styles.css" || name == "manifest.webmanifest" {
-			continue
-		}
-		if name == "favicon.ico" {
-			addURL("/favicon.ico")
-		} else {
-			addURL("/static/" + name)
-		}
-		hashFile("xy/web/assets/static/" + name)
 	}
 	return urls, "xy-shell-" + hex.EncodeToString(h.Sum(nil))[:10]
 }
