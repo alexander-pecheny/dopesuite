@@ -80,10 +80,22 @@ loadtest *args:
     done
     exec env "${envs[@]}" scripts/loadtest/realtime_demo.sh
 
+# The kit's guard (root justfile) covers only kit/tags_gen.go; the overlay's
+# tags_gen.go goes just as stale when vocab.json (ours or the kit's) changes.
+generate-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    go generate ./dope/web/ui
+    if ! git diff --exit-code -- dope/web/ui/tags_gen.go; then
+      echo "dope/web/ui/tags_gen.go is stale: regenerated from vocab.json, commit the result" >&2
+      exit 1
+    fi
+
 pre-commit:
     just fmt
     just vet
     just tidy-check
+    just generate-check
     just test
 
 # Mint a one-shot invite code and print it. Reads DOPE_DB from .env.

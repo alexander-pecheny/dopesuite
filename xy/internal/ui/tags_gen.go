@@ -148,6 +148,7 @@ var CheckPlain = base.CheckPlain
 var EditorPlain = base.EditorPlain
 var DirRow = base.DirRow
 var DirCol = base.DirCol
+var HintDanger = base.HintDanger
 var JustifyStart = base.JustifyStart
 var JustifyCenter = base.JustifyCenter
 var JustifyEnd = base.JustifyEnd
