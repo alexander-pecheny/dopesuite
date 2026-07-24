@@ -174,7 +174,7 @@ func targets() []target {
 				Outdir:              "dopeuikit/assets/dist",
 			},
 			{
-				EntryPointsAdvanced: entries("dopeuikit/assets/ts/", "menu-model"),
+				EntryPointsAdvanced: entries("dopeuikit/assets/ts/", "menu-model", "login-model"),
 				Format:              api.FormatESModule,
 				Outdir:              "dopeuikit/assets/dist/esm",
 			},

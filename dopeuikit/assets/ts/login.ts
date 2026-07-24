@@ -4,6 +4,9 @@
 //     username is an existing password account, proves the password to link it).
 //   • «Войти по паролю» — username + password, existing accounts only.
 // Registration is not a separate flow: the telegram button creates the account.
+// The flow decisions live in login-model.ts; this file only binds the DOM.
+
+import { claimOutcome, errorMessage, pollTelegram, tgStartView } from "./login-model";
 
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -76,12 +79,12 @@ async function startTelegram(): Promise<void> {
   setText(methodMessage, "");
   setStatus("saving");
   try {
-    const res = (await fetchJSON("/api/auth/tg/start", { method: "POST" })) as {
-      code: string;
+    const res = tgStartView((await fetchJSON("/api/auth/tg/start", { method: "POST" })) as {
+      code?: string;
       bot_username?: string;
-    };
+    });
     code = res.code;
-    showCode(res.bot_username || "");
+    showCode(res);
     setText(codeMessage, "");
     showStep("code");
     setStatus("saved");
@@ -92,12 +95,12 @@ async function startTelegram(): Promise<void> {
   }
 }
 
-function showCode(bot: string): void {
-  tgCode.textContent = code;
-  if (bot) {
-    tgBotName.textContent = "@" + bot;
-    tgDeepLink.textContent = "t.me/" + bot;
-    tgDeepLink.href = "https://t.me/" + bot + "?start=" + encodeURIComponent(code);
+function showCode(view: ReturnType<typeof tgStartView>): void {
+  tgCode.textContent = view.code;
+  if (view.deepLinkHref) {
+    tgBotName.textContent = view.botName;
+    tgDeepLink.textContent = view.deepLinkLabel;
+    tgDeepLink.href = view.deepLinkHref;
     tgDeepLink.target = "_blank";
     tgDeepLink.rel = "noopener";
     tgDeepLink.hidden = false;
@@ -135,34 +138,15 @@ async function poll(): Promise<void> {
   if (polling) return;
   polling = true;
   const forCode = code;
-  for (let i = 0; i < 120 && forCode === code; i++) {
-    await sleep(1500);
-    let st: { status?: string };
-    try {
-      st = (await fetchJSON("/api/auth/tg/status?code=" + encodeURIComponent(forCode))) as {
-        status?: string;
-      };
-    } catch {
-      continue;
-    }
-    if (st.status === "ready") {
-      redirectToHost();
-      polling = false;
-      return;
-    }
-    if (st.status === "choose_username") {
-      showStep("username");
-      polling = false;
-      return;
-    }
-    if (st.status === "expired" || st.status === "not_found") {
-      setText(codeMessage, "Код истёк. Начните вход заново.");
-      polling = false;
-      return;
-    }
-  }
+  const outcome = await pollTelegram(forCode, () => forCode === code, {
+    fetchStatus: async (c) =>
+      (await fetchJSON("/api/auth/tg/status?code=" + encodeURIComponent(c))) as { status?: string },
+    sleep,
+  });
   polling = false;
-  setText(codeMessage, "Время ожидания вышло. Обновите страницу.");
+  if (outcome.kind === "redirect") redirectToHost();
+  else if (outcome.kind === "step") showStep(outcome.step);
+  else if (outcome.kind === "message") setText(codeMessage, outcome.text);
 }
 
 usernameForm.addEventListener("submit", (event) => {
@@ -192,23 +176,24 @@ async function claim(password: string, messageNode: HTMLElement): Promise<void> 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code, username, password }),
     })) as { status?: string };
-    if (res.status === "ready") {
+    const outcome = claimOutcome(res.status);
+    if (outcome.kind === "redirect") {
       redirectToHost();
       return;
     }
-    if (res.status === "password_required") {
+    if (outcome.kind === "step") {
       linkPassword.value = "";
-      showStep("link");
+      showStep(outcome.step);
       setStatus("saved");
       return;
     }
-    if (res.status === "username_taken") {
-      setText(usernameMessage, "Логин занят, выберите другой.");
+    if (outcome.kind === "username_taken") {
+      setText(usernameMessage, outcome.text);
       showStep("username");
       setStatus("error");
       return;
     }
-    setText(messageNode, "Что-то пошло не так, попробуйте снова.");
+    setText(messageNode, outcome.text);
     setStatus("error");
   } catch (error) {
     setText(messageNode, errorMessage(error));
@@ -261,10 +246,6 @@ async function fetchJSON(url: string, init?: RequestInit): Promise<unknown> {
   }
   if (response.status === 204) return null;
   return response.json();
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function setText(node: HTMLElement, text: string): void {
