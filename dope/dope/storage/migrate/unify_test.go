@@ -231,4 +231,33 @@ values (1, 1, 4, 1, 4, ?, 'now')`, journal.Compress(journal.EncodeSegment(segRec
 	if string(recs[3].Args) != string(generic) {
 		t.Fatalf("segment event record rewritten: %x", recs[3].Args)
 	}
+
+	// Re-run safety: with another flat game still pending (a crash mid-run
+	// leaves exactly this), the already-converted game's match blob must not
+	// be wiped by re-copying its blanked staging column.
+	var matchState string
+	if err := db.QueryRow(`select state_json from matches where id = ?`, matchID).Scan(&matchState); err != nil {
+		t.Fatal(err)
+	}
+	if matchState != `{"x":1}` {
+		t.Fatalf("converted match blob = %s", matchState)
+	}
+	mustExec(`update matches set state_json = '{"x":1,"edited":true}' where id = ?`, matchID)
+	mustExec(`insert into games(id, fest_id, title, state_json, status, game_type) values (2, 1, 'flat2', '{"z":3}', 'active', 'od')`)
+	if err := RunUnifyConversion(db); err != nil {
+		t.Fatalf("re-run: %v", err)
+	}
+	if err := db.QueryRow(`select state_json from matches where id = ?`, matchID).Scan(&matchState); err != nil {
+		t.Fatal(err)
+	}
+	if matchState != `{"x":1,"edited":true}` {
+		t.Fatalf("re-run wiped the converted match blob: %s", matchState)
+	}
+	var second string
+	if err := db.QueryRow(`select m.state_json from matches m where m.game_id = 2 and m.code = 'main'`).Scan(&second); err != nil {
+		t.Fatal(err)
+	}
+	if second != `{"z":3}` {
+		t.Fatalf("pending game not converted on re-run: %s", second)
+	}
 }

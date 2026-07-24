@@ -209,6 +209,12 @@ where game_type in ('od', 'ksi', 'si')`, nil,
 		}
 		matchOf[g.id] = matchID
 		stageOf[g.id] = stageID
+		// The blanked staging column marks a game as moved: a re-run after a
+		// mid-loop crash must not copy '{}' over a match blob that already
+		// holds the state (and post-migration games are born blanked).
+		if g.state == "" || g.state == "{}" {
+			continue
+		}
 		if _, err := db.ExecContext(ctx,
 			`update matches set state_json = ? where id = ?`, g.state, matchID); err != nil {
 			return err
