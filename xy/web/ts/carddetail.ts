@@ -888,7 +888,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   byId("cardTypo").addEventListener("click", async () => {
     captureDraft();
     if (!draft.desc.trim()) return;
-    if (!xySync.isOnline()) { alert("Типографика доступна только онлайн."); return; }
+    if (!xySync.requireOnline("Типографика доступна только онлайн.")) return;
     setStatus("saving");
     try {
       const res = await fetch("/api/typo", {
@@ -920,7 +920,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const ta = cardDescEl;
     const text = ta.value.trim();
     if (!text) return;
-    if (!xySync.isOnline()) { alert("Разбор текста доступен только онлайн."); return; }
+    if (!xySync.requireOnline("Разбор текста доступен только онлайн.")) return;
     setStatus("saving");
     try {
       const res = await fetch("/api/import/text", {
@@ -1286,7 +1286,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // Copying — and anything touching another board — carries comments/attachments
     // and re-encrypts, so it's online-only.
     const intraBoardMove = sameBoard && remove;
-    if (!intraBoardMove && !xySync.isOnline()) { msg.textContent = "Копирование и перенос между досками доступны только онлайн."; return; }
+    if (!intraBoardMove && !xySync.requireOnline("Копирование и перенос между досками доступны только онлайн.", msg)) return;
     msg.textContent = sameBoard ? "Сохранение…" : "Перешифровка…";
     try {
       if (sameBoard) {

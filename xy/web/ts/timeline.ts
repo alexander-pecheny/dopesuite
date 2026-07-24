@@ -533,7 +533,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // refreshes the выписки counter), reporting failures in the card's message line.
   async function commentAction(fn: () => Promise<unknown>): Promise<void> {
     const msg = byId("cardMessage");
-    if (!xySync.isOnline()) { msg.textContent = "Правка комментариев доступна только онлайн."; return; }
+    if (!xySync.requireOnline("Правка комментариев доступна только онлайн.", msg)) return;
     try {
       await fn();
       msg.textContent = "";

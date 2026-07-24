@@ -194,7 +194,7 @@ async function renameBoard(): Promise<void> {
   if (name == null) return;
   const t = name.trim();
   if (!t || t === state.name) return;
-  if (!xySync.isOnline()) { alert("Переименование доски доступно только онлайн."); return; }
+  if (!xySync.requireOnline("Переименование доски доступно только онлайн.")) return;
   setStatus("saving");
   try {
     await jpatch(`/api/boards/${boardId}`, { name: t });
@@ -207,7 +207,7 @@ async function renameBoard(): Promise<void> {
 
 async function deleteBoard(): Promise<void> {
   if (state.role !== "owner") { alert("Удалить доску может только её владелец."); return; }
-  if (!xySync.isOnline()) { alert("Удаление доски доступно только онлайн."); return; }
+  if (!xySync.requireOnline("Удаление доски доступно только онлайн.")) return;
   const warn = "Доска со всеми списками, карточками и вложениями будет скрыта сразу и безвозвратно удалена через 14 дней.";
   const name = (state.name || "").trim();
   if (name) {
@@ -972,7 +972,7 @@ async function moveListCopyLocked(remove: boolean, src: BoardList, ctx: MoveCtx)
 
   // Copying a list (it carries every card's comments/attachments) and any
   // cross-board op are online-only; only the intra-board move above works offline.
-  if (!xySync.isOnline()) { msg.textContent = "Копирование и перенос между досками доступны только онлайн."; return; }
+  if (!xySync.requireOnline("Копирование и перенос между досками доступны только онлайн.", msg)) return;
   msg.textContent = sameBoard ? "Копирование…" : "Перешифровка…";
   try {
     if (sameBoard) {
@@ -1290,7 +1290,7 @@ async function linkSelected(): Promise<void> {
   const selected = units.filter((u) => manageSelected.has(u.key));
   if (selected.length < 2 || selected.some((u) => u.kind !== "list")) return;
   const msg = byId("listsManageMessage");
-  if (!xySync.isOnline()) { msg.textContent = "Связывание списков доступно только онлайн."; return; }
+  if (!xySync.requireOnline("Связывание списков доступно только онлайн.", msg)) return;
   const name = (prompt("Название списка списков:", "") || "").trim();
   if (!name) return;
   // Preserve board order (units are rank-sorted).
@@ -1308,7 +1308,7 @@ async function renameGroup(gid: number): Promise<void> {
   const name = (prompt("Новое название группы:", g ? g.name : "") || "").trim();
   if (!name) return;
   const msg = byId("listsManageMessage");
-  if (!xySync.isOnline()) { msg.textContent = "Переименование доступно только онлайн."; return; }
+  if (!xySync.requireOnline("Переименование доступно только онлайн.", msg)) return;
   try {
     await jpatch(`/api/list-groups/${gid}`, { name_enc: await xyCrypto.encField(mustDK(), name) });
     await unlock.load();
@@ -1319,7 +1319,7 @@ async function renameGroup(gid: number): Promise<void> {
 async function unlinkGroup(gid: number): Promise<void> {
   if (!confirm("Разъединить группу? Списки останутся, но нумерация снова станет раздельной.")) return;
   const msg = byId("listsManageMessage");
-  if (!xySync.isOnline()) { msg.textContent = "Разъединение доступно только онлайн."; return; }
+  if (!xySync.requireOnline("Разъединение доступно только онлайн.", msg)) return;
   try {
     await jdelete(`/api/list-groups/${gid}`);
     await unlock.load();
@@ -1376,7 +1376,7 @@ importPickOverlay.addEventListener("pointerdown", (e) => { if (e.target === impo
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !importPickOverlay.hidden) closeImportPick(); });
 
 async function importFile(file: File, splitTours: boolean): Promise<void> {
-  if (!xySync.isOnline()) { alert("Импорт доступен только онлайн."); return; }
+  if (!xySync.requireOnline("Импорт доступен только онлайн.")) return;
   setStatus("saving");
   try {
     const fd = new FormData();
@@ -1521,7 +1521,7 @@ function splitCardsByTours(cards: ImportCard[]): Array<{ title: string; cards: I
 async function commitImport(name: string, source: string, images: ImportImage[] | undefined, splitTours: boolean): Promise<void> {
   const cards = importCards(source);
   if (!cards.length) { alert("В файле не найдено вопросов."); return; }
-  if (!xySync.isOnline()) { alert("Импорт доступен только онлайн."); return; }
+  if (!xySync.requireOnline("Импорт доступен только онлайн.")) return;
   const tours = splitTours ? splitCardsByTours(cards) : [];
   // The server refuses a group of one, and a group of one is pointless anyway.
   const grouped = tours.length >= 2;
@@ -1640,7 +1640,7 @@ async function exportList(list: BoardList, format = "docx", mobile = false): Pro
   if (mobile) scope.title += "_mobile";
   const cards = scope.cards;
   if (!cards.length) { alert("В списке нет карточек."); return; }
-  if (!xySync.isOnline()) { alert(`Экспорт в ${ext} доступен только онлайн.`); return; }
+  if (!xySync.requireOnline(`Экспорт в ${ext} доступен только онлайн.`)) return;
   setStatus("saving");
   try {
     const source = cards.map((c) => c.desc.trim()).filter(Boolean).join("\n\n") + "\n";
@@ -1771,7 +1771,7 @@ async function closeHandouts(): Promise<void> {
 
 async function generateHandoutsPdf(): Promise<void> {
   if (!handoutsCtx) return;
-  if (!xySync.isOnline()) { byId("handoutsMessage").textContent = "Генерация PDF доступна только онлайн."; return; }
+  if (!xySync.requireOnline("Генерация PDF доступна только онлайн.", byId("handoutsMessage"))) return;
   const source = byId<HTMLTextAreaElement>("handoutsSource").value;
   const msg = byId("handoutsMessage");
   if (!source.trim()) { msg.textContent = "Пустой источник."; return; }
@@ -1901,7 +1901,7 @@ async function appendImages(fd: FormData, cards: ReadonlyArray<{ id: number }>, 
 async function generateSplitFitZip(): Promise<void> {
   if (!handoutsCtx) return;
   const msg = byId("handoutsMessage");
-  if (!xySync.isOnline()) { msg.textContent = "Split-fit доступен только онлайн."; return; }
+  if (!xySync.requireOnline("Split-fit доступен только онлайн.", msg)) return;
   const source = byId<HTMLTextAreaElement>("handoutsSource").value;
   if (!source.trim()) { msg.textContent = "Пустой источник."; return; }
   const btn = byId<HTMLButtonElement>("handoutsSplitFit");
@@ -2645,7 +2645,7 @@ function attachMenu(anchor: HTMLElement, att: NamedAttachment, name: string): vo
 
 async function attachAction(fn: () => Promise<unknown>): Promise<void> {
   const msg = byId("cardMessage");
-  if (!xySync.isOnline()) { msg.textContent = "Правка вложений доступна только онлайн."; return; }
+  if (!xySync.requireOnline("Правка вложений доступна только онлайн.", msg)) return;
   try {
     await fn();
     msg.textContent = "";
@@ -2741,7 +2741,7 @@ byId("attachUpload").addEventListener("click", async () => {
   const input = byId<HTMLInputElement>("attachFile");
   const file = input.files && input.files[0];
   if (!file || cardDetail.openCardId() == null) return;
-  if (!xySync.isOnline()) { byId("cardMessage").textContent = "Загрузка вложений доступна только онлайн."; return; }
+  if (!xySync.requireOnline("Загрузка вложений доступна только онлайн.", byId("cardMessage"))) return;
   const compress = byId<HTMLInputElement>("attachCompress").checked;
   try {
     await uploadAttachment(file, !compress, file.name);
@@ -2806,7 +2806,7 @@ byId("pasteForm").addEventListener("submit", async (e) => {
   const compress = byId<HTMLInputElement>("pasteCompress").checked;
   const name = withExt(byId<HTMLInputElement>("pasteName").value, compress ? "webp" : extFromMime(file.type));
   closePasteModal();
-  if (!xySync.isOnline()) { msg.textContent = "Загрузка вложений доступна только онлайн."; return; }
+  if (!xySync.requireOnline("Загрузка вложений доступна только онлайн.", msg)) return;
   try {
     await uploadAttachment(file, !compress, name);
   } catch (err) { msg.textContent = errMsg(err); }
@@ -2946,7 +2946,7 @@ async function download(att: NamedAttachment, name: string): Promise<void> {
 
 async function removeAttachment(att: NamedAttachment, name: string): Promise<void> {
   if (!confirm(`Удалить вложение «${name}»?`)) return;
-  if (!xySync.isOnline()) { byId("cardMessage").textContent = "Удаление вложений доступно только онлайн."; return; }
+  if (!xySync.requireOnline("Удаление вложений доступно только онлайн.", byId("cardMessage"))) return;
   try {
     const ev = await xyCrypto.encField(mustDK(), JSON.stringify({ file: name }));
     await jdelete(`/api/attachments/${att.id}?event_payload_enc=${encodeURIComponent(ev)}`);

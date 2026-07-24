@@ -212,7 +212,7 @@ createForm.addEventListener("submit", async (e) => {
   if (!name || !pass) return;
   const passErr = xyCrypto.validatePassphrase(pass);
   if (passErr) { createMessage.textContent = passErr; return; }
-  if (!xySync.isOnline()) { createMessage.textContent = "Создание доски доступно только онлайн."; return; }
+  if (!xySync.requireOnline("Создание доски доступно только онлайн.", createMessage)) return;
   try {
     // The passphrase still mints the board's data key (lists/cards stay encrypted);
     // only the name travels in the clear now.

@@ -392,6 +392,17 @@ async function timelineFor(cardId: number | string): Promise<TimelineEvent[]> {
 }
 async function cacheTimeline(cardId: number | string, events: TimelineEvent[]): Promise<void> { await xyStore.putTimeline(cardId, events); }
 
+// requireOnline gates actions the outbox can't queue (cross-board copy,
+// exports, attachment bytes, board rename…): true when online; offline it
+// shows `message` — in messageNode when given, else as an alert — and returns
+// false. One gate, one reporting path, instead of per-call-site ritual.
+function requireOnline(message: string, messageNode?: { textContent: string | null } | null): boolean {
+  if (isOnline()) return true;
+  if (messageNode) messageNode.textContent = message;
+  else alert(message);
+  return false;
+}
+
 // ---- lifecycle ----
 
 let started = false;
@@ -406,7 +417,7 @@ function start(): void {
 
 export const xySync = {
   mutate, flush, start,
-  isOnline, status, onStatus, onBoardSynced,
+  isOnline, requireOnline, status, onStatus, onBoardSynced,
   saveSnapshot, loadSnapshot, pendingCount, pendingCountForBoard, pendingOps,
   timelineFor, cacheTimeline,
   getAttachment: xyStore.getAttachment, putAttachment: xyStore.putAttachment,
