@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type Store struct {
@@ -67,6 +68,34 @@ func (s *Store) Put(r io.Reader) (string, int64, error) {
 // Open returns a reader over the ciphertext for ref.
 func (s *Store) Open(ref string) (*os.File, error) {
 	return os.Open(s.path(ref))
+}
+
+// ListOlderThan returns the refs of all blobs last modified before cutoff.
+func (s *Store) ListOlderThan(cutoff time.Time) ([]string, error) {
+	shards, err := os.ReadDir(s.root)
+	if err != nil {
+		return nil, err
+	}
+	var refs []string
+	for _, sh := range shards {
+		if !sh.IsDir() {
+			continue
+		}
+		files, err := os.ReadDir(filepath.Join(s.root, sh.Name()))
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			info, err := f.Info()
+			if err != nil {
+				continue
+			}
+			if info.ModTime().Before(cutoff) {
+				refs = append(refs, f.Name())
+			}
+		}
+	}
+	return refs, nil
 }
 
 // Remove deletes the blob for ref (best-effort).

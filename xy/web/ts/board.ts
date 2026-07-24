@@ -187,8 +187,8 @@ window.dopeMenu?.setExtras([{
 xySizes.apply(state.sizes);
 
 // renameBoard / deleteBoard touch board-level metadata, which isn't part of the
-// per-board sync outbox (lists/cards) — so both are online-only. The server soft-
-// deletes the board (owner-only) and excludes it from the board list thereafter.
+// per-board sync outbox (lists/cards) — so both are online-only. The server
+// tombstones the board (owner-only); the reaper destroys it after 14 days.
 async function renameBoard(): Promise<void> {
   const name = prompt("Новое название доски:", state.name || "");
   if (name == null) return;
@@ -207,8 +207,14 @@ async function renameBoard(): Promise<void> {
 
 async function deleteBoard(): Promise<void> {
   if (state.role !== "owner") { alert("Удалить доску может только её владелец."); return; }
-  if (!confirm(`Удалить доску «${state.name || ""}» со всеми списками и карточками? Это действие необратимо.`)) return;
   if (!xySync.isOnline()) { alert("Удаление доски доступно только онлайн."); return; }
+  const warn = "Доска со всеми списками, карточками и вложениями будет скрыта сразу и безвозвратно удалена через 14 дней.";
+  const name = (state.name || "").trim();
+  if (name) {
+    const typed = prompt(`${warn}\n\nЧтобы подтвердить, введите название доски:`);
+    if (typed == null) return;
+    if (typed.trim() !== name) { alert("Название не совпало — удаление отменено."); return; }
+  } else if (!confirm(`${warn} Продолжить?`)) return;
   try {
     await jdelete(`/api/boards/${boardId}`);
     try { await xyCrypto.forgetDK(boardId); } catch (_) {}

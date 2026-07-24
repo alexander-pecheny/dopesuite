@@ -15,20 +15,27 @@ func humanMB(b int64) string {
 }
 
 // storageUsageSQL sums the bytes a user's own boards hold: attachment blobs plus
-// every encrypted content column, excluding soft-deleted rows. It is the same
-// figure shown on /profile and enforced on upload. The uid is bound five times,
-// once per board-scoped subquery.
+// every encrypted content column. Tombstones don't count, including everything
+// under a tombstoned board or card (ADR-0002: quota-free until reaped). Shown on
+// /profile and enforced on upload; the uid is bound five times, once per subquery.
 const storageUsageSQL = `
 select
-  coalesce((select sum(a.size) from attachments a join boards b on b.id = a.board_id
+  coalesce((select sum(a.size) from attachments a
+            join boards b on b.id = a.board_id and b.deleted_at is null
+            join cards ac on ac.id = a.card_id and ac.deleted_at is null
             where b.owner_user_id = ? and a.deleted_at is null), 0)
-+ coalesce((select sum(length(c.description_enc) + coalesce(length(c.alias_enc), 0)) from cards c join boards b on b.id = c.board_id
++ coalesce((select sum(length(c.description_enc) + coalesce(length(c.alias_enc), 0)) from cards c
+            join boards b on b.id = c.board_id and b.deleted_at is null
             where b.owner_user_id = ? and c.deleted_at is null), 0)
-+ coalesce((select sum(length(l.title_enc)) from lists l join boards b on b.id = l.board_id
++ coalesce((select sum(length(l.title_enc)) from lists l
+            join boards b on b.id = l.board_id and b.deleted_at is null
             where b.owner_user_id = ? and l.deleted_at is null), 0)
-+ coalesce((select sum(length(lb.name_enc) + length(lb.color_enc)) from labels lb join boards b on b.id = lb.board_id
++ coalesce((select sum(length(lb.name_enc) + length(lb.color_enc)) from labels lb
+            join boards b on b.id = lb.board_id and b.deleted_at is null
             where b.owner_user_id = ? and lb.deleted_at is null), 0)
-+ coalesce((select sum(length(t.payload_enc)) from timeline_events t join boards b on b.id = t.board_id
++ coalesce((select sum(length(t.payload_enc)) from timeline_events t
+            join boards b on b.id = t.board_id and b.deleted_at is null
+            join cards tc on tc.id = t.card_id and tc.deleted_at is null
             where b.owner_user_id = ? and t.deleted_at is null), 0)`
 
 type rowQuerier interface {

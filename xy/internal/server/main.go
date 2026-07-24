@@ -27,6 +27,10 @@ func Main() {
 		runAddUser(os.Args[2:])
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "gc" {
+		runGC()
+		return
+	}
 
 	srv, err := newServer()
 	if err != nil {
@@ -182,6 +186,7 @@ func Main() {
 	// Compile typst (wasm) ahead of the first handout request: cold, that is a ~15s
 	// wasm compile, which no user should sit through.
 	srv.warmTypst()
+	go srv.reapLoop()
 
 	log.Printf("xy serving on %s (assets from %s)", addr, srv.assets.Mode)
 

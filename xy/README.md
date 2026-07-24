@@ -139,14 +139,14 @@ Set `XY_TYPST_TEST_BIN` to a typst binary to run those tests.
 ## Deployment & backups
 
 **Attachment bytes are files on disk, not rows in SQLite** (`internal/blobstore`:
-content-addressed, sharded, write-once). The DB only stores a `blob_ref`. So a
+random-ref, sharded, write-once). The DB only stores a `blob_ref`. So a
 backup has **two halves, and a restore needs both** — restore `xy.db` alone and
 every attachment becomes a dangling ref:
 
 | what | how | where |
 | --- | --- | --- |
 | `xy.db` | litestream (continuous) | `r2:backups/xy/xy.db` |
-| `blobs/` | `rclone copy`, hourly systemd timer | `r2:backups/xy/blobs` |
+| `blobs/` | `rclone sync --backup-dir`, hourly systemd timer | `r2:backups/xy/blobs` (trash: `…/blobs-trash/<date>`) |
 
 The `xy.db` half is mostly ciphertext, but note that **board names are plaintext**
 (see the trust model) — they, and the structural metadata, are visible to whoever
@@ -163,12 +163,17 @@ chown -R xy:xy /var/lib/xy
 
 Two deliberate choices worth knowing:
 
-- **`rclone copy`, not `sync`.** Blobs are immutable, so the backup only ever needs
-  to grow. `sync` would mirror deletions — one accidental attachment delete would
-  propagate to R2 and the bytes would be gone for good.
+- **`sync` with a trash prefix, matching the tombstone model** (ADR-0002).
+  Deletion in xy is a 14-day tombstone, then a reaper destroys rows and blobs
+  (`xy-server gc` runs the same pass on demand). The backup follows: `sync`
+  MOVES a locally-deleted blob into a dated `blobs-trash/` prefix rather than
+  deleting it, and the same timer prunes trash older than 14 days. So both
+  halves share one recovery window — a tombstone restores by SQL, a
+  mistakenly-purged blob restores from trash — and truly deleted data leaves R2
+  within ~28 days of the user's delete.
 - **Blobs are not stored in SQLite**, which would have given one backup mechanism
   instead of two. litestream takes timer-driven *full* snapshots: a 1.6 MB `xy.db`
   costs 21.5 MB in R2 (13 daily snapshots × ~1 MB, at a 14-day retention) — a ~13×
   amplification. Ciphertext does not compress, so blobs in the DB would be
-  re-uploaded in full on every snapshot; `rclone copy` of an immutable
-  content-addressed tree uploads each blob exactly once, ever.
+  re-uploaded in full on every snapshot; `rclone sync` of an immutable
+  write-once tree uploads each blob exactly once.

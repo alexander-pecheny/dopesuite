@@ -33,3 +33,6 @@ The one wire format for ciphertext: `magic("xy1") | alg | nonce | ct+tag`, base6
 
 **Outbox**:
 The offline mutation queue (`sync.js`): entities created offline get negative temp ids, remapped to real ids on flush.
+
+**Tombstone**:
+Any deleted entity during its 14-day grace period: hidden from the app and from quota, restorable on request. After 14 days it is reaped — permanently destroyed, including attachment bytes.

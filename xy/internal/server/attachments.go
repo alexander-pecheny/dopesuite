@@ -307,9 +307,8 @@ func (s *server) handleDeleteAttachment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var bid, cardID int64
-	var ref string
-	err := s.db.QueryRowContext(r.Context(), `select board_id, card_id, blob_ref from attachments where id = ? and deleted_at is null`, attID).
-		Scan(&bid, &cardID, &ref)
+	err := s.db.QueryRowContext(r.Context(), `select board_id, card_id from attachments where id = ? and deleted_at is null`, attID).
+		Scan(&bid, &cardID)
 	if errors.Is(err, sql.ErrNoRows) {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -333,6 +332,7 @@ func (s *server) handleDeleteAttachment(w http.ResponseWriter, r *http.Request) 
 	if handleErr(w, err) {
 		return
 	}
-	_ = s.blobs.Remove(ref)
+	// The blob stays on disk: a tombstoned attachment is restorable for 14 days,
+	// and only the reaper destroys bytes (ADR-0002).
 	w.WriteHeader(http.StatusNoContent)
 }

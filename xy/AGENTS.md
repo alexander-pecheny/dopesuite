@@ -87,6 +87,9 @@ internal/server/       package server — the whole HTTP server
                        behind the editor's «типограф» button. Plaintext in, plaintext out, nothing kept
   handouts.go          POST /api/handouts/{pdf,split_fit} — fully in-process (chgk/handout + typst as a wasm module, see typst.go). No Python, no typst binary, nothing written to disk. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
   typst.go             the shared typst (wasm) pool: built once, warmed at boot, injectable so handler tests stub it. XY_WASM_CACHE must be persistent (~15s cold compile vs ~0.6s cached)
+  reap.go              the tombstone reaper (ADR-0002): every delete is a 14-day tombstone; an hourly
+                       loop (+ `xy-server gc` on demand) hard-deletes expired ones, destroys their blobs,
+                       and sweeps orphaned blob files
   staging.go           handout image staging: /api/handouts/{stage,heartbeat,DELETE stage} — client uploads referenced images once on modal open; pdf/split_fit reuse them via a session id (reaped after ~1min of no heartbeat) instead of re-uploading each generate. Staged images live in memory only, never on disk
   multipart.go         readMultipart: in-memory multipart parsing for every endpoint that receives plaintext (export/handouts/staging/import). ParseMultipartForm spills parts over its budget into an unmanaged temp file — plaintext on disk is exactly what xy must not do. (attachments.go still uses it: those uploads are ciphertext.)
   debug.go             [timing] logs on export/handout endpoints, gated by XY_DEBUG_TIMING
@@ -146,9 +149,9 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        of PNG — most of the exported file. Don't "simplify" this back to a plain ToPNG.
   *_test.go            full-flow integration test (register→board→card→label→timeline+ACL)
 internal/session/      cookie + session.User (ported from dope/platform/session)
-internal/blobstore/    attachment bytes ON DISK (content-addressed, sharded, write-once); the DB
+internal/blobstore/    attachment bytes ON DISK (random-ref, sharded, write-once); the DB
                        stores only a blob_ref. NB: backups therefore have two halves — litestream
-                       replicates xy.db, an hourly `rclone copy` replicates blobs/. Restore the DB
+                       replicates xy.db, an hourly `rclone sync --backup-dir` replicates blobs/ (deletions go to a dated trash prefix, pruned after 14d). Restore the DB
                        alone and every attachment is a dangling ref. See README "Deployment & backups".
 web/assets/            //go:embed static + ui (package assets)
   ui/                  the 7 app pages as .dopeui (index, board, login, register,
