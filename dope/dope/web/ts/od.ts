@@ -1577,7 +1577,24 @@ function buildInputGate(): HTMLElement {
   }
   msg.appendChild(document.createTextNode("."));
   wrap.appendChild(msg);
+  // Name the teams that are actually missing one: in a 30-team fest a single
+  // blank is invisible in the roster, and hunting for it costs the operator
+  // minutes on a tournament day.
+  const missing = unnumberedTeamLabels();
+  if (missing.length) {
+    const detail = document.createElement("p");
+    detail.textContent = `Без номера: ${missing.join(", ")}.`;
+    wrap.appendChild(detail);
+  }
   return wrap;
+}
+
+function unnumberedTeamLabels(): string[] {
+  const labels: string[] = [];
+  for (let i = 0; i < state.teams.length; i++) {
+    if (!teamNumber(i)) labels.push(teamLabel(i));
+  }
+  return labels;
 }
 
 function lockCell(qIndex: number, className: string): HTMLTableCellElement {
