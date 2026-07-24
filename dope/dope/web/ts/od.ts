@@ -2671,7 +2671,7 @@ function resultsTeamCell(index: number, opts: {showCity?: boolean; flag?: string
   const nameTd = document.createElement("td");
   nameTd.className = "results-team";
   const teamLabelText = team.name || `Команда ${index + 1}`;
-  const displayText = flag ? `${flag} ${teamLabelText}` : teamLabelText;
+  const displayText = flag ? `${flag} ${teamLabelText}` : teamLabelText;
   const nameWrap = document.createElement("span");
   nameWrap.className = "results-team-name-wrap";
   const nameSpan = document.createElement("span");

@@ -3315,13 +3315,13 @@ export function computeEKPlayerStats(stages: EKStage[] | null | undefined): EKPl
   const battleSeen = new Map<string, Set<string>>(); // key → Set of battle ids (for the Бои count)
   for (const stage of stages || []) {
     for (const match of stage.matches || []) {
-      const battleID = `${stage.code || ""}${match.code || ""}`;
+      const battleID = `${stage.code || ""}\x1f${match.code || ""}`;
       for (const team of match.teams || []) {
         const teamName = team.name || "";
         for (const theme of team.themes || []) {
           const playerName = String(theme.player || "").trim();
           if (!playerName) continue;
-          const key = `${teamName}${playerName}`;
+          const key = `${teamName}\x1f${playerName}`;
           let row = players.get(key);
           let seen = battleSeen.get(key);
           if (!row || !seen) {

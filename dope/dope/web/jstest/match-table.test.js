@@ -314,6 +314,26 @@ test("computeEKPlayerStats aggregates per player across battles, regular themes 
   assert.equal(Math.round(bob.share * 100), 38); // 30/80
 });
 
+test("computeEKPlayerStats keys by (team, player) — concatenation collisions stay separate", () => {
+  const stages = [
+    {code: "r16", matches: [
+      {code: "A", teams: [
+        {name: "Альфа", themes: [{player: "Бета", answers: ["right", "", "", "", ""]}]},
+        {name: "АльфаБ", themes: [{player: "ета", answers: ["", "right", "", "", ""]}]},
+      ]},
+      // battle-id collision: (stage "r16", match "8") vs (stage "r168", match "")
+      {code: "8", teams: [{name: "Альфа", themes: [{player: "Бета", answers: ["right", "", "", "", ""]}]}]},
+    ]},
+    {code: "r168", matches: [
+      {code: "", teams: [{name: "Альфа", themes: [{player: "Бета", answers: ["", "", "right", "", ""]}]}]},
+    ]},
+  ];
+  const rows = T.computeEKPlayerStats(stages);
+  assert.equal(rows.length, 2, "colliding (team,player) concatenations must not merge");
+  const beta = rows.find((r) => r.team === "Альфа");
+  assert.equal(beta.battles, 3, "colliding battle ids must count separately");
+});
+
 test("computeEKPlayerStats team-share zeroes out non-helpers", () => {
   const stages = [
     {code: "r16", matches: [
