@@ -134,58 +134,67 @@ func xySWBuild() api.BuildOptions {
 	}
 }
 
+// builds is lazy so selecting one target never runs another's filesystem
+// work — xySWBuild reads (and fatals on) xy+kit assets, which a dope-only
+// build must not depend on.
 type target struct {
 	name   string
-	builds []api.BuildOptions
+	builds func() []api.BuildOptions
 }
 
 func targets() []target {
 	return []target{
-		{"dope", []api.BuildOptions{
-			{
-				EntryPointsAdvanced: entries("dope/dope/web/ts/pages/", "od", "si", "host", "viewer"),
-				Bundle:              true,
-				Format:              api.FormatIIFE,
-				Outdir:              "dope/dope/web/assets/static/dist",
-			},
-			// Builder-page classic scripts: self-contained IIFE bundles, one per script.
-			{
-				EntryPointsAdvanced: entries("dope/dope/web/ts/",
-					"pageforms", "menu-config", "gamecreate", "numbers", "profile", "roster"),
-				Bundle: true,
-				Format: api.FormatIIFE,
-				Outdir: "dope/dope/web/assets/static/dist",
-			},
-			// Library modules as ESM for the test runner (not embedded, not served).
-			{
-				EntryPointsAdvanced: entries("dope/dope/web/ts/",
-					"entry-model", "match-table", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid"),
-				Format: api.FormatESModule,
-				Outdir: "dope/dope/web/jstest/dist",
-			},
+		{"dope", func() []api.BuildOptions {
+			return []api.BuildOptions{
+				{
+					EntryPointsAdvanced: entries("dope/dope/web/ts/pages/", "od", "si", "host", "viewer"),
+					Bundle:              true,
+					Format:              api.FormatIIFE,
+					Outdir:              "dope/dope/web/assets/static/dist",
+				},
+				// Builder-page classic scripts: self-contained IIFE bundles, one per script.
+				{
+					EntryPointsAdvanced: entries("dope/dope/web/ts/",
+						"pageforms", "menu-config", "gamecreate", "numbers", "profile", "roster"),
+					Bundle: true,
+					Format: api.FormatIIFE,
+					Outdir: "dope/dope/web/assets/static/dist",
+				},
+				// Library modules as ESM for the test runner (not embedded, not served).
+				{
+					EntryPointsAdvanced: entries("dope/dope/web/ts/",
+						"entry-model", "match-table", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid"),
+					Format: api.FormatESModule,
+					Outdir: "dope/dope/web/jstest/dist",
+				},
+			}
 		}},
 		// menu/login ship as classic bundles (menu must run blocking in <head> —
 		// theme before first paint); the pure kernels also emit as ESM for tests.
-		{"uikit", []api.BuildOptions{
-			{
-				EntryPointsAdvanced: entries("dopeuikit/assets/ts/", "menu", "login"),
-				Bundle:              true,
-				Format:              api.FormatIIFE,
-				Outdir:              "dopeuikit/assets/dist",
-			},
-			{
-				EntryPointsAdvanced: entries("dopeuikit/assets/ts/", "menu-model", "login-model"),
-				Format:              api.FormatESModule,
-				Outdir:              "dopeuikit/assets/dist/esm",
-			},
+		{"uikit", func() []api.BuildOptions {
+			return []api.BuildOptions{
+				{
+					EntryPointsAdvanced: entries("dopeuikit/assets/ts/", "menu", "login"),
+					Bundle:              true,
+					Format:              api.FormatIIFE,
+					Outdir:              "dopeuikit/assets/dist",
+				},
+				{
+					EntryPointsAdvanced: entries("dopeuikit/assets/ts/", "menu-model", "login-model"),
+					Format:              api.FormatESModule,
+					Outdir:              "dopeuikit/assets/dist/esm",
+				},
+			}
 		}},
-		{"xy", []api.BuildOptions{
-			{
-				EntryPoints: xySources(),
-				Format:      api.FormatESModule,
-				Outdir:      "xy/web/assets/static/dist",
-			},
-			xySWBuild(),
+		{"xy", func() []api.BuildOptions {
+			return []api.BuildOptions{
+				{
+					EntryPoints: xySources(),
+					Format:      api.FormatESModule,
+					Outdir:      "xy/web/assets/static/dist",
+				},
+				xySWBuild(),
+			}
 		}},
 	}
 }
@@ -221,7 +230,7 @@ func main() {
 	}
 
 	all := targets()
-	byName := map[string][]api.BuildOptions{}
+	byName := map[string]func() []api.BuildOptions{}
 	for _, t := range all {
 		byName[t.name] = t.builds
 	}
@@ -235,7 +244,7 @@ func main() {
 		if !ok {
 			fatal("unknown target: " + name)
 		}
-		for _, build := range builds {
+		for _, build := range builds() {
 			build.LogLevel = api.LogLevelInfo
 			build.Target = api.ES2019
 			build.Sourcemap = api.SourceMapLinked
