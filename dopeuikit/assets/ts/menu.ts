@@ -171,10 +171,9 @@ function build(): void {
   const actions = document.querySelector(".host-actions");
   const header = document.querySelector(".public-top");
   if (actions) {
-    wrap.classList.add("menu-inline");
     actions.appendChild(wrap);
   } else if (header) {
-    wrap.classList.add("menu-inline", "menu-public");
+    wrap.classList.add("menu-public");
     header.appendChild(wrap);
   } else {
     wrap.classList.add("menu-floating");

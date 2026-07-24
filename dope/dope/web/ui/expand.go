@@ -11,9 +11,6 @@ import (
 // authored per page.
 func expandGameTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 	mainCls := []string{"game-header-main"}
-	if base.Flag(p, "viewer") {
-		mainCls = append(mainCls, "viewer-header-main")
-	}
 
 	kids := []base.Node{
 		base.El("nav", []base.Attr{base.ClassAttr("game-breadcrumbs"), base.At("id", "gameBreadcrumbs"), base.At("aria-label", "Навигация")}),

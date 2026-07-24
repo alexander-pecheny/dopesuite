@@ -143,7 +143,6 @@ var AlignStretch = base.AlignStretch
 var Primary = base.Primary
 var Ghost = base.Ghost
 var Danger = base.Danger
-var Secondary = base.Secondary
 var CheckPlain = base.CheckPlain
 var EditorPlain = base.EditorPlain
 var DirRow = base.DirRow

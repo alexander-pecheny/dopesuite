@@ -46,7 +46,6 @@
         { "name": "tabshidden", "kind": "bare" },
         { "name": "heading" },
         { "name": "progressid" },
-        { "name": "viewer", "kind": "bare" },
         { "name": "syncstate" }
       ],
       "children": "none" },

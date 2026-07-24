@@ -250,12 +250,12 @@ func textareaBody(c *ExpandCtx, attrs []Attr, p *Element) *Element {
 func expandButton(c *ExpandCtx, p *Element) []Node {
 	classes := []string{"btn"}
 	switch k, _ := Get(p, "kind"); k {
+	case "primary":
+		classes = append(classes, "btn-primary")
 	case "ghost":
 		classes = append(classes, "btn-ghost")
 	case "danger":
 		classes = append(classes, "btn-danger")
-	case "secondary":
-		classes = append(classes, "btn-secondary")
 	}
 	if Flag(p, "small") {
 		classes = append(classes, "btn-small")
