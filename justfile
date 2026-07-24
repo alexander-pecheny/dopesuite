@@ -10,7 +10,7 @@ test: test-core test-uikit
     cd xy && just test
     cd dope && just test
 
-fmt: fmt-core fmt-uikit
+fmt: fmt-core fmt-uikit fmt-scripts
     cd xy && just fmt
     cd dope && just fmt
 
@@ -19,9 +19,26 @@ vet: vet-core vet-uikit
     cd dope && just vet
 
 # Run before committing anything, anywhere in the repo.
-pre-commit: pre-commit-core pre-commit-uikit
+pre-commit: pre-commit-core pre-commit-uikit class-check
     cd xy && just pre-commit
     cd dope && just pre-commit
+
+# The Vocabulary is closed where Go emits markup, but ~72% of the class names
+# are written in TypeScript and core.css is shared by both apps — so no single
+# module can check either half. Fail when the two drift: a rule nothing emits,
+# or a name nothing styles. (xy's own dead-CSS test covers only the xy layer.)
+class-check: fmt-scripts
+    go -C scripts/classcheck vet ./...
+    go -C scripts/classcheck test ./...
+    go -C scripts/classcheck run .
+
+# scripts/ holds two Go modules (webbuild, classcheck) that no module recipe
+# reaches, so they had no fmt or vet until this.
+fmt-scripts:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(find scripts -type f -name '*.go')
+    ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
 
 # esbuild the frontend targets (shared toolchain, docs/adr/0001) — pure Go, no
 # JS runtime. No args = all targets; `just build-web dope uikit` builds some.
@@ -85,17 +102,31 @@ fmt-uikit:
 tidy-check-uikit:
     cd dopeuikit && go mod tidy -diff
 
-# Nothing else regenerates kit/tags_gen.go, so a kit/vocab.json edit that forgets
-# `go generate` ships a typed builder that doesn't match the vocabulary.
-# Fail if kit/tags_gen.go is stale w.r.t. kit/vocab.json.
+# Nothing else regenerates a tags_gen.go, so a vocab.json edit that forgets
+# `go generate` ships a typed builder that doesn't match the vocabulary. Both
+# app overlays generate from the kit's vocab as well as their own, so a kit edit
+# leaves them stale too — check all three, not just the kit.
 generate-check: build-web
     #!/usr/bin/env bash
     set -euo pipefail
-    cd dopeuikit
-    go generate ./kit
-    if ! git diff --exit-code -- kit/tags_gen.go; then
-      echo "kit/tags_gen.go is stale: regenerated from kit/vocab.json, commit the result" >&2
-      exit 1
-    fi
+    # Compare each regenerated file against what was on disk, NOT against HEAD:
+    # a git diff also fires when vocab.json and tags_gen.go are both edited
+    # correctly but not yet committed, which makes pre-commit unusable mid-change.
+    before=$(mktemp)
+    trap 'rm -f "$before"' EXIT
+    rc=0
+    for target in "dopeuikit ./kit kit/tags_gen.go" \
+                  "dope ./dope/web/ui dope/web/ui/tags_gen.go" \
+                  "xy ./internal/ui internal/ui/tags_gen.go"; do
+      set -- $target
+      cp "$1/$3" "$before"
+      (cd "$1" && go generate "$2")
+      if ! diff -q "$before" "$1/$3" >/dev/null; then
+        echo "$1/$3 is stale w.r.t. its vocab.json: run 'go generate $2' in $1/" >&2
+        diff "$before" "$1/$3" >&2 || true
+        rc=1
+      fi
+    done
+    exit $rc
 
 pre-commit-uikit: fmt-uikit vet-uikit tidy-check-uikit generate-check test-uikit
