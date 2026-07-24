@@ -209,6 +209,26 @@ func (a *Assets) ServeFonts() http.Handler {
 	})
 }
 
+// ServeRoot serves one asset from a root request path (/favicon.ico), reading it
+// from the same source FS under "static/", so the disk-mode hot reload and the
+// cache policy carry over.
+func (a *Assets) ServeRoot(name, contentType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, err := fs.ReadFile(a.Source, "static/"+name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		a.setCachePolicy(w, r, "/static/"+name)
+		w.Header().Set("Content-Type", contentType)
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		_, _ = w.Write(body)
+	}
+}
+
 // ServeShared serves a kit-owned file registered in Config.Shared, re-reading
 // the sibling checkout in disk/dev mode (the CoreCSS contract).
 func (a *Assets) ServeShared(path string) http.HandlerFunc {
