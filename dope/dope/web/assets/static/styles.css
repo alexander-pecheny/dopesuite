@@ -309,7 +309,14 @@
   background: var(--structure);
 }
 
-.table-host.grid-host {
+/* A table-host is min-width:max-content because it usually holds a score board
+   wider than the screen. .fits-frame says the opposite: this content fits the
+   frame and wraps, so it must never push the page sideways — the grid, Составы,
+   and the numbering guard's message all do. The page that renders the content
+   toggles the class, so the layout never depends on a selector the browser may
+   not support. */
+.table-host.grid-host,
+.table-host.fits-frame {
   width: 100%;
   min-width: 0;
 }
@@ -1679,10 +1686,23 @@ body:not(.embedded-match) .grid-match {
   display: none;
 }
 
+/* The numbering guard's message is prose, not a score table: it fits the frame
+   and wraps. .od-input-wrap is min-width:max-content for the wide input tables
+   it normally holds, which would otherwise make this sentence the pane's
+   minimum width and push the whole frame sideways. */
 .od-input-gate {
   margin: 24px;
   font-size: var(--text-base);
   color: var(--text);
+}
+
+/* .od-input-wrap is min-width:max-content for the wide input tables it normally
+   holds. The guard's message is prose, so when the wrap holds that instead, the
+   sentence would become the pane's minimum width and push the frame sideways —
+   a child cannot shrink its own max-content contribution, so the wrap itself
+   relaxes. */
+.od-input-wrap.od-input-wrap-guard {
+  min-width: 0;
 }
 
 .od-input-gate a {
@@ -4103,14 +4123,9 @@ body.is-fullscreen.od-page .match-main {
    states need local rules. The score-table host is min-width:max-content (so wide boards can
    scroll), but the roster should instead fit the frame and wrap the players
    column, so it never scrolls sideways and the sticky "Игроки" header stays put.
-   Neutralize the max-content host just for the roster and let the table be 100%
-   wide with a fixed layout — the fixed №/Команда columns leave the rest to the
-   players column, which wraps. */
-.table-host:has(.roster-results-wrapper) {
-  width: 100%;
-  min-width: 0;
-}
-
+   The host is neutralized by .fits-frame (toggled where the tab renders) and
+   the table is 100% wide with a fixed layout — the fixed
+   №/Команда columns leave the rest to the players column, which wraps. */
 .roster-results-wrapper {
   width: 100%;
 }
@@ -4143,14 +4158,31 @@ body.is-fullscreen.od-page .match-main {
   text-align: left;
 }
 
+/* Safety net. The roster is sized to fit, so it should never scroll sideways —
+   but .results-table freezes № and Команда at the left edge for the wide score
+   boards it was built for, and if anything ever does overflow here (an
+   unusually long name, a browser that inflates text) those frozen columns
+   would paint over the players text while the Игроки header slid away alone.
+   Freeze the header with them so the columns stay legible and aligned. */
+.roster-results-table thead .roster-players-head {
+  position: sticky;
+  left: calc(var(--results-place-col) + var(--results-team-col));
+  z-index: 3;
+}
+
 .roster-players-cell {
   padding: var(--space-2) var(--results-team-pad);
   white-space: normal;
 }
 
-/* Keep each full name intact; allow wrapping only at the space between names. */
+/* Keep each full name intact — the space inside a name is rendered non-breaking
+   at build time, so lines break between names, not inside one. break-word is
+   the escape hatch: a single name wider than the column breaks rather than
+   pushing the whole table sideways, which is what made the roster scroll on
+   phones instead of showing every player at once. */
 .roster-player {
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .roster-player:not(:last-child)::after {

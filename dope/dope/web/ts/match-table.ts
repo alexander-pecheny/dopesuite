@@ -889,6 +889,14 @@ export function fetchFestRoster(festID: string | number | null | undefined): Pro
 const RATING_TEAM_URL = "https://rating.chgk.info/teams/";
 const RATING_PLAYER_URL = "https://rating.chgk.info/players/";
 
+// nonBreakingName joins a player's name parts with U+00A0 so a line never
+// breaks inside one person's name. The alternative — white-space: nowrap on the
+// chip — cannot break at all, so a name wider than its column pushed the whole
+// table sideways rather than wrapping.
+function nonBreakingName(name: string | undefined): string {
+  return (name || "").replace(/ /g, " ");
+}
+
 // rosterNameNode returns a link to `href` (an external rating page) when one is
 // given, otherwise a plain span — both carrying `className` so styling is the
 // same whether or not a rating id was available.
@@ -984,7 +992,10 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
         const chip = document.createElement("span");
         chip.className = "roster-player";
         const href = Number(info.ratingID) > 0 ? `${RATING_PLAYER_URL}${info.ratingID}` : "";
-        chip.appendChild(rosterNameNode(info.name || "", href, "roster-player-name"));
+        // Non-breaking spaces inside the name so the column wraps between
+        // players, never through one — the cell itself is free to wrap, which
+        // is what keeps the roster on screen instead of scrolling sideways.
+        chip.appendChild(rosterNameNode(nonBreakingName(info.name), href, "roster-player-name"));
         playersCell.appendChild(chip);
       });
     }

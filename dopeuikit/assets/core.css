@@ -326,6 +326,14 @@ body {
   min-height: 100%;
   font-family: var(--font-sans);
   color: var(--text);
+  /* WebKit inflates text inside wide blocks on real iOS devices unless told
+     not to — and it inflates the TEXT while CSS-px column widths stay put, so
+     fixed-width tables overflow on a phone in ways no desktop device emulation
+     reproduces (neither Chrome's nor Firefox's applies the autosizer). Our type
+     scale is already sized for small screens, so opt out and render what the
+     stylesheet says. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 button,

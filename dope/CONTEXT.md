@@ -35,6 +35,9 @@ One seat in a Match. Declares where its occupant comes from (seed, a place in a 
 **Participant**:
 Whoever occupies a Slot — a team in team formats, an individual player in individual formats (individual СИ).
 
+**Numbering guard**:
+Every Participant needs a number before results can be entered — the number is the identity every format scores against, so entering results before they exist would attach data to an unstable key. The server refuses writes while any is missing (409), and a game page shows the guard's message in place of its input sheet, naming the teams still without one.
+
 **Pin**:
 A host's manual place assignment for a Slot, part of the Match's Protocol state. A Pin beats the scorer's computed place at every recompute until the host clears it.
 

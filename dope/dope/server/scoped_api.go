@@ -187,10 +187,12 @@ func (s *server) requireFestTableEditor(w http.ResponseWriter, r *http.Request, 
 	return user, ok
 }
 
-// requireNumberedTeams blocks game editing until every active fest team has a
-// number. Team number is the universal team identity across OD/KSI/EK, so
-// scoring before teams are numbered would attach data to an unstable key — the
-// guard the user asked for. Writes 409 Conflict and returns false when blocked.
+// requireNumberedTeams is the numbering guard (CONTEXT.md) on the write path:
+// it blocks game editing until every active fest team has a number. Team number
+// is the universal team identity across OD/KSI/EK, so scoring before teams are
+// numbered would attach data to an unstable key. The game page enforces the
+// same rule client-side, showing the guard's message in place of its input
+// sheet. Writes 409 Conflict and returns false when blocked.
 // A fest with no teams at all is not blocked (nothing to number yet). Called at
 // the write gates right after requireFestTableEditor.
 func (s *server) requireNumberedTeams(w http.ResponseWriter, r *http.Request, festID int64) bool {

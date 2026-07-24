@@ -366,6 +366,9 @@ function render(options: {preserveScroll?: boolean} = {}): void {
     renderedTable = activeTab === "detailed" ? node : null;
     if (activeTab !== "detailed") resetTableIndex();
     siRoot.replaceChildren(node);
+    // Составы fits the frame and wraps rather than scrolling sideways like a
+    // score board, so the host drops its max-content sizing.
+    siRoot.classList.toggle("fits-frame", activeTab === "roster");
     renderedTab = activeTab;
     restoreTabScroll(activeTab);
     updateResultsScrollState();

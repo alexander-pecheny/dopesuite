@@ -581,6 +581,11 @@ function render(): void {
   // The Экран tab is a projection surface: hide the page-global diagnostic
   // "Скачать лог" chip (and anything else corner-pinned) while it is showing.
   document.body.classList.toggle("od-screen-active", activeTab === "screen");
+  // Составы, and the numbering guard's message, fit the frame and wrap instead
+  // of scrolling sideways like a score board, so the host drops its max-content
+  // sizing — the same class-toggle the grid uses, rather than a :has() the
+  // layout silently depends on.
+  odRoot.classList.toggle("fits-frame", activeTab === "roster" || (activeTab === "input" && !allTeamsNumbered()));
   restoreTabScroll(activeTab);
   updateResultsScrollState();
   if (activeTab === "detailed" || activeTab === "results") teamNameOverflow.schedule(activePane);
@@ -694,7 +699,9 @@ function buildInputView(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "od-input-wrap";
   if (!allTeamsNumbered()) {
-    wrapper.appendChild(buildInputGate());
+    // Prose, not an input table: the wrap must fit the frame and wrap.
+    wrapper.classList.add("od-input-wrap-guard");
+    wrapper.appendChild(buildNumberingGuard());
     return wrapper;
   }
   const tables = document.createElement("div");
@@ -1562,7 +1569,10 @@ function shootoutEntryCell(roundIndex: number, questionIndex: number, rowIndex: 
   return cell;
 }
 
-function buildInputGate(): HTMLElement {
+// buildNumberingGuard renders the numbering guard's block: the message shown in
+// place of the input sheet while any team still lacks a number. The server
+// enforces the same rule on writes (requireNumberedTeams → 409).
+function buildNumberingGuard(): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "od-input-gate";
   const msg = document.createElement("p");
@@ -1589,6 +1599,7 @@ function buildInputGate(): HTMLElement {
   return wrap;
 }
 
+// unnumberedTeamLabels lists the teams the numbering guard is waiting on.
 function unnumberedTeamLabels(): string[] {
   const labels: string[] = [];
   for (let i = 0; i < state.teams.length; i++) {
