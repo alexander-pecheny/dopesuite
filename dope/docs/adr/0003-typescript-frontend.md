@@ -26,7 +26,7 @@ pass — decided 2026-07-24.
 
 - `justfile` dev/test/embed gain an esbuild step; dev hot-reload becomes esbuild watch; embedded assets are built output.
 - A protocol renderer cannot ship a page without the standard chrome — conventions become structural, not aspirational.
-- One shell serves host and viewer, differing by `CanEdit`.
+- ~~One shell serves host and viewer, differing by `CanEdit`~~ (superseded by the 2026-07-24 amendment: the shell is gone; the shared surface is state-sync + the page modules).
 - Non-game chrome (`menu.js`, `pageforms.js`) may stay classic scripts; only the game-page stack is in scope.
 
 ## Amendment (2026-07-24): the DopeShell shim is gone; the real seam is state-sync
