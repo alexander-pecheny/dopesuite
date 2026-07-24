@@ -272,12 +272,10 @@ func (s *server) handleDeleteList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "delete-list", func(ctx context.Context, tx *sql.Tx) error {
-		now := rfc3339(time.Now())
-		if _, err := tx.ExecContext(ctx, `update lists set deleted_at = ? where id = ?`, now, listID); err != nil {
+		if err := tombstone(ctx, tx, "lists", "id = ?", listID); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `update cards set deleted_at = ? where list_id = ? and deleted_at is null`, now, listID)
-		return err
+		return tombstone(ctx, tx, "cards", "list_id = ?", listID)
 	})
 	if handleErr(w, err) {
 		return
@@ -389,12 +387,10 @@ func (s *server) handleDeleteListGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "delete-list-group", func(ctx context.Context, tx *sql.Tx) error {
-		now := rfc3339(time.Now())
-		if _, err := tx.ExecContext(ctx, `update lists set group_id = null, updated_at = ? where group_id = ?`, now, groupID); err != nil {
+		if _, err := tx.ExecContext(ctx, `update lists set group_id = null, updated_at = ? where group_id = ?`, rfc3339(time.Now()), groupID); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `update list_groups set deleted_at = ? where id = ?`, now, groupID)
-		return err
+		return tombstone(ctx, tx, "list_groups", "id = ?", groupID)
 	})
 	if handleErr(w, err) {
 		return
@@ -586,8 +582,7 @@ func (s *server) handleDeleteCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "delete-card", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update cards set deleted_at = ? where id = ?`, rfc3339(time.Now()), cardID)
-		return err
+		return tombstone(ctx, tx, "cards", "id = ?", cardID)
 	})
 	if handleErr(w, err) {
 		return
@@ -718,9 +713,7 @@ func (s *server) handleDeleteLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var bid int64
-	// A tombstone reads as already-deleted (204 no-op): re-stamping deleted_at
-	// would reset its 14-day reap clock (ADR-0002), e.g. on an offline-queue
-	// replay of an old delete.
+	// A tombstone reads as already-deleted (204 no-op) rather than a 404.
 	if err := s.db.QueryRowContext(r.Context(),
 		`select board_id from labels where id = ? and deleted_at is null`, labelID).Scan(&bid); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -734,9 +727,7 @@ func (s *server) handleDeleteLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "delete-label", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx,
-			`update labels set deleted_at = ? where id = ? and deleted_at is null`, rfc3339(time.Now()), labelID)
-		return err
+		return tombstone(ctx, tx, "labels", "id = ?", labelID)
 	})
 	if handleErr(w, err) {
 		return
@@ -999,7 +990,8 @@ func (s *server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.withWriteTx(r.Context(), "delete-comment", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
-update timeline_events set deleted_at = ?, payload_enc = x'', is_excerpt = 0 where id = ?`, rfc3339(time.Now()), evID)
+update timeline_events set deleted_at = ?, payload_enc = x'', is_excerpt = 0
+where id = ? and deleted_at is null`, rfc3339(time.Now()), evID)
 		return err
 	})
 	if handleErr(w, err) {

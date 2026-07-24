@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -297,5 +298,58 @@ func TestStorageCountsLiveDataOnly(t *testing.T) {
 	afterCard := storageUsed(t, c)
 	if afterCard >= afterBoard {
 		t.Fatalf("storage did not drop after card delete: %d -> %d", afterBoard, afterCard)
+	}
+}
+
+// A re-delete of any tombstoned entity must not re-stamp deleted_at — that
+// would reset the 14-day reap clock (e.g. an offline-queue replay of an old
+// delete). All delete handlers go through tombstone(), which only stamps live
+// rows; this exercises that seam directly, including the list→cards cascade.
+func TestTombstoneNeverRestamps(t *testing.T) {
+	ts, srv := newTestServer(t)
+	c := registerUser(t, srv, ts, 771006, "restamp-user")
+	bID, lID, cardID := makeBoardCard(t, c, "restamp")
+
+	const old = "2000-01-01T00:00:00Z"
+	ctx := context.Background()
+	stamp := func(table, where string, id int64) {
+		t.Helper()
+		if err := srv.withWriteTx(ctx, "test-tombstone", func(ctx context.Context, tx *sql.Tx) error {
+			return tombstone(ctx, tx, table, where, id)
+		}); err != nil {
+			t.Fatalf("tombstone %s: %v", table, err)
+		}
+	}
+	deletedAt := func(table string, id int64) string {
+		t.Helper()
+		var v string
+		if err := srv.db.QueryRow(`select deleted_at from `+table+` where id = ?`, id).Scan(&v); err != nil {
+			t.Fatalf("deleted_at %s: %v", table, err)
+		}
+		return v
+	}
+
+	for _, e := range []struct {
+		table, where string
+		id           int64
+	}{
+		{"cards", "id = ?", cardID},
+		{"lists", "id = ?", lID},
+		{"boards", "id = ?", bID},
+	} {
+		stamp(e.table, e.where, e.id)
+		if _, err := srv.db.Exec(`update `+e.table+` set deleted_at = ? where id = ?`, old, e.id); err != nil {
+			t.Fatal(err)
+		}
+		stamp(e.table, e.where, e.id)
+		if got := deletedAt(e.table, e.id); got != old {
+			t.Fatalf("%s re-delete reset the reap clock: deleted_at = %s, want %s", e.table, got, old)
+		}
+	}
+
+	// The list-delete cascade must skip cards already tombstoned.
+	stamp("cards", "list_id = ?", lID)
+	if got := deletedAt("cards", cardID); got != old {
+		t.Fatalf("cascade re-delete reset the reap clock: deleted_at = %s, want %s", got, old)
 	}
 }

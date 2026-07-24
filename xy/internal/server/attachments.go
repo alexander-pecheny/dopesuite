@@ -321,7 +321,7 @@ func (s *server) handleDeleteAttachment(w http.ResponseWriter, r *http.Request) 
 	}
 	eventEnc := r.URL.Query().Get("event_payload_enc")
 	err = s.withWriteTx(r.Context(), "delete-attachment", func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `update attachments set deleted_at = ? where id = ?`, rfc3339(time.Now()), attID); err != nil {
+		if err := tombstone(ctx, tx, "attachments", "id = ?", attID); err != nil {
 			return err
 		}
 		if eventEnc != "" {

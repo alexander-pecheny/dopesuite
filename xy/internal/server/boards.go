@@ -423,8 +423,7 @@ func (s *server) handleDeleteBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "delete-board", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update boards set deleted_at = ? where id = ?`, rfc3339(time.Now()), bid)
-		return err
+		return tombstone(ctx, tx, "boards", "id = ?", bid)
 	})
 	if handleErr(w, err) {
 		return
