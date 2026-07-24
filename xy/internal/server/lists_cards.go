@@ -718,7 +718,11 @@ func (s *server) handleDeleteLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var bid int64
-	if err := s.db.QueryRowContext(r.Context(), `select board_id from labels where id = ?`, labelID).Scan(&bid); err != nil {
+	// A tombstone reads as already-deleted (204 no-op): re-stamping deleted_at
+	// would reset its 14-day reap clock (ADR-0002), e.g. on an offline-queue
+	// replay of an old delete.
+	if err := s.db.QueryRowContext(r.Context(),
+		`select board_id from labels where id = ? and deleted_at is null`, labelID).Scan(&bid); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			w.WriteHeader(http.StatusNoContent)
 		} else {
@@ -730,7 +734,8 @@ func (s *server) handleDeleteLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := s.withWriteTx(r.Context(), "delete-label", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update labels set deleted_at = ? where id = ?`, rfc3339(time.Now()), labelID)
+		_, err := tx.ExecContext(ctx,
+			`update labels set deleted_at = ? where id = ? and deleted_at is null`, rfc3339(time.Now()), labelID)
 		return err
 	})
 	if handleErr(w, err) {
