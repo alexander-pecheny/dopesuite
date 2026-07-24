@@ -191,6 +191,54 @@ func TestReapKeepsFreshTombstones(t *testing.T) {
 	}
 }
 
+// An expired comment tombstone that still anchors a live reply survives the
+// reap (thread placeholder, watermark id stays taken); it goes once the reply
+// is expired too. New comments never land on a reaped id (AUTOINCREMENT).
+func TestReapKeepsThreadAnchors(t *testing.T) {
+	ts, srv := newTestServer(t)
+	c := registerUser(t, srv, ts, 771006, "reap-thread-user")
+	_, _, cardID := makeBoardCard(t, c, "threads")
+
+	lastCommentID := func() int64 {
+		var id int64
+		if err := srv.db.QueryRow(
+			`select max(id) from timeline_events where card_id = ? and type = 'comment'`, cardID).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{"payload_enc": enc("root")}), 204)
+	rootID := lastCommentID()
+	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{
+		"payload_enc": enc("reply"), "reply_to_id": rootID,
+	}), 204)
+	replyID := lastCommentID()
+	mustStatus(t, c.do("DELETE", "/api/comments/"+itoa(rootID), nil), 204)
+
+	if _, err := srv.reapOnce(context.Background(), time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("reapOnce: %v", err)
+	}
+	if n := countRows(t, srv, "timeline_events", "id = ?", rootID); n != 1 {
+		t.Fatal("expired root with a live reply was reaped")
+	}
+	if n := countRows(t, srv, "timeline_events", "id = ? and reply_to_id = ?", replyID, rootID); n != 1 {
+		t.Fatal("live reply lost its thread anchor")
+	}
+
+	mustStatus(t, c.do("DELETE", "/api/comments/"+itoa(replyID), nil), 204)
+	if _, err := srv.reapOnce(context.Background(), time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("second reapOnce: %v", err)
+	}
+	if n := countRows(t, srv, "timeline_events", "id in (?, ?)", rootID, replyID); n != 0 {
+		t.Fatal("thread not reaped after all replies expired")
+	}
+
+	mustStatus(t, c.do("POST", "/api/cards/"+itoa(cardID)+"/comments", map[string]any{"payload_enc": enc("after")}), 204)
+	if nextID := lastCommentID(); nextID <= replyID {
+		t.Fatalf("comment id %d reuses reaped id space (max was %d)", nextID, replyID)
+	}
+}
+
 func TestSweepOrphanBlobs(t *testing.T) {
 	ts, srv := newTestServer(t)
 	c := registerUser(t, srv, ts, 771005, "sweep-user")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"os"
 	"time"
 )
 
@@ -48,11 +49,9 @@ where b.deleted_at < ?1 or c.deleted_at < ?1 or l.deleted_at < ?1 or a.deleted_a
 		if err := rows.Close(); err != nil {
 			return err
 		}
-		// reply_to_id and lists.group_id have no ON DELETE action, so live rows
-		// pointing at a reaped one must be unlinked first.
+		// lists.group_id has no ON DELETE action, so live lists pointing at a
+		// reaped group must be unlinked first.
 		stmts := []string{
-			`update timeline_events set reply_to_id = null
-			 where reply_to_id in (select id from timeline_events where deleted_at < ?1)`,
 			`update lists set group_id = null
 			 where group_id in (select id from list_groups where deleted_at < ?1)`,
 			`delete from boards where deleted_at < ?1`,
@@ -60,7 +59,14 @@ where b.deleted_at < ?1 or c.deleted_at < ?1 or l.deleted_at < ?1 or a.deleted_a
 			`delete from lists where deleted_at < ?1`,
 			`delete from list_groups where deleted_at < ?1`,
 			`delete from labels where deleted_at < ?1`,
-			`delete from timeline_events where deleted_at < ?1`,
+			// An expired comment that still anchors surviving replies is kept:
+			// its payload was blanked at delete, the timeline renders it as the
+			// thread's «комментарий удалён» placeholder, and no surviving
+			// reply_to_id ever dangles. It reaps once its replies are gone.
+			`delete from timeline_events where deleted_at < ?1
+			 and id not in (select reply_to_id from timeline_events
+			                where reply_to_id is not null
+			                  and (deleted_at is null or deleted_at >= ?1))`,
 			`delete from attachments where deleted_at < ?1`,
 		}
 		for _, q := range stmts {
@@ -146,4 +152,18 @@ func runGC() {
 		log.Fatal(err)
 	}
 	srv.reap()
+}
+
+// requireExistingDB gates the maintenance subcommands: openDB happily creates
+// and migrates a fresh empty DB, so running `xy-server gc` (or invite/adduser)
+// from a directory without the prod env would silently "succeed" against
+// nothing and litter cwd with a new xy.db.
+func requireExistingDB() {
+	path := os.Getenv("XY_DB")
+	if path == "" {
+		path = dbFile
+	}
+	if _, err := os.Stat(path); err != nil {
+		log.Fatalf("no database at %q — set XY_DB (maintenance commands never create one)", path)
+	}
 }

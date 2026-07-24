@@ -202,7 +202,56 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV16(db); err != nil {
 		return err
 	}
+	if err := migrateV17(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV17 rebuilds timeline_events with AUTOINCREMENT. The reaper (ADR-0002)
+// hard-deletes rows, and a plain integer primary key lets SQLite reuse a freed
+// max id — but card_reads watermarks compare `id > comment_read_id`, so a new
+// comment landing on a recycled id would arrive silently marked read.
+// AUTOINCREMENT (sqlite_sequence) makes ids strictly increasing forever.
+func migrateV17(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 17`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+pragma foreign_keys = off;
+create table timeline_events_v17(
+  id integer primary key autoincrement,
+  board_id integer not null references boards(id) on delete cascade,
+  card_id integer not null references cards(id) on delete cascade,
+  type text not null check (type in (
+    'comment','desc_edit','label_add','label_remove',
+    'attach_add','attach_remove','attach_replace')),
+  author_user_id integer references users(id),
+  created_at text not null,
+  payload_enc blob not null,
+  deleted_at text,
+  edited_at text,
+  is_excerpt integer not null default 0,
+  reply_to_id integer references timeline_events(id)
+);
+insert into timeline_events_v17(id, board_id, card_id, type, author_user_id,
+    created_at, payload_enc, deleted_at, edited_at, is_excerpt, reply_to_id)
+  select id, board_id, card_id, type, author_user_id,
+    created_at, payload_enc, deleted_at, edited_at, is_excerpt, reply_to_id
+  from timeline_events;
+drop table timeline_events;
+alter table timeline_events_v17 rename to timeline_events;
+create index if not exists idx_timeline_card on timeline_events(card_id);
+create index if not exists idx_timeline_reply on timeline_events(reply_to_id);
+pragma foreign_keys = on;
+insert or ignore into schema_versions(version, applied_at)
+  values(17, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV16 backs open Telegram registration and per-user storage quotas.

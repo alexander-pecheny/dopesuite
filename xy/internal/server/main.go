@@ -20,14 +20,17 @@ func init() { session.ProdEnvVar = "XY_ENV" }
 // subcommand mints a one-shot registration invite and prints it.
 func Main() {
 	if len(os.Args) > 1 && os.Args[1] == "invite" {
+		requireExistingDB()
 		runMintInvite(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "adduser" {
+		requireExistingDB()
 		runAddUser(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "gc" {
+		requireExistingDB()
 		runGC()
 		return
 	}
