@@ -87,7 +87,7 @@ const viewerCounter = gameTable.createViewerCounter(statusNode);
 const teamNameOverflow = gameTable.createTeamNameOverflowController({
   root: siRoot,
   detailed: {
-    cellSelector: ".ksi-detailed-team-cell",
+    cellSelector: "[data-ksi-team-cell]",
     nameSelector: ".od-detailed-team-name",
     truncatedClass: "od-detailed-team-cell-truncated",
   },
@@ -205,7 +205,6 @@ window.addEventListener("resize", () => {
   }
   updateResultsScrollState();
 });
-document.querySelector(".sheet-frame")?.addEventListener("scroll", updateResultsScrollState, {passive: true});
 
 const gameLoader = gameTable.createGameDataLoader({
   route,
@@ -565,7 +564,7 @@ function buildRefusalsTable(): HTMLElement {
   const order = state!.participants.map((_, index) => index).sort(compareParticipantNumbers);
 
   const table = document.createElement("table");
-  table.className = "results-table seed-import-table ksi-refusals-table";
+  table.className = "results-table seed-import-table";
 
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
@@ -589,7 +588,7 @@ function buildRefusalsTable(): HTMLElement {
     tr.appendChild(gameTable.td(number > 0 ? number : "", "results-place seed-number-cell"));
 
     const teamCell = document.createElement("td");
-    teamCell.className = "results-team seed-team-cell";
+    teamCell.className = "results-team";
     const nameWrap = document.createElement("span");
     nameWrap.className = "results-team-name-wrap";
     const label = participantLabel(index);
@@ -601,7 +600,7 @@ function buildRefusalsTable(): HTMLElement {
     nameWrap.appendChild(name);
     teamCell.appendChild(nameWrap);
     const fullName = document.createElement("span");
-    fullName.className = "popover results-team-name-popover";
+    fullName.className = "popover popover-inline results-team-name-popover";
     fullName.textContent = label;
     teamCell.appendChild(fullName);
     tr.appendChild(teamCell);
@@ -661,7 +660,7 @@ function buildResultsTableInner(): HTMLTableElement {
     nameWrap.appendChild(nameSpan);
     nameTd.appendChild(nameWrap);
     const fullName = document.createElement("span");
-    fullName.className = "popover results-team-name-popover";
+    fullName.className = "popover popover-inline results-team-name-popover";
     fullName.textContent = row.name;
     nameTd.appendChild(fullName);
     tr.appendChild(nameTd);
@@ -800,11 +799,13 @@ function restoreTabScroll(tab: string): void {
   frame.scrollLeft = pos.left;
 }
 
+const resultsScroll = DopeTable.bindScrollEdges(siRoot.closest(".sheet-frame"), ({left}, frame) => {
+  frame.classList.toggle("results-scroll-left", isTeamMode() && activeTab === "results" && left);
+  frame.classList.toggle("detailed-scroll-left", isTeamMode() && activeTab === "detailed" && left);
+});
+
 function updateResultsScrollState(): void {
-  const frame = scrollFrame();
-  if (!frame) return;
-  frame.classList.toggle("results-scroll-left", isTeamMode() && activeTab === "results" && frame.scrollLeft > 1);
-  frame.classList.toggle("detailed-scroll-left", isTeamMode() && activeTab === "detailed" && frame.scrollLeft > 1);
+  resultsScroll.refresh();
 }
 
 function detailedPlayerOrder(): number[] {
@@ -906,7 +907,8 @@ function nameCell(name: string, playerIndex: number): HTMLElement {
   const cell = document.createElement("td");
   cell.className = "sticky sticky-name team-name";
   if (isTeamMode()) {
-    cell.className = "sticky sticky-name team-name od-detailed-team-cell ksi-detailed-team-cell";
+    cell.className = "sticky sticky-name team-name od-detailed-team-cell";
+    cell.dataset.ksiTeamCell = "";
     const number = participantNumber(playerIndex);
     const baseName = name || participantFallback(playerIndex);
     const layout = document.createElement("span");
@@ -920,7 +922,7 @@ function nameCell(name: string, playerIndex: number): HTMLElement {
     const nameWrap = document.createElement("span");
     nameWrap.className = "od-detailed-team-name-wrap";
     const label = document.createElement("span");
-    label.className = "readonly-team-name od-detailed-team-name";
+    label.className = "od-detailed-team-name";
     label.textContent = baseName;
     label.tabIndex = 0;
     label.setAttribute("aria-label", baseName);
@@ -929,7 +931,7 @@ function nameCell(name: string, playerIndex: number): HTMLElement {
     cell.appendChild(layout);
 
     const fullName = document.createElement("span");
-    fullName.className = "popover od-detailed-team-name-popover";
+    fullName.className = "popover popover-inline od-detailed-team-name-popover";
     fullName.textContent = baseName;
     cell.appendChild(fullName);
     return cell;

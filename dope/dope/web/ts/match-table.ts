@@ -33,6 +33,7 @@ import {
   renderGameBreadcrumbs,
 } from "./game-page.js";
 import {
+  bindScrollEdges,
   clamp,
   createCellRangeSelection,
   createFloatingPopover,
@@ -41,6 +42,7 @@ import {
   createViewerCounter,
   installCellNavBar,
   installVirtualKeypad,
+  isClipped,
   markNameOverflow,
 } from "./widgets.js";
 
@@ -594,7 +596,7 @@ export function scoreCellSpecs(options: ScoreCellSpecsOptions = {}): NodeIndexSp
         const popover = node.closest(".readonly-player")?.querySelector(".readonly-player-popover");
         if (popover) setNodeText(popover, theme.player);
       }},
-    {name: "playerSelect", selector: ".player-select", keys: themeKeys,
+    {name: "playerSelect", selector: "[data-player-select]", keys: themeKeys,
       sync: (node, ms, o) => {
         const select = node as HTMLSelectElement;
         const theme = scoreThemeOf(select, ms);
@@ -816,7 +818,7 @@ export function buildVenuesTable(venues: Venue[] | null | undefined, options: Ve
     if (index === list.length - 1) row.classList.add("results-group-last");
     row.appendChild(td(venue.number, "results-place venues-number"));
     const titleCell = document.createElement("td");
-    titleCell.className = "results-team venues-title-cell";
+    titleCell.className = "results-team";
     if (editable && onTitleChange) {
       const input = document.createElement("input");
       input.className = "venue-input";
@@ -955,7 +957,8 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
     }
 
     const teamCell = document.createElement("td");
-    teamCell.className = "results-team roster-team-cell";
+    teamCell.className = "results-team";
+    teamCell.dataset.rosterTeamCell = "";
     const teamHref = Number(team.ratingID) > 0 ? `${RATING_TEAM_URL}${team.ratingID}` : "";
     // Same DOM shape as buildEKStatsTable's name cell, so the shared
     // fade-on-overflow + hover/focus popover (results-team styling) applies to
@@ -968,7 +971,7 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
     nameWrap.appendChild(nameEl);
     teamCell.appendChild(nameWrap);
     const namePopover = document.createElement("span");
-    namePopover.className = "popover results-team-name-popover";
+    namePopover.className = "popover popover-inline results-team-name-popover";
     namePopover.textContent = team.name || "";
     teamCell.appendChild(namePopover);
     if (team.city) {
@@ -1013,7 +1016,6 @@ export function buildRosterTable(teams: RosterTeam[] | null | undefined): HTMLEl
 // a tab pane by any page — no roster data needs to be threaded through.
 export function buildRosterView(festID: string | number | null | undefined): HTMLElement {
   const container = document.createElement("div");
-  container.className = "roster-view";
   const loading = document.createElement("p");
   loading.className = "roster-empty";
   loading.textContent = "Загрузка составов…";
@@ -1027,7 +1029,7 @@ export function buildRosterView(festID: string | number | null | undefined): HTM
       // The popover itself is already handled: the CSS-only variant on OD/KSI,
       // and the page-bound floating popover on the EK host/viewer roots.
       const remeasure = () => markNameOverflow(container, {
-        cellSelector: ".roster-team-cell",
+        cellSelector: "[data-roster-team-cell]",
         nameSelector: ".results-team-name",
         truncatedClass: "results-team-truncated",
       });
@@ -1051,7 +1053,7 @@ export function fitEKStageTeamName(cell: HTMLElement | null | undefined, nameNod
   const baseSize = parseFloat(getComputedStyle(name).fontSize) || 13;
   const minSize = 9;
   const vertOverflows = () => name.scrollHeight > name.clientHeight + 1;
-  const horizOverflows = () => name.scrollWidth > name.clientWidth + 1;
+  const horizOverflows = () => isClipped(name);
   name.style.fontSize = "";
   if (vertOverflows()) {
     let size = Math.floor(baseSize) - 1;
@@ -1216,7 +1218,7 @@ export function buildEKStatsTable(rows: EKPlayerStatsRow[] | null | undefined): 
     wrap.appendChild(name);
     cell.appendChild(wrap);
     const popover = document.createElement("span");
-    popover.className = "popover results-team-name-popover";
+    popover.className = "popover popover-inline results-team-name-popover";
     popover.textContent = text;
     cell.appendChild(popover);
     return cell;
@@ -1298,6 +1300,8 @@ export const DopeTable = {
   mountUnnumberedBanner,
   mountGameDownloads,
   parseGameRoute,
+  isClipped,
+  bindScrollEdges,
   markNameOverflow,
   createLocalCache,
   gameEventsURL,

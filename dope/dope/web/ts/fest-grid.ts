@@ -1,3 +1,5 @@
+import { markNameOverflow } from "./widgets.js";
+
 export interface FestGridVenueObject {
   number?: unknown;
   Number?: unknown;
@@ -135,7 +137,7 @@ export function buildReseedStagePanel(
   const blockedMessage = reseedBlockedMessage(stage, options);
   if (options.editable) {
     const actions = document.createElement("div");
-    actions.className = "cluster reseed-actions";
+    actions.className = "cluster";
     const calculateButton = document.createElement("button");
     calculateButton.type = "button";
     calculateButton.className = "btn";
@@ -449,7 +451,7 @@ function reseedTeamCell(name: string): HTMLElement {
   wrap.appendChild(label);
   cell.appendChild(wrap);
   const popover = document.createElement("span");
-  popover.className = "popover results-team-name-popover";
+  popover.className = "popover popover-inline results-team-name-popover";
   popover.textContent = name;
   cell.appendChild(popover);
   return cell;
@@ -496,7 +498,7 @@ function slotTeamCell(label: string): HTMLElement {
   name.setAttribute("aria-label", label);
   cell.appendChild(name);
   const fullName = document.createElement("span");
-  fullName.className = "popover grid-slot-team-popover";
+  fullName.className = "popover popover-inline grid-slot-team-popover";
   fullName.textContent = label;
   cell.appendChild(fullName);
   return cell;
@@ -511,15 +513,11 @@ function scheduleFestGridNameOverflowUpdate(root: HTMLElement): void {
 }
 
 function updateFestGridNameOverflow(root: HTMLElement): void {
-  const cells = root.querySelectorAll(".grid-slot-team");
-  const readings = new Array<boolean>(cells.length);
-  for (let i = 0; i < cells.length; i++) {
-    const name = cells[i].querySelector(".grid-slot-team-name");
-    readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
-  }
-  for (let i = 0; i < cells.length; i++) {
-    cells[i].classList.toggle("grid-slot-team-truncated", readings[i]);
-  }
+  markNameOverflow(root, {
+    cellSelector: ".grid-slot-team",
+    nameSelector: ".grid-slot-team-name",
+    truncatedClass: "grid-slot-team-truncated",
+  });
 }
 
 function slotLabel(slot: FestGridSlot, live: FestGridLiveTeam = {}): string {

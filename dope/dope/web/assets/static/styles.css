@@ -43,11 +43,7 @@
    JS emitter adds that class. The block below holds only what a hover-revealed
    NAME popover adds: measure, type, and pointer transparency. Individual rules
    further down only set positioning + display behavior. */
-.player-select-popover,
-.grid-slot-team-popover,
-.results-team-name-popover,
-.match-table.od-detailed .od-detailed-team-name-popover,
-.match-table .ek-team-cell .od-detailed-team-name-popover,
+.popover-inline,
 .floating-name-popover {
   max-width: min(420px, calc(100vw - 32px));
   padding: var(--space-1) var(--space-2);
@@ -57,6 +53,65 @@
   line-height: var(--leading-snug);
   white-space: normal;
   pointer-events: none;
+}
+
+/* One inline popover: parked under its anchor, hidden until the page toggles
+   the truncation class that reveals it. Families differ only in how far in from
+   the cell edge they sit, so that is the one thing they override. */
+.popover-inline {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: var(--inline-popover-left, var(--space-1-5));
+  z-index: var(--z-dropdown);
+  display: none;
+}
+
+.results-team-name-popover { --inline-popover-left: var(--space-3); }
+
+.match-table.od-detailed .od-detailed-team-name-popover {
+  --inline-popover-left: calc(var(--od-detailed-number-col) + var(--space-1));
+}
+
+.match-table .ek-team-cell .od-detailed-team-name-popover,
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-popover {
+  --inline-popover-left: var(--space-1);
+}
+
+/* Revealed on hover/focus of whichever cell the page marked truncated… */
+.player-select-truncated:hover .player-select-popover,
+.player-select-truncated:focus-within .player-select-popover,
+.grid-slot-team-truncated:hover .grid-slot-team-popover,
+.grid-slot-team-truncated:focus-within .grid-slot-team-popover,
+.results-team-truncated:hover .results-team-name-popover,
+.results-team-truncated:focus-within .results-team-name-popover,
+.match-table.od-detailed .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
+.match-table.od-detailed .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
+.match-table .ek-team-cell.od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
+.match-table .ek-team-cell.od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
+.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover {
+  display: block;
+}
+
+/* …except where createFloatingPopover is driving a body-level popover instead,
+   which is every page on .ek-page and any page that opted in. */
+.floating-popovers-enabled .player-select-truncated:hover .player-select-popover,
+.floating-popovers-enabled .player-select-truncated:focus-within .player-select-popover,
+.floating-popovers-enabled .grid-slot-team-truncated:hover .grid-slot-team-popover,
+.floating-popovers-enabled .grid-slot-team-truncated:focus-within .grid-slot-team-popover,
+.floating-popovers-enabled .results-team-truncated:hover .results-team-name-popover,
+.floating-popovers-enabled .results-team-truncated:focus-within .results-team-name-popover,
+.ek-page .results-team-truncated:hover .results-team-name-popover,
+.ek-page .results-team-truncated:focus-within .results-team-name-popover,
+.floating-popovers-enabled .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
+.floating-popovers-enabled .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
+.ek-page .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
+.ek-page .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
+.floating-popovers-enabled .readonly-player-cell-truncated:hover .readonly-player-popover,
+.floating-popovers-enabled .readonly-player-cell-truncated:focus-within .readonly-player-popover,
+.ek-page .readonly-player-cell-truncated:hover .readonly-player-popover,
+.ek-page .readonly-player-cell-truncated:focus-within .readonly-player-popover {
+  display: none;
 }
 
 .list-action-row {
@@ -299,7 +354,10 @@
   display: none;
 }
 
+/* The fight page has no corner gutter, so every frozen column starts one term
+   earlier. Zeroing the term does that once, instead of restating four offsets. */
 .fight-frame {
+  --sheet-corner-col: 0px;
   border: 0;
   background-color: var(--structure);
 }
@@ -476,19 +534,11 @@
   max-width: var(--team-col);
 }
 
-.fight-frame .sticky-name {
-  left: 0;
-}
-
 .sticky-total {
   left: calc(var(--sheet-corner-col) + var(--team-col));
   width: var(--total-col);
   min-width: var(--total-col);
   max-width: var(--total-col);
-}
-
-.fight-frame .sticky-total {
-  left: var(--team-col);
 }
 
 .sticky-place {
@@ -498,16 +548,8 @@
   max-width: var(--place-col);
 }
 
-.fight-frame .sticky-place {
-  left: calc(var(--team-col) + var(--total-col));
-}
-
 .sticky-place-gap {
   left: calc(var(--sheet-corner-col) + var(--team-col) + var(--total-col) + var(--place-col));
-}
-
-.fight-frame .sticky-place-gap {
-  left: calc(var(--team-col) + var(--total-col) + var(--place-col));
 }
 
 .match-table .place-gap,
@@ -695,27 +737,9 @@
   display: block;
 }
 
-.player-select-popover {
-  position: absolute;
-  top: calc(100% - 2px);
-  left: var(--space-1-5);
-  z-index: var(--z-dropdown);
-  display: none;
-}
-
 .player-cell:hover,
 .player-cell:focus-within {
   z-index: var(--z-popover);
-}
-
-.player-select-truncated:hover .player-select-popover,
-.player-select-truncated:focus-within .player-select-popover {
-  display: block;
-}
-
-.floating-popovers-enabled .player-select-truncated:hover .player-select-popover,
-.floating-popovers-enabled .player-select-truncated:focus-within .player-select-popover {
-  display: none;
 }
 
 .player-cell select {
@@ -1257,24 +1281,6 @@ body:not(.embedded-match) .grid-match {
   pointer-events: none;
 }
 
-.grid-slot-team-popover {
-  position: absolute;
-  top: calc(100% - 2px);
-  left: var(--space-1-5);
-  z-index: var(--z-dropdown);
-  display: none;
-}
-
-.grid-slot-team-truncated:hover .grid-slot-team-popover,
-.grid-slot-team-truncated:focus-within .grid-slot-team-popover {
-  display: block;
-}
-
-.floating-popovers-enabled .grid-slot-team-truncated:hover .grid-slot-team-popover,
-.floating-popovers-enabled .grid-slot-team-truncated:focus-within .grid-slot-team-popover {
-  display: none;
-}
-
 .slot-total,
 .slot-place {
   font-variant-numeric: tabular-nums;
@@ -1387,10 +1393,6 @@ body:not(.embedded-match) .grid-match {
     font-size: var(--text-xs-tight);
   }
 
-  .fight-frame .sticky-name {
-    left: 0;
-  }
-
   .match-table .sticky-total {
     left: var(--team-col);
     width: var(--total-col);
@@ -1398,19 +1400,11 @@ body:not(.embedded-match) .grid-match {
     max-width: var(--total-col);
   }
 
-  .fight-frame .sticky-total {
-    left: var(--team-col);
-  }
-
   .match-table .sticky-place {
     left: calc(var(--team-col) + var(--total-col));
     width: var(--place-col);
     min-width: var(--place-col);
     max-width: var(--place-col);
-  }
-
-  .fight-frame .sticky-place {
-    left: calc(var(--team-col) + var(--total-col));
   }
 
   .match-table .sticky-place-gap {
@@ -2660,26 +2654,6 @@ body:not(.embedded-match) .grid-match {
   font-size: var(--text-xs);
 }
 
-.results-team-name-popover {
-  position: absolute;
-  top: calc(100% - 2px);
-  left: var(--space-3);
-  z-index: var(--z-dropdown);
-  display: none;
-}
-
-.results-team-truncated:hover .results-team-name-popover,
-.results-team-truncated:focus-within .results-team-name-popover {
-  display: block;
-}
-
-.floating-popovers-enabled .results-team-truncated:hover .results-team-name-popover,
-.floating-popovers-enabled .results-team-truncated:focus-within .results-team-name-popover,
-.ek-page .results-team-truncated:hover .results-team-name-popover,
-.ek-page .results-team-truncated:focus-within .results-team-name-popover {
-  display: none;
-}
-
 .results-num,
 .results-tour { text-align: center; }
 
@@ -3069,37 +3043,6 @@ body:not(.embedded-match) .grid-match {
 .match-table.od-detailed .od-detailed-team-name:focus,
 .match-table .ek-team-cell .od-detailed-team-name:focus {
   outline: var(--focus-ring-none);
-}
-
-.match-table.od-detailed .od-detailed-team-name-popover,
-.match-table .ek-team-cell .od-detailed-team-name-popover {
-  position: absolute;
-  top: calc(100% - 2px);
-  left: calc(var(--od-detailed-number-col) + var(--space-1));
-  z-index: var(--z-dropdown);
-  display: none;
-}
-
-.match-table .ek-team-cell .od-detailed-team-name-popover {
-  left: var(--space-1);
-}
-
-.match-table.od-detailed .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
-.match-table.od-detailed .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
-.match-table .ek-team-cell.od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
-.match-table .ek-team-cell.od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover {
-  display: block;
-}
-
-.floating-popovers-enabled .match-table.od-detailed .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
-.floating-popovers-enabled .match-table.od-detailed .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
-.floating-popovers-enabled .match-table .ek-team-cell.od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
-.floating-popovers-enabled .match-table .ek-team-cell.od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
-.ek-page .match-table.od-detailed .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
-.ek-page .match-table.od-detailed .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
-.ek-page .match-table .ek-team-cell.od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
-.ek-page .match-table .ek-team-cell.od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover {
-  display: none;
 }
 
 .floating-name-popover {
@@ -3552,26 +3495,6 @@ body:not(.embedded-match) .grid-match {
   width: var(--inline-fade-width);
   background: var(--inline-fade-bg);
   pointer-events: none;
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player-popover {
-  position: absolute;
-  top: calc(100% - 2px);
-  left: var(--space-1);
-  z-index: var(--z-dropdown);
-  display: none;
-}
-
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
-.viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover {
-  display: block;
-}
-
-.floating-popovers-enabled .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
-.floating-popovers-enabled .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover,
-.ek-page .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:hover .readonly-player-popover,
-.ek-page .viewer-readonly .match-table.ek-stage-table.readonly-table .readonly-player.readonly-player-cell-truncated:focus-within .readonly-player-popover {
-  display: none;
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table .ek-team-cell .od-detailed-team-name-wrap {

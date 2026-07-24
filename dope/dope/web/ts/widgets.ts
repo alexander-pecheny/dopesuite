@@ -422,6 +422,56 @@ export interface NameOverflowConfig {
   cityTruncatedClass?: string;
 }
 
+export interface ScrollEdges {
+  left: boolean;
+  right: boolean;
+}
+
+export interface ScrollEdgeBinding {
+  refresh(): void;
+  dispose(): void;
+}
+
+// bindScrollEdges keeps a scroller's edge classes in sync with where it is
+// scrolled to: `update` runs once now and on every scroll, coalesced to a frame.
+// Seven pages used to hand-roll this, each repeating the same epsilon and two of
+// them binding twice to the same element with no way to unbind.
+export function bindScrollEdges(
+  el: Element | null | undefined,
+  update: (edges: ScrollEdges, el: Element) => void,
+): ScrollEdgeBinding {
+  if (!el) return {refresh() {}, dispose() {}};
+  const target = el;
+  let frame = 0;
+  const refresh = (): void => {
+    frame = 0;
+    update({
+      left: target.scrollLeft > 1,
+      right: target.scrollLeft + target.clientWidth < target.scrollWidth - 1,
+    }, target);
+  };
+  const onScroll = (): void => {
+    if (!frame) frame = requestAnimationFrame(refresh);
+  };
+  refresh();
+  target.addEventListener("scroll", onScroll, {passive: true});
+  return {
+    refresh,
+    dispose() {
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      target.removeEventListener("scroll", onScroll);
+    },
+  };
+}
+
+// isClipped is the one definition of "this text does not fit its box", epsilon
+// included. Every truncation cue in the app — the fade, the popover, the EK
+// stage font-shrink — asks this question, so it gets asked in one place.
+export function isClipped(el: Element | null | undefined): boolean {
+  return Boolean(el && el.scrollWidth > el.clientWidth + 1);
+}
+
 // markNameOverflow flags every cell under `root` whose inner name (and optional
 // city) is clipped, so the page can show a fade + popover. Reads are batched
 // ahead of writes so the measure loop never triggers a reflow mid-pass.
@@ -430,14 +480,13 @@ export function markNameOverflow(root: ParentNode | null | undefined, cfg: NameO
   const cells = root.querySelectorAll(cfg.cellSelector);
   const readings = new Array<boolean>(cells.length);
   for (let i = 0; i < cells.length; i++) {
-    const name = cells[i].querySelector(cfg.nameSelector);
-    readings[i] = Boolean(name && name.scrollWidth > name.clientWidth + 1);
+    readings[i] = isClipped(cells[i].querySelector(cfg.nameSelector));
   }
   for (let i = 0; i < cells.length; i++) {
     cells[i].classList.toggle(cfg.truncatedClass, readings[i]);
     if (cfg.citySelector && cfg.cityTruncatedClass) {
       const city = cells[i].querySelector(cfg.citySelector);
-      city?.classList.toggle(cfg.cityTruncatedClass, city.scrollWidth > city.clientWidth + 1);
+      city?.classList.toggle(cfg.cityTruncatedClass, isClipped(city));
     }
   }
 }
@@ -842,9 +891,7 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
   // Number and eyes are separate children so the flex `gap` spaces them — a
   // single "N👀" text node would render them touching.
   const num = document.createElement("span");
-  num.className = "viewers-count-num";
   const eyes = document.createElement("span");
-  eyes.className = "viewers-count-eyes";
   eyes.textContent = "\u{1F440}";
   eyes.setAttribute("aria-hidden", "true");
   node.append(num, eyes);

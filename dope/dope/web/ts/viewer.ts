@@ -9,6 +9,7 @@ import type {
   EKStage,
   NodeIndex,
   ScopedEventMessage,
+  ScrollEdgeBinding,
   ScoreTableTheme,
   ScoreTableThemeRow,
   TeamView,
@@ -142,12 +143,11 @@ const stageCache = createStageCache({
   },
   onPaneShown: ({pane}) => {
     scheduleReadonlyNameOverflowUpdate(pane);
-    updateStageScrollState(viewerRoot.closest(".sheet-frame"));
+    stageScroll?.refresh();
   },
 });
 let reloadTimer: number | undefined;
 let readonlyTableIndex: NodeIndex | null = null;
-let viewerTabsFadeFrame = 0;
 let readonlyNameOverflowFrame = 0;
 
 const floatingPopoverSpecs = [
@@ -522,20 +522,19 @@ function applyFestViewEvent(view: FestView): void {
   }
 }
 
-// Toggles the scrolled-under fade on the frozen-column boundary of the EK
-// stage tables (see the .stage-scroll-left rule in styles.css), mirroring the
-// OD/KSI behaviour. The .sheet-frame is static, so we bind the scroll listener
-// once and let updateStageScrollState run on every scroll.
-function bindStageScrollFade(): void {
-  const scrollFrame = viewerRoot.closest(".sheet-frame");
-  if (!scrollFrame) return;
-  updateStageScrollState(scrollFrame);
-  scrollFrame.addEventListener("scroll", () => updateStageScrollState(scrollFrame), {passive: true});
-}
+// Toggles the scrolled-under fade on the frozen-column boundary of the EK stage
+// tables (see the .stage-scroll-left rule in styles.css). The .sheet-frame is
+// static, so the binding is made once and refreshed thereafter.
+let stageScroll: ScrollEdgeBinding | null = null;
 
-function updateStageScrollState(frame: Element | null): void {
-  if (!frame) return;
-  frame.classList.toggle("stage-scroll-left", frame.scrollLeft > 1);
+function bindStageScrollFade(): void {
+  if (stageScroll) {
+    stageScroll.refresh();
+    return;
+  }
+  stageScroll = gameTable.bindScrollEdges(viewerRoot.closest(".sheet-frame"), ({left}, frame) => {
+    frame.classList.toggle("stage-scroll-left", left);
+  });
 }
 
 // SPA navigation for the viewer tab strip: same pattern as the host EK page.
@@ -664,7 +663,7 @@ function render(): void {
     viewerRoot.replaceChildren(table);
   }
   scheduleReadonlyNameOverflowUpdate();
-  updateStageScrollState(viewerRoot.closest(".sheet-frame"));
+  stageScroll?.refresh();
 }
 
 function applyUpdatedMatch(updated: ViewerMatchView): void {
@@ -836,13 +835,18 @@ function activeViewerTabKey(): string {
   return "grid";
 }
 
+let viewerTabsScroll: ScrollEdgeBinding | null = null;
+
 function bindViewerTabsScrollFade(): void {
-  if (!viewerTabsRoot) return;
-  if (viewerTabsRoot.dataset.scrollFadeBound !== "1") {
-    viewerTabsRoot.addEventListener("scroll", scheduleViewerTabsFadeUpdate, {passive: true});
-    viewerTabsRoot.dataset.scrollFadeBound = "1";
+  if (!viewerTabsRoot || embedded) return;
+  if (!viewerTabsScroll) {
+    viewerTabsScroll = gameTable.bindScrollEdges(viewerTabsRoot, ({left, right}, tabs) => {
+      tabs.classList.toggle("tabs-scroll-left", left);
+      tabs.classList.toggle("tabs-scroll-right", right);
+    });
+    return;
   }
-  scheduleViewerTabsFadeUpdate();
+  viewerTabsScroll.refresh();
 }
 
 function scrollActiveViewerTabIntoView(activeLink: HTMLAnchorElement | null): void {
@@ -866,20 +870,7 @@ function scrollActiveViewerTabIntoView(activeLink: HTMLAnchorElement | null): vo
 }
 
 function scheduleViewerTabsFadeUpdate(): void {
-  if (!viewerTabsRoot || embedded) return;
-  if (viewerTabsFadeFrame) cancelAnimationFrame(viewerTabsFadeFrame);
-  viewerTabsFadeFrame = requestAnimationFrame(() => {
-    viewerTabsFadeFrame = 0;
-    updateViewerTabsScrollFade();
-  });
-}
-
-function updateViewerTabsScrollFade(): void {
-  if (!viewerTabsRoot) return;
-  const hasLeft = viewerTabsRoot.scrollLeft > 1;
-  const hasRight = viewerTabsRoot.scrollLeft + viewerTabsRoot.clientWidth < viewerTabsRoot.scrollWidth - 1;
-  viewerTabsRoot.classList.toggle("tabs-scroll-left", hasLeft);
-  viewerTabsRoot.classList.toggle("tabs-scroll-right", hasRight);
+  viewerTabsScroll?.refresh();
 }
 
 function withMatchState<T>(matchState: ViewerMatchView, callback: () => T): T {
@@ -930,7 +921,7 @@ function readonlyTeamNameCell(team: ViewerTeam, teamIndex: number): HTMLElement 
   const nameWrap = document.createElement("span");
   nameWrap.className = "od-detailed-team-name-wrap";
   const label = document.createElement("span");
-  label.className = "readonly-team-name od-detailed-team-name";
+  label.className = "od-detailed-team-name";
   label.textContent = labelText;
   label.tabIndex = 0;
   label.setAttribute("aria-label", labelText);
@@ -938,7 +929,7 @@ function readonlyTeamNameCell(team: ViewerTeam, teamIndex: number): HTMLElement 
   layout.appendChild(nameWrap);
   cell.appendChild(layout);
   const fullName = document.createElement("span");
-  fullName.className = "popover od-detailed-team-name-popover";
+  fullName.className = "popover popover-inline od-detailed-team-name-popover";
   fullName.textContent = labelText;
   cell.appendChild(fullName);
   return cell;
@@ -1001,9 +992,6 @@ function readonlyThemeCells(teamIndex: number, theme: ViewerTheme, themeIndex: n
   const playerCell = document.createElement("td");
   playerCell.colSpan = state!.questionValues.length;
   playerCell.className = "readonly-player theme-block theme-block-top-left";
-  if (isShootout) {
-    playerCell.classList.add("shootout-block");
-  }
   const playerLabel = theme.player || "";
   const playerWrap = document.createElement("span");
   playerWrap.className = "readonly-player-text-wrap";
@@ -1020,7 +1008,7 @@ function readonlyThemeCells(teamIndex: number, theme: ViewerTheme, themeIndex: n
   // Always render the popover (even empty) so the sync keeps it in step when the
   // player changes from/to blank, rather than only existing at build time.
   const playerPopover = document.createElement("span");
-  playerPopover.className = "popover readonly-player-popover";
+  playerPopover.className = "popover popover-inline readonly-player-popover";
   playerPopover.textContent = playerLabel;
   playerCell.appendChild(playerPopover);
   const answers = theme.answers.map((mark, answerIndex) => {
@@ -1032,9 +1020,6 @@ function readonlyThemeCells(teamIndex: number, theme: ViewerTheme, themeIndex: n
     cell.dataset.shootout = isShootout ? "1" : "0";
     cell.dataset.theme = String(themeIndex);
     cell.dataset.answer = String(answerIndex);
-    if (isShootout) {
-      cell.classList.add("shootout-block");
-    }
     return cell;
   });
   return {
