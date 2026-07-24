@@ -70,13 +70,22 @@ type config struct {
 	stages       []stageCfg
 	ekEditors    int
 	ekMatches    []string
+	editMode     string
 }
 
 // eventEnvelope mirrors the server's SSE payload wrapper (db.go eventEnvelope).
+// A full-state broadcast carries `data`; a delta carries `ops` instead, so both
+// have to be read to find an editor's marker.
 type eventEnvelope struct {
 	Scope    string          `json:"scope"`
 	Revision int64           `json:"revision"`
 	Data     json.RawMessage `json:"data"`
+	Ops      []envelopeOp    `json:"ops"`
+}
+
+type envelopeOp struct {
+	Path  []json.RawMessage `json:"path"`
+	Value json.RawMessage   `json:"value"`
 }
 
 // marker is embedded at the top level of every editor payload and echoed back
@@ -114,6 +123,7 @@ func parseFlags() config {
 	flag.IntVar(&cfg.payloadBytes, "payload-bytes", 1200, "approximate edit payload size, padded to model a real game-state blob")
 	flag.StringVar(&cfg.outPath, "out", "", "optional path to write the JSON report")
 	flag.BoolVar(&cfg.insecure, "insecure", false, "skip TLS verification")
+	flag.StringVar(&cfg.editMode, "edit-mode", "patch", "how flat-game editors write: patch (set-ops, the real client path) or put (whole state)")
 	flag.IntVar(&cfg.ekEditors, "ek-editors", 0, "concurrent EK editors PATCHing per-match state ops (spread over -ek-matches)")
 	flag.StringVar(&ekMatches, "ek-matches", "", "comma-separated EK match codes the EK editors mark cells in")
 	flag.Parse()
@@ -130,6 +140,10 @@ func parseFlags() config {
 		if code = strings.TrimSpace(code); code != "" {
 			cfg.ekMatches = append(cfg.ekMatches, code)
 		}
+	}
+	if cfg.editMode != "patch" && cfg.editMode != "put" {
+		fmt.Fprintln(os.Stderr, "loadtest: -edit-mode must be patch or put")
+		os.Exit(2)
 	}
 	if cfg.ekEditors > 0 && len(cfg.ekMatches) == 0 {
 		fmt.Fprintln(os.Stderr, "loadtest: -ek-matches is required when -ek-editors > 0")
@@ -328,6 +342,9 @@ func runViewer(ctx context.Context, cfg config, client *http.Client, stats *stat
 	stats.viewerConnected.Add(1)
 	defer stats.viewerConnected.Add(-1)
 
+	var feed []scopedEvent
+	defer func() { stats.recordViewerFeed(feed) }()
+
 	reader := bufio.NewReaderSize(resp.Body, 64*1024)
 	var dataBuf bytes.Buffer
 	for {
@@ -342,7 +359,7 @@ func runViewer(ctx context.Context, cfg config, client *http.Client, stats *stat
 		switch {
 		case line == "":
 			if dataBuf.Len() > 0 {
-				stats.recordEvent(dataBuf.Bytes())
+				stats.recordEvent(dataBuf.Bytes(), &feed)
 				dataBuf.Reset()
 			}
 		case strings.HasPrefix(line, "data:"):
@@ -368,8 +385,12 @@ func runEditor(ctx context.Context, cfg config, client *http.Client, stats *stat
 		}
 
 		seq := stats.editSeq.Add(1)
-		body := buildPayload(marker{Seq: seq, TSNano: time.Now().UnixNano(), Editor: id}, pad)
-		req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(body))
+		m := marker{Seq: seq, TSNano: time.Now().UnixNano(), Editor: id}
+		method, body := http.MethodPut, buildPayload(m, pad)
+		if cfg.editMode == "patch" {
+			method, body = http.MethodPatch, buildPatch(m, pad)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 		if err != nil {
 			return
 		}
@@ -486,6 +507,23 @@ func loadMatchTeamIDs(ctx context.Context, client *http.Client, matchURL, token 
 	return ids, nil
 }
 
+// buildPatch writes the same marker fields as buildPayload, but as the set-ops
+// a real od/KSI client sends — so the batcher's flat path is what is measured.
+func buildPatch(m marker, pad string) []byte {
+	op := func(key string, value any) map[string]any {
+		return map[string]any{"path": []any{key}, "value": value}
+	}
+	// Each editor stamps its OWN path: a window folds co-editors' ops into one
+	// merged delta, so a shared marker path would leave only the last writer's
+	// timestamp and undercount delivery by design.
+	b, _ := json.Marshal(map[string]any{"ops": []any{
+		map[string]any{"path": []any{"_lt", strconv.Itoa(m.Editor)}, "value": m.TSNano},
+		op("_lt_seq", m.Seq),
+		op("pad", pad),
+	}})
+	return b
+}
+
 func buildPayload(m marker, pad string) []byte {
 	obj := map[string]any{
 		"_lt_seq":    m.Seq,
@@ -528,43 +566,47 @@ type stats struct {
 	startTime time.Time
 
 	// EK edits carry no in-band marker: their broadcast is a server-computed
-	// MatchView, not the editor's payload. Correlation is by (scope, revision)
-	// instead — the response and the broadcast name the same one — joined at the
-	// end so a broadcast that beats its own HTTP response is still counted.
-	revMu      sync.Mutex
-	revSends   map[string][]time.Time
-	revArrives map[string][]time.Time
+	// MatchView, not the editor's payload. Correlation is by revision instead —
+	// the editor's response and the broadcast name the same one. Viewer-side
+	// deltas coalesce, so a merged broadcast at revision R proves every edit up
+	// to R reached that viewer; the join below is therefore "first arrival whose
+	// revision is at least the edit's", per viewer, computed at the end so a
+	// broadcast that beats its own HTTP response still counts.
+	revMu       sync.Mutex
+	sends       []scopedEvent
+	viewerFeeds [][]scopedEvent
 }
 
-// revTrackLimit bounds the correlation maps so a long soak can't grow unbounded.
-const revTrackLimit = 400_000
-
-func revKey(scope string, revision int64) string {
-	return scope + "#" + strconv.FormatInt(revision, 10)
+// scopedEvent is one edit sent, or one broadcast received, on a match scope.
+type scopedEvent struct {
+	scope    string
+	revision int64
+	at       time.Time
 }
+
+// eventTrackLimit bounds the correlation slices so a long soak can't grow
+// unbounded; overflow is logged as dropped rather than silently truncated.
+const eventTrackLimit = 400_000
 
 func (s *stats) recordSend(scope string, revision int64, at time.Time) {
 	s.revMu.Lock()
 	defer s.revMu.Unlock()
-	if len(s.revSends) < revTrackLimit {
-		s.revSends[revKey(scope, revision)] = append(s.revSends[revKey(scope, revision)], at)
+	if len(s.sends) < eventTrackLimit {
+		s.sends = append(s.sends, scopedEvent{scope, revision, at})
 	}
 }
 
-func (s *stats) recordArrival(scope string, revision int64, at time.Time) {
+func (s *stats) recordViewerFeed(feed []scopedEvent) {
+	if len(feed) == 0 {
+		return
+	}
 	s.revMu.Lock()
 	defer s.revMu.Unlock()
-	if len(s.revArrives) < revTrackLimit {
-		s.revArrives[revKey(scope, revision)] = append(s.revArrives[revKey(scope, revision)], at)
-	}
+	s.viewerFeeds = append(s.viewerFeeds, feed)
 }
 
 func newStats(cfgStages []stageCfg) *stats {
-	s := &stats{
-		startTime:  time.Now(),
-		revSends:   map[string][]time.Time{},
-		revArrives: map[string][]time.Time{},
-	}
+	s := &stats{startTime: time.Now()}
 	for range cfgStages {
 		s.stages = append(s.stages, &stageStat{})
 	}
@@ -590,25 +632,58 @@ func (s *stats) recordEdit(elapsed time.Duration, status int) {
 	st.mu.Unlock()
 }
 
-func (s *stats) recordEvent(data []byte) {
+// recordEvent classifies one SSE envelope. Match-scope envelopes append to the
+// caller's own feed — delta envelopes carry `ops` and no `data`, so this must
+// happen before the marker gate below drops them.
+func (s *stats) recordEvent(data []byte, feed *[]scopedEvent) {
 	st := s.stage()
 	st.eventsReceived.Add(1)
 	var env eventEnvelope
-	if err := json.Unmarshal(data, &env); err != nil || len(env.Data) == 0 {
+	if err := json.Unmarshal(data, &env); err != nil {
 		return
 	}
-	if strings.HasPrefix(env.Scope, "match:") && env.Revision > 0 {
-		s.recordArrival(env.Scope, env.Revision, time.Now())
+	if strings.HasPrefix(env.Scope, "match:") && env.Revision > 0 && len(*feed) < eventTrackLimit {
+		*feed = append(*feed, scopedEvent{env.Scope, env.Revision, time.Now()})
 	}
-	var m marker
-	if err := json.Unmarshal(env.Data, &m); err != nil || m.TSNano == 0 {
+	markers := envelopeMarkers(env)
+	if len(markers) == 0 {
 		return
 	}
-	st.markersSeen.Add(1)
-	latency := float64(time.Now().UnixNano()-m.TSNano) / 1e6
+	now := time.Now().UnixNano()
+	st.markersSeen.Add(int64(len(markers)))
 	st.mu.Lock()
-	st.propMS = append(st.propMS, latency)
+	for _, m := range markers {
+		st.propMS = append(st.propMS, float64(now-m.TSNano)/1e6)
+	}
 	st.mu.Unlock()
+}
+
+// envelopeMarkers finds every editor marker a broadcast carries: at the top
+// level of a full-state payload, or as the per-editor `_lt/<id>` set-ops of a
+// delta. A merged window carries one op per co-editor, and each one is a
+// delivery, so all of them count.
+func envelopeMarkers(env eventEnvelope) []marker {
+	var out []marker
+	if len(env.Data) > 0 {
+		var m marker
+		if err := json.Unmarshal(env.Data, &m); err == nil && m.TSNano != 0 {
+			out = append(out, m)
+		}
+	}
+	for _, op := range env.Ops {
+		if len(op.Path) != 2 {
+			continue
+		}
+		var key string
+		if json.Unmarshal(op.Path[0], &key) != nil || key != "_lt" {
+			continue
+		}
+		var m marker
+		if json.Unmarshal(op.Value, &m.TSNano) == nil && m.TSNano != 0 {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 type stageReport struct {
@@ -690,44 +765,56 @@ func (s *stats) finalize(cfg config, total time.Duration) report {
 	return r
 }
 
-// finalizeEK joins EK sends to viewer arrivals on (scope, revision). Latency
-// samples are capped per revision so a long soak stays bounded; the delivery
-// ratio still counts every pair.
+// finalizeEK joins each EK edit to the first broadcast that carried it to each
+// viewer. Deltas coalesce, so an arrival at revision R proves every edit up to R
+// reached that viewer — the join is therefore a merge over revision order, not
+// an equality match.
 func (s *stats) finalizeEK(cfg config) *ekReport {
-	const samplesPerRevision = 20
-	viewers := int64(0)
-	for _, st := range s.stages {
-		if st.connectedAtEnd > viewers {
-			viewers = st.connectedAtEnd
-		}
-	}
 	s.revMu.Lock()
 	defer s.revMu.Unlock()
 
+	sendsByScope := map[string][]scopedEvent{}
+	for _, send := range s.sends {
+		sendsByScope[send.scope] = append(sendsByScope[send.scope], send)
+	}
+	for _, sends := range sendsByScope {
+		sort.Slice(sends, func(i, j int) bool { return sends[i].revision < sends[j].revision })
+	}
+
 	var latencies []float64
-	var edits, delivered int64
-	for key, sends := range s.revSends {
-		edits += int64(len(sends))
-		arrivals := s.revArrives[key]
-		delivered += int64(len(sends)) * int64(len(arrivals))
-		for i, arrival := range arrivals {
-			if i >= samplesPerRevision {
-				break
-			}
-			for _, sent := range sends {
-				if ms := float64(arrival.Sub(sent)) / 1e6; ms >= 0 {
+	var delivered int64
+	for _, feed := range s.viewerFeeds {
+		arrivalsByScope := map[string][]scopedEvent{}
+		for _, arrival := range feed {
+			arrivalsByScope[arrival.scope] = append(arrivalsByScope[arrival.scope], arrival)
+		}
+		for scope, sends := range sendsByScope {
+			arrivals := arrivalsByScope[scope]
+			sort.Slice(arrivals, func(i, j int) bool { return arrivals[i].revision < arrivals[j].revision })
+			next := 0
+			for _, send := range sends {
+				for next < len(arrivals) && arrivals[next].revision < send.revision {
+					next++
+				}
+				if next == len(arrivals) {
+					break // this viewer never saw a broadcast at or past this edit
+				}
+				delivered++
+				if ms := float64(arrivals[next].at.Sub(send.at)) / 1e6; ms >= 0 {
 					latencies = append(latencies, ms)
 				}
 			}
 		}
 	}
+
+	viewers := int64(len(s.viewerFeeds))
 	p50, p95, p99, max := percentiles(latencies)
 	ratio := 0.0
-	if expected := edits * viewers; expected > 0 {
+	if expected := int64(len(s.sends)) * viewers; expected > 0 {
 		ratio = float64(delivered) / float64(expected)
 	}
 	return &ekReport{
-		Editors: cfg.ekEditors, Edits: edits, DeliveryRatio: ratio,
+		Editors: cfg.ekEditors, Edits: int64(len(s.sends)), DeliveryRatio: ratio,
 		PropP50: p50, PropP95: p95, PropP99: p99, PropMax: max,
 	}
 }

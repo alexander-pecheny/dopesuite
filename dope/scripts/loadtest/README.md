@@ -14,20 +14,14 @@ real edits, then reports the numbers that matter for this app:
 
 ## What the production box actually is
 
-`vps2day-ee`: **1 CPU, ~960 MB RAM**, nginx → Go (`:8090`) → SQLite (`/var/lib/dope/fest.db`, WAL).
+`vps2day-ee`: **1 CPU, ~960 MB RAM**, Caddy → Go (`:8090`) → SQLite (`/var/lib/dope/fest.db`, WAL).
 
-- nginx is `worker_processes auto` = **1 worker**. Each viewer costs ~2 connection slots
-  (client + a fresh upstream connection — there is no upstream `keepalive`, and an active
-  SSE stream holds both open for its whole life).
-- **Tuned 2026-06-02** for up to ~1000 viewers: `worker_connections 4096` +
-  `worker_rlimit_nofile 8192` in `/etc/nginx/nginx.conf` (backup alongside it as
-  `nginx.conf.bak.*`). Ceiling is now ~2000 SSE viewers (4096 slots ÷ 2); 1000 sits at
-  ~50% with headroom. Applied with `nginx -t` + `systemctl reload` (no dropped conns).
-  These limits are **not in the repo** — they live only on the VPS, so re-apply them if
-  the box is rebuilt. Past ~2000 the next wall is the single CPU under edit fan-out.
-- nginx is already SSE-correct: `proxy_buffering off`, `proxy_read_timeout 1h`.
-- `worker_processes` stays 1 (only 1 CPU) — adding workers wouldn't help.
-- The **single CPU** is shared by nginx + Go + SQLite. Under concurrent edits, CPU
+- The reverse proxy is **Caddy** (`/etc/caddy/Caddyfile`), which also issues the TLS
+  certs and serves HTTP/2. The `/etc/nginx/` tree on the box is a dead leftover — nginx
+  is not running, so its worker/connection tuning (and the notes that used to be here
+  about it) no longer applies to anything.
+- SSE needs `flush_interval -1` on the `reverse_proxy` block, which every dope site has.
+- The **single CPU** is shared by Caddy + Go + SQLite. Under concurrent edits, CPU
   saturation (not file descriptors — `LimitNOFILE=524288`) breaks first.
 - The global write mutex means your test edits contend with **real users' edits**.
   Run during a quiet window.
@@ -35,7 +29,7 @@ real edits, then reports the numbers that matter for this app:
 ## Layout
 
 - `main.go` — the load driver. Run it **from your machine** (not the VPS) so it goes
-  through nginx + the network like a real client. Stdlib only: `go run ./scripts/loadtest`.
+  through Caddy + the network like a real client. Stdlib only: `go run ./scripts/loadtest`.
 - `provision.py` — run **on the VPS**. Seeds a disposable public fest + a game + N
   editor accounts, and injects a session token per editor (no login needed). Teardown
   deletes exactly what it created.
@@ -79,7 +73,7 @@ ssh vps2day-ee 'watch -n1 "ss -s; journalctl -u dope.service --since \"1 min ago
 | `edit_latency_ms_p95` | low tens | climbing into seconds → serialized behind the write mutex |
 | `delivery_ratio` | ~1.0 | < 1 → slow viewers' event buffers overflowing (fan-out backpressure) |
 | `propagation_ms_p95` | sub-second | seconds → CPU saturated or viewers backed up |
-| `viewers_failed` | 0 | hitting nginx `worker_connections` or upstream accept limits |
+| `viewers_failed` | 0 | hitting the proxy's connection ceiling or upstream accept limits |
 
 ## EK editors (the tournament path)
 
@@ -94,10 +88,16 @@ go run ./scripts/loadtest -base https://dopetest.pecheny.me \
   -edit-interval 2s -duration 15m -tokens <toks> -out report.json
 ```
 
-EK propagation is correlated by `(scope, revision)` rather than by an in-band
-marker: the broadcast is a server-computed MatchView, not the editor's payload,
-so the revision both the response and the broadcast name is what joins them.
-It reports as a separate `ek` block.
+EK propagation is correlated by revision rather than by an in-band marker: the
+broadcast is a server-computed MatchView, not the editor's payload. Deltas
+coalesce, so an arrival at revision R proves every edit up to R reached that
+viewer, and the join is a merge over revision order per viewer. It reports as a
+separate `ek` block.
+
+Flat editors (`-edit-mode patch`, the default) send the same set-ops od/KSI
+clients do, each stamping its own `_lt/<editor>` marker path so a merged window
+still shows one delivery per co-editor. `-edit-mode put` keeps the old
+whole-state write for comparison.
 
 To prove the per-window commit cap, point every EK editor at one match and edit
 far above human rate: `-ek-editors 8 -ek-matches A -edit-interval 50ms`. Writes
@@ -111,10 +111,10 @@ Start small, confirm clean, then climb until something bends:
 2. **Target** `-viewers 120 -editors 3 -edit-interval 2s` — your stated goal.
 3. **Editor stress** `-viewers 120 -editors 6 -edit-interval 500ms` — push the write mutex.
 4. **Viewer stress** `-viewers 1000 -editors 2 -ramp 30s` — your worst case; expect
-   `viewers_failed` to stay 0 now that the nginx limits are raised (ceiling ~2000).
+   `viewers_failed` to stay 0.
 
-Find the knee, then decide whether the fix is config (nginx workers, more vCPU) or code
-(per-fest locking instead of the global `s.mu`).
+Find the knee, then decide whether the fix is config (more vCPU) or code (per-fest
+locking instead of the global `s.mu`).
 
 ## Realtime multi-game demo (`realtime_demo.sh`)
 
@@ -131,11 +131,29 @@ VIEWERS=30-100 EPS=5 DURATION=600 scripts/loadtest/realtime_demo.sh
 LOCAL=1 VIEWERS=30-100 scripts/loadtest/realtime_demo.sh
 ```
 
+## Staging: dopetest.pecheny.me
+
+`dopetest.pecheny.me` is a second dope instance on the same box (`dopetest.service`,
+`:8091`, `/var/lib/dopetest/fest.db`) running on a **copy** of the prod DB, so a release
+can be loadtested — and its startup migrations rehearsed — under the real memory limit
+without touching prod. Refresh its DB with the same online snapshot prod uses:
+
+```bash
+ssh vps2day-ee 'sudo systemctl stop dopetest &&
+  python3 -c "import sqlite3; src=sqlite3.connect(\"/var/lib/dope/fest.db\"); dst=sqlite3.connect(\"/var/lib/dopetest/fest.db\"); src.backup(dst)" &&
+  sudo systemctl start dopetest'
+```
+
+`provision.py grant --fest <id>` adds editor accounts to a fest that already exists
+(the prod copy has real stages, matches and rosters, which `provision` does not seed);
+`reopen --game <id> --codes A,B,C` sets finished bouts back to active so editors can
+type into them. Both are undone by the same `teardown --stamp`.
+
 ## Gotcha: SSE needs HTTP/2 (fixed 2026-06-02)
 
 Viewer pages hold a long-lived `EventSource`. Over **HTTP/1.1** browsers cap ~6
 connections per host, so ~6 open viewer tabs exhaust the pool and any *new* tab's
 fetches (EK bracket → skeleton forever) or `EventSource` (OD/KSI → no live
 updates) hang. This is load-independent — purely the connection count. Fix: serve
-**HTTP/2** at nginx (`listen 443 ssl http2;`), which multiplexes unlimited streams
-over one connection. Verify: `curl -o /dev/null -w '%{http_version}\n' https://dope.pecheny.me/` → `2`.
+**HTTP/2**, which Caddy serves by default and multiplexes unlimited streams over one
+connection. Verify: `curl -o /dev/null -w '%{http_version}\n' https://dope.pecheny.me/` → `2`.

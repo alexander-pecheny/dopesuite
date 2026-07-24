@@ -121,6 +121,58 @@ def provision(con: sqlite3.Connection, stamp: str, editors: int, expiry_days: in
     }
 
 
+def grant(con: sqlite3.Connection, stamp: str, fest_id: int, editors: int, expiry_days: int) -> dict:
+    """Create N editor accounts on an EXISTING fest and open matches for them.
+
+    The weekend shape is EK editors marking cells in real bouts, which needs a
+    fest with stages, matches, slots and rosters — far more than `provision`
+    seeds. On a staging copy of the prod DB that already exists, so this only
+    adds the accounts (tagged by stamp, so teardown stays exact) and reopens the
+    bouts the editors will type into.
+    """
+    now = utc_now()
+    cur = con.cursor()
+    if not cur.execute("select 1 from fests where id = ?", (fest_id,)).fetchone():
+        raise SystemExit(f"fest {fest_id} not found")
+
+    tokens: list[str] = []
+    user_ids: list[int] = []
+    for i in range(editors):
+        username = f"lt_{stamp}_{i}"
+        cur.execute(
+            "insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at) "
+            "values(null, null, ?, 0, ?, ?)",
+            (username, now, now),
+        )
+        uid = cur.lastrowid
+        user_ids.append(uid)
+        token = secrets.token_hex(32)
+        tokens.append(token)
+        cur.execute(
+            "insert into sessions(user_id, token_hash, created_at, expires_at, last_seen_at) "
+            "values(?, ?, ?, ?, ?)",
+            (uid, hash_token(token), now, utc_in_days(expiry_days), now),
+        )
+        cur.execute(
+            "insert into fest_organizers(fest_id, user_id, role, added_at) values(?, ?, 'admin', ?)",
+            (fest_id, uid, now),
+        )
+    con.commit()
+    return {"stamp": stamp, "fest_id": fest_id, "tokens": tokens, "editor_user_ids": user_ids}
+
+
+def reopen(con: sqlite3.Connection, game_id: int, codes: list[str]) -> dict:
+    """Set the named matches back to active so editors can type into them."""
+    cur = con.cursor()
+    placeholders = ",".join("?" * len(codes))
+    cur.execute(
+        f"update matches set status = 'active' where game_id = ? and code in ({placeholders})",
+        [game_id, *codes],
+    )
+    con.commit()
+    return {"reopened": cur.rowcount}
+
+
 def teardown(con: sqlite3.Connection, stamp: str) -> dict:
     slug = f"dope-loadtest-{stamp}"
     cur = con.cursor()
@@ -136,6 +188,11 @@ def teardown(con: sqlite3.Connection, stamp: str) -> dict:
         deleted["fest"] = cur.rowcount  # cascades games + fest_organizers
 
     # Test users (sessions cascade on user delete).
+    # fest_organizers rows a `grant` run added on a pre-existing fest.
+    cur.execute(
+        "delete from fest_organizers where user_id in (select id from users where username like ?)",
+        (f"lt_{stamp}_%",),
+    )
     cur.execute("delete from users where username like ?", (f"lt_{stamp}_%",))
     deleted["users"] = cur.rowcount
     con.commit()
@@ -144,11 +201,14 @@ def teardown(con: sqlite3.Connection, stamp: str) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["provision", "teardown"])
+    parser.add_argument("action", choices=["provision", "grant", "reopen", "teardown"])
     parser.add_argument("--db", default="/var/lib/dope/fest.db", help="path to the live SQLite file")
     parser.add_argument("--editors", type=int, default=3, help="number of editor accounts to create")
     parser.add_argument("--stamp", default=None, help="unique tag; defaults to UTC YYMMDD-HHMM on provision")
     parser.add_argument("--expiry-days", type=int, default=2, help="session lifetime for the test accounts")
+    parser.add_argument("--fest", type=int, default=0, help="existing fest id (grant)")
+    parser.add_argument("--game", type=int, default=0, help="existing game id (reopen)")
+    parser.add_argument("--codes", default="", help="comma-separated match codes to reopen")
     args = parser.parse_args()
 
     con = connect(args.db)
@@ -163,6 +223,15 @@ def main() -> int:
                 file=sys.stderr,
             )
             print(json.dumps(result))
+        elif args.action == "grant":
+            if not args.fest:
+                raise SystemExit("grant requires --fest")
+            stamp = args.stamp or default_stamp()
+            print(json.dumps(grant(con, stamp, args.fest, args.editors, args.expiry_days)))
+        elif args.action == "reopen":
+            if not args.game or not args.codes:
+                raise SystemExit("reopen requires --game and --codes")
+            print(json.dumps(reopen(con, args.game, [c for c in args.codes.split(",") if c])))
         else:
             if not args.stamp:
                 raise SystemExit("teardown requires --stamp")
