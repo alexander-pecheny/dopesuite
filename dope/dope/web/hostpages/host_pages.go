@@ -83,10 +83,26 @@ func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 
 type profileData struct {
 	HasPassword bool
+	Username    string
+	Telegram    string
 }
 
-// profileDoc builds the /profile page: the set/change-password form (driven by
-// profile.js via #passwordForm + data-has-password) and a logout form.
+// identitySection renders who you are logged in as. Either identity can be
+// missing: a Telegram-only account has no username until it picks one, and a
+// username/password account never links a Telegram handle.
+func identitySection(data profileData) []ui.Item {
+	var lines []ui.Item
+	if data.Username != "" {
+		lines = append(lines, ui.Hint(ui.Inline(ui.Text("Вы вошли как "), ui.Strong(ui.Text(data.Username)), ui.Text("."))))
+	}
+	if data.Telegram != "" {
+		lines = append(lines, ui.Hint(ui.Inline(ui.Text("Telegram: "), ui.Strong(ui.Text("@"+data.Telegram)), ui.Text("."))))
+	}
+	return lines
+}
+
+// profileDoc builds the /profile page: who you are, the set/change-password form
+// (driven by profile.js via #passwordForm + data-has-password) and a logout form.
 func profileDoc(data profileData) *ui.Doc {
 	action := "Установить пароль"
 	hasPassword := "0"
@@ -106,20 +122,24 @@ func profileDoc(data profileData) *ui.Doc {
 			ui.Placeholder("Повторите новый пароль"), ui.Autocomplete("new-password"), ui.Required()),
 		ui.Button(ui.Submit(), ui.Text(action)),
 	)
-	return &ui.Doc{Nodes: []ui.Node{
-		ui.Page(ui.Title("Профиль"), ui.PagePublic, ui.Classicscripts("dist/profile.js"),
-			ui.Publictopbar(ui.Title("Профиль")),
-			ui.List(ui.Listrow(ui.Href("/host"), ui.Listtitle(ui.Text("← Назад к списку турниров")))),
-			ui.Section(
-				ui.Hint(ui.Text(action)),
-				ui.Form(form...),
-				ui.Message(ui.ID("passwordMessage")),
-			),
-			ui.Form(ui.Method("post"), ui.Action("/profile/logout"),
-				ui.Button(ui.Submit(), ui.Text("Разлогиниться")),
-			),
+	page := []ui.Item{ui.Title("Профиль"), ui.PagePublic, ui.Classicscripts("dist/profile.js"),
+		ui.Publictopbar(ui.Title("Профиль")),
+		ui.List(ui.Listrow(ui.Href("/host"), ui.Listtitle(ui.Text("← Назад к списку турниров")))),
+	}
+	if lines := identitySection(data); len(lines) > 0 {
+		page = append(page, ui.Section(lines...))
+	}
+	page = append(page,
+		ui.Section(
+			ui.Hint(ui.Text(action)),
+			ui.Form(form...),
+			ui.Message(ui.ID("passwordMessage")),
 		),
-	}}
+		ui.Form(ui.Method("post"), ui.Action("/profile/logout"),
+			ui.Button(ui.Submit(), ui.Text("Разлогиниться")),
+		),
+	)
+	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
 }
 
 // /host — landing page.
@@ -174,13 +194,18 @@ func (s *Server) HandleProfilePage(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
-		var hash sql.NullString
+		var hash, username, telegram sql.NullString
 		if err := s.h.Engine().DB.QueryRowContext(r.Context(),
-			`select password_hash from users where id = ?`, user.UserID).Scan(&hash); err != nil {
+			`select password_hash, username, telegram_username from users where id = ?`,
+			user.UserID).Scan(&hash, &username, &telegram); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		pages.RenderDoc(w, s.h.Engine().AssetETags, profileDoc(profileData{HasPassword: hash.Valid && hash.String != ""}))
+		pages.RenderDoc(w, s.h.Engine().AssetETags, profileDoc(profileData{
+			HasPassword: hash.Valid && hash.String != "",
+			Username:    username.String,
+			Telegram:    strings.TrimPrefix(telegram.String, "@"),
+		}))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
