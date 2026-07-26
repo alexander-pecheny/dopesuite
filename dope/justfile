@@ -55,6 +55,13 @@ tidy-check:
 deploy *args: build-web
     python3 ../deploy.py --target dope-server {{args}}
 
+# Deploy to dopetest.pecheny.me — the same binary against a copy of prod's DB,
+# on prod's own box. Run this BEFORE `just deploy` whenever a release touches
+# the schema, a backfill, or memory on the read paths: startup migrations
+# rehearse there under the real 960MB/1-CPU limit (one once OOM-killed prod).
+deploy-staging *args: build-web
+    python3 ../deploy.py --target dopetest {{args}}
+
 # Drive a realtime load test (wraps scripts/loadtest/realtime_demo.sh).
 # Raises the fd limit first so 1000s of SSE viewer connections fit.
 # Flags map to the script's env vars: --foo-bar baz -> FOO_BAR=baz; --local is a switch.

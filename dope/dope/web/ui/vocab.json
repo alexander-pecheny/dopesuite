@@ -211,6 +211,11 @@
       "name": "note",
       "props": [],
       "children": "text"
+    },
+    {
+      "name": "richtext",
+      "props": [],
+      "children": "any"
     }
   ]
 }

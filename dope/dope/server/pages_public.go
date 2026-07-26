@@ -17,6 +17,7 @@ import (
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 	"dope/dope/web/hostpages"
+	"dope/dope/web/pages"
 
 	"pecheny.me/dopecore/session"
 )
@@ -54,85 +55,6 @@ func (d publicFestDetail) Ref() string {
 	return fmt.Sprintf("%d", d.ID)
 }
 
-var publicListTemplate = template.Must(template.New("publicList").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Фесты</title>
-  <link rel="preload" href="/static/fonts/noto-sans-var.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/dist/menu-config.js"></script>
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public" data-jump-label="Режим ведущего" data-jump-href="/host" data-jump-title="Перейти в режим ведущего">
-  <header class="public-top">
-    <h1>Фесты</h1>
-  </header>
-  <main class="public-main">
-    {{if .}}
-    {{range .}}
-    <details class="fest-group" open>
-      <summary class="fest-group-title">{{.Title}}</summary>
-      <ul class="list fest-list">
-        {{range .Fests}}
-        <li>
-          <a class="list-row fest-row" href="/fest/{{.Ref}}">
-            <span class="fest-row-title">{{.Title}}</span>
-            {{if .Dates}}<span class="fest-row-dates">{{.Dates}}</span>{{end}}
-          </a>
-        </li>
-        {{end}}
-      </ul>
-    </details>
-    {{end}}
-    {{else}}
-    <p class="empty">Нет публичных фестов.</p>
-    {{end}}
-  </main>
-</body>
-</html>`))
-
-var publicFestTemplate = template.Must(template.New("publicFest").Parse(`<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}}</title>
-  <link rel="preload" href="/static/fonts/noto-sans-var.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/dist/menu-config.js"></script>
-  <script src="/static/menu.js"></script>
-</head>
-<body class="public" data-jump-label="Режим ведущего" data-jump-href="/host/fest/{{.Ref}}" data-jump-title="Открыть в режиме ведущего">
-  <header class="public-top">
-    <a class="public-back" href="/">←</a>
-    <h1>{{.Title}}</h1>
-  </header>
-  <main class="public-main">
-    {{if .Dates}}<p class="muted">{{.Dates}}</p>{{end}}
-    {{if .Description}}<section class="public-description">{{.Description}}</section>{{end}}
-    {{if .Games}}
-    <section class="section">
-      <h2>Игры</h2>
-      <ul class="list">
-        {{range .Games}}
-        <li>
-          <a class="list-row" href="{{.URL}}">
-            <span class="list-row-title">{{.Title}}</span>
-            {{if .Slug}}<span class="muted">{{.Slug}}</span>{{end}}
-          </a>
-        </li>
-        {{end}}
-      </ul>
-    </section>
-    {{else}}
-    <p class="empty">В этом фесте пока нет игр.</p>
-    {{end}}
-  </main>
-</body>
-</html>`))
-
 func (s *server) handlePublicIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -148,10 +70,15 @@ func (s *server) handlePublicIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	groups := groupPublicFests(summaries, time.Now().Format("2006-01-02"))
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := publicListTemplate.Execute(w, groups); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	out := make([]hostpages.PublicFestGroup, 0, len(groups))
+	for _, g := range groups {
+		fests := make([]hostpages.PublicFest, 0, len(g.Fests))
+		for _, f := range g.Fests {
+			fests = append(fests, hostpages.PublicFest{Ref: f.Ref(), Title: f.Title, Dates: f.Dates})
+		}
+		out = append(out, hostpages.PublicFestGroup{Title: g.Title, Fests: fests})
 	}
+	pages.RenderDoc(w, s.eng.AssetETags, hostpages.PublicIndexDoc(out))
 }
 
 // publicFestGroup is one collapsible bucket on the public index.
@@ -333,10 +260,13 @@ func (s *server) renderPublicFestPage(w http.ResponseWriter, r *http.Request, id
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := publicFestTemplate.Execute(w, detail); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	pages.RenderDoc(w, s.eng.AssetETags, hostpages.PublicFestDoc(hostpages.PublicFestDetail{
+		Ref:         detail.Ref(),
+		Title:       detail.Title,
+		Dates:       detail.Dates,
+		Description: detail.Description,
+		Games:       detail.Games,
+	}))
 }
 
 func (s *server) assertFestPublic(ctx context.Context, festID int64) error {

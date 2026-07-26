@@ -75,6 +75,15 @@ func expandPublicTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 	return one(base.El("header", []base.Attr{base.ClassAttr("public-top")}, kids...))
 }
 
+// expandRichtext wraps markup the app already rendered — a fest's markdown
+// description — in the prose section the public pages style. Its child is a
+// ui.Raw node, which is why this primitive exists at all: everything else in
+// the vocabulary escapes its text, and this content is HTML by the time it
+// gets here.
+func expandRichtext(c *base.ExpandCtx, p *base.Element) []base.Node {
+	return one(base.El("section", []base.Attr{base.ClassAttr("public-description")}, c.Nodes(p.Block)...))
+}
+
 // inlineLink renders an inline anchor; newtab adds target="_blank" rel="noopener".
 // Used for the prose links in the server-rendered pages (register bot/done links).
 func inlineLink(c *base.ExpandCtx, p *base.Element) base.Item {

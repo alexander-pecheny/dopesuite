@@ -144,8 +144,14 @@ thin **overlay** on the kit (imports `pecheny.me/dopeuikit/kit`).
   primitive itself is DopeUIKit's; the game pages paint the same classes
   client-side (`game-page.ts`).
 - **Dynamic pages** (admin/audit/journal/register/numbers + hostpages: dash,
-  games, home, teams, imports, players) are built with the same package's typed
-  builder (`Render`) in `dope/web/pages/` and `dope/web/hostpages/`. Their former
+  games, home, teams, imports, players, and the two public pages — the fest
+  index at `/` and a fest's own page, `hostpages/public_pages.go`) are built with
+  the same package's typed builder (`Render`) in `dope/web/pages/` and
+  `dope/web/hostpages/`. There are no hand-written `html/template` strings left:
+  the public pages were the last two, which is why they kept a bare "←" after
+  everything else moved to the trail. A fest's markdown description reaches the
+  page through the `richtext` primitive + `ui.Raw`, the engine's one unescaped
+  escape hatch — never build a `Raw` from request data. Their former
   inline `on*` handlers moved to `pageforms.js`, keyed on `data-*` attributes
   (`data-confirm`/`data-autosubmit`/`data-dialog-open`/…) — never re-add inline
   handlers (CSP forbids them).

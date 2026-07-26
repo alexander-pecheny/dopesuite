@@ -139,6 +139,12 @@ in `assets/core.css` — colors, spacing, type scale, shadows, and semantic alia
 `--shadow-sm`) that the app CSS layers build on. Both apps serve core.css first,
 then their own layer.
 
+`ui.Raw` builds a `RawHTML` node, printed verbatim: the engine's one escape
+hatch, for markup the app already rendered (dope's markdown fest descriptions).
+The parser cannot produce one — no `.dopeui` syntax or vocab prop maps to it —
+so only the typed builder can, and the value's provenance stays visible at the
+call site. Never build one from request data.
+
 ## Core primitive catalog (summary)
 
 Chrome: `page topbar crumbs/crumb iconbtn iconlink`. Layout: `col row spacer section`. Text:

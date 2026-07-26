@@ -80,6 +80,13 @@ func Text(s string) *TextNode {
 	return &TextNode{Value: s}
 }
 
+// Raw is pre-rendered markup, passed through the printer unescaped. See
+// RawHTML: it is for HTML the app itself produced (dope's markdown-rendered
+// fest descriptions), never for anything derived from a request.
+func Raw(html string) *RawHTML {
+	return &RawHTML{HTML: html}
+}
+
 // CommentNode builds an HTML comment; multiple lines render as one
 // multi-line comment.
 func CommentNode(lines ...string) *Comment {

@@ -3796,28 +3796,6 @@ body:not(.embedded-match) .grid-match {
   transform: rotate(-90deg);
 }
 
-.fest-row {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: var(--space-3);
-  row-gap: var(--space-1);
-}
-
-.fest-row-title {
-  font-weight: var(--fw-semibold);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.fest-row-dates {
-  color: var(--muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
-
 .public-user {
   margin-left: auto;
   color: var(--muted);

@@ -82,6 +82,24 @@ type BlankLine struct{}
 func (*BlankLine) item() {}
 func (*BlankLine) node() {}
 
+// RawHTML is markup written through the printer verbatim, the engine's one
+// escape hatch. It exists for content an app has ALREADY rendered to HTML —
+// dope's fest descriptions, which are markdown run through a server-side
+// renderer — and which would otherwise force those pages to stay hand-written
+// templates outside the DSL entirely.
+//
+// The parser never produces one: no `.dopeui` syntax maps to it, and no vocab
+// prop carries it. Only the typed builder can, so a page author opts in from Go
+// and the value's provenance is visible at the call site. Never build one from
+// request data.
+type RawHTML struct {
+	HTML string
+	Line int
+}
+
+func (*RawHTML) item() {}
+func (*RawHTML) node() {}
+
 // Doctype emits `<!doctype html>`. Not authored directly — the page expander
 // emits it as the first node.
 type Doctype struct {
