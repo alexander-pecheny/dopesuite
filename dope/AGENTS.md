@@ -74,7 +74,7 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 | `host.ts` | ~3200 | EK host editor — match score editing, undo/redo, stage tabs, SSE sync. imports `match-table.ts` + `stage-cache.ts` |
 | `od.ts` | ~3800 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync. imports `match-table.ts` |
 | `match-table.ts` | ~1300 | **Core shared library** (exported `DopeTable`) — table builders, cell helpers, venues/roster/EK-stats tables; re-exports `state-sync.ts` + `game-page.ts` + `widgets.ts` so consumers keep one import. Used by all game pages |
-| `game-page.ts` | ~330 | Page plumbing — window-globals contract (init payloads, menu chrome), route parsing, breadcrumbs, menu jump/download mounts, localStorage snapshot cache, init/cache/fetch game-data loader |
+| `game-page.ts` | ~330 | Page plumbing — window-globals contract (init payloads, menu chrome), route parsing, the header breadcrumb trail (🏠 / [Мои фесты] / фест / игра / раздел, mirroring the URL; the Мои фесты crumb only on the /host tree), menu jump/download mounts, localStorage snapshot cache, init/cache/fetch game-data loader |
 | `widgets.ts` | ~860 | Interaction widgets — cell nav bar, virtual keypad, floating popovers, sync-status dot, name overflow, cell range selection, viewer counter |
 | `state-sync.ts` | ~1450 | **The SSE engine** — scoped event protocol (seq-chained deltas, epoch resets), durable pending ops, stream lifecycle + iOS-wake recovery, client recorder, host presence; `createStateSync` (od/si) and `createLiveEvents` (host/viewer), both stream-injectable for tests |
 | `si.ts` | ~1750 | KSI (team jeopardy) page — question/answer tables, team/player rows, detailed/results/refusals tabs. imports `match-table.ts` |
@@ -136,6 +136,13 @@ thin **overlay** on the kit (imports `pecheny.me/dopeuikit/kit`).
   (`init="__HOST_INIT__"` emits the exact byte-string `serve_html.go` splices the
   per-request JSON payload over). Spec: DopeUIKit `DESIGN.md` (engine + kit) +
   `dope/web/ui/vocab.json`/`expand.go` (dope overlay).
+- **Header path**: every server-rendered page's `publictopbar` carries a
+  `crumbs` trail built by the helpers in `web/pages/crumbs.go`
+  (`HostCrumbs`/`FestCrumbs`/`AdminCrumbs` + `Trail`), so no page restates its
+  ancestry. The lone `←` back link these bars used to carry is gone — the
+  second-to-last crumb is the same destination and also says what it is. The
+  primitive itself is DopeUIKit's; the game pages paint the same classes
+  client-side (`game-page.ts`).
 - **Dynamic pages** (admin/audit/journal/register/numbers + hostpages: dash,
   games, home, teams, imports, players) are built with the same package's typed
   builder (`Render`) in `dope/web/pages/` and `dope/web/hostpages/`. Their former

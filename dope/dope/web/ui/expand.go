@@ -5,7 +5,8 @@ import (
 )
 
 // expandGameTopbar builds the game pages' header: the game-header-main column
-// (breadcrumbs mount, an optional viewer heading, the tabs mount, an optional OD
+// (the breadcrumb nav the page scripts fill, an optional viewer heading, the
+// tabs mount, an optional OD
 // progress readout) and the host-actions sync-stack dot. It is self-contained —
 // the ids and class variants the game scripts bind to are fixed here, not
 // authored per page.
@@ -13,7 +14,7 @@ func expandGameTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 	mainCls := []string{"game-header-main"}
 
 	kids := []base.Node{
-		base.El("nav", []base.Attr{base.ClassAttr("game-breadcrumbs"), base.At("id", "gameBreadcrumbs"), base.At("aria-label", "Навигация")}),
+		base.El("nav", []base.Attr{base.ClassAttr("crumbs"), base.At("id", "gameBreadcrumbs"), base.At("aria-label", "Навигация")}),
 	}
 	if h, ok := base.Get(p, "heading"); ok {
 		kids = append(kids, base.Inl("h1", nil, &base.TextNode{Value: h}))
@@ -52,15 +53,21 @@ func expandGameTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 }
 
 // expandPublicTopbar builds the server-rendered pages' header: header.public-top
-// with an optional back link (a.public-back "←"), the h1 title, and an optional
-// corner user/context link (a.public-user). No sync dot — these pages are static.
-func expandPublicTopbar(_ *base.ExpandCtx, p *base.Element) []base.Node {
-	title, _ := base.Get(p, "title")
+// with the breadcrumb path and an optional corner user/context link
+// (a.public-user). No sync dot — these pages are static. The lone "←" back link
+// these bars used to carry is gone: the trail's second-to-last crumb is the same
+// destination, and it also says where that is.
+func expandPublicTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 	var kids []base.Node
-	if back, ok := base.Get(p, "back"); ok {
-		kids = append(kids, base.Inl("a", []base.Attr{base.ClassAttr("public-back"), base.At("href", back)}, &base.TextNode{Value: "←"}))
+	for _, n := range p.Block {
+		if e, ok := n.(*base.Element); ok && e.Tag == "crumbs" {
+			kids = append(kids, base.ExpandCrumbs(c, e)...)
+		}
 	}
-	kids = append(kids, base.Inl("h1", nil, &base.TextNode{Value: title}))
+	if len(kids) == 0 {
+		title, _ := base.Get(p, "title")
+		kids = append(kids, base.Inl("h1", nil, &base.TextNode{Value: title}))
+	}
 	if user, ok := base.Get(p, "user"); ok {
 		label, _ := base.Get(p, "userlabel")
 		kids = append(kids, base.Inl("a", []base.Attr{base.ClassAttr("public-user"), base.At("href", user)}, &base.TextNode{Value: label}))

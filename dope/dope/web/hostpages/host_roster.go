@@ -55,7 +55,7 @@ type hostFestImportData struct {
 func hostTeamsDoc(data hostFestRosterData) *dopeui.Doc {
 	page := []dopeui.Item{
 		dopeui.Title(data.Fest.Title + " · команды"), dopeui.PagePublic,
-		dopeui.Publictopbar(dopeui.Title("Команды"), dopeui.Back("/host/fest/"+data.Fest.Ref())),
+		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(data.Fest.Ref(), data.Fest.Title), "Команды")),
 	}
 	if len(data.Teams) > 0 {
 		rows := []dopeui.Item{dopeui.Trow(
@@ -93,7 +93,7 @@ func hostPlayersDoc(data hostFestRosterData) *dopeui.Doc {
 	ref := data.Fest.Ref()
 	page := []dopeui.Item{
 		dopeui.Title(data.Fest.Title + " · игроки"), dopeui.PagePublic, dopeui.Classicscripts("dist/pageforms.js dist/roster.js"),
-		dopeui.Publictopbar(dopeui.Title("Игроки"), dopeui.Back("/host/fest/"+ref)),
+		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(ref, data.Fest.Title), "Игроки")),
 	}
 	if data.Error != "" {
 		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
@@ -221,7 +221,7 @@ func hostRatingImportDoc(data hostFestImportData) *dopeui.Doc {
 	festRef := data.Fest.Ref()
 	page := []dopeui.Item{
 		dopeui.Title(data.Fest.Title + " · импорт участников"), dopeui.PagePublic,
-		dopeui.Publictopbar(dopeui.Title("Импорт участников"), dopeui.Back("/host/fest/"+festRef)),
+		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(festRef, data.Fest.Title), "Импорт участников")),
 	}
 	page = append(page, importMessages(data.Error, data.Notice)...)
 
@@ -246,7 +246,7 @@ func hostSchemeImportDoc(data hostFestImportData) *dopeui.Doc {
 	festRef := data.Fest.Ref()
 	page := []dopeui.Item{
 		dopeui.Title(data.Fest.Title + " · импорт схемы"), dopeui.PagePublic,
-		dopeui.Publictopbar(dopeui.Title("Импорт схемы"), dopeui.Back("/host/fest/"+festRef)),
+		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(festRef, data.Fest.Title), "Импорт схемы")),
 	}
 	page = append(page, importMessages(data.Error, data.Notice)...)
 	page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"), dopeui.Action("/host/fest/"+festRef+"/import"), dopeui.Autocomplete("off"),

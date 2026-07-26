@@ -41,7 +41,7 @@ func jumpViewerNav() []ui.Item {
 func hostLoggedInDoc(data hostLandingData) *ui.Doc {
 	page := []ui.Item{ui.Title("Мои фесты · " + data.Username), ui.PagePublic}
 	page = append(page, jumpViewerNav()...)
-	page = append(page, ui.Publictopbar(ui.Title("Мои фесты")))
+	page = append(page, ui.Publictopbar(pages.Trail([]ui.Item{pages.HomeCrumb()}, "Мои фесты")))
 
 	if data.Error != "" {
 		page = append(page, ui.Empty(ui.Text(data.Error)))
@@ -108,7 +108,7 @@ func profileDoc(data profileData) *ui.Doc {
 	)
 	return &ui.Doc{Nodes: []ui.Node{
 		ui.Page(ui.Title("Профиль"), ui.PagePublic, ui.Classicscripts("dist/profile.js"),
-			ui.Publictopbar(ui.Title("Профиль")),
+			ui.Publictopbar(pages.Trail(pages.HostCrumbs(), "Профиль")),
 			ui.List(ui.Listrow(ui.Href("/host"), ui.Listtitle(ui.Text("← Назад к списку турниров")))),
 			ui.Section(
 				ui.Hint(ui.Text(action)),

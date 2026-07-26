@@ -43,43 +43,53 @@ export interface GameBreadcrumbsOptions {
   currentTitle?: string;
   festHref?: string;
   gameHref?: string;
+  // Host pages sit under /host/fest/…, so their trail carries the Мои фесты
+  // crumb the URL does; the public viewer's does not.
+  host?: boolean;
 }
 
+// renderGameBreadcrumbs paints the header path, mirroring the URL: 🏠, then one
+// crumb per navigable prefix, ending in the page you are on as plain text. It
+// emits the kit's .crumb classes, so it looks the same as the server-rendered
+// pages' trail.
 export function renderGameBreadcrumbs(root: HTMLElement | null | undefined, options: GameBreadcrumbsOptions = {}): void {
   if (!root) return;
   const festTitle = String(options.festTitle || "Фест").trim() || "Фест";
   const gameTitle = String(options.gameTitle || "Игра").trim() || "Игра";
   const currentTitle = String(options.currentTitle || "").trim();
-  root.replaceChildren();
 
-  const festLink = document.createElement("a");
-  festLink.href = options.festHref || "/";
-  festLink.textContent = festTitle;
-  root.appendChild(festLink);
-
-  root.appendChild(breadcrumbSeparator());
+  const trail: Array<{ text: string; href?: string; home?: boolean }> = [
+    { text: "🏠", href: "/", home: true },
+  ];
+  if (options.host) trail.push({ text: "Мои фесты", href: "/host" });
+  trail.push({ text: festTitle, href: options.festHref || "/" });
   if (options.gameHref && currentTitle && currentTitle !== gameTitle) {
-    const gameLink = document.createElement("a");
-    gameLink.className = "game-breadcrumbs-game";
-    gameLink.href = options.gameHref;
-    gameLink.textContent = gameTitle;
-    root.appendChild(gameLink);
-    root.appendChild(breadcrumbSeparator());
-    const current = document.createElement("span");
-    current.className = "game-breadcrumbs-current";
-    current.textContent = currentTitle;
-    root.appendChild(current);
+    trail.push({ text: gameTitle, href: options.gameHref });
+    trail.push({ text: currentTitle });
   } else {
-    const game = document.createElement("span");
-    game.className = "game-breadcrumbs-game";
-    game.textContent = currentTitle || gameTitle;
-    root.appendChild(game);
+    trail.push({ text: currentTitle || gameTitle });
   }
+
+  root.replaceChildren();
+  trail.forEach((crumb, i) => {
+    if (i > 0) root.appendChild(breadcrumbSeparator());
+    const last = i === trail.length - 1;
+    const node = document.createElement(crumb.href && !last ? "a" : "span");
+    node.className = "crumb" + (crumb.home ? " crumb-home" : "") + (last ? " crumb-current" : "");
+    node.textContent = crumb.text;
+    if (crumb.home) {
+      node.setAttribute("aria-label", "Главная");
+      node.title = "Главная";
+    }
+    if (crumb.href && !last) node.setAttribute("href", crumb.href);
+    if (last) node.setAttribute("aria-current", "page");
+    root.appendChild(node);
+  });
 }
 
 function breadcrumbSeparator(): HTMLElement {
   const sep = document.createElement("span");
-  sep.className = "game-breadcrumbs-sep";
+  sep.className = "crumb-sep";
   sep.textContent = "/";
   sep.setAttribute("aria-hidden", "true");
   return sep;

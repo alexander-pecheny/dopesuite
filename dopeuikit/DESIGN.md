@@ -102,7 +102,12 @@ type=module>`), and body. `PageKinds[kind]` sets body/main classes and an
 optional `Frame` wrapper around main. A `placement:"header"` child (topbar)
 becomes `<header>`; `placement:"overlay"` children render after `</main>`.
 `topbar` auto-emits the `TopbarSync` dot unless `nosync`; `syncstate` overrides
-its `data-state`. `HeadHook` is the seam for an extension to splice head nodes
+its `data-state`. A `crumbs` child becomes the bar's heading in place of the
+`title`: the breadcrumb path (`🏠 / фест / игра`), one `crumb` per navigable URL
+prefix, the last one — the page you are on — rendered as text rather than a
+link. `crumb home` marks the 🏠 icon so it neither shrinks nor ellipsises.
+`ExpandCrumbs` is exported, so an app's own header primitive (dope's
+`publictopbar`) can place the same trail. `HeadHook` is the seam for an extension to splice head nodes
 positionally (dope's `init` marker: `<script>window.__HOST_INIT__=null;</script>`).
 
 **Scripts convention**: bundles that boot via `window` globals rather than
@@ -136,7 +141,7 @@ then their own layer.
 
 ## Core primitive catalog (summary)
 
-Chrome: `page topbar iconbtn iconlink`. Layout: `col row spacer section`. Text:
+Chrome: `page topbar crumbs/crumb iconbtn iconlink`. Layout: `col row spacer section`. Text:
 `text hint subhead label bigcode message empty muted strong code`. Forms:
 `form textfield password filefield hiddenfield numfield colorfield sliderrow
 checkbox radio selectfield/option editor button field`. Notable form props:

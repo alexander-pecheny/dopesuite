@@ -764,6 +764,82 @@ input[type="radio"]:focus-visible {
   letter-spacing: 0;
 }
 
+/* Breadcrumbs — the shared header path (🏠 / фест / игра). Every crumb is a
+   navigable prefix of the URL; the last is the page you are on, so it is plain
+   text. The trail is one line that ellipsises rather than wrapping: the header
+   is a fixed height, and a second row would push the content down. */
+.host-brand {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+.crumbs {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--text-xl);
+  line-height: var(--leading-snug);
+}
+
+.crumb {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  /* The overflow:hidden that yields the ellipsis clips at the padding edge, so
+     a line-height bump alone still shaved bold Cyrillic descenders (у, щ, р).
+     Give the clip box explicit bottom room so descenders survive. */
+  padding-bottom: 0.2em;
+}
+
+.crumb:hover {
+  text-decoration: underline;
+}
+
+/* The home crumb is an icon: it should not shrink, ellipsise, or dim. */
+.crumb-home {
+  flex: 0 0 auto;
+  overflow: visible;
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* The page you are on is the one that should read as the title. */
+.crumb-current {
+  flex: 1 1 auto;
+  color: var(--text-strong);
+  font-weight: var(--fw-bold);
+}
+
+.crumb-current:hover {
+  text-decoration: none;
+}
+
+.crumb-sep {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+/* Ancestors are the first to give up room; the current page keeps its share. */
+@media (max-width: 640px) {
+  .crumbs {
+    font-size: var(--text-base);
+    gap: var(--space-1-5);
+  }
+
+  .crumbs .crumb:not(.crumb-current):not(.crumb-home) {
+    max-width: 6ch;
+  }
+}
+
 .host-actions {
   display: flex;
   flex: 0 0 auto;

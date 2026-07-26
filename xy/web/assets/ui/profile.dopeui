@@ -1,5 +1,8 @@
 page title="Профиль · xy" kind="sheet" scripts="dist/profile.js"
-  topbar title="Профиль" home="/"
+  topbar title="Профиль"
+    crumbs
+      crumb home href="/" label="Все доски" "🏠"
+      crumb "Профиль"
 
   section
     hint "Вы вошли как " (strong id="whoami" "…") "."

@@ -1,5 +1,9 @@
 page title="API-токены · xy" kind="sheet" scripts="dist/tokens.js"
   topbar title="API-токены"
+    crumbs
+      crumb home href="/" label="Все доски" "🏠"
+      crumb href="/profile" "Профиль"
+      crumb "API-токены"
     iconlink href="/profile" label="Профиль" "⬅️"
 
   section

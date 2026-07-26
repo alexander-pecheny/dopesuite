@@ -40,7 +40,7 @@ func hostNumbersDoc(data hostFestNumbersData) *ui.Doc {
 	ref := data.Fest.Ref()
 	page := []ui.Item{
 		ui.Title(data.Fest.Title + " · номера команд"), ui.PagePublic, ui.Classicscripts("dist/numbers.js"),
-		ui.Publictopbar(ui.Title("Номера команд"), ui.Back("/host/fest/"+ref)),
+		ui.Publictopbar(Trail(FestCrumbs(ref, data.Fest.Title), "Номера команд")),
 	}
 	if data.Error != "" {
 		page = append(page, ui.Empty(ui.Text(data.Error)))

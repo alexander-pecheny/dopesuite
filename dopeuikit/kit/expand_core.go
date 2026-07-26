@@ -5,6 +5,7 @@ package kit
 var coreExpanders = map[string]ExpandFunc{
 	"page":    expandPage,
 	"topbar":  expandTopbar,
+	"crumbs":  ExpandCrumbs,
 	"iconbtn": expandIconbtn,
 	"iconlink": func(c *ExpandCtx, p *Element) []Node {
 		label, _ := Get(p, "label")

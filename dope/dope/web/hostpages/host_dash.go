@@ -76,7 +76,7 @@ func hostFestDashDoc(data hostFestDashData) *dopeui.Doc {
 			dopeui.Data("jump-title", "Открыть зрительскую страницу"),
 		)
 	}
-	page = append(page, dopeui.Publictopbar(dopeui.Title(data.Fest.Title), dopeui.Back("/host")))
+	page = append(page, dopeui.Publictopbar(pages.Trail(pages.HostCrumbs(), data.Fest.Title)))
 	if data.Error != "" {
 		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
 	}

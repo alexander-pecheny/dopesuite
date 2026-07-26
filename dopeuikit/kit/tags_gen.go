@@ -37,6 +37,14 @@ func Topbar(items ...Item) *Element {
 	return base.New("topbar", items...)
 }
 
+func Crumbs(items ...Item) *Element {
+	return base.New("crumbs", items...)
+}
+
+func Crumb(items ...Item) *Element {
+	return base.New("crumb", items...)
+}
+
 func Iconbtn(items ...Item) *Element {
 	return base.New("iconbtn", items...)
 }
@@ -259,10 +267,6 @@ func Titleid(v string) Attr {
 	return Attr{Name: "titleid", Value: v}
 }
 
-func Home(v string) Attr {
-	return Attr{Name: "home", Value: v}
-}
-
 func Nosync() Attr {
 	return Attr{Name: "nosync", Bare: true}
 }
@@ -271,16 +275,20 @@ func Syncstate(v string) Attr {
 	return Attr{Name: "syncstate", Value: v}
 }
 
+func Href(v string) Attr {
+	return Attr{Name: "href", Value: v}
+}
+
 func Label(v string) Attr {
 	return Attr{Name: "label", Value: v}
 }
 
-func Badgeid(v string) Attr {
-	return Attr{Name: "badgeid", Value: v}
+func Home() Attr {
+	return Attr{Name: "home", Bare: true}
 }
 
-func Href(v string) Attr {
-	return Attr{Name: "href", Value: v}
+func Badgeid(v string) Attr {
+	return Attr{Name: "badgeid", Value: v}
 }
 
 func Wrap() Attr {
