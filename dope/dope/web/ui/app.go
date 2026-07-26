@@ -19,6 +19,18 @@ var overlayVocab []byte
 // viewportContent is dope's plain (non-PWA) viewport.
 const viewportContent = "width=device-width, initial-scale=1"
 
+// iconLinks point the launchers at the icon set design/icon/gen-icon.py renders.
+// /favicon.ico needs no link (browsers ask for it anyway); iOS ignores the
+// manifest and reads only apple-touch-icon. The manifest is there for the icons,
+// not to make dope a PWA — its `display: browser` keeps an added-to-home-screen
+// dope opening as a normal tab.
+var iconLinks = []base.HeadLink{
+	{Rel: "icon", Type: "image/png", Sizes: "192x192", Href: "/static/icon-192.png"},
+	{Rel: "icon", Type: "image/png", Sizes: "512x512", Href: "/static/icon-512.png"},
+	{Rel: "apple-touch-icon", Href: "/static/apple-touch-icon.png"},
+	{Rel: "manifest", Href: "/manifest.webmanifest"},
+}
+
 var dopeApp = mustApp()
 
 func mustApp() *base.App {
@@ -58,6 +70,7 @@ func mustApp() *base.App {
 			Viewport:     viewportContent,
 			Stylesheets:  []string{"/static/styles.css"},
 			FontPreloads: []string{"/static/fonts/noto-sans-var.woff2"},
+			HeadLinks:    iconLinks,
 			BootScripts:  []string{"/static/dist/menu-config.js", "/static/menu.js"},
 			DefaultKind:  "sheet",
 			PageKinds: map[string]base.PageKind{

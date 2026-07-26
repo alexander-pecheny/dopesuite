@@ -14,6 +14,10 @@ type SyncSpec struct {
 	Label string
 }
 
+// HeadLink is a plain <link> in the head — icons and the web-app manifest.
+// Empty fields are omitted.
+type HeadLink struct{ Rel, Type, Sizes, Href string }
+
 // Chrome is the app's page shell: language, viewport, head assets, page kinds
 // and the topbar sync default. HeadHook lets an extension contribute head nodes
 // right after the boot scripts (e.g. dope's init-payload marker).
@@ -22,6 +26,7 @@ type Chrome struct {
 	Viewport     string
 	Stylesheets  []string
 	FontPreloads []string
+	HeadLinks    []HeadLink
 	BootScripts  []string
 	// ModuleBootScripts load on every page like BootScripts but as ES modules
 	// (deferred by the browser) — for app chrome that doesn't need to block
