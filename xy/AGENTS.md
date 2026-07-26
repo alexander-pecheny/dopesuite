@@ -206,7 +206,8 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        board, owner-only delete), the «📤 Экспорт» modal (tick any of
                        .4s / .docx / .pdf / .pdf для телефона / раздатки, `runExport`
                        → /api/export/pack; a bare .4s with no images is written in the
-                       browser, the only export that works offline); direct links to a card
+                       browser, the only export that works offline; the modal is on the
+                       overlay stack, so back closes it); direct links to a card
                        (?card=) and a comment (&comment=, copied from the timeline 🔗);
                        ← / → walk the open card's list — its whole group when it is in one —
                        stopping at both ends, and firing only when the caret is outside a

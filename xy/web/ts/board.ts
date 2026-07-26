@@ -1690,9 +1690,12 @@ function openExport(list: BoardList): void {
   byId("exportMessage").textContent = notes.join(" ");
   syncExportForm();
   exportOverlay.hidden = false;
+  overlayStack.open({ el: exportOverlay, close: hideExport });
 }
 
-function closeExport(): void {
+function closeExport(): void { overlayStack.pop(); }
+
+function hideExport(): void {
   exportOverlay.hidden = true;
   exportCtx = null;
 }
@@ -1782,7 +1785,6 @@ byId("exportToggleAll").addEventListener("click", () => {
 for (const f of EXPORT_FORMATS) exportBox(f.box).addEventListener("change", syncExportForm);
 byId("exportCancel").addEventListener("click", closeExport);
 exportOverlay.addEventListener("pointerdown", (e) => { if (e.target === exportOverlay) closeExport(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !exportOverlay.hidden) closeExport(); });
 
 // ---- handouts generation (chgksuite .hndt → PDF) ----
 // "Генерация раздаток": port of `chgksuite handouts 4s2hndt` (in chgk.js) builds
