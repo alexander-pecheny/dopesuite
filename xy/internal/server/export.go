@@ -74,16 +74,23 @@ type exportRequest struct {
 // PDF exports. ext is stripped off the client-supplied filename, since the handler
 // appends its own.
 func (s *server) readExportRequest(w http.ResponseWriter, r *http.Request, ext string) (exportRequest, bool) {
+	req, _, ok := s.readExportForm(w, r, ext)
+	return req, ok
+}
+
+// readExportForm is readExportRequest plus the raw form, for the pack export —
+// it reads fields (formats, hndt) the single-format endpoints have no use for.
+func (s *server) readExportForm(w http.ResponseWriter, r *http.Request, ext string) (exportRequest, *memForm, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxExportRequest)
 	form, err := readMultipart(r, maxExportRequest)
 	if err != nil {
 		httpError(w, http.StatusBadRequest, err.Error())
-		return exportRequest{}, false
+		return exportRequest{}, nil, false
 	}
 	source := normalizeNewlines(form.Value("source"))
 	if strings.TrimSpace(source) == "" {
 		httpError(w, http.StatusBadRequest, "empty source")
-		return exportRequest{}, false
+		return exportRequest{}, nil, false
 	}
 	name := headerSafeName(safeImageName(form.Value("filename")))
 	if name == "" {
@@ -100,7 +107,7 @@ func (s *server) readExportRequest(w http.ResponseWriter, r *http.Request, ext s
 			req.images[base] = f.Data
 		}
 	}
-	return req, true
+	return req, form, true
 }
 
 // serveDownload streams a generated file as an attachment. Nothing about it is

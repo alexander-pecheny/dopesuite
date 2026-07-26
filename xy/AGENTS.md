@@ -80,6 +80,10 @@ internal/server/       package server — the whole HTTP server
   export.go            POST /api/export/{docx,pdf} — one 4s source + images, exported two ways, both fully
                        in-process (chgk/docx, chgk/typstdoc), images included; no Python. The PDF goes through
                        the shared typst (wasm) pool (typst.go), so it too writes nothing anywhere
+  exportpack.go        POST /api/export/pack — the export modal's request: one 4s source, several formats
+                       (4s/docx/pdf/pdf_mobile/handouts) rendered by composing the above + handout.SplitFit,
+                       returned as the bare file when one was asked for or a zip when more. Images ride along
+                       only for the .4s (docx/pdf embed their own); split-fit's PDFs land under раздатки/
   import4s.go          POST /api/import/parse — .4s/.zip/.docx → 4s source + images (chgk/chgkimport),
                        parsed in memory, nothing persisted; the client encrypts the result into a new list.
                        POST /api/import/text — the same pipeline without the file: one card's plain text
@@ -185,8 +189,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        move carries the card's labels + comments + attachments via
                        copyCardExtras — online-only for the extras), list ⋯ menu
                        (incl. rename/delete list), board ☰ menu (incl. rename/delete
-                       board, owner-only delete), export to docx / PDF (same request,
-                       `exportList(list, format)`); direct links to a card
+                       board, owner-only delete), the «📤 Экспорт» modal (tick any of
+                       .4s / .docx / .pdf / .pdf для телефона / раздатки, `runExport`
+                       → /api/export/pack; a bare .4s with no images is written in the
+                       browser, the only export that works offline); direct links to a card
                        (?card=) and a comment (&comment=, copied from the timeline 🔗);
                        «Управление списками» modal groups consecutive lists into a
                        list_of_lists (☰ menu); all mutations via sync.ts (offline-capable);

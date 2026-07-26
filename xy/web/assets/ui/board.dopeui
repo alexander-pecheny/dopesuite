@@ -145,6 +145,21 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
         iconbtn id="previewClose" label="Закрыть" "×"
     mount id="previewBody" kind="preview-body"
 
+  -- export picker: tick the formats, get one file — or a zip of all of them.
+  -- Offline only .4s survives; the rest need the server to render.
+  modal id="exportOverlay" label="Экспорт списка" title="Экспорт"
+    form id="exportForm" dir="col"
+      checkbox id="exportFmt4s" checked title="Исходник chgksuite; изображения кладутся рядом в архив" " .4s"
+      checkbox id="exportFmtDocx" " .docx"
+      checkbox id="exportFmtPdf" " .pdf"
+      checkbox id="exportFmtPdfMobile" title="Вёрстка под узкий экран" " .pdf для телефона"
+      checkbox id="exportFmtHandouts" title="Раздатки по одной на страницу, свёрстанные по размеру (split-fit)" " раздатки в pdf"
+      row gap="sm" align="center" wrap
+        button small kind="ghost" id="exportToggleAll" "Выбрать все"
+        button submit id="exportRun" "Экспорт"
+        button kind="ghost" id="exportCancel" "Отмена"
+    message id="exportMessage"
+
   -- import picker: the package file plus how it lands on the board — one list,
   -- or (разбить по турам) one list per "## " section, linked into a group with
   -- continuous numbering and combined export
