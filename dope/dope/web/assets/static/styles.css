@@ -2776,9 +2776,21 @@ body:not(.embedded-match) .grid-match {
   max-width: var(--team-col);
 }
 
-/* OD Подробно freezes the same four columns every other match-table does. It
-   used to drop place/place-gap to `position: static`, which left the М header
-   sliding under the frozen Команда and Σ as the sheet scrolled sideways. */
+/* OD Подробно unfreezes М so two more questions fit on a phone. Only the
+   horizontal half: the header keeps `position: sticky` for the vertical
+   scroll, and drops to the question columns' z-index so it slides under the
+   frozen Команда and Σ rather than over them. */
+.match-table.od-detailed:not(.ksi-detailed) tbody .sticky-place,
+.match-table.od-detailed:not(.ksi-detailed) tbody .sticky-place-gap {
+  position: static;
+  z-index: auto;
+}
+
+.match-table.od-detailed:not(.ksi-detailed) thead .sticky-place,
+.match-table.od-detailed:not(.ksi-detailed) thead .sticky-place-gap {
+  left: auto;
+  z-index: 4;
+}
 
 .match-table.compact-score-table,
 .match-table.compact-score-table th,
