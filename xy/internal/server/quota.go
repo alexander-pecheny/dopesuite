@@ -30,13 +30,19 @@ select
 + coalesce((select sum(length(l.title_enc)) from lists l
             join boards b on b.id = l.board_id and b.deleted_at is null
             where b.owner_user_id = ? and l.deleted_at is null), 0)
-+ coalesce((select sum(length(lb.name_enc) + length(lb.color_enc)) from labels lb
++ coalesce((select sum(length(lb.name_enc) + coalesce(length(lb.color_enc), 0)) from labels lb
             join boards b on b.id = lb.board_id and b.deleted_at is null
             where b.owner_user_id = ? and lb.deleted_at is null), 0)
++ coalesce((select sum(length(s.meta_enc)) from test_sessions s
+            join boards b on b.id = s.board_id and b.deleted_at is null
+            where b.owner_user_id = ? and s.deleted_at is null), 0)
 + coalesce((select sum(length(t.payload_enc)) from timeline_events t
             join boards b on b.id = t.board_id and b.deleted_at is null
-            join cards tc on tc.id = t.card_id and tc.deleted_at is null
-            where b.owner_user_id = ? and t.deleted_at is null), 0)`
+            left join cards tc on tc.id = t.card_id
+            left join test_sessions ts on ts.id = t.session_id
+            where b.owner_user_id = ? and t.deleted_at is null
+              and (t.card_id is null or tc.deleted_at is null)
+              and (t.session_id is null or ts.deleted_at is null)), 0)`
 
 type rowQuerier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
@@ -44,7 +50,7 @@ type rowQuerier interface {
 
 func storageBytes(ctx context.Context, q rowQuerier, uid int64) (int64, error) {
 	var n int64
-	err := q.QueryRowContext(ctx, storageUsageSQL, uid, uid, uid, uid, uid).Scan(&n)
+	err := q.QueryRowContext(ctx, storageUsageSQL, uid, uid, uid, uid, uid, uid).Scan(&n)
 	return n, err
 }
 

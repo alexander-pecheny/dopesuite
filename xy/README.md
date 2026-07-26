@@ -161,6 +161,36 @@ RCLONE_CONFIG=/dev/null rclone copy r2:backups/xy/blobs /var/lib/xy/blobs
 chown -R xy:xy /var/lib/xy
 ```
 
+### Staging — xytest.pecheny.me
+
+The same binary on the same box, against a copy of prod's DB, so a release's
+startup migrations rehearse before prod sees them. `just deploy-staging` (target
+`xytest` in `deploy.py`).
+
+| | prod | staging |
+| --- | --- | --- |
+| unit / port | `xy.service`, 9673 | `xytest.service`, 9683 |
+| binary / env | `/opt/xy`, `/etc/xy.env` | `/opt/xytest`, `/etc/xytest.env` |
+| data | `/var/lib/xy` | `/var/lib/xytest` |
+| litestream | replicated | **no** — staging must never write to prod's replica |
+| telegram bot | `xy-bot.service` | **none** — bootstrap with `xy-server adduser` |
+
+Refresh staging's data from prod with SQLite's online backup (consistent against
+a live WAL) and hardlink the blobs, which costs no disk because the store is
+write-once and unlinking one link leaves the other:
+
+```sh
+sudo systemctl stop xytest
+sudo rm -rf /var/lib/xytest/xy.db /var/lib/xytest/blobs
+sudo sqlite3 /var/lib/xy/xy.db ".backup /var/lib/xytest/xy.db"
+sudo cp -al /var/lib/xy/blobs /var/lib/xytest/blobs
+sudo chown -R xy:xy /var/lib/xytest && sudo systemctl start xytest
+```
+
+Never sweep `/tmp/systemd-private-*` during disk cleanup — those are the live
+`PrivateTmp` directories of the running services, and deleting one makes that
+unit's `systemctl reload` fail with `status=226/NAMESPACE` until it restarts.
+
 Two deliberate choices worth knowing:
 
 - **`sync` with a trash prefix, matching the tombstone model** (ADR-0002).

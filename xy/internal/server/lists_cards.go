@@ -42,8 +42,12 @@ type cardDTO struct {
 type labelDTO struct {
 	ID       int64  `json:"id"`
 	NameEnc  string `json:"name_enc"`
-	ColorEnc string `json:"color_enc"`
+	ColorEnc string `json:"color_enc"` // "" = inherit the board's mark template
 	Kind     string `json:"kind"`
+	// A test label is a link to a Test Session plus a Mark; its name_enc is only
+	// a cache for chgksuite (the Trello API hands label names over verbatim).
+	SessionID *int64 `json:"session_id,omitempty"`
+	Mark      string `json:"mark,omitempty"`
 }
 
 func scanLists(ctx context.Context, q querier, boardID int64) ([]listDTO, error) {
@@ -122,7 +126,7 @@ from cards where board_id = ? and deleted_at is null order by rank`, boardID)
 
 func scanLabels(ctx context.Context, q querier, boardID int64) ([]labelDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, name_enc, color_enc, kind from labels where board_id = ? and deleted_at is null order by id`, boardID)
+select id, name_enc, color_enc, kind, session_id, mark from labels where board_id = ? and deleted_at is null order by id`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -131,11 +135,19 @@ select id, name_enc, color_enc, kind from labels where board_id = ? and deleted_
 	for rows.Next() {
 		var l labelDTO
 		var nameEnc, colorEnc []byte
-		if err := rows.Scan(&l.ID, &nameEnc, &colorEnc, &l.Kind); err != nil {
+		var sessionID sql.NullInt64
+		var mark sql.NullString
+		if err := rows.Scan(&l.ID, &nameEnc, &colorEnc, &l.Kind, &sessionID, &mark); err != nil {
 			return nil, err
 		}
 		l.NameEnc = b64(nameEnc)
-		l.ColorEnc = b64(colorEnc)
+		if colorEnc != nil {
+			l.ColorEnc = b64(colorEnc)
+		}
+		if sessionID.Valid {
+			l.SessionID = &sessionID.Int64
+		}
+		l.Mark = mark.String
 		out = append(out, l)
 	}
 	return out, rows.Err()
@@ -593,9 +605,11 @@ func (s *server) handleDeleteCard(w http.ResponseWriter, r *http.Request) {
 // ---- labels ----
 
 type createLabelRequest struct {
-	NameEnc  string `json:"name_enc"`
-	ColorEnc string `json:"color_enc"`
-	Kind     string `json:"kind"`
+	NameEnc   string `json:"name_enc"`
+	ColorEnc  string `json:"color_enc"` // "" = inherit the board's mark template
+	Kind      string `json:"kind"`
+	SessionID *int64 `json:"session_id"`
+	Mark      string `json:"mark"`
 }
 
 func (s *server) handleListLabels(w http.ResponseWriter, r *http.Request) {
@@ -629,11 +643,29 @@ func (s *server) handleCreateLabel(w http.ResponseWriter, r *http.Request) {
 	if kind == "" {
 		kind = "normal"
 	}
+	if kind == "test" && (req.SessionID == nil || req.Mark == "") {
+		httpError(w, http.StatusBadRequest, "test label needs session_id and mark")
+		return
+	}
+	if req.SessionID != nil {
+		sbid, err := boardOfSession(r.Context(), s.db, *req.SessionID)
+		if handleErr(w, err) {
+			return
+		}
+		if sbid != bid {
+			httpError(w, http.StatusBadRequest, "session belongs to another board")
+			return
+		}
+	}
+	if len(colorEnc) == 0 {
+		colorEnc = nil // null = inherit
+	}
 	now := time.Now()
 	var id int64
 	err := s.withWriteTx(r.Context(), "create-label", func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `insert into labels(board_id, name_enc, color_enc, kind, created_at) values(?, ?, ?, ?, ?)`,
-			bid, nameEnc, colorEnc, kind, rfc3339(now))
+		res, err := tx.ExecContext(ctx,
+			`insert into labels(board_id, name_enc, color_enc, kind, session_id, mark, created_at) values(?, ?, ?, ?, ?, ?, ?)`,
+			bid, nameEnc, colorEnc, kind, req.SessionID, nullStr(req.Mark), rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -690,6 +722,9 @@ func (s *server) handlePatchLabel(w http.ResponseWriter, r *http.Request) {
 			colorEnc, err := unb64(*req.ColorEnc)
 			if err != nil {
 				return errBadRequest("invalid color_enc")
+			}
+			if len(colorEnc) == 0 {
+				colorEnc = nil // null = inherit the board's mark template
 			}
 			if _, err := tx.ExecContext(ctx, `update labels set color_enc = ? where id = ?`, colorEnc, labelID); err != nil {
 				return err
@@ -802,6 +837,11 @@ type timelineEventDTO struct {
 	// rendered because live replies hang off it. PayloadEnc is empty for these.
 	Deleted    bool   `json:"deleted,omitempty"`
 	PayloadEnc string `json:"payload_enc"`
+	// SessionID tags a comment with the Test Session it came out of («на этом
+	// тесте команда споткнулась о формулировку»). CardID is null on a note about
+	// the session itself, which is what a comment on the old test card was.
+	SessionID *int64 `json:"session_id,omitempty"`
+	CardID    *int64 `json:"card_id,omitempty"`
 }
 
 func (s *server) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
@@ -817,7 +857,7 @@ select e.id, e.type, e.author_user_id, e.created_at, e.edited_at, e.is_excerpt,
        e.reply_to_id, e.deleted_at is not null,
        (select count(*) from timeline_events r
           where r.reply_to_id = e.id and r.deleted_at is null),
-       e.payload_enc
+       e.payload_enc, e.session_id, e.card_id
 from timeline_events e
 where e.card_id = ?
   and (e.deleted_at is null
@@ -835,9 +875,16 @@ order by e.id`, cardID)
 		var edited sql.NullString
 		var excerpt, deleted int
 		var payload []byte
+		var sessionID, cardRef sql.NullInt64
 		if err := rows.Scan(&e.ID, &e.Type, &author, &e.CreatedAt, &edited, &excerpt,
-			&replyTo, &deleted, &e.ReplyCount, &payload); handleErr(w, err) {
+			&replyTo, &deleted, &e.ReplyCount, &payload, &sessionID, &cardRef); handleErr(w, err) {
 			return
+		}
+		if sessionID.Valid {
+			e.SessionID = &sessionID.Int64
+		}
+		if cardRef.Valid {
+			e.CardID = &cardRef.Int64
 		}
 		if author.Valid {
 			e.AuthorID = &author.Int64
@@ -862,6 +909,7 @@ order by e.id`, cardID)
 type addCommentRequest struct {
 	PayloadEnc string `json:"payload_enc"`
 	ReplyToID  *int64 `json:"reply_to_id"`
+	SessionID  *int64 `json:"session_id"` // optional: the test this came out of
 }
 
 func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
@@ -885,14 +933,24 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		}
 		replyTo = root
 	}
+	if req.SessionID != nil {
+		sbid, err := boardOfSession(r.Context(), s.db, *req.SessionID)
+		if handleErr(w, err) {
+			return
+		}
+		if sbid != bid {
+			httpError(w, http.StatusBadRequest, "session belongs to another board")
+			return
+		}
+	}
 	err := s.withWriteTx(r.Context(), "add-comment", func(ctx context.Context, tx *sql.Tx) error {
 		payload, err := unb64(req.PayloadEnc)
 		if err != nil {
 			return errBadRequest("invalid payload_enc")
 		}
 		_, err = tx.ExecContext(ctx, `
-insert into timeline_events(board_id, card_id, type, author_user_id, created_at, payload_enc, reply_to_id)
-values(?, ?, 'comment', ?, ?, ?, ?)`, bid, cardID, uid, rfc3339(time.Now()), payload, replyTo)
+insert into timeline_events(board_id, card_id, session_id, type, author_user_id, created_at, payload_enc, reply_to_id)
+values(?, ?, ?, 'comment', ?, ?, ?, ?)`, bid, cardID, req.SessionID, uid, rfc3339(time.Now()), payload, replyTo)
 		return err
 	})
 	if handleErr(w, err) {

@@ -789,8 +789,6 @@
 :not(.pv-small) + .pv-small { margin-top: 0.31em; }
 .pv-heading { font-size: var(--text-xl); font-weight: var(--fw-bold); margin: var(--space-5) 0 var(--space-3); }
 .pv-section { font-size: var(--text-lg); font-weight: var(--fw-semibold); margin: var(--space-4) 0 var(--space-2); }
-.pv-test { color: var(--muted); font-style: italic; }
-.pv-testers { white-space: pre-wrap; line-height: 1.7; font-size: var(--text-base); }
 .pv-empty { color: var(--muted); }
 /* break long URLs at any character so they never force horizontal scroll on
    narrow screens (links are often unbreakable runs with no spaces). */
@@ -1212,3 +1210,46 @@ body {
   overscroll-behavior: none;
   touch-action: manipulation;
 }
+
+/* ---- test sessions: the Тесты panel, the label editor, the mark template ----
+   All three are list-shaped modals, so they share one row skeleton. */
+.sess-row {
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+  align-items: center; justify-content: space-between;
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-soft);
+}
+.sess-row:last-child { border-bottom: 0; }
+.sess-head { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; min-width: 0; flex: 1 1 16rem; }
+.sess-title { font-weight: var(--fw-semibold); }
+.sess-meta { color: var(--muted); font-size: var(--text-sm); }
+/* A copied session says how stale it might be: its testers froze at transfer
+   time, and that list is what «Видели» reads (ADR-0003). */
+.sess-origin { color: var(--muted); font-size: var(--text-sm); font-style: italic; }
+.sess-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.sess-cities { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.sess-invite-box { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: var(--space-3) 0; }
+.sess-invite { flex: 1 1 18rem; margin: 0; font-size: var(--text-base); }
+
+/* A test label is drawn apart from a topic label whatever colour it landed on,
+   so an imported Trello tag can never read as «взяли» (issue #25). */
+.label-chip.is-test, .label-pick.is-test { border: 1px dashed var(--grid-dark); }
+
+/* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
+#cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+.seen-label { color: var(--muted); font-size: var(--text-sm); }
+.seen-names { flex: 1 1 12rem; }
+.seen-copy { flex: 0 0 auto; }
+
+/* The person directory's dropdown: this board's names first and unlabelled,
+   then names from other unlocked boards tagged with where they came from. */
+.suggest-pop { position: absolute; z-index: 30; max-height: 12rem; overflow-y: auto; }
+.suggest-board { color: var(--muted); font-size: var(--text-sm); margin-left: var(--space-2); }
+
+/* A tester row is seg + name + ×, which does not fit a 393px phone. Let it wrap
+   and give the name input its own line: the seg and the × stay paired above it. */
+#sessionForm .tester-row { flex-wrap: wrap; }
+#sessionForm .tester-row .fld-row-input { flex: 1 1 100%; min-width: 0; }
+
+/* The session's debrief: what was said about any question at this test. */
+.sess-notes { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
+.sess-note { margin: 0; }

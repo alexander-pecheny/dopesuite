@@ -8,6 +8,12 @@ export interface AuthMe {
   default_author?: string | null;
   card_title?: string | null;
   sizes?: unknown;
+  timezone?: string | null;
+  announce_cities?: unknown;
+  session_title_mode?: string | null;
+  // Null until the first-run modal has been answered; every page opens it while
+  // it is unset (see profile.ts#firstRun).
+  onboarded_at?: string | null;
 }
 
 async function fetchJSON(url: string, init?: RequestInit): Promise<unknown> {

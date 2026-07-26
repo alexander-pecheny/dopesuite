@@ -1097,10 +1097,10 @@ function testerSortKey(name: string | null | undefined): [string, string] {
   return [surname, words.slice(0, -1).join(" ")];
 }
 
-// testerCopyText flattens testers (across all cards in a test list) into the
-// shareable line: players sorted by surname-then-given, teams alphabetically,
-// each list deduped. Returns "" when there are no testers.
-function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): string {
+// testerNames dedupes and orders testers: players by surname-then-given, teams
+// alphabetically. Split out of testerCopyText because the «Видели» line on a
+// card wants the names WITHOUT the «Вопросы тестировали:» framing.
+function testerNames(testers: ReadonlyArray<TesterLike> | null | undefined): { players: string[]; teams: string[] } {
   const seen: Record<TesterType, Set<string>> = { player: new Set(), team: new Set() };
   const players: string[] = [], teams: string[] = [];
   for (const t of testers || []) {
@@ -1116,6 +1116,12 @@ function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): 
     return ka[0].localeCompare(kb[0], "ru") || ka[1].localeCompare(kb[1], "ru");
   });
   teams.sort((a, b) => a.localeCompare(b, "ru"));
+  return { players, teams };
+}
+
+// testerCopyText flattens testers into the shareable line. "" when there are none.
+function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): string {
+  const { players, teams } = testerNames(testers);
   let s = "";
   if (players.length) s = "Вопросы тестировали: " + players.join(", ");
   if (teams.length) s += (s ? ", а также команды: " : "Вопросы тестировали команды: ") + teams.join(", ");
@@ -1130,5 +1136,5 @@ export const xyChgk = {
   fixTrelloFormatting,
   splitFields, composeFields, parseHandoutBlock,
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
-  parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText,
+  parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText, testerNames,
 };

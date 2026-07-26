@@ -44,7 +44,7 @@ func mustApp() *base.App {
 			Stylesheets:       []string{"/static/styles.css"},
 			FontPreloads:      []string{"/static/fonts/noto-sans-var.woff2"},
 			BootScripts:       []string{"/static/menu.js"},
-			ModuleBootScripts: []string{"/static/dist/pwa.js"},
+			ModuleBootScripts: []string{"/static/dist/pwa.js", "/static/dist/firstrun.js"},
 			DefaultKind:       "sheet",
 			PageKinds: map[string]base.PageKind{
 				"sheet": {Body: []string{"host", "import-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "import-frame"}},

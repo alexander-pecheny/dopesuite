@@ -52,8 +52,21 @@ export interface BoardCard {
 export interface BoardLabel {
   id: number;
   kind: string;
+  // For a test label `name` is only the chgksuite cache; what the board shows is
+  // derived from its session (sessions.ts#markLabel). "" colour = inherit the
+  // board's mark template for this label's mark.
   name: string;
   color: string;
+  sessionId: number | null;
+  mark: string;
+}
+
+// A Test Session as the board holds it: the decrypted meta_enc, parsed lazily by
+// whoever needs it (sessions.ts#parseSession).
+export interface BoardSession {
+  id: number;
+  meta: string;
+  createdAt: string | null;
 }
 export interface UnreadFlags {
   content?: boolean;
@@ -66,11 +79,19 @@ export interface BoardState {
   groups: BoardGroup[];
   cards: BoardCard[];
   labels: BoardLabel[];
+  sessions: BoardSession[];
   cardLabels: Record<string, number[]>;
   unread: Record<string, UnreadFlags>;
   sizes: Sizes;
   defaultAuthor: string;
   cardTitle: string;
+  timezone: string;
+  announceCities: unknown;
+  // Which form a session's derived name takes — the reader's own choice, per
+  // issue #8. "date-title" | "title" | "date"; "" is the default.
+  sessionTitleMode: string;
+  // The board's mark template, decrypted; "" means the built-in взяли/не взяли.
+  markTemplate: string;
 }
 
 // ---- the ciphertext snapshot (GET /api/boards/{id} shape, as load reads it) ----
@@ -90,7 +111,15 @@ export interface Snapshot {
     id: number; list_id: number; kind: string; rank: string;
     description_enc: string; handout_meta_enc?: string | null; alias_enc?: string | null; created_at?: string | null;
   }>;
-  labels?: Array<{ id: number; kind: string; name_enc: string; color_enc: string }>;
+  labels?: Array<{
+    id: number; kind: string; name_enc: string; color_enc: string;
+    session_id?: number | null; mark?: string;
+  }>;
+  sessions?: Array<{ id: number; meta_enc: string; created_at?: string | null }>;
+  timezone?: string;
+  announce_cities?: unknown;
+  session_title_mode?: string;
+  mark_template_enc?: string;
   [key: string]: unknown;
 }
 
@@ -267,6 +296,10 @@ export function createUnlock(deps: UnlockDeps): Unlock {
         sizes,
         defaultAuthor: snap.default_author || "",
         cardTitle: snap.card_title || "question",
+        timezone: snap.timezone || "",
+        sessionTitleMode: snap.session_title_mode || "",
+        announceCities: snap.announce_cities ?? null,
+        markTemplate: snap.mark_template_enc ? await crypto.decField(key, snap.mark_template_enc) : "",
         lists: await Promise.all((snap.lists || []).map(async (l) => ({
           id: l.id, type: l.type, rank: l.rank, groupId: l.group_id != null ? l.group_id : null,
           title: await crypto.decField(key, l.title_enc),
@@ -284,7 +317,12 @@ export function createUnlock(deps: UnlockDeps): Unlock {
         labels: await Promise.all((snap.labels || []).map(async (l) => ({
           id: l.id, kind: l.kind,
           name: await crypto.decField(key, l.name_enc),
-          color: await crypto.decField(key, l.color_enc),
+          color: l.color_enc ? await crypto.decField(key, l.color_enc) : "",
+          sessionId: l.session_id != null ? l.session_id : null,
+          mark: l.mark || "",
+        }))),
+        sessions: await Promise.all((snap.sessions || []).map(async (s) => ({
+          id: s.id, meta: await crypto.decField(key, s.meta_enc), createdAt: s.created_at || null,
         }))),
       };
       deps.onState(state, { offline: fromMirror });

@@ -117,7 +117,7 @@ test("cached-DK fast path: no overlay, onDK + decrypted onState, mirror written,
     id: 2, listId: 1, kind: "question", rank: "b",
     desc: "d:e:desc", handoutMeta: "d:e:meta", alias: null, createdAt: "2026-01-01",
   }]);
-  assert.deepEqual(state.labels, [{ id: 3, kind: "normal", name: "d:e:lname", color: "d:e:lcolor" }]);
+  assert.deepEqual(state.labels, [{ id: 3, kind: "normal", name: "d:e:lname", color: "d:e:lcolor", sessionId: null, mark: "" }]);
   // sizes: null in the snapshot → sanitized defaults, applied before render
   assert.equal(state.sizes.boardW, 1512);
   assert.deepEqual(calls.sizes, [state.sizes]);

@@ -215,6 +215,7 @@ type boardSnapshot struct {
 	Groups        []groupDTO           `json:"groups"`
 	Cards         []cardDTO            `json:"cards"`
 	Labels        []labelDTO           `json:"labels"`
+	Sessions      []sessionDTO         `json:"sessions"`
 	CardLabels    map[string][]int64   `json:"card_labels"`
 	Unread        map[string]unreadDTO `json:"unread"`
 	// Sizes is the CALLER's display layout ({boardW,listW,cardLines}) — a per-user,
@@ -231,6 +232,18 @@ type boardSnapshot struct {
 	// users.card_title), delivered like Sizes so the board renders previews the
 	// reader's way straight from the cached snapshot. A card's alias wins over it.
 	CardTitle string `json:"card_title,omitempty"`
+	// Timezone is the caller's IANA zone (users.timezone): the default anchor for
+	// a new session and the first city of its announce set. AnnounceCities is
+	// their saved default set. Both are per-user, delivered like Sizes.
+	Timezone       string          `json:"timezone,omitempty"`
+	AnnounceCities json.RawMessage `json:"announce_cities,omitempty"`
+	// SessionTitleMode is how the reader wants a session's derived name written
+	// (issue #8): "date-title" (the default), "title" or "date".
+	SessionTitleMode string `json:"session_title_mode,omitempty"`
+	// MarkTemplateEnc is the BOARD's mark template — which marks a new session
+	// gets, and the colour a test label inherits when its own is null. Empty means
+	// the client's built-in «взяли»/«не взяли» pair.
+	MarkTemplateEnc string `json:"mark_template_enc,omitempty"`
 }
 
 // unreadDTO flags, per card, whether the caller has unread events in either
@@ -247,21 +260,26 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, CardLabels: map[string][]int64{}, Unread: map[string]unreadDTO{}}
+	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: map[string][]int64{}, Unread: map[string]unreadDTO{}}
 
 	var name sql.NullString
-	var nameEnc []byte
-	if err := s.db.QueryRowContext(ctx, `select name, name_enc, schema_version from boards where id = ?`, bid).Scan(&name, &nameEnc, &snap.SchemaVersion); handleErr(w, err) {
+	var nameEnc, markTemplate []byte
+	if err := s.db.QueryRowContext(ctx, `select name, name_enc, schema_version, mark_template_enc from boards where id = ?`, bid).Scan(&name, &nameEnc, &snap.SchemaVersion, &markTemplate); handleErr(w, err) {
 		return
 	}
 	snap.Name = name.String
 	snap.NameEnc = b64(nameEnc)
+	if markTemplate != nil {
+		snap.MarkTemplateEnc = b64(markTemplate)
+	}
 
 	// The caller's per-user display prefs (see boardSnapshot.Sizes /
 	// .DefaultAuthor), shared across all their boards — keyed on the user, not
 	// this board.
-	var sizes, defAuthor, cardTitle sql.NullString
-	if err := s.db.QueryRowContext(ctx, `select sizes, default_author, card_title from users where id = ?`, uid).Scan(&sizes, &defAuthor, &cardTitle); handleErr(w, err) {
+	var sizes, defAuthor, cardTitle, timezone, cities, titleMode sql.NullString
+	if err := s.db.QueryRowContext(ctx,
+		`select sizes, default_author, card_title, timezone, announce_cities, session_title_mode from users where id = ?`, uid).
+		Scan(&sizes, &defAuthor, &cardTitle, &timezone, &cities, &titleMode); handleErr(w, err) {
 		return
 	}
 	if sizes.Valid && sizes.String != "" {
@@ -269,6 +287,11 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	}
 	snap.DefaultAuthor = defAuthor.String
 	snap.CardTitle = cardTitle.String
+	snap.Timezone = timezone.String
+	snap.SessionTitleMode = titleMode.String
+	if cities.Valid && cities.String != "" {
+		snap.AnnounceCities = json.RawMessage(cities.String)
+	}
 
 	lists, err := scanLists(ctx, s.db, bid)
 	if handleErr(w, err) {
@@ -293,6 +316,12 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	snap.Labels = labels
+
+	sessions, err := scanSessions(ctx, s.db, bid)
+	if handleErr(w, err) {
+		return
+	}
+	snap.Sessions = sessions
 
 	clRows, err := s.db.QueryContext(ctx, `
 select cl.card_id, cl.label_id

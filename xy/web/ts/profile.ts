@@ -1,6 +1,7 @@
 // profile.ts — username management, logout, and the three settings dialogs:
 // change password, board sizes (with a pseudo-board preview), default author.
 import { xyApp, xySizes } from "./app.js";
+import { COMMON_CITIES } from "./sessions.js";
 import type { AuthMe, Sizes } from "./app.js";
 
 const { fetchJSON, jpost, fetchVoid, el } = xyApp;
@@ -42,6 +43,9 @@ function wireModal(overlayId: string, openBtnId: string, cancelBtnId: string | n
 let sizes: Sizes = { ...xySizes.DEFAULT };
 let defaultAuthor = "";
 let cardTitle = "question"; // which field a card's board preview shows
+let timezone = "";
+let announceCities: Array<{ zone: string; name: string }> = [];
+let sessionTitleMode = "date-title";
 
 async function boot(): Promise<void> {
   const me = await xyApp.requireLogin();
@@ -52,6 +56,9 @@ async function boot(): Promise<void> {
   sizes = xySizes.sanitize(m.sizes);
   defaultAuthor = m.default_author || "";
   cardTitle = m.card_title || "question";
+  timezone = m.timezone || "";
+  announceCities = Array.isArray(m.announce_cities) ? (m.announce_cities as Array<{ zone: string; name: string }>) : [];
+  sessionTitleMode = m.session_title_mode || "date-title";
   loadStorage();
 }
 const booted = boot();
@@ -223,6 +230,52 @@ authorForm.addEventListener("submit", async (e) => {
     authorModal.close();
   } catch (err) {
     setText(authorMessage, errMsg(err));
+  }
+});
+
+// ---- timezone, announce cities, session label naming ----
+// The timezone does two jobs and neither is rendering: it is the zone a new test
+// session's time is written in, and the first city of its announce set. The
+// cities are only the seed — a session keeps its own copy, because who is
+// invited changes from test to test.
+const tzForm = byId<HTMLFormElement>("tzForm");
+const tzMessage = byId("tzMessage");
+const tzModal = wireModal("tzOverlay", "tzBtn", "tzCancel", async () => {
+  await booted;
+  byId<HTMLInputElement>("tzValue").value = timezone || guessZone();
+  byId<HTMLInputElement>("tzCities").value = announceCities.map((c) => c.name).join(", ");
+  byId<HTMLSelectElement>("tzTitleMode").value = sessionTitleMode;
+  setText(tzMessage, "");
+});
+
+function guessZone(): string {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { return ""; }
+}
+
+// citiesFromNames resolves typed names against the built-in table; an unknown one
+// is kept with the caller's own zone, so the invite line still names it.
+function citiesFromNames(raw: string, ownZone: string): Array<{ zone: string; name: string }> {
+  return raw.split(",").map((s) => s.trim()).filter(Boolean).map((name) => {
+    const known = COMMON_CITIES.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    return known || { zone: ownZone, name };
+  });
+}
+
+tzForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setText(tzMessage, "");
+  const tz = byId<HTMLInputElement>("tzValue").value.trim();
+  const mode = byId<HTMLSelectElement>("tzTitleMode").value;
+  const cities = citiesFromNames(byId<HTMLInputElement>("tzCities").value, tz || guessZone());
+  try {
+    await jpost("/api/auth/profile-defaults", { timezone: tz, session_title_mode: mode });
+    await jpost("/api/auth/announce-cities", { announce_cities: cities });
+    timezone = tz;
+    sessionTitleMode = mode;
+    announceCities = cities;
+    tzModal.close();
+  } catch (err) {
+    setText(tzMessage, errMsg(err));
   }
 });
 

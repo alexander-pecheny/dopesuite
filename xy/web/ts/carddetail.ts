@@ -15,12 +15,13 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
+import { parseSession, serializeSession } from "./sessions.js";
 import { xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { CardFields, Handout, Tester, TesterLike } from "./chgk.js";
-import type { BoardCard, BoardLabel, BoardList, Snapshot, UnreadFlags } from "./unlock.js";
+import type { BoardCard, BoardLabel, BoardList, BoardSession, Snapshot, UnreadFlags } from "./unlock.js";
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
 
@@ -34,34 +35,12 @@ const { keyBetween } = xyRank;
 // server for a while. The next snapshot replaces it with the server's value.
 export const nowStamp = (): string => new Date().toISOString();
 
-// testTitle renders a test card's derived title from its JSON description.
-export function testTitle(desc: string): string {
-  try {
-    const m = xyChgk.parseTestCard(desc);
-    const head = m.title ? `${m.title} · ${m.datetime}` : m.datetime;
-    const players = m.testers.filter((t) => t.type === "player").length;
-    const teams = m.testers.filter((t) => t.type === "team").length;
-    const parts: string[] = [];
-    if (players) parts.push(`${players} игр.`);
-    if (teams) parts.push(`${teams} ком.`);
-    return `🗓️ ${head}${parts.length ? " · " + parts.join(", ") : ""}`;
-  } catch (_) { return "тест-сессия"; }
-}
-
 // The 4s skeleton a new question's Текст view opens on: question / answer /
 // comment / source / author, the blocks a question is expected to carry. The
 // "@" line pre-fills the user's default author (a /profile setting) — saving
 // an otherwise untouched stub is allowed and creates a card with just that.
 export function questionStub(defaultAuthor: string): string {
   return "? \n! \n/ \n^ \n@ " + (defaultAuthor || "");
-}
-
-// testerSummaryLine is the shareable "Вопросы тестировали: …" line — players
-// sorted by surname, teams alphabetically, both deduped (chgk.js
-// testerCopyText), terminated with a period. "" when there are no testers.
-export function testerSummaryLine(testers: ReadonlyArray<TesterLike>): string {
-  const t = xyChgk.testerCopyText(testers);
-  return t ? t + "." : "";
 }
 
 // ---- injected seams ----
@@ -73,6 +52,7 @@ export interface CardDetailState {
   cards: BoardCard[];
   labels: BoardLabel[];
   cardLabels: Record<string, number[]>;
+  sessions: BoardSession[];
   unread: Record<string, UnreadFlags>;
   defaultAuthor: string;
 }
@@ -139,7 +119,7 @@ export interface CardDetailDeps {
   renderLabelPicker(card: BoardCard): void;
   paintLabels(): void;
   questionNumberFor(card: PreviewCardLike): string | null;
-  cleanupTestLabels(cards: BoardCard[]): Promise<void>;
+  forgetCardLabels(cards: BoardCard[]): void;
   preview: PreviewSeam;
   attachments: AttachmentsSeam;
   readMarkers: ReadMarkerSeam;
@@ -156,13 +136,18 @@ export interface CardReturn {
 
 // moveCtx: the currently-selected destination board for move/copy — its DK,
 // lists (with titles) and cards-per-list (for computing the insertion rank).
-export interface MoveLabel { id: number; kind?: string; name: string; color: string }
+export interface MoveLabel { id: number; kind?: string; name: string; color: string; sessionId?: number | null; mark?: string }
+// A target board's sessions, decrypted, so a transferred test label can find the
+// sitting it belongs to instead of matching on a name that may render differently.
+export interface MoveSession { id: number; meta: string }
 export interface MoveCtx {
   boardId: number;
   dk: DataKey;
   lists: Array<{ id: number; title: string; rank: string }>;
   cardsByList: Map<number, Array<{ id: number; rank: string }>>;
   labels: MoveLabel[];
+  sessions: MoveSession[];
+  name: string;
 }
 
 export interface CardDetail {
@@ -173,13 +158,14 @@ export interface CardDetail {
   maybeOpenDeepLink(): void;
   highlightComment(eventId: number): void;
   copyCommentLink(eventId: number): Promise<void>;
-  testerSummary(list: BoardList): string;
-  copyTesterList(list: BoardList): Promise<void>;
+  // The clipboard write, with its insecure-context fallback — the Тесты panel
+  // copies invite and tester lines through the same path.
+  copyPlain(text: string): Promise<void>;
   // Reused by the board's list move/copy (board.js's «Переместить список…»).
   loadMoveBoard(bid: number): Promise<MoveCtx>;
   cardCopyBody(src: BoardCard, rank: string, key: DataKey): Promise<OpBody>;
   copyCardExtras(srcCardId: number, targetDk: DataKey, newCardId: number): Promise<void>;
-  reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, targetLabels: MoveLabel[]): Promise<number[]>;
+  reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number[]>;
 }
 
 interface FieldReader<T> { node: HTMLElement; read(): T }
@@ -194,8 +180,6 @@ interface FieldReaders {
   authors: FieldReader<string[] | null>;
   hndt: FieldReader<string | null>;
 }
-
-interface TesterRowEl extends HTMLElement { _read?: () => Tester }
 
 interface MoveBoardItem { id: number; name?: string; name_enc?: string | null; schema_version?: number }
 
@@ -285,7 +269,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // create empty cards). Labels/attachments/move/timeline appear only when editing
   // an existing card.
   function addCard(list: BoardList): void {
-    if (list.type === "test") { void addTestCard(list); return; }
     pendingList = list;
     openCardId = null;
     cardView = "";
@@ -305,78 +288,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     lastEditView = "fields";
     setCardView("fields");
     cardDescEl.focus();
-  }
-
-  // addTestCard: a test card's "description" is JSON {datetime, title, testers}
-  // (see chgk.js parseTestCard). Creating it also auto-creates two board labels
-  // ("{dt} взяли" green / "не взяли" red) for the user to assign to questions
-  // later; the tester list is edited in the card detail.
-  async function addTestCard(list: BoardList): Promise<void> {
-    const now = new Date();
-    const pad = (n: number): string => String(n).padStart(2, "0");
-    const def = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const dt = prompt("Дата и время тест-сессии (ГГГГ-ММ-ДД ЧЧ:ММ):", def);
-    if (!dt) return;
-    // Optional human label to tell sessions apart at a glance (e.g. "Алиев и др.").
-    // Folded into the card preview and the auto-created green/red label names.
-    const title = (prompt("Название тест-сессии (необязательно, напр. «Алиев и др.»):", "") || "").trim();
-    const tag = title ? `${dt} ${title}` : dt;
-    const existing = deps.cardsOf(list.id);
-    const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
-    try {
-      const dk = mustDK();
-      const desc = JSON.stringify({ datetime: dt, title, testers: [] });
-      const res = await verbs.create("createCard", `/api/lists/${list.id}/cards`, {
-        description_enc: await xyCrypto.encField(dk, desc), rank, kind: "test",
-      });
-      state().cards.push({ id: res.id as number, listId: list.id, kind: "test", rank, desc, handoutMeta: null, alias: null, createdAt: nowStamp() });
-      // auto labels, then assign both to the new card
-      const autoIds: number[] = [];
-      const pairs: Array<[string, string, string]> = [["взяли", "#3aa657", "test_taken"], ["не взяли", "#dd3322", "test_missed"]];
-      for (const [suffix, color, kind] of pairs) {
-        const lr = await verbs.create("createLabel", `/api/boards/${boardId}/labels`, {
-          name_enc: await xyCrypto.encField(dk, `${tag} ${suffix}`),
-          color_enc: await xyCrypto.encField(dk, color),
-          kind,
-        });
-        state().labels.push({ id: lr.id as number, kind, name: `${tag} ${suffix}`, color });
-        autoIds.push(lr.id as number);
-      }
-      await verbs.put("setCardLabels", `/api/cards/${res.id}/labels`, { label_ids: autoIds });
-      state().cardLabels[res.id as number] = autoIds.slice();
-      deps.render();
-    } catch (err) { setStatus("error"); }
-  }
-
-  // setTestDetailTitle shows the test session's "datetime · title" heading above
-  // the Поля/Текст switcher (test cards have no kind selector to fill that slot).
-  function setTestDetailTitle(card: BoardCard): void {
-    const node = byId("cardDetailTitle");
-    const m = xyChgk.parseTestCard(card.desc);
-    node.textContent = m.title ? `${m.datetime} · ${m.title}` : m.datetime;
-    node.hidden = false;
-  }
-
-  // listTesters gathers the testers from every test card in a list (flattened).
-  function listTesters(list: BoardList): Tester[] {
-    const all: Tester[] = [];
-    for (const c of deps.cardsOf(list.id)) {
-      if (c.kind !== "test") continue;
-      all.push(...xyChgk.parseTestCard(c.desc).testers);
-    }
-    return all;
-  }
-
-  // testerSummary is the shareable "Вопросы тестировали: …" line for a test list.
-  function testerSummary(list: BoardList): string {
-    return testerSummaryLine(listTesters(list));
-  }
-
-  // copyTesterList copies the test list's tester summary to the clipboard silently.
-  async function copyTesterList(list: BoardList): Promise<void> {
-    const text = testerSummary(list);
-    if (!text) return;
-    try { await copyText(text); } catch (_) {}
   }
 
   // fitTextarea grows a textarea to fit its content so the user never scrolls
@@ -406,7 +317,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     return c ? c.kind : "question";
   }
   function fieldsAvailable(): boolean { return draftKind() === "question"; }
-  function isTestCard(): boolean { return draftKind() === "test"; }
 
   // boardAuthors / boardSources collect the author names and source lines already
   // used across the board's question cards (deduped, sorted) — the autocomplete
@@ -478,17 +388,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // the tabs, so it is read on every capture, whichever view is active (and for
     // test cards too, which return early below).
     draft.alias = cardAliasEl.value.trim() || null;
-    if (isTestCard()) {
-      // Test cards keep their canonical JSON ({datetime,title,testers}) in
-      // draft.desc; both views edit only the testers list (datetime/title are set
-      // at creation), so re-read them from draft.desc and fold the rows back in.
-      const cur = xyChgk.parseTestCard(draft.desc);
-      let testers: Tester[] | null = null;
-      if (cardView === "text") testers = xyChgk.testersFromText(cardDescEl.value);
-      else if (cardView === "fields" && testerReaders) testers = readTesterRows();
-      if (testers) draft.desc = xyChgk.serializeTestCard({ datetime: cur.datetime, title: cur.title, testers });
-      return;
-    }
     if (cardView === "text") draft.desc = cardDescEl.value;
     else if (cardView === "fields" && cardFieldReaders) {
       const r = readCardFields(cardFieldReaders);
@@ -527,35 +426,29 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   function setCardView(view: string): void {
     captureDraft();
-    const test = isTestCard();
-    // Test cards offer Поля (tester rows) + Текст (plaintext) but no Просмотр;
-    // other non-question cards have no Поля, so they fall back to Текст.
-    if (test && view === "preview") view = lastEditView === "text" ? "text" : "fields";
-    else if (view === "fields" && !fieldsAvailable() && !test) view = "text";
+    // A non-question card has no Поля, so it falls back to Текст.
+    if (view === "fields" && !fieldsAvailable()) view = "text";
     cardView = view;
     if (view !== "preview") lastEditView = view;
     byId("cardViewPreview").hidden = view !== "preview";
     byId("cardViewFields").hidden = view !== "fields";
     byId("cardViewText").hidden = view !== "text";
     for (const t of CARD_TABS) tabBtn(t).classList.toggle("active", t === view);
-    // The raw tab shows 4s for questions but a plaintext tester list for test
-    // cards — «Формат 4s» would be a lie there, so it falls back to «Текст».
-    tabBtn("text").textContent = test ? "Текст" : "Формат 4s";
-    tabBtn("fields").hidden = !fieldsAvailable() && !test;
-    tabBtn("preview").hidden = !!pendingList || test;
+    tabBtn("text").textContent = "Формат 4s";
+    tabBtn("fields").hidden = !fieldsAvailable();
+    tabBtn("preview").hidden = !!pendingList;
     byId("cardViewTabs").hidden = false;
     // (the save button's visibility is refreshSaveState's alone — see the end of
     // this function — because it depends on more than the view)
-    // The tools edit text, so they follow the two edit views. Both rewriting tools
-    // are question-only: a test card's draft is JSON (its Текст view is a tester
-    // list), and →.4s additionally needs the raw 4s editor it types into.
+    // The tools edit text, so they follow the two edit views. →.4s additionally
+    // needs the raw 4s editor it types into.
     byId("cardEditTools").hidden = view === "preview";
-    byId("cardTypo").hidden = test;
+    byId("cardTypo").hidden = false;
     byId("cardTo4s").hidden = view !== "text" || !fieldsAvailable();
-    byId("cardDescLabel").textContent = test ? "Тестировали (- игрок, -T команда)" : "Описание";
+    byId("cardDescLabel").textContent = "Описание";
     if (view === "text") {
       const ta = cardDescEl;
-      ta.value = test ? xyChgk.testersToText(xyChgk.parseTestCard(draft.desc).testers) : draft.desc;
+      ta.value = draft.desc;
       // A brand-new question opens on an empty editor, which says nothing about what
       // the format wants. Seed the markers so the writer fills in blanks instead of
       // recalling 4s from memory; the caret lands after the "?". "Empty" includes
@@ -563,13 +456,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       // author is set — that's still a blank form.
       const bare = ta.value.trim();
       const authorOnly = state().defaultAuthor && bare === "@ " + state().defaultAuthor;
-      if (!test && pendingList && (!bare || authorOnly)) {
+      if (pendingList && (!bare || authorOnly)) {
         ta.value = questionStub(state().defaultAuthor);
         ta.focus();
         ta.setSelectionRange(2, 2);
       }
       fitTextarea(ta);
-    } else if (view === "fields") { if (test) renderTesterFields(); else renderCardFields(); }
+    } else if (view === "fields") renderCardFields();
     else if (view === "preview") void renderCardPreview();
     refreshSaveState();
   }
@@ -769,46 +662,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     return { desc: xyChgk.composeFields(rec), meta: R.hndt.read() };
   }
 
-  // ---- test card "Поля" editor: one row per tester, each a name input + a
-  // игрок/команда toggle (wysiwyg-style; the Текст view is the plaintext mirror).
-  let testerReaders: (() => Tester[]) | null = null; // () => [{text,type}] for the current tester rows
-
-  function renderTesterFields(): void {
-    const box = cardFieldsEl;
-    box.replaceChildren();
-    const m = xyChgk.parseTestCard(draft.desc);
-    // fld-wide: .card-fields wraps pills side by side now, so a stacked block
-    // must claim the full row explicitly.
-    const wrap = el("div", { class: "fld fld-wide" });
-    const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Тестировали" }));
-    const rows = el("div", { class: "fld-rows" });
-    const addRow = (t: TesterLike | null): HTMLInputElement => {
-      const seg = el("div", { class: "seg tester-seg" });
-      const bP = el("button", { class: "seg-btn", type: "button", text: "игрок" });
-      const bT = el("button", { class: "seg-btn", type: "button", text: "команда" });
-      let type: Tester["type"] = t && t.type === "team" ? "team" : "player";
-      const syncSeg = (): void => { bP.classList.toggle("active", type === "player"); bT.classList.toggle("active", type === "team"); };
-      bP.addEventListener("click", () => { type = "player"; syncSeg(); });
-      bT.addEventListener("click", () => { type = "team"; syncSeg(); });
-      seg.append(bP, bT); syncSeg();
-      const inp = el("input", { class: "input fld-row-input", type: "text", value: (t && t.text) || "", placeholder: "имя…" }) as HTMLInputElement;
-      const rrm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: "Удалить строку" });
-      const row = el("div", { class: "fld-row tester-row" }, seg, inp, rrm) as TesterRowEl;
-      rrm.addEventListener("click", () => row.remove());
-      row._read = () => ({ text: inp.value, type });
-      rows.append(row);
-      return inp;
-    };
-    (m.testers.length ? m.testers : [{ text: "", type: "player" as const }]).forEach((t) => addRow(t));
-    const rowAdd = el("button", { class: "input fld-add-row", type: "button", text: "+ тестер" });
-    rowAdd.addEventListener("click", () => addRow({ text: "", type: "player" }).focus());
-    wrap.append(head, rows, rowAdd);
-    box.append(wrap);
-    testerReaders = () => [...rows.querySelectorAll<TesterRowEl>(".tester-row")].map((r) => (r._read as () => Tester)());
-  }
-
-  function readTesterRows(): Tester[] { return testerReaders ? testerReaders() : []; }
-
   // renderCardPreview renders the open card's draft the docx way (single-card
   // version of the list preview). Read-only; double-click jumps back to editing.
   async function renderCardPreview(): Promise<void> {
@@ -1004,14 +857,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardDetailBox.classList.remove("creating");
     cardDescEl.value = card.desc;
     cardMessageEl.textContent = "";
-    // Kind selector: editable for ordinary cards, hidden for test cards (their
-    // "kind" is fixed and their description is JSON, not 4s markup).
-    const isTest = card.kind === "test";
-    cardKindEl.hidden = isTest;
-    if (!isTest) cardKindEl.value = card.kind || "question";
-    // Test cards show their session heading in place of the (hidden) kind selector.
-    if (isTest) setTestDetailTitle(card);
-    else byId("cardDetailTitle").hidden = true;
+    cardKindEl.hidden = false;
+    cardKindEl.value = card.kind || "question";
+    byId("cardDetailTitle").hidden = true;
     // The "copy for testing" action only makes sense for question cards (it shares
     // the numbered, screen-mode question text); hide it otherwise.
     byId("cardCopy").hidden = card.kind !== "question";
@@ -1025,12 +873,12 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     else overlayStack.replace(cardOverlay, entry, cardUrl(card.id));
     deps.renderLabelPicker(card);
     deps.paintLabels();
-    lastEditView = (isTest || fieldsAvailable()) ? "fields" : "text";
+    lastEditView = fieldsAvailable() ? "fields" : "text";
     // Render the chosen view straight away so reopening a card never flashes the
     // previously-open card's content. The preview resolves its own images, so it
     // doesn't wait on the per-card loads below — which run in parallel, not
     // sequentially, to cut the total round-trip.
-    setCardView(isTest ? "fields" : "preview");
+    setCardView("preview");
     await Promise.all([deps.attachments.load(card.id), deps.timeline.load(card.id), populateMoveBoards()]);
     armReadTracking(card);
   }
@@ -1159,7 +1007,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       const lists = [...state().lists].sort(byRank).map((l) => ({ id: l.id, title: l.title, rank: l.rank }));
       const cardsByList = new Map<number, Array<{ id: number; rank: string }>>();
       for (const l of lists) cardsByList.set(l.id, deps.cardsOf(l.id).map((c) => ({ id: c.id, rank: c.rank })));
-      return { boardId: bid, dk: mustDK(), lists, cardsByList, labels: state().labels };
+      return {
+        boardId: bid, dk: mustDK(), lists, cardsByList, labels: state().labels,
+        sessions: state().sessions.map((s) => ({ id: s.id, meta: s.meta })), name: state().name,
+      };
     }
     const tdk = await ensureDK(bid);
     const snap = (await fetchJSON(`/api/boards/${bid}`)) as Snapshot;
@@ -1172,9 +1023,19 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       cardsByList.set(l.id, (snap.cards || []).filter((c) => c.list_id === l.id).map((c) => ({ id: c.id, rank: c.rank })).sort(byRank));
     }
     const labels = await Promise.all((snap.labels || []).map(async (l) => ({
-      id: l.id, kind: l.kind, name: await xyCrypto.decField(tdk, l.name_enc), color: await xyCrypto.decField(tdk, l.color_enc),
+      id: l.id, kind: l.kind,
+      name: await xyCrypto.decField(tdk, l.name_enc),
+      color: l.color_enc ? await xyCrypto.decField(tdk, l.color_enc) : "",
+      sessionId: l.session_id != null ? l.session_id : null,
+      mark: l.mark || "",
     })));
-    return { boardId: bid, dk: tdk, lists, cardsByList, labels };
+    const sessions = await Promise.all((snap.sessions || []).map(async (s) => ({
+      id: s.id, meta: await xyCrypto.decField(tdk, s.meta_enc),
+    })));
+    return {
+      boardId: bid, dk: tdk, lists, cardsByList, labels, sessions,
+      name: snap.name || "",
+    };
   }
 
   async function onMoveBoardChange(): Promise<void> {
@@ -1277,27 +1138,69 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     }
   }
 
-  // reconcileLabels maps a source card's labels onto the target board by
-  // decrypted name+color, creating any missing label there. targetLabels is the
-  // running target-board list — mutated so a batch of copies reuses labels it
-  // just created instead of duplicating them.
-  async function reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, targetLabels: MoveLabel[]): Promise<number[]> {
+  // reconcileLabels maps a source card's labels onto the target board, creating
+  // whatever is missing there. A normal label matches on decrypted name+colour; a
+  // TEST label cannot, because its name is derived and two readers may render it
+  // differently — it matches on its session's `key`, the id of the sitting, which
+  // is copied verbatim on transfer.
+  //
+  // The session itself has to be copied: boards share no key, so nothing can be
+  // referenced across one. The copy carries an `origin` stamp because it diverges
+  // from its original the moment either is edited, and the tester list is what
+  // «Видели» reads (ADR-0003). ctx is the target board's running state, mutated
+  // so a batch of copies reuses what it just created.
+  async function reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number[]> {
     const srcIds = state().cardLabels[srcCardId] || [];
     const targetIds: number[] = [];
     for (const sid of srcIds) {
       const sl = deps.labelById(sid);
       if (!sl) continue;
-      let match = targetLabels.find((t) => t.name === sl.name && t.color === sl.color);
+      if (sl.kind === "test" && sl.sessionId != null) {
+        const id = await reconcileTestLabel(sl, targetBid, targetDk, ctx);
+        if (id != null) targetIds.push(id);
+        continue;
+      }
+      let match = ctx.labels.find((t) => t.kind !== "test" && t.name === sl.name && t.color === sl.color);
       if (!match) {
         const lr = (await jpost(`/api/boards/${targetBid}/labels`, {
-          name_enc: await xyCrypto.encField(targetDk, sl.name), color_enc: await xyCrypto.encField(targetDk, sl.color), kind: sl.kind,
+          name_enc: await xyCrypto.encField(targetDk, sl.name), color_enc: await xyCrypto.encField(targetDk, sl.color), kind: "normal",
         })) as { id: number };
         match = { id: lr.id, name: sl.name, color: sl.color };
-        targetLabels.push(match);
+        ctx.labels.push(match);
       }
       targetIds.push(match.id);
     }
     return targetIds;
+  }
+
+  async function reconcileTestLabel(sl: BoardLabel, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number | null> {
+    const src = state().sessions.find((s) => s.id === sl.sessionId);
+    if (!src) return null;
+    const meta = parseSession(src.meta);
+    if (!meta.key) return null; // a session that predates keys can't be matched safely
+
+    let session = ctx.sessions.find((s) => parseSession(s.meta).key === meta.key);
+    if (!session) {
+      const copy = serializeSession({
+        ...meta,
+        origin: meta.origin || { board: state().name, at: new Date().toISOString().slice(0, 10) },
+      });
+      const sr = (await jpost(`/api/boards/${targetBid}/sessions`, {
+        meta_enc: await xyCrypto.encField(targetDk, copy),
+      })) as { id: number };
+      session = { id: sr.id, meta: copy };
+      ctx.sessions.push(session);
+    }
+
+    const found = ctx.labels.find((t) => t.sessionId === session.id && t.mark === sl.mark);
+    if (found) return found.id;
+    const lr = (await jpost(`/api/boards/${targetBid}/labels`, {
+      name_enc: await xyCrypto.encField(targetDk, sl.name),
+      color_enc: "", // null = inherit the target board's mark template
+      kind: "test", session_id: session.id, mark: sl.mark,
+    })) as { id: number };
+    ctx.labels.push({ id: lr.id, name: sl.name, color: "", kind: "test", sessionId: session.id, mark: sl.mark });
+    return lr.id;
   }
 
   async function doMoveCopy(remove: boolean): Promise<void> {
@@ -1333,7 +1236,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       } else {
         const tdk = moveCtx.dk;
         const res = (await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, tdk))) as { id: number };
-        const targetIds = await reconcileLabels(card.id, targetBid, tdk, moveCtx.labels.slice());
+        const targetIds = await reconcileLabels(card.id, targetBid, tdk, moveCtx);
         if (targetIds.length) await jput(`/api/cards/${res.id}/labels`, { label_ids: targetIds });
         await copyCardExtras(card.id, tdk, res.id);
         if (remove) {
@@ -1588,17 +1491,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       deps.render();
       await deps.timeline.load(card.id);
       cardDescEl.value = newDesc;
-      // Test cards have no Просмотр — keep them in the current editor view (re-rendering
-      // their own tester editor); every other card jumps to the rendered preview, which
-      // is itself the confirmation that the edits landed.
-      if (isTestCard()) {
-        setTestDetailTitle(card);
-        if (cardView === "fields") renderTesterFields();
-        else if (cardView === "text") { const ta = cardDescEl; ta.value = xyChgk.testersToText(xyChgk.parseTestCard(newDesc).testers); fitTextarea(ta); }
-        refreshSaveState();
-      } else {
-        setCardView("preview");
-      }
+      // The rendered preview is itself the confirmation that the edits landed.
+      setCardView("preview");
       msg.textContent = "Карточка сохранена.";
     } catch (err) { msg.textContent = errMsg(err); return false; }
     return true;
@@ -1660,7 +1554,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       await verbs.del("deleteCard", `/api/cards/${card.id}`);
       const st = state();
       st.cards = st.cards.filter((c) => c.id !== card.id);
-      await deps.cleanupTestLabels([card]);
+      deps.forgetCardLabels([card]);
       dismissCard();
       deps.render();
     } catch (err) { cardMessageEl.textContent = errMsg(err); }
@@ -1671,11 +1565,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     openCard,
     closeCard,
     openCardId: () => openCardId,
+    copyPlain: copyText,
     maybeOpenDeepLink,
     highlightComment,
     copyCommentLink,
-    testerSummary,
-    copyTesterList,
     loadMoveBoard,
     cardCopyBody,
     copyCardExtras, reconcileLabels,
