@@ -1,5 +1,8 @@
 page title="Мои доски · xy" kind="full" scripts="dist/index.js"
   topbar title="Доски"
+    crumbs
+      crumb home label="Все доски" "🏠"
+      crumb "Доски"
     iconlink href="/import" label="Импорт из Trello" "📥"
     iconbtn id="newBoardBtn" label="Новая доска" "➕"
 

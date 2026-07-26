@@ -111,7 +111,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 	sel := data.SelectedType
 	page := []dopeui.Item{
 		dopeui.Title(data.Fest.Title + " · новая игра"), dopeui.PagePublic, dopeui.Classicscripts("dist/gamecreate.js"),
-		dopeui.Publictopbar(dopeui.Title("Добавить игру"), dopeui.Back("/host/fest/"+ref)),
+		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(ref, data.Fest.Title), "Добавить игру")),
 	}
 	if data.Error != "" {
 		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
@@ -161,7 +161,7 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	festRef := data.Fest.Ref()
 	page := []dopeui.Item{
 		dopeui.Title(data.Game.Title + " · " + data.Fest.Title), dopeui.PagePublic,
-		dopeui.Publictopbar(dopeui.Title(data.Game.Title), dopeui.Back("/host/fest/"+festRef)),
+		dopeui.Publictopbar(pages.Trail(pages.FestCrumbs(festRef, data.Fest.Title), data.Game.Title)),
 	}
 	if data.Error != "" {
 		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))

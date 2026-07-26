@@ -3040,6 +3040,7 @@ function renderGameBreadcrumbs(): void {
   if (!breadcrumbsNode || !route.festID) return;
   const gameTitle = fest?.gameName || currentGameTitle() || "ЭК";
   gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
+    host: true,
     festHref: `/host/fest/${route.festID}`,
     festTitle: fest?.title || "Фест",
     gameHref: route.mode === "grid" ? "" : route.base + "/",

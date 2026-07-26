@@ -728,7 +728,7 @@ func formatJournalTime(ts string) string {
 // per host action (when / who / the change descriptions) and a per-row
 // revert-to-here form. The revert confirm is a data-confirm attribute wired by
 // pageforms.js (no inline on* handler).
-func journalDoc(festID, gameID int64, title, errMsg, notice string, groups []journalChange) *ui.Doc {
+func journalDoc(festID, gameID int64, title, festTitle, errMsg, notice string, groups []journalChange) *ui.Doc {
 	var main []ui.Item
 	if errMsg != "" {
 		main = append(main, ui.Empty(ui.Text(errMsg)))
@@ -751,7 +751,8 @@ func journalDoc(festID, gameID int64, title, errMsg, notice string, groups []jou
 
 	page := []ui.Item{
 		ui.Title("История игры · " + title), ui.PagePublic, ui.Classicscripts("dist/pageforms.js"),
-		ui.Publictopbar(ui.Title("История · "+title), ui.Back(fmt.Sprintf("/host/fest/%d/audit", festID))),
+		ui.Publictopbar(Trail(append(FestCrumbs(strconv.FormatInt(festID, 10), festTitle),
+			ui.Crumb(ui.Href(fmt.Sprintf("/host/fest/%d/audit", festID)), ui.Text("История изменений"))), title)),
 	}
 	page = append(page, main...)
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
@@ -789,7 +790,7 @@ func (s *Server) RenderGameJournal(w http.ResponseWriter, r *http.Request, festI
 		http.Error(w, "journal: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	RenderDoc(w, s.h.Engine().AssetETags, journalDoc(festID, gameID, title, errMsg, notice, groups))
+	RenderDoc(w, s.h.Engine().AssetETags, journalDoc(festID, gameID, title, FestTitle(r.Context(), s.h.DB(), festID), errMsg, notice, groups))
 }
 
 func (s *Server) HandleGameRevert(w http.ResponseWriter, r *http.Request, festID, gameID int64) {

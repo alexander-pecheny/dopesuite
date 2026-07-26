@@ -28,7 +28,7 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (session.U
 func adminIndexDoc() *ui.Doc {
 	return &ui.Doc{Nodes: []ui.Node{
 		ui.Page(ui.Title("Админка"), ui.PagePublic,
-			ui.Publictopbar(ui.Title("Админка")),
+			ui.Publictopbar(Trail([]ui.Item{HomeCrumb()}, "Админка")),
 			ui.List(
 				ui.Listrow(ui.Href("/admin/create_users"), ui.Listtitle(ui.Text("Создать пользователей"))),
 				ui.Listrow(ui.Href("/admin/users"), ui.Listtitle(ui.Text("Пользователи"))),
@@ -105,7 +105,7 @@ func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
 
 	page := []ui.Item{
 		ui.Title("Создать пользователей · Админка"), ui.PagePublic, ui.Classicscripts("dist/pageforms.js"),
-		ui.Publictopbar(ui.Title("Создать пользователей"), ui.User("/admin"), ui.Userlabel("Админка")),
+		ui.Publictopbar(Trail(AdminCrumbs(), "Создать пользователей")),
 	}
 	page = append(page, main...)
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(page...)}}
@@ -150,7 +150,7 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 	}
 	return &ui.Doc{Nodes: []ui.Node{
 		ui.Page(ui.Title("Пользователи · Админка"), ui.PagePublic,
-			ui.Publictopbar(ui.Title("Пользователи"), ui.User("/admin"), ui.Userlabel("Админка")),
+			ui.Publictopbar(Trail(AdminCrumbs(), "Пользователи")),
 			body,
 		),
 	}}

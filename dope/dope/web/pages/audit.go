@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	ui "dope/dope/web/ui"
 )
@@ -20,7 +21,7 @@ type auditGameRow struct {
 
 // festAuditIndexDoc builds the fest's per-game history index page: a link list of
 // the fest's games, each pointing at its own edit history + revert.
-func festAuditIndexDoc(festID int64, games []auditGameRow) *ui.Doc {
+func festAuditIndexDoc(festID int64, festTitle string, games []auditGameRow) *ui.Doc {
 	sect := []ui.Item{ui.Note(ui.Text("История и откат ведутся отдельно по каждой игре."))}
 	if len(games) > 0 {
 		rows := make([]ui.Item, 0, len(games))
@@ -40,7 +41,7 @@ func festAuditIndexDoc(festID int64, games []auditGameRow) *ui.Doc {
 	}
 	return &ui.Doc{Nodes: []ui.Node{
 		ui.Page(ui.Title("История изменений"), ui.PagePublic,
-			ui.Publictopbar(ui.Title("История изменений"), ui.Back(fmt.Sprintf("/host/fest/%d", festID))),
+			ui.Publictopbar(Trail(FestCrumbs(strconv.FormatInt(festID, 10), festTitle), "История изменений")),
 			ui.Section(sect...),
 		),
 	}}
@@ -64,5 +65,5 @@ func (s *Server) RenderHostFestAudit(w http.ResponseWriter, r *http.Request, fes
 		}
 		games = append(games, g)
 	}
-	RenderDoc(w, s.h.Engine().AssetETags, festAuditIndexDoc(festID, games))
+	RenderDoc(w, s.h.Engine().AssetETags, festAuditIndexDoc(festID, FestTitle(r.Context(), s.h.DB(), festID), games))
 }

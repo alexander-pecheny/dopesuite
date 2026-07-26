@@ -114,14 +114,7 @@
    fixed header — and its ☰ dropdown — must stay above it (the settings/unlock
    modals at z-modal still win over both). */
 .board-page .host-top { z-index: var(--z-board-header); }
-/* Breadcrumb: 🏠 / {board name}, replacing the old "←" back link. */
-.host-brand { display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 1 1 auto; }
-.host-home { display: inline-flex; align-items: center; text-decoration: none; font-size: 18px; line-height: 1; }
-.host-sep { color: var(--muted); }
-/* The overflow:hidden that yields the ellipsis clips at the padding edge, so a
-   line-height bump alone still shaved bold Cyrillic descenders (у, щ, р). Give
-   the clip box explicit bottom room via padding so descenders survive. */
-.host-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; line-height: var(--leading-snug); padding-bottom: 0.2em; }
+/* The header breadcrumb (.crumbs) is the kit's now — both apps share it. */
 
 /* Blue "unread" dots are the kit's .unread-dot: .unread-dot-corner on kanban
    cards and board tiles, .unread-dot-badge on the 🔔 bell, plain in the card

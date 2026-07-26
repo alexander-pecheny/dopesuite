@@ -1,5 +1,8 @@
 page title="Импорт из Trello · xy" kind="wide" scripts="dist/import.js"
   topbar title="Импорт из Trello"
+    crumbs
+      crumb home href="/" label="Все доски" "🏠"
+      crumb "Импорт из Trello"
     iconlink href="/" label="Все доски" "⬅️"
 
   form id="importForm" dir="col"

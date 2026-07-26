@@ -37,7 +37,7 @@ Russian-language UI.
   generated builder + `core.css`/fonts). `internal/ui` is xy's thin **overlay**
   on the `kit` (imports `pecheny.me/dopeuikit/kit`). Pages are authored in
   `.dopeui` (`web/assets/ui/`) as typed AppKit-style primitives — `page`,
-  `topbar`, `col`/`row`, `button`, `modal`, `mount`… — compiled to HTML at server
+  `topbar`, `crumbs`, `col`/`row`, `button`, `modal`, `mount`… — compiled to HTML at server
   startup by the xy `App` (`internal/ui/app.go`, `Compile`); the dynamic /admin
   pages use the same package's builder (`Render`). The overlay adds xy primitives
   (`docoverlay`/`headrow`/`headactions`/`split`/`pane`/`previewtitle`), overrides
@@ -45,6 +45,10 @@ Russian-language UI.
   (`internal/ui/vocab.json`, `expand.go`). The vocabulary is closed; unknown
   primitive/prop, bad enum value, or duplicate id is a compile error. Spec:
   DopeUIKit `DESIGN.md` (engine + kit) + `internal/ui/DESIGN.md` (xy overlay).
+- **Header path**: every page's `topbar` carries a `crumbs` trail — 🏠 / доска,
+  🏠 / Профиль / API-токены — replacing the old 🏠 + title pair. An open card is
+  a modal, not a place, so it adds no crumb. The primitive and its CSS are the
+  kit's; dope renders the same trail.
 - **CSS**: the shared design system is DopeUIKit's `assets/core.css` (served via
   `kit.CoreCSS`); xy's `web/assets/static/styles.css` is only the xy layer
   (kanban/card/board + xy vars + PWA overrides). The server serves

@@ -3677,6 +3677,7 @@ function setHeading(text: string): void {
 function renderGameBreadcrumbs(gameTitle: string): void {
   if (!breadcrumbsNode || !route.festID) return;
   gameTable.renderGameBreadcrumbs(breadcrumbsNode, {
+    host: !viewer,
     festHref: viewer ? `/fest/${route.festID}` : `/host/fest/${route.festID}`,
     festTitle: fest?.title || "Фест",
     gameTitle: fest?.gameName || gameTitle || scheme?.title || "ОД",

@@ -100,20 +100,82 @@ func expandPage(ctx *ExpandCtx, p *Element) []Node {
 	}
 }
 
+// ExpandCrumbs renders a breadcrumb trail: every crumb is a real navigable
+// prefix of the current URL, and the last one — the page you are on — is plain
+// text rather than a link. Apps reach it through their topbar; it is exported so
+// an app's own header primitive (dope's publictopbar) can place one too.
+func ExpandCrumbs(ctx *ExpandCtx, p *Element) []Node {
+	crumbs := childElements(p, "crumb")
+	kids := make([]Node, 0, len(crumbs)*2)
+	for i, c := range crumbs {
+		if i > 0 {
+			kids = append(kids, Inl("span", []Attr{ClassAttr("crumb-sep"), At("aria-hidden", "true")}, &TextNode{Value: "/"}))
+		}
+		kids = append(kids, crumbNode(ctx, c, i == len(crumbs)-1))
+	}
+	return one(El("nav", []Attr{ClassAttr("crumbs"), At("aria-label", "Навигация")}, kids...))
+}
+
+func crumbNode(ctx *ExpandCtx, c *Element, last bool) Node {
+	classes := []string{"crumb"}
+	if Flag(c, "home") {
+		classes = append(classes, "crumb-home")
+	}
+	if last {
+		classes = append(classes, "crumb-current")
+	}
+	href, linked := Get(c, "href")
+	// The home crumb is an icon, so it needs the name spelling out; the rest say
+	// what they are already.
+	var extra []Attr
+	if label, ok := Get(c, "label"); ok {
+		extra = append(extra, At("aria-label", label), At("title", label))
+	}
+	if !linked || last {
+		attrs := append([]Attr{ClassAttr(classes...)}, extra...)
+		attrs = append(attrs, IDAttr(c)...)
+		if last {
+			attrs = append(attrs, At("aria-current", "page"))
+		}
+		return &Element{Tag: "span", Attrs: attrs, Inline: ctx.Items(c.Inline)}
+	}
+	attrs := append([]Attr{ClassAttr(classes...), At("href", href)}, extra...)
+	attrs = append(attrs, IDAttr(c)...)
+	return &Element{Tag: "a", Attrs: attrs, Inline: ctx.Items(c.Inline)}
+}
+
+func childElements(p *Element, tag string) []*Element {
+	var out []*Element
+	for _, n := range p.Block {
+		if e, ok := n.(*Element); ok && e.Tag == tag {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 func expandTopbar(ctx *ExpandCtx, p *Element) []Node {
 	ch := ctx.Chrome()
 	title, _ := Get(p, "title")
 	titleid, hasTitleID := Get(p, "titleid")
 
+	// A crumbs child is the heading when present: the full path replaces the
+	// bare title, which said where you were but not how you got there.
+	var crumbs *Element
+	var rest []Node
+	for _, n := range p.Block {
+		if e, ok := n.(*Element); ok && e.Tag == "crumbs" {
+			crumbs = e
+			continue
+		}
+		rest = append(rest, n)
+	}
+
 	var heading []Node
-	if home, ok := Get(p, "home"); ok {
-		brandTitle := Inl("h1", classAndID([]string{"host-title"}, titleid, hasTitleID), &TextNode{Value: title})
-		heading = []Node{El("div", []Attr{ClassAttr("host-brand")},
-			Inl("a", []Attr{ClassAttr("host-home"), At("href", home), At("aria-label", "Все доски"), At("title", "Все доски")}, &TextNode{Value: "🏠"}),
-			Inl("span", []Attr{ClassAttr("host-sep"), At("aria-hidden", "true")}, &TextNode{Value: "/"}),
-			brandTitle,
-		)}
-	} else {
+	switch {
+	case crumbs != nil:
+		heading = []Node{El("div", []Attr{ClassAttr("host-brand")}, ctx.Expand(crumbs)...)}
+	default:
 		heading = []Node{Inl("h1", idIfSet(titleid, hasTitleID), &TextNode{Value: title})}
 	}
 
@@ -126,7 +188,7 @@ func expandTopbar(ctx *ExpandCtx, p *Element) []Node {
 		}
 		actions = append(actions, El("span", []Attr{ClassAttr(s.Class), At("id", s.ID), At("data-state", state), At("aria-label", s.Label), At("title", s.Label)}))
 	}
-	actions = append(actions, ctx.Nodes(p.Block)...)
+	actions = append(actions, ctx.Nodes(rest)...)
 
 	kids := append(heading, El("div", []Attr{ClassAttr("host-actions")}, actions...))
 	headerAttrs := []Attr{ClassAttr("host-top")}
@@ -136,14 +198,6 @@ func expandTopbar(ctx *ExpandCtx, p *Element) []Node {
 	}
 	headerAttrs = append(headerAttrs, Passthrough(p)...)
 	return one(El("header", headerAttrs, kids...))
-}
-
-func classAndID(classes []string, id string, has bool) []Attr {
-	out := []Attr{ClassAttr(classes...)}
-	if has {
-		out = append(out, At("id", id))
-	}
-	return out
 }
 
 func idIfSet(id string, has bool) []Attr {
