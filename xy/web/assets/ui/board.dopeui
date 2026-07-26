@@ -278,3 +278,14 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       row gap="sm" wrap
         button submit "Сохранить"
         button kind="ghost" id="pasteCancel" "Отмена"
+
+  -- unsaved-changes prompt: leaving a dirty card by any route (↩️, Escape,
+  -- Android back, the backdrop, ← / → to the next card) asks rather than
+  -- silently discarding, which is what every exit used to do.
+  modal id="dirtyOverlay" label="Несохранённые изменения" title="Несохранённые изменения"
+    hint "В карточке есть несохранённые изменения."
+    row gap="sm" wrap
+      button id="dirtySave" "Сохранить"
+      button kind="danger" id="dirtyDiscard" "Не сохранять"
+      button kind="ghost" id="dirtyCancel" "Отмена"
+    message id="dirtyMessage"

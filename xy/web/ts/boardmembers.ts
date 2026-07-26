@@ -7,6 +7,7 @@
 // the card timeline (member user_id → username), so it is cached on board load.
 // The module writes members/memberNames/me onto the shared board `state` object
 // board.js passes in, and owns the members overlay's DOM + listeners.
+import { overlayStack } from "./overlaystack.js";
 import { xyApp } from "./app.js";
 import type { AuthMe } from "./app.js";
 import { xySync } from "./sync.js";
@@ -52,12 +53,15 @@ export function createBoardMembers(state: MembersState, boardId: number | string
   }
 
   function open(): void {
+    const el = document.getElementById("membersOverlay")!;
     document.getElementById("membersMessage")!.textContent = "";
-    document.getElementById("membersOverlay")!.hidden = false;
+    el.hidden = false;
+    overlayStack.open({ el, close: hide });
     render();
   }
 
-  function close(): void { document.getElementById("membersOverlay")!.hidden = true; }
+  function hide(): void { document.getElementById("membersOverlay")!.hidden = true; }
+  function close(): void { overlayStack.pop(); }
 
   async function render(): Promise<void> {
     const listNode = document.getElementById("membersList")!;

@@ -1,5 +1,6 @@
 // board.ts — kanban board: unlock, render lists/cards (derived titles),
 // drag-reorder with fractional ranks, card detail + timeline + labels.
+import { overlayStack } from "./overlaystack.js";
 import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
@@ -307,12 +308,21 @@ function closeNotifPanel(): void {
   notifPanelEl = null;
   notifToggle.setAttribute("aria-expanded", "false");
   document.removeEventListener("pointerdown", onNotifOutside, true);
-  document.removeEventListener("keydown", onNotifKey);
+  document.removeEventListener("keydown", onNotifKey, true);
 }
 function onNotifOutside(e: PointerEvent): void {
   if (notifPanelEl && e.target instanceof Node && !notifPanelEl.contains(e.target) && e.target !== notifToggle) closeNotifPanel();
 }
-function onNotifKey(e: KeyboardEvent): void { if (e.key === "Escape") closeNotifPanel(); }
+// Transient popups (this panel, the ⋯ menu, the label picker) claim Escape in
+// the CAPTURE phase and stop it there. They are not on the overlay stack — no
+// history entry, nothing to go back to — but they are the innermost dismissible
+// thing on screen, so Escape must close them without also closing the card
+// underneath. Capture is what puts them ahead of the stack's own listener.
+function onNotifKey(e: KeyboardEvent): void {
+  if (e.key !== "Escape") return;
+  e.stopImmediatePropagation();
+  closeNotifPanel();
+}
 
 async function openNotifPanel(): Promise<void> {
   if (notifPanelEl) { closeNotifPanel(); return; }
@@ -336,7 +346,7 @@ async function openNotifPanel(): Promise<void> {
   notifToggle.parentElement?.append(panel);
   notifPanelEl = panel;
   document.addEventListener("pointerdown", onNotifOutside, true);
-  document.addEventListener("keydown", onNotifKey);
+  document.addEventListener("keydown", onNotifKey, true);
 
   let events: ActivityEvent[] = [];
   try { events = (await fetchJSON(`/api/boards/${boardId}/activity`)) as ActivityEvent[]; } catch (_) {}
@@ -843,14 +853,14 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
     menu.remove();
     openListMenu = null;
     document.removeEventListener("pointerdown", onOutside, true);
-    document.removeEventListener("keydown", onKey);
+    document.removeEventListener("keydown", onKey, true);
     window.removeEventListener("scroll", close, true);
     window.removeEventListener("resize", close);
   }
   function onOutside(e: PointerEvent): void {
     if (e.target instanceof Node && !menu.contains(e.target) && !anchor.contains(e.target)) close();
   }
-  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") close(); }
+  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); } }
   document.body.append(menu);
   // Right-align to the trigger, then clamp inside the viewport; below the
   // trigger unless there is no room, then above.
@@ -863,7 +873,7 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
   menu.style.top = top + "px";
   openListMenu = { anchor, close };
   document.addEventListener("pointerdown", onOutside, true);
-  document.addEventListener("keydown", onKey);
+  document.addEventListener("keydown", onKey, true);
   window.addEventListener("scroll", close, true);
   window.addEventListener("resize", close);
 }
@@ -882,9 +892,11 @@ function openMoveList(list: BoardList): void {
   listMoveSrc = list;
   byId("moveListMessage").textContent = "";
   byId("moveListOverlay").hidden = false;
+  overlayStack.open({ el: byId("moveListOverlay"), close: hideMoveList });
   void populateMoveListBoards();
 }
-function closeMoveList(): void { byId("moveListOverlay").hidden = true; }
+function hideMoveList(): void { byId("moveListOverlay").hidden = true; }
+function closeMoveList(): void { overlayStack.pop(); }
 
 // populateMoveListBoards fills the board <select> with decrypted board names
 // (current board first/default), then loads the chosen board's list positions.
@@ -1074,9 +1086,11 @@ function openListsManage(): void {
   byId("listsManageMessage").textContent = "";
   byId<HTMLInputElement>("listsMovePos").value = "";
   listsManageOverlay.hidden = false;
+  overlayStack.open({ el: listsManageOverlay, close: hideListsManage });
   renderManage();
 }
-function closeListsManage(): void { listsManageOverlay.hidden = true; }
+function hideListsManage(): void { listsManageOverlay.hidden = true; }
+function closeListsManage(): void { overlayStack.pop(); }
 
 function renderManage(): void {
   const units = computeUnits();
@@ -1321,7 +1335,6 @@ byId("listsMoveBtn").addEventListener("click", () => {
 });
 byId("listsManageClose").addEventListener("click", closeListsManage);
 listsManageOverlay.addEventListener("pointerdown", (e) => { if (e.target === listsManageOverlay) closeListsManage(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !listsManageOverlay.hidden) closeListsManage(); });
 
 // ---- import a package (.4s / .zip / .docx) into a new list ----
 // The server parses the upload with the Go port of chgksuite's parser
@@ -1345,8 +1358,10 @@ const importPickOverlay = byId("importPickOverlay");
 function openImportPick(): void {
   byId<HTMLFormElement>("importPickForm").reset();
   importPickOverlay.hidden = false;
+  overlayStack.open({ el: importPickOverlay, close: hideImportPick });
 }
-function closeImportPick(): void { importPickOverlay.hidden = true; }
+function hideImportPick(): void { importPickOverlay.hidden = true; }
+function closeImportPick(): void { overlayStack.pop(); }
 
 byId("importPickForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1359,7 +1374,6 @@ byId("importPickForm").addEventListener("submit", async (e) => {
 });
 byId("importPickCancel").addEventListener("click", closeImportPick);
 importPickOverlay.addEventListener("pointerdown", (e) => { if (e.target === importPickOverlay) closeImportPick(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !importPickOverlay.hidden) closeImportPick(); });
 
 async function importFile(file: File, splitTours: boolean): Promise<void> {
   if (!xySync.requireOnline("Импорт доступен только онлайн.")) return;
@@ -1423,6 +1437,7 @@ function openImportVerify(pkg: ImportPkg, splitTours: boolean): void {
   const src = byId<HTMLTextAreaElement>("importSource");
   src.value = pkg.source;
   importOverlay.hidden = false;
+  overlayStack.open({ el: importOverlay, close: hideImportVerify });
   renderImportPreview();
   src.focus();
   // Focusing puts the caret at the end; the user wants to read from the top.
@@ -1444,12 +1459,13 @@ function renderImportPreview(): void {
   byId("importCount").textContent = `${cards.length} блоков, ${qs} вопросов`;
 }
 
-function closeImportVerify(): void {
+function hideImportVerify(): void {
   importOverlay.hidden = true;
   if (importCtx) for (const url of importCtx.imgMap.values()) URL.revokeObjectURL(url);
   importCtx = null;
   byId("importPreview").replaceChildren();
 }
+function closeImportVerify(): void { overlayStack.pop(); }
 
 byId("importSource").addEventListener("input", debounceImportPreview());
 byId("importClose").addEventListener("click", closeImportVerify);
@@ -1461,7 +1477,6 @@ byId("importCommit").addEventListener("click", async () => {
   await commitImport(name, source, images, splitTours);
 });
 importOverlay.addEventListener("pointerdown", (e) => { if (e.target === importOverlay) closeImportVerify(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !importOverlay.hidden) closeImportVerify(); });
 
 // Re-rendering the whole preview on every keystroke is wasteful on a big package.
 function debounceImportPreview(): () => void {
@@ -1689,6 +1704,7 @@ function openHandouts(list: BoardList): void {
   byId("handoutsMessage").textContent = source.trim() ? "" : "В списке нет вопросов с раздаточным материалом.";
   clearHandoutsPdf();
   handoutsOverlay.hidden = false;
+  overlayStack.open({ el: handoutsOverlay, close: hideHandouts });
   // Pre-stage the referenced images now (in the background) so the first PDF /
   // split_fit generation doesn't pay the gather+upload, and start heartbeating.
   handoutSession.ensure(source).catch(() => {});
@@ -1747,7 +1763,9 @@ async function persistHandoutMeta(): Promise<void> {
   }
 }
 
-async function closeHandouts(): Promise<void> {
+function closeHandouts(): void { overlayStack.pop(); }
+
+async function hideHandouts(): Promise<void> {
   handoutsOverlay.hidden = true;
   void handoutSession.close(); // stop heartbeat + delete the staged images server-side
   await persistHandoutMeta();
@@ -1911,7 +1929,6 @@ byId("handoutsGenerate").addEventListener("click", () => { void generateHandouts
 byId("handoutsSplitFit").addEventListener("click", () => { void generateSplitFitZip(); });
 byId("handoutsClose").addEventListener("click", () => { void closeHandouts(); });
 handoutsOverlay.addEventListener("pointerdown", (e) => { if (e.target === handoutsOverlay) void closeHandouts(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !handoutsOverlay.hidden) void closeHandouts(); });
 
 // ---- list preview (docx-style HTML render, entirely client-side) ----
 // Renders a whole list the way chgksuite's docx export would — questions with
@@ -2072,9 +2089,11 @@ function pvField(field: string, defaultLabel: string, text: string, imgMap: Map<
 }
 
 // pvEditBtn builds the small inline ✏️ button rendered just before each preview
-// block's leading label (e.g. "✏️Вопрос 1."): it closes the preview and drops
+// block's leading label (e.g. "✏️Вопрос 1."): it hides the preview and drops
 // straight into the card editor, remembering the preview + card so the card's
 // ↩️ back button can restore this exact preview scrolled to the same question.
+// The preview is hidden rather than closed: the card takes over its place on the
+// overlay stack (openCard replaces it), so this is one step forward, not two.
 function pvEditBtn(card: BoardCard): HTMLElement {
   const list = previewListRef;
   return el("button", {
@@ -2083,7 +2102,7 @@ function pvEditBtn(card: BoardCard): HTMLElement {
     onclick: (e: Event) => {
       e.stopPropagation();
       const group = previewGroupMode;
-      closePreview();
+      hidePreview();
       void cardDetail.openCard(card, { returnTo: list ? { listId: list.id, cardId: card.id, group } : null });
     },
   });
@@ -2160,7 +2179,9 @@ function renderPreviewBody(screen: boolean): void {
   cards.forEach((card, i) => body.append(renderPreviewCard(card, numbers[i], imgMap, screen, true)));
 }
 
-function closePreview(): void {
+function closePreview(): void { overlayStack.pop(); }
+
+function hidePreview(): void {
   previewOverlay.hidden = true;
   previewCtx = null;
   previewListRef = null;
@@ -2190,6 +2211,7 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   q(".preview-screen-toggle").hidden = isTest;
   byId("previewCopyTesters").hidden = !isTest;
   previewOverlay.hidden = false;
+  overlayStack.open({ el: previewOverlay, close: hidePreview });
   if (isTest) {
     const text = cardDetail.testerSummary(list);
     body.replaceChildren(text
@@ -2233,7 +2255,6 @@ byId("previewCopyTesters").addEventListener("click", async (e) => {
 byId("previewScreen").addEventListener("change", (e) => renderPreviewBody((e.target as HTMLInputElement).checked));
 byId("previewClose").addEventListener("click", closePreview);
 previewOverlay.addEventListener("pointerdown", (e) => { if (e.target === previewOverlay) closePreview(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !previewOverlay.hidden) closePreview(); });
 
 // ---- commit card move (rank recompute from DOM order) ----
 async function commitCardMove(cardId: number, targetListId: number, body: HTMLElement): Promise<void> {
@@ -2432,15 +2453,15 @@ function openLabelAddPopup(): void {
   function close(): void {
     popup.remove();
     document.removeEventListener("pointerdown", onOutside, true);
-    document.removeEventListener("keydown", onKey);
+    document.removeEventListener("keydown", onKey, true);
   }
   function onOutside(e: PointerEvent): void { if (e.target instanceof Node && !anchor.contains(e.target)) close(); }
-  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { close(); byId("labelAddBtn").focus(); } }
+  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); byId("labelAddBtn").focus(); } }
 
   filter.addEventListener("input", fill);
   anchor.append(popup);
   document.addEventListener("pointerdown", onOutside, true);
-  document.addEventListener("keydown", onKey);
+  document.addEventListener("keydown", onKey, true);
   fill();
   filter.focus();
 }
