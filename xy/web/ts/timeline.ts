@@ -6,6 +6,7 @@
 // outbox `post` verb, popupMenu, plural, attachment access); the card-detail
 // module is reached through the `card` seam (open-card id + comment-link copy),
 // which the orchestrator wires back to the carddetail factory's API.
+import { overlayStack } from "./overlaystack.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
@@ -379,7 +380,8 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // The card panel gives the лента ~320px of height; on a long discussion that is
   // a keyhole. Развернуть re-renders the same events full-screen, flowed into
   // columns so as much as possible is readable at once.
-  function closeFeed(): void { feedOverlay.hidden = true; }
+  function hideFeed(): void { feedOverlay.hidden = true; }
+  function closeFeed(): void { overlayStack.pop(); }
 
   // Reading order in the expanded лента. The panel's feed is always newest-first
   // (you go there for what just happened); reading a whole discussion end to end
@@ -424,10 +426,10 @@ export function createTimeline(deps: TimelineDeps): Timeline {
 
   byId("feedExpand").addEventListener("click", async () => {
     feedOverlay.hidden = false;
+    overlayStack.open({ el: feedOverlay, close: hideFeed });
     await renderFeedGrid();
   });
   byId("feedClose").addEventListener("click", closeFeed);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !feedOverlay.hidden) closeFeed(); });
 
   // ---- reply threads ----
   // Threads are one level deep and live in a modal: the лента stays flat and
@@ -442,7 +444,8 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     });
   }
 
-  function closeThread(): void { threadOverlay.hidden = true; threadRootId = null; }
+  function hideThread(): void { threadOverlay.hidden = true; threadRootId = null; }
+  function closeThread(): void { overlayStack.pop(); }
 
   // openThread renders the root comment and its replies, oldest first, from the
   // events already loaded for the open card — no extra round trip.
@@ -473,6 +476,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     body.replaceChildren(frag);
     byId("threadMessage").textContent = "";
     threadOverlay.hidden = false;
+    overlayStack.open({ el: threadOverlay, close: hideThread });
   }
 
   byId("threadForm").addEventListener("submit", async (e) => {
@@ -495,7 +499,6 @@ export function createTimeline(deps: TimelineDeps): Timeline {
 
   byId("threadClose").addEventListener("click", closeThread);
   threadOverlay.addEventListener("pointerdown", (e) => { if (e.target === threadOverlay) closeThread(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !threadOverlay.hidden) closeThread(); });
 
   function mustDK(): DataKey {
     const dk = deps.getDK();
@@ -602,7 +605,8 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     byId<HTMLButtonElement>("excerptsView").disabled = n === 0;
   }
 
-  const closeExcerpts = (): void => { excerptsOverlay.hidden = true; };
+  const hideExcerpts = (): void => { excerptsOverlay.hidden = true; };
+  const closeExcerpts = (): void => { overlayStack.pop(); };
 
   async function openExcerpts(): Promise<void> {
     const body = byId("excerptsBody");
@@ -631,12 +635,12 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       body.append(box);
     }
     excerptsOverlay.hidden = false;
+    overlayStack.open({ el: excerptsOverlay, close: hideExcerpts });
   }
 
   byId("excerptsView").addEventListener("click", () => { void openExcerpts(); });
   byId("excerptsClose").addEventListener("click", closeExcerpts);
   excerptsOverlay.addEventListener("pointerdown", (e) => { if (e.target === excerptsOverlay) closeExcerpts(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !excerptsOverlay.hidden) closeExcerpts(); });
 
   return {
     load,

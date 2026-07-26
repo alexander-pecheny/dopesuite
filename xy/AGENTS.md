@@ -23,8 +23,8 @@ Russian-language UI.
   tsc) emits same-named ESM into the gitignored `web/assets/static/dist/`,
   which the pages load and the SW precaches. board.ts is a thin orchestrator
   over extracted kernels (unlock.ts, dragrank.ts, carddetail.ts, carddraft.ts,
-  timeline.ts, boardmembers.ts, handoutsession.ts, attachments.ts — each a `create(deps)`
-  factory with jstest coverage).
+  timeline.ts, boardmembers.ts, handoutsession.ts, attachments.ts, overlaystack.ts
+  — each a `create(deps)` factory with jstest coverage).
 - **Crypto**: scrypt KEK (vendored `@noble/hashes`, pure JS, **no WASM** → runs
   under iOS Lockdown Mode) + native AES-256-GCM via WebCrypto.
 - **Tests**: Go (`go test`) + frontend (`deno test --parallel jstest/`).
@@ -163,6 +163,16 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        temp-id remapping, snapshot apply, pending-timeline synthesis,
                        online/offline status events (PWA resync)
     sw.ts              service worker — app-shell caching (served at root, scope '/')
+    overlaystack.ts    one owner for every overlay's dismissal. An overlay registers on open;
+                       the stack pushes a history entry, so Android's back button closes it
+                       instead of the app (it has no Escape key). Back, Escape and the
+                       ✕/↩️ buttons all funnel through the same popstate, so they cannot
+                       drift apart. It shows/hides nothing — each overlay hands in the close
+                       function it already had. `confirm` gates a dismissal (the card's
+                       unsaved-changes prompt); `replace` swaps the top overlay for a
+                       hand-off (list preview → card) rather than a dismissal. Transient
+                       popups (⋯ menu, label picker, 🔔 panel) stay OFF the stack and claim
+                       Escape in the CAPTURE phase, so they close before the card does
     rank.ts            fractional indexing (LexoRank-style keyBetween)
     app.ts             shared fetch/DOM helpers, derived titles, offline-tolerant requireLogin
     diff.ts            word-level token diff for desc_edit timeline highlighting
@@ -188,6 +198,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        board, owner-only delete), export to docx / PDF (same request,
                        `exportList(list, format)`); direct links to a card
                        (?card=) and a comment (&comment=, copied from the timeline 🔗);
+                       ← / → walk the open card's list — its whole group when it is in one —
+                       stopping at both ends, and firing only when the caret is outside a
+                       field; leaving a dirty card by ANY route (↩️, Escape, back, backdrop,
+                       the arrows) raises the Save / Discard prompt instead of discarding;
                        «Управление списками» modal groups consecutive lists into a
                        list_of_lists (☰ menu); all mutations via sync.ts (offline-capable);
                        display sizes (users.sizes, edited on /profile — see profile.ts) are

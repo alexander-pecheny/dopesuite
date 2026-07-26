@@ -4,6 +4,7 @@
 // and the image lightbox. A create(deps) factory like the board's other
 // kernels; board.ts supplies the popup menu, the open-card accessor and the
 // timeline surface, and wires the result into carddetail's seams.
+import { overlayStack } from "./overlaystack.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
@@ -316,7 +317,8 @@ const cardOverlay = byId("cardOverlay");
 
 
 
-function closePasteModal(): void { pasteOverlay.hidden = true; pastedFile = null; }
+function hidePasteModal(): void { pasteOverlay.hidden = true; pastedFile = null; }
+function closePasteModal(): void { overlayStack.pop(); }
 
 document.addEventListener("paste", (e) => {
   // Only intercept image pastes while a persisted card is open (attachments need
@@ -337,6 +339,7 @@ document.addEventListener("paste", (e) => {
   nameInput.value = (file.name && file.name !== "image.png") ? file.name : `вставка.${extFromMime(file.type)}`;
   byId<HTMLInputElement>("pasteCompress").checked = false;
   pasteOverlay.hidden = false;
+  overlayStack.open({ el: pasteOverlay, close: hidePasteModal });
   nameInput.focus();
   nameInput.select();
 });
@@ -357,7 +360,6 @@ byId("pasteForm").addEventListener("submit", async (e) => {
 
 byId("pasteCancel").addEventListener("click", closePasteModal);
 pasteOverlay.addEventListener("pointerdown", (e) => { if (e.target === pasteOverlay) closePasteModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pasteOverlay.hidden) closePasteModal(); });
 
 // viewAttachment shows an image attachment in an in-page lightbox (zoom/pan,
 // right-click → save still works since it's a real <img> on the blob URL).
@@ -444,17 +446,16 @@ function openLightbox(url: string, name: string): void {
   img.onload = () => { lbBaseW = img.clientWidth; lbBaseH = img.clientHeight; lbApply(); };
   img.src = url;
   overlay.hidden = false;
-  document.addEventListener("keydown", lbOnKey);
+  overlayStack.open({ el: overlay, close: hideLightbox });
 }
 
-function closeLightbox(): void {
+function hideLightbox(): void {
   if (!lbEls || lbEls.overlay.hidden) return;
   lbEls.overlay.hidden = true;
   lbEls.img.removeAttribute("src"); // don't hold a big decoded bitmap while closed
-  document.removeEventListener("keydown", lbOnKey);
 }
 
-function lbOnKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.preventDefault(); closeLightbox(); } }
+function closeLightbox(): void { overlayStack.pop(); }
 
 // Inline (img …) preview images open in the same lightbox. Delegated so it
 // covers every preview surface (card, list, import) without wiring each <img>.

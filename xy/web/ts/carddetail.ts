@@ -10,6 +10,7 @@
 // questionNumberFor, which lives with the board's group-numbering logic); the
 // timeline module is injected as `timeline` — the orchestrator creates the
 // timeline first and wires its `card` seam back to this factory's API.
+import { overlayStack } from "./overlaystack.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
@@ -299,6 +300,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardDetailBox.classList.add("creating");
     byId("cardCopy").hidden = true; // no number/desc yet
     cardOverlay.hidden = false;
+    overlayStack.open({ el: cardOverlay, close: hideCard, confirm: confirmLeaveCard });
     // New card: no preview yet — open straight into the structured editor.
     lastEditView = "fields";
     setCardView("fields");
@@ -947,14 +949,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function cardUrl(cardId: number): string { return `${location.origin}${location.pathname}?card=${cardId}`; }
   function commentUrl(cardId: number, eventId: number): string { return `${cardUrl(cardId)}&comment=${eventId}`; }
 
-  // reflectCardInUrl keeps the address bar in sync with the open card (replaceState,
-  // so it doesn't pollute history) — a refresh or copied address reopens the card.
-  function reflectCardInUrl(cardId: number | null): void {
-    history.replaceState(null, "", cardId ? cardUrl(cardId) : location.pathname);
-  }
-
   // maybeOpenDeepLink runs once after the first successful board load: if the URL
-  // names a card (and optionally a comment), open it.
+  // names a card (and optionally a comment), open it. The bare board URL is put
+  // back first, so the entry the card pushes has the board underneath it and
+  // going back from a shared link lands there instead of leaving the app.
   let deepLinkDone = false;
   function maybeOpenDeepLink(): void {
     if (deepLinkDone) return;
@@ -965,6 +963,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const card = state().cards.find((c) => c.id === cardId);
     if (!card) return;
     const commentId = Number(params.get("comment")) || null;
+    history.replaceState(null, "", location.pathname);
     openCard(card).then(() => { if (commentId) highlightComment(commentId); }).catch(() => {});
   }
 
@@ -996,7 +995,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     pendingList = null;
     cardReturn = opts.returnTo || null;
     openCardId = card.id;
-    reflectCardInUrl(card.id);
     cardView = "";
     cardFieldReaders = null;
     const openMeta = card.handoutMeta != null ? card.handoutMeta : null;
@@ -1019,6 +1017,12 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     byId("cardCopy").hidden = card.kind !== "question";
     byId("cardCopyMsg").hidden = true;
     cardOverlay.hidden = false;
+    // Opened from a list preview, the card takes that preview's place rather
+    // than stacking on top of it — one step forward, so one back gets out.
+    const entry = { el: cardOverlay, close: hideCard, confirm: confirmLeaveCard };
+    if (cardReturn) overlayStack.replace(previewOverlay, entry, cardUrl(card.id));
+    else if (!overlayStack.isTop(cardOverlay)) overlayStack.open(entry, cardUrl(card.id));
+    else overlayStack.replace(cardOverlay, entry, cardUrl(card.id));
     deps.renderLabelPicker(card);
     deps.paintLabels();
     lastEditView = (isTest || fieldsAvailable()) ? "fields" : "text";
@@ -1336,7 +1340,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
           await jdelete(`/api/cards/${card.id}`);
           const st = state();
           st.cards = st.cards.filter((c) => c.id !== card.id);
-          cardOverlay.hidden = true;
+          dismissCard();
         }
       }
       deps.render();
@@ -1414,23 +1418,20 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     }
   });
 
-  function closeCard(): void {
+  // hideCard is the card's teardown, run by the overlay stack when the card is
+  // dismissed — by ↩️, Escape, Android's back button or the backdrop, all of
+  // which are the same gesture now. If the card was opened from a list preview,
+  // that preview is restored (pushing its own stack entry) scrolled to the same
+  // question, so going back once more leaves it for the board.
+  async function hideCard(): Promise<void> {
+    const ret = cardReturn; // capture before the reset below clears it
     stopReadTracking();
     cardOverlay.hidden = true;
-    reflectCardInUrl(null);
     openCardId = null;
     pendingList = null;
     cardReturn = null;
     cardView = "";
     cardFieldReaders = null;
-  }
-
-  // cardBack drives the ↩️ button: if the card was opened from a list preview,
-  // close it and restore that preview scrolled to the same question; otherwise it
-  // is a plain close back to the board.
-  async function cardBack(): Promise<void> {
-    const ret = cardReturn; // capture before closeCard clears it
-    closeCard();
     if (!ret || ret.listId == null) return;
     const list = state().lists.find((l) => l.id === ret.listId);
     if (!list) return;
@@ -1439,25 +1440,104 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const node = byId("previewBody").querySelector(`[data-card-id="${ret.cardId}"]`);
     if (node) node.scrollIntoView({ block: "center" });
   }
-  byId("cardClose").addEventListener("click", () => { void cardBack(); });
+
+  // closeCard asks to dismiss; the stack runs hideCard once the unsaved-changes
+  // gate (confirmLeaveCard) is satisfied.
+  function closeCard(): void { overlayStack.pop(); }
+
+  // dismissCard closes a card that no longer exists — deleted, or moved to
+  // another board. There is nothing left to save, so the dirty gate is skipped.
+  function dismissCard(): void {
+    draft.open("", null, null); // clean baseline: nothing to prompt about
+    overlayStack.pop();
+  }
+
+  // ---- leaving a dirty card ----
+  // Every exit used to discard unsaved edits without a word. Now each one — ↩️,
+  // Escape, Android back, the backdrop, and the ← / → walk — asks first. The
+  // prompt is deliberately NOT on the overlay stack: it runs *during* the
+  // stack's dismissal, and pushing it there would recurse.
+  const dirtyOverlay = byId("dirtyOverlay");
+  let dirtyAnswer: ((leave: boolean) => void) | null = null;
+
+  function settleDirty(leave: boolean): void {
+    const answer = dirtyAnswer;
+    dirtyAnswer = null;
+    dirtyOverlay.hidden = true;
+    if (answer) answer(leave);
+  }
+
+  // confirmLeaveCard resolves true when the card may be left. A clean card never
+  // prompts; a failed save keeps you on the card with the error showing.
+  function confirmLeaveCard(): Promise<boolean> {
+    captureDraft(); // the active view's edits count, even if the caret left it
+    if (!draft.contentDirty(!!pendingList)) return Promise.resolve(true);
+    byId("dirtyMessage").textContent = "";
+    dirtyOverlay.hidden = false;
+    return new Promise<boolean>((resolve) => { dirtyAnswer = resolve; });
+  }
+
+  byId("dirtySave").addEventListener("click", async () => {
+    const saved = await saveCard();
+    if (!saved) { byId("dirtyMessage").textContent = "Не удалось сохранить — карточка осталась открытой."; return; }
+    settleDirty(true);
+  });
+  byId("dirtyDiscard").addEventListener("click", () => { settleDirty(true); });
+  byId("dirtyCancel").addEventListener("click", () => { settleDirty(false); });
+  dirtyOverlay.addEventListener("pointerdown", (e) => { if (e.target === dirtyOverlay) settleDirty(false); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && dirtyAnswer) { e.stopPropagation(); settleDirty(false); }
+  });
+
+  // ---- walking the list with ← / → ----
+  // Reviewing a package means opening each card in turn; the arrows do that
+  // without going back to the board. They only fire when the caret is not in a
+  // field, so typing is never hijacked — and an existing card opens in the
+  // read-only Просмотр view, where that is always true.
+  function typingTarget(el: EventTarget | null): boolean {
+    if (!(el instanceof HTMLElement)) return false;
+    return el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+  }
+
+  // walkScope is the run of cards the arrows move through: the open card's list,
+  // or — when that list belongs to a group — the whole group in board order, the
+  // same scope its numbering, preview and export already use.
+  function walkScope(card: BoardCard): BoardCard[] {
+    const list = state().lists.find((l) => l.id === card.listId);
+    if (!list) return deps.cardsOf(card.listId);
+    const lists = list.groupId != null
+      ? state().lists.filter((l) => l.groupId === list.groupId && l.type !== "test").sort(byRank)
+      : [list];
+    return lists.flatMap((l) => deps.cardsOf(l.id));
+  }
+
+  async function walkCard(step: number): Promise<void> {
+    const card = state().cards.find((c) => c.id === openCardId);
+    if (!card) return;
+    const scope = walkScope(card);
+    const next = scope[scope.findIndex((c) => c.id === card.id) + step];
+    if (!next) return; // the ends of the walk are ends, not wrap-arounds
+    if (!(await confirmLeaveCard())) return;
+    await openCard(next, { returnTo: cardReturn });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (cardOverlay.hidden || pendingList || dirtyAnswer) return;
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    if (e.metaKey || e.ctrlKey || e.altKey || typingTarget(e.target)) return;
+    e.preventDefault();
+    void walkCard(e.key === "ArrowRight" ? 1 : -1);
+  });
+
+  byId("cardClose").addEventListener("click", closeCard);
   byId("cardLink").addEventListener("click", () => { void copyCardLink(); });
   cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) closeCard(); });
 
-  // Escape behaves like the ↩️ back button when the card is open — but only when
-  // no in-card widget owns Escape first (paste modal, label popup), so it dismisses
-  // those without also closing the card.
-  const pasteOverlay = byId("pasteOverlay");
-  const excerptsOverlay = byId("excerptsOverlay");
-  const threadOverlay = byId("threadOverlay");
-  const feedOverlay = byId("feedOverlay");
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || cardOverlay.hidden) return;
-    if (!pasteOverlay.hidden || !excerptsOverlay.hidden || !threadOverlay.hidden
-        || !feedOverlay.hidden || document.querySelector(".label-add-popup")) return;
-    void cardBack();
-  });
+  cardSaveBtn.addEventListener("click", () => { void saveCard(); });
 
-  cardSaveBtn.addEventListener("click", async () => {
+  // saveCard persists the open card's 4s content, reporting whether the write
+  // landed so the unsaved-changes prompt knows not to leave on a failure.
+  async function saveCard(): Promise<boolean> {
     captureDraft(); // fold the active view's edits into draft.desc / draft.meta
     const msg = cardMessageEl;
     // create mode: persist a new card with the composed description, then switch to
@@ -1481,11 +1561,11 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
         deps.render();
         await openCard(card);
         msg.textContent = "Карточка сохранена.";
-      } catch (err) { msg.textContent = errMsg(err); }
-      return;
+      } catch (err) { msg.textContent = errMsg(err); return false; }
+      return true;
     }
     const card = state().cards.find((c) => c.id === openCardId);
-    if (!card) return;
+    if (!card) return false;
     const newDesc = draft.desc;
     const newMeta = draft.normalizedMeta();
     // The alias is deliberately absent here — it saves on its own button
@@ -1520,8 +1600,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
         setCardView("preview");
       }
       msg.textContent = "Карточка сохранена.";
-    } catch (err) { msg.textContent = errMsg(err); }
-  });
+    } catch (err) { msg.textContent = errMsg(err); return false; }
+    return true;
+  }
 
   // Cmd/Ctrl-Enter saves from either edit view (textarea or structured fields).
   function saveOnCmdEnter(e: KeyboardEvent): void {
@@ -1580,7 +1661,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       const st = state();
       st.cards = st.cards.filter((c) => c.id !== card.id);
       await deps.cleanupTestLabels([card]);
-      cardOverlay.hidden = true;
+      dismissCard();
       deps.render();
     } catch (err) { cardMessageEl.textContent = errMsg(err); }
   });
