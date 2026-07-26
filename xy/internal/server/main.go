@@ -139,9 +139,11 @@ func Main() {
 	mux.HandleFunc("GET /api/boards/{id}/activity", srv.handleBoardActivity)
 	mux.HandleFunc("POST /api/boards/{id}/read-all", srv.handleBoardReadAll)
 
-	// ---- export (the same package as .docx or as a typst-laid-out .pdf) ----
+	// ---- export (the same package as .docx or as a typst-laid-out .pdf;
+	//      /pack renders several formats at once and zips them) ----
 	mux.HandleFunc("POST /api/export/docx", srv.handleExportDocx)
 	mux.HandleFunc("POST /api/export/pdf", srv.handleExportPDF)
+	mux.HandleFunc("POST /api/export/pack", srv.handleExportPack)
 
 	// ---- import (.4s / .zip / .docx → 4s source + images; plain text → 4s) ----
 	mux.HandleFunc("POST /api/import/parse", srv.handleImportParse)
