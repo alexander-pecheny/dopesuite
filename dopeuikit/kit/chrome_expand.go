@@ -19,6 +19,16 @@ func expandPage(ctx *ExpandCtx, p *Element) []Node {
 	for _, href := range ch.Stylesheets {
 		head = append(head, El("link", []Attr{At("rel", "stylesheet"), At("href", href)}))
 	}
+	for _, l := range ch.HeadLinks {
+		attrs := []Attr{At("rel", l.Rel), At("href", l.Href)}
+		if l.Type != "" {
+			attrs = append(attrs, At("type", l.Type))
+		}
+		if l.Sizes != "" {
+			attrs = append(attrs, At("sizes", l.Sizes))
+		}
+		head = append(head, El("link", attrs))
+	}
 	for _, src := range ch.BootScripts {
 		head = append(head, El("script", []Attr{At("src", src)}))
 	}
