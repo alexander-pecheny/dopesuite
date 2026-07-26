@@ -79,11 +79,11 @@ func Overlay(base, merged *ui.Vocab, pkg, basePkg string) ([]byte, error) {
 	fmt.Fprintf(&b, "import base %q\n\n", basePkg)
 
 	b.WriteString("// Node types, re-exported so app code imports one package.\n")
-	for _, t := range []string{"Doc", "Node", "Item", "Attr", "Element", "TextNode", "RunNode", "Comment", "BlankLine", "Doctype"} {
+	for _, t := range []string{"Doc", "Node", "Item", "Attr", "Element", "TextNode", "RawHTML", "RunNode", "Comment", "BlankLine", "Doctype"} {
 		fmt.Fprintf(&b, "type %s = base.%s\n", t, t)
 	}
 	b.WriteString("\n// Builder leaves, re-exported.\n")
-	for _, f := range []string{"New", "Text", "Line", "Inline", "CommentNode", "Blank", "ID", "Aria", "Data"} {
+	for _, f := range []string{"New", "Text", "Raw", "Line", "Inline", "CommentNode", "Blank", "ID", "Aria", "Data"} {
 		fmt.Fprintf(&b, "var %s = base.%s\n", f, f)
 	}
 

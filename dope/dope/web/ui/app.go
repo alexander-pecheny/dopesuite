@@ -47,6 +47,7 @@ func mustApp() *base.App {
 			"actionlist":   expandActionlist,
 			"actionrow":    expandActionrow,
 			"rowlink":      expandRowlink,
+			"richtext":     expandRichtext,
 		},
 		Inline: map[string]base.InlineFunc{
 			"link": inlineLink,

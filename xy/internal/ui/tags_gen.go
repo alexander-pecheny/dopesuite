@@ -11,6 +11,7 @@ type Item = base.Item
 type Attr = base.Attr
 type Element = base.Element
 type TextNode = base.TextNode
+type RawHTML = base.RawHTML
 type RunNode = base.RunNode
 type Comment = base.Comment
 type BlankLine = base.BlankLine
@@ -19,6 +20,7 @@ type Doctype = base.Doctype
 // Builder leaves, re-exported.
 var New = base.New
 var Text = base.Text
+var Raw = base.Raw
 var Line = base.Line
 var Inline = base.Inline
 var CommentNode = base.CommentNode

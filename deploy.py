@@ -7,6 +7,7 @@ xy and dope are on DIFFERENT hosts, so the host is per-target, not global.
 
   ./deploy.py --target dope-server           # the default for `just deploy` in dope/
   ./deploy.py --target xy-server,xy-bot      # the default for `just deploy` in xy/
+  ./deploy.py --target dopetest              # dope staging (`just deploy-staging`)
   ./deploy.py --target dope-bot --skip-tests
   ./deploy.py --target xy-server --dry-run   # builds, uploads nothing
 
@@ -62,6 +63,22 @@ TARGETS: dict[str, dict] = {
         "package": "./dope/cmd/telegram-bot",
         "binary": "dope-bot",
         "env_prefix": "DOPE",
+        "optional": False,
+    },
+    # Staging: the same dope binary, on the same box as prod, against a copy of
+    # prod's DB (/var/lib/dopetest). It exists so a release's startup migrations
+    # rehearse under the real 960MB/1-CPU limit before prod ever sees them — a
+    # migration once OOM-killed prod. Deploy here first whenever a release
+    # touches the schema, a backfill, or memory on the read paths.
+    "dopetest": {
+        "host": "vps2day-ee",
+        "remote_dir": "/opt/dopetest",
+        "service": "dopetest.service",
+        "service_env": "DOPETEST_DEPLOY_SERVICE",
+        "module": "dope",
+        "package": "./dope/cmd/dope-server",
+        "binary": "dope-server",
+        "env_prefix": "DOPETEST",
         "optional": False,
     },
     "xy-server": {

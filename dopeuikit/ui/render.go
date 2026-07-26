@@ -27,7 +27,7 @@ func (c *ExpandCtx) node(n Node) []Node {
 		return c.Expand(v)
 	case *RunNode:
 		return []Node{&RunNode{Items: c.Items(v.Items)}}
-	case *TextNode, *Comment, *BlankLine:
+	case *TextNode, *Comment, *BlankLine, *RawHTML:
 		return []Node{n}
 	}
 	return nil
@@ -46,7 +46,7 @@ func (c *ExpandCtx) Items(items []Item) []Item {
 	var out []Item
 	for _, it := range items {
 		switch v := it.(type) {
-		case *TextNode:
+		case *TextNode, *RawHTML:
 			out = append(out, v)
 		case *Element:
 			out = append(out, c.InlineOne(v))
@@ -120,6 +120,10 @@ func printNode(b *strings.Builder, n Node, depth int) {
 			b.WriteString(line)
 		}
 		b.WriteString(" -->\n")
+	case *RawHTML:
+		b.WriteString(indent(depth))
+		b.WriteString(v.HTML)
+		b.WriteString("\n")
 	case *RunNode:
 		b.WriteString(indent(depth))
 		printInline(b, v.Items)
@@ -175,6 +179,8 @@ func printInline(b *strings.Builder, items []Item) {
 		switch v := it.(type) {
 		case *TextNode:
 			b.WriteString(textEscaper.Replace(v.Value))
+		case *RawHTML:
+			b.WriteString(v.HTML)
 		case *Element:
 			writeOpenTag(b, v)
 			if htmlVoid[v.Tag] {
