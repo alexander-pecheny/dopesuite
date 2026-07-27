@@ -2,6 +2,7 @@
 // change password, board sizes (with a pseudo-board preview), default author.
 import { xyApp, xySizes } from "./app.js";
 import { COMMON_CITIES, guessZone } from "./sessions.js";
+import { autocomplete, townChoices, zoneChoices } from "./suggest.js";
 import type { AuthMe, Sizes } from "./app.js";
 
 const { fetchJSON, jpost, fetchVoid, el } = xyApp;
@@ -256,6 +257,17 @@ function citiesFromNames(raw: string, ownZone: string): Array<{ zone: string; na
     return known || { zone: ownZone, name };
   });
 }
+
+// The same pickers the session form uses: a bare box here meant typing an IANA
+// id from memory, and «алматы» finding nothing.
+autocomplete(byId<HTMLInputElement>("tzValue"), zoneChoices);
+autocomplete(byId<HTMLInputElement>("tzCities"), (q) => {
+  // The field is a comma-separated list, so complete only its LAST entry.
+  const head = q.slice(0, q.lastIndexOf(",") + 1);
+  const tail = q.slice(q.lastIndexOf(",") + 1).trim();
+  if (!tail) return [];
+  return townChoices(tail).map((c) => ({ ...c, value: head + (head ? " " : "") + c.value }));
+});
 
 tzForm.addEventListener("submit", async (e) => {
   e.preventDefault();

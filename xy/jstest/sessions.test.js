@@ -206,3 +206,28 @@ test("forgetting a dead card drops its own assignments and nobody else's", () =>
   assert.equal(wrong[2], undefined, "the hole lands at the INDEX, not the card");
   assert.ok(wrong.some((a) => a && a.cardId === 2), "card 2's rows survive the wrong form");
 });
+
+// The zone picker has to be usable by someone who knows «Алматы» and not
+// «Asia/Almaty» — the town list already carries that mapping.
+test("every common ЧГК city resolves to a zone the picker can offer", () => {
+  const byName = new Map(TOWNS.filter((t) => t.zone).map((t) => [t.name, t.zone]));
+  for (const [city, zone] of [
+    ["Москва", "Europe/Moscow"],
+    ["Алматы", "Asia/Almaty"],
+    ["Тбилиси", "Asia/Tbilisi"],
+    ["Берлин", "Europe/Berlin"],
+    ["Ереван", "Asia/Yerevan"],
+    ["Владивосток", "Asia/Vladivostok"],
+  ]) {
+    assert.equal(byName.get(city), zone, `${city} should map to ${zone}`);
+  }
+});
+
+test("a Cyrillic prefix matches towns that a raw IANA search never would", () => {
+  const hits = TOWNS.filter((t) => t.zone && t.name.toLowerCase().startsWith("алма"));
+  assert.ok(hits.length > 0, "«алма» matches no town");
+  assert.ok(hits.some((t) => t.zone === "Asia/Almaty"));
+  // The point: the zone id itself contains no Cyrillic, so without the town
+  // index this query returns nothing at all.
+  assert.equal(hits[0].zone.toLowerCase().includes("алма"), false);
+});

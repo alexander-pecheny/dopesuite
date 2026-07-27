@@ -1289,7 +1289,7 @@ body {
   max-height: 12rem;
   overflow-y: auto;
 }
-.suggest-board { color: var(--muted); font-size: var(--text-sm); margin-left: var(--space-2); }
+.suggest-hint { color: var(--muted); font-size: var(--text-sm); margin-left: var(--space-2); }
 
 /* A tester row is seg + name + ×. The name SHRINKS rather than claiming a line
    of its own — giving it 100% pushed the × onto a third line at every width, not

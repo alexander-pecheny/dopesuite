@@ -11,6 +11,7 @@
 
 import { xyApp } from "./app.js";
 import { guessZone } from "./sessions.js";
+import { autocomplete, zoneChoices } from "./suggest.js";
 import type { AuthMe } from "./app.js";
 
 const { jpost, el } = xyApp;
@@ -35,6 +36,9 @@ function build(zone: string, author: string): { overlay: HTMLElement; read: () =
     authorInput,
     el("p", { class: "hint", text: "Подставляется в поле «Автор» новых вопросов." }),
   );
+  // The zone box is the first thing a new account is asked for, so it gets the
+  // same picker as everywhere else rather than expecting an IANA id typed blind.
+  autocomplete(tzInput, zoneChoices);
   const overlay = el("div", { class: "appearance-modal-overlay", id: "firstRunOverlay" }, card);
   return {
     overlay,

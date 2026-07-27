@@ -11,6 +11,7 @@ import {
   sessionLabel, zoneOffset,
 } from "./sessions.js";
 import { TOWNS } from "./towns.js";
+import { autocomplete, type Choice, townChoices, zoneChoices } from "./suggest.js";
 import type { BoardSession } from "./unlock.js";
 import type { Tester } from "./chgk.js";
 import * as people from "./people.js";
@@ -154,7 +155,8 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       class: "input", type: "text", value: m.time, placeholder: "чч:мм", autocomplete: "off",
     }) as HTMLInputElement;
     const tzInp = el("input", {
-      class: "input", type: "text", value: m.tz, placeholder: "Europe/Moscow", autocomplete: "off",
+      class: "input", type: "text", value: m.tz || deps.defaultTimezone(),
+      placeholder: "Europe/Moscow", autocomplete: "off",
     }) as HTMLInputElement;
     autocomplete(tzInp, zoneChoices);
     const titleInp = el("input", { class: "input", type: "text", value: m.title, placeholder: "короткое имя теста — напр. «Алиев и др.»" }) as HTMLInputElement;
@@ -344,73 +346,9 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     return s ? s + "." : "";
   }
 
-  // autocomplete is the one custom dropdown this panel uses — for testers, towns
-  // and timezones alike. A native <select> can't filter, and the towns list is
-  // 1681 long, so it would be unusable as one.
-  interface Choice { value: string; label: string; hint?: string }
-
-  function autocomplete(inp: HTMLInputElement, choices: (q: string) => Choice[], onPick?: (c: Choice) => void): void {
-    let pop: HTMLElement | null = null;
-    const dismiss = (): void => { if (pop) { pop.remove(); pop = null; } };
-    inp.addEventListener("blur", () => setTimeout(dismiss, 150));
-    const draw = (): void => {
-      dismiss();
-      const hits = choices(inp.value);
-      if (!hits.length) return;
-      pop = el("div", { class: "menu-dropdown suggest-pop" });
-      for (const h of hits) {
-        pop.append(el("button", {
-          class: "menu-item", type: "button",
-          onmousedown: (e: Event) => {
-            e.preventDefault();
-            inp.value = h.value;
-            inp.dispatchEvent(new Event("input", { bubbles: true }));
-            dismiss();
-            if (onPick) onPick(h);
-          },
-        },
-          el("span", { text: h.label }),
-          h.hint ? el("span", { class: "suggest-board", text: h.hint }) : el("span"),
-        ));
-      }
-      // .suggest-pop is absolutely positioned; without a positioned ancestor it
-      // anchors to the page and lands somewhere unrelated — which reads as the
-      // autocomplete simply not working. Marked HERE rather than at bind time,
-      // because a field is often wired before it is appended to anything.
-      const host = inp.parentElement;
-      if (!host) return;
-      host.classList.add("suggest-anchor");
-      host.append(pop);
-    };
-    inp.addEventListener("input", draw);
-    inp.addEventListener("focus", draw);
-  }
-
   function testerChoices(q: string): Choice[] {
     if (!q.trim()) return [];
     return people.suggest(deps.boardId, q).map((s) => ({ value: s.text, label: s.text, hint: s.board }));
-  }
-
-  // A town brings its timezone with it (towns.ts joins ЧГК's list to GeoNames),
-  // so picking «Алматы» fills the zone too — nobody should have to know that
-  // Алматы is Asia/Almaty.
-  function townChoices(q: string): Choice[] {
-    const needle = q.trim().toLowerCase();
-    const pool = needle ? TOWNS.filter((c) => c.name.toLowerCase().startsWith(needle)) : TOWNS;
-    return pool.slice(0, 10).map((c) => ({
-      value: c.name,
-      label: c.name,
-      hint: c.zone ? zoneOffset(c.zone) : "",
-    }));
-  }
-
-  function zoneChoices(q: string): Choice[] {
-    const needle = q.trim().toLowerCase();
-    const zones = allZones();
-    const pool = needle
-      ? zones.filter((z) => z.toLowerCase().includes(needle) || zoneOffset(z).toLowerCase().includes(needle))
-      : zones;
-    return pool.slice(0, 12).map((z) => ({ value: z, label: z, hint: zoneOffset(z) }));
   }
 
   async function saveSession(prev: SessionMeta, cities: AnnounceCity[]): Promise<void> {
