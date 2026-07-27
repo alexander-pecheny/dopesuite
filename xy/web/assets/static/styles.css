@@ -405,16 +405,30 @@
 /* label picker */
 .label-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 /* Assigned labels render as filled colour pills (the colour is set via the CSSOM
-   in paintLabels); the trailing "×" stays as the remove affordance. */
+   in paintLabels). The pill is inert; its "×" is the only remove affordance, so
+   brushing a label cannot take it off the card. */
 .label-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   padding: var(--space-0-5) var(--space-2);
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: var(--muted);
   color: #fff;
   font-size: var(--text-xs);
-  cursor: var(--cursor-action);
 }
+.label-pick-x {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  padding: 0 var(--space-0-5);
+  cursor: var(--cursor-action);
+  opacity: 0.75;
+}
+.label-pick-x:hover, .label-pick-x:focus-visible { opacity: 1; }
 .label-pick.is-on { font-weight: var(--fw-bold); }
 /* No horizontal padding: this sits at the left edge of the labels row and its
    text has to line up with the block above and below it, not sit indented 8px
@@ -1245,10 +1259,21 @@ body {
 .suggest-pop { position: absolute; z-index: 30; max-height: 12rem; overflow-y: auto; }
 .suggest-board { color: var(--muted); font-size: var(--text-sm); margin-left: var(--space-2); }
 
-/* A tester row is seg + name + ×, which does not fit a 393px phone. Let it wrap
-   and give the name input its own line: the seg and the × stay paired above it. */
+/* A tester row is seg + name + ×. The name SHRINKS rather than claiming a line
+   of its own — giving it 100% pushed the × onto a third line at every width, not
+   just on a phone — so all three stay on one row down to ~200px, below which the
+   row wraps by itself. */
 #sessionForm .tester-row { flex-wrap: wrap; }
-#sessionForm .tester-row .fld-row-input { flex: 1 1 100%; min-width: 0; }
+#sessionForm .tester-row .fld-row-input { flex: 1 1 8rem; min-width: 0; }
+
+/* These modals hold more than a screenful, so their BODY scrolls — the shape
+   .lists-manage-rows already uses, which keeps the title and the «Готово»
+   button pinned either side of the scrolling part. */
+#sessionForm, #sessionsList, #labelsEditor, #marksEditor {
+  max-height: 65vh;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
 
 /* The session's debrief: what was said about any question at this test. */
 .sess-notes { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }

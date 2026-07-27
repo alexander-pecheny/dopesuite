@@ -168,7 +168,13 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     const drawCities = (): void => {
       cityBox.replaceChildren();
       for (const [i, c] of cities.entries()) {
-        cityBox.append(el("span", { class: "label-pick is-on", text: `${c.name} ×`, onclick: () => { cities.splice(i, 1); drawCities(); previewInvite(); } }));
+        cityBox.append(el("span", { class: "label-pick is-on", title: c.name },
+          el("span", { class: "label-pick-name", text: c.name }),
+          el("button", {
+            class: "label-pick-x", type: "button", text: "×",
+            title: "Убрать город", "aria-label": `Убрать ${c.name}`,
+            onclick: () => { cities.splice(i, 1); drawCities(); previewInvite(); },
+          })));
       }
       const pick = el("select", { class: "input" }) as HTMLSelectElement;
       pick.append(el("option", { value: "", text: "+ город…" }));

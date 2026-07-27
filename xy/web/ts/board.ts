@@ -2543,11 +2543,21 @@ function renderLabelPicker(card: BoardCard): void {
   for (const id of assigned) {
     const lbl = labelById(id);
     if (!lbl) continue;
-    picker.append(el("button", {
-      class: "label-pick is-on" + (lbl.kind === "test" ? " is-test" : ""), type: "button", dataset: { c: labelColor(lbl) },
-      title: "Снять метку", text: labelName(lbl) + " ×",
-      onclick: () => { void toggleLabel(card, lbl); },
-    }));
+    // The chip itself is inert: only the × removes. It used to be one button
+    // whose whole face was the remove affordance, so brushing a label took it
+    // off the card with no warning and no undo.
+    const name = labelName(lbl);
+    picker.append(el("span", {
+      class: "label-pick is-on" + (lbl.kind === "test" ? " is-test" : ""),
+      dataset: { c: labelColor(lbl) }, title: name,
+    },
+      el("span", { class: "label-pick-name", text: name }),
+      el("button", {
+        class: "label-pick-x", type: "button", text: "×",
+        title: "Снять метку", "aria-label": `Снять метку «${name}»`,
+        onclick: () => { void toggleLabel(card, lbl); },
+      }),
+    ));
   }
   if (!assigned.length) picker.append(el("span", { class: "label-empty", text: "меток нет" }));
   renderSeen(card);
