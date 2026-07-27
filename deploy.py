@@ -92,6 +92,21 @@ TARGETS: dict[str, dict] = {
         "env_prefix": "XY",
         "optional": False,
     },
+    # Staging: the same xy binary, on the same box as prod, against a copy of
+    # prod's DB (/var/lib/xytest) with prod's blobs hardlinked in. Deploy here
+    # first whenever a release touches the schema or a migration. No telegram
+    # bot and no litestream — bootstrap accounts with `xy-server adduser`.
+    "xytest": {
+        "host": "vps-he",
+        "remote_dir": "/opt/xytest",
+        "service": "xytest.service",
+        "service_env": "XYTEST_DEPLOY_SERVICE",
+        "module": "xy",
+        "package": "./cmd/xy-server",
+        "binary": "xy-server",
+        "env_prefix": "XYTEST",
+        "optional": False,
+    },
     "xy-bot": {
         "host": "vps-he",
         "remote_dir": "/opt/xy",

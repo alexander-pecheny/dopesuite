@@ -39,11 +39,36 @@ type cardDTO struct {
 	CreatedAt string `json:"created_at"`
 }
 
+// cardLabelDTO is one label ASSIGNMENT. SessionID nil = the author's own view of
+// the question; set = what the testers thought at that sitting. The same label
+// may appear twice on one card, once each way.
+type cardLabelDTO struct {
+	CardID    int64  `json:"card_id"`
+	LabelID   int64  `json:"label_id"`
+	SessionID *int64 `json:"session_id,omitempty"`
+}
+
+// tourTesterDTO is one session named by one tour's Declaration.
+// tourTesterDTO is one session a tour's Declaration names — or, with a null
+// SessionID, the marker that the tour declared and names nobody.
+type tourTesterDTO struct {
+	ListID    *int64 `json:"list_id,omitempty"`
+	GroupID   *int64 `json:"group_id,omitempty"`
+	SessionID *int64 `json:"session_id"`
+}
+
+// cardSessionDTO is one Playing: this question was played at that test.
+type cardSessionDTO struct {
+	CardID    int64 `json:"card_id"`
+	SessionID int64 `json:"session_id"`
+}
+
+// A label is just a label (ADR-0004): what makes one a test's verdict rather
+// than the author's is the ASSIGNMENT carrying a session, not the label itself.
 type labelDTO struct {
 	ID       int64  `json:"id"`
 	NameEnc  string `json:"name_enc"`
 	ColorEnc string `json:"color_enc"`
-	Kind     string `json:"kind"`
 }
 
 func scanLists(ctx context.Context, q querier, boardID int64) ([]listDTO, error) {
@@ -122,7 +147,7 @@ from cards where board_id = ? and deleted_at is null order by rank`, boardID)
 
 func scanLabels(ctx context.Context, q querier, boardID int64) ([]labelDTO, error) {
 	rows, err := q.QueryContext(ctx, `
-select id, name_enc, color_enc, kind from labels where board_id = ? and deleted_at is null order by id`, boardID)
+select id, name_enc, color_enc from labels where board_id = ? and deleted_at is null order by id`, boardID)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +156,7 @@ select id, name_enc, color_enc, kind from labels where board_id = ? and deleted_
 	for rows.Next() {
 		var l labelDTO
 		var nameEnc, colorEnc []byte
-		if err := rows.Scan(&l.ID, &nameEnc, &colorEnc, &l.Kind); err != nil {
+		if err := rows.Scan(&l.ID, &nameEnc, &colorEnc); err != nil {
 			return nil, err
 		}
 		l.NameEnc = b64(nameEnc)
@@ -339,6 +364,9 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 			if n, _ := res.RowsAffected(); n == 0 {
 				return errBadRequest("список не найден на этой доске")
 			}
+			if _, err := tx.ExecContext(ctx, `delete from tour_testers where list_id = ?`, lid); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -388,6 +416,9 @@ func (s *server) handleDeleteListGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.withWriteTx(r.Context(), "delete-list-group", func(ctx context.Context, tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `update lists set group_id = null, updated_at = ? where group_id = ?`, rfc3339(time.Now()), groupID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `delete from tour_testers where group_id = ?`, groupID); err != nil {
 			return err
 		}
 		return tombstone(ctx, tx, "list_groups", "id = ?", groupID)
@@ -595,7 +626,6 @@ func (s *server) handleDeleteCard(w http.ResponseWriter, r *http.Request) {
 type createLabelRequest struct {
 	NameEnc  string `json:"name_enc"`
 	ColorEnc string `json:"color_enc"`
-	Kind     string `json:"kind"`
 }
 
 func (s *server) handleListLabels(w http.ResponseWriter, r *http.Request) {
@@ -625,15 +655,12 @@ func (s *server) handleCreateLabel(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusBadRequest, "invalid label fields")
 		return
 	}
-	kind := req.Kind
-	if kind == "" {
-		kind = "normal"
-	}
 	now := time.Now()
 	var id int64
 	err := s.withWriteTx(r.Context(), "create-label", func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `insert into labels(board_id, name_enc, color_enc, kind, created_at) values(?, ?, ?, ?, ?)`,
-			bid, nameEnc, colorEnc, kind, rfc3339(now))
+		res, err := tx.ExecContext(ctx,
+			`insert into labels(board_id, name_enc, color_enc, created_at) values(?, ?, ?, ?)`,
+			bid, nameEnc, colorEnc, rfc3339(now))
 		if err != nil {
 			return err
 		}
@@ -735,9 +762,15 @@ func (s *server) handleDeleteLabel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// labelAssignment is one (label, optional playing) pair — see cardLabelDTO.
+type labelAssignment struct {
+	LabelID   int64  `json:"label_id"`
+	SessionID *int64 `json:"session_id"`
+}
+
 type setCardLabelsRequest struct {
-	LabelIDs []int64      `json:"label_ids"`
-	Events   []eventInput `json:"events"` // optional label_add/label_remove timeline events
+	Labels []labelAssignment `json:"labels"`
+	Events []eventInput      `json:"events"` // optional label_add/label_remove timeline events
 }
 
 type eventInput struct {
@@ -758,16 +791,30 @@ func (s *server) handleSetCardLabels(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.ExecContext(ctx, `delete from card_labels where card_id = ?`, cardID); err != nil {
 			return err
 		}
-		for _, lid := range req.LabelIDs {
+		for _, a := range req.Labels {
 			// Ensure the label belongs to this board.
 			var lb int64
-			if err := tx.QueryRowContext(ctx, `select board_id from labels where id = ? and deleted_at is null`, lid).Scan(&lb); err != nil {
+			if err := tx.QueryRowContext(ctx, `select board_id from labels where id = ? and deleted_at is null`, a.LabelID).Scan(&lb); err != nil {
 				return errBadRequest("метка не найдена")
 			}
 			if lb != bid {
 				return errBadRequest("метка с другой доски")
 			}
-			if _, err := tx.ExecContext(ctx, `insert into card_labels(card_id, label_id) values(?, ?)`, cardID, lid); err != nil {
+			// A scoped assignment must name a Playing that exists: «взяли», but at
+			// what, is not a state the model has.
+			if a.SessionID != nil {
+				var played int
+				if err := tx.QueryRowContext(ctx,
+					`select count(*) from card_sessions where card_id = ? and session_id = ?`, cardID, *a.SessionID).Scan(&played); err != nil {
+					return err
+				}
+				if played == 0 {
+					return errBadRequest("вопрос не отмечен этим тестом")
+				}
+			}
+			if _, err := tx.ExecContext(ctx,
+				`insert or ignore into card_labels(card_id, label_id, session_id) values(?, ?, ?)`,
+				cardID, a.LabelID, a.SessionID); err != nil {
 				return err
 			}
 		}
@@ -776,6 +823,153 @@ func (s *server) handleSetCardLabels(w http.ResponseWriter, r *http.Request) {
 				return errBadRequest("bad label event type")
 			}
 			if err := appendEvent(ctx, tx, bid, cardID, ev.Type, uid, ev.PayloadEnc); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSetCardSessions replaces a card's Playings: which tests this question was
+// played at. Dropping one takes the labels scoped to it — a label scoped to a
+// playing that no longer exists cannot be read (ADR-0004) — which the FK does,
+// so the client confirms the count first.
+func (s *server) handleSetCardSessions(w http.ResponseWriter, r *http.Request) {
+	_, cardID, bid, ok := s.requireChildAccess(w, r, boardOfCard)
+	if !ok {
+		return
+	}
+	var req struct {
+		SessionIDs []int64 `json:"session_ids"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	err := s.withWriteTx(r.Context(), "set-card-sessions", func(ctx context.Context, tx *sql.Tx) error {
+		keep := map[int64]bool{}
+		for _, sid := range req.SessionIDs {
+			var sb int64
+			if err := tx.QueryRowContext(ctx,
+				`select board_id from test_sessions where id = ? and deleted_at is null`, sid).Scan(&sb); err != nil {
+				return errBadRequest("тест не найден")
+			}
+			if sb != bid {
+				return errBadRequest("тест с другой доски")
+			}
+			keep[sid] = true
+		}
+		rows, err := tx.QueryContext(ctx, `select session_id from card_sessions where card_id = ?`, cardID)
+		if err != nil {
+			return err
+		}
+		var have []int64
+		for rows.Next() {
+			var sid int64
+			if err := rows.Scan(&sid); err != nil {
+				rows.Close()
+				return err
+			}
+			have = append(have, sid)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, sid := range have {
+			if keep[sid] {
+				continue
+			}
+			// Explicit, not by FK: the cascade fires when the SESSION dies, and this
+			// is the card walking away from a session that still exists.
+			if _, err := tx.ExecContext(ctx,
+				`delete from card_labels where card_id = ? and session_id = ?`, cardID, sid); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx,
+				`delete from card_sessions where card_id = ? and session_id = ?`, cardID, sid); err != nil {
+				return err
+			}
+		}
+		for sid := range keep {
+			if _, err := tx.ExecContext(ctx,
+				`insert or ignore into card_sessions(card_id, session_id) values(?, ?)`, cardID, sid); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSetTourTesters replaces one tour's Declaration. The tour is a list or a
+// whole group (exportScope), so exactly one of the two ids is given.
+func (s *server) handleSetTourTesters(w http.ResponseWriter, r *http.Request) {
+	_, bid, _, ok := s.requireBoard(w, r, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		ListID     *int64  `json:"list_id"`
+		GroupID    *int64  `json:"group_id"`
+		SessionIDs []int64 `json:"session_ids"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if (req.ListID == nil) == (req.GroupID == nil) {
+		httpError(w, http.StatusBadRequest, "нужен ровно один из list_id / group_id")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "set-tour-testers", func(ctx context.Context, tx *sql.Tx) error {
+		var owner int64
+		var scope string
+		if req.ListID != nil {
+			scope = "list_id"
+			if err := tx.QueryRowContext(ctx, `select board_id from lists where id = ? and deleted_at is null`, *req.ListID).Scan(&owner); err != nil {
+				return errBadRequest("список не найден")
+			}
+		} else {
+			scope = "group_id"
+			if err := tx.QueryRowContext(ctx, `select board_id from list_groups where id = ? and deleted_at is null`, *req.GroupID).Scan(&owner); err != nil {
+				return errBadRequest("группа не найдена")
+			}
+		}
+		if owner != bid {
+			return errBadRequest("тур с другой доски")
+		}
+		id := req.ListID
+		if id == nil {
+			id = req.GroupID
+		}
+		if _, err := tx.ExecContext(ctx, `delete from tour_testers where `+scope+` = ?`, *id); err != nil {
+			return err
+		}
+		// A tour that names nobody still declares: one marker row, so the custom
+		// does not re-tick what the editor just cleared.
+		if len(req.SessionIDs) == 0 {
+			_, err := tx.ExecContext(ctx,
+				`insert into tour_testers(board_id, list_id, group_id, session_id) values(?, ?, ?, null)`,
+				bid, req.ListID, req.GroupID)
+			return err
+		}
+		for _, sid := range req.SessionIDs {
+			var sb int64
+			if err := tx.QueryRowContext(ctx, `select board_id from test_sessions where id = ? and deleted_at is null`, sid).Scan(&sb); err != nil {
+				return errBadRequest("тест не найден")
+			}
+			if sb != bid {
+				return errBadRequest("тест с другой доски")
+			}
+			if _, err := tx.ExecContext(ctx,
+				`insert or ignore into tour_testers(board_id, list_id, group_id, session_id) values(?, ?, ?, ?)`,
+				bid, req.ListID, req.GroupID, sid); err != nil {
 				return err
 			}
 		}
@@ -802,6 +996,11 @@ type timelineEventDTO struct {
 	// rendered because live replies hang off it. PayloadEnc is empty for these.
 	Deleted    bool   `json:"deleted,omitempty"`
 	PayloadEnc string `json:"payload_enc"`
+	// SessionID tags a comment with the Test Session it came out of («на этом
+	// тесте команда споткнулась о формулировку»). CardID is null on a note about
+	// the session itself, which is what a comment on the old test card was.
+	SessionID *int64 `json:"session_id,omitempty"`
+	CardID    *int64 `json:"card_id,omitempty"`
 }
 
 func (s *server) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
@@ -817,7 +1016,7 @@ select e.id, e.type, e.author_user_id, e.created_at, e.edited_at, e.is_excerpt,
        e.reply_to_id, e.deleted_at is not null,
        (select count(*) from timeline_events r
           where r.reply_to_id = e.id and r.deleted_at is null),
-       e.payload_enc
+       e.payload_enc, e.session_id, e.card_id
 from timeline_events e
 where e.card_id = ?
   and (e.deleted_at is null
@@ -835,9 +1034,16 @@ order by e.id`, cardID)
 		var edited sql.NullString
 		var excerpt, deleted int
 		var payload []byte
+		var sessionID, cardRef sql.NullInt64
 		if err := rows.Scan(&e.ID, &e.Type, &author, &e.CreatedAt, &edited, &excerpt,
-			&replyTo, &deleted, &e.ReplyCount, &payload); handleErr(w, err) {
+			&replyTo, &deleted, &e.ReplyCount, &payload, &sessionID, &cardRef); handleErr(w, err) {
 			return
+		}
+		if sessionID.Valid {
+			e.SessionID = &sessionID.Int64
+		}
+		if cardRef.Valid {
+			e.CardID = &cardRef.Int64
 		}
 		if author.Valid {
 			e.AuthorID = &author.Int64
@@ -862,6 +1068,7 @@ order by e.id`, cardID)
 type addCommentRequest struct {
 	PayloadEnc string `json:"payload_enc"`
 	ReplyToID  *int64 `json:"reply_to_id"`
+	SessionID  *int64 `json:"session_id"` // optional: the test this came out of
 }
 
 func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
@@ -885,14 +1092,24 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		}
 		replyTo = root
 	}
+	if req.SessionID != nil {
+		sbid, err := boardOfSession(r.Context(), s.db, *req.SessionID)
+		if handleErr(w, err) {
+			return
+		}
+		if sbid != bid {
+			httpError(w, http.StatusBadRequest, "session belongs to another board")
+			return
+		}
+	}
 	err := s.withWriteTx(r.Context(), "add-comment", func(ctx context.Context, tx *sql.Tx) error {
 		payload, err := unb64(req.PayloadEnc)
 		if err != nil {
 			return errBadRequest("invalid payload_enc")
 		}
 		_, err = tx.ExecContext(ctx, `
-insert into timeline_events(board_id, card_id, type, author_user_id, created_at, payload_enc, reply_to_id)
-values(?, ?, 'comment', ?, ?, ?, ?)`, bid, cardID, uid, rfc3339(time.Now()), payload, replyTo)
+insert into timeline_events(board_id, card_id, session_id, type, author_user_id, created_at, payload_enc, reply_to_id)
+values(?, ?, ?, 'comment', ?, ?, ?, ?)`, bid, cardID, req.SessionID, uid, rfc3339(time.Now()), payload, replyTo)
 		return err
 	})
 	if handleErr(w, err) {

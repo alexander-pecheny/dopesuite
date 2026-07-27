@@ -111,3 +111,8 @@ invite days='7': wasm build-web
 # Build + deploy both xy units (server + bot) via the monorepo's ../deploy.py.
 deploy *args: wasm build-web
     python3 ../deploy.py --target xy-server,xy-bot {{args}}
+
+# Staging at xytest.pecheny.me: a copy of prod's DB, same box, no bot.
+# Release here first whenever the change touches the schema or a migration.
+deploy-staging *args: wasm build-web
+    python3 ../deploy.py --target xytest {{args}}

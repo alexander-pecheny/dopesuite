@@ -332,10 +332,13 @@
 }
 
 /* labels */
+/* Shorter and taller than it used to be: the row now shares its width with the
+   test groups beside it, and a stubbier pill both fits more of them and lines up
+   with the 🧪 rather than sitting as a thin bar under it. */
 .label-chip {
   display: inline-block;
-  width: 34px;
-  height: 8px;
+  width: 22px;
+  height: 12px;
   border-radius: var(--radius-pill);
   background: var(--muted);
 }
@@ -405,16 +408,31 @@
 /* label picker */
 .label-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 /* Assigned labels render as filled colour pills (the colour is set via the CSSOM
-   in paintLabels); the trailing "×" stays as the remove affordance. */
+   in paintLabels). The pill is inert; its "×" is the only remove affordance, so
+   brushing a label cannot take it off the card. */
 .label-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   padding: var(--space-0-5) var(--space-2);
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: var(--muted);
   color: #fff;
   font-size: var(--text-xs);
-  cursor: var(--cursor-action);
 }
+.label-pick-name { overflow-wrap: anywhere; }
+.label-pick-x {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  padding: 0 var(--space-0-5);
+  cursor: var(--cursor-action);
+  opacity: 0.75;
+}
+.label-pick-x:hover, .label-pick-x:focus-visible { opacity: 1; }
 .label-pick.is-on { font-weight: var(--fw-bold); }
 /* No horizontal padding: this sits at the left edge of the labels row and its
    text has to line up with the block above and below it, not sit indented 8px
@@ -789,8 +807,6 @@
 :not(.pv-small) + .pv-small { margin-top: 0.31em; }
 .pv-heading { font-size: var(--text-xl); font-weight: var(--fw-bold); margin: var(--space-5) 0 var(--space-3); }
 .pv-section { font-size: var(--text-lg); font-weight: var(--fw-semibold); margin: var(--space-4) 0 var(--space-2); }
-.pv-test { color: var(--muted); font-style: italic; }
-.pv-testers { white-space: pre-wrap; line-height: 1.7; font-size: var(--text-base); }
 .pv-empty { color: var(--muted); }
 /* break long URLs at any character so they never force horizontal scroll on
    narrow screens (links are often unbreakable runs with no spaces). */
@@ -1212,3 +1228,144 @@ body {
   overscroll-behavior: none;
   touch-action: manipulation;
 }
+
+/* ---- test sessions: the Тесты panel, the label editor, the mark template ----
+   All three are list-shaped modals, so they share one row skeleton. */
+.sess-row {
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+  align-items: center; justify-content: space-between;
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-soft);
+}
+.sess-row:last-child { border-bottom: 0; }
+.sess-head { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; min-width: 0; flex: 1 1 16rem; }
+.sess-title { font-weight: var(--fw-semibold); }
+.sess-meta { color: var(--muted); font-size: var(--text-sm); }
+/* A copied session says how stale it might be: its testers froze at transfer
+   time, and that list is what «Видели» reads (ADR-0003). */
+.sess-origin { color: var(--muted); font-size: var(--text-sm); font-style: italic; }
+.sess-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.sess-cities { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.sess-invite-box { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: var(--space-3) 0; }
+.sess-invite { flex: 1 1 18rem; margin: 0; font-size: var(--text-base); }
+
+/* A test on a board card: the flask alone when the testers recorded nothing,
+   the flask plus their verdicts' colours in a thin border when they did. Inside
+   the group the verdicts are DOTS, not pills — a card can carry several tests,
+   and pills there ate the row. */
+.kcard-test { display: inline-flex; align-items: center; gap: 3px; }
+.kcard-test.has-labels {
+  border: 1px solid var(--grid-dark);
+  border-radius: var(--radius-pill);
+  padding: 1px 5px;
+}
+.kcard-test .label-chip { width: 8px; height: 8px; border-radius: 50%; }
+/* An emoji's glyph overflows a line-height of 1, so the flask sat on the group's
+   bottom border. Centre it in a box tall enough to hold it. */
+.kcard-test-icon {
+  font-size: 10px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  height: 12px;
+}
+
+/* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
+#cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+.seen-label { color: var(--muted); font-size: var(--text-sm); }
+.seen-names { flex: 1 1 12rem; }
+.seen-copy { flex: 0 0 auto; }
+
+/* The person directory's dropdown: this board's names first and unlabelled,
+   then names from other unlocked boards tagged with where they came from. */
+/* position:absolute with no offsets leaves the popup at its STATIC position —
+   inline after the input, i.e. off to the right of the row. It has to be pinned
+   to the anchor's bottom-left to read as a dropdown. */
+.suggest-pop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  min-width: 14rem;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+.suggest-board { color: var(--muted); font-size: var(--text-sm); margin-left: var(--space-2); }
+
+/* A tester row is seg + name + ×. The name SHRINKS rather than claiming a line
+   of its own — giving it 100% pushed the × onto a third line at every width, not
+   just on a phone — so all three stay on one row down to ~200px, below which the
+   row wraps by itself. */
+#sessionForm .tester-row { flex-wrap: wrap; }
+#sessionForm .tester-row .fld-row-input { flex: 1 1 8rem; min-width: 0; }
+
+/* These modals hold more than a screenful, so their BODY scrolls — the shape
+   .lists-manage-rows already uses, which keeps the title and the «Готово»
+   button pinned either side of the scrolling part. */
+#sessionForm, #sessionsList, #labelsEditor, #marksEditor {
+  max-height: 65vh;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+
+/* The session's лента reuses the card's timeline markup (.tl-item / .tl-meta /
+   .tl-body), so a note reads exactly like a comment rather than being a second,
+   slightly-different comment UI. Only the container needs a rule. */
+.sess-feed { display: flex; flex-direction: column; gap: var(--space-2); }
+/* The tester rows and the «+ тестер» button under them are one block; without a
+   gap it sat flush against the Сохранить row below. */
+.sess-testers { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+.sess-notes { max-height: 14rem; overflow-y: auto; }
+
+/* A Playing: one test this question was played at, with its own labels. The name,
+   its ×, the chips and the add button are ONE wrapping row — stacking them put a
+   lone ＋ on a line of its own under every test. */
+.playing {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-soft);
+}
+.playing:last-child { border-bottom: 0; }
+.playing-head { display: flex; align-items: center; gap: var(--space-1); }
+.playing-name { font-weight: var(--fw-semibold); font-size: var(--text-sm); }
+/* position:relative anchors the add-label popup to THIS row. Without it the
+   popup positions against the page and lands over the board. */
+.playing-labels {
+  position: relative;
+  display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
+}
+#cardPlayings { display: flex; flex-direction: column; }
+/* The add-label button inside a playing sits among chips, so it matches them. */
+.playing-add { padding: var(--space-0-5) var(--space-2); font-size: var(--text-xs); }
+#playingAddRow { position: relative; display: flex; gap: var(--space-2); align-items: center; }
+/* The popup is anchored to a chip row, which is narrow; keep it readable. */
+.label-add-popup { min-width: 16rem; max-width: min(24rem, 90vw); }
+
+/* The town field sits inside the chip row, so it must not stretch to fill it. */
+.sess-city-add { width: 12rem; max-width: 100%; }
+/* Any input with an autocomplete under it: the popup is absolute, so its parent
+   has to be the positioning context. */
+.suggest-anchor { position: relative; }
+
+/* A city is not a coloured label, so it does not wear the label pill — that
+   painted it grey-on-white and made both the name and its offset unreadable.
+   Surface + border, text in the normal ink. */
+.city-chip {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-0-5) var(--space-2);
+  border: 1px solid var(--grid-dark); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text); font-size: var(--text-xs);
+}
+.city-chip-name { font-weight: var(--fw-semibold); }
+/* Which zone the town resolved to: a wrong guess is visible before the invite
+   line goes out, not after. Muted against the SURFACE, so it stays legible. */
+.city-chip-zone { color: var(--muted); font-size: var(--text-2xs); }
+.city-chip-x {
+  border: 0; background: none; color: var(--muted); font: inherit;
+  line-height: 1; padding: 0 var(--space-0-5); cursor: var(--cursor-action);
+}
+.city-chip-x:hover, .city-chip-x:focus-visible { color: var(--text); }
+
+/* A section heading belongs to what is UNDER it, so it needs air above and
+   little below — «Лента» was sitting nearer the delete button than its own
+   feed. */
+#sessionForm .fld:first-child { margin-top: 0; }
+#sessionForm .fld-head { margin-top: var(--space-4); margin-bottom: var(--space-1); }

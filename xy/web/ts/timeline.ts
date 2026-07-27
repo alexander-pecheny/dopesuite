@@ -66,6 +66,14 @@ export interface TimelineDeps {
     openCardId(): number | null;
     copyCommentLink(eventId: number): void;
   };
+  // A label's CURRENT name, or "" when it has since been deleted. The payload
+  // freezes the name at the time, which was harmless while labels were
+  // immutable; now a rename — or a retimed session, whose labels derive their
+  // names from it — would leave the whole history reading the old one.
+  labelName(labelId: number): string;
+  // The test sessions the open card is tagged with, as {id, label} — the choices
+  // the comment box offers. Empty hides the picker entirely.
+  cardSessions(cardId: number): Array<{ id: number; label: string }>;
   attachments: {
     url(att: AttachmentLike): Promise<string>;
     download(att: AttachmentLike, name: string): Promise<void>;
@@ -201,6 +209,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // «Выписок: N». The container must never be shorter than its content.
   async function load(cardId: number): Promise<void> {
     const tl = byId("timeline");
+    renderSessionPicker(cardId);
     // Refresh the cached server timeline when online, then merge any pending
     // (un-synced) events synthesized from the outbox so offline edits/comments show.
     if (xySync.isOnline()) {
@@ -304,14 +313,18 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       wrap.append(el("div", { class: "tl-meta", text: editor + "правка описания · " + when }),
         diffView() === "brief" ? renderBriefDiff(ops) : renderFullDiff(ops));
     } else {
-      let info: { label?: string; file?: string } = {};
-      try { info = JSON.parse(payload) as { label?: string; file?: string }; } catch (_) {}
+      let info: { label?: string; file?: string; label_id?: number } = {};
+      try { info = JSON.parse(payload) as { label?: string; file?: string; label_id?: number }; } catch (_) {}
       const verbs: Record<string, string> = {
         label_add: "добавлена метка", label_remove: "снята метка",
         attach_add: "вложение добавлено", attach_remove: "вложение удалено", attach_replace: "вложение заменено",
       };
       const verb = verbs[ev.type] || ev.type;
-      const detail = info.label || info.file || "";
+      // Live name when the label still exists, the frozen one when it doesn't —
+      // which keeps a deleted label's history readable, the property freezing the
+      // name was there to protect.
+      const live = info.label_id != null ? deps.labelName(info.label_id) : "";
+      const detail = live || info.label || info.file || "";
       wrap.append(el("div", { class: "tl-meta", text: meta(`${verb}${detail ? ": " + detail : ""} · ${when}`) }));
     }
     return wrap;
@@ -581,6 +594,20 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     ta.focus();
   }
 
+  // renderSessionPicker offers the sessions this card is tagged with. Attaching
+  // is never automatic: one session is offered pre-selected, several are picked
+  // by hand, none hides the row.
+  function renderSessionPicker(cardId: number): void {
+    const row = byId("commentSessionRow");
+    const sel = byId<HTMLSelectElement>("commentSession");
+    const sessions = deps.cardSessions(cardId);
+    row.hidden = !sessions.length;
+    if (!sessions.length) { sel.replaceChildren(); return; }
+    sel.replaceChildren(el("option", { value: "", text: "— не отмечать —" }));
+    for (const s of sessions) sel.append(el("option", { value: String(s.id), text: s.label }));
+    if (sessions.length === 1) sel.value = String(sessions[0].id);
+  }
+
   byId("commentForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = byId<HTMLInputElement>("commentInput");
@@ -588,7 +615,12 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const oc = deps.card.openCardId();
     if (!text || !oc) return;
     try {
-      await deps.post("comment", `/api/cards/${oc}/comments`, { payload_enc: await xyCrypto.encField(mustDK(), text) });
+      const sel = byId<HTMLSelectElement>("commentSession");
+      const sessionId = sel.value ? Number(sel.value) : null;
+      await deps.post("comment", `/api/cards/${oc}/comments`, {
+        payload_enc: await xyCrypto.encField(mustDK(), text),
+        ...(sessionId ? { session_id: sessionId } : {}),
+      });
       input.value = "";
       await load(oc);
     } catch (err) { byId("cardMessage").textContent = err instanceof Error ? err.message : String(err); }

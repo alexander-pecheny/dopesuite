@@ -22,6 +22,7 @@ page title="Профиль · xy" kind="sheet" scripts="dist/profile.js"
     button kind="ghost" id="sizesBtn" "Настройка ширины / высоты"
     button kind="ghost" id="authorBtn" "Автор по умолчанию"
     button kind="ghost" id="cardTitleBtn" "Заголовок карточки"
+    button kind="ghost" id="tzBtn" "Часовой пояс и города"
     button kind="ghost" href="/profile/tokens" "API-токены"
     button kind="ghost" id="logoutBtn" "Выйти"
 
@@ -57,6 +58,25 @@ page title="Профиль · xy" kind="sheet" scripts="dist/profile.js"
         button submit "Сохранить"
         button kind="ghost" id="authorCancel" "Отмена"
     message id="authorMessage"
+
+  -- timezone + the default announce set: the anchor a new test session is
+  -- written in, and the cities its invite line is written for
+  modal id="tzOverlay" label="Часовой пояс и города" title="Часовой пояс и города"
+    form id="tzForm" dir="col"
+      textfield id="tzValue" placeholder="Europe/Moscow" autocomplete="off" maxlength="64"
+      hint "Часовой пояс, в котором записывается время новых тестов."
+      label for="tzCities" "Города для приглашения"
+      textfield id="tzCities" placeholder="Москва, Берлин, Алматы" autocomplete="off"
+      hint "Через запятую. Строка со временем начала выглядит так: 20 июля, 19:00 (Москва) / 18:00 (Берлин)."
+      label for="tzTitleMode" "Названия меток тестов"
+      selectfield id="tzTitleMode" title="Названия меток тестов"
+        option value="date-title" "дата и название"
+        option value="title" "только название"
+        option value="date" "только дата"
+      row gap="sm" wrap
+        button submit "Сохранить"
+        button kind="ghost" id="tzCancel" "Отмена"
+    message id="tzMessage"
 
   -- card-title dialog: which field a card shows in the board list
   modal id="cardTitleOverlay" label="Заголовок карточки" title="Заголовок карточки"

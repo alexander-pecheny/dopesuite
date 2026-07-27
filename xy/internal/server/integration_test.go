@@ -67,8 +67,17 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("DELETE /api/cards/{id}", srv.handleDeleteCard)
 	mux.HandleFunc("POST /api/boards/{id}/labels", srv.handleCreateLabel)
 	mux.HandleFunc("PUT /api/cards/{id}/labels", srv.handleSetCardLabels)
+	mux.HandleFunc("PUT /api/cards/{id}/sessions", srv.handleSetCardSessions)
 	mux.HandleFunc("GET /api/cards/{id}/timeline", srv.handleGetTimeline)
 	mux.HandleFunc("POST /api/cards/{id}/comments", srv.handleAddComment)
+	mux.HandleFunc("GET /api/boards/{id}/sessions", srv.handleListSessions)
+	mux.HandleFunc("POST /api/boards/{id}/sessions", srv.handleCreateSession)
+	mux.HandleFunc("PATCH /api/sessions/{id}", srv.handlePatchSession)
+	mux.HandleFunc("DELETE /api/sessions/{id}", srv.handleDeleteSession)
+	mux.HandleFunc("GET /api/sessions/{id}/timeline", srv.handleGetSessionTimeline)
+	mux.HandleFunc("POST /api/sessions/{id}/comments", srv.handleAddSessionComment)
+	mux.HandleFunc("POST /api/auth/profile-defaults", srv.handleSetProfileDefaults)
+	mux.HandleFunc("POST /api/auth/announce-cities", srv.handleSetAnnounceCities)
 	mux.HandleFunc("POST /api/cards/{id}/timeline/import", srv.handleImportEvents)
 	mux.HandleFunc("DELETE /api/comments/{id}", srv.handleDeleteComment)
 	mux.HandleFunc("POST /api/cards/{id}/read", srv.handleMarkRead)
@@ -265,8 +274,8 @@ func TestFullFlow(t *testing.T) {
 	}
 	c.decode(resp, &labelC)
 	resp = c.do("PUT", "/api/cards/"+cardID+"/labels", map[string]any{
-		"label_ids": []int64{labelC.ID},
-		"events":    []map[string]string{{"type": "label_add", "payload_enc": enc(`{"label":"hard"}`)}},
+		"labels": []map[string]any{{"label_id": labelC.ID}},
+		"events": []map[string]string{{"type": "label_add", "payload_enc": enc(`{"label":"hard"}`)}},
 	})
 	mustStatus(t, resp, 204)
 
@@ -291,8 +300,9 @@ func TestFullFlow(t *testing.T) {
 	if len(snap.Lists) != 1 || len(snap.Cards) != 1 || len(snap.Labels) != 1 {
 		t.Fatalf("snapshot = %d lists, %d cards, %d labels", len(snap.Lists), len(snap.Cards), len(snap.Labels))
 	}
-	if got := snap.CardLabels[itoa(cardC.ID)]; len(got) != 1 || got[0] != labelC.ID {
-		t.Fatalf("card_labels = %v, want [%d]", got, labelC.ID)
+	if len(snap.CardLabels) != 1 || snap.CardLabels[0].CardID != cardC.ID ||
+		snap.CardLabels[0].LabelID != labelC.ID || snap.CardLabels[0].SessionID != nil {
+		t.Fatalf("card_labels = %+v, want one unscoped assignment of %d", snap.CardLabels, labelC.ID)
 	}
 	if dec(snap.Cards[0].DescEnc) != "edited question" {
 		t.Fatalf("desc = %q", dec(snap.Cards[0].DescEnc))

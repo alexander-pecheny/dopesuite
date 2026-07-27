@@ -12,12 +12,14 @@ const SNAP = {
   sizes: null,
   default_author: "Автор",
   card_title: "answer",
-  card_labels: { 2: [3] },
+  card_labels: [{ card_id: 2, label_id: 3 }],
+  card_sessions: [{ card_id: 2, session_id: 9 }],
   unread: { 2: { comments: true } },
   lists: [{ id: 1, type: "normal", rank: "a", group_id: 5, title_enc: "e:list" }],
   groups: [{ id: 5, name_enc: "e:group" }],
   cards: [{ id: 2, list_id: 1, kind: "question", rank: "b", description_enc: "e:desc", handout_meta_enc: "e:meta", alias_enc: null, created_at: "2026-01-01" }],
-  labels: [{ id: 3, kind: "normal", name_enc: "e:lname", color_enc: "e:lcolor" }],
+  labels: [{ id: 3, name_enc: "e:lname", color_enc: "e:lcolor" }],
+  sessions: [{ id: 9, meta_enc: "e:smeta" }],
 };
 
 const GOOD_PASS = "correct horse battery staple";
@@ -109,7 +111,8 @@ test("cached-DK fast path: no overlay, onDK + decrypted onState, mirror written,
   assert.equal(state.name, "Доска");
   assert.equal(state.defaultAuthor, "Автор");
   assert.equal(state.cardTitle, "answer");
-  assert.deepEqual(state.cardLabels, { 2: [3] });
+  assert.deepEqual(state.cardLabels, [{ cardId: 2, labelId: 3, sessionId: null }]);
+  assert.deepEqual(state.cardSessions, [{ cardId: 2, sessionId: 9 }]);
   assert.deepEqual(state.unread, { 2: { comments: true } });
   assert.deepEqual(state.lists, [{ id: 1, type: "normal", rank: "a", groupId: 5, title: "d:e:list" }]);
   assert.deepEqual(state.groups, [{ id: 5, name: "d:e:group" }]);
@@ -117,7 +120,7 @@ test("cached-DK fast path: no overlay, onDK + decrypted onState, mirror written,
     id: 2, listId: 1, kind: "question", rank: "b",
     desc: "d:e:desc", handoutMeta: "d:e:meta", alias: null, createdAt: "2026-01-01",
   }]);
-  assert.deepEqual(state.labels, [{ id: 3, kind: "normal", name: "d:e:lname", color: "d:e:lcolor" }]);
+  assert.deepEqual(state.labels, [{ id: 3, name: "d:e:lname", color: "d:e:lcolor" }]);
   // sizes: null in the snapshot → sanitized defaults, applied before render
   assert.equal(state.sizes.boardW, 1512);
   assert.deepEqual(calls.sizes, [state.sizes]);

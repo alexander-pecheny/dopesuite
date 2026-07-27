@@ -74,6 +74,19 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       mount id="labelPicker" kind="label-picker"
       mount id="labelAddRow" kind="label-add-row"
         button kind="ghost" id="labelAddBtn" "➕ Добавить метку…"
+
+    -- Тесты: which sittings this question was played at, each with its own
+    -- labels. Separate from Метки above: a label there is the author's view, a
+    -- label under a test is what the testers thought (ADR-0004).
+    label data-edit-only "Тесты"
+    mount id="cardPlayings" kind="card-playings" data-edit-only
+    row gap="sm" align="center" wrap data-edit-only
+      mount id="playingAddRow" kind="label-add-row"
+        button kind="ghost" id="playingAddBtn" "➕ Отметить тестом…"
+    -- Видели: every tester from every session this card is tagged with, derived
+    -- and stored nowhere. Hidden until there is one.
+    mount id="cardSeen" kind="card-seen" hidden data-edit-only
+
     form id="newLabelForm" dir="row" gap="sm"
       textfield id="newLabelName" placeholder="Новая метка" grow
       colorfield id="newLabelColor" value="#4477aa"
@@ -136,6 +149,11 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     mount id="timeline" kind="timeline" data-edit-only
     form id="commentForm" dir="col" data-edit-only
       editor id="commentInput" kind="comment" placeholder="Комментарий…" spellcheck="false"
+      -- tag the comment with the test it came out of («на этом тесте команда
+      -- споткнулась о формулировку»); hidden unless the card carries a session
+      row id="commentSessionRow" gap="sm" align="center" wrap hidden
+        label for="commentSession" "На тесте"
+        selectfield id="commentSession" compact title="Тест, на котором это обсуждали"
       button small submit "Отправить"
 
   -- list preview overlay (docx-style render, JS-only)
@@ -143,7 +161,6 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     headrow
       previewtitle id="previewTitle" "Предпросмотр"
       headactions
-        button small id="previewCopyTesters" hidden "👥 Копировать список тестеров"
         checkbox id="previewScreen" kind="preview" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения" " для экрана"
         iconbtn id="previewClose" label="Закрыть" "×"
     mount id="previewBody" kind="preview-body"
@@ -237,6 +254,30 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
         button small kind="ghost" id="listsMoveBtn" disabled title="Переместить выбранные на указанную позицию" "Переместить выбранные"
     mount id="listsManageRows" kind="lists-manage-rows"
     message id="listsManageMessage"
+
+  -- test sessions: the board-level panel that replaced the тест-список
+  modal id="sessionsOverlay" label="Тесты" title="🧪 Тесты" variant="lists" done="Готово" doneid="sessionsClose"
+    row gap="sm" align="center" justify="between" wrap
+      button small id="sessionAddBtn" title="Создать тест-сессию" "＋ Новый тест"
+    mount id="sessionsList" kind="sessions-list"
+    message id="sessionsMessage"
+
+  -- one session: date, optional time and zone, title, testers, announce cities
+  modal id="sessionEditOverlay" label="Тест-сессия" title="Тест-сессия" variant="lists" done="Готово" doneid="sessionEditClose"
+    mount id="sessionForm" kind="session-form"
+    message id="sessionEditMessage"
+
+  -- rename / recolour every label on the board (issue #25)
+  modal id="labelsEditOverlay" label="Метки" title="🏷️ Метки" variant="lists" done="Готово" doneid="labelsEditClose"
+    mount id="labelsEditor" kind="labels-editor"
+    message id="labelsEditMessage"
+
+  -- «Вопросы тестировали» for ONE tour: each session with how much of the tour
+  -- it saw, so the custom (name those who tested most of it) can be applied
+  modal id="testerListOverlay" label="Список тестеров" title="👥 Список тестеров" variant="lists" done="Готово" doneid="testerListClose"
+    hint "По умолчанию отмечены те, кто видел больше половины вопросов из списка."
+    mount id="testerList" kind="tester-list"
+    message id="testerListMessage"
 
   -- members / sharing overlay
   modal id="membersOverlay" label="Участники доски" title="Участники доски" done="Готово" doneid="membersClose"

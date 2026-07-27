@@ -15,7 +15,7 @@
 // The pure functions (substitute*, applyOpToSnapshot, pendingTimeline) carry the
 // tricky logic and take no globals, so jstest can exercise them without IndexedDB.
 import { xyStore } from "./store.js";
-import type { BoardSnapshot, OpBody, OutboxOp, TimelineEvent } from "./store.js";
+import type { BoardSnapshot, OpBody, OutboxOp, SnapshotCardLabel, SnapshotPlaying, TimelineEvent } from "./store.js";
 
 // The server's JSON reply to a mutation, as far as the engine reads it.
 interface MutationResult {
@@ -82,6 +82,31 @@ function pathIds(path: string): number[] {
 
 // applyOpToSnapshot mutates `snap` (a GET /api/boards/{id} payload) to reflect
 // `op`, using `resultId` as the id of any newly-created entity. Keeps the local
+// normalizePlayings folds the map-shaped mirror forward, same reason as below.
+function normalizePlayings(raw: unknown): SnapshotPlaying[] {
+  if (Array.isArray(raw)) return raw as SnapshotPlaying[];
+  if (!raw || typeof raw !== "object") return [];
+  const out: SnapshotPlaying[] = [];
+  for (const [cardId, ids] of Object.entries(raw as Record<string, number[]>)) {
+    for (const sessionId of ids || []) out.push({ card_id: Number(cardId), session_id: sessionId });
+  }
+  return out;
+}
+
+// normalizeCardLabels folds the pre-ADR-0004 mirror shape forward. A device that
+// synced before labels could be scoped holds card_labels as {cardId: [labelId]};
+// reading .filter on that throws and takes the whole outbox replay with it, so
+// the shape is converted rather than assumed.
+function normalizeCardLabels(raw: unknown): SnapshotCardLabel[] {
+  if (Array.isArray(raw)) return raw as SnapshotCardLabel[];
+  if (!raw || typeof raw !== "object") return [];
+  const out: SnapshotCardLabel[] = [];
+  for (const [cardId, ids] of Object.entries(raw as Record<string, number[]>)) {
+    for (const labelId of ids || []) out.push({ card_id: Number(cardId), label_id: labelId, session_id: null });
+  }
+  return out;
+}
+
 // mirror current so a fresh offline open renders pending edits. Returns snap.
 function applyOpToSnapshot(
   snap: BoardSnapshot | null | undefined,
@@ -92,7 +117,8 @@ function applyOpToSnapshot(
   const lists = (snap.lists = snap.lists || []);
   const cards = (snap.cards = snap.cards || []);
   const labels = (snap.labels = snap.labels || []);
-  const cardLabels = (snap.card_labels = snap.card_labels || {});
+  const cardLabels = (snap.card_labels = normalizeCardLabels(snap.card_labels));
+  const cardSessions = (snap.card_sessions = normalizePlayings(snap.card_sessions));
   const body: OpBody = op.body || {};
   const ids = pathIds(op.path);
   switch (op.kind) {
@@ -143,7 +169,7 @@ function applyOpToSnapshot(
       break;
     }
     case "createLabel":
-      labels.push({ id: resultId as number, name_enc: body.name_enc, color_enc: body.color_enc, kind: body.kind || "normal" });
+      labels.push({ id: resultId as number, name_enc: body.name_enc, color_enc: body.color_enc });
       break;
     case "patchLabel": {
       const l = labels.find((x) => x.id === ids[0]);
@@ -153,14 +179,27 @@ function applyOpToSnapshot(
     case "deleteLabel": {
       const lid = ids[0];
       snap.labels = labels.filter((x) => x.id !== lid);
-      for (const k of Object.keys(cardLabels)) {
-        cardLabels[k] = (cardLabels[k] || []).filter((id) => id !== lid);
-      }
+      snap.card_labels = cardLabels.filter((a) => a.label_id !== lid);
       break;
     }
-    case "setCardLabels":
-      cardLabels[ids[0]] = (body.label_ids || []).slice();
+    case "setCardLabels": {
+      const cid = ids[0];
+      snap.card_labels = cardLabels.filter((a) => a.card_id !== cid).concat(
+        (body.labels || []).map((a) => ({ card_id: cid, label_id: a.label_id, session_id: a.session_id ?? null })),
+      );
       break;
+    }
+    case "setCardSessions": {
+      const cid = ids[0];
+      const keep = new Set(body.session_ids || []);
+      snap.card_sessions = cardSessions.filter((p) => p.card_id !== cid)
+        .concat([...keep].map((sid) => ({ card_id: cid, session_id: sid })));
+      // A label scoped to a playing the card just walked away from cannot be
+      // read, so the mirror drops it the way the server does.
+      snap.card_labels = cardLabels.filter((a) =>
+        a.card_id !== cid || a.session_id == null || keep.has(a.session_id));
+      break;
+    }
     case "patchBoard":
       // Board names are plaintext now; a rename bumps the board to schema_version 2.
       if (body.name != null) { snap.name = body.name; snap.schema_version = 2; }

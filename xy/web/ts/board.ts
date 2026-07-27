@@ -4,7 +4,7 @@ import { overlayStack } from "./overlaystack.js";
 import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
-import { xyChgk } from "./chgk.js";
+import { type Tester, xyChgk } from "./chgk.js";
 import { xySync } from "./sync.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { createBoardMembers } from "./boardmembers.js";
@@ -13,12 +13,18 @@ import { gatherTargets } from "./attachments.js";
 import { createUnlock } from "./unlock.js";
 import { byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from "./dragrank.js";
 import { createTimeline, eventAuthor } from "./timeline.js";
-import { createCardDetail, nowStamp, testTitle } from "./carddetail.js";
+import { createCardDetail, nowStamp } from "./carddetail.js";
+import {
+  type AnnounceCity, parseSession, type SessionMeta, sessionLabel,
+  type TitleMode, whoSaw,
+} from "./sessions.js";
+import * as people from "./people.js";
+import { createSessionsPanel } from "./sessionspanel.js";
 import type { DataKey } from "./crypto.js";
 import type { SyncStatus } from "./sync.js";
 import type { OpBody } from "./store.js";
 import type { ScreenValue } from "./chgk.js";
-import type { BoardCard, BoardLabel, BoardList, BoardState } from "./unlock.js";
+import type { BoardCard, BoardLabel, BoardList, BoardState, CardLabel } from "./unlock.js";
 import type { MembersState } from "./boardmembers.js";
 import type { MenuItem, Timeline } from "./timeline.js";
 import type { MoveCtx, PreviewCardLike } from "./carddetail.js";
@@ -63,7 +69,7 @@ const titleNode = byId("boardTitle");
 // members roster boardmembers.js merges onto it.
 type LiveState = BoardState & MembersState;
 
-const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], cardLabels: {}, members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question" };
+const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", timezone: "", announceCities: null, sessionTitleMode: "" };
 let dk: DataKey | null = null;
 function mustDK(): DataKey {
   if (!dk) throw new Error("нет ключа доски");
@@ -123,8 +129,12 @@ const unlock = createUnlock({
   onDK: (k) => { dk = k; },
   onState: (s) => {
     Object.assign(state, s);
+    sessionMetaCache = new Map();
     titleNode.textContent = state.name;
     document.title = state.name + " · xy";
+    // Feed the person directory. The tester names are plaintext in hand at this
+    // moment, so this costs a pass over a handful of sessions and no decryption.
+    people.remember(boardId, state.name, state.sessions.flatMap((s) => parseSession(s.meta).testers));
     render();
     renderNotifBadge();
     void boardMembers.load(); // best-effort: populate the author-name map for timelines (online only)
@@ -162,6 +172,14 @@ window.dopeMenu?.setExtras([{
   title: "Импортировать пакет вопросов (.4s, .zip или .docx)",
   onClick: () => openImportPick(),
 }, {
+  label: "🧪 Тесты",
+  title: "Тест-сессии доски: кто когда играл, приглашение со временем начала",
+  onClick: () => sessionsPanel.open(),
+}, {
+  label: "🏷️ Метки",
+  title: "Переименовать, перекрасить или удалить метки доски",
+  onClick: () => openLabelsEditor(),
+}, {
   label: "👥 Участники доски",
   title: "Поделиться доской: добавить или убрать участников",
   onClick: () => boardMembers.open(),
@@ -174,6 +192,9 @@ window.dopeMenu?.setExtras([{
   title: "Забыть пароль доски на этом устройстве",
   onClick: async () => {
     await xyCrypto.forgetDK(boardId);
+    // The names this board contributed to the person directory outlive nothing:
+    // once the DK is gone its content is ciphertext with no key on this device.
+    people.forget(boardId);
     location.reload();
   },
 }, {
@@ -221,6 +242,7 @@ async function deleteBoard(): Promise<void> {
   try {
     await jdelete(`/api/boards/${boardId}`);
     try { await xyCrypto.forgetDK(boardId); } catch (_) {}
+    people.forget(boardId);
     location.href = "/";
   } catch (err) { alert("Не удалось удалить: " + errMsg(err)); }
 }
@@ -232,7 +254,6 @@ async function deleteBoard(): Promise<void> {
 async function fixTrelloFormattingBoard(): Promise<void> {
   const changes: Array<{ card: BoardCard; desc: string }> = [];
   for (const c of state.cards) {
-    if (c.kind === "test") continue; // test cards hold JSON, not 4s markup
     const fixed = xyChgk.fixTrelloFormatting(c.desc);
     if (fixed !== c.desc) changes.push({ card: c, desc: fixed });
   }
@@ -387,6 +408,51 @@ notifToggle.addEventListener("click", () => { if (notifPanelEl) closeNotifPanel(
 
 const cardsOf = (listId: number): BoardCard[] => state.cards.filter((c) => c.listId === listId).sort(byRank);
 const labelById = (id: number) => state.labels.find((l) => l.id === id);
+const sessionById = (id: number) => state.sessions.find((s) => s.id === id);
+
+let sessionMetaCache = new Map<number, SessionMeta>();
+function sessionMeta(id: number): SessionMeta | null {
+  const hit = sessionMetaCache.get(id);
+  if (hit) return hit;
+  const s = sessionById(id);
+  if (!s) return null;
+  const m = parseSession(s.meta);
+  sessionMetaCache.set(id, m);
+  return m;
+}
+
+function titleMode(): TitleMode {
+  const m = state.sessionTitleMode;
+  return m === "title" || m === "date" ? m : "date-title";
+}
+
+function sessionName(id: number): string {
+  const m = sessionMeta(id);
+  return m ? sessionLabel(m, titleMode()) : "тест";
+}
+
+function playingsOf(cardId: number): number[] {
+  const ids = state.cardSessions.filter((p) => p.cardId === cardId).map((p) => p.sessionId);
+  ids.sort((a, b) => {
+    const ma = sessionMeta(a), mb = sessionMeta(b);
+    return ((mb && mb.date) || "").localeCompare((ma && ma.date) || "") || b - a;
+  });
+  return ids;
+}
+
+function assignmentsOf(cardId: number, sessionId: number | null | undefined): CardLabel[] {
+  return state.cardLabels.filter((a) =>
+    a.cardId === cardId && (sessionId === undefined || a.sessionId === sessionId));
+}
+
+function sessionsOfCard(cardId: number): SessionMeta[] {
+  const out: SessionMeta[] = [];
+  for (const sid of playingsOf(cardId)) {
+    const m = sessionMeta(sid);
+    if (m) out.push(m);
+  }
+  return out;
+}
 
 // ---- render ----
 const groupById = (id: number) => state.groups.find((g) => g.id === id);
@@ -470,7 +536,6 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     const items: MenuItem[] = [{ icon: plusIcon(), label: "Добавить карточку", onClick: () => cardDetail.addCard(list) }];
-    if (list.type === "test") items.push({ label: "👥 Копировать список тестеров", onClick: () => { void cardDetail.copyTesterList(list); } });
     if (list.groupId != null) {
       items.push(
         { label: "🔍 Предпросмотр списка", onClick: () => { void previewList(list); } },
@@ -480,29 +545,24 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
       items.push({ label: "🔍 Предпросмотр", onClick: () => { void previewList(list); } });
     }
     items.push(
+      { label: "👥 Список тестеров", onClick: () => openTesterList(list) },
       { label: "↔️ Переместить список…", onClick: () => openMoveList(list) },
       { label: "✏️ Переименовать список", onClick: () => { void renameList(list); } },
     );
-    // Export / handout generation are question-list features; skip them for
-    // test lists (whose cards hold tester sessions, not 4s questions).
-    if (list.type !== "test") {
-      const grouped = list.groupId != null;
-      const suffix = grouped ? " группы" : "";
-      items.push(
-        { label: `📤 Экспорт${suffix}`, onClick: () => openExport(list) },
-        { label: grouped ? "🧩 Генерация раздаток (вся группа)" : "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
-      );
-    }
+    const grouped = list.groupId != null;
+    const suffix = grouped ? " группы" : "";
+    items.push(
+      { label: `📤 Экспорт${suffix}`, onClick: () => openExport(list) },
+      { label: grouped ? "🧩 Генерация раздаток (вся группа)" : "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
+    );
     items.push({ label: "🗑️ Удалить список", onClick: () => { void deleteList(list); } });
     popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
-  // Test lists get a 🧪 prefix so they stand out from ordinary question lists.
-  const titleText = (list.type === "test" ? "🧪 " : "") + (list.title || "(без названия)");
   const cards = cardsOf(list.id);
   const headMain = el("div", { class: "klist-headmain" },
-    el("span", { class: "klist-title", text: titleText }));
-  const qCount = list.type === "test" ? 0 : cards.filter((c) => c.kind === "question").length;
+    el("span", { class: "klist-title", text: list.title || "(без названия)" }));
+  const qCount = cards.filter((c) => c.kind === "question").length;
   if (qCount) headMain.append(el("span", { class: "klist-count", text: questionCountLabel(qCount) }));
   col.append(el("div", { class: "klist-head" }, headMain, addCardBtn, menuWrap));
   if (list.groupId != null) {
@@ -512,7 +572,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
   // Grouped lists carry continuous numbering computed across the whole group;
   // standalone lists number from 1.
-  const numbers = list.type === "test" ? [] : (precomputedNumbers || xyChgk.numberQuestionCards(cards));
+  const numbers = precomputedNumbers || xyChgk.numberQuestionCards(cards);
   cards.forEach((card, i) => body.append(renderCard(card, numbers[i])));
   col.append(body);
 
@@ -584,37 +644,19 @@ async function deleteList(list: BoardList): Promise<void> {
     state.cards = state.cards.filter((c) => c.listId !== list.id);
     const oc = cardDetail.openCardId();
     if (oc != null && !state.cards.some((c) => c.id === oc)) cardDetail.closeCard();
-    await cleanupTestLabels(removed);
+    forgetCardLabels(removed);
     setStatus("saved");
     render();
   } catch (err) { setStatus("error"); alert("Не удалось удалить: " + errMsg(err)); }
 }
 
-// cleanupTestLabels runs after cards are deleted: the auto-created green/red
-// "взяли / не взяли" labels of a deleted test session are deleted with it,
-// unless some remaining card is still marked by them (issue #13 — a board
-// otherwise accretes a label pair per deleted session forever). Only the
-// test_taken/test_missed kinds are touched: a hand-made label assigned to a
-// test card may well be in use elsewhere by design.
-async function cleanupTestLabels(deletedCards: BoardCard[]): Promise<void> {
-  const candidates = new Set<number>();
-  for (const c of deletedCards) {
-    const ids = state.cardLabels[c.id] || [];
-    if (c.kind === "test") {
-      for (const lid of ids) {
-        const l = labelById(lid);
-        if (l && (l.kind === "test_taken" || l.kind === "test_missed")) candidates.add(lid);
-      }
-    }
-    delete state.cardLabels[c.id]; // drop the dead card's row before the usage scan
-  }
-  for (const lid of candidates) {
-    if (state.cards.some((c) => (state.cardLabels[c.id] || []).includes(lid))) continue;
-    try {
-      await del("deleteLabel", `/api/labels/${lid}`);
-      state.labels = state.labels.filter((l) => l.id !== lid);
-    } catch (_) { /* leave the label; it can be removed by hand */ }
-  }
+// forgetCardLabels drops dead cards' assignments and playings. cardLabels is a
+// flat list, so this MUST filter — `delete list[id]` punches a hole at that
+// index, dropping someone else's assignment and keeping the dead card's own.
+function forgetCardLabels(deletedCards: BoardCard[]): void {
+  const dead = new Set(deletedCards.map((c) => c.id));
+  state.cardLabels = state.cardLabels.filter((a) => !dead.has(a.cardId));
+  state.cardSessions = state.cardSessions.filter((p) => !dead.has(p.cardId));
 }
 
 // Cards carry the card's *whole* text (whitespace collapsed), not a truncated
@@ -634,9 +676,6 @@ const aliasOf = (card: BoardCard | null | undefined): string => ((card && card.a
 // cardTitle is the plain-text form (move/copy dialogs, titles); renderCardTitle
 // below is the DOM form.
 function cardTitle(card: BoardCard, number?: string | null): string {
-  // The alias input is on every card's detail, so it must win on every kind —
-  // a test card that ignored its alias would be a silent no-op for the user.
-  if (card.kind === "test") return aliasOf(card) || testTitle(card.desc);
   const body = cardBody(card);
   if (card.kind === "question" && number) return `${number}. ${body}`;
   return body;
@@ -660,9 +699,32 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
 function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const node = el("div", { class: "kcard kcard-" + (card.kind || "normal"), draggable: "true", dataset: { cardId: card.id }, onclick: () => { void cardDetail.openCard(card); } });
   const labelRow = el("div", { class: "kcard-labels" });
-  for (const lid of state.cardLabels[card.id] || []) {
-    const lbl = labelById(lid);
+  // The board card shows the author's own labels; a test's verdict belongs to the
+  // card detail, where it can say WHICH test it came from.
+  for (const a of assignmentsOf(card.id, null)) {
+    const lbl = labelById(a.labelId);
     if (lbl) labelRow.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
+  }
+  // One group per test the question was played at: a 🧪 on its own when the
+  // testers recorded nothing, otherwise the 🧪 and their verdicts' colours inside
+  // a thin border — so «tested, no opinion» and «tested, three opinions» read
+  // apart at a glance without spelling either out.
+  for (const sid of playingsOf(card.id)) {
+    const scoped = assignmentsOf(card.id, sid);
+    const flask = el("span", { class: "kcard-test-icon", text: "🧪" });
+    if (!scoped.length) {
+      labelRow.append(el("span", { class: "kcard-test", title: "Тест: " + sessionName(sid) }, flask));
+      continue;
+    }
+    const group = el("span", {
+      class: "kcard-test has-labels",
+      title: "Тест: " + sessionName(sid),
+    }, flask);
+    for (const a of scoped) {
+      const lbl = labelById(a.labelId);
+      if (lbl) group.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
+    }
+    labelRow.append(group);
   }
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
@@ -784,16 +846,14 @@ function renderAddList(): HTMLElement {
     class: "kadd kadd-ok", type: "submit", title: "Создать список", "aria-label": "Создать список", hidden: true,
   }, checkIcon()) as HTMLButtonElement;
   input.addEventListener("input", () => { okBtn.hidden = !input.value.trim(); });
-  const typeSel = el("select", { class: "input", "aria-label": "Тип списка" },
-    el("option", { value: "normal", text: "вопросы" }),
-    el("option", { value: "test", text: "тесты" })) as HTMLSelectElement;
-  const typeRow = el("label", { class: "attach-lossless" }, "Тип:", typeSel);
-  form.append(el("div", { class: "u-row u-gap-sm" }, input, okBtn), typeRow);
+  // Every list is a question list now: a test session is board-level, not a
+  // column, so the old «вопросы / тесты» picker has nothing left to pick.
+  form.append(el("div", { class: "u-row u-gap-sm" }, input, okBtn));
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const title = input.value.trim();
     if (!title) return;
-    const type = typeSel.value;
+    const type = "normal";
     const ranks = [...state.lists].sort(byRank);
     const rank = keyBetween(ranks.length ? ranks[ranks.length - 1].rank : null, null);
     try {
@@ -802,7 +862,6 @@ function renderAddList(): HTMLElement {
       state.lists.push({ id: res.id as number, type, rank, groupId: null, title });
       input.value = "";
       okBtn.hidden = true;
-      typeSel.value = "normal";
       render();
     } catch (err) { setStatus("error"); }
   });
@@ -999,15 +1058,17 @@ async function moveListCopyLocked(remove: boolean, src: BoardList, ctx: MoveCtx)
         cr = keyBetween(cr, null);
         const cres = (await jpost(`/api/lists/${lres.id}/cards`, await cardDetail.cardCopyBody(c, cr, key))) as { id: number };
         state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc, handoutMeta: c.handoutMeta || null, alias: c.alias || null, createdAt: nowStamp() });
-        const ids = state.cardLabels[c.id] || [];
-        if (ids.length) { await jput(`/api/cards/${cres.id}/labels`, { label_ids: ids }); state.cardLabels[cres.id] = ids.slice(); }
+        const own = assignmentsOf(c.id, null);
+        if (own.length) {
+          await jput(`/api/cards/${cres.id}/labels`, { labels: own.map((a) => ({ label_id: a.labelId, session_id: null })) });
+          state.cardLabels.push(...own.map((a) => ({ cardId: cres.id, labelId: a.labelId, sessionId: null })));
+        }
         await cardDetail.copyCardExtras(c.id, key, cres.id);
       }
     } else {
       // Cross-board: re-encrypt under the target board's key, reconcile labels by
       // decrypted name+color (same as the per-card path).
       const tdk = ctx.dk;
-      const tLabels = ctx.labels.slice();
       const lres = (await jpost(`/api/boards/${targetBid}/lists`, {
         title_enc: await xyCrypto.encField(tdk, src.title), rank, type,
       })) as { id: number };
@@ -1015,8 +1076,10 @@ async function moveListCopyLocked(remove: boolean, src: BoardList, ctx: MoveCtx)
       for (const c of srcCards) {
         cr = keyBetween(cr, null);
         const cres = (await jpost(`/api/lists/${lres.id}/cards`, await cardDetail.cardCopyBody(c, cr, tdk))) as { id: number };
-        const targetIds = await cardDetail.reconcileLabels(c.id, targetBid, tdk, tLabels);
-        if (targetIds.length) await jput(`/api/cards/${cres.id}/labels`, { label_ids: targetIds });
+        const plays = await cardDetail.reconcilePlayings(c.id, targetBid, tdk, ctx);
+        if (plays.length) await jput(`/api/cards/${cres.id}/sessions`, { session_ids: plays });
+        const assignments = await cardDetail.reconcileLabels(c.id, targetBid, tdk, ctx);
+        if (assignments.length) await jput(`/api/cards/${cres.id}/labels`, { labels: assignments });
         await cardDetail.copyCardExtras(c.id, tdk, cres.id);
       }
       if (remove) {
@@ -1120,7 +1183,7 @@ function manageMoveControl(unit: Unit): HTMLElement {
 }
 
 function manageTitle(list: BoardList): string {
-  return (list.type === "test" ? "🧪 " : "") + (list.title || "(без названия)");
+  return list.title || "(без названия)";
 }
 
 function renderManageUnit(unit: Unit, pos: number): HTMLElement {
@@ -1620,13 +1683,13 @@ async function attachImported(cardId: number, img: ImportImage): Promise<boolean
 // to look like the docx (same layout, same non-breaking spaces/hyphens, same
 // keep-together questions). See internal/server/exportpack.go.
 // exportScope resolves which lists a per-list action (export / handouts) covers:
-// a standalone list is just itself; a grouped list pulls in every (non-test) list
-// of its group, in board order, so the whole list_of_lists exports as one file.
+// a standalone list is just itself; a grouped list pulls in every list of its
+// group, in board order, so the whole list_of_lists exports as one file.
 // Returns { cards (concatenated, in order), title }.
 function exportScope(list: BoardList): { cards: BoardCard[]; title: string } {
   let lists = [list], title = list.title || "export";
   if (list.groupId != null) {
-    lists = listsInGroup(list.groupId).filter((l) => l.type !== "test");
+    lists = listsInGroup(list.groupId);
     const g = groupById(list.groupId);
     if (g && g.name) title = g.name;
   }
@@ -2222,9 +2285,6 @@ function pvEditBtn(card: BoardCard): HTMLElement {
 // `edit` adds the ✏️ jump-to-editor button — only the list preview passes it; the
 // card-detail preview (already inside the editor) leaves it off.
 function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<string, string>, screen: boolean, edit = false): HTMLElement {
-  if (card.kind === "test") {
-    return el("p", { class: "pv-meta pv-test", text: testTitle(card.desc), dataset: { cardId: card.id } });
-  }
   const blocks = xyChgk.parseBlocks(card.desc);
   const find = (t: string) => blocks.find((b) => b.type === t);
 
@@ -2304,29 +2364,19 @@ function hidePreview(): void {
 // continuous numbering) — the same scope its export/handouts cover.
 async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   const group = wholeGroup && list.groupId != null ? groupById(list.groupId) : null;
-  const scopeLists = group ? listsInGroup(list.groupId as number).filter((l) => l.type !== "test") : [list];
+  const scopeLists = group ? listsInGroup(list.groupId as number) : [list];
   const cards = scopeLists.flatMap((l) => cardsOf(l.id));
   byId("previewTitle").textContent = group
     ? "🔗" + (group.name || "связанные списки")
-    : (list.type === "test" ? "🧪 " : "") + (list.title || "Предпросмотр");
+    : (list.title || "Предпросмотр");
   const body = byId("previewBody");
   body.replaceChildren();
   previewCtx = null;
   previewListRef = list;
   previewGroupMode = !!group;
-  // Screen-mode toggle + tester-copy button are mutually exclusive per list kind.
-  const isTest = !group && list.type === "test";
-  q(".preview-screen-toggle").hidden = isTest;
-  byId("previewCopyTesters").hidden = !isTest;
+  q(".preview-screen-toggle").hidden = false;
   previewOverlay.hidden = false;
   overlayStack.open({ el: previewOverlay, close: hidePreview });
-  if (isTest) {
-    const text = cardDetail.testerSummary(list);
-    body.replaceChildren(text
-      ? el("p", { class: "pv-testers", text })
-      : el("p", { class: "pv-empty", text: "В этом списке пока нет тестеров." }));
-    return;
-  }
   if (!cards.length) {
     body.append(el("p", { class: "pv-empty", text: "В списке нет карточек." }));
     return;
@@ -2349,16 +2399,6 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
     if (previewCtx === ctx && !previewOverlay.hidden) fillPreviewImages(body, imgMap);
   });
 }
-
-// Copy the previewed test list's tester summary; brief inline confirmation.
-byId("previewCopyTesters").addEventListener("click", async (e) => {
-  if (!previewListRef) return;
-  const btn = e.currentTarget as HTMLButtonElement; // capture before await (currentTarget clears after dispatch)
-  if (!btn.dataset.label) btn.dataset.label = btn.textContent || "";
-  await cardDetail.copyTesterList(previewListRef);
-  btn.textContent = "Скопировано ✓";
-  setTimeout(() => { btn.textContent = btn.dataset.label || ""; }, 1500);
-});
 
 byId("previewScreen").addEventListener("change", (e) => renderPreviewBody((e.target as HTMLInputElement).checked));
 byId("previewClose").addEventListener("click", closePreview);
@@ -2427,7 +2467,7 @@ const cardDetail = createCardDetail({
   renderLabelPicker,
   paintLabels,
   questionNumberFor,
-  cleanupTestLabels,
+  forgetCardLabels,
   preview: { renderPreviewCard, resolveImages: attachments.resolveImages, imageRefs, fillPreviewImages, previewList },
   attachments,
   readMarkers: { refreshCardUnreadDot, renderNotifBadge },
@@ -2446,26 +2486,26 @@ timeline = createTimeline({
     openCardId: () => cardDetail.openCardId(),
     copyCommentLink: (id) => { void cardDetail.copyCommentLink(id); },
   },
+  labelName: (id) => { const l = labelById(id); return l ? l.name : ""; },
+  cardSessions: (cardId) => playingsOf(cardId).map((id) => ({ id, label: sessionName(id) })),
   attachments: { url: attachments.attachmentUrl, download: attachments.download },
 });
 
 // ---- labels ----
-// renderLabelPicker shows only the labels actually assigned to this card (each
-// removable on click). Boards can have dozens of labels (e.g. one green/red pair
-// per test session), so the rest live behind an "add label" dropdown rather than
-// being dumped on screen.
+// The card's «Метки» and «Тесты» are two separate pickers (ADR-0004): a label is
+// the author's view of the question, a Playing is where it was tested, and a
+// label scoped to a Playing is what the testers thought there. Mixing them into
+// one list was what made «взяли» multiply by the number of tests.
+
 // labelLastUsage maps label id → the highest card id currently carrying it.
 // Card ids grow monotonically, so the max id is a recency proxy for "last used"
 // without scanning per-card timelines. Labels absent from the map were never
 // used (or imported with no assignments).
 function labelLastUsage(): Map<number, number> {
   const usage = new Map<number, number>();
-  for (const [cardId, ids] of Object.entries(state.cardLabels)) {
-    const cid = Number(cardId);
-    for (const id of ids || []) {
-      const prev = usage.get(id);
-      if (prev === undefined || cid > prev) usage.set(id, cid);
-    }
+  for (const a of state.cardLabels) {
+    const prev = usage.get(a.labelId);
+    if (prev === undefined || a.cardId > prev) usage.set(a.labelId, a.cardId);
   }
   return usage;
 }
@@ -2483,36 +2523,109 @@ function sortLabels(labels: BoardLabel[]): BoardLabel[] {
   });
 }
 
+function labelChip(lbl: BoardLabel, onRemove: () => void, title: string): HTMLElement {
+  return el("span", { class: "label-pick is-on", dataset: { c: lbl.color }, title: lbl.name },
+    el("span", { class: "label-pick-name", text: lbl.name }),
+    el("button", {
+      class: "label-pick-x", type: "button", text: "×",
+      title, "aria-label": `${title}: ${lbl.name}`,
+      onclick: onRemove,
+    }));
+}
+
 function renderLabelPicker(card: BoardCard): void {
   const picker = byId("labelPicker");
   picker.replaceChildren();
-  const assigned = state.cardLabels[card.id] || [];
-  for (const id of assigned) {
-    const lbl = labelById(id);
-    if (!lbl) continue;
-    picker.append(el("button", {
-      class: "label-pick is-on", type: "button", dataset: { c: lbl.color },
-      title: "Снять метку", text: lbl.name + " ×",
-      onclick: () => { void toggleLabel(card, lbl); },
-    }));
+  const own = assignmentsOf(card.id, null);
+  for (const a of own) {
+    const lbl = labelById(a.labelId);
+    if (lbl) picker.append(labelChip(lbl, () => { void setLabel(card, lbl, null, false); }, "Снять метку"));
   }
-  if (!assigned.length) picker.append(el("span", { class: "label-empty", text: "меток нет" }));
+  if (!own.length) picker.append(el("span", { class: "label-empty", text: "меток нет" }));
+
+  renderPlayings(card);
+  renderSeen(card);
   closeLabelAddPopup();
   paintLabels();
 }
 
+function renderPlayings(card: BoardCard): void {
+  const box = byId("cardPlayings");
+  box.replaceChildren();
+  const ids = playingsOf(card.id);
+  if (!ids.length) {
+    box.append(el("span", { class: "label-empty", text: "тестов нет" }));
+    return;
+  }
+  for (const sid of ids) {
+    const head = el("div", { class: "playing-head" },
+      el("span", { class: "playing-name", text: sessionName(sid) }),
+      el("button", {
+        class: "label-pick-x", type: "button", text: "×",
+        title: "Убрать тест с вопроса", "aria-label": `Убрать тест ${sessionName(sid)}`,
+        onclick: () => { void removePlaying(card, sid); },
+      }));
+    const chips = el("div", { class: "playing-labels" });
+    for (const a of assignmentsOf(card.id, sid)) {
+      const lbl = labelById(a.labelId);
+      if (lbl) chips.append(labelChip(lbl, () => { void setLabel(card, lbl, sid, false); }, "Снять отметку теста"));
+    }
+    chips.append(el("button", {
+      class: "input playing-add", type: "button", text: "＋",
+      title: "Добавить метку этого теста",
+      onclick: (e: Event) => { openLabelAddPopup(sid, (e.currentTarget as HTMLElement).parentElement as HTMLElement); },
+    }));
+    box.append(el("div", { class: "playing" }, head, chips));
+  }
+}
+
+// renderSeen writes who saw THIS question beyond the people the tour already
+// names. A tour's preamble lists whoever tested most of it, and those people
+// know not to play; the ones who matter here are the extras — a question moved
+// in from another tournament, seen by three people nobody has warned. Showing
+// the full list again would bury them.
+function renderSeen(card: BoardCard): void {
+  const node = byId("cardSeen");
+  const mine = sessionsOfCard(card.id);
+  if (!mine.length) { node.hidden = true; return; }
+
+  const list = state.lists.find((l) => l.id === card.listId);
+  const named = list ? tourPicked(list) : new Set<number>();
+  const common = new Set<string>();
+  for (const sid of named) {
+    const m = sessionMeta(sid);
+    for (const t of (m && m.testers) || []) common.add((t.text || "").trim());
+  }
+
+  const extras = mine.map((m) => ({
+    ...m,
+    testers: (m.testers || []).filter((t) => !common.has((t.text || "").trim())),
+  }));
+  const line = whoSaw(common.size ? extras : mine);
+  node.hidden = !line;
+  if (!line) return;
+
+  const label = common.size ? "Видели вопрос, кроме общих тестеров списка: " : "Видели: ";
+  node.replaceChildren(
+    el("span", { class: "seen-label", text: label }),
+    el("span", { class: "seen-names", text: line }),
+    el("button", {
+      class: "input seen-copy", type: "button", text: "📋",
+      title: "Скопировать",
+      onclick: () => { void cardDetail.copyPlain(label + line); },
+    }),
+  );
+}
+
 function closeLabelAddPopup(): void {
-  const popup = document.querySelector("#labelAddRow .label-add-popup");
-  if (popup) popup.remove();
+  for (const popup of document.querySelectorAll(".label-add-popup")) popup.remove();
 }
 
 // The "create a new label" form is authored in board.dopeui but does NOT belong
 // in the card body: it used to sit there permanently as a third stacked row under
-// «Метки», duplicating the popup's job and pushing the section to three lines for
-// a control almost nobody needs on any given card. Detach it once at boot and
-// keep the node; openLabelAddPopup mounts it at the foot of the popup, where
-// "create a label" actually belongs. Handlers bound to the element survive the
-// move, so its submit listener below keeps working.
+// «Метки», duplicating the popup's job. Detach it once at boot and keep the node;
+// openLabelAddPopup mounts it at the foot of the popup, where "create a label"
+// actually belongs. Handlers bound to the element survive the move.
 const newLabelForm = byId<HTMLFormElement>("newLabelForm");
 newLabelForm.remove();
 
@@ -2520,40 +2633,99 @@ newLabelForm.remove();
 swapPlusIcon(byId("labelAddBtn"));
 swapPlusIcon(newLabelForm.querySelector<HTMLButtonElement>('button[type="submit"]')!);
 
-// openLabelAddPopup mounts a custom dropdown under the "➕ Добавить метку" button:
-// a filter field above a scrollable list of the unassigned labels, sorted by last
-// usage (sortLabels), with the create-new-label form at the foot. A native
-// <select> can't host a search box, hence the hand-rolled popup (shares the
-// .menu-dropdown styling of the list "⋯" menu).
-function openLabelAddPopup(): void {
-  const found = state.cards.find((c) => c.id === cardDetail.openCardId());
-  if (!found) return;
-  const card = found;
-  const anchor = byId("labelAddRow");
-  if (anchor.querySelector(".label-add-popup")) { closeLabelAddPopup(); return; } // toggle off
+// setLabel adds or removes ONE assignment. The card's whole set goes up together
+// because the endpoint replaces it — cheap, and it keeps the offline mirror's
+// view of a card in a single op.
+async function setLabel(card: BoardCard, lbl: BoardLabel, sessionId: number | null, adding: boolean): Promise<void> {
+  const rest = state.cardLabels.filter((a) =>
+    a.cardId !== card.id || a.labelId !== lbl.id || a.sessionId !== sessionId);
+  const next = adding ? [...rest, { cardId: card.id, labelId: lbl.id, sessionId }] : rest;
+  try {
+    const events = [{
+      type: adding ? "label_add" : "label_remove",
+      payload_enc: await xyCrypto.encField(mustDK(), JSON.stringify({ label: lbl.name, label_id: lbl.id })),
+    }];
+    await put("setCardLabels", `/api/cards/${card.id}/labels`, {
+      labels: next.filter((a) => a.cardId === card.id).map((a) => ({ label_id: a.labelId, session_id: a.sessionId })),
+      events,
+    });
+    state.cardLabels = next;
+    renderLabelPicker(card);
+    render();
+    await timeline.load(card.id);
+  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
+}
 
-  const assignedSet = new Set(state.cardLabels[card.id] || []);
-  const pool = sortLabels(state.labels.filter((l) => !assignedSet.has(l.id)));
+async function addPlaying(card: BoardCard, sessionId: number): Promise<void> {
+  await writePlayings(card, [...new Set([...playingsOf(card.id), sessionId])]);
+}
+
+// removePlaying takes the labels scoped to it — a label scoped to a playing that
+// no longer exists cannot be read (ADR-0004) — so the confirmation names how many.
+async function removePlaying(card: BoardCard, sessionId: number): Promise<void> {
+  const scoped = assignmentsOf(card.id, sessionId).length;
+  const what = scoped
+    ? `Снять тест «${sessionName(sessionId)}» и ${scoped} ${plural(scoped, "метку", "метки", "меток")} на нём?`
+    : `Снять тест «${sessionName(sessionId)}» с вопроса?`;
+  if (!confirm(what)) return;
+  await writePlayings(card, playingsOf(card.id).filter((id) => id !== sessionId));
+}
+
+async function writePlayings(card: BoardCard, ids: number[]): Promise<void> {
+  try {
+    await put("setCardSessions", `/api/cards/${card.id}/sessions`, { session_ids: ids });
+    state.cardSessions = state.cardSessions.filter((p) => p.cardId !== card.id)
+      .concat(ids.map((sessionId) => ({ cardId: card.id, sessionId })));
+    const keep = new Set(ids);
+    state.cardLabels = state.cardLabels.filter((a) =>
+      a.cardId !== card.id || a.sessionId == null || keep.has(a.sessionId));
+    renderLabelPicker(card);
+    render();
+  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
+}
+
+// filteredPopup is the one dropdown shape this card uses three ways: a filter
+// field over a scrollable list, dismissed by Escape, an outside click, or a
+// second click on its trigger. A native <select> can host neither the filter nor
+// the swatches, hence the hand-rolled popup (it shares .menu-dropdown with the
+// list ⋯ menu).
+interface PopupItem { id: number; name: string; color?: string }
+
+function filteredPopup(opts: {
+  anchor: HTMLElement;
+  items: PopupItem[];
+  placeholder: string;
+  empty: string;
+  extra?: HTMLElement;
+  onPick(item: PopupItem): void;
+}): void {
+  const already = opts.anchor.querySelector(".label-add-popup");
+  closeLabelAddPopup();
+  if (already) return; // a second click on the trigger closes it
 
   const filter = el("input", {
     class: "input label-add-filter", type: "text",
-    placeholder: "Фильтр меток…", autocomplete: "off",
+    placeholder: opts.placeholder, autocomplete: "off",
   }) as HTMLInputElement;
   const listBox = el("div", { class: "label-add-list" });
-  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, filter, listBox, newLabelForm);
+  const kids = opts.extra ? [filter, listBox, opts.extra] : [filter, listBox];
+  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, ...kids);
 
   function fill(): void {
     const q = filter.value.trim().toLowerCase();
-    const items = q ? pool.filter((l) => l.name.toLowerCase().includes(q)) : pool;
+    const shown = q ? opts.items.filter((i) => i.name.toLowerCase().includes(q)) : opts.items;
     listBox.replaceChildren();
-    if (!items.length) { listBox.append(el("span", { class: "label-empty", text: "ничего не найдено" })); return; }
-    for (const lbl of items) {
+    if (!shown.length) {
+      listBox.append(el("span", { class: "label-empty", text: opts.items.length ? "ничего не найдено" : opts.empty }));
+      return;
+    }
+    for (const item of shown) {
       listBox.append(el("button", {
         class: "menu-item label-add-item", type: "button", role: "menuitem",
-        onclick: () => { close(); void toggleLabel(card, lbl); },
+        onclick: () => { close(); opts.onPick(item); },
       },
-        el("span", { class: "label-swatch", dataset: { c: lbl.color } }),
-        el("span", { class: "label-add-name", text: lbl.name }),
+        item.color ? el("span", { class: "label-swatch", dataset: { c: item.color } }) : el("span"),
+        el("span", { class: "label-add-name", text: item.name }),
       ));
     }
     paintLabels();
@@ -2563,36 +2735,294 @@ function openLabelAddPopup(): void {
     document.removeEventListener("pointerdown", onOutside, true);
     document.removeEventListener("keydown", onKey, true);
   }
-  function onOutside(e: PointerEvent): void { if (e.target instanceof Node && !anchor.contains(e.target)) close(); }
-  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); byId("labelAddBtn").focus(); } }
+  function onOutside(e: PointerEvent): void { if (e.target instanceof Node && !opts.anchor.contains(e.target)) close(); }
+  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); } }
 
   filter.addEventListener("input", fill);
-  anchor.append(popup);
+  opts.anchor.append(popup);
   document.addEventListener("pointerdown", onOutside, true);
   document.addEventListener("keydown", onKey, true);
   fill();
   filter.focus();
 }
 
-byId("labelAddBtn").addEventListener("click", openLabelAddPopup);
-
-async function toggleLabel(card: BoardCard, lbl: BoardLabel): Promise<void> {
-  const cur = new Set(state.cardLabels[card.id] || []);
-  const adding = !cur.has(lbl.id);
-  if (adding) cur.add(lbl.id); else cur.delete(lbl.id);
-  const ids = [...cur];
-  try {
-    const events = [{
-      type: adding ? "label_add" : "label_remove",
-      payload_enc: await xyCrypto.encField(mustDK(), JSON.stringify({ label: lbl.name })),
-    }];
-    await put("setCardLabels", `/api/cards/${card.id}/labels`, { label_ids: ids, events });
-    state.cardLabels[card.id] = ids;
-    renderLabelPicker(card);
-    render();
-    await timeline.load(card.id);
-  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
+// openLabelAddPopup offers the labels not yet assigned IN THIS SCOPE. sessionId
+// null means the author's own; set means one Playing's — so the same label can
+// be added to a card twice, once each way (ADR-0004).
+function openLabelAddPopup(sessionId: number | null, anchorEl?: HTMLElement): void {
+  const card = state.cards.find((c) => c.id === cardDetail.openCardId());
+  if (!card) return;
+  const taken = new Set(assignmentsOf(card.id, sessionId).map((a) => a.labelId));
+  const pool = sortLabels(state.labels.filter((l) => !taken.has(l.id)));
+  filteredPopup({
+    anchor: anchorEl || byId("labelAddRow"),
+    items: pool.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+    placeholder: "Фильтр меток…",
+    empty: state.labels.length ? "все метки доски уже добавлены" : "меток на доске нет",
+    // Creating a label from inside a test would still make a plain board label,
+    // so the form belongs only to the author's own section.
+    extra: sessionId == null ? newLabelForm : undefined,
+    onPick: (item) => {
+      const lbl = labelById(item.id);
+      if (lbl) void setLabel(card, lbl, sessionId, true);
+    },
+  });
 }
+
+byId("labelAddBtn").addEventListener("click", () => openLabelAddPopup(null));
+
+// openPlayingAddPopup offers the board's tests this question is not yet marked
+// with — the second of the card's two pickers.
+function openPlayingAddPopup(): void {
+  const card = state.cards.find((c) => c.id === cardDetail.openCardId());
+  if (!card) return;
+  const on = new Set(playingsOf(card.id));
+  const pool = state.sessions.filter((s) => !on.has(s.id))
+    .map((s) => ({ id: s.id, name: sessionName(s.id), date: (sessionMeta(s.id) || { date: "" }).date }))
+    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
+  filteredPopup({
+    anchor: byId("playingAddRow"),
+    items: pool.map((s) => ({ id: s.id, name: s.name })),
+    placeholder: "Фильтр тестов…",
+    empty: state.sessions.length ? "все тесты доски уже отмечены" : "тестов на доске нет",
+    onPick: (item) => { void addPlaying(card, item.id); },
+  });
+}
+
+byId("playingAddBtn").addEventListener("click", openPlayingAddPopup);
+
+// ---- «Вопросы тестировали» for one tour ----
+//
+// The test list used to BE this list, one per tour. A board-level Тесты panel
+// can only say who tested at all, so a tour compiles its own: each session with
+// how many of the tour's questions it saw. The ЧГК custom names those who tested
+// MOST of a tour (they should not play it); someone who saw one or two questions
+// still may, skipping what they know — so a flat list cannot serve.
+interface TourTester { id: number; name: string; seen: number }
+
+function tourCoverage(list: BoardList): { cards: BoardCard[]; rows: TourTester[] } {
+  const cards = exportScope(list).cards.filter((c) => c.kind === "question");
+  const seen = new Map<number, number>();
+  for (const c of cards) {
+    for (const sid of playingsOf(c.id)) seen.set(sid, (seen.get(sid) || 0) + 1);
+  }
+  const rows = [...seen.entries()]
+    .map(([id, n]): TourTester => ({ id, name: sessionName(id), seen: n }))
+    .sort((a, b) => b.seen - a.seen || a.name.localeCompare(b.name, "ru"));
+  return { cards, rows };
+}
+
+// Which sessions were ticked last time, per tour. A personal working state on
+// the way to a document, so it lives beside the other display prefs rather than
+// on the server.
+// A tour's Declaration lives on the board, not in this browser: the preamble
+// ships with the package, so two editors preparing it see one answer. The ticks
+// used to sit in localStorage, where they outlived the sessions they named.
+function tourScope(list: BoardList): { listId: number | null; groupId: number | null } {
+  return list.groupId != null ? { listId: null, groupId: list.groupId } : { listId: list.id, groupId: null };
+}
+
+// null = this tour has no Declaration and falls back to the custom. An empty
+// array = it declared, and names nobody.
+function declaredFor(list: BoardList): number[] | null {
+  const s = tourScope(list);
+  const rows = state.tourTesters.filter((d) => d.listId === s.listId && d.groupId === s.groupId);
+  if (!rows.length) return null;
+  return rows.filter((d) => d.sessionId != null).map((d) => d.sessionId as number);
+}
+
+async function declare(list: BoardList, ids: number[]): Promise<void> {
+  const s = tourScope(list);
+  await put("setTourTesters", `/api/boards/${boardId}/tour-testers`, {
+    list_id: s.listId, group_id: s.groupId, session_ids: ids,
+  });
+  const rest = state.tourTesters.filter((d) => d.listId !== s.listId || d.groupId !== s.groupId);
+  state.tourTesters = ids.length
+    ? rest.concat(ids.map((sessionId) => ({ ...s, sessionId })))
+    : rest.concat([{ ...s, sessionId: null }]);
+}
+
+// Undeclared, a tour falls back to the custom: everyone who saw MORE than half
+// its questions. Shared with the card's «кроме общих тестеров» line.
+function tourPicked(list: BoardList): Set<number> {
+  const { cards, rows } = tourCoverage(list);
+  const declared = declaredFor(list);
+  return new Set(declared ?? rows.filter((r) => r.seen * 2 > cards.length).map((r) => r.id));
+}
+
+function openTesterList(list: BoardList): void {
+  const overlay = byId("testerListOverlay");
+  const box = byId("testerList");
+  const { cards, rows } = tourCoverage(list);
+  const total = cards.length;
+  const picked = tourPicked(list);
+
+  const line = el("p", { class: "sess-invite" });
+  const redraw = (): void => {
+    const testers: Tester[] = [];
+    for (const r of rows) {
+      if (!picked.has(r.id)) continue;
+      const m = sessionMeta(r.id);
+      if (m) testers.push(...m.testers);
+    }
+    const names = whoSaw(testers.length ? [{ testers } as SessionMeta] : []);
+    line.textContent = names ? `Вопросы тестировали: ${names}.` : "Никто не отмечен.";
+  };
+
+  box.replaceChildren();
+  if (!rows.length) box.append(el("p", { class: "label-empty", text: "Вопросы этого тура никто не тестировал." }));
+  for (const r of rows) {
+    const cb = el("input", { class: "input", type: "checkbox" }) as HTMLInputElement;
+    cb.checked = picked.has(r.id);
+    cb.addEventListener("change", () => {
+      if (cb.checked) picked.add(r.id); else picked.delete(r.id);
+      void declare(list, [...picked]).catch((err) => {
+        byId("testerListMessage").textContent = errMsg(err);
+      });
+      redraw();
+    });
+    box.append(el("label", { class: "sess-row" },
+      el("div", { class: "sess-head" }, cb, el("span", { class: "sess-title", text: r.name })),
+      el("span", { class: "sess-meta", text: `${r.seen} из ${total}` })));
+  }
+  const copy = el("button", {
+    class: "input", type: "button", text: "📋 Скопировать",
+    onclick: () => { void cardDetail.copyPlain(line.textContent || ""); },
+  });
+  box.append(el("div", { class: "sess-invite-box" }, line, copy));
+  redraw();
+
+  byId("testerListMessage").textContent = "";
+  overlay.hidden = false;
+  overlayStack.open({ el: overlay, close: () => { overlay.hidden = true; } });
+}
+
+byId("testerListClose").addEventListener("click", () => { byId("testerListOverlay").hidden = true; });
+
+// ---- the Тесты panel + the label editor ----
+
+const sessionsPanel = createSessionsPanel({
+  boardId,
+  el,
+  byId,
+  sessions: () => state.sessions,
+  boardName: () => state.name,
+  defaultTimezone: () => state.timezone,
+  defaultCities: () => {
+    const c = state.announceCities;
+    return Array.isArray(c) ? (c as AnnounceCity[]) : [];
+  },
+  // How many questions this test was played at — the number the Тесты panel
+  // shows and the tester-list modal counts coverage from.
+  playedCount: (sessionId) =>
+    new Set(state.cardSessions.filter((p) => p.sessionId === sessionId).map((p) => p.cardId)).size,
+  createSession: async (meta) => {
+    const res = await create("createSession", `/api/boards/${boardId}/sessions`, {
+      meta_enc: await xyCrypto.encField(mustDK(), meta),
+    });
+    const id = res.id as number;
+    state.sessions.push({ id, meta, createdAt: nowStamp() });
+    sessionMetaCache.delete(id);
+    return id;
+  },
+  patchSession: async (id, meta) => {
+    await patch("patchSession", `/api/sessions/${id}`, { meta_enc: await xyCrypto.encField(mustDK(), meta) });
+    const s = state.sessions.find((x) => x.id === id);
+    if (s) s.meta = meta;
+    sessionMetaCache.delete(id);
+  },
+  deleteSession: async (id) => {
+    await del("deleteSession", `/api/sessions/${id}`);
+    state.sessions = state.sessions.filter((s) => s.id !== id);
+    // The label survives — it is an ordinary board label. What goes is the
+    // playings and the assignments scoped to them (ADR-0004).
+    state.cardSessions = state.cardSessions.filter((p) => p.sessionId !== id);
+    state.cardLabels = state.cardLabels.filter((a) => a.sessionId !== id);
+    sessionMetaCache.delete(id);
+  },
+  copyText: (text: string) => cardDetail.copyPlain(text),
+  loadNotes: async (sessionId) => {
+    const raw = (await fetchJSON(`/api/sessions/${sessionId}/timeline`)) as Array<{
+      payload_enc: string; card_id?: number; created_at: string; author_user_id?: number | null;
+    }>;
+    const out: Array<{ text: string; card: number | null; when: string; author: string }> = [];
+    for (const e of raw) {
+      let text = "";
+      try { text = await xyCrypto.decField(mustDK(), e.payload_enc || ""); } catch (_) { continue; }
+      // Same author resolution the card's лента uses, so the two read alike.
+      out.push({ text, card: e.card_id ?? null, when: e.created_at, author: eventAuthor(e, state.me, state.memberNames) });
+    }
+    return out;
+  },
+  addNote: async (sessionId, text) => {
+    await post("addSessionNote", `/api/sessions/${sessionId}/comments`, {
+      payload_enc: await xyCrypto.encField(mustDK(), text),
+    });
+  },
+  overlayOpen: (node: HTMLElement, close: () => void) => overlayStack.open({ el: node, close }),
+  overlayClose: () => overlayStack.pop(),
+  render,
+});
+
+// openLabelsEditor: one row per label, name and colour editable in place, with a
+// usage count and a delete (issue #25). Every label is editable now — there is no
+// such thing as a test label whose name comes from somewhere else (ADR-0004).
+function openLabelsEditor(): void {
+  const overlay = byId("labelsEditOverlay");
+  const box = byId("labelsEditor");
+  const usage = labelUsageCounts();
+  box.replaceChildren();
+  if (!state.labels.length) box.append(el("p", { class: "label-empty", text: "Меток нет." }));
+  for (const lbl of sortLabels(state.labels.slice())) {
+    const name = el("input", { class: "input", type: "text", value: lbl.name }) as HTMLInputElement;
+    const color = el("input", { class: "input", type: "color", value: lbl.color || "#888888" }) as HTMLInputElement;
+    const count = el("span", { class: "sess-meta", text: `${usage.get(lbl.id) || 0} карт.` });
+    const save = el("button", { class: "input", type: "button", text: "Сохранить" });
+    save.addEventListener("click", async () => {
+      try {
+        await patch("patchLabel", `/api/labels/${lbl.id}`, {
+          name_enc: await xyCrypto.encField(mustDK(), name.value.trim()),
+          color_enc: await xyCrypto.encField(mustDK(), color.value),
+        });
+        lbl.color = color.value;
+        lbl.name = name.value.trim();
+        render();
+        byId("labelsEditMessage").textContent = "Сохранено.";
+      } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
+    });
+    const drop = el("button", { class: "btn btn-danger", type: "button", text: "🗑️" });
+    drop.addEventListener("click", async () => {
+      if (!confirm(`Удалить метку «${lbl.name}»? Она исчезнет со всех карточек.`)) return;
+      try {
+        await del("deleteLabel", `/api/labels/${lbl.id}`);
+        state.labels = state.labels.filter((l) => l.id !== lbl.id);
+        state.cardLabels = state.cardLabels.filter((a) => a.labelId !== lbl.id);
+        render();
+        openLabelsEditor();
+      } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
+    });
+    box.append(el("div", { class: "sess-row" },
+      el("div", { class: "sess-head" }, name, count),
+      el("div", { class: "sess-actions" }, color, save, drop)));
+  }
+  byId("labelsEditMessage").textContent = "";
+  overlay.hidden = false;
+  overlayStack.open({ el: overlay, close: () => { overlay.hidden = true; } });
+}
+
+// labelUsageCounts: label id → how many live cards carry it, either way.
+function labelUsageCounts(): Map<number, number> {
+  const counts = new Map<number, number>();
+  const live = new Set(state.cards.map((c) => c.id));
+  for (const a of state.cardLabels) {
+    if (!live.has(a.cardId)) continue;
+    counts.set(a.labelId, (counts.get(a.labelId) || 0) + 1);
+  }
+  return counts;
+}
+
+byId("labelsEditClose").addEventListener("click", () => { byId("labelsEditOverlay").hidden = true; });
+
 
 // NB: `newLabelForm` (the retained node), not getElementById — the form is
 // detached from the document above and lives inside the popup while it is open.
@@ -2606,15 +3036,14 @@ newLabelForm.addEventListener("submit", async (e) => {
       name_enc: await xyCrypto.encField(mustDK(), name),
       color_enc: await xyCrypto.encField(mustDK(), color),
     });
-    const lbl: BoardLabel = { id: res.id as number, kind: "normal", name, color };
+    const lbl: BoardLabel = { id: res.id as number, name, color };
     state.labels.push(lbl);
     byId<HTMLInputElement>("newLabelName").value = "";
     const card = state.cards.find((c) => c.id === cardDetail.openCardId());
-    // The form is now reachable only from inside the add-label popup, so naming a
-    // label there means you want it ON this card — assign it instead of merely
-    // creating it and making the user reopen the popup to pick what they just
-    // typed. toggleLabel does the API call, re-renders and closes the popup.
-    if (card) await toggleLabel(card, lbl);
+    // The form is reachable only from inside the add-label popup, so naming a
+    // label there means you want it ON this card — assign it instead of making
+    // the user reopen the popup to pick what they just typed.
+    if (card) await setLabel(card, lbl, null, true);
   } catch (err) { byId("cardMessage").textContent = errMsg(err); }
 });
 

@@ -33,10 +33,16 @@ select
 + coalesce((select sum(length(lb.name_enc) + length(lb.color_enc)) from labels lb
             join boards b on b.id = lb.board_id and b.deleted_at is null
             where b.owner_user_id = ? and lb.deleted_at is null), 0)
++ coalesce((select sum(length(s.meta_enc)) from test_sessions s
+            join boards b on b.id = s.board_id and b.deleted_at is null
+            where b.owner_user_id = ? and s.deleted_at is null), 0)
 + coalesce((select sum(length(t.payload_enc)) from timeline_events t
             join boards b on b.id = t.board_id and b.deleted_at is null
-            join cards tc on tc.id = t.card_id and tc.deleted_at is null
-            where b.owner_user_id = ? and t.deleted_at is null), 0)`
+            left join cards tc on tc.id = t.card_id
+            left join test_sessions ts on ts.id = t.session_id
+            where b.owner_user_id = ? and t.deleted_at is null
+              and (tc.id is not null and tc.deleted_at is null
+                   or ts.id is not null and ts.deleted_at is null)), 0)`
 
 type rowQuerier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
@@ -44,7 +50,7 @@ type rowQuerier interface {
 
 func storageBytes(ctx context.Context, q rowQuerier, uid int64) (int64, error) {
 	var n int64
-	err := q.QueryRowContext(ctx, storageUsageSQL, uid, uid, uid, uid, uid).Scan(&n)
+	err := q.QueryRowContext(ctx, storageUsageSQL, uid, uid, uid, uid, uid, uid).Scan(&n)
 	return n, err
 }
 

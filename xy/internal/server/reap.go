@@ -59,6 +59,7 @@ where b.deleted_at < ?1 or c.deleted_at < ?1 or l.deleted_at < ?1 or a.deleted_a
 			`delete from lists where deleted_at < ?1`,
 			`delete from list_groups where deleted_at < ?1`,
 			`delete from labels where deleted_at < ?1`,
+			`delete from test_sessions where deleted_at < ?1`,
 			// An expired comment that still anchors surviving replies is kept:
 			// its payload was blanked at delete, the timeline renders it as the
 			// thread's «комментарий удалён» placeholder, and no surviving

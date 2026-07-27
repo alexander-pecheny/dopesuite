@@ -94,7 +94,7 @@ const { xySync } = await import("../web/assets/static/dist/sync.js");
 
 test("offline creates queue with temp ids, flush remaps them to real ids", async () => {
   // Seed a mirror snapshot so applyToMirror has something to update.
-  await xySync.saveSnapshot(1, { id: 1, role: "owner", name_enc: "N", lists: [], cards: [], labels: [], card_labels: {} });
+  await xySync.saveSnapshot(1, { id: 1, role: "owner", name_enc: "N", lists: [], cards: [], labels: [], card_labels: [] });
 
   // ---- go offline ----
   navigator.onLine = false;
@@ -107,7 +107,7 @@ test("offline creates queue with temp ids, flush remaps them to real ids", async
 
   const label = await xySync.mutate({ kind: "createLabel", method: "POST", path: "/api/boards/1/labels", body: { name_enc: "LB", color_enc: "C", kind: "normal" }, board: 1, mint: true });
   // assign the (temp) label to the (temp) card
-  await xySync.mutate({ kind: "setCardLabels", method: "PUT", path: `/api/cards/${card.id}/labels`, body: { label_ids: [label.id], events: [{ type: "label_add", payload_enc: "P" }] }, board: 1 });
+  await xySync.mutate({ kind: "setCardLabels", method: "PUT", path: `/api/cards/${card.id}/labels`, body: { labels: [{ label_id: label.id, session_id: null }], events: [{ type: "label_add", payload_enc: "P" }] }, board: 1 });
 
   // nothing should have been sent while offline
   assert.equal(sent.length, 0, "no network calls while offline");
@@ -117,7 +117,7 @@ test("offline creates queue with temp ids, flush remaps them to real ids", async
   assert.equal(mirror.lists.length, 1);
   assert.equal(mirror.cards.length, 1);
   assert.equal(mirror.cards[0].list_id, list.id);
-  assert.deepEqual(mirror.card_labels[card.id], [label.id]);
+  assert.deepEqual(mirror.card_labels, [{ card_id: card.id, label_id: label.id, session_id: null }]);
   assert.equal(await xySync.pendingCountForBoard(1), 4);
 
   // ---- come back online and flush ----
@@ -135,14 +135,16 @@ test("offline creates queue with temp ids, flush remaps them to real ids", async
   const listRealId = 101, cardRealId = 102, labelRealId = 103;
   assert.equal(cardReq.path, `/api/lists/${listRealId}/cards`, "card create points at the real list id");
   assert.equal(setReq.path, `/api/cards/${cardRealId}/labels`, "label-set points at the real card id");
-  assert.deepEqual(setReq.body.label_ids, [labelRealId], "label id remapped in body");
+  // The remapper is generic — it rewrites any negative int it finds, including
+  // one nested inside an assignment object.
+  assert.deepEqual(setReq.body.labels, [{ label_id: labelRealId, session_id: null }], "label id remapped in body");
   assert.ok(labelReq && listReq, "list + label creates were sent");
 });
 
 test("a desc edit made offline replays and surfaces in the pending timeline", async () => {
   navigator.onLine = false;
   // edit an existing (server) card 500
-  await xySync.saveSnapshot(2, { id: 2, role: "owner", name_enc: "N", lists: [], cards: [{ id: 500, list_id: 1, kind: "question", description_enc: "old", rank: "a0" }], labels: [], card_labels: {} });
+  await xySync.saveSnapshot(2, { id: 2, role: "owner", name_enc: "N", lists: [], cards: [{ id: 500, list_id: 1, kind: "question", description_enc: "old", rank: "a0" }], labels: [], card_labels: [] });
   await xySync.mutate({ kind: "patchCard", method: "PATCH", path: "/api/cards/500", body: { description_enc: "new", desc_event_enc: "DIFF" }, board: 2 });
 
   const tl = await xySync.timelineFor(500);

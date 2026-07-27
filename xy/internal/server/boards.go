@@ -209,14 +209,21 @@ type boardSnapshot struct {
 	Name    string `json:"name"`     // plaintext (schema_version 2); "" for legacy
 	NameEnc string `json:"name_enc"` // legacy ciphertext (schema_version 1 fallback)
 	// SchemaVersion: 1 = name still encrypted in name_enc; 2 = name is plaintext.
-	SchemaVersion int                  `json:"schema_version"`
-	Role          string               `json:"role"`
-	Lists         []listDTO            `json:"lists"`
-	Groups        []groupDTO           `json:"groups"`
-	Cards         []cardDTO            `json:"cards"`
-	Labels        []labelDTO           `json:"labels"`
-	CardLabels    map[string][]int64   `json:"card_labels"`
-	Unread        map[string]unreadDTO `json:"unread"`
+	SchemaVersion int            `json:"schema_version"`
+	Role          string         `json:"role"`
+	Lists         []listDTO      `json:"lists"`
+	Groups        []groupDTO     `json:"groups"`
+	Cards         []cardDTO      `json:"cards"`
+	Labels        []labelDTO     `json:"labels"`
+	Sessions      []sessionDTO   `json:"sessions"`
+	CardLabels    []cardLabelDTO `json:"card_labels"`
+	// CardSessions is the Playings — one row per (card, session), the same shape
+	// as CardLabels because both mirror their table. What «Видели» reads.
+	CardSessions []cardSessionDTO `json:"card_sessions"`
+	// TourTesters is each tour's Declaration: which sessions its «Вопросы
+	// тестировали» line names. A tour with none falls back to the custom.
+	TourTesters []tourTesterDTO      `json:"tour_testers"`
+	Unread      map[string]unreadDTO `json:"unread"`
 	// Sizes is the CALLER's display layout ({boardW,listW,cardLines}) — a per-user,
 	// all-boards preference (users.sizes, plaintext JSON; see migrateV9), delivered
 	// here alongside the snapshot's other caller-specific fields (role, unread) so
@@ -231,6 +238,14 @@ type boardSnapshot struct {
 	// users.card_title), delivered like Sizes so the board renders previews the
 	// reader's way straight from the cached snapshot. A card's alias wins over it.
 	CardTitle string `json:"card_title,omitempty"`
+	// Timezone is the caller's IANA zone (users.timezone): the default anchor for
+	// a new session and the first city of its announce set. AnnounceCities is
+	// their saved default set. Both are per-user, delivered like Sizes.
+	Timezone       string          `json:"timezone,omitempty"`
+	AnnounceCities json.RawMessage `json:"announce_cities,omitempty"`
+	// SessionTitleMode is how the reader wants a session's derived name written
+	// (issue #8): "date-title" (the default), "title" or "date".
+	SessionTitleMode string `json:"session_title_mode,omitempty"`
 }
 
 // unreadDTO flags, per card, whether the caller has unread events in either
@@ -247,7 +262,7 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, CardLabels: map[string][]int64{}, Unread: map[string]unreadDTO{}}
+	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, TourTesters: []tourTesterDTO{}, Unread: map[string]unreadDTO{}}
 
 	var name sql.NullString
 	var nameEnc []byte
@@ -260,15 +275,20 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	// The caller's per-user display prefs (see boardSnapshot.Sizes /
 	// .DefaultAuthor), shared across all their boards — keyed on the user, not
 	// this board.
-	var sizes, defAuthor, cardTitle sql.NullString
-	if err := s.db.QueryRowContext(ctx, `select sizes, default_author, card_title from users where id = ?`, uid).Scan(&sizes, &defAuthor, &cardTitle); handleErr(w, err) {
+	prefs, err := loadUserPrefs(ctx, s.db, uid)
+	if handleErr(w, err) {
 		return
 	}
-	if sizes.Valid && sizes.String != "" {
-		snap.Sizes = json.RawMessage(sizes.String)
+	if prefs.Sizes.Valid && prefs.Sizes.String != "" {
+		snap.Sizes = json.RawMessage(prefs.Sizes.String)
 	}
-	snap.DefaultAuthor = defAuthor.String
-	snap.CardTitle = cardTitle.String
+	if prefs.AnnounceCities.Valid && prefs.AnnounceCities.String != "" {
+		snap.AnnounceCities = json.RawMessage(prefs.AnnounceCities.String)
+	}
+	snap.DefaultAuthor = prefs.DefaultAuthor.String
+	snap.CardTitle = prefs.CardTitle.String
+	snap.Timezone = prefs.Timezone.String
+	snap.SessionTitleMode = prefs.SessionTitleMode.String
 
 	lists, err := scanLists(ctx, s.db, bid)
 	if handleErr(w, err) {
@@ -294,8 +314,14 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	}
 	snap.Labels = labels
 
+	sessions, err := scanSessions(ctx, s.db, bid)
+	if handleErr(w, err) {
+		return
+	}
+	snap.Sessions = sessions
+
 	clRows, err := s.db.QueryContext(ctx, `
-select cl.card_id, cl.label_id
+select cl.card_id, cl.label_id, cl.session_id
 from card_labels cl join cards c on c.id = cl.card_id
 where c.board_id = ? and c.deleted_at is null`, bid)
 	if handleErr(w, err) {
@@ -303,12 +329,55 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 	}
 	defer clRows.Close()
 	for clRows.Next() {
-		var cardID, labelID int64
-		if err := clRows.Scan(&cardID, &labelID); handleErr(w, err) {
+		var a cardLabelDTO
+		var sessionID sql.NullInt64
+		if err := clRows.Scan(&a.CardID, &a.LabelID, &sessionID); handleErr(w, err) {
 			return
 		}
-		key := strconv.FormatInt(cardID, 10)
-		snap.CardLabels[key] = append(snap.CardLabels[key], labelID)
+		if sessionID.Valid {
+			a.SessionID = &sessionID.Int64
+		}
+		snap.CardLabels = append(snap.CardLabels, a)
+	}
+
+	ttRows, err := s.db.QueryContext(ctx,
+		`select list_id, group_id, session_id from tour_testers where board_id = ?`, bid)
+	if handleErr(w, err) {
+		return
+	}
+	defer ttRows.Close()
+	for ttRows.Next() {
+		var d tourTesterDTO
+		var listID, groupID, sessionID sql.NullInt64
+		if err := ttRows.Scan(&listID, &groupID, &sessionID); handleErr(w, err) {
+			return
+		}
+		if sessionID.Valid {
+			d.SessionID = &sessionID.Int64
+		}
+		if listID.Valid {
+			d.ListID = &listID.Int64
+		}
+		if groupID.Valid {
+			d.GroupID = &groupID.Int64
+		}
+		snap.TourTesters = append(snap.TourTesters, d)
+	}
+
+	csRows, err := s.db.QueryContext(ctx, `
+select cs.card_id, cs.session_id
+from card_sessions cs join cards c on c.id = cs.card_id
+where c.board_id = ? and c.deleted_at is null`, bid)
+	if handleErr(w, err) {
+		return
+	}
+	defer csRows.Close()
+	for csRows.Next() {
+		var p cardSessionDTO
+		if err := csRows.Scan(&p.CardID, &p.SessionID); handleErr(w, err) {
+			return
+		}
+		snap.CardSessions = append(snap.CardSessions, p)
 	}
 
 	// Unread map: one row per card that has at least one event, authored by

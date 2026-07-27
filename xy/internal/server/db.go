@@ -1,6 +1,9 @@
 package server
 
-import "database/sql"
+import (
+	"database/sql"
+	"time"
+)
 
 // migrate brings the schema up to date. Each version is applied once, gated on a
 // row in schema_versions, mirroring dope's migration runner. The whole M1 schema
@@ -205,7 +208,336 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV17(db); err != nil {
 		return err
 	}
+	if err := migrateV18(db); err != nil {
+		return err
+	}
+	if err := migrateV19(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV19 stores a tour's Declaration: which Test Sessions its «Вопросы
+// тестировали» line names. Board data rather than a per-reader preference —
+// the preamble ships with the package, so two editors preparing it must see one
+// answer. Undeclared, a tour falls back to the ЧГК custom (everyone who saw more
+// than half its questions), which is why absence is meaningful and a row per
+// named session is enough.
+//
+// A tour is a List or a whole List Group (exportScope), hence exactly one of the
+// two FKs; both cascade, so a Declaration cannot outlive its tour. Linking or
+// dissolving a group drops the Declarations involved: the claim was about a
+// specific set of questions, and regrouping makes it a claim about a different
+// one.
+func migrateV19(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 19`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+create table if not exists tour_testers(
+  board_id integer not null references boards(id) on delete cascade,
+  list_id integer references lists(id) on delete cascade,
+  group_id integer references list_groups(id) on delete cascade,
+  session_id integer references test_sessions(id) on delete cascade,
+  check ((list_id is null) <> (group_id is null))
+);
+create unique index if not exists idx_tour_testers_list
+  on tour_testers(list_id, session_id) where list_id is not null and session_id is not null;
+create unique index if not exists idx_tour_testers_group
+  on tour_testers(group_id, session_id) where group_id is not null and session_id is not null;
+-- A NULL session_id marks «declared, and it names nobody». Without it an empty
+-- Declaration is indistinguishable from never having declared, and the custom
+-- silently re-ticks what the editor just cleared. NULLs compare distinct in
+-- SQLite, so the marker needs uniqueness of its own.
+create unique index if not exists idx_tour_testers_empty_list
+  on tour_testers(list_id) where list_id is not null and session_id is null;
+create unique index if not exists idx_tour_testers_empty_group
+  on tour_testers(group_id) where group_id is not null and session_id is null;
+create index if not exists idx_tour_testers_board on tour_testers(board_id);
+
+insert or ignore into schema_versions(version, applied_at)
+  values(19, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
+}
+
+// migrateV18 turns a test session from a Card in a test List into its own
+// board-level entity, and rebuilds how a label reaches a question.
+//
+// A label is no longer bound to a session (ADR-0004): a label ASSIGNMENT carries
+// an optional session, so «взяли» is one ordinary board label composed onto a
+// Playing rather than one label per sitting. Being played at a test is its own
+// fact — card_sessions — because that, not a label, is what «Видели» reads.
+//
+// Nothing here decrypts. A test card's description_enc holds the session's JSON
+// under the board key, so the ciphertext moves verbatim into
+// test_sessions.meta_enc and the client folds the old {datetime,title,testers}
+// shape forward on first read (sessions.ts#parseSession). An old test label keeps
+// the exact name it already has and becomes a plain board label — 1↔1, no
+// regeneration, so no key is needed for that either.
+//
+// A test card carrying attachments cannot dissolve (the bytes have nowhere to
+// go), so it stays as an ordinary card in its now-ordinary list. One with only
+// comments leaves nothing behind: the comments move onto the session, which is
+// what they always were.
+func migrateV18(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 18`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+
+	// timeline_events is AUTOINCREMENT for the card_reads watermark (migrateV17);
+	// dropping the table would drop its sqlite_sequence row and let ids be reused.
+	var oldSeq sql.NullInt64
+	if err := db.QueryRow(`select seq from sqlite_sequence where name = 'timeline_events'`).Scan(&oldSeq); err != nil && err != sql.ErrNoRows {
+		return err
+	}
+
+	if _, err := db.Exec(`
+pragma foreign_keys = off;
+
+create table if not exists test_sessions(
+  id integer primary key autoincrement,
+  board_id integer not null references boards(id) on delete cascade,
+  meta_enc blob not null,
+  created_at text not null,
+  deleted_at text
+);
+
+-- A Playing: this question was played at that test. Its own fact, not a side
+-- effect of labelling — «Видели» reads this, and a scoped label hangs off it.
+create table if not exists card_sessions(
+  card_id integer not null references cards(id) on delete cascade,
+  session_id integer not null references test_sessions(id) on delete cascade,
+  primary key (card_id, session_id)
+);
+
+-- Which labels were the auto-created «взяли»/«не взяли» ones, captured while
+-- labels.kind still exists: the data half needs it to tell a session's own
+-- labels from a hand-made label that happens to sit on a test card, and the
+-- rebuild below is about to drop the column.
+create table _v18_test_labels as select id from labels where kind like 'test%';
+
+create table labels_v18(
+  id integer primary key,
+  board_id integer not null references boards(id) on delete cascade,
+  name_enc blob not null,
+  color_enc blob not null,
+  created_at text not null,
+  deleted_at text
+);
+insert into labels_v18(id, board_id, name_enc, color_enc, created_at, deleted_at)
+  select id, board_id, name_enc, color_enc, created_at, deleted_at from labels;
+
+-- An assignment carries an optional Playing: null = the author's own view, set =
+-- what the testers thought at that sitting. The same label may therefore appear
+-- on one card twice, which is the point.
+create table card_labels_v18(
+  card_id integer not null references cards(id) on delete cascade,
+  label_id integer not null references labels(id) on delete cascade,
+  session_id integer references test_sessions(id) on delete cascade,
+  primary key (card_id, label_id, session_id)
+);
+insert into card_labels_v18(card_id, label_id, session_id)
+  select card_id, label_id, null from card_labels;
+
+drop table card_labels;
+drop table labels;
+alter table labels_v18 rename to labels;
+alter table card_labels_v18 rename to card_labels;
+
+-- SQLite compares NULLs as DISTINCT, so the primary key above does not make the
+-- unscoped assignment unique: (1,5,null) inserts twice without complaint. This
+-- closes that hole exactly where it opens.
+create unique index if not exists idx_card_labels_unscoped
+  on card_labels(card_id, label_id) where session_id is null;
+
+-- timeline: a comment may hang off a card, off a session, or off both.
+create table timeline_events_v18(
+  id integer primary key autoincrement,
+  board_id integer not null references boards(id) on delete cascade,
+  card_id integer references cards(id) on delete cascade,
+  session_id integer references test_sessions(id) on delete cascade,
+  type text not null check (type in (
+    'comment','desc_edit','label_add','label_remove',
+    'attach_add','attach_remove','attach_replace')),
+  author_user_id integer references users(id),
+  created_at text not null,
+  payload_enc blob not null,
+  deleted_at text,
+  edited_at text,
+  is_excerpt integer not null default 0,
+  reply_to_id integer references timeline_events(id),
+  check (card_id is not null or session_id is not null)
+);
+insert into timeline_events_v18(id, board_id, card_id, session_id, type, author_user_id,
+    created_at, payload_enc, deleted_at, edited_at, is_excerpt, reply_to_id)
+  select id, board_id, card_id, null, type, author_user_id,
+    created_at, payload_enc, deleted_at, edited_at, is_excerpt, reply_to_id
+  from timeline_events;
+drop table timeline_events;
+alter table timeline_events_v18 rename to timeline_events;
+
+create index if not exists idx_sessions_board on test_sessions(board_id);
+create index if not exists idx_labels_board on labels(board_id);
+create index if not exists idx_card_sessions_session on card_sessions(session_id);
+create index if not exists idx_card_labels_session on card_labels(session_id);
+create index if not exists idx_timeline_card on timeline_events(card_id);
+create index if not exists idx_timeline_session on timeline_events(session_id);
+create index if not exists idx_timeline_reply on timeline_events(reply_to_id);
+
+alter table users add column timezone text;
+alter table users add column announce_cities text;
+alter table users add column session_title_mode text;
+alter table users add column onboarded_at text;
+pragma foreign_keys = on;
+`); err != nil {
+		return err
+	}
+
+	if oldSeq.Valid {
+		if _, err := db.Exec(
+			`update sqlite_sequence set seq = ? where name = 'timeline_events' and seq < ?`,
+			oldSeq.Int64, oldSeq.Int64); err != nil {
+			return err
+		}
+	}
+
+	if err := migrateV18Sessions(db); err != nil {
+		return err
+	}
+
+	_, err := db.Exec(`
+insert or ignore into schema_versions(version, applied_at)
+  values(18, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
+}
+
+// migrateV18Sessions is migrateV18's data half: one session per test card, its
+// comments and its labels' Playings rebound, then the test lists demoted.
+//
+// It runs AFTER the DDL above, which has already flattened labels — so the
+// old kind/session_id/mark are read here from the pre-migration tables via the
+// temporary copies the DDL left behind.
+func migrateV18Sessions(db *sql.DB) error {
+	now := rfc3339(time.Now().UTC())
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query(`select id, board_id, description_enc from cards where kind = 'test' and deleted_at is null`)
+	if err != nil {
+		return err
+	}
+	type testCard struct {
+		id, boardID int64
+		desc        []byte
+	}
+	var cards []testCard
+	for rows.Next() {
+		var c testCard
+		if err := rows.Scan(&c.id, &c.boardID, &c.desc); err != nil {
+			rows.Close()
+			return err
+		}
+		cards = append(cards, c)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	for _, c := range cards {
+		res, err := tx.Exec(
+			`insert into test_sessions(board_id, meta_enc, created_at) values(?, ?, ?)`,
+			c.boardID, c.desc, now)
+		if err != nil {
+			return err
+		}
+		sid, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		// The auto-created «взяли»/«не взяли» pair was assigned to the test card
+		// itself, so card_labels already records which labels are this session's.
+		// Every question carrying one of them was PLAYED at this session — that is
+		// the Playing the new model needs, and the label assignment stays unscoped
+		// because its name already says which test it was («… · взяли»).
+		if _, err := tx.Exec(`
+insert or ignore into card_sessions(card_id, session_id)
+select distinct cl.card_id, ?
+from card_labels cl
+join cards c on c.id = cl.card_id and c.deleted_at is null and c.kind <> 'test'
+where cl.label_id in (
+    select label_id from card_labels
+    where card_id = ? and label_id in (select id from _v18_test_labels))`, sid, c.id); err != nil {
+			return err
+		}
+		// A comment on a test card is a note about the session with no question
+		// attached — exactly the shape session-only comments now have.
+		if _, err := tx.Exec(
+			`update timeline_events set session_id = ?, card_id = null where card_id = ? and type = 'comment'`,
+			sid, c.id); err != nil {
+			return err
+		}
+		// The derived events (desc_edit, label_*) logged edits to a card that is
+		// about to stop existing; they have no session-level meaning.
+		if _, err := tx.Exec(
+			`update timeline_events set deleted_at = ? where card_id = ? and type <> 'comment' and deleted_at is null`,
+			now, c.id); err != nil {
+			return err
+		}
+
+		var attached int
+		if err := tx.QueryRow(
+			`select count(*) from attachments where card_id = ? and deleted_at is null`, c.id).Scan(&attached); err != nil {
+			return err
+		}
+		// The session's own labels never belong on the card either way: the card is
+		// about to dissolve, or it survives only to hold an attachment. Leaving
+		// them on the survivor was the difference between the two paths.
+		if _, err := tx.Exec(`delete from card_labels where card_id = ?`, c.id); err != nil {
+			return err
+		}
+		if attached > 0 {
+			if _, err := tx.Exec(`update cards set kind = 'normal', updated_at = ? where id = ?`, now, c.id); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := tx.Exec(`update cards set deleted_at = ? where id = ?`, now, c.id); err != nil {
+			return err
+		}
+	}
+
+	// Test lists are gone as a concept. One with surviving cards becomes an
+	// ordinary list, keeping its (encrypted, unreadable here) title; an emptied
+	// one is tombstoned.
+	if _, err := tx.Exec(`
+update lists set deleted_at = ?, type = 'normal'
+where type = 'test' and deleted_at is null
+  and not exists (select 1 from cards where cards.list_id = lists.id and cards.deleted_at is null)`, now); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`update lists set type = 'normal' where type = 'test'`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`drop table if exists _v18_test_labels`); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // migrateV17 rebuilds timeline_events with AUTOINCREMENT. The reaper (ADR-0002)

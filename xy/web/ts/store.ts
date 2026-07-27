@@ -21,10 +21,12 @@ export interface OpBody {
   description_enc?: string;
   handout_meta_enc?: string;
   alias_enc?: string;
-  list_id?: number;
+  list_id?: number | null;
+  group_id?: number | null;
   name_enc?: string;
   color_enc?: string;
-  label_ids?: number[];
+  labels?: Array<{ label_id: number; session_id?: number | null }>;
+  session_ids?: number[];
   name?: string;
   payload_enc?: string;
   reply_to_id?: number | null;
@@ -73,8 +75,21 @@ export interface SnapshotLabel {
   id: number;
   name_enc?: string;
   color_enc?: string;
-  kind?: string;
   [key: string]: unknown;
+}
+
+// One label ASSIGNMENT in the mirror — see unlock.ts#CardLabel. session_id null
+// = the author's own view, set = the testers' at that sitting.
+export interface SnapshotCardLabel {
+  card_id: number;
+  label_id: number;
+  session_id?: number | null;
+}
+
+// One Playing in the mirror — same flat shape as the assignment above.
+export interface SnapshotPlaying {
+  card_id: number;
+  session_id: number;
 }
 export interface BoardSnapshot {
   name?: string;
@@ -82,7 +97,8 @@ export interface BoardSnapshot {
   lists?: SnapshotList[];
   cards?: SnapshotCard[];
   labels?: SnapshotLabel[];
-  card_labels?: Record<string, number[]>;
+  card_labels?: SnapshotCardLabel[];
+  card_sessions?: SnapshotPlaying[];
   [key: string]: unknown;
 }
 

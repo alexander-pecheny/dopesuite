@@ -93,6 +93,11 @@ type meResponse struct {
 	Sizes         json.RawMessage `json:"sizes,omitempty"`
 	DefaultAuthor string          `json:"default_author,omitempty"`
 	CardTitle     string          `json:"card_title,omitempty"`
+	// The test-session preferences, and the first-run stamp every page checks.
+	Timezone         string          `json:"timezone,omitempty"`
+	AnnounceCities   json.RawMessage `json:"announce_cities,omitempty"`
+	SessionTitleMode string          `json:"session_title_mode,omitempty"`
+	OnboardedAt      string          `json:"onboarded_at,omitempty"`
 }
 
 func meOf(u session.User) meResponse {
@@ -106,21 +111,49 @@ func meOf(u session.User) meResponse {
 	return resp
 }
 
+// userPrefs is every per-user display preference, read as one row. They ride
+// both /api/auth/me and the board snapshot, and adding a seventh used to mean
+// editing the select and its unpack in two places.
+type userPrefs struct {
+	Sizes            sql.NullString
+	DefaultAuthor    sql.NullString
+	CardTitle        sql.NullString
+	Timezone         sql.NullString
+	AnnounceCities   sql.NullString
+	SessionTitleMode sql.NullString
+	OnboardedAt      sql.NullString
+}
+
+func loadUserPrefs(ctx context.Context, q rowQuerier, uid int64) (userPrefs, error) {
+	var p userPrefs
+	err := q.QueryRowContext(ctx, `
+select sizes, default_author, card_title, timezone, announce_cities, session_title_mode, onboarded_at
+from users where id = ?`, uid).
+		Scan(&p.Sizes, &p.DefaultAuthor, &p.CardTitle, &p.Timezone, &p.AnnounceCities, &p.SessionTitleMode, &p.OnboardedAt)
+	return p, err
+}
+
 func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {
 		return
 	}
 	resp := meOf(u)
-	var sizes, author, cardTitle sql.NullString
-	if err := s.db.QueryRowContext(r.Context(), `select sizes, default_author, card_title from users where id = ?`, u.UserID).Scan(&sizes, &author, &cardTitle); handleErr(w, err) {
+	p, err := loadUserPrefs(r.Context(), s.db, u.UserID)
+	if handleErr(w, err) {
 		return
 	}
-	if sizes.Valid && sizes.String != "" {
-		resp.Sizes = json.RawMessage(sizes.String)
+	if p.Sizes.Valid && p.Sizes.String != "" {
+		resp.Sizes = json.RawMessage(p.Sizes.String)
 	}
-	resp.DefaultAuthor = author.String
-	resp.CardTitle = cardTitle.String
+	if p.AnnounceCities.Valid && p.AnnounceCities.String != "" {
+		resp.AnnounceCities = json.RawMessage(p.AnnounceCities.String)
+	}
+	resp.DefaultAuthor = p.DefaultAuthor.String
+	resp.CardTitle = p.CardTitle.String
+	resp.Timezone = p.Timezone.String
+	resp.SessionTitleMode = p.SessionTitleMode.String
+	resp.OnboardedAt = p.OnboardedAt.String
 	writeJSON(w, resp)
 }
 
@@ -610,6 +643,105 @@ func (s *server) handleSetDefaultAuthor(w http.ResponseWriter, r *http.Request) 
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleSetProfileDefaults stores the two questions the first-run modal asks —
+// the IANA timezone a new test session is anchored in and the default author —
+// and stamps onboarded_at so the modal never opens again. Also the write path
+// for the /profile dialogs that edit either one on its own.
+func (s *server) handleSetProfileDefaults(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Timezone         *string `json:"timezone"`
+		DefaultAuthor    *string `json:"default_author"`
+		SessionTitleMode *string `json:"session_title_mode"`
+		Onboarded        bool    `json:"onboarded"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	// Not validated against the tz database: Intl on the client is the source of
+	// these, and a zone the server rejects would be a zone the user's browser
+	// believes in. Length-capped only.
+	if req.Timezone != nil && len(*req.Timezone) > 64 {
+		httpError(w, http.StatusBadRequest, "слишком длинный часовой пояс")
+		return
+	}
+	if req.DefaultAuthor != nil && len(strings.TrimSpace(*req.DefaultAuthor)) > 200 {
+		httpError(w, http.StatusBadRequest, "слишком длинное имя")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "set-profile-defaults", func(ctx context.Context, tx *sql.Tx) error {
+		now := rfc3339(time.Now())
+		if req.Timezone != nil {
+			if _, err := tx.ExecContext(ctx, `update users set timezone = ?, updated_at = ? where id = ?`,
+				strings.TrimSpace(*req.Timezone), now, u.UserID); err != nil {
+				return err
+			}
+		}
+		if req.DefaultAuthor != nil {
+			if _, err := tx.ExecContext(ctx, `update users set default_author = ?, updated_at = ? where id = ?`,
+				strings.TrimSpace(*req.DefaultAuthor), now, u.UserID); err != nil {
+				return err
+			}
+		}
+		if req.SessionTitleMode != nil {
+			if !sessionTitleModes[*req.SessionTitleMode] {
+				return errBadRequest("bad session_title_mode")
+			}
+			if _, err := tx.ExecContext(ctx, `update users set session_title_mode = ?, updated_at = ? where id = ?`,
+				*req.SessionTitleMode, now, u.UserID); err != nil {
+				return err
+			}
+		}
+		if req.Onboarded {
+			if _, err := tx.ExecContext(ctx,
+				`update users set onboarded_at = ? where id = ? and onboarded_at is null`, now, u.UserID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSetAnnounceCities stores the caller's default announce set — the cities
+// a new session's invite line is written in ([{zone,name}], plaintext JSON
+// beside users.sizes). The session keeps its own copy; this is only the seed.
+func (s *server) handleSetAnnounceCities(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		AnnounceCities json.RawMessage `json:"announce_cities"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if len(req.AnnounceCities) > 4096 {
+		httpError(w, http.StatusBadRequest, "слишком длинный список городов")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "set-announce-cities", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update users set announce_cities = ?, updated_at = ? where id = ?`,
+			string(req.AnnounceCities), rfc3339(time.Now()), u.UserID)
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// sessionTitleModes allowlists users.session_title_mode: how a session's derived
+// label name is written. "" means the default, "date-title".
+var sessionTitleModes = map[string]bool{"": true, "date-title": true, "title": true, "date": true}
 
 // cardTitleModes allowlists the values of users.card_title (see migrateV13):
 // which field a card's list preview derives its title from. "" means the
