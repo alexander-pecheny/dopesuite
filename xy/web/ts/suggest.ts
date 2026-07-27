@@ -50,13 +50,21 @@ export function autocomplete(
         h.hint ? el("span", { class: "suggest-hint", text: h.hint }) : el("span"),
       ));
     }
-    // .suggest-pop is absolutely positioned, so its parent must be the
-    // positioning context — marked here rather than at bind time, because a
-    // field is often wired before it is appended to anything.
+    // The popup is absolutely positioned, so its parent must be the positioning
+    // context — marked here rather than at bind time, because a field is often
+    // wired before it is appended to anything.
     const host = inp.parentElement;
     if (!host) return;
     host.classList.add("suggest-anchor");
     host.append(pop);
+    // top:100% would mean the bottom of the ANCHOR, which is only the field on a
+    // form that wraps each one. /profile puts every input in a single column, so
+    // the popup landed under the whole form. Measure from the input's own box.
+    const hostBox = host.getBoundingClientRect();
+    const inpBox = inp.getBoundingClientRect();
+    pop.style.top = `${Math.round(inpBox.bottom - hostBox.top)}px`;
+    pop.style.left = `${Math.round(inpBox.left - hostBox.left)}px`;
+    pop.style.minWidth = `${Math.round(inpBox.width)}px`;
   };
 
   inp.addEventListener("input", draw);
