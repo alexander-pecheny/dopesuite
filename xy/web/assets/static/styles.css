@@ -1275,9 +1275,25 @@ body {
   padding-right: var(--space-1);
 }
 
-/* The session's debrief: what was said about any question at this test. */
-.sess-notes { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
-.sess-note { margin: 0; }
+/* The session's лента reuses the card's timeline markup (.tl-item / .tl-meta /
+   .tl-body), so a note reads exactly like a comment rather than being a second,
+   slightly-different comment UI. Only the container needs a rule. */
+.sess-feed { display: flex; flex-direction: column; gap: var(--space-2); }
+.sess-notes { max-height: 14rem; overflow-y: auto; }
+
+/* A Playing: one test this question was played at, with its own labels. */
+.playing {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-soft);
+}
+.playing:last-child { border-bottom: 0; }
+.playing-head { display: flex; align-items: center; gap: var(--space-2); }
+.playing-name { font-weight: var(--fw-semibold); font-size: var(--text-sm); }
+.playing-labels { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+#cardPlayings { display: flex; flex-direction: column; }
+/* The add-label button inside a playing sits among chips, so it matches them. */
+.playing-add { padding: var(--space-0-5) var(--space-2); font-size: var(--text-xs); }
+#playingAddRow { position: relative; display: flex; gap: var(--space-2); align-items: center; }
 
 /* The town field sits inside the chip row, so it must not stretch to fill it. */
 .sess-city-add { width: 12rem; max-width: 100%; }

@@ -34,26 +34,37 @@ test("applyOpToSnapshot: patch, move, delete, labels", () => {
   const snap = {
     lists: [{ id: 1, type: "normal", title_enc: "L1", rank: "a0" }, { id: 2, type: "normal", title_enc: "L2", rank: "a1" }],
     cards: [{ id: 5, list_id: 1, kind: "normal", description_enc: "D", rank: "a0" }],
-    labels: [{ id: 9, name_enc: "N", color_enc: "C", kind: "normal" }],
+    labels: [{ id: 9, name_enc: "N", color_enc: "C" }],
+    // The pre-ADR-0004 mirror shape: a device that synced before labels could be
+    // scoped holds this, and the engine must fold it forward rather than throw.
     card_labels: { 5: [9] },
   };
   _applyOpToSnapshot(snap, { kind: "patchCard", path: "/api/cards/5", body: { description_enc: "D2", list_id: 2 } });
   assert.equal(snap.cards[0].description_enc, "D2");
   assert.equal(snap.cards[0].list_id, 2);
-  _applyOpToSnapshot(snap, { kind: "setCardLabels", path: "/api/cards/5/labels", body: { label_ids: [] } });
-  assert.deepEqual(snap.card_labels[5], []);
+  _applyOpToSnapshot(snap, { kind: "setCardLabels", path: "/api/cards/5/labels", body: { labels: [] } });
+  assert.deepEqual(snap.card_labels, []);
+  _applyOpToSnapshot(snap, {
+    kind: "setCardLabels", path: "/api/cards/5/labels",
+    body: { labels: [{ label_id: 9, session_id: null }, { label_id: 9, session_id: 3 }] },
+  });
+  // The same label twice on one card: once the author's, once the testers'.
+  assert.deepEqual(snap.card_labels, [
+    { card_id: 5, label_id: 9, session_id: null },
+    { card_id: 5, label_id: 9, session_id: 3 },
+  ]);
   _applyOpToSnapshot(snap, { kind: "deleteLabel", path: "/api/labels/9", body: {} });
   assert.equal(snap.labels.length, 0);
+  assert.deepEqual(snap.card_labels, []);
   _applyOpToSnapshot(snap, { kind: "deleteCard", path: "/api/cards/5", body: {} });
   assert.equal(snap.cards.length, 0);
-  assert.equal(snap.card_labels[5], undefined);
 });
 
 test("applyOpToSnapshot: deleteList removes its cards", () => {
   const snap = {
     lists: [{ id: 1 }, { id: 2 }],
     cards: [{ id: 5, list_id: 1 }, { id: 6, list_id: 2 }],
-    labels: [], card_labels: {},
+    labels: [], card_labels: [],
   };
   _applyOpToSnapshot(snap, { kind: "deleteList", path: "/api/lists/1", body: {} });
   assert.deepEqual(snap.lists.map((l) => l.id), [2]);
@@ -64,7 +75,7 @@ test("pendingTimeline synthesizes per-card events from ops", () => {
   const ops = [
     { kind: "comment", path: "/api/cards/5/comments", body: { payload_enc: "P1" }, ts: "t1" },
     { kind: "patchCard", path: "/api/cards/5", body: { description_enc: "x", desc_event_enc: "DE" }, ts: "t2" },
-    { kind: "setCardLabels", path: "/api/cards/5/labels", body: { label_ids: [1], events: [{ type: "label_add", payload_enc: "LA" }] }, ts: "t3" },
+    { kind: "setCardLabels", path: "/api/cards/5/labels", body: { labels: [{ label_id: 1 }], events: [{ type: "label_add", payload_enc: "LA" }] }, ts: "t3" },
     { kind: "comment", path: "/api/cards/6/comments", body: { payload_enc: "OTHER" }, ts: "t4" },
   ];
   const tl = _pendingTimeline(ops, 5);

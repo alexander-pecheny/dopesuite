@@ -13,7 +13,7 @@
       "handouts-pdf", "import-preview", "lists-manage-rows", "members-list",
       "token-list", "token-value", "card-copy-msg", "import-count", "card-title",
       "sizes-preview", "excerpts", "excerpt-count", "thread", "feed-grid",
-      "sessions-list", "session-form", "labels-editor", "marks-editor", "card-seen"
+      "sessions-list", "session-form", "labels-editor", "card-seen", "card-playings", "tester-list"
     ] }
   },
   "primitives": [

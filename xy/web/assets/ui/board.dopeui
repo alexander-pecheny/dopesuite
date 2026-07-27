@@ -74,6 +74,15 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       mount id="labelPicker" kind="label-picker"
       mount id="labelAddRow" kind="label-add-row"
         button kind="ghost" id="labelAddBtn" "➕ Добавить метку…"
+
+    -- Тесты: which sittings this question was played at, each with its own
+    -- labels. Separate from Метки above: a label there is the author's view, a
+    -- label under a test is what the testers thought (ADR-0004).
+    label data-edit-only "Тесты"
+    mount id="cardPlayings" kind="card-playings" data-edit-only
+    row gap="sm" align="center" wrap data-edit-only
+      mount id="playingAddRow" kind="label-add-row"
+        button kind="ghost" id="playingAddBtn" "➕ Отметить тестом…"
     -- Видели: every tester from every session this card is tagged with, derived
     -- and stored nowhere. Hidden until there is one.
     mount id="cardSeen" kind="card-seen" hidden data-edit-only
@@ -251,7 +260,6 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
   modal id="sessionsOverlay" label="Тесты" title="🧪 Тесты" variant="lists" done="Готово" doneid="sessionsClose"
     row gap="sm" align="center" justify="between" wrap
       button small id="sessionAddBtn" title="Создать тест-сессию" "＋ Новый тест"
-      button small kind="ghost" id="marksBtn" title="Какие отметки получает новая сессия" "Отметки сессий"
     mount id="sessionsList" kind="sessions-list"
     message id="sessionsMessage"
 
@@ -265,11 +273,12 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     mount id="labelsEditor" kind="labels-editor"
     message id="labelsEditMessage"
 
-  -- the board's mark template: which marks a new session gets
-  modal id="marksOverlay" label="Отметки сессий" title="Отметки сессий" variant="lists" done="Готово" doneid="marksClose"
-    hint "Новая тест-сессия получает эти отметки. Цвет отсюда наследуют все метки сессий, у которых нет своего."
-    mount id="marksEditor" kind="marks-editor"
-    message id="marksMessage"
+  -- «Вопросы тестировали» for ONE tour: each session with how much of the tour
+  -- it saw, so the custom (name those who tested most of it) can be applied
+  modal id="testerListOverlay" label="Список тестеров" title="👥 Список тестеров" variant="lists" done="Готово" doneid="testerListClose"
+    hint "Отмечены те, кто видел больше половины тура. По обычаю в преамбулу пишут именно их."
+    mount id="testerList" kind="tester-list"
+    message id="testerListMessage"
 
   -- members / sharing overlay
   modal id="membersOverlay" label="Участники доски" title="Участники доски" done="Готово" doneid="membersClose"

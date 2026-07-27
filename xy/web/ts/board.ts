@@ -4,7 +4,7 @@ import { overlayStack } from "./overlaystack.js";
 import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
-import { xyChgk } from "./chgk.js";
+import { type Tester, xyChgk } from "./chgk.js";
 import { xySync } from "./sync.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { createBoardMembers } from "./boardmembers.js";
@@ -15,8 +15,8 @@ import { byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from ".
 import { createTimeline, eventAuthor } from "./timeline.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
 import {
-  type AnnounceCity, canonicalLabel, DEFAULT_MARKS, type Mark, markLabel,
-  parseSession, type SessionMeta, sessionLabel, type TitleMode, whoSaw,
+  type AnnounceCity, parseSession, type SessionMeta, sessionLabel,
+  type TitleMode, whoSaw,
 } from "./sessions.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
@@ -24,7 +24,7 @@ import type { DataKey } from "./crypto.js";
 import type { SyncStatus } from "./sync.js";
 import type { OpBody } from "./store.js";
 import type { ScreenValue } from "./chgk.js";
-import type { BoardCard, BoardLabel, BoardList, BoardState } from "./unlock.js";
+import type { BoardCard, BoardLabel, BoardList, BoardState, CardLabel } from "./unlock.js";
 import type { MembersState } from "./boardmembers.js";
 import type { MenuItem, Timeline } from "./timeline.js";
 import type { MoveCtx, PreviewCardLike } from "./carddetail.js";
@@ -69,7 +69,7 @@ const titleNode = byId("boardTitle");
 // members roster boardmembers.js merges onto it.
 type LiveState = BoardState & MembersState;
 
-const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: {}, members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", timezone: "", announceCities: null, markTemplate: "", sessionTitleMode: "" };
+const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: {}, members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", timezone: "", announceCities: null, sessionTitleMode: "" };
 let dk: DataKey | null = null;
 function mustDK(): DataKey {
   if (!dk) throw new Error("нет ключа доски");
@@ -411,9 +411,9 @@ const labelById = (id: number) => state.labels.find((l) => l.id === id);
 const sessionById = (id: number) => state.sessions.find((s) => s.id === id);
 
 // ---- test sessions ----
-// A test label carries no name of its own worth showing: what the board renders
-// is derived from the session it points at, so a rename or a retimed session
-// updates every chip at once. Its stored name_enc is only chgksuite's cache.
+// A Playing says this question was played at that test (ADR-0004). A label is an
+// ordinary board label; what makes one a test's verdict rather than the author's
+// is the ASSIGNMENT carrying a session.
 
 // sessionMeta parses (and memoizes) a session's decrypted meta. Sessions are few
 // per board and the cache is dropped whole on every snapshot.
@@ -428,51 +428,41 @@ function sessionMeta(id: number): SessionMeta | null {
   return m;
 }
 
-// boardMarks is the board's mark template, falling back to the built-in
-// взяли/не взяли pair — which is what every board made before this refactor has.
-function boardMarks(): Mark[] {
-  if (!state.markTemplate) return DEFAULT_MARKS;
-  try {
-    const parsed: unknown = JSON.parse(state.markTemplate);
-    if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_MARKS;
-    return (parsed as Array<Record<string, unknown>>)
-      .map((m): Mark => ({ mark: String(m.mark || ""), name: String(m.name || ""), color: String(m.color || "") }))
-      .filter((m) => m.mark && m.name);
-  } catch (_) { return DEFAULT_MARKS; }
-}
-
-// labelName is what a label reads on screen: a normal label's own name, a test
-// label's derived one. state.cardTitle's sibling — the reader's title mode —
-// lives on /profile and is delivered in the snapshot.
-function labelName(lbl: BoardLabel): string {
-  if (lbl.kind !== "test" || lbl.sessionId == null) return lbl.name;
-  const m = sessionMeta(lbl.sessionId);
-  return m ? markLabel(m, lbl.mark, boardMarks(), titleMode()) : lbl.name;
-}
-
-// labelColor resolves an inherited colour: null on a test label means "take the
-// board's template colour for this mark", so recolouring the template recolours
-// every session at once — which is what issue #25 actually asked for.
-function labelColor(lbl: BoardLabel): string {
-  if (lbl.color) return lbl.color;
-  if (lbl.kind !== "test") return "#888888";
-  return boardMarks().find((m) => m.mark === lbl.mark)?.color || "#888888";
-}
-
 function titleMode(): TitleMode {
   const m = state.sessionTitleMode;
   return m === "title" || m === "date" ? m : "date-title";
 }
 
-// sessionsOfCard is every session a card is tagged with, via its test labels.
+// sessionName is what a playing reads on screen — derived, never stored, so
+// retiming a session renames every chip at once (issue #8).
+function sessionName(id: number): string {
+  const m = sessionMeta(id);
+  return m ? sessionLabel(m, titleMode()) : "тест";
+}
+
+// playingsOf is the sessions a question was played at, newest first.
+function playingsOf(cardId: number): number[] {
+  const ids = (state.cardSessions[cardId] || []).slice();
+  ids.sort((a, b) => {
+    const ma = sessionMeta(a), mb = sessionMeta(b);
+    return ((mb && mb.date) || "").localeCompare((ma && ma.date) || "") || b - a;
+  });
+  return ids;
+}
+
+// assignmentsOf returns a card's label assignments, optionally only those scoped
+// to one playing (or only the unscoped ones when sessionId is null).
+function assignmentsOf(cardId: number, sessionId: number | null | undefined): CardLabel[] {
+  return state.cardLabels.filter((a) =>
+    a.cardId === cardId && (sessionId === undefined || a.sessionId === sessionId));
+}
+
+// sessionsOfCard is every session a card was played at, as decrypted meta —
+// what the «Видели» line reads.
 function sessionsOfCard(cardId: number): SessionMeta[] {
-  const seen = new Set<number>();
   const out: SessionMeta[] = [];
-  for (const lid of state.cardLabels[cardId] || []) {
-    const lbl = labelById(lid);
-    if (!lbl || lbl.kind !== "test" || lbl.sessionId == null || seen.has(lbl.sessionId)) continue;
-    seen.add(lbl.sessionId);
-    const m = sessionMeta(lbl.sessionId);
+  for (const sid of playingsOf(cardId)) {
+    const m = sessionMeta(sid);
     if (m) out.push(m);
   }
   return out;
@@ -569,6 +559,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
       items.push({ label: "🔍 Предпросмотр", onClick: () => { void previewList(list); } });
     }
     items.push(
+      { label: "👥 Копировать список тестеров", onClick: () => openTesterList(list) },
       { label: "↔️ Переместить список…", onClick: () => openMoveList(list) },
       { label: "✏️ Переименовать список", onClick: () => { void renameList(list); } },
     );
@@ -721,14 +712,15 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
 function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const node = el("div", { class: "kcard kcard-" + (card.kind || "normal"), draggable: "true", dataset: { cardId: card.id }, onclick: () => { void cardDetail.openCard(card); } });
   const labelRow = el("div", { class: "kcard-labels" });
-  for (const lid of state.cardLabels[card.id] || []) {
-    const lbl = labelById(lid);
-    if (lbl) {
-      labelRow.append(el("span", {
-        class: "label-chip" + (lbl.kind === "test" ? " is-test" : ""),
-        title: labelName(lbl), dataset: { c: labelColor(lbl) },
-      }));
-    }
+  // The board card shows the author's own labels; a test's verdict belongs to the
+  // card detail, where it can say WHICH test it came from.
+  for (const a of assignmentsOf(card.id, null)) {
+    const lbl = labelById(a.labelId);
+    if (lbl) labelRow.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
+  }
+  // One dot per test the question was played at, so coverage reads at a glance.
+  for (const sid of playingsOf(card.id)) {
+    labelRow.append(el("span", { class: "label-chip is-test", title: "Тест: " + sessionName(sid) }));
   }
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
@@ -1062,8 +1054,11 @@ async function moveListCopyLocked(remove: boolean, src: BoardList, ctx: MoveCtx)
         cr = keyBetween(cr, null);
         const cres = (await jpost(`/api/lists/${lres.id}/cards`, await cardDetail.cardCopyBody(c, cr, key))) as { id: number };
         state.cards.push({ id: cres.id, listId: lres.id, kind: c.kind, rank: cr, desc: c.desc, handoutMeta: c.handoutMeta || null, alias: c.alias || null, createdAt: nowStamp() });
-        const ids = state.cardLabels[c.id] || [];
-        if (ids.length) { await jput(`/api/cards/${cres.id}/labels`, { label_ids: ids }); state.cardLabels[cres.id] = ids.slice(); }
+        const own = assignmentsOf(c.id, null);
+        if (own.length) {
+          await jput(`/api/cards/${cres.id}/labels`, { labels: own.map((a) => ({ label_id: a.labelId, session_id: null })) });
+          state.cardLabels.push(...own.map((a) => ({ cardId: cres.id, labelId: a.labelId, sessionId: null })));
+        }
         await cardDetail.copyCardExtras(c.id, key, cres.id);
       }
     } else {
@@ -1077,8 +1072,10 @@ async function moveListCopyLocked(remove: boolean, src: BoardList, ctx: MoveCtx)
       for (const c of srcCards) {
         cr = keyBetween(cr, null);
         const cres = (await jpost(`/api/lists/${lres.id}/cards`, await cardDetail.cardCopyBody(c, cr, tdk))) as { id: number };
-        const targetIds = await cardDetail.reconcileLabels(c.id, targetBid, tdk, ctx);
-        if (targetIds.length) await jput(`/api/cards/${cres.id}/labels`, { label_ids: targetIds });
+        const plays = await cardDetail.reconcilePlayings(c.id, targetBid, tdk, ctx);
+        if (plays.length) await jput(`/api/cards/${cres.id}/sessions`, { session_ids: plays });
+        const assignments = await cardDetail.reconcileLabels(c.id, targetBid, tdk, ctx);
+        if (assignments.length) await jput(`/api/cards/${cres.id}/labels`, { labels: assignments });
         await cardDetail.copyCardExtras(c.id, tdk, cres.id);
       }
       if (remove) {
@@ -2486,39 +2483,26 @@ timeline = createTimeline({
     openCardId: () => cardDetail.openCardId(),
     copyCommentLink: (id) => { void cardDetail.copyCommentLink(id); },
   },
-  labelName: (id) => { const l = labelById(id); return l ? labelName(l) : ""; },
-  cardSessions: (cardId) => {
-    const seen = new Set<number>();
-    const out: Array<{ id: number; label: string }> = [];
-    for (const lid of state.cardLabels[cardId] || []) {
-      const lbl = labelById(lid);
-      if (!lbl || lbl.kind !== "test" || lbl.sessionId == null || seen.has(lbl.sessionId)) continue;
-      seen.add(lbl.sessionId);
-      const m = sessionMeta(lbl.sessionId);
-      if (m) out.push({ id: lbl.sessionId, label: sessionLabel(m, titleMode()) });
-    }
-    return out;
-  },
+  labelName: (id) => { const l = labelById(id); return l ? l.name : ""; },
+  cardSessions: (cardId) => playingsOf(cardId).map((id) => ({ id, label: sessionName(id) })),
   attachments: { url: attachments.attachmentUrl, download: attachments.download },
 });
 
 // ---- labels ----
-// renderLabelPicker shows only the labels actually assigned to this card (each
-// removable on click). Boards can have dozens of labels (e.g. one green/red pair
-// per test session), so the rest live behind an "add label" dropdown rather than
-// being dumped on screen.
+// The card's «Метки» and «Тесты» are two separate pickers (ADR-0004): a label is
+// the author's view of the question, a Playing is where it was tested, and a
+// label scoped to a Playing is what the testers thought there. Mixing them into
+// one list was what made «взяли» multiply by the number of tests.
+
 // labelLastUsage maps label id → the highest card id currently carrying it.
 // Card ids grow monotonically, so the max id is a recency proxy for "last used"
 // without scanning per-card timelines. Labels absent from the map were never
 // used (or imported with no assignments).
 function labelLastUsage(): Map<number, number> {
   const usage = new Map<number, number>();
-  for (const [cardId, ids] of Object.entries(state.cardLabels)) {
-    const cid = Number(cardId);
-    for (const id of ids || []) {
-      const prev = usage.get(id);
-      if (prev === undefined || cid > prev) usage.set(id, cid);
-    }
+  for (const a of state.cardLabels) {
+    const prev = usage.get(a.labelId);
+    if (prev === undefined || a.cardId > prev) usage.set(a.labelId, a.cardId);
   }
   return usage;
 }
@@ -2536,39 +2520,70 @@ function sortLabels(labels: BoardLabel[]): BoardLabel[] {
   });
 }
 
+// labelChip is one assigned label: an inert pill whose × is the only remove
+// affordance, so brushing a label cannot take it off the card.
+function labelChip(lbl: BoardLabel, onRemove: () => void, title: string): HTMLElement {
+  return el("span", { class: "label-pick is-on", dataset: { c: lbl.color }, title: lbl.name },
+    el("span", { class: "label-pick-name", text: lbl.name }),
+    el("button", {
+      class: "label-pick-x", type: "button", text: "×",
+      title, "aria-label": `${title}: ${lbl.name}`,
+      onclick: onRemove,
+    }));
+}
+
 function renderLabelPicker(card: BoardCard): void {
   const picker = byId("labelPicker");
   picker.replaceChildren();
-  const assigned = state.cardLabels[card.id] || [];
-  for (const id of assigned) {
-    const lbl = labelById(id);
-    if (!lbl) continue;
-    // The chip itself is inert: only the × removes. It used to be one button
-    // whose whole face was the remove affordance, so brushing a label took it
-    // off the card with no warning and no undo.
-    const name = labelName(lbl);
-    picker.append(el("span", {
-      class: "label-pick is-on" + (lbl.kind === "test" ? " is-test" : ""),
-      dataset: { c: labelColor(lbl) }, title: name,
-    },
-      el("span", { class: "label-pick-name", text: name }),
-      el("button", {
-        class: "label-pick-x", type: "button", text: "×",
-        title: "Снять метку", "aria-label": `Снять метку «${name}»`,
-        onclick: () => { void toggleLabel(card, lbl); },
-      }),
-    ));
+  const own = assignmentsOf(card.id, null);
+  for (const a of own) {
+    const lbl = labelById(a.labelId);
+    if (lbl) picker.append(labelChip(lbl, () => { void setLabel(card, lbl, null, false); }, "Снять метку"));
   }
-  if (!assigned.length) picker.append(el("span", { class: "label-empty", text: "меток нет" }));
+  if (!own.length) picker.append(el("span", { class: "label-empty", text: "меток нет" }));
+
+  renderPlayings(card);
   renderSeen(card);
   closeLabelAddPopup();
   paintLabels();
 }
 
-// renderSeen writes the «Видели» line: every tester from every session this card
-// is tagged with, deduped — including sessions that arrived as copies from other
-// boards, which is the case the whole thing exists for. A pure derivation; it
-// stores nothing.
+// renderPlayings draws one block per test this question was played at, each with
+// its own labels — «на этом тесте не взяли» — added and removed independently of
+// the author's own.
+function renderPlayings(card: BoardCard): void {
+  const box = byId("cardPlayings");
+  box.replaceChildren();
+  const ids = playingsOf(card.id);
+  if (!ids.length) {
+    box.append(el("span", { class: "label-empty", text: "тестов нет" }));
+    return;
+  }
+  for (const sid of ids) {
+    const head = el("div", { class: "playing-head" },
+      el("span", { class: "playing-name", text: sessionName(sid) }),
+      el("button", {
+        class: "label-pick-x", type: "button", text: "×",
+        title: "Убрать тест с вопроса", "aria-label": `Убрать тест ${sessionName(sid)}`,
+        onclick: () => { void removePlaying(card, sid); },
+      }));
+    const chips = el("div", { class: "playing-labels" });
+    for (const a of assignmentsOf(card.id, sid)) {
+      const lbl = labelById(a.labelId);
+      if (lbl) chips.append(labelChip(lbl, () => { void setLabel(card, lbl, sid, false); }, "Снять отметку теста"));
+    }
+    chips.append(el("button", {
+      class: "input playing-add", type: "button", text: "＋",
+      title: "Добавить метку этого теста",
+      onclick: (e: Event) => { openLabelAddPopup(sid, (e.currentTarget as HTMLElement).parentElement as HTMLElement); },
+    }));
+    box.append(el("div", { class: "playing" }, head, chips));
+  }
+}
+
+// renderSeen writes the «Видели» line: every tester from every test this
+// question was played at, deduped — copies from other boards included, which is
+// the case the whole thing exists for. A pure derivation; it stores nothing.
 function renderSeen(card: BoardCard): void {
   const node = byId("cardSeen");
   const line = whoSaw(sessionsOfCard(card.id));
@@ -2586,17 +2601,14 @@ function renderSeen(card: BoardCard): void {
 }
 
 function closeLabelAddPopup(): void {
-  const popup = document.querySelector("#labelAddRow .label-add-popup");
-  if (popup) popup.remove();
+  for (const popup of document.querySelectorAll(".label-add-popup")) popup.remove();
 }
 
 // The "create a new label" form is authored in board.dopeui but does NOT belong
 // in the card body: it used to sit there permanently as a third stacked row under
-// «Метки», duplicating the popup's job and pushing the section to three lines for
-// a control almost nobody needs on any given card. Detach it once at boot and
-// keep the node; openLabelAddPopup mounts it at the foot of the popup, where
-// "create a label" actually belongs. Handlers bound to the element survive the
-// move, so its submit listener below keeps working.
+// «Метки», duplicating the popup's job. Detach it once at boot and keep the node;
+// openLabelAddPopup mounts it at the foot of the popup, where "create a label"
+// actually belongs. Handlers bound to the element survive the move.
 const newLabelForm = byId<HTMLFormElement>("newLabelForm");
 newLabelForm.remove();
 
@@ -2604,27 +2616,32 @@ newLabelForm.remove();
 swapPlusIcon(byId("labelAddBtn"));
 swapPlusIcon(newLabelForm.querySelector<HTMLButtonElement>('button[type="submit"]')!);
 
-// openLabelAddPopup mounts a custom dropdown under the "➕ Добавить метку" button:
-// a filter field above a scrollable list of the unassigned labels, sorted by last
-// usage (sortLabels), with the create-new-label form at the foot. A native
-// <select> can't host a search box, hence the hand-rolled popup (shares the
-// .menu-dropdown styling of the list "⋯" menu).
-function openLabelAddPopup(): void {
+// openLabelAddPopup mounts a filtered dropdown of the labels not yet assigned in
+// this scope. `sessionId` null means the author's own labels; set means the
+// labels of one Playing, so the same label can be added twice to a card — once
+// each way. A native <select> can't host a search box, hence the hand-rolled
+// popup (shares the .menu-dropdown styling of the list "⋯" menu).
+function openLabelAddPopup(sessionId: number | null, anchorEl?: HTMLElement): void {
   const found = state.cards.find((c) => c.id === cardDetail.openCardId());
   if (!found) return;
   const card = found;
-  const anchor = byId("labelAddRow");
-  if (anchor.querySelector(".label-add-popup")) { closeLabelAddPopup(); return; } // toggle off
+  const anchor = anchorEl || byId("labelAddRow");
+  const already = anchor.querySelector(".label-add-popup");
+  closeLabelAddPopup();
+  if (already) return; // toggle off
 
-  const assignedSet = new Set(state.cardLabels[card.id] || []);
-  const pool = sortLabels(state.labels.filter((l) => !assignedSet.has(l.id)));
+  const taken = new Set(assignmentsOf(card.id, sessionId).map((a) => a.labelId));
+  const pool = sortLabels(state.labels.filter((l) => !taken.has(l.id)));
 
   const filter = el("input", {
     class: "input label-add-filter", type: "text",
     placeholder: "Фильтр меток…", autocomplete: "off",
   }) as HTMLInputElement;
   const listBox = el("div", { class: "label-add-list" });
-  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, filter, listBox, newLabelForm);
+  // The create-label form only makes sense in the author's own section: a new
+  // label made from inside a test would still be a plain board label.
+  const kids = sessionId == null ? [filter, listBox, newLabelForm] : [filter, listBox];
+  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, ...kids);
 
   function fill(): void {
     const q = filter.value.trim().toLowerCase();
@@ -2634,10 +2651,10 @@ function openLabelAddPopup(): void {
     for (const lbl of items) {
       listBox.append(el("button", {
         class: "menu-item label-add-item", type: "button", role: "menuitem",
-        onclick: () => { close(); void toggleLabel(card, lbl); },
+        onclick: () => { close(); void setLabel(card, lbl, sessionId, true); },
       },
-        el("span", { class: "label-swatch", dataset: { c: labelColor(lbl) } }),
-        el("span", { class: "label-add-name", text: labelName(lbl) }),
+        el("span", { class: "label-swatch", dataset: { c: lbl.color } }),
+        el("span", { class: "label-add-name", text: lbl.name }),
       ));
     }
     paintLabels();
@@ -2648,7 +2665,7 @@ function openLabelAddPopup(): void {
     document.removeEventListener("keydown", onKey, true);
   }
   function onOutside(e: PointerEvent): void { if (e.target instanceof Node && !anchor.contains(e.target)) close(); }
-  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); byId("labelAddBtn").focus(); } }
+  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); } }
 
   filter.addEventListener("input", fill);
   anchor.append(popup);
@@ -2658,25 +2675,205 @@ function openLabelAddPopup(): void {
   filter.focus();
 }
 
-byId("labelAddBtn").addEventListener("click", openLabelAddPopup);
+byId("labelAddBtn").addEventListener("click", () => openLabelAddPopup(null));
 
-async function toggleLabel(card: BoardCard, lbl: BoardLabel): Promise<void> {
-  const cur = new Set(state.cardLabels[card.id] || []);
-  const adding = !cur.has(lbl.id);
-  if (adding) cur.add(lbl.id); else cur.delete(lbl.id);
-  const ids = [...cur];
+// setLabel adds or removes ONE assignment. The whole card's assignments go up
+// together because the endpoint replaces the set — cheap, and it keeps the
+// offline mirror's view of a card in one op.
+async function setLabel(card: BoardCard, lbl: BoardLabel, sessionId: number | null, adding: boolean): Promise<void> {
+  const rest = state.cardLabels.filter((a) =>
+    a.cardId !== card.id || a.labelId !== lbl.id || a.sessionId !== sessionId);
+  const next = adding ? [...rest, { cardId: card.id, labelId: lbl.id, sessionId }] : rest;
   try {
     const events = [{
       type: adding ? "label_add" : "label_remove",
-      payload_enc: await xyCrypto.encField(mustDK(), JSON.stringify({ label: labelName(lbl), label_id: lbl.id })),
+      payload_enc: await xyCrypto.encField(mustDK(), JSON.stringify({ label: lbl.name, label_id: lbl.id })),
     }];
-    await put("setCardLabels", `/api/cards/${card.id}/labels`, { label_ids: ids, events });
-    state.cardLabels[card.id] = ids;
+    await put("setCardLabels", `/api/cards/${card.id}/labels`, {
+      labels: next.filter((a) => a.cardId === card.id).map((a) => ({ label_id: a.labelId, session_id: a.sessionId })),
+      events,
+    });
+    state.cardLabels = next;
     renderLabelPicker(card);
     render();
     await timeline.load(card.id);
   } catch (err) { byId("cardMessage").textContent = errMsg(err); }
 }
+
+// addPlaying / removePlaying edit which tests a question was played at. Removing
+// one takes the labels scoped to it — a label scoped to a playing that no longer
+// exists cannot be read (ADR-0004) — so the confirmation names the count.
+async function addPlaying(card: BoardCard, sessionId: number): Promise<void> {
+  const ids = [...new Set([...playingsOf(card.id), sessionId])];
+  await writePlayings(card, ids);
+}
+
+async function removePlaying(card: BoardCard, sessionId: number): Promise<void> {
+  const scoped = assignmentsOf(card.id, sessionId).length;
+  const what = scoped
+    ? `Снять тест «${sessionName(sessionId)}» и ${scoped} ${plural(scoped, "метку", "метки", "меток")} на нём?`
+    : `Снять тест «${sessionName(sessionId)}» с вопроса?`;
+  if (!confirm(what)) return;
+  await writePlayings(card, playingsOf(card.id).filter((id) => id !== sessionId));
+}
+
+async function writePlayings(card: BoardCard, ids: number[]): Promise<void> {
+  try {
+    await put("setCardSessions", `/api/cards/${card.id}/sessions`, { session_ids: ids });
+    state.cardSessions[card.id] = ids;
+    const keep = new Set(ids);
+    state.cardLabels = state.cardLabels.filter((a) =>
+      a.cardId !== card.id || a.sessionId == null || keep.has(a.sessionId));
+    renderLabelPicker(card);
+    render();
+  } catch (err) { byId("cardMessage").textContent = errMsg(err); }
+}
+
+// openPlayingAddPopup lists the board's tests this question is not yet marked
+// with — the second of the card's two autocompletes.
+function openPlayingAddPopup(): void {
+  const found = state.cards.find((c) => c.id === cardDetail.openCardId());
+  if (!found) return;
+  const card = found;
+  const anchor = byId("playingAddRow");
+  const already = anchor.querySelector(".label-add-popup");
+  closeLabelAddPopup();
+  if (already) return;
+
+  const on = new Set(playingsOf(card.id));
+  const pool = state.sessions.filter((s) => !on.has(s.id))
+    .map((s) => ({ id: s.id, name: sessionName(s.id), date: (sessionMeta(s.id) || { date: "" }).date }))
+    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
+
+  const filter = el("input", {
+    class: "input label-add-filter", type: "text",
+    placeholder: "Фильтр тестов…", autocomplete: "off",
+  }) as HTMLInputElement;
+  const listBox = el("div", { class: "label-add-list" });
+  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, filter, listBox);
+
+  function fill(): void {
+    const q = filter.value.trim().toLowerCase();
+    const items = q ? pool.filter((s) => s.name.toLowerCase().includes(q)) : pool;
+    listBox.replaceChildren();
+    if (!items.length) {
+      listBox.append(el("span", { class: "label-empty", text: pool.length ? "ничего не найдено" : "тестов на доске нет" }));
+      return;
+    }
+    for (const s of items) {
+      listBox.append(el("button", {
+        class: "menu-item label-add-item", type: "button", role: "menuitem",
+        onclick: () => { close(); void addPlaying(card, s.id); },
+      }, el("span", { class: "label-add-name", text: s.name })));
+    }
+  }
+  function close(): void {
+    popup.remove();
+    document.removeEventListener("pointerdown", onOutside, true);
+    document.removeEventListener("keydown", onKey, true);
+  }
+  function onOutside(e: PointerEvent): void { if (e.target instanceof Node && !anchor.contains(e.target)) close(); }
+  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); } }
+
+  filter.addEventListener("input", fill);
+  anchor.append(popup);
+  document.addEventListener("pointerdown", onOutside, true);
+  document.addEventListener("keydown", onKey, true);
+  fill();
+  filter.focus();
+}
+
+byId("playingAddBtn").addEventListener("click", openPlayingAddPopup);
+
+// ---- «Вопросы тестировали» for one tour ----
+//
+// The test list used to BE this list, one per tour. A board-level Тесты panel
+// can only say who tested at all, so a tour compiles its own: each session with
+// how many of the tour's questions it saw. The ЧГК custom names those who tested
+// MOST of a tour (they should not play it); someone who saw one or two questions
+// still may, skipping what they know — so a flat list cannot serve.
+interface TourTester { id: number; name: string; seen: number }
+
+function tourCoverage(list: BoardList): { cards: BoardCard[]; rows: TourTester[] } {
+  const cards = exportScope(list).cards.filter((c) => c.kind === "question");
+  const seen = new Map<number, number>();
+  for (const c of cards) {
+    for (const sid of state.cardSessions[c.id] || []) seen.set(sid, (seen.get(sid) || 0) + 1);
+  }
+  const rows = [...seen.entries()]
+    .map(([id, n]): TourTester => ({ id, name: sessionName(id), seen: n }))
+    .sort((a, b) => b.seen - a.seen || a.name.localeCompare(b.name, "ru"));
+  return { cards, rows };
+}
+
+// Which sessions were ticked last time, per tour. A personal working state on
+// the way to a document, so it lives beside the other display prefs rather than
+// on the server.
+const tourPickKey = (list: BoardList): string =>
+  `xy.testerpick.${boardId}.${list.groupId != null ? "g" + list.groupId : "l" + list.id}`;
+
+function loadTourPick(list: BoardList): number[] | null {
+  try {
+    const raw = localStorage.getItem(tourPickKey(list));
+    if (!raw) return null;
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) ? (v as number[]) : null;
+  } catch (_) { return null; }
+}
+
+function saveTourPick(list: BoardList, ids: number[]): void {
+  try { localStorage.setItem(tourPickKey(list), JSON.stringify(ids)); } catch (_) { /* quota */ }
+}
+
+function openTesterList(list: BoardList): void {
+  const overlay = byId("testerListOverlay");
+  const box = byId("testerList");
+  const { cards, rows } = tourCoverage(list);
+  const total = cards.length;
+  const remembered = loadTourPick(list);
+  // Default: those who saw MORE than half the tour, which is the custom. A
+  // remembered choice wins — you have already decided for this tour.
+  const picked = new Set<number>(remembered ?? rows.filter((r) => r.seen * 2 > total).map((r) => r.id));
+
+  const line = el("p", { class: "sess-invite" });
+  const redraw = (): void => {
+    const testers: Tester[] = [];
+    for (const r of rows) {
+      if (!picked.has(r.id)) continue;
+      const m = sessionMeta(r.id);
+      if (m) testers.push(...m.testers);
+    }
+    const names = whoSaw(testers.length ? [{ testers } as SessionMeta] : []);
+    line.textContent = names ? `Вопросы тестировали: ${names}.` : "Никто не отмечен.";
+  };
+
+  box.replaceChildren();
+  if (!rows.length) box.append(el("p", { class: "label-empty", text: "Вопросы этого тура никто не тестировал." }));
+  for (const r of rows) {
+    const cb = el("input", { class: "input", type: "checkbox" }) as HTMLInputElement;
+    cb.checked = picked.has(r.id);
+    cb.addEventListener("change", () => {
+      if (cb.checked) picked.add(r.id); else picked.delete(r.id);
+      saveTourPick(list, [...picked]);
+      redraw();
+    });
+    box.append(el("label", { class: "sess-row" },
+      el("div", { class: "sess-head" }, cb, el("span", { class: "sess-title", text: r.name })),
+      el("span", { class: "sess-meta", text: `${r.seen} из ${total}` })));
+  }
+  const copy = el("button", {
+    class: "input", type: "button", text: "📋 Скопировать",
+    onclick: () => { void cardDetail.copyPlain(line.textContent || ""); },
+  });
+  box.append(el("div", { class: "sess-invite-box" }, line, copy));
+  redraw();
+
+  byId("testerListMessage").textContent = "";
+  overlay.hidden = false;
+  overlayStack.open({ el: overlay, close: () => { overlay.hidden = true; } });
+}
+
+byId("testerListClose").addEventListener("click", () => { byId("testerListOverlay").hidden = true; });
 
 // ---- the Тесты panel + the label editor ----
 
@@ -2691,11 +2888,10 @@ const sessionsPanel = createSessionsPanel({
     const c = state.announceCities;
     return Array.isArray(c) ? (c as AnnounceCity[]) : [];
   },
-  marks: boardMarks,
-  labelCountFor: (sessionId) => {
-    const ids = new Set(state.labels.filter((l) => l.sessionId === sessionId).map((l) => l.id));
-    return state.cards.filter((c) => (state.cardLabels[c.id] || []).some((id) => ids.has(id))).length;
-  },
+  // How many questions this test was played at — the number the Тесты panel
+  // shows and the tester-list modal counts coverage from.
+  playedCount: (sessionId) =>
+    Object.values(state.cardSessions).filter((ids) => ids.includes(sessionId)).length,
   createSession: async (meta) => {
     const res = await create("createSession", `/api/boards/${boardId}/sessions`, {
       meta_enc: await xyCrypto.encField(mustDK(), meta),
@@ -2703,16 +2899,6 @@ const sessionsPanel = createSessionsPanel({
     const id = res.id as number;
     state.sessions.push({ id, meta, createdAt: nowStamp() });
     sessionMetaCache.delete(id);
-    // A new session gets the board's marks as labels straight away: assigning
-    // one to a question is the whole point, and a session with none can't be.
-    for (const m of boardMarks()) {
-      const lr = await create("createLabel", `/api/boards/${boardId}/labels`, {
-        name_enc: await xyCrypto.encField(mustDK(), canonicalLabel(parseSession(meta), m.mark, boardMarks())),
-        color_enc: "", // null = inherit the template, so recolouring it recolours every session
-        kind: "test", session_id: id, mark: m.mark,
-      });
-      state.labels.push({ id: lr.id as number, kind: "test", name: "", color: "", sessionId: id, mark: m.mark });
-    }
     return id;
   },
   patchSession: async (id, meta) => {
@@ -2720,20 +2906,16 @@ const sessionsPanel = createSessionsPanel({
     const s = state.sessions.find((x) => x.id === id);
     if (s) s.meta = meta;
     sessionMetaCache.delete(id);
-    // The stored name is chgksuite's cache (it reads label names over the Trello
-    // API), so a retimed or renamed session rewrites it.
-    const m = parseSession(meta);
-    for (const lbl of state.labels.filter((l) => l.sessionId === id)) {
-      const name = canonicalLabel(m, lbl.mark, boardMarks());
-      if (name === lbl.name) continue;
-      await patch("patchLabel", `/api/labels/${lbl.id}`, { name_enc: await xyCrypto.encField(mustDK(), name) });
-      lbl.name = name;
-    }
   },
   deleteSession: async (id) => {
     await del("deleteSession", `/api/sessions/${id}`);
     state.sessions = state.sessions.filter((s) => s.id !== id);
-    state.labels = state.labels.filter((l) => l.sessionId !== id);
+    // The label survives — it is an ordinary board label. What goes is the
+    // playings and the assignments scoped to them (ADR-0004).
+    for (const k of Object.keys(state.cardSessions)) {
+      state.cardSessions[k] = (state.cardSessions[k] || []).filter((s) => s !== id);
+    }
+    state.cardLabels = state.cardLabels.filter((a) => a.sessionId !== id);
     sessionMetaCache.delete(id);
   },
   copyText: (text: string) => cardDetail.copyPlain(text),
@@ -2758,44 +2940,38 @@ const sessionsPanel = createSessionsPanel({
 });
 
 // openLabelsEditor: one row per label, name and colour editable in place, with a
-// usage count and a delete (issue #25). A test label's name is locked here —
-// it is derived from its session, which is edited in the Тесты panel — but its
-// colour is not, and clearing the colour hands it back to the board's template.
+// usage count and a delete (issue #25). Every label is editable now — there is no
+// such thing as a test label whose name comes from somewhere else (ADR-0004).
 function openLabelsEditor(): void {
   const overlay = byId("labelsEditOverlay");
   const box = byId("labelsEditor");
-  const usage = labelLastUsageCounts();
+  const usage = labelUsageCounts();
   box.replaceChildren();
   if (!state.labels.length) box.append(el("p", { class: "label-empty", text: "Меток нет." }));
   for (const lbl of sortLabels(state.labels.slice())) {
-    const isTest = lbl.kind === "test";
-    const name = el("input", {
-      class: "input", type: "text", value: labelName(lbl),
-      disabled: isTest, title: isTest ? "Имя метки сессии берётся из самой сессии — измените её во вкладке «Тесты»" : "",
-    }) as HTMLInputElement;
-    const color = el("input", { class: "input", type: "color", value: labelColor(lbl) }) as HTMLInputElement;
+    const name = el("input", { class: "input", type: "text", value: lbl.name }) as HTMLInputElement;
+    const color = el("input", { class: "input", type: "color", value: lbl.color || "#888888" }) as HTMLInputElement;
     const count = el("span", { class: "sess-meta", text: `${usage.get(lbl.id) || 0} карт.` });
     const save = el("button", { class: "input", type: "button", text: "Сохранить" });
     save.addEventListener("click", async () => {
       try {
-        const body: Record<string, string> = { color_enc: await xyCrypto.encField(mustDK(), color.value) };
-        if (!isTest) body.name_enc = await xyCrypto.encField(mustDK(), name.value.trim());
-        await patch("patchLabel", `/api/labels/${lbl.id}`, body);
+        await patch("patchLabel", `/api/labels/${lbl.id}`, {
+          name_enc: await xyCrypto.encField(mustDK(), name.value.trim()),
+          color_enc: await xyCrypto.encField(mustDK(), color.value),
+        });
         lbl.color = color.value;
-        if (!isTest) lbl.name = name.value.trim();
+        lbl.name = name.value.trim();
         render();
         byId("labelsEditMessage").textContent = "Сохранено.";
       } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
     });
     const drop = el("button", { class: "input danger", type: "button", text: "🗑️" });
     drop.addEventListener("click", async () => {
-      if (!confirm(`Удалить метку «${labelName(lbl)}»? Она исчезнет со всех карточек.`)) return;
+      if (!confirm(`Удалить метку «${lbl.name}»? Она исчезнет со всех карточек.`)) return;
       try {
         await del("deleteLabel", `/api/labels/${lbl.id}`);
         state.labels = state.labels.filter((l) => l.id !== lbl.id);
-        for (const k of Object.keys(state.cardLabels)) {
-          state.cardLabels[k] = (state.cardLabels[k] || []).filter((id) => id !== lbl.id);
-        }
+        state.cardLabels = state.cardLabels.filter((a) => a.labelId !== lbl.id);
         render();
         openLabelsEditor();
       } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
@@ -2809,63 +2985,19 @@ function openLabelsEditor(): void {
   overlayStack.open({ el: overlay, close: () => { overlay.hidden = true; } });
 }
 
-byId("labelsEditClose").addEventListener("click", () => { byId("labelsEditOverlay").hidden = true; });
-
-// openMarksEditor edits the BOARD's mark template: which marks a new session
-// gets, and the colour every test label without one of its own inherits.
-// Per-board rather than per-user because labels are shared with the board's
-// other members — two personal templates would build inconsistent sessions.
-function openMarksEditor(): void {
-  const overlay = byId("marksOverlay");
-  const box = byId("marksEditor");
-  const marks = boardMarks().map((m) => ({ ...m }));
-  const draw = (): void => {
-    box.replaceChildren();
-    marks.forEach((m, i) => {
-      const name = el("input", { class: "input", type: "text", value: m.name, placeholder: "напр. видели" }) as HTMLInputElement;
-      name.addEventListener("input", () => { m.name = name.value; });
-      const color = el("input", { class: "input", type: "color", value: m.color || "#888888" }) as HTMLInputElement;
-      color.addEventListener("input", () => { m.color = color.value; });
-      const rm = el("button", { class: "input danger", type: "button", text: "×", onclick: () => { marks.splice(i, 1); draw(); } });
-      box.append(el("div", { class: "sess-row" },
-        el("div", { class: "sess-head" }, name),
-        el("div", { class: "sess-actions" }, color, rm)));
-    });
-    const add = el("button", {
-      class: "input fld-add-row", type: "button", text: "+ отметка",
-      onclick: () => { marks.push({ mark: "m" + Date.now().toString(36), name: "", color: "#888888" }); draw(); },
-    });
-    const save = el("button", { class: "input", type: "button", text: "Сохранить" });
-    save.addEventListener("click", async () => {
-      const clean = marks.filter((m) => m.name.trim()).map((m) => ({ ...m, name: m.name.trim() }));
-      if (!clean.length) { byId("marksMessage").textContent = "Нужна хотя бы одна отметка."; return; }
-      const json = JSON.stringify(clean);
-      try {
-        await post("setMarkTemplate", `/api/boards/${boardId}/mark-template`, { mark_template_enc: await xyCrypto.encField(mustDK(), json) });
-        state.markTemplate = json;
-        render();
-        byId("marksMessage").textContent = "Сохранено.";
-      } catch (err) { byId("marksMessage").textContent = errMsg(err); }
-    });
-    box.append(el("div", { class: "sess-actions" }, add, save));
-  };
-  draw();
-  byId("marksMessage").textContent = "";
-  overlay.hidden = false;
-  overlayStack.open({ el: overlay, close: () => { overlay.hidden = true; } });
-}
-
-byId("marksBtn").addEventListener("click", openMarksEditor);
-byId("marksClose").addEventListener("click", () => { byId("marksOverlay").hidden = true; });
-
-// labelLastUsageCounts: label id → how many live cards carry it.
-function labelLastUsageCounts(): Map<number, number> {
+// labelUsageCounts: label id → how many live cards carry it, either way.
+function labelUsageCounts(): Map<number, number> {
   const counts = new Map<number, number>();
-  for (const c of state.cards) {
-    for (const id of state.cardLabels[c.id] || []) counts.set(id, (counts.get(id) || 0) + 1);
+  const live = new Set(state.cards.map((c) => c.id));
+  for (const a of state.cardLabels) {
+    if (!live.has(a.cardId)) continue;
+    counts.set(a.labelId, (counts.get(a.labelId) || 0) + 1);
   }
   return counts;
 }
+
+byId("labelsEditClose").addEventListener("click", () => { byId("labelsEditOverlay").hidden = true; });
+
 
 // NB: `newLabelForm` (the retained node), not getElementById — the form is
 // detached from the document above and lives inside the popup while it is open.
@@ -2879,15 +3011,14 @@ newLabelForm.addEventListener("submit", async (e) => {
       name_enc: await xyCrypto.encField(mustDK(), name),
       color_enc: await xyCrypto.encField(mustDK(), color),
     });
-    const lbl: BoardLabel = { id: res.id as number, kind: "normal", name, color, sessionId: null, mark: "" };
+    const lbl: BoardLabel = { id: res.id as number, name, color };
     state.labels.push(lbl);
     byId<HTMLInputElement>("newLabelName").value = "";
     const card = state.cards.find((c) => c.id === cardDetail.openCardId());
-    // The form is now reachable only from inside the add-label popup, so naming a
-    // label there means you want it ON this card — assign it instead of merely
-    // creating it and making the user reopen the popup to pick what they just
-    // typed. toggleLabel does the API call, re-renders and closes the popup.
-    if (card) await toggleLabel(card, lbl);
+    // The form is reachable only from inside the add-label popup, so naming a
+    // label there means you want it ON this card — assign it instead of making
+    // the user reopen the popup to pick what they just typed.
+    if (card) await setLabel(card, lbl, null, true);
   } catch (err) { byId("cardMessage").textContent = errMsg(err); }
 });
 

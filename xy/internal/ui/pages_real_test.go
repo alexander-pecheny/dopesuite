@@ -49,14 +49,14 @@ var loadBearingClasses = map[string][]string{
 }
 
 var (
-	idGetRe    = regexp.MustCompile(`getElementById\("([^"]+)"\)`)
+	idGetRe = regexp.MustCompile(`getElementById\("([^"]+)"\)`)
 	// wireModal(overlayId, openBtnId, cancelBtnId, …) hands its ids in as STRING
 	// ARGUMENTS, so idGetRe never sees them — a whole family of /profile buttons
 	// was invisible to this contract until a missing one bricked the page at
 	// module load (byId throws, so nothing after it binds, incl. «Выйти»).
 	wireModalRe = regexp.MustCompile(`wireModal\("([A-Za-z0-9_-]+)",\s*"([A-Za-z0-9_-]+)"(?:,\s*"([A-Za-z0-9_-]+)")?`)
-	idQueryRe  = regexp.MustCompile(`querySelector(?:All)?\("#([A-Za-z0-9_-]+)"[^"]*"?\)`)
-	importReJS = regexp.MustCompile(`from\s+"\./([a-z0-9_-]+\.js)"|import\s+"\./([a-z0-9_-]+\.js)"`)
+	idQueryRe   = regexp.MustCompile(`querySelector(?:All)?\("#([A-Za-z0-9_-]+)"[^"]*"?\)`)
+	importReJS  = regexp.MustCompile(`from\s+"\./([a-z0-9_-]+\.js)"|import\s+"\./([a-z0-9_-]+\.js)"`)
 	// The built ESM lives under /static/dist/, so a pattern without the optional
 	// path segment matched only the kit's /static/menu.js — i.e. this contract
 	// silently covered none of xy's own page scripts.

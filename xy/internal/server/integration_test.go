@@ -275,7 +275,7 @@ func TestFullFlow(t *testing.T) {
 	c.decode(resp, &labelC)
 	resp = c.do("PUT", "/api/cards/"+cardID+"/labels", map[string]any{
 		"labels": []map[string]any{{"label_id": labelC.ID}},
-		"events":    []map[string]string{{"type": "label_add", "payload_enc": enc(`{"label":"hard"}`)}},
+		"events": []map[string]string{{"type": "label_add", "payload_enc": enc(`{"label":"hard"}`)}},
 	})
 	mustStatus(t, resp, 204)
 

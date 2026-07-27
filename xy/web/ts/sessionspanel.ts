@@ -6,8 +6,9 @@
 // A create(deps) kernel like the board's others; board.ts owns the wiring.
 
 import {
-  allZones, type AnnounceCity, humanDate, inviteLine, type Mark, newKey,
-  parseSession, serializeSession, type SessionMeta, sessionLabel, zoneOffset,
+  allZones, type AnnounceCity, formatDate, humanDate, inviteLine, newKey,
+  parseDate, parseSession, parseTime, serializeSession, type SessionMeta,
+  sessionLabel, zoneOffset,
 } from "./sessions.js";
 import { TOWNS } from "./towns.js";
 import type { BoardSession } from "./unlock.js";
@@ -22,8 +23,7 @@ export interface SessionsPanelDeps {
   boardName(): string;
   defaultTimezone(): string;
   defaultCities(): AnnounceCity[];
-  marks(): Mark[];
-  labelCountFor(sessionId: number): number;
+  playedCount(sessionId: number): number;
   createSession(meta: string): Promise<number>;
   patchSession(id: number, meta: string): Promise<void>;
   deleteSession(id: number): Promise<void>;
@@ -87,11 +87,11 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       const counts: string[] = [];
       if (players) counts.push(`${players} игр.`);
       if (teams) counts.push(`${teams} ком.`);
-      const marked = deps.labelCountFor(s.id);
+      const marked = deps.playedCount(s.id);
 
       const head = el("div", { class: "sess-head" },
         el("span", { class: "sess-title", text: sessionLabel(m) || "(без даты)" }),
-        el("span", { class: "sess-meta", text: [m.time, counts.join(", "), marked ? `${marked} мет.` : ""].filter(Boolean).join(" · ") }),
+        el("span", { class: "sess-meta", text: [m.time, counts.join(", "), marked ? `${marked} вопр.` : ""].filter(Boolean).join(" · ") }),
       );
       // A copied session says how stale it might be (ADR-0003) — its testers are
       // frozen at transfer time, and that list is what «Видели» reads.
@@ -149,18 +149,25 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     const box = byId("sessionForm");
     box.replaceChildren();
 
-    const dateInp = el("input", { class: "input", type: "date", value: m.date }) as HTMLInputElement;
+    const dateInp = el("input", {
+      class: "input", type: "text", value: formatDate(m.date), placeholder: "дд.мм.гггг", autocomplete: "off",
+    }) as HTMLInputElement;
     // Date only by default (issue #33): most tests never need a time, and the
     // ones that do get a zone with it.
-    const timeInp = el("input", { class: "input", type: "time", value: m.time }) as HTMLInputElement;
-    const tzInp = el("input", { class: "input", type: "text", value: m.tz, placeholder: "Europe/Moscow" }) as HTMLInputElement;
-    const titleInp = el("input", { class: "input", type: "text", value: m.title, placeholder: "напр. «Алиев и др.»" }) as HTMLInputElement;
+    const timeInp = el("input", {
+      class: "input", type: "text", value: m.time, placeholder: "чч:мм", autocomplete: "off",
+    }) as HTMLInputElement;
+    const tzInp = el("input", {
+      class: "input", type: "text", value: m.tz, placeholder: "Europe/Moscow", autocomplete: "off",
+    }) as HTMLInputElement;
+    autocomplete(tzInp, zoneChoices);
+    const titleInp = el("input", { class: "input", type: "text", value: m.title, placeholder: "короткое имя теста — напр. «Алиев и др.»" }) as HTMLInputElement;
 
     box.append(
       field("Дата", dateInp),
       field("Время (необязательно)", timeInp),
-      field("Часовой пояс времени", tzInp),
-      field("Название", titleInp),
+      field("Часовой пояс", tzInp),
+      field("Алиас", titleInp),
     );
 
     // Announce cities: the invite line's whole point.
@@ -244,6 +251,9 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     box.append(field("Тестировали", el("div", {}, rows, add)));
     testerRows = () => [...rows.querySelectorAll<TesterRow>(".tester-row")].map((r) => (r._read as () => Tester)());
 
+    // Saving and copying come BEFORE the лента: they act on the fields above, and
+    // burying them under a comment thread of unknown length puts the button you
+    // came for off the bottom of the modal.
     const summary = el("button", {
       class: "input", type: "button", text: "👥 Скопировать список тестеров",
       onclick: () => {
@@ -251,23 +261,32 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
         if (line) void deps.copyText(line);
       },
     });
-    // The debrief: what was said at this test, across every question. Today that
-    // is unrecoverable, because a comment records only which card it sits on.
-    const notes = el("div", { class: "sess-notes" });
-    const noteInput = el("input", { class: "input", type: "text", placeholder: "Заметка о тесте…" }) as HTMLInputElement;
-    const noteAdd = el("button", { class: "input", type: "button", text: "Добавить" });
-    noteAdd.addEventListener("click", () => { void postNote(noteInput); });
-    box.append(field("Обсуждали на тесте", el("div", {}, notes, el("div", { class: "sess-actions" }, noteInput, noteAdd))));
-    void drawNotes(notes);
-
     const save = el("button", { class: "input", type: "button", text: "Сохранить" });
     save.addEventListener("click", () => { void saveSession(m, cities); });
     const drop = el("button", { class: "input danger", type: "button", text: "🗑️ Удалить тест" });
     drop.addEventListener("click", () => { void removeSession(); });
     box.append(el("div", { class: "sess-actions" }, save, summary, drop));
 
+    // The debrief reuses the card's лента markup — .tl-item / .tl-meta / .tl-body
+    // and the comment form's shape — so a note here reads exactly like a comment
+    // there instead of being a second, slightly-different comment UI.
+    const notes = el("div", { class: "timeline sess-notes" });
+    const noteInput = el("textarea", {
+      class: "input comment-input", rows: "2", placeholder: "Заметка о тесте…", spellcheck: "false",
+    }) as HTMLTextAreaElement;
+    const noteAdd = el("button", { class: "btn btn-small", type: "button", text: "Отправить" });
+    noteAdd.addEventListener("click", () => { void postNote(noteInput); });
+    box.append(field("Лента теста", el("div", { class: "sess-feed" }, notes,
+      el("div", { class: "sess-actions" }, noteInput, noteAdd))));
+    void drawNotes(notes);
+
     function read(): { date: string; time: string; tz: string; title: string } {
-      return { date: dateInp.value, time: timeInp.value, tz: tzInp.value.trim(), title: titleInp.value.trim() };
+      return {
+        date: parseDate(dateInp.value) || m.date,
+        time: parseTime(timeInp.value),
+        tz: tzInp.value.trim(),
+        title: titleInp.value.trim(),
+      };
     }
     formRead = () => read();
     previewInvite();
@@ -285,16 +304,21 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       box.replaceChildren();
       if (!notes.length) { box.append(el("p", { class: "label-empty", text: "Пока ничего." })); return; }
       for (const n of notes) {
-        box.append(el("p", { class: "sess-note" },
-          el("span", { class: "sess-meta", text: n.card ? "к вопросу · " : "о тесте · " }),
-          el("span", { text: n.text })));
+        box.append(el("div", { class: "tl-item" },
+          el("div", { class: "tl-meta", text: (n.card ? "к вопросу" : "о тесте") + " · " + shortWhen(n.when) }),
+          el("div", { class: "tl-body", text: n.text })));
       }
     } catch (_) {
       box.replaceChildren(el("p", { class: "label-empty", text: "Не удалось загрузить." }));
     }
   }
 
-  async function postNote(input: HTMLInputElement): Promise<void> {
+  function shortWhen(iso: string): string {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("ru-RU");
+  }
+
+  async function postNote(input: HTMLTextAreaElement): Promise<void> {
     const text = input.value.trim();
     if (!text || editing == null) return;
     try {

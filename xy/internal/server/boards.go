@@ -209,18 +209,18 @@ type boardSnapshot struct {
 	Name    string `json:"name"`     // plaintext (schema_version 2); "" for legacy
 	NameEnc string `json:"name_enc"` // legacy ciphertext (schema_version 1 fallback)
 	// SchemaVersion: 1 = name still encrypted in name_enc; 2 = name is plaintext.
-	SchemaVersion int                  `json:"schema_version"`
-	Role          string               `json:"role"`
-	Lists         []listDTO            `json:"lists"`
-	Groups        []groupDTO           `json:"groups"`
-	Cards         []cardDTO            `json:"cards"`
-	Labels        []labelDTO           `json:"labels"`
-	Sessions      []sessionDTO         `json:"sessions"`
-	CardLabels    []cardLabelDTO       `json:"card_labels"`
+	SchemaVersion int            `json:"schema_version"`
+	Role          string         `json:"role"`
+	Lists         []listDTO      `json:"lists"`
+	Groups        []groupDTO     `json:"groups"`
+	Cards         []cardDTO      `json:"cards"`
+	Labels        []labelDTO     `json:"labels"`
+	Sessions      []sessionDTO   `json:"sessions"`
+	CardLabels    []cardLabelDTO `json:"card_labels"`
 	// CardSessions is the Playings: card id → the sessions that question was
 	// played at. What the «Видели» line reads, and what a scoped label hangs off.
-	CardSessions map[string][]int64 `json:"card_sessions"`
-	Unread        map[string]unreadDTO `json:"unread"`
+	CardSessions map[string][]int64   `json:"card_sessions"`
+	Unread       map[string]unreadDTO `json:"unread"`
 	// Sizes is the CALLER's display layout ({boardW,listW,cardLines}) — a per-user,
 	// all-boards preference (users.sizes, plaintext JSON; see migrateV9), delivered
 	// here alongside the snapshot's other caller-specific fields (role, unread) so

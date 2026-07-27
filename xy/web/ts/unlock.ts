@@ -51,14 +51,17 @@ export interface BoardCard {
 }
 export interface BoardLabel {
   id: number;
-  kind: string;
-  // For a test label `name` is only the chgksuite cache; what the board shows is
-  // derived from its session (sessions.ts#markLabel). "" colour = inherit the
-  // board's mark template for this label's mark.
   name: string;
   color: string;
+}
+
+// One label ASSIGNMENT. sessionId null = the author's own view of the question;
+// set = what the testers thought at that sitting (ADR-0004). The same label may
+// appear on one card twice, once each way.
+export interface CardLabel {
+  cardId: number;
+  labelId: number;
   sessionId: number | null;
-  mark: string;
 }
 
 // A Test Session as the board holds it: the decrypted meta_enc, parsed lazily by
@@ -80,7 +83,10 @@ export interface BoardState {
   cards: BoardCard[];
   labels: BoardLabel[];
   sessions: BoardSession[];
-  cardLabels: Record<string, number[]>;
+  cardLabels: CardLabel[];
+  // The Playings: card id → the sessions that question was played at. What
+  // «Видели» reads; a scoped label hangs off one of these.
+  cardSessions: Record<string, number[]>;
   unread: Record<string, UnreadFlags>;
   sizes: Sizes;
   defaultAuthor: string;
@@ -90,8 +96,6 @@ export interface BoardState {
   // Which form a session's derived name takes — the reader's own choice, per
   // issue #8. "date-title" | "title" | "date"; "" is the default.
   sessionTitleMode: string;
-  // The board's mark template, decrypted; "" means the built-in взяли/не взяли.
-  markTemplate: string;
 }
 
 // ---- the ciphertext snapshot (GET /api/boards/{id} shape, as load reads it) ----
@@ -103,7 +107,7 @@ export interface Snapshot {
   sizes?: unknown;
   default_author?: string;
   card_title?: string;
-  card_labels?: Record<string, number[]>;
+  card_labels?: Array<{ card_id: number; label_id: number; session_id?: number | null }>;
   unread?: Record<string, UnreadFlags>;
   lists?: Array<{ id: number; type: string; rank: string; group_id?: number | null; title_enc: string }>;
   groups?: Array<{ id: number; name_enc: string }>;
@@ -111,15 +115,12 @@ export interface Snapshot {
     id: number; list_id: number; kind: string; rank: string;
     description_enc: string; handout_meta_enc?: string | null; alias_enc?: string | null; created_at?: string | null;
   }>;
-  labels?: Array<{
-    id: number; kind: string; name_enc: string; color_enc: string;
-    session_id?: number | null; mark?: string;
-  }>;
+  labels?: Array<{ id: number; name_enc: string; color_enc: string }>;
+  card_sessions?: Record<string, number[]>;
   sessions?: Array<{ id: number; meta_enc: string; created_at?: string | null }>;
   timezone?: string;
   announce_cities?: unknown;
   session_title_mode?: string;
-  mark_template_enc?: string;
   [key: string]: unknown;
 }
 
@@ -291,7 +292,10 @@ export function createUnlock(deps: UnlockDeps): Unlock {
       const state: BoardState = {
         role: snap.role || "editor",
         name,
-        cardLabels: snap.card_labels || {},
+        cardLabels: (snap.card_labels || []).map((a) => ({
+          cardId: a.card_id, labelId: a.label_id, sessionId: a.session_id != null ? a.session_id : null,
+        })),
+        cardSessions: snap.card_sessions || {},
         unread: snap.unread || {},
         sizes,
         defaultAuthor: snap.default_author || "",
@@ -299,7 +303,6 @@ export function createUnlock(deps: UnlockDeps): Unlock {
         timezone: snap.timezone || "",
         sessionTitleMode: snap.session_title_mode || "",
         announceCities: snap.announce_cities ?? null,
-        markTemplate: snap.mark_template_enc ? await crypto.decField(key, snap.mark_template_enc) : "",
         lists: await Promise.all((snap.lists || []).map(async (l) => ({
           id: l.id, type: l.type, rank: l.rank, groupId: l.group_id != null ? l.group_id : null,
           title: await crypto.decField(key, l.title_enc),
@@ -315,11 +318,9 @@ export function createUnlock(deps: UnlockDeps): Unlock {
           createdAt: c.created_at || null,
         }))),
         labels: await Promise.all((snap.labels || []).map(async (l) => ({
-          id: l.id, kind: l.kind,
+          id: l.id,
           name: await crypto.decField(key, l.name_enc),
-          color: l.color_enc ? await crypto.decField(key, l.color_enc) : "",
-          sessionId: l.session_id != null ? l.session_id : null,
-          mark: l.mark || "",
+          color: await crypto.decField(key, l.color_enc),
         }))),
         sessions: await Promise.all((snap.sessions || []).map(async (s) => ({
           id: s.id, meta: await crypto.decField(key, s.meta_enc), createdAt: s.created_at || null,

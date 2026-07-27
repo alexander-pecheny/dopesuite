@@ -21,7 +21,7 @@ import { xyRank } from "./rank.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { CardFields, Handout, Tester, TesterLike } from "./chgk.js";
-import type { BoardCard, BoardLabel, BoardList, BoardSession, Snapshot, UnreadFlags } from "./unlock.js";
+import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Snapshot, UnreadFlags } from "./unlock.js";
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
 
@@ -51,7 +51,8 @@ export interface CardDetailState {
   lists: BoardList[];
   cards: BoardCard[];
   labels: BoardLabel[];
-  cardLabels: Record<string, number[]>;
+  cardLabels: CardLabel[];
+  cardSessions: Record<string, number[]>;
   sessions: BoardSession[];
   unread: Record<string, UnreadFlags>;
   defaultAuthor: string;
@@ -136,7 +137,7 @@ export interface CardReturn {
 
 // moveCtx: the currently-selected destination board for move/copy — its DK,
 // lists (with titles) and cards-per-list (for computing the insertion rank).
-export interface MoveLabel { id: number; kind?: string; name: string; color: string; sessionId?: number | null; mark?: string }
+export interface MoveLabel { id: number; name: string; color: string }
 // A target board's sessions, decrypted, so a transferred test label can find the
 // sitting it belongs to instead of matching on a name that may render differently.
 export interface MoveSession { id: number; meta: string }
@@ -165,7 +166,8 @@ export interface CardDetail {
   loadMoveBoard(bid: number): Promise<MoveCtx>;
   cardCopyBody(src: BoardCard, rank: string, key: DataKey): Promise<OpBody>;
   copyCardExtras(srcCardId: number, targetDk: DataKey, newCardId: number): Promise<void>;
-  reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number[]>;
+  reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<Array<{ label_id: number; session_id: number | null }>>;
+  reconcilePlayings(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number[]>;
 }
 
 interface FieldReader<T> { node: HTMLElement; read(): T }
@@ -1023,11 +1025,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       cardsByList.set(l.id, (snap.cards || []).filter((c) => c.list_id === l.id).map((c) => ({ id: c.id, rank: c.rank })).sort(byRank));
     }
     const labels = await Promise.all((snap.labels || []).map(async (l) => ({
-      id: l.id, kind: l.kind,
+      id: l.id,
       name: await xyCrypto.decField(tdk, l.name_enc),
-      color: l.color_enc ? await xyCrypto.decField(tdk, l.color_enc) : "",
-      sessionId: l.session_id != null ? l.session_id : null,
-      mark: l.mark || "",
+      color: await xyCrypto.decField(tdk, l.color_enc),
     })));
     const sessions = await Promise.all((snap.sessions || []).map(async (s) => ({
       id: s.id, meta: await xyCrypto.decField(tdk, s.meta_enc),
@@ -1138,69 +1138,71 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     }
   }
 
-  // reconcileLabels maps a source card's labels onto the target board, creating
-  // whatever is missing there. A normal label matches on decrypted name+colour; a
-  // TEST label cannot, because its name is derived and two readers may render it
-  // differently — it matches on its session's `key`, the id of the sitting, which
-  // is copied verbatim on transfer.
+  // reconcileLabels maps a source card's label assignments onto the target board,
+  // creating whatever is missing there. A label matches on decrypted name+colour.
+  // An assignment SCOPED to a playing needs that playing on the target too, so
+  // its session is copied across first, matched on `key` — the id of the sitting,
+  // which travels verbatim (ADR-0003) because a derived name may render
+  // differently for two readers.
   //
   // The session itself has to be copied: boards share no key, so nothing can be
   // referenced across one. The copy carries an `origin` stamp because it diverges
-  // from its original the moment either is edited, and the tester list is what
-  // «Видели» reads (ADR-0003). ctx is the target board's running state, mutated
-  // so a batch of copies reuses what it just created.
-  async function reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number[]> {
-    const srcIds = state().cardLabels[srcCardId] || [];
-    const targetIds: number[] = [];
-    for (const sid of srcIds) {
-      const sl = deps.labelById(sid);
+  // from its original the moment either is edited, and its tester list is what
+  // «Видели» reads. ctx is the target board's running state, mutated so a batch
+  // of copies reuses what it just created.
+  async function reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<Array<{ label_id: number; session_id: number | null }>> {
+    const out: Array<{ label_id: number; session_id: number | null }> = [];
+    for (const a of state().cardLabels.filter((x) => x.cardId === srcCardId)) {
+      const sl = deps.labelById(a.labelId);
       if (!sl) continue;
-      if (sl.kind === "test" && sl.sessionId != null) {
-        const id = await reconcileTestLabel(sl, targetBid, targetDk, ctx);
-        if (id != null) targetIds.push(id);
-        continue;
-      }
-      let match = ctx.labels.find((t) => t.kind !== "test" && t.name === sl.name && t.color === sl.color);
+      let match = ctx.labels.find((t) => t.name === sl.name && t.color === sl.color);
       if (!match) {
         const lr = (await jpost(`/api/boards/${targetBid}/labels`, {
-          name_enc: await xyCrypto.encField(targetDk, sl.name), color_enc: await xyCrypto.encField(targetDk, sl.color), kind: "normal",
+          name_enc: await xyCrypto.encField(targetDk, sl.name),
+          color_enc: await xyCrypto.encField(targetDk, sl.color),
         })) as { id: number };
         match = { id: lr.id, name: sl.name, color: sl.color };
         ctx.labels.push(match);
       }
-      targetIds.push(match.id);
+      let sessionID: number | null = null;
+      if (a.sessionId != null) {
+        sessionID = await reconcileSession(a.sessionId, targetBid, targetDk, ctx);
+        if (sessionID == null) continue; // a session that predates keys can't be matched
+      }
+      out.push({ label_id: match.id, session_id: sessionID });
     }
-    return targetIds;
+    return out;
   }
 
-  async function reconcileTestLabel(sl: BoardLabel, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number | null> {
-    const src = state().sessions.find((s) => s.id === sl.sessionId);
+  // reconcilePlayings copies the card's Playings — which tests it was played at —
+  // and returns the target board's ids for them.
+  async function reconcilePlayings(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number[]> {
+    const out: number[] = [];
+    for (const sid of state().cardSessions[srcCardId] || []) {
+      const id = await reconcileSession(sid, targetBid, targetDk, ctx);
+      if (id != null) out.push(id);
+    }
+    return out;
+  }
+
+  async function reconcileSession(srcSessionId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number | null> {
+    const src = state().sessions.find((s) => s.id === srcSessionId);
     if (!src) return null;
     const meta = parseSession(src.meta);
-    if (!meta.key) return null; // a session that predates keys can't be matched safely
+    if (!meta.key) return null;
 
-    let session = ctx.sessions.find((s) => parseSession(s.meta).key === meta.key);
-    if (!session) {
-      const copy = serializeSession({
-        ...meta,
-        origin: meta.origin || { board: state().name, at: new Date().toISOString().slice(0, 10) },
-      });
-      const sr = (await jpost(`/api/boards/${targetBid}/sessions`, {
-        meta_enc: await xyCrypto.encField(targetDk, copy),
-      })) as { id: number };
-      session = { id: sr.id, meta: copy };
-      ctx.sessions.push(session);
-    }
-
-    const found = ctx.labels.find((t) => t.sessionId === session.id && t.mark === sl.mark);
+    const found = ctx.sessions.find((s) => parseSession(s.meta).key === meta.key);
     if (found) return found.id;
-    const lr = (await jpost(`/api/boards/${targetBid}/labels`, {
-      name_enc: await xyCrypto.encField(targetDk, sl.name),
-      color_enc: "", // null = inherit the target board's mark template
-      kind: "test", session_id: session.id, mark: sl.mark,
+
+    const copy = serializeSession({
+      ...meta,
+      origin: meta.origin || { board: state().name, at: new Date().toISOString().slice(0, 10) },
+    });
+    const sr = (await jpost(`/api/boards/${targetBid}/sessions`, {
+      meta_enc: await xyCrypto.encField(targetDk, copy),
     })) as { id: number };
-    ctx.labels.push({ id: lr.id, name: sl.name, color: "", kind: "test", sessionId: session.id, mark: sl.mark });
-    return lr.id;
+    ctx.sessions.push({ id: sr.id, meta: copy });
+    return sr.id;
   }
 
   async function doMoveCopy(remove: boolean): Promise<void> {
@@ -1229,15 +1231,30 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
           const dk = mustDK();
           const res = (await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, dk))) as { id: number };
           state().cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc, handoutMeta: card.handoutMeta || null, alias: card.alias || null, createdAt: nowStamp() });
-          const ids = state().cardLabels[card.id] || [];
-          if (ids.length) { await jput(`/api/cards/${res.id}/labels`, { label_ids: ids }); state().cardLabels[res.id] = ids.slice(); }
+          // Same board: the labels and the playings are already there, so the copy
+          // just repeats the assignments verbatim.
+          const own = state().cardLabels.filter((a) => a.cardId === card.id);
+          const plays = (state().cardSessions[card.id] || []).slice();
+          if (plays.length) {
+            await jput(`/api/cards/${res.id}/sessions`, { session_ids: plays });
+            state().cardSessions[res.id] = plays;
+          }
+          if (own.length) {
+            await jput(`/api/cards/${res.id}/labels`, {
+              labels: own.map((a) => ({ label_id: a.labelId, session_id: a.sessionId })),
+            });
+            state().cardLabels.push(...own.map((a) => ({ ...a, cardId: res.id })));
+          }
           await copyCardExtras(card.id, dk, res.id);
         }
       } else {
         const tdk = moveCtx.dk;
         const res = (await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, tdk))) as { id: number };
-        const targetIds = await reconcileLabels(card.id, targetBid, tdk, moveCtx);
-        if (targetIds.length) await jput(`/api/cards/${res.id}/labels`, { label_ids: targetIds });
+        // Playings first: a scoped assignment must name one that already exists.
+        const plays = await reconcilePlayings(card.id, targetBid, tdk, moveCtx);
+        if (plays.length) await jput(`/api/cards/${res.id}/sessions`, { session_ids: plays });
+        const assignments = await reconcileLabels(card.id, targetBid, tdk, moveCtx);
+        if (assignments.length) await jput(`/api/cards/${res.id}/labels`, { labels: assignments });
         await copyCardExtras(card.id, tdk, res.id);
         if (remove) {
           await jdelete(`/api/cards/${card.id}`);
@@ -1571,6 +1588,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     copyCommentLink,
     loadMoveBoard,
     cardCopyBody,
-    copyCardExtras, reconcileLabels,
+    copyCardExtras, reconcileLabels, reconcilePlayings,
   };
 }
