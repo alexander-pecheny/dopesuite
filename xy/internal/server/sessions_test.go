@@ -35,22 +35,16 @@ func TestSessionFlow(t *testing.T) {
 	}
 	sid := itoa(session.ID)
 
-	// A test label needs both a session and a mark; a null colour means "inherit
-	// the board's mark template", which is a legal state, not a missing field.
+	// A label is just a label; what makes it a test's verdict is the ASSIGNMENT
+	// carrying the session (ADR-0004).
 	resp = c.do("POST", "/api/boards/"+board+"/labels", map[string]any{
-		"name_enc": enc("20 июля · Алиев и др."), "color_enc": "", "kind": "test",
-		"session_id": session.ID, "mark": "taken",
+		"name_enc": enc("взяли"), "color_enc": enc("#3aa657"),
 	})
 	mustStatus(t, resp, 200)
 	var label struct {
 		ID int64 `json:"id"`
 	}
 	c.decode(resp, &label)
-
-	resp = c.do("POST", "/api/boards/"+board+"/labels", map[string]any{
-		"name_enc": enc("x"), "color_enc": enc("#fff"), "kind": "test",
-	})
-	mustStatus(t, resp, 400) // test label with no session
 
 	// A note about the test itself: no question attached.
 	resp = c.do("POST", "/api/sessions/"+sid+"/comments", map[string]string{"payload_enc": enc("шли дольше обычного")})
@@ -78,15 +72,6 @@ func TestSessionFlow(t *testing.T) {
 	if len(snap.Labels) != 1 {
 		t.Fatalf("snapshot labels = %d, want 1", len(snap.Labels))
 	}
-	if got := snap.Labels[0]; got.Mark != "taken" || got.SessionID == nil || *got.SessionID != session.ID {
-		t.Errorf("label = %+v, want mark taken bound to the session", got)
-	}
-	if snap.Labels[0].ColorEnc != "" {
-		t.Errorf("colour = %q, want empty (inherit)", snap.Labels[0].ColorEnc)
-	}
-
-	resp = c.do("POST", "/api/boards/"+board+"/mark-template", map[string]string{"mark_template_enc": enc("tmpl")})
-	mustStatus(t, resp, 204)
 
 	resp = c.do("PATCH", "/api/sessions/"+sid, map[string]string{"meta_enc": enc("edited")})
 	mustStatus(t, resp, 204)
@@ -102,11 +87,10 @@ func TestSessionFlow(t *testing.T) {
 	if len(snap.Sessions) != 0 {
 		t.Errorf("sessions after delete = %d, want 0", len(snap.Sessions))
 	}
-	if len(snap.Labels) != 0 {
-		t.Errorf("labels after session delete = %d, want 0", len(snap.Labels))
-	}
-	if snap.MarkTemplateEnc != enc("tmpl") {
-		t.Errorf("mark template = %q", snap.MarkTemplateEnc)
+	// The label survives its session: it is an ordinary board label, and only the
+	// assignments scoped to the session go.
+	if len(snap.Labels) != 1 {
+		t.Errorf("labels after session delete = %d, want 1", len(snap.Labels))
 	}
 }
 

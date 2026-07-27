@@ -216,7 +216,10 @@ type boardSnapshot struct {
 	Cards         []cardDTO            `json:"cards"`
 	Labels        []labelDTO           `json:"labels"`
 	Sessions      []sessionDTO         `json:"sessions"`
-	CardLabels    map[string][]int64   `json:"card_labels"`
+	CardLabels    []cardLabelDTO       `json:"card_labels"`
+	// CardSessions is the Playings: card id → the sessions that question was
+	// played at. What the «Видели» line reads, and what a scoped label hangs off.
+	CardSessions map[string][]int64 `json:"card_sessions"`
 	Unread        map[string]unreadDTO `json:"unread"`
 	// Sizes is the CALLER's display layout ({boardW,listW,cardLines}) — a per-user,
 	// all-boards preference (users.sizes, plaintext JSON; see migrateV9), delivered
@@ -240,10 +243,6 @@ type boardSnapshot struct {
 	// SessionTitleMode is how the reader wants a session's derived name written
 	// (issue #8): "date-title" (the default), "title" or "date".
 	SessionTitleMode string `json:"session_title_mode,omitempty"`
-	// MarkTemplateEnc is the BOARD's mark template — which marks a new session
-	// gets, and the colour a test label inherits when its own is null. Empty means
-	// the client's built-in «взяли»/«не взяли» pair.
-	MarkTemplateEnc string `json:"mark_template_enc,omitempty"`
 }
 
 // unreadDTO flags, per card, whether the caller has unread events in either
@@ -260,18 +259,15 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: map[string][]int64{}, Unread: map[string]unreadDTO{}}
+	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: map[string][]int64{}, Unread: map[string]unreadDTO{}}
 
 	var name sql.NullString
-	var nameEnc, markTemplate []byte
-	if err := s.db.QueryRowContext(ctx, `select name, name_enc, schema_version, mark_template_enc from boards where id = ?`, bid).Scan(&name, &nameEnc, &snap.SchemaVersion, &markTemplate); handleErr(w, err) {
+	var nameEnc []byte
+	if err := s.db.QueryRowContext(ctx, `select name, name_enc, schema_version from boards where id = ?`, bid).Scan(&name, &nameEnc, &snap.SchemaVersion); handleErr(w, err) {
 		return
 	}
 	snap.Name = name.String
 	snap.NameEnc = b64(nameEnc)
-	if markTemplate != nil {
-		snap.MarkTemplateEnc = b64(markTemplate)
-	}
 
 	// The caller's per-user display prefs (see boardSnapshot.Sizes /
 	// .DefaultAuthor), shared across all their boards — keyed on the user, not
@@ -324,7 +320,7 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	snap.Sessions = sessions
 
 	clRows, err := s.db.QueryContext(ctx, `
-select cl.card_id, cl.label_id
+select cl.card_id, cl.label_id, cl.session_id
 from card_labels cl join cards c on c.id = cl.card_id
 where c.board_id = ? and c.deleted_at is null`, bid)
 	if handleErr(w, err) {
@@ -332,12 +328,32 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 	}
 	defer clRows.Close()
 	for clRows.Next() {
-		var cardID, labelID int64
-		if err := clRows.Scan(&cardID, &labelID); handleErr(w, err) {
+		var a cardLabelDTO
+		var sessionID sql.NullInt64
+		if err := clRows.Scan(&a.CardID, &a.LabelID, &sessionID); handleErr(w, err) {
+			return
+		}
+		if sessionID.Valid {
+			a.SessionID = &sessionID.Int64
+		}
+		snap.CardLabels = append(snap.CardLabels, a)
+	}
+
+	csRows, err := s.db.QueryContext(ctx, `
+select cs.card_id, cs.session_id
+from card_sessions cs join cards c on c.id = cs.card_id
+where c.board_id = ? and c.deleted_at is null`, bid)
+	if handleErr(w, err) {
+		return
+	}
+	defer csRows.Close()
+	for csRows.Next() {
+		var cardID, sessionID int64
+		if err := csRows.Scan(&cardID, &sessionID); handleErr(w, err) {
 			return
 		}
 		key := strconv.FormatInt(cardID, 10)
-		snap.CardLabels[key] = append(snap.CardLabels[key], labelID)
+		snap.CardSessions[key] = append(snap.CardSessions[key], sessionID)
 	}
 
 	// Unread map: one row per card that has at least one event, authored by

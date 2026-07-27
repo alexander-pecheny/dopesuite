@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-// The data half of migrateV18: a test card becomes a Test Session, its labels
-// and comments follow it, and whatever cannot dissolve stays put. Run against a
-// migrated DB with legacy-shaped rows inserted by hand, so the assertions are
-// about the rebinding rather than the DDL (which every other test exercises by
-// simply booting).
+// The data half of migrateV18: a test card becomes a Test Session, its comments
+// follow it, every question it labelled gains a Playing, and whatever cannot
+// dissolve stays put. Run against a migrated DB with legacy-shaped rows inserted
+// by hand, so the assertions are about the rebinding rather than the DDL (which
+// every other test exercises by simply booting).
 func TestMigrateV18Sessions(t *testing.T) {
 	db := migratedDB(t)
 
@@ -18,22 +18,38 @@ func TestMigrateV18Sessions(t *testing.T) {
 	bid := insertBoard(t, db, uid, "board")
 	testList := insertList(t, db, bid, "test")
 	keepList := insertList(t, db, bid, "test")
+	questions := insertList(t, db, bid, "normal")
+
+	// migrateV18 has already flattened labels, so the pre-migration marker table
+	// is what says which labels were a session's own. Rebuild it by hand.
+	mustExec(t, db, `create table if not exists _v18_test_labels(id integer)`)
 
 	// A clean test card: only comments, so it should dissolve entirely.
 	clean := insertCard(t, db, bid, testList, "test", "session-one-ciphertext")
-	taken := insertLabel(t, db, bid, "test", "taken", "взяли")
-	missed := insertLabel(t, db, bid, "test", "missed", "не взяли")
+	taken := insertLabel(t, db, bid, "взяли")
+	missed := insertLabel(t, db, bid, "не взяли")
+	mustExec(t, db, `insert into _v18_test_labels(id) values(?), (?)`, taken, missed)
 	assignLabel(t, db, clean, taken)
 	assignLabel(t, db, clean, missed)
 	comment := insertEvent(t, db, bid, clean, "comment", "тест шёл дольше обычного")
 	edit := insertEvent(t, db, bid, clean, "desc_edit", "diff")
 
-	// A dirty one: an attachment has nowhere to go, so the card survives.
+	// Two questions: one the testers took, one they missed. Both were PLAYED.
+	q1 := insertCard(t, db, bid, questions, "question", "q1")
+	q2 := insertCard(t, db, bid, questions, "question", "q2")
+	assignLabel(t, db, q1, taken)
+	assignLabel(t, db, q2, missed)
+
+	// A hand-made label that merely happens to sit on the test card must NOT drag
+	// every card carrying it into the session.
+	topic := insertLabel(t, db, bid, "поэзия")
+	assignLabel(t, db, clean, topic)
+	q3 := insertCard(t, db, bid, questions, "question", "q3")
+	assignLabel(t, db, q3, topic)
+
+	// A dirty test card: an attachment has nowhere to go, so the card survives.
 	dirty := insertCard(t, db, bid, keepList, "test", "session-two-ciphertext")
 	insertAttachment(t, db, bid, dirty)
-
-	// A Trello import's green label: test-kinded, but bound to no session.
-	orphan := insertLabel(t, db, bid, "test", "taken", "поэзия")
 
 	if err := migrateV18Sessions(db); err != nil {
 		t.Fatalf("migrateV18Sessions: %v", err)
@@ -43,27 +59,33 @@ func TestMigrateV18Sessions(t *testing.T) {
 		t.Fatalf("sessions created = %d, want 2", got)
 	}
 	// The session carries the card's ciphertext verbatim — nothing decrypts here.
-	cleanSession := scalarInt(t, db,
+	session := scalarInt(t, db,
 		`select id from test_sessions where meta_enc = ?`, []byte("session-one-ciphertext"))
-	if cleanSession == 0 {
+	if session == 0 {
 		t.Fatal("no session carries the clean card's ciphertext")
 	}
 
-	for _, id := range []int64{taken, missed} {
-		if got := scalarInt(t, db, `select coalesce(session_id, 0) from labels where id = ?`, id); got != cleanSession {
-			t.Errorf("label %d session_id = %d, want %d", id, got, cleanSession)
+	// Playings, not labels, are what «Видели» reads.
+	for _, id := range []int64{q1, q2} {
+		if got := scalarInt(t, db, `select count(*) from card_sessions where card_id = ? and session_id = ?`, id, session); got != 1 {
+			t.Errorf("card %d has no playing for the session", id)
 		}
 	}
-	if kind := scalarStr(t, db, `select kind from labels where id = ?`, orphan); kind != "normal" {
-		t.Errorf("orphan test label kind = %q, want normal", kind)
+	if got := scalarInt(t, db, `select count(*) from card_sessions where card_id = ?`, q3); got != 0 {
+		t.Error("a hand-made label dragged an unrelated card into the session")
 	}
-	if name := scalarStr(t, db, `select cast(name_enc as text) from labels where id = ?`, orphan); name != "поэзия" {
-		t.Errorf("orphan label lost its name: %q", name)
+
+	// Labels survive 1↔1, keeping their names, and stay unscoped.
+	if name := scalarStr(t, db, `select cast(name_enc as text) from labels where id = ?`, taken); name != "взяли" {
+		t.Errorf("label lost its name: %q", name)
+	}
+	if got := scalarInt(t, db, `select count(*) from card_labels where card_id = ? and session_id is not null`, q1); got != 0 {
+		t.Error("migrated assignment should stay unscoped")
 	}
 
 	// A comment on a test card was always a note about the session.
-	if got := scalarInt(t, db, `select coalesce(session_id, 0) from timeline_events where id = ?`, comment); got != cleanSession {
-		t.Errorf("comment session_id = %d, want %d", got, cleanSession)
+	if got := scalarInt(t, db, `select coalesce(session_id, 0) from timeline_events where id = ?`, comment); got != session {
+		t.Errorf("comment session_id = %d, want %d", got, session)
 	}
 	if got := scalarInt(t, db, `select count(*) from timeline_events where id = ? and card_id is null`, comment); got != 1 {
 		t.Error("comment kept its card_id")
@@ -78,18 +100,61 @@ func TestMigrateV18Sessions(t *testing.T) {
 	if kind := scalarStr(t, db, `select kind from cards where id = ?`, dirty); kind != "normal" {
 		t.Errorf("card with attachments kind = %q, want normal", kind)
 	}
-	if got := scalarInt(t, db, `select count(*) from cards where id = ? and deleted_at is null`, dirty); got != 1 {
-		t.Error("card with attachments should survive")
-	}
-
 	if got := scalarInt(t, db, `select count(*) from lists where id = ? and deleted_at is not null`, testList); got != 1 {
 		t.Error("emptied test list should be tombstoned")
 	}
 	if got := scalarInt(t, db, `select count(*) from lists where type = 'test'`); got != 0 {
 		t.Errorf("%d lists still typed test", got)
 	}
-	if got := scalarInt(t, db, `select count(*) from lists where id = ? and deleted_at is null`, keepList); got != 1 {
-		t.Error("list with a surviving card should stay")
+}
+
+// The partial unique index is the whole reason the key can stay nullable: SQLite
+// compares NULLs as distinct, so without it the unscoped assignment duplicates.
+func TestUnscopedLabelAssignmentIsUnique(t *testing.T) {
+	db := migratedDB(t)
+	uid := insertUser(t, db, "owner")
+	bid := insertBoard(t, db, uid, "board")
+	list := insertList(t, db, bid, "normal")
+	card := insertCard(t, db, bid, list, "question", "q")
+	label := insertLabel(t, db, bid, "сложный")
+
+	assignLabel(t, db, card, label)
+	if _, err := db.Exec(`insert into card_labels(card_id, label_id, session_id) values(?, ?, null)`, card, label); err == nil {
+		t.Fatal("a second unscoped assignment inserted; the partial index is missing")
+	}
+
+	// The same label scoped to a playing is a DIFFERENT claim and must be allowed.
+	sid := execIns(t, db, `insert into test_sessions(board_id, meta_enc, created_at) values(?, ?, ?)`,
+		bid, []byte("meta"), fixtureNow)
+	if _, err := db.Exec(`insert into card_labels(card_id, label_id, session_id) values(?, ?, ?)`, card, label, sid); err != nil {
+		t.Fatalf("scoped assignment rejected: %v", err)
+	}
+	if got := scalarInt(t, db, `select count(*) from card_labels where card_id = ? and label_id = ?`, card, label); got != 2 {
+		t.Errorf("assignments = %d, want 2 (one yours, one the testers')", got)
+	}
+}
+
+// Removing a Playing takes the labels scoped to it: a label scoped to a playing
+// that no longer exists cannot be read (ADR-0004).
+func TestRemovingAPlayingCascadesItsLabels(t *testing.T) {
+	db := migratedDB(t)
+	mustExec(t, db, `pragma foreign_keys = on`)
+	uid := insertUser(t, db, "owner")
+	bid := insertBoard(t, db, uid, "board")
+	list := insertList(t, db, bid, "normal")
+	card := insertCard(t, db, bid, list, "question", "q")
+	label := insertLabel(t, db, bid, "взяли")
+	sid := execIns(t, db, `insert into test_sessions(board_id, meta_enc, created_at) values(?, ?, ?)`,
+		bid, []byte("meta"), fixtureNow)
+	mustExec(t, db, `insert into card_sessions(card_id, session_id) values(?, ?)`, card, sid)
+	mustExec(t, db, `insert into card_labels(card_id, label_id, session_id) values(?, ?, ?)`, card, label, sid)
+
+	mustExec(t, db, `delete from test_sessions where id = ?`, sid)
+	if got := scalarInt(t, db, `select count(*) from card_labels where session_id = ?`, sid); got != 0 {
+		t.Errorf("%d scoped assignments outlived their playing", got)
+	}
+	if got := scalarInt(t, db, `select count(*) from card_sessions where session_id = ?`, sid); got != 0 {
+		t.Error("the playing itself outlived its session")
 	}
 }
 
@@ -163,13 +228,20 @@ func insertCard(t *testing.T, db *sql.DB, bid, listID int64, kind, desc string) 
 		bid, listID, kind, []byte(desc), fixtureNow, fixtureNow)
 }
 
-func insertLabel(t *testing.T, db *sql.DB, bid int64, kind, mark, name string) int64 {
-	return execIns(t, db, `insert into labels(board_id, name_enc, color_enc, kind, mark, created_at) values(?, ?, ?, ?, ?, ?)`,
-		bid, []byte(name), []byte("#3aa657"), kind, mark, fixtureNow)
+func insertLabel(t *testing.T, db *sql.DB, bid int64, name string) int64 {
+	return execIns(t, db, `insert into labels(board_id, name_enc, color_enc, created_at) values(?, ?, ?, ?)`,
+		bid, []byte(name), []byte("#3aa657"), fixtureNow)
+}
+
+func mustExec(t *testing.T, db *sql.DB, q string, args ...any) {
+	t.Helper()
+	if _, err := db.Exec(q, args...); err != nil {
+		t.Fatalf("exec %q: %v", q, err)
+	}
 }
 
 func assignLabel(t *testing.T, db *sql.DB, cardID, labelID int64) {
-	execIns(t, db, `insert into card_labels(card_id, label_id) values(?, ?)`, cardID, labelID)
+	execIns(t, db, `insert into card_labels(card_id, label_id, session_id) values(?, ?, null)`, cardID, labelID)
 }
 
 func insertEvent(t *testing.T, db *sql.DB, bid, cardID int64, typ, payload string) int64 {

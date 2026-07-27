@@ -1278,3 +1278,9 @@ body {
 /* The session's debrief: what was said about any question at this test. */
 .sess-notes { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }
 .sess-note { margin: 0; }
+
+/* The town field sits inside the chip row, so it must not stretch to fill it. */
+.sess-city-add { width: 12rem; max-width: 100%; }
+/* Which zone a town resolved to, shown on its chip: a wrong guess is visible
+   before the invite line goes out, not after. */
+.label-pick-zone { opacity: 0.7; font-size: var(--text-2xs); }

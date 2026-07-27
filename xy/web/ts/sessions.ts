@@ -184,6 +184,71 @@ export function humanDate(date: string): string {
   return `${d} ${MONTHS[mo - 1] || ""}`.trim();
 }
 
+const pad = (n: number): string => String(n).padStart(2, "0");
+
+// ---- date and time as the UI writes them ----
+//
+// Native <input type="date"|"time"> render in the BROWSER's locale, not the
+// document's, so Chrome shows 02/23/2026 and 07:00 PM to anyone whose browser
+// is en-US however the page is marked up. These are the deterministic
+// alternative: text in, ISO stored.
+
+// formatDate: 2026-02-23 → 23.02.2026. Anything unparseable passes through, so
+// a half-typed value is never eaten.
+export function formatDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : (iso || "");
+}
+
+// parseDate: 23.02.2026 → 2026-02-23, "" when it isn't a real date. Accepts
+// 23.2.2026 and 23/02/2026 too — both are what people actually type.
+export function parseDate(human: string): string {
+  const m = /^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/.exec((human || "").trim());
+  if (!m) return "";
+  const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return "";
+  const probe = new Date(Date.UTC(y, mo - 1, d));
+  if (probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) return ""; // 31.02
+  return `${y}-${pad(mo)}-${pad(d)}`;
+}
+
+// parseTime: чч:мм, 24-hour. "" when it isn't one — including "7:00 PM", which
+// is exactly the input this replaces.
+export function parseTime(human: string): string {
+  const m = /^(\d{1,2})[:.](\d{2})$/.exec((human || "").trim());
+  if (!m) return "";
+  const h = Number(m[1]), min = Number(m[2]);
+  if (h > 23 || min > 59) return "";
+  return `${pad(h)}:${pad(min)}`;
+}
+
+// zoneOffset renders a zone's CURRENT offset for a picker label: «UTC+3».
+// Computed from Intl rather than a table, so it follows the platform's tz data
+// and stays right across a DST change.
+export function zoneOffset(zone: string, at: Date = new Date()): string {
+  try {
+    const fmt = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longOffset" });
+    const part = fmt.formatToParts(at).find((p) => p.type === "timeZoneName");
+    const raw = (part && part.value) || "GMT";
+    const norm = raw.replace("GMT", "UTC");
+    return norm === "UTC" ? "UTC+0" : norm.replace(/:00$/, "").replace(/UTC([+-])0(\d)/, "UTC$1$2");
+  } catch (_) {
+    return "";
+  }
+}
+
+// allZones lists every IANA zone the platform knows, newest tz data included —
+// which is the "library that maintains accurate timezone data", already present
+// and already under the CSP.
+export function allZones(): string[] {
+  try {
+    const f = Intl as unknown as { supportedValuesOf?: (k: string) => string[] };
+    return f.supportedValuesOf ? f.supportedValuesOf("timeZone") : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 // ---- the invite line ----
 
 // Wall clock plus a zone is what the editor means — «19:00 по Москве» is an
@@ -226,8 +291,6 @@ function zonedParts(at: Date, zone: string): Parts {
     mm: Number(got.minute),
   };
 }
-
-const pad = (n: number): string => String(n).padStart(2, "0");
 
 // inviteLine is the one artifact that leaves xy: a line to paste into the
 // messenger where the testers actually are. 99% of them will never have an

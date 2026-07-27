@@ -155,9 +155,13 @@ func (s *server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 		if err := tombstone(ctx, tx, "test_sessions", "id = ?", sessionID); err != nil {
 			return err
 		}
-		// A test label has no life of its own once its session is gone.
-		if _, err := tx.ExecContext(ctx,
-			`update labels set deleted_at = ? where session_id = ? and deleted_at is null`, now, sessionID); err != nil {
+		// A label OUTLIVES its session: it is an ordinary board label. What goes is
+		// the playings on it and the assignments scoped to them — a label scoped to
+		// a playing that no longer exists cannot be read (ADR-0004).
+		if _, err := tx.ExecContext(ctx, `delete from card_labels where session_id = ?`, sessionID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `delete from card_sessions where session_id = ?`, sessionID); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx,
@@ -259,43 +263,6 @@ func (s *server) handleAddSessionComment(w http.ResponseWriter, r *http.Request)
 		_, err = tx.ExecContext(ctx, `
 insert into timeline_events(board_id, card_id, session_id, type, author_user_id, created_at, payload_enc)
 values(?, null, ?, 'comment', ?, ?, ?)`, bid, sessionID, u.UserID, rfc3339(time.Now()), payload)
-		return err
-	})
-	if handleErr(w, err) {
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// ---- the board's mark template ----
-//
-// Which marks a new session gets: [{mark, name, color}], encrypted because the
-// names are the board's content. Null means the client's built-in
-// «взяли»/«не взяли» pair, which is what every pre-existing board gets.
-
-type markTemplateRequest struct {
-	MarkTemplateEnc *string `json:"mark_template_enc"` // null/"" clears it
-}
-
-func (s *server) handleSetMarkTemplate(w http.ResponseWriter, r *http.Request) {
-	_, bid, _, ok := s.requireBoard(w, r, "id")
-	if !ok {
-		return
-	}
-	var req markTemplateRequest
-	if !readJSON(w, r, &req) {
-		return
-	}
-	var tmpl []byte
-	if req.MarkTemplateEnc != nil && *req.MarkTemplateEnc != "" {
-		var err error
-		if tmpl, err = unb64(*req.MarkTemplateEnc); err != nil {
-			httpError(w, http.StatusBadRequest, "invalid mark_template_enc")
-			return
-		}
-	}
-	err := s.withWriteTx(r.Context(), "set-mark-template", func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `update boards set mark_template_enc = ? where id = ?`, tmpl, bid)
 		return err
 	})
 	if handleErr(w, err) {

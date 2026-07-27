@@ -20,16 +20,19 @@ A Card's own short display label, stored as its own encrypted column — deliber
 A named, ordered run of **consecutive** Lists sharing one question-numbering sequence and a combined export. A group always moves as one block. (Schema name: `list_of_lists`.)
 
 **Label**:
-A named, coloured tag on a Board, assignable to any of its Cards. Renameable and recolourable at will — except a Test Label, whose name comes from the Test Session it is bound to.
-_Avoid_: tag, метка as a distinct thing
+A named, coloured tag on a Board, assignable to any of its Cards, renameable and recolourable at will. An assignment carries an optional Playing: unscoped it is the author's own view of the question, scoped it is what the testers thought at that sitting. So «взяли» is ONE Board Label composed onto a Playing, not a label per session.
+_Avoid_: tag, метка as a distinct thing; mark (retired — it named the взяли/не взяли slot before an assignment could be scoped)
 
 **Test Session**:
 One sitting at which a group of testers played a set of questions. Its own Board-level entity — not a Card and not a List — carrying a date, an optional time and zone, a title, and its testers.
 _Avoid_: тест-список, test list, test card
 
-**Mark**:
-What one of a Test Session's Labels records about a question at that session: взяли, не взяли, видели, or whatever a Board's template names. A Board seeds every new session's marks from its own template.
-_Avoid_: role, outcome, verdict, status
+**Playing**:
+The record that a question was played at a Test Session. A Card's own link to a Session — it is what «Видели» reads, and what a Label can be scoped to.
+_Avoid_: mark, test mark, session tag
+
+**Tester List**:
+The «Вопросы тестировали: …» line a tour carries in its preamble. By ЧГК custom it names those who tested most of the tour and therefore should not play it — someone who saw one or two questions still may, skipping the ones they know. Compiled per tour (a List, or its whole List Group) from the Playings its questions carry, not from the board's Sessions as a whole.
 
 **Announce Set**:
 The cities a Test Session's start time is announced in, and the source of the invite line an editor pastes into a messenger. A city carries a timezone and the name to print; testers are not xy users, so this is an outbound string, not a rendering preference.

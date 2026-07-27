@@ -6,9 +6,10 @@
 // A create(deps) kernel like the board's others; board.ts owns the wiring.
 
 import {
-  type AnnounceCity, COMMON_CITIES, humanDate, inviteLine, type Mark, newKey,
-  parseSession, serializeSession, type SessionMeta, sessionLabel,
+  allZones, type AnnounceCity, humanDate, inviteLine, type Mark, newKey,
+  parseSession, serializeSession, type SessionMeta, sessionLabel, zoneOffset,
 } from "./sessions.js";
+import { TOWNS } from "./towns.js";
 import type { BoardSession } from "./unlock.js";
 import type { Tester } from "./chgk.js";
 import * as people from "./people.js";
@@ -170,31 +171,39 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       for (const [i, c] of cities.entries()) {
         cityBox.append(el("span", { class: "label-pick is-on", title: c.name },
           el("span", { class: "label-pick-name", text: c.name }),
+          el("span", { class: "label-pick-zone", text: zoneOffset(c.zone) }),
           el("button", {
             class: "label-pick-x", type: "button", text: "×",
             title: "Убрать город", "aria-label": `Убрать ${c.name}`,
             onclick: () => { cities.splice(i, 1); drawCities(); previewInvite(); },
           })));
       }
-      const pick = el("select", { class: "input" }) as HTMLSelectElement;
-      pick.append(el("option", { value: "", text: "+ город…" }));
-      for (const c of COMMON_CITIES) pick.append(el("option", { value: c.zone, text: c.name }));
-      pick.append(el("option", { value: "__own", text: "свой…" }));
-      pick.addEventListener("change", () => {
-        if (!pick.value) return;
-        if (pick.value === "__own") {
-          const zone = (prompt("Часовой пояс (IANA), напр. Asia/Tbilisi:", "") || "").trim();
-          const name = (prompt("Как назвать город в приглашении?", "") || "").trim();
-          if (zone && name) cities.push({ zone, name });
-        } else {
-          const found = COMMON_CITIES.find((c) => c.zone === pick.value);
-          if (found && !cities.some((c) => c.zone === found.zone)) cities.push(found);
-        }
-        pick.value = "";
+      // A town brings its zone with it, so a city nobody could place — Тбилиси,
+      // Кокшетау — needs no IANA knowledge from the person inviting.
+      const add = el("input", {
+        class: "input sess-city-add", type: "text", placeholder: "+ город…", autocomplete: "off",
+      }) as HTMLInputElement;
+      const addCity = (name: string, zone: string): void => {
+        if (!name || cities.some((c) => c.name === name)) return;
+        cities.push({ name, zone: zone || tzInp.value.trim() || m.tz });
+        add.value = "";
         drawCities();
         previewInvite();
+      };
+      autocomplete(add, townChoices, (choice) => {
+        const town = TOWNS.find((c) => c.name === choice.value);
+        addCity(choice.value, (town && town.zone) || "");
       });
-      cityBox.append(pick);
+      // A town off the list still works: it takes the session's own zone, which
+      // the user can then change on the chip's row.
+      add.addEventListener("keydown", (e) => {
+        if ((e as KeyboardEvent).key !== "Enter") return;
+        e.preventDefault();
+        const typed = add.value.trim();
+        const town = TOWNS.find((c) => c.name.toLowerCase() === typed.toLowerCase());
+        addCity(town ? town.name : typed, (town && town.zone) || "");
+      });
+      cityBox.append(add);
     };
     drawCities();
     box.append(field("Города для приглашения", cityBox));
@@ -221,7 +230,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       bT.addEventListener("click", () => { type = "team"; sync(); });
       seg.append(bP, bT); sync();
       const inp = el("input", { class: "input fld-row-input", type: "text", value: (t && t.text) || "", placeholder: "имя…", autocomplete: "off" }) as HTMLInputElement;
-      attachSuggest(inp);
+      autocomplete(inp, testerChoices);
       const rm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: "Удалить строку" });
       const row = el("div", { class: "fld-row tester-row" }, seg, inp, rm);
       rm.addEventListener("click", () => row.remove());
@@ -315,26 +324,66 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     return s ? s + "." : "";
   }
 
-  // attachSuggest hangs the person directory off a tester input: this board's
-  // names first and unlabelled, then names from other unlocked boards tagged
-  // with where they came from.
-  function attachSuggest(inp: HTMLInputElement): void {
+  // autocomplete is the one custom dropdown this panel uses — for testers, towns
+  // and timezones alike. A native <select> can't filter, and the towns list is
+  // 1681 long, so it would be unusable as one.
+  interface Choice { value: string; label: string; hint?: string }
+
+  function autocomplete(inp: HTMLInputElement, choices: (q: string) => Choice[], onPick?: (c: Choice) => void): void {
     let pop: HTMLElement | null = null;
     const dismiss = (): void => { if (pop) { pop.remove(); pop = null; } };
     inp.addEventListener("blur", () => setTimeout(dismiss, 150));
-    inp.addEventListener("input", () => {
+    const draw = (): void => {
       dismiss();
-      const hits = people.suggest(deps.boardId, inp.value);
-      if (!hits.length || !inp.value.trim()) return;
+      const hits = choices(inp.value);
+      if (!hits.length) return;
       pop = el("div", { class: "menu-dropdown suggest-pop" });
       for (const h of hits) {
         pop.append(el("button", {
           class: "menu-item", type: "button",
-          onmousedown: (e: Event) => { e.preventDefault(); inp.value = h.text; dismiss(); },
-        }, el("span", { text: h.text }), h.board ? el("span", { class: "suggest-board", text: h.board }) : el("span")));
+          onmousedown: (e: Event) => {
+            e.preventDefault();
+            inp.value = h.value;
+            inp.dispatchEvent(new Event("input", { bubbles: true }));
+            dismiss();
+            if (onPick) onPick(h);
+          },
+        },
+          el("span", { text: h.label }),
+          h.hint ? el("span", { class: "suggest-board", text: h.hint }) : el("span"),
+        ));
       }
       inp.parentElement?.append(pop);
-    });
+    };
+    inp.addEventListener("input", draw);
+    inp.addEventListener("focus", draw);
+  }
+
+  function testerChoices(q: string): Choice[] {
+    if (!q.trim()) return [];
+    return people.suggest(deps.boardId, q).map((s) => ({ value: s.text, label: s.text, hint: s.board }));
+  }
+
+  // A town brings its timezone with it (towns.ts joins ЧГК's list to GeoNames),
+  // so picking «Алматы» fills the zone too — nobody should have to know that
+  // Алматы is Asia/Almaty.
+  function townChoices(q: string): Choice[] {
+    const needle = q.trim().toLowerCase();
+    const pool = needle ? TOWNS.filter((c) => c.name.toLowerCase().startsWith(needle)) : TOWNS;
+    return pool.slice(0, 10).map((c) => ({
+      value: c.name,
+      label: c.name,
+      hint: c.zone ? zoneOffset(c.zone) : "",
+    }));
+  }
+
+  function zoneChoices(q: string): Choice[] {
+    const needle = q.trim().toLowerCase();
+    const zones = allZones();
+    const pool = needle
+      ? zones.filter((z) => z.toLowerCase().includes(needle) || zoneOffset(z).toLowerCase().includes(needle))
+      : zones;
+    return pool.slice(0, 12).map((z) => ({ value: z, label: z, hint: zoneOffset(z) }));
   }
 
   async function saveSession(prev: SessionMeta, cities: AnnounceCity[]): Promise<void> {

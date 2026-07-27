@@ -1,5 +1,10 @@
 # A transferred Test Session is a dated snapshot, not a replica
 
+> Still current. Its "test label" wording predates
+> [ADR-0004](0004-a-label-assignment-carries-an-optional-playing.md): what
+> travels with a copied question is now its Playing plus any labels scoped to
+> it, matched on the same `key`.
+
 A Test Session records a real sitting, so in principle there is one true version
 of it and every copy on another board should track that version. xy's crypto
 forbids exactly that: boards share no key, the server must not learn that two

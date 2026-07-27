@@ -52,7 +52,7 @@ func TestTrelloCompatAPI(t *testing.T) {
 		ID int64 `json:"id"`
 	}
 	c.decode(resp, &label)
-	resp = c.do("PUT", "/api/cards/"+cardID+"/labels", map[string]any{"label_ids": []int64{label.ID}})
+	resp = c.do("PUT", "/api/cards/"+cardID+"/labels", map[string]any{"labels": []map[string]any{{"label_id": label.ID}}})
 	mustStatus(t, resp, 204)
 
 	// mint an API token (session-authed)

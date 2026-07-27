@@ -10,7 +10,13 @@ import {
   serializeSession,
   sessionLabel,
   whoSaw,
+  formatDate,
+  parseDate,
+  parseTime,
+  zoneOffset,
+  allZones,
 } from "../web/assets/static/dist/sessions.js";
+import { TOWNS } from "../web/assets/static/dist/towns.js";
 
 const base = {
   date: "2026-07-20",
@@ -125,4 +131,69 @@ test("whoSaw unions testers across sessions and dedupes", () => {
   const a = { ...base, testers: [{ text: "Иванов Иван", type: "player" }] };
   const b = { ...base, testers: [{ text: "Иванов Иван", type: "player" }, { text: "Петров Пётр", type: "player" }] };
   assert.equal(whoSaw([a, b]), "Иванов Иван, Петров Пётр");
+});
+
+// ---- date, time and zones as the UI writes them ----
+
+test("formatDate/parseDate round-trip in dd.mm.yyyy", () => {
+  assert.equal(formatDate("2026-02-23"), "23.02.2026");
+  assert.equal(parseDate("23.02.2026"), "2026-02-23");
+  assert.equal(parseDate("23.2.2026"), "2026-02-23");
+  assert.equal(parseDate("23/02/2026"), "2026-02-23");
+});
+
+test("a half-typed date passes through rather than being eaten", () => {
+  assert.equal(formatDate("2026-02"), "2026-02");
+  assert.equal(parseDate("23.02"), "");
+});
+
+test("parseDate rejects a day that month does not have", () => {
+  assert.equal(parseDate("31.02.2026"), "");
+  assert.equal(parseDate("29.02.2024"), "2024-02-29"); // a real leap day
+});
+
+test("parseTime takes 24-hour only — the AM/PM it replaces is rejected", () => {
+  assert.equal(parseTime("19:00"), "19:00");
+  assert.equal(parseTime("9:05"), "09:05");
+  assert.equal(parseTime("07:00 PM"), "");
+  assert.equal(parseTime("25:00"), "");
+  assert.equal(parseTime("19:60"), "");
+});
+
+test("zoneOffset labels a zone the way a picker should", () => {
+  assert.equal(zoneOffset("UTC", new Date("2026-01-15T12:00:00Z")), "UTC+0");
+  assert.equal(zoneOffset("Europe/Moscow", new Date("2026-01-15T12:00:00Z")), "UTC+3");
+  assert.equal(zoneOffset("Asia/Kolkata", new Date("2026-01-15T12:00:00Z")), "UTC+5:30");
+});
+
+test("allZones returns the platform's IANA list", () => {
+  const zones = allZones();
+  assert.ok(zones.length > 100, `only ${zones.length} zones`);
+  assert.ok(zones.includes("Europe/Moscow"));
+});
+
+test("every bundled town name is non-empty and zones are IANA-shaped", () => {
+  assert.ok(TOWNS.length > 1000, `only ${TOWNS.length} towns`);
+  for (const t of TOWNS) {
+    assert.ok(t.name && t.name.trim(), "blank town name");
+    if (t.zone) assert.match(t.zone, /^[A-Za-z_]+\/[A-Za-z_+-]+/);
+  }
+});
+
+test("DST is handled because we store wall clock + zone, not an instant", () => {
+  // The same 19:00 Moscow is 17:00 in Berlin in winter and 18:00 in summer:
+  // Moscow has no DST, Berlin does. Nothing here knows that — Intl applies the
+  // zone's rules FOR THAT DATE, which is the whole reason a session stores a
+  // date, a wall clock and a zone rather than a timestamp.
+  const winter = { ...base, date: "2026-01-15", cities: [{ zone: "Europe/Berlin", name: "Берлин" }] };
+  const summer = { ...base, date: "2026-07-15", cities: [{ zone: "Europe/Berlin", name: "Берлин" }] };
+  assert.equal(inviteLine(winter), "15 января, 17:00 (Берлин)");
+  assert.equal(inviteLine(summer), "15 июля, 18:00 (Берлин)");
+});
+
+test("a zone that abolished DST converts flat across the year", () => {
+  // Kazakhstan runs no DST, so 19:00 Moscow is 21:00 Алматы in both seasons.
+  const cities = [{ zone: "Asia/Almaty", name: "Алматы" }];
+  assert.equal(inviteLine({ ...base, date: "2026-01-15", cities }), "15 января, 21:00 (Алматы)");
+  assert.equal(inviteLine({ ...base, date: "2026-07-15", cities }), "15 июля, 21:00 (Алматы)");
 });
