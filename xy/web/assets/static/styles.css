@@ -1348,6 +1348,5 @@ body {
 /* A section heading belongs to what is UNDER it, so it needs air above and
    little below — «Лента» was sitting nearer the delete button than its own
    feed. */
-#sessionForm .fld { margin-top: var(--space-4); }
 #sessionForm .fld:first-child { margin-top: 0; }
-#sessionForm .fld-head { margin-bottom: var(--space-1); }
+#sessionForm .fld-head { margin-top: var(--space-4); margin-bottom: var(--space-1); }
