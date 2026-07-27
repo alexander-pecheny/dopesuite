@@ -41,8 +41,8 @@ select
             left join cards tc on tc.id = t.card_id
             left join test_sessions ts on ts.id = t.session_id
             where b.owner_user_id = ? and t.deleted_at is null
-              and (t.card_id is null or tc.deleted_at is null)
-              and (t.session_id is null or ts.deleted_at is null)), 0)`
+              and (tc.id is not null and tc.deleted_at is null
+                   or ts.id is not null and ts.deleted_at is null)), 0)`
 
 type rowQuerier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row

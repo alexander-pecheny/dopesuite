@@ -93,8 +93,8 @@ argument for two boards.
 
 **#25 — edit labels.** New «🏷️ Метки» item in the board ☰ menu: one row per
 label, name and colour editable inline, with a usage count and delete. A test
-label's name is locked there (edit the session in the Тесты panel instead); its
-colour is not. Separately, render test labels with their own affordance — a 🧪
+label's name is locked there **[superseded — there are no test labels; every
+label is editable]**. Separately, render test labels with their own affordance — a 🧪
 dot or an outlined pill — so an imported Trello tag can never *look* like
 «взяли» whatever colour it got. That alone fixes the reported symptom.
 
@@ -228,8 +228,9 @@ Copying or moving a question already reconciles labels by decrypted name+colour
 (`carddetail.ts#reconcileLabels`). That breaks the moment two users render names
 differently, so it becomes: for each test label on the card, decrypt its
 session's `meta_enc`, look for a session on the target board with the same `key`,
-create it there re-encrypted if absent, then find-or-create the label for
-`(session, mark)`. Since both keys are in hand during the copy, the match is
+create it there re-encrypted if absent, then — **[superseded]** where this said
+"find-or-create the label for `(session, mark)`", what ships is: match the board
+label by name+colour and scope the ASSIGNMENT to the copied playing. Since both keys are in hand during the copy, the match is
 client-side and the server learns nothing.
 
 Every design has to *copy* the session — boards share no key, so nothing can be
@@ -262,21 +263,23 @@ session's labels.
    Comments on the card move onto the session as session-only notes (`card_id`
    NULL), which is what they always were.
 2. A test card carrying **attachments** stays put: the bytes have nowhere to go,
-   so it becomes an ordinary card and its (now ordinary) list keeps it. The
+   so it becomes an ordinary card and its (now ordinary) list keeps it. It sheds
+   the session's own labels either way — they belong to the session, not to the
+   card that used to represent it. The
    planned «Тесты (архив)» list turned out to be unbuildable — a list title is
    encrypted, and the migration cannot decrypt, so it cannot name one either. The
    original list's own title is a better label than an invented one anyway. A
    test card with nothing but comments leaves nothing behind, because step 1
    rehomed them; on most boards that is all of them.
-3. Each `test_taken`/`test_missed` label assigned to that test card → that
-   session, `mark` = `taken`/`missed`, `name_enc` rewritten to the canonical
-   form, `color_enc` nulled so it inherits from the board template.
+3. **[superseded]** Each `test_taken`/`test_missed` label was to become a
+   session label with a `mark`. What SHIPPED: the label becomes an ordinary
+   board label keeping its exact name, and every question it marked gains a
+   Playing instead (ADR-0004).
 4. A `test_taken`/`test_missed` label with no test card (Trello import maps
    green/red that way, see `import.ts`) → `kind = normal`, name kept. These are
    exactly the labels #25 complained about, and demoting them makes them
    editable.
-5. Each board's mark template seeded with взяли/не взяли, so existing boards keep
-   behaving as they do.
+5. **[superseded]** There is no mark template to seed.
 6. ~~Each `label_add`/`label_remove` timeline payload gains `label_id`~~ — not
    done, and not doable: `payload_enc` is encrypted and the migration holds no
    key. New writes carry `label_id`; pre-migration history keeps only the frozen

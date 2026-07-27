@@ -650,12 +650,13 @@ async function deleteList(list: BoardList): Promise<void> {
   } catch (err) { setStatus("error"); alert("Не удалось удалить: " + errMsg(err)); }
 }
 
-// forgetCardLabels drops dead cards' label rows. A test label used to need
-// sweeping here too — it was created per session and orphaned when the session's
-// card died. It now hangs off test_sessions by FK, so deleting the session takes
-// it (sessions.go#handleDeleteSession) and there is nothing to chase.
+// forgetCardLabels drops dead cards' assignments and playings. cardLabels is a
+// flat list, so this MUST filter — `delete list[id]` punches a hole at that
+// index, dropping someone else's assignment and keeping the dead card's own.
 function forgetCardLabels(deletedCards: BoardCard[]): void {
-  for (const c of deletedCards) delete state.cardLabels[c.id];
+  const dead = new Set(deletedCards.map((c) => c.id));
+  state.cardLabels = state.cardLabels.filter((a) => !dead.has(a.cardId));
+  for (const id of dead) delete state.cardSessions[id];
 }
 
 // Cards carry the card's *whole* text (whitespace collapsed), not a truncated

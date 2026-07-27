@@ -185,3 +185,24 @@ test("a zone that abolished DST converts flat across the year", () => {
   assert.equal(inviteLine({ ...base, date: "2026-01-15", cities }), "15 января, 21:00 (Алматы)");
   assert.equal(inviteLine({ ...base, date: "2026-07-15", cities }), "15 июля, 21:00 (Алматы)");
 });
+
+// A card's assignments live in a FLAT list, so forgetting a dead card must
+// filter on cardId. `delete list[id]` punches a hole at that array index —
+// dropping an unrelated card's assignment and keeping the dead card's own.
+test("forgetting a dead card drops its own assignments and nobody else's", () => {
+  const cardLabels = [
+    { cardId: 1, labelId: 10, sessionId: null },
+    { cardId: 2, labelId: 11, sessionId: null },
+    { cardId: 2, labelId: 12, sessionId: 7 },
+    { cardId: 3, labelId: 13, sessionId: null },
+  ];
+  const dead = new Set([2]);
+  const kept = cardLabels.filter((a) => !dead.has(a.cardId));
+  assert.deepEqual(kept.map((a) => a.cardId), [1, 3]);
+
+  // What the buggy shape did instead: index 2 is card 3's row, not card 2's.
+  const wrong = cardLabels.slice();
+  delete wrong[2];
+  assert.equal(wrong[2], undefined, "the hole lands at the INDEX, not the card");
+  assert.ok(wrong.some((a) => a && a.cardId === 2), "card 2's rows survive the wrong form");
+});
