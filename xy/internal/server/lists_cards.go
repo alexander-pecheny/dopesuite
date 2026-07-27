@@ -48,6 +48,12 @@ type cardLabelDTO struct {
 	SessionID *int64 `json:"session_id,omitempty"`
 }
 
+// cardSessionDTO is one Playing: this question was played at that test.
+type cardSessionDTO struct {
+	CardID    int64 `json:"card_id"`
+	SessionID int64 `json:"session_id"`
+}
+
 // A label is just a label (ADR-0004): what makes one a test's verdict rather
 // than the author's is the ASSIGNMENT carrying a session, not the label itself.
 type labelDTO struct {

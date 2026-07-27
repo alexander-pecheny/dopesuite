@@ -21,7 +21,7 @@ import { xyRank } from "./rank.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
 import type { CardFields, Handout, Tester, TesterLike } from "./chgk.js";
-import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Snapshot, UnreadFlags } from "./unlock.js";
+import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing, Snapshot, UnreadFlags } from "./unlock.js";
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
 
@@ -52,7 +52,7 @@ export interface CardDetailState {
   cards: BoardCard[];
   labels: BoardLabel[];
   cardLabels: CardLabel[];
-  cardSessions: Record<string, number[]>;
+  cardSessions: Playing[];
   sessions: BoardSession[];
   unread: Record<string, UnreadFlags>;
   defaultAuthor: string;
@@ -1178,7 +1178,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // and returns the target board's ids for them.
   async function reconcilePlayings(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<number[]> {
     const out: number[] = [];
-    for (const sid of state().cardSessions[srcCardId] || []) {
+    for (const sid of state().cardSessions.filter((p) => p.cardId === srcCardId).map((p) => p.sessionId)) {
       const id = await reconcileSession(sid, targetBid, targetDk, ctx);
       if (id != null) out.push(id);
     }
@@ -1234,10 +1234,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
           // Same board: the labels and the playings are already there, so the copy
           // just repeats the assignments verbatim.
           const own = state().cardLabels.filter((a) => a.cardId === card.id);
-          const plays = (state().cardSessions[card.id] || []).slice();
+          const plays = state().cardSessions.filter((p) => p.cardId === card.id).map((p) => p.sessionId);
           if (plays.length) {
             await jput(`/api/cards/${res.id}/sessions`, { session_ids: plays });
-            state().cardSessions[res.id] = plays;
+            state().cardSessions.push(...plays.map((sessionId) => ({ cardId: res.id, sessionId })));
           }
           if (own.length) {
             await jput(`/api/cards/${res.id}/labels`, {

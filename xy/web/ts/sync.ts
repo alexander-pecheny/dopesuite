@@ -15,7 +15,7 @@
 // The pure functions (substitute*, applyOpToSnapshot, pendingTimeline) carry the
 // tricky logic and take no globals, so jstest can exercise them without IndexedDB.
 import { xyStore } from "./store.js";
-import type { BoardSnapshot, OpBody, OutboxOp, SnapshotCardLabel, TimelineEvent } from "./store.js";
+import type { BoardSnapshot, OpBody, OutboxOp, SnapshotCardLabel, SnapshotPlaying, TimelineEvent } from "./store.js";
 
 // The server's JSON reply to a mutation, as far as the engine reads it.
 interface MutationResult {
@@ -82,6 +82,17 @@ function pathIds(path: string): number[] {
 
 // applyOpToSnapshot mutates `snap` (a GET /api/boards/{id} payload) to reflect
 // `op`, using `resultId` as the id of any newly-created entity. Keeps the local
+// normalizePlayings folds the map-shaped mirror forward, same reason as below.
+function normalizePlayings(raw: unknown): SnapshotPlaying[] {
+  if (Array.isArray(raw)) return raw as SnapshotPlaying[];
+  if (!raw || typeof raw !== "object") return [];
+  const out: SnapshotPlaying[] = [];
+  for (const [cardId, ids] of Object.entries(raw as Record<string, number[]>)) {
+    for (const sessionId of ids || []) out.push({ card_id: Number(cardId), session_id: sessionId });
+  }
+  return out;
+}
+
 // normalizeCardLabels folds the pre-ADR-0004 mirror shape forward. A device that
 // synced before labels could be scoped holds card_labels as {cardId: [labelId]};
 // reading .filter on that throws and takes the whole outbox replay with it, so
@@ -107,7 +118,7 @@ function applyOpToSnapshot(
   const cards = (snap.cards = snap.cards || []);
   const labels = (snap.labels = snap.labels || []);
   const cardLabels = (snap.card_labels = normalizeCardLabels(snap.card_labels));
-  const cardSessions = (snap.card_sessions = snap.card_sessions || {});
+  const cardSessions = (snap.card_sessions = normalizePlayings(snap.card_sessions));
   const body: OpBody = op.body || {};
   const ids = pathIds(op.path);
   switch (op.kind) {
@@ -181,7 +192,8 @@ function applyOpToSnapshot(
     case "setCardSessions": {
       const cid = ids[0];
       const keep = new Set(body.session_ids || []);
-      cardSessions[cid] = [...keep];
+      snap.card_sessions = cardSessions.filter((p) => p.card_id !== cid)
+        .concat([...keep].map((sid) => ({ card_id: cid, session_id: sid })));
       // A label scoped to a playing the card just walked away from cannot be
       // read, so the mirror drops it the way the server does.
       snap.card_labels = cardLabels.filter((a) =>

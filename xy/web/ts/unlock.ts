@@ -64,6 +64,13 @@ export interface CardLabel {
   sessionId: number | null;
 }
 
+// One Playing: this question was played at that test. Same flat shape as
+// CardLabel because both mirror their table.
+export interface Playing {
+  cardId: number;
+  sessionId: number;
+}
+
 // A Test Session as the board holds it: the decrypted meta_enc, parsed lazily by
 // whoever needs it (sessions.ts#parseSession).
 export interface BoardSession {
@@ -84,9 +91,7 @@ export interface BoardState {
   labels: BoardLabel[];
   sessions: BoardSession[];
   cardLabels: CardLabel[];
-  // The Playings: card id → the sessions that question was played at. What
-  // «Видели» reads; a scoped label hangs off one of these.
-  cardSessions: Record<string, number[]>;
+  cardSessions: Playing[];
   unread: Record<string, UnreadFlags>;
   sizes: Sizes;
   defaultAuthor: string;
@@ -116,7 +121,7 @@ export interface Snapshot {
     description_enc: string; handout_meta_enc?: string | null; alias_enc?: string | null; created_at?: string | null;
   }>;
   labels?: Array<{ id: number; name_enc: string; color_enc: string }>;
-  card_sessions?: Record<string, number[]>;
+  card_sessions?: Array<{ card_id: number; session_id: number }>;
   sessions?: Array<{ id: number; meta_enc: string; created_at?: string | null }>;
   timezone?: string;
   announce_cities?: unknown;
@@ -295,7 +300,7 @@ export function createUnlock(deps: UnlockDeps): Unlock {
         cardLabels: (snap.card_labels || []).map((a) => ({
           cardId: a.card_id, labelId: a.label_id, sessionId: a.session_id != null ? a.session_id : null,
         })),
-        cardSessions: snap.card_sessions || {},
+        cardSessions: (snap.card_sessions || []).map((p) => ({ cardId: p.card_id, sessionId: p.session_id })),
         unread: snap.unread || {},
         sizes,
         defaultAuthor: snap.default_author || "",

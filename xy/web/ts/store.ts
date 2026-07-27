@@ -84,6 +84,12 @@ export interface SnapshotCardLabel {
   label_id: number;
   session_id?: number | null;
 }
+
+// One Playing in the mirror — same flat shape as the assignment above.
+export interface SnapshotPlaying {
+  card_id: number;
+  session_id: number;
+}
 export interface BoardSnapshot {
   name?: string;
   schema_version?: number;
@@ -91,7 +97,7 @@ export interface BoardSnapshot {
   cards?: SnapshotCard[];
   labels?: SnapshotLabel[];
   card_labels?: SnapshotCardLabel[];
-  card_sessions?: Record<string, number[]>;
+  card_sessions?: SnapshotPlaying[];
   [key: string]: unknown;
 }
 

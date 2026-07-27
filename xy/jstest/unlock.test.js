@@ -13,7 +13,7 @@ const SNAP = {
   default_author: "Автор",
   card_title: "answer",
   card_labels: [{ card_id: 2, label_id: 3 }],
-  card_sessions: { 2: [9] },
+  card_sessions: [{ card_id: 2, session_id: 9 }],
   unread: { 2: { comments: true } },
   lists: [{ id: 1, type: "normal", rank: "a", group_id: 5, title_enc: "e:list" }],
   groups: [{ id: 5, name_enc: "e:group" }],
@@ -112,7 +112,7 @@ test("cached-DK fast path: no overlay, onDK + decrypted onState, mirror written,
   assert.equal(state.defaultAuthor, "Автор");
   assert.equal(state.cardTitle, "answer");
   assert.deepEqual(state.cardLabels, [{ cardId: 2, labelId: 3, sessionId: null }]);
-  assert.deepEqual(state.cardSessions, { 2: [9] });
+  assert.deepEqual(state.cardSessions, [{ cardId: 2, sessionId: 9 }]);
   assert.deepEqual(state.unread, { 2: { comments: true } });
   assert.deepEqual(state.lists, [{ id: 1, type: "normal", rank: "a", groupId: 5, title: "d:e:list" }]);
   assert.deepEqual(state.groups, [{ id: 5, name: "d:e:group" }]);

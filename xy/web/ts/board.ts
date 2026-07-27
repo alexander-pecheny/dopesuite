@@ -69,7 +69,7 @@ const titleNode = byId("boardTitle");
 // members roster boardmembers.js merges onto it.
 type LiveState = BoardState & MembersState;
 
-const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: {}, members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", timezone: "", announceCities: null, sessionTitleMode: "" };
+const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", timezone: "", announceCities: null, sessionTitleMode: "" };
 let dk: DataKey | null = null;
 function mustDK(): DataKey {
   if (!dk) throw new Error("нет ключа доски");
@@ -432,7 +432,7 @@ function sessionName(id: number): string {
 }
 
 function playingsOf(cardId: number): number[] {
-  const ids = (state.cardSessions[cardId] || []).slice();
+  const ids = state.cardSessions.filter((p) => p.cardId === cardId).map((p) => p.sessionId);
   ids.sort((a, b) => {
     const ma = sessionMeta(a), mb = sessionMeta(b);
     return ((mb && mb.date) || "").localeCompare((ma && ma.date) || "") || b - a;
@@ -656,7 +656,7 @@ async function deleteList(list: BoardList): Promise<void> {
 function forgetCardLabels(deletedCards: BoardCard[]): void {
   const dead = new Set(deletedCards.map((c) => c.id));
   state.cardLabels = state.cardLabels.filter((a) => !dead.has(a.cardId));
-  for (const id of dead) delete state.cardSessions[id];
+  state.cardSessions = state.cardSessions.filter((p) => !dead.has(p.cardId));
 }
 
 // Cards carry the card's *whole* text (whitespace collapsed), not a truncated
@@ -2674,7 +2674,8 @@ async function removePlaying(card: BoardCard, sessionId: number): Promise<void> 
 async function writePlayings(card: BoardCard, ids: number[]): Promise<void> {
   try {
     await put("setCardSessions", `/api/cards/${card.id}/sessions`, { session_ids: ids });
-    state.cardSessions[card.id] = ids;
+    state.cardSessions = state.cardSessions.filter((p) => p.cardId !== card.id)
+      .concat(ids.map((sessionId) => ({ cardId: card.id, sessionId })));
     const keep = new Set(ids);
     state.cardLabels = state.cardLabels.filter((a) =>
       a.cardId !== card.id || a.sessionId == null || keep.has(a.sessionId));
@@ -2803,7 +2804,7 @@ function tourCoverage(list: BoardList): { cards: BoardCard[]; rows: TourTester[]
   const cards = exportScope(list).cards.filter((c) => c.kind === "question");
   const seen = new Map<number, number>();
   for (const c of cards) {
-    for (const sid of state.cardSessions[c.id] || []) seen.set(sid, (seen.get(sid) || 0) + 1);
+    for (const sid of playingsOf(c.id)) seen.set(sid, (seen.get(sid) || 0) + 1);
   }
   const rows = [...seen.entries()]
     .map(([id, n]): TourTester => ({ id, name: sessionName(id), seen: n }))
@@ -2899,7 +2900,7 @@ const sessionsPanel = createSessionsPanel({
   // How many questions this test was played at — the number the Тесты panel
   // shows and the tester-list modal counts coverage from.
   playedCount: (sessionId) =>
-    Object.values(state.cardSessions).filter((ids) => ids.includes(sessionId)).length,
+    new Set(state.cardSessions.filter((p) => p.sessionId === sessionId).map((p) => p.cardId)).size,
   createSession: async (meta) => {
     const res = await create("createSession", `/api/boards/${boardId}/sessions`, {
       meta_enc: await xyCrypto.encField(mustDK(), meta),
@@ -2920,9 +2921,7 @@ const sessionsPanel = createSessionsPanel({
     state.sessions = state.sessions.filter((s) => s.id !== id);
     // The label survives — it is an ordinary board label. What goes is the
     // playings and the assignments scoped to them (ADR-0004).
-    for (const k of Object.keys(state.cardSessions)) {
-      state.cardSessions[k] = (state.cardSessions[k] || []).filter((s) => s !== id);
-    }
+    state.cardSessions = state.cardSessions.filter((p) => p.sessionId !== id);
     state.cardLabels = state.cardLabels.filter((a) => a.sessionId !== id);
     sessionMetaCache.delete(id);
   },

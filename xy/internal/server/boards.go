@@ -217,9 +217,9 @@ type boardSnapshot struct {
 	Labels        []labelDTO     `json:"labels"`
 	Sessions      []sessionDTO   `json:"sessions"`
 	CardLabels    []cardLabelDTO `json:"card_labels"`
-	// CardSessions is the Playings: card id → the sessions that question was
-	// played at. What the «Видели» line reads, and what a scoped label hangs off.
-	CardSessions map[string][]int64   `json:"card_sessions"`
+	// CardSessions is the Playings — one row per (card, session), the same shape
+	// as CardLabels because both mirror their table. What «Видели» reads.
+	CardSessions []cardSessionDTO     `json:"card_sessions"`
 	Unread       map[string]unreadDTO `json:"unread"`
 	// Sizes is the CALLER's display layout ({boardW,listW,cardLines}) — a per-user,
 	// all-boards preference (users.sizes, plaintext JSON; see migrateV9), delivered
@@ -259,7 +259,7 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: map[string][]int64{}, Unread: map[string]unreadDTO{}}
+	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, Unread: map[string]unreadDTO{}}
 
 	var name sql.NullString
 	var nameEnc []byte
@@ -346,12 +346,11 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 	}
 	defer csRows.Close()
 	for csRows.Next() {
-		var cardID, sessionID int64
-		if err := csRows.Scan(&cardID, &sessionID); handleErr(w, err) {
+		var p cardSessionDTO
+		if err := csRows.Scan(&p.CardID, &p.SessionID); handleErr(w, err) {
 			return
 		}
-		key := strconv.FormatInt(cardID, 10)
-		snap.CardSessions[key] = append(snap.CardSessions[key], sessionID)
+		snap.CardSessions = append(snap.CardSessions, p)
 	}
 
 	// Unread map: one row per card that has at least one event, authored by
