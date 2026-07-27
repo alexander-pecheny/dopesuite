@@ -22,6 +22,7 @@ page title="Профиль · xy" kind="sheet" scripts="dist/profile.js"
     button kind="ghost" id="sizesBtn" "Настройка ширины / высоты"
     button kind="ghost" id="authorBtn" "Автор по умолчанию"
     button kind="ghost" id="cardTitleBtn" "Заголовок карточки"
+    button kind="ghost" id="tzBtn" "Часовой пояс и города"
     button kind="ghost" href="/profile/tokens" "API-токены"
     button kind="ghost" id="logoutBtn" "Выйти"
 

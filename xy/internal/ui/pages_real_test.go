@@ -50,9 +50,17 @@ var loadBearingClasses = map[string][]string{
 
 var (
 	idGetRe    = regexp.MustCompile(`getElementById\("([^"]+)"\)`)
+	// wireModal(overlayId, openBtnId, cancelBtnId, …) hands its ids in as STRING
+	// ARGUMENTS, so idGetRe never sees them — a whole family of /profile buttons
+	// was invisible to this contract until a missing one bricked the page at
+	// module load (byId throws, so nothing after it binds, incl. «Выйти»).
+	wireModalRe = regexp.MustCompile(`wireModal\("([A-Za-z0-9_-]+)",\s*"([A-Za-z0-9_-]+)"(?:,\s*"([A-Za-z0-9_-]+)")?`)
 	idQueryRe  = regexp.MustCompile(`querySelector(?:All)?\("#([A-Za-z0-9_-]+)"[^"]*"?\)`)
 	importReJS = regexp.MustCompile(`from\s+"\./([a-z0-9_-]+\.js)"|import\s+"\./([a-z0-9_-]+\.js)"`)
-	scriptSrc  = regexp.MustCompile(`src="/static/([a-z0-9_-]+\.js)"`)
+	// The built ESM lives under /static/dist/, so a pattern without the optional
+	// path segment matched only the kit's /static/menu.js — i.e. this contract
+	// silently covered none of xy's own page scripts.
+	scriptSrc = regexp.MustCompile(`src="/static/((?:dist/)?[a-z0-9_-]+\.js)"`)
 )
 
 // TestPageSelectorContract asserts every element id and load-bearing class that
@@ -112,6 +120,13 @@ func wantedIDs(t *testing.T, page string) []string {
 		for _, m := range idQueryRe.FindAllStringSubmatch(text, -1) {
 			set[m[1]] = true
 		}
+		for _, m := range wireModalRe.FindAllStringSubmatch(text, -1) {
+			for _, id := range m[1:] {
+				if id != "" {
+					set[id] = true
+				}
+			}
+		}
 	}
 	ids := make([]string, 0, len(set))
 	for id := range set {
@@ -153,7 +168,10 @@ func jsClosure(t *testing.T, entries []string) []string {
 			if dep == "" {
 				dep = m[2]
 			}
-			visit(dep)
+			// A relative import resolves against the IMPORTER's directory: the
+			// built ESM lives in dist/, so `from "./app.js"` inside
+			// dist/profile.js means dist/app.js, not app.js.
+			visit(filepath.Join(filepath.Dir(file), dep))
 		}
 	}
 	for _, e := range entries {
