@@ -1256,10 +1256,18 @@ body {
 .kcard-test.has-labels {
   border: 1px solid var(--grid-dark);
   border-radius: var(--radius-pill);
-  padding: 1px 4px 1px 2px;
+  padding: 1px 5px;
 }
 .kcard-test .label-chip { width: 8px; height: 8px; border-radius: 50%; }
-.kcard-test-icon { font-size: 11px; line-height: 1; }
+/* An emoji's glyph overflows a line-height of 1, so the flask sat on the group's
+   bottom border. Centre it in a box tall enough to hold it. */
+.kcard-test-icon {
+  font-size: 10px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  height: 12px;
+}
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
 #cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
@@ -1269,7 +1277,18 @@ body {
 
 /* The person directory's dropdown: this board's names first and unlabelled,
    then names from other unlocked boards tagged with where they came from. */
-.suggest-pop { position: absolute; z-index: 30; max-height: 12rem; overflow-y: auto; }
+/* position:absolute with no offsets leaves the popup at its STATIC position —
+   inline after the input, i.e. off to the right of the row. It has to be pinned
+   to the anchor's bottom-left to read as a dropdown. */
+.suggest-pop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  min-width: 14rem;
+  max-height: 12rem;
+  overflow-y: auto;
+}
 .suggest-board { color: var(--muted); font-size: var(--text-sm); margin-left: var(--space-2); }
 
 /* A tester row is seg + name + ×. The name SHRINKS rather than claiming a line
