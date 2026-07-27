@@ -211,7 +211,58 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV18(db); err != nil {
 		return err
 	}
+	if err := migrateV19(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV19 stores a tour's Declaration: which Test Sessions its «Вопросы
+// тестировали» line names. Board data rather than a per-reader preference —
+// the preamble ships with the package, so two editors preparing it must see one
+// answer. Undeclared, a tour falls back to the ЧГК custom (everyone who saw more
+// than half its questions), which is why absence is meaningful and a row per
+// named session is enough.
+//
+// A tour is a List or a whole List Group (exportScope), hence exactly one of the
+// two FKs; both cascade, so a Declaration cannot outlive its tour. Linking or
+// dissolving a group drops the Declarations involved: the claim was about a
+// specific set of questions, and regrouping makes it a claim about a different
+// one.
+func migrateV19(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 19`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`
+create table if not exists tour_testers(
+  board_id integer not null references boards(id) on delete cascade,
+  list_id integer references lists(id) on delete cascade,
+  group_id integer references list_groups(id) on delete cascade,
+  session_id integer references test_sessions(id) on delete cascade,
+  check ((list_id is null) <> (group_id is null))
+);
+create unique index if not exists idx_tour_testers_list
+  on tour_testers(list_id, session_id) where list_id is not null and session_id is not null;
+create unique index if not exists idx_tour_testers_group
+  on tour_testers(group_id, session_id) where group_id is not null and session_id is not null;
+-- A NULL session_id marks «declared, and it names nobody». Without it an empty
+-- Declaration is indistinguishable from never having declared, and the custom
+-- silently re-ticks what the editor just cleared. NULLs compare distinct in
+-- SQLite, so the marker needs uniqueness of its own.
+create unique index if not exists idx_tour_testers_empty_list
+  on tour_testers(list_id) where list_id is not null and session_id is null;
+create unique index if not exists idx_tour_testers_empty_group
+  on tour_testers(group_id) where group_id is not null and session_id is null;
+create index if not exists idx_tour_testers_board on tour_testers(board_id);
+
+insert or ignore into schema_versions(version, applied_at)
+  values(19, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV18 turns a test session from a Card in a test List into its own

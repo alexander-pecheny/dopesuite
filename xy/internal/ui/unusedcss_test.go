@@ -415,3 +415,50 @@ func TestHeadingsSitWithTheirContent(t *testing.T) {
 			len(bad), strings.Join(bad, "\n  "))
 	}
 }
+
+// A stray control byte in a source file is invisible in review and makes git
+// treat the file as BINARY — no diff, no blame. One reached this repo as a
+// literal NUL, from a scripted edit where "\x00" in the replacement text was
+// interpreted before it was written. Tab, newline and carriage return are the
+// only control characters a source file has any business holding.
+func TestNoStrayControlBytes(t *testing.T) {
+	roots := []string{"../../web/ts", "../../web/assets/ui", "../../web/assets/static/styles.css",
+		"../../internal", "../../jstest", "../../scripts", "../../docs"}
+	var bad []string
+	for _, root := range roots {
+		err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				if d.Name() == "testdata" || d.Name() == "dist" || d.Name() == "node_modules" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			switch filepath.Ext(path) {
+			case ".ts", ".js", ".go", ".css", ".md", ".dopeui", ".json", ".py":
+			default:
+				return nil
+			}
+			b, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for i, c := range b {
+				if c < 32 && c != '\t' && c != '\n' && c != '\r' {
+					bad = append(bad, fmt.Sprintf("%s: byte %d at offset %d", path, c, i))
+					return nil // one report per file is enough
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", root, err)
+		}
+	}
+	sort.Strings(bad)
+	if len(bad) > 0 {
+		t.Errorf("%d source file(s) hold a stray control byte:\n  %s", len(bad), strings.Join(bad, "\n  "))
+	}
+}

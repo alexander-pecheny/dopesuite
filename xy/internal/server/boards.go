@@ -219,8 +219,11 @@ type boardSnapshot struct {
 	CardLabels    []cardLabelDTO `json:"card_labels"`
 	// CardSessions is the Playings — one row per (card, session), the same shape
 	// as CardLabels because both mirror their table. What «Видели» reads.
-	CardSessions []cardSessionDTO     `json:"card_sessions"`
-	Unread       map[string]unreadDTO `json:"unread"`
+	CardSessions []cardSessionDTO `json:"card_sessions"`
+	// TourTesters is each tour's Declaration: which sessions its «Вопросы
+	// тестировали» line names. A tour with none falls back to the custom.
+	TourTesters []tourTesterDTO      `json:"tour_testers"`
+	Unread      map[string]unreadDTO `json:"unread"`
 	// Sizes is the CALLER's display layout ({boardW,listW,cardLines}) — a per-user,
 	// all-boards preference (users.sizes, plaintext JSON; see migrateV9), delivered
 	// here alongside the snapshot's other caller-specific fields (role, unread) so
@@ -259,7 +262,7 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, Unread: map[string]unreadDTO{}}
+	snap := boardSnapshot{ID: bid, Role: role, Lists: []listDTO{}, Groups: []groupDTO{}, Cards: []cardDTO{}, Labels: []labelDTO{}, Sessions: []sessionDTO{}, CardLabels: []cardLabelDTO{}, CardSessions: []cardSessionDTO{}, TourTesters: []tourTesterDTO{}, Unread: map[string]unreadDTO{}}
 
 	var name sql.NullString
 	var nameEnc []byte
@@ -335,6 +338,30 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 			a.SessionID = &sessionID.Int64
 		}
 		snap.CardLabels = append(snap.CardLabels, a)
+	}
+
+	ttRows, err := s.db.QueryContext(ctx,
+		`select list_id, group_id, session_id from tour_testers where board_id = ?`, bid)
+	if handleErr(w, err) {
+		return
+	}
+	defer ttRows.Close()
+	for ttRows.Next() {
+		var d tourTesterDTO
+		var listID, groupID, sessionID sql.NullInt64
+		if err := ttRows.Scan(&listID, &groupID, &sessionID); handleErr(w, err) {
+			return
+		}
+		if sessionID.Valid {
+			d.SessionID = &sessionID.Int64
+		}
+		if listID.Valid {
+			d.ListID = &listID.Int64
+		}
+		if groupID.Valid {
+			d.GroupID = &groupID.Int64
+		}
+		snap.TourTesters = append(snap.TourTesters, d)
 	}
 
 	csRows, err := s.db.QueryContext(ctx, `

@@ -253,3 +253,40 @@ func insertAttachment(t *testing.T, db *sql.DB, bid, cardID int64) int64 {
 	return execIns(t, db, `insert into attachments(board_id, card_id, filename_enc, mime, size, blob_ref, created_at) values(?, ?, ?, 'image/png', 10, 'ref', ?)`,
 		bid, cardID, []byte("f.png"), fixtureNow)
 }
+
+// A Declaration is a claim about a specific set of questions, so it dies when
+// its tour stops being that tour: linking a list into a group, or dissolving
+// one, drops the Declarations involved rather than carrying them across. The
+// tempting alternative — union them — is what puts a tester who saw 9 of 12 in
+// one tour into a merged 24-question preamble they should have been able to play.
+func TestDeclarationDiesWithItsTour(t *testing.T) {
+	db := migratedDB(t)
+	mustExec(t, db, `pragma foreign_keys = on`)
+	uid := insertUser(t, db, "owner")
+	bid := insertBoard(t, db, uid, "board")
+	list := insertList(t, db, bid, "normal")
+	sid := execIns(t, db, `insert into test_sessions(board_id, meta_enc, created_at) values(?, ?, ?)`,
+		bid, []byte("meta"), fixtureNow)
+	mustExec(t, db, `insert into tour_testers(board_id, list_id, session_id) values(?, ?, ?)`, bid, list, sid)
+
+	// Exactly one scope: a row naming both, or neither, is not a tour.
+	if _, err := db.Exec(`insert into tour_testers(board_id, list_id, group_id, session_id) values(?, ?, 1, ?)`,
+		bid, list, sid); err == nil {
+		t.Error("a Declaration naming both a list and a group was accepted")
+	}
+	if _, err := db.Exec(`insert into tour_testers(board_id, session_id) values(?, ?)`, bid, sid); err == nil {
+		t.Error("a Declaration naming no tour was accepted")
+	}
+	// And one row per (tour, session).
+	if _, err := db.Exec(`insert into tour_testers(board_id, list_id, session_id) values(?, ?, ?)`,
+		bid, list, sid); err == nil {
+		t.Error("the same session was declared twice for one tour")
+	}
+
+	// The session going takes its Declaration with it: naming a test that no
+	// longer exists is not a state the model has.
+	mustExec(t, db, `delete from test_sessions where id = ?`, sid)
+	if got := scalarInt(t, db, `select count(*) from tour_testers where list_id = ?`, list); got != 0 {
+		t.Errorf("%d Declarations outlived the session they named", got)
+	}
+}

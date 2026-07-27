@@ -21,7 +21,8 @@ export interface OpBody {
   description_enc?: string;
   handout_meta_enc?: string;
   alias_enc?: string;
-  list_id?: number;
+  list_id?: number | null;
+  group_id?: number | null;
   name_enc?: string;
   color_enc?: string;
   labels?: Array<{ label_id: number; session_id?: number | null }>;

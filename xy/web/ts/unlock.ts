@@ -71,6 +71,16 @@ export interface Playing {
   sessionId: number;
 }
 
+// One session named by one tour's Declaration. listId xor groupId, matching
+// exportScope: a grouped list's tour is its whole group.
+// sessionId null is the marker that the tour declared and names nobody —
+// distinct from having no Declaration at all, which falls back to the custom.
+export interface TourTester {
+  listId: number | null;
+  groupId: number | null;
+  sessionId: number | null;
+}
+
 // A Test Session as the board holds it: the decrypted meta_enc, parsed lazily by
 // whoever needs it (sessions.ts#parseSession).
 export interface BoardSession {
@@ -92,6 +102,7 @@ export interface BoardState {
   sessions: BoardSession[];
   cardLabels: CardLabel[];
   cardSessions: Playing[];
+  tourTesters: TourTester[];
   unread: Record<string, UnreadFlags>;
   sizes: Sizes;
   defaultAuthor: string;
@@ -122,6 +133,7 @@ export interface Snapshot {
   }>;
   labels?: Array<{ id: number; name_enc: string; color_enc: string }>;
   card_sessions?: Array<{ card_id: number; session_id: number }>;
+  tour_testers?: Array<{ list_id?: number | null; group_id?: number | null; session_id: number | null }>;
   sessions?: Array<{ id: number; meta_enc: string; created_at?: string | null }>;
   timezone?: string;
   announce_cities?: unknown;
@@ -301,6 +313,9 @@ export function createUnlock(deps: UnlockDeps): Unlock {
           cardId: a.card_id, labelId: a.label_id, sessionId: a.session_id != null ? a.session_id : null,
         })),
         cardSessions: (snap.card_sessions || []).map((p) => ({ cardId: p.card_id, sessionId: p.session_id })),
+        tourTesters: (snap.tour_testers || []).map((d) => ({
+          listId: d.list_id ?? null, groupId: d.group_id ?? null, sessionId: d.session_id ?? null,
+        })),
         unread: snap.unread || {},
         sizes,
         defaultAuthor: snap.default_author || "",

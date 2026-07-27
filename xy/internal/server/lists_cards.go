@@ -48,6 +48,15 @@ type cardLabelDTO struct {
 	SessionID *int64 `json:"session_id,omitempty"`
 }
 
+// tourTesterDTO is one session named by one tour's Declaration.
+// tourTesterDTO is one session a tour's Declaration names — or, with a null
+// SessionID, the marker that the tour declared and names nobody.
+type tourTesterDTO struct {
+	ListID    *int64 `json:"list_id,omitempty"`
+	GroupID   *int64 `json:"group_id,omitempty"`
+	SessionID *int64 `json:"session_id"`
+}
+
 // cardSessionDTO is one Playing: this question was played at that test.
 type cardSessionDTO struct {
 	CardID    int64 `json:"card_id"`
@@ -355,6 +364,9 @@ func (s *server) handleCreateListGroup(w http.ResponseWriter, r *http.Request) {
 			if n, _ := res.RowsAffected(); n == 0 {
 				return errBadRequest("список не найден на этой доске")
 			}
+			if _, err := tx.ExecContext(ctx, `delete from tour_testers where list_id = ?`, lid); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -404,6 +416,9 @@ func (s *server) handleDeleteListGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.withWriteTx(r.Context(), "delete-list-group", func(ctx context.Context, tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `update lists set group_id = null, updated_at = ? where group_id = ?`, rfc3339(time.Now()), groupID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `delete from tour_testers where group_id = ?`, groupID); err != nil {
 			return err
 		}
 		return tombstone(ctx, tx, "list_groups", "id = ?", groupID)
@@ -882,6 +897,79 @@ func (s *server) handleSetCardSessions(w http.ResponseWriter, r *http.Request) {
 		for sid := range keep {
 			if _, err := tx.ExecContext(ctx,
 				`insert or ignore into card_sessions(card_id, session_id) values(?, ?)`, cardID, sid); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSetTourTesters replaces one tour's Declaration. The tour is a list or a
+// whole group (exportScope), so exactly one of the two ids is given.
+func (s *server) handleSetTourTesters(w http.ResponseWriter, r *http.Request) {
+	_, bid, _, ok := s.requireBoard(w, r, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		ListID     *int64  `json:"list_id"`
+		GroupID    *int64  `json:"group_id"`
+		SessionIDs []int64 `json:"session_ids"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if (req.ListID == nil) == (req.GroupID == nil) {
+		httpError(w, http.StatusBadRequest, "нужен ровно один из list_id / group_id")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "set-tour-testers", func(ctx context.Context, tx *sql.Tx) error {
+		var owner int64
+		var scope string
+		if req.ListID != nil {
+			scope = "list_id"
+			if err := tx.QueryRowContext(ctx, `select board_id from lists where id = ? and deleted_at is null`, *req.ListID).Scan(&owner); err != nil {
+				return errBadRequest("список не найден")
+			}
+		} else {
+			scope = "group_id"
+			if err := tx.QueryRowContext(ctx, `select board_id from list_groups where id = ? and deleted_at is null`, *req.GroupID).Scan(&owner); err != nil {
+				return errBadRequest("группа не найдена")
+			}
+		}
+		if owner != bid {
+			return errBadRequest("тур с другой доски")
+		}
+		id := req.ListID
+		if id == nil {
+			id = req.GroupID
+		}
+		if _, err := tx.ExecContext(ctx, `delete from tour_testers where `+scope+` = ?`, *id); err != nil {
+			return err
+		}
+		// A tour that names nobody still declares: one marker row, so the custom
+		// does not re-tick what the editor just cleared.
+		if len(req.SessionIDs) == 0 {
+			_, err := tx.ExecContext(ctx,
+				`insert into tour_testers(board_id, list_id, group_id, session_id) values(?, ?, ?, null)`,
+				bid, req.ListID, req.GroupID)
+			return err
+		}
+		for _, sid := range req.SessionIDs {
+			var sb int64
+			if err := tx.QueryRowContext(ctx, `select board_id from test_sessions where id = ? and deleted_at is null`, sid).Scan(&sb); err != nil {
+				return errBadRequest("тест не найден")
+			}
+			if sb != bid {
+				return errBadRequest("тест с другой доски")
+			}
+			if _, err := tx.ExecContext(ctx,
+				`insert or ignore into tour_testers(board_id, list_id, group_id, session_id) values(?, ?, ?, ?)`,
+				bid, req.ListID, req.GroupID, sid); err != nil {
 				return err
 			}
 		}

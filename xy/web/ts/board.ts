@@ -69,7 +69,7 @@ const titleNode = byId("boardTitle");
 // members roster boardmembers.js merges onto it.
 type LiveState = BoardState & MembersState;
 
-const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", timezone: "", announceCities: null, sessionTitleMode: "" };
+const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", timezone: "", announceCities: null, sessionTitleMode: "" };
 let dk: DataKey | null = null;
 function mustDK(): DataKey {
   if (!dk) throw new Error("нет ключа доски");
@@ -2815,26 +2815,39 @@ function tourCoverage(list: BoardList): { cards: BoardCard[]; rows: TourTester[]
 // Which sessions were ticked last time, per tour. A personal working state on
 // the way to a document, so it lives beside the other display prefs rather than
 // on the server.
-const tourPickKey = (list: BoardList): string =>
-  `xy.testerpick.${boardId}.${list.groupId != null ? "g" + list.groupId : "l" + list.id}`;
-
-function loadTourPick(list: BoardList): number[] | null {
-  try {
-    const raw = localStorage.getItem(tourPickKey(list));
-    if (!raw) return null;
-    const v: unknown = JSON.parse(raw);
-    return Array.isArray(v) ? (v as number[]) : null;
-  } catch (_) { return null; }
+// A tour's Declaration lives on the board, not in this browser: the preamble
+// ships with the package, so two editors preparing it see one answer. The ticks
+// used to sit in localStorage, where they outlived the sessions they named.
+function tourScope(list: BoardList): { listId: number | null; groupId: number | null } {
+  return list.groupId != null ? { listId: null, groupId: list.groupId } : { listId: list.id, groupId: null };
 }
 
-function saveTourPick(list: BoardList, ids: number[]): void {
-  try { localStorage.setItem(tourPickKey(list), JSON.stringify(ids)); } catch (_) { /* quota */ }
+// null = this tour has no Declaration and falls back to the custom. An empty
+// array = it declared, and names nobody.
+function declaredFor(list: BoardList): number[] | null {
+  const s = tourScope(list);
+  const rows = state.tourTesters.filter((d) => d.listId === s.listId && d.groupId === s.groupId);
+  if (!rows.length) return null;
+  return rows.filter((d) => d.sessionId != null).map((d) => d.sessionId as number);
 }
 
+async function declare(list: BoardList, ids: number[]): Promise<void> {
+  const s = tourScope(list);
+  await put("setTourTesters", `/api/boards/${boardId}/tour-testers`, {
+    list_id: s.listId, group_id: s.groupId, session_ids: ids,
+  });
+  const rest = state.tourTesters.filter((d) => d.listId !== s.listId || d.groupId !== s.groupId);
+  state.tourTesters = ids.length
+    ? rest.concat(ids.map((sessionId) => ({ ...s, sessionId })))
+    : rest.concat([{ ...s, sessionId: null }]);
+}
+
+// Undeclared, a tour falls back to the custom: everyone who saw MORE than half
+// its questions. Shared with the card's «кроме общих тестеров» line.
 function tourPicked(list: BoardList): Set<number> {
   const { cards, rows } = tourCoverage(list);
-  const remembered = loadTourPick(list);
-  return new Set(remembered ?? rows.filter((r) => r.seen * 2 > cards.length).map((r) => r.id));
+  const declared = declaredFor(list);
+  return new Set(declared ?? rows.filter((r) => r.seen * 2 > cards.length).map((r) => r.id));
 }
 
 function openTesterList(list: BoardList): void {
@@ -2863,7 +2876,9 @@ function openTesterList(list: BoardList): void {
     cb.checked = picked.has(r.id);
     cb.addEventListener("change", () => {
       if (cb.checked) picked.add(r.id); else picked.delete(r.id);
-      saveTourPick(list, [...picked]);
+      void declare(list, [...picked]).catch((err) => {
+        byId("testerListMessage").textContent = errMsg(err);
+      });
       redraw();
     });
     box.append(el("label", { class: "sess-row" },

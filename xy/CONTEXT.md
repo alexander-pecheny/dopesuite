@@ -34,6 +34,10 @@ _Avoid_: mark, test mark, session tag
 **Tester List**:
 The «Вопросы тестировали: …» line a tour carries in its preamble. By ЧГК custom it names those who tested most of the tour and therefore should not play it — someone who saw one or two questions still may, skipping the ones they know. Compiled per tour (a List, or its whole List Group) from the Playings its questions carry, not from the board's Sessions as a whole.
 
+**Declaration**:
+Which Sessions a tour's Tester List names. Board data, not a per-reader preference: the preamble belongs to the tour and ships with the package, so two editors preparing it see one answer. Undeclared, a tour falls back to the custom — everyone who saw more than half its questions.
+_Avoid_: tick state, selection, pick
+
 **Announce Set**:
 The cities a Test Session's start time is announced in, and the source of the invite line an editor pastes into a messenger. A city carries a timezone and the name to print; testers are not xy users, so this is an outbound string, not a rendering preference.
 
