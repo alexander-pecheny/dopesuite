@@ -176,11 +176,11 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     const drawCities = (): void => {
       cityBox.replaceChildren();
       for (const [i, c] of cities.entries()) {
-        cityBox.append(el("span", { class: "label-pick is-on", title: c.name },
-          el("span", { class: "label-pick-name", text: c.name }),
-          el("span", { class: "label-pick-zone", text: zoneOffset(c.zone) }),
+        cityBox.append(el("span", { class: "city-chip", title: `${c.name} · ${c.zone}` },
+          el("span", { class: "city-chip-name", text: c.name }),
+          el("span", { class: "city-chip-zone", text: zoneOffset(c.zone) }),
           el("button", {
-            class: "label-pick-x", type: "button", text: "×",
+            class: "city-chip-x", type: "button", text: "×",
             title: "Убрать город", "aria-label": `Убрать ${c.name}`,
             onclick: () => { cities.splice(i, 1); drawCities(); previewInvite(); },
           })));
@@ -378,7 +378,14 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
           h.hint ? el("span", { class: "suggest-board", text: h.hint }) : el("span"),
         ));
       }
-      inp.parentElement?.append(pop);
+      // .suggest-pop is absolutely positioned; without a positioned ancestor it
+      // anchors to the page and lands somewhere unrelated — which reads as the
+      // autocomplete simply not working. Marked HERE rather than at bind time,
+      // because a field is often wired before it is appended to anything.
+      const host = inp.parentElement;
+      if (!host) return;
+      host.classList.add("suggest-anchor");
+      host.append(pop);
     };
     inp.addEventListener("input", draw);
     inp.addEventListener("focus", draw);

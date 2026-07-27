@@ -332,10 +332,13 @@
 }
 
 /* labels */
+/* Shorter and taller than it used to be: the row now shares its width with the
+   test groups beside it, and a stubbier pill both fits more of them and lines up
+   with the 🧪 rather than sitting as a thin bar under it. */
 .label-chip {
   display: inline-block;
-  width: 34px;
-  height: 8px;
+  width: 22px;
+  height: 12px;
   border-radius: var(--radius-pill);
   background: var(--muted);
 }
@@ -1246,14 +1249,17 @@ body {
 .sess-invite { flex: 1 1 18rem; margin: 0; font-size: var(--text-base); }
 
 /* A test on a board card: the flask alone when the testers recorded nothing,
-   the flask plus their verdicts' colours in a thin border when they did. */
+   the flask plus their verdicts' colours in a thin border when they did. Inside
+   the group the verdicts are DOTS, not pills — a card can carry several tests,
+   and pills there ate the row. */
 .kcard-test { display: inline-flex; align-items: center; gap: 3px; }
 .kcard-test.has-labels {
   border: 1px solid var(--grid-dark);
   border-radius: var(--radius-pill);
   padding: 1px 4px 1px 2px;
 }
-.kcard-test-icon { font-size: 9px; line-height: 1; }
+.kcard-test .label-chip { width: 8px; height: 8px; border-radius: 50%; }
+.kcard-test-icon { font-size: 11px; line-height: 1; }
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
 #cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
@@ -1316,6 +1322,32 @@ body {
 
 /* The town field sits inside the chip row, so it must not stretch to fill it. */
 .sess-city-add { width: 12rem; max-width: 100%; }
-/* Which zone a town resolved to, shown on its chip: a wrong guess is visible
-   before the invite line goes out, not after. */
-.label-pick-zone { opacity: 0.7; font-size: var(--text-2xs); }
+/* Any input with an autocomplete under it: the popup is absolute, so its parent
+   has to be the positioning context. */
+.suggest-anchor { position: relative; }
+
+/* A city is not a coloured label, so it does not wear the label pill — that
+   painted it grey-on-white and made both the name and its offset unreadable.
+   Surface + border, text in the normal ink. */
+.city-chip {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-0-5) var(--space-2);
+  border: 1px solid var(--grid-dark); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text); font-size: var(--text-xs);
+}
+.city-chip-name { font-weight: var(--fw-semibold); }
+/* Which zone the town resolved to: a wrong guess is visible before the invite
+   line goes out, not after. Muted against the SURFACE, so it stays legible. */
+.city-chip-zone { color: var(--muted); font-size: var(--text-2xs); }
+.city-chip-x {
+  border: 0; background: none; color: var(--muted); font: inherit;
+  line-height: 1; padding: 0 var(--space-0-5); cursor: var(--cursor-action);
+}
+.city-chip-x:hover, .city-chip-x:focus-visible { color: var(--text); }
+
+/* A section heading belongs to what is UNDER it, so it needs air above and
+   little below — «Лента» was sitting nearer the delete button than its own
+   feed. */
+#sessionForm .fld { margin-top: var(--space-4); }
+#sessionForm .fld:first-child { margin-top: 0; }
+#sessionForm .fld-head { margin-bottom: var(--space-1); }
