@@ -559,7 +559,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
       items.push({ label: "🔍 Предпросмотр", onClick: () => { void previewList(list); } });
     }
     items.push(
-      { label: "👥 Копировать список тестеров", onClick: () => openTesterList(list) },
+      { label: "👥 Список тестеров", onClick: () => openTesterList(list) },
       { label: "↔️ Переместить список…", onClick: () => openMoveList(list) },
       { label: "✏️ Переименовать список", onClick: () => { void renameList(list); } },
     );
@@ -2388,7 +2388,6 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   previewListRef = list;
   previewGroupMode = !!group;
   q(".preview-screen-toggle").hidden = false;
-  byId("previewCopyTesters").hidden = true;
   previewOverlay.hidden = false;
   overlayStack.open({ el: previewOverlay, close: hidePreview });
   if (!cards.length) {

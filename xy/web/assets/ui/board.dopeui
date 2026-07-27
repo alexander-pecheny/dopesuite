@@ -161,7 +161,6 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     headrow
       previewtitle id="previewTitle" "Предпросмотр"
       headactions
-        button small id="previewCopyTesters" hidden "👥 Копировать список тестеров"
         checkbox id="previewScreen" kind="preview" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения" " для экрана"
         iconbtn id="previewClose" label="Закрыть" "×"
     mount id="previewBody" kind="preview-body"
