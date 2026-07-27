@@ -111,30 +111,49 @@ func meOf(u session.User) meResponse {
 	return resp
 }
 
+// userPrefs is every per-user display preference, read as one row. They ride
+// both /api/auth/me and the board snapshot, and adding a seventh used to mean
+// editing the select and its unpack in two places.
+type userPrefs struct {
+	Sizes            sql.NullString
+	DefaultAuthor    sql.NullString
+	CardTitle        sql.NullString
+	Timezone         sql.NullString
+	AnnounceCities   sql.NullString
+	SessionTitleMode sql.NullString
+	OnboardedAt      sql.NullString
+}
+
+func loadUserPrefs(ctx context.Context, q rowQuerier, uid int64) (userPrefs, error) {
+	var p userPrefs
+	err := q.QueryRowContext(ctx, `
+select sizes, default_author, card_title, timezone, announce_cities, session_title_mode, onboarded_at
+from users where id = ?`, uid).
+		Scan(&p.Sizes, &p.DefaultAuthor, &p.CardTitle, &p.Timezone, &p.AnnounceCities, &p.SessionTitleMode, &p.OnboardedAt)
+	return p, err
+}
+
 func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.requireUser(w, r)
 	if !ok {
 		return
 	}
 	resp := meOf(u)
-	var sizes, author, cardTitle, timezone, cities, titleMode, onboarded sql.NullString
-	if err := s.db.QueryRowContext(r.Context(), `
-select sizes, default_author, card_title, timezone, announce_cities, session_title_mode, onboarded_at
-from users where id = ?`, u.UserID).
-		Scan(&sizes, &author, &cardTitle, &timezone, &cities, &titleMode, &onboarded); handleErr(w, err) {
+	p, err := loadUserPrefs(r.Context(), s.db, u.UserID)
+	if handleErr(w, err) {
 		return
 	}
-	if sizes.Valid && sizes.String != "" {
-		resp.Sizes = json.RawMessage(sizes.String)
+	if p.Sizes.Valid && p.Sizes.String != "" {
+		resp.Sizes = json.RawMessage(p.Sizes.String)
 	}
-	if cities.Valid && cities.String != "" {
-		resp.AnnounceCities = json.RawMessage(cities.String)
+	if p.AnnounceCities.Valid && p.AnnounceCities.String != "" {
+		resp.AnnounceCities = json.RawMessage(p.AnnounceCities.String)
 	}
-	resp.DefaultAuthor = author.String
-	resp.CardTitle = cardTitle.String
-	resp.Timezone = timezone.String
-	resp.SessionTitleMode = titleMode.String
-	resp.OnboardedAt = onboarded.String
+	resp.DefaultAuthor = p.DefaultAuthor.String
+	resp.CardTitle = p.CardTitle.String
+	resp.Timezone = p.Timezone.String
+	resp.SessionTitleMode = p.SessionTitleMode.String
+	resp.OnboardedAt = p.OnboardedAt.String
 	writeJSON(w, resp)
 }
 

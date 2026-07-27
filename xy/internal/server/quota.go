@@ -30,7 +30,7 @@ select
 + coalesce((select sum(length(l.title_enc)) from lists l
             join boards b on b.id = l.board_id and b.deleted_at is null
             where b.owner_user_id = ? and l.deleted_at is null), 0)
-+ coalesce((select sum(length(lb.name_enc) + coalesce(length(lb.color_enc), 0)) from labels lb
++ coalesce((select sum(length(lb.name_enc) + length(lb.color_enc)) from labels lb
             join boards b on b.id = lb.board_id and b.deleted_at is null
             where b.owner_user_id = ? and lb.deleted_at is null), 0)
 + coalesce((select sum(length(s.meta_enc)) from test_sessions s

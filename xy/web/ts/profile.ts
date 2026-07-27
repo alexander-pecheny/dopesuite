@@ -1,7 +1,7 @@
 // profile.ts — username management, logout, and the three settings dialogs:
 // change password, board sizes (with a pseudo-board preview), default author.
 import { xyApp, xySizes } from "./app.js";
-import { COMMON_CITIES } from "./sessions.js";
+import { COMMON_CITIES, guessZone } from "./sessions.js";
 import type { AuthMe, Sizes } from "./app.js";
 
 const { fetchJSON, jpost, fetchVoid, el } = xyApp;
@@ -247,10 +247,6 @@ const tzModal = wireModal("tzOverlay", "tzBtn", "tzCancel", async () => {
   byId<HTMLSelectElement>("tzTitleMode").value = sessionTitleMode;
   setText(tzMessage, "");
 });
-
-function guessZone(): string {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { return ""; }
-}
 
 // citiesFromNames resolves typed names against the built-in table; an unknown one
 // is kept with the caller's own zone, so the invite line still names it.

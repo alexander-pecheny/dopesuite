@@ -272,22 +272,20 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	// The caller's per-user display prefs (see boardSnapshot.Sizes /
 	// .DefaultAuthor), shared across all their boards — keyed on the user, not
 	// this board.
-	var sizes, defAuthor, cardTitle, timezone, cities, titleMode sql.NullString
-	if err := s.db.QueryRowContext(ctx,
-		`select sizes, default_author, card_title, timezone, announce_cities, session_title_mode from users where id = ?`, uid).
-		Scan(&sizes, &defAuthor, &cardTitle, &timezone, &cities, &titleMode); handleErr(w, err) {
+	prefs, err := loadUserPrefs(ctx, s.db, uid)
+	if handleErr(w, err) {
 		return
 	}
-	if sizes.Valid && sizes.String != "" {
-		snap.Sizes = json.RawMessage(sizes.String)
+	if prefs.Sizes.Valid && prefs.Sizes.String != "" {
+		snap.Sizes = json.RawMessage(prefs.Sizes.String)
 	}
-	snap.DefaultAuthor = defAuthor.String
-	snap.CardTitle = cardTitle.String
-	snap.Timezone = timezone.String
-	snap.SessionTitleMode = titleMode.String
-	if cities.Valid && cities.String != "" {
-		snap.AnnounceCities = json.RawMessage(cities.String)
+	if prefs.AnnounceCities.Valid && prefs.AnnounceCities.String != "" {
+		snap.AnnounceCities = json.RawMessage(prefs.AnnounceCities.String)
 	}
+	snap.DefaultAuthor = prefs.DefaultAuthor.String
+	snap.CardTitle = prefs.CardTitle.String
+	snap.Timezone = prefs.Timezone.String
+	snap.SessionTitleMode = prefs.SessionTitleMode.String
 
 	lists, err := scanLists(ctx, s.db, bid)
 	if handleErr(w, err) {

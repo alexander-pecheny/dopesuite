@@ -39,7 +39,6 @@ select id, meta_enc, created_at from test_sessions where board_id = ? and delete
 	return out, rows.Err()
 }
 
-// boardOfSession resolves the owning board (for ACL) of a session.
 func boardOfSession(ctx context.Context, q querier, sessionID int64) (int64, error) {
 	var bid int64
 	err := q.QueryRowContext(ctx,
@@ -50,7 +49,6 @@ func boardOfSession(ctx context.Context, q querier, sessionID int64) (int64, err
 	return bid, err
 }
 
-// requireSession resolves {id} to a session the caller may write to.
 func (s *server) requireSession(w http.ResponseWriter, r *http.Request) (sessionID, boardID int64, ok bool) {
 	u, authed := s.requireUser(w, r)
 	if !authed {
@@ -175,12 +173,6 @@ func (s *server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---- the session's own лента ----
-//
-// The debrief view: everything said about any question at this test, plus the
-// notes about the test itself. A card-attached comment appears in both its
-// card's timeline and here — the tag is an annotation, not a move.
-
 func (s *server) handleGetSessionTimeline(w http.ResponseWriter, r *http.Request) {
 	sessionID, _, ok := s.requireSession(w, r)
 	if !ok {
@@ -236,8 +228,6 @@ order by e.id`, sessionID)
 	writeJSON(w, out)
 }
 
-// handleAddSessionComment records a note about the test itself — no question
-// attached, which is the shape a comment on the old test card always had.
 func (s *server) handleAddSessionComment(w http.ResponseWriter, r *http.Request) {
 	u, authed := s.requireUser(w, r)
 	if !authed {

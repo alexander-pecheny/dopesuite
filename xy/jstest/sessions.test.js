@@ -1,11 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  canonicalLabel,
-  DEFAULT_MARKS,
   humanDate,
   inviteLine,
-  markLabel,
   parseSession,
   serializeSession,
   sessionLabel,
@@ -82,17 +79,8 @@ test("a titleless session falls back to its date under every mode", () => {
   assert.equal(sessionLabel(m, "date-title"), "20 июля");
 });
 
-test("markLabel names the session and the mark", () => {
-  assert.equal(markLabel(base, "taken", DEFAULT_MARKS), "20 июля · Алиев и др. · взяли");
-});
 
-test("an unknown mark falls back to its own key", () => {
-  assert.equal(markLabel(base, "seen", DEFAULT_MARKS), "20 июля · Алиев и др. · seen");
-});
 
-test("canonicalLabel ignores the reader's preference — chgksuite reads it", () => {
-  assert.equal(canonicalLabel(base, "taken", DEFAULT_MARKS), markLabel(base, "taken", DEFAULT_MARKS, "date-title"));
-});
 
 test("the invite line converts from the anchor zone, not from UTC", () => {
   const m = {

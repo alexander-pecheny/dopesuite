@@ -65,8 +65,6 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     overlay.hidden = true;
   }
 
-  // Sessions sort newest first by date — a better order than the manual rank a
-  // list gave them, and the one you want when adding to the most recent test.
   function sorted(): Array<{ s: BoardSession; m: SessionMeta }> {
     return deps.sessions()
       .map((s) => ({ s, m: parseSession(s.meta) }))
@@ -143,8 +141,6 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     }
   }
 
-  // ---- the session form ----
-
   function renderForm(m: SessionMeta): void {
     const box = byId("sessionForm");
     box.replaceChildren();
@@ -170,7 +166,6 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       field("Алиас", titleInp),
     );
 
-    // Announce cities: the invite line's whole point.
     const cityBox = el("div", { class: "sess-cities" });
     const cities: AnnounceCity[] = (m.cities || []).slice();
     const drawCities = (): void => {

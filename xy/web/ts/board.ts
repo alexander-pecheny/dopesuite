@@ -410,13 +410,6 @@ const cardsOf = (listId: number): BoardCard[] => state.cards.filter((c) => c.lis
 const labelById = (id: number) => state.labels.find((l) => l.id === id);
 const sessionById = (id: number) => state.sessions.find((s) => s.id === id);
 
-// ---- test sessions ----
-// A Playing says this question was played at that test (ADR-0004). A label is an
-// ordinary board label; what makes one a test's verdict rather than the author's
-// is the ASSIGNMENT carrying a session.
-
-// sessionMeta parses (and memoizes) a session's decrypted meta. Sessions are few
-// per board and the cache is dropped whole on every snapshot.
 let sessionMetaCache = new Map<number, SessionMeta>();
 function sessionMeta(id: number): SessionMeta | null {
   const hit = sessionMetaCache.get(id);
@@ -433,14 +426,11 @@ function titleMode(): TitleMode {
   return m === "title" || m === "date" ? m : "date-title";
 }
 
-// sessionName is what a playing reads on screen — derived, never stored, so
-// retiming a session renames every chip at once (issue #8).
 function sessionName(id: number): string {
   const m = sessionMeta(id);
   return m ? sessionLabel(m, titleMode()) : "тест";
 }
 
-// playingsOf is the sessions a question was played at, newest first.
 function playingsOf(cardId: number): number[] {
   const ids = (state.cardSessions[cardId] || []).slice();
   ids.sort((a, b) => {
@@ -450,15 +440,11 @@ function playingsOf(cardId: number): number[] {
   return ids;
 }
 
-// assignmentsOf returns a card's label assignments, optionally only those scoped
-// to one playing (or only the unscoped ones when sessionId is null).
 function assignmentsOf(cardId: number, sessionId: number | null | undefined): CardLabel[] {
   return state.cardLabels.filter((a) =>
     a.cardId === cardId && (sessionId === undefined || a.sessionId === sessionId));
 }
 
-// sessionsOfCard is every session a card was played at, as decrypted meta —
-// what the «Видели» line reads.
 function sessionsOfCard(cardId: number): SessionMeta[] {
   const out: SessionMeta[] = [];
   for (const sid of playingsOf(cardId)) {
@@ -2536,8 +2522,6 @@ function sortLabels(labels: BoardLabel[]): BoardLabel[] {
   });
 }
 
-// labelChip is one assigned label: an inert pill whose × is the only remove
-// affordance, so brushing a label cannot take it off the card.
 function labelChip(lbl: BoardLabel, onRemove: () => void, title: string): HTMLElement {
   return el("span", { class: "label-pick is-on", dataset: { c: lbl.color }, title: lbl.name },
     el("span", { class: "label-pick-name", text: lbl.name }),
@@ -2564,9 +2548,6 @@ function renderLabelPicker(card: BoardCard): void {
   paintLabels();
 }
 
-// renderPlayings draws one block per test this question was played at, each with
-// its own labels — «на этом тесте не взяли» — added and removed independently of
-// the author's own.
 function renderPlayings(card: BoardCard): void {
   const box = byId("cardPlayings");
   box.replaceChildren();
@@ -2651,78 +2632,9 @@ newLabelForm.remove();
 swapPlusIcon(byId("labelAddBtn"));
 swapPlusIcon(newLabelForm.querySelector<HTMLButtonElement>('button[type="submit"]')!);
 
-// openLabelAddPopup mounts a filtered dropdown of the labels not yet assigned in
-// this scope. `sessionId` null means the author's own labels; set means the
-// labels of one Playing, so the same label can be added twice to a card — once
-// each way. A native <select> can't host a search box, hence the hand-rolled
-// popup (shares the .menu-dropdown styling of the list "⋯" menu).
-function openLabelAddPopup(sessionId: number | null, anchorEl?: HTMLElement): void {
-  const found = state.cards.find((c) => c.id === cardDetail.openCardId());
-  if (!found) return;
-  const card = found;
-  const anchor = anchorEl || byId("labelAddRow");
-  const already = anchor.querySelector(".label-add-popup");
-  closeLabelAddPopup();
-  if (already) return; // toggle off
-
-  const taken = new Set(assignmentsOf(card.id, sessionId).map((a) => a.labelId));
-  const pool = sortLabels(state.labels.filter((l) => !taken.has(l.id)));
-
-  const filter = el("input", {
-    class: "input label-add-filter", type: "text",
-    placeholder: "Фильтр меток…", autocomplete: "off",
-  }) as HTMLInputElement;
-  const listBox = el("div", { class: "label-add-list" });
-  // The create-label form only makes sense in the author's own section: a new
-  // label made from inside a test would still be a plain board label.
-  const kids = sessionId == null ? [filter, listBox, newLabelForm] : [filter, listBox];
-  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, ...kids);
-
-  function fill(): void {
-    const q = filter.value.trim().toLowerCase();
-    const items = q ? pool.filter((l) => l.name.toLowerCase().includes(q)) : pool;
-    listBox.replaceChildren();
-    if (!items.length) {
-      const why = state.labels.length === 0
-        ? "меток на доске нет"
-        : pool.length === 0
-        ? "все метки доски уже добавлены"
-        : "ничего не найдено";
-      listBox.append(el("span", { class: "label-empty", text: why }));
-      return;
-    }
-    for (const lbl of items) {
-      listBox.append(el("button", {
-        class: "menu-item label-add-item", type: "button", role: "menuitem",
-        onclick: () => { close(); void setLabel(card, lbl, sessionId, true); },
-      },
-        el("span", { class: "label-swatch", dataset: { c: lbl.color } }),
-        el("span", { class: "label-add-name", text: lbl.name }),
-      ));
-    }
-    paintLabels();
-  }
-  function close(): void {
-    popup.remove();
-    document.removeEventListener("pointerdown", onOutside, true);
-    document.removeEventListener("keydown", onKey, true);
-  }
-  function onOutside(e: PointerEvent): void { if (e.target instanceof Node && !anchor.contains(e.target)) close(); }
-  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); } }
-
-  filter.addEventListener("input", fill);
-  anchor.append(popup);
-  document.addEventListener("pointerdown", onOutside, true);
-  document.addEventListener("keydown", onKey, true);
-  fill();
-  filter.focus();
-}
-
-byId("labelAddBtn").addEventListener("click", () => openLabelAddPopup(null));
-
-// setLabel adds or removes ONE assignment. The whole card's assignments go up
-// together because the endpoint replaces the set — cheap, and it keeps the
-// offline mirror's view of a card in one op.
+// setLabel adds or removes ONE assignment. The card's whole set goes up together
+// because the endpoint replaces it — cheap, and it keeps the offline mirror's
+// view of a card in a single op.
 async function setLabel(card: BoardCard, lbl: BoardLabel, sessionId: number | null, adding: boolean): Promise<void> {
   const rest = state.cardLabels.filter((a) =>
     a.cardId !== card.id || a.labelId !== lbl.id || a.sessionId !== sessionId);
@@ -2743,14 +2655,12 @@ async function setLabel(card: BoardCard, lbl: BoardLabel, sessionId: number | nu
   } catch (err) { byId("cardMessage").textContent = errMsg(err); }
 }
 
-// addPlaying / removePlaying edit which tests a question was played at. Removing
-// one takes the labels scoped to it — a label scoped to a playing that no longer
-// exists cannot be read (ADR-0004) — so the confirmation names the count.
 async function addPlaying(card: BoardCard, sessionId: number): Promise<void> {
-  const ids = [...new Set([...playingsOf(card.id), sessionId])];
-  await writePlayings(card, ids);
+  await writePlayings(card, [...new Set([...playingsOf(card.id), sessionId])]);
 }
 
+// removePlaying takes the labels scoped to it — a label scoped to a playing that
+// no longer exists cannot be read (ADR-0004) — so the confirmation names how many.
 async function removePlaying(card: BoardCard, sessionId: number): Promise<void> {
   const scoped = assignmentsOf(card.id, sessionId).length;
   const what = scoped
@@ -2772,65 +2682,109 @@ async function writePlayings(card: BoardCard, ids: number[]): Promise<void> {
   } catch (err) { byId("cardMessage").textContent = errMsg(err); }
 }
 
-// openPlayingAddPopup lists the board's tests this question is not yet marked
-// with — the second of the card's two autocompletes.
-function openPlayingAddPopup(): void {
-  const found = state.cards.find((c) => c.id === cardDetail.openCardId());
-  if (!found) return;
-  const card = found;
-  const anchor = byId("playingAddRow");
-  const already = anchor.querySelector(".label-add-popup");
-  closeLabelAddPopup();
-  if (already) return;
+// filteredPopup is the one dropdown shape this card uses three ways: a filter
+// field over a scrollable list, dismissed by Escape, an outside click, or a
+// second click on its trigger. A native <select> can host neither the filter nor
+// the swatches, hence the hand-rolled popup (it shares .menu-dropdown with the
+// list ⋯ menu).
+interface PopupItem { id: number; name: string; color?: string }
 
-  const on = new Set(playingsOf(card.id));
-  const pool = state.sessions.filter((s) => !on.has(s.id))
-    .map((s) => ({ id: s.id, name: sessionName(s.id), date: (sessionMeta(s.id) || { date: "" }).date }))
-    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
+function filteredPopup(opts: {
+  anchor: HTMLElement;
+  items: PopupItem[];
+  placeholder: string;
+  empty: string;
+  extra?: HTMLElement;
+  onPick(item: PopupItem): void;
+}): void {
+  const already = opts.anchor.querySelector(".label-add-popup");
+  closeLabelAddPopup();
+  if (already) return; // a second click on the trigger closes it
 
   const filter = el("input", {
     class: "input label-add-filter", type: "text",
-    placeholder: "Фильтр тестов…", autocomplete: "off",
+    placeholder: opts.placeholder, autocomplete: "off",
   }) as HTMLInputElement;
   const listBox = el("div", { class: "label-add-list" });
-  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, filter, listBox);
+  const kids = opts.extra ? [filter, listBox, opts.extra] : [filter, listBox];
+  const popup = el("div", { class: "menu-dropdown label-add-popup", role: "menu" }, ...kids);
 
   function fill(): void {
     const q = filter.value.trim().toLowerCase();
-    const items = q ? pool.filter((s) => s.name.toLowerCase().includes(q)) : pool;
+    const shown = q ? opts.items.filter((i) => i.name.toLowerCase().includes(q)) : opts.items;
     listBox.replaceChildren();
-    if (!items.length) {
-      // Three different nothings: the board has no tests, they are all already on
-      // this question, or the filter matched none of the rest.
-      const why = state.sessions.length === 0
-        ? "тестов на доске нет"
-        : pool.length === 0
-        ? "все тесты доски уже отмечены"
-        : "ничего не найдено";
-      listBox.append(el("span", { class: "label-empty", text: why }));
+    if (!shown.length) {
+      listBox.append(el("span", { class: "label-empty", text: opts.items.length ? "ничего не найдено" : opts.empty }));
       return;
     }
-    for (const s of items) {
+    for (const item of shown) {
       listBox.append(el("button", {
         class: "menu-item label-add-item", type: "button", role: "menuitem",
-        onclick: () => { close(); void addPlaying(card, s.id); },
-      }, el("span", { class: "label-add-name", text: s.name })));
+        onclick: () => { close(); opts.onPick(item); },
+      },
+        item.color ? el("span", { class: "label-swatch", dataset: { c: item.color } }) : el("span"),
+        el("span", { class: "label-add-name", text: item.name }),
+      ));
     }
+    paintLabels();
   }
   function close(): void {
     popup.remove();
     document.removeEventListener("pointerdown", onOutside, true);
     document.removeEventListener("keydown", onKey, true);
   }
-  function onOutside(e: PointerEvent): void { if (e.target instanceof Node && !anchor.contains(e.target)) close(); }
+  function onOutside(e: PointerEvent): void { if (e.target instanceof Node && !opts.anchor.contains(e.target)) close(); }
   function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); } }
 
   filter.addEventListener("input", fill);
-  anchor.append(popup);
+  opts.anchor.append(popup);
   document.addEventListener("pointerdown", onOutside, true);
   document.addEventListener("keydown", onKey, true);
   fill();
   filter.focus();
+}
+
+// openLabelAddPopup offers the labels not yet assigned IN THIS SCOPE. sessionId
+// null means the author's own; set means one Playing's — so the same label can
+// be added to a card twice, once each way (ADR-0004).
+function openLabelAddPopup(sessionId: number | null, anchorEl?: HTMLElement): void {
+  const card = state.cards.find((c) => c.id === cardDetail.openCardId());
+  if (!card) return;
+  const taken = new Set(assignmentsOf(card.id, sessionId).map((a) => a.labelId));
+  const pool = sortLabels(state.labels.filter((l) => !taken.has(l.id)));
+  filteredPopup({
+    anchor: anchorEl || byId("labelAddRow"),
+    items: pool.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+    placeholder: "Фильтр меток…",
+    empty: state.labels.length ? "все метки доски уже добавлены" : "меток на доске нет",
+    // Creating a label from inside a test would still make a plain board label,
+    // so the form belongs only to the author's own section.
+    extra: sessionId == null ? newLabelForm : undefined,
+    onPick: (item) => {
+      const lbl = labelById(item.id);
+      if (lbl) void setLabel(card, lbl, sessionId, true);
+    },
+  });
+}
+
+byId("labelAddBtn").addEventListener("click", () => openLabelAddPopup(null));
+
+// openPlayingAddPopup offers the board's tests this question is not yet marked
+// with — the second of the card's two pickers.
+function openPlayingAddPopup(): void {
+  const card = state.cards.find((c) => c.id === cardDetail.openCardId());
+  if (!card) return;
+  const on = new Set(playingsOf(card.id));
+  const pool = state.sessions.filter((s) => !on.has(s.id))
+    .map((s) => ({ id: s.id, name: sessionName(s.id), date: (sessionMeta(s.id) || { date: "" }).date }))
+    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
+  filteredPopup({
+    anchor: byId("playingAddRow"),
+    items: pool.map((s) => ({ id: s.id, name: s.name })),
+    placeholder: "Фильтр тестов…",
+    empty: state.sessions.length ? "все тесты доски уже отмечены" : "тестов на доске нет",
+    onPick: (item) => { void addPlaying(card, item.id); },
+  });
 }
 
 byId("playingAddBtn").addEventListener("click", openPlayingAddPopup);
@@ -2875,10 +2829,6 @@ function saveTourPick(list: BoardList, ids: number[]): void {
   try { localStorage.setItem(tourPickKey(list), JSON.stringify(ids)); } catch (_) { /* quota */ }
 }
 
-// tourPicked is which sessions this tour names in its preamble: what you ticked
-// last time, or — never having ticked — those who saw MORE than half of it, the
-// ЧГК custom. Shared with the card's «кроме общих тестеров» line so the two
-// cannot drift.
 function tourPicked(list: BoardList): Set<number> {
   const { cards, rows } = tourCoverage(list);
   const remembered = loadTourPick(list);

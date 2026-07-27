@@ -10,17 +10,10 @@
 // page having to opt in.
 
 import { xyApp } from "./app.js";
+import { guessZone } from "./sessions.js";
 import type { AuthMe } from "./app.js";
 
 const { jpost, el } = xyApp;
-
-function guessZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-  } catch (_) {
-    return "";
-  }
-}
 
 function build(zone: string, author: string): { overlay: HTMLElement; read: () => { tz: string; author: string } } {
   const tzInput = el("input", {

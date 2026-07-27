@@ -22,15 +22,11 @@ export interface SessionMeta {
   origin?: SessionOrigin;
 }
 
-// A city to announce the start time in. `zone` computes, `name` prints — Munich
-// and Berlin share a zone, and a tester wants their own city named.
 export interface AnnounceCity {
   zone: string;
   name: string;
 }
 
-// Where a copied session came from, and when (ADR-0003): the copy diverges from
-// its original the moment either is edited, so it says how stale it might be.
 export interface SessionOrigin {
   board: string;
   at: string;
@@ -41,23 +37,6 @@ export interface Session {
   meta: SessionMeta;
 }
 
-// A mark is what one of a session's labels records about a question at it.
-export interface Mark {
-  mark: string;
-  name: string;
-  color: string;
-}
-
-// The template a board falls back to when it has none of its own — today's
-// behaviour, so every pre-existing board keeps behaving as it did.
-export const DEFAULT_MARKS: Mark[] = [
-  { mark: "taken", name: "взяли", color: "#3aa657" },
-  { mark: "missed", name: "не взяли", color: "#dd3322" },
-];
-
-// The cities ЧГК actually uses. Nominative, because the invite line puts them in
-// parentheses — `19:00 (Москва)` has no grammar to get wrong, which is also what
-// makes a hand-typed city safe.
 export const COMMON_CITIES: AnnounceCity[] = [
   { zone: "Europe/Moscow", name: "Москва" },
   { zone: "Europe/Kyiv", name: "Киев" },
@@ -143,39 +122,17 @@ export function serializeSession(m: SessionMeta): string {
   });
 }
 
-// newKey mints the id that survives a transfer. crypto.randomUUID is available
-// under the CSP and everywhere xy runs (it needs a secure context, which the app
-// always has).
 export function newKey(): string {
   return crypto.randomUUID();
 }
 
-// ---- display ----
-
 export type TitleMode = "date-title" | "title" | "date";
 
-// sessionLabel is a session's name wherever one is shown — the label on a card,
-// the row in the Тесты panel. Derived, never stored, so #8's complaint is a
-// per-user setting rather than a migration.
 export function sessionLabel(m: SessionMeta, mode: TitleMode = "date-title"): string {
   const date = humanDate(m.date);
   if (mode === "date") return date || m.title;
   if (mode === "title") return m.title || date;
   return m.title ? (date ? `${date} · ${m.title}` : m.title) : date;
-}
-
-// markLabel is what a test label reads on a card: the session, then the mark.
-export function markLabel(m: SessionMeta, mark: string, marks: Mark[], mode: TitleMode = "date-title"): string {
-  const name = marks.find((x) => x.mark === mark)?.name || mark;
-  const head = sessionLabel(m, mode);
-  return head ? `${head} · ${name}` : name;
-}
-
-// canonicalLabel is the name cached in labels.name_enc for chgksuite, which
-// reads label names over the Trello API and groups whole lists by them under
-// --labels. Always the full form, never the reader's preference.
-export function canonicalLabel(m: SessionMeta, mark: string, marks: Mark[]): string {
-  return markLabel(m, mark, marks, "date-title");
 }
 
 export function humanDate(date: string): string {
@@ -222,9 +179,6 @@ export function parseTime(human: string): string {
   return `${pad(h)}:${pad(min)}`;
 }
 
-// zoneOffset renders a zone's CURRENT offset for a picker label: «UTC+3».
-// Computed from Intl rather than a table, so it follows the platform's tz data
-// and stays right across a DST change.
 export function zoneOffset(zone: string, at: Date = new Date()): string {
   try {
     const fmt = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longOffset" });
@@ -237,9 +191,14 @@ export function zoneOffset(zone: string, at: Date = new Date()): string {
   }
 }
 
-// allZones lists every IANA zone the platform knows, newest tz data included —
-// which is the "library that maintains accurate timezone data", already present
-// and already under the CSP.
+export function guessZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch (_) {
+    return "";
+  }
+}
+
 export function allZones(): string[] {
   try {
     const f = Intl as unknown as { supportedValuesOf?: (k: string) => string[] };
@@ -319,8 +278,6 @@ export function inviteLine(m: SessionMeta): string {
   });
   return head ? `${head}, ${parts.join(" / ")}` : parts.join(" / ");
 }
-
-// ---- the «Видели» line ----
 
 // whoSaw is every tester from every session a card is tagged with, deduped.
 // Sessions that arrived as copies from other boards are in here too — that is

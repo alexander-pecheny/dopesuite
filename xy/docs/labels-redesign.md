@@ -1,5 +1,17 @@
 # Labels redesign
 
+> **Partly superseded.** The Mark model below — a label bound to a session, one
+> «взяли» per sitting — was replaced mid-build by
+> [ADR-0004](adr/0004-a-label-assignment-carries-an-optional-playing.md): a label
+> is an ordinary board label and its ASSIGNMENT carries an optional Playing.
+> Where this note and ADR-0004 disagree, the ADR is what shipped. Sections marked
+> **[superseded]** are kept because the reasoning that led to the ADR is in them.
+>
+> Three later additions are not described here at all, having been asked for
+> after it was written: the per-tour Tester List modal, the card's «Видели
+> вопрос, кроме общих тестеров списка» line, and the bundled ЧГК town list with
+> its GeoNames timezones.
+
 Covers [#25](https://code.pecheny.me/pecheny/dopesuite/issues/25),
 [#33](https://code.pecheny.me/pecheny/dopesuite/issues/33),
 [#12](https://code.pecheny.me/pecheny/dopesuite/issues/12),
@@ -19,7 +31,7 @@ So: **a test label stops being a label with a name and becomes a link from a
 card to a test session, plus a mark.** Its display text is derived on render,
 never stored. Everything below follows from that.
 
-## Model
+## Model **[superseded — see ADR-0004]**
 
 | now | after |
 | --- | --- |
@@ -120,7 +132,8 @@ The time belongs to the session row, where the copy button is.
 
 **#12 — who saw the question.** Two halves, and only the first is in scope here.
 
-The marks half: a **per-board** mark template, seeded at board creation from the
+The marks half **[superseded — ADR-0004 retires marks entirely; «взяли» is one
+ordinary board label composed onto a Playing]**: a **per-board** mark template, seeded at board creation from the
 creator's personal default on `/profile`, defaulting in turn to today's
 взяли/не взяли pair. Per-board, not per-user, because labels are shared with the
 board's other members — two people with different personal templates would
@@ -264,8 +277,11 @@ session's labels.
    editable.
 5. Each board's mark template seeded with взяли/не взяли, so existing boards keep
    behaving as they do.
-6. Each `label_add`/`label_remove` timeline payload gains `label_id` beside the
-   name it already froze.
+6. ~~Each `label_add`/`label_remove` timeline payload gains `label_id`~~ — not
+   done, and not doable: `payload_enc` is encrypted and the migration holds no
+   key. New writes carry `label_id`; pre-migration history keeps only the frozen
+   name, which the renderer falls back to. So a rename updates history from here
+   on, not backwards.
 
 `board.ts#deleteCard`'s hand-rolled sweep of a deleted session's exclusive labels
 becomes an FK cascade.

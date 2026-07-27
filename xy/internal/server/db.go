@@ -274,7 +274,6 @@ create table if not exists card_sessions(
 -- rebuild below is about to drop the column.
 create table _v18_test_labels as select id from labels where kind like 'test%';
 
--- Labels go back to being just labels: no kind, no session, no mark.
 create table labels_v18(
   id integer primary key,
   board_id integer not null references boards(id) on delete cascade,
@@ -454,14 +453,17 @@ where cl.label_id in (
 			`select count(*) from attachments where card_id = ? and deleted_at is null`, c.id).Scan(&attached); err != nil {
 			return err
 		}
+		// The session's own labels never belong on the card either way: the card is
+		// about to dissolve, or it survives only to hold an attachment. Leaving
+		// them on the survivor was the difference between the two paths.
+		if _, err := tx.Exec(`delete from card_labels where card_id = ?`, c.id); err != nil {
+			return err
+		}
 		if attached > 0 {
 			if _, err := tx.Exec(`update cards set kind = 'normal', updated_at = ? where id = ?`, now, c.id); err != nil {
 				return err
 			}
 			continue
-		}
-		if _, err := tx.Exec(`delete from card_labels where card_id = ?`, c.id); err != nil {
-			return err
 		}
 		if _, err := tx.Exec(`update cards set deleted_at = ? where id = ?`, now, c.id); err != nil {
 			return err
