@@ -276,7 +276,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
   -- «Вопросы тестировали» for ONE tour: each session with how much of the tour
   -- it saw, so the custom (name those who tested most of it) can be applied
   modal id="testerListOverlay" label="Список тестеров" title="👥 Список тестеров" variant="lists" done="Готово" doneid="testerListClose"
-    hint "Отмечены те, кто видел больше половины тура. По обычаю в преамбулу пишут именно их."
+    hint "По умолчанию отмечены те, кто видел больше половины вопросов из списка."
     mount id="testerList" kind="tester-list"
     message id="testerListMessage"
 

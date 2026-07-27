@@ -418,6 +418,7 @@
   color: #fff;
   font-size: var(--text-xs);
 }
+.label-pick-name { overflow-wrap: anywhere; }
 .label-pick-x {
   border: 0;
   background: none;
@@ -1244,9 +1245,15 @@ body {
 .sess-invite-box { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: var(--space-3) 0; }
 .sess-invite { flex: 1 1 18rem; margin: 0; font-size: var(--text-base); }
 
-/* A test label is drawn apart from a topic label whatever colour it landed on,
-   so an imported Trello tag can never read as «взяли» (issue #25). */
-.label-chip.is-test, .label-pick.is-test { border: 1px dashed var(--grid-dark); }
+/* A test on a board card: the flask alone when the testers recorded nothing,
+   the flask plus their verdicts' colours in a thin border when they did. */
+.kcard-test { display: inline-flex; align-items: center; gap: 3px; }
+.kcard-test.has-labels {
+  border: 1px solid var(--grid-dark);
+  border-radius: var(--radius-pill);
+  padding: 1px 4px 1px 2px;
+}
+.kcard-test-icon { font-size: 9px; line-height: 1; }
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
 #cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
@@ -1279,21 +1286,33 @@ body {
    .tl-body), so a note reads exactly like a comment rather than being a second,
    slightly-different comment UI. Only the container needs a rule. */
 .sess-feed { display: flex; flex-direction: column; gap: var(--space-2); }
+/* The tester rows and the «+ тестер» button under them are one block; without a
+   gap it sat flush against the Сохранить row below. */
+.sess-testers { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
 .sess-notes { max-height: 14rem; overflow-y: auto; }
 
-/* A Playing: one test this question was played at, with its own labels. */
+/* A Playing: one test this question was played at, with its own labels. The name,
+   its ×, the chips and the add button are ONE wrapping row — stacking them put a
+   lone ＋ on a line of its own under every test. */
 .playing {
-  display: flex; flex-direction: column; gap: var(--space-1);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
   padding: var(--space-2) 0; border-bottom: 1px solid var(--border-soft);
 }
 .playing:last-child { border-bottom: 0; }
-.playing-head { display: flex; align-items: center; gap: var(--space-2); }
+.playing-head { display: flex; align-items: center; gap: var(--space-1); }
 .playing-name { font-weight: var(--fw-semibold); font-size: var(--text-sm); }
-.playing-labels { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+/* position:relative anchors the add-label popup to THIS row. Without it the
+   popup positions against the page and lands over the board. */
+.playing-labels {
+  position: relative;
+  display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
+}
 #cardPlayings { display: flex; flex-direction: column; }
 /* The add-label button inside a playing sits among chips, so it matches them. */
 .playing-add { padding: var(--space-0-5) var(--space-2); font-size: var(--text-xs); }
 #playingAddRow { position: relative; display: flex; gap: var(--space-2); align-items: center; }
+/* The popup is anchored to a chip row, which is narrow; keep it readable. */
+.label-add-popup { min-width: 16rem; max-width: min(24rem, 90vw); }
 
 /* The town field sits inside the chip row, so it must not stretch to fill it. */
 .sess-city-add { width: 12rem; max-width: 100%; }

@@ -242,3 +242,75 @@ func cssClassSelectors(css string) []string {
 	sort.Strings(classes)
 	return classes
 }
+
+// classesUsedByJSRe pulls the literal class strings the frontend puts on
+// elements: el(tag, {class: "a b"}) and node.className = "a b". Anything
+// composed at runtime ("kcard-" + kind) is caught by the prefix rule below
+// rather than parsed.
+var classesUsedByJSRe = regexp.MustCompile(`\bclass(?:Name)?\s*[:=]\s*"([^"]+)"`)
+
+// dynamicClassPrefixes are class names the JS builds by concatenation or that
+// come from the kit's own stylesheet rather than xy's layer, so a missing rule
+// in styles.css says nothing.
+var dynamicClassPrefixes = []string{"u-", "btn", "input", "menu-", "modal", "appearance-", "card-desc", "hint", "seg", "fld"}
+
+// knownUnstyled are class names that carry no style ON PURPOSE: a JS selector
+// hook (querySelector finds the node by it) or a marker left for a future rule.
+// Everything else reaching this list is a typo or an invented name, which is
+// what the test is for — keep this short and justified.
+var knownUnstyled = map[string]bool{
+	"kcard-unread":     true, // hook: board.ts finds the dot to remove it
+	"tl-edit":          true, // hook: the inline comment editor's textarea
+	"lm-grouphead":     true, // marker on a group's header row
+	"lm-move-btn":      true,
+	"notif-panel-body": true,
+	"pv-block":         true,
+}
+
+// TestNoUndefinedCSSClasses is TestNoUnusedCSSClasses in the other direction: a
+// class the JS puts on an element but NO stylesheet defines. That one renders
+// unstyled and silently — which is how a hand-built «лента» ended up wearing
+// .tl-item/.tl-body, names nothing had ever styled, while the real card comment
+// wears .tl-event/.tl-comment. Dead CSS was already caught; dead class NAMES
+// were not.
+func TestNoUndefinedCSSClasses(t *testing.T) {
+	defined := map[string]bool{}
+	for _, path := range []string{"../../web/assets/static/styles.css", "../../../dopeuikit/assets/core.css"} {
+		css, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		for _, c := range cssClassSelectors(string(css)) {
+			defined[c] = true
+		}
+	}
+
+	var missing []string
+	seen := map[string]bool{}
+	for _, m := range classesUsedByJSRe.FindAllStringSubmatch(jsCorpus(t), -1) {
+		for _, class := range strings.Fields(m[1]) {
+			// A trailing '-' means the literal is the head of a runtime
+			// concatenation ("kcard-" + kind), not a class in its own right.
+			if defined[class] || seen[class] || knownUnstyled[class] || strings.HasSuffix(class, "-") {
+				continue
+			}
+			skip := false
+			for _, p := range dynamicClassPrefixes {
+				if strings.HasPrefix(class, p) {
+					skip = true
+					break
+				}
+			}
+			if skip {
+				continue
+			}
+			seen[class] = true
+			missing = append(missing, "."+class)
+		}
+	}
+	sort.Strings(missing)
+	if len(missing) > 0 {
+		t.Errorf("the frontend sets %d class(es) no stylesheet defines:\n  %s",
+			len(missing), strings.Join(missing, "\n  "))
+	}
+}

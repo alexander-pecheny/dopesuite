@@ -30,7 +30,7 @@ export interface SessionsPanelDeps {
   copyText(text: string): Promise<void>;
   // The session's лента: everything said about any question at this test, plus
   // the notes about the test itself. Decrypted by the caller, which owns the DK.
-  loadNotes(sessionId: number): Promise<Array<{ text: string; card: number | null; when: string }>>;
+  loadNotes(sessionId: number): Promise<Array<{ text: string; card: number | null; when: string; author: string }>>;
   addNote(sessionId: number, text: string): Promise<void>;
   overlayOpen(el: HTMLElement, close: () => void): void;
   overlayClose(el: HTMLElement): void;
@@ -248,7 +248,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     (m.testers.length ? m.testers : [{ text: "", type: "player" as const }]).forEach((t) => addRow(t));
     const add = el("button", { class: "input fld-add-row", type: "button", text: "+ тестер" });
     add.addEventListener("click", () => addRow({ text: "", type: "player" }).focus());
-    box.append(field("Тестировали", el("div", {}, rows, add)));
+    box.append(field("Тестировали", el("div", { class: "sess-testers" }, rows, add)));
     testerRows = () => [...rows.querySelectorAll<TesterRow>(".tester-row")].map((r) => (r._read as () => Tester)());
 
     // Saving and copying come BEFORE the лента: they act on the fields above, and
@@ -263,21 +263,21 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     });
     const save = el("button", { class: "input", type: "button", text: "Сохранить" });
     save.addEventListener("click", () => { void saveSession(m, cities); });
-    const drop = el("button", { class: "input danger", type: "button", text: "🗑️ Удалить тест" });
+    const drop = el("button", { class: "btn btn-danger", type: "button", text: "🗑️ Удалить тест" });
     drop.addEventListener("click", () => { void removeSession(); });
     box.append(el("div", { class: "sess-actions" }, save, summary, drop));
 
-    // The debrief reuses the card's лента markup — .tl-item / .tl-meta / .tl-body
-    // and the comment form's shape — so a note here reads exactly like a comment
-    // there instead of being a second, slightly-different comment UI.
+    // The debrief wears the card's OWN лента classes — .tl-event / .tl-meta /
+    // .tl-comment, and .card-desc on the box — so a note here is the same markup
+    // as a comment there rather than a lookalike.
     const notes = el("div", { class: "timeline sess-notes" });
     const noteInput = el("textarea", {
-      class: "input comment-input", rows: "2", placeholder: "Заметка о тесте…", spellcheck: "false",
+      class: "card-desc comment-input", placeholder: "Комментарий…", spellcheck: "false",
     }) as HTMLTextAreaElement;
-    const noteAdd = el("button", { class: "btn btn-small", type: "button", text: "Отправить" });
+    const noteAdd = el("button", { class: "btn", type: "button", text: "Отправить" });
     noteAdd.addEventListener("click", () => { void postNote(noteInput); });
-    box.append(field("Лента теста", el("div", { class: "sess-feed" }, notes,
-      el("div", { class: "sess-actions" }, noteInput, noteAdd))));
+    box.append(field("Лента", el("div", { class: "sess-feed" }, notes,
+      el("div", { class: "u-col u-gap-sm" }, noteInput, noteAdd))));
     void drawNotes(notes);
 
     function read(): { date: string; time: string; tz: string; title: string } {
@@ -302,11 +302,12 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     try {
       const notes = await deps.loadNotes(editing);
       box.replaceChildren();
-      if (!notes.length) { box.append(el("p", { class: "label-empty", text: "Пока ничего." })); return; }
+      if (!notes.length) { box.append(el("p", { class: "label-empty", text: "Комментариев пока нет." })); return; }
       for (const n of notes) {
-        box.append(el("div", { class: "tl-item" },
-          el("div", { class: "tl-meta", text: (n.card ? "к вопросу" : "о тесте") + " · " + shortWhen(n.when) }),
-          el("div", { class: "tl-body", text: n.text })));
+        const meta = [n.author, n.card ? "к вопросу" : "", shortWhen(n.when)].filter(Boolean).join(" · ");
+        box.append(el("div", { class: "tl-event tl-comment" },
+          el("div", { class: "tl-meta", text: meta }),
+          el("div", { class: "tl-comment", text: n.text })));
       }
     } catch (_) {
       box.replaceChildren(el("p", { class: "label-empty", text: "Не удалось загрузить." }));

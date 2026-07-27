@@ -718,9 +718,26 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
     const lbl = labelById(a.labelId);
     if (lbl) labelRow.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
   }
-  // One dot per test the question was played at, so coverage reads at a glance.
+  // One group per test the question was played at: a 🧪 on its own when the
+  // testers recorded nothing, otherwise the 🧪 and their verdicts' colours inside
+  // a thin border — so «tested, no opinion» and «tested, three opinions» read
+  // apart at a glance without spelling either out.
   for (const sid of playingsOf(card.id)) {
-    labelRow.append(el("span", { class: "label-chip is-test", title: "Тест: " + sessionName(sid) }));
+    const scoped = assignmentsOf(card.id, sid);
+    const flask = el("span", { class: "kcard-test-icon", text: "🧪" });
+    if (!scoped.length) {
+      labelRow.append(el("span", { class: "kcard-test", title: "Тест: " + sessionName(sid) }, flask));
+      continue;
+    }
+    const group = el("span", {
+      class: "kcard-test has-labels",
+      title: "Тест: " + sessionName(sid),
+    }, flask);
+    for (const a of scoped) {
+      const lbl = labelById(a.labelId);
+      if (lbl) group.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
+    }
+    labelRow.append(group);
   }
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
@@ -2581,21 +2598,40 @@ function renderPlayings(card: BoardCard): void {
   }
 }
 
-// renderSeen writes the «Видели» line: every tester from every test this
-// question was played at, deduped — copies from other boards included, which is
-// the case the whole thing exists for. A pure derivation; it stores nothing.
+// renderSeen writes who saw THIS question beyond the people the tour already
+// names. A tour's preamble lists whoever tested most of it, and those people
+// know not to play; the ones who matter here are the extras — a question moved
+// in from another tournament, seen by three people nobody has warned. Showing
+// the full list again would bury them.
 function renderSeen(card: BoardCard): void {
   const node = byId("cardSeen");
-  const line = whoSaw(sessionsOfCard(card.id));
+  const mine = sessionsOfCard(card.id);
+  if (!mine.length) { node.hidden = true; return; }
+
+  const list = state.lists.find((l) => l.id === card.listId);
+  const named = list ? tourPicked(list) : new Set<number>();
+  const common = new Set<string>();
+  for (const sid of named) {
+    const m = sessionMeta(sid);
+    for (const t of (m && m.testers) || []) common.add((t.text || "").trim());
+  }
+
+  const extras = mine.map((m) => ({
+    ...m,
+    testers: (m.testers || []).filter((t) => !common.has((t.text || "").trim())),
+  }));
+  const line = whoSaw(common.size ? extras : mine);
   node.hidden = !line;
   if (!line) return;
+
+  const label = common.size ? "Видели вопрос, кроме общих тестеров списка: " : "Видели: ";
   node.replaceChildren(
-    el("span", { class: "seen-label", text: "Видели: " }),
+    el("span", { class: "seen-label", text: label }),
     el("span", { class: "seen-names", text: line }),
     el("button", {
       class: "input seen-copy", type: "button", text: "📋",
-      title: "Скопировать список тех, кто видел вопрос",
-      onclick: () => { void cardDetail.copyPlain(line); },
+      title: "Скопировать",
+      onclick: () => { void cardDetail.copyPlain(label + line); },
     }),
   );
 }
@@ -2647,7 +2683,15 @@ function openLabelAddPopup(sessionId: number | null, anchorEl?: HTMLElement): vo
     const q = filter.value.trim().toLowerCase();
     const items = q ? pool.filter((l) => l.name.toLowerCase().includes(q)) : pool;
     listBox.replaceChildren();
-    if (!items.length) { listBox.append(el("span", { class: "label-empty", text: "ничего не найдено" })); return; }
+    if (!items.length) {
+      const why = state.labels.length === 0
+        ? "меток на доске нет"
+        : pool.length === 0
+        ? "все метки доски уже добавлены"
+        : "ничего не найдено";
+      listBox.append(el("span", { class: "label-empty", text: why }));
+      return;
+    }
     for (const lbl of items) {
       listBox.append(el("button", {
         class: "menu-item label-add-item", type: "button", role: "menuitem",
@@ -2757,7 +2801,14 @@ function openPlayingAddPopup(): void {
     const items = q ? pool.filter((s) => s.name.toLowerCase().includes(q)) : pool;
     listBox.replaceChildren();
     if (!items.length) {
-      listBox.append(el("span", { class: "label-empty", text: pool.length ? "ничего не найдено" : "тестов на доске нет" }));
+      // Three different nothings: the board has no tests, they are all already on
+      // this question, or the filter matched none of the rest.
+      const why = state.sessions.length === 0
+        ? "тестов на доске нет"
+        : pool.length === 0
+        ? "все тесты доски уже отмечены"
+        : "ничего не найдено";
+      listBox.append(el("span", { class: "label-empty", text: why }));
       return;
     }
     for (const s of items) {
@@ -2825,15 +2876,22 @@ function saveTourPick(list: BoardList, ids: number[]): void {
   try { localStorage.setItem(tourPickKey(list), JSON.stringify(ids)); } catch (_) { /* quota */ }
 }
 
+// tourPicked is which sessions this tour names in its preamble: what you ticked
+// last time, or — never having ticked — those who saw MORE than half of it, the
+// ЧГК custom. Shared with the card's «кроме общих тестеров» line so the two
+// cannot drift.
+function tourPicked(list: BoardList): Set<number> {
+  const { cards, rows } = tourCoverage(list);
+  const remembered = loadTourPick(list);
+  return new Set(remembered ?? rows.filter((r) => r.seen * 2 > cards.length).map((r) => r.id));
+}
+
 function openTesterList(list: BoardList): void {
   const overlay = byId("testerListOverlay");
   const box = byId("testerList");
   const { cards, rows } = tourCoverage(list);
   const total = cards.length;
-  const remembered = loadTourPick(list);
-  // Default: those who saw MORE than half the tour, which is the custom. A
-  // remembered choice wins — you have already decided for this tour.
-  const picked = new Set<number>(remembered ?? rows.filter((r) => r.seen * 2 > total).map((r) => r.id));
+  const picked = tourPicked(list);
 
   const line = el("p", { class: "sess-invite" });
   const redraw = (): void => {
@@ -2920,12 +2978,15 @@ const sessionsPanel = createSessionsPanel({
   },
   copyText: (text: string) => cardDetail.copyPlain(text),
   loadNotes: async (sessionId) => {
-    const raw = (await fetchJSON(`/api/sessions/${sessionId}/timeline`)) as Array<{ payload_enc: string; card_id?: number; created_at: string }>;
-    const out: Array<{ text: string; card: number | null; when: string }> = [];
+    const raw = (await fetchJSON(`/api/sessions/${sessionId}/timeline`)) as Array<{
+      payload_enc: string; card_id?: number; created_at: string; author_user_id?: number | null;
+    }>;
+    const out: Array<{ text: string; card: number | null; when: string; author: string }> = [];
     for (const e of raw) {
       let text = "";
       try { text = await xyCrypto.decField(mustDK(), e.payload_enc || ""); } catch (_) { continue; }
-      out.push({ text, card: e.card_id ?? null, when: e.created_at });
+      // Same author resolution the card's лента uses, so the two read alike.
+      out.push({ text, card: e.card_id ?? null, when: e.created_at, author: eventAuthor(e, state.me, state.memberNames) });
     }
     return out;
   },
@@ -2965,7 +3026,7 @@ function openLabelsEditor(): void {
         byId("labelsEditMessage").textContent = "Сохранено.";
       } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
     });
-    const drop = el("button", { class: "input danger", type: "button", text: "🗑️" });
+    const drop = el("button", { class: "btn btn-danger", type: "button", text: "🗑️" });
     drop.addEventListener("click", async () => {
       if (!confirm(`Удалить метку «${lbl.name}»? Она исчезнет со всех карточек.`)) return;
       try {
