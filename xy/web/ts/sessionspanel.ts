@@ -249,9 +249,9 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     box.append(field("Тестировали", el("div", { class: "sess-testers" }, rows, add)));
     testerRows = () => [...rows.querySelectorAll<TesterRow>(".tester-row")].map((r) => (r._read as () => Tester)());
 
-    // Saving and copying come BEFORE the лента: they act on the fields above, and
-    // burying them under a comment thread of unknown length puts the button you
-    // came for off the bottom of the modal.
+    // These come BEFORE the лента: they act on the fields above, and burying them
+    // under a comment thread of unknown length puts them off the bottom. There is
+    // no Сохранить — Готово saves, and so does every other way out.
     const summary = el("button", {
       class: "input", type: "button", text: "👥 Скопировать список тестеров",
       onclick: () => {
@@ -259,13 +259,9 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
         if (line) void deps.copyText(line);
       },
     });
-    const save = el("button", { class: "input", type: "button", text: "Сохранить" });
-    save.addEventListener("click", async () => {
-      if (await saveOnLeave()) byId("sessionEditMessage").textContent = "Сохранено.";
-    });
     const drop = el("button", { class: "btn btn-danger", type: "button", text: "🗑️ Удалить тест" });
     drop.addEventListener("click", () => { void removeSession(); });
-    box.append(el("div", { class: "sess-actions" }, save, summary, drop));
+    box.append(el("div", { class: "sess-actions" }, summary, drop));
 
     // The debrief wears the card's OWN лента classes — .tl-event / .tl-meta /
     // .tl-comment, and .card-desc on the box — so a note here is the same markup
