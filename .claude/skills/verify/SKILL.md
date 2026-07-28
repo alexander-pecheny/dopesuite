@@ -16,6 +16,15 @@ a failed check — read the `✗`/`✓` line or the returned value, don't trust 
 it up. Without it Chrome dies with *"No usable sandbox … without writing
 DevToolsActivePort"*. If you ever see that, the config is missing — restore it.
 
+**Throwaway servers go on 978x — xy 9781, dope 9782.** This box is also xy's
+production host, and the whole 967x–968x band is taken by long-running units:
+9673 xy prod, 9683 xytest staging, 9674 design-review, 9675 tg-oidc (3000 is
+forgejo). A test server there either refuses to bind or, worse, shadows a real
+service. Never `pkill -f xy-server` to clean up — that pattern matches prod and
+staging too; kill the PID you started, or run it as a background task and stop
+that. If 978x is itself busy, another agent session is mid-verify: pick 9783+
+rather than killing whatever holds it.
+
 ## The two workflows
 
 - **Snapshot + refs** (agent-browser's native style): `agent-browser snapshot -i`
@@ -65,7 +74,7 @@ agent-browser set viewport 1280 800 1    # back to desktop; re-verify desktop to
   (scroll it into view first with `scrollintoview`). Full-page `--full`.
 
 ```bash
-agent-browser open http://127.0.0.1:9681/login
+agent-browser open http://127.0.0.1:9781/login
 agent-browser fill '#loginUsername' tester          # types real keys → input events fire
 agent-browser eval 'usernameForm.requestSubmit()'
 agent-browser screenshot $SP/shot.png                # also: get html/text/count
@@ -103,13 +112,35 @@ Both apps share the login UI: two JS steps — `#loginUsername` +
 
 ```bash
 cd xy && go build -o $SP/xy-server ./cmd/xy-server
+XY_DB=$SP/t.db PORT=9781 XY_WASM_CACHE=$SP/wasm-cache $SP/xy-server  # background task
 printf 'testpass123' | XY_DB=$SP/t.db $SP/xy-server adduser tester   # password on stdin
-XY_DB=$SP/t.db PORT=9681 XY_WASM_CACHE=$SP/wasm-cache $SP/xy-server  # background task
 ```
 
-Run it **from the repo root** for disk-mode assets (`assets from disk` in the
-log) — edits to `web/assets/static/*` serve without rebuild. Run the binary
-from elsewhere to test embed mode + `?v=` asset versioning.
+Start the server **before** `adduser`: maintenance subcommands never create a
+database, so on a fresh `$SP` they exit with *"no database at … — set XY_DB"*.
+Booting the server once creates and migrates it.
+
+Run it with the working directory set to **`xy/`** (the module root, not the
+monorepo root) for disk-mode assets — edits to `web/assets/static/*` then serve
+without rebuilding the binary. **Check the first log line every time**: it says
+`assets from disk` or `assets from embed`, and in embed mode you are testing the
+assets baked in when the binary was built, so every `just build-web` since is
+invisible. Backgrounding with `(cmd &)` inherits the calling shell's cwd — if
+that was the monorepo root you silently get embed mode. Run from elsewhere
+deliberately to test embed + `?v=` asset versioning.
+
+Two caches sit in front of your edits, and clearing one is not enough:
+
+- the **service worker** — `navigator.serviceWorker.getRegistrations()` →
+  `unregister()`, then `caches.keys()` → `caches.delete()`;
+- the browser's **HTTP cache** — disk mode serves `/static/dist/*.js` with no
+  `?v=`, so the same URL that embed mode versioned is now unversioned and a
+  stale copy is reused. `agent-browser close` and reopen: each launch is a fresh
+  ephemeral profile, which is the only reliable way to drop it.
+
+When the DOM does not match the source you just built, check the served bytes
+before debugging the code: `curl -s localhost:9781/static/dist/board.js | grep -c
+'<your new class>'`.
 
 Flows that took trial and error:
 
@@ -166,7 +197,7 @@ agent-browser eval 'document.querySelector(".menu-trigger").click()'
 
 ```bash
 cd dope && cp fest.db $SP/fest.db     # real-ish local data; never run against the live DB
-DOPE_DB=$SP/fest.db PORT=9672 go run ./dope/cmd/dope-server   # background task
+DOPE_DB=$SP/fest.db PORT=9782 go run ./dope/cmd/dope-server   # background task
 ```
 
 Log in with your local account, or mint an invite and register a fresh user:
