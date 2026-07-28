@@ -407,9 +407,11 @@
 
 /* label picker */
 .label-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-/* Assigned labels render as filled colour pills (the colour is set via the CSSOM
-   in paintLabels). The pill is inert; its "×" is the only remove affordance, so
-   brushing a label cannot take it off the card. */
+/* Assigned labels render as filled colour pills. Both the fill AND the ink are
+   set via the CSSOM in paintLabels — the ink follows the fill's luminance, so
+   #fff here is only the fallback for a label with no colour of its own (which
+   lands on --muted). The pill is inert; its "×" is the only remove affordance,
+   so brushing a label cannot take it off the card. */
 .label-pick {
   display: inline-flex;
   align-items: center;
