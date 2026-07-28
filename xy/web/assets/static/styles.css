@@ -460,12 +460,20 @@
 .label-add-item { display: flex; align-items: center; gap: var(--space-2); }
 .label-swatch { flex: none; width: 12px; height: 12px; border-radius: var(--radius-sm); background: var(--muted); }
 .label-add-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* --control-h, not a hardcoded 34px and not `align-self: stretch`: the swatch is
-   an input[type=color], a REPLACED element, so flex stretch is silently ignored
-   on it (verified — align-self computes to `stretch` and the height stays at its
-   intrinsic 27px). It has to be told the field height explicitly to share a
-   baseline with the name field beside it. */
-.label-color-input { width: 38px; height: var(--control-h); padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+/* label colour picker (colorpick.js); --control-h shares the field's baseline */
+.color-field { position: relative; display: inline-flex; flex: none; }
+.color-field-btn {
+  width: 38px; height: var(--control-h); padding: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); cursor: var(--cursor-action);
+}
+.menu-dropdown.color-pop { min-width: 0; width: max-content; gap: var(--space-2); padding: var(--space-2); }
+.menu-dropdown.menu-fixed.color-pop { z-index: var(--z-modal-dropdown); }
+.color-grid { display: grid; grid-template-columns: repeat(4, 26px); gap: var(--space-1); }
+.color-cell { width: 26px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: var(--cursor-action); }
+.color-cell.is-on { outline: 2px solid var(--text); outline-offset: 1px; }
+.color-hex { width: 100%; font-family: var(--font-mono); }
+.color-hex.is-bad { border-color: var(--danger); background: var(--danger-soft); }
 
 /* timeline */
 .timeline { display: flex; flex-direction: column; gap: var(--space-2); max-height: 320px; overflow-y: auto; }
@@ -1247,6 +1255,9 @@ body {
 .sess-cities { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .sess-invite-box { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: var(--space-3) 0; }
 .sess-invite { flex: 1 1 18rem; margin: 0; font-size: var(--text-base); }
+/* Two lines in the tester list, so they stack and the copy button sits beside */
+.sess-invite-lines { flex: 1 1 18rem; display: flex; flex-direction: column; gap: var(--space-1); }
+.sess-invite-lines .sess-invite { flex: none; }
 
 /* A test on a board card: the flask alone when the testers recorded nothing,
    the flask plus their verdicts' colours in a thin border when they did. Inside

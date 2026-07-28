@@ -56,7 +56,6 @@ var Password = base.Password
 var Filefield = base.Filefield
 var Hiddenfield = base.Hiddenfield
 var Numfield = base.Numfield
-var Colorfield = base.Colorfield
 var Sliderrow = base.Sliderrow
 var Checkbox = base.Checkbox
 var Radio = base.Radio

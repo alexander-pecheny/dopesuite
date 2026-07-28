@@ -89,7 +89,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
 
     form id="newLabelForm" dir="row" gap="sm"
       textfield id="newLabelName" placeholder="Новая метка" grow
-      colorfield id="newLabelColor" value="#4477aa"
+      mount id="newLabelColor" kind="color-field"
       button small submit title="Создать и добавить метку" "➕"
 
     -- Алиас: the card's short name, shown in the list instead of its text. NOT a

@@ -7,6 +7,7 @@ import {
   serializeSession,
   sessionLabel,
   whoSaw,
+  partialSeen,
   formatDate,
   parseDate,
   parseTime,
@@ -119,6 +120,46 @@ test("whoSaw unions testers across sessions and dedupes", () => {
   const a = { ...base, testers: [{ text: "Иванов Иван", type: "player" }] };
   const b = { ...base, testers: [{ text: "Иванов Иван", type: "player" }, { text: "Петров Пётр", type: "player" }] };
   assert.equal(whoSaw([a, b]), "Иванов Иван, Петров Пётр");
+});
+
+// ---- the inverse: who to warn about which questions ----
+
+const saw = (name) => ({ text: name, type: "player" });
+
+test("partialSeen groups question numbers under each tester", () => {
+  const qs = [
+    { num: "1", testers: [saw("Анна Петрова")] },
+    { num: "2", testers: [saw("Анна Петрова")] },
+    { num: "3", testers: [saw("Александр Иванов")] },
+    { num: "5", testers: [saw("Александр Иванов")] },
+  ];
+  assert.equal(
+    partialSeen(qs, new Set()),
+    "Видели отдельные вопросы: Александр Иванов: 3, 5; Анна Петрова: 1, 2.",
+  );
+});
+
+test("partialSeen drops whoever the preamble already names", () => {
+  const qs = [
+    { num: "1", testers: [saw("Сидоров Пётр"), saw("Анна Петрова")] },
+    { num: "2", testers: [saw("Сидоров Пётр")] },
+  ];
+  assert.equal(partialSeen(qs, new Set(["Сидоров Пётр"])), "Видели отдельные вопросы: Анна Петрова: 1.");
+  assert.equal(partialSeen(qs, new Set(["Сидоров Пётр", "Анна Петрова"])), "");
+});
+
+test("partialSeen dedupes a tester who saw one question at two tests", () => {
+  const qs = [{ num: "7", testers: [saw("Анна Петрова"), saw("Анна Петрова")] }];
+  assert.equal(partialSeen(qs, new Set()), "Видели отдельные вопросы: Анна Петрова: 7.");
+});
+
+test("partialSeen keeps the caller's numbering, not a 1..n count", () => {
+  const qs = [{ num: "12", testers: [saw("Анна Петрова")] }, { num: "3", testers: [saw("Анна Петрова")] }];
+  assert.equal(partialSeen(qs, new Set()), "Видели отдельные вопросы: Анна Петрова: 12, 3.");
+});
+
+test("partialSeen ignores blank tester names", () => {
+  assert.equal(partialSeen([{ num: "1", testers: [saw("  ")] }], new Set()), "");
 });
 
 // ---- date, time and zones as the UI writes them ----

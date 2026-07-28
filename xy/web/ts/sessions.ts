@@ -288,3 +288,28 @@ export function whoSaw(sessions: ReadonlyArray<SessionMeta>): string {
   const { players, teams } = xyChgk.testerNames(all);
   return [...players, ...teams].join(", ");
 }
+
+export interface SeenQuestion {
+  num: string;
+  testers: ReadonlyArray<Tester>;
+}
+
+// The inverse of whoSaw: whoSaw names the people a tour's preamble covers, who
+// then know not to play it — this names everyone ELSE who saw some of it, and
+// which questions, because those have to be warned one question at a time.
+export function partialSeen(questions: ReadonlyArray<SeenQuestion>, named: ReadonlySet<string>): string {
+  const byName = new Map<string, string[]>();
+  for (const q of questions) {
+    for (const t of q.testers) {
+      const name = (t.text || "").trim();
+      if (!name || named.has(name)) continue;
+      const nums = byName.get(name) || [];
+      if (!nums.includes(q.num)) nums.push(q.num);
+      byName.set(name, nums);
+    }
+  }
+  const parts = [...byName.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "ru"))
+    .map(([name, nums]) => `${name}: ${nums.join(", ")}`);
+  return parts.length ? `Видели отдельные вопросы: ${parts.join("; ")}.` : "";
+}

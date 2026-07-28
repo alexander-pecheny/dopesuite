@@ -149,7 +149,7 @@ call site. Never build one from request data.
 
 Chrome: `page topbar crumbs/crumb iconbtn iconlink`. Layout: `col row spacer section`. Text:
 `text hint subhead label bigcode message empty muted strong code`. Forms:
-`form textfield password filefield hiddenfield numfield colorfield sliderrow
+`form textfield password filefield hiddenfield numfield sliderrow
 checkbox radio selectfield/option editor button field`. Notable form props:
 `textfield`/`password` carry `minlength`/`maxlength`/`pattern`; `selectfield`
 takes `name`; `button` supports multi-target form submission via

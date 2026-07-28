@@ -222,6 +222,9 @@
   --z-dropdown: 30;
   --z-popover: 35;
   --z-modal: 80;
+  /* A dropdown opened from INSIDE a modal. --z-dropdown would paint under the
+     modal it belongs to; --z-toast is a different concern entirely. */
+  --z-modal-dropdown: 85;
   --z-toast: 120;
   --z-tooltip: 999;
 

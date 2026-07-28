@@ -33,8 +33,9 @@ export interface SessionsPanelDeps {
   // the notes about the test itself. Decrypted by the caller, which owns the DK.
   loadNotes(sessionId: number): Promise<Array<{ text: string; card: number | null; when: string; author: string }>>;
   addNote(sessionId: number, text: string): Promise<void>;
-  overlayOpen(el: HTMLElement, close: () => void): void;
-  overlayClose(el: HTMLElement): void;
+  overlayOpen(el: HTMLElement, close: () => void, confirm?: () => Promise<boolean>): void;
+  // Dismisses the topmost overlay, which is always the one this panel opened.
+  overlayClose(): void;
   render(): void;
 }
 
@@ -120,7 +121,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     editing = id;
     renderForm(parseSession(s.meta));
     editOverlay.hidden = false;
-    deps.overlayOpen(editOverlay, closeEdit);
+    deps.overlayOpen(editOverlay, closeEdit, saveOnLeave);
   }
 
   async function addSession(): Promise<void> {
@@ -259,7 +260,9 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       },
     });
     const save = el("button", { class: "input", type: "button", text: "Сохранить" });
-    save.addEventListener("click", () => { void saveSession(m, cities); });
+    save.addEventListener("click", async () => {
+      if (await saveOnLeave()) byId("sessionEditMessage").textContent = "Сохранено.";
+    });
     const drop = el("button", { class: "btn btn-danger", type: "button", text: "🗑️ Удалить тест" });
     drop.addEventListener("click", () => { void removeSession(); });
     box.append(el("div", { class: "sess-actions" }, save, summary, drop));
@@ -286,10 +289,12 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       };
     }
     formRead = () => read();
+    formSave = () => saveSession(m, cities);
     previewInvite();
   }
 
   let formRead: (() => { date: string; time: string; tz: string; title: string }) | null = null;
+  let formSave: (() => Promise<void>) | null = null;
   let notesBox: HTMLElement | null = null;
 
   async function drawNotes(box: HTMLElement): Promise<void> {
@@ -351,6 +356,8 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     return people.suggest(deps.boardId, q).map((s) => ({ value: s.text, label: s.text, hint: s.board }));
   }
 
+  // Throws on failure, so saveOnLeave can keep you on the form. Identical meta
+  // is not sent: opening a test and closing it again should cost nothing.
   async function saveSession(prev: SessionMeta, cities: AnnounceCity[]): Promise<void> {
     if (editing == null || !formRead) return;
     const f = formRead();
@@ -364,13 +371,23 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       testers: testerRows ? testerRows() : prev.testers,
       key: prev.key || newKey(),
     };
+    const next = serializeSession(meta);
+    if (next === serializeSession(prev)) return;
+    await deps.patchSession(editing, next);
+    renderList();
+    deps.render();
+  }
+
+  // The form has no Отмена: every field on it is a fact about the test, so any
+  // exit saves, and only a save that FAILS keeps you here (the stack's gate).
+  async function saveOnLeave(): Promise<boolean> {
+    if (editing == null || !formSave) return true;
     try {
-      await deps.patchSession(editing, serializeSession(meta));
-      byId("sessionEditMessage").textContent = "Сохранено.";
-      renderList();
-      deps.render();
+      await formSave();
+      return true;
     } catch (_) {
       byId("sessionEditMessage").textContent = "Не удалось сохранить.";
+      return false;
     }
   }
 
@@ -379,7 +396,8 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     if (!confirm("Удалить тест-сессию? Её метки исчезнут с карточек.")) return;
     try {
       await deps.deleteSession(editing);
-      closeEdit();
+      editing = null; // nothing left to save on the way out
+      dismiss();
       renderList();
       deps.render();
     } catch (_) {
@@ -387,17 +405,23 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     }
   }
 
+  // The teardown the stack runs; `dismiss` is the ask. One function doing both
+  // popped the stack twice and took the Тесты panel down with the form.
   function closeEdit(): void {
     editOverlay.hidden = true;
     editing = null;
     testerRows = null;
     formRead = null;
-    deps.overlayClose(editOverlay);
+    formSave = null;
   }
 
+  const dismiss = (): void => deps.overlayClose();
+
   byId("sessionAddBtn").addEventListener("click", () => { void addSession(); });
-  byId("sessionsClose").addEventListener("click", close);
-  byId("sessionEditClose").addEventListener("click", closeEdit);
+  byId("sessionsClose").addEventListener("click", dismiss);
+  byId("sessionEditClose").addEventListener("click", dismiss);
+  overlay.addEventListener("pointerdown", (e) => { if (e.target === overlay) dismiss(); });
+  editOverlay.addEventListener("pointerdown", (e) => { if (e.target === editOverlay) dismiss(); });
 
   return { open, openSession };
 }
