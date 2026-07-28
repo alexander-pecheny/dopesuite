@@ -135,10 +135,6 @@ func Numfield(items ...Item) *Element {
 	return base.New("numfield", items...)
 }
 
-func Colorfield(items ...Item) *Element {
-	return base.New("colorfield", items...)
-}
-
 func Sliderrow(items ...Item) *Element {
 	return base.New("sliderrow", items...)
 }

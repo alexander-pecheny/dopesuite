@@ -499,15 +499,6 @@
       "children": "none"
     },
     {
-      "name": "colorfield",
-      "props": [
-        {
-          "name": "value"
-        }
-      ],
-      "children": "none"
-    },
-    {
       "name": "sliderrow",
       "props": [
         {

@@ -15,11 +15,13 @@ import { byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from ".
 import { createTimeline, eventAuthor } from "./timeline.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
 import {
-  type AnnounceCity, parseSession, type SessionMeta, sessionLabel,
-  type TitleMode, whoSaw,
+  type AnnounceCity, parseSession, partialSeen, type SeenQuestion, type SessionMeta,
+  sessionLabel, type TitleMode, whoSaw,
 } from "./sessions.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
+import { colorField, LABEL_COLORS } from "./colorpick.js";
+import { anchorPopup } from "./popup.js";
 import type { DataKey } from "./crypto.js";
 import type { SyncStatus } from "./sync.js";
 import type { OpBody } from "./store.js";
@@ -906,33 +908,8 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
       onclick: () => { close(); it.onClick(); },
     }, it.icon ? [it.icon, " "] : [], it.label));
   }
-  function close(): void {
-    menu.remove();
-    openListMenu = null;
-    document.removeEventListener("pointerdown", onOutside, true);
-    document.removeEventListener("keydown", onKey, true);
-    window.removeEventListener("scroll", close, true);
-    window.removeEventListener("resize", close);
-  }
-  function onOutside(e: PointerEvent): void {
-    if (e.target instanceof Node && !menu.contains(e.target) && !anchor.contains(e.target)) close();
-  }
-  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); } }
-  document.body.append(menu);
-  // Right-align to the trigger, then clamp inside the viewport; below the
-  // trigger unless there is no room, then above.
-  const r = anchor.getBoundingClientRect();
-  const pad = 8;
-  const left = Math.max(pad, Math.min(r.right - menu.offsetWidth, window.innerWidth - menu.offsetWidth - pad));
-  let top = r.bottom + 4;
-  if (top + menu.offsetHeight > window.innerHeight - pad) top = Math.max(pad, r.top - menu.offsetHeight - 4);
-  menu.style.left = left + "px";
-  menu.style.top = top + "px";
+  const { close } = anchorPopup(menu, anchor, { anchor, onClose: () => { openListMenu = null; } });
   openListMenu = { anchor, close };
-  document.addEventListener("pointerdown", onOutside, true);
-  document.addEventListener("keydown", onKey, true);
-  window.addEventListener("scroll", close, true);
-  window.addEventListener("resize", close);
 }
 
 // ---- move / copy a whole list (within board → re-rank/duplicate; other board →
@@ -2627,6 +2604,7 @@ function closeLabelAddPopup(): void {
 // openLabelAddPopup mounts it at the foot of the popup, where "create a label"
 // actually belongs. Handlers bound to the element survive the move.
 const newLabelForm = byId<HTMLFormElement>("newLabelForm");
+const newLabelColor = colorField(byId("newLabelColor"), LABEL_COLORS[0]);
 newLabelForm.remove();
 
 // The compiled pages spell "+" as the ➕ emoji; swap it for the SVG plus.
@@ -2735,8 +2713,20 @@ function filteredPopup(opts: {
     document.removeEventListener("pointerdown", onOutside, true);
     document.removeEventListener("keydown", onKey, true);
   }
-  function onOutside(e: PointerEvent): void { if (e.target instanceof Node && !opts.anchor.contains(e.target)) close(); }
-  function onKey(e: KeyboardEvent): void { if (e.key === "Escape") { e.stopImmediatePropagation(); close(); } }
+  // A popup opened FROM this one (the colour palette) is body-mounted to escape
+  // our scroll clipping, so it is not inside `anchor` — untreated, picking a
+  // colour read as an outside click and took this popup and its form down.
+  const above = (): Element | null => document.querySelector(".menu-fixed");
+  function onOutside(e: PointerEvent): void {
+    if (!(e.target instanceof Node) || opts.anchor.contains(e.target)) return;
+    if (e.target instanceof Element && e.target.closest(".menu-fixed")) return;
+    close();
+  }
+  function onKey(e: KeyboardEvent): void {
+    if (e.key !== "Escape" || above()) return;
+    e.stopImmediatePropagation();
+    close();
+  }
 
   filter.addEventListener("input", fill);
   opts.anchor.append(popup);
@@ -2850,6 +2840,21 @@ function tourPicked(list: BoardList): Set<number> {
   return new Set(declared ?? rows.filter((r) => r.seen * 2 > cards.length).map((r) => r.id));
 }
 
+// Numbering runs over the whole export scope (a group numbers across its member
+// lists) and is not always 1..n — a № directive can set a number outright.
+function seenQuestions(list: BoardList): SeenQuestion[] {
+  const scope = exportScope(list).cards;
+  const numbers = xyChgk.numberQuestionCards(scope);
+  const out: SeenQuestion[] = [];
+  scope.forEach((card, i) => {
+    const num = numbers[i];
+    if (!num) return;
+    const testers = playingsOf(card.id).flatMap((sid) => (sessionMeta(sid) || { testers: [] }).testers || []);
+    if (testers.length) out.push({ num, testers });
+  });
+  return out;
+}
+
 function openTesterList(list: BoardList): void {
   const overlay = byId("testerListOverlay");
   const box = byId("testerList");
@@ -2858,6 +2863,7 @@ function openTesterList(list: BoardList): void {
   const picked = tourPicked(list);
 
   const line = el("p", { class: "sess-invite" });
+  const partial = el("p", { class: "sess-invite" });
   const redraw = (): void => {
     const testers: Tester[] = [];
     for (const r of rows) {
@@ -2867,6 +2873,8 @@ function openTesterList(list: BoardList): void {
     }
     const names = whoSaw(testers.length ? [{ testers } as SessionMeta] : []);
     line.textContent = names ? `Вопросы тестировали: ${names}.` : "Никто не отмечен.";
+    partial.textContent = partialSeen(seenQuestions(list), new Set(testers.map((t) => (t.text || "").trim())));
+    partial.hidden = !partial.textContent;
   };
 
   box.replaceChildren();
@@ -2887,9 +2895,13 @@ function openTesterList(list: BoardList): void {
   }
   const copy = el("button", {
     class: "input", type: "button", text: "📋 Скопировать",
-    onclick: () => { void cardDetail.copyPlain(line.textContent || ""); },
+    onclick: () => {
+      const text = [line.textContent, partial.textContent].filter(Boolean).join("\n");
+      void cardDetail.copyPlain(text);
+    },
   });
-  box.append(el("div", { class: "sess-invite-box" }, line, copy));
+  box.append(el("div", { class: "sess-invite-box" },
+    el("div", { class: "sess-invite-lines" }, line, partial), copy));
   redraw();
 
   byId("testerListMessage").textContent = "";
@@ -2897,7 +2909,9 @@ function openTesterList(list: BoardList): void {
   overlayStack.open({ el: overlay, close: () => { overlay.hidden = true; } });
 }
 
-byId("testerListClose").addEventListener("click", () => { byId("testerListOverlay").hidden = true; });
+const testerListOverlay = byId("testerListOverlay");
+byId("testerListClose").addEventListener("click", () => { overlayStack.pop(); });
+testerListOverlay.addEventListener("pointerdown", (e) => { if (e.target === testerListOverlay) overlayStack.pop(); });
 
 // ---- the Тесты panel + the label editor ----
 
@@ -2959,32 +2973,55 @@ const sessionsPanel = createSessionsPanel({
       payload_enc: await xyCrypto.encField(mustDK(), text),
     });
   },
-  overlayOpen: (node: HTMLElement, close: () => void) => overlayStack.open({ el: node, close }),
+  overlayOpen: (node: HTMLElement, close: () => void, confirm?: () => Promise<boolean>) =>
+    overlayStack.open({ el: node, close, confirm }),
   overlayClose: () => overlayStack.pop(),
   render,
 });
 
-// openLabelsEditor: one row per label, name and colour editable in place, with a
-// usage count and a delete (issue #25). Every label is editable now — there is no
-// such thing as a test label whose name comes from somewhere else (ADR-0004).
-function openLabelsEditor(): void {
-  const overlay = byId("labelsEditOverlay");
+// Every label is editable (issue #25) — there is no such thing as a test label
+// whose name comes from somewhere else (ADR-0004).
+function renderLabelsEditor(focusNew = false): void {
   const box = byId("labelsEditor");
   const usage = labelUsageCounts();
   box.replaceChildren();
+
+  // The card's add-label popup was the only way to make one, so you had to open
+  // a card first — and managing labels is what this modal is for.
+  const newName = el("input", { class: "input", type: "text", placeholder: "Новая метка" }) as HTMLInputElement;
+  const newColor = colorField(el("div"), LABEL_COLORS[0]);
+  const add = el("button", { class: "input", type: "button", text: "Добавить" });
+  const submit = async (): Promise<void> => {
+    if (!newName.value.trim()) return;
+    try {
+      await createLabel(newName.value.trim(), newColor.value());
+      render();
+      renderLabelsEditor(true);
+    } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
+  };
+  add.addEventListener("click", () => { void submit(); });
+  newName.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    void submit();
+  });
+  box.append(el("div", { class: "sess-row" },
+    el("div", { class: "sess-head" }, newName),
+    el("div", { class: "sess-actions" }, newColor.node, add)));
+
   if (!state.labels.length) box.append(el("p", { class: "label-empty", text: "Меток нет." }));
   for (const lbl of sortLabels(state.labels.slice())) {
     const name = el("input", { class: "input", type: "text", value: lbl.name }) as HTMLInputElement;
-    const color = el("input", { class: "input", type: "color", value: lbl.color || "#888888" }) as HTMLInputElement;
+    const color = colorField(el("div"), lbl.color || "#888888");
     const count = el("span", { class: "sess-meta", text: `${usage.get(lbl.id) || 0} карт.` });
     const save = el("button", { class: "input", type: "button", text: "Сохранить" });
     save.addEventListener("click", async () => {
       try {
         await patch("patchLabel", `/api/labels/${lbl.id}`, {
           name_enc: await xyCrypto.encField(mustDK(), name.value.trim()),
-          color_enc: await xyCrypto.encField(mustDK(), color.value),
+          color_enc: await xyCrypto.encField(mustDK(), color.value()),
         });
-        lbl.color = color.value;
+        lbl.color = color.value();
         lbl.name = name.value.trim();
         render();
         byId("labelsEditMessage").textContent = "Сохранено.";
@@ -2998,16 +3035,23 @@ function openLabelsEditor(): void {
         state.labels = state.labels.filter((l) => l.id !== lbl.id);
         state.cardLabels = state.cardLabels.filter((a) => a.labelId !== lbl.id);
         render();
-        openLabelsEditor();
+        renderLabelsEditor();
       } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
     });
     box.append(el("div", { class: "sess-row" },
       el("div", { class: "sess-head" }, name, count),
-      el("div", { class: "sess-actions" }, color, save, drop)));
+      el("div", { class: "sess-actions" }, color.node, save, drop)));
   }
+  if (focusNew) newName.focus();
+}
+
+const labelsEditOverlay = byId("labelsEditOverlay");
+
+function openLabelsEditor(): void {
+  renderLabelsEditor();
   byId("labelsEditMessage").textContent = "";
-  overlay.hidden = false;
-  overlayStack.open({ el: overlay, close: () => { overlay.hidden = true; } });
+  labelsEditOverlay.hidden = false;
+  overlayStack.open({ el: labelsEditOverlay, close: () => { labelsEditOverlay.hidden = true; } });
 }
 
 // labelUsageCounts: label id → how many live cards carry it, either way.
@@ -3021,23 +3065,27 @@ function labelUsageCounts(): Map<number, number> {
   return counts;
 }
 
-byId("labelsEditClose").addEventListener("click", () => { byId("labelsEditOverlay").hidden = true; });
+byId("labelsEditClose").addEventListener("click", () => { overlayStack.pop(); });
+labelsEditOverlay.addEventListener("pointerdown", (e) => { if (e.target === labelsEditOverlay) overlayStack.pop(); });
 
+async function createLabel(name: string, color: string): Promise<BoardLabel> {
+  const res = await create("createLabel", `/api/boards/${boardId}/labels`, {
+    name_enc: await xyCrypto.encField(mustDK(), name),
+    color_enc: await xyCrypto.encField(mustDK(), color),
+  });
+  const lbl: BoardLabel = { id: res.id as number, name, color };
+  state.labels.push(lbl);
+  return lbl;
+}
 
 // NB: `newLabelForm` (the retained node), not getElementById — the form is
 // detached from the document above and lives inside the popup while it is open.
 newLabelForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = byId<HTMLInputElement>("newLabelName").value.trim();
-  const color = byId<HTMLInputElement>("newLabelColor").value;
   if (!name) return;
   try {
-    const res = await create("createLabel", `/api/boards/${boardId}/labels`, {
-      name_enc: await xyCrypto.encField(mustDK(), name),
-      color_enc: await xyCrypto.encField(mustDK(), color),
-    });
-    const lbl: BoardLabel = { id: res.id as number, name, color };
-    state.labels.push(lbl);
+    const lbl = await createLabel(name, newLabelColor.value());
     byId<HTMLInputElement>("newLabelName").value = "";
     const card = state.cards.find((c) => c.id === cardDetail.openCardId());
     // The form is reachable only from inside the add-label popup, so naming a

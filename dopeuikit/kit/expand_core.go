@@ -58,7 +58,6 @@ var coreExpanders = map[string]ExpandFunc{
 		return one(El("input", attrs))
 	},
 	"numfield":    expandNumfield,
-	"colorfield":  expandColorfield,
 	"sliderrow":   expandSliderrow,
 	"checkbox":    expandCheckboxGeneric,
 	"radio":       expandRadio,
@@ -152,15 +151,6 @@ func expandNumfield(c *ExpandCtx, p *Element) []Node {
 	attrs = append(attrs, IDAttr(p)...)
 	attrs = append(attrs, At("type", "number"))
 	attrs = append(attrs, CopyProps(p, "min", "max", "step", "placeholder")...)
-	attrs = append(attrs, MetaAttrs(p)...)
-	return one(El("input", attrs))
-}
-
-func expandColorfield(c *ExpandCtx, p *Element) []Node {
-	attrs := []Attr{ClassAttr(GrowClasses([]string{"label-color-input"}, p)...)}
-	attrs = append(attrs, IDAttr(p)...)
-	attrs = append(attrs, At("type", "color"))
-	attrs = append(attrs, CopyProps(p, "value")...)
 	attrs = append(attrs, MetaAttrs(p)...)
 	return one(El("input", attrs))
 }
