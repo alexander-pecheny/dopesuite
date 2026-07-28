@@ -20,7 +20,7 @@ import {
 } from "./sessions.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
-import { colorField, LABEL_COLORS } from "./colorpick.js";
+import { colorField, LABEL_COLORS, textOn } from "./colorpick.js";
 import { anchorPopup } from "./popup.js";
 import type { DataKey } from "./crypto.js";
 import type { SyncStatus } from "./sync.js";
@@ -753,11 +753,14 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
 
 // Apply label colors through the CSSOM (avoids inline-style CSP issues).
 function paintLabels(): void {
-  for (const chip of document.querySelectorAll<HTMLElement>(".label-chip[data-c]")) {
+  for (const chip of document.querySelectorAll<HTMLElement>(".label-chip[data-c], .label-swatch[data-c]")) {
     chip.style.backgroundColor = chip.dataset.c || "";
   }
-  for (const sw of document.querySelectorAll<HTMLElement>(".label-pick[data-c], .label-swatch[data-c]")) {
-    sw.style.backgroundColor = sw.dataset.c || "";
+  // A pick is the one that carries its name, so its ink follows its colour.
+  for (const pick of document.querySelectorAll<HTMLElement>(".label-pick[data-c]")) {
+    pick.style.backgroundColor = pick.dataset.c || "";
+    const ink = textOn(pick.dataset.c || "");
+    if (ink) pick.style.color = ink;
   }
 }
 

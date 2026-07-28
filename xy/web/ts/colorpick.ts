@@ -8,18 +8,43 @@ import { anchorPopup, type AnchoredPopup } from "./popup.js";
 
 const { el } = xyApp;
 
-// Dark enough for the white text a filled chip carries (.label-pick: color #fff).
+// uchu's pastel palette (uchu.style), shade 5 of all eight hues — one rung
+// across the set, which is what an OKLCH palette buys you: they read as equals
+// rather than as one loud colour beside seven quiet ones.
 export const LABEL_COLORS = [
-  "#c0392b", "#d35400", "#c99700", "#7f9c2c",
-  "#3f9142", "#2c8c7a", "#2f7fb5", "#3a5ea8",
-  "#7a5ec2", "#b0508f", "#8a6a55", "#5a6672",
+  "#a84151", "#d69870", "#ebd697", "#77bb79",
+  "#3d64ac", "#674292", "#e5b5c7", "#bfc1c3",
 ];
+
+// uchu's own ink and paper. The palette is designed against these two, and every
+// LABEL_COLORS entry clears WCAG AA (4.5:1) against whichever textOn picks.
+const YIN = "#080a0d";
+const YANG = "#fdfdfd";
 
 // "" when the input is not a colour yet — a half-typed one is not an error.
 export function normalizeHex(raw: string): string {
   const v = (raw || "").trim().replace(/^#/, "").toLowerCase();
   const full = v.length === 3 ? v.replace(/./g, (ch) => ch + ch) : v;
   return /^[0-9a-f]{6}$/.test(full) ? "#" + full : "";
+}
+
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5]
+    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((u) => (u <= 0.04045 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+// textOn returns the ink that reads better on `bg`, or "" when bg is not a
+// colour. A label's colour is the user's to choose, so the text has to follow
+// it — a hardcoded white is what forced every palette entry to be dark.
+export function textOn(bg: string): string {
+  const hex = normalizeHex(bg);
+  if (!hex) return "";
+  const l = luminance(hex);
+  const onYin = (l + 0.05) / (luminance(YIN) + 0.05);
+  const onYang = (luminance(YANG) + 0.05) / (l + 0.05);
+  return onYin >= onYang ? YIN : YANG;
 }
 
 export interface ColorField {

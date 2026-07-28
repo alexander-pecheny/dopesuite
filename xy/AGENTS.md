@@ -273,10 +273,16 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        invite and tester-summary copies, and the session's лента. The form
                        has no Отмена: leaving it by ANY route saves (the overlay stack's
                        confirm gate), and only a failed save keeps you on it
-    colorpick.ts       the label colour control: a swatch button opening a fixed 12-colour
-                       palette plus a hex field, replacing input[type=color] (which hands
-                       the choice to a full-screen OS sheet on Android). The kit's
-                       `colorfield` primitive is gone with it
+    colorpick.ts       the label colour control: a swatch button opening a fixed palette
+                       plus a hex field, replacing input[type=color] (which hands the
+                       choice to a full-screen OS sheet on Android). The kit's
+                       `colorfield` primitive is gone with it. The palette is uchu's
+                       pastel set (uchu.style), shade 5 of all eight hues — ONE rung
+                       across the set, which is what an OKLCH palette buys. textOn then
+                       picks uchu's yin or yang per fill by WCAG contrast, and paintLabels
+                       applies it: a label's colour is the user's, so the ink follows it.
+                       The hardcoded white on .label-pick is what forced the previous
+                       palette to be uniformly dark — don't reintroduce it
     popup.ts           anchorPopup: a transient popup mounted on <body> at a fixed,
                        viewport-clamped spot, with the outside-click / Escape / scroll /
                        resize dismissals. Shared by the list ⋯ menu and the colour palette
