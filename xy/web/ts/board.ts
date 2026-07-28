@@ -20,7 +20,7 @@ import {
 } from "./sessions.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
-import { colorField, LABEL_COLORS, textOn } from "./colorpick.js";
+import { type ColorField, colorField, LABEL_COLORS, textOn } from "./colorpick.js";
 import { anchorPopup } from "./popup.js";
 import type { DataKey } from "./crypto.js";
 import type { SyncStatus } from "./sync.js";
@@ -2983,21 +2983,52 @@ const sessionsPanel = createSessionsPanel({
 });
 
 // Every label is editable (issue #25) — there is no such thing as a test label
-// whose name comes from somewhere else (ADR-0004).
+// whose name comes from somewhere else (ADR-0004). Like the session form, the
+// editor has no per-row Сохранить: Готово commits the lot.
+interface LabelRow { lbl: BoardLabel; name: HTMLInputElement; color: ColorField }
+let labelRows: LabelRow[] = [];
+let labelDraft: { name: HTMLInputElement; color: ColorField } | null = null;
+
+// flushLabelsEditor writes whatever the editor is holding — renamed or
+// recoloured rows first, then a name left in the create row. It throws, so the
+// leave gate can keep the modal open on a failure instead of eating the edit.
+async function flushLabelsEditor(): Promise<void> {
+  for (const row of labelRows) {
+    const name = row.name.value.trim();
+    const color = row.color.value();
+    // A blanked name is a slip, not a rename: a nameless label is unusable.
+    if (!name || (name === row.lbl.name && color === row.lbl.color)) continue;
+    await patch("patchLabel", `/api/labels/${row.lbl.id}`, {
+      name_enc: await xyCrypto.encField(mustDK(), name),
+      color_enc: await xyCrypto.encField(mustDK(), color),
+    });
+    row.lbl.name = name;
+    row.lbl.color = color;
+  }
+  if (labelDraft && labelDraft.name.value.trim()) {
+    await createLabel(labelDraft.name.value.trim(), labelDraft.color.value());
+    labelDraft.name.value = "";
+  }
+}
+
 function renderLabelsEditor(focusNew = false): void {
   const box = byId("labelsEditor");
   const usage = labelUsageCounts();
   box.replaceChildren();
+  labelRows = [];
 
   // The card's add-label popup was the only way to make one, so you had to open
   // a card first — and managing labels is what this modal is for.
   const newName = el("input", { class: "input", type: "text", placeholder: "Новая метка" }) as HTMLInputElement;
   const newColor = colorField(el("div"), LABEL_COLORS[0]);
+  labelDraft = { name: newName, color: newColor };
   const add = el("button", { class: "input", type: "button", text: "Добавить" });
+  // Добавить is the create affordance, not a save — it commits now so you can
+  // type the next one. Leaving with a name still in the box creates it too.
   const submit = async (): Promise<void> => {
     if (!newName.value.trim()) return;
     try {
-      await createLabel(newName.value.trim(), newColor.value());
+      await flushLabelsEditor();
       render();
       renderLabelsEditor(true);
     } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
@@ -3017,23 +3048,14 @@ function renderLabelsEditor(focusNew = false): void {
     const name = el("input", { class: "input", type: "text", value: lbl.name }) as HTMLInputElement;
     const color = colorField(el("div"), lbl.color || "#888888");
     const count = el("span", { class: "sess-meta", text: `${usage.get(lbl.id) || 0} карт.` });
-    const save = el("button", { class: "input", type: "button", text: "Сохранить" });
-    save.addEventListener("click", async () => {
-      try {
-        await patch("patchLabel", `/api/labels/${lbl.id}`, {
-          name_enc: await xyCrypto.encField(mustDK(), name.value.trim()),
-          color_enc: await xyCrypto.encField(mustDK(), color.value()),
-        });
-        lbl.color = color.value();
-        lbl.name = name.value.trim();
-        render();
-        byId("labelsEditMessage").textContent = "Сохранено.";
-      } catch (err) { byId("labelsEditMessage").textContent = errMsg(err); }
-    });
+    labelRows.push({ lbl, name, color });
     const drop = el("button", { class: "btn btn-danger", type: "button", text: "🗑️" });
     drop.addEventListener("click", async () => {
       if (!confirm(`Удалить метку «${lbl.name}»? Она исчезнет со всех карточек.`)) return;
       try {
+        // Commit the other rows first — this re-renders, and their edits would
+        // go with the old DOM.
+        await flushLabelsEditor();
         await del("deleteLabel", `/api/labels/${lbl.id}`);
         state.labels = state.labels.filter((l) => l.id !== lbl.id);
         state.cardLabels = state.cardLabels.filter((a) => a.labelId !== lbl.id);
@@ -3043,9 +3065,20 @@ function renderLabelsEditor(focusNew = false): void {
     });
     box.append(el("div", { class: "sess-row" },
       el("div", { class: "sess-head" }, name, count),
-      el("div", { class: "sess-actions" }, color.node, save, drop)));
+      el("div", { class: "sess-actions" }, color.node, drop)));
   }
   if (focusNew) newName.focus();
+}
+
+async function leaveLabelsEditor(): Promise<boolean> {
+  try {
+    await flushLabelsEditor();
+    render();
+    return true;
+  } catch (err) {
+    byId("labelsEditMessage").textContent = errMsg(err);
+    return false;
+  }
 }
 
 const labelsEditOverlay = byId("labelsEditOverlay");
@@ -3054,7 +3087,11 @@ function openLabelsEditor(): void {
   renderLabelsEditor();
   byId("labelsEditMessage").textContent = "";
   labelsEditOverlay.hidden = false;
-  overlayStack.open({ el: labelsEditOverlay, close: () => { labelsEditOverlay.hidden = true; } });
+  overlayStack.open({
+    el: labelsEditOverlay,
+    close: () => { labelsEditOverlay.hidden = true; labelRows = []; labelDraft = null; },
+    confirm: leaveLabelsEditor,
+  });
 }
 
 // labelUsageCounts: label id → how many live cards carry it, either way.
