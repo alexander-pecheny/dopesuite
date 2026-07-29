@@ -139,10 +139,24 @@ values(null, 'anton_tg', 'anton', 0, ?, ?)`, now, now); err != nil {
 		t.Fatalf("status = %d, body %s", resp.Code, resp.Body.String())
 	}
 	body := resp.Body.String()
-	for _, want := range []string{"anton_tg", "Последний вход", time.Now().Format("2006-01-02"), "—"} {
+	for _, want := range []string{"anton_tg", "Вход", time.Now().Format("2006-01-02"), "—"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("users page missing %q: %s", want, body)
 		}
+	}
+
+	// Sorting ascending puts the never-logged-in account first, and the header
+	// offers the flip back.
+	sortReq := httptest.NewRequest(http.MethodGet, "/admin/users?sort=last&dir=asc", nil)
+	sortReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
+	sortResp := httptest.NewRecorder()
+	srv.PageServer().HandleAdminUsers(sortResp, sortReq)
+	sorted := sortResp.Body.String()
+	if !strings.Contains(sorted, "Вход ↑") || !strings.Contains(sorted, "sort=last&amp;dir=desc") {
+		t.Fatalf("sorted page missing the flip affordance: %s", sorted)
+	}
+	if strings.Index(sorted, "anton") > strings.Index(sorted, "pecheny") {
+		t.Fatalf("ascending should list the never-logged-in account first: %s", sorted)
 	}
 }
 

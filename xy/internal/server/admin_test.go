@@ -5,8 +5,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
+
+	"pecheny.me/dopecore/adminusers"
 )
 
 // postForm sends a form-encoded POST carrying the client's session cookies.
@@ -48,9 +51,50 @@ func TestAdminUsers(t *testing.T) {
 	resp := admin.do("GET", "/admin/users", nil)
 	mustStatus(t, resp, 200)
 	page := body(t, resp)
-	for _, want := range []string{"plainuser", "boss", "Хранилище", "Последний вход", "без лимита"} {
+	for _, want := range []string{"plainuser", "boss", "Хранилище", "Вход", "0 / 25 МБ", "0 МБ / ∞"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("users page missing %q:\n%s", want, page)
+		}
+	}
+
+	// A sorted view marks its column with an arrow, and the same header now
+	// offers the opposite direction.
+	sorted := body(t, admin.do("GET", "/admin/users?sort=used", nil))
+	if !strings.Contains(sorted, "Хранилище ↓") || !strings.Contains(sorted, "sort=used&amp;dir=asc") {
+		t.Fatalf("sorted page missing the flip affordance:\n%s", sorted)
+	}
+}
+
+// TestSortAdminUsers covers the ordering itself: both keys, both directions, and
+// the accounts that never logged in.
+func TestSortAdminUsers(t *testing.T) {
+	rows := []adminUserRow{
+		{Username: "a", Used: 10, LastLoginAt: "2026-01-02T00:00:00Z"},
+		{Username: "b", Used: 30, LastLoginAt: ""},
+		{Username: "c", Used: 20, LastLoginAt: "2026-03-04T00:00:00Z"},
+	}
+	names := func(s adminusers.Sort) string {
+		got := slices.Clone(rows)
+		sortAdminUsers(got, s)
+		out := ""
+		for _, u := range got {
+			out += u.Username
+		}
+		return out
+	}
+	cases := map[string]struct {
+		sort adminusers.Sort
+		want string
+	}{
+		"used desc": {adminusers.Sort{Key: "used", Desc: true}, "bca"},
+		"used asc":  {adminusers.Sort{Key: "used"}, "acb"},
+		"last desc": {adminusers.Sort{Key: "last", Desc: true}, "cab"},
+		"last asc":  {adminusers.Sort{Key: "last"}, "bac"},
+		"unsorted":  {adminusers.Sort{}, "abc"},
+	}
+	for name, c := range cases {
+		if got := names(c.sort); got != c.want {
+			t.Errorf("%s = %q, want %q", name, got, c.want)
 		}
 	}
 }

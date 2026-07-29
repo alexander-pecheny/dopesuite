@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"dope/dope/platform/util"
@@ -8,6 +9,7 @@ import (
 	ui "dope/dope/web/ui"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -112,16 +114,43 @@ func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
 }
 
 type adminUserRow struct {
-	ID        int64
-	Username  string
-	Telegram  string
-	IsSystem  bool
-	LastLogin string
-	CreatedAt string
+	ID          int64
+	Username    string
+	Telegram    string
+	IsSystem    bool
+	LastLoginAt string // raw RFC3339, empty when the account has no live session
+	CreatedAt   string
 }
 
 type adminUsersData struct {
 	Users []adminUserRow
+	Sort  adminusers.Sort
+}
+
+// sortAdminUsers reorders in place by last login, the one column worth ranking
+// on this page. Both timestamps are RFC3339, which sorts as text; an account
+// that never logged in has none and sorts first ascending.
+func sortAdminUsers(users []adminUserRow, s adminusers.Sort) {
+	if s.Key != "last" {
+		return
+	}
+	slices.SortStableFunc(users, func(a, b adminUserRow) int {
+		c := cmp.Compare(a.LastLoginAt, b.LastLoginAt)
+		if s.Desc {
+			return -c
+		}
+		return c
+	})
+}
+
+// sortHeader is a sortable column heading: a small ghost button carrying the
+// direction this column would sort in next, and an arrow when it is the active
+// one.
+func sortHeader(key, label string, s adminusers.Sort) *ui.Element {
+	dir, arrow := s.Header(key)
+	return ui.Hcell(ui.Button(ui.Ghost, ui.Small(),
+		ui.Href("/admin/users?sort="+key+"&dir="+dir), ui.Text(label+arrow),
+	))
 }
 
 // adminTime renders a stored RFC3339 timestamp for the admin table; a missing
@@ -141,7 +170,7 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 	if len(data.Users) > 0 {
 		rows := []ui.Item{ui.Scroll(), ui.Trow(
 			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Telegram")),
-			ui.Hcell(ui.Text("Последний вход")), ui.Hcell(ui.Text("Создан")),
+			sortHeader("last", "Вход", data.Sort), ui.Hcell(ui.Text("Создан")),
 		)}
 		for _, u := range data.Users {
 			nameCell := ui.Cell(ui.Text(u.Username))
@@ -152,7 +181,7 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 				ui.Cell(ui.Text(strconv.FormatInt(u.ID, 10))),
 				nameCell,
 				ui.Cell(ui.Text(u.Telegram)),
-				ui.Cell(ui.Text(u.LastLogin)),
+				ui.Cell(ui.Text(adminTime(u.LastLoginAt))),
 				ui.Cell(ui.Text(u.CreatedAt)),
 			))
 		}
@@ -186,7 +215,9 @@ func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	RenderDoc(w, s.h.Engine().AssetETags, adminUsersDoc(adminUsersData{Users: users}))
+	order := adminusers.ParseSort(r.URL.Query(), "last")
+	sortAdminUsers(users, order)
+	RenderDoc(w, s.h.Engine().AssetETags, adminUsersDoc(adminUsersData{Users: users, Sort: order}))
 }
 
 func (s *Server) loadAdminUsers(ctx context.Context) ([]adminUserRow, error) {
@@ -197,12 +228,11 @@ from users u
 order by u.created_at desc, u.id desc`, nil, func(rows *sql.Rows) (adminUserRow, error) {
 		var u adminUserRow
 		var isSystem int
-		if err := rows.Scan(&u.ID, &u.Username, &u.Telegram, &isSystem, &u.CreatedAt, &u.LastLogin); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Telegram, &isSystem, &u.CreatedAt, &u.LastLoginAt); err != nil {
 			return u, err
 		}
 		u.IsSystem = isSystem == 1
 		u.CreatedAt = adminTime(u.CreatedAt)
-		u.LastLogin = adminTime(u.LastLogin)
 		return u, nil
 	})
 }

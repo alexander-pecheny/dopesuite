@@ -10,13 +10,15 @@ import (
 	"pecheny.me/dopecore/adminusers"
 )
 
-// humanMB renders a byte count as MiB for a user-facing string, rounded to two
-// decimals and with trailing zeros dropped: a few hundred bytes reads "0 МБ",
-// not "0.00004863 МБ".
-func humanMB(b int64) string {
+// mbNum renders a byte count as a bare MiB number, rounded to two decimals with
+// trailing zeros dropped: a few hundred bytes reads "0", not "0.00004863".
+func mbNum(b int64) string {
 	mb := math.Round(float64(b)/(1<<20)*100) / 100
-	return strconv.FormatFloat(mb, 'f', -1, 64) + " МБ"
+	return strconv.FormatFloat(mb, 'f', -1, 64)
 }
+
+// humanMB is mbNum with the unit, for a standalone user-facing string.
+func humanMB(b int64) string { return mbNum(b) + " МБ" }
 
 // storageUsageSQL sums the bytes a user's own boards hold: attachment blobs plus
 // every encrypted content column. Tombstones don't count, including everything
