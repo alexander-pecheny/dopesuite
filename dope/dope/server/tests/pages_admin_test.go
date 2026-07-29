@@ -139,7 +139,7 @@ values(null, 'anton_tg', 'anton', 0, ?, ?)`, now, now); err != nil {
 		t.Fatalf("status = %d, body %s", resp.Code, resp.Body.String())
 	}
 	body := resp.Body.String()
-	for _, want := range []string{"anton_tg", "Вход", time.Now().Format("2006-01-02"), "—"} {
+	for _, want := range []string{"anton_tg", "Активность", time.Now().Format("2006-01-02"), "—"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("users page missing %q: %s", want, body)
 		}
@@ -152,7 +152,7 @@ values(null, 'anton_tg', 'anton', 0, ?, ?)`, now, now); err != nil {
 	sortResp := httptest.NewRecorder()
 	srv.PageServer().HandleAdminUsers(sortResp, sortReq)
 	sorted := sortResp.Body.String()
-	if !strings.Contains(sorted, "Вход ↑") || !strings.Contains(sorted, "sort=last&amp;dir=desc") {
+	if !strings.Contains(sorted, "Активность ↑") || !strings.Contains(sorted, "sort=last&amp;dir=desc") {
 		t.Fatalf("sorted page missing the flip affordance: %s", sorted)
 	}
 	if strings.Index(sorted, "anton") > strings.Index(sorted, "pecheny") {

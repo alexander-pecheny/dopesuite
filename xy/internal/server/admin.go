@@ -160,13 +160,13 @@ func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
 }
 
 type adminUserRow struct {
-	ID          int64
-	Username    string
-	Telegram    string
-	Used        int64
-	Quota       int64
-	Unlimited   bool
-	LastLoginAt string // raw RFC3339, empty when the account has no live session
+	ID         int64
+	Username   string
+	Telegram   string
+	Used       int64
+	Quota      int64
+	Unlimited  bool
+	LastSeenAt string // raw RFC3339 of the newest session's last_seen_at; empty when there is none
 }
 
 // adminTime renders a stored RFC3339 timestamp for the admin tables; a missing
@@ -190,7 +190,7 @@ func sortAdminUsers(users []adminUserRow, s adminusers.Sort) {
 		if s.Key == "used" {
 			c = cmp.Compare(a.Used, b.Used)
 		} else {
-			c = cmp.Compare(a.LastLoginAt, b.LastLoginAt) // RFC3339 sorts as text; never-logged-in ("") sorts first
+			c = cmp.Compare(a.LastSeenAt, b.LastSeenAt) // RFC3339 sorts as text; never-seen ("") sorts first
 		}
 		if s.Desc {
 			return -c
@@ -219,16 +219,16 @@ func storageCell(u adminUserRow) string {
 }
 
 // adminUsersDoc builds the /admin/users page: every account with its telegram
-// handle, storage against quota, and last login. Login and handle share one
+// handle, storage against quota, and last activity. Login and handle share one
 // column — two lines of the same fact, and three columns fit a phone where five
 // did not.
 func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
 	var body ui.Item
 	if len(users) > 0 {
-		rows := []ui.Item{ui.Scroll(), ui.Trow(
+		rows := []ui.Item{ui.Scroll(), ui.ID("adminUsers"), ui.Trow(
 			ui.Hcell(ui.Text("Пользователь")),
+			sortHeader("last", "Активность", s),
 			sortHeader("used", "Хранилище", s),
-			sortHeader("last", "Вход", s),
 		)}
 		for _, u := range users {
 			who := ui.Cell(ui.Text(u.Username))
@@ -237,8 +237,8 @@ func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
 			}
 			rows = append(rows, ui.Trow(
 				who,
+				ui.Cell(ui.Text(adminTime(u.LastSeenAt))),
 				ui.Cell(ui.Text(storageCell(u))),
-				ui.Cell(ui.Text(adminTime(u.LastLoginAt))),
 			))
 		}
 		body = ui.Section(ui.Table(rows...))
@@ -256,6 +256,8 @@ func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
 }
 
 // HandleAdminUsers serves /admin/users — the account list, ordered by ?sort/?dir.
+// "Активность" is the newest session's last_seen_at, not its created_at: sessions
+// slide, so someone who visits daily on the same cookie never logs in again.
 func (s *server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAdmin(w, r); !ok {
 		return
@@ -276,7 +278,7 @@ func (s *server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 func (s *server) loadAdminUsers(ctx context.Context) ([]adminUserRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 select u.id, u.username, coalesce(u.telegram_username, ''), u.quota_bytes,
-       coalesce((select max(s.created_at) from sessions s where s.user_id = u.id), '')
+       coalesce((select max(s.last_seen_at) from sessions s where s.user_id = u.id), '')
 from users u
 order by u.created_at desc, u.id desc`)
 	if err != nil {
@@ -287,16 +289,16 @@ order by u.created_at desc, u.id desc`)
 	var out []adminUserRow
 	for rows.Next() {
 		var (
-			u         adminUserRow
-			username  sql.NullString
-			lastLogin string
+			u        adminUserRow
+			username sql.NullString
+			lastSeen string
 		)
-		if err := rows.Scan(&u.ID, &username, &u.Telegram, &u.Quota, &lastLogin); err != nil {
+		if err := rows.Scan(&u.ID, &username, &u.Telegram, &u.Quota, &lastSeen); err != nil {
 			return nil, err
 		}
 		u.Username = username.String
 		u.Unlimited = quotaExempt(username)
-		u.LastLoginAt = lastLogin
+		u.LastSeenAt = lastSeen
 		out = append(out, u)
 	}
 	if err := rows.Err(); err != nil {

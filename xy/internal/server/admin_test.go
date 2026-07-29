@@ -51,7 +51,7 @@ func TestAdminUsers(t *testing.T) {
 	resp := admin.do("GET", "/admin/users", nil)
 	mustStatus(t, resp, 200)
 	page := body(t, resp)
-	for _, want := range []string{"plainuser", "boss", "Хранилище", "Вход", "0 / 25 МБ", "0 МБ / ∞"} {
+	for _, want := range []string{"plainuser", "boss", "Хранилище", "Активность", "0 / 25 МБ", "0 МБ / ∞"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("users page missing %q:\n%s", want, page)
 		}
@@ -69,9 +69,9 @@ func TestAdminUsers(t *testing.T) {
 // the accounts that never logged in.
 func TestSortAdminUsers(t *testing.T) {
 	rows := []adminUserRow{
-		{Username: "a", Used: 10, LastLoginAt: "2026-01-02T00:00:00Z"},
-		{Username: "b", Used: 30, LastLoginAt: ""},
-		{Username: "c", Used: 20, LastLoginAt: "2026-03-04T00:00:00Z"},
+		{Username: "a", Used: 10, LastSeenAt: "2026-01-02T00:00:00Z"},
+		{Username: "b", Used: 30, LastSeenAt: ""},
+		{Username: "c", Used: 20, LastSeenAt: "2026-03-04T00:00:00Z"},
 	}
 	names := func(s adminusers.Sort) string {
 		got := slices.Clone(rows)
