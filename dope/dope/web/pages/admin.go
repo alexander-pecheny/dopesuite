@@ -116,6 +116,7 @@ type adminUserRow struct {
 	Username  string
 	Telegram  string
 	IsSystem  bool
+	LastLogin string
 	CreatedAt string
 }
 
@@ -123,14 +124,24 @@ type adminUsersData struct {
 	Users []adminUserRow
 }
 
+// adminTime renders a stored RFC3339 timestamp for the admin table; a missing
+// or unparsable value becomes a dash.
+func adminTime(ts string) string {
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return "—"
+	}
+	return t.Local().Format("2006-01-02 15:04")
+}
+
 // adminUsersDoc builds the /admin/users page: a table of all users, or an empty
 // note. System accounts are tagged "(система)".
 func adminUsersDoc(data adminUsersData) *ui.Doc {
 	var body ui.Item
 	if len(data.Users) > 0 {
-		rows := []ui.Item{ui.Trow(
-			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text("Логин")),
-			ui.Hcell(ui.Text("Telegram")), ui.Hcell(ui.Text("Создан")),
+		rows := []ui.Item{ui.Scroll(), ui.Trow(
+			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Telegram")),
+			ui.Hcell(ui.Text("Последний вход")), ui.Hcell(ui.Text("Создан")),
 		)}
 		for _, u := range data.Users {
 			nameCell := ui.Cell(ui.Text(u.Username))
@@ -141,6 +152,7 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 				ui.Cell(ui.Text(strconv.FormatInt(u.ID, 10))),
 				nameCell,
 				ui.Cell(ui.Text(u.Telegram)),
+				ui.Cell(ui.Text(u.LastLogin)),
 				ui.Cell(ui.Text(u.CreatedAt)),
 			))
 		}
@@ -179,18 +191,18 @@ func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) loadAdminUsers(ctx context.Context) ([]adminUserRow, error) {
 	return store.CollectRows(ctx, s.h.DB(), `
-select id, coalesce(username, ''), coalesce(telegram_username, ''), is_system, created_at
-from users
-order by created_at desc, id desc`, nil, func(rows *sql.Rows) (adminUserRow, error) {
+select u.id, coalesce(u.username, ''), coalesce(u.telegram_username, ''), u.is_system, u.created_at,
+       coalesce((select max(s.created_at) from sessions s where s.user_id = u.id), '')
+from users u
+order by u.created_at desc, u.id desc`, nil, func(rows *sql.Rows) (adminUserRow, error) {
 		var u adminUserRow
 		var isSystem int
-		if err := rows.Scan(&u.ID, &u.Username, &u.Telegram, &isSystem, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Telegram, &isSystem, &u.CreatedAt, &u.LastLogin); err != nil {
 			return u, err
 		}
 		u.IsSystem = isSystem == 1
-		if t, err := time.Parse(time.RFC3339, u.CreatedAt); err == nil {
-			u.CreatedAt = t.Format("2006-01-02 15:04")
-		}
+		u.CreatedAt = adminTime(u.CreatedAt)
+		u.LastLogin = adminTime(u.LastLogin)
 		return u, nil
 	})
 }

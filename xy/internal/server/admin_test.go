@@ -34,6 +34,27 @@ func body(t *testing.T, resp *http.Response) string {
 	return string(b)
 }
 
+// TestAdminUsers covers the account list: gated like the rest of /admin, and
+// showing each user's handle, storage against quota, and last login.
+func TestAdminUsers(t *testing.T) {
+	ts, srv := newTestServer(t)
+
+	plain := registerUser(t, srv, ts, 880011, "plainuser")
+	mustStatus(t, plain.do("GET", "/admin/users", nil), 404)
+
+	admin := registerUser(t, srv, ts, 880012, "boss")
+	t.Setenv("XY_ADMIN_USER", "boss")
+
+	resp := admin.do("GET", "/admin/users", nil)
+	mustStatus(t, resp, 200)
+	page := body(t, resp)
+	for _, want := range []string{"plainuser", "boss", "Хранилище", "Последний вход", "без лимита"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("users page missing %q:\n%s", want, page)
+		}
+	}
+}
+
 // TestAdminCreateUsers covers the admin gate and the bulk create-users flow:
 // non-admins can't reach it; the admin can create accounts, with duplicates
 // skipped and invalid logins reported; created users can then log in.

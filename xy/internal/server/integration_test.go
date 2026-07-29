@@ -100,6 +100,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("GET /admin", srv.HandleAdminLanding)
 	mux.HandleFunc("GET /admin/create_users", srv.HandleAdminCreateUsers)
 	mux.HandleFunc("POST /admin/create_users", srv.HandleAdminCreateUsers)
+	mux.HandleFunc("GET /admin/users", srv.HandleAdminUsers)
 	mux.HandleFunc("GET /1/boards/{id}", srv.handleTrelloGetBoard)
 	mux.HandleFunc("GET /1/boards/{id}/lists", srv.handleTrelloGetLists)
 	mux.HandleFunc("POST /1/lists/{id}/cards", srv.handleTrelloCreateCard)

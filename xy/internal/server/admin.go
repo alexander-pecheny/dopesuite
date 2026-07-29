@@ -59,6 +59,9 @@ func adminIndexDoc() *ui.Doc {
 					ui.Listrow(ui.Href("/admin/create_users"),
 						ui.Listtitle(ui.Text("Создать пользователей")),
 					),
+					ui.Listrow(ui.Href("/admin/users"),
+						ui.Listtitle(ui.Text("Пользователи")),
+					),
 				),
 			),
 		),
@@ -152,6 +155,118 @@ func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
 	pageItems = append(pageItems, main...)
 
 	return &ui.Doc{Nodes: []ui.Node{ui.Page(pageItems...)}}
+}
+
+type adminUserRow struct {
+	ID        int64
+	Username  string
+	Telegram  string
+	Used      int64
+	Quota     int64
+	Unlimited bool
+	LastLogin string
+}
+
+// adminTime renders a stored RFC3339 timestamp for the admin tables; a missing
+// or unparsable value becomes a dash.
+func adminTime(ts string) string {
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return "—"
+	}
+	return t.Local().Format("2006-01-02 15:04")
+}
+
+// adminUsersDoc builds the /admin/users page: every account with its telegram
+// handle, storage against quota, and last login.
+func adminUsersDoc(users []adminUserRow) *ui.Doc {
+	var body ui.Item
+	if len(users) > 0 {
+		rows := []ui.Item{ui.Scroll(), ui.Trow(
+			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Telegram")),
+			ui.Hcell(ui.Text("Хранилище")), ui.Hcell(ui.Text("Последний вход")),
+		)}
+		for _, u := range users {
+			storage := humanMB(u.Used) + " / " + humanMB(u.Quota)
+			if u.Unlimited {
+				storage = humanMB(u.Used) + " / без лимита"
+			}
+			rows = append(rows, ui.Trow(
+				ui.Cell(ui.Text(strconv.FormatInt(u.ID, 10))),
+				ui.Cell(ui.Text(u.Username)),
+				ui.Cell(ui.Text(u.Telegram)),
+				ui.Cell(ui.Text(storage)),
+				ui.Cell(ui.Text(u.LastLogin)),
+			))
+		}
+		body = ui.Section(ui.Table(rows...))
+	} else {
+		body = ui.Section(ui.Hint(ui.Text("Пользователей нет.")))
+	}
+	return &ui.Doc{Nodes: []ui.Node{
+		ui.Page(ui.Title("Пользователи · Админка"), ui.PageFull,
+			ui.Topbar(ui.Title("Пользователи"),
+				ui.Iconlink(ui.Href("/admin"), ui.Label("Админка"), ui.Text("↩️")),
+			),
+			body,
+		),
+	}}
+}
+
+// HandleAdminUsers serves /admin/users — the account list.
+func (s *server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireAdmin(w, r); !ok {
+		return
+	}
+	users, err := s.loadAdminUsers(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.renderAdminPage(w, adminUsersDoc(users))
+}
+
+// loadAdminUsers reads every account, then prices each one's storage. The
+// per-user sum runs after the row scan, not inside it, so the two queries never
+// share a connection.
+func (s *server) loadAdminUsers(ctx context.Context) ([]adminUserRow, error) {
+	rows, err := s.db.QueryContext(ctx, `
+select u.id, u.username, coalesce(u.telegram_username, ''), u.quota_bytes,
+       coalesce((select max(s.created_at) from sessions s where s.user_id = u.id), '')
+from users u
+order by u.created_at desc, u.id desc`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []adminUserRow
+	for rows.Next() {
+		var (
+			u         adminUserRow
+			username  sql.NullString
+			lastLogin string
+		)
+		if err := rows.Scan(&u.ID, &username, &u.Telegram, &u.Quota, &lastLogin); err != nil {
+			return nil, err
+		}
+		u.Username = username.String
+		u.Unlimited = quotaExempt(username)
+		u.LastLogin = adminTime(lastLogin)
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range out {
+		used, err := storageBytes(ctx, s.db, out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Used = used
+	}
+	return out, nil
 }
 
 // HandleAdminLanding serves /admin — a landing page linking to the admin tools.
