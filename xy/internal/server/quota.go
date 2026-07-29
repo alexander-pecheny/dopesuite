@@ -3,15 +3,19 @@ package server
 import (
 	"context"
 	"database/sql"
+	"math"
 	"net/http"
 	"strconv"
 
 	"pecheny.me/dopecore/adminusers"
 )
 
-// humanMB renders a byte count as whole/one-decimal MiB for a user-facing string.
+// humanMB renders a byte count as MiB for a user-facing string, rounded to two
+// decimals and with trailing zeros dropped: a few hundred bytes reads "0 МБ",
+// not "0.00004863 МБ".
 func humanMB(b int64) string {
-	return strconv.FormatFloat(float64(b)/(1<<20), 'f', -1, 64) + " МБ"
+	mb := math.Round(float64(b)/(1<<20)*100) / 100
+	return strconv.FormatFloat(mb, 'f', -1, 64) + " МБ"
 }
 
 // storageUsageSQL sums the bytes a user's own boards hold: attachment blobs plus
