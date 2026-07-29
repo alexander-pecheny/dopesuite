@@ -1,12 +1,14 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -158,13 +160,13 @@ func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
 }
 
 type adminUserRow struct {
-	ID        int64
-	Username  string
-	Telegram  string
-	Used      int64
-	Quota     int64
-	Unlimited bool
-	LastLogin string
+	ID          int64
+	Username    string
+	Telegram    string
+	Used        int64
+	Quota       int64
+	Unlimited   bool
+	LastLoginAt string // raw RFC3339, empty when the account has no live session
 }
 
 // adminTime renders a stored RFC3339 timestamp for the admin tables; a missing
@@ -177,26 +179,66 @@ func adminTime(ts string) string {
 	return t.Local().Format("2006-01-02 15:04")
 }
 
+// sortAdminUsers reorders in place. Storage can't be an ORDER BY — it is summed
+// per user after the query — so both keys are sorted here.
+func sortAdminUsers(users []adminUserRow, s adminusers.Sort) {
+	if s.Key == "" {
+		return
+	}
+	slices.SortStableFunc(users, func(a, b adminUserRow) int {
+		var c int
+		if s.Key == "used" {
+			c = cmp.Compare(a.Used, b.Used)
+		} else {
+			c = cmp.Compare(a.LastLoginAt, b.LastLoginAt) // RFC3339 sorts as text; never-logged-in ("") sorts first
+		}
+		if s.Desc {
+			return -c
+		}
+		return c
+	})
+}
+
+// sortHeader is a sortable column heading: a small ghost button carrying the
+// direction this column would sort in next, and an arrow when it is the active
+// one.
+func sortHeader(key, label string, s adminusers.Sort) *ui.Element {
+	dir, arrow := s.Header(key)
+	return ui.Hcell(ui.Button(ui.Ghost, ui.Small(),
+		ui.Href("/admin/users?sort="+key+"&dir="+dir), ui.Text(label+arrow),
+	))
+}
+
+// storageCell reads "0.16 / 25 МБ" — the unit is stated once, and the admin's
+// own uncapped account says so instead of naming a limit.
+func storageCell(u adminUserRow) string {
+	if u.Unlimited {
+		return humanMB(u.Used) + " / ∞"
+	}
+	return mbNum(u.Used) + " / " + humanMB(u.Quota)
+}
+
 // adminUsersDoc builds the /admin/users page: every account with its telegram
-// handle, storage against quota, and last login.
-func adminUsersDoc(users []adminUserRow) *ui.Doc {
+// handle, storage against quota, and last login. Login and handle share one
+// column — two lines of the same fact, and three columns fit a phone where five
+// did not.
+func adminUsersDoc(users []adminUserRow, s adminusers.Sort) *ui.Doc {
 	var body ui.Item
 	if len(users) > 0 {
 		rows := []ui.Item{ui.Scroll(), ui.Trow(
-			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Telegram")),
-			ui.Hcell(ui.Text("Хранилище")), ui.Hcell(ui.Text("Последний вход")),
+			ui.Hcell(ui.Text("Пользователь")),
+			sortHeader("used", "Хранилище", s),
+			sortHeader("last", "Вход", s),
 		)}
 		for _, u := range users {
-			storage := humanMB(u.Used) + " / " + humanMB(u.Quota)
-			if u.Unlimited {
-				storage = humanMB(u.Used) + " / без лимита"
+			who := ui.Cell(ui.Text(u.Username))
+			if u.Telegram != "" {
+				who = ui.Cell(ui.Col(ui.SpaceNone, ui.Line(ui.Text(u.Username)), ui.Muted(ui.Text(u.Telegram))))
 			}
 			rows = append(rows, ui.Trow(
-				ui.Cell(ui.Text(strconv.FormatInt(u.ID, 10))),
-				ui.Cell(ui.Text(u.Username)),
-				ui.Cell(ui.Text(u.Telegram)),
-				ui.Cell(ui.Text(storage)),
-				ui.Cell(ui.Text(u.LastLogin)),
+				who,
+				ui.Cell(ui.Text(storageCell(u))),
+				ui.Cell(ui.Text(adminTime(u.LastLoginAt))),
 			))
 		}
 		body = ui.Section(ui.Table(rows...))
@@ -213,7 +255,7 @@ func adminUsersDoc(users []adminUserRow) *ui.Doc {
 	}}
 }
 
-// HandleAdminUsers serves /admin/users — the account list.
+// HandleAdminUsers serves /admin/users — the account list, ordered by ?sort/?dir.
 func (s *server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAdmin(w, r); !ok {
 		return
@@ -223,7 +265,9 @@ func (s *server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.renderAdminPage(w, adminUsersDoc(users))
+	order := adminusers.ParseSort(r.URL.Query(), "used", "last")
+	sortAdminUsers(users, order)
+	s.renderAdminPage(w, adminUsersDoc(users, order))
 }
 
 // loadAdminUsers reads every account, then prices each one's storage. The
@@ -252,7 +296,7 @@ order by u.created_at desc, u.id desc`)
 		}
 		u.Username = username.String
 		u.Unlimited = quotaExempt(username)
-		u.LastLogin = adminTime(lastLogin)
+		u.LastLoginAt = lastLogin
 		out = append(out, u)
 	}
 	if err := rows.Err(); err != nil {
