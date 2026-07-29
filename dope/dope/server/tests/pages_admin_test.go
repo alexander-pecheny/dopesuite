@@ -116,6 +116,36 @@ values(null, null, 'anton', 0, ?, ?)`, now, now); err != nil {
 	}
 }
 
+// TestAdminUsersPage checks the account list shows a session-holder's last
+// login and dashes the account that has never logged in.
+func TestAdminUsersPage(t *testing.T) {
+	t.Setenv("DOPE_ADMIN_USER", "pecheny")
+	srv := newAuthTestServer(t)
+	cookie := makeUserWithSession(t, srv, "pecheny")
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := srv.Eng().DB.Exec(`
+insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
+values(null, 'anton_tg', 'anton', 0, ?, ?)`, now, now); err != nil {
+		t.Fatalf("seed anton: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
+	resp := httptest.NewRecorder()
+	srv.PageServer().HandleAdminUsers(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	body := resp.Body.String()
+	for _, want := range []string{"anton_tg", "Последний вход", time.Now().Format("2006-01-02"), "—"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("users page missing %q: %s", want, body)
+		}
+	}
+}
+
 func TestAdminPagesRejectNonAdmin(t *testing.T) {
 	t.Setenv("DOPE_ADMIN_USER", "pecheny")
 	srv := newAuthTestServer(t)

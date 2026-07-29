@@ -60,6 +60,7 @@ func Main() {
 	mux.HandleFunc("GET /admin", srv.HandleAdminLanding)
 	mux.HandleFunc("GET /admin/create_users", srv.HandleAdminCreateUsers)
 	mux.HandleFunc("POST /admin/create_users", srv.HandleAdminCreateUsers)
+	mux.HandleFunc("GET /admin/users", srv.HandleAdminUsers)
 
 	// ---- PWA: service worker + manifest at the site root (scope '/') ----
 	mux.HandleFunc("GET /sw.js", srv.serveRootAsset(
