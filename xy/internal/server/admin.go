@@ -52,7 +52,7 @@ func validNewUsername(name string) bool {
 // adminIndexDoc builds the /admin landing page: a link list of admin tools.
 func adminIndexDoc() *ui.Doc {
 	return &ui.Doc{Nodes: []ui.Node{
-		ui.Page(ui.Title("Админка"), ui.PageFull,
+		ui.Page(ui.Title("Админка"), ui.PageSheet,
 			ui.Topbar(ui.Title("Админка")),
 			ui.Section(
 				ui.List(
@@ -147,7 +147,7 @@ func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
 	main = append(main, createUsersFormSection())
 
 	pageItems := []ui.Item{
-		ui.Title("Создать пользователей · Админка"), ui.PageFull,
+		ui.Title("Создать пользователей · Админка"), ui.PageSheet,
 		ui.Topbar(ui.Title("Создать пользователей"),
 			ui.Iconlink(ui.Href("/admin"), ui.Label("Админка"), ui.Text("↩️")),
 		),
@@ -204,7 +204,7 @@ func adminUsersDoc(users []adminUserRow) *ui.Doc {
 		body = ui.Section(ui.Hint(ui.Text("Пользователей нет.")))
 	}
 	return &ui.Doc{Nodes: []ui.Node{
-		ui.Page(ui.Title("Пользователи · Админка"), ui.PageFull,
+		ui.Page(ui.Title("Пользователи · Админка"), ui.PageSheet,
 			ui.Topbar(ui.Title("Пользователи"),
 				ui.Iconlink(ui.Href("/admin"), ui.Label("Админка"), ui.Text("↩️")),
 			),
