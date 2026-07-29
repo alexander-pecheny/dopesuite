@@ -114,12 +114,12 @@ func adminCreateUsersDoc(data adminusers.CreateUsersData) *ui.Doc {
 }
 
 type adminUserRow struct {
-	ID          int64
-	Username    string
-	Telegram    string
-	IsSystem    bool
-	LastLoginAt string // raw RFC3339, empty when the account has no live session
-	CreatedAt   string
+	ID         int64
+	Username   string
+	Telegram   string
+	IsSystem   bool
+	LastSeenAt string // raw RFC3339 of the newest session's last_seen_at; empty when there is none
+	CreatedAt  string
 }
 
 type adminUsersData struct {
@@ -127,15 +127,15 @@ type adminUsersData struct {
 	Sort  adminusers.Sort
 }
 
-// sortAdminUsers reorders in place by last login, the one column worth ranking
-// on this page. Both timestamps are RFC3339, which sorts as text; an account
-// that never logged in has none and sorts first ascending.
+// sortAdminUsers reorders in place by last activity, the one column worth
+// ranking on this page. The timestamps are RFC3339, which sorts as text; an
+// account that never showed up has none and sorts first ascending.
 func sortAdminUsers(users []adminUserRow, s adminusers.Sort) {
 	if s.Key != "last" {
 		return
 	}
 	slices.SortStableFunc(users, func(a, b adminUserRow) int {
-		c := cmp.Compare(a.LastLoginAt, b.LastLoginAt)
+		c := cmp.Compare(a.LastSeenAt, b.LastSeenAt)
 		if s.Desc {
 			return -c
 		}
@@ -170,7 +170,7 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 	if len(data.Users) > 0 {
 		rows := []ui.Item{ui.Scroll(), ui.Trow(
 			ui.Hcell(ui.Text("ID")), ui.Hcell(ui.Text("Логин")), ui.Hcell(ui.Text("Telegram")),
-			sortHeader("last", "Вход", data.Sort), ui.Hcell(ui.Text("Создан")),
+			sortHeader("last", "Активность", data.Sort), ui.Hcell(ui.Text("Создан")),
 		)}
 		for _, u := range data.Users {
 			nameCell := ui.Cell(ui.Text(u.Username))
@@ -181,7 +181,7 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 				ui.Cell(ui.Text(strconv.FormatInt(u.ID, 10))),
 				nameCell,
 				ui.Cell(ui.Text(u.Telegram)),
-				ui.Cell(ui.Text(adminTime(u.LastLoginAt))),
+				ui.Cell(ui.Text(adminTime(u.LastSeenAt))),
 				ui.Cell(ui.Text(u.CreatedAt)),
 			))
 		}
@@ -197,7 +197,9 @@ func adminUsersDoc(data adminUsersData) *ui.Doc {
 	}}
 }
 
-// /admin/users — lists all users with their creation timestamp.
+// /admin/users — every account with its handle, last activity and creation time.
+// Activity is the newest session's last_seen_at, not its created_at: sessions
+// slide, so someone who visits daily on the same cookie never logs in again.
 func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/admin/users" {
 		http.NotFound(w, r)
@@ -223,12 +225,12 @@ func (s *Server) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
 func (s *Server) loadAdminUsers(ctx context.Context) ([]adminUserRow, error) {
 	return store.CollectRows(ctx, s.h.DB(), `
 select u.id, coalesce(u.username, ''), coalesce(u.telegram_username, ''), u.is_system, u.created_at,
-       coalesce((select max(s.created_at) from sessions s where s.user_id = u.id), '')
+       coalesce((select max(s.last_seen_at) from sessions s where s.user_id = u.id), '')
 from users u
 order by u.created_at desc, u.id desc`, nil, func(rows *sql.Rows) (adminUserRow, error) {
 		var u adminUserRow
 		var isSystem int
-		if err := rows.Scan(&u.ID, &u.Username, &u.Telegram, &isSystem, &u.CreatedAt, &u.LastLoginAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Telegram, &isSystem, &u.CreatedAt, &u.LastSeenAt); err != nil {
 			return u, err
 		}
 		u.IsSystem = isSystem == 1
