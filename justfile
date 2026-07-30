@@ -106,6 +106,10 @@ tidy-check-uikit:
 # `go generate` ships a typed builder that doesn't match the vocabulary. Both
 # app overlays generate from the kit's vocab as well as their own, so a kit edit
 # leaves them stale too — check all three, not just the kit.
+#
+# core.css is in the same list for the same reason: its uchu ramps are generated
+# from palette/uchu.json, and a hand-edited rung is exactly the drift the ladder
+# exists to prevent.
 generate-check: build-web
     #!/usr/bin/env bash
     set -euo pipefail
@@ -116,13 +120,14 @@ generate-check: build-web
     trap 'rm -f "$before"' EXIT
     rc=0
     for target in "dopeuikit ./kit kit/tags_gen.go" \
+                  "dopeuikit ./palette assets/core.css" \
                   "dope ./dope/web/ui dope/web/ui/tags_gen.go" \
                   "xy ./internal/ui internal/ui/tags_gen.go"; do
       set -- $target
       cp "$1/$3" "$before"
       (cd "$1" && go generate "$2")
       if ! diff -q "$before" "$1/$3" >/dev/null; then
-        echo "$1/$3 is stale w.r.t. its vocab.json: run 'go generate $2' in $1/" >&2
+        echo "$1/$3 is stale w.r.t. its source: run 'go generate $2' in $1/" >&2
         diff "$before" "$1/$3" >&2 || true
         rc=1
       fi
