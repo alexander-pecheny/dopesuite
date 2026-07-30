@@ -285,11 +285,25 @@
   --wash-positive: color-mix(in oklab, var(--surface) 88%, var(--uchu-green-6));
   --wash-negative: color-mix(in oklab, var(--surface) 88%, var(--uchu-red-5));
   --wash-emphasis: color-mix(in oklab, var(--surface) 88%, var(--uchu-blue-5));
-  /* Amber/warning cluster: the unnumbered-teams banner and fuzzy-match badge. */
-  --amber-bg: #fde68a;
-  --amber-border: #f59e0b;
-  --amber-text-strong: #7c2d12;
-  --amber-text: #b06a00;
+  /* ── WARNING ───────────────────────────────────────────────────────────────
+     A fill and its ink — the unnumbered-teams banner, the fuzzy-match badge,
+     the pending sync dot. Two tokens, not the four (--amber-bg, --amber-border,
+     --amber-text-strong, --amber-text) that used to occupy FOUR hue families
+     between them: hue 96, 70, 66 and 38, drifting from yellow through orange
+     into red-brown, all named amber.
+
+     The drift was hiding a real constraint rather than being sloppy. Yellow
+     cannot carry text on a light surface — uchu's darkest yellow rung reaches
+     only 3.54:1 against yang, short of AA — so a warning FILL wants yellow and
+     warning INK wants orange, and the old values had drifted toward exactly
+     that without saying so. Now it is said: the split is by role, and one ink
+     serves both grounds (orange-9 is 4.87:1 on the fill and 5.52:1 on paper,
+     asserted in palette_test.go).
+
+     --amber-border is gone. The Kit's outlines are off in the regular themes;
+     the banner separates by fill like everything else. */
+  --warn-bg: var(--uchu-yellow-2);
+  --warn-text: var(--uchu-orange-9);
   /* Diagnostic chip (download-log button): stays dark in every theme, so it
      names the ink rung directly rather than a role that moves. */
   --diag-bg: oklch(from var(--uchu-yin-9) l c h / 0.82);
@@ -304,7 +318,6 @@
      their referents, so no dark-block override needed). */
   --accent: var(--success);
   --text-muted: var(--muted);
-  --orange-dark: var(--amber-text);
   --blue-strong: #174ea6;
   --blue-bright: #1d4ed8;
   --danger-text: #9f1239;
@@ -1125,7 +1138,7 @@ input[type="radio"]:focus-visible {
 }
 
 .sync-status[data-state="pending"] {
-  color: var(--orange-dark);
+  color: var(--warn-text);
 }
 
 .sync-status[data-state="pending"]::before {
@@ -1323,11 +1336,11 @@ input[type="radio"]:focus-visible {
   --danger: #f25555;
   --danger-text: #f7a6b4;
 
-  /* amber/warning — shifted warm so it stays visible on dark */
-  --amber-bg: #463713;
-  --amber-border: #c4881d;
-  --amber-text-strong: #f6ddc0;
-  --amber-text: #e3aa55;
+  /* warning — the fill takes the wash form (this theme's paper mixed with the
+     same dark orange rung light uses as its ink); the ink climbs the orange ramp
+     until it reads on both that fill and bare paper */
+  --warn-bg: color-mix(in oklab, var(--surface) 72%, var(--uchu-orange-9));
+  --warn-text: var(--uchu-orange-4);
 
   /* overlays — deepen the scrims (--shade is near-black here); shadows are a
      weak cue on dark, so only the alphas move */

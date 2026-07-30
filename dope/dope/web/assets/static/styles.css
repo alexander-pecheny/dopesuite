@@ -3705,7 +3705,7 @@ body:not(.embedded-match) .grid-match {
   white-space: nowrap;
 }
 
-.numbers-import-row.is-fuzzy .numbers-import-badge { color: var(--amber-text); }
+.numbers-import-row.is-fuzzy .numbers-import-badge { color: var(--warn-text); }
 
 .numbers-import-row.is-unmatched .numbers-import-badge { color: var(--muted-light); }
 

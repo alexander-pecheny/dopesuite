@@ -443,6 +443,39 @@ func TestLabelSetIsOneRung(t *testing.T) {
 	}
 }
 
+// TestWarnInkReadsOnBothGrounds is the constraint the old four-token amber
+// cluster had drifted toward without ever writing down. --warn-text appears in
+// two places — inside the banner, on --warn-bg, and on bare paper for the
+// fuzzy-match badge and the pending sync dot — so ONE ink has to clear AA on
+// both. That is also why the fill is yellow and the ink is orange: uchu's
+// darkest yellow reaches only 3.54:1 on yang, so yellow cannot be the ink.
+func TestWarnInkReadsOnBothGrounds(t *testing.T) {
+	css := core(t)
+	for _, th := range themes {
+		t.Run(th.name, func(t *testing.T) {
+			tokens := tokensFor(t, css, th.selector)
+			ink, _, ok1 := resolve(tokens, "warn-text")
+			fill, _, ok2 := resolve(tokens, "warn-bg")
+			surface, _, ok3 := resolve(tokens, "surface")
+			if !ok1 || !ok2 || !ok3 {
+				t.Fatal("the warning pair does not resolve")
+			}
+			for _, g := range []struct {
+				name string
+				bg   OKLCH
+			}{{"--warn-bg", fill}, {"--surface", surface}} {
+				if got := Contrast(ink, g.bg); got < 4.5 {
+					t.Errorf("--warn-text on %s is %.2f:1, want >= 4.5:1", g.name, got)
+				}
+			}
+			// The fill is a fill: it must not be mistaken for the paper.
+			if math.Abs(fill.L-surface.L) < 0.02 {
+				t.Errorf("--warn-bg (L %.3f) is indistinguishable from --surface (L %.3f)", fill.L, surface.L)
+			}
+		})
+	}
+}
+
 // TestInkClearsItsSurface is the contrast floor. Each pair is one the Kit
 // actually composes — body text on the two backgrounds text sits on, and the
 // muted tier on both. WCAG AA is 4.5:1 for body text; --muted-light is

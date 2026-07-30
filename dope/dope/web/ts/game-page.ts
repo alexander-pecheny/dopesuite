@@ -121,12 +121,11 @@ export function mountUnnumberedBanner(festID: string | number | null | undefined
     position: "sticky",
     top: "0",
     zIndex: "2147483600",
-    background: "var(--amber-bg)",
-    color: "var(--amber-text-strong)",
+    background: "var(--warn-bg)",
+    color: "var(--warn-text)",
     font: "13px/1.4 system-ui, sans-serif",
     padding: "8px 12px",
     textAlign: "center",
-    borderBottom: "1px solid var(--amber-border)",
   });
   bar.append("Командам не присвоены номера — редактирование результатов заблокировано. ");
   const link = document.createElement("a");
