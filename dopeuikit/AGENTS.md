@@ -38,3 +38,19 @@ just vet-uikit
 just fmt-uikit
 just pre-commit-uikit   # fmt + vet + tidy + generate-check + test
 ```
+
+## Colour
+
+Colour is uchu (uchu.style), vendored in `palette/uchu.json`. **A role names a
+rung, never a hex** — see `docs/adr/0001-colour-is-a-rung-on-the-uchu-ladder.md`
+for the rule and its three exemptions.
+
+```
+go generate ./palette      # ramps -> core.css, sets -> Go + TS + dope's layer
+go test ./palette          # the ladder's invariants, read back out of core.css
+```
+
+`palette_test.go` is the design's test surface: monotone ladder per theme, ΔL
+0.03 between adjacent surfaces, AA for every ink-on-fill pair, high contrast
+never compressing. If a colour change fails it, the change is wrong — the
+assertions are cheaper to re-read than the four theme blocks are to re-derive.
