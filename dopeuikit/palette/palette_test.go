@@ -31,7 +31,12 @@ var (
 	hexRe     = regexp.MustCompile(`#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b`)
 	rungRefRe = regexp.MustCompile(`^var\(--uchu-([a-z0-9-]+)\)$`)
 	derivedRe = regexp.MustCompile(`^oklch\(from `)
-	mixRe     = regexp.MustCompile(`^color-mix\(in oklab,\s*var\(--([a-z0-9-]+)\)\s+([\d.]+)%,\s*var\(--([a-z0-9-]+)\)\s*\)$`)
+	// A rung wearing a theme's cast: lightness from the rung, chroma and hue
+	// replaced. Opaque, so it stays on the ladder and must keep being checked —
+	// matching this BEFORE derivedRe is what keeps dark inside every assertion
+	// below rather than silently skipped as a wash.
+	tintedRe = regexp.MustCompile(`^oklch\(from var\(--([a-z0-9-]+)\) l (\S+) (\S+)\)$`)
+	mixRe    = regexp.MustCompile(`^color-mix\(in oklab,\s*var\(--([a-z0-9-]+)\)\s+([\d.]+)%,\s*var\(--([a-z0-9-]+)\)\s*\)$`)
 	// The generated ramps themselves: `oklch(L C H)` with no alpha and no `from`.
 	oklchRe = regexp.MustCompile(`^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$`)
 )
@@ -125,6 +130,15 @@ func resolve(tokens map[string]string, name string) (c OKLCH, derived, ok bool) 
 			h, _ := strconv.ParseFloat(m[3], 64)
 			return OKLCH{l, c, h}, false, true
 		}
+		if m := tintedRe.FindStringSubmatch(v); m != nil {
+			base, _, ok := resolve(tokens, m[1])
+			c, okC := number(tokens, m[2])
+			h, okH := number(tokens, m[3])
+			if !ok || !okC || !okH {
+				return OKLCH{}, false, false
+			}
+			return OKLCH{base.L, c, h}, false, true
+		}
 		if derivedRe.MatchString(v) {
 			return OKLCH{}, true, true
 		}
@@ -150,6 +164,26 @@ func resolve(tokens map[string]string, name string) (c OKLCH, derived, ok bool) 
 		name = m[1]
 	}
 	return OKLCH{}, false, false
+}
+
+// number reads a scalar token — the cast's chroma and hue — following var()
+// chains the same way a colour would be followed.
+func number(tokens map[string]string, v string) (float64, bool) {
+	for range 8 {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f, true
+		}
+		m := varRefRe.FindStringSubmatch(v)
+		if m == nil {
+			return 0, false
+		}
+		next, ok := tokens[m[1]]
+		if !ok {
+			return 0, false
+		}
+		v = strings.TrimSpace(next)
+	}
+	return 0, false
 }
 
 func fromHex(h string) OKLCH {
@@ -208,30 +242,32 @@ func TestNeutralRolesNameARung(t *testing.T) {
 					t.Errorf("--%s = %q does not resolve to a colour", role, v)
 					continue
 				}
-				// A rung reference always round-trips to its ramp value; a hex
-				// only lands on one by luck.
-				if !onARamp(c) {
-					t.Errorf("--%s resolves to L=%.4f C=%.4f, which is not a uchu rung — name a --uchu-* rung instead of a literal",
-						role, c.L, c.C)
+				// The ladder owns LIGHTNESS; a theme's cast may replace chroma
+				// and hue (see --tint-c/--tint-h in the dark block). So the
+				// invariant is that the role's lightness is a rung's lightness —
+				// which a rung reference gives for free and a hand-picked hex
+				// only lands on by luck.
+				if !onARung(c.L) {
+					t.Errorf("--%s resolves to L=%.4f, which is no rung's lightness — name a --uchu-* rung instead of a literal",
+						role, c.L)
 				}
 			}
 		})
 	}
 }
 
-// onARamp reports whether a colour is exactly a vendored rung.
-func onARamp(c OKLCH) bool {
+// onARung reports whether a lightness is exactly some vendored rung's.
+func onARung(l float64) bool {
 	const eps = 1e-9
 	for _, name := range Anchors() {
-		if a := Anchor(name); math.Abs(a.L-c.L) < eps && math.Abs(a.C-c.C) < eps {
+		if math.Abs(Anchor(name).L-l) < eps {
 			return true
 		}
 	}
 	for _, variant := range Variants() {
 		for _, hue := range Hues(variant) {
 			for n := 1; n <= 9; n++ {
-				r := Rung(variant, hue, n)
-				if math.Abs(r.L-c.L) < eps && math.Abs(r.C-c.C) < eps && math.Abs(r.H-c.H) < eps {
+				if math.Abs(Rung(variant, hue, n).L-l) < eps {
 					return true
 				}
 			}

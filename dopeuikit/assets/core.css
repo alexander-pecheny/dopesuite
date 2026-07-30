@@ -1274,6 +1274,22 @@ input[type="radio"]:focus-visible {
      render with the dark UA palette — otherwise the <select> arrows stay black
      and vanish against dark fills */
   color-scheme: dark;
+  /* ── THE CAST ──────────────────────────────────────────────────────────────
+     A rung fixes LIGHTNESS. It does not have to fix hue, and dark's neutrals
+     were never meant to be dead neutral — they carried a blue cast at chroma
+     0.014–0.024 around hue 261, and losing it made the whole theme read
+     differently even though every step was in the right place.
+
+     So the cast is its own dial. `oklch(from <rung> l …)` keeps the rung's
+     lightness — the ladder, its monotonicity, its gaps, everything the tests
+     assert — and replaces only chroma and hue. Two numbers steer the entire
+     dark palette; there is nothing to keep in sync.
+
+     Light does not declare a cast and names its rungs bare, because uchu's gray
+     ramp is already the neutral it wants. */
+  --tint-c: 0.018;
+  --tint-h: 261;
+
   /* Dark reads UP the yin ramp: page darkest, paper/cards lifted, controls
      lifted again — the steps ARE the elevation here, unlike light.
      Five rungs where there were ten. yin's rungs are the constraint that
@@ -1283,13 +1299,13 @@ input[type="radio"]:focus-visible {
      The -transparent twins and the ghost washes are NOT restated here: they
      derive from --paper / --structure / --text, which this block re-points, so
      they follow on their own. */
-  --page: var(--uchu-yin);
-  --paper: var(--uchu-yin-9);
+  --page: oklch(from var(--uchu-yin) l var(--tint-c) var(--tint-h));
+  --paper: oklch(from var(--uchu-yin-9) l var(--tint-c) var(--tint-h));
   --surface: var(--paper);
-  --structure: var(--uchu-yin-8);
+  --structure: oklch(from var(--uchu-yin-8) l var(--tint-c) var(--tint-h));
   --hover-bg: var(--structure);
-  --grid: var(--uchu-yin-8);
-  --grid-dark: var(--uchu-yin-7);
+  --grid: oklch(from var(--uchu-yin-8) l var(--tint-c) var(--tint-h));
+  --grid-dark: oklch(from var(--uchu-yin-7) l var(--tint-c) var(--tint-h));
   --shade: var(--uchu-yin);
   /* outlines off (see the :root block) — high contrast turns them back on */
   --border: transparent;
@@ -1299,18 +1315,22 @@ input[type="radio"]:focus-visible {
   /* lifted clear of --structure and --paper: with no outline the fill is the
      only thing that makes a control a control. The field stays recessed to
      --structure, which is the split light deliberately does not make. */
-  --action-bg: var(--uchu-yin-7);
-  --action-hover-bg: var(--uchu-yin-6);
+  --action-bg: oklch(from var(--uchu-yin-7) l var(--tint-c) var(--tint-h));
+  --action-hover-bg: oklch(from var(--uchu-yin-6) l var(--tint-c) var(--tint-h));
   --field-bg: var(--structure);
   --action-disabled-bg: var(--paper);
 
   /* text — off-white high-emphasis, dimmer for muted (avoids halation). Read up
      the yin ramp; --text-strong borrows gray-1 because yin tops out at 0.92 and
-     the strong tier has to clear --text. */
+     the strong tier has to clear --text.
+     The two ink tiers take the cast (the old --muted sat at chroma 0.015, same
+     family as the surfaces); --text and --text-strong do NOT — they were 0.006
+     and 0.003 before, near-neutral, and tinted white reads as a colour cast
+     rather than as paper. */
   --text: var(--uchu-yin-1);
   --text-strong: var(--uchu-gray-1);
-  --muted: var(--uchu-yin-3);
-  --muted-light: var(--uchu-yin-5);
+  --muted: oklch(from var(--uchu-yin-3) l var(--tint-c) var(--tint-h));
+  --muted-light: oklch(from var(--uchu-yin-5) l var(--tint-c) var(--tint-h));
 
   /* accents — lighter + a touch desaturated so they don't vibrate on dark */
   --blue: #5b9bf5;
@@ -1424,22 +1444,24 @@ input[type="radio"]:focus-visible {
      grid-dark four, which is what a display that cannot resolve fills needs.
      --header and --toolbar used to be declared here and nowhere else, styling
      nothing in either app; they are gone rather than re-pointed. */
-  --page: var(--uchu-yin);
-  --paper: var(--uchu-yin-9);
-  --grid: var(--uchu-yin-5);
-  --grid-dark: var(--uchu-yin-3);
+  /* The cast carries over from the dark block — this mode changes which rungs
+     the roles name, never the hue family they sit in. */
+  --page: oklch(from var(--uchu-yin) l var(--tint-c) var(--tint-h));
+  --paper: oklch(from var(--uchu-yin-9) l var(--tint-c) var(--tint-h));
+  --grid: oklch(from var(--uchu-yin-5) l var(--tint-c) var(--tint-h));
+  --grid-dark: oklch(from var(--uchu-yin-3) l var(--tint-c) var(--tint-h));
   /* Outlines back ON — see the light high-contrast block. */
   --border: var(--grid-dark);
   --border-soft: var(--uchu-yin-5);
   --action-border: var(--uchu-yin-4);
   --action-disabled-border: var(--grid-dark);
   /* recessed to the page, so the brightened ink has the darkest possible ground */
-  --field-bg: var(--uchu-yin);
+  --field-bg: oklch(from var(--uchu-yin) l var(--tint-c) var(--tint-h));
 
   --text: var(--uchu-yang);
   --text-strong: var(--uchu-yang);
-  --muted: var(--uchu-yin-2);
-  --muted-light: var(--uchu-yin-4);
+  --muted: oklch(from var(--uchu-yin-2) l var(--tint-c) var(--tint-h));
+  --muted-light: oklch(from var(--uchu-yin-4) l var(--tint-c) var(--tint-h));
 
   --blue: #7fb0f8;
   --green-dark: #9be0b3;
