@@ -278,7 +278,20 @@
 }
 /* auto/directive question number reads as scaffolding, not content */
 .kcard-num { color: var(--muted); }
-.kcard-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-1); }
+/* Every unit on this row is exactly --chip-h tall — a bare label, a lone 🧪, a
+   test group with three verdicts in it. Widths differ and must: a test group
+   holds however many verdicts it holds. Heights differing is what read as
+   broken, and it happened by default — the row is a flex line, so `stretch`
+   grew the bare 🧪 to match the tallest item while the labels, having an
+   explicit height, stayed short and hung off the top. */
+.kcard-labels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+  --chip-h: 12px;
+}
 /* A card that isn't a question isn't a tile: no fill, so the list shows through
    and the eye can tell scaffolding (headings, meta) from the questions. */
 .kcard-heading { background: transparent; padding-bottom: var(--space-1); }
@@ -337,14 +350,17 @@
 }
 
 /* labels */
-/* Shorter and taller than it used to be: the row now shares its width with the
-   test groups beside it, and a stubbier pill both fits more of them and lines up
-   with the 🧪 rather than sitting as a thin bar under it. */
+/* A label is a DOT. The pill shape is reserved for the test group below — that
+   is the one thing on the row that contains other things, so letting it be the
+   only elongated shape is what makes the row parse at a glance: circles are
+   labels, a capsule is a test, and the circles inside a capsule are what the
+   testers said. A dot is also the narrowest a colour can be, which is what keeps
+   a card carrying several tests on one line. */
 .label-chip {
   display: inline-block;
-  width: 22px;
-  height: 12px;
-  border-radius: var(--radius-pill);
+  width: var(--chip-h, 12px);
+  height: var(--chip-h, 12px);
+  border-radius: var(--radius-full);
   background: var(--muted);
 }
 
@@ -1270,21 +1286,31 @@ body {
    the flask plus their verdicts' colours in a thin border when they did. Inside
    the group the verdicts are DOTS, not pills — a card can carry several tests,
    and pills there ate the row. */
-.kcard-test { display: inline-flex; align-items: center; gap: 3px; }
+/* border-box, so the border and padding come OUT of --chip-h rather than adding
+   to it — that is what used to make a test group 16px beside a 12px label. */
+.kcard-test {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--chip-h);
+  gap: 2px;
+}
 .kcard-test.has-labels {
   border: 1px solid var(--grid-dark);
   border-radius: var(--radius-pill);
-  padding: 1px 5px;
+  padding: 0 3px;
 }
-.kcard-test .label-chip { width: 8px; height: 8px; border-radius: 50%; }
+/* A verdict is the same dot as a label, at the size the capsule leaves it: the
+   group is --chip-h tall and 1px of that is border, top and bottom. */
+.kcard-test .label-chip { width: 8px; height: 8px; }
 /* An emoji's glyph overflows a line-height of 1, so the flask sat on the group's
    bottom border. Centre it in a box tall enough to hold it. */
 .kcard-test-icon {
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1;
   display: inline-flex;
   align-items: center;
-  height: 12px;
+  height: 10px;
 }
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
