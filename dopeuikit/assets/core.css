@@ -55,7 +55,7 @@
 
      The ladder is monotone per theme and its contrast ratios are asserted —
      palette/palette_test.go, which reads this file. */
-  /* ---- BEGIN GENERATED: uchu ramps (go generate ./palette) ---- */
+  /* ---- BEGIN GENERATED uchu-ramps (go generate ./palette) ---- */
   --uchu-yang: oklch(0.994 0 0);
   --uchu-yin: oklch(0.1438 0.007 256.88);
 

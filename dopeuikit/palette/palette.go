@@ -10,7 +10,7 @@
 // the ladder testable — see palette_test.go, which asserts monotonicity and WCAG
 // contrast the four theme blocks in core.css used to carry on trust alone.
 //
-//go:generate go run ../cmd/palettegen -css ../assets/core.css
+//go:generate go run ../cmd/palettegen -css ../assets/core.css -css ../../dope/dope/web/assets/static/styles.css -go sets_gen.go -ts ../../xy/web/ts/palette_gen.ts -ts-sets label
 package palette
 
 import (
@@ -22,16 +22,20 @@ import (
 	"strings"
 )
 
-//go:embed uchu.json
+//go:embed uchu.json sets.json
 var source embed.FS
 
-// The generated region in core.css. Both palettegen (which writes it) and
-// palette_test.go (which refuses to look for stray hexes inside it) key off
-// these, so the two can never disagree about where the ramps end.
-const (
-	BeginMarker = "/* ---- BEGIN GENERATED: uchu ramps (go generate ./palette) ---- */"
-	EndMarker   = "/* ---- END GENERATED ---- */"
-)
+// Generated regions in a stylesheet, keyed by name so one generator can fill
+// several — the ramps in core.css, the sticker swatches in dope's layer. Both
+// palettegen (which writes them) and palette_test.go (which refuses to look for
+// stray hexes inside them) key off these, so the two can never disagree about
+// where a region ends.
+func BeginMarker(region string) string {
+	return "/* ---- BEGIN GENERATED " + region + " (go generate ./palette) ---- */"
+}
+
+// EndMarker closes any region.
+const EndMarker = "/* ---- END GENERATED ---- */"
 
 // OKLCH is one rung: perceptual lightness 0..1, chroma, hue in degrees.
 type OKLCH struct {
@@ -43,7 +47,27 @@ type doc struct {
 	Ramps   map[string]map[string][][3]float64 `json:"ramps"`
 }
 
-var loaded doc
+// NamedColor is one entry of a set: the enum token the apps store, and the
+// colour it paints.
+type NamedColor struct {
+	Name string `json:"name"`
+	Hex  string `json:"hex"`
+}
+
+// setSpec is either a rung sweep (one rung across several hues) or a literal
+// list. Literal exists for a set whose values are persisted somewhere and so
+// cannot move onto the ramps without a migration.
+type setSpec struct {
+	Variant string       `json:"variant"`
+	Rung    int          `json:"rung"`
+	Hues    []string     `json:"hues"`
+	Literal []NamedColor `json:"literal"`
+}
+
+var (
+	loaded doc
+	sets   map[string]setSpec
+)
 
 func init() {
 	b, err := source.ReadFile("uchu.json")
@@ -53,6 +77,52 @@ func init() {
 	if err := json.Unmarshal(b, &loaded); err != nil {
 		panic("palette: uchu.json: " + err.Error())
 	}
+	s, err := source.ReadFile("sets.json")
+	if err != nil {
+		panic("palette: " + err.Error())
+	}
+	raw := map[string]json.RawMessage{}
+	if err := json.Unmarshal(s, &raw); err != nil {
+		panic("palette: sets.json: " + err.Error())
+	}
+	sets = map[string]setSpec{}
+	for name, body := range raw {
+		if strings.HasPrefix(name, "_") {
+			continue
+		}
+		var spec setSpec
+		if err := json.Unmarshal(body, &spec); err != nil {
+			panic("palette: sets.json: " + name + ": " + err.Error())
+		}
+		sets[name] = spec
+	}
+}
+
+// SetNames lists the declared sets, sorted.
+func SetNames() []string {
+	out := make([]string, 0, len(sets))
+	for n := range sets {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Set resolves a named set to its colours. A rung sweep becomes one rung across
+// its hues, in the declared order; a literal list is returned as written.
+func Set(name string) []NamedColor {
+	spec, ok := sets[name]
+	if !ok {
+		panic("palette: no set " + name)
+	}
+	if spec.Literal != nil {
+		return append([]NamedColor(nil), spec.Literal...)
+	}
+	out := make([]NamedColor, 0, len(spec.Hues))
+	for _, hue := range spec.Hues {
+		out = append(out, NamedColor{Name: hue, Hex: Rung(spec.Variant, hue, spec.Rung).Hex()})
+	}
+	return out
 }
 
 // Variants are the two palettes uchu publishes: "base" is the saturated set,

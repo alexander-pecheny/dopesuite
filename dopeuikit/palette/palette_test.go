@@ -395,6 +395,54 @@ func TestWashesAreOneTier(t *testing.T) {
 	}
 }
 
+// TestSetsAreOfferable guards what a picker assumes about a set it renders: the
+// entries are distinct, and each one can carry ink. The label picker paints its
+// own text by choosing yin or yang per fill, so every entry must clear AA
+// against at least one of them — otherwise a Label exists that cannot show its
+// own name.
+func TestSetsAreOfferable(t *testing.T) {
+	yin, yang := Anchor("yin"), Anchor("yang")
+	for _, name := range SetNames() {
+		t.Run(name, func(t *testing.T) {
+			seen := map[string]string{}
+			for _, c := range Set(name) {
+				if prev, dup := seen[c.Hex]; dup {
+					t.Errorf("%q and %q are both %s — a picker would show one twice", prev, c.Name, c.Hex)
+				}
+				seen[c.Hex] = c.Name
+
+				fill := fromHex(strings.TrimPrefix(c.Hex, "#"))
+				best := math.Max(Contrast(fill, yin), Contrast(fill, yang))
+				if best < 4.5 {
+					t.Errorf("%s (%s) reaches only %.2f:1 against uchu's ink and paper — nothing can be written on it",
+						c.Name, c.Hex, best)
+				}
+			}
+		})
+	}
+}
+
+// TestLabelSetIsOneRung is what "one rung across the set" actually claims: every
+// entry is the SAME INDEX of its own hue's ramp. It is not a claim about
+// lightness — uchu's rung 5 spans L 0.46 (purple) to 0.88 (yellow), because a
+// rung equalises the palette's design step and not its luminance. The value of
+// the property is that the set moves together: re-rung the palette and all eight
+// shift as one, which is the thing a hand-assembled list cannot do.
+func TestLabelSetIsOneRung(t *testing.T) {
+	spec := sets["label"]
+	got := Set("label")
+	if len(got) != len(spec.Hues) {
+		t.Fatalf("label set has %d entries for %d hues", len(got), len(spec.Hues))
+	}
+	for i, c := range got {
+		want := Rung(spec.Variant, spec.Hues[i], spec.Rung).Hex()
+		if c.Hex != want {
+			t.Errorf("%s is %s, want %s (%s %s rung %d) — the set has drifted off its rung",
+				c.Name, c.Hex, want, spec.Variant, spec.Hues[i], spec.Rung)
+		}
+	}
+}
+
 // TestInkClearsItsSurface is the contrast floor. Each pair is one the Kit
 // actually composes — body text on the two backgrounds text sits on, and the
 // muted tier on both. WCAG AA is 4.5:1 for body text; --muted-light is

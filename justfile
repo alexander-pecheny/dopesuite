@@ -116,21 +116,28 @@ generate-check: build-web
     # Compare each regenerated file against what was on disk, NOT against HEAD:
     # a git diff also fires when vocab.json and tags_gen.go are both edited
     # correctly but not yet committed, which makes pre-commit unusable mid-change.
-    before=$(mktemp)
-    trap 'rm -f "$before"' EXIT
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
     rc=0
+    # "module gen-target file..." — one generate run may write several files
+    # (./palette emits into two stylesheets, a Go file and a TypeScript one), and
+    # checking only the first would let the others go stale silently.
     for target in "dopeuikit ./kit kit/tags_gen.go" \
-                  "dopeuikit ./palette assets/core.css" \
+                  "dopeuikit ./palette assets/core.css palette/sets_gen.go ../dope/dope/web/assets/static/styles.css ../xy/web/ts/palette_gen.ts" \
                   "dope ./dope/web/ui dope/web/ui/tags_gen.go" \
                   "xy ./internal/ui internal/ui/tags_gen.go"; do
       set -- $target
-      cp "$1/$3" "$before"
-      (cd "$1" && go generate "$2")
-      if ! diff -q "$before" "$1/$3" >/dev/null; then
-        echo "$1/$3 is stale w.r.t. its source: run 'go generate $2' in $1/" >&2
-        diff "$before" "$1/$3" >&2 || true
-        rc=1
-      fi
+      module=$1 gentarget=$2
+      shift 2
+      for f in "$@"; do cp "$module/$f" "$tmp/$(echo "$f" | tr / _)"; done
+      (cd "$module" && go generate "$gentarget")
+      for f in "$@"; do
+        if ! diff -q "$tmp/$(echo "$f" | tr / _)" "$module/$f" >/dev/null; then
+          echo "$module/$f is stale w.r.t. its source: run 'go generate $gentarget' in $module/" >&2
+          diff "$tmp/$(echo "$f" | tr / _)" "$module/$f" >&2 || true
+          rc=1
+        fi
+      done
     done
     exit $rc
 

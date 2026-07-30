@@ -4146,9 +4146,12 @@ body.is-fullscreen.od-page .match-main {
 }
 
 /* The fixed sticker colour palette — the only colours an organizer may pick.
-   Hex values mirror stickerPaletteColors in host_games.go; keep the two in
-   sync. Each swatch is a hidden radio over a coloured dot. */
+   Generated from dopeuikit/palette/sets.json, which is also where the Go enum
+   in host_games.go and the swatch dots below get them. It used to be declared
+   here AND there, with a comment asking whoever edited one to remember the
+   other. Each swatch is a hidden radio over a coloured dot. */
 :root {
+  /* ---- BEGIN GENERATED sticker-swatches (go generate ./palette) ---- */
   --sticker-c-white: #ffffff;
   --sticker-c-yellow: #fdf66f;
   --sticker-c-green: #aded87;
@@ -4156,6 +4159,7 @@ body.is-fullscreen.od-page .match-main {
   --sticker-c-blue: #68caff;
   --sticker-c-pink: #f4a8ff;
   --sticker-c-orange: #ffae37;
+  /* ---- END GENERATED ---- */
 }
 
 .sticker-palette {
