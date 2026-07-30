@@ -30,3 +30,13 @@ A `.dopeui` source document, compiled to HTML by the app's `App` (`Compile`) at 
 
 **Typed builder**:
 The generated Go API over the Vocabulary (`tags_gen.go`, `go generate` from `vocab.json`) — the only way dynamic pages emit markup.
+
+**Rung**:
+One step of a uchu ramp, named `(variant, hue, 1..9)` — `yin-9`, `pastel-red-5`. The unit colour is measured in: a role names a rung, never a hex, so "one step darker" is arithmetic. Vendored in `palette/uchu.json` (ADR-0001).
+
+**Ladder**:
+The ordered set of Rungs a theme's surfaces occupy, from paper out to the control fills. Each theme is a different WINDOW on the same ramps, and high contrast is the same roles at a wider stride — which is why there is one palette and not four.
+_Avoid_: palette for this sense — a palette is the whole vocabulary, a ladder is one theme's walk through it.
+
+**Wash**:
+A tinted background that says what happened to a row, cell or field. There are exactly three — positive, negative, emphasis — each a mix of its own theme's paper with a Rung, so a wash sits on whatever surface the theme has.

@@ -42,60 +42,289 @@
 
 :root {
   color-scheme: light;
-  --grid: #e3e3e4;
-  --grid-dark: #cececf;
-  --text: #202124;
-  --text-strong: #3c4043;
-  --muted: #5f6368;
-  --muted-light: #9aa0a6;
+
+  /* ── THE PALETTE ───────────────────────────────────────────────────────────
+     uchu (uchu.style) is the whole colour vocabulary. Both variants ship in
+     full below, generated from palette/uchu.json — `go generate ./palette`.
+
+     Do NOT add a colour to this file. A role names a RUNG, and a role that
+     wants a shade the ladder does not have is a role that wants a different
+     rung. That constraint is the feature: it is what makes "one step darker"
+     arithmetic instead of a trip to a colour picker, and it is what lets the
+     high-contrast blocks below be an OFFSET rather than a fourth palette.
+
+     The ladder is monotone per theme and its contrast ratios are asserted —
+     palette/palette_test.go, which reads this file. */
+  /* ---- BEGIN GENERATED uchu-ramps (go generate ./palette) ---- */
+  --uchu-yang: oklch(0.994 0 0);
+  --uchu-yin: oklch(0.1438 0.007 256.88);
+
+  --uchu-blue-1: oklch(0.8966 0.046 260.67);
+  --uchu-blue-2: oklch(0.8017 0.091 258.88);
+  --uchu-blue-3: oklch(0.7094 0.136 258.06);
+  --uchu-blue-4: oklch(0.6239 0.181 258.33);
+  --uchu-blue-5: oklch(0.5487 0.222 260.33);
+  --uchu-blue-6: oklch(0.5115 0.204 260.17);
+  --uchu-blue-7: oklch(0.4736 0.185 259.89);
+  --uchu-blue-8: oklch(0.4348 0.17 260.2);
+  --uchu-blue-9: oklch(0.3953 0.15 259.87);
+
+  --uchu-gray-1: oklch(0.9557 0.003 286.35);
+  --uchu-gray-2: oklch(0.9204 0.002 197.12);
+  --uchu-gray-3: oklch(0.8828 0.003 286.34);
+  --uchu-gray-4: oklch(0.8468 0.002 197.12);
+  --uchu-gray-5: oklch(0.8073 0.002 247.84);
+  --uchu-gray-6: oklch(0.7503 0.002 247.85);
+  --uchu-gray-7: oklch(0.6901 0.003 286.32);
+  --uchu-gray-8: oklch(0.6312 0.004 219.55);
+  --uchu-gray-9: oklch(0.5682 0.004 247.89);
+
+  --uchu-green-1: oklch(0.9396 0.05 148.74);
+  --uchu-green-2: oklch(0.8877 0.096 147.71);
+  --uchu-green-3: oklch(0.8374 0.139 146.57);
+  --uchu-green-4: oklch(0.7933 0.179 145.62);
+  --uchu-green-5: oklch(0.7523 0.209 144.64);
+  --uchu-green-6: oklch(0.7003 0.194 144.71);
+  --uchu-green-7: oklch(0.6424 0.175 144.92);
+  --uchu-green-8: oklch(0.5883 0.158 145.05);
+  --uchu-green-9: oklch(0.5277 0.138 145.41);
+
+  --uchu-orange-1: oklch(0.9383 0.037 56.93);
+  --uchu-orange-2: oklch(0.8837 0.072 55.8);
+  --uchu-orange-3: oklch(0.8356 0.107 56.49);
+  --uchu-orange-4: oklch(0.7875 0.141 54.32);
+  --uchu-orange-5: oklch(0.7461 0.171 51.56);
+  --uchu-orange-6: oklch(0.6933 0.157 52.18);
+  --uchu-orange-7: oklch(0.638 0.142 52.1);
+  --uchu-orange-8: oklch(0.5828 0.128 52.2);
+  --uchu-orange-9: oklch(0.5249 0.113 51.98);
+
+  --uchu-pink-1: oklch(0.958 0.023 354.27);
+  --uchu-pink-2: oklch(0.9214 0.046 352.31);
+  --uchu-pink-3: oklch(0.889 0.066 354.39);
+  --uchu-pink-4: oklch(0.8543 0.09 354.1);
+  --uchu-pink-5: oklch(0.8223 0.112 355.33);
+  --uchu-pink-6: oklch(0.7637 0.101 355.37);
+  --uchu-pink-7: oklch(0.7023 0.092 354.96);
+  --uchu-pink-8: oklch(0.6411 0.084 353.91);
+  --uchu-pink-9: oklch(0.5768 0.074 353.14);
+
+  --uchu-purple-1: oklch(0.891 0.046 305.24);
+  --uchu-purple-2: oklch(0.7868 0.091 305);
+  --uchu-purple-3: oklch(0.685 0.136 303.78);
+  --uchu-purple-4: oklch(0.5847 0.181 302.06);
+  --uchu-purple-5: oklch(0.4939 0.215 298.31);
+  --uchu-purple-6: oklch(0.4611 0.198 298.4);
+  --uchu-purple-7: oklch(0.4277 0.181 298.49);
+  --uchu-purple-8: oklch(0.3946 0.164 298.29);
+  --uchu-purple-9: oklch(0.3601 0.145 298.35);
+
+  --uchu-red-1: oklch(0.8898 0.052 3.28);
+  --uchu-red-2: oklch(0.7878 0.109 4.54);
+  --uchu-red-3: oklch(0.6986 0.162 7.82);
+  --uchu-red-4: oklch(0.6273 0.209 12.37);
+  --uchu-red-5: oklch(0.5863 0.231 19.6);
+  --uchu-red-6: oklch(0.5441 0.214 19.06);
+  --uchu-red-7: oklch(0.4995 0.195 18.34);
+  --uchu-red-8: oklch(0.458 0.177 17.7);
+  --uchu-red-9: oklch(0.4117 0.157 16.58);
+
+  --uchu-yellow-1: oklch(0.9705 0.039 91.2);
+  --uchu-yellow-2: oklch(0.95 0.07 92.39);
+  --uchu-yellow-3: oklch(0.9276 0.098 92.58);
+  --uchu-yellow-4: oklch(0.9092 0.125 92.56);
+  --uchu-yellow-5: oklch(0.89 0.146 91.5);
+  --uchu-yellow-6: oklch(0.8239 0.133 91.5);
+  --uchu-yellow-7: oklch(0.7584 0.122 92.21);
+  --uchu-yellow-8: oklch(0.6914 0.109 91.04);
+  --uchu-yellow-9: oklch(0.6229 0.097 91.9);
+
+  --uchu-yin-1: oklch(0.9187 0.003 264.54);
+  --uchu-yin-2: oklch(0.8461 0.004 286.31);
+  --uchu-yin-3: oklch(0.7689 0.004 247.87);
+  --uchu-yin-4: oklch(0.6917 0.004 247.88);
+  --uchu-yin-5: oklch(0.6101 0.005 271.34);
+  --uchu-yin-6: oklch(0.5279 0.005 271.32);
+  --uchu-yin-7: oklch(0.4387 0.005 271.3);
+  --uchu-yin-8: oklch(0.3502 0.005 236.66);
+  --uchu-yin-9: oklch(0.2511 0.006 258.36);
+
+  --uchu-pastel-blue-1: oklch(0.9 0.028 261);
+  --uchu-pastel-blue-2: oklch(0.8 0.048 260);
+  --uchu-pastel-blue-3: oklch(0.7 0.072 259);
+  --uchu-pastel-blue-4: oklch(0.6 0.096 259);
+  --uchu-pastel-blue-5: oklch(0.51 0.124 262);
+  --uchu-pastel-blue-6: oklch(0.48 0.112 261);
+  --uchu-pastel-blue-7: oklch(0.44 0.1 261);
+  --uchu-pastel-blue-8: oklch(0.41 0.096 262);
+  --uchu-pastel-blue-9: oklch(0.37 0.084 261);
+
+  --uchu-pastel-gray-1: oklch(0.96 0.004 287);
+  --uchu-pastel-gray-2: oklch(0.92 0.004 195);
+  --uchu-pastel-gray-3: oklch(0.88 0.004 287);
+  --uchu-pastel-gray-4: oklch(0.85 0.004 195);
+  --uchu-pastel-gray-5: oklch(0.81 0.004 243);
+  --uchu-pastel-gray-6: oklch(0.75 0.004 245);
+  --uchu-pastel-gray-7: oklch(0.69 0.008 286);
+  --uchu-pastel-gray-8: oklch(0.63 0.004 215);
+  --uchu-pastel-gray-9: oklch(0.57 0.004 269);
+
+  --uchu-pastel-green-1: oklch(0.94 0.032 149);
+  --uchu-pastel-green-2: oklch(0.88 0.056 148);
+  --uchu-pastel-green-3: oklch(0.83 0.076 147);
+  --uchu-pastel-green-4: oklch(0.78 0.1 146);
+  --uchu-pastel-green-5: oklch(0.73 0.116 145);
+  --uchu-pastel-green-6: oklch(0.68 0.108 145);
+  --uchu-pastel-green-7: oklch(0.63 0.1 145);
+  --uchu-pastel-green-8: oklch(0.57 0.088 146);
+  --uchu-pastel-green-9: oklch(0.51 0.08 146);
+
+  --uchu-pastel-orange-1: oklch(0.94 0.02 55);
+  --uchu-pastel-orange-2: oklch(0.88 0.04 56);
+  --uchu-pastel-orange-3: oklch(0.83 0.056 57);
+  --uchu-pastel-orange-4: oklch(0.78 0.076 55);
+  --uchu-pastel-orange-5: oklch(0.73 0.092 53);
+  --uchu-pastel-orange-6: oklch(0.68 0.084 54);
+  --uchu-pastel-orange-7: oklch(0.62 0.076 54);
+  --uchu-pastel-orange-8: oklch(0.57 0.068 54);
+  --uchu-pastel-orange-9: oklch(0.51 0.06 53);
+
+  --uchu-pastel-pink-1: oklch(0.96 0.016 353);
+  --uchu-pastel-pink-2: oklch(0.92 0.028 351);
+  --uchu-pastel-pink-3: oklch(0.89 0.036 355);
+  --uchu-pastel-pink-4: oklch(0.85 0.048 353);
+  --uchu-pastel-pink-5: oklch(0.82 0.06 354);
+  --uchu-pastel-pink-6: oklch(0.76 0.056 354);
+  --uchu-pastel-pink-7: oklch(0.7 0.048 355);
+  --uchu-pastel-pink-8: oklch(0.64 0.044 354);
+  --uchu-pastel-pink-9: oklch(0.58 0.04 353);
+
+  --uchu-pastel-purple-1: oklch(0.89 0.028 304);
+  --uchu-pastel-purple-2: oklch(0.79 0.052 307);
+  --uchu-pastel-purple-3: oklch(0.68 0.072 305);
+  --uchu-pastel-purple-4: oklch(0.57 0.1 304);
+  --uchu-pastel-purple-5: oklch(0.46 0.128 303);
+  --uchu-pastel-purple-6: oklch(0.43 0.116 303);
+  --uchu-pastel-purple-7: oklch(0.4 0.108 302);
+  --uchu-pastel-purple-8: oklch(0.37 0.1 303);
+  --uchu-pastel-purple-9: oklch(0.34 0.084 302);
+
+  --uchu-pastel-red-1: oklch(0.89 0.032 2);
+  --uchu-pastel-red-2: oklch(0.78 0.06 3);
+  --uchu-pastel-red-3: oklch(0.68 0.088 5);
+  --uchu-pastel-red-4: oklch(0.59 0.12 8);
+  --uchu-pastel-red-5: oklch(0.52 0.136 14);
+  --uchu-pastel-red-6: oklch(0.49 0.128 13);
+  --uchu-pastel-red-7: oklch(0.45 0.116 13);
+  --uchu-pastel-red-8: oklch(0.41 0.104 12);
+  --uchu-pastel-red-9: oklch(0.37 0.092 11);
+
+  --uchu-pastel-yellow-1: oklch(0.97 0.024 94);
+  --uchu-pastel-yellow-2: oklch(0.95 0.036 92);
+  --uchu-pastel-yellow-3: oklch(0.92 0.052 92);
+  --uchu-pastel-yellow-4: oklch(0.9 0.068 91);
+  --uchu-pastel-yellow-5: oklch(0.88 0.084 92);
+  --uchu-pastel-yellow-6: oklch(0.82 0.076 92);
+  --uchu-pastel-yellow-7: oklch(0.75 0.068 92);
+  --uchu-pastel-yellow-8: oklch(0.69 0.064 91);
+  --uchu-pastel-yellow-9: oklch(0.62 0.056 90);
+
+  --uchu-pastel-yin-1: oklch(0.9187 0.003 264.54);
+  --uchu-pastel-yin-2: oklch(0.8461 0.004 286.31);
+  --uchu-pastel-yin-3: oklch(0.7689 0.004 247.87);
+  --uchu-pastel-yin-4: oklch(0.6917 0.004 247.88);
+  --uchu-pastel-yin-5: oklch(0.6101 0.005 271.34);
+  --uchu-pastel-yin-6: oklch(0.5279 0.005 271.32);
+  --uchu-pastel-yin-7: oklch(0.4387 0.005 271.3);
+  --uchu-pastel-yin-8: oklch(0.3502 0.005 236.66);
+  --uchu-pastel-yin-9: oklch(0.2511 0.006 258.36);
+  /* ---- END GENERATED ---- */
+
+  /* ── NEUTRAL ROLES ─────────────────────────────────────────────────────────
+     Light reads DOWN the ramps: paper at the top, ink at the bottom. Fills come
+     off `gray` and inks off `yin`, which is uchu's own division of labour.
+
+     Five fills and lines, where there used to be eight: --grid shares a rung
+     with --action-bg (a table rule and a button fill never abut, so the pair
+     never had to be told apart), and page/surface-tint/hover-bg all resolve to
+     --structure. The old set put --grid 0.916, --action-bg 0.934 and
+     --action-hover-bg 0.901 inside one 0.033 band — three values that read as
+     one gray. Rungs cannot land that close: the tightest gap here is 0.035. */
+  --paper: var(--uchu-yang);
+  --structure: var(--uchu-gray-1);
+  --grid: var(--uchu-gray-2);
+  --grid-dark: var(--uchu-gray-5);
+  --muted-light: var(--uchu-gray-7);
+  --muted: var(--uchu-yin-6);
+  --text-strong: var(--uchu-yin-8);
+  --text: var(--uchu-yin-9);
   --blue: #1a73e8;
-  --blue-tint: #e8f0fe;
   --green: #69a882;
   --green-dark: #206836;
   --red: #ecc5c9;
   --red-dark: #9b3f48;
-  --red-soft: #fff7f7;
   --success: #16a34a;
-  --success-alt: #34a853;
-  --success-soft: #edf8f1;
   --danger: #dc2626;
-  --danger-soft: #fdf0f2;
-  --warning-soft: #dfe9f9;
-  /* Amber/warning cluster: the unnumbered-teams banner and fuzzy-match badge. */
-  --amber-bg: #fde68a;
-  --amber-border: #f59e0b;
-  --amber-text-strong: #7c2d12;
-  --amber-text: #b06a00;
-  /* Diagnostic chip (download-log button): stays dark in every theme. */
-  --diag-bg: rgba(30, 30, 30, 0.82);
-  --diag-fg: #ffffff;
-  --paper: #ffffff;
-  --paper-transparent: rgba(255, 255, 255, 0);
-  --structure: #f1f1f2;
+
+  /* ── THE THREE WASHES ──────────────────────────────────────────────────────
+     A wash is a tinted background that says what just happened to a row, a cell
+     or a field. There are exactly three things it can say — this went well, this
+     went wrong, this is the one you are on — so there are three tokens, named
+     for the meaning rather than for the hue.
+
+     There used to be seven (--red-soft, --danger-soft, --success-soft,
+     --accent-soft, --blue-tint, --warning-soft, --blue-soft), sitting inside a
+     0.05 lightness band and interleaved with the structural grays: two pairs
+     were 0.004 and 0.009 apart, and three were dead. --warning-soft was the
+     sharp end — named for warning, and blue at hue 260.
+
+     Each is a mix of THIS THEME'S paper with a rung, so a wash sits on whatever
+     surface the theme has instead of being re-picked against it. That is also
+     what buys the equal weight the old set never had: all three land at L
+     0.94–0.96 here, where the seven spread from 0.929 to 0.982. */
+  --wash-positive: color-mix(in oklab, var(--surface) 88%, var(--uchu-green-6));
+  --wash-negative: color-mix(in oklab, var(--surface) 88%, var(--uchu-red-5));
+  --wash-emphasis: color-mix(in oklab, var(--surface) 88%, var(--uchu-blue-5));
+  /* ── WARNING ───────────────────────────────────────────────────────────────
+     A fill and its ink — the unnumbered-teams banner, the fuzzy-match badge,
+     the pending sync dot. Two tokens, not the four (--amber-bg, --amber-border,
+     --amber-text-strong, --amber-text) that used to occupy FOUR hue families
+     between them: hue 96, 70, 66 and 38, drifting from yellow through orange
+     into red-brown, all named amber.
+
+     The drift was hiding a real constraint rather than being sloppy. Yellow
+     cannot carry text on a light surface — uchu's darkest yellow rung reaches
+     only 3.54:1 against yang, short of AA — so a warning FILL wants yellow and
+     warning INK wants orange, and the old values had drifted toward exactly
+     that without saying so. Now it is said: the split is by role, and one ink
+     serves both grounds (orange-9 is 4.87:1 on the fill and 5.52:1 on paper,
+     asserted in palette_test.go).
+
+     --amber-border is gone. The Kit's outlines are off in the regular themes;
+     the banner separates by fill like everything else. */
+  --warn-bg: var(--uchu-yellow-2);
+  --warn-text: var(--uchu-orange-9);
+  /* Diagnostic chip (download-log button): stays dark in every theme, so it
+     names the ink rung directly rather than a role that moves. */
+  --diag-bg: oklch(from var(--uchu-yin-9) l c h / 0.82);
+  --diag-fg: var(--uchu-yang);
   /* Transparent twins for gradient endpoints: a fade must end on the alpha-0
      version of ITS OWN color — `transparent` (black) or a hardcoded light value
-     tints the ramp on the other themes. */
-  --structure-transparent: rgba(241, 241, 242, 0);
-  --accent-soft: #eef3fa;
+     tints the ramp on the other themes. Derived from the role now, so a twin
+     can no longer drift away from the colour it is the fade of. */
+  --paper-transparent: oklch(from var(--paper) l c h / 0);
+  --structure-transparent: oklch(from var(--structure) l c h / 0);
   /* Semantic aliases onto existing theme-aware tokens (theme-aware through
      their referents, so no dark-block override needed). */
   --accent: var(--success);
   --text-muted: var(--muted);
-  --orange-dark: var(--amber-text);
   --blue-strong: #174ea6;
   --blue-bright: #1d4ed8;
-  --blue-soft: #d3ebff;
   --danger-text: #9f1239;
 
-  /* THE NEUTRAL LADDER. Light keeps exactly four fill grays — paper (#fff),
-     structure, the control fill, the control hover — plus the two line grays
-     (--grid/--grid-dark). Every rung is NEUTRAL — the ghost wash's base
-     rgb(32,33,36) over white — not blue-gray; a cool-tinted rung next to the
-     neutral ghost read as two unrelated grays. Everything else aliases onto a rung: page,
-     surface-tint and hover-bg all resolve to --structure. The old palette had
-     nine near-identical fills (#f8fafc/#f6f7f9/#eef1f5/#eef1f4/#eaeef3/
-     #e9eaec/#e3e8ef/…) whose differences carried no meaning and read as dirt.
-     Dark keeps its own ladder below: there the steps ARE the elevation. */
+  /* Aliases, not rungs: these three carried no distinction of their own even
+     when they had their own hexes. Dark re-points --page below, where the steps
+     ARE the elevation. */
   --page: var(--structure);
   --surface: var(--paper);
   --surface-tint: var(--structure);
@@ -123,18 +352,14 @@
   --action-border: transparent;
   --action-disabled-border: transparent;
 
-  /* THE control fill. It carries the whole affordance now that the outlines
-     are gone, so it must read against BOTH --surface (#fff) and --structure —
-     the two backgrounds controls actually sit on. Buttons and fields share it
-     in light (shape and typography already tell them apart; a 2% gray
-     difference told nobody anything); dark keeps them split below, where
-     recessed-field vs lifted-button is real elevation.
-     NEUTRAL, not blue-gray: it must sit in the same hue family as the ghost
-     wash below — a bluish filled button next to a neutral ghost read as two
-     unrelated grays. These are the ghost's base rgb(32,33,36) over white at
-     ~10% / ~15%. */
-  --action-bg: #e9e9ea;
-  --action-hover-bg: #dedee0;
+  /* THE control fill. It carries the whole affordance now that the outlines are
+     gone, so it must read against BOTH --paper and --structure — the two
+     backgrounds controls actually sit on. Buttons and fields share it in light
+     (shape and typography already tell them apart; a 2% gray difference told
+     nobody anything); dark keeps them split below, where recessed-field vs
+     lifted-button is real elevation. */
+  --action-bg: var(--uchu-gray-2);
+  --action-hover-bg: var(--uchu-gray-3);
   --action-fg: var(--text);
   --field-bg: var(--action-bg);
 
@@ -142,9 +367,11 @@
      on --surface, --structure and --page alike, and any opaque fill picked to
      read on one of them disappears into another. A wash of the text color works
      against all three. It must still read as a button — with the outlines gone,
-     a ghost with no fill at all is just a word (which is what it had become). */
-  --action-ghost-bg: rgba(32, 33, 36, 0.06);
-  --action-ghost-hover-bg: rgba(32, 33, 36, 0.12);
+     a ghost with no fill at all is just a word (which is what it had become).
+     A wash OF --text, so it stays in the ink's hue family by construction; the
+     old pair hardcoded rgb(32,33,36) and needed a paragraph explaining why. */
+  --action-ghost-bg: oklch(from var(--text) l c h / 0.06);
+  --action-ghost-hover-bg: oklch(from var(--text) l c h / 0.12);
 
   --action-disabled-bg: var(--structure);
   --action-disabled-fg: var(--muted-light);
@@ -208,16 +435,20 @@
   --fw-semibold: 600;
   --fw-bold: 700;
 
-  --shadow-sm: 0 1px 2px rgba(32, 33, 36, 0.12);
-  --shadow-popover: 0 8px 20px rgba(32, 33, 36, 0.18);
-  --shadow-popover-up: 0 -8px 20px rgba(32, 33, 36, 0.18);
-  --shadow-card: 0 8px 24px rgba(32, 33, 36, 0.18);
-  --shadow-modal: 0 18px 48px rgba(32, 33, 36, 0.22);
-  --shadow-scroll-inset: inset -24px 0 18px -22px rgba(32, 33, 36, 0.45);
+  /* --shade is the colour every scrim and shadow is a wash OF. One token, so
+     dark re-points it once (to near-black, where a yin-9 scrim would vanish)
+     instead of restating eight rgba() literals. */
+  --shade: var(--uchu-yin-9);
+  --shadow-sm: 0 1px 2px oklch(from var(--shade) l c h / 0.12);
+  --shadow-popover: 0 8px 20px oklch(from var(--shade) l c h / 0.18);
+  --shadow-popover-up: 0 -8px 20px oklch(from var(--shade) l c h / 0.18);
+  --shadow-card: 0 8px 24px oklch(from var(--shade) l c h / 0.18);
+  --shadow-modal: 0 18px 48px oklch(from var(--shade) l c h / 0.22);
+  --shadow-scroll-inset: inset -24px 0 18px -22px oklch(from var(--shade) l c h / 0.45);
   --focus-ring-none: 0;
   --focus-outline-offset-tight: calc(var(--space-0-5) * -1);
 
-  --backdrop: rgba(32, 33, 36, 0.35);
+  --backdrop: oklch(from var(--shade) l c h / 0.35);
 
   --z-dropdown: 30;
   --z-popover: 35;
@@ -240,7 +471,7 @@
 
   /* scroll-fade utility */
   --scroll-fade-size: 24px;
-  --scroll-fade-color: rgba(32, 33, 36, 0.18);
+  --scroll-fade-color: oklch(from var(--shade) l c h / 0.18);
   --inline-fade-width: 34px;
   --inline-fade-bg: linear-gradient(to right, var(--paper-transparent), var(--paper));
 
@@ -506,7 +737,7 @@ input[type="radio"]::before {
   width: 10px;
   height: 10px;
   transform: scale(0);
-  background: #fff;
+  background: var(--uchu-yang);
   /* a tick, drawn rather than typed: a glyph would depend on the font stack */
   clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
 }
@@ -640,7 +871,7 @@ input[type="radio"]:focus-visible {
 
 .btn.btn-primary {
   background: var(--blue);
-  color: #fff;
+  color: var(--uchu-yang);
 }
 
 .btn.btn-primary:hover { background: var(--blue); filter: brightness(1.08); }
@@ -660,9 +891,9 @@ input[type="radio"]:focus-visible {
   color: var(--text);
 }
 
-/* Danger reads through its fill too. --red-soft was near-white and relied on the
-   red outline to be legible as a danger button; --red is the actual tinted fill,
-   and --red-dark is its designated on-color in every theme. */
+/* Danger reads through its fill too. The old near-white wash relied on a red
+   outline to be legible as a danger button; --red is the actual tinted fill, and
+   --red-dark is its designated on-color in every theme. */
 .btn.btn-danger {
   color: var(--red-dark);
   background: var(--red);
@@ -907,7 +1138,7 @@ input[type="radio"]:focus-visible {
 }
 
 .sync-status[data-state="pending"] {
-  color: var(--orange-dark);
+  color: var(--warn-text);
 }
 
 .sync-status[data-state="pending"]::before {
@@ -1043,45 +1274,75 @@ input[type="radio"]:focus-visible {
      render with the dark UA palette — otherwise the <select> arrows stay black
      and vanish against dark fills */
   color-scheme: dark;
-  /* neutral surfaces — base (page) darkest, paper/cards lifted, structure/
-     header/hover progressively lighter to read as elevation */
-  --page: #14161b;
-  --paper: #1e2128;
-  --paper-transparent: rgba(30, 33, 40, 0);
+  /* ── THE CAST ──────────────────────────────────────────────────────────────
+     A rung fixes LIGHTNESS. It does not have to fix hue, and dark's neutrals
+     were never meant to be dead neutral — they carried a blue cast at chroma
+     0.014–0.024 around hue 261, and losing it made the whole theme read
+     differently even though every step was in the right place.
+
+     So the cast is its own dial. `oklch(from <rung> l …)` keeps the rung's
+     lightness — the ladder, its monotonicity, its gaps, everything the tests
+     assert — and replaces only chroma and hue. Two numbers steer the entire
+     dark palette; there is nothing to keep in sync.
+
+     Light does not declare a cast and names its rungs bare, because uchu's gray
+     ramp is already the neutral it wants. */
+  --tint-c: 0.018;
+  --tint-h: 261;
+
+  /* Dark reads UP the yin ramp: page darkest, paper/cards lifted, controls
+     lifted again — the steps ARE the elevation here, unlike light.
+     Five rungs where there were ten. yin's rungs are the constraint that
+     produced the reduction: between L 0.14 and 0.53 the ramp offers exactly
+     yin, yin-9, yin-8, yin-7 and yin-6, so the old ladder's ten surfaces cannot
+     be expressed. Two of its pairs were 0.003 and 0.007 apart anyway.
+     The -transparent twins and the ghost washes are NOT restated here: they
+     derive from --paper / --structure / --text, which this block re-points, so
+     they follow on their own. */
+  --page: oklch(from var(--uchu-yin) l var(--tint-c) var(--tint-h));
+  --paper: oklch(from var(--uchu-yin-9) l var(--tint-c) var(--tint-h));
   --surface: var(--paper);
-  --structure: #262a31;
-  --structure-transparent: rgba(38, 42, 49, 0);
-  --hover-bg: #2c313a;
-  --accent-soft: #1d2532;
-  --grid: #353b45;
-  --grid-dark: #474e5a;
+  --structure: oklch(from var(--uchu-yin-8) l var(--tint-c) var(--tint-h));
+  --hover-bg: var(--structure);
+  --grid: oklch(from var(--uchu-yin-8) l var(--tint-c) var(--tint-h));
+  --grid-dark: oklch(from var(--uchu-yin-7) l var(--tint-c) var(--tint-h));
+  --shade: var(--uchu-yin);
   /* outlines off (see the :root block) — high contrast turns them back on */
   --border: transparent;
   --border-soft: transparent;
   --action-border: transparent;
   --action-disabled-border: transparent;
-  /* lifted clear of --structure (#262a31) and --paper (#1e2128): with no outline
-     the fill is the only thing that makes a control a control */
-  --action-bg: #333944;
-  --action-hover-bg: #3e4552;
-  --field-bg: #2b303a;
-  --action-ghost-bg: rgba(255, 255, 255, 0.07);
-  --action-ghost-hover-bg: rgba(255, 255, 255, 0.14);
-  --action-disabled-bg: #20242b;
+  /* lifted clear of --structure and --paper: with no outline the fill is the
+     only thing that makes a control a control. The field stays recessed to
+     --structure, which is the split light deliberately does not make. */
+  --action-bg: oklch(from var(--uchu-yin-7) l var(--tint-c) var(--tint-h));
+  --action-hover-bg: oklch(from var(--uchu-yin-6) l var(--tint-c) var(--tint-h));
+  --field-bg: var(--structure);
+  --action-disabled-bg: var(--paper);
 
-  /* text — off-white high-emphasis, dimmer for muted (avoids halation) */
-  --text: #e4e6ea;
-  --text-strong: #f2f4f6;
-  --muted: #a6acb5;
-  --muted-light: #7a818b;
+  /* text — off-white high-emphasis, dimmer for muted (avoids halation). Read up
+     the yin ramp; --text-strong borrows gray-1 because yin tops out at 0.92 and
+     the strong tier has to clear --text.
+     The two ink tiers take the cast (the old --muted sat at chroma 0.015, same
+     family as the surfaces); --text and --text-strong do NOT — they were 0.006
+     and 0.003 before, near-neutral, and tinted white reads as a colour cast
+     rather than as paper. */
+  --text: var(--uchu-yin-1);
+  --text-strong: var(--uchu-gray-1);
+  --muted: oklch(from var(--uchu-yin-3) l var(--tint-c) var(--tint-h));
+  --muted-light: oklch(from var(--uchu-yin-5) l var(--tint-c) var(--tint-h));
 
   /* accents — lighter + a touch desaturated so they don't vibrate on dark */
   --blue: #5b9bf5;
-  --blue-tint: #1b2942;
-  --blue-soft: #213450;
   --blue-strong: #8fbaf8;
   --blue-bright: #5e8ff2;
-  --warning-soft: #243349;
+
+  /* The washes take the SAME form as light — a mix of this theme's paper with a
+     rung — and only two things change: the rung goes to the dark end of its
+     ramp, and the paper's share drops. That is the whole dark wash block. */
+  --wash-positive: color-mix(in oklab, var(--surface) 72%, var(--uchu-green-9));
+  --wash-negative: color-mix(in oklab, var(--surface) 72%, var(--uchu-red-9));
+  --wash-emphasis: color-mix(in oklab, var(--surface) 72%, var(--uchu-blue-9));
 
   /* status — re-picked for dark, not desaturated light values */
   --green: #33814b;
@@ -1091,23 +1352,20 @@ input[type="radio"]:focus-visible {
   --green-dark: #7fd29b;
   --red: #9a353c;
   --red-dark: #f0a0aa;
-  --red-soft: #2a1c1e;
   --success: #2ecc6f;
-  --success-alt: #3ed47e;
-  --success-soft: #15291d;
   --danger: #f25555;
-  --danger-soft: #2c1518;
   --danger-text: #f7a6b4;
 
-  /* amber/warning — shifted warm so it stays visible on dark */
-  --amber-bg: #463713;
-  --amber-border: #c4881d;
-  --amber-text-strong: #f6ddc0;
-  --amber-text: #e3aa55;
+  /* warning — the fill takes the wash form (this theme's paper mixed with the
+     same dark orange rung light uses as its ink); the ink climbs the orange ramp
+     until it reads on both that fill and bare paper */
+  --warn-bg: color-mix(in oklab, var(--surface) 72%, var(--uchu-orange-9));
+  --warn-text: var(--uchu-orange-4);
 
-  /* overlays — deepen black-based scrims; shadows are a weak cue on dark */
-  --backdrop: rgba(0, 0, 0, 0.6);
-  --scroll-fade-color: rgba(0, 0, 0, 0.5);
+  /* overlays — deepen the scrims (--shade is near-black here); shadows are a
+     weak cue on dark, so only the alphas move */
+  --backdrop: oklch(from var(--shade) l c h / 0.6);
+  --scroll-fade-color: oklch(from var(--shade) l c h / 0.5);
 }
 
 :root[data-theme="dark"] body {
@@ -1127,33 +1385,40 @@ input[type="radio"]:focus-visible {
    cell/row boundaries carry separation regardless of fill. Push text toward
    AAA. */
 :root[data-theme="light"][data-contrast="high"] {
-  --grid: #9aa1ab;
-  --grid-dark: #5f6772;
-  --border: var(--grid-dark);
-  --border-soft: #b5bcc6;
-  --structure: #d2d8e0;
-  --structure-transparent: rgba(210, 216, 224, 0);
-  --page: #e6e9ee;
-  --hover-bg: #ccd2da;
-  --accent-soft: #dbe5f4;
-  --surface-tint: #e9edf2;
+  /* Same roles, same ramp — the ladder STRETCHES. Regular light walks gray in
+     single steps (yang, 1, 2, 3); here it takes two at a time (yang, 3, 5, 7),
+     so every adjacent gap roughly triples: 0.035 becomes 0.076 at the tightest.
+     That is the whole block. High contrast is a step size, not a fourth palette,
+     so there is nothing here to keep in step with :root by hand.
+     Reading it as a stride is also what caught the bug this replaces:
+     --action-bg used to move the WRONG WAY (#e9e9ea → #e9edf2, lighter, against
+     a page that got darker) — invisible as a hex, obvious as a backwards step. */
+  --structure: var(--uchu-gray-3);
+  --page: var(--uchu-gray-2);
+  --surface-tint: var(--uchu-gray-2);
+  --hover-bg: var(--uchu-gray-4);
+  --grid: var(--uchu-gray-7);
+  --grid-dark: var(--uchu-gray-9);
   /* Outlines back ON — the fills alone are what a bad display cannot resolve, so
      this mode re-points every outline token the regular themes zero out. */
-  --action-bg: #e9edf2;
-  --action-hover-bg: #ccd2da;
-  --field-bg: #ffffff;
-  --action-border: #8b929c;
+  --action-bg: var(--uchu-gray-5);
+  --action-hover-bg: var(--uchu-gray-7);
+  /* The field stays paper-white on purpose: here it separates by its OUTLINE,
+     which is the one mode where an outline earns its keep. */
+  --field-bg: var(--uchu-yang);
+  --border: var(--grid-dark);
+  --border-soft: var(--uchu-gray-6);
+  --action-border: var(--uchu-gray-8);
   --action-disabled-border: var(--grid-dark);
 
-  --text: #16181b;
-  --text-strong: #000000;
-  --muted: #3c4043;
-  --muted-light: #5f6368;
+  --text: var(--uchu-yin);
+  --text-strong: var(--uchu-yin);
+  --muted: var(--uchu-yin-8);
+  --muted-light: var(--uchu-yin-6);
 
   --blue-strong: #103d86;
   --green-dark: #1f6e44;
   --red-dark: #8a2e37;
-  --success-text: #0f5132;
   --danger-text: #7a0c2e;
 
   /* answer-cell fills (right/wrong). The default pastel 'wrong' reads as gray
@@ -1168,27 +1433,35 @@ input[type="radio"]:focus-visible {
    Brighten borders and text, and widen the surface lightness gaps so adjacent
    panels stay distinct on a poor display. */
 :root[data-theme="dark"][data-contrast="high"] {
-  --page: #0e1014;
-  --paper: #1f232b;
-  --paper-transparent: rgba(31, 35, 43, 0);
-  --structure: #2f3540;
-  --structure-transparent: rgba(47, 53, 64, 0);
-  --header: #2b313b;
-  --toolbar: #282d36;
-  --hover-bg: #363d49;
-  --grid: #5a626e;
-  --grid-dark: #828b98;
+  /* Dark does NOT stretch its fills, and that is the interesting part. Regular
+     dark already walks yin in ~0.09 steps — nearly three times light's stride —
+     so adjacent fills are not what a poor display fails on. Climbing them would
+     actively hurt: yin's steps get SMALLER toward the light end (0.099 at yin-9,
+     0.077 by yin-3), so a stretch compresses, and the fills would then be moving
+     toward the ink, which this mode brightens to yang. Light text on a lifted
+     mid-gray button is the worse bug.
+     So the fills stay put and the LINES do the work — grid climbs two rungs and
+     grid-dark four, which is what a display that cannot resolve fills needs.
+     --header and --toolbar used to be declared here and nowhere else, styling
+     nothing in either app; they are gone rather than re-pointed. */
+  /* The cast carries over from the dark block — this mode changes which rungs
+     the roles name, never the hue family they sit in. */
+  --page: oklch(from var(--uchu-yin) l var(--tint-c) var(--tint-h));
+  --paper: oklch(from var(--uchu-yin-9) l var(--tint-c) var(--tint-h));
+  --grid: oklch(from var(--uchu-yin-5) l var(--tint-c) var(--tint-h));
+  --grid-dark: oklch(from var(--uchu-yin-3) l var(--tint-c) var(--tint-h));
   /* Outlines back ON — see the light high-contrast block. */
   --border: var(--grid-dark);
-  --border-soft: #4a515c;
-  --action-border: #5a626e;
+  --border-soft: var(--uchu-yin-5);
+  --action-border: var(--uchu-yin-4);
   --action-disabled-border: var(--grid-dark);
-  --field-bg: #171a20;
+  /* recessed to the page, so the brightened ink has the darkest possible ground */
+  --field-bg: oklch(from var(--uchu-yin) l var(--tint-c) var(--tint-h));
 
-  --text: #f6f8fa;
-  --text-strong: #ffffff;
-  --muted: #c4cad2;
-  --muted-light: #9aa1ab;
+  --text: var(--uchu-yang);
+  --text-strong: var(--uchu-yang);
+  --muted: oklch(from var(--uchu-yin-2) l var(--tint-c) var(--tint-h));
+  --muted-light: oklch(from var(--uchu-yin-4) l var(--tint-c) var(--tint-h));
 
   --blue: #7fb0f8;
   --green-dark: #9be0b3;

@@ -5,21 +5,18 @@
 
 import { xyApp } from "./app.js";
 import { anchorPopup, type AnchoredPopup } from "./popup.js";
+// uchu's pastel palette, shade 5 of all eight hues — one rung across the set,
+// which is what an OKLCH palette buys you: they read as equals rather than as one
+// loud colour beside seven quiet ones. Generated from dopeuikit/palette, the same
+// source core.css and dope's swatch enum read, so the suite has one palette
+// rather than one per language. YIN and YANG are uchu's own ink and paper: the
+// palette is designed against those two, and every entry clears WCAG AA (4.5:1)
+// against whichever one textOn picks.
+import { LABEL_COLORS, YIN, YANG } from "./palette_gen.js";
 
 const { el } = xyApp;
 
-// uchu's pastel palette (uchu.style), shade 5 of all eight hues — one rung
-// across the set, which is what an OKLCH palette buys you: they read as equals
-// rather than as one loud colour beside seven quiet ones.
-export const LABEL_COLORS = [
-  "#a84151", "#d69870", "#ebd697", "#77bb79",
-  "#3d64ac", "#674292", "#e5b5c7", "#bfc1c3",
-];
-
-// uchu's own ink and paper. The palette is designed against these two, and every
-// LABEL_COLORS entry clears WCAG AA (4.5:1) against whichever textOn picks.
-const YIN = "#080a0d";
-const YANG = "#fdfdfd";
+export { LABEL_COLORS };
 
 // "" when the input is not a colour yet — a half-typed one is not an error.
 export function normalizeHex(raw: string): string {

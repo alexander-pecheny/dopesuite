@@ -1534,7 +1534,7 @@ body:not(.embedded-match) .grid-match {
 }
 
 .match-tab:hover {
-  background: var(--accent-soft);
+  background: var(--wash-emphasis);
 }
 
 .match-tab.active {
@@ -1589,7 +1589,7 @@ body:not(.embedded-match) .grid-match {
 }
 
 .game-host-top .match-tab:hover {
-  background: var(--accent-soft);
+  background: var(--wash-emphasis);
 }
 
 .game-host-top .match-tab.active {
@@ -1796,7 +1796,7 @@ body:not(.embedded-match) .grid-match {
   cursor: var(--cursor-action);
 }
 
-.entry-nav-bar button:active { background: var(--blue-tint); }
+.entry-nav-bar button:active { background: var(--wash-emphasis); }
 
 /* Virtual numeric keypad (installVirtualKeypad). Replaces the OS keyboard for
    digit-only cell entry on touch devices: the host input sets inputmode="none"
@@ -1859,7 +1859,7 @@ body:not(.embedded-match) .grid-match {
 
 .entry-keypad-back { font-size: var(--text-lg); }
 
-.entry-keypad-key:active { background: var(--blue-tint); }
+.entry-keypad-key:active { background: var(--wash-emphasis); }
 
 @keyframes yinyang-spin {
   from { transform: rotate(0deg); }
@@ -1904,7 +1904,7 @@ body:not(.embedded-match) .grid-match {
 
 .entry-cell.entry-selected {
   position: relative;
-  background-color: var(--blue-tint);
+  background-color: var(--wash-emphasis);
 }
 
 /* Draw the selection frame on a pseudo-element rather than as a box-shadow on
@@ -1947,7 +1947,7 @@ body:not(.embedded-match) .grid-match {
 
 .entry-cell.entry-selected:focus {
   outline: 0;
-  background-color: var(--blue-tint);
+  background-color: var(--wash-emphasis);
 }
 
 .entry-cell:focus {
@@ -2030,7 +2030,7 @@ body:not(.embedded-match) .grid-match {
 
 .entry-suggest-option.active,
 .entry-suggest-option:hover {
-  background: var(--accent-soft);
+  background: var(--wash-emphasis);
 }
 
 .entry-suggest-option .team-number-badge {
@@ -2040,7 +2040,7 @@ body:not(.embedded-match) .grid-match {
 
 .entry-table .entry-input-bad,
 .entry-table .entry-input-dup {
-  background-color: var(--danger-soft);
+  background-color: var(--wash-negative);
   color: var(--red-dark);
 }
 
@@ -2239,7 +2239,7 @@ body:not(.embedded-match) .grid-match {
 }
 
 .match-table.od-detailed .shootout-head {
-  --cell-fill: var(--accent-soft);
+  --cell-fill: var(--wash-emphasis);
 }
 
 .match-table.od-detailed .od-shootout-cell {
@@ -3705,7 +3705,7 @@ body:not(.embedded-match) .grid-match {
   white-space: nowrap;
 }
 
-.numbers-import-row.is-fuzzy .numbers-import-badge { color: var(--amber-text); }
+.numbers-import-row.is-fuzzy .numbers-import-badge { color: var(--warn-text); }
 
 .numbers-import-row.is-unmatched .numbers-import-badge { color: var(--muted-light); }
 
@@ -4146,9 +4146,12 @@ body.is-fullscreen.od-page .match-main {
 }
 
 /* The fixed sticker colour palette — the only colours an organizer may pick.
-   Hex values mirror stickerPaletteColors in host_games.go; keep the two in
-   sync. Each swatch is a hidden radio over a coloured dot. */
+   Generated from dopeuikit/palette/sets.json, which is also where the Go enum
+   in host_games.go and the swatch dots below get them. It used to be declared
+   here AND there, with a comment asking whoever edited one to remember the
+   other. Each swatch is a hidden radio over a coloured dot. */
 :root {
+  /* ---- BEGIN GENERATED sticker-swatches (go generate ./palette) ---- */
   --sticker-c-white: #ffffff;
   --sticker-c-yellow: #fdf66f;
   --sticker-c-green: #aded87;
@@ -4156,6 +4159,7 @@ body.is-fullscreen.od-page .match-main {
   --sticker-c-blue: #68caff;
   --sticker-c-pink: #f4a8ff;
   --sticker-c-orange: #ffae37;
+  /* ---- END GENERATED ---- */
 }
 
 .sticker-palette {

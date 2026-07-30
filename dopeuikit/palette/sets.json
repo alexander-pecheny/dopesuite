@@ -1,0 +1,23 @@
+{
+  "_doc": "Named colour sets the apps offer as a closed choice. uchu.json is vendored data; this file is ours. Each set is emitted to every language that needs it (CSS custom properties, a Go enum, a TypeScript array) by cmd/palettegen, so a set has exactly one definition.",
+
+  "label": {
+    "_doc": "xy Board Labels. One rung across all eight hues, which is what an OKLCH palette buys: they read as equals rather than one loud colour beside seven quiet ones. A Label stores its own hex, so this list is a set of presets and changing it never orphans an existing Label.",
+    "variant": "pastel",
+    "rung": 5,
+    "hues": ["red", "orange", "yellow", "green", "blue", "purple", "pink", "gray"]
+  },
+
+  "sticker": {
+    "_doc": "dope KSI stickers: the fixed set an organizer may assign. NOT on the ramps yet, and deliberately so — host_games.go submits the HEX with the form and matches the stored value with EqualFold, so every existing game's config names one of these strings. Repainting them onto uchu rungs orphans those selections and needs a migration; that is its own change. Until then the value lives here once instead of in three files.",
+    "literal": [
+      { "name": "white", "hex": "#ffffff" },
+      { "name": "yellow", "hex": "#fdf66f" },
+      { "name": "green", "hex": "#aded87" },
+      { "name": "red", "hex": "#ff7a6b" },
+      { "name": "blue", "hex": "#68caff" },
+      { "name": "pink", "hex": "#f4a8ff" },
+      { "name": "orange", "hex": "#ffae37" }
+    ]
+  }
+}

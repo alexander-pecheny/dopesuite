@@ -22,6 +22,8 @@ import (
 	"dope/dope/storage/storeutil"
 	"dope/dope/web/pages"
 	dopeui "dope/dope/web/ui"
+
+	"pecheny.me/dopeuikit/palette"
 )
 
 type hostGameSettingsData struct {
@@ -46,15 +48,11 @@ type gameIdentity struct {
 // stickerPaletteColors is the fixed set of colours an organizer may assign to a
 // sticker. Name is the closed swatch-color enum token the swatchradio primitive
 // turns into --sticker-c-<name>; Hex is the value submitted with the form.
-var stickerPaletteColors = []struct{ Name, Hex string }{
-	{"white", "#ffffff"},
-	{"yellow", "#fdf66f"},
-	{"green", "#aded87"},
-	{"red", "#ff7a6b"},
-	{"blue", "#68caff"},
-	{"pink", "#f4a8ff"},
-	{"orange", "#ffae37"},
-}
+//
+// It comes from dopeuikit/palette, which also generates the --sticker-c-* block
+// in styles.css. The two used to be separate literals with a comment asking
+// whoever edited one to remember the other.
+var stickerPaletteColors = palette.StickerColors
 
 // stickerPalette builds the swatch radio group for one sticker colour field; the
 // swatchradio expansion owns the inline --swatch style.
