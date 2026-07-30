@@ -1534,7 +1534,7 @@ body:not(.embedded-match) .grid-match {
 }
 
 .match-tab:hover {
-  background: var(--accent-soft);
+  background: var(--wash-emphasis);
 }
 
 .match-tab.active {
@@ -1589,7 +1589,7 @@ body:not(.embedded-match) .grid-match {
 }
 
 .game-host-top .match-tab:hover {
-  background: var(--accent-soft);
+  background: var(--wash-emphasis);
 }
 
 .game-host-top .match-tab.active {
@@ -1796,7 +1796,7 @@ body:not(.embedded-match) .grid-match {
   cursor: var(--cursor-action);
 }
 
-.entry-nav-bar button:active { background: var(--blue-tint); }
+.entry-nav-bar button:active { background: var(--wash-emphasis); }
 
 /* Virtual numeric keypad (installVirtualKeypad). Replaces the OS keyboard for
    digit-only cell entry on touch devices: the host input sets inputmode="none"
@@ -1859,7 +1859,7 @@ body:not(.embedded-match) .grid-match {
 
 .entry-keypad-back { font-size: var(--text-lg); }
 
-.entry-keypad-key:active { background: var(--blue-tint); }
+.entry-keypad-key:active { background: var(--wash-emphasis); }
 
 @keyframes yinyang-spin {
   from { transform: rotate(0deg); }
@@ -1904,7 +1904,7 @@ body:not(.embedded-match) .grid-match {
 
 .entry-cell.entry-selected {
   position: relative;
-  background-color: var(--blue-tint);
+  background-color: var(--wash-emphasis);
 }
 
 /* Draw the selection frame on a pseudo-element rather than as a box-shadow on
@@ -1947,7 +1947,7 @@ body:not(.embedded-match) .grid-match {
 
 .entry-cell.entry-selected:focus {
   outline: 0;
-  background-color: var(--blue-tint);
+  background-color: var(--wash-emphasis);
 }
 
 .entry-cell:focus {
@@ -2030,7 +2030,7 @@ body:not(.embedded-match) .grid-match {
 
 .entry-suggest-option.active,
 .entry-suggest-option:hover {
-  background: var(--accent-soft);
+  background: var(--wash-emphasis);
 }
 
 .entry-suggest-option .team-number-badge {
@@ -2040,7 +2040,7 @@ body:not(.embedded-match) .grid-match {
 
 .entry-table .entry-input-bad,
 .entry-table .entry-input-dup {
-  background-color: var(--danger-soft);
+  background-color: var(--wash-negative);
   color: var(--red-dark);
 }
 
@@ -2239,7 +2239,7 @@ body:not(.embedded-match) .grid-match {
 }
 
 .match-table.od-detailed .shootout-head {
-  --cell-fill: var(--accent-soft);
+  --cell-fill: var(--wash-emphasis);
 }
 
 .match-table.od-detailed .od-shootout-cell {

@@ -259,18 +259,32 @@
   --text-strong: var(--uchu-yin-8);
   --text: var(--uchu-yin-9);
   --blue: #1a73e8;
-  --blue-tint: #e8f0fe;
   --green: #69a882;
   --green-dark: #206836;
   --red: #ecc5c9;
   --red-dark: #9b3f48;
-  --red-soft: #fff7f7;
   --success: #16a34a;
-  --success-alt: #34a853;
-  --success-soft: #edf8f1;
   --danger: #dc2626;
-  --danger-soft: #fdf0f2;
-  --warning-soft: #dfe9f9;
+
+  /* ── THE THREE WASHES ──────────────────────────────────────────────────────
+     A wash is a tinted background that says what just happened to a row, a cell
+     or a field. There are exactly three things it can say — this went well, this
+     went wrong, this is the one you are on — so there are three tokens, named
+     for the meaning rather than for the hue.
+
+     There used to be seven (--red-soft, --danger-soft, --success-soft,
+     --accent-soft, --blue-tint, --warning-soft, --blue-soft), sitting inside a
+     0.05 lightness band and interleaved with the structural grays: two pairs
+     were 0.004 and 0.009 apart, and three were dead. --warning-soft was the
+     sharp end — named for warning, and blue at hue 260.
+
+     Each is a mix of THIS THEME'S paper with a rung, so a wash sits on whatever
+     surface the theme has instead of being re-picked against it. That is also
+     what buys the equal weight the old set never had: all three land at L
+     0.94–0.96 here, where the seven spread from 0.929 to 0.982. */
+  --wash-positive: color-mix(in oklab, var(--surface) 88%, var(--uchu-green-6));
+  --wash-negative: color-mix(in oklab, var(--surface) 88%, var(--uchu-red-5));
+  --wash-emphasis: color-mix(in oklab, var(--surface) 88%, var(--uchu-blue-5));
   /* Amber/warning cluster: the unnumbered-teams banner and fuzzy-match badge. */
   --amber-bg: #fde68a;
   --amber-border: #f59e0b;
@@ -286,7 +300,6 @@
      can no longer drift away from the colour it is the fade of. */
   --paper-transparent: oklch(from var(--paper) l c h / 0);
   --structure-transparent: oklch(from var(--structure) l c h / 0);
-  --accent-soft: #eef3fa;
   /* Semantic aliases onto existing theme-aware tokens (theme-aware through
      their referents, so no dark-block override needed). */
   --accent: var(--success);
@@ -294,7 +307,6 @@
   --orange-dark: var(--amber-text);
   --blue-strong: #174ea6;
   --blue-bright: #1d4ed8;
-  --blue-soft: #d3ebff;
   --danger-text: #9f1239;
 
   /* Aliases, not rungs: these three carried no distinction of their own even
@@ -866,9 +878,9 @@ input[type="radio"]:focus-visible {
   color: var(--text);
 }
 
-/* Danger reads through its fill too. --red-soft was near-white and relied on the
-   red outline to be legible as a danger button; --red is the actual tinted fill,
-   and --red-dark is its designated on-color in every theme. */
+/* Danger reads through its fill too. The old near-white wash relied on a red
+   outline to be legible as a danger button; --red is the actual tinted fill, and
+   --red-dark is its designated on-color in every theme. */
 .btn.btn-danger {
   color: var(--red-dark);
   background: var(--red);
@@ -1263,7 +1275,6 @@ input[type="radio"]:focus-visible {
   --surface: var(--paper);
   --structure: var(--uchu-yin-8);
   --hover-bg: var(--structure);
-  --accent-soft: #1d2532;
   --grid: var(--uchu-yin-8);
   --grid-dark: var(--uchu-yin-7);
   --shade: var(--uchu-yin);
@@ -1290,11 +1301,15 @@ input[type="radio"]:focus-visible {
 
   /* accents — lighter + a touch desaturated so they don't vibrate on dark */
   --blue: #5b9bf5;
-  --blue-tint: #1b2942;
-  --blue-soft: #213450;
   --blue-strong: #8fbaf8;
   --blue-bright: #5e8ff2;
-  --warning-soft: #243349;
+
+  /* The washes take the SAME form as light — a mix of this theme's paper with a
+     rung — and only two things change: the rung goes to the dark end of its
+     ramp, and the paper's share drops. That is the whole dark wash block. */
+  --wash-positive: color-mix(in oklab, var(--surface) 72%, var(--uchu-green-9));
+  --wash-negative: color-mix(in oklab, var(--surface) 72%, var(--uchu-red-9));
+  --wash-emphasis: color-mix(in oklab, var(--surface) 72%, var(--uchu-blue-9));
 
   /* status — re-picked for dark, not desaturated light values */
   --green: #33814b;
@@ -1304,12 +1319,8 @@ input[type="radio"]:focus-visible {
   --green-dark: #7fd29b;
   --red: #9a353c;
   --red-dark: #f0a0aa;
-  --red-soft: #2a1c1e;
   --success: #2ecc6f;
-  --success-alt: #3ed47e;
-  --success-soft: #15291d;
   --danger: #f25555;
-  --danger-soft: #2c1518;
   --danger-text: #f7a6b4;
 
   /* amber/warning — shifted warm so it stays visible on dark */
@@ -1355,7 +1366,6 @@ input[type="radio"]:focus-visible {
   --hover-bg: var(--uchu-gray-4);
   --grid: var(--uchu-gray-7);
   --grid-dark: var(--uchu-gray-9);
-  --accent-soft: #dbe5f4;
   /* Outlines back ON — the fills alone are what a bad display cannot resolve, so
      this mode re-points every outline token the regular themes zero out. */
   --action-bg: var(--uchu-gray-5);
@@ -1376,7 +1386,6 @@ input[type="radio"]:focus-visible {
   --blue-strong: #103d86;
   --green-dark: #1f6e44;
   --red-dark: #8a2e37;
-  --success-text: #0f5132;
   --danger-text: #7a0c2e;
 
   /* answer-cell fills (right/wrong). The default pastel 'wrong' reads as gray

@@ -31,7 +31,29 @@ var (
 	hexRe     = regexp.MustCompile(`#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b`)
 	rungRefRe = regexp.MustCompile(`^var\(--uchu-([a-z0-9-]+)\)$`)
 	derivedRe = regexp.MustCompile(`^oklch\(from `)
+	mixRe     = regexp.MustCompile(`^color-mix\(in oklab,\s*var\(--([a-z0-9-]+)\)\s+([\d.]+)%,\s*var\(--([a-z0-9-]+)\)\s*\)$`)
+	// The generated ramps themselves: `oklch(L C H)` with no alpha and no `from`.
+	oklchRe = regexp.MustCompile(`^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$`)
 )
+
+// mix interpolates two colours in OKLab, which is what the browser does for
+// `color-mix(in oklab, …)`. The washes are defined that way so each one sits on
+// its own theme's paper, so the test has to follow them there.
+func mix(a OKLCH, frac float64, b OKLCH) OKLCH {
+	toLab := func(c OKLCH) (l, x, y float64) {
+		return c.L, c.C * math.Cos(c.H*math.Pi/180), c.C * math.Sin(c.H*math.Pi/180)
+	}
+	al, ax, ay := toLab(a)
+	bl, bx, by := toLab(b)
+	l := al*frac + bl*(1-frac)
+	x := ax*frac + bx*(1-frac)
+	y := ay*frac + by*(1-frac)
+	h := math.Atan2(y, x) * 180 / math.Pi
+	if h < 0 {
+		h += 360
+	}
+	return OKLCH{l, math.Hypot(x, y), h}
+}
 
 func core(t *testing.T) string {
 	t.Helper()
@@ -97,8 +119,26 @@ func resolve(tokens map[string]string, name string) (c OKLCH, derived, ok bool) 
 		if m := rungRefRe.FindStringSubmatch(v); m != nil {
 			return Lookup(m[1]), false, true
 		}
+		if m := oklchRe.FindStringSubmatch(v); m != nil {
+			l, _ := strconv.ParseFloat(m[1], 64)
+			c, _ := strconv.ParseFloat(m[2], 64)
+			h, _ := strconv.ParseFloat(m[3], 64)
+			return OKLCH{l, c, h}, false, true
+		}
 		if derivedRe.MatchString(v) {
 			return OKLCH{}, true, true
+		}
+		if m := mixRe.FindStringSubmatch(v); m != nil {
+			base, _, okA := resolve(tokens, m[1])
+			hue, _, okB := resolve(tokens, m[3])
+			if !okA || !okB {
+				return OKLCH{}, false, false
+			}
+			frac, err := strconv.ParseFloat(m[2], 64)
+			if err != nil {
+				return OKLCH{}, false, false
+			}
+			return mix(base, frac/100, hue), false, true
 		}
 		if m := hexRe.FindStringSubmatch(v); m != nil && strings.HasPrefix(v, "#") {
 			return fromHex(m[1]), false, true
@@ -312,6 +352,44 @@ func TestAdjacentSurfacesAreDistinguishable(t *testing.T) {
 					}
 				}
 				seen[role] = c.L
+			}
+		})
+	}
+}
+
+// washes are the three things a tinted background can say. They must read as
+// ONE tier — a set of equals — which is exactly what the seven they replace did
+// not do: those spread from L 0.929 to 0.982 and interleaved with the grays, so
+// which wash you were looking at carried no information.
+var washes = []string{"wash-positive", "wash-negative", "wash-emphasis"}
+
+func TestWashesAreOneTier(t *testing.T) {
+	const spread = 0.05
+	css := core(t)
+	for _, th := range themes {
+		t.Run(th.name, func(t *testing.T) {
+			tokens := tokensFor(t, css, th.selector)
+			lo, hi := math.Inf(1), math.Inf(-1)
+			for _, w := range washes {
+				c, _, ok := resolve(tokens, w)
+				if !ok {
+					t.Fatalf("--%s does not resolve", w)
+				}
+				lo, hi = math.Min(lo, c.L), math.Max(hi, c.L)
+
+				// A wash is a background, so the body ink has to survive it.
+				ink, _, _ := resolve(tokens, "text")
+				if got := Contrast(ink, c); got < 7 {
+					t.Errorf("--text on --%s is %.2f:1, want >= 7:1", w, got)
+				}
+				// And it has to be visible against the paper it sits on.
+				surface, _, _ := resolve(tokens, "surface")
+				if math.Abs(surface.L-c.L) < 0.02 && c.C < 0.02 {
+					t.Errorf("--%s is indistinguishable from --surface", w)
+				}
+			}
+			if hi-lo > spread {
+				t.Errorf("washes span %.3f lightness, want <= %.2f — they should read as equals", hi-lo, spread)
 			}
 		})
 	}
