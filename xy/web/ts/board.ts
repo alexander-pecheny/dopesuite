@@ -701,6 +701,11 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
 function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const node = el("div", { class: "kcard kcard-" + (card.kind || "normal"), draggable: "true", dataset: { cardId: card.id }, onclick: () => { void cardDetail.openCard(card); } });
   const labelRow = el("div", { class: "kcard-labels" });
+  // Derived from the text, so it leads the row: nobody put it there and nobody
+  // can take it off, unlike everything after it.
+  if (card.kind === "question" && xyChgk.handoutForCard(card.desc)) {
+    labelRow.append(el("span", { class: "kcard-handout", title: "Раздаточный материал", text: "📃" }));
+  }
   // The board card shows the author's own labels; a test's verdict belongs to the
   // card detail, where it can say WHICH test it came from.
   for (const a of assignmentsOf(card.id, null)) {

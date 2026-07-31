@@ -1312,6 +1312,15 @@ body {
   align-items: center;
   height: 10px;
 }
+/* The handout mark: same emoji-in-a-box trick as the flask, but at the row's
+   own height — this one stands on the row rather than inside a capsule. */
+.kcard-handout {
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  height: var(--chip-h);
+}
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
 #cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
