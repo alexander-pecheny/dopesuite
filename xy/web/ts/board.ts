@@ -2455,6 +2455,7 @@ const cardDetail = createCardDetail({
   forgetCardLabels,
   preview: { renderPreviewCard, resolveImages: attachments.resolveImages, imageRefs, fillPreviewImages, previewList },
   attachments,
+  popupMenu,
   readMarkers: { refreshCardUnreadDot, renderNotifBadge },
   timeline: {
     load: (cardId) => timeline.load(cardId),

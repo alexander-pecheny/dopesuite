@@ -667,19 +667,6 @@ function fixTrelloLinks(desc: string): string {
   return result + desc;
 }
 
-// shareText builds the plain text handed to testers over chat: the screen-mode
-// question (prefixed "Вопрос N.") plus any handout block, so what the players
-// would see is reproduced. `number` comes from numberQuestionCards.
-function shareText(desc: string | null | undefined, number: string | number | null | undefined): string {
-  const blocks = parseBlocks(desc);
-  const parts: string[] = [];
-  for (const b of blocks) {
-    if (b.type === "handout") parts.push("Раздаточный материал:\n" + screenText(b.text));
-  }
-  const q = screenText(questionText(desc));
-  parts.push((number ? `Вопрос ${number}. ` : "") + q);
-  return parts.join("\n\n");
-}
 
 // ── question versions ───────────────────────────────────────────────────────
 // A Version is one candidate wording of a question. They live in the question
@@ -749,6 +736,48 @@ function promoteVersion(question: string | null | undefined, i: number): { quest
   if (i <= 0 || i >= parts.length) return { question: question || "", index: i };
   parts.unshift(parts.splice(i, 1)[0]);
   return { question: joinVersions(parts), index: 0 };
+}
+
+// ── what a card offers to copy ──────────────────────────────────────────────
+// One button used to copy handout-and-question together, which is not how a
+// tester receives them: the раздатка goes out first, on its own, and a
+// дуплет/блиц goes out a leg at a time (issue #45). copyTargets is that list —
+// what THIS card has, in the order it would be sent.
+export interface CopyTarget {
+  label: string;
+  // Exactly one of these. `image` names an attachment, for a handout that is a
+  // picture: the tester needs the picture, not its filename.
+  text?: string;
+  image?: string;
+}
+
+// copyTargets enumerates a question card's copyable pieces for the version being
+// looked at. The blitz rule: the lead-in («Блиц:») rides with the first leg and
+// is not repeated, because the legs are pasted into one conversation in order.
+function copyTargets(desc: string | null | undefined, number: string | number | null | undefined, versionIdx = 0): CopyTarget[] {
+  const f = splitFields(desc);
+  const out: CopyTarget[] = [];
+  if (f.handout) {
+    out.push(f.handout.kind === "image"
+      ? { label: "Раздатка", image: f.handout.name }
+      : { label: "Раздатка", text: "Раздаточный материал:\n" + screenText(f.handout.text) });
+  }
+  // splitFields lifts an inline handout out of the question and leaves the bare
+  // anchor where it stood; that marks a position, and has no business in a paste.
+  const q = screenText(versionText(f.question ?? "", versionIdx))
+    .split(HANDOUT_ANCHOR).join("").trim();
+  const head = number ? `Вопрос ${number}. ` : "";
+  const lst = splitList(q);
+  if (lst.items) {
+    lst.items.forEach((item, i) => {
+      const line = `${i + 1}. ${item.trim()}`;
+      const lead = lst.preamble.trim();
+      out.push({ label: `Вопрос ${i + 1}`, text: i === 0 ? head + (lead ? lead + "\n" : "") + line : line });
+    });
+  } else {
+    out.push({ label: "Вопрос", text: head + q });
+  }
+  return out;
 }
 
 // ── structured fields (semi-WYSIWYG) ────────────────────────────────────────
@@ -1201,11 +1230,12 @@ function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): 
 export const xyChgk = {
   parseBlocks, numberDirective, questionText, answerText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
-  removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem,
+  removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,
   splitFields, composeFields, parseHandoutBlock,
   splitVersions, versionText, setVersion, addVersion, removeVersion, promoteVersion,
+  copyTargets,
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
   parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText, testerNames,
 };

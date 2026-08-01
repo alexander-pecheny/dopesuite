@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { xyChgk } from "../web/assets/static/dist/chgk.js";
 
 const { questionText, blockText, numberQuestionCards, parseBlocks, numberDirective,
-  removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem } = xyChgk;
+  removeAccents, removeSquareBrackets, screenText, parse4sElem } = xyChgk;
 
 test("question text strips the leading '? ' marker", () => {
   const desc = "? В каком году?\n! 1799\n^ источник";
@@ -101,15 +101,12 @@ test("screenText applies both transforms", () => {
   );
 });
 
-test("shareText prefixes the question number and reproduces handouts", () => {
-  const desc = "? Что э́то? [прочитать дважды]\n! ответ\n^ источник";
-  assert.equal(shareText(desc, "5"), "Вопрос 5. Что это?");
-
-  const withHandout = "> Схема ме́тро\n? Что на схеме?\n! круг";
-  assert.equal(
-    shareText(withHandout, "3"),
-    "Раздаточный материал:\nСхема метро\n\nВопрос 3. Что на схеме?",
-  );
+test("a legacy \"> \" handout block is still offered as its own paste", () => {
+  const t = xyChgk.copyTargets("> Схема ме́тро\n? Что на схеме?\n! круг", "3");
+  assert.deepEqual(t.map((x) => x.text), [
+    "Раздаточный материал:\nСхема метро",
+    "Вопрос 3. Что на схеме?",
+  ]);
 });
 
 test("numberQuestionCards: №№ on a heading card resets the base for following questions", () => {
@@ -562,4 +559,45 @@ test("versions survive a splitFields/composeFields round-trip", () => {
   const f = splitFields(desc);
   assert.equal(splitVersions(f.question).length, 2);
   assert.equal(composeFields(f), desc);
+});
+
+// ---- what a card offers to copy (issue #45) ----
+const { copyTargets } = xyChgk;
+
+test("a plain question offers exactly one thing to copy", () => {
+  const t = copyTargets("? Простой вопрос?\n! Ответ", 12);
+  assert.deepEqual(t, [{ label: "Вопрос", text: "Вопрос 12. Простой вопрос?" }]);
+});
+
+test("a handout is its own paste, and no longer rides along with the question", () => {
+  const t = copyTargets("? [Раздаточный материал: схема] Что на схеме?\n! круг", 3);
+  assert.equal(t.length, 2);
+  assert.equal(t[0].label, "Раздатка");
+  assert.equal(t[0].text, "Раздаточный материал:\nсхема");
+  assert.equal(t[1].text, "Вопрос 3. Что на схеме?");
+});
+
+test("an image handout offers the picture, not its filename", () => {
+  const t = copyTargets("? [Раздаточный материал: (img map.png)] Что тут?\n! круг", 1);
+  assert.deepEqual(t[0], { label: "Раздатка", image: "map.png" });
+});
+
+test("a blitz offers one paste per leg, the lead-in only on the first", () => {
+  const desc = "? Блиц:\n- Первый вопрос?\n- Второй вопрос?\n- Третий вопрос?\n! ответы";
+  const t = copyTargets(desc, 12);
+  assert.deepEqual(t.map((x) => x.label), ["Вопрос 1", "Вопрос 2", "Вопрос 3"]);
+  assert.equal(t[0].text, "Вопрос 12. Блиц:\n1. Первый вопрос?");
+  assert.equal(t[1].text, "2. Второй вопрос?");
+  assert.equal(t[2].text, "3. Третий вопрос?");
+});
+
+test("copying takes the version you are looking at", () => {
+  const desc = "? Первая?\n(PAGEBREAK)\nВторая?\n! Ответ";
+  assert.equal(copyTargets(desc, 5, 0)[0].text, "Вопрос 5. Первая?");
+  assert.equal(copyTargets(desc, 5, 1)[0].text, "Вопрос 5. Вторая?");
+});
+
+test("screen mode still applies — host notes and accents are not sent to testers", () => {
+  const t = copyTargets("? [Ведущему: не читать] Вопро́с?\n! Ответ", 1);
+  assert.equal(t[0].text, "Вопрос 1. Вопрос?");
 });
