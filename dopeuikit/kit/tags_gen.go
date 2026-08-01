@@ -495,6 +495,7 @@ var IconPencil = Attr{Name: "icon", Value: "pencil"}
 var IconPlus = Attr{Name: "icon", Value: "plus"}
 var IconReplace = Attr{Name: "icon", Value: "replace"}
 var IconSettings = Attr{Name: "icon", Value: "settings"}
+var IconTag = Attr{Name: "icon", Value: "tag"}
 var IconTags = Attr{Name: "icon", Value: "tags"}
 var IconTimer = Attr{Name: "icon", Value: "timer"}
 var IconTrash2 = Attr{Name: "icon", Value: "trash-2"}

@@ -65,6 +65,10 @@
    full name below on hover/focus. The fade is a mask on the text so it needs no
    bg-matched gradient and survives the tile/hover/dark fills paper rows never see. */
 .board-card-name-wrap { position: relative; display: block; min-width: 0; }
+/* The lock on a board whose name is readable but whose content still needs the
+   passphrase. The name is --text-lg, and a glyph at the full 1.15em of that
+   out-shouts the word it belongs to — this is a mark, not a heading. */
+.board-card-name .ico { width: 0.8em; height: 0.8em; opacity: 0.75; }
 .board-card-name {
   display: block;
   font-weight: var(--fw-semibold);
@@ -349,18 +353,14 @@
 }
 
 /* labels */
-/* A label is a DOT. The pill shape is reserved for the test group below — that
-   is the one thing on the row that contains other things, so letting it be the
-   only elongated shape is what makes the row parse at a glance: circles are
-   labels, a capsule is a test, and the circles inside a capsule are what the
-   testers said. A dot is also the narrowest a colour can be, which is what keeps
-   a card carrying several tests on one line. */
-.label-chip {
-  display: inline-block;
-  width: var(--chip-h, 12px);
-  height: var(--chip-h, 12px);
-  border-radius: var(--radius-full);
-  background: var(--muted);
+/* A label on a card is a TAG filled with its colour, next to the flask filled
+   with a test's verdicts. Two glyphs, both coloured by what they carry — which
+   is what makes the row parse at a glance now that neither is a bare dot. */
+.kcard-label {
+  display: inline-flex;
+  align-items: center;
+  height: var(--chip-h);
+  font-size: 13px;
 }
 
 /* card detail overlay — occupies the whole lower section (below the fixed

@@ -727,6 +727,24 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
   return el("div", { class: cls, text: cardTitle(card, number) });
 }
 
+// leadIcon marks a glyph as having words after it — see .ico-lead: CSS cannot
+// tell "glyph alone" from "glyph then text" apart, because a label is a bare
+// text node and :only-child counts elements.
+function leadIcon(node: Node): Node {
+  if (node instanceof SVGElement) node.setAttribute("class", "ico ico-lead");
+  return node;
+}
+
+// tagIcon is a label: the tag filled with the label's own colour. Same idea as
+// the flask — the colour IS the glyph — so a card's row reads as one family of
+// shapes rather than dots beside icons. The eyelet stays currentColor so the tag
+// still reads as a tag against a pale fill.
+function tagIcon(color: string): SVGSVGElement {
+  const svg = icon("tag");
+  svg.querySelector("path")?.setAttribute("fill", color);
+  return svg;
+}
+
 // ---- the test flask ----
 // A playing used to render as a capsule: the flask, then one dot per verdict.
 // Now that the flask is a real shape, the verdicts ARE the flask — the colours
@@ -796,7 +814,7 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   // card detail, where it can say WHICH test it came from.
   for (const a of assignmentsOf(card.id, null)) {
     const lbl = labelById(a.labelId);
-    if (lbl) labelRow.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
+    if (lbl) labelRow.append(el("span", { class: "kcard-label", title: lbl.name }, tagIcon(lbl.color)));
   }
   // One flask per test the question was played at, filled with the verdicts
   // recorded there. The colours are the only signal now, so the tooltip names
@@ -835,7 +853,7 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
 
 // Apply label colors through the CSSOM (avoids inline-style CSP issues).
 function paintLabels(): void {
-  for (const chip of document.querySelectorAll<HTMLElement>(".label-chip[data-c], .label-swatch[data-c]")) {
+  for (const chip of document.querySelectorAll<HTMLElement>(".label-swatch[data-c]")) {
     chip.style.backgroundColor = chip.dataset.c || "";
   }
   // A pick is the one that carries its name, so its ink follows its colour.
@@ -991,7 +1009,7 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
     menu.append(el("button", {
       class: "menu-item", type: "button", role: "menuitem",
       onclick: () => { close(); it.onClick(); },
-    }, it.icon ? [it.icon, " "] : [], it.label));
+    }, it.icon ? [leadIcon(it.icon)] : [], it.label));
   }
   const { close } = anchorPopup(menu, anchor, { anchor, onClose: () => { openListMenu = null; } });
   openListMenu = { anchor, close };

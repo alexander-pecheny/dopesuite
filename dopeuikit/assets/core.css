@@ -856,8 +856,10 @@ input[type="radio"]:focus-visible {
   vertical-align: -0.15em;
 }
 /* A glyph with words beside it needs a gap; a bare icon button has no words and
-   must not gain a phantom one. */
-.ico:not(:only-child) { margin-right: 0.4em; }
+   must not gain a phantom one. This cannot be a selector — a label is a text
+   node, and :only-child counts elements — so whoever draws the icon says which
+   it is (kit/icon.go, iconed() in icons_gen.ts). */
+.ico-lead { margin-right: 0.4em; }
 
 .btn {
   display: inline-flex;

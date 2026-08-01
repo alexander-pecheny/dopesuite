@@ -139,7 +139,12 @@ export function icon(name: IconName): SVGSVGElement {
 // words. Menu rows keep their text — a dropdown is read by its label, and the
 // glyph is only an anchor for the eye.
 export function iconed(name: IconName, label: string): (SVGSVGElement | string)[] {
-  return [icon(name), label];
+  const glyph = icon(name);
+  // The gap has to be a class: a label is a bare text node, and CSS :only-child
+  // counts ELEMENTS, so a selector can never tell "glyph alone" from "glyph then
+  // words" apart.
+  glyph.setAttribute("class", "ico ico-lead");
+  return [glyph, label];
 }
 `)
 	return b.String()

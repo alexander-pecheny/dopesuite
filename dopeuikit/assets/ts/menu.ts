@@ -199,7 +199,11 @@ function build(): void {
       button.type = "button";
       button.className = "menu-item";
       button.setAttribute("role", "menuitem");
-      if (item.icon) button.append(icon(item.icon as IconName));
+      if (item.icon) {
+        const glyph = icon(item.icon as IconName);
+        glyph.setAttribute("class", "ico ico-lead");
+        button.append(glyph);
+      }
       button.append(item.label);
       if (item.title) button.title = item.title;
       button.addEventListener("click", () => {

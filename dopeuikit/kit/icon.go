@@ -15,7 +15,9 @@ import (
 // (icongen generates that list from the vendored files), so a miss here means
 // the enum and the files have drifted — worth a loud panic at page-compile time,
 // which happens at server start, not per request.
-func iconItem(p *Element) Item {
+func iconItem(p *Element) Item { return iconItemClass(p, "ico") }
+
+func iconItemClass(p *Element, class string) Item {
 	name, ok := Get(p, "icon")
 	if !ok || name == "" {
 		return nil
@@ -24,15 +26,23 @@ func iconItem(p *Element) Item {
 	if !found {
 		panic(fmt.Sprintf("kit: icon %q is in the vocabulary but not in icons/svg — re-run `go generate ./icons`", name))
 	}
-	return Raw(`<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+	return Raw(`<svg class="` + class + `" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
 		`stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` + body + `</svg>`)
 }
 
 // withIcon puts the glyph ahead of a control's own inline content. A labelled
 // control keeps its words — a menu row or a button is read by its text, and the
 // glyph is an anchor for the eye, not a replacement for the label.
+// A glyph with words beside it needs a gap from them. CSS cannot see that: a
+// label is a bare text node, and `:only-child` counts ELEMENTS, so the glyph
+// always looks like an only child however much text follows it. Hence the class
+// rather than a selector.
 func withIcon(p *Element, items []Item) []Item {
-	ico := iconItem(p)
+	class := "ico"
+	if len(items) > 0 {
+		class = "ico ico-lead"
+	}
+	ico := iconItemClass(p, class)
 	if ico == nil {
 		return items
 	}

@@ -179,6 +179,7 @@ var IconPencil = base.IconPencil
 var IconPlus = base.IconPlus
 var IconReplace = base.IconReplace
 var IconSettings = base.IconSettings
+var IconTag = base.IconTag
 var IconTags = base.IconTags
 var IconTimer = base.IconTimer
 var IconTrash2 = base.IconTrash2
