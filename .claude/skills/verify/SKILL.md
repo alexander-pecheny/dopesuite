@@ -75,8 +75,9 @@ agent-browser set viewport 1280 800 1    # back to desktop; re-verify desktop to
 
 ```bash
 agent-browser open http://127.0.0.1:9781/login
-agent-browser fill '#loginUsername' tester          # types real keys → input events fire
-agent-browser eval 'usernameForm.requestSubmit()'
+agent-browser fill '#pwUsername' tester             # types real keys → input events fire
+agent-browser fill '#pwPassword' testpass123        # see the login note below
+agent-browser eval 'passwordForm.requestSubmit()'
 agent-browser screenshot $SP/shot.png                # also: get html/text/count
 agent-browser eval 'document.title'                  # → "Мои доски · xy" — assert in the shell
 agent-browser close
@@ -104,9 +105,16 @@ agent-browser close
   the browser dies. Test PDF-frame geometry with an `about:blank` iframe of the
   same class instead.
 
-Both apps share the login UI: two JS steps — `#loginUsername` +
-`usernameForm.requestSubmit()`, then `#passwordValue` +
-`passwordForm.requestSubmit()`.
+Both apps share the login UI. Password login is behind a button, and the fields
+are `#pwUsername` / `#pwPassword` — not `#loginUsername` / `#passwordValue`,
+which do not exist:
+
+```bash
+agent-browser eval '[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Войти по паролю").click()'
+agent-browser fill '#pwUsername' tester
+agent-browser fill '#pwPassword' testpass123
+agent-browser eval 'passwordForm.requestSubmit()'
+```
 
 ## xy
 

@@ -205,6 +205,13 @@ func (a *Assets) ServeFonts() http.Handler {
 	handler := http.StripPrefix("/static/", http.FileServer(http.FS(fsys)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		// A font must be preloaded with `crossorigin` (else the preload and the
+		// @font-face fetch have different cache keys), and that makes even a
+		// same-origin request a CORS one. Without this header Firefox cannot hand
+		// the preloaded bytes to @font-face: it refetches the font and warns that
+		// the preload went unused. Fonts are public files; there is nothing here
+		// an origin check would protect.
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		handler.ServeHTTP(w, r)
 	})
 }
