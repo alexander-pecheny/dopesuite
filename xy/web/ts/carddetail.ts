@@ -20,7 +20,7 @@ import { xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
-import type { CardFields, Handout, Tester, TesterLike } from "./chgk.js";
+import type { CardFields, CopyTarget, Handout, Tester, TesterLike } from "./chgk.js";
 import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing, Snapshot, UnreadFlags } from "./unlock.js";
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
@@ -95,6 +95,7 @@ export interface AttachmentsSeam {
   imageNames(): string[];
   clearImageNames(): void;
   upload(file: File, lossless: boolean, name: string): Promise<void>;
+  resolveImages(cards: ReadonlyArray<{ id: number }>, wanted: Set<string>): Promise<Map<string, string>>;
 }
 
 // The board-owned halves of read tracking: the kanban card dot and the 🔔 badge.
@@ -121,6 +122,9 @@ export interface CardDetailDeps {
   renderLabelPicker(card: BoardCard): void;
   paintLabels(): void;
   questionNumberFor(card: PreviewCardLike): string | null;
+  // The board's shared transient popup (see board.js#popupMenu) — the copy
+  // button opens one when a card has more than one thing worth copying.
+  popupMenu(anchor: HTMLElement, items: Array<{ label: string; onClick: () => void }>): void;
   forgetCardLabels(cards: BoardCard[]): void;
   preview: PreviewSeam;
   attachments: AttachmentsSeam;
@@ -1473,15 +1477,57 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     copyMsgTimer = setTimeout(() => { node.hidden = true; }, 2500);
   }
 
-  byId("cardCopy").addEventListener("click", async () => {
-    const card = state().cards.find((c) => c.id === openCardId);
-    if (!card) return;
-    try {
-      await copyText(xyChgk.shareText(card.desc, deps.questionNumberFor(card)));
-      showCopyMsg("Скопировано для теста", false);
-    } catch (err) {
-      showCopyMsg("Не удалось скопировать: " + errMsg(err), true);
+  // imagePng fetches a handout picture and re-encodes it as PNG — the one image
+  // type both Chrome and Firefox accept on the clipboard. The attachment is very
+  // likely a WebP (that is what the upload offers), which neither will take.
+  async function imagePng(name: string): Promise<Blob> {
+    const card = openCardCard();
+    if (!card) throw new Error("карточка не открыта");
+    const urls = await deps.attachments.resolveImages([{ id: card.id }], new Set([name]));
+    const url = urls.get(name);
+    if (!url) throw new Error("картинка не найдена среди вложений");
+    const blob = await (await fetch(url)).blob();
+    if (blob.type === "image/png") return blob;
+    const bmp = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("не удалось перекодировать"))), "image/png");
+    });
+  }
+
+  // runCopy performs one target. The image branch hands ClipboardItem a promise
+  // built in the click's own turn rather than awaiting first: Safari only honours
+  // a write that was issued synchronously from the gesture.
+  async function runCopy(t: CopyTarget): Promise<void> {
+    if (t.image) {
+      if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
+        throw new Error("браузер не умеет копировать картинки");
+      }
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": imagePng(t.image) })]);
+      return;
     }
+    await copyText(t.text || "");
+  }
+
+  function copyAndReport(t: CopyTarget): void {
+    void runCopy(t)
+      .then(() => showCopyMsg(`Скопировано: ${t.label.toLowerCase()}`, false))
+      .catch((err) => showCopyMsg("Не удалось скопировать: " + errMsg(err), true));
+  }
+
+  // One button, because a card usually has exactly one thing worth copying. When
+  // it has more — a раздатка, or the legs of a блиц — they are separate pastes
+  // (issue #45), so the button opens the list instead of guessing.
+  byId("cardCopy").addEventListener("click", () => {
+    const card = openCardCard();
+    if (!card) return;
+    captureDraft(); // copy what is on screen, not what was last saved
+    const targets = xyChgk.copyTargets(draft.desc, deps.questionNumberFor(card), versionIdx);
+    if (targets.length === 1) { copyAndReport(targets[0]); return; }
+    deps.popupMenu(byId("cardCopy"), targets.map((t) => ({ label: t.label, onClick: () => copyAndReport(t) })));
   });
 
   // hideCard is the card's teardown, run by the overlay stack when the card is
