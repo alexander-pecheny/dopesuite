@@ -1057,6 +1057,22 @@
 .fld-muted .fld-add { opacity: 0.75; }
 .fld-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .fld-label { font-size: var(--text-sm); font-weight: var(--fw-semibold); color: var(--muted); }
+/* The Автор caption is a choice the 4s carries as a !!override, so that field's
+   label IS the control. Styled as the label it replaces — a select that looks
+   like a heading until you reach for it. */
+select.fld-label-select {
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  cursor: var(--cursor-action);
+}
+select.fld-label-select:hover, select.fld-label-select:focus { border-color: var(--border); color: var(--text); }
+.fld-present select.fld-label-select { font-size: var(--text-xs); }
 .fld-rm, .fld-row-rm, .fld-tag-rm {
   border: none; background: transparent; color: var(--muted);
   font-size: var(--text-base); line-height: 1; cursor: var(--cursor-action);
