@@ -10,6 +10,7 @@ import {
   parseDate, parseSession, parseTime, serializeSession, type SessionMeta,
   sessionLabel, zoneOffset,
 } from "./sessions.js";
+import { xyApp } from "./app.js";
 import { TOWNS } from "./towns.js";
 import { autocomplete, type Choice, townChoices, zoneChoices } from "./suggest.js";
 import type { BoardSession } from "./unlock.js";
@@ -412,6 +413,11 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
   }
 
   const dismiss = (): void => deps.overlayClose();
+
+  // The form has no submit button — leaving it is what saves (saveOnLeave). So
+  // Cmd/Ctrl-Enter means the same thing every other editor's does here: commit
+  // and get out.
+  xyApp.onCmdEnter(byId("sessionForm"), dismiss);
 
   byId("sessionAddBtn").addEventListener("click", () => { void addSession(); });
   byId("sessionsClose").addEventListener("click", dismiss);

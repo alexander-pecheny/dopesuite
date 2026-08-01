@@ -16,7 +16,15 @@ import type { DataKey } from "./crypto.js";
 import type { DiffOp } from "./diff.js";
 import type { OpBody, TimelineEvent } from "./store.js";
 
-const { fetchJSON, jpatch, jdelete, el } = xyApp;
+const { fetchJSON, jpatch, jdelete, el, onCmdEnter } = xyApp;
+
+// requestSubmit, not submit(): the form's own submit listener is what posts the
+// comment, and a raw .submit() bypasses every listener and navigates the page.
+function submitOnCmdEnter(inputId: string, formId: string): void {
+  const form = document.getElementById(formId) as HTMLFormElement | null;
+  const input = document.getElementById(inputId);
+  if (form && input) onCmdEnter(input, () => form.requestSubmit());
+}
 
 // A timeline event as this module reads it: the synced/pending DTO plus the
 // comment-specific flags the server adds and the client-recomputed reply_count.
@@ -492,6 +500,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     overlayStack.open({ el: threadOverlay, close: hideThread });
   }
 
+  submitOnCmdEnter("threadInput", "threadForm");
   byId("threadForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = byId<HTMLInputElement>("threadInput");
@@ -608,6 +617,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     if (sessions.length === 1) sel.value = String(sessions[0].id);
   }
 
+  submitOnCmdEnter("commentInput", "commentForm");
   byId("commentForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = byId<HTMLInputElement>("commentInput");

@@ -25,7 +25,7 @@ import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
 
-const { fetchJSON, jpost, jput, jdelete, el } = xyApp;
+const { fetchJSON, jpost, jput, jdelete, el, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;
 
 // ---- pure helpers (exported for tests and for the board) ----
@@ -1516,14 +1516,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   }
 
   // Cmd/Ctrl-Enter saves from either edit view (textarea or structured fields).
-  function saveOnCmdEnter(e: KeyboardEvent): void {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      cardSaveBtn.click();
-    }
-  }
-  cardDescEl.addEventListener("keydown", saveOnCmdEnter);
-  cardFieldsEl.addEventListener("keydown", saveOnCmdEnter);
+  onCmdEnter(cardDescEl, () => cardSaveBtn.click());
+  onCmdEnter(cardFieldsEl, () => cardSaveBtn.click());
 
   // Re-evaluate the save button on every edit. Typing fires "input"; the Поля
   // view's +/× field pills and the tool buttons change the draft via clicks, which
@@ -1558,6 +1552,12 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     } catch (err) { cardMessageEl.textContent = errMsg(err); }
   }
   cardAliasSaveBtn.addEventListener("click", () => { void saveAlias(); });
+  // The alias input sits outside any form, so plain Enter did nothing at all —
+  // the one field in the card you had to leave the keyboard to commit.
+  onCmdEnter(cardAliasEl, () => { void saveAlias(); });
+  cardAliasEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); void saveAlias(); }
+  });
   cardAliasEl.addEventListener("keydown", (e) => {
     // Enter saves the alias (not the card); Cmd/Ctrl+Enter keeps the card-save
     // shortcut for muscle memory, but on a saved card that too means the alias.

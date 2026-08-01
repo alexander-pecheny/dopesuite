@@ -32,3 +32,37 @@ test("truncates long text at a word boundary with an ellipsis", () => {
   assert.ok(out.length <= 31, out);
   assert.ok(!/\sслов$/.test(out), "should not cut mid-word: " + out);
 });
+
+// ---- onCmdEnter ----
+// A stub node rather than a DOM: the helper only ever adds one keydown listener,
+// so handing it a recorder and calling that listener is the whole surface.
+function stubNode() {
+  const node = { handler: null, addEventListener: (_type, fn) => { node.handler = fn; } };
+  return node;
+}
+
+function press(node, key, mods = {}) {
+  let defaultPrevented = false;
+  node.handler({ key, metaKey: false, ctrlKey: false, ...mods, preventDefault: () => { defaultPrevented = true; } });
+  return defaultPrevented;
+}
+
+test("onCmdEnter fires on Ctrl-Enter and on Cmd-Enter", () => {
+  const node = stubNode();
+  let runs = 0;
+  xyApp.onCmdEnter(node, () => { runs++; });
+  assert.ok(press(node, "Enter", { ctrlKey: true }), "prevents the default newline");
+  assert.equal(runs, 1);
+  press(node, "Enter", { metaKey: true });
+  assert.equal(runs, 2);
+});
+
+test("onCmdEnter ignores a bare Enter and other modified keys", () => {
+  const node = stubNode();
+  let runs = 0;
+  xyApp.onCmdEnter(node, () => { runs++; });
+  assert.equal(press(node, "Enter"), false, "a bare Enter must still insert a newline");
+  press(node, "s", { ctrlKey: true });
+  press(node, "Escape", { metaKey: true });
+  assert.equal(runs, 0);
+});
