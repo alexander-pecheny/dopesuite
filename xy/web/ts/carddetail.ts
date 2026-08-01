@@ -293,7 +293,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       deps.render();
       await openCard(card, { fresh: true });
     } catch (err) {
-      cardMessageEl.textContent = errMsg(err);
+      // The overlay is not open yet, so its message line would be invisible —
+      // this failure has to surface on the board itself.
+      deps.setStatus("error");
+      alert("Не удалось создать карточку: " + errMsg(err));
     }
   }
 
