@@ -752,8 +752,6 @@
 
 
 /* card create mode: show only the type chooser + description editor */
-.card-detail.creating [data-edit-only] { display: none !important; }
-.card-detail:not(.creating) [data-create-only] { display: none !important; }
 
 /* list preview ("à la docx export", rendered client-side) — a wide, scrollable
    reading view layered over the board like the card detail. */
