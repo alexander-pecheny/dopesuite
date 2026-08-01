@@ -801,6 +801,11 @@ export interface CardFields {
   comment: string | null;
   sources: string[] | null;
   authors: string[] | null;
+  // The "@" line's chgksuite "!!Label" override, decoded ("~" → space), or null
+  // for the default «Автор». Its own field because it is a property of the
+  // caption, not of any name: «Авторка Мария» is one author with a gendered
+  // label, not an author called "!!Авторка" (issue #44).
+  authorLabel: string | null;
   extra: string | null;
 }
 
@@ -928,11 +933,48 @@ function authorsFromText(text: string | null | undefined): string[] {
   return (text || "").split(",").map((s) => s.trim()).filter((s) => s !== "");
 }
 
+// The captions the Поля dropdown offers. chgksuite prints «Автор» and never
+// pluralises (composer/docx.py#get_label_standalone does that for sources only),
+// so every caption but the first is spelled out as an override — anything else
+// would promise a label the export won't print.
+const AUTHOR_LABELS = ["Автор", "Авторка", "Авторы", "Авторки"] as const;
+
+// The 4s override token is space-delimited, so a caption with a space in it is
+// written with "~" and read back as a space (applyOverride decodes it).
+const encodeLabel = (s: string): string => s.trim().replace(/\s+/g, "~");
+
+// authorBlock splits an "@" block into its caption override and its names.
+function authorBlock(text: string | null | undefined): { label: string | null; names: string[] } {
+  const ov = applyOverride(text);
+  if (ov.label) return { label: ov.label, names: authorsFromText(ov.text) };
+  // Repair pass for the importer's output: both chgksuite's parser and our port
+  // of it glue the caption straight onto the name («!!АвторкаМария»), which
+  // applyOverride cannot split because there is no space to split on. Only the
+  // captions we know are recovered — anything else stays verbatim rather than
+  // being guessed at.
+  const s = (text || "").trim();
+  for (const lab of AUTHOR_LABELS) {
+    if (lab !== AUTHOR_LABELS[0] && s.startsWith("!!" + lab)) {
+      return { label: lab, names: authorsFromText(s.slice(2 + lab.length)) };
+    }
+  }
+  return { label: null, names: authorsFromText(s) };
+}
+
+// composeAuthors is authorBlock's inverse: "@ !!Авторка Мария Петрова".
+function composeAuthors(names: ReadonlyArray<string>, label: string | null): string {
+  const clean = names.map((s) => s.trim()).filter((s) => s !== "");
+  const enc = label ? encodeLabel(label) : "";
+  const head = enc && enc !== AUTHOR_LABELS[0] ? `!!${enc}` : "";
+  const body = [head, clean.join(", ")].filter(Boolean).join(" ");
+  return body ? `@ ${body}` : "@";
+}
+
 function splitFields(desc: string | null | undefined): CardFields {
   const blocks = parseBlocks(desc);
   const res: CardFields = {
     preMarkup: null, handout: null, question: null, answer: null, zachet: null,
-    nezachet: null, comment: null, sources: null, authors: null, extra: null,
+    nezachet: null, comment: null, sources: null, authors: null, authorLabel: null, extra: null,
   };
   const preLines: string[] = [], extraLines: string[] = [], authorList: string[] = [];
   let seenQuestion = false, sawAuthor = false;
@@ -949,7 +991,13 @@ function splitFields(desc: string | null | undefined): CardFields {
     }
     if ((t === "answer" || t === "zachet" || t === "nezachet" || t === "comment") && res[t] === null) { res[t] = b.text; continue; }
     if (t === "source" && res.sources === null) { res.sources = sourcesFromBlock(b.text); continue; }
-    if (t === "author") { sawAuthor = true; authorList.push(...authorsFromText(b.text)); continue; }
+    if (t === "author") {
+      sawAuthor = true;
+      const ab = authorBlock(b.text);
+      if (ab.label && res.authorLabel === null) res.authorLabel = ab.label;
+      authorList.push(...ab.names);
+      continue;
+    }
     if (!seenQuestion && PRE_TYPES.has(t)) { preLines.push(rawLine(b)); continue; }
     extraLines.push(rawLine(b));
   }
@@ -990,8 +1038,7 @@ function composeFields(f: Partial<CardFields>): string {
   if (f.comment !== null && f.comment !== undefined) marker("/", f.comment);
   if (f.sources !== null && f.sources !== undefined) out.push(composeSources(f.sources));
   if (f.authors !== null && f.authors !== undefined) {
-    const names = f.authors.map((s) => s.trim()).filter((s) => s !== "");
-    out.push(names.length ? `@ ${names.join(", ")}` : "@");
+    out.push(composeAuthors(f.authors, f.authorLabel ?? null));
   }
   if (f.extra && f.extra.trim()) out.push(f.extra.trim());
   return out.join("\n");
@@ -1233,7 +1280,7 @@ export const xyChgk = {
   removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,
-  splitFields, composeFields, parseHandoutBlock,
+  splitFields, composeFields, parseHandoutBlock, authorBlock, composeAuthors, AUTHOR_LABELS,
   splitVersions, versionText, setVersion, addVersion, removeVersion, promoteVersion,
   copyTargets,
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,

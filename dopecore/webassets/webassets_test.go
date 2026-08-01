@@ -110,3 +110,25 @@ func TestGzipSkipsAndCompresses(t *testing.T) {
 		t.Fatal("/events must not be gzipped")
 	}
 }
+
+// A font is preloaded with `crossorigin`, which makes even the same-origin
+// request a CORS one. Without ACAO on the response Firefox cannot hand the
+// preloaded bytes to @font-face: it refetches and warns that the preload went
+// unused.
+func TestFontsAllowCrossOriginSoThePreloadIsUsable(t *testing.T) {
+	a := New(Config{
+		Embedded: fstest.MapFS{"static/styles.css": &fstest.MapFile{Data: []byte(".app{}")}},
+		Fonts:    fstest.MapFS{"fonts/noto-sans-var.woff2": &fstest.MapFile{Data: []byte("woff2")}},
+	})
+	rec := httptest.NewRecorder()
+	a.ServeFonts().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/static/fonts/noto-sans-var.woff2", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want *", got)
+	}
+	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Errorf("Cache-Control = %q, want immutable", cc)
+	}
+}
