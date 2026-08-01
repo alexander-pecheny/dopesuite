@@ -175,6 +175,7 @@ type HostPresenceCursor = {
 };
 
 const hostRoot = document.getElementById("hostTable") as HTMLElement;
+DopeTable.fitScrollFade(hostRoot.closest(".sheet-frame"));
 const statusNode = document.getElementById("status") as HTMLElement;
 const pageHeading = document.querySelector<HTMLElement>(".host-top h1");
 const ekTabsRoot = document.getElementById("ekTabs");

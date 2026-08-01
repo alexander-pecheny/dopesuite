@@ -628,6 +628,7 @@ function restoreTabScroll(tab: string): void {
   frame.scrollLeft = pos.left;
 }
 
+DopeTable.fitScrollFade(document.querySelector(".sheet-frame"));
 const resultsScroll = DopeTable.bindScrollEdges(document.querySelector(".sheet-frame"), ({left}, frame) => {
   frame.classList.toggle("results-scroll-left", activeTab === "results" && left);
   frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && left);

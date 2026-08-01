@@ -3348,13 +3348,12 @@ body:not(.embedded-match) .grid-match {
   }
 }
 
-/* Public EK viewer tuning. */
+/* Public EK viewer tuning. The frame used to add a static right-edge inset
+   shadow as a "more content" cue; the kit's scroll fade now covers that
+   (content-capped, gone at scroll end), and the full-height shadow painted
+   past short tables' bottom edge. */
 .readonly-battle-popover {
   display: none;
-}
-
-.viewer-readonly .match-main:has(.fight-host) .fight-frame {
-  box-shadow: var(--shadow-scroll-inset);
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table {

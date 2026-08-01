@@ -934,3 +934,39 @@ export function renderTabBar(
     root.appendChild(btn);
   }
 }
+
+// fitScrollFade caps a scroll frame's edge shadows (the kit's scroll-fade
+// backgrounds) to its content box: the shadows are viewport-fixed and would
+// otherwise run the frame's full height/width even where the table has long
+// ended. Observes the frame and its children, so re-renders and resizes keep
+// the cap honest.
+export function fitScrollFade(frame: Element | null | undefined): void {
+  if (!frame || typeof ResizeObserver !== "function") return;
+  const el = frame as HTMLElement;
+  const apply = (): void => {
+    const bounds = el.getBoundingClientRect();
+    let width = 0;
+    let height = 0;
+    for (const child of el.children) {
+      const rect = child.getBoundingClientRect();
+      width = Math.max(width, rect.right - bounds.left + el.scrollLeft);
+      height = Math.max(height, rect.bottom - bounds.top + el.scrollTop);
+    }
+    if (width > 0 && height > 0) {
+      el.style.setProperty("--scroll-fade-content-w", `${Math.round(width)}px`);
+      el.style.setProperty("--scroll-fade-content-h", `${Math.round(height)}px`);
+    }
+  };
+  const observer = new ResizeObserver(apply);
+  const observeChildren = (): void => {
+    observer.disconnect();
+    observer.observe(el);
+    for (const child of el.children) observer.observe(child);
+  };
+  new MutationObserver(() => {
+    observeChildren();
+    apply();
+  }).observe(el, {childList: true});
+  observeChildren();
+  apply();
+}

@@ -90,6 +90,7 @@ interface ViewerInit {
 const pageWindow = window as Window & {__VIEWER_INIT__?: ViewerInit | null};
 
 const viewerRoot = document.getElementById("viewerTable")!;
+DopeTable.fitScrollFade(viewerRoot.closest(".sheet-frame"));
 const statusNode = document.getElementById("status");
 const pageHeading = document.querySelector<HTMLElement>(".host-top h1");
 const viewerTabsRoot = document.getElementById("viewerTabs");

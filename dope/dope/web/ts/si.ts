@@ -789,6 +789,7 @@ function restoreTabScroll(tab: string): void {
   frame.scrollLeft = pos.left;
 }
 
+DopeTable.fitScrollFade(siRoot.closest(".sheet-frame"));
 const resultsScroll = DopeTable.bindScrollEdges(siRoot.closest(".sheet-frame"), ({left}, frame) => {
   frame.classList.toggle("results-scroll-left", isTeamMode() && activeTab === "results" && left);
   frame.classList.toggle("detailed-scroll-left", isTeamMode() && activeTab === "detailed" && left);
