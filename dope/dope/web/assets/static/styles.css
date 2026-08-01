@@ -3782,7 +3782,6 @@ body:not(.embedded-match) .grid-match {
 }
 
 .match-table.brain-crosstable .brain-cross-cols th {
-  font-style: italic;
   color: var(--muted);
 }
 

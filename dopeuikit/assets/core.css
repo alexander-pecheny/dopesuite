@@ -518,8 +518,8 @@
   background-size:
     var(--scroll-fade-content-w) var(--scroll-fade-size),
     var(--scroll-fade-content-w) var(--scroll-fade-size),
-    var(--scroll-fade-content-w) calc(var(--scroll-fade-size) * 0.5),
-    var(--scroll-fade-content-w) calc(var(--scroll-fade-size) * 0.5);
+    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5),
+    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5);
   background-attachment: local, local, scroll, scroll;
 }
 
@@ -546,10 +546,10 @@
     var(--scroll-fade-content-w) var(--scroll-fade-size),
     var(--scroll-fade-size) var(--scroll-fade-content-h),
     var(--scroll-fade-size) var(--scroll-fade-content-h),
-    var(--scroll-fade-content-w) calc(var(--scroll-fade-size) * 0.5),
-    var(--scroll-fade-content-w) calc(var(--scroll-fade-size) * 0.5),
-    calc(var(--scroll-fade-size) * 0.5) var(--scroll-fade-content-h),
-    calc(var(--scroll-fade-size) * 0.5) var(--scroll-fade-content-h);
+    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5),
+    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5),
+    calc(var(--scroll-fade-size) * 0.5) min(var(--scroll-fade-content-h), 100%),
+    calc(var(--scroll-fade-size) * 0.5) min(var(--scroll-fade-content-h), 100%);
   background-attachment: local, local, local, local, scroll, scroll, scroll, scroll;
 }
 

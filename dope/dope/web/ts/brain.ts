@@ -554,8 +554,9 @@ interface CrossRow {
 }
 
 // buildCrosstable renders the sheet's group table: score cells vs each
-// opponent, then О (2/1/0 head-to-head points, finished бои only), + / − / +/−
-// (questions taken and conceded across all бои), М (place, О → ± → +).
+// opponent, then О (head-to-head points, finished бои only), + / − / +/−
+// (questions taken and conceded across all бои), М (place, ranked by the
+// stage's comparator order — КИНСБФ §4.2 by default).
 function buildCrosstable(): HTMLElement {
   const stage = groupStage();
   const rules = groupRules();
@@ -671,7 +672,7 @@ function buildCrosstable(): HTMLElement {
     const stat = (value: string | number, extra = "") => {
       const cell = document.createElement("td");
       cell.className = "number" + (extra ? ` ${extra}` : "");
-      cell.textContent = String(value);
+      cell.textContent = gameTable.formatDisplayText(value);
       tr.appendChild(cell);
     };
     stat(row.points);
@@ -780,8 +781,11 @@ function applyMarkEdits(edits: CellEdit[]): void {
   for (const [code, ops] of opsByCode) sendOps(code, ops);
 }
 
-let activeCoord: CellCoord | null = null;
-let lastSelection: {anchor: CellCoord; focus: CellCoord} | null = null;
+function cellAt(coord: CellCoord | null): HTMLElement | null {
+  if (!coord) return null;
+  const at = boutAtRow(coord.row);
+  return at ? cellNode(at.code, coord.col, at.q) : null;
+}
 
 const cellSelection: CellRangeSelection = gameTable.createCellRangeSelection({
   root: brainRoot,
@@ -793,60 +797,43 @@ const cellSelection: CellRangeSelection = gameTable.createCellRangeSelection({
     const row = globalRow(ctx.code, ctx.q);
     return row < 0 ? null : {row, col: ctx.side};
   },
-  cellAtCoord: (coord) => {
-    if (!coord) return null;
-    const at = boutAtRow(coord.row);
-    return at ? cellNode(at.code, coord.col, at.q) : null;
-  },
+  cellAtCoord: cellAt,
   serialize: serializeMark,
   parse: parseMarkText,
   cycle: (cell) => MARK_CYCLE[parseMarkText(serializeMark(cell))] ?? "right",
   applyValues: applyMarkEdits,
-  onSelectionChange: (selection) => {
-    lastSelection = selection?.anchor && selection.focus ? {anchor: selection.anchor, focus: selection.focus} : null;
-  },
-  onActiveChange: (cell, coord) => {
+  onActiveChange: (cell) => {
     brainRoot.querySelector(".answer-cell.active")?.classList.remove("active");
     cell?.classList.add("active");
-    activeCoord = coord ? {row: coord.row, col: coord.col} : null;
   },
 });
 cellSelection.bind();
 
 // restoreSelection re-applies the cursor after a re-render rebuilt the cells.
 function restoreSelection(): void {
-  if (activeTab !== "protocol" || !lastSelection) return;
-  cellSelection.setSelection(lastSelection.anchor, lastSelection.focus, {focus: false});
+  if (activeTab !== "protocol" || !cellSelection.anchor) return;
+  cellSelection.setSelection(cellSelection.anchor, cellSelection.focus, {focus: false});
 }
 
 function moveActive(dRow: number, dCol: number, extend: boolean): void {
-  if (!activeCoord) return;
+  const from = cellSelection.focus;
+  if (!from) return;
   const next = {
-    row: gameTable.clamp(activeCoord.row + dRow, 0, totalRows() - 1),
-    col: gameTable.clamp(activeCoord.col + dCol, 0, 1),
+    row: gameTable.clamp(from.row + dRow, 0, totalRows() - 1),
+    col: gameTable.clamp(from.col + dCol, 0, 1),
   };
-  if (extend) {
-    cellSelection.setSelection(cellSelection.anchor || activeCoord, next);
-    return;
-  }
-  cellSelection.setSelection(next, next);
+  cellSelection.setSelection(extend ? cellSelection.anchor || from : next, next);
 }
 
 function setMarkForSelection(mark: string): void {
   const cells = cellSelection.selectedCells();
-  const active = activeCoord && cellAtActive();
+  const active = cellAt(cellSelection.focus);
   const targets = cells.length > 1 ? cells : active ? [active] : [];
   applyMarkEdits(targets.map((cell) => ({cell, value: mark})));
 }
 
-function cellAtActive(): HTMLElement | null {
-  if (!activeCoord) return null;
-  const at = boutAtRow(activeCoord.row);
-  return at ? cellNode(at.code, activeCoord.col, at.q) : null;
-}
-
 function handleKeydown(event: KeyboardEvent): void {
-  if (viewer || activeTab !== "protocol" || !activeCoord) return;
+  if (viewer || activeTab !== "protocol" || !cellSelection.focus) return;
   const target = event.target as HTMLElement | null;
   if (target && (target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
   const key = event.key.toLowerCase();

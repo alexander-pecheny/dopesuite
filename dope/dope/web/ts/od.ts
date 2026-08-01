@@ -667,24 +667,13 @@ function updateHeaderProgress(): void {
 }
 
 function renderTabs(): void {
-  odTabsRoot.replaceChildren();
-  for (const tab of TABS) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "match-tab" + (activeTab === tab.key ? " active" : "");
-    btn.textContent = tab.label;
-    btn.setAttribute("role", "tab");
-    btn.setAttribute("aria-selected", activeTab === tab.key ? "true" : "false");
-    btn.addEventListener("click", () => {
-      if (activeTab === tab.key) return;
-      activeTab = tab.key;
-      if (window.location.hash.replace(/^#/, "") !== tab.key) {
-        history.replaceState(null, "", `#${tab.key}`);
-      }
-      render();
-    });
-    odTabsRoot.appendChild(btn);
-  }
+  DopeTable.renderTabBar(odTabsRoot, TABS, activeTab, (key) => {
+    activeTab = key;
+    if (window.location.hash.replace(/^#/, "") !== key) {
+      history.replaceState(null, "", `#${key}`);
+    }
+    render();
+  });
 }
 
 // === Ввод ===
