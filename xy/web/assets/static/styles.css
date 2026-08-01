@@ -1056,6 +1056,52 @@
 .fld-add:hover { color: var(--text); border-color: var(--muted); }
 .fld-muted .fld-add { opacity: 0.75; }
 .fld-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+/* массовое действие — the bar is fixed to the bottom of the viewport because
+   the selection spans the whole board: it must stay reachable however far you
+   have scrolled to tick the next list. */
+.mass-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: var(--space-3);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100vw - 2 * var(--space-3));
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-popover-up);
+}
+.mass-count { font-weight: var(--fw-semibold); white-space: nowrap; }
+.mass-hint { color: var(--muted); }
+.mass-acts { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+.mass-act { width: auto; padding: var(--space-1) var(--space-2); font-size: var(--text-sm); cursor: var(--cursor-action); }
+/* --red is the tinted FILL; --red-dark is its designated on-colour in every
+   theme, so the ink has to be that or the word washes out on the button. */
+.mass-act-danger { color: var(--red-dark); background: var(--red); }
+.mass-body { display: flex; flex-direction: column; gap: var(--space-1); }
+/* The board scrolls under the bar; without this the last row of cards hides
+   behind it and cannot be ticked. */
+body.mass-mode .kanban { padding-bottom: 72px; }
+.kcard-check, .klist-check { display: inline-flex; align-items: center; margin-right: var(--space-1); cursor: var(--cursor-action); }
+.kcard-check { float: right; margin-left: var(--space-1); }
+/* Centring a content-width flex box on a phone collapses it into a tall narrow
+   column — seven action buttons stacked. Pin it to both edges instead, which is
+   where a bottom bar belongs on a phone anyway. */
+@media (max-width: 760px) {
+  .mass-bar { left: var(--space-2); right: var(--space-2); transform: none; max-width: none; justify-content: space-between; }
+  .mass-acts { flex: 1 1 100%; }
+  .mass-act { flex: 1 1 auto; }
+  /* …but the destructive one never grows to fill a row on its own: the biggest
+     target on the bar should not be the irreversible one. */
+  .mass-act-danger { flex: 0 1 auto; }
+}
+
 .fld-label { font-size: var(--text-sm); font-weight: var(--fw-semibold); color: var(--muted); }
 .fld-rm, .fld-row-rm, .fld-tag-rm {
   border: none; background: transparent; color: var(--muted);

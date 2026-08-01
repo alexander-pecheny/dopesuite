@@ -243,6 +243,17 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       button small id="moveListMoveBtn" "Переместить"
     message id="moveListMessage"
 
+  -- Массовое действие: the bar that appears once cards are ticked, and the one
+  -- dialog every action runs through. The dialog IS the confirmation — it names
+  -- the count, holds whatever the action needs picked, and its primary button
+  -- does the thing; there is no second «точно?» to click past.
+  mount id="massBar" kind="mass-bar" hidden
+  modal id="massOverlay" label="Массовое действие" title="Массовое действие" done="Закрыть" doneid="massClose"
+    mount id="massBody" kind="mass-body"
+    row gap="sm" align="center" wrap
+      button id="massRun" "Выполнить"
+    message id="massMessage"
+
   -- lists management overlay: reorder lists (drag / position), select several
   -- and move them together, and link consecutive lists into a group
   -- (list_of_lists) with shared numbering + combined export.

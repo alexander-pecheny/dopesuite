@@ -22,6 +22,7 @@ import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
 import { type ColorField, colorField, LABEL_COLORS, textOn } from "./colorpick.js";
 import { anchorPopup } from "./popup.js";
+import { type MassAction, xyMass } from "./massaction.js";
 import type { DataKey } from "./crypto.js";
 import type { SyncStatus } from "./sync.js";
 import type { OpBody } from "./store.js";
@@ -169,6 +170,10 @@ window.dopeMenu?.setExtras([{
   label: "📋 Управление списками",
   title: "Переупорядочить списки и связать их в группы (списки списков)",
   onClick: () => openListsManage(),
+}, {
+  label: "☑️ Массовое действие",
+  title: "Отметить карточки на всей доске и сделать с ними одно действие",
+  onClick: () => setMassMode(!massMode),
 }, {
   label: "📥 Импорт",
   title: "Импортировать пакет вопросов (.4s, .zip или .docx)",
@@ -520,6 +525,7 @@ function render(): void {
   }
   kanban.append(renderAddList());
   paintLabels();
+  if (massMode) { massSelected = xyMass.prune(massSelected, state.cards); renderMassBar(); }
   kanban.scrollLeft = scrollLeft;
   for (const b of kanban.querySelectorAll<HTMLElement>(".kcards")) {
     const top = listScroll.get(b.dataset.listId);
@@ -566,7 +572,20 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
     el("span", { class: "klist-title", text: list.title || "(без названия)" }));
   const qCount = cards.filter((c) => c.kind === "question").length;
   if (qCount) headMain.append(el("span", { class: "klist-count", text: questionCountLabel(qCount) }));
-  col.append(el("div", { class: "klist-head" }, headMain, addCardBtn, menuWrap));
+  const headKids: HTMLElement[] = [];
+  if (massMode) {
+    const ids = cards.map((c) => c.id);
+    const all = el("input", { type: "checkbox", "aria-label": "Отметить весь список" }) as HTMLInputElement;
+    all.dataset.listId = String(list.id);
+    all.checked = xyMass.allSelected(massSelected, ids);
+    all.addEventListener("change", () => {
+      massSelected = xyMass.toggleAll(massSelected, ids);
+      renderMassBar();
+      paintMassChecks();
+    });
+    headKids.push(el("label", { class: "klist-check" }, all));
+  }
+  col.append(el("div", { class: "klist-head" }, ...headKids, headMain, addCardBtn, menuWrap));
   if (list.groupId != null) {
     const g = groupById(list.groupId);
     col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт", text: "🔗" + ((g && g.name) || "связанные списки") }));
@@ -700,6 +719,17 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
 
 function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const node = el("div", { class: "kcard kcard-" + (card.kind || "normal"), draggable: "true", dataset: { cardId: card.id }, onclick: () => { void cardDetail.openCard(card); } });
+  // In массовое действие a card is something you pick, not something you open:
+  // the tickbox swallows the click so ticking a run never opens one by accident.
+  if (massMode) {
+    const box = el("input", { type: "checkbox", "aria-label": "Отметить карточку" }) as HTMLInputElement;
+    box.dataset.cardId = String(card.id);
+    box.checked = massSelected.has(card.id);
+    const wrap = el("label", { class: "kcard-check" }, box);
+    wrap.addEventListener("click", (e) => { e.stopPropagation(); });
+    box.addEventListener("change", () => massToggle(card.id));
+    node.append(wrap);
+  }
   const labelRow = el("div", { class: "kcard-labels" });
   // Derived from the text, so it leads the row: nobody put it there and nobody
   // can take it off, unlike everything after it.
@@ -2475,6 +2505,234 @@ timeline = createTimeline({
   cardSessions: (cardId) => playingsOf(cardId).map((id) => ({ id, label: sessionName(id) })),
   attachments: { url: attachments.attachmentUrl, download: attachments.download },
 });
+
+// ---- массовое действие ----
+// Ticking cards across the whole board, then doing one thing to all of them.
+// The rules (what a select-all covers, board order, how a partly-failed run
+// reads) live in massaction.js; this is the DOM, the pickers and the writes.
+let massMode = false;
+let massSelected: Set<number> = new Set();
+let massAction: MassAction | null = null;
+
+function massCards(): BoardCard[] {
+  return xyMass.ordered(massSelected, boardCardsInOrder());
+}
+
+// boardCardsInOrder flattens the board the way the reader sees it: lists by
+// rank, cards by rank inside each. A bulk move must land its cards in that
+// order, not in whatever order they were ticked.
+function boardCardsInOrder(): BoardCard[] {
+  return [...state.lists].sort(byRank).flatMap((l) => cardsOf(l.id));
+}
+
+function setMassMode(on: boolean): void {
+  massMode = on;
+  if (!on) massSelected = new Set();
+  document.body.classList.toggle("mass-mode", on);
+  render();
+}
+
+function massToggle(id: number): void {
+  massSelected = xyMass.toggleOne(massSelected, id);
+  renderMassBar();
+  paintMassChecks();
+}
+
+// paintMassChecks syncs every checkbox to the selection without rebuilding the
+// board — a full render on each tick would lose the scroll position and make
+// ticking a run of cards feel like it was fighting back.
+function paintMassChecks(): void {
+  for (const box of kanban.querySelectorAll<HTMLInputElement>(".kcard-check input")) {
+    box.checked = massSelected.has(Number(box.dataset.cardId));
+  }
+  for (const box of kanban.querySelectorAll<HTMLInputElement>(".klist-check input")) {
+    const ids = cardsOf(Number(box.dataset.listId)).map((c) => c.id);
+    box.checked = xyMass.allSelected(massSelected, ids);
+  }
+}
+
+function renderMassBar(): void {
+  const bar = byId("massBar");
+  bar.hidden = !massMode;
+  if (!massMode) return;
+  const n = massSelected.size;
+  const actions = n
+    ? xyMass.MASS_ACTIONS.map((a) => {
+        const b = el("button", { class: "input mass-act" + (a.danger ? " mass-act-danger" : ""), type: "button", title: a.title, text: a.label });
+        b.addEventListener("click", () => openMass(a));
+        return b;
+      })
+    : [el("span", { class: "mass-hint", text: "Отметьте карточки" })];
+  const done = el("button", { class: "input", type: "button", text: "Готово" });
+  done.addEventListener("click", () => setMassMode(false));
+  bar.replaceChildren(
+    el("span", { class: "mass-count", text: n ? `Выбрано: ${xyMass.cardCount(n)}` : "Массовое действие" }),
+    el("div", { class: "mass-acts" }, ...actions),
+    done,
+  );
+}
+
+// ---- the one dialog ----
+const massOverlay = byId("massOverlay");
+let massTarget: { listId: number; ctx: MoveCtx } | null = null;
+let massPick: number | null = null;
+
+function closeMass(): void { overlayStack.pop(); }
+function hideMass(): void { massOverlay.hidden = true; massAction = null; massTarget = null; massPick = null; }
+
+async function openMass(action: MassAction): Promise<void> {
+  massAction = action;
+  massPick = null;
+  massTarget = null;
+  const n = massSelected.size;
+  massOverlay.querySelector<HTMLElement>(".appearance-modal-title")!.textContent = `${action.label}: ${xyMass.cardCount(n)}`;
+  byId("massMessage").textContent = "";
+  const run = byId<HTMLButtonElement>("massRun");
+  run.textContent = `${action.verb} (${n})`;
+  run.disabled = action.needs !== "none";
+  run.classList.toggle("btn-danger", !!action.danger);
+  const body = byId("massBody");
+  body.replaceChildren();
+  if (action.needs === "label") buildMassLabelPick(body, run);
+  else if (action.needs === "session") buildMassSessionPick(body, run);
+  else if (action.needs === "target") await buildMassTargetPick(body, run);
+  else body.append(el("p", { class: "label-empty", text: "Карточки будут удалены. Их можно восстановить в течение 14 дней." }));
+  massOverlay.hidden = false;
+  overlayStack.open({ el: massOverlay, close: hideMass });
+}
+
+// The label picker is the board's own label list, same chips as the card's —
+// reusing the vocabulary rather than inventing a bulk-only one.
+function buildMassLabelPick(body: HTMLElement, run: HTMLButtonElement): void {
+  if (!state.labels.length) { body.append(el("p", { class: "label-empty", text: "На доске нет меток." })); return; }
+  const row = el("div", { class: "label-picker" });
+  for (const l of [...state.labels].sort((a, b) => a.name.localeCompare(b.name))) {
+    const chip = el("button", { class: "label-pick", type: "button", dataset: { c: l.color }, text: l.name });
+    chip.addEventListener("click", () => {
+      massPick = l.id;
+      for (const other of row.querySelectorAll(".label-pick")) other.classList.remove("active");
+      chip.classList.add("active");
+      run.disabled = false;
+    });
+    row.append(chip);
+  }
+  body.append(row);
+  paintLabels();
+}
+
+function buildMassSessionPick(body: HTMLElement, run: HTMLButtonElement): void {
+  if (!state.sessions.length) { body.append(el("p", { class: "label-empty", text: "На доске нет тестов." })); return; }
+  const sel = el("select", { class: "input" }) as HTMLSelectElement;
+  sel.append(el("option", { value: "", text: "— выберите тест —" }));
+  for (const s of state.sessions) sel.append(el("option", { value: String(s.id), text: sessionName(s.id) }));
+  sel.addEventListener("change", () => { massPick = Number(sel.value) || null; run.disabled = !massPick; });
+  body.append(sel);
+}
+
+// Move/copy reuses the card's own destination machinery (loadMoveBoard →
+// MoveCtx), so a bulk move offers exactly the boards, lists and positions a
+// single card's does.
+async function buildMassTargetPick(body: HTMLElement, run: HTMLButtonElement): Promise<void> {
+  const boardSel = el("select", { class: "input" }) as HTMLSelectElement;
+  const listSel = el("select", { class: "input" }) as HTMLSelectElement;
+  body.append(el("label", { class: "section-label", text: "Доска" }), boardSel,
+              el("label", { class: "section-label", text: "Список" }), listSel);
+  const boards = await cardDetail.moveBoardOptions();
+  for (const b of boards) boardSel.append(el("option", { value: String(b.id), text: b.label }));
+  boardSel.value = String(boardId);
+  const fillLists = async (): Promise<void> => {
+    listSel.replaceChildren();
+    run.disabled = true;
+    massTarget = null;
+    const ctx = await cardDetail.loadMoveBoard(Number(boardSel.value));
+    if (!ctx) { listSel.append(el("option", { value: "", text: "— пароль доски неизвестен —" })); return; }
+    for (const l of ctx.lists) listSel.append(el("option", { value: String(l.id), text: l.title || "(без названия)" }));
+    const pick = (): void => {
+      const listId = Number(listSel.value);
+      massTarget = listId ? { listId, ctx } : null;
+      run.disabled = !massTarget;
+    };
+    listSel.addEventListener("change", pick);
+    pick();
+  };
+  boardSel.addEventListener("change", () => { void fillLists(); });
+  await fillLists();
+}
+
+// runMass performs the action card by card, reporting as it goes. It is not a
+// transaction on purpose: one card failing (a lost connection, a card someone
+// else deleted) must not undo the ones that worked. Failures stay selected, so
+// «try again» means clicking the same button.
+async function runMass(): Promise<void> {
+  const action = massAction;
+  if (!action) return;
+  const cards = massCards();
+  const msg = byId("massMessage");
+  const run = byId<HTMLButtonElement>("massRun");
+  run.disabled = true;
+  const failed = new Set<number>();
+  let ok = 0;
+  for (const [i, card] of cards.entries()) {
+    msg.textContent = `${i + 1} из ${cards.length}…`;
+    try {
+      await applyMass(action, card);
+      ok++;
+    } catch (_) {
+      failed.add(card.id);
+    }
+  }
+  massSelected = failed;
+  render();
+  msg.textContent = xyMass.runSummary(ok, failed.size);
+  run.disabled = false;
+  if (!failed.size) setTimeout(closeMass, 900);
+}
+
+async function applyMass(action: MassAction, card: BoardCard): Promise<void> {
+  switch (action.key) {
+    case "delete":
+      await del("deleteCard", `/api/cards/${card.id}`);
+      state.cards = state.cards.filter((c) => c.id !== card.id);
+      forgetCardLabels([card]);
+      return;
+    case "label-add":
+    case "label-del": {
+      if (massPick == null) throw new Error("не выбрана метка");
+      const own = state.cardLabels.filter((a) => a.cardId === card.id);
+      const keep = action.key === "label-del"
+        ? own.filter((a) => !(a.labelId === massPick && a.sessionId == null))
+        : own.some((a) => a.labelId === massPick && a.sessionId == null) ? own : [...own, { cardId: card.id, labelId: massPick, sessionId: null }];
+      await jput(`/api/cards/${card.id}/labels`, { labels: keep.map((a) => ({ label_id: a.labelId, session_id: a.sessionId })) });
+      state.cardLabels = state.cardLabels.filter((a) => a.cardId !== card.id).concat(keep);
+      return;
+    }
+    case "session-add":
+    case "session-del": {
+      if (massPick == null) throw new Error("не выбран тест");
+      const plays = playingsOf(card.id);
+      const next = action.key === "session-del"
+        ? plays.filter((id) => id !== massPick)
+        : plays.includes(massPick) ? plays : [...plays, massPick];
+      await jput(`/api/cards/${card.id}/sessions`, { session_ids: next });
+      state.cardSessions = state.cardSessions.filter((p) => p.cardId !== card.id)
+        .concat(next.map((sessionId) => ({ cardId: card.id, sessionId })));
+      // A playing that is gone takes its scoped labels with it (ADR-0004).
+      if (action.key === "session-del") {
+        state.cardLabels = state.cardLabels.filter((a) => !(a.cardId === card.id && a.sessionId === massPick));
+      }
+      return;
+    }
+    case "move":
+    case "copy": {
+      if (!massTarget) throw new Error("не выбран список");
+      await cardDetail.transferCard(card, massTarget.listId, massTarget.ctx, action.key === "move");
+      return;
+    }
+  }
+}
+
+byId("massRun").addEventListener("click", () => { void runMass(); });
+byId("massClose").addEventListener("click", closeMass);
 
 // ---- labels ----
 // The card's «Метки» and «Тесты» are two separate pickers (ADR-0004): a label is
