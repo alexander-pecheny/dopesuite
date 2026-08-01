@@ -125,6 +125,7 @@ var xyMounts = map[string]base.MountSpec{
 	"token-list":        {Tag: "ul", Classes: []string{"token-list"}},
 	"token-value":       {Tag: "code", Classes: []string{"token-value"}},
 	"card-copy-msg":     {Tag: "div", Classes: []string{"card-copy-msg"}},
+	"card-versions":     {Tag: "div", Classes: []string{"seg", "seg-grow", "card-versions"}},
 	"mass-bar":          {Tag: "div", Classes: []string{"mass-bar"}},
 	"mass-body":         {Tag: "div", Classes: []string{"mass-body"}},
 	"import-count":      {Tag: "span", Classes: []string{"import-count"}},

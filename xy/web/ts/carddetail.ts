@@ -1,5 +1,5 @@
 // carddetail.ts — the card-detail modal, lifted out of board.js into a typed
-// create(deps) factory: create mode (addCard/addTestCard), the Просмотр/Поля/
+// create(deps) factory: card creation (addCard), the Просмотр/Поля/
 // Текст views over a shared draft (carddraft.js), the field builders with their
 // hand-drawn suggest dropdowns, the edit-tools row (ударение / типограф / →.4s),
 // direct links + deep links, open/close/back, read tracking, move/copy
@@ -20,12 +20,12 @@ import { xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
-import type { CardFields, Handout, Tester, TesterLike } from "./chgk.js";
+import type { CardFields, CopyTarget, Handout, Tester, TesterLike } from "./chgk.js";
 import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing, Snapshot, UnreadFlags } from "./unlock.js";
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
 
-const { fetchJSON, jpost, jput, jdelete, el } = xyApp;
+const { fetchJSON, jpost, jput, jdelete, el, onCmdEnter, swapIcon, linkIcon, clipboardIcon, cloneIcon, backIcon } = xyApp;
 const { keyBetween } = xyRank;
 
 // ---- pure helpers (exported for tests and for the board) ----
@@ -94,6 +94,8 @@ export interface AttachmentsSeam {
   load(cardId: number): Promise<void>;
   imageNames(): string[];
   clearImageNames(): void;
+  upload(file: File, lossless: boolean, name: string): Promise<void>;
+  resolveImages(cards: ReadonlyArray<{ id: number }>, wanted: Set<string>): Promise<Map<string, string>>;
 }
 
 // The board-owned halves of read tracking: the kanban card dot and the 🔔 badge.
@@ -120,6 +122,9 @@ export interface CardDetailDeps {
   renderLabelPicker(card: BoardCard): void;
   paintLabels(): void;
   questionNumberFor(card: PreviewCardLike): string | null;
+  // The board's shared transient popup (see board.js#popupMenu) — the copy
+  // button opens one when a card has more than one thing worth copying.
+  popupMenu(anchor: HTMLElement, items: Array<{ label: string; onClick: () => void }>): void;
   forgetCardLabels(cards: BoardCard[]): void;
   preview: PreviewSeam;
   attachments: AttachmentsSeam;
@@ -152,7 +157,7 @@ export interface MoveCtx {
 }
 
 export interface CardDetail {
-  addCard(list: BoardList): void;
+  addCard(list: BoardList): Promise<void>;
   openCard(card: BoardCard, opts?: { returnTo?: CardReturn | null }): Promise<void>;
   closeCard(): void;
   openCardId(): number | null;
@@ -181,9 +186,13 @@ interface FieldReaders {
   nezachet: FieldReader<string | null>;
   comment: FieldReader<string | null>;
   sources: FieldReader<string[] | null>;
-  authors: FieldReader<string[] | null>;
+  authors: FieldReader<AuthorsValue>;
   hndt: FieldReader<string | null>;
 }
+
+// The Автор field reads back as two things: the names and the caption chosen for
+// them. `names: null` is the field being absent altogether.
+interface AuthorsValue { names: string[] | null; label: string | null }
 
 interface MoveBoardItem { id: number; name?: string; name_enc?: string | null; schema_version?: number }
 
@@ -232,7 +241,15 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   // ---- card detail state ----
   let openCardId: number | null = null;
-  let pendingList: BoardList | null = null; // set while composing a brand-new (unsaved) card
+  // Set while the open card is one just created and still untouched. The card is
+  // persisted from the start; this only drives the blank-form affordances — the
+  // 4s stub, the two fields opened ready to type into, and hiding Просмотр,
+  // which has nothing to show yet.
+  let freshCard = false;
+  // Which version of the question the Просмотр and Поля views are scoped to.
+  // Purely a view cursor — versions live in the 4s itself (see chgk.js), so
+  // nothing about it is persisted, and Формат 4s ignores it entirely.
+  let versionIdx = 0;
   // cardReturn remembers where the open card was launched from so its ↩️ back
   // button lands there: null → plain close (board view); {listId, cardId} → reopen
   // that list's preview scrolled to this question (set only when opened from a
@@ -267,32 +284,34 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   const CARD_TABS = ["preview", "fields", "text"] as const;
   const tabBtn = (v: string): HTMLButtonElement => byId<HTMLButtonElement>("cardTab" + v[0].toUpperCase() + v.slice(1));
 
-  // ---- add card (create mode) ----
-  // addCard opens the card detail in "create mode" — only the description editor
-  // is shown (the card isn't persisted until you save a description, so we never
-  // create empty cards). Labels/attachments/move/timeline appear only when editing
-  // an existing card.
-  function addCard(list: BoardList): void {
-    pendingList = list;
-    openCardId = null;
-    cardView = "";
-    cardFieldReaders = null;
-    draft.blank();
-    deps.attachments.clearImageNames();
-    cardDescEl.value = "";
-    cardAliasEl.value = "";
-    cardKindEl.hidden = false;
-    cardKindEl.value = "question";
-    cardMessageEl.textContent = "";
-    cardDetailBox.classList.add("creating");
-    byId("cardCopy").hidden = true; // no number/desc yet
-    cardOverlay.hidden = false;
-    overlayStack.open({ el: cardOverlay, close: hideCard, confirm: confirmLeaveCard });
-    // New card: no preview yet — open straight into the structured editor.
-    lastEditView = "fields";
-    setCardView("fields");
-    cardDescEl.focus();
-  }
+  // ---- add card ----
+  // addCard persists a blank card and opens it. It used to stay unsaved until you
+  // typed a description, which meant everything a card needs a row for — labels,
+  // тесты, вложения, the лента, move/copy — was hidden on the one screen where
+  // you most want to attach a picture (issue #26). A blank card is a real card;
+  // an accidental one is deleted like any other.
+  async function addCard(list: BoardList): Promise<void> {
+    const existing = deps.cardsOf(list.id);
+    const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
+    const kind = "question";
+    try {
+      const dk = mustDK();
+      const res = await verbs.create("createCard", `/api/lists/${list.id}/cards`, {
+        description_enc: await xyCrypto.encField(dk, ""), rank, kind,
+      });
+      const card: BoardCard = {
+        id: res.id as number, listId: list.id, kind, rank, desc: "",
+        handoutMeta: null, alias: null, createdAt: nowStamp(),
+      };
+      state().cards.push(card);
+      deps.render();
+      await openCard(card, { fresh: true });
+    } catch (err) {
+      // The overlay is not open yet, so its message line would be invisible —
+      // this failure has to surface on the board itself.
+      deps.setStatus("error");
+      alert("Не удалось создать карточку: " + errMsg(err));
+    }  }
 
   // fitTextarea grows a textarea to fit its content so the user never scrolls
   // inside it (CSS min-height still sets the floor). scrollHeight is 0 while the
@@ -316,9 +335,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function openCardCard(): BoardCard | undefined { return state().cards.find((c) => c.id === openCardId); }
 
   function draftKind(): string {
-    if (pendingList) return cardKindEl.value || "question";
     const c = openCardCard();
-    return c ? c.kind : "question";
+    return c ? c.kind : cardKindEl.value || "question";
   }
   function fieldsAvailable(): boolean { return draftKind() === "question"; }
 
@@ -407,10 +425,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     captureDraft();
     const btn = cardSaveBtn;
     // The alias is NOT part of this: it is a separate column with its own save
-    // button (refreshAliasState). «Сохранить» is about the card's 4s content —
-    // on a NEW card that content still carries the alias along (see cardSave), so
-    // the alias only counts as "dirty" here while creating.
-    const dirty = draft.contentDirty(!!pendingList);
+    // button (refreshAliasState). «Сохранить» is about the card's 4s content.
+    const dirty = draft.contentDirty(false);
     btn.disabled = !dirty;
     // Просмотр is read-only, so nothing can be dirty there; the button hides.
     btn.hidden = cardView === "preview" && !dirty;
@@ -420,10 +436,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   }
 
   // refreshAliasState enables the alias's own save button only when the input
-  // differs from what is persisted. On a card being created there is no alias
-  // column yet (the button is data-edit-only, hidden), so this is a no-op then.
+  // differs from what is persisted.
   function refreshAliasState(): void {
-    if (pendingList) return;
     const cur = cardAliasEl.value.trim() || null;
     cardAliasSaveBtn.disabled = !draft.aliasDirty(cur);
   }
@@ -440,13 +454,17 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     for (const t of CARD_TABS) tabBtn(t).classList.toggle("active", t === view);
     tabBtn("text").textContent = "Формат 4s";
     tabBtn("fields").hidden = !fieldsAvailable();
-    tabBtn("preview").hidden = !!pendingList;
+    // Nothing to preview until the card has content; the tab appears as soon as
+    // it does, so the flag needs no clearing.
+    tabBtn("preview").hidden = freshCard && !draft.desc.trim();
     byId("cardViewTabs").hidden = false;
     // (the save button's visibility is refreshSaveState's alone — see the end of
     // this function — because it depends on more than the view)
     // The tools edit text, so they follow the two edit views. →.4s additionally
     // needs the raw 4s editor it types into.
     byId("cardEditTools").hidden = view === "preview";
+    byId("cardAddVersion").hidden = !fieldsAvailable();
+    renderVersionTabs();
     byId("cardTypo").hidden = false;
     byId("cardTo4s").hidden = view !== "text" || !fieldsAvailable();
     byId("cardDescLabel").textContent = "Описание";
@@ -460,7 +478,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       // author is set — that's still a blank form.
       const bare = ta.value.trim();
       const authorOnly = state().defaultAuthor && bare === "@ " + state().defaultAuthor;
-      if (pendingList && (!bare || authorOnly)) {
+      if (freshCard && (!bare || authorOnly)) {
         ta.value = questionStub(state().defaultAuthor);
         ta.focus();
         ta.setSelectionRange(2, 2);
@@ -519,7 +537,25 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const sel = el("select", { class: "input fld-input" }) as HTMLSelectElement;
     const cardImageNames = deps.attachments.imageNames();
     for (const n of cardImageNames) sel.append(el("option", { value: n, text: n }));
-    const body = el("div", { class: "fld-body" }, toggle, ta, sel);
+    // Picking a handout picture used to mean attaching the file further down the
+    // card first, then coming back up here to choose it — and on a card that had
+    // no attachments yet the dropdown was simply empty, with no way out of it
+    // (issue #26). This attaches and selects in one gesture.
+    const filePick = el("input", { type: "file", accept: "image/*", hidden: true }) as HTMLInputElement;
+    const attachBtn = el("button", { class: "input fld-add-row", type: "button", text: "📎 Прикрепить…", title: "Загрузить картинку и подставить её сюда" });
+    attachBtn.addEventListener("click", () => filePick.click());
+    filePick.addEventListener("change", async () => {
+      const file = filePick.files && filePick.files[0];
+      filePick.value = ""; // so re-picking the same file fires change again
+      if (!file) return;
+      try {
+        await deps.attachments.upload(file, true, file.name);
+        ensureOption(sel, file.name);
+        sel.value = file.name;
+      } catch (err) { cardMessageEl.textContent = errMsg(err); }
+    });
+    const imgRow = el("div", { class: "fld-row" }, sel, attachBtn, filePick);
+    const body = el("div", { class: "fld-body" }, toggle, ta, imgRow);
     let mode: "text" | "image" = initial && initial.kind === "image" ? "image" : "text";
     if (initial) {
       if (initial.kind === "image") { ensureOption(sel, initial.name); sel.value = initial.name || ""; }
@@ -530,7 +566,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       modeText.classList.toggle("active", mode === "text");
       modeImg.classList.toggle("active", mode === "image");
       ta.hidden = mode !== "text";
-      sel.hidden = mode !== "image";
+      imgRow.hidden = mode !== "image";
       if (mode === "text" && present) fitTextarea(ta);
     };
     modeText.addEventListener("click", () => { mode = "text"; syncMode(); });
@@ -577,12 +613,23 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   }
 
   // buildAuthorsField: a tag input (like labels) seeded with autocomplete from the
-  // board's existing authors; free text adds a new author.
-  function buildAuthorsField(initial: string[] | null, suggestions: string[]): FieldReader<string[] | null> {
+  // board's existing authors; free text adds a new author. The field's own label
+  // is a dropdown, because the caption is a choice the 4s carries as a
+  // "!!override" — Автор / Авторка / Авторы / Авторки (issue #44).
+  function buildAuthorsField(initial: string[] | null, suggestions: string[], label: string | null): FieldReader<AuthorsValue> {
     const wrap = el("div", { class: "fld" });
     const addBtn = el("button", { class: "fld-add", type: "button", text: "+ Автор", title: "Добавить поле" });
     const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
-    const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Автор" }), rmBtn);
+    const labelSel = el("select", { class: "fld-label-select", title: "Подпись поля в экспорте" }) as HTMLSelectElement;
+    for (const l of xyChgk.AUTHOR_LABELS) labelSel.append(el("option", { value: l, text: l }));
+    // A card may already carry a caption of its own («!!Составитель»). It gets its
+    // own entry rather than being silently folded into Автор — nothing an editor
+    // wrote is thrown away by opening the card.
+    if (label && !(xyChgk.AUTHOR_LABELS as readonly string[]).includes(label)) {
+      labelSel.append(el("option", { value: label, text: label }));
+    }
+    labelSel.value = label || xyChgk.AUTHOR_LABELS[0];
+    const head = el("div", { class: "fld-head" }, labelSel, rmBtn);
     const tags = el("div", { class: "fld-tags" });
     const tagSet: string[] = [];
     const inp = el("input", { class: "input fld-tag-input", type: "text", placeholder: "имя автора…" }) as HTMLInputElement;
@@ -612,9 +659,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // Include the in-progress text without touching the input; actual commits
     // happen on Enter/comma/blur/suggestion-pick.
     return { node: wrap, read: () => {
-      if (!present) return null;
+      if (!present) return { names: null, label: null };
       const v = inp.value.trim();
-      return v ? [...tagSet, v] : tagSet.slice();
+      return { names: v ? [...tagSet, v] : tagSet.slice(), label: labelSel.value || null };
     } };
   }
 
@@ -624,7 +671,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const f = xyChgk.splitFields(draft.desc);
     // A brand-new card pre-fills the user's default author (a /profile setting)
     // and opens the two fields every question has, ready to type into.
-    const fresh = !!pendingList && !draft.desc.trim();
+    const fresh = freshCard && !draft.desc.trim();
     if (fresh && f.authors == null && state().defaultAuthor) f.authors = [state().defaultAuthor];
     cardFieldsPre = f.preMarkup;
     cardFieldsExtra = f.extra;
@@ -632,13 +679,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     box.replaceChildren();
     const R: FieldReaders = {
       handout: buildHandoutField(f.handout),
-      question: buildField("Текст вопроса", "area", f.question, { open: fresh }),
+      question: buildField("Текст вопроса", "area", f.question == null ? null : xyChgk.versionText(f.question, versionIdx), { open: fresh }),
       answer: buildField("Ответ", "area", f.answer, { open: fresh }),
       zachet: buildField("Зачёт", "input", f.zachet),
       nezachet: buildField("Незачёт", "input", f.nezachet),
       comment: buildField("Комментарий", "area", f.comment),
       sources: buildSourcesField(f.sources, boardSources()),
-      authors: buildAuthorsField(f.authors, boardAuthors()),
+      authors: buildAuthorsField(f.authors, boardAuthors(), f.authorLabel),
       hndt: buildField("Доп. разметка для генерации раздаток", "area", draft.meta, { muted: true }),
     };
     for (const k of ["handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"] as const) box.append(R[k].node);
@@ -648,19 +695,122 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardFieldReaders = R;
   }
 
+  // ---- question versions ----
+  // The Поля editor shows one version; the field it writes back is the whole
+  // thing, with only that version replaced. Reading the current field off the
+  // draft rather than off the editor is what keeps the versions you cannot see
+  // from being dropped on save.
+  function questionField(): string | null {
+    const q = xyChgk.splitFields(draft.desc).question;
+    return q == null ? null : q;
+  }
+
+  function writeQuestionVersion(edited: string | null): string | null {
+    if (edited == null) return null;
+    const whole = questionField();
+    if (whole == null) return edited;
+    return xyChgk.setVersion(whole, versionIdx, edited);
+  }
+
+  function versionCount(): number {
+    const q = questionField();
+    return q == null ? 1 : xyChgk.splitVersions(q).length;
+  }
+
+  // previewDesc is the draft as Просмотр should render it: scoped to the selected
+  // version. The list preview and every export still show all of them — a version
+  // IS a page break — but inside the editor you are looking at one wording.
+  function previewDesc(): string {
+    const whole = questionField();
+    if (whole == null || xyChgk.splitVersions(whole).length < 2) return draft.desc;
+    const f = xyChgk.splitFields(draft.desc);
+    f.question = xyChgk.versionText(whole, versionIdx);
+    return xyChgk.composeFields(f);
+  }
+
+  // applyVersions writes a reshaped question field back through the draft and
+  // re-renders. Every version edit — add, delete, promote — goes through here, so
+  // there is one place that keeps draft, cursor and views in step.
+  // The transform is passed in rather than its result: the draft has to be
+  // captured BEFORE the current question field is read, or an in-flight edit is
+  // reshuffled away.
+  function applyVersions(fn: (question: string) => { question: string; index: number }): void {
+    captureDraft();
+    const next = fn(questionField() ?? "");
+    const f = xyChgk.splitFields(draft.desc);
+    f.question = next.question;
+    draft.desc = xyChgk.composeFields(f);
+    cardDescEl.value = draft.desc;
+    selectVersion(next.index);
+  }
+
+  // selectVersion moves the cursor and redraws. Dropping the field readers first
+  // is the whole trick: setCardView captures the draft before rendering, and a
+  // capture taken after the cursor moved would file the outgoing version's text
+  // under the incoming version. renderCardFields rebuilds them immediately.
+  function selectVersion(i: number): void {
+    versionIdx = i;
+    cardFieldReaders = null;
+    setCardView(cardView || "fields");
+    refreshSaveState();
+  }
+
+  // renderVersionTabs draws the second strip. It only appears once there is more
+  // than one version — a plain question must not grow a row of chrome that says
+  // «Версия 1» and nothing else. ↑ and × ride on the selected tab rather than on
+  // every one: three controls per version is a lot on a phone, and both act on
+  // what you are looking at.
+  function renderVersionTabs(): void {
+    const box = byId("cardVersions");
+    const n = versionCount();
+    if (versionIdx >= n) versionIdx = n - 1;
+    const show = n > 1 && fieldsAvailable() && cardView !== "text";
+    box.hidden = !show;
+    if (!show) { box.replaceChildren(); return; }
+    const nodes: HTMLElement[] = [];
+    for (let i = 0; i < n; i++) {
+      const btn = el("button", { class: "seg-btn" + (i === versionIdx ? " active" : ""), type: "button", role: "tab", text: `Версия ${i + 1}` });
+      btn.addEventListener("click", () => { captureDraft(); selectVersion(i); });
+      nodes.push(btn);
+      if (i !== versionIdx) continue;
+      if (i > 0) {
+        const up = el("button", { class: "vtab-act", type: "button", title: "Сделать первой — порядок версий виден в экспорте", "aria-label": "Сделать первой", text: "↑" });
+        up.addEventListener("click", () => applyVersions((q) => xyChgk.promoteVersion(q, i)));
+        nodes.push(up);
+      }
+      const rm = el("button", { class: "vtab-act", type: "button", title: "Удалить эту версию", "aria-label": "Удалить версию", text: "×" });
+      rm.addEventListener("click", () => applyVersions((q) => xyChgk.removeVersion(q, i)));
+      nodes.push(rm);
+    }
+    box.replaceChildren(...nodes);
+  }
+
+  // The header's emoji become SVG so they follow the theme rather than each
+  // platform's own idea of what 🔗 looks like.
+  swapIcon(byId("cardLink"), linkIcon());
+  swapIcon(byId("cardCopy"), clipboardIcon());
+  swapIcon(byId("cardAddVersion"), cloneIcon());
+  swapIcon(byId("cardClose"), backIcon());
+
+  byId("cardAddVersion").addEventListener("click", () => {
+    applyVersions((q) => xyChgk.addVersion(q, versionIdx));
+  });
+
   // readCardFields collapses the Поля editor back into a 4s description + handout
   // settings, preserving the pre-question and unmodelled blocks captured at render time.
   function readCardFields(R: FieldReaders): { desc: string; meta: string | null } {
+    const authors = R.authors.read();
     const rec: Partial<CardFields> = {
       preMarkup: cardFieldsPre,
       handout: R.handout.read(),
-      question: R.question.read(),
+      question: writeQuestionVersion(R.question.read()),
       answer: R.answer.read(),
       zachet: R.zachet.read(),
       nezachet: R.nezachet.read(),
       comment: R.comment.read(),
       sources: R.sources.read(),
-      authors: R.authors.read(),
+      authors: authors.names,
+      authorLabel: authors.label,
       extra: cardFieldsExtra,
     };
     return { desc: xyChgk.composeFields(rec), meta: R.hndt.read() };
@@ -672,7 +822,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const body = byId("cardPreviewBody");
     if (!draft.desc.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: "Пусто." })); return; }
     const c = openCardCard();
-    const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: draft.desc, listId: c ? c.listId : (pendingList ? pendingList.id : 0) };
+    const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: previewDesc(), listId: c ? c.listId : 0 };
     const number = card.kind === "question" ? deps.questionNumberFor(card) : null;
     const reqId = openCardId;
     const screen = byId<HTMLInputElement>("cardPreviewScreen").checked;
@@ -847,9 +997,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     catch (err) { showCopyMsg("Не удалось скопировать: " + errMsg(err), true); }
   }
 
-  async function openCard(card: BoardCard, opts: { returnTo?: CardReturn | null } = {}): Promise<void> {
+  async function openCard(card: BoardCard, opts: { returnTo?: CardReturn | null; fresh?: boolean } = {}): Promise<void> {
     stopReadTracking(); // tear down any timer/observer left over from a previous card
-    pendingList = null;
+    freshCard = !!opts.fresh;
+    versionIdx = 0;
     cardReturn = opts.returnTo || null;
     openCardId = card.id;
     cardView = "";
@@ -858,7 +1009,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const openAlias = card.alias != null ? card.alias : null;
     draft.open(card.desc, openMeta, openAlias);
     cardAliasEl.value = openAlias || "";
-    cardDetailBox.classList.remove("creating");
     cardDescEl.value = card.desc;
     cardMessageEl.textContent = "";
     cardKindEl.hidden = false;
@@ -882,7 +1032,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // previously-open card's content. The preview resolves its own images, so it
     // doesn't wait on the per-card loads below — which run in parallel, not
     // sequentially, to cut the total round-trip.
-    setCardView("preview");
+    // A card just created has nothing to preview, so it opens on the editor.
+    setCardView(freshCard ? lastEditView : "preview");
     await Promise.all([deps.attachments.load(card.id), deps.timeline.load(card.id), populateMoveBoards()]);
     armReadTracking(card);
   }
@@ -1337,7 +1488,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // selector but the value is applied on first save). Test cards never reach here
   // (their selector is hidden in openCard).
   cardKindEl.addEventListener("change", async () => {
-    if (pendingList) { setCardView(fieldsAvailable() ? "fields" : "text"); return; } // create mode: re-eval tabs
     if (openCardId == null) return;
     const card = state().cards.find((c) => c.id === openCardId);
     if (!card) return;
@@ -1386,15 +1536,57 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     copyMsgTimer = setTimeout(() => { node.hidden = true; }, 2500);
   }
 
-  byId("cardCopy").addEventListener("click", async () => {
-    const card = state().cards.find((c) => c.id === openCardId);
-    if (!card) return;
-    try {
-      await copyText(xyChgk.shareText(card.desc, deps.questionNumberFor(card)));
-      showCopyMsg("Скопировано для теста", false);
-    } catch (err) {
-      showCopyMsg("Не удалось скопировать: " + errMsg(err), true);
+  // imagePng fetches a handout picture and re-encodes it as PNG — the one image
+  // type both Chrome and Firefox accept on the clipboard. The attachment is very
+  // likely a WebP (that is what the upload offers), which neither will take.
+  async function imagePng(name: string): Promise<Blob> {
+    const card = openCardCard();
+    if (!card) throw new Error("карточка не открыта");
+    const urls = await deps.attachments.resolveImages([{ id: card.id }], new Set([name]));
+    const url = urls.get(name);
+    if (!url) throw new Error("картинка не найдена среди вложений");
+    const blob = await (await fetch(url)).blob();
+    if (blob.type === "image/png") return blob;
+    const bmp = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("не удалось перекодировать"))), "image/png");
+    });
+  }
+
+  // runCopy performs one target. The image branch hands ClipboardItem a promise
+  // built in the click's own turn rather than awaiting first: Safari only honours
+  // a write that was issued synchronously from the gesture.
+  async function runCopy(t: CopyTarget): Promise<void> {
+    if (t.image) {
+      if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
+        throw new Error("браузер не умеет копировать картинки");
+      }
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": imagePng(t.image) })]);
+      return;
     }
+    await copyText(t.text || "");
+  }
+
+  function copyAndReport(t: CopyTarget): void {
+    void runCopy(t)
+      .then(() => showCopyMsg(`Скопировано: ${t.label.toLowerCase()}`, false))
+      .catch((err) => showCopyMsg("Не удалось скопировать: " + errMsg(err), true));
+  }
+
+  // One button, because a card usually has exactly one thing worth copying. When
+  // it has more — a раздатка, or the legs of a блиц — they are separate pastes
+  // (issue #45), so the button opens the list instead of guessing.
+  byId("cardCopy").addEventListener("click", () => {
+    const card = openCardCard();
+    if (!card) return;
+    captureDraft(); // copy what is on screen, not what was last saved
+    const targets = xyChgk.copyTargets(draft.desc, deps.questionNumberFor(card), versionIdx);
+    if (targets.length === 1) { copyAndReport(targets[0]); return; }
+    deps.popupMenu(byId("cardCopy"), targets.map((t) => ({ label: t.label, onClick: () => copyAndReport(t) })));
   });
 
   // hideCard is the card's teardown, run by the overlay stack when the card is
@@ -1407,7 +1599,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     stopReadTracking();
     cardOverlay.hidden = true;
     openCardId = null;
-    pendingList = null;
+    freshCard = false;
     cardReturn = null;
     cardView = "";
     cardFieldReaders = null;
@@ -1450,7 +1642,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // prompts; a failed save keeps you on the card with the error showing.
   function confirmLeaveCard(): Promise<boolean> {
     captureDraft(); // the active view's edits count, even if the caret left it
-    if (!draft.contentDirty(!!pendingList)) return Promise.resolve(true);
+    if (!draft.contentDirty(false)) return Promise.resolve(true);
     byId("dirtyMessage").textContent = "";
     dirtyOverlay.hidden = false;
     return new Promise<boolean>((resolve) => { dirtyAnswer = resolve; });
@@ -1501,7 +1693,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   }
 
   document.addEventListener("keydown", (e) => {
-    if (cardOverlay.hidden || pendingList || dirtyAnswer) return;
+    if (cardOverlay.hidden || dirtyAnswer) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     if (e.metaKey || e.ctrlKey || e.altKey || typingTarget(e.target)) return;
     e.preventDefault();
@@ -1519,30 +1711,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   async function saveCard(): Promise<boolean> {
     captureDraft(); // fold the active view's edits into draft.desc / draft.meta
     const msg = cardMessageEl;
-    // create mode: persist a new card with the composed description, then switch to
-    // the full edit view.
-    if (pendingList) {
-      const text = draft.desc;
-      const list = pendingList;
-      const kind = cardKindEl.value || "question";
-      const existing = deps.cardsOf(list.id);
-      const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
-      const meta = draft.normalizedMeta();
-      const alias = draft.normalizedAlias();
-      try {
-        const dk = mustDK();
-        const reqBody: OpBody = { description_enc: await xyCrypto.encField(dk, text), rank, kind };
-        if (meta) reqBody.handout_meta_enc = await xyCrypto.encField(dk, meta);
-        if (alias) reqBody.alias_enc = await xyCrypto.encField(dk, alias);
-        const res = await verbs.create("createCard", `/api/lists/${list.id}/cards`, reqBody);
-        const card: BoardCard = { id: res.id as number, listId: list.id, kind, rank, desc: text, handoutMeta: meta, alias, createdAt: nowStamp() };
-        state().cards.push(card);
-        deps.render();
-        await openCard(card);
-        msg.textContent = "Карточка сохранена.";
-      } catch (err) { msg.textContent = errMsg(err); return false; }
-      return true;
-    }
     const card = state().cards.find((c) => c.id === openCardId);
     if (!card) return false;
     const newDesc = draft.desc;
@@ -1575,14 +1743,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   }
 
   // Cmd/Ctrl-Enter saves from either edit view (textarea or structured fields).
-  function saveOnCmdEnter(e: KeyboardEvent): void {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      cardSaveBtn.click();
-    }
-  }
-  cardDescEl.addEventListener("keydown", saveOnCmdEnter);
-  cardFieldsEl.addEventListener("keydown", saveOnCmdEnter);
+  onCmdEnter(cardDescEl, () => cardSaveBtn.click());
+  onCmdEnter(cardFieldsEl, () => cardSaveBtn.click());
 
   // Re-evaluate the save button on every edit. Typing fires "input"; the Поля
   // view's +/× field pills and the tool buttons change the draft via clicks, which
@@ -1599,7 +1761,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // from the card's content save. "" clears it (same convention as the server's
   // optBlob). Online-capable via the sync outbox like any other card mutation.
   async function saveAlias(): Promise<void> {
-    if (pendingList || !openCardId) return; // a new card saves its alias on create
+    if (!openCardId) return;
     const card = state().cards.find((c) => c.id === openCardId);
     if (!card) return;
     const btn = cardAliasSaveBtn;
@@ -1617,6 +1779,12 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     } catch (err) { cardMessageEl.textContent = errMsg(err); }
   }
   cardAliasSaveBtn.addEventListener("click", () => { void saveAlias(); });
+  // The alias input sits outside any form, so plain Enter did nothing at all —
+  // the one field in the card you had to leave the keyboard to commit.
+  onCmdEnter(cardAliasEl, () => { void saveAlias(); });
+  cardAliasEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); void saveAlias(); }
+  });
   cardAliasEl.addEventListener("keydown", (e) => {
     // Enter saves the alias (not the card); Cmd/Ctrl+Enter keeps the card-save
     // shortcut for muscle memory, but on a saved card that too means the alias.

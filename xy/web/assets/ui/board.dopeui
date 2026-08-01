@@ -26,11 +26,16 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       mount id="cardDetailTitle" kind="card-title" hidden
       -- these buttons share the header row with the 38px kind-select and the
       -- icon button, so they are full height too — `small` made them 30px and
-      -- nothing in the row agreed with anything else
+      -- nothing in the row agreed with anything else.
+      -- Icons, not emoji-plus-caption: the row has to fit a phone, and an emoji
+      -- keeps its own colours on every platform while an inline SVG follows the
+      -- button's text colour. The words live on in title/aria-label. board.js
+      -- swaps the glyphs in at boot — the vocabulary has no svg primitive.
       headactions kind="detail"
-        unreaddot id="contentUnreadDot" data-edit-only title="Непрочитанные изменения"
-        button id="cardLink" title="Скопировать прямую ссылку на карточку" data-edit-only "🔗 Ссылка"
-        button id="cardCopy" hidden title="Скопировать текст вопроса для тест-сессии (экранный режим)" "📋 Копировать"
+        unreaddot id="contentUnreadDot" title="Непрочитанные изменения"
+        button id="cardLink" title="Скопировать прямую ссылку на карточку" aria-label="Ссылка на карточку" "🔗"
+        button id="cardCopy" hidden title="Скопировать текст вопроса для тест-сессии (экранный режим)" aria-label="Копировать" "📋"
+        button id="cardAddVersion" hidden title="Добавить версию — копию текущей формулировки, которую можно переписать" aria-label="Добавить версию" "⧉"
         iconbtn id="cardClose" label="Назад" "↩️"
     mount id="cardCopyMsg" kind="card-copy-msg" hidden
 
@@ -39,6 +44,11 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       tab id="cardTabPreview" view="preview" "Просмотр"
       tab id="cardTabFields" view="fields" "Поля"
       tab id="cardTabText" view="text" "Формат 4s"
+
+    -- Versions of the question, when it has more than one: a second strip that
+    -- scopes Просмотр and Поля to one wording. Формат 4s always shows the whole
+    -- field, (PAGEBREAK)s and all — that is the escape hatch.
+    mount id="cardVersions" kind="card-versions" hidden
 
     -- editing tools: ударение types into whichever field of Поля/Текст the caret
     -- was last in; типограф and →.4s rewrite the whole card, so they need no caret
@@ -63,14 +73,14 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
 
     row gap="sm" wrap
       button id="cardSave" "Сохранить"
-      button kind="danger" id="cardDelete" data-edit-only "Удалить карточку"
+      button kind="danger" id="cardDelete" "Удалить карточку"
     message id="cardMessage"
 
-    label data-edit-only "Метки"
+    label "Метки"
     -- The assigned labels and the add button share ONE row; the "create a new
     -- label" form is not here at all — board.js detaches it at boot and mounts it
     -- inside the add-label popup, which is the only place it is wanted.
-    row gap="sm" align="center" wrap data-edit-only
+    row gap="sm" align="center" wrap
       mount id="labelPicker" kind="label-picker"
       mount id="labelAddRow" kind="label-add-row"
         button kind="ghost" id="labelAddBtn" "➕ Добавить метку…"
@@ -78,14 +88,14 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     -- Тесты: which sittings this question was played at, each with its own
     -- labels. Separate from Метки above: a label there is the author's view, a
     -- label under a test is what the testers thought (ADR-0004).
-    label data-edit-only "Тесты"
-    mount id="cardPlayings" kind="card-playings" data-edit-only
-    row gap="sm" align="center" wrap data-edit-only
+    label "Тесты"
+    mount id="cardPlayings" kind="card-playings"
+    row gap="sm" align="center" wrap
       mount id="playingAddRow" kind="label-add-row"
         button kind="ghost" id="playingAddBtn" "➕ Отметить тестом…"
     -- Видели: every tester from every session this card is tagged with, derived
     -- and stored nowhere. Hidden until there is one.
-    mount id="cardSeen" kind="card-seen" hidden data-edit-only
+    mount id="cardSeen" kind="card-seen" hidden
 
     form id="newLabelForm" dir="row" gap="sm"
       textfield id="newLabelName" placeholder="Новая метка" grow
@@ -95,19 +105,19 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     -- Алиас: the card's short name, shown in the list instead of its text. NOT a
     -- 4s field (its own encrypted column), so it lives out here below the views
     -- rather than inside Поля, and captureDraft reads it whichever view is open.
-    -- Deliberately NOT data-edit-only, unlike every other section down here: those
+    -- Deliberately NOT, unlike every other section down here: those
     -- need a persisted card (labels, attachments, timeline), an alias does not, and
     -- hiding it would make it unsettable on the card-creation screen.
     label id="cardAliasLabel" "Алиас"
     -- The alias is its own column, saved on its OWN button fused to the input —
     -- NOT via «Сохранить», which is about the card's 4s content. The two are
     -- unrelated, and coupling them meant an alias could not be saved from the
-    -- read-only Просмотр view at all. The button is data-edit-only: on a card
+    -- read-only Просмотр view at all. The button is: on a card
     -- being CREATED there is no alias column yet, so the alias rides along on the
     -- initial create instead (see cardSave), and only an existing card needs it.
     row id="cardAliasRow" gap="sm" align="center"
       textfield id="cardAlias" placeholder="короткое имя карточки — показывается в списке вместо текста" autocomplete="off" maxlength="200" grow
-      button id="cardAliasSave" data-edit-only disabled title="Сохранить алиас" "Сохранить"
+      button id="cardAliasSave" disabled title="Сохранить алиас" "Сохранить"
 
     -- Выписки: the comments and attachments flagged as source excerpts, counted
     -- here and shown together in one modal — the point of the flag is to have the
@@ -115,39 +125,39 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     -- the count is a span mount, NOT a `label`: the label primitive is a section
     -- heading and carries a 24px top margin, which drops it out of line with the
     -- button beside it however the row is aligned
-    row gap="sm" align="center" wrap data-edit-only
+    row gap="sm" align="center" wrap
       mount id="excerptsCount" kind="excerpt-count"
       button small kind="ghost" id="excerptsView" disabled "Смотреть"
 
-    label data-edit-only "Вложения"
-    mount id="attachments" kind="attachments" data-edit-only
-    row gap="sm" align="center" wrap data-edit-only
+    label "Вложения"
+    mount id="attachments" kind="attachments"
+    row gap="sm" align="center" wrap
       -- no `small` on the upload button: it shares this row with the file field,
       -- and a 30px button beside a 38px field cannot line up with it
       filefield id="attachFile"
       checkbox id="attachCompress" " сжать (WebP)"
       button id="attachUpload" "Загрузить"
 
-    label data-edit-only "Переместить / копировать"
-    row gap="sm" align="center" wrap data-edit-only
+    label "Переместить / копировать"
+    row gap="sm" align="center" wrap
       selectfield id="moveBoard" title="Доска" grow
       selectfield id="moveList" title="Список" grow
       selectfield id="movePos" title="Позиция" grow
-    row gap="sm" align="center" wrap data-edit-only
+    row gap="sm" align="center" wrap
       button small id="copyBtn" "Копировать"
       button small id="moveBtn" "Переместить"
 
-    label data-edit-only "Лента " (unreaddot id="commentsUnreadDot" title="Непрочитанные комментарии")
+    label "Лента " (unreaddot id="commentsUnreadDot" title="Непрочитанные комментарии")
     -- вид правок controls how desc_edit events render: краткий shows only the
     -- changed words with a little context, подробный the whole before/after.
-    row gap="sm" align="center" wrap data-edit-only
+    row gap="sm" align="center" wrap
       label for="feedDiffView" "Вид правок"
       selectfield id="feedDiffView" compact title="Вид правок"
         option value="brief" "краткий"
         option value="full" "подробный"
       button small kind="ghost" id="feedExpand" title="Развернуть ленту на весь экран" "⛶ Развернуть"
-    mount id="timeline" kind="timeline" data-edit-only
-    form id="commentForm" dir="col" data-edit-only
+    mount id="timeline" kind="timeline"
+    form id="commentForm" dir="col"
       editor id="commentInput" kind="comment" placeholder="Комментарий…" spellcheck="false"
       -- tag the comment with the test it came out of («на этом тесте команда
       -- споткнулась о формулировку»); hidden unless the card carries a session

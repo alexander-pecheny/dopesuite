@@ -667,18 +667,117 @@ function fixTrelloLinks(desc: string): string {
   return result + desc;
 }
 
-// shareText builds the plain text handed to testers over chat: the screen-mode
-// question (prefixed "Вопрос N.") plus any handout block, so what the players
-// would see is reproduced. `number` comes from numberQuestionCards.
-function shareText(desc: string | null | undefined, number: string | number | null | undefined): string {
-  const blocks = parseBlocks(desc);
-  const parts: string[] = [];
-  for (const b of blocks) {
-    if (b.type === "handout") parts.push("Раздаточный материал:\n" + screenText(b.text));
+
+// ── question versions ───────────────────────────────────────────────────────
+// A Version is one candidate wording of a question. They live in the question
+// field itself, separated by chgksuite's own (PAGEBREAK) directive — no marker
+// of ours (which would break import/export parity, the same reason the alias is
+// its own column) and no schema change. Every version reaches the export, page
+// broken, which is exactly what (PAGEBREAK) already meant; pruning before
+// delivery is the editor's job. Only the question is versioned — never the
+// answer or the comment.
+const VERSION_SEP = "(PAGEBREAK)";
+
+// splitVersions cuts the question field into its versions, verbatim. There is
+// always at least one, so a question with no (PAGEBREAK) is a one-version
+// question and nothing downstream needs a special case.
+function splitVersions(question: string | null | undefined): string[] {
+  return (question || "").split(VERSION_SEP);
+}
+
+// versionText is one version as the editor should see it — the surrounding
+// whitespace belongs to the separator, not to the wording.
+function versionText(question: string | null | undefined, i: number): string {
+  return (splitVersions(question)[i] || "").trim();
+}
+
+// setVersion writes one version back, keeping the whitespace that framed it so
+// editing version 2 cannot silently reflow how version 1 breaks in the export.
+function setVersion(question: string | null | undefined, i: number, text: string): string {
+  const parts = splitVersions(question);
+  if (i < 0 || i >= parts.length) return question || "";
+  const lead = /^\s*/.exec(parts[i])![0];
+  const trail = /\s*$/.exec(parts[i])![0];
+  parts[i] = lead + text + trail;
+  return parts.join(VERSION_SEP);
+}
+
+// joinVersions is the canonical spelling: each version on its own lines with the
+// separator alone between them. Restructuring (add/delete/promote) normalises to
+// it; a plain edit does not, so merely retyping one wording never reflows how the
+// others break in the export.
+function joinVersions(parts: ReadonlyArray<string>): string {
+  return parts.map((s) => s.trim()).join("\n" + VERSION_SEP + "\n");
+}
+
+// addVersion clones version `i` and inserts the copy after it, returning the new
+// field and the index to switch to. Cloning rather than starting blank is what
+// «Добавить версию» is for: a version is a rewording of what is already there.
+function addVersion(question: string | null | undefined, i: number): { question: string; index: number } {
+  const parts = splitVersions(question);
+  const at = Math.min(Math.max(i, 0), parts.length - 1);
+  parts.splice(at + 1, 0, parts[at]);
+  return { question: joinVersions(parts), index: at + 1 };
+}
+
+// removeVersion drops one version. The last one cannot go — a question with no
+// wording is not a question — so it is returned unchanged.
+function removeVersion(question: string | null | undefined, i: number): { question: string; index: number } {
+  const parts = splitVersions(question);
+  if (parts.length < 2 || i < 0 || i >= parts.length) return { question: question || "", index: i };
+  parts.splice(i, 1);
+  return { question: joinVersions(parts), index: Math.max(0, i - 1) };
+}
+
+// promoteVersion moves one version to the front. Order is visible in the export,
+// so «the good one goes first» is a real edit, not a display preference.
+function promoteVersion(question: string | null | undefined, i: number): { question: string; index: number } {
+  const parts = splitVersions(question);
+  if (i <= 0 || i >= parts.length) return { question: question || "", index: i };
+  parts.unshift(parts.splice(i, 1)[0]);
+  return { question: joinVersions(parts), index: 0 };
+}
+
+// ── what a card offers to copy ──────────────────────────────────────────────
+// One button used to copy handout-and-question together, which is not how a
+// tester receives them: the раздатка goes out first, on its own, and a
+// дуплет/блиц goes out a leg at a time (issue #45). copyTargets is that list —
+// what THIS card has, in the order it would be sent.
+export interface CopyTarget {
+  label: string;
+  // Exactly one of these. `image` names an attachment, for a handout that is a
+  // picture: the tester needs the picture, not its filename.
+  text?: string;
+  image?: string;
+}
+
+// copyTargets enumerates a question card's copyable pieces for the version being
+// looked at. The blitz rule: the lead-in («Блиц:») rides with the first leg and
+// is not repeated, because the legs are pasted into one conversation in order.
+function copyTargets(desc: string | null | undefined, number: string | number | null | undefined, versionIdx = 0): CopyTarget[] {
+  const f = splitFields(desc);
+  const out: CopyTarget[] = [];
+  if (f.handout) {
+    out.push(f.handout.kind === "image"
+      ? { label: "Раздатка", image: f.handout.name }
+      : { label: "Раздатка", text: "Раздаточный материал:\n" + screenText(f.handout.text) });
   }
-  const q = screenText(questionText(desc));
-  parts.push((number ? `Вопрос ${number}. ` : "") + q);
-  return parts.join("\n\n");
+  // splitFields lifts an inline handout out of the question and leaves the bare
+  // anchor where it stood; that marks a position, and has no business in a paste.
+  const q = screenText(versionText(f.question ?? "", versionIdx))
+    .split(HANDOUT_ANCHOR).join("").trim();
+  const head = number ? `Вопрос ${number}. ` : "";
+  const lst = splitList(q);
+  if (lst.items) {
+    lst.items.forEach((item, i) => {
+      const line = `${i + 1}. ${item.trim()}`;
+      const lead = lst.preamble.trim();
+      out.push({ label: `Вопрос ${i + 1}`, text: i === 0 ? head + (lead ? lead + "\n" : "") + line : line });
+    });
+  } else {
+    out.push({ label: "Вопрос", text: head + q });
+  }
+  return out;
 }
 
 // ── structured fields (semi-WYSIWYG) ────────────────────────────────────────
@@ -702,6 +801,11 @@ export interface CardFields {
   comment: string | null;
   sources: string[] | null;
   authors: string[] | null;
+  // The "@" line's chgksuite "!!Label" override, decoded ("~" → space), or null
+  // for the default «Автор». Its own field because it is a property of the
+  // caption, not of any name: «Авторка Мария» is one author with a gendered
+  // label, not an author called "!!Авторка" (issue #44).
+  authorLabel: string | null;
   extra: string | null;
 }
 
@@ -829,11 +933,48 @@ function authorsFromText(text: string | null | undefined): string[] {
   return (text || "").split(",").map((s) => s.trim()).filter((s) => s !== "");
 }
 
+// The captions the Поля dropdown offers. chgksuite prints «Автор» and never
+// pluralises (composer/docx.py#get_label_standalone does that for sources only),
+// so every caption but the first is spelled out as an override — anything else
+// would promise a label the export won't print.
+const AUTHOR_LABELS = ["Автор", "Авторка", "Авторы", "Авторки"] as const;
+
+// The 4s override token is space-delimited, so a caption with a space in it is
+// written with "~" and read back as a space (applyOverride decodes it).
+const encodeLabel = (s: string): string => s.trim().replace(/\s+/g, "~");
+
+// authorBlock splits an "@" block into its caption override and its names.
+function authorBlock(text: string | null | undefined): { label: string | null; names: string[] } {
+  const ov = applyOverride(text);
+  if (ov.label) return { label: ov.label, names: authorsFromText(ov.text) };
+  // Repair pass for the importer's output: both chgksuite's parser and our port
+  // of it glue the caption straight onto the name («!!АвторкаМария»), which
+  // applyOverride cannot split because there is no space to split on. Only the
+  // captions we know are recovered — anything else stays verbatim rather than
+  // being guessed at.
+  const s = (text || "").trim();
+  for (const lab of AUTHOR_LABELS) {
+    if (lab !== AUTHOR_LABELS[0] && s.startsWith("!!" + lab)) {
+      return { label: lab, names: authorsFromText(s.slice(2 + lab.length)) };
+    }
+  }
+  return { label: null, names: authorsFromText(s) };
+}
+
+// composeAuthors is authorBlock's inverse: "@ !!Авторка Мария Петрова".
+function composeAuthors(names: ReadonlyArray<string>, label: string | null): string {
+  const clean = names.map((s) => s.trim()).filter((s) => s !== "");
+  const enc = label ? encodeLabel(label) : "";
+  const head = enc && enc !== AUTHOR_LABELS[0] ? `!!${enc}` : "";
+  const body = [head, clean.join(", ")].filter(Boolean).join(" ");
+  return body ? `@ ${body}` : "@";
+}
+
 function splitFields(desc: string | null | undefined): CardFields {
   const blocks = parseBlocks(desc);
   const res: CardFields = {
     preMarkup: null, handout: null, question: null, answer: null, zachet: null,
-    nezachet: null, comment: null, sources: null, authors: null, extra: null,
+    nezachet: null, comment: null, sources: null, authors: null, authorLabel: null, extra: null,
   };
   const preLines: string[] = [], extraLines: string[] = [], authorList: string[] = [];
   let seenQuestion = false, sawAuthor = false;
@@ -850,7 +991,13 @@ function splitFields(desc: string | null | undefined): CardFields {
     }
     if ((t === "answer" || t === "zachet" || t === "nezachet" || t === "comment") && res[t] === null) { res[t] = b.text; continue; }
     if (t === "source" && res.sources === null) { res.sources = sourcesFromBlock(b.text); continue; }
-    if (t === "author") { sawAuthor = true; authorList.push(...authorsFromText(b.text)); continue; }
+    if (t === "author") {
+      sawAuthor = true;
+      const ab = authorBlock(b.text);
+      if (ab.label && res.authorLabel === null) res.authorLabel = ab.label;
+      authorList.push(...ab.names);
+      continue;
+    }
     if (!seenQuestion && PRE_TYPES.has(t)) { preLines.push(rawLine(b)); continue; }
     extraLines.push(rawLine(b));
   }
@@ -891,8 +1038,7 @@ function composeFields(f: Partial<CardFields>): string {
   if (f.comment !== null && f.comment !== undefined) marker("/", f.comment);
   if (f.sources !== null && f.sources !== undefined) out.push(composeSources(f.sources));
   if (f.authors !== null && f.authors !== undefined) {
-    const names = f.authors.map((s) => s.trim()).filter((s) => s !== "");
-    out.push(names.length ? `@ ${names.join(", ")}` : "@");
+    out.push(composeAuthors(f.authors, f.authorLabel ?? null));
   }
   if (f.extra && f.extra.trim()) out.push(f.extra.trim());
   return out.join("\n");
@@ -1131,10 +1277,12 @@ function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): 
 export const xyChgk = {
   parseBlocks, numberDirective, questionText, answerText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
-  removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem,
+  removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,
-  splitFields, composeFields, parseHandoutBlock,
+  splitFields, composeFields, parseHandoutBlock, authorBlock, composeAuthors, AUTHOR_LABELS,
+  splitVersions, versionText, setVersion, addVersion, removeVersion, promoteVersion,
+  copyTargets,
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
   parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText, testerNames,
 };

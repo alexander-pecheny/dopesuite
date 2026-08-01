@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { xyChgk } from "../web/assets/static/dist/chgk.js";
 
 const { questionText, blockText, numberQuestionCards, parseBlocks, numberDirective,
-  removeAccents, removeSquareBrackets, screenText, shareText, parse4sElem } = xyChgk;
+  removeAccents, removeSquareBrackets, screenText, parse4sElem } = xyChgk;
 
 test("question text strips the leading '? ' marker", () => {
   const desc = "? В каком году?\n! 1799\n^ источник";
@@ -101,15 +101,12 @@ test("screenText applies both transforms", () => {
   );
 });
 
-test("shareText prefixes the question number and reproduces handouts", () => {
-  const desc = "? Что э́то? [прочитать дважды]\n! ответ\n^ источник";
-  assert.equal(shareText(desc, "5"), "Вопрос 5. Что это?");
-
-  const withHandout = "> Схема ме́тро\n? Что на схеме?\n! круг";
-  assert.equal(
-    shareText(withHandout, "3"),
-    "Раздаточный материал:\nСхема метро\n\nВопрос 3. Что на схеме?",
-  );
+test("a legacy \"> \" handout block is still offered as its own paste", () => {
+  const t = xyChgk.copyTargets("> Схема ме́тро\n? Что на схеме?\n! круг", "3");
+  assert.deepEqual(t.map((x) => x.text), [
+    "Раздаточный материал:\nСхема метро",
+    "Вопрос 3. Что на схеме?",
+  ]);
 });
 
 test("numberQuestionCards: №№ on a heading card resets the base for following questions", () => {
@@ -499,4 +496,155 @@ test("an answerless question falls back to its text rather than previewing blank
 test("answer mode does not touch non-question cards", () => {
   assert.equal(xyChgk.previewText("heading", "### Тур 1", "answer"), "Тур 1");
   assert.equal(xyChgk.previewText("meta", "# Дата", "answer"), "Дата");
+});
+
+// ---- question versions (issue #47) ----
+// A version is a candidate wording, kept in the question field and separated by
+// chgksuite's own (PAGEBREAK). No marker of ours, no column, and every version
+// still reaches the export.
+const { splitVersions, versionText, setVersion, addVersion, removeVersion, promoteVersion } = xyChgk;
+
+test("a question with no separator is one version", () => {
+  assert.deepEqual(splitVersions("Один вопрос?"), ["Один вопрос?"]);
+  assert.equal(versionText("Один вопрос?", 0), "Один вопрос?");
+});
+
+test("versionText trims the whitespace that framed the separator", () => {
+  const q = "Первая?\n(PAGEBREAK)\nВторая?";
+  assert.equal(splitVersions(q).length, 2);
+  assert.equal(versionText(q, 0), "Первая?");
+  assert.equal(versionText(q, 1), "Вторая?");
+});
+
+test("editing one version leaves the others byte-identical", () => {
+  const q = "Первая?\n(PAGEBREAK)\nВторая?";
+  assert.equal(setVersion(q, 1, "Вторая, переписанная?"), "Первая?\n(PAGEBREAK)\nВторая, переписанная?");
+  assert.equal(setVersion(q, 0, "Первая, переписанная?"), "Первая, переписанная?\n(PAGEBREAK)\nВторая?");
+});
+
+test("setVersion ignores an index that is not there", () => {
+  assert.equal(setVersion("Одна?", 3, "нет"), "Одна?");
+});
+
+test("adding a version clones the current one and selects the copy", () => {
+  const r = addVersion("Первая?", 0);
+  assert.equal(r.index, 1);
+  assert.deepEqual(splitVersions(r.question).map((s) => s.trim()), ["Первая?", "Первая?"]);
+  // the two are independent from the next edit on
+  assert.equal(versionText(setVersion(r.question, 1, "Другая?"), 0), "Первая?");
+});
+
+test("deleting a version drops it and steps back", () => {
+  const q = addVersion(addVersion("А?", 0).question, 1).question;
+  assert.equal(splitVersions(q).length, 3);
+  const r = removeVersion(setVersion(q, 2, "В?"), 2);
+  assert.equal(r.index, 1);
+  assert.deepEqual(splitVersions(r.question).map((s) => s.trim()), ["А?", "А?"]);
+});
+
+test("the last version cannot be deleted", () => {
+  assert.deepEqual(removeVersion("Одна?", 0), { question: "Одна?", index: 0 });
+});
+
+test("promoting a version moves it to the front, because order is what exports", () => {
+  const q = "А?\n(PAGEBREAK)\nБ?\n(PAGEBREAK)\nВ?";
+  const r = promoteVersion(q, 2);
+  assert.equal(r.index, 0);
+  assert.deepEqual(splitVersions(r.question).map((s) => s.trim()), ["В?", "А?", "Б?"]);
+  assert.deepEqual(promoteVersion(q, 0), { question: q, index: 0 });
+});
+
+test("versions survive a splitFields/composeFields round-trip", () => {
+  const desc = "? Первая?\n(PAGEBREAK)\nВторая?\n! Ответ";
+  const f = splitFields(desc);
+  assert.equal(splitVersions(f.question).length, 2);
+  assert.equal(composeFields(f), desc);
+});
+
+// ---- what a card offers to copy (issue #45) ----
+const { copyTargets } = xyChgk;
+
+test("a plain question offers exactly one thing to copy", () => {
+  const t = copyTargets("? Простой вопрос?\n! Ответ", 12);
+  assert.deepEqual(t, [{ label: "Вопрос", text: "Вопрос 12. Простой вопрос?" }]);
+});
+
+test("a handout is its own paste, and no longer rides along with the question", () => {
+  const t = copyTargets("? [Раздаточный материал: схема] Что на схеме?\n! круг", 3);
+  assert.equal(t.length, 2);
+  assert.equal(t[0].label, "Раздатка");
+  assert.equal(t[0].text, "Раздаточный материал:\nсхема");
+  assert.equal(t[1].text, "Вопрос 3. Что на схеме?");
+});
+
+test("an image handout offers the picture, not its filename", () => {
+  const t = copyTargets("? [Раздаточный материал: (img map.png)] Что тут?\n! круг", 1);
+  assert.deepEqual(t[0], { label: "Раздатка", image: "map.png" });
+});
+
+test("a blitz offers one paste per leg, the lead-in only on the first", () => {
+  const desc = "? Блиц:\n- Первый вопрос?\n- Второй вопрос?\n- Третий вопрос?\n! ответы";
+  const t = copyTargets(desc, 12);
+  assert.deepEqual(t.map((x) => x.label), ["Вопрос 1", "Вопрос 2", "Вопрос 3"]);
+  assert.equal(t[0].text, "Вопрос 12. Блиц:\n1. Первый вопрос?");
+  assert.equal(t[1].text, "2. Второй вопрос?");
+  assert.equal(t[2].text, "3. Третий вопрос?");
+});
+
+test("copying takes the version you are looking at", () => {
+  const desc = "? Первая?\n(PAGEBREAK)\nВторая?\n! Ответ";
+  assert.equal(copyTargets(desc, 5, 0)[0].text, "Вопрос 5. Первая?");
+  assert.equal(copyTargets(desc, 5, 1)[0].text, "Вопрос 5. Вторая?");
+});
+
+test("screen mode still applies — host notes and accents are not sent to testers", () => {
+  const t = copyTargets("? [Ведущему: не читать] Вопро́с?\n! Ответ", 1);
+  assert.equal(t[0].text, "Вопрос 1. Вопрос?");
+});
+
+// ---- author caption (issue #44) ----
+// chgksuite prints «Автор» and never pluralises, so every other caption is
+// spelled out in the 4s as a "!!override" the exporters already honour.
+
+test("the author caption is peeled off the names, not left in the first one", () => {
+  const f = splitFields("? Вопрос\n@ !!Авторка Мария Петрова");
+  assert.equal(f.authorLabel, "Авторка");
+  assert.deepEqual(f.authors, ["Мария Петрова"]);
+});
+
+test("Автор is the default and writes no override", () => {
+  const f = splitFields("? Вопрос\n@ Иванов");
+  assert.equal(f.authorLabel, null);
+  assert.equal(composeFields({ ...f, authorLabel: "Автор" }), "? Вопрос\n@ Иванов");
+});
+
+test("a chosen caption round-trips through compose and split", () => {
+  for (const label of ["Авторка", "Авторы", "Авторки"]) {
+    const desc = composeFields({ question: "Вопрос", authors: ["А", "Б"], authorLabel: label });
+    assert.equal(desc, `? Вопрос\n@ !!${label} А, Б`);
+    const back = splitFields(desc);
+    assert.equal(back.authorLabel, label);
+    assert.deepEqual(back.authors, ["А", "Б"]);
+  }
+});
+
+test("a caption we do not know survives untouched", () => {
+  const desc = "? Вопрос\n@ !!Составитель Иванов";
+  const f = splitFields(desc);
+  assert.equal(f.authorLabel, "Составитель");
+  assert.equal(composeFields(f), desc);
+});
+
+test("a multi-word caption keeps its ~ separator", () => {
+  const desc = composeFields({ question: "В", authors: ["И"], authorLabel: "Автор вопроса" });
+  assert.equal(desc, "? В\n@ !!Автор~вопроса И");
+  assert.equal(splitFields(desc).authorLabel, "Автор вопроса");
+});
+
+// The importer — ours and chgksuite's alike — glues the caption onto the name
+// with no space, which is unsplittable by the generic override rule.
+test("an imported «!!АвторкаМария» is recovered rather than shown as a name", () => {
+  const f = splitFields("? Вопрос\n@ !!АвторкаМария");
+  assert.equal(f.authorLabel, "Авторка");
+  assert.deepEqual(f.authors, ["Мария"]);
 });

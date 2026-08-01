@@ -237,6 +237,7 @@ var MountSessionForm = Attr{Name: "kind", Value: "session-form"}
 var MountLabelsEditor = Attr{Name: "kind", Value: "labels-editor"}
 var MountCardSeen = Attr{Name: "kind", Value: "card-seen"}
 var MountCardPlayings = Attr{Name: "kind", Value: "card-playings"}
+var MountCardVersions = Attr{Name: "kind", Value: "card-versions"}
 var MountMassBar = Attr{Name: "kind", Value: "mass-bar"}
 var MountMassBody = Attr{Name: "kind", Value: "mass-body"}
 var MountTesterList = Attr{Name: "kind", Value: "tester-list"}

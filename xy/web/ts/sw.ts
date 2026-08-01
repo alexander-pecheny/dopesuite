@@ -116,12 +116,59 @@ async function networkFirstStatic(request: Request): Promise<Response> {
   }
 }
 
+// ---- named downloads (see namedurl.ts) ----
+// Generated files the page hands over so the browser sees them at /dl/<name>
+// rather than at a blob: UUID. In memory only: this is decrypted plaintext, and
+// it must never reach Cache Storage. The map is dropped whenever the worker is
+// recycled, which is fine — the viewer has already loaded what it fetched.
+const downloads = new Map<string, { blob: Blob; filename: string }>();
+
+sw.addEventListener("message", (event) => {
+  const d = event.data as { type?: string; path?: string; filename?: string; blob?: Blob } | null;
+  const reply = (ok: boolean): void => { event.ports[0]?.postMessage(ok); };
+  if (!d || !d.path) return;
+  if (d.type === "xy-dl-put" && d.blob) {
+    downloads.set(d.path, { blob: d.blob, filename: d.filename || "download" });
+    reply(true);
+  } else if (d.type === "xy-dl-del") {
+    downloads.delete(d.path);
+    reply(true);
+  }
+});
+
+// rfc6266 spells a download name so a non-ASCII one survives: a quoted-string
+// filename is latin-1, so Cyrillic sent that way arrives as mojibake. Mirrors
+// contentDisposition in internal/server/export.go.
+function rfc6266(disposition: string, filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "");
+  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+function serveDownload(path: string): Response {
+  const hit = downloads.get(path);
+  if (!hit) return new Response("", { status: 404 });
+  return new Response(hit.blob, {
+    headers: {
+      "Content-Type": hit.blob.type || "application/octet-stream",
+      // inline, not attachment: the iframe must render it. Both PDF viewers read
+      // the name to suggest on Save from here either way.
+      "Content-Disposition": rfc6266("inline", hit.filename),
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 sw.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== sw.location.origin) return;
 
+  // Before the navigate branch: the PDF preview iframe is a navigation.
+  if (url.pathname.startsWith("/dl/")) {
+    event.respondWith(serveDownload(url.pathname));
+    return;
+  }
   if (request.mode === "navigate") {
     event.respondWith(networkFirstNavigation(request));
     return;
