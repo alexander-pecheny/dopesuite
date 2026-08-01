@@ -72,7 +72,7 @@ func TestExportPackSingleFormatIsBare(t *testing.T) {
 	if string(b) != packSource {
 		t.Errorf("4s body = %q, want the source verbatim", b)
 	}
-	if !strings.Contains(disp, `filename="Тур 1.4s"`) {
+	if !strings.Contains(disp, `filename*=UTF-8''%D0%A2%D1%83%D1%80%201.4s`) {
 		t.Errorf("Content-Disposition = %q", disp)
 	}
 }
@@ -85,7 +85,7 @@ func TestExportPackZipsSeveral(t *testing.T) {
 	c := registerUser(t, srv, ts, 770211, "packzip")
 
 	b, disp := postPack(t, ts, c, "4s,docx", true)
-	if !strings.Contains(disp, `filename="Тур 1.zip"`) {
+	if !strings.Contains(disp, `filename*=UTF-8''%D0%A2%D1%83%D1%80%201.zip`) {
 		t.Errorf("Content-Disposition = %q", disp)
 	}
 	got := zipNames(t, b)
