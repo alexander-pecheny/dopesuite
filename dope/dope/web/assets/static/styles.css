@@ -941,6 +941,29 @@
   outline: 0;
 }
 
+/* Viewer pages disable controls in earnest but wear the enabled face: a
+   spectator knows the protocol isn't theirs to change, and the washed
+   disabled look would misread as "checkbox is off" / "field is broken". */
+.viewer-readonly input:disabled,
+.viewer-readonly select:disabled,
+.viewer-readonly textarea:disabled {
+  opacity: 1;
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+  cursor: default;
+}
+
+.viewer-readonly input[type="checkbox"]:disabled,
+.viewer-readonly input[type="radio"]:disabled {
+  background: var(--field-bg);
+}
+
+.viewer-readonly input[type="checkbox"]:disabled:checked,
+.viewer-readonly input[type="radio"]:disabled:checked {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
 .narrow {
   width: var(--narrow-col);
   min-width: var(--narrow-col);
