@@ -22,6 +22,7 @@ import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
 import { type ColorField, colorField, LABEL_COLORS, textOn } from "./colorpick.js";
 import { anchorPopup } from "./popup.js";
+import { namedUrl, revokeNamedUrl } from "./namedurl.js";
 import type { DataKey } from "./crypto.js";
 import type { SyncStatus } from "./sync.js";
 import type { OpBody } from "./store.js";
@@ -1892,7 +1893,18 @@ function clearHandoutsPdf(): void {
   pane.replaceChildren();
   const dl = byId<HTMLAnchorElement>("handoutsDownload");
   dl.hidden = true;
-  if (handoutsPdfUrl) { URL.revokeObjectURL(handoutsPdfUrl); handoutsPdfUrl = null; }
+  if (handoutsPdfUrl) { revokeNamedUrl(handoutsPdfUrl); handoutsPdfUrl = null; }
+}
+
+// handoutFileBase names a generated раздатка after the board and the list it came
+// from — «Моя_доска_Тур_1_handouts» — rather than after nothing in particular
+// (issue #43). Only path separators and whitespace are folded away: the name is
+// the one the editor typed, Cyrillic included, and every download it rides on
+// spells it in UTF-8.
+function handoutFileBase(): string {
+  const clean = (s: string): string => s.trim().replace(/[\\/\s]+/g, "_");
+  const list = (handoutsCtx && (handoutsCtx.title || handoutsCtx.list.title)) || "";
+  return [clean(state.name), clean(list), "handouts"].filter(Boolean).join("_");
 }
 
 // persistHandoutMeta writes the edited per-question settings back onto the cards
@@ -1943,12 +1955,12 @@ async function generateHandoutsPdf(): Promise<void> {
     const fd = await handoutsBody(source);
     const res = await fetch("/api/handouts/pdf", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
-    const blob = await res.blob();
-    handoutsPdfUrl = URL.createObjectURL(blob);
+    const name = handoutFileBase() + ".pdf";
+    handoutsPdfUrl = await namedUrl(await res.blob(), name);
     byId("handoutsPdf").replaceChildren(pdfPreviewNode(handoutsPdfUrl));
     const dl = byId<HTMLAnchorElement>("handoutsDownload");
     dl.href = handoutsPdfUrl;
-    dl.setAttribute("download", (handoutsCtx.title || handoutsCtx.list.title || "handouts") + ".pdf");
+    dl.setAttribute("download", name);
     dl.hidden = false;
     msg.textContent = "Готово.";
   } catch (err) {
@@ -2066,13 +2078,7 @@ async function generateSplitFitZip(): Promise<void> {
     const fd = await handoutsBody(source);
     const res = await fetch("/api/handouts/split_fit", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = el("a", { href: url, download: (handoutsCtx.title || handoutsCtx.list.title || "handouts") + ".zip" });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    downloadBlob(await res.blob(), handoutFileBase() + ".zip");
     msg.textContent = "Готово — zip со всеми PDF скачан.";
   } catch (err) {
     msg.textContent = "Split-fit не удался: " + errMsg(err);

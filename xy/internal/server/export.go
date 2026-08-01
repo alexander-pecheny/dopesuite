@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -110,11 +111,52 @@ func (s *server) readExportForm(w http.ResponseWriter, r *http.Request, ext stri
 	return req, form, true
 }
 
+// attrChar reports whether r may appear unescaped in an RFC 5987 ext-value.
+func attrChar(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return true
+	case strings.ContainsRune("!#$&+-.^_`|~", r):
+		return true
+	}
+	return false
+}
+
+// contentDisposition builds the attachment header for a download name. A
+// quoted-string filename is latin-1, so a Cyrillic list name sent that way
+// arrives as mojibake (issue #43); RFC 6266's filename* carries the real name in
+// UTF-8, with the ASCII-folded filename= left behind for anything that ignores it.
+func contentDisposition(name string) string {
+	var ascii, ext strings.Builder
+	needsExt := false
+	for _, r := range name {
+		if r < 0x80 {
+			ascii.WriteRune(r)
+		} else {
+			ascii.WriteByte('_')
+			needsExt = true
+		}
+		if attrChar(r) {
+			ext.WriteRune(r)
+			continue
+		}
+		needsExt = true
+		for _, b := range []byte(string(r)) {
+			fmt.Fprintf(&ext, "%%%02X", b)
+		}
+	}
+	h := `attachment; filename="` + ascii.String() + `"`
+	if needsExt {
+		h += "; filename*=UTF-8''" + ext.String()
+	}
+	return h
+}
+
 // serveDownload streams a generated file as an attachment. Nothing about it is
 // cacheable: it is the user's plaintext, in a format anyone can read.
 func serveDownload(w http.ResponseWriter, b []byte, filename, contentType string) {
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	w.Header().Set("Content-Disposition", contentDisposition(filename))
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("Content-Length", strconv.Itoa(len(b)))
 	_, _ = w.Write(b)
