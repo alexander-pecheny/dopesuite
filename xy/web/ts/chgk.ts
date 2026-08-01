@@ -681,6 +681,76 @@ function shareText(desc: string | null | undefined, number: string | number | nu
   return parts.join("\n\n");
 }
 
+// ── question versions ───────────────────────────────────────────────────────
+// A Version is one candidate wording of a question. They live in the question
+// field itself, separated by chgksuite's own (PAGEBREAK) directive — no marker
+// of ours (which would break import/export parity, the same reason the alias is
+// its own column) and no schema change. Every version reaches the export, page
+// broken, which is exactly what (PAGEBREAK) already meant; pruning before
+// delivery is the editor's job. Only the question is versioned — never the
+// answer or the comment.
+const VERSION_SEP = "(PAGEBREAK)";
+
+// splitVersions cuts the question field into its versions, verbatim. There is
+// always at least one, so a question with no (PAGEBREAK) is a one-version
+// question and nothing downstream needs a special case.
+function splitVersions(question: string | null | undefined): string[] {
+  return (question || "").split(VERSION_SEP);
+}
+
+// versionText is one version as the editor should see it — the surrounding
+// whitespace belongs to the separator, not to the wording.
+function versionText(question: string | null | undefined, i: number): string {
+  return (splitVersions(question)[i] || "").trim();
+}
+
+// setVersion writes one version back, keeping the whitespace that framed it so
+// editing version 2 cannot silently reflow how version 1 breaks in the export.
+function setVersion(question: string | null | undefined, i: number, text: string): string {
+  const parts = splitVersions(question);
+  if (i < 0 || i >= parts.length) return question || "";
+  const lead = /^\s*/.exec(parts[i])![0];
+  const trail = /\s*$/.exec(parts[i])![0];
+  parts[i] = lead + text + trail;
+  return parts.join(VERSION_SEP);
+}
+
+// joinVersions is the canonical spelling: each version on its own lines with the
+// separator alone between them. Restructuring (add/delete/promote) normalises to
+// it; a plain edit does not, so merely retyping one wording never reflows how the
+// others break in the export.
+function joinVersions(parts: ReadonlyArray<string>): string {
+  return parts.map((s) => s.trim()).join("\n" + VERSION_SEP + "\n");
+}
+
+// addVersion clones version `i` and inserts the copy after it, returning the new
+// field and the index to switch to. Cloning rather than starting blank is what
+// «Добавить версию» is for: a version is a rewording of what is already there.
+function addVersion(question: string | null | undefined, i: number): { question: string; index: number } {
+  const parts = splitVersions(question);
+  const at = Math.min(Math.max(i, 0), parts.length - 1);
+  parts.splice(at + 1, 0, parts[at]);
+  return { question: joinVersions(parts), index: at + 1 };
+}
+
+// removeVersion drops one version. The last one cannot go — a question with no
+// wording is not a question — so it is returned unchanged.
+function removeVersion(question: string | null | undefined, i: number): { question: string; index: number } {
+  const parts = splitVersions(question);
+  if (parts.length < 2 || i < 0 || i >= parts.length) return { question: question || "", index: i };
+  parts.splice(i, 1);
+  return { question: joinVersions(parts), index: Math.max(0, i - 1) };
+}
+
+// promoteVersion moves one version to the front. Order is visible in the export,
+// so «the good one goes first» is a real edit, not a display preference.
+function promoteVersion(question: string | null | undefined, i: number): { question: string; index: number } {
+  const parts = splitVersions(question);
+  if (i <= 0 || i >= parts.length) return { question: question || "", index: i };
+  parts.unshift(parts.splice(i, 1)[0]);
+  return { question: joinVersions(parts), index: 0 };
+}
+
 // ── structured fields (semi-WYSIWYG) ────────────────────────────────────────
 // splitFields/composeFields convert between a raw 4s question description and a
 // flat field record so the card editor can offer one input per field while the
@@ -1182,6 +1252,7 @@ export const xyChgk = {
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,
   splitFields, composeFields, parseHandoutBlock, authorBlock, composeAuthors, AUTHOR_LABELS,
+  splitVersions, versionText, setVersion, addVersion, removeVersion, promoteVersion,
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
   parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText, testerNames,
 };

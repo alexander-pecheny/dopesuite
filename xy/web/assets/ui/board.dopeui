@@ -26,11 +26,16 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       mount id="cardDetailTitle" kind="card-title" hidden
       -- these buttons share the header row with the 38px kind-select and the
       -- icon button, so they are full height too — `small` made them 30px and
-      -- nothing in the row agreed with anything else
+      -- nothing in the row agreed with anything else.
+      -- Icons, not emoji-plus-caption: the row has to fit a phone, and an emoji
+      -- keeps its own colours on every platform while an inline SVG follows the
+      -- button's text colour. The words live on in title/aria-label. board.js
+      -- swaps the glyphs in at boot — the vocabulary has no svg primitive.
       headactions kind="detail"
         unreaddot id="contentUnreadDot" title="Непрочитанные изменения"
-        button id="cardLink" title="Скопировать прямую ссылку на карточку" "🔗 Ссылка"
-        button id="cardCopy" hidden title="Скопировать текст вопроса для тест-сессии (экранный режим)" "📋 Копировать"
+        button id="cardLink" title="Скопировать прямую ссылку на карточку" aria-label="Ссылка на карточку" "🔗"
+        button id="cardCopy" hidden title="Скопировать текст вопроса для тест-сессии (экранный режим)" aria-label="Копировать" "📋"
+        button id="cardAddVersion" hidden title="Добавить версию — копию текущей формулировки, которую можно переписать" aria-label="Добавить версию" "⧉"
         iconbtn id="cardClose" label="Назад" "↩️"
     mount id="cardCopyMsg" kind="card-copy-msg" hidden
 
@@ -39,6 +44,11 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       tab id="cardTabPreview" view="preview" "Просмотр"
       tab id="cardTabFields" view="fields" "Поля"
       tab id="cardTabText" view="text" "Формат 4s"
+
+    -- Versions of the question, when it has more than one: a second strip that
+    -- scopes Просмотр and Поля to one wording. Формат 4s always shows the whole
+    -- field, (PAGEBREAK)s and all — that is the escape hatch.
+    mount id="cardVersions" kind="card-versions" hidden
 
     -- editing tools: ударение types into whichever field of Поля/Текст the caret
     -- was last in; типограф and →.4s rewrite the whole card, so they need no caret

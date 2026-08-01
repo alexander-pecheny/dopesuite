@@ -182,6 +182,18 @@ function strokeIcon(d: string): SVGSVGElement {
 
 const plusIcon = (): SVGSVGElement => strokeIcon("M12 5v14M5 12h14");
 const checkIcon = (): SVGSVGElement => strokeIcon("M5 13l4.5 4.5L19 8");
+// The card header's four actions. Emoji there rendered in their own colours on
+// every platform and ignored the theme; these follow the button's text colour.
+const linkIcon = (): SVGSVGElement => strokeIcon("M10 14a4 4 0 006 .5l3-3a4 4 0 00-5.5-5.5l-1.5 1.5M14 10a4 4 0 00-6-.5l-3 3A4 4 0 009.5 18l1.5-1.5");
+const clipboardIcon = (): SVGSVGElement => strokeIcon("M9 4h6v3H9zM8 5.5H6.5A1.5 1.5 0 005 7v12a1.5 1.5 0 001.5 1.5h11A1.5 1.5 0 0019 19V7a1.5 1.5 0 00-1.5-1.5H16");
+const cloneIcon = (): SVGSVGElement => strokeIcon("M9 9h9.5a1.5 1.5 0 011.5 1.5V20a1.5 1.5 0 01-1.5 1.5H9A1.5 1.5 0 017.5 20v-9.5A1.5 1.5 0 019 9zM16 6V4.5A1.5 1.5 0 0014.5 3H5a1.5 1.5 0 00-1.5 1.5V14A1.5 1.5 0 005 15.5h1.5");
+const backIcon = (): SVGSVGElement => strokeIcon("M10 6l-6 6 6 6M4 12h11a5 5 0 015 5v1");
+
+// swapIcon replaces a compiled page button's emoji glyph with an SVG one; the
+// words stay in title/aria-label, which is where they already were.
+function swapIcon(btn: HTMLElement, icon: SVGSVGElement): void {
+  btn.replaceChildren(icon);
+}
 
 // swapPlusIcon replaces a compiled page button's leading ➕ with plusIcon().
 // The .dopeui vocabulary has no svg primitive, so the pages ship the emoji as
@@ -222,4 +234,4 @@ function wireGenPassphrase(button: HTMLElement, input: HTMLInputElement, generat
 
 export const xySizes = { DEFAULT: SIZES_DEFAULT, ...SIZES_RANGE, sanitize: sanitizeSizes, apply: applySizes };
 
-export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin, plusIcon, checkIcon, swapPlusIcon, onCmdEnter, wireGenPassphrase };
+export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin, plusIcon, checkIcon, swapPlusIcon, linkIcon, clipboardIcon, cloneIcon, backIcon, swapIcon, onCmdEnter, wireGenPassphrase };

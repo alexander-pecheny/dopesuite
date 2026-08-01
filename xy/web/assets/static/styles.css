@@ -1054,6 +1054,21 @@
 .fld-add:hover { color: var(--text); border-color: var(--muted); }
 .fld-muted .fld-add { opacity: 0.75; }
 .fld-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+/* The version strip: the kit's seg/seg-btn, plus the two actions that ride on
+   the selected tab (↑ make first, × delete). They sit on the selected tab only
+   — three controls per version is too much on a phone, and both act on the
+   version you are looking at. */
+.card-versions { margin-bottom: var(--space-2); }
+.vtab-act {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  padding: 0 var(--space-1);
+  cursor: var(--cursor-action);
+}
+.vtab-act:hover { color: var(--text); }
+
 .fld-label { font-size: var(--text-sm); font-weight: var(--fw-semibold); color: var(--muted); }
 /* The Автор caption is a choice the 4s carries as a !!override, so that field's
    label IS the control. Styled as the label it replaces — a select that looks
