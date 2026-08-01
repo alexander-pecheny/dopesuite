@@ -19,6 +19,10 @@ A Card's own short display label, stored as its own encrypted column — deliber
 **List Group**:
 A named, ordered run of **consecutive** Lists sharing one question-numbering sequence and a combined export. A group always moves as one block. (Schema name: `list_of_lists`.)
 
+**Version**:
+One candidate wording of a Card's question, kept alongside its siblings so the editors can weigh them before choosing. Only the question has Versions — never the answer or the comment. They live in the question text itself, separated by chgksuite's `(PAGEBREAK)`, so every Version reaches the export and pruning the rejected ones is an editorial act, not an automatic one. A Version has no name, author or date: it is a wording and nothing else.
+_Avoid_: draft, variant, revision (a Version is a live alternative, not a superseded past state — that is what the Timeline records)
+
 **Label**:
 A named, coloured tag on a Board, assignable to any of its Cards, renameable and recolourable at will. An assignment carries an optional Playing: unscoped it is the author's own view of the question, scoped it is what the testers thought at that sitting. So «взяли» is ONE Board Label composed onto a Playing, not a label per session.
 _Avoid_: tag, метка as a distinct thing; mark (retired — it named the взяли/не взяли slot before an assignment could be scoped)

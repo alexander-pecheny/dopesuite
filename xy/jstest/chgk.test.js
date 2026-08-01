@@ -500,3 +500,66 @@ test("answer mode does not touch non-question cards", () => {
   assert.equal(xyChgk.previewText("heading", "### Тур 1", "answer"), "Тур 1");
   assert.equal(xyChgk.previewText("meta", "# Дата", "answer"), "Дата");
 });
+
+// ---- question versions (issue #47) ----
+// A version is a candidate wording, kept in the question field and separated by
+// chgksuite's own (PAGEBREAK). No marker of ours, no column, and every version
+// still reaches the export.
+const { splitVersions, versionText, setVersion, addVersion, removeVersion, promoteVersion } = xyChgk;
+
+test("a question with no separator is one version", () => {
+  assert.deepEqual(splitVersions("Один вопрос?"), ["Один вопрос?"]);
+  assert.equal(versionText("Один вопрос?", 0), "Один вопрос?");
+});
+
+test("versionText trims the whitespace that framed the separator", () => {
+  const q = "Первая?\n(PAGEBREAK)\nВторая?";
+  assert.equal(splitVersions(q).length, 2);
+  assert.equal(versionText(q, 0), "Первая?");
+  assert.equal(versionText(q, 1), "Вторая?");
+});
+
+test("editing one version leaves the others byte-identical", () => {
+  const q = "Первая?\n(PAGEBREAK)\nВторая?";
+  assert.equal(setVersion(q, 1, "Вторая, переписанная?"), "Первая?\n(PAGEBREAK)\nВторая, переписанная?");
+  assert.equal(setVersion(q, 0, "Первая, переписанная?"), "Первая, переписанная?\n(PAGEBREAK)\nВторая?");
+});
+
+test("setVersion ignores an index that is not there", () => {
+  assert.equal(setVersion("Одна?", 3, "нет"), "Одна?");
+});
+
+test("adding a version clones the current one and selects the copy", () => {
+  const r = addVersion("Первая?", 0);
+  assert.equal(r.index, 1);
+  assert.deepEqual(splitVersions(r.question).map((s) => s.trim()), ["Первая?", "Первая?"]);
+  // the two are independent from the next edit on
+  assert.equal(versionText(setVersion(r.question, 1, "Другая?"), 0), "Первая?");
+});
+
+test("deleting a version drops it and steps back", () => {
+  const q = addVersion(addVersion("А?", 0).question, 1).question;
+  assert.equal(splitVersions(q).length, 3);
+  const r = removeVersion(setVersion(q, 2, "В?"), 2);
+  assert.equal(r.index, 1);
+  assert.deepEqual(splitVersions(r.question).map((s) => s.trim()), ["А?", "А?"]);
+});
+
+test("the last version cannot be deleted", () => {
+  assert.deepEqual(removeVersion("Одна?", 0), { question: "Одна?", index: 0 });
+});
+
+test("promoting a version moves it to the front, because order is what exports", () => {
+  const q = "А?\n(PAGEBREAK)\nБ?\n(PAGEBREAK)\nВ?";
+  const r = promoteVersion(q, 2);
+  assert.equal(r.index, 0);
+  assert.deepEqual(splitVersions(r.question).map((s) => s.trim()), ["В?", "А?", "Б?"]);
+  assert.deepEqual(promoteVersion(q, 0), { question: q, index: 0 });
+});
+
+test("versions survive a splitFields/composeFields round-trip", () => {
+  const desc = "? Первая?\n(PAGEBREAK)\nВторая?\n! Ответ";
+  const f = splitFields(desc);
+  assert.equal(splitVersions(f.question).length, 2);
+  assert.equal(composeFields(f), desc);
+});

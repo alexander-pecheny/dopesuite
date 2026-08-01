@@ -25,7 +25,7 @@ import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
 
-const { fetchJSON, jpost, jput, jdelete, el } = xyApp;
+const { fetchJSON, jpost, jput, jdelete, el, swapIcon, linkIcon, clipboardIcon, cloneIcon, backIcon } = xyApp;
 const { keyBetween } = xyRank;
 
 // ---- pure helpers (exported for tests and for the board) ----
@@ -231,6 +231,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // ---- card detail state ----
   let openCardId: number | null = null;
   let pendingList: BoardList | null = null; // set while composing a brand-new (unsaved) card
+  // Which version of the question the Просмотр and Поля views are scoped to.
+  // Purely a view cursor — versions live in the 4s itself (see chgk.js), so
+  // nothing about it is persisted, and Формат 4s ignores it entirely.
+  let versionIdx = 0;
   // cardReturn remembers where the open card was launched from so its ↩️ back
   // button lands there: null → plain close (board view); {listId, cardId} → reopen
   // that list's preview scrolled to this question (set only when opened from a
@@ -272,6 +276,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // an existing card.
   function addCard(list: BoardList): void {
     pendingList = list;
+    versionIdx = 0;
     openCardId = null;
     cardView = "";
     cardFieldReaders = null;
@@ -445,6 +450,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // The tools edit text, so they follow the two edit views. →.4s additionally
     // needs the raw 4s editor it types into.
     byId("cardEditTools").hidden = view === "preview";
+    byId("cardAddVersion").hidden = !fieldsAvailable();
+    renderVersionTabs();
     byId("cardTypo").hidden = false;
     byId("cardTo4s").hidden = view !== "text" || !fieldsAvailable();
     byId("cardDescLabel").textContent = "Описание";
@@ -630,7 +637,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     box.replaceChildren();
     const R: FieldReaders = {
       handout: buildHandoutField(f.handout),
-      question: buildField("Текст вопроса", "area", f.question, { open: fresh }),
+      question: buildField("Текст вопроса", "area", f.question == null ? null : xyChgk.versionText(f.question, versionIdx), { open: fresh }),
       answer: buildField("Ответ", "area", f.answer, { open: fresh }),
       zachet: buildField("Зачёт", "input", f.zachet),
       nezachet: buildField("Незачёт", "input", f.nezachet),
@@ -646,13 +653,114 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardFieldReaders = R;
   }
 
+  // ---- question versions ----
+  // The Поля editor shows one version; the field it writes back is the whole
+  // thing, with only that version replaced. Reading the current field off the
+  // draft rather than off the editor is what keeps the versions you cannot see
+  // from being dropped on save.
+  function questionField(): string | null {
+    const q = xyChgk.splitFields(draft.desc).question;
+    return q == null ? null : q;
+  }
+
+  function writeQuestionVersion(edited: string | null): string | null {
+    if (edited == null) return null;
+    const whole = questionField();
+    if (whole == null) return edited;
+    return xyChgk.setVersion(whole, versionIdx, edited);
+  }
+
+  function versionCount(): number {
+    const q = questionField();
+    return q == null ? 1 : xyChgk.splitVersions(q).length;
+  }
+
+  // previewDesc is the draft as Просмотр should render it: scoped to the selected
+  // version. The list preview and every export still show all of them — a version
+  // IS a page break — but inside the editor you are looking at one wording.
+  function previewDesc(): string {
+    const whole = questionField();
+    if (whole == null || xyChgk.splitVersions(whole).length < 2) return draft.desc;
+    const f = xyChgk.splitFields(draft.desc);
+    f.question = xyChgk.versionText(whole, versionIdx);
+    return xyChgk.composeFields(f);
+  }
+
+  // applyVersions writes a reshaped question field back through the draft and
+  // re-renders. Every version edit — add, delete, promote — goes through here, so
+  // there is one place that keeps draft, cursor and views in step.
+  // The transform is passed in rather than its result: the draft has to be
+  // captured BEFORE the current question field is read, or an in-flight edit is
+  // reshuffled away.
+  function applyVersions(fn: (question: string) => { question: string; index: number }): void {
+    captureDraft();
+    const next = fn(questionField() ?? "");
+    const f = xyChgk.splitFields(draft.desc);
+    f.question = next.question;
+    draft.desc = xyChgk.composeFields(f);
+    cardDescEl.value = draft.desc;
+    selectVersion(next.index);
+  }
+
+  // selectVersion moves the cursor and redraws. Dropping the field readers first
+  // is the whole trick: setCardView captures the draft before rendering, and a
+  // capture taken after the cursor moved would file the outgoing version's text
+  // under the incoming version. renderCardFields rebuilds them immediately.
+  function selectVersion(i: number): void {
+    versionIdx = i;
+    cardFieldReaders = null;
+    setCardView(cardView || "fields");
+    refreshSaveState();
+  }
+
+  // renderVersionTabs draws the second strip. It only appears once there is more
+  // than one version — a plain question must not grow a row of chrome that says
+  // «Версия 1» and nothing else. ↑ and × ride on the selected tab rather than on
+  // every one: three controls per version is a lot on a phone, and both act on
+  // what you are looking at.
+  function renderVersionTabs(): void {
+    const box = byId("cardVersions");
+    const n = versionCount();
+    if (versionIdx >= n) versionIdx = n - 1;
+    const show = n > 1 && fieldsAvailable() && cardView !== "text";
+    box.hidden = !show;
+    if (!show) { box.replaceChildren(); return; }
+    const nodes: HTMLElement[] = [];
+    for (let i = 0; i < n; i++) {
+      const btn = el("button", { class: "seg-btn" + (i === versionIdx ? " active" : ""), type: "button", role: "tab", text: `Версия ${i + 1}` });
+      btn.addEventListener("click", () => { captureDraft(); selectVersion(i); });
+      nodes.push(btn);
+      if (i !== versionIdx) continue;
+      if (i > 0) {
+        const up = el("button", { class: "vtab-act", type: "button", title: "Сделать первой — порядок версий виден в экспорте", "aria-label": "Сделать первой", text: "↑" });
+        up.addEventListener("click", () => applyVersions((q) => xyChgk.promoteVersion(q, i)));
+        nodes.push(up);
+      }
+      const rm = el("button", { class: "vtab-act", type: "button", title: "Удалить эту версию", "aria-label": "Удалить версию", text: "×" });
+      rm.addEventListener("click", () => applyVersions((q) => xyChgk.removeVersion(q, i)));
+      nodes.push(rm);
+    }
+    box.replaceChildren(...nodes);
+  }
+
+  // The header's emoji become SVG so they follow the theme rather than each
+  // platform's own idea of what 🔗 looks like.
+  swapIcon(byId("cardLink"), linkIcon());
+  swapIcon(byId("cardCopy"), clipboardIcon());
+  swapIcon(byId("cardAddVersion"), cloneIcon());
+  swapIcon(byId("cardClose"), backIcon());
+
+  byId("cardAddVersion").addEventListener("click", () => {
+    applyVersions((q) => xyChgk.addVersion(q, versionIdx));
+  });
+
   // readCardFields collapses the Поля editor back into a 4s description + handout
   // settings, preserving the pre-question and unmodelled blocks captured at render time.
   function readCardFields(R: FieldReaders): { desc: string; meta: string | null } {
     const rec: Partial<CardFields> = {
       preMarkup: cardFieldsPre,
       handout: R.handout.read(),
-      question: R.question.read(),
+      question: writeQuestionVersion(R.question.read()),
       answer: R.answer.read(),
       zachet: R.zachet.read(),
       nezachet: R.nezachet.read(),
@@ -670,7 +778,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const body = byId("cardPreviewBody");
     if (!draft.desc.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: "Пусто." })); return; }
     const c = openCardCard();
-    const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: draft.desc, listId: c ? c.listId : (pendingList ? pendingList.id : 0) };
+    const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: previewDesc(), listId: c ? c.listId : (pendingList ? pendingList.id : 0) };
     const number = card.kind === "question" ? deps.questionNumberFor(card) : null;
     const reqId = openCardId;
     const screen = byId<HTMLInputElement>("cardPreviewScreen").checked;
@@ -848,6 +956,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   async function openCard(card: BoardCard, opts: { returnTo?: CardReturn | null } = {}): Promise<void> {
     stopReadTracking(); // tear down any timer/observer left over from a previous card
     pendingList = null;
+    versionIdx = 0;
     cardReturn = opts.returnTo || null;
     openCardId = card.id;
     cardView = "";
