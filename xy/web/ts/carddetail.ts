@@ -169,6 +169,8 @@ export interface CardDetail {
   copyPlain(text: string): Promise<void>;
   // Reused by the board's list move/copy (board.js's «Переместить список…»).
   loadMoveBoard(bid: number): Promise<MoveCtx>;
+  moveBoardOptions(): Promise<Array<{ id: number; label: string }>>;
+  transferCard(card: BoardCard, targetListId: number, ctx: MoveCtx, remove: boolean): Promise<void>;
   cardCopyBody(src: BoardCard, rank: string, key: DataKey): Promise<OpBody>;
   copyCardExtras(srcCardId: number, targetDk: DataKey, newCardId: number): Promise<void>;
   reconcileLabels(srcCardId: number, targetBid: number, targetDk: DataKey, ctx: MoveCtx): Promise<Array<{ label_id: number; session_id: number | null }>>;
@@ -1130,15 +1132,16 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   // populateMoveBoards fills the board <select> with decrypted board names (the
   // current board first/default), then loads its lists.
-  async function populateMoveBoards(): Promise<void> {
-    const sel = moveBoardSel;
-    sel.replaceChildren();
+  // moveBoardOptions lists every board this move/copy could target, already
+  // labelled. Shared by the card's own destination select and the bulk dialog's,
+  // so the two can never offer different places.
+  async function moveBoardOptions(): Promise<Array<{ id: number; label: string }>> {
     let boards: MoveBoardItem[] = [];
     try { boards = (await fetchJSON("/api/boards")) as MoveBoardItem[]; } catch (_) {}
     // Always offer the current board (so the move UI works — and never prompts for
     // another board's password — even when offline and the board list is unfetched).
     if (!boards.some((b) => b.id === boardId)) boards.unshift({ id: boardId, name_enc: null });
-    for (const b of boards) {
+    return await Promise.all(boards.map(async (b) => {
       let label = "доска #" + b.id;
       if (b.id === boardId) label = (state().name || label) + " (эта доска)";
       else if ((b.schema_version ?? 0) >= 2) label = b.name || label; // plaintext name, no key needed
@@ -1146,8 +1149,14 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
         try { const cdk = await xyCrypto.loadCachedDK(b.id); if (cdk) label = await xyCrypto.decField(cdk, b.name_enc || ""); }
         catch (_) {}
       }
-      sel.append(el("option", { value: b.id, text: label }));
-    }
+      return { id: b.id, label };
+    }));
+  }
+
+  async function populateMoveBoards(): Promise<void> {
+    const sel = moveBoardSel;
+    sel.replaceChildren();
+    for (const b of await moveBoardOptions()) sel.append(el("option", { value: b.id, text: b.label }));
     sel.value = String(boardId);
     await onMoveBoardChange();
   }
@@ -1354,6 +1363,56 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     })) as { id: number };
     ctx.sessions.push({ id: sr.id, meta: copy });
     return sr.id;
+  }
+
+  // transferCard moves or copies ONE card to the end of `ctx`'s target list —
+  // the same re-encrypt/reconcile path the card's own move/copy takes, minus the
+  // modal. «Массовое действие» drives it once per card, so a bulk move behaves
+  // exactly like doing them one at a time, only without the clicking.
+  // It appends to ctx.cardsByList as it goes, so a run of cards keeps its order
+  // in the destination instead of piling onto one rank.
+  async function transferCard(card: BoardCard, targetListId: number, ctx: MoveCtx, remove: boolean): Promise<void> {
+    const sameBoard = ctx.boardId === boardId;
+    const listCards = ctx.cardsByList.get(targetListId) || [];
+    const rank = keyBetween(listCards.length ? listCards[listCards.length - 1].rank : null, null);
+    let newId = card.id;
+    if (sameBoard && remove) {
+      await verbs.patch("patchCard", `/api/cards/${card.id}`, { list_id: targetListId, rank });
+      card.listId = targetListId;
+      card.rank = rank;
+    } else if (sameBoard) {
+      const dk = mustDK();
+      const res = (await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, dk))) as { id: number };
+      newId = res.id;
+      state().cards.push({ id: res.id, listId: targetListId, kind: card.kind, rank, desc: card.desc, handoutMeta: card.handoutMeta || null, alias: card.alias || null, createdAt: nowStamp() });
+      const own = state().cardLabels.filter((a) => a.cardId === card.id);
+      const plays = state().cardSessions.filter((p) => p.cardId === card.id).map((p) => p.sessionId);
+      if (plays.length) {
+        await jput(`/api/cards/${res.id}/sessions`, { session_ids: plays });
+        state().cardSessions.push(...plays.map((sessionId) => ({ cardId: res.id, sessionId })));
+      }
+      if (own.length) {
+        await jput(`/api/cards/${res.id}/labels`, { labels: own.map((a) => ({ label_id: a.labelId, session_id: a.sessionId })) });
+        state().cardLabels.push(...own.map((a) => ({ ...a, cardId: res.id })));
+      }
+      await copyCardExtras(card.id, dk, res.id);
+    } else {
+      const tdk = ctx.dk;
+      const res = (await jpost(`/api/lists/${targetListId}/cards`, await cardCopyBody(card, rank, tdk))) as { id: number };
+      newId = res.id;
+      const plays = await reconcilePlayings(card.id, ctx.boardId, tdk, ctx);
+      if (plays.length) await jput(`/api/cards/${res.id}/sessions`, { session_ids: plays });
+      const assignments = await reconcileLabels(card.id, ctx.boardId, tdk, ctx);
+      if (assignments.length) await jput(`/api/cards/${res.id}/labels`, { labels: assignments });
+      await copyCardExtras(card.id, tdk, res.id);
+      if (remove) {
+        await jdelete(`/api/cards/${card.id}`);
+        const st = state();
+        st.cards = st.cards.filter((c) => c.id !== card.id);
+      }
+    }
+    listCards.push({ id: newId, rank });
+    ctx.cardsByList.set(targetListId, listCards);
   }
 
   async function doMoveCopy(remove: boolean): Promise<void> {
@@ -1755,6 +1814,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     highlightComment,
     copyCommentLink,
     loadMoveBoard,
+    moveBoardOptions,
+    transferCard,
     cardCopyBody,
     copyCardExtras, reconcileLabels, reconcilePlayings,
   };
