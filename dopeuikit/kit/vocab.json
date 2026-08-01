@@ -738,6 +738,10 @@
       "placement": "overlay",
       "props": [
         {
+          "name": "icon",
+          "enum": "icon-name"
+        },
+        {
           "name": "id",
           "required": true
         },

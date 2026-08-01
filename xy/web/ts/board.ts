@@ -598,7 +598,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   col.append(el("div", { class: "klist-head" }, ...headKids, headMain, addCardBtn, menuWrap));
   if (list.groupId != null) {
     const g = groupById(list.groupId);
-    col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт", text: "🔗" + ((g && g.name) || "связанные списки") }));
+    col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт" }, ...iconed("link", (g && g.name) || "связанные списки")));
   }
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
   // Grouped lists carry continuous numbering computed across the whole group;
@@ -727,6 +727,52 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
   return el("div", { class: cls, text: cardTitle(card, number) });
 }
 
+// ---- the test flask ----
+// A playing used to render as a capsule: the flask, then one dot per verdict.
+// Now that the flask is a real shape, the verdicts ARE the flask — the colours
+// fill it like liquid. Empty means «tested, nobody recorded an opinion», which
+// is exactly what an empty flask looks like.
+//
+// FLASK_LIQUID is the interior below the graduation line at y=15, traced off the
+// vendored flask-conical outline: down the right slope, round the bottom, back
+// up the left. It has to be kept with that shape — re-vendoring a different
+// flask means re-tracing this.
+const FLASK_LIQUID = "M6.453 15H17.547L19.755 19.04A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96Z";
+const SVG_NS = "http://www.w3.org/2000/svg";
+let flaskSeq = 0;
+
+// flaskIcon fills the flask with one vertical band per verdict, clipped to the
+// liquid shape. Vertical bands rather than stacked layers: the interior is ~7
+// units tall and ~15 wide, so at a 10px badge only the horizontal axis has room
+// to tell two colours apart.
+function flaskIcon(colors: readonly string[]): SVGSVGElement {
+  const svg = icon("flask-conical");
+  if (!colors.length) return svg;
+  const id = `flask-fill-${++flaskSeq}`;
+  const shape = document.createElementNS(SVG_NS, "path");
+  shape.setAttribute("d", FLASK_LIQUID);
+  const clip = document.createElementNS(SVG_NS, "clipPath");
+  clip.setAttribute("id", id);
+  clip.append(shape);
+  const defs = document.createElementNS(SVG_NS, "defs");
+  defs.append(clip);
+  const fill = document.createElementNS(SVG_NS, "g");
+  fill.setAttribute("clip-path", `url(#${id})`);
+  const x0 = 4, width = 16 / colors.length;
+  colors.forEach((c, i) => {
+    const band = document.createElementNS(SVG_NS, "rect");
+    band.setAttribute("x", String(x0 + i * width));
+    band.setAttribute("y", "14");
+    band.setAttribute("width", String(width));
+    band.setAttribute("height", "9");
+    band.setAttribute("fill", c);
+    fill.append(band);
+  });
+  // Under the outline, so the stroke still reads at badge size.
+  svg.prepend(defs, fill);
+  return svg;
+}
+
 function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const node = el("div", { class: "kcard kcard-" + (card.kind || "normal"), draggable: "true", dataset: { cardId: card.id }, onclick: () => { void cardDetail.openCard(card); } });
   // In массовое действие a card is something you pick, not something you open:
@@ -744,7 +790,7 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   // Derived from the text, so it leads the row: nobody put it there and nobody
   // can take it off, unlike everything after it.
   if (card.kind === "question" && xyChgk.handoutForCard(card.desc)) {
-    labelRow.append(el("span", { class: "kcard-handout", title: "Раздаточный материал", text: "📃" }));
+    labelRow.append(el("span", { class: "kcard-handout", title: "Раздаточный материал" }, icon("file-text")));
   }
   // The board card shows the author's own labels; a test's verdict belongs to the
   // card detail, where it can say WHICH test it came from.
@@ -752,26 +798,17 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
     const lbl = labelById(a.labelId);
     if (lbl) labelRow.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
   }
-  // One group per test the question was played at: a 🧪 on its own when the
-  // testers recorded nothing, otherwise the 🧪 and their verdicts' colours inside
-  // a thin border — so «tested, no opinion» and «tested, three opinions» read
-  // apart at a glance without spelling either out.
+  // One flask per test the question was played at, filled with the verdicts
+  // recorded there. The colours are the only signal now, so the tooltip names
+  // them — it used to live on the individual dots.
   for (const sid of playingsOf(card.id)) {
-    const scoped = assignmentsOf(card.id, sid);
-    const flask = el("span", { class: "kcard-test-icon", text: "🧪" });
-    if (!scoped.length) {
-      labelRow.append(el("span", { class: "kcard-test", title: "Тест: " + sessionName(sid) }, flask));
-      continue;
-    }
-    const group = el("span", {
-      class: "kcard-test has-labels",
-      title: "Тест: " + sessionName(sid),
-    }, flask);
-    for (const a of scoped) {
-      const lbl = labelById(a.labelId);
-      if (lbl) group.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
-    }
-    labelRow.append(group);
+    const verdicts = assignmentsOf(card.id, sid)
+      .map((a) => labelById(a.labelId))
+      .filter((l): l is BoardLabel => !!l);
+    const title = "Тест: " + sessionName(sid) +
+      (verdicts.length ? " — " + verdicts.map((l) => l.name).join(", ") : "");
+    labelRow.append(el("span", { class: "kcard-test", title },
+      el("span", { class: "kcard-test-icon" }, flaskIcon(verdicts.map((l) => l.color)))));
   }
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
@@ -1219,7 +1256,7 @@ function renderManageUnit(unit: Unit, pos: number): HTMLElement {
       manageCheckbox(unit),
       el("span", { class: "lm-pos", text: "#" + pos }),
       el("span", { class: "lm-handle", text: "≡", title: "Перетащить" }),
-      el("span", { class: "lm-title lm-group-title", text: "🔗 " + ((g && g.name) || "Связанные списки") }),
+      el("span", { class: "lm-title lm-group-title" }, ...iconed("link", (g && g.name) || "Связанные списки")),
       el("button", { class: "lm-icon", type: "button", title: "Переименовать группу", onclick: () => { void renameGroup(unit.id); } }, icon("pencil")),
       el("button", { class: "lm-icon", type: "button", title: "Разъединить группу", onclick: () => { void unlinkGroup(unit.id); } }, icon("unlink")),
       manageMoveControl(unit),
@@ -2398,9 +2435,9 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   const group = wholeGroup && list.groupId != null ? groupById(list.groupId) : null;
   const scopeLists = group ? listsInGroup(list.groupId as number) : [list];
   const cards = scopeLists.flatMap((l) => cardsOf(l.id));
-  byId("previewTitle").textContent = group
-    ? "🔗" + (group.name || "связанные списки")
-    : (list.title || "Предпросмотр");
+  const title = byId("previewTitle");
+  if (group) title.replaceChildren(...iconed("link", group.name || "связанные списки"));
+  else title.textContent = list.title || "Предпросмотр";
   const body = byId("previewBody");
   body.replaceChildren();
   previewCtx = null;

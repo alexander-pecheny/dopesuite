@@ -1368,28 +1368,19 @@ body {
   height: var(--chip-h);
   gap: 2px;
 }
-.kcard-test.has-labels {
-  border: 1px solid var(--grid-dark);
-  border-radius: var(--radius-pill);
-  padding: 0 3px;
-}
-/* A verdict is the same dot as a label, at the size the capsule leaves it: the
-   group is --chip-h tall and 1px of that is border, top and bottom. */
-.kcard-test .label-chip { width: 8px; height: 8px; }
-/* An emoji's glyph overflows a line-height of 1, so the flask sat on the group's
-   bottom border. Centre it in a box tall enough to hold it. */
+/* The flask carries the verdicts as liquid now (see flaskIcon), so there is no
+   capsule and no row of dots — just the glyph, at a size where two or three
+   bands of colour still read apart. */
 .kcard-test-icon {
-  font-size: 9px;
-  line-height: 1;
+  font-size: 13px;
   display: inline-flex;
   align-items: center;
-  height: 10px;
+  height: var(--chip-h);
 }
-/* The handout mark: same emoji-in-a-box trick as the flask, but at the row's
-   own height — this one stands on the row rather than inside a capsule. */
+/* The handout mark stands on the label row rather than inside a capsule, so it
+   takes the row's own height. */
 .kcard-handout {
   font-size: 11px;
-  line-height: 1;
   display: inline-flex;
   align-items: center;
   height: var(--chip-h);

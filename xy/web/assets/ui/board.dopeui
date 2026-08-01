@@ -277,7 +277,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     message id="listsManageMessage"
 
   -- test sessions: the board-level panel that replaced the тест-список
-  modal id="sessionsOverlay" label="Тесты" title="🧪 Тесты" variant="lists" done="Готово" doneid="sessionsClose"
+  modal id="sessionsOverlay" icon="flask-conical" label="Тесты" title="Тесты" variant="lists" done="Готово" doneid="sessionsClose"
     row gap="sm" align="center" justify="between" wrap
       button small id="sessionAddBtn" title="Создать тест-сессию" "＋ Новый тест"
     mount id="sessionsList" kind="sessions-list"
@@ -289,13 +289,13 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     message id="sessionEditMessage"
 
   -- rename / recolour every label on the board (issue #25)
-  modal id="labelsEditOverlay" label="Метки" title="🏷️ Метки" variant="lists" done="Готово" doneid="labelsEditClose"
+  modal id="labelsEditOverlay" icon="tags" label="Метки" title="Метки" variant="lists" done="Готово" doneid="labelsEditClose"
     mount id="labelsEditor" kind="labels-editor"
     message id="labelsEditMessage"
 
   -- «Вопросы тестировали» for ONE tour: each session with how much of the tour
   -- it saw, so the custom (name those who tested most of it) can be applied
-  modal id="testerListOverlay" label="Список тестеров" title="👥 Список тестеров" variant="lists" done="Готово" doneid="testerListClose"
+  modal id="testerListOverlay" icon="users" label="Список тестеров" title="Список тестеров" variant="lists" done="Готово" doneid="testerListClose"
     hint "По умолчанию отмечены те, кто видел больше половины вопросов из списка."
     mount id="testerList" kind="tester-list"
     message id="testerListMessage"

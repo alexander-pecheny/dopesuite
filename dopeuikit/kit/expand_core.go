@@ -310,7 +310,11 @@ func expandModal(c *ExpandCtx, p *Element) []Node {
 	}
 	var kids []Node
 	if title, ok := Get(p, "title"); ok {
-		kids = append(kids, Inl("h2", []Attr{ClassAttr("appearance-modal-title")}, &TextNode{Value: title}))
+		head := []Item{&TextNode{Value: title}}
+		if ico := iconItem(p); ico != nil {
+			head = []Item{ico, &TextNode{Value: title}}
+		}
+		kids = append(kids, Inl("h2", []Attr{ClassAttr("appearance-modal-title")}, head...))
 	}
 	kids = append(kids, c.Nodes(p.Block)...)
 	if done, ok := Get(p, "done"); ok {

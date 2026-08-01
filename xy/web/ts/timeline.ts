@@ -665,7 +665,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     }
     for (const att of openCardExcerptAtts) {
       const name = att.name || "файл";
-      const box = el("div", { class: "excerpt" }, el("div", { class: "excerpt-meta", text: `📎 ${name}` }));
+      const box = el("div", { class: "excerpt" }, el("div", { class: "excerpt-meta" }, ...iconed("paperclip", name)));
       if ((att.mime || "").startsWith("image/")) {
         // .pv-img wires it into the shared lightbox (zoom/pan) on click.
         const img = el("img", { class: "excerpt-img pv-img", alt: name }) as HTMLImageElement;
