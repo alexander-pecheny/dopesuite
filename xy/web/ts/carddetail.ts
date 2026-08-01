@@ -179,9 +179,13 @@ interface FieldReaders {
   nezachet: FieldReader<string | null>;
   comment: FieldReader<string | null>;
   sources: FieldReader<string[] | null>;
-  authors: FieldReader<string[] | null>;
+  authors: FieldReader<AuthorsValue>;
   hndt: FieldReader<string | null>;
 }
+
+// The Автор field reads back as two things: the names and the caption chosen for
+// them. `names: null` is the field being absent altogether.
+interface AuthorsValue { names: string[] | null; label: string | null }
 
 interface MoveBoardItem { id: number; name?: string; name_enc?: string | null; schema_version?: number }
 
@@ -575,12 +579,23 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   }
 
   // buildAuthorsField: a tag input (like labels) seeded with autocomplete from the
-  // board's existing authors; free text adds a new author.
-  function buildAuthorsField(initial: string[] | null, suggestions: string[]): FieldReader<string[] | null> {
+  // board's existing authors; free text adds a new author. The field's own label
+  // is a dropdown, because the caption is a choice the 4s carries as a
+  // "!!override" — Автор / Авторка / Авторы / Авторки (issue #44).
+  function buildAuthorsField(initial: string[] | null, suggestions: string[], label: string | null): FieldReader<AuthorsValue> {
     const wrap = el("div", { class: "fld" });
     const addBtn = el("button", { class: "fld-add", type: "button", text: "+ Автор", title: "Добавить поле" });
     const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
-    const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Автор" }), rmBtn);
+    const labelSel = el("select", { class: "fld-label-select", title: "Подпись поля в экспорте" }) as HTMLSelectElement;
+    for (const l of xyChgk.AUTHOR_LABELS) labelSel.append(el("option", { value: l, text: l }));
+    // A card may already carry a caption of its own («!!Составитель»). It gets its
+    // own entry rather than being silently folded into Автор — nothing an editor
+    // wrote is thrown away by opening the card.
+    if (label && !(xyChgk.AUTHOR_LABELS as readonly string[]).includes(label)) {
+      labelSel.append(el("option", { value: label, text: label }));
+    }
+    labelSel.value = label || xyChgk.AUTHOR_LABELS[0];
+    const head = el("div", { class: "fld-head" }, labelSel, rmBtn);
     const tags = el("div", { class: "fld-tags" });
     const tagSet: string[] = [];
     const inp = el("input", { class: "input fld-tag-input", type: "text", placeholder: "имя автора…" }) as HTMLInputElement;
@@ -610,9 +625,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // Include the in-progress text without touching the input; actual commits
     // happen on Enter/comma/blur/suggestion-pick.
     return { node: wrap, read: () => {
-      if (!present) return null;
+      if (!present) return { names: null, label: null };
       const v = inp.value.trim();
-      return v ? [...tagSet, v] : tagSet.slice();
+      return { names: v ? [...tagSet, v] : tagSet.slice(), label: labelSel.value || null };
     } };
   }
 
@@ -636,7 +651,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       nezachet: buildField("Незачёт", "input", f.nezachet),
       comment: buildField("Комментарий", "area", f.comment),
       sources: buildSourcesField(f.sources, boardSources()),
-      authors: buildAuthorsField(f.authors, boardAuthors()),
+      authors: buildAuthorsField(f.authors, boardAuthors(), f.authorLabel),
       hndt: buildField("Доп. разметка для генерации раздаток", "area", draft.meta, { muted: true }),
     };
     for (const k of ["handout", "question", "answer", "zachet", "nezachet", "comment", "sources", "authors", "hndt"] as const) box.append(R[k].node);
@@ -649,6 +664,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // readCardFields collapses the Поля editor back into a 4s description + handout
   // settings, preserving the pre-question and unmodelled blocks captured at render time.
   function readCardFields(R: FieldReaders): { desc: string; meta: string | null } {
+    const authors = R.authors.read();
     const rec: Partial<CardFields> = {
       preMarkup: cardFieldsPre,
       handout: R.handout.read(),
@@ -658,7 +674,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       nezachet: R.nezachet.read(),
       comment: R.comment.read(),
       sources: R.sources.read(),
-      authors: R.authors.read(),
+      authors: authors.names,
+      authorLabel: authors.label,
       extra: cardFieldsExtra,
     };
     return { desc: xyChgk.composeFields(rec), meta: R.hndt.read() };
