@@ -10,6 +10,7 @@ import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import type { DataKey } from "./crypto.js";
 import type { MenuItem } from "./timeline.js";
+import { icon, iconed } from "./icons_gen.js";
 
 const { fetchJSON, jpatch, jdelete, el } = xyApp;
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -178,13 +179,13 @@ async function loadAttachments(cardId: number): Promise<void> {
     if (isImage) cardImageNames.push(name);
     // Images open in the lightbox (save via right-click there); other files download.
     const row = el("div", { class: "attach-row" },
-      el("button", { class: "attach-name", type: "button", text: `📎 ${name}`, onclick: () => { void (isImage ? viewAttachment(att, name) : download(att, name)); } }),
+      el("button", { class: "attach-name", type: "button", onclick: () => { void (isImage ? viewAttachment(att, name) : download(att, name)); } }, ...iconed("paperclip", name)),
       att.is_excerpt ? el("span", { class: "tl-badge", text: "выписка" }) : null,
       el("span", { class: "attach-size", text: humanSize(att.size) }),
       el("button", {
-        class: "attach-del", type: "button", title: "Действия с вложением", text: "⋯", "aria-haspopup": "true",
+        class: "attach-del", type: "button", title: "Действия с вложением", "aria-haspopup": "true",
         onclick: (e: Event) => attachMenu(e.currentTarget as HTMLElement, att, name),
-      }),
+      }, icon("ellipsis")),
     );
     frag.append(row);
   }
@@ -194,8 +195,8 @@ async function loadAttachments(cardId: number): Promise<void> {
 
 function attachMenu(anchor: HTMLElement, att: NamedAttachment, name: string): void {
   deps.popupMenu(anchor, [
-    { label: "🔄 Заменить", onClick: () => pickReplacement(att, name) },
-    { label: "🗑 Удалить", onClick: () => { void removeAttachment(att, name); } },
+    { icon: icon("replace"), label: "Заменить", onClick: () => pickReplacement(att, name) },
+    { icon: icon("trash-2"), label: "Удалить", onClick: () => { void removeAttachment(att, name); } },
     {
       label: "Выписка", checked: !!att.is_excerpt,
       onClick: () => { void attachAction(async () => {

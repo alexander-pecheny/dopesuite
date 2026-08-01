@@ -187,7 +187,6 @@ async function migrateName(id: number, name: string): Promise<void> {
 }
 
 // ---- create board ----
-xyApp.swapPlusIcon(byId("newBoardBtn")); // emoji ➕ → SVG plus
 byId("newBoardBtn").addEventListener("click", () => {
   createMessage.textContent = "";
   createForm.reset();

@@ -27,6 +27,27 @@ pre-commit: pre-commit-core pre-commit-uikit class-check
 # are written in TypeScript and core.css is shared by both apps — so no single
 # module can check either half. Fail when the two drift: a rule nothing emits,
 # or a name nothing styles. (xy's own dead-CSS test covers only the xy layer.)
+# Vendor one more Lucide icon and regenerate every consumer. Icons are vendored
+# rather than depended on: the build stays offline, and only shapes we actually
+# use ship. Names are lucide.dev's — `just icons-add trash-2`.
+icons-add name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ver=$(curl -sf https://registry.npmjs.org/lucide-static | python3 -c 'import json,sys; print(json.load(sys.stdin)["dist-tags"]["latest"])')
+    tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+    curl -sfL "https://registry.npmjs.org/lucide-static/-/lucide-static-$ver.tgz" | tar xz -C "$tmp"
+    src="$tmp/package/icons/{{name}}.svg"
+    test -f "$src" || { echo "no such Lucide icon: {{name}}" >&2; exit 1; }
+    cp "$src" dopeuikit/icons/svg/
+    just icons-gen
+    echo "vendored {{name}} from lucide-static $ver"
+
+# Regenerate the icon set into Go, the vocabulary and both apps' TypeScript.
+icons-gen:
+    cd dopeuikit && go generate ./icons && go generate ./kit
+    cd xy && go generate ./internal/ui
+    cd dope && go generate ./dope/web/ui
+
 class-check: fmt-scripts
     go -C scripts/classcheck vet ./...
     go -C scripts/classcheck test ./...

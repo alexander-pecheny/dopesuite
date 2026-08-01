@@ -15,6 +15,7 @@ import type { AuthMe } from "./app.js";
 import type { DataKey } from "./crypto.js";
 import type { DiffOp } from "./diff.js";
 import type { OpBody, TimelineEvent } from "./store.js";
+import { icon, iconed } from "./icons_gen.js";
 
 const { fetchJSON, jpatch, jdelete, el, onCmdEnter } = xyApp;
 
@@ -302,12 +303,12 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         metaRow.append(el("div", { class: "tl-actions" },
           el("button", {
             class: "tl-link", type: "button", title: "Копировать ссылку на комментарий",
-            text: "🔗", onclick: () => deps.card.copyCommentLink(ev.id),
-          }),
+            onclick: () => deps.card.copyCommentLink(ev.id),
+          }, icon("link")),
           el("button", {
             class: "tl-menu", type: "button", title: "Действия с комментарием", "aria-haspopup": "true",
-            text: "⋯", onclick: (e: Event) => commentMenu(e.currentTarget as HTMLElement, ev, payload),
-          })));
+            onclick: (e: Event) => commentMenu(e.currentTarget as HTMLElement, ev, payload),
+          }, icon("ellipsis"))));
       }
       wrap.append(metaRow, el("div", { class: "tl-comment", text: payload }));
       if ((ev.reply_count || 0) > 0) wrap.append(threadButton(ev));
@@ -460,9 +461,8 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const n = ev.reply_count || 0;
     return el("button", {
       class: "tl-thread", type: "button",
-      text: `💬 ${n} ${deps.plural(n, "ответ", "ответа", "ответов")}`,
       onclick: () => { void openThread(ev.id); },
-    });
+    }, ...iconed("message-circle", `${n} ${deps.plural(n, "ответ", "ответа", "ответов")}`));
   }
 
   function hideThread(): void { threadOverlay.hidden = true; threadRootId = null; }
@@ -539,13 +539,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const mine = !!(st.me && ev.author_user_id === st.me.user_id);
     // Replying opens the thread (with its composer) — for a comment with no
     // replies yet, that is just the comment plus an empty answer box.
-    const items: MenuItem[] = [{ label: "↩️ Ответить", onClick: () => { void openThread(ev.reply_to_id || ev.id); } }];
+    const items: MenuItem[] = [{ icon: icon("message-circle"), label: "Ответить", onClick: () => { void openThread(ev.reply_to_id || ev.id); } }];
     if (mine) {
       // The node is taken from the anchor, not looked up by id: the same comment
       // may also be rendered in the expanded лента, and the edit must open on the
       // copy whose ⋯ was actually clicked.
-      items.push({ label: "✏️ Редактировать", onClick: () => startCommentEdit(ev, payload, anchor.closest<HTMLElement>(".tl-event")) });
-      items.push({ label: "🗑 Удалить", onClick: () => deleteComment(ev) });
+      items.push({ icon: icon("pencil"), label: "Редактировать", onClick: () => startCommentEdit(ev, payload, anchor.closest<HTMLElement>(".tl-event")) });
+      items.push({ icon: icon("trash-2"), label: "Удалить", onClick: () => deleteComment(ev) });
     }
     items.push({
       label: "Выписка", checked: !!ev.is_excerpt,

@@ -1,9 +1,9 @@
 page title="Импорт из Trello · xy" kind="wide" scripts="dist/import.js"
   topbar title="Импорт из Trello"
     crumbs
-      crumb home href="/" label="Все доски" "🏠"
+      crumb home href="/" icon="house" label="Все доски"
       crumb "Импорт из Trello"
-    iconlink href="/" label="Все доски" "⬅️"
+    iconlink href="/" icon="arrow-left" label="Все доски"
 
   form id="importForm" dir="col"
     hint
@@ -35,10 +35,10 @@ page title="Импорт из Trello · xy" kind="wide" scripts="dist/import.js"
 
     textfield id="boardName" placeholder="Название доски (по умолчанию — из Trello)"
     -- textfield (not password): board creation is the one safe moment to show the
-    -- passphrase; «🎲» fills a strong one and copies it. Mirrors the create dialog.
+    -- passphrase; the dice button fills a strong one and copies it. Mirrors the create dialog.
     row gap="sm" align="center"
       textfield id="boardPass" placeholder="Пароль доски (для шифрования)" autocomplete="new-password" required grow
-      iconbtn id="genPassBtn" label="Сгенерировать пароль" "🎲"
+      iconbtn id="genPassBtn" icon="dices" label="Сгенерировать пароль"
     hint "Пароль нужен для E2E-шифрования."
     hint kind="danger" "Сохраните его прямо сейчас, его нельзя будет восстановить"
     row gap="sm" wrap

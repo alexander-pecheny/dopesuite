@@ -16,6 +16,7 @@ import { autocomplete, type Choice, townChoices, zoneChoices } from "./suggest.j
 import type { BoardSession } from "./unlock.js";
 import type { Tester } from "./chgk.js";
 import * as people from "./people.js";
+import { icon, iconed } from "./icons_gen.js";
 
 export interface SessionsPanelDeps {
   boardId: number;
@@ -107,7 +108,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
         el("div", { class: "sess-actions" },
           el("button", { class: "input", type: "button", text: "Открыть", onclick: () => openSession(s.id) }),
           el("button", {
-            class: "input", type: "button", text: "📋 Приглашение",
+            class: "input", type: "button",
             title: "Скопировать строку со временем начала для мессенджера",
             onclick: () => { void deps.copyText(inviteLine(m)); },
           }),
@@ -215,7 +216,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     box.append(field("Города для приглашения", cityBox));
 
     const invitePreview = el("p", { class: "sess-invite" });
-    const inviteCopy = el("button", { class: "input", type: "button", text: "📋 Скопировать приглашение" });
+    const inviteCopy = el("button", { class: "input", type: "button" }, ...iconed("clipboard", "Скопировать приглашение"));
     const previewInvite = (): void => {
       invitePreview.textContent = inviteLine({ ...m, ...read(), cities });
     };
@@ -254,13 +255,13 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
     // under a comment thread of unknown length puts them off the bottom. There is
     // no Сохранить — Готово saves, and so does every other way out.
     const summary = el("button", {
-      class: "input", type: "button", text: "👥 Скопировать список тестеров",
+      class: "input", type: "button",
       onclick: () => {
         const line = summaryLine(testerRows ? testerRows() : []);
         if (line) void deps.copyText(line);
       },
     });
-    const drop = el("button", { class: "btn btn-danger", type: "button", text: "🗑️ Удалить тест" });
+    const drop = el("button", { class: "btn btn-danger", type: "button" }, ...iconed("trash-2", "Удалить тест"));
     drop.addEventListener("click", () => { void removeSession(); });
     box.append(el("div", { class: "sess-actions" }, summary, drop));
 

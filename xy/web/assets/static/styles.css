@@ -230,7 +230,6 @@
 .kadd:hover { color: var(--text); }
 /* the SVG glyphs (app.js strokeIcon: +, ✓) size with the surrounding text and
    inherit their color via currentColor — the reason they replaced the emoji */
-.stroke-ico { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; }
 .kcards { display: flex; flex-direction: column; gap: var(--space-2); overflow-y: auto; min-height: var(--space-6); padding: var(--space-1); }
 .kcard {
   position: relative; /* anchors .kcard-unread */

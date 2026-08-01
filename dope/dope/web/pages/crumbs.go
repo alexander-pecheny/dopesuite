@@ -24,7 +24,7 @@ import (
 
 // HomeCrumb is the 🏠 every trail starts with.
 func HomeCrumb() dopeui.Item {
-	return dopeui.Crumb(dopeui.Home(), dopeui.Href("/"), dopeui.Label("Главная"), dopeui.Text("🏠"))
+	return dopeui.Crumb(dopeui.Home(), dopeui.Href("/"), dopeui.IconHouse, dopeui.Label("Главная"))
 }
 
 // HostCrumbs is the editing tree's root: 🏠 / Мои фесты.

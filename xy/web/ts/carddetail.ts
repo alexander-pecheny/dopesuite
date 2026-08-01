@@ -24,8 +24,9 @@ import type { CardFields, CopyTarget, Handout, Tester, TesterLike } from "./chgk
 import type { BoardCard, BoardLabel, BoardList, BoardSession, CardLabel, Playing, Snapshot, UnreadFlags } from "./unlock.js";
 import type { OpBody } from "./store.js";
 import type { CardEvent } from "./timeline.js";
+import { icon, iconed } from "./icons_gen.js";
 
-const { fetchJSON, jpost, jput, jdelete, el, onCmdEnter, swapIcon, linkIcon, clipboardIcon, cloneIcon, backIcon } = xyApp;
+const { fetchJSON, jpost, jput, jdelete, el, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;
 
 // ---- pure helpers (exported for tests and for the board) ----
@@ -542,7 +543,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // no attachments yet the dropdown was simply empty, with no way out of it
     // (issue #26). This attaches and selects in one gesture.
     const filePick = el("input", { type: "file", accept: "image/*", hidden: true }) as HTMLInputElement;
-    const attachBtn = el("button", { class: "input fld-add-row", type: "button", text: "📎 Прикрепить…", title: "Загрузить картинку и подставить её сюда" });
+    const attachBtn = el("button", { class: "input fld-add-row", type: "button", title: "Загрузить картинку и подставить её сюда" }, ...iconed("paperclip", "Прикрепить…"));
     attachBtn.addEventListener("click", () => filePick.click());
     filePick.addEventListener("change", async () => {
       const file = filePick.files && filePick.files[0];
@@ -784,13 +785,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     }
     box.replaceChildren(...nodes);
   }
-
-  // The header's emoji become SVG so they follow the theme rather than each
-  // platform's own idea of what 🔗 looks like.
-  swapIcon(byId("cardLink"), linkIcon());
-  swapIcon(byId("cardCopy"), clipboardIcon());
-  swapIcon(byId("cardAddVersion"), cloneIcon());
-  swapIcon(byId("cardClose"), backIcon());
 
   byId("cardAddVersion").addEventListener("click", () => {
     applyVersions((q) => xyChgk.addVersion(q, versionIdx));
@@ -1774,7 +1768,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       draft.commitAlias(next);
       deps.render(); // the board card previews the alias
       btn.disabled = true;
-      btn.textContent = "✓";
+      btn.replaceChildren(icon("check"));
       setTimeout(() => { btn.textContent = "Сохранить"; }, 1200);
     } catch (err) { cardMessageEl.textContent = errMsg(err); }
   }

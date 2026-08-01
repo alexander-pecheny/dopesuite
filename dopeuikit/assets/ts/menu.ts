@@ -16,6 +16,7 @@ import {
   pickPref,
   resolveTheme,
 } from "./menu-model";
+import { type IconName, icon } from "./icons_gen.js";
 
 const THEME_KEY = "dope-theme";
 const CONTRAST_KEY = "dope-contrast";
@@ -198,7 +199,8 @@ function build(): void {
       button.type = "button";
       button.className = "menu-item";
       button.setAttribute("role", "menuitem");
-      button.textContent = item.label;
+      if (item.icon) button.append(icon(item.icon as IconName));
+      button.append(item.label);
       if (item.title) button.title = item.title;
       button.addEventListener("click", () => {
         closeMenu();

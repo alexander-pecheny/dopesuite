@@ -32,8 +32,9 @@ import type { BoardCard, BoardLabel, BoardList, BoardState, CardLabel } from "./
 import type { MembersState } from "./boardmembers.js";
 import type { MenuItem, Timeline } from "./timeline.js";
 import type { MoveCtx, PreviewCardLike } from "./carddetail.js";
+import { icon, iconed } from "./icons_gen.js";
 
-const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, plusIcon, checkIcon, swapPlusIcon, onCmdEnter } = xyApp;
+const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -164,39 +165,48 @@ document.addEventListener("visibilitychange", () => {
 // "forget password" (rarely needed) don't warrant header buttons.
 // dopeMenu.setExtras renders them as actions.
 window.dopeMenu?.setExtras([{
-  label: "✏️ Переименовать доску",
+  icon: "pencil",
+  label: "Переименовать доску",
   title: "Изменить название доски",
   onClick: () => { void renameBoard(); },
 }, {
-  label: "📋 Управление списками",
+  icon: "columns-3",
+  label: "Управление списками",
   title: "Переупорядочить списки и связать их в группы (списки списков)",
   onClick: () => openListsManage(),
 }, {
-  label: "☑️ Массовое действие",
+  icon: "list-checks",
+  label: "Массовое действие",
   title: "Отметить карточки на всей доске и сделать с ними одно действие",
   onClick: () => setMassMode(!massMode),
 }, {
-  label: "📥 Импорт",
+  icon: "file-up",
+  label: "Импорт",
   title: "Импортировать пакет вопросов (.4s, .zip или .docx)",
   onClick: () => openImportPick(),
 }, {
-  label: "🧪 Тесты",
+  icon: "flask-conical",
+  label: "Тесты",
   title: "Тест-сессии доски: кто когда играл, приглашение со временем начала",
   onClick: () => sessionsPanel.open(),
 }, {
-  label: "🏷️ Метки",
+  icon: "tags",
+  label: "Метки",
   title: "Переименовать, перекрасить или удалить метки доски",
   onClick: () => openLabelsEditor(),
 }, {
-  label: "👥 Участники доски",
+  icon: "users",
+  label: "Участники доски",
   title: "Поделиться доской: добавить или убрать участников",
   onClick: () => boardMembers.open(),
 }, {
-  label: "🧹 Исправить оформление Trello",
+  icon: "wand-sparkles",
+  label: "Исправить оформление Trello",
   title: "Убрать артефакты Trello (двойные переносы, экранирование, смарт-ссылки) во всех карточках",
   onClick: () => { void fixTrelloFormattingBoard(); },
 }, {
-  label: "🔒 Забыть пароль доски",
+  icon: "lock",
+  label: "Забыть пароль доски",
   title: "Забыть пароль доски на этом устройстве",
   onClick: async () => {
     await xyCrypto.forgetDK(boardId);
@@ -206,7 +216,8 @@ window.dopeMenu?.setExtras([{
     location.reload();
   },
 }, {
-  label: "🗑️ Удалить доску",
+  icon: "trash-2",
+  label: "Удалить доску",
   title: "Удалить доску со всеми списками и карточками (только владелец)",
   onClick: () => { void deleteBoard(); },
 }]);
@@ -537,32 +548,32 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const menuWrap = el("div", { class: "klist-menu-wrap" });
   // Adding a card is the most-used list action (issue #4): a dedicated "+"
   // beside the ⋯ menu saves the menu round-trip. The menu item stays too.
-  const addCardBtn = el("button", { class: "kadd", title: "Добавить карточку", "aria-label": "Добавить карточку" }, plusIcon());
+  const addCardBtn = el("button", { class: "kadd", title: "Добавить карточку", "aria-label": "Добавить карточку" }, icon("plus"));
   addCardBtn.addEventListener("click", () => { void cardDetail.addCard(list); });
-  const menuBtn = el("button", { class: "kadd", title: "Меню списка", text: "⋯", "aria-haspopup": "true" });
+  const menuBtn = el("button", { class: "kadd", title: "Меню списка", "aria-haspopup": "true" }, icon("ellipsis"));
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const items: MenuItem[] = [{ icon: plusIcon(), label: "Добавить карточку", onClick: () => { void cardDetail.addCard(list); } }];
+    const items: MenuItem[] = [{ icon: icon("plus"), label: "Добавить карточку", onClick: () => { void cardDetail.addCard(list); } }];
     if (list.groupId != null) {
       items.push(
-        { label: "🔍 Предпросмотр списка", onClick: () => { void previewList(list); } },
-        { label: "🔍 Предпросмотр всей группы", onClick: () => { void previewList(list, true); } },
+        { icon: icon("eye"), label: "Предпросмотр списка", onClick: () => { void previewList(list); } },
+        { icon: icon("eye"), label: "Предпросмотр всей группы", onClick: () => { void previewList(list, true); } },
       );
     } else {
-      items.push({ label: "🔍 Предпросмотр", onClick: () => { void previewList(list); } });
+      items.push({ icon: icon("eye"), label: "Предпросмотр", onClick: () => { void previewList(list); } });
     }
     items.push(
-      { label: "👥 Список тестеров", onClick: () => openTesterList(list) },
-      { label: "↔️ Переместить список…", onClick: () => openMoveList(list) },
-      { label: "✏️ Переименовать список", onClick: () => { void renameList(list); } },
+      { icon: icon("users"), label: "Список тестеров", onClick: () => openTesterList(list) },
+      { icon: icon("arrow-left-right"), label: "Переместить список…", onClick: () => openMoveList(list) },
+      { icon: icon("pencil"), label: "Переименовать список", onClick: () => { void renameList(list); } },
     );
     const grouped = list.groupId != null;
     const suffix = grouped ? " группы" : "";
     items.push(
-      { label: `📤 Экспорт${suffix}`, onClick: () => openExport(list) },
-      { label: grouped ? "🧩 Генерация раздаток (вся группа)" : "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
+      { icon: icon("file-down"), label: `Экспорт${suffix}`, onClick: () => openExport(list) },
+      { icon: icon("file-text"), label: grouped ? "Генерация раздаток (вся группа)" : "Генерация раздаток", onClick: () => openHandouts(list) },
     );
-    items.push({ label: "🗑️ Удалить список", onClick: () => { void deleteList(list); } });
+    items.push({ icon: icon("trash-2"), label: "Удалить список", onClick: () => { void deleteList(list); } });
     popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
@@ -883,7 +894,7 @@ function renderAddList(): HTMLElement {
   // appears as soon as there is a name to create.
   const okBtn = el("button", {
     class: "kadd kadd-ok", type: "submit", title: "Создать список", "aria-label": "Создать список", hidden: true,
-  }, checkIcon()) as HTMLButtonElement;
+  }, icon("check")) as HTMLButtonElement;
   input.addEventListener("input", () => { okBtn.hidden = !input.value.trim(); });
   // Every list is a question list now: a test session is board-level, not a
   // column, so the old «вопросы / тесты» picker has nothing left to pick.
@@ -938,8 +949,8 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
       menu.append(row);
       continue;
     }
-    // Most items carry their icon inside the label string (emoji); an SVG icon
-    // comes as it.icon and takes the emoji's slot before the text.
+    // The glyph is a separate node, never part of the label: a menu row is read
+    // by its words, and the icon is only an anchor for the eye.
     menu.append(el("button", {
       class: "menu-item", type: "button", role: "menuitem",
       onclick: () => { close(); it.onClick(); },
@@ -1189,7 +1200,7 @@ function manageCheckbox(unit: Unit): HTMLElement {
 
 function manageMoveControl(unit: Unit): HTMLElement {
   const inp = el("input", { class: "input lm-move-pos", type: "number", min: "1", placeholder: "№" }) as HTMLInputElement;
-  const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", text: "↕️", title: "Переместить на эту позицию" });
+  const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", title: "Переместить на эту позицию" }, icon("arrow-up-down"));
   const go = (): void => { const n = parseInt(inp.value, 10); if (n >= 1) void moveUnitsTo(new Set([unit.key]), n); };
   btn.addEventListener("click", go);
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
@@ -1209,8 +1220,8 @@ function renderManageUnit(unit: Unit, pos: number): HTMLElement {
       el("span", { class: "lm-pos", text: "#" + pos }),
       el("span", { class: "lm-handle", text: "≡", title: "Перетащить" }),
       el("span", { class: "lm-title lm-group-title", text: "🔗 " + ((g && g.name) || "Связанные списки") }),
-      el("button", { class: "lm-icon", type: "button", text: "✏️", title: "Переименовать группу", onclick: () => { void renameGroup(unit.id); } }),
-      el("button", { class: "lm-icon", type: "button", text: "✂️", title: "Разъединить группу", onclick: () => { void unlinkGroup(unit.id); } }),
+      el("button", { class: "lm-icon", type: "button", title: "Переименовать группу", onclick: () => { void renameGroup(unit.id); } }, icon("pencil")),
+      el("button", { class: "lm-icon", type: "button", title: "Разъединить группу", onclick: () => { void unlinkGroup(unit.id); } }, icon("unlink")),
       manageMoveControl(unit),
     ));
     // Members are draggable within their own group (the whole group is still
@@ -2291,14 +2302,13 @@ function pvEditBtn(card: BoardCard): HTMLElement {
   const list = previewListRef;
   return el("button", {
     class: "pv-edit", title: "Редактировать карточку", "aria-label": "Редактировать карточку",
-    text: "✏️",
     onclick: (e: Event) => {
       e.stopPropagation();
       const group = previewGroupMode;
       hidePreview();
       void cardDetail.openCard(card, { returnTo: list ? { listId: list.id, cardId: card.id, group } : null });
     },
-  });
+  }, icon("pencil"));
 }
 
 // renderPreviewCard renders one card the way the docx export would: a question
@@ -2866,10 +2876,10 @@ function renderSeen(card: BoardCard): void {
     el("span", { class: "seen-label", text: label }),
     el("span", { class: "seen-names", text: line }),
     el("button", {
-      class: "input seen-copy", type: "button", text: "📋",
+      class: "input seen-copy", type: "button",
       title: "Скопировать",
       onclick: () => { void cardDetail.copyPlain(label + line); },
-    }),
+    }, icon("clipboard")),
   );
 }
 
@@ -2887,8 +2897,6 @@ const newLabelColor = colorField(byId("newLabelColor"), LABEL_COLORS[0]);
 newLabelForm.remove();
 
 // The compiled pages spell "+" as the ➕ emoji; swap it for the SVG plus.
-swapPlusIcon(byId("labelAddBtn"));
-swapPlusIcon(newLabelForm.querySelector<HTMLButtonElement>('button[type="submit"]')!);
 
 // setLabel adds or removes ONE assignment. The card's whole set goes up together
 // because the endpoint replaces it — cheap, and it keeps the offline mirror's
@@ -3173,12 +3181,12 @@ function openTesterList(list: BoardList): void {
       el("span", { class: "sess-meta", text: `${r.seen} из ${total}` })));
   }
   const copy = el("button", {
-    class: "input", type: "button", text: "📋 Скопировать",
+    class: "input", type: "button",
     onclick: () => {
       const text = [line.textContent, partial.textContent].filter(Boolean).join("\n");
       void cardDetail.copyPlain(text);
     },
-  });
+  }, ...iconed("clipboard", "Скопировать"));
   box.append(el("div", { class: "sess-invite-box" },
     el("div", { class: "sess-invite-lines" }, line, partial), copy));
   redraw();
@@ -3325,7 +3333,7 @@ function renderLabelsEditor(focusNew = false): void {
     const color = colorField(el("div"), lbl.color || "#888888");
     const count = el("span", { class: "sess-meta", text: `${usage.get(lbl.id) || 0} карт.` });
     labelRows.push({ lbl, name, color });
-    const drop = el("button", { class: "btn btn-danger", type: "button", text: "🗑️" });
+    const drop = el("button", { class: "btn btn-danger", type: "button" }, icon("trash-2"));
     drop.addEventListener("click", async () => {
       if (!confirm(`Удалить метку «${lbl.name}»? Она исчезнет со всех карточек.`)) return;
       try {

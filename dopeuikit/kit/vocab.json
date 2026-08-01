@@ -1,6 +1,46 @@
 {
   "root": "page",
   "enums": {
+    "icon-name": {
+      "prefix": "Icon",
+      "values": [
+        "arrow-left",
+        "arrow-left-right",
+        "arrow-up",
+        "arrow-up-down",
+        "bell",
+        "check",
+        "clipboard",
+        "columns-3",
+        "copy",
+        "dices",
+        "ellipsis",
+        "eye",
+        "file-down",
+        "file-text",
+        "file-up",
+        "flask-conical",
+        "house",
+        "link",
+        "list-checks",
+        "lock",
+        "maximize-2",
+        "menu",
+        "message-circle",
+        "paperclip",
+        "pencil",
+        "plus",
+        "replace",
+        "settings",
+        "tags",
+        "timer",
+        "trash-2",
+        "unlink",
+        "users",
+        "wand-sparkles",
+        "x"
+      ]
+    },
     "space": {
       "prefix": "Space",
       "values": [
@@ -160,6 +200,10 @@
       "name": "crumb",
       "props": [
         {
+          "name": "icon",
+          "enum": "icon-name"
+        },
+        {
           "name": "href"
         },
         {
@@ -176,6 +220,10 @@
       "name": "iconbtn",
       "props": [
         {
+          "name": "icon",
+          "enum": "icon-name"
+        },
+        {
           "name": "label",
           "required": true
         },
@@ -188,6 +236,10 @@
     {
       "name": "iconlink",
       "props": [
+        {
+          "name": "icon",
+          "enum": "icon-name"
+        },
         {
           "name": "href",
           "required": true
@@ -623,6 +675,10 @@
       "name": "button",
       "props": [
         {
+          "name": "icon",
+          "enum": "icon-name"
+        },
+        {
           "name": "kind",
           "enum": "button-kind"
         },
@@ -725,6 +781,10 @@
     {
       "name": "tab",
       "props": [
+        {
+          "name": "icon",
+          "enum": "icon-name"
+        },
         {
           "name": "view",
           "required": true
