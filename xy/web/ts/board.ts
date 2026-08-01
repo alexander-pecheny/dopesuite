@@ -22,7 +22,7 @@ import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
 import { type ColorField, colorField, LABEL_COLORS, textOn } from "./colorpick.js";
 import { anchorPopup } from "./popup.js";
-import { type MassAction, xyMass } from "./massaction.js";
+import { type MassAction, plural, xyMass } from "./massaction.js";
 import type { DataKey } from "./crypto.js";
 import type { SyncStatus } from "./sync.js";
 import type { OpBody } from "./store.js";
@@ -483,11 +483,6 @@ function groupNumbering(lists: BoardList[]): Map<number, Array<string | null>> {
 }
 
 // plural picks the Russian declension for n: 1 вопрос, 2 вопроса, 12 вопросов.
-function plural(n: number, one: string, few: string, many: string): string {
-  const m10 = n % 10, m100 = n % 100;
-  return m100 >= 11 && m100 <= 14 ? many : m10 === 1 ? one : m10 >= 2 && m10 <= 4 ? few : many;
-}
-
 function questionCountLabel(n: number): string {
   return `${n} ${plural(n, "вопрос", "вопроса", "вопросов")}`;
 }
@@ -525,7 +520,10 @@ function render(): void {
   }
   kanban.append(renderAddList());
   paintLabels();
-  if (massMode) { massSelected = xyMass.prune(massSelected, state.cards); renderMassBar(); }
+  // Unconditional: renderMassBar is also what HIDES the bar, so guarding it on
+  // massMode left «Готово» with nothing to close.
+  if (massMode) massSelected = xyMass.prune(massSelected, state.cards);
+  renderMassBar();
   kanban.scrollLeft = scrollLeft;
   for (const b of kanban.querySelectorAll<HTMLElement>(".kcards")) {
     const top = listScroll.get(b.dataset.listId);
@@ -2559,7 +2557,7 @@ function renderMassBar(): void {
   const actions = n
     ? xyMass.MASS_ACTIONS.map((a) => {
         const b = el("button", { class: "input mass-act" + (a.danger ? " mass-act-danger" : ""), type: "button", title: a.title, text: a.label });
-        b.addEventListener("click", () => openMass(a));
+        b.addEventListener("click", () => { void openMass(a); });
         return b;
       })
     : [el("span", { class: "mass-hint", text: "Отметьте карточки" })];
@@ -2669,6 +2667,11 @@ async function runMass(): Promise<void> {
   const cards = massCards();
   const msg = byId("massMessage");
   const run = byId<HTMLButtonElement>("massRun");
+  // Copying, and anything touching another board, re-encrypts and carries
+  // attachments — online-only, like the single-card path. Saying so once beats
+  // letting every card fail with the same message.
+  const online = action.key === "copy" || (action.key === "move" && massTarget && massTarget.ctx.boardId !== boardId);
+  if (online && !xySync.requireOnline("Копирование и перенос между досками доступны только онлайн.", msg)) return;
   run.disabled = true;
   const failed = new Set<number>();
   let ok = 0;
