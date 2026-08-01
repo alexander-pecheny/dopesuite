@@ -7,7 +7,7 @@
 // side-effect module bundled by pages/brain.ts.
 
 import {DopeTable} from "./match-table.js";
-import type {GameInitLike, RosterTeam, ScopedEventMessage} from "./match-table.js";
+import type {CellCoord, CellEdit, CellRangeSelection, GameInitLike, RosterTeam, ScopedEventMessage} from "./match-table.js";
 import {rankGroup} from "./brain-rank.js";
 import type {RankDuel, RankTeam} from "./brain-rank.js";
 
@@ -339,6 +339,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   brainRoot.replaceChildren(node);
   brainRoot.classList.toggle("fits-frame", activeTab === "roster");
   if (options.preserveScroll && frame) frame.scrollTop = scrollTop;
+  restoreSelection();
 }
 
 function renderTabs(): void {
@@ -417,7 +418,6 @@ function buildBout(code: string, view: BrainMatchView): HTMLElement {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
-  table.addEventListener("click", handleTableClick);
   table.addEventListener("change", handleTableChange);
   section.appendChild(table);
   if (editable && groupRules().tiebreakQuestions) {
@@ -687,40 +687,6 @@ function buildCrosstable(): HTMLElement {
 }
 
 
-const MARK_CYCLE: Record<string, string> = {"": "right", right: "wrong", wrong: ""};
-
-function cellContext(el: HTMLElement): {code: string; view: BrainMatchView; side: number; q: number} | null {
-  const code = el.dataset.match || "";
-  const view = matches.get(code);
-  const side = Number(el.dataset.side);
-  const q = Number(el.dataset.q);
-  if (!view || (side !== 0 && side !== 1) || !Number.isInteger(q)) return null;
-  if (q < 0 || q >= matchRows(view, side).length) return null;
-  return {code, view, side, q};
-}
-
-function setMark(cell: HTMLElement, mark: string): void {
-  const ctx = cellContext(cell);
-  if (!ctx || viewer || ctx.view.finished) return;
-  const row = matchRows(ctx.view, ctx.side)[ctx.q];
-  if (row.mark === mark) return;
-  row.mark = mark;
-  cell.classList.remove("right", "wrong");
-  if (mark) cell.classList.add(mark);
-  const table = cell.closest("table");
-  const score = table?.querySelector(".brain-score-head");
-  if (score) score.textContent = `${taken(ctx.view, 0)} : ${taken(ctx.view, 1)}`;
-  sendOps(ctx.code, [{path: ["teams", ctx.side, "rows", ctx.q, "mark"], value: mark}]);
-}
-
-function handleTableClick(event: Event): void {
-  const cell = (event.target as HTMLElement | null)?.closest?.<HTMLElement>(".answer-cell");
-  if (!cell || viewer) return;
-  const ctx = cellContext(cell);
-  if (!ctx || ctx.view.finished) return;
-  setMark(cell, MARK_CYCLE[matchRows(ctx.view, ctx.side)[ctx.q].mark] ?? "right");
-}
-
 function handleTableChange(event: Event): void {
   const target = event.target;
   if (target instanceof HTMLInputElement && target.classList.contains("finish-toggle")) {
@@ -737,31 +703,161 @@ function handleTableChange(event: Event): void {
   }
 }
 
-function handleKeydown(event: KeyboardEvent): void {
-  const cell = (document.activeElement as HTMLElement | null)?.closest?.<HTMLElement>(".answer-cell");
-  if (!cell || !brainRoot.contains(cell) || viewer) return;
-  const ctx = cellContext(cell);
-  if (!ctx || ctx.view.finished) return;
-  switch (event.key) {
-    case "1":
-    case "+":
-      setMark(cell, "right");
-      break;
-    case "0":
-    case "-":
-      setMark(cell, "wrong");
-      break;
-    case "Backspace":
-    case "Delete":
-      setMark(cell, "");
-      break;
-    case "Enter":
-    case " ":
-      setMark(cell, MARK_CYCLE[matchRows(ctx.view, ctx.side)[ctx.q].mark] ?? "right");
-      break;
-    default:
-      return;
+const MARK_CYCLE: Record<string, string> = {"": "right", right: "wrong", wrong: ""};
+
+function cellContext(el: HTMLElement): {code: string; view: BrainMatchView; side: number; q: number} | null {
+  const code = el.dataset.match || "";
+  const view = matches.get(code);
+  const side = Number(el.dataset.side);
+  const q = Number(el.dataset.q);
+  if (!view || (side !== 0 && side !== 1) || !Number.isInteger(q)) return null;
+  if (q < 0 || q >= matchRows(view, side).length) return null;
+  return {code, view, side, q};
+}
+
+function cellNode(code: string, side: number, q: number): HTMLElement | null {
+  return brainRoot.querySelector<HTMLElement>(
+    `.answer-cell[data-match="${gameTable.cssEscape(code)}"][data-side="${side}"][data-q="${q}"]`,
+  );
+}
+
+// The selection treats the stacked бої as one sheet: row = the question's
+// global index down the page, col = the side. The widget (shared with КСИ)
+// then gives click/drag/shift ranges, copy/paste and touch tap-cycling.
+function globalRow(code: string, q: number): number {
+  let row = 0;
+  for (const bout of orderedMatches()) {
+    if (bout.code === code) return row + q;
+    row += matchRows(bout.view, 0).length;
   }
+  return -1;
+}
+
+function boutAtRow(row: number): {code: string; q: number} | null {
+  for (const bout of orderedMatches()) {
+    const count = matchRows(bout.view, 0).length;
+    if (row < count) return {code: bout.code, q: row};
+    row -= count;
+  }
+  return null;
+}
+
+function totalRows(): number {
+  return orderedMatches().reduce((sum, bout) => sum + matchRows(bout.view, 0).length, 0);
+}
+
+function serializeMark(cell: Element | null | undefined): string {
+  const el = cell as HTMLElement | null;
+  return el?.classList.contains("right") ? "1" : el?.classList.contains("wrong") ? "0" : "";
+}
+
+function parseMarkText(text: string): string {
+  const value = String(text || "").trim().toLowerCase();
+  if (["1", "+", "q", "й", "right"].includes(value)) return "right";
+  if (["0", "-", "\u2212", "w", "ц", "wrong"].includes(value)) return "wrong";
+  return "";
+}
+
+// applyMarkEdits updates the local views and DOM, then sends one PATCH per бой.
+function applyMarkEdits(edits: CellEdit[]): void {
+  const opsByCode = new Map<string, Array<{path: Array<string | number>; value: unknown}>>();
+  for (const edit of edits) {
+    const cell = edit.cell as HTMLElement;
+    const ctx = cellContext(cell);
+    if (!ctx || viewer || ctx.view.finished) continue;
+    const mark = parseMarkText(String(edit.value ?? ""));
+    const row = matchRows(ctx.view, ctx.side)[ctx.q];
+    if (row.mark === mark) continue;
+    row.mark = mark;
+    cell.classList.remove("right", "wrong");
+    if (mark) cell.classList.add(mark);
+    const score = cell.closest("table")?.querySelector(".brain-score-head");
+    if (score) score.textContent = `${taken(ctx.view, 0)} : ${taken(ctx.view, 1)}`;
+    const ops = opsByCode.get(ctx.code) || [];
+    ops.push({path: ["teams", ctx.side, "rows", ctx.q, "mark"], value: mark});
+    opsByCode.set(ctx.code, ops);
+  }
+  for (const [code, ops] of opsByCode) sendOps(code, ops);
+}
+
+let activeCoord: CellCoord | null = null;
+let lastSelection: {anchor: CellCoord; focus: CellCoord} | null = null;
+
+const cellSelection: CellRangeSelection = gameTable.createCellRangeSelection({
+  root: brainRoot,
+  cellSelector: ".answer-cell",
+  readonly: () => viewer,
+  coordOf: (cell) => {
+    const ctx = cellContext(cell as HTMLElement);
+    if (!ctx) return null;
+    const row = globalRow(ctx.code, ctx.q);
+    return row < 0 ? null : {row, col: ctx.side};
+  },
+  cellAtCoord: (coord) => {
+    if (!coord) return null;
+    const at = boutAtRow(coord.row);
+    return at ? cellNode(at.code, coord.col, at.q) : null;
+  },
+  serialize: serializeMark,
+  parse: parseMarkText,
+  cycle: (cell) => MARK_CYCLE[parseMarkText(serializeMark(cell))] ?? "right",
+  applyValues: applyMarkEdits,
+  onSelectionChange: (selection) => {
+    lastSelection = selection?.anchor && selection.focus ? {anchor: selection.anchor, focus: selection.focus} : null;
+  },
+  onActiveChange: (cell, coord) => {
+    brainRoot.querySelector(".answer-cell.active")?.classList.remove("active");
+    cell?.classList.add("active");
+    activeCoord = coord ? {row: coord.row, col: coord.col} : null;
+  },
+});
+cellSelection.bind();
+
+// restoreSelection re-applies the cursor after a re-render rebuilt the cells.
+function restoreSelection(): void {
+  if (activeTab !== "protocol" || !lastSelection) return;
+  cellSelection.setSelection(lastSelection.anchor, lastSelection.focus, {focus: false});
+}
+
+function moveActive(dRow: number, dCol: number, extend: boolean): void {
+  if (!activeCoord) return;
+  const next = {
+    row: gameTable.clamp(activeCoord.row + dRow, 0, totalRows() - 1),
+    col: gameTable.clamp(activeCoord.col + dCol, 0, 1),
+  };
+  if (extend) {
+    cellSelection.setSelection(cellSelection.anchor || activeCoord, next);
+    return;
+  }
+  cellSelection.setSelection(next, next);
+}
+
+function setMarkForSelection(mark: string): void {
+  const cells = cellSelection.selectedCells();
+  const active = activeCoord && cellAtActive();
+  const targets = cells.length > 1 ? cells : active ? [active] : [];
+  applyMarkEdits(targets.map((cell) => ({cell, value: mark})));
+}
+
+function cellAtActive(): HTMLElement | null {
+  if (!activeCoord) return null;
+  const at = boutAtRow(activeCoord.row);
+  return at ? cellNode(at.code, activeCoord.col, at.q) : null;
+}
+
+function handleKeydown(event: KeyboardEvent): void {
+  if (viewer || activeTab !== "protocol" || !activeCoord) return;
+  const target = event.target as HTMLElement | null;
+  if (target && (target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+  const key = event.key.toLowerCase();
+  if (event.key === "ArrowUp") moveActive(-1, 0, event.shiftKey);
+  else if (event.key === "ArrowDown") moveActive(1, 0, event.shiftKey);
+  else if (event.key === "ArrowLeft") moveActive(0, -1, event.shiftKey);
+  else if (event.key === "ArrowRight") moveActive(0, 1, event.shiftKey);
+  else if (key === "q" || key === "й" || key === "+" || key === "1" || event.code === "NumpadAdd") setMarkForSelection("right");
+  else if (key === "w" || key === "ц" || key === "-" || key === "0" || event.code === "NumpadSubtract") setMarkForSelection("wrong");
+  else if (key === "backspace" || key === "delete" || event.key === " ") setMarkForSelection("");
+  else return;
   event.preventDefault();
 }
 
@@ -769,6 +865,7 @@ document.addEventListener("keydown", handleKeydown);
 
 
 render();
+gameTable.fitScrollFade(brainRoot.closest(".sheet-frame"));
 loadFestRoster();
 fetchMatches()
   .then(() => {
