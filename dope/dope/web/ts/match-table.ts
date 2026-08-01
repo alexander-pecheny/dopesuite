@@ -44,6 +44,7 @@ import {
   installVirtualKeypad,
   isClipped,
   markNameOverflow,
+  renderTabBar,
 } from "./widgets.js";
 
 const MINUS_SIGN = "\u2212";
@@ -1303,6 +1304,7 @@ export const DopeTable = {
   isClipped,
   bindScrollEdges,
   markNameOverflow,
+  renderTabBar,
   createLocalCache,
   gameEventsURL,
   createEpochTracker,

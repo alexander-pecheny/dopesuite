@@ -37,6 +37,7 @@ var pageSources = map[string]string{
 	"static/viewer.html": "ui/viewer.dopeui",
 	"static/od.html":     "ui/od.dopeui",
 	"static/si.html":     "ui/si.dopeui",
+	"static/brain.html":  "ui/brain.dopeui",
 }
 
 // pageBytes returns the HTML for a shell path: the compiled .dopeui page for the

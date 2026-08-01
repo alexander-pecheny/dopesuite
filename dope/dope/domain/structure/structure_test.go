@@ -231,7 +231,8 @@ func h2h(code string, finished bool, teamA, teamB int64, takenA, takenB int, pla
 
 // Worked example, computed by hand: 101 beats 102 5:3, draws 103 4:4;
 // 103 beats 102 6:2. Points (2/1/0): 101=3, 103=3, 102=0; the points tie
-// breaks on diff (103: +4, 101: +2).
+// carries through личная встреча (their бой drew, 1:1 in the pair) and breaks
+// on taken (103: 10, 101: 9).
 func TestRoundRobinStandings(t *testing.T) {
 	kind, _ := Kind("rr")
 	ranked, err := kind.Standings(json.RawMessage(`{}`), []MatchOutcome{
@@ -295,6 +296,70 @@ func assertRanked(t *testing.T, got, want []RankedEntry) {
 			}
 		}
 	}
+}
+
+// The КИНСБФ §4.2 order: очки, then личная встреча among the tied, then
+// taken, then diff. The reference-sheet group, computed by hand: Рыб (401)
+// and Перед (403) both finish on 4 очка; Перед won their бой 3:2, so Перед is
+// first despite the worse diff (0 vs +5). Пост (402) and Дело (404) tie on 2;
+// Дело won their бой 3:0.
+func TestRoundRobinStandingsHeadToHead(t *testing.T) {
+	kind, _ := Kind("rr")
+	referenceGroup := []MatchOutcome{
+		h2h("g-1", true, 401, 402, 4, 0, 1, 2),
+		h2h("g-2", true, 403, 404, 2, 1, 1, 2),
+		h2h("g-3", true, 401, 404, 3, 1, 1, 2),
+		h2h("g-4", true, 402, 403, 3, 1, 1, 2),
+		h2h("g-5", true, 401, 403, 2, 3, 2, 1),
+		h2h("g-6", true, 402, 404, 0, 3, 2, 1),
+	}
+	ranked, err := kind.Standings(json.RawMessage(`{}`), referenceGroup)
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	assertRanked(t, ranked, []RankedEntry{
+		{Rank: 1, Participant: 403, Metrics: map[string]float64{"points": 4, "diff": 0}},
+		{Rank: 2, Participant: 401, Metrics: map[string]float64{"points": 4, "diff": 5}},
+		{Rank: 3, Participant: 404, Metrics: map[string]float64{"points": 2, "diff": 0}},
+		{Rank: 4, Participant: 402, Metrics: map[string]float64{"points": 2, "diff": -5}},
+	})
+
+	// The same group under an explicit football-style order ignores the бои
+	// between the tied and ranks Рыб first on diff.
+	footballOrder, err := kind.Standings(json.RawMessage(`{"order":["points","diff","taken"]}`), referenceGroup)
+	if err != nil {
+		t.Fatalf("Standings (football order): %v", err)
+	}
+	assertRanked(t, footballOrder, []RankedEntry{
+		{Rank: 1, Participant: 401}, {Rank: 2, Participant: 403},
+		{Rank: 3, Participant: 404}, {Rank: 4, Participant: 402},
+	})
+}
+
+// A three-way tie is a mini-table (§4.2): A beats B beats C beats A, all on
+// 4 очка with D swept. The mini-table stays tied (2 очка each), the comparator
+// sequence continues — taken splits A (10) from B and C (9 each), and only
+// then diff orders B (+4) over C (+3). Личная встреча is consumed once, not
+// re-applied to later sub-ties: B beat C but ranks below no one for it.
+func TestRoundRobinStandingsThreeWayMiniTable(t *testing.T) {
+	kind, _ := Kind("rr")
+	ranked, err := kind.Standings(json.RawMessage(`{}`), []MatchOutcome{
+		h2h("g-1", true, 501, 502, 3, 2, 1, 2),
+		h2h("g-2", true, 502, 503, 3, 2, 1, 2),
+		h2h("g-3", true, 503, 501, 3, 2, 1, 2),
+		h2h("g-4", true, 501, 504, 5, 4, 1, 2),
+		h2h("g-5", true, 502, 504, 4, 0, 1, 2),
+		h2h("g-6", true, 503, 504, 4, 1, 1, 2),
+	})
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	assertRanked(t, ranked, []RankedEntry{
+		{Rank: 1, Participant: 501, Metrics: map[string]float64{"points": 4, "taken": 10}},
+		{Rank: 2, Participant: 502, Metrics: map[string]float64{"points": 4, "taken": 9, "diff": 4}},
+		{Rank: 3, Participant: 503, Metrics: map[string]float64{"points": 4, "taken": 9, "diff": 3}},
+		{Rank: 4, Participant: 504, Metrics: map[string]float64{"points": 0}},
+	})
 }
 
 // A partial round-robin is schedule data: explicit pairings replace the

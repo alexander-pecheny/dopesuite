@@ -240,6 +240,9 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 				case "si", "ksi":
 					s.serveGameHTMLWithInit(w, r, "static/si.html", scope)
 					return
+				case "brain":
+					s.serveGameHTMLWithInit(w, r, "static/brain.html", scope)
+					return
 				default:
 					s.serveViewerHTMLWithInit(w, r, scope, parts[1:])
 					return

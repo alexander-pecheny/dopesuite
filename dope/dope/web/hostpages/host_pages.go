@@ -599,6 +599,8 @@ func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, festI
 		s.h.ServeGameHTMLWithInit(w, r, "static/od.html", scope)
 	case "si", "ksi":
 		s.h.ServeGameHTMLWithInit(w, r, "static/si.html", scope)
+	case "brain":
+		s.h.ServeGameHTMLWithInit(w, r, "static/brain.html", scope)
 	default:
 		s.h.ServeHostHTMLWithInit(w, r, scope, parts)
 	}

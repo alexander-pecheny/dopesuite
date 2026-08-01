@@ -24,6 +24,7 @@ type FestScheme struct {
 	TourComp          json.RawMessage `json:"tourComp,omitempty"`
 	NTeams            int             `json:"nTeams,omitempty"`
 	Themes            int             `json:"themes,omitempty"`
+	Questions         int             `json:"questions,omitempty"`
 	Participants      []string        `json:"participants,omitempty"`
 	Stickers          json.RawMessage `json:"stickers,omitempty"`
 }
@@ -45,6 +46,7 @@ type SchemeStage struct {
 	Code      string          `json:"code"`
 	Title     string          `json:"title"`
 	StageType string          `json:"stage_type"`
+	Kind      string          `json:"kind,omitempty"` // registered StageKind ('rr', …); empty = stage_type
 	Position  int             `json:"position"`
 	Matches   []SchemeMatch   `json:"matches"`
 	Teams     []SchemeSlot    `json:"teams"`

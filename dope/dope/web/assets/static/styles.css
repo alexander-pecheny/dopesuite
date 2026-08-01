@@ -437,6 +437,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1);
   color: var(--text-strong);
   font-size: var(--text-xs);
   line-height: var(--leading-tight);
@@ -3708,6 +3709,125 @@ body:not(.embedded-match) .grid-match {
 .numbers-import-row.is-fuzzy .numbers-import-badge { color: var(--warn-text); }
 
 .numbers-import-row.is-unmatched .numbers-import-badge { color: var(--muted-light); }
+
+/* Брейн: the бой protocol blocks and the group cross-table. Both mirror the
+   reference sheet's structure — a бой is № | player | mark | mark | player
+   around a running-score header with appendable «П» tiebreak rows; the
+   cross-table is score cells vs each opponent plus О / + / − / +/− / М. */
+.brain-protocol {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.brain-bout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.match-table.brain-detailed .brain-name-head,
+.match-table.brain-detailed .brain-player-cell {
+  width: var(--team-col);
+  min-width: var(--team-col);
+  padding: var(--space-0);
+}
+
+.match-table.brain-detailed .brain-bout-corner {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.brain-name {
+  display: block;
+  text-align: center;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.match-table.brain-detailed .brain-score-head {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+.match-table.brain-crosstable .brain-group-head {
+  text-align: center;
+  color: var(--text-strong);
+}
+
+.match-table.brain-crosstable .brain-cross-cols th {
+  font-style: italic;
+  color: var(--muted);
+}
+
+.match-table.brain-crosstable .brain-cross-team-head {
+  text-align: left;
+}
+
+.match-table.brain-crosstable .brain-cross-team {
+  width: var(--team-col);
+  min-width: var(--team-col);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.match-table.brain-crosstable .brain-cross-cell {
+  width: var(--question-col);
+  min-width: var(--question-col);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.match-table.brain-crosstable .brain-cross-num {
+  width: var(--total-col);
+  min-width: var(--narrow-col);
+}
+
+.match-table.brain-crosstable .brain-cross-diag {
+  color: var(--muted-light);
+}
+
+.match-table.brain-crosstable .brain-cross-live {
+  font-style: italic;
+  color: var(--muted);
+}
+
+.match-table.brain-detailed .brain-finish-head,
+.match-table.brain-detailed .brain-finish-gap {
+  --cell-fill: var(--structure);
+  border-radius: 0;
+  border-color: var(--structure);
+}
+
+.match-table.brain-detailed .brain-finish-head {
+  padding: var(--space-0-5) var(--space-1-5);
+}
+
+.brain-player-select {
+  width: 100%;
+  height: 100%;
+  min-height: var(--question-size);
+  padding: var(--space-0) var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.match-table.brain-detailed .brain-tiebreak-marker {
+  font-style: italic;
+}
+
+.brain-controls {
+  display: flex;
+  gap: var(--space-2);
+}
 
 /* ════════════════════════════════════════════════════════════════════════
    end of the section moved out of core.css — the original dope layer follows

@@ -43,3 +43,9 @@ A host's manual place assignment for a Slot, part of the Match's Protocol state.
 
 **Reseed**:
 A Stage that re-ranks Participants from prior results (with deterministic lots for true ties) so later Stages can seat by rank.
+
+**Перестрелка**:
+A tiebreak continuation, common to every format (EK's shootout themes, ОД's shootout rounds, brain's "П" questions). Two distinct forms: extra material appended to the Match itself until the tie breaks, or a separate replay Match between fully tied Participants. Whether a Stage's Matches allow the appended form is part of that Stage's rules — regulations differ per tournament.
+
+**Личная встреча**:
+The head-to-head comparator in group ranking: among Participants tied on очки, the points they took in Matches between themselves (for exactly two, simply who won their Match). Ranking comparators and their order are per-Stage rules.

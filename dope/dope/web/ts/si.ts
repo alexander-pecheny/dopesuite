@@ -756,29 +756,19 @@ function resultMetrics(playerIndex: number): ResultMetrics {
 
 function renderTabs(): void {
   if (!siTabsRoot) return;
-  siTabsRoot.replaceChildren();
   if (!isTeamMode()) {
+    siTabsRoot.replaceChildren();
     siTabsRoot.hidden = true;
     return;
   }
   siTabsRoot.hidden = false;
-  for (const tab of visibleTabs()) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "match-tab" + (activeTab === tab.key ? " active" : "");
-    btn.textContent = tab.label;
-    btn.setAttribute("role", "tab");
-    btn.setAttribute("aria-selected", activeTab === tab.key ? "true" : "false");
-    btn.addEventListener("click", () => {
-      if (activeTab === tab.key) return;
-      activeTab = tab.key;
-      if (window.location.hash.replace(/^#/, "") !== tab.key) {
-        history.replaceState(null, "", `#${tab.key}`);
-      }
-      render();
-    });
-    siTabsRoot.appendChild(btn);
-  }
+  gameTable.renderTabBar(siTabsRoot, visibleTabs(), activeTab, (key) => {
+    activeTab = key;
+    if (window.location.hash.replace(/^#/, "") !== key) {
+      history.replaceState(null, "", `#${key}`);
+    }
+    render();
+  });
 }
 
 function scrollFrame(): Element | null {

@@ -38,9 +38,9 @@ func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMa
 	if legacy, ok := p.(LegacyResultWriter); ok {
 		return legacy.WriteResultsTx(ctx, tx, match)
 	}
-	stateJSON, err := json.Marshal(match.State)
-	if err != nil {
-		return err
+	stateJSON := json.RawMessage(match.RawState)
+	if len(stateJSON) == 0 {
+		stateJSON = json.RawMessage("{}")
 	}
 	outcomes, err := p.Score(nil, stateJSON)
 	if err != nil {

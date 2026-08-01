@@ -14,10 +14,11 @@ import "encoding/json"
 
 // Canonical game_type codes as stored in the games.game_type column.
 const (
-	EK  = "ek"  // эрудит-квартет (bracket of small matches)
-	OD  = "od"  // ЧГК — командная викторина с раундами по минуте
-	KSI = "ksi" // командная своя игра
-	SI  = "si"  // legacy alias used by some viewers/renderers for KSI
+	EK    = "ek"    // эрудит-квартет (bracket of small matches)
+	OD    = "od"    // ЧГК — командная викторина с раундами по минуте
+	KSI   = "ksi"   // командная своя игра
+	SI    = "si"    // legacy alias used by some viewers/renderers for KSI
+	Brain = "brain" // брейн-ринг — head-to-head buzzer бои
 )
 
 // Default is the game type assumed when a game has none recorded.
@@ -37,10 +38,11 @@ type Definition struct {
 // registry is the single source of truth for known game types. Iteration order
 // is never relied upon; look-ups go through the helpers below.
 var registry = map[string]Definition{
-	EK:  {Code: EK, Label: "ЭК"},
-	OD:  {Code: OD, Label: "ЧГК", ChGK: true},
-	KSI: {Code: KSI, Label: "КСИ", ChGK: true},
-	SI:  {Code: SI, Label: "СИ", ChGK: true},
+	EK:    {Code: EK, Label: "ЭК"},
+	OD:    {Code: OD, Label: "ЧГК", ChGK: true},
+	KSI:   {Code: KSI, Label: "КСИ", ChGK: true},
+	SI:    {Code: SI, Label: "СИ", ChGK: true},
+	Brain: {Code: Brain, Label: "Брейн", ChGK: true},
 }
 
 // Label returns the short display label for a game type, falling back to the

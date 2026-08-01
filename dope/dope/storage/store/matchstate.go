@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ var QuestionValues = [5]int{10, 20, 30, 40, 50}
 type DBMatchState struct {
 	MatchID      int64
 	GameID       int64
+	GameType     string
 	Code         string
 	Title        string
 	Status       string
@@ -31,13 +33,41 @@ type DBMatchState struct {
 	Venue        *VenueView
 	State        MatchState
 	Blob         MatchBlob
+	RawState     string // verbatim matches.state_json — the Protocol document for non-EK games
 	TeamIDs      []int64
 	RosterSource string
 }
 
+// IsEKShaped reports whether the match's state blob follows the EK team-keyed
+// blob vocabulary (matchops/MatchBlob); every other protocol owns its state as
+// an opaque JSON document addressed by generic set ops.
+func (m DBMatchState) IsEKShaped() bool {
+	return m.GameType == "" || m.GameType == "ek"
+}
+
 // MatchViewFrom scores a loaded match into its client-facing view, joining the
-// header fields BuildView doesn't see.
+// header fields BuildView doesn't see. A non-EK match carries its Protocol
+// document verbatim in State plus light slot-occupant rows — the renderer owns
+// the shape, the view only frames it.
 func MatchViewFrom(match DBMatchState) MatchView {
+	if !match.IsEKShaped() {
+		teams := make([]TeamView, len(match.State.Teams))
+		for i, team := range match.State.Teams {
+			teams[i] = TeamView{ID: team.ID, Name: team.Name, Place: team.Place}
+		}
+		return MatchView{
+			Title:      match.Title,
+			Code:       match.Code,
+			StageCode:  match.StageCode,
+			StageTitle: match.StageTitle,
+			Venue:      match.Venue,
+			Finished:   match.Status == "finished",
+			Revision:   match.Revision,
+			UpdatedAt:  match.UpdatedAt.Format(time.RFC3339),
+			State:      json.RawMessage(match.RawState),
+			Teams:      teams,
+		}
+	}
 	view := BuildView(match.State)
 	view.Code = match.Code
 	view.StageCode = match.StageCode
@@ -132,7 +162,7 @@ func LoadDBMatchStateWhere(ctx context.Context, q Queryer, where string, args ..
 	var venueTitle sql.NullString
 	var stateJSON string
 	if err := q.QueryRowContext(ctx, `
-select m.id, m.game_id, m.code, m.title, m.status, m.revision, m.state_json,
+select m.id, m.game_id, g.game_type, m.code, m.title, m.status, m.revision, m.state_json,
        t.revision, t.updated_at, s.code, s.title, v.number, v.title, g.roster_source
 from matches m
 join fests t on t.id = m.fest_id
@@ -140,15 +170,18 @@ join games g on g.id = m.game_id
 join stages s on s.id = m.stage_id
 left join venues v on v.id = m.venue_id
 where `+where, args...).
-		Scan(&match.MatchID, &match.GameID, &match.Code, &match.Title, &match.Status, &match.Revision, &stateJSON,
+		Scan(&match.MatchID, &match.GameID, &match.GameType, &match.Code, &match.Title, &match.Status, &match.Revision, &stateJSON,
 			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle, &match.RosterSource); err != nil {
 		return DBMatchState{}, err
 	}
-	blob, err := ParseMatchBlob(stateJSON)
-	if err != nil {
-		return DBMatchState{}, fmt.Errorf("match %d state: %w", match.MatchID, err)
+	match.RawState = stateJSON
+	if match.IsEKShaped() {
+		blob, err := ParseMatchBlob(stateJSON)
+		if err != nil {
+			return DBMatchState{}, fmt.Errorf("match %d state: %w", match.MatchID, err)
+		}
+		match.Blob = blob
 	}
-	match.Blob = blob
 	match.UpdatedAt = ParseDBTime(updatedAt)
 	if venueNumber.Valid {
 		match.Venue = &VenueView{Number: int(venueNumber.Int64), Title: venueTitle.String}
@@ -205,6 +238,22 @@ order by ms.slot_index`, match.MatchID)
 	}
 	if err := slotRows.Close(); err != nil {
 		return DBMatchState{}, err
+	}
+	if !match.IsEKShaped() {
+		for _, slot := range slots {
+			for len(match.State.Teams) <= slot.Index {
+				match.State.Teams = append(match.State.Teams, TeamState{})
+				match.TeamIDs = append(match.TeamIDs, 0)
+			}
+			name := slot.Name
+			if !slot.TeamID.Valid {
+				name = SlotSourceLabel(slot.SourceType, slot.SourceRef)
+			} else {
+				match.TeamIDs[slot.Index] = slot.TeamID.Int64
+			}
+			match.State.Teams[slot.Index] = TeamState{ID: match.TeamIDs[slot.Index], Name: name, Place: slot.Place}
+		}
+		return match, nil
 	}
 	playerName, err := blobPlayerNames(ctx, q, match.Blob)
 	if err != nil {

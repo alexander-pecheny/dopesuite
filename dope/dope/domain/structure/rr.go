@@ -3,6 +3,7 @@ package structure
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"dope/dope/storage/store"
 )
@@ -120,7 +121,8 @@ func circleRounds(n int) [][][2]int {
 
 // rrStandingsConfig tunes the cross-table: the head-to-head points rule, the
 // protocol metric acting as the score, and the ranking key order. Defaults are
-// the brain-ring canon: 2/1/0 over "taken", ranked О → ± → +.
+// the КИНСБФ canon (§4.2): 2/1/0 over "taken", ranked очки → личная встреча
+// among the tied ("h2h") → taken → diff.
 type rrStandingsConfig struct {
 	Points *struct {
 		Win  float64 `json:"win"`
@@ -146,7 +148,7 @@ func (roundRobin) Standings(cfg json.RawMessage, results []MatchOutcome) ([]Rank
 	}
 	order := conf.Order
 	if order == nil {
-		order = []string{"points", "diff", "taken"}
+		order = []string{"points", "h2h", "taken", "diff"}
 	}
 
 	byParticipant := map[int64]*RankedEntry{}
@@ -194,29 +196,84 @@ func (roundRobin) Standings(cfg json.RawMessage, results []MatchOutcome) ([]Rank
 		e.Metrics["diff"] = e.Metrics["taken"] - e.Metrics["conceded"]
 		ranked = append(ranked, *e)
 	}
-	keyLess := func(x, y RankedEntry) int {
-		for _, key := range order {
-			if x.Metrics[key] != y.Metrics[key] {
-				if x.Metrics[key] > y.Metrics[key] {
-					return -1
+
+	// Личная встреча needs each finished бой's point split, not just totals.
+	type duel struct {
+		a, b   int64
+		pa, pb float64
+	}
+	var duels []duel
+	for _, match := range results {
+		if !match.Finished || len(match.Slots) != 2 {
+			continue
+		}
+		a, b := match.Slots[0], match.Slots[1]
+		if a.Participant == 0 || b.Participant == 0 {
+			continue
+		}
+		switch {
+		case a.Place < b.Place:
+			duels = append(duels, duel{a.Participant, b.Participant, win, loss})
+		case a.Place > b.Place:
+			duels = append(duels, duel{a.Participant, b.Participant, loss, win})
+		default:
+			duels = append(duels, duel{a.Participant, b.Participant, draw, draw})
+		}
+	}
+
+	// Each key partitions the still-tied group; "h2h" is relative to that
+	// group — the points the tied teams took in their бои against each other.
+	// Keys are consumed in order and never re-applied to later sub-ties, so a
+	// still-tied pair inside a mini-table falls through to the next key.
+	seats := make([]int, len(ranked))
+	for i := range seats {
+		seats[i] = i
+	}
+	tieGroup := make([]int, len(ranked))
+	groupSeq := 0
+	var arrange func(ids []int, keyIdx int)
+	arrange = func(ids []int, keyIdx int) {
+		if len(ids) < 2 || keyIdx >= len(order) {
+			groupSeq++
+			for _, i := range ids {
+				tieGroup[i] = groupSeq
+			}
+			return
+		}
+		val := func(i int) float64 { return ranked[i].Metrics[order[keyIdx]] }
+		if order[keyIdx] == "h2h" {
+			tied := make(map[int64]bool, len(ids))
+			for _, i := range ids {
+				tied[ranked[i].Participant] = true
+			}
+			sub := map[int64]float64{}
+			for _, d := range duels {
+				if tied[d.a] && tied[d.b] {
+					sub[d.a] += d.pa
+					sub[d.b] += d.pb
 				}
-				return 1
+			}
+			val = func(i int) float64 { return sub[ranked[i].Participant] }
+		}
+		sort.SliceStable(ids, func(x, y int) bool { return val(ids[x]) > val(ids[y]) })
+		start := 0
+		for end := 1; end <= len(ids); end++ {
+			if end == len(ids) || val(ids[end]) != val(ids[start]) {
+				arrange(ids[start:end], keyIdx+1)
+				start = end
 			}
 		}
-		return 0
 	}
-	// Insertion sort: stable, so full ties keep first-appearance order.
-	for i := 1; i < len(ranked); i++ {
-		for j := i; j > 0 && keyLess(ranked[j], ranked[j-1]) < 0; j-- {
-			ranked[j], ranked[j-1] = ranked[j-1], ranked[j]
-		}
-	}
-	for i := range ranked {
-		if i > 0 && keyLess(ranked[i], ranked[i-1]) == 0 {
-			ranked[i].Rank = ranked[i-1].Rank
+	arrange(seats, 0)
+
+	out := make([]RankedEntry, len(ranked))
+	for pos, i := range seats {
+		out[pos] = ranked[i]
+		if pos > 0 && tieGroup[i] == tieGroup[seats[pos-1]] {
+			out[pos].Rank = out[pos-1].Rank
 		} else {
-			ranked[i].Rank = i + 1
+			out[pos].Rank = pos + 1
 		}
 	}
-	return ranked, nil
+	return out, nil
 }

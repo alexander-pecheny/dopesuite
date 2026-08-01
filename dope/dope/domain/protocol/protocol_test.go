@@ -142,3 +142,62 @@ func TestODScore(t *testing.T) {
 		}
 	}
 }
+
+// Worked example, computed by hand. A 5-question бой plus one "П" tiebreak:
+// side 1 takes q1,q3,П (3 with tiebreaks, 2 base), side 2 takes q2,q4 (2/2).
+// Side 1 leads: places 1/2. The tied variant (П cleared) shares 1.5 — group
+// points are the rr stage's concern, gated on matches.status, not scored here.
+func TestBrainScore(t *testing.T) {
+	p, ok := Get("brain")
+	if !ok {
+		t.Fatal("brain protocol not registered")
+	}
+	state := func(lastMark string) json.RawMessage {
+		return json.RawMessage(`{"tiebreaks":1,"teams":[
+			{"rows":[{"player":"p1","mark":"right"},{"player":"","mark":""},{"player":"p2","mark":"right"},{"player":"p1","mark":"wrong"},{"player":"","mark":""},{"player":"p1","mark":"` + lastMark + `"}]},
+			{"rows":[{"player":"","mark":""},{"player":"q1","mark":"right"},{"player":"q2","mark":"wrong"},{"player":"q1","mark":"right"},{"player":"","mark":""},{"player":"","mark":""}]}]}`)
+	}
+	outcomes, err := p.Score(nil, state("right"))
+	if err != nil {
+		t.Fatalf("Score: %v", err)
+	}
+	want := []struct {
+		place, taken, takenBase float64
+	}{{1, 3, 2}, {2, 2, 2}}
+	if len(outcomes) != len(want) {
+		t.Fatalf("got %d outcomes, want %d", len(outcomes), len(want))
+	}
+	for i, w := range want {
+		o := outcomes[i]
+		if o.Place != w.place || o.Metrics["taken"] != w.taken || o.Metrics["takenBase"] != w.takenBase {
+			t.Errorf("side %d = place %v taken %v base %v, want %v/%v/%v",
+				i+1, o.Place, o.Metrics["taken"], o.Metrics["takenBase"], w.place, w.taken, w.takenBase)
+		}
+	}
+
+	tied, err := p.Score(nil, state(""))
+	if err != nil {
+		t.Fatalf("Score (tied): %v", err)
+	}
+	for i, o := range tied {
+		if o.Place != 1.5 {
+			t.Errorf("tied side %d place = %v, want 1.5", i+1, o.Place)
+		}
+	}
+
+	empty, err := p.EmptyState(json.RawMessage(`{"questions":4}`))
+	if err != nil {
+		t.Fatalf("EmptyState: %v", err)
+	}
+	var parsed struct {
+		Teams []struct {
+			Rows []struct{} `json:"rows"`
+		} `json:"teams"`
+	}
+	if err := json.Unmarshal(empty, &parsed); err != nil {
+		t.Fatalf("parse empty state: %v", err)
+	}
+	if len(parsed.Teams) != 2 || len(parsed.Teams[0].Rows) != 4 || len(parsed.Teams[1].Rows) != 4 {
+		t.Errorf("empty state shape = %s", empty)
+	}
+}

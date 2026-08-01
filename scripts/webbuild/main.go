@@ -159,7 +159,7 @@ func targets() []target {
 		{"dope", func() []api.BuildOptions {
 			return []api.BuildOptions{
 				{
-					EntryPointsAdvanced: entries("dope/dope/web/ts/pages/", "od", "si", "host", "viewer"),
+					EntryPointsAdvanced: entries("dope/dope/web/ts/pages/", "od", "si", "brain", "host", "viewer"),
 					Bundle:              true,
 					Format:              api.FormatIIFE,
 					Outdir:              "dope/dope/web/assets/static/dist",
@@ -175,7 +175,7 @@ func targets() []target {
 				// Library modules as ESM for the test runner (not embedded, not served).
 				{
 					EntryPointsAdvanced: entries("dope/dope/web/ts/",
-						"entry-model", "match-table", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid",
+						"entry-model", "match-table", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid", "brain-rank",
 						// game-page draws the 🏠 crumb through it
 						"icons_gen"),
 					Format: api.FormatESModule,

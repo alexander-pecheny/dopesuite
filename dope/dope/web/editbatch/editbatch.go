@@ -569,8 +569,10 @@ func (b *Batcher) runJob(ctx context.Context, tx *sql.Tx, job *editJob, byMatch 
 }
 
 // applyMatchPatchTx applies one editor's ops to a match's Protocol state blob.
-// The ops address blob paths; matchops turns each into the typed mutation for
-// that path, and the recorded BlobOps become the journal's semantic record.
+// EK ops address blob paths; matchops turns each into the typed mutation for
+// that path. Every other protocol owns its state as an opaque document, edited
+// by the same generic set-op engine flat games use. Either way the recorded
+// BlobOps become the journal's semantic record.
 func (b *Batcher) applyMatchPatchTx(ctx context.Context, tx *sql.Tx, job *editJob) error {
 	match, err := b.loadMatchTx(ctx, tx, job)
 	if err != nil {
@@ -578,6 +580,16 @@ func (b *Batcher) applyMatchPatchTx(ctx context.Context, tx *sql.Tx, job *editJo
 	}
 	if match.State.Finished {
 		return errors.New("match is finished")
+	}
+	if !match.IsEKShaped() {
+		next, blobOps, err := applyStateOps(match.GameType, match.RawState, job.req.Ops, nil, false)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `update matches set state_json = ? where id = ?`, string(next), job.matchID); err != nil {
+			return err
+		}
+		return festwrite.JournalMatchPatchTx(ctx, tx, job.matchID, blobOps)
 	}
 	ops, err := store.MutateMatchBlobTx(ctx, tx, job.matchID, func(blob *store.MatchBlob) error {
 		return matchops.Apply(blob, match, job.req.Ops)
@@ -693,10 +705,64 @@ func (b *Batcher) failBatch(jobs []*editJob, err error) {
 	}
 }
 
+// applyStateOps validates and applies generic set ops to a Protocol state
+// document, returning the updated JSON and the semantic journal ops. Shared by
+// the flat-game and per-match patch paths so live writes and journal replay
+// (the generic branch of storage/journal ApplyMatchPatch) stay one engine.
+func applyStateOps(gameType, stateJSON string, ops []edit.PatchOp, sample *metrics.Sample, metricsOn bool) ([]byte, []store.BlobOp, error) {
+	if stateJSON == "" {
+		stateJSON = "{}"
+	}
+	var root any
+	tUnmarshal := metrics.NowIf(metricsOn)
+	if err := json.Unmarshal([]byte(stateJSON), &root); err != nil {
+		return nil, nil, fmt.Errorf("stored game state is invalid json: %w", err)
+	}
+	if metricsOn {
+		sample.Unmarshal = time.Since(tUnmarshal)
+	}
+	if root == nil {
+		root = map[string]any{}
+	}
+
+	blobOps := make([]store.BlobOp, 0, len(ops))
+	for _, op := range ops {
+		if op.Op != "" && op.Op != "set" {
+			return nil, nil, fmt.Errorf("unsupported patch op %q", op.Op)
+		}
+		path, err := edit.ParseJSONPatchPath(op.Path)
+		if err != nil {
+			return nil, nil, err
+		}
+		if edit.PatchPathTouchesRatingRoster(gameType, path) {
+			return nil, nil, edit.ErrRatingRosterImmutable
+		}
+		value, err := edit.DecodePatchValue(op.Value)
+		if err != nil {
+			return nil, nil, err
+		}
+		root, err = edit.ApplyJSONSet(root, path, value)
+		if err != nil {
+			return nil, nil, err
+		}
+		blobOps = append(blobOps, store.BlobOp{Kind: "set", Path: pointerFromSegments(path), Value: value, Parts: op.Path})
+	}
+
+	tMarshal := metrics.NowIf(metricsOn)
+	next, err := json.Marshal(root)
+	if err != nil {
+		return nil, nil, err
+	}
+	if metricsOn {
+		sample.Marshal = time.Since(tMarshal)
+	}
+	return next, blobOps, nil
+}
+
 // applyGamePatchTx applies one flat game's state PATCH within an existing
-// transaction: read the current state, apply the ops, write it back and bump the
-// fest revision (which appends the journal event). It performs no locking, no
-// begin/commit — the batcher owns those — so several edits share one tx. It
+// transaction: read the current state, apply the ops, write it back and bump
+// the fest revision (which appends the journal event). It performs no locking,
+// no begin/commit — the batcher owns those — so several edits share one tx. It
 // returns the new state, the assigned revision and the marshaled ops (for the
 // merged broadcast). Ops are validated and applied before any write, so a
 // returned error means nothing was written for this edit.
@@ -721,54 +787,12 @@ where g.fest_id = ? and g.id = ?`,
 		scope.FestID, scope.GameID).Scan(&gameType, &matchID, &stateJSON); err != nil {
 		return nil, 0, nil, err
 	}
-	if stateJSON == "" {
-		stateJSON = "{}"
-	}
 
-	var root any
-	tUnmarshal := metrics.NowIf(metricsOn)
-	if err := json.Unmarshal([]byte(stateJSON), &root); err != nil {
-		return nil, 0, nil, fmt.Errorf("stored game state is invalid json: %w", err)
-	}
-	if metricsOn {
-		sample.Unmarshal = time.Since(tUnmarshal)
-	}
-	if root == nil {
-		root = map[string]any{}
-	}
-
-	blobOps := make([]store.BlobOp, 0, len(req.Ops))
-	for _, op := range req.Ops {
-		if op.Op != "" && op.Op != "set" {
-			return nil, 0, nil, fmt.Errorf("unsupported patch op %q", op.Op)
-		}
-		path, err := edit.ParseJSONPatchPath(op.Path)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		if edit.PatchPathTouchesRatingRoster(gameType, path) {
-			return nil, 0, nil, edit.ErrRatingRosterImmutable
-		}
-		value, err := edit.DecodePatchValue(op.Value)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		root, err = edit.ApplyJSONSet(root, path, value)
-		if err != nil {
-			return nil, 0, nil, err
-		}
-		blobOps = append(blobOps, store.BlobOp{Kind: "set", Path: pointerFromSegments(path), Value: value, Parts: op.Path})
-	}
-
-	tMarshal := metrics.NowIf(metricsOn)
-	next, err := json.Marshal(root)
+	next, blobOps, err := applyStateOps(gameType, stateJSON, req.Ops, sample, metricsOn)
 	if err != nil {
 		return nil, 0, nil, err
 	}
 	tDB := metrics.NowIf(metricsOn)
-	if metricsOn {
-		sample.Marshal = tDB.Sub(tMarshal)
-	}
 	if matchID.Valid {
 		if _, err := tx.ExecContext(ctx, `
 update matches set state_json = ? where id = ?`, string(next), matchID.Int64); err != nil {

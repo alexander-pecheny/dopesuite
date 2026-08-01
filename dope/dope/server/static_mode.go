@@ -211,7 +211,11 @@ func (s *server) buildStaticEntry(ctx context.Context, route hostInitRoute) (*st
 	var data []byte
 	if games.IsChGK(gameType) {
 		htmlPath, marker = "static/od.html", gameInitMarker
-		if gameType != games.OD {
+		switch gameType {
+		case games.OD:
+		case games.Brain:
+			htmlPath = "static/brain.html"
+		default:
 			htmlPath = "static/si.html"
 		}
 		payload, err := s.buildGameInit(ctx, festScope{FestID: route.FestID, GameID: route.GameID})

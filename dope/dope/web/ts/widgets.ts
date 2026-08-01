@@ -910,3 +910,27 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
     },
   };
 }
+
+// renderTabBar fills a gametopbar tabs mount with .match-tab buttons — the one
+// tab strip every game page shares (od/si/brain). The caller owns which tabs
+// are visible and what selecting one does.
+export function renderTabBar(
+  root: HTMLElement,
+  tabs: Array<{key: string; label: string}>,
+  activeKey: string,
+  onSelect: (key: string) => void,
+): void {
+  root.replaceChildren();
+  for (const tab of tabs) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "match-tab" + (activeKey === tab.key ? " active" : "");
+    btn.textContent = tab.label;
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-selected", activeKey === tab.key ? "true" : "false");
+    btn.addEventListener("click", () => {
+      if (tab.key !== activeKey) onSelect(tab.key);
+    });
+    root.appendChild(btn);
+  }
+}
