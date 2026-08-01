@@ -534,11 +534,11 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   // Adding a card is the most-used list action (issue #4): a dedicated "+"
   // beside the ⋯ menu saves the menu round-trip. The menu item stays too.
   const addCardBtn = el("button", { class: "kadd", title: "Добавить карточку", "aria-label": "Добавить карточку" }, plusIcon());
-  addCardBtn.addEventListener("click", () => cardDetail.addCard(list));
+  addCardBtn.addEventListener("click", () => { void cardDetail.addCard(list); });
   const menuBtn = el("button", { class: "kadd", title: "Меню списка", text: "⋯", "aria-haspopup": "true" });
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const items: MenuItem[] = [{ icon: plusIcon(), label: "Добавить карточку", onClick: () => cardDetail.addCard(list) }];
+    const items: MenuItem[] = [{ icon: plusIcon(), label: "Добавить карточку", onClick: () => { void cardDetail.addCard(list); } }];
     if (list.groupId != null) {
       items.push(
         { label: "🔍 Предпросмотр списка", onClick: () => { void previewList(list); } },

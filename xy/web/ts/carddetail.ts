@@ -1,5 +1,5 @@
 // carddetail.ts — the card-detail modal, lifted out of board.js into a typed
-// create(deps) factory: create mode (addCard/addTestCard), the Просмотр/Поля/
+// create(deps) factory: card creation (addCard), the Просмотр/Поля/
 // Текст views over a shared draft (carddraft.js), the field builders with their
 // hand-drawn suggest dropdowns, the edit-tools row (ударение / типограф / →.4s),
 // direct links + deep links, open/close/back, read tracking, move/copy
@@ -94,6 +94,7 @@ export interface AttachmentsSeam {
   load(cardId: number): Promise<void>;
   imageNames(): string[];
   clearImageNames(): void;
+  upload(file: File, lossless: boolean, name: string): Promise<void>;
 }
 
 // The board-owned halves of read tracking: the kanban card dot and the 🔔 badge.
@@ -152,7 +153,7 @@ export interface MoveCtx {
 }
 
 export interface CardDetail {
-  addCard(list: BoardList): void;
+  addCard(list: BoardList): Promise<void>;
   openCard(card: BoardCard, opts?: { returnTo?: CardReturn | null }): Promise<void>;
   closeCard(): void;
   openCardId(): number | null;
@@ -234,7 +235,11 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   // ---- card detail state ----
   let openCardId: number | null = null;
-  let pendingList: BoardList | null = null; // set while composing a brand-new (unsaved) card
+  // Set while the open card is one just created and still untouched. The card is
+  // persisted from the start; this only drives the blank-form affordances — the
+  // 4s stub, the two fields opened ready to type into, and hiding Просмотр,
+  // which has nothing to show yet.
+  let freshCard = false;
   // cardReturn remembers where the open card was launched from so its ↩️ back
   // button lands there: null → plain close (board view); {listId, cardId} → reopen
   // that list's preview scrolled to this question (set only when opened from a
@@ -269,31 +274,34 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   const CARD_TABS = ["preview", "fields", "text"] as const;
   const tabBtn = (v: string): HTMLButtonElement => byId<HTMLButtonElement>("cardTab" + v[0].toUpperCase() + v.slice(1));
 
-  // ---- add card (create mode) ----
-  // addCard opens the card detail in "create mode" — only the description editor
-  // is shown (the card isn't persisted until you save a description, so we never
-  // create empty cards). Labels/attachments/move/timeline appear only when editing
-  // an existing card.
-  function addCard(list: BoardList): void {
-    pendingList = list;
-    openCardId = null;
-    cardView = "";
-    cardFieldReaders = null;
-    draft.blank();
-    deps.attachments.clearImageNames();
-    cardDescEl.value = "";
-    cardAliasEl.value = "";
-    cardKindEl.hidden = false;
-    cardKindEl.value = "question";
-    cardMessageEl.textContent = "";
-    cardDetailBox.classList.add("creating");
-    byId("cardCopy").hidden = true; // no number/desc yet
-    cardOverlay.hidden = false;
-    overlayStack.open({ el: cardOverlay, close: hideCard, confirm: confirmLeaveCard });
-    // New card: no preview yet — open straight into the structured editor.
-    lastEditView = "fields";
-    setCardView("fields");
-    cardDescEl.focus();
+  // ---- add card ----
+  // addCard persists a blank card and opens it. It used to stay unsaved until you
+  // typed a description, which meant everything a card needs a row for — labels,
+  // тесты, вложения, the лента, move/copy — was hidden on the one screen where
+  // you most want to attach a picture (issue #26). A blank card is a real card;
+  // an accidental one is deleted like any other.
+  async function addCard(list: BoardList): Promise<void> {
+    const existing = deps.cardsOf(list.id);
+    const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
+    const kind = "question";
+    try {
+      const dk = mustDK();
+      const res = await verbs.create("createCard", `/api/lists/${list.id}/cards`, {
+        description_enc: await xyCrypto.encField(dk, ""), rank, kind,
+      });
+      const card: BoardCard = {
+        id: res.id as number, listId: list.id, kind, rank, desc: "",
+        handoutMeta: null, alias: null, createdAt: nowStamp(),
+      };
+      state().cards.push(card);
+      deps.render();
+      await openCard(card, { fresh: true });
+    } catch (err) {
+      // The overlay is not open yet, so its message line would be invisible —
+      // this failure has to surface on the board itself.
+      deps.setStatus("error");
+      alert("Не удалось создать карточку: " + errMsg(err));
+    }
   }
 
   // fitTextarea grows a textarea to fit its content so the user never scrolls
@@ -318,9 +326,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function openCardCard(): BoardCard | undefined { return state().cards.find((c) => c.id === openCardId); }
 
   function draftKind(): string {
-    if (pendingList) return cardKindEl.value || "question";
     const c = openCardCard();
-    return c ? c.kind : "question";
+    return c ? c.kind : cardKindEl.value || "question";
   }
   function fieldsAvailable(): boolean { return draftKind() === "question"; }
 
@@ -409,10 +416,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     captureDraft();
     const btn = cardSaveBtn;
     // The alias is NOT part of this: it is a separate column with its own save
-    // button (refreshAliasState). «Сохранить» is about the card's 4s content —
-    // on a NEW card that content still carries the alias along (see cardSave), so
-    // the alias only counts as "dirty" here while creating.
-    const dirty = draft.contentDirty(!!pendingList);
+    // button (refreshAliasState). «Сохранить» is about the card's 4s content.
+    const dirty = draft.contentDirty(false);
     btn.disabled = !dirty;
     // Просмотр is read-only, so nothing can be dirty there; the button hides.
     btn.hidden = cardView === "preview" && !dirty;
@@ -422,10 +427,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   }
 
   // refreshAliasState enables the alias's own save button only when the input
-  // differs from what is persisted. On a card being created there is no alias
-  // column yet (the button is data-edit-only, hidden), so this is a no-op then.
+  // differs from what is persisted.
   function refreshAliasState(): void {
-    if (pendingList) return;
     const cur = cardAliasEl.value.trim() || null;
     cardAliasSaveBtn.disabled = !draft.aliasDirty(cur);
   }
@@ -442,7 +445,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     for (const t of CARD_TABS) tabBtn(t).classList.toggle("active", t === view);
     tabBtn("text").textContent = "Формат 4s";
     tabBtn("fields").hidden = !fieldsAvailable();
-    tabBtn("preview").hidden = !!pendingList;
+    // Nothing to preview until the card has content; the tab appears as soon as
+    // it does, so the flag needs no clearing.
+    tabBtn("preview").hidden = freshCard && !draft.desc.trim();
     byId("cardViewTabs").hidden = false;
     // (the save button's visibility is refreshSaveState's alone — see the end of
     // this function — because it depends on more than the view)
@@ -462,7 +467,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       // author is set — that's still a blank form.
       const bare = ta.value.trim();
       const authorOnly = state().defaultAuthor && bare === "@ " + state().defaultAuthor;
-      if (pendingList && (!bare || authorOnly)) {
+      if (freshCard && (!bare || authorOnly)) {
         ta.value = questionStub(state().defaultAuthor);
         ta.focus();
         ta.setSelectionRange(2, 2);
@@ -521,7 +526,25 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const sel = el("select", { class: "input fld-input" }) as HTMLSelectElement;
     const cardImageNames = deps.attachments.imageNames();
     for (const n of cardImageNames) sel.append(el("option", { value: n, text: n }));
-    const body = el("div", { class: "fld-body" }, toggle, ta, sel);
+    // Picking a handout picture used to mean attaching the file further down the
+    // card first, then coming back up here to choose it — and on a card that had
+    // no attachments yet the dropdown was simply empty, with no way out of it
+    // (issue #26). This attaches and selects in one gesture.
+    const filePick = el("input", { type: "file", accept: "image/*", hidden: true }) as HTMLInputElement;
+    const attachBtn = el("button", { class: "input fld-add-row", type: "button", text: "📎 Прикрепить…", title: "Загрузить картинку и подставить её сюда" });
+    attachBtn.addEventListener("click", () => filePick.click());
+    filePick.addEventListener("change", async () => {
+      const file = filePick.files && filePick.files[0];
+      filePick.value = ""; // so re-picking the same file fires change again
+      if (!file) return;
+      try {
+        await deps.attachments.upload(file, true, file.name);
+        ensureOption(sel, file.name);
+        sel.value = file.name;
+      } catch (err) { cardMessageEl.textContent = errMsg(err); }
+    });
+    const imgRow = el("div", { class: "fld-row" }, sel, attachBtn, filePick);
+    const body = el("div", { class: "fld-body" }, toggle, ta, imgRow);
     let mode: "text" | "image" = initial && initial.kind === "image" ? "image" : "text";
     if (initial) {
       if (initial.kind === "image") { ensureOption(sel, initial.name); sel.value = initial.name || ""; }
@@ -532,7 +555,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       modeText.classList.toggle("active", mode === "text");
       modeImg.classList.toggle("active", mode === "image");
       ta.hidden = mode !== "text";
-      sel.hidden = mode !== "image";
+      imgRow.hidden = mode !== "image";
       if (mode === "text" && present) fitTextarea(ta);
     };
     modeText.addEventListener("click", () => { mode = "text"; syncMode(); });
@@ -637,7 +660,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const f = xyChgk.splitFields(draft.desc);
     // A brand-new card pre-fills the user's default author (a /profile setting)
     // and opens the two fields every question has, ready to type into.
-    const fresh = !!pendingList && !draft.desc.trim();
+    const fresh = freshCard && !draft.desc.trim();
     if (fresh && f.authors == null && state().defaultAuthor) f.authors = [state().defaultAuthor];
     cardFieldsPre = f.preMarkup;
     cardFieldsExtra = f.extra;
@@ -687,7 +710,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const body = byId("cardPreviewBody");
     if (!draft.desc.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: "Пусто." })); return; }
     const c = openCardCard();
-    const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: draft.desc, listId: c ? c.listId : (pendingList ? pendingList.id : 0) };
+    const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: draft.desc, listId: c ? c.listId : 0 };
     const number = card.kind === "question" ? deps.questionNumberFor(card) : null;
     const reqId = openCardId;
     const screen = byId<HTMLInputElement>("cardPreviewScreen").checked;
@@ -862,9 +885,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     catch (err) { showCopyMsg("Не удалось скопировать: " + errMsg(err), true); }
   }
 
-  async function openCard(card: BoardCard, opts: { returnTo?: CardReturn | null } = {}): Promise<void> {
+  async function openCard(card: BoardCard, opts: { returnTo?: CardReturn | null; fresh?: boolean } = {}): Promise<void> {
     stopReadTracking(); // tear down any timer/observer left over from a previous card
-    pendingList = null;
+    freshCard = !!opts.fresh;
     cardReturn = opts.returnTo || null;
     openCardId = card.id;
     cardView = "";
@@ -873,7 +896,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const openAlias = card.alias != null ? card.alias : null;
     draft.open(card.desc, openMeta, openAlias);
     cardAliasEl.value = openAlias || "";
-    cardDetailBox.classList.remove("creating");
     cardDescEl.value = card.desc;
     cardMessageEl.textContent = "";
     cardKindEl.hidden = false;
@@ -897,7 +919,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // previously-open card's content. The preview resolves its own images, so it
     // doesn't wait on the per-card loads below — which run in parallel, not
     // sequentially, to cut the total round-trip.
-    setCardView("preview");
+    // A card just created has nothing to preview, so it opens on the editor.
+    setCardView(freshCard ? lastEditView : "preview");
     await Promise.all([deps.attachments.load(card.id), deps.timeline.load(card.id), populateMoveBoards()]);
     armReadTracking(card);
   }
@@ -1295,7 +1318,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // selector but the value is applied on first save). Test cards never reach here
   // (their selector is hidden in openCard).
   cardKindEl.addEventListener("change", async () => {
-    if (pendingList) { setCardView(fieldsAvailable() ? "fields" : "text"); return; } // create mode: re-eval tabs
     if (openCardId == null) return;
     const card = state().cards.find((c) => c.id === openCardId);
     if (!card) return;
@@ -1365,7 +1387,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     stopReadTracking();
     cardOverlay.hidden = true;
     openCardId = null;
-    pendingList = null;
+    freshCard = false;
     cardReturn = null;
     cardView = "";
     cardFieldReaders = null;
@@ -1408,7 +1430,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // prompts; a failed save keeps you on the card with the error showing.
   function confirmLeaveCard(): Promise<boolean> {
     captureDraft(); // the active view's edits count, even if the caret left it
-    if (!draft.contentDirty(!!pendingList)) return Promise.resolve(true);
+    if (!draft.contentDirty(false)) return Promise.resolve(true);
     byId("dirtyMessage").textContent = "";
     dirtyOverlay.hidden = false;
     return new Promise<boolean>((resolve) => { dirtyAnswer = resolve; });
@@ -1459,7 +1481,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   }
 
   document.addEventListener("keydown", (e) => {
-    if (cardOverlay.hidden || pendingList || dirtyAnswer) return;
+    if (cardOverlay.hidden || dirtyAnswer) return;
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     if (e.metaKey || e.ctrlKey || e.altKey || typingTarget(e.target)) return;
     e.preventDefault();
@@ -1477,30 +1499,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   async function saveCard(): Promise<boolean> {
     captureDraft(); // fold the active view's edits into draft.desc / draft.meta
     const msg = cardMessageEl;
-    // create mode: persist a new card with the composed description, then switch to
-    // the full edit view.
-    if (pendingList) {
-      const text = draft.desc;
-      const list = pendingList;
-      const kind = cardKindEl.value || "question";
-      const existing = deps.cardsOf(list.id);
-      const rank = keyBetween(existing.length ? existing[existing.length - 1].rank : null, null);
-      const meta = draft.normalizedMeta();
-      const alias = draft.normalizedAlias();
-      try {
-        const dk = mustDK();
-        const reqBody: OpBody = { description_enc: await xyCrypto.encField(dk, text), rank, kind };
-        if (meta) reqBody.handout_meta_enc = await xyCrypto.encField(dk, meta);
-        if (alias) reqBody.alias_enc = await xyCrypto.encField(dk, alias);
-        const res = await verbs.create("createCard", `/api/lists/${list.id}/cards`, reqBody);
-        const card: BoardCard = { id: res.id as number, listId: list.id, kind, rank, desc: text, handoutMeta: meta, alias, createdAt: nowStamp() };
-        state().cards.push(card);
-        deps.render();
-        await openCard(card);
-        msg.textContent = "Карточка сохранена.";
-      } catch (err) { msg.textContent = errMsg(err); return false; }
-      return true;
-    }
     const card = state().cards.find((c) => c.id === openCardId);
     if (!card) return false;
     const newDesc = draft.desc;
@@ -1551,7 +1549,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // from the card's content save. "" clears it (same convention as the server's
   // optBlob). Online-capable via the sync outbox like any other card mutation.
   async function saveAlias(): Promise<void> {
-    if (pendingList || !openCardId) return; // a new card saves its alias on create
+    if (!openCardId) return;
     const card = state().cards.find((c) => c.id === openCardId);
     if (!card) return;
     const btn = cardAliasSaveBtn;
