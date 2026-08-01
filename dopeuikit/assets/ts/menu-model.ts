@@ -14,6 +14,9 @@ export interface MenuJump {
 
 export interface MenuExtra {
   label: string;
+  // An icon NAME, not a node: this model is DOM-free so jstest can exercise it.
+  // menu.ts turns it into the glyph.
+  icon?: string;
   title?: string;
   href?: string;
   download?: boolean;
@@ -34,8 +37,8 @@ export interface MenuConfig {
 
 export type MenuItem =
   | { kind: "appearance" }
-  | { kind: "link"; label: string; href: string; title: string; external: boolean; download: boolean }
-  | { kind: "action"; label: string; title: string; onClick: () => void };
+  | { kind: "link"; label: string; href: string; title: string; external: boolean; download: boolean; icon?: string }
+  | { kind: "action"; label: string; title: string; onClick: () => void; icon?: string };
 
 export function pickPref<T extends string>(raw: string | null, allowed: readonly T[], fallback: T): T {
   return allowed.includes(raw as T) ? (raw as T) : fallback;
@@ -65,7 +68,7 @@ export function menuItems(state: {
   }
   for (const extra of state.extras) {
     if (extra.onClick) {
-      items.push({ kind: "action", label: extra.label, title: extra.title ?? "", onClick: extra.onClick });
+      items.push({ kind: "action", label: extra.label, title: extra.title ?? "", onClick: extra.onClick, ...(extra.icon ? { icon: extra.icon } : {}) });
     } else {
       items.push(link(extra.label, extra.href ?? "", extra.title, false, extra.download));
     }

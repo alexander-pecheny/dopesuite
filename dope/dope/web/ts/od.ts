@@ -3,6 +3,7 @@
 // sync. Converted from the legacy od.js; boots itself on import (ADR-0001).
 import { DopeTable } from "./match-table.js";
 import { DopeEntryModel } from "./entry-model.js";
+import { icon } from "./icons_gen.js";
 import type {
   AdoptedGameSnapshot,
   ClientRecorder,
@@ -2909,7 +2910,7 @@ function buildScreenOverlay(wrapper: ScreenWrapper): HTMLElement {
   const settingsBtn = document.createElement("button");
   settingsBtn.type = "button";
   settingsBtn.className = "btn screen-btn";
-  settingsBtn.textContent = "⚙️ Настройки";
+  settingsBtn.replaceChildren(icon("settings"), "Настройки");
   settingsBtn.setAttribute("aria-expanded", screenPanelOpen ? "true" : "false");
   settingsBtn.addEventListener("click", () => {
     screenPanelOpen = !screenPanelOpen;

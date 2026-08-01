@@ -3,6 +3,7 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import type { SyncStatus } from "./sync.js";
+import { iconed } from "./icons_gen.js";
 
 const { fetchJSON, jpost, el, escapeHtml } = xyApp;
 
@@ -80,12 +81,12 @@ function renderBoards(boards: BoardListItem[]): void {
   // Boards arrive already ordered by the caller's last visit (server-side).
   for (const b of boards) {
     // Migrated (v2) boards carry a plaintext name — shown with no key needed. Legacy
-    // (v1) boards still need the cached DK, so start with a 🔒 placeholder.
+    // (v1) boards still need the cached DK, so start with a locked placeholder.
     const migrated = b.schema_version >= 2;
-    const title = migrated ? b.name : "🔒 доска #" + b.id;
     const card = el("a", { class: "board-card", href: `/board/${b.id}` },
       el("span", { class: "board-card-name-wrap" },
-        el("span", { class: "board-card-name", text: title })),
+        el("span", { class: "board-card-name" },
+          ...(migrated ? [b.name] : iconed("lock", "доска #" + b.id)))),
       el("span", { class: "board-card-role", text: b.role === "owner" ? "владелец" : "редактор" }),
     );
     if (b.unread) {
@@ -103,7 +104,7 @@ function renderBoards(boards: BoardListItem[]): void {
       // The name is readable without a key, but opening the board still needs its
       // DK — mark boards that will ask for the passphrase.
       xyCrypto.loadCachedDK(b.id).then((dk) => {
-        if (!dk) setCardName(card, "🔒 " + b.name);
+        if (!dk) setCardName(card, b.name, true);
       }).catch(() => {});
     }
     listNode.append(card);
@@ -111,8 +112,12 @@ function renderBoards(boards: BoardListItem[]): void {
   measureNames();
 }
 
-function setCardName(card: HTMLElement, text: string): void {
-  card.querySelector(".board-card-name")!.textContent = text;
+// `locked` marks a board whose name is readable but whose content still needs
+// the passphrase — the lock rides ahead of the name.
+function setCardName(card: HTMLElement, text: string, locked = false): void {
+  const node = card.querySelector(".board-card-name")!;
+  if (locked) node.replaceChildren(...iconed("lock", text));
+  else node.textContent = text;
   measureNames();
 }
 // Flag every card whose one-line title overflows, so the CSS fade turns on only
@@ -187,7 +192,6 @@ async function migrateName(id: number, name: string): Promise<void> {
 }
 
 // ---- create board ----
-xyApp.swapPlusIcon(byId("newBoardBtn")); // emoji ➕ → SVG plus
 byId("newBoardBtn").addEventListener("click", () => {
   createMessage.textContent = "";
   createForm.reset();

@@ -65,6 +65,10 @@
    full name below on hover/focus. The fade is a mask on the text so it needs no
    bg-matched gradient and survives the tile/hover/dark fills paper rows never see. */
 .board-card-name-wrap { position: relative; display: block; min-width: 0; }
+/* The lock on a board whose name is readable but whose content still needs the
+   passphrase. The name is --text-lg, and a glyph at the full 1.15em of that
+   out-shouts the word it belongs to — this is a mark, not a heading. */
+.board-card-name .ico { width: 0.8em; height: 0.8em; opacity: 0.75; }
 .board-card-name {
   display: block;
   font-weight: var(--fw-semibold);
@@ -230,7 +234,6 @@
 .kadd:hover { color: var(--text); }
 /* the SVG glyphs (app.js strokeIcon: +, ✓) size with the surrounding text and
    inherit their color via currentColor — the reason they replaced the emoji */
-.stroke-ico { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; }
 .kcards { display: flex; flex-direction: column; gap: var(--space-2); overflow-y: auto; min-height: var(--space-6); padding: var(--space-1); }
 .kcard {
   position: relative; /* anchors .kcard-unread */
@@ -350,18 +353,14 @@
 }
 
 /* labels */
-/* A label is a DOT. The pill shape is reserved for the test group below — that
-   is the one thing on the row that contains other things, so letting it be the
-   only elongated shape is what makes the row parse at a glance: circles are
-   labels, a capsule is a test, and the circles inside a capsule are what the
-   testers said. A dot is also the narrowest a colour can be, which is what keeps
-   a card carrying several tests on one line. */
-.label-chip {
-  display: inline-block;
-  width: var(--chip-h, 12px);
-  height: var(--chip-h, 12px);
-  border-radius: var(--radius-full);
-  background: var(--muted);
+/* A label on a card is a TAG filled with its colour, next to the flask filled
+   with a test's verdicts. Two glyphs, both coloured by what they carry — which
+   is what makes the row parse at a glance now that neither is a bare dot. */
+.kcard-label {
+  display: inline-flex;
+  align-items: center;
+  height: var(--chip-h);
+  font-size: 13px;
 }
 
 /* card detail overlay — occupies the whole lower section (below the fixed
@@ -1369,28 +1368,19 @@ body {
   height: var(--chip-h);
   gap: 2px;
 }
-.kcard-test.has-labels {
-  border: 1px solid var(--grid-dark);
-  border-radius: var(--radius-pill);
-  padding: 0 3px;
-}
-/* A verdict is the same dot as a label, at the size the capsule leaves it: the
-   group is --chip-h tall and 1px of that is border, top and bottom. */
-.kcard-test .label-chip { width: 8px; height: 8px; }
-/* An emoji's glyph overflows a line-height of 1, so the flask sat on the group's
-   bottom border. Centre it in a box tall enough to hold it. */
+/* The flask carries the verdicts as liquid now (see flaskIcon), so there is no
+   capsule and no row of dots — just the glyph, at a size where two or three
+   bands of colour still read apart. */
 .kcard-test-icon {
-  font-size: 9px;
-  line-height: 1;
+  font-size: 13px;
   display: inline-flex;
   align-items: center;
-  height: 10px;
+  height: var(--chip-h);
 }
-/* The handout mark: same emoji-in-a-box trick as the flask, but at the row's
-   own height — this one stands on the row rather than inside a capsule. */
+/* The handout mark stands on the label row rather than inside a capsule, so it
+   takes the row's own height. */
 .kcard-handout {
   font-size: 11px;
-  line-height: 1;
   display: inline-flex;
   align-items: center;
   height: var(--chip-h);

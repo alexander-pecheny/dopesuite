@@ -32,8 +32,9 @@ import type { BoardCard, BoardLabel, BoardList, BoardState, CardLabel } from "./
 import type { MembersState } from "./boardmembers.js";
 import type { MenuItem, Timeline } from "./timeline.js";
 import type { MoveCtx, PreviewCardLike } from "./carddetail.js";
+import { icon, iconed } from "./icons_gen.js";
 
-const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, plusIcon, checkIcon, swapPlusIcon, onCmdEnter } = xyApp;
+const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -164,39 +165,48 @@ document.addEventListener("visibilitychange", () => {
 // "forget password" (rarely needed) don't warrant header buttons.
 // dopeMenu.setExtras renders them as actions.
 window.dopeMenu?.setExtras([{
-  label: "✏️ Переименовать доску",
+  icon: "pencil",
+  label: "Переименовать доску",
   title: "Изменить название доски",
   onClick: () => { void renameBoard(); },
 }, {
-  label: "📋 Управление списками",
+  icon: "columns-3",
+  label: "Управление списками",
   title: "Переупорядочить списки и связать их в группы (списки списков)",
   onClick: () => openListsManage(),
 }, {
-  label: "☑️ Массовое действие",
+  icon: "list-checks",
+  label: "Массовое действие",
   title: "Отметить карточки на всей доске и сделать с ними одно действие",
   onClick: () => setMassMode(!massMode),
 }, {
-  label: "📥 Импорт",
+  icon: "file-up",
+  label: "Импорт",
   title: "Импортировать пакет вопросов (.4s, .zip или .docx)",
   onClick: () => openImportPick(),
 }, {
-  label: "🧪 Тесты",
+  icon: "flask-conical",
+  label: "Тесты",
   title: "Тест-сессии доски: кто когда играл, приглашение со временем начала",
   onClick: () => sessionsPanel.open(),
 }, {
-  label: "🏷️ Метки",
+  icon: "tags",
+  label: "Метки",
   title: "Переименовать, перекрасить или удалить метки доски",
   onClick: () => openLabelsEditor(),
 }, {
-  label: "👥 Участники доски",
+  icon: "users",
+  label: "Участники доски",
   title: "Поделиться доской: добавить или убрать участников",
   onClick: () => boardMembers.open(),
 }, {
-  label: "🧹 Исправить оформление Trello",
+  icon: "wand-sparkles",
+  label: "Исправить оформление Trello",
   title: "Убрать артефакты Trello (двойные переносы, экранирование, смарт-ссылки) во всех карточках",
   onClick: () => { void fixTrelloFormattingBoard(); },
 }, {
-  label: "🔒 Забыть пароль доски",
+  icon: "lock",
+  label: "Забыть пароль доски",
   title: "Забыть пароль доски на этом устройстве",
   onClick: async () => {
     await xyCrypto.forgetDK(boardId);
@@ -206,7 +216,8 @@ window.dopeMenu?.setExtras([{
     location.reload();
   },
 }, {
-  label: "🗑️ Удалить доску",
+  icon: "trash-2",
+  label: "Удалить доску",
   title: "Удалить доску со всеми списками и карточками (только владелец)",
   onClick: () => { void deleteBoard(); },
 }]);
@@ -537,32 +548,32 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   const menuWrap = el("div", { class: "klist-menu-wrap" });
   // Adding a card is the most-used list action (issue #4): a dedicated "+"
   // beside the ⋯ menu saves the menu round-trip. The menu item stays too.
-  const addCardBtn = el("button", { class: "kadd", title: "Добавить карточку", "aria-label": "Добавить карточку" }, plusIcon());
+  const addCardBtn = el("button", { class: "kadd", title: "Добавить карточку", "aria-label": "Добавить карточку" }, icon("plus"));
   addCardBtn.addEventListener("click", () => { void cardDetail.addCard(list); });
-  const menuBtn = el("button", { class: "kadd", title: "Меню списка", text: "⋯", "aria-haspopup": "true" });
+  const menuBtn = el("button", { class: "kadd", title: "Меню списка", "aria-haspopup": "true" }, icon("ellipsis"));
   menuBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const items: MenuItem[] = [{ icon: plusIcon(), label: "Добавить карточку", onClick: () => { void cardDetail.addCard(list); } }];
+    const items: MenuItem[] = [{ icon: icon("plus"), label: "Добавить карточку", onClick: () => { void cardDetail.addCard(list); } }];
     if (list.groupId != null) {
       items.push(
-        { label: "🔍 Предпросмотр списка", onClick: () => { void previewList(list); } },
-        { label: "🔍 Предпросмотр всей группы", onClick: () => { void previewList(list, true); } },
+        { icon: icon("eye"), label: "Предпросмотр списка", onClick: () => { void previewList(list); } },
+        { icon: icon("eye"), label: "Предпросмотр всей группы", onClick: () => { void previewList(list, true); } },
       );
     } else {
-      items.push({ label: "🔍 Предпросмотр", onClick: () => { void previewList(list); } });
+      items.push({ icon: icon("eye"), label: "Предпросмотр", onClick: () => { void previewList(list); } });
     }
     items.push(
-      { label: "👥 Список тестеров", onClick: () => openTesterList(list) },
-      { label: "↔️ Переместить список…", onClick: () => openMoveList(list) },
-      { label: "✏️ Переименовать список", onClick: () => { void renameList(list); } },
+      { icon: icon("users"), label: "Список тестеров", onClick: () => openTesterList(list) },
+      { icon: icon("arrow-left-right"), label: "Переместить список…", onClick: () => openMoveList(list) },
+      { icon: icon("pencil"), label: "Переименовать список", onClick: () => { void renameList(list); } },
     );
     const grouped = list.groupId != null;
     const suffix = grouped ? " группы" : "";
     items.push(
-      { label: `📤 Экспорт${suffix}`, onClick: () => openExport(list) },
-      { label: grouped ? "🧩 Генерация раздаток (вся группа)" : "🧩 Генерация раздаток", onClick: () => openHandouts(list) },
+      { icon: icon("file-down"), label: `Экспорт${suffix}`, onClick: () => openExport(list) },
+      { icon: icon("file-text"), label: grouped ? "Генерация раздаток (вся группа)" : "Генерация раздаток", onClick: () => openHandouts(list) },
     );
-    items.push({ label: "🗑️ Удалить список", onClick: () => { void deleteList(list); } });
+    items.push({ icon: icon("trash-2"), label: "Удалить список", onClick: () => { void deleteList(list); } });
     popupMenu(menuWrap, items);
   });
   menuWrap.append(menuBtn);
@@ -587,7 +598,7 @@ function renderList(list: BoardList, precomputedNumbers?: Array<string | null>):
   col.append(el("div", { class: "klist-head" }, ...headKids, headMain, addCardBtn, menuWrap));
   if (list.groupId != null) {
     const g = groupById(list.groupId);
-    col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт", text: "🔗" + ((g && g.name) || "связанные списки") }));
+    col.append(el("div", { class: "klist-group-tag", title: "Список входит в группу — сквозная нумерация и общий экспорт" }, ...iconed("link", (g && g.name) || "связанные списки")));
   }
   const body = el("div", { class: "kcards", dataset: { listId: list.id } });
   // Grouped lists carry continuous numbering computed across the whole group;
@@ -716,6 +727,70 @@ function renderCardTitle(card: BoardCard, number?: string | null): HTMLElement {
   return el("div", { class: cls, text: cardTitle(card, number) });
 }
 
+// leadIcon marks a glyph as having words after it — see .ico-lead: CSS cannot
+// tell "glyph alone" from "glyph then text" apart, because a label is a bare
+// text node and :only-child counts elements.
+function leadIcon(node: Node): Node {
+  if (node instanceof SVGElement) node.setAttribute("class", "ico ico-lead");
+  return node;
+}
+
+// tagIcon is a label: the tag filled with the label's own colour. Same idea as
+// the flask — the colour IS the glyph — so a card's row reads as one family of
+// shapes rather than dots beside icons. The eyelet stays currentColor so the tag
+// still reads as a tag against a pale fill.
+function tagIcon(color: string): SVGSVGElement {
+  const svg = icon("tag");
+  svg.querySelector("path")?.setAttribute("fill", color);
+  return svg;
+}
+
+// ---- the test flask ----
+// A playing used to render as a capsule: the flask, then one dot per verdict.
+// Now that the flask is a real shape, the verdicts ARE the flask — the colours
+// fill it like liquid. Empty means «tested, nobody recorded an opinion», which
+// is exactly what an empty flask looks like.
+//
+// FLASK_LIQUID is the interior below the graduation line at y=15, traced off the
+// vendored flask-conical outline: down the right slope, round the bottom, back
+// up the left. It has to be kept with that shape — re-vendoring a different
+// flask means re-tracing this.
+const FLASK_LIQUID = "M6.453 15H17.547L19.755 19.04A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96Z";
+const SVG_NS = "http://www.w3.org/2000/svg";
+let flaskSeq = 0;
+
+// flaskIcon fills the flask with one vertical band per verdict, clipped to the
+// liquid shape. Vertical bands rather than stacked layers: the interior is ~7
+// units tall and ~15 wide, so at a 10px badge only the horizontal axis has room
+// to tell two colours apart.
+function flaskIcon(colors: readonly string[]): SVGSVGElement {
+  const svg = icon("flask-conical");
+  if (!colors.length) return svg;
+  const id = `flask-fill-${++flaskSeq}`;
+  const shape = document.createElementNS(SVG_NS, "path");
+  shape.setAttribute("d", FLASK_LIQUID);
+  const clip = document.createElementNS(SVG_NS, "clipPath");
+  clip.setAttribute("id", id);
+  clip.append(shape);
+  const defs = document.createElementNS(SVG_NS, "defs");
+  defs.append(clip);
+  const fill = document.createElementNS(SVG_NS, "g");
+  fill.setAttribute("clip-path", `url(#${id})`);
+  const x0 = 4, width = 16 / colors.length;
+  colors.forEach((c, i) => {
+    const band = document.createElementNS(SVG_NS, "rect");
+    band.setAttribute("x", String(x0 + i * width));
+    band.setAttribute("y", "14");
+    band.setAttribute("width", String(width));
+    band.setAttribute("height", "9");
+    band.setAttribute("fill", c);
+    fill.append(band);
+  });
+  // Under the outline, so the stroke still reads at badge size.
+  svg.prepend(defs, fill);
+  return svg;
+}
+
 function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   const node = el("div", { class: "kcard kcard-" + (card.kind || "normal"), draggable: "true", dataset: { cardId: card.id }, onclick: () => { void cardDetail.openCard(card); } });
   // In массовое действие a card is something you pick, not something you open:
@@ -733,34 +808,25 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   // Derived from the text, so it leads the row: nobody put it there and nobody
   // can take it off, unlike everything after it.
   if (card.kind === "question" && xyChgk.handoutForCard(card.desc)) {
-    labelRow.append(el("span", { class: "kcard-handout", title: "Раздаточный материал", text: "📃" }));
+    labelRow.append(el("span", { class: "kcard-handout", title: "Раздаточный материал" }, icon("file-text")));
   }
   // The board card shows the author's own labels; a test's verdict belongs to the
   // card detail, where it can say WHICH test it came from.
   for (const a of assignmentsOf(card.id, null)) {
     const lbl = labelById(a.labelId);
-    if (lbl) labelRow.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
+    if (lbl) labelRow.append(el("span", { class: "kcard-label", title: lbl.name }, tagIcon(lbl.color)));
   }
-  // One group per test the question was played at: a 🧪 on its own when the
-  // testers recorded nothing, otherwise the 🧪 and their verdicts' colours inside
-  // a thin border — so «tested, no opinion» and «tested, three opinions» read
-  // apart at a glance without spelling either out.
+  // One flask per test the question was played at, filled with the verdicts
+  // recorded there. The colours are the only signal now, so the tooltip names
+  // them — it used to live on the individual dots.
   for (const sid of playingsOf(card.id)) {
-    const scoped = assignmentsOf(card.id, sid);
-    const flask = el("span", { class: "kcard-test-icon", text: "🧪" });
-    if (!scoped.length) {
-      labelRow.append(el("span", { class: "kcard-test", title: "Тест: " + sessionName(sid) }, flask));
-      continue;
-    }
-    const group = el("span", {
-      class: "kcard-test has-labels",
-      title: "Тест: " + sessionName(sid),
-    }, flask);
-    for (const a of scoped) {
-      const lbl = labelById(a.labelId);
-      if (lbl) group.append(el("span", { class: "label-chip", title: lbl.name, dataset: { c: lbl.color } }));
-    }
-    labelRow.append(group);
+    const verdicts = assignmentsOf(card.id, sid)
+      .map((a) => labelById(a.labelId))
+      .filter((l): l is BoardLabel => !!l);
+    const title = "Тест: " + sessionName(sid) +
+      (verdicts.length ? " — " + verdicts.map((l) => l.name).join(", ") : "");
+    labelRow.append(el("span", { class: "kcard-test", title },
+      el("span", { class: "kcard-test-icon" }, flaskIcon(verdicts.map((l) => l.color)))));
   }
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
@@ -787,7 +853,7 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
 
 // Apply label colors through the CSSOM (avoids inline-style CSP issues).
 function paintLabels(): void {
-  for (const chip of document.querySelectorAll<HTMLElement>(".label-chip[data-c], .label-swatch[data-c]")) {
+  for (const chip of document.querySelectorAll<HTMLElement>(".label-swatch[data-c]")) {
     chip.style.backgroundColor = chip.dataset.c || "";
   }
   // A pick is the one that carries its name, so its ink follows its colour.
@@ -883,7 +949,7 @@ function renderAddList(): HTMLElement {
   // appears as soon as there is a name to create.
   const okBtn = el("button", {
     class: "kadd kadd-ok", type: "submit", title: "Создать список", "aria-label": "Создать список", hidden: true,
-  }, checkIcon()) as HTMLButtonElement;
+  }, icon("check")) as HTMLButtonElement;
   input.addEventListener("input", () => { okBtn.hidden = !input.value.trim(); });
   // Every list is a question list now: a test session is board-level, not a
   // column, so the old «вопросы / тесты» picker has nothing left to pick.
@@ -938,12 +1004,12 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
       menu.append(row);
       continue;
     }
-    // Most items carry their icon inside the label string (emoji); an SVG icon
-    // comes as it.icon and takes the emoji's slot before the text.
+    // The glyph is a separate node, never part of the label: a menu row is read
+    // by its words, and the icon is only an anchor for the eye.
     menu.append(el("button", {
       class: "menu-item", type: "button", role: "menuitem",
       onclick: () => { close(); it.onClick(); },
-    }, it.icon ? [it.icon, " "] : [], it.label));
+    }, it.icon ? [leadIcon(it.icon)] : [], it.label));
   }
   const { close } = anchorPopup(menu, anchor, { anchor, onClose: () => { openListMenu = null; } });
   openListMenu = { anchor, close };
@@ -1189,7 +1255,7 @@ function manageCheckbox(unit: Unit): HTMLElement {
 
 function manageMoveControl(unit: Unit): HTMLElement {
   const inp = el("input", { class: "input lm-move-pos", type: "number", min: "1", placeholder: "№" }) as HTMLInputElement;
-  const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", text: "↕️", title: "Переместить на эту позицию" });
+  const btn = el("button", { class: "btn btn-small btn-ghost lm-move-btn", type: "button", title: "Переместить на эту позицию" }, icon("arrow-up-down"));
   const go = (): void => { const n = parseInt(inp.value, 10); if (n >= 1) void moveUnitsTo(new Set([unit.key]), n); };
   btn.addEventListener("click", go);
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
@@ -1208,9 +1274,9 @@ function renderManageUnit(unit: Unit, pos: number): HTMLElement {
       manageCheckbox(unit),
       el("span", { class: "lm-pos", text: "#" + pos }),
       el("span", { class: "lm-handle", text: "≡", title: "Перетащить" }),
-      el("span", { class: "lm-title lm-group-title", text: "🔗 " + ((g && g.name) || "Связанные списки") }),
-      el("button", { class: "lm-icon", type: "button", text: "✏️", title: "Переименовать группу", onclick: () => { void renameGroup(unit.id); } }),
-      el("button", { class: "lm-icon", type: "button", text: "✂️", title: "Разъединить группу", onclick: () => { void unlinkGroup(unit.id); } }),
+      el("span", { class: "lm-title lm-group-title" }, ...iconed("link", (g && g.name) || "Связанные списки")),
+      el("button", { class: "lm-icon", type: "button", title: "Переименовать группу", onclick: () => { void renameGroup(unit.id); } }, icon("pencil")),
+      el("button", { class: "lm-icon", type: "button", title: "Разъединить группу", onclick: () => { void unlinkGroup(unit.id); } }, icon("unlink")),
       manageMoveControl(unit),
     ));
     // Members are draggable within their own group (the whole group is still
@@ -2291,14 +2357,13 @@ function pvEditBtn(card: BoardCard): HTMLElement {
   const list = previewListRef;
   return el("button", {
     class: "pv-edit", title: "Редактировать карточку", "aria-label": "Редактировать карточку",
-    text: "✏️",
     onclick: (e: Event) => {
       e.stopPropagation();
       const group = previewGroupMode;
       hidePreview();
       void cardDetail.openCard(card, { returnTo: list ? { listId: list.id, cardId: card.id, group } : null });
     },
-  });
+  }, icon("pencil"));
 }
 
 // renderPreviewCard renders one card the way the docx export would: a question
@@ -2388,9 +2453,9 @@ async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   const group = wholeGroup && list.groupId != null ? groupById(list.groupId) : null;
   const scopeLists = group ? listsInGroup(list.groupId as number) : [list];
   const cards = scopeLists.flatMap((l) => cardsOf(l.id));
-  byId("previewTitle").textContent = group
-    ? "🔗" + (group.name || "связанные списки")
-    : (list.title || "Предпросмотр");
+  const title = byId("previewTitle");
+  if (group) title.replaceChildren(...iconed("link", group.name || "связанные списки"));
+  else title.textContent = list.title || "Предпросмотр";
   const body = byId("previewBody");
   body.replaceChildren();
   previewCtx = null;
@@ -2866,10 +2931,10 @@ function renderSeen(card: BoardCard): void {
     el("span", { class: "seen-label", text: label }),
     el("span", { class: "seen-names", text: line }),
     el("button", {
-      class: "input seen-copy", type: "button", text: "📋",
+      class: "input seen-copy", type: "button",
       title: "Скопировать",
       onclick: () => { void cardDetail.copyPlain(label + line); },
-    }),
+    }, icon("clipboard")),
   );
 }
 
@@ -2887,8 +2952,6 @@ const newLabelColor = colorField(byId("newLabelColor"), LABEL_COLORS[0]);
 newLabelForm.remove();
 
 // The compiled pages spell "+" as the ➕ emoji; swap it for the SVG plus.
-swapPlusIcon(byId("labelAddBtn"));
-swapPlusIcon(newLabelForm.querySelector<HTMLButtonElement>('button[type="submit"]')!);
 
 // setLabel adds or removes ONE assignment. The card's whole set goes up together
 // because the endpoint replaces it — cheap, and it keeps the offline mirror's
@@ -3173,12 +3236,12 @@ function openTesterList(list: BoardList): void {
       el("span", { class: "sess-meta", text: `${r.seen} из ${total}` })));
   }
   const copy = el("button", {
-    class: "input", type: "button", text: "📋 Скопировать",
+    class: "input", type: "button",
     onclick: () => {
       const text = [line.textContent, partial.textContent].filter(Boolean).join("\n");
       void cardDetail.copyPlain(text);
     },
-  });
+  }, ...iconed("clipboard", "Скопировать"));
   box.append(el("div", { class: "sess-invite-box" },
     el("div", { class: "sess-invite-lines" }, line, partial), copy));
   redraw();
@@ -3325,7 +3388,7 @@ function renderLabelsEditor(focusNew = false): void {
     const color = colorField(el("div"), lbl.color || "#888888");
     const count = el("span", { class: "sess-meta", text: `${usage.get(lbl.id) || 0} карт.` });
     labelRows.push({ lbl, name, color });
-    const drop = el("button", { class: "btn btn-danger", type: "button", text: "🗑️" });
+    const drop = el("button", { class: "btn btn-danger", type: "button" }, icon("trash-2"));
     drop.addEventListener("click", async () => {
       if (!confirm(`Удалить метку «${lbl.name}»? Она исчезнет со всех карточек.`)) return;
       try {

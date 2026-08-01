@@ -147,11 +147,11 @@ func crumbNode(ctx *ExpandCtx, c *Element, last bool) Node {
 		if last {
 			attrs = append(attrs, At("aria-current", "page"))
 		}
-		return &Element{Tag: "span", Attrs: attrs, Inline: ctx.Items(c.Inline)}
+		return &Element{Tag: "span", Attrs: attrs, Inline: withIcon(c, ctx.Items(c.Inline))}
 	}
 	attrs := append([]Attr{ClassAttr(classes...), At("href", href)}, extra...)
 	attrs = append(attrs, IDAttr(c)...)
-	return &Element{Tag: "a", Attrs: attrs, Inline: ctx.Items(c.Inline)}
+	return &Element{Tag: "a", Attrs: attrs, Inline: withIcon(c, ctx.Items(c.Inline))}
 }
 
 func childElements(p *Element, tag string) []*Element {

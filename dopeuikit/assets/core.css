@@ -845,6 +845,22 @@ input[type="radio"]:focus-visible {
    "this one is real and that one is a label", which is a lie when both do the
    same class of thing. */
 
+/* The one icon rule. A glyph is sized in em of whatever it sits in and stroked
+   in currentColor, so the control colours, sizes and themes it — which is the
+   whole point of retiring the emoji: those carried their own palette and
+   ignored the theme. Shapes are Lucide, vendored in dopeuikit/icons. */
+.ico {
+  width: 1.15em;
+  height: 1.15em;
+  flex: none;
+  vertical-align: -0.15em;
+}
+/* A glyph with words beside it needs a gap; a bare icon button has no words and
+   must not gain a phantom one. This cannot be a selector — a label is a text
+   node, and :only-child counts elements — so whoever draws the icon says which
+   it is (kit/icon.go, iconed() in icons_gen.ts). */
+.ico-lead { margin-right: 0.4em; }
+
 .btn {
   display: inline-flex;
   align-items: center;

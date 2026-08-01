@@ -12,7 +12,7 @@ var coreExpanders = map[string]ExpandFunc{
 		href, _ := Get(p, "href")
 		attrs := []Attr{ClassAttr("action-icon"), At("href", href), At("aria-label", label), At("title", tooltip(p, label))}
 		attrs = append(attrs, Passthrough(p)...)
-		return one(&Element{Tag: "a", Attrs: attrs, Inline: c.Items(p.Inline)})
+		return one(&Element{Tag: "a", Attrs: attrs, Inline: withIcon(p, c.Items(p.Inline))})
 	},
 	"col": func(c *ExpandCtx, p *Element) []Node {
 		return one(El("div", RootAttrs(FlexClasses("u-col", p), p), c.Nodes(p.Block)...))
@@ -122,7 +122,7 @@ func expandIconbtn(c *ExpandCtx, p *Element) []Node {
 	attrs = append(attrs, IDAttr(p)...)
 	attrs = append(attrs, At("type", "button"), At("aria-label", label), At("title", tooltip(p, label)))
 	attrs = append(attrs, Passthrough(p)...)
-	items := c.Items(p.Inline)
+	items := withIcon(p, c.Items(p.Inline))
 	if hasBadge {
 		items = append(items, &Element{Tag: "span", Attrs: []Attr{ClassAttr("unread-dot", "unread-dot-badge"), At("id", badgeid), BareAt("hidden")}})
 	}
@@ -262,7 +262,7 @@ func expandButton(c *ExpandCtx, p *Element) []Node {
 		}
 		attrs = append(attrs, CopyFlags(p, "download")...)
 		attrs = append(attrs, MetaAttrs(p)...)
-		return one(&Element{Tag: "a", Attrs: attrs, Inline: c.Items(p.Inline)})
+		return one(&Element{Tag: "a", Attrs: attrs, Inline: withIcon(p, c.Items(p.Inline))})
 	}
 	typ := "button"
 	if Flag(p, "submit") {
@@ -274,7 +274,7 @@ func expandButton(c *ExpandCtx, p *Element) []Node {
 	attrs = append(attrs, CopyProps(p, "name", "value", "formaction")...)
 	attrs = append(attrs, CopyFlags(p, "formnovalidate", "disabled")...)
 	attrs = append(attrs, MetaAttrs(p)...)
-	return one(&Element{Tag: "button", Attrs: attrs, Inline: c.Items(p.Inline)})
+	return one(&Element{Tag: "button", Attrs: attrs, Inline: withIcon(p, c.Items(p.Inline))})
 }
 
 func expandField(c *ExpandCtx, p *Element) []Node {
@@ -310,7 +310,11 @@ func expandModal(c *ExpandCtx, p *Element) []Node {
 	}
 	var kids []Node
 	if title, ok := Get(p, "title"); ok {
-		kids = append(kids, Inl("h2", []Attr{ClassAttr("appearance-modal-title")}, &TextNode{Value: title}))
+		head := []Item{&TextNode{Value: title}}
+		if ico := iconItemClass(p, "ico ico-lead"); ico != nil {
+			head = []Item{ico, &TextNode{Value: title}}
+		}
+		kids = append(kids, Inl("h2", []Attr{ClassAttr("appearance-modal-title")}, head...))
 	}
 	kids = append(kids, c.Nodes(p.Block)...)
 	if done, ok := Get(p, "done"); ok {
@@ -346,7 +350,7 @@ func expandTab(c *ExpandCtx, p *Element) []Node {
 	attrs := []Attr{ClassAttr("seg-btn")}
 	attrs = append(attrs, IDAttr(p)...)
 	attrs = append(attrs, At("type", "button"), At("role", "tab"), At("data-view", view))
-	return one(&Element{Tag: "button", Attrs: attrs, Inline: c.Items(p.Inline)})
+	return one(&Element{Tag: "button", Attrs: attrs, Inline: withIcon(p, c.Items(p.Inline))})
 }
 
 func tabpanelAttrs(p *Element) []Attr {

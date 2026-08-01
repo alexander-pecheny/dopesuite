@@ -1,10 +1,10 @@
 page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
   topbar title="Доска"
     crumbs
-      crumb home href="/" label="Все доски" "🏠"
+      crumb home href="/" icon="house" label="Все доски"
       crumb id="boardTitle" "Доска"
-    iconbtn id="notifToggle" label="События" title="События других участников" badgeid="notifBadge" aria-haspopup="true" aria-expanded="false" "🔔"
-    iconbtn id="timerToggle" label="Таймер" title="Таймер ЧГК" aria-pressed="false" "⏰"
+    iconbtn id="notifToggle" label="События" title="События других участников" badgeid="notifBadge" aria-haspopup="true" aria-expanded="false" icon="bell"
+    iconbtn id="timerToggle" icon="timer" label="Таймер" title="Таймер ЧГК" aria-pressed="false"
 
   mount id="kanban" kind="kanban" hidden
 
@@ -33,10 +33,10 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       -- swaps the glyphs in at boot — the vocabulary has no svg primitive.
       headactions kind="detail"
         unreaddot id="contentUnreadDot" title="Непрочитанные изменения"
-        button id="cardLink" title="Скопировать прямую ссылку на карточку" aria-label="Ссылка на карточку" "🔗"
-        button id="cardCopy" hidden title="Скопировать текст вопроса для тест-сессии (экранный режим)" aria-label="Копировать" "📋"
-        button id="cardAddVersion" hidden title="Добавить версию — копию текущей формулировки, которую можно переписать" aria-label="Добавить версию" "⧉"
-        iconbtn id="cardClose" label="Назад" "↩️"
+        button id="cardLink" icon="link" title="Скопировать прямую ссылку на карточку" aria-label="Ссылка на карточку"
+        button id="cardCopy" hidden icon="clipboard" title="Скопировать вопрос или раздатку" aria-label="Копировать"
+        button id="cardAddVersion" hidden icon="copy" title="Добавить версию — копию текущей формулировки, которую можно переписать" aria-label="Добавить версию"
+        iconbtn id="cardClose" icon="arrow-left" label="Назад"
     mount id="cardCopyMsg" kind="card-copy-msg" hidden
 
     -- view switch: preview (read-only) / structured fields / raw 4s text
@@ -83,7 +83,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     row gap="sm" align="center" wrap
       mount id="labelPicker" kind="label-picker"
       mount id="labelAddRow" kind="label-add-row"
-        button kind="ghost" id="labelAddBtn" "➕ Добавить метку…"
+        button kind="ghost" icon="plus" id="labelAddBtn" "Добавить метку…"
 
     -- Тесты: which sittings this question was played at, each with its own
     -- labels. Separate from Метки above: a label there is the author's view, a
@@ -92,7 +92,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     mount id="cardPlayings" kind="card-playings"
     row gap="sm" align="center" wrap
       mount id="playingAddRow" kind="label-add-row"
-        button kind="ghost" id="playingAddBtn" "➕ Отметить тестом…"
+        button kind="ghost" icon="plus" id="playingAddBtn" "Отметить тестом…"
     -- Видели: every tester from every session this card is tagged with, derived
     -- and stored nowhere. Hidden until there is one.
     mount id="cardSeen" kind="card-seen" hidden
@@ -100,7 +100,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     form id="newLabelForm" dir="row" gap="sm"
       textfield id="newLabelName" placeholder="Новая метка" grow
       mount id="newLabelColor" kind="color-field"
-      button small submit title="Создать и добавить метку" "➕"
+      button small submit icon="plus" title="Создать и добавить метку"
 
     -- Алиас: the card's short name, shown in the list instead of its text. NOT a
     -- 4s field (its own encrypted column), so it lives out here below the views
@@ -155,7 +155,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       selectfield id="feedDiffView" compact title="Вид правок"
         option value="brief" "краткий"
         option value="full" "подробный"
-      button small kind="ghost" id="feedExpand" title="Развернуть ленту на весь экран" "⛶ Развернуть"
+      button small kind="ghost" icon="maximize-2" id="feedExpand" title="Развернуть ленту на весь экран" "Развернуть"
     mount id="timeline" kind="timeline"
     form id="commentForm" dir="col"
       editor id="commentInput" kind="comment" placeholder="Комментарий…" spellcheck="false"
@@ -269,7 +269,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
   -- (list_of_lists) with shared numbering + combined export.
   modal id="listsManageOverlay" label="Управление списками" title="Управление списками" variant="lists" done="Готово" doneid="listsManageClose"
     row gap="sm" align="center" justify="between" wrap
-      button small id="listsLinkBtn" disabled title="Выберите подряд идущие списки и свяжите их в группу" "🔗 Связать списки"
+      button small icon="link" id="listsLinkBtn" disabled title="Выберите подряд идущие списки и свяжите их в группу" "Связать списки"
       row gap="sm" align="center"
         numfield id="listsMovePos" min="1" placeholder="№" narrow
         button small kind="ghost" id="listsMoveBtn" disabled title="Переместить выбранные на указанную позицию" "Переместить выбранные"
@@ -277,7 +277,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     message id="listsManageMessage"
 
   -- test sessions: the board-level panel that replaced the тест-список
-  modal id="sessionsOverlay" label="Тесты" title="🧪 Тесты" variant="lists" done="Готово" doneid="sessionsClose"
+  modal id="sessionsOverlay" icon="flask-conical" label="Тесты" title="Тесты" variant="lists" done="Готово" doneid="sessionsClose"
     row gap="sm" align="center" justify="between" wrap
       button small id="sessionAddBtn" title="Создать тест-сессию" "＋ Новый тест"
     mount id="sessionsList" kind="sessions-list"
@@ -289,13 +289,13 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     message id="sessionEditMessage"
 
   -- rename / recolour every label on the board (issue #25)
-  modal id="labelsEditOverlay" label="Метки" title="🏷️ Метки" variant="lists" done="Готово" doneid="labelsEditClose"
+  modal id="labelsEditOverlay" icon="tags" label="Метки" title="Метки" variant="lists" done="Готово" doneid="labelsEditClose"
     mount id="labelsEditor" kind="labels-editor"
     message id="labelsEditMessage"
 
   -- «Вопросы тестировали» for ONE tour: each session with how much of the tour
   -- it saw, so the custom (name those who tested most of it) can be applied
-  modal id="testerListOverlay" label="Список тестеров" title="👥 Список тестеров" variant="lists" done="Готово" doneid="testerListClose"
+  modal id="testerListOverlay" icon="users" label="Список тестеров" title="Список тестеров" variant="lists" done="Готово" doneid="testerListClose"
     hint "По умолчанию отмечены те, кто видел больше половины вопросов из списка."
     mount id="testerList" kind="tester-list"
     message id="testerListMessage"
@@ -356,7 +356,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
         button submit "Сохранить"
         button kind="ghost" id="pasteCancel" "Отмена"
 
-  -- unsaved-changes prompt: leaving a dirty card by any route (↩️, Escape,
+  -- unsaved-changes prompt: leaving a dirty card by any route (the back button, Escape,
   -- Android back, the backdrop, ← / → to the next card) asks rather than
   -- silently discarding, which is what every exit used to do.
   modal id="dirtyOverlay" label="Несохранённые изменения" title="Несохранённые изменения"

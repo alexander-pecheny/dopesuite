@@ -175,7 +175,9 @@ func targets() []target {
 				// Library modules as ESM for the test runner (not embedded, not served).
 				{
 					EntryPointsAdvanced: entries("dope/dope/web/ts/",
-						"entry-model", "match-table", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid"),
+						"entry-model", "match-table", "state-sync", "game-page", "widgets", "stage-cache", "stats-sync", "fest-grid",
+						// game-page draws the 🏠 crumb through it
+						"icons_gen"),
 					Format: api.FormatESModule,
 					Outdir: "dope/dope/web/jstest/dist",
 				},

@@ -1,3 +1,4 @@
+import { icon } from "./icons_gen.js";
 // Game-page plumbing shared by od/si/host/viewer: the window globals contract
 // (init payloads, menu chrome), route parsing, breadcrumbs, the menu jump/
 // download mounts, the localStorage snapshot cache and the init/cache/fetch
@@ -59,7 +60,7 @@ export function renderGameBreadcrumbs(root: HTMLElement | null | undefined, opti
   const currentTitle = String(options.currentTitle || "").trim();
 
   const trail: Array<{ text: string; href?: string; home?: boolean }> = [
-    { text: "🏠", href: "/", home: true },
+    { text: "", href: "/", home: true },
   ];
   if (options.host) trail.push({ text: "Мои фесты", href: "/host" });
   trail.push({ text: festTitle, href: options.festHref || "/" });
@@ -76,10 +77,13 @@ export function renderGameBreadcrumbs(root: HTMLElement | null | undefined, opti
     const last = i === trail.length - 1;
     const node = document.createElement(crumb.href && !last ? "a" : "span");
     node.className = "crumb" + (crumb.home ? " crumb-home" : "") + (last ? " crumb-current" : "");
-    node.textContent = crumb.text;
+    // The home crumb is a glyph with no words; the rest say what they are.
     if (crumb.home) {
+      node.appendChild(icon("house"));
       node.setAttribute("aria-label", "Главная");
       node.title = "Главная";
+    } else {
+      node.textContent = crumb.text;
     }
     if (crumb.href && !last) node.setAttribute("href", crumb.href);
     if (last) node.setAttribute("aria-current", "page");

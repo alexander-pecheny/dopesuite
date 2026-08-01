@@ -54,7 +54,7 @@ func PublicIndexDoc(groups []PublicFestGroup) *ui.Doc {
 	page := []ui.Item{ui.Title("Фесты"), ui.PagePublic}
 	page = append(page, jumpHostNav("/host", "Режим ведущего", "Перейти в режим ведущего")...)
 	page = append(page, ui.Publictopbar(ui.Crumbs(
-		ui.Crumb(ui.Home(), ui.Label("Главная"), ui.Text("🏠")),
+		ui.Crumb(ui.Home(), ui.IconHouse, ui.Label("Главная")),
 		ui.Crumb(ui.Text("Фесты")),
 	)))
 

@@ -25,6 +25,7 @@ import { create as createStatsSync } from "./stats-sync.js";
 import type { StatsMatchEvent, StatsSyncGameTable } from "./stats-sync.js";
 import { buildFestGrid, buildReseedStagePanel, parseScheme } from "./fest-grid.js";
 import type { ReseedEntry } from "./fest-grid.js";
+import { icon } from "./icons_gen.js";
 
 type HostMode = "grid" | "venues" | "roster" | "stats" | "seedImport" | "match" | "stage" | "missing";
 
@@ -2501,7 +2502,7 @@ function battleHeader(): HTMLElement {
     venueButton.type = "button";
     venueButton.className = "btn btn-xs venue-edit-button";
     venueButton.dataset.matchCode = matchCode;
-    venueButton.textContent = "✏️";
+    venueButton.replaceChildren(icon("pencil"));
     venueButton.title = "Изменить площадку";
     venueButton.setAttribute("aria-label", "Изменить площадку");
     venueButton.addEventListener("click", () => openVenueDialog(matchCode));
