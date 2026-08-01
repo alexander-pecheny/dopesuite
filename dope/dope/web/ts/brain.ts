@@ -354,7 +354,8 @@ function renderTabs(): void {
   });
 }
 
-// buildProtocols stacks the group's бой blocks — the sheet's протоколы tab.
+// buildProtocols lays the group's бой blocks side by side — the sheet's
+// протоколы tab; groups will stack vertically once a game holds several.
 function buildProtocols(): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "brain-protocol";
@@ -366,9 +367,12 @@ function buildProtocols(): HTMLElement {
     wrap.appendChild(empty);
     return wrap;
   }
+  const row = document.createElement("div");
+  row.className = "brain-bouts";
   for (const {code, view} of bouts) {
-    wrap.appendChild(buildBout(code, view));
+    row.appendChild(buildBout(code, view));
   }
+  wrap.appendChild(row);
   return wrap;
 }
 
@@ -722,29 +726,21 @@ function cellNode(code: string, side: number, q: number): HTMLElement | null {
   );
 }
 
-// The selection treats the stacked бої as one sheet: row = the question's
-// global index down the page, col = the side. The widget (shared with КСИ)
-// then gives click/drag/shift ranges, copy/paste and touch tap-cycling.
-function globalRow(code: string, q: number): number {
-  let row = 0;
-  for (const bout of orderedMatches()) {
-    if (bout.code === code) return row + q;
-    row += matchRows(bout.view, 0).length;
-  }
-  return -1;
+// The selection treats the бої laid side by side as one sheet: row = the
+// question, col = бой × 2 + side. The widget (shared with КСИ) then gives
+// click/drag/shift ranges, copy/paste and touch tap-cycling.
+function cellCoord(code: string, side: number, q: number): CellCoord | null {
+  const idx = orderedMatches().findIndex((bout) => bout.code === code);
+  return idx < 0 ? null : {row: q, col: idx * 2 + side};
 }
 
-function boutAtRow(row: number): {code: string; q: number} | null {
-  for (const bout of orderedMatches()) {
-    const count = matchRows(bout.view, 0).length;
-    if (row < count) return {code: bout.code, q: row};
-    row -= count;
-  }
-  return null;
+function boutAtCol(col: number): {code: string; view: BrainMatchView; side: number} | null {
+  const bout = orderedMatches()[Math.floor(col / 2)];
+  return bout ? {code: bout.code, view: bout.view, side: col % 2} : null;
 }
 
-function totalRows(): number {
-  return orderedMatches().reduce((sum, bout) => sum + matchRows(bout.view, 0).length, 0);
+function totalCols(): number {
+  return orderedMatches().length * 2;
 }
 
 function serializeMark(cell: Element | null | undefined): string {
@@ -783,8 +779,8 @@ function applyMarkEdits(edits: CellEdit[]): void {
 
 function cellAt(coord: CellCoord | null): HTMLElement | null {
   if (!coord) return null;
-  const at = boutAtRow(coord.row);
-  return at ? cellNode(at.code, coord.col, at.q) : null;
+  const at = boutAtCol(coord.col);
+  return at ? cellNode(at.code, at.side, coord.row) : null;
 }
 
 const cellSelection: CellRangeSelection = gameTable.createCellRangeSelection({
@@ -793,9 +789,7 @@ const cellSelection: CellRangeSelection = gameTable.createCellRangeSelection({
   readonly: () => viewer,
   coordOf: (cell) => {
     const ctx = cellContext(cell as HTMLElement);
-    if (!ctx) return null;
-    const row = globalRow(ctx.code, ctx.q);
-    return row < 0 ? null : {row, col: ctx.side};
+    return ctx ? cellCoord(ctx.code, ctx.side, ctx.q) : null;
   },
   cellAtCoord: cellAt,
   serialize: serializeMark,
@@ -818,10 +812,9 @@ function restoreSelection(): void {
 function moveActive(dRow: number, dCol: number, extend: boolean): void {
   const from = cellSelection.focus;
   if (!from) return;
-  const next = {
-    row: gameTable.clamp(from.row + dRow, 0, totalRows() - 1),
-    col: gameTable.clamp(from.col + dCol, 0, 1),
-  };
+  const col = gameTable.clamp(from.col + dCol, 0, totalCols() - 1);
+  const rows = matchRows(boutAtCol(col)!.view, 0).length;
+  const next = {row: gameTable.clamp(from.row + dRow, 0, rows - 1), col};
   cellSelection.setSelection(extend ? cellSelection.anchor || from : next, next);
 }
 

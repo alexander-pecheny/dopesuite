@@ -3743,6 +3743,12 @@ body:not(.embedded-match) .grid-match {
   gap: var(--space-5);
 }
 
+.brain-bouts {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
 .brain-bout {
   display: flex;
   flex-direction: column;
