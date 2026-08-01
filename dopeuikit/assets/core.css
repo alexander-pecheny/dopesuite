@@ -850,10 +850,15 @@ input[type="radio"]:focus-visible {
    whole point of retiring the emoji: those carried their own palette and
    ignored the theme. Shapes are Lucide, vendored in dopeuikit/icons. */
 .ico {
-  width: 1.15em;
-  height: 1.15em;
+  --ico-size: 1.15em;
+  width: var(--ico-size);
+  height: var(--ico-size);
   flex: none;
-  vertical-align: -0.15em;
+  /* Centre the glyph on the text's optical middle (~0.36em above the baseline):
+     its bottom then sits half its own height below that. Written in terms of
+     --ico-size so re-sizing an icon re-aligns it — a fixed offset is only ever
+     right for one size, and every other size drifts off the line. */
+  vertical-align: calc(var(--ico-size) / -2 + 0.36em);
 }
 /* A glyph with words beside it needs a gap; a bare icon button has no words and
    must not gain a phantom one. This cannot be a selector — a label is a text
@@ -1059,7 +1064,11 @@ input[type="radio"]:focus-visible {
   flex: 0 0 auto;
   overflow: visible;
   font-size: 18px;
-  line-height: 1;
+  /* No line-height:1 and no align-self here. The trail baseline-aligns its
+     crumbs, so this one needs a real text baseline to align TO — with
+     line-height:1 its baseline collapses onto its own bottom edge and the glyph
+     hangs above the words. Given a normal line box, .ico's own offset centres it
+     on the baseline exactly as it does beside real text. */
 }
 
 /* The page you are on is the one that should read as the title. */

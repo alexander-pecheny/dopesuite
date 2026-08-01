@@ -68,7 +68,7 @@
 /* The lock on a board whose name is readable but whose content still needs the
    passphrase. The name is --text-lg, and a glyph at the full 1.15em of that
    out-shouts the word it belongs to — this is a mark, not a heading. */
-.board-card-name .ico { width: 0.8em; height: 0.8em; opacity: 0.75; }
+.board-card-name .ico { --ico-size: 0.8em; opacity: 0.75; }
 .board-card-name {
   display: block;
   font-weight: var(--fw-semibold);
@@ -355,7 +355,14 @@
 /* labels */
 /* A label on a card is a TAG filled with its colour, next to the flask filled
    with a test's verdicts. Two glyphs, both coloured by what they carry — which
-   is what makes the row parse at a glance now that neither is a bare dot. */
+   is what makes the row parse at a glance now that neither is a bare dot.
+   Their outlines are drawn lighter and in --muted: a badge marks a card, it
+   does not label it, and at body-text weight the row shouted over the question
+   it belongs to. The FILL still carries the user's colour at full strength. */
+.kcard-label .ico, .kcard-test-icon .ico, .kcard-handout .ico {
+  color: var(--muted);
+  stroke-width: 1.5;
+}
 .kcard-label {
   display: inline-flex;
   align-items: center;
