@@ -563,3 +563,49 @@ test("versions survive a splitFields/composeFields round-trip", () => {
   assert.equal(splitVersions(f.question).length, 2);
   assert.equal(composeFields(f), desc);
 });
+// ---- author caption (issue #44) ----
+// chgksuite prints «Автор» and never pluralises, so every other caption is
+// spelled out in the 4s as a "!!override" the exporters already honour.
+
+test("the author caption is peeled off the names, not left in the first one", () => {
+  const f = splitFields("? Вопрос\n@ !!Авторка Мария Петрова");
+  assert.equal(f.authorLabel, "Авторка");
+  assert.deepEqual(f.authors, ["Мария Петрова"]);
+});
+
+test("Автор is the default and writes no override", () => {
+  const f = splitFields("? Вопрос\n@ Иванов");
+  assert.equal(f.authorLabel, null);
+  assert.equal(composeFields({ ...f, authorLabel: "Автор" }), "? Вопрос\n@ Иванов");
+});
+
+test("a chosen caption round-trips through compose and split", () => {
+  for (const label of ["Авторка", "Авторы", "Авторки"]) {
+    const desc = composeFields({ question: "Вопрос", authors: ["А", "Б"], authorLabel: label });
+    assert.equal(desc, `? Вопрос\n@ !!${label} А, Б`);
+    const back = splitFields(desc);
+    assert.equal(back.authorLabel, label);
+    assert.deepEqual(back.authors, ["А", "Б"]);
+  }
+});
+
+test("a caption we do not know survives untouched", () => {
+  const desc = "? Вопрос\n@ !!Составитель Иванов";
+  const f = splitFields(desc);
+  assert.equal(f.authorLabel, "Составитель");
+  assert.equal(composeFields(f), desc);
+});
+
+test("a multi-word caption keeps its ~ separator", () => {
+  const desc = composeFields({ question: "В", authors: ["И"], authorLabel: "Автор вопроса" });
+  assert.equal(desc, "? В\n@ !!Автор~вопроса И");
+  assert.equal(splitFields(desc).authorLabel, "Автор вопроса");
+});
+
+// The importer — ours and chgksuite's alike — glues the caption onto the name
+// with no space, which is unsplittable by the generic override rule.
+test("an imported «!!АвторкаМария» is recovered rather than shown as a name", () => {
+  const f = splitFields("? Вопрос\n@ !!АвторкаМария");
+  assert.equal(f.authorLabel, "Авторка");
+  assert.deepEqual(f.authors, ["Мария"]);
+});

@@ -203,6 +203,19 @@ function swapPlusIcon(btn: HTMLElement): void {
   btn.replaceChildren(plusIcon(), ...(rest ? [" " + rest] : []));
 }
 
+// onCmdEnter fires `run` on Cmd/Ctrl-Enter inside `node`. A textarea swallows
+// plain Enter, so without this the only way to commit what you typed is to find
+// the button with the mouse — which is what made the comment box (issue #48)
+// feel broken next to the card editor, where the shortcut already worked.
+function onCmdEnter(node: HTMLElement, run: () => void): void {
+  node.addEventListener("keydown", (e) => {
+    const ev = e as KeyboardEvent;
+    if (ev.key !== "Enter" || !(ev.metaKey || ev.ctrlKey)) return;
+    ev.preventDefault();
+    run();
+  });
+}
+
 // wireGenPassphrase makes `button` fill `input` with a fresh passphrase and copy
 // it to the clipboard. Shared by the board-create and Trello-import flows (both
 // mint a new board from a passphrase). `generate` is injected so this module
@@ -221,4 +234,4 @@ function wireGenPassphrase(button: HTMLElement, input: HTMLInputElement, generat
 
 export const xySizes = { DEFAULT: SIZES_DEFAULT, ...SIZES_RANGE, sanitize: sanitizeSizes, apply: applySizes };
 
-export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin, plusIcon, checkIcon, swapPlusIcon, linkIcon, clipboardIcon, cloneIcon, backIcon, swapIcon, wireGenPassphrase };
+export const xyApp = { fetchJSON, fetchVoid, jpost, jpatch, jput, jdelete, escapeHtml, el, deriveTitle, requireLogin, plusIcon, checkIcon, swapPlusIcon, linkIcon, clipboardIcon, cloneIcon, backIcon, swapIcon, onCmdEnter, wireGenPassphrase };
