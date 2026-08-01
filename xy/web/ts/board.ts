@@ -31,7 +31,7 @@ import type { MembersState } from "./boardmembers.js";
 import type { MenuItem, Timeline } from "./timeline.js";
 import type { MoveCtx, PreviewCardLike } from "./carddetail.js";
 
-const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, plusIcon, checkIcon, swapPlusIcon } = xyApp;
+const { fetchJSON, jpost, jpatch, jput, jdelete, el, deriveTitle, plusIcon, checkIcon, swapPlusIcon, onCmdEnter } = xyApp;
 const { keyBetween } = xyRank;
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -2082,6 +2082,9 @@ async function generateSplitFitZip(): Promise<void> {
 }
 
 byId("handoutsGenerate").addEventListener("click", () => { void generateHandoutsPdf(); });
+// Edit the .hndt, regenerate, look: Cmd/Ctrl-Enter is that loop without the trip
+// to the button.
+onCmdEnter(byId("handoutsSource"), () => byId("handoutsGenerate").click());
 byId("handoutsSplitFit").addEventListener("click", () => { void generateSplitFitZip(); });
 byId("handoutsClose").addEventListener("click", () => { void closeHandouts(); });
 handoutsOverlay.addEventListener("pointerdown", (e) => { if (e.target === handoutsOverlay) void closeHandouts(); });
