@@ -50,6 +50,27 @@ func BrainEmptyStateJSON(questions int) []byte {
 	return []byte(mustJSON(BrainState{Teams: teams}))
 }
 
+// BrainStateStarted reports whether a бой has any entered protocol data — a
+// mark, a player attribution or appended tiebreak rows. Started бои are the
+// ones a scheme recompile must not touch.
+func BrainStateStarted(stateJSON string) bool {
+	var state BrainState
+	if err := json.Unmarshal([]byte(stateJSON), &state); err != nil {
+		return true // unreadable state is data, not pristine
+	}
+	if state.Tiebreaks > 0 {
+		return true
+	}
+	for _, side := range state.Teams {
+		for _, row := range side.Rows {
+			if row.Mark != "" || row.Player != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // BrainQuestions reads scheme.questions, falling back to the default count.
 func BrainQuestions(schemeJSON string) int {
 	var probe struct {

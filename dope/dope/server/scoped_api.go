@@ -1318,6 +1318,48 @@ func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, 
 		}
 		s.eng.BroadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, stateJSON)
 		writeJSONValue(w, view)
+	case "run":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !s.requireNumberedTeams(w, r, scope.FestID) {
+			return
+		}
+		view, revision, stateJSON, err := imports.ImportSeedsFromScheme(&s.eng, r.Context(), scope)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.eng.InvalidateFestViewCache(scope.FestID)
+		s.eng.BroadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, stateJSON)
+		writeJSONValue(w, view)
+	case "xlsx":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !s.requireNumberedTeams(w, r, scope.FestID) {
+			return
+		}
+		if err := r.ParseMultipartForm(4 << 20); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "нет файла", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		view, revision, stateJSON, err := imports.ImportSeedsFromXLSX(&s.eng, r.Context(), scope, file)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.eng.InvalidateFestViewCache(scope.FestID)
+		s.eng.BroadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, stateJSON)
+		writeJSONValue(w, view)
 	case "decline":
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

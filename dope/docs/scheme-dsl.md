@@ -73,11 +73,16 @@ dealing key. The same snake deals reseed ranks into a block's groups.
 - `seed: xlsx` — an uploaded sheet carrying either an exact seeding column or a
   basket column.
 
-The DSL only *declares* the source. Resolution is the host pressing «Import
-seed», which snapshots the source's current standings — partial results
-mid-fest are a normal seed source — into seed rows (`imports/seed.go`
-machinery: sourceRank, decline ticks, ladder, waitlist). Nothing recomputes
-afterwards except tick/untick.
+The DSL only *declares* the source. Resolution is the host pressing the
+import button on the game's Посев tab, which snapshots the source's current
+standings — partial results mid-fest are a normal seed source — into seed
+rows (`imports/seed.go` machinery: sourceRank, decline ticks, ladder,
+waitlist). Nothing recomputes afterwards except tick/untick. Supported source
+game types: ОД (standings by total, R rating; `[init] sorting` may reorder by
+`points`/`rating`) and КСИ; `random` draws a per-game deterministic lot. The
+xlsx upload takes column A = team number or name, optional column B = basket
+(basket sheets lot within each band; without baskets, row order is the
+seeding).
 
 ## `[scheme]` — blocks
 
@@ -122,9 +127,11 @@ The compiler expands blocks into the existing detailed scheme JSON
 per Wave for eliminations, `reseed` rows for reseed Edges. Codes are
 deterministic and hyphenated (stage `s1-g2`, `s2-semifinal`, `s2-r16-w2`;
 match `s2-semifinal-m1`), so recompiling an edited DSL preserves every
-surviving match's identity (state, journal, SSE scopes). The save flow shows a
-create/delete diff and requires explicit confirmation to delete a match with
-entered results.
+surviving match's identity (state, journal, SSE scopes). A recompile touches
+only what has not started: pristine бои rebuild freely (questions changes,
+added blocks, deletions), while a бой with entered marks must survive with
+identical slot sources — otherwise the whole edit is refused, naming the
+offending бои.
 
 Deterministic advancement templates: pods (paired groups) fill opposite se
 bracket halves — winners' matches first, runner-up-led rematches in the second

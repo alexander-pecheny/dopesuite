@@ -9,7 +9,7 @@ Detailed scheme JSON (ADR-0001's authoring document) turned out to be a machine 
 
 ## Consequences
 
-- Compilation is deterministic with stable codes (`s1-g2`, `s2-semifinal-m1`), so recompiling an edited DSL preserves surviving matches' identity — state, journal, SSE scopes. Saves show a create/delete diff; deleting a match with entered results demands explicit confirmation.
+- Compilation is deterministic with stable codes (`s1-g2`, `s2-semifinal-m1`), so recompiling an edited DSL preserves surviving matches' identity — state, journal, SSE scopes. A recompile only changes what has not started: a бой with entered marks must survive with identical slot sources or the edit is refused naming it.
 - Config cascades defaults < block < round: `[defaults]` holds cross-cutting and protocol params (`themes: 6`), blocks redeclare differences, dotted keys (`themes.final: 12`, `reseed: r4`, `venues.final`) address a Kind's canonical round codes.
 - `[init]` declares seeding (`seed: {game}|random|xlsx`; exact ranks or baskets, deterministic lots where unranked) but resolves nothing: the host's «Import seed» snapshots the source's *current* standings (partial ОД mid-fest is normal), and only decline ticks move the ladder afterwards — `imports/seed.go` generalizes off its ksi→ek hardcode.
 - Advancement is deterministic by each Kind's canonical template (teams keep venues); `reseed:` is opt-in per Round boundary. v1 chains blocks linearly — eliminated teams get final classification; consolation brackets are a later Edge extension.

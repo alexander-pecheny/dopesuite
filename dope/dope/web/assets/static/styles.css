@@ -3761,6 +3761,34 @@ body:not(.embedded-match) .grid-match {
   font-style: italic;
 }
 
+.brain-seed-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.brain-seed-file {
+  max-width: calc(var(--team-col) + var(--space-8));
+}
+
+.brain-seed-error {
+  margin: var(--space-0);
+  color: var(--red);
+}
+
+.match-table.brain-seed-table td {
+  padding: var(--space-1) var(--space-2);
+}
+
+.brain-seed-waitlist {
+  color: var(--muted);
+}
+
+.brain-seed-declined .brain-cross-team {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
 .brain-bout {
   display: flex;
   flex-direction: column;

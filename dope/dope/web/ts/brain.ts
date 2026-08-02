@@ -78,7 +78,25 @@ interface BrainScheme {
   title?: string;
   questions?: number;
   stages?: BrainSchemeStage[];
+  seeding?: {source?: string} | null;
   [key: string]: unknown;
+}
+
+interface SeedImportRow {
+  sourceRank?: number;
+  seedNumber?: number;
+  teamID?: number;
+  name?: string;
+  city?: string;
+  declined?: boolean;
+  waitlist?: boolean;
+}
+
+interface SeedImportData {
+  source?: string;
+  drawSize?: number;
+  activeCount?: number;
+  rows?: SeedImportRow[];
 }
 
 interface FestInfo {
@@ -102,6 +120,7 @@ const BRAIN_TABS = [
   {key: "table", label: "Таблица"},
   {key: "roster", label: "Составы"},
 ];
+const SEED_TAB = {key: "seed", label: "Посев"};
 
 const route = gameTable.parseGameRoute();
 const viewer = Boolean(route.viewer);
@@ -124,6 +143,13 @@ let festRoster: RosterTeam[] = [];
 let rosterView: HTMLElement | null = null;
 let activeTab = tabFromHash() || "protocol";
 let resyncScheduled = false;
+
+// The Посев tab appears only for the host of a game whose scheme declares an
+// [init] seed source.
+function visibleTabs(): Array<{key: string; label: string}> {
+  if (viewer || !scheme.seeding?.source) return BRAIN_TABS;
+  return [...BRAIN_TABS, SEED_TAB];
+}
 
 function stageKind(stage: BrainSchemeStage): string {
   return stage.kind || stage.stage_type || "";
@@ -169,7 +195,7 @@ function questionsFor(code: string): number {
 
 function tabFromHash(): string | null {
   const key = (window.location.hash || "").replace(/^#/, "");
-  return BRAIN_TABS.some((t) => t.key === key) ? key : null;
+  return visibleTabs().some((t) => t.key === key) ? key : null;
 }
 
 window.addEventListener("hashchange", () => {
@@ -376,7 +402,9 @@ function render(options: {preserveScroll?: boolean} = {}): void {
     ? (rosterView ||= gameTable.buildRosterView(route.festID))
     : activeTab === "table"
       ? buildCrosstable()
-      : buildProtocols();
+      : activeTab === "seed"
+        ? buildSeedView()
+        : buildProtocols();
   brainRoot.replaceChildren(node);
   brainRoot.classList.toggle("fits-frame", activeTab === "roster");
   if (options.preserveScroll && frame) frame.scrollTop = scrollTop;
@@ -386,7 +414,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
 function renderTabs(): void {
   if (!brainTabsRoot) return;
   brainTabsRoot.hidden = false;
-  gameTable.renderTabBar(brainTabsRoot, BRAIN_TABS, activeTab, (key) => {
+  gameTable.renderTabBar(brainTabsRoot, visibleTabs(), activeTab, (key) => {
     activeTab = key;
     if (window.location.hash.replace(/^#/, "") !== key) {
       history.replaceState(null, "", `#${key}`);
@@ -768,6 +796,145 @@ function buildGroupTable(stage: BrainSchemeStage): HTMLElement {
   });
   table.appendChild(tbody);
   return table;
+}
+
+
+let seedImport: SeedImportData | null = null;
+let seedError = "";
+let seedLoaded = false;
+
+async function seedAction(run: () => Promise<Response>): Promise<void> {
+  try {
+    const response = await run();
+    if (!response.ok) throw new Error(await response.text());
+    seedImport = await response.json() as SeedImportData;
+    seedError = "";
+    await fetchMatches();
+  } catch (error) {
+    seedError = error instanceof Error ? error.message.trim() : String(error);
+  }
+  render({preserveScroll: true});
+}
+
+function loadSeedView(): void {
+  if (seedLoaded) return;
+  seedLoaded = true;
+  fetch(`${route.apiBase}/seed-import`)
+    .then(async (response) => {
+      if (!response.ok) throw new Error(await response.text());
+      seedImport = await response.json() as SeedImportData;
+      render({preserveScroll: true});
+    })
+    .catch(() => {
+      seedLoaded = false;
+    });
+}
+
+// buildSeedView is the Посев tab: the declared source, the one import button
+// (or the xlsx upload), and the ladder — active seeds, declines, waitlist.
+function buildSeedView(): HTMLElement {
+  loadSeedView();
+  const wrap = document.createElement("div");
+  wrap.className = "brain-protocol";
+  const source = scheme.seeding?.source || "";
+
+  const bar = document.createElement("div");
+  bar.className = "brain-seed-bar";
+  if (source === "xlsx") {
+    const file = document.createElement("input");
+    file.type = "file";
+    file.accept = ".xlsx";
+    file.className = "brain-seed-file";
+    const upload = document.createElement("button");
+    upload.type = "button";
+    upload.className = "btn";
+    upload.textContent = "Загрузить посев из xlsx";
+    upload.addEventListener("click", () => {
+      const chosen = file.files?.[0];
+      if (!chosen) {
+        seedError = "Выберите файл";
+        render({preserveScroll: true});
+        return;
+      }
+      const body = new FormData();
+      body.append("file", chosen);
+      void seedAction(() => fetch(`${route.apiBase}/seed-import/xlsx`, {method: "POST", body}));
+    });
+    bar.append(file, upload);
+  } else {
+    const importButton = document.createElement("button");
+    importButton.type = "button";
+    importButton.className = "btn";
+    importButton.textContent = source === "random" ? "Провести жребий" : `Импортировать посев из ${source}`;
+    importButton.addEventListener("click", () => {
+      void seedAction(() => fetch(`${route.apiBase}/seed-import/run`, {method: "POST"}));
+    });
+    bar.appendChild(importButton);
+  }
+  wrap.appendChild(bar);
+
+  if (seedError) {
+    const error = document.createElement("p");
+    error.className = "brain-seed-error";
+    error.textContent = seedError;
+    wrap.appendChild(error);
+  }
+
+  const rows = seedImport?.rows || [];
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "roster-empty";
+    empty.textContent = "Посев ещё не импортирован.";
+    wrap.appendChild(empty);
+    return wrap;
+  }
+
+  const table = document.createElement("table");
+  table.className = "match-table brain-seed-table";
+  const thead = document.createElement("thead");
+  const head = document.createElement("tr");
+  head.className = "brain-cross-cols";
+  for (const text of ["Посев", "Команда", "Город", "Место в источнике", "Отказ"]) {
+    const th = document.createElement("th");
+    th.textContent = text;
+    head.appendChild(th);
+  }
+  thead.appendChild(head);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    tr.classList.toggle("brain-seed-waitlist", Boolean(row.waitlist));
+    tr.classList.toggle("brain-seed-declined", Boolean(row.declined));
+    const seed = document.createElement("td");
+    seed.className = "number";
+    seed.textContent = row.declined ? "—" : row.waitlist ? "запас" : String(row.seedNumber || "");
+    const name = document.createElement("td");
+    name.className = "brain-cross-team";
+    name.textContent = row.name || "";
+    const city = document.createElement("td");
+    city.textContent = row.city || "";
+    const rank = document.createElement("td");
+    rank.className = "number";
+    rank.textContent = String(row.sourceRank || "");
+    const decline = document.createElement("td");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = Boolean(row.declined);
+    checkbox.addEventListener("change", () => {
+      void seedAction(() => fetch(`${route.apiBase}/seed-import/decline`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({teamID: row.teamID, declined: checkbox.checked}),
+      }));
+    });
+    decline.appendChild(checkbox);
+    tr.append(seed, name, city, rank, decline);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  return wrap;
 }
 
 

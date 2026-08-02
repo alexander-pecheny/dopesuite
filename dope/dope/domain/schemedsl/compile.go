@@ -363,13 +363,14 @@ func snakeDeal(groups, size int) [][]int {
 }
 
 // seedSlot returns the entrant at seed rank p (1-based): the provided entrant
-// list, or a positional Посев placeholder carrying its basket band.
-func (c *compiler) seedSlot(rank, band int) store.SchemeSlot {
+// list, or a positional Посев placeholder. Basket stays 1 — the seed-import
+// ladder keys assignments on (basket 1, rank); bands live in the position.
+func (c *compiler) seedSlot(rank int) store.SchemeSlot {
 	if len(c.in.Entrants) > 0 {
 		return c.in.Entrants[rank-1]
 	}
 	return store.SchemeSlot{
-		Seed:  &store.SchemeSeedRef{Basket: band + 1, Position: rank},
+		Seed:  &store.SchemeSeedRef{Basket: 1, Position: rank},
 		Label: fmt.Sprintf("Посев %d", rank),
 	}
 }
@@ -448,8 +449,8 @@ func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
 	dealt := snakeDeal(groups, size)
 	out := make([][]store.SchemeSlot, groups)
 	for g, ranks := range dealt {
-		for band, rank := range ranks {
-			out[g] = append(out[g], c.seedSlot(rank, band))
+		for _, rank := range ranks {
+			out[g] = append(out[g], c.seedSlot(rank))
 		}
 	}
 	return out
@@ -852,8 +853,8 @@ func (c *compiler) seFirstRound(index int, blk Section, teams int) ([][]store.Sc
 		first := make([][]store.SchemeSlot, count)
 		for i := 0; i < count; i++ {
 			first[i] = []store.SchemeSlot{
-				c.seedSlot(order[2*i], 0),
-				c.seedSlot(order[2*i+1], 0),
+				c.seedSlot(order[2*i]),
+				c.seedSlot(order[2*i+1]),
 			}
 		}
 		return first, nil

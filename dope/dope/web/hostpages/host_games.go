@@ -15,6 +15,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
+	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/schemedsl"
 	"dope/dope/domain/view"
@@ -30,10 +31,12 @@ import (
 )
 
 type hostGameSettingsData struct {
-	Fest  view.HostFest
-	Game  PublicFestGame
-	Slug  string
-	Error string
+	Fest      view.HostFest
+	Game      PublicFestGame
+	Slug      string
+	Error     string
+	SchemeDSL string
+	HasDSL    bool
 }
 
 type hostGameCreateData struct {
@@ -174,13 +177,21 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	if data.Error != "" {
 		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
 	}
-	page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"),
-		dopeui.Action("/host/fest/"+festRef+"/game/"+data.Game.Ref()+"/settings"), dopeui.Autocomplete("off"),
+	form := []dopeui.Item{dopeui.DirCol, dopeui.Method("post"),
+		dopeui.Action("/host/fest/" + festRef + "/game/" + data.Game.Ref() + "/settings"), dopeui.Autocomplete("off"),
 		dopeui.Field(dopeui.Label("Тип игры"), dopeui.Textfield(dopeui.Value(data.Game.Type), dopeui.Disabled())),
 		dopeui.Field(dopeui.Label("Название"), dopeui.Textfield(dopeui.Name("title"), dopeui.Value(data.Game.Title), dopeui.Required())),
 		dopeui.Field(dopeui.Label("Slug (необязательно, a-z, 0-9, дефис)"), dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Slug), dopeui.Pattern("[a-z0-9-]+"))),
-		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text("Сохранить"))),
-	))
+	}
+	if data.HasDSL {
+		form = append(form,
+			dopeui.Field(dopeui.Label("Схема"),
+				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SchemeDSL))),
+			dopeui.Hint(dopeui.Text("Пересборка меняет только не начатые бои: можно поменять число вопросов или добавить блок, но начатый бой должен сохраниться без изменений.")),
+		)
+	}
+	form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text("Сохранить"))))
+	page = append(page, dopeui.Form(form...))
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
 
@@ -195,19 +206,23 @@ func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	var (
-		code     string
-		title    string
-		gameType string
-		slug     sql.NullString
+		code      string
+		title     string
+		gameType  string
+		slug      sql.NullString
+		schemeDSL string
 	)
 	if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
-select code, title, game_type, slug from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug); err != nil {
+select code, title, game_type, slug, coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if submitted := strings.TrimSpace(r.Form.Get("brain_dsl")); submitted != "" && errMsg != "" {
+		schemeDSL = r.Form.Get("brain_dsl")
 	}
 	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameSettingsDoc(hostGameSettingsData{
 		Fest: fest,
@@ -218,8 +233,10 @@ select code, title, game_type, slug from games where id = ? and fest_id = ?`, ga
 			Title: title,
 			Type:  games.Label(gameType),
 		},
-		Slug:  slug.String,
-		Error: errMsg,
+		Slug:      slug.String,
+		Error:     errMsg,
+		SchemeDSL: schemeDSL,
+		HasDSL:    gameType == games.Brain && schemeDSL != "",
 	}))
 }
 
@@ -257,6 +274,23 @@ update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = 
 		title, slugValue, util.UtcNow(), gameID, festID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if dsl := r.Form.Get("brain_dsl"); strings.TrimSpace(dsl) != "" {
+		var stored string
+		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
+select coalesce(scheme_dsl, '') from games where id = ?`, gameID).Scan(&stored); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if strings.TrimSpace(stored) != strings.TrimSpace(dsl) {
+			err := s.h.Engine().WithWriteTx(r.Context(), festID, "game-recompile", func(ctx context.Context, tx *sql.Tx) error {
+				return recompileBrainGameTx(ctx, tx, festID, gameID, dsl)
+			})
+			if err != nil {
+				s.renderHostGameSettings(w, r, festID, gameID, err.Error())
+				return
+			}
+		}
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
 	gameRef := slug
@@ -822,23 +856,29 @@ func defaultBrainDSL(teams, questions int) string {
 // row by number (shared with the EK seed import) and pinned into its slot and
 // game_assignments, so the group is playable the moment it exists.
 func buildBrainStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, scheme store.FestScheme) error {
-	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
-	if err != nil {
-		return err
-	}
-	teamIDByNumber := make(map[int]int64, len(teams))
-	for _, team := range teams {
-		teamID, _, err := imports.EnsureSeedTeamByNumber(ctx, tx, festID, team.Number, team.Name, team.City, nil)
+	// A declared seed source owns game_assignments — «Import seed» writes them
+	// by seed rank, so creation must not pre-fill them by team number.
+	if scheme.Seeding == nil {
+		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 		if err != nil {
 			return err
 		}
-		teamIDByNumber[int(team.Number)] = teamID
-		if _, err := tx.ExecContext(ctx, `
+		for _, team := range teams {
+			teamID, _, err := imports.EnsureSeedTeamByNumber(ctx, tx, festID, team.Number, team.Name, team.City, nil)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `
 insert into game_assignments(game_id, basket, number, team_id) values(?, 1, ?, ?)
 on conflict(game_id, basket, number) do update set team_id = excluded.team_id`,
-			gameID, team.Number, teamID); err != nil {
-			return err
+				gameID, team.Number, teamID); err != nil {
+				return err
+			}
 		}
+	}
+	seat, err := seedSeaterTx(ctx, tx, festID, gameID)
+	if err != nil {
+		return err
 	}
 	for stageIndex, stage := range scheme.Stages {
 		emptyState := string(games.BrainEmptyStateJSON(stageQuestions(stage, scheme.Questions)))
@@ -861,20 +901,306 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
 			if err != nil {
 				return err
 			}
-			for slotIndex, slot := range match.Slots {
-				sourceType, sourceRef := storeutil.SlotSource(slot)
-				var teamID any
-				if slot.Seed != nil {
-					if id, ok := teamIDByNumber[slot.Seed.Number]; ok {
-						teamID = id
+			if err := insertMatchSlots(ctx, tx, matchID, match.Slots, seat); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// recompileBrainGameTx re-expands an edited DSL onto a live game: stages and
+// unstarted бои follow the new scheme (questions changes included), started
+// бои must survive with identical slot sources — else the whole edit is
+// refused, naming them.
+func recompileBrainGameTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, dsl string) error {
+	var oldSchemeJSON string
+	if err := tx.QueryRowContext(ctx, `
+select coalesce(scheme_json, '{}') from games where id = ? and fest_id = ? and game_type = 'brain'`,
+		gameID, festID).Scan(&oldSchemeJSON); err != nil {
+		return err
+	}
+	var meta struct {
+		Slug  string `json:"slug"`
+		Title string `json:"title"`
+	}
+	_ = json.Unmarshal([]byte(oldSchemeJSON), &meta)
+	scheme, err := brainSchemeFromDSLTx(ctx, tx, festID, meta.Slug, meta.Title, dsl)
+	if err != nil {
+		return err
+	}
+
+	type dbMatch struct {
+		ID      int64
+		StageID int64
+		Status  string
+		State   string
+	}
+	existingMatches := map[string]dbMatch{}
+	rows, err := tx.QueryContext(ctx, `
+select id, stage_id, code, status, coalesce(state_json, '{}') from matches where game_id = ?`, gameID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var m dbMatch
+		var code string
+		if err := rows.Scan(&m.ID, &m.StageID, &code, &m.Status, &m.State); err != nil {
+			rows.Close()
+			return err
+		}
+		existingMatches[code] = m
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	existingStages := map[string]int64{}
+	stageRows, err := tx.QueryContext(ctx, `select id, code from stages where game_id = ?`, gameID)
+	if err != nil {
+		return err
+	}
+	for stageRows.Next() {
+		var id int64
+		var code string
+		if err := stageRows.Scan(&id, &code); err != nil {
+			stageRows.Close()
+			return err
+		}
+		existingStages[code] = id
+	}
+	if err := stageRows.Err(); err != nil {
+		stageRows.Close()
+		return err
+	}
+	stageRows.Close()
+
+	planned := map[string]store.SchemeMatch{}
+	for _, stage := range scheme.Stages {
+		for _, match := range stage.Matches {
+			planned[match.Code] = match
+		}
+	}
+	var blocked []string
+	for code, m := range existingMatches {
+		if m.Status != "finished" && !games.BrainStateStarted(m.State) {
+			continue
+		}
+		match, survives := planned[code]
+		if !survives || !sameSlotIdentities(ctx, tx, m.ID, match.Slots) {
+			blocked = append(blocked, code)
+		}
+	}
+	if len(blocked) > 0 {
+		sort.Strings(blocked)
+		return fmt.Errorf("нельзя менять начатые бои: %s — уберите их изменения или снимите отметку «Закончен» и очистите протокол", strings.Join(blocked, ", "))
+	}
+
+	seat, err := seedSeaterTx(ctx, tx, festID, gameID)
+	if err != nil {
+		return err
+	}
+	for stageIndex, stage := range scheme.Stages {
+		position := stage.Position
+		if position == 0 {
+			position = stageIndex + 1
+		}
+		stageID, exists := existingStages[stage.Code]
+		if exists {
+			if _, err := tx.ExecContext(ctx, `
+update stages set title = ?, stage_type = ?, kind = ?, position = ?, config_json = ? where id = ?`,
+				stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage), stageID); err != nil {
+				return err
+			}
+			delete(existingStages, stage.Code)
+		} else {
+			if stageID, err = store.InsertReturningID(ctx, tx, `
+insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json)
+values(?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
+				festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage)); err != nil {
+				return err
+			}
+		}
+		emptyState := string(games.BrainEmptyStateJSON(stageQuestions(stage, scheme.Questions)))
+		for matchIndex, match := range stage.Matches {
+			existing, ok := existingMatches[match.Code]
+			if ok {
+				delete(existingMatches, match.Code)
+				started := existing.Status == "finished" || games.BrainStateStarted(existing.State)
+				if started {
+					if _, err := tx.ExecContext(ctx, `
+update matches set stage_id = ?, title = ?, position = ? where id = ?`,
+						stageID, match.Title, matchIndex+1, existing.ID); err != nil {
+						return err
 					}
+					continue
 				}
 				if _, err := tx.ExecContext(ctx, `
-insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
-values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, teamID); err != nil {
+update matches set stage_id = ?, title = ?, position = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
+					stageID, match.Title, matchIndex+1, len(match.Slots), emptyState, existing.ID); err != nil {
 					return err
 				}
+				if _, err := tx.ExecContext(ctx, `delete from match_slots where match_id = ?`, existing.ID); err != nil {
+					return err
+				}
+				if err := insertMatchSlots(ctx, tx, existing.ID, match.Slots, seat); err != nil {
+					return err
+				}
+				continue
 			}
+			matchID, err := store.InsertReturningID(ctx, tx, `
+insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, status, revision, state_json)
+values(?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
+				festID, gameID, stageID, match.Code, match.Title, matchIndex+1, len(match.Slots), emptyState)
+			if err != nil {
+				return err
+			}
+			if err := insertMatchSlots(ctx, tx, matchID, match.Slots, seat); err != nil {
+				return err
+			}
+		}
+	}
+	for _, m := range existingMatches {
+		if _, err := tx.ExecContext(ctx, `delete from matches where id = ?`, m.ID); err != nil {
+			return err
+		}
+	}
+	for _, stageID := range existingStages {
+		if _, err := tx.ExecContext(ctx, `delete from stages where id = ?`, stageID); err != nil {
+			return err
+		}
+	}
+
+	schemeJSON, err := json.Marshal(scheme)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+update games set scheme_json = ?, scheme_dsl = ?, revision = revision + 1, updated_at = ? where id = ?`,
+		string(schemeJSON), dsl, util.UtcNow(), gameID); err != nil {
+		return err
+	}
+	if _, err := resolver.ResolveGameSlotsTx(ctx, tx, gameID); err != nil {
+		return err
+	}
+	_, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "game:recompile", util.MustJSON(map[string]any{
+		"gameID": gameID,
+		"stages": len(scheme.Stages),
+	}))
+	return err
+}
+
+// sameSlotIdentities compares a live match's slot sources with the planned
+// ones, ignoring cosmetic labels.
+func sameSlotIdentities(ctx context.Context, tx *sql.Tx, matchID int64, planned []store.SchemeSlot) bool {
+	rows, err := tx.QueryContext(ctx, `
+select source_type, source_ref_json from match_slots where match_id = ? order by slot_index`, matchID)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	var current []string
+	for rows.Next() {
+		var sourceType, refJSON string
+		if err := rows.Scan(&sourceType, &refJSON); err != nil {
+			return false
+		}
+		current = append(current, slotIdentity(sourceType, refJSON))
+	}
+	if rows.Err() != nil || len(current) != len(planned) {
+		return false
+	}
+	for i, slot := range planned {
+		sourceType, refJSON := storeutil.SlotSource(slot)
+		if slotIdentity(sourceType, refJSON) != current[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func slotIdentity(sourceType, refJSON string) string {
+	var ref map[string]any
+	_ = json.Unmarshal([]byte(refJSON), &ref)
+	switch sourceType {
+	case "seed":
+		return fmt.Sprintf("seed:%d:%d", store.IntFromMap(ref, "basket"), store.IntFromMap(ref, "number"))
+	case "from_match":
+		return fmt.Sprintf("from_match:%v:%d", ref["match"], store.IntFromMap(ref, "place"))
+	case "reseed":
+		return fmt.Sprintf("reseed:%v:%d", ref["stage"], store.IntFromMap(ref, "rank"))
+	}
+	return sourceType
+}
+
+// seedSeaterTx builds the seat lookup a recompile reuses: fest teams by
+// number (roster-seeded games) plus the seed-import ladder's assignments
+// (declared-seed games).
+func seedSeaterTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) (func(slot store.SchemeSlot) any, error) {
+	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
+	if err != nil {
+		return nil, err
+	}
+	byNumber := make(map[int]int64, len(teams))
+	for _, team := range teams {
+		if team.Number > 0 {
+			teamID, _, err := imports.EnsureSeedTeamByNumber(ctx, tx, festID, team.Number, team.Name, team.City, nil)
+			if err != nil {
+				return nil, err
+			}
+			byNumber[int(team.Number)] = teamID
+		}
+	}
+	assignments := map[[2]int]int64{}
+	rows, err := tx.QueryContext(ctx, `select basket, number, team_id from game_assignments where game_id = ?`, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var basket, number int
+		var teamID int64
+		if err := rows.Scan(&basket, &number, &teamID); err != nil {
+			return nil, err
+		}
+		assignments[[2]int{basket, number}] = teamID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return func(slot store.SchemeSlot) any {
+		if slot.Seed == nil {
+			return nil
+		}
+		if slot.Seed.Number > 0 {
+			if id, ok := byNumber[slot.Seed.Number]; ok {
+				return id
+			}
+		}
+		key := slot.Seed.Number
+		if key == 0 {
+			key = slot.Seed.Position
+		}
+		basket := slot.Seed.Basket
+		if basket <= 0 {
+			basket = 1
+		}
+		if id, ok := assignments[[2]int{basket, key}]; ok {
+			return id
+		}
+		return nil
+	}, nil
+}
+
+func insertMatchSlots(ctx context.Context, tx *sql.Tx, matchID int64, slots []store.SchemeSlot, seat func(store.SchemeSlot) any) error {
+	for slotIndex, slot := range slots {
+		sourceType, sourceRef := storeutil.SlotSource(slot)
+		if _, err := tx.ExecContext(ctx, `
+insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
+values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, seat(slot)); err != nil {
+			return err
 		}
 	}
 	return nil
