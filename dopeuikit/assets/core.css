@@ -1063,13 +1063,17 @@ input[type="radio"]:focus-visible {
 .crumb-home {
   flex: 0 0 auto;
   overflow: visible;
-  font-size: 18px;
   /* No line-height:1 and no align-self here. The trail baseline-aligns its
      crumbs, so this one needs a real text baseline to align TO — with
      line-height:1 its baseline collapses onto its own bottom edge and the glyph
      hangs above the words. Given a normal line box, .ico's own offset centres it
      on the baseline exactly as it does beside real text. */
 }
+/* Shrink the house with --ico-size, NOT with font-size on the crumb: the offset
+   in .ico is a share of the em it INHERITS, so a wrapper that changes font-size
+   moves the glyph as well as resizing it, and the house rides up on the trail's
+   larger words. */
+.crumb-home .ico { --ico-size: 21px; }
 
 /* The page you are on is the one that should read as the title. */
 .crumb-current {
