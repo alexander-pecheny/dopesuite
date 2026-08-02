@@ -20,7 +20,7 @@ import {
 } from "./sessions.js";
 import * as people from "./people.js";
 import { createSessionsPanel } from "./sessionspanel.js";
-import { type ColorField, colorField, LABEL_COLORS, textOn } from "./colorpick.js";
+import { type ColorField, colorField, labelFill, labelInk, LABEL_COLORS } from "./colorpick.js";
 import { anchorPopup } from "./popup.js";
 import { type MassAction, plural, xyMass } from "./massaction.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
@@ -735,59 +735,29 @@ function leadIcon(node: Node): Node {
   return node;
 }
 
-// tagIcon is a label: the tag filled with the label's own colour. Same idea as
-// the flask — the colour IS the glyph — so a card's row reads as one family of
-// shapes rather than dots beside icons. The eyelet stays currentColor so the tag
-// still reads as a tag against a pale fill.
-function tagIcon(color: string): SVGSVGElement {
-  const svg = icon("tag");
-  svg.querySelector("path")?.setAttribute("fill", color);
-  return svg;
+// labelDot is a label: a disc of the label's own colour and nothing else. A
+// glyph outlined in one colour and filled with another needs room the row does
+// not have — at the size a card badge actually renders, a rim is half a device
+// pixel and only mutes the colour it encircles. A disc is all fill.
+function labelDot(color: string, title: string): HTMLElement {
+  const dot = el("span", { class: "kcard-label", title });
+  dot.style.background = labelFill(color);
+  return dot;
 }
 
 // ---- the test flask ----
-// A playing used to render as a capsule: the flask, then one dot per verdict.
-// Now that the flask is a real shape, the verdicts ARE the flask — the colours
-// fill it like liquid. Empty means «tested, nobody recorded an opinion», which
-// is exactly what an empty flask looks like.
-//
-// FLASK_LIQUID is the interior below the graduation line at y=15, traced off the
-// vendored flask-conical outline: down the right slope, round the bottom, back
-// up the left. It has to be kept with that shape — re-vendoring a different
-// flask means re-tracing this.
-const FLASK_LIQUID = "M6.453 15H17.547L19.755 19.04A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96Z";
-const SVG_NS = "http://www.w3.org/2000/svg";
-let flaskSeq = 0;
+// A playing is a SOLID flask, in one colour: the first verdict recorded at that
+// test, or --muted when the testers recorded nothing — «tested, nobody said
+// anything». It used to be an outline with the verdicts poured in as liquid,
+// which needed three inks inside 14 pixels and read as a grey smudge.
+// Verdicts past the first hang beside it as a braille-like grid of discs (see
+// .kcard-verdicts), so the flask keeps one colour however many were recorded.
+const VERDICT_DOTS = 6;
 
-// flaskIcon fills the flask with one vertical band per verdict, clipped to the
-// liquid shape. Vertical bands rather than stacked layers: the interior is ~7
-// units tall and ~15 wide, so at a 10px badge only the horizontal axis has room
-// to tell two colours apart.
-function flaskIcon(colors: readonly string[]): SVGSVGElement {
+function flaskIcon(color: string): SVGSVGElement {
   const svg = icon("flask-conical");
-  if (!colors.length) return svg;
-  const id = `flask-fill-${++flaskSeq}`;
-  const shape = document.createElementNS(SVG_NS, "path");
-  shape.setAttribute("d", FLASK_LIQUID);
-  const clip = document.createElementNS(SVG_NS, "clipPath");
-  clip.setAttribute("id", id);
-  clip.append(shape);
-  const defs = document.createElementNS(SVG_NS, "defs");
-  defs.append(clip);
-  const fill = document.createElementNS(SVG_NS, "g");
-  fill.setAttribute("clip-path", `url(#${id})`);
-  const x0 = 4, width = 16 / colors.length;
-  colors.forEach((c, i) => {
-    const band = document.createElementNS(SVG_NS, "rect");
-    band.setAttribute("x", String(x0 + i * width));
-    band.setAttribute("y", "14");
-    band.setAttribute("width", String(width));
-    band.setAttribute("height", "9");
-    band.setAttribute("fill", c);
-    fill.append(band);
-  });
-  // Under the outline, so the stroke still reads at badge size.
-  svg.prepend(defs, fill);
+  svg.querySelector("path")?.setAttribute("fill", "currentColor");
+  svg.style.color = labelFill(color);
   return svg;
 }
 
@@ -814,9 +784,9 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   // card detail, where it can say WHICH test it came from.
   for (const a of assignmentsOf(card.id, null)) {
     const lbl = labelById(a.labelId);
-    if (lbl) labelRow.append(el("span", { class: "kcard-label", title: lbl.name }, tagIcon(lbl.color)));
+    if (lbl) labelRow.append(labelDot(lbl.color, lbl.name));
   }
-  // One flask per test the question was played at, filled with the verdicts
+  // One flask per test the question was played at, coloured by the verdicts
   // recorded there. The colours are the only signal now, so the tooltip names
   // them — it used to live on the individual dots.
   for (const sid of playingsOf(card.id)) {
@@ -825,8 +795,20 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
       .filter((l): l is BoardLabel => !!l);
     const title = "Тест: " + sessionName(sid) +
       (verdicts.length ? " — " + verdicts.map((l) => l.name).join(", ") : "");
-    labelRow.append(el("span", { class: "kcard-test", title },
-      el("span", { class: "kcard-test-icon" }, flaskIcon(verdicts.map((l) => l.color)))));
+    const test = el("span", { class: "kcard-test", title },
+      el("span", { class: "kcard-test-icon" }, flaskIcon(verdicts[0]?.color || "")));
+    // The rest of the verdicts, as many as the grid holds; the tooltip above
+    // still names every one of them.
+    if (verdicts.length > 1) {
+      const grid = el("span", { class: "kcard-verdicts" });
+      for (const v of verdicts.slice(1, 1 + VERDICT_DOTS)) {
+        const dot = el("span", { class: "kcard-verdict" });
+        dot.style.background = labelFill(v.color);
+        grid.append(dot);
+      }
+      test.append(grid);
+    }
+    labelRow.append(test);
   }
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
@@ -847,19 +829,20 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
     node.classList.remove("dragging");
     if (!cardDragCommitted) render();
   });
-  // color the chips via inline style is disallowed by CSP? inline style attr is allowed (style-src governs <style>/<link>, not the style attribute under CSP3 'unsafe-inline' for attributes? Actually attribute styles need style-src 'unsafe-inline'). Use dataset + a post-pass with CSSOM:
   return node;
 }
 
 // Apply label colors through the CSSOM (avoids inline-style CSP issues).
+// The value written is `var(--label-green)`, not a hex, so the browser re-reads
+// it when the theme flips — nothing here has to re-render on a theme change.
 function paintLabels(): void {
   for (const chip of document.querySelectorAll<HTMLElement>(".label-swatch[data-c]")) {
-    chip.style.backgroundColor = chip.dataset.c || "";
+    chip.style.background = labelFill(chip.dataset.c || "");
   }
   // A pick is the one that carries its name, so its ink follows its colour.
   for (const pick of document.querySelectorAll<HTMLElement>(".label-pick[data-c]")) {
-    pick.style.backgroundColor = pick.dataset.c || "";
-    const ink = textOn(pick.dataset.c || "");
+    pick.style.background = labelFill(pick.dataset.c || "");
+    const ink = labelInk(pick.dataset.c || "");
     if (ink) pick.style.color = ink;
   }
 }
@@ -3385,7 +3368,7 @@ function renderLabelsEditor(focusNew = false): void {
   if (!state.labels.length) box.append(el("p", { class: "label-empty", text: "Меток нет." }));
   for (const lbl of sortLabels(state.labels.slice())) {
     const name = el("input", { class: "input", type: "text", value: lbl.name }) as HTMLInputElement;
-    const color = colorField(el("div"), lbl.color || "#888888");
+    const color = colorField(el("div"), lbl.color);
     const count = el("span", { class: "sess-meta", text: `${usage.get(lbl.id) || 0} карт.` });
     labelRows.push({ lbl, name, color });
     const drop = el("button", { class: "btn btn-danger", type: "button" }, icon("trash-2"));

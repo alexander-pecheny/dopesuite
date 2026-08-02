@@ -32,7 +32,7 @@ test("menuItems starts with appearance and keeps jump before extras", () => {
     account: null,
     config: {},
   });
-  assert.deepEqual(items[0], { kind: "appearance" });
+  assert.deepEqual(items[0], { kind: "appearance", icon: "palette" });
   assert.deepEqual(items[1], {
     kind: "link", label: "Редактировать", href: "/host", title: "", external: true, download: false,
   });
@@ -44,7 +44,7 @@ test("menuItems starts with appearance and keeps jump before extras", () => {
 test("menuItems account entry uses config labels with kit defaults", () => {
   const loggedIn = menuItems({ jump: null, extras: [], account: { loggedIn: true }, config: {} });
   assert.deepEqual(loggedIn[1], {
-    kind: "link", label: "Профиль", href: "/profile", title: "", external: false, download: false,
+    kind: "link", label: "Профиль", href: "/profile", title: "", external: false, download: false, icon: "user",
   });
   const anon = menuItems({
     jump: null,
@@ -54,6 +54,7 @@ test("menuItems account entry uses config labels with kit defaults", () => {
   });
   assert.equal(anon[1].href, "/login?next=1");
   assert.equal(anon[1].label, "Вход для ведущего");
+  assert.equal(anon[1].icon, "log-in");
 });
 
 test("jumpFromDataset reads the body data-jump-* contract", () => {

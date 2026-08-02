@@ -36,7 +36,7 @@ export interface MenuConfig {
 }
 
 export type MenuItem =
-  | { kind: "appearance" }
+  | { kind: "appearance"; icon: string }
   | { kind: "link"; label: string; href: string; title: string; external: boolean; download: boolean; icon?: string }
   | { kind: "action"; label: string; title: string; onClick: () => void; icon?: string };
 
@@ -49,8 +49,8 @@ export function resolveTheme(pref: ThemePref, prefersDark: boolean): Theme {
   return prefersDark ? "dark" : "light";
 }
 
-function link(label: string, href: string, title?: string, external?: boolean, download?: boolean): MenuItem {
-  return { kind: "link", label, href, title: title ?? "", external: external ?? false, download: download ?? false };
+function link(label: string, href: string, title?: string, external?: boolean, download?: boolean, icon?: string): MenuItem {
+  return { kind: "link", label, href, title: title ?? "", external: external ?? false, download: download ?? false, ...(icon ? { icon } : {}) };
 }
 
 // Item order: Оформление, then the page-supplied jump (Редактировать / Страница
@@ -62,7 +62,10 @@ export function menuItems(state: {
   account: MenuAccount | null;
   config: MenuConfig;
 }): MenuItem[] {
-  const items: MenuItem[] = [{ kind: "appearance" }];
+  // Every row is a glyph and a word. The two the model owns — Оформление and
+  // the account entry — used to be the only ones without one, so the column of
+  // icons broke at the top and the bottom.
+  const items: MenuItem[] = [{ kind: "appearance", icon: "palette" }];
   if (state.jump) {
     items.push(link(state.jump.label, state.jump.href, state.jump.title, state.jump.external));
   }
@@ -77,8 +80,8 @@ export function menuItems(state: {
     const cfg = state.config;
     items.push(
       state.account.loggedIn
-        ? link(cfg.profileLabel || "Профиль", cfg.profileHref || "/profile")
-        : link(cfg.loginLabel || "Вход", cfg.loginHref || "/login"),
+        ? link(cfg.profileLabel || "Профиль", cfg.profileHref || "/profile", "", false, false, "user")
+        : link(cfg.loginLabel || "Вход", cfg.loginHref || "/login", "", false, false, "log-in"),
     );
   }
   return items;
