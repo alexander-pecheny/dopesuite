@@ -1162,7 +1162,6 @@ function breadcrumbCurrentTitle(gameTitle: string): string {
 
 function setViewerMode(mode: string): void {
   viewerRoot.classList.toggle("grid-host", mode === "grid");
-  viewerRoot.classList.toggle("fight-host", mode === "match");
   // Составы fits the frame and wraps rather than scrolling sideways like a
   // score board, so the host drops its max-content sizing.
   viewerRoot.classList.toggle("fits-frame", mode === "roster");

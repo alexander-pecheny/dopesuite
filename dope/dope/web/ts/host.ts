@@ -3069,7 +3069,6 @@ function setViewerLink(href: string, title: string): void {
 
 function setHostMode(mode: string): void {
   hostRoot.classList.toggle("grid-host", mode === "grid");
-  hostRoot.classList.toggle("fight-host", mode === "match");
   // Составы fits the frame and wraps rather than scrolling sideways like a
   // score board, so the host drops its max-content sizing.
   hostRoot.classList.toggle("fits-frame", mode === "roster");

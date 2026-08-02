@@ -33,7 +33,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 		}
 	}
 
-	form := url.Values{"game_type": {"brain"}, "brain_questions": {"5"}}
+	form := url.Values{"game_type": {"brain"}, "brain_dsl": {"[defaults]\nquestions: 5\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n"}}
 	createReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/game/new", festID), strings.NewReader(form.Encode()))
 	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	createReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
@@ -61,7 +61,7 @@ where m.game_id = ? and ms.team_id is not null`, gameID).Scan(&seatedSlots); err
 		t.Fatalf("seated slots = %d, err %v; want 12", seatedSlots, err)
 	}
 
-	// Бой main-1 is Яблоко vs Ель (round 1 pairs numbers 1-2). Яблоко takes q1,q2.
+	// Бой s1-g1-1 is Яблоко vs Ель (round 1 pairs numbers 1-2). Яблоко takes q1,q2.
 	patch := map[string]any{"ops": []map[string]any{
 		{"path": []any{"teams", 0, "rows", 0, "player"}, "value": "Игрок 1"},
 		{"path": []any{"teams", 0, "rows", 0, "mark"}, "value": "right"},
@@ -69,7 +69,7 @@ where m.game_id = ? and ms.team_id is not null`, gameID).Scan(&seatedSlots); err
 		{"path": []any{"teams", 1, "rows", 2, "mark"}, "value": "wrong"},
 	}}
 	patchResp := scopedAPIRequest(t, srv, http.MethodPatch,
-		fmt.Sprintf("/api/fest/%d/games/%d/matches/main-1/state", festID, gameID), patch, token)
+		fmt.Sprintf("/api/fest/%d/games/%d/matches/s1-g1-1/state", festID, gameID), patch, token)
 	if patchResp.Code != http.StatusOK {
 		t.Fatalf("match patch status = %d, body %s", patchResp.Code, patchResp.Body.String())
 	}
@@ -93,7 +93,7 @@ where m.game_id = ? and ms.team_id is not null`, gameID).Scan(&seatedSlots); err
 	}
 
 	finishResp := scopedAPIRequest(t, srv, http.MethodPost,
-		fmt.Sprintf("/api/fest/%d/games/%d/matches/main-1/finish", festID, gameID),
+		fmt.Sprintf("/api/fest/%d/games/%d/matches/s1-g1-1/finish", festID, gameID),
 		map[string]any{"finished": true}, token)
 	if finishResp.Code != http.StatusOK {
 		t.Fatalf("finish status = %d, body %s", finishResp.Code, finishResp.Body.String())
@@ -104,17 +104,17 @@ where m.game_id = ? and ms.team_id is not null`, gameID).Scan(&seatedSlots); err
 	if err := srv.Eng().DB.QueryRow(`
 select r.place, r.metrics_json ->> '$.taken' from match_results r
 join teams tm on tm.id = r.team_id join matches m on m.id = r.match_id
-where m.game_id = ? and m.code = 'main-1' and tm.name = 'Яблоко'`, gameID).Scan(&placeA, &takenA); err != nil {
+where m.game_id = ? and m.code = 's1-g1-1' and tm.name = 'Яблоко'`, gameID).Scan(&placeA, &takenA); err != nil {
 		t.Fatalf("result Яблоко: %v", err)
 	}
 	if err := srv.Eng().DB.QueryRow(`
 select r.place from match_results r
 join teams tm on tm.id = r.team_id join matches m on m.id = r.match_id
-where m.game_id = ? and m.code = 'main-1' and tm.name = 'Ель'`, gameID).Scan(&placeB); err != nil {
+where m.game_id = ? and m.code = 's1-g1-1' and tm.name = 'Ель'`, gameID).Scan(&placeB); err != nil {
 		t.Fatalf("result Ель: %v", err)
 	}
 	if placeA != 1 || placeB != 2 || takenA != 2 {
-		t.Fatalf("main-1 places/taken = %v/%v taken %v, want 1/2 taken 2", placeA, placeB, takenA)
+		t.Fatalf("s1-g1-1 places/taken = %v/%v taken %v, want 1/2 taken 2", placeA, placeB, takenA)
 	}
 
 	var points float64

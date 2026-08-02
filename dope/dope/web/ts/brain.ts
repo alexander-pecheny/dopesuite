@@ -43,7 +43,9 @@ interface BrainMatchView {
 }
 
 interface SchemeSlotRef {
-  seed?: {number?: number} | null;
+  seed?: {number?: number; position?: number} | null;
+  reseed?: {stage?: string; rank?: number} | null;
+  fromMatch?: {match?: string; place?: number} | null;
   label?: string;
 }
 
@@ -60,11 +62,14 @@ interface BrainStageRules {
   order?: string[];
   points?: {win?: number; draw?: number; loss?: number} | null;
   tiebreakQuestions?: boolean;
+  questions?: number;
 }
 
 interface BrainSchemeStage {
   code?: string;
   title?: string;
+  kind?: string;
+  stage_type?: string;
   matches?: BrainSchemeMatch[];
   config?: BrainStageRules | null;
 }
@@ -120,22 +125,46 @@ let rosterView: HTMLElement | null = null;
 let activeTab = tabFromHash() || "protocol";
 let resyncScheduled = false;
 
-function groupStage(): BrainSchemeStage {
-  return scheme.stages?.[0] || {};
+function stageKind(stage: BrainSchemeStage): string {
+  return stage.kind || stage.stage_type || "";
 }
 
-// groupRules reads the stage's rules from the fest view — the same
+// protocolStages are the stages whose бої the page draws — everything except
+// reseed edges, in scheme order.
+function protocolStages(): BrainSchemeStage[] {
+  return (scheme.stages || []).filter((s) => stageKind(s) !== "reseed");
+}
+
+function rrStages(): BrainSchemeStage[] {
+  return (scheme.stages || []).filter((s) => stageKind(s) === "rr");
+}
+
+const stageByMatch = new Map<string, BrainSchemeStage>();
+for (const schemeStage of scheme.stages || []) {
+  for (const planned of schemeStage.matches || []) {
+    if (planned.code) stageByMatch.set(planned.code, schemeStage);
+  }
+}
+
+// groupRules reads a stage's rules from the fest view — the same
 // stages.config_json row the resolver ranks by, so client and server can't
 // drift — falling back to the scheme's creation-time copy.
-function groupRules(): BrainStageRules {
-  const code = groupStage().code;
-  const stage = fest?.stages?.find((s) => s?.code === code);
-  return stage?.config?.config || groupStage().config || {};
+function groupRules(groupStage: BrainSchemeStage): BrainStageRules {
+  const stage = fest?.stages?.find((s) => s?.code === groupStage.code);
+  return stage?.config?.config || groupStage.config || {};
 }
 
-function baseQuestions(): number {
+function schemeQuestions(): number {
   const n = Number(scheme.questions);
   return Number.isInteger(n) && n > 0 ? n : 5;
+}
+
+// questionsFor is a бой's regular question count: its stage's override (the
+// DSL's per-block/round questions cascade), else the scheme-wide default.
+function questionsFor(code: string): number {
+  const stage = stageByMatch.get(code);
+  const n = Number(stage ? groupRules(stage).questions : 0);
+  return Number.isInteger(n) && n > 0 ? n : schemeQuestions();
 }
 
 function tabFromHash(): string | null {
@@ -158,7 +187,7 @@ function normalizeState(view: BrainMatchView): void {
   if (!Number.isInteger(state.tiebreaks) || (state.tiebreaks as number) < 0) state.tiebreaks = 0;
   if (!Array.isArray(state.teams)) state.teams = [];
   while (state.teams.length < 2) state.teams.push({rows: []});
-  const rowCount = baseQuestions() + (state.tiebreaks as number);
+  const rowCount = questionsFor(view.code || "") + (state.tiebreaks as number);
   state.teams = state.teams.map((side) => {
     const rows = Array.isArray(side?.rows) ? side!.rows! : [];
     while (rows.length < rowCount) rows.push({player: "", mark: ""});
@@ -293,8 +322,7 @@ function teamName(view: BrainMatchView, side: number): string {
   return view.teams?.[side]?.name || `Команда ${side + 1}`;
 }
 
-function rowLabel(index: number): string {
-  const base = baseQuestions();
+function rowLabel(index: number, base: number): string {
   if (index < base) return String(index + 1);
   return index === base ? "П" : `П${index - base + 1}`;
 }
@@ -307,14 +335,27 @@ function rosterFor(name: string): string[] {
     .filter(Boolean);
 }
 
-function orderedMatches(): Array<{code: string; view: BrainMatchView}> {
-  const out: Array<{code: string; view: BrainMatchView}> = [];
-  for (const planned of groupStage().matches || []) {
+interface BoutEntry {
+  code: string;
+  view: BrainMatchView;
+  planned: BrainSchemeMatch;
+  stage: BrainSchemeStage;
+}
+
+function stageBouts(stage: BrainSchemeStage): BoutEntry[] {
+  const out: BoutEntry[] = [];
+  for (const planned of stage.matches || []) {
     const code = planned.code || "";
     const view = matches.get(code);
-    if (view) out.push({code, view});
+    if (view) out.push({code, view, planned, stage});
   }
   return out;
+}
+
+// allBouts flattens every protocol stage's бої in scheme order — the selection
+// grid's column space spans them all.
+function allBouts(): BoutEntry[] {
+  return protocolStages().flatMap(stageBouts);
 }
 
 
@@ -354,29 +395,41 @@ function renderTabs(): void {
   });
 }
 
-// buildProtocols lays the group's бой blocks side by side — the sheet's
-// протоколы tab; groups will stack vertically once a game holds several.
+// buildProtocols lays each stage's бої side by side — the sheet's протоколы
+// tab — and stacks the stages (groups, then knockout rounds) vertically.
 function buildProtocols(): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "brain-protocol";
-  const bouts = orderedMatches();
-  if (!bouts.length) {
+  const stages = protocolStages();
+  const multi = stages.length > 1;
+  let rendered = 0;
+  for (const stage of stages) {
+    const bouts = stageBouts(stage);
+    if (!bouts.length) continue;
+    rendered++;
+    if (multi) {
+      const head = document.createElement("h2");
+      head.className = "brain-stage-head";
+      head.textContent = stage.title || stage.code || "";
+      wrap.appendChild(head);
+    }
+    const row = document.createElement("div");
+    row.className = "brain-bouts";
+    for (const bout of bouts) {
+      row.appendChild(buildBout(bout));
+    }
+    wrap.appendChild(row);
+  }
+  if (!rendered) {
     const empty = document.createElement("p");
     empty.className = "roster-empty";
     empty.textContent = "Бои ещё не загружены.";
     wrap.appendChild(empty);
-    return wrap;
   }
-  const row = document.createElement("div");
-  row.className = "brain-bouts";
-  for (const {code, view} of bouts) {
-    row.appendChild(buildBout(code, view));
-  }
-  wrap.appendChild(row);
   return wrap;
 }
 
-function buildBout(code: string, view: BrainMatchView): HTMLElement {
+function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   const section = document.createElement("section");
   section.className = "brain-bout";
   const editable = !viewer && !view.finished;
@@ -390,27 +443,28 @@ function buildBout(code: string, view: BrainMatchView): HTMLElement {
   const head = document.createElement("tr");
   const corner = document.createElement("th");
   corner.className = "row-marker brain-bout-corner";
-  corner.textContent = code.split("-").pop() || code;
+  corner.textContent = (code.split("-").pop() || code).replace(/^m/, "");
   corner.title = view.title || code;
   head.appendChild(corner);
-  head.appendChild(nameHead(view, 0));
+  head.appendChild(nameHead(view, 0, planned));
   const score = document.createElement("th");
   score.className = "number brain-score-head";
   score.colSpan = 2;
   score.textContent = `${taken(view, 0)} : ${taken(view, 1)}`;
   head.appendChild(score);
-  head.appendChild(nameHead(view, 1));
+  head.appendChild(nameHead(view, 1, planned));
   head.appendChild(finishHead(code, view));
   thead.appendChild(head);
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
   const rowCount = matchRows(view, 0).length;
+  const base = questionsFor(code);
   for (let q = 0; q < rowCount; q++) {
     const tr = document.createElement("tr");
     const marker = document.createElement("td");
-    marker.className = "row-marker" + (q >= baseQuestions() ? " brain-tiebreak-marker" : "");
-    marker.textContent = rowLabel(q);
+    marker.className = "row-marker" + (q >= base ? " brain-tiebreak-marker" : "");
+    marker.textContent = rowLabel(q, base);
     tr.appendChild(marker);
     tr.appendChild(playerCell(code, view, 0, q, editable));
     tr.appendChild(markCell(code, view, 0, q, editable));
@@ -424,18 +478,22 @@ function buildBout(code: string, view: BrainMatchView): HTMLElement {
   table.appendChild(tbody);
   table.addEventListener("change", handleTableChange);
   section.appendChild(table);
-  if (editable && groupRules().tiebreakQuestions) {
+  const stage = stageByMatch.get(code);
+  if (editable && stage && groupRules(stage).tiebreakQuestions) {
     section.appendChild(tiebreakControls(code, view));
   }
   return section;
 }
 
-function nameHead(view: BrainMatchView, side: number): HTMLElement {
+// nameHead shows the seated team; an unresolved slot shows its source label
+// (Посев 5, Гр. 1-2 — the server fills it from the slot ref) muted.
+function nameHead(view: BrainMatchView, side: number, planned: BrainSchemeMatch): HTMLElement {
   const th = document.createElement("th");
   th.className = "brain-name-head";
   const name = document.createElement("span");
   name.className = "brain-name";
-  name.textContent = teamName(view, side);
+  name.textContent = view.teams?.[side]?.name || planned.slots?.[side]?.label || "—";
+  name.classList.toggle("brain-name-pending", !view.teams?.[side]?.id);
   th.appendChild(name);
   return th;
 }
@@ -498,7 +556,7 @@ function markCell(code: string, view: BrainMatchView, side: number, q: number, e
   td.dataset.match = code;
   td.dataset.side = String(side);
   td.dataset.q = String(q);
-  td.title = `${teamName(view, side)}, вопрос ${rowLabel(q)}`;
+  td.title = `${teamName(view, side)}, вопрос ${rowLabel(q, questionsFor(code))}`;
   return td;
 }
 
@@ -549,7 +607,7 @@ function tiebreakControls(code: string, view: BrainMatchView): HTMLElement {
 
 
 interface CrossRow {
-  number: number;
+  key: string;
   name: string;
   points: number;
   plus: number;
@@ -557,41 +615,65 @@ interface CrossRow {
   rank: number;
 }
 
-// buildCrosstable renders the sheet's group table: score cells vs each
+// slotKey is a stable identity for an entrant ref, whatever grain it is:
+// seeds by number/position, rank refs by stage+rank.
+function slotKey(slot: SchemeSlotRef | null | undefined): string {
+  if (!slot) return "";
+  if (slot.seed?.number) return `s${slot.seed.number}`;
+  if (slot.seed?.position) return `p${slot.seed.position}`;
+  if (slot.reseed) return `r${slot.reseed.stage || ""}:${slot.reseed.rank || 0}`;
+  return slot.label || "";
+}
+
+// buildCrosstable stacks one group table per rr stage: score cells vs each
 // opponent, then О (head-to-head points, finished бои only), + / − / +/−
 // (questions taken and conceded across all бои), М (place, ranked by the
 // stage's comparator order — КИНСБФ §4.2 by default).
 function buildCrosstable(): HTMLElement {
-  const stage = groupStage();
-  const rules = groupRules();
+  const wrap = document.createElement("div");
+  wrap.className = "brain-protocol";
+  const groups = rrStages();
+  if (!groups.length) {
+    const empty = document.createElement("p");
+    empty.className = "roster-empty";
+    empty.textContent = "В этой схеме нет групповых таблиц.";
+    wrap.appendChild(empty);
+    return wrap;
+  }
+  for (const stage of groups) {
+    wrap.appendChild(buildGroupTable(stage));
+  }
+  return wrap;
+}
+
+function buildGroupTable(stage: BrainSchemeStage): HTMLElement {
+  const rules = groupRules(stage);
   const entrants = rules.entrants || [];
   const win = rules.points?.win ?? 2;
   const draw = rules.points?.draw ?? 1;
   const loss = rules.points?.loss ?? 0;
   const rows: CrossRow[] = entrants.map((slot) => ({
-    number: slot.seed?.number || 0,
+    key: slotKey(slot),
     name: slot.label || "",
     points: 0,
     plus: 0,
     minus: 0,
     rank: 0,
   }));
-  const indexByNumber = new Map<number, number>();
-  rows.forEach((row, i) => indexByNumber.set(row.number, i));
+  const indexByKey = new Map<string, number>();
+  rows.forEach((row, i) => indexByKey.set(row.key, i));
   const cellText: string[][] = rows.map(() => rows.map(() => ""));
   const cellMuted: boolean[][] = rows.map(() => rows.map(() => false));
   const duels: RankDuel[] = [];
 
-  for (const planned of groupStage().matches || []) {
+  for (const planned of stage.matches || []) {
     const view = matches.get(planned.code || "");
     if (!view) continue;
-    const na = planned.slots?.[0]?.seed?.number || 0;
-    const nb = planned.slots?.[1]?.seed?.number || 0;
-    const a = indexByNumber.get(na);
-    const b = indexByNumber.get(nb);
+    const a = indexByKey.get(slotKey(planned.slots?.[0]));
+    const b = indexByKey.get(slotKey(planned.slots?.[1]));
     if (a === undefined || b === undefined) continue;
-    rows[a].name = teamName(view, 0);
-    rows[b].name = teamName(view, 1);
+    if (view.teams?.[0]?.name) rows[a].name = view.teams[0].name;
+    if (view.teams?.[1]?.name) rows[b].name = view.teams[1].name;
     const ta = taken(view, 0);
     const tb = taken(view, 1);
     if (view.finished || started(view)) {
@@ -617,8 +699,6 @@ function buildCrosstable(): HTMLElement {
     row.rank = ranks[i];
   });
 
-  const wrap = document.createElement("div");
-  wrap.className = "brain-protocol";
   const table = document.createElement("table");
   table.className = "match-table brain-crosstable";
 
@@ -687,8 +767,7 @@ function buildCrosstable(): HTMLElement {
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
-  wrap.appendChild(table);
-  return wrap;
+  return table;
 }
 
 
@@ -730,17 +809,17 @@ function cellNode(code: string, side: number, q: number): HTMLElement | null {
 // question, col = бой × 2 + side. The widget (shared with КСИ) then gives
 // click/drag/shift ranges, copy/paste and touch tap-cycling.
 function cellCoord(code: string, side: number, q: number): CellCoord | null {
-  const idx = orderedMatches().findIndex((bout) => bout.code === code);
+  const idx = allBouts().findIndex((bout) => bout.code === code);
   return idx < 0 ? null : {row: q, col: idx * 2 + side};
 }
 
 function boutAtCol(col: number): {code: string; view: BrainMatchView; side: number} | null {
-  const bout = orderedMatches()[Math.floor(col / 2)];
+  const bout = allBouts()[Math.floor(col / 2)];
   return bout ? {code: bout.code, view: bout.view, side: col % 2} : null;
 }
 
 function totalCols(): number {
-  return orderedMatches().length * 2;
+  return allBouts().length * 2;
 }
 
 function serializeMark(cell: Element | null | undefined): string {

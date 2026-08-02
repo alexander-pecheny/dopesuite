@@ -58,8 +58,9 @@ protocol registry for the game's type.
 `seed:` is one token: the reserved words `random` or `xlsx`, else a game slug
 in this fest (unknown slug = compile error). Every source yields, per team,
 either an exact rank or a basket; baskets resolve to ranks by the deterministic
-Жребий lot. Dealing into the first block follows rank bands (ranks 1..G to
-groups 1..G, and so on) — there is no separate dealing key.
+Жребий lot. Dealing is always the snake: bands of G ranks, odd bands reversed
+(the reference generate_kinsbf.py's PF_GROUPS pattern) — there is no separate
+dealing key. The same snake deals reseed ranks into a block's groups.
 
 - `seed: {game}` — that game's standings as metrics, ordered by `[init]`
   `sorting` (roster rating available as a metric).

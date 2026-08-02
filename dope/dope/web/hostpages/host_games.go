@@ -16,7 +16,7 @@ import (
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/roster"
-	"dope/dope/domain/structure"
+	"dope/dope/domain/schemedsl"
 	"dope/dope/domain/view"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
@@ -40,6 +40,7 @@ type hostGameCreateData struct {
 	Fest         view.HostFest
 	Error        string
 	SelectedType string
+	BrainDSL     string
 }
 
 type gameIdentity struct {
@@ -149,7 +150,9 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			stickerRow("Пустой = минус (пустые = −номинал)", "ksis_emptywrong_max", "1", "ksis_emptywrong_color", "#ff7a6b"),
 		),
 		gameSettings("brain", sel,
-			dopeui.Field(dopeui.Label("Количество вопросов в бое"), dopeui.Textfield(dopeui.Name("brain_questions"), dopeui.Inputmode("numeric"), dopeui.Value("5"))),
+			dopeui.Field(dopeui.Label("Схема"),
+				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.BrainDSL))),
+			dopeui.Hint(dopeui.Text("Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, типы roundrobin / single_elimination / double_elimination.")),
 		),
 		gameSettings("ek", sel,
 			dopeui.Field(dopeui.Label("JSON-схема"),
@@ -353,10 +356,10 @@ func (s *Server) handleHostClearGame(w http.ResponseWriter, r *http.Request, fes
 	}
 	defer tx.Rollback()
 
-	var gameType, title, schemeJSON string
+	var gameType, title, schemeJSON, schemeDSL string
 	if err := tx.QueryRowContext(r.Context(), `
-select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and fest_id = ?`,
-		gameID, festID).Scan(&gameType, &title, &schemeJSON); err != nil {
+select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`,
+		gameID, festID).Scan(&gameType, &title, &schemeJSON, &schemeDSL); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -447,7 +450,24 @@ select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and
 			}
 		}
 	case "brain":
-		scheme, err := brainSchemeTx(r.Context(), tx, festID, meta.Slug, meta.Title, games.BrainQuestions(schemeJSON))
+		// Pre-DSL games get their shortcut scheme re-expressed in the DSL, so a
+		// clear upgrades them onto the one authoring path.
+		if strings.TrimSpace(schemeDSL) == "" {
+			var count int
+			if err := tx.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&count); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			schemeDSL = defaultBrainDSL(count)
+			if questions := games.BrainQuestions(schemeJSON); questions > 0 {
+				schemeDSL = strings.Replace(schemeDSL, "questions: 5", fmt.Sprintf("questions: %d", questions), 1)
+			}
+			if _, err := tx.ExecContext(r.Context(), `update games set scheme_dsl = ? where id = ?`, schemeDSL, gameID); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		scheme, err := brainSchemeFromDSLTx(r.Context(), tx, festID, meta.Slug, meta.Title, schemeDSL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -537,7 +557,13 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameCreateDoc(hostGameCreateData{Fest: fest, Error: errMsg, SelectedType: selectedType}))
+	brainDSL := strings.TrimSpace(r.Form.Get("brain_dsl"))
+	if brainDSL == "" {
+		var count int
+		_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&count)
+		brainDSL = defaultBrainDSL(count)
+	}
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameCreateDoc(hostGameCreateData{Fest: fest, Error: errMsg, SelectedType: selectedType, BrainDSL: brainDSL}))
 }
 
 func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -611,11 +637,7 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 				return err
 			}
 		case games.Brain:
-			questions, err := parsePositiveFormInt(form, "brain_questions", "Количество вопросов в бое", 1, 50)
-			if err != nil {
-				return err
-			}
-			gameID, err = createBrainGameTx(ctx, tx, festID, questions)
+			gameID, err = createBrainGameTx(ctx, tx, festID, form.Get("brain_dsl"))
 			if err != nil {
 				return err
 			}
@@ -699,16 +721,16 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 	return insertJSONGameTx(ctx, tx, festID, identity, "od", schemeJSON, stateJSON)
 }
 
-// createBrainGameTx creates a brain game as a real Structure: one rr stage over
-// the fest's numbered teams, its бои scheduled upfront by the rr kind (the
-// canonical KINSBF rounds), each match pre-seeded with the pristine protocol
-// state and both slots occupied.
-func createBrainGameTx(ctx context.Context, tx *sql.Tx, festID int64, questions int) (int64, error) {
+// createBrainGameTx creates a brain game from its scheme DSL: the compiled
+// Structure's stages and matches materialise upfront, each match pre-seeded
+// with the pristine protocol state; seed slots seat the fest's numbered teams
+// unless [init] declares a seed source to import later.
+func createBrainGameTx(ctx context.Context, tx *sql.Tx, festID int64, dsl string) (int64, error) {
 	identity, err := nextGameIdentityTx(ctx, tx, festID, "brain", "Брейн")
 	if err != nil {
 		return 0, err
 	}
-	scheme, err := brainSchemeTx(ctx, tx, festID, identity.Code, identity.Title, questions)
+	scheme, err := brainSchemeFromDSLTx(ctx, tx, festID, identity.Code, identity.Title, dsl)
 	if err != nil {
 		return 0, err
 	}
@@ -724,9 +746,9 @@ values(?, ?, 2, ?, ?)`, uniqueSchemeSlug(identity.Code), identity.Title, string(
 		return 0, err
 	}
 	gameID, err := store.InsertReturningID(ctx, tx, `
-insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
-values(?, ?, ?, 'brain', ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
-		festID, identity.Code, identity.Title, identity.Position, schemeID, string(schemeJSON), now, now)
+insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, scheme_dsl, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
+values(?, ?, ?, 'brain', ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
+		festID, identity.Code, identity.Title, identity.Position, schemeID, string(schemeJSON), dsl, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -736,55 +758,55 @@ values(?, ?, ?, 'brain', ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 	return gameID, nil
 }
 
-// brainSchemeTx builds a brain game's scheme document from the fest's teams:
-// one 'main' stage of kind rr whose entrants are the numbered fest teams in
-// roster order, with the бои already scheduled.
-func brainSchemeTx(ctx context.Context, tx *sql.Tx, festID int64, slug, title string, questions int) (store.FestScheme, error) {
-	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
+// brainSchemeFromDSLTx compiles a brain DSL into the detailed scheme. Without
+// an [init] seed source, the fest's numbered teams are the seeding — entrant
+// order is team numbers, not the roster view's alphabetical order — and the
+// count must match the scheme's draw.
+func brainSchemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, slug, title, dsl string) (store.FestScheme, error) {
+	if strings.TrimSpace(dsl) == "" {
+		return store.FestScheme{}, errors.New("опишите схему брейна")
+	}
+	doc, err := schemedsl.Parse(dsl)
 	if err != nil {
 		return store.FestScheme{}, err
 	}
-	if len(teams) < 2 {
-		return store.FestScheme{}, errors.New("для брейна нужны хотя бы две команды в фесте")
+	input := schemedsl.Input{Slug: slug, Title: title, GameType: games.Brain}
+	if _, hasSeed := doc.Init.Str("seed"); !hasSeed {
+		entrants, err := brainSeedEntrantsTx(ctx, tx, festID)
+		if err != nil {
+			return store.FestScheme{}, err
+		}
+		input.Entrants = entrants
 	}
-	// Entrant order is the seeding: team numbers, not the roster view's
-	// alphabetical order — position 1 meets position 2 in round one.
+	return schemedsl.Compile(doc, input)
+}
+
+func brainSeedEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64) ([]store.SchemeSlot, error) {
+	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
+	if err != nil {
+		return nil, err
+	}
+	if len(teams) < 2 {
+		return nil, errors.New("для брейна нужны хотя бы две команды в фесте")
+	}
 	sort.Slice(teams, func(i, j int) bool { return teams[i].Number < teams[j].Number })
 	entrants := make([]store.SchemeSlot, len(teams))
 	for i, team := range teams {
 		if team.Number <= 0 {
-			return store.FestScheme{}, errors.New("перед созданием брейна пронумеруйте команды феста")
+			return nil, errors.New("перед созданием брейна пронумеруйте команды феста")
 		}
 		entrants[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: int(team.Number)}, Label: team.Name}
 	}
-	config, err := json.Marshal(map[string]any{"code": "main", "entrants": entrants})
-	if err != nil {
-		return store.FestScheme{}, err
+	return entrants, nil
+}
+
+// defaultBrainDSL is the creation form's prefill: today's shortcut — one group
+// over the whole fest — written in the DSL so the host sees something editable.
+func defaultBrainDSL(teams int) string {
+	if teams < 2 {
+		teams = 4
 	}
-	rr, ok := structure.Kind("rr")
-	if !ok {
-		return store.FestScheme{}, errors.New("rr stage kind is not registered")
-	}
-	matches, err := rr.Schedule(config, nil)
-	if err != nil {
-		return store.FestScheme{}, err
-	}
-	return store.FestScheme{
-		SchemaVersion: 2,
-		Slug:          slug,
-		Title:         title,
-		GameType:      games.Brain,
-		Questions:     questions,
-		Stages: []store.SchemeStage{{
-			Code:      "main",
-			Title:     "Группа",
-			StageType: "matches",
-			Kind:      "rr",
-			Position:  1,
-			Matches:   matches,
-			Config:    config,
-		}},
-	}, nil
+	return fmt.Sprintf("[defaults]\nquestions: 5\n\n[scheme]\ntype: roundrobin\nteams_in_group: %d\n", teams)
 }
 
 // buildBrainStructureTx materialises a brain scheme into stage/match/slot rows.
@@ -810,8 +832,8 @@ on conflict(game_id, basket, number) do update set team_id = excluded.team_id`,
 			return err
 		}
 	}
-	emptyState := string(games.BrainEmptyStateJSON(scheme.Questions))
 	for stageIndex, stage := range scheme.Stages {
+		emptyState := string(games.BrainEmptyStateJSON(stageQuestions(stage, scheme.Questions)))
 		position := stage.Position
 		if position == 0 {
 			position = stageIndex + 1
@@ -848,6 +870,18 @@ values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, teamID); e
 		}
 	}
 	return nil
+}
+
+// stageQuestions reads a stage's questions override from its kind config,
+// falling back to the scheme-wide count.
+func stageQuestions(stage store.SchemeStage, fallback int) int {
+	var config struct {
+		Questions int `json:"questions"`
+	}
+	if err := json.Unmarshal(stage.Config, &config); err == nil && config.Questions > 0 {
+		return config.Questions
+	}
+	return fallback
 }
 
 // ksiStickersGameType is the creation-form value for the "KSI with stickers"

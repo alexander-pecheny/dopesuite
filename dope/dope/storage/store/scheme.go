@@ -27,6 +27,20 @@ type FestScheme struct {
 	Questions         int             `json:"questions,omitempty"`
 	Participants      []string        `json:"participants,omitempty"`
 	Stickers          json.RawMessage `json:"stickers,omitempty"`
+	Seeding           *SchemeSeeding  `json:"seeding,omitempty"`
+}
+
+// SchemeSeeding is the [init] declaration compiled from the scheme DSL: where
+// the seeding comes from and how the source's metrics are ordered. It resolves
+// only when the host presses «Import seed» — never on its own.
+type SchemeSeeding struct {
+	Source string           `json:"source"`
+	Sort   []SchemeSortRule `json:"sort,omitempty"`
+}
+
+type SchemeSortRule struct {
+	Metric string `json:"metric"`
+	Dir    string `json:"dir"`
 }
 
 type SchemeTeam struct {

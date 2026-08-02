@@ -3749,6 +3749,18 @@ body:not(.embedded-match) .grid-match {
   gap: var(--space-5);
 }
 
+.brain-stage-head {
+  margin: var(--space-0);
+  font-size: var(--text-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+}
+
+.brain-name-pending {
+  color: var(--muted);
+  font-style: italic;
+}
+
 .brain-bout {
   display: flex;
   flex-direction: column;

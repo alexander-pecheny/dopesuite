@@ -697,6 +697,7 @@ end`); err != nil {
 	}
 	if err := store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{
 		{Name: "participant_kind", Type: "TEXT NOT NULL DEFAULT 'team'"},
+		{Name: "scheme_dsl", Type: "TEXT NOT NULL DEFAULT ''"},
 	}); err != nil {
 		return err
 	}
