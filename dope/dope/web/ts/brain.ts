@@ -10,6 +10,8 @@ import {DopeTable} from "./match-table.js";
 import type {CellCoord, CellEdit, CellRangeSelection, GameInitLike, RosterTeam, ScopedEventMessage} from "./match-table.js";
 import {rankGroup} from "./brain-rank.js";
 import type {RankDuel, RankTeam} from "./brain-rank.js";
+import {buildReseedStagePanel} from "./fest-grid.js";
+import type {FestGridStage} from "./fest-grid.js";
 
 interface PageGlobals {
   __GAME_INIT__?: GameInitLike | null;
@@ -71,6 +73,7 @@ interface BrainSchemeStage {
   kind?: string;
   stage_type?: string;
   matches?: BrainSchemeMatch[];
+  sources?: string[];
   config?: BrainStageRules | null;
 }
 
@@ -102,7 +105,7 @@ interface SeedImportData {
 interface FestInfo {
   title?: string;
   gameName?: string;
-  stages?: Array<{code?: string; config?: {config?: BrainStageRules} | null} | null>;
+  stages?: Array<(FestGridStage & {config?: {config?: BrainStageRules} | null}) | null>;
   [key: string]: unknown;
 }
 
@@ -423,15 +426,93 @@ function renderTabs(): void {
   });
 }
 
+// The live fest view feeds the reseed panels (entries, sort rules). The init
+// snapshot goes stale, so «Рассчитать» adopts the fresh view it gets back.
+const festStages = new Map<string, FestGridStage>();
+for (const viewStage of fest?.stages || []) {
+  if (viewStage?.code) festStages.set(viewStage.code, viewStage);
+}
+const reseedError = new Map<string, string>();
+
+function adoptFestStages(fresh: FestInfo | null): void {
+  for (const viewStage of fresh?.stages || []) {
+    if (viewStage?.code) festStages.set(viewStage.code, viewStage);
+  }
+}
+
+// A reseed calculates once every бой of its source stages is finished —
+// derived from the live match views, not the init snapshot.
+function reseedPendingBouts(stage: BrainSchemeStage): string[] {
+  const sources = new Set(stage.sources || []);
+  const pending: string[] = [];
+  for (const src of protocolStages()) {
+    if (!src.code || !sources.has(src.code)) continue;
+    for (const planned of src.matches || []) {
+      const code = planned.code || "";
+      if (!matches.get(code)?.finished) pending.push(code);
+    }
+  }
+  return pending;
+}
+
+async function calculateReseed(code: string): Promise<void> {
+  setStatus("saving");
+  try {
+    const response = await fetch(`${route.apiBase}/stages/${encodeURIComponent(code)}/reseed`, {method: "POST"});
+    if (!response.ok) throw new Error((await response.text()).trim() || "Не удалось рассчитать пересев");
+    adoptFestStages(await response.json() as FestInfo);
+    reseedError.delete(code);
+    setStatus("saved");
+  } catch (error) {
+    reseedError.set(code, error instanceof Error ? error.message : String(error));
+    setStatus("error");
+  }
+  render({preserveScroll: true});
+}
+
+function buildBrainReseedPanel(stage: BrainSchemeStage): HTMLElement {
+  const code = stage.code || "";
+  const pending = reseedPendingBouts(stage);
+  const blocked = pending.length === 1
+    ? `Бой ${pending[0]} не закончен`
+    : pending.length > 1 ? `Бои ${pending.join(", ")} не закончены` : "";
+  const panel = buildReseedStagePanel({...(festStages.get(code) || {}), code}, {
+    editable: !viewer,
+    canCalculate: pending.length === 0,
+    blockedMessage: blocked,
+    onCalculate: () => void calculateReseed(code),
+  });
+  const errorText = reseedError.get(code);
+  if (errorText) {
+    const note = document.createElement("p");
+    note.className = "brain-seed-error";
+    note.textContent = errorText;
+    panel.appendChild(note);
+  }
+  return panel;
+}
+
 // buildProtocols lays each stage's бої side by side — the sheet's протоколы
-// tab — and stacks the stages (groups, then knockout rounds) vertically.
+// tab — and stacks the stages (groups, reseed edges, knockout rounds)
+// vertically in scheme order.
 function buildProtocols(): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "brain-protocol";
-  const stages = protocolStages();
+  const stages = scheme.stages || [];
   const multi = stages.length > 1;
   let rendered = 0;
   for (const stage of stages) {
+    if (stageKind(stage) === "reseed") {
+      rendered++;
+      if (multi) {
+        const head = document.createElement("h2");
+        head.className = "brain-stage-head";
+        head.textContent = stage.title || stage.code || "";
+        wrap.appendChild(head);
+      }
+      wrap.appendChild(buildBrainReseedPanel(stage));
+      continue;
+    }
     const bouts = stageBouts(stage);
     if (!bouts.length) continue;
     rendered++;

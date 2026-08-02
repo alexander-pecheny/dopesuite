@@ -45,6 +45,10 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEn
 		if !match.Finished {
 			continue
 		}
+		takenSum := 0.0
+		for _, slot := range match.Slots {
+			takenSum += slot.Metrics["takenBase"]
+		}
 		for _, slot := range match.Slots {
 			if slot.Participant == 0 {
 				continue
@@ -59,11 +63,24 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEn
 			for key, value := range slot.Metrics {
 				entry.Metrics[key] += value
 			}
+			entry.Metrics["points"] += 2 * (2 - slot.Place)
+			entry.Metrics["taken_base"] += slot.Metrics["takenBase"]
+			entry.Metrics["conceded_base"] += takenSum - slot.Metrics["takenBase"]
+			entry.Metrics["bouts"]++
+			entry.Metrics["questions_asked"] += float64(match.Questions)
 		}
 	}
 	entries := make([]RankedEntry, 0, len(order))
 	for _, id := range order {
-		entries = append(entries, *byParticipant[id])
+		entry := byParticipant[id]
+		if b := entry.Metrics["bouts"]; b > 0 {
+			entry.Metrics["points_share"] = entry.Metrics["points"] / (2 * b)
+		}
+		if asked := entry.Metrics["questions_asked"]; asked > 0 {
+			entry.Metrics["taken_share"] = entry.Metrics["taken_base"] / asked
+		}
+		entry.Metrics["diff"] = entry.Metrics["taken_base"] - entry.Metrics["conceded_base"]
+		entries = append(entries, *entry)
 	}
 
 	tiedButDraw := func(a, b RankedEntry) bool {

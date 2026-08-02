@@ -185,7 +185,7 @@ export function buildReseedStagePanel(
     row.appendChild(reseedTeamCell(entry.name || ""));
     if (hasSourceMatch) row.appendChild(tableCell("td", entry.metrics?.match || "", "results-num reseed-source"));
     metricColumns.forEach((metric) => {
-      row.appendChild(tableCell("td", reseedMetricValue(entry.metrics?.[metric]), "results-num reseed-metric"));
+      row.appendChild(tableCell("td", reseedMetricValue(metric, entry.metrics?.[metric]), "results-num reseed-metric"));
     });
     tbody.appendChild(row);
   });
@@ -427,16 +427,21 @@ function reseedMetricLabel(metric: string): string {
     wrong_30: "−30",
     wrong_20: "−20",
     wrong_10: "−10",
+    points_share: "% очков",
+    taken_share: "% взятых",
+    diff: "+/−",
+    taken_base: "Взятые б/п",
     draw: "Жребий",
   };
   return labels[metric] || metric;
 }
 
-function reseedMetricValue(value: unknown): string {
+function reseedMetricValue(metric: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
   const number = Number(value);
-  if (Number.isFinite(number) && String(value).trim() !== "") return scoreText(number);
-  return String(value);
+  if (!Number.isFinite(number) || String(value).trim() === "") return String(value);
+  if (metric.endsWith("_share")) return `${scoreText(Math.round(number * 1000) / 10)}%`;
+  return scoreText(number);
 }
 
 function reseedTeamCell(name: string): HTMLElement {

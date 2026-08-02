@@ -232,6 +232,11 @@ func kindStageConfig(raw []byte, seed string) json.RawMessage {
 // stageMatchOutcomesTx loads a stage's matches as structure.MatchOutcome (slot
 // results in slot order) and reports whether every match is finished.
 func stageMatchOutcomesTx(ctx context.Context, tx *sql.Tx, stageID int64) ([]structure.MatchOutcome, bool, error) {
+	var stageConfig string
+	if err := tx.QueryRowContext(ctx, `select config_json from stages where id = ?`, stageID).Scan(&stageConfig); err != nil {
+		return nil, false, err
+	}
+	questions := int(stageConfigQuestions(stageConfig))
 	type matchRow struct {
 		id     int64
 		code   string
@@ -272,7 +277,7 @@ order by ms.slot_index`, []any{m.id}, func(rows *sql.Rows) (slotRes, error) {
 		if err != nil {
 			return nil, false, err
 		}
-		outcome := structure.MatchOutcome{Code: m.code, Finished: finished}
+		outcome := structure.MatchOutcome{Code: m.code, Finished: finished, Questions: questions}
 		for _, s := range slots {
 			metrics := map[string]float64{"total": s.total, "plus": s.plus}
 			var parsed map[string]any
@@ -540,15 +545,15 @@ func ReseedPrerequisites(ctx context.Context, q store.Queryer, config []byte, ga
 
 	advancing := 0
 	for _, slot := range cfg.Teams {
-		if slot.FromMatch == nil {
-			continue
-		}
-		teamID, err := teamAtMatchPlace(ctx, q, gameID, slot.FromMatch.Match, slot.FromMatch.Place)
+		teamID, source, err := eligibleTeam(ctx, q, gameID, slot)
 		if err != nil {
 			return state, err
 		}
+		if source == "" {
+			continue
+		}
 		if teamID == 0 {
-			state.addPending(slot.FromMatch.Match)
+			state.addPending(source)
 		}
 		advancing++
 	}
@@ -609,15 +614,16 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 		return err
 	}
 
-	// Advancing teams come from the fromMatch place selectors in `teams`.
+	// Advancing teams come from the place selectors in `teams` — a from_match
+	// place or a source stage's rank.
 	advancing := make([]int64, 0, len(cfg.Teams))
 	for _, slot := range cfg.Teams {
-		if slot.FromMatch == nil {
-			continue
-		}
-		teamID, err := teamAtMatchPlace(ctx, tx, gameID, slot.FromMatch.Match, slot.FromMatch.Place)
+		teamID, source, err := eligibleTeam(ctx, tx, gameID, slot)
 		if err != nil {
 			return err
+		}
+		if source == "" {
+			continue
 		}
 		if teamID == 0 {
 			return clear() // a source bout is not finished yet
@@ -638,13 +644,13 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 		return clear()
 	}
 
+	bouts, err := loadReseedBouts(ctx, tx, state.SourceMatchIDs)
+	if err != nil {
+		return err
+	}
 	entries := make([]reseedEntry, 0, len(advancing))
 	for _, teamID := range advancing {
-		entry, err := aggregateReseedMetrics(ctx, tx, teamID, state.SourceMatchIDs)
-		if err != nil {
-			return err
-		}
-		entries = append(entries, entry)
+		entries = append(entries, aggregateReseedMetrics(bouts, teamID))
 	}
 
 	rules := cfg.Sort
@@ -670,11 +676,15 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 	}
 	for rank, entry := range entries {
 		out := map[string]any{
-			"place_sum": entry.metrics["place_sum"],
-			"total":     int(entry.metrics["total"]),
-			"plus":      int(entry.metrics["plus"]),
-			"draw":      int(entry.metrics["draw"]),
-			"match":     strings.Join(entry.bouts, "+"),
+			"place_sum":    entry.metrics["place_sum"],
+			"total":        int(entry.metrics["total"]),
+			"plus":         int(entry.metrics["plus"]),
+			"draw":         int(entry.metrics["draw"]),
+			"match":        strings.Join(entry.bouts, "+"),
+			"points_share": entry.metrics["points_share"],
+			"taken_share":  entry.metrics["taken_share"],
+			"diff":         entry.metrics["diff"],
+			"taken_base":   int(entry.metrics["taken_base"]),
 		}
 		for _, key := range reseedCountMetrics {
 			out[key] = int(entry.metrics[key])
@@ -838,47 +848,146 @@ func numFromAny(value any) float64 {
 	return 0
 }
 
-// aggregateReseedMetrics sums one team's place/total/plus/correct_* across the
-// given source bouts.
-func aggregateReseedMetrics(ctx context.Context, q store.Queryer, teamID int64, sourceMatchIDs []int64) (reseedEntry, error) {
-	entry := reseedEntry{teamID: teamID, metrics: map[string]float64{}}
+// eligibleTeam resolves one advancing-team selector — a from_match place or a
+// source stage's rank — returning the source's code so the caller can name what
+// still blocks it. 0 while the upstream is not final; "" when the slot has no
+// selector at all.
+func eligibleTeam(ctx context.Context, q store.Queryer, gameID int64, slot store.SchemeSlot) (int64, string, error) {
+	switch {
+	case slot.FromMatch != nil:
+		teamID, err := teamAtMatchPlace(ctx, q, gameID, slot.FromMatch.Match, slot.FromMatch.Place)
+		return teamID, slot.FromMatch.Match, err
+	case slot.Reseed != nil:
+		teamID, err := teamAtReseedRank(ctx, q, gameID, slot.Reseed.Stage, slot.Reseed.Rank)
+		return teamID, slot.Reseed.Stage, err
+	}
+	return 0, "", nil
+}
+
+// reseedBout is one source bout's results: every team's row plus the bout's
+// base question count (its stage's questions — перестрелки не в счёт).
+type reseedBout struct {
+	code      string
+	questions float64
+	rows      []reseedBoutRow
+}
+
+type reseedBoutRow struct {
+	teamID    int64
+	place     float64
+	total     int
+	plus      int
+	takenBase float64
+	metrics   map[string]any
+}
+
+func loadReseedBouts(ctx context.Context, q store.Queryer, sourceMatchIDs []int64) ([]reseedBout, error) {
+	if len(sourceMatchIDs) == 0 {
+		return nil, nil
+	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(sourceMatchIDs)), ",")
-	args := []any{teamID}
+	args := make([]any, 0, len(sourceMatchIDs))
 	for _, id := range sourceMatchIDs {
 		args = append(args, id)
 	}
 	rows, err := q.QueryContext(ctx, fmt.Sprintf(`
-select m.code, mr.place, mr.total, mr.plus, mr.metrics_json
+select m.id, m.code, s.config_json, mr.team_id, mr.place, mr.total, mr.plus, mr.metrics_json
 from match_results mr
 join matches m on m.id = mr.match_id
 join stages s on s.id = m.stage_id
-where mr.team_id = ? and mr.match_id in (%s)
+where mr.match_id in (%s)
 order by s.position, m.position, m.id`, placeholders), args...)
 	if err != nil {
-		return entry, err
+		return nil, err
 	}
 	defer rows.Close()
+	var bouts []reseedBout
+	var lastMatch int64
 	for rows.Next() {
-		var code, rawMetrics string
+		var matchID, teamID int64
+		var code, configJSON, rawMetrics string
 		var place float64
 		var total, plus int
-		if err := rows.Scan(&code, &place, &total, &plus, &rawMetrics); err != nil {
-			return entry, err
+		if err := rows.Scan(&matchID, &code, &configJSON, &teamID, &place, &total, &plus, &rawMetrics); err != nil {
+			return nil, err
 		}
-		entry.bouts = append(entry.bouts, code)
-		entry.metrics["place_sum"] += place
-		entry.metrics["total"] += float64(total)
-		entry.metrics["plus"] += float64(plus)
-		// metrics_json mixes scalars (correct_50, draw, ...) with arrays
+		if matchID != lastMatch {
+			bouts = append(bouts, reseedBout{code: code, questions: stageConfigQuestions(configJSON)})
+			lastMatch = matchID
+		}
+		row := reseedBoutRow{teamID: teamID, place: place, total: total, plus: plus}
+		// metrics_json mixes scalars (correct_50, takenBase, ...) with arrays
 		// (correctCounts, wrongCounts), so decode into map[string]any and pull
-		// just the scalar keys we sum — decoding into map[string]float64 would
-		// fail on the arrays and silently drop every count.
+		// just the scalar keys — decoding into map[string]float64 would fail on
+		// the arrays and silently drop every count.
 		var parsed map[string]any
-		if err := json.Unmarshal([]byte(rawMetrics), &parsed); err == nil {
-			for _, key := range reseedCountMetrics {
-				entry.metrics[key] += numFromAny(parsed[key])
+		if json.Unmarshal([]byte(rawMetrics), &parsed) == nil {
+			row.metrics = parsed
+			row.takenBase = numFromAny(parsed["takenBase"])
+		}
+		bout := &bouts[len(bouts)-1]
+		bout.rows = append(bout.rows, row)
+	}
+	return bouts, rows.Err()
+}
+
+// stageConfigQuestions reads a stage's per-bout base question count from its
+// persisted config (nested under "config" for scheme-imported stages).
+func stageConfigQuestions(raw string) float64 {
+	var outer struct {
+		Questions float64 `json:"questions"`
+		Config    struct {
+			Questions float64 `json:"questions"`
+		} `json:"config"`
+	}
+	if json.Unmarshal([]byte(raw), &outer) != nil {
+		return 0
+	}
+	if outer.Config.Questions > 0 {
+		return outer.Config.Questions
+	}
+	return outer.Questions
+}
+
+// aggregateReseedMetrics sums one team's reseed stats over the source bouts:
+// the legacy place/total/plus/correct_* sums plus регламент КИНСБФ 3.3.5 —
+// очки and взятые (без перестрелок) as shares of their maximum, and разница
+// against what opponents took in the team's own bouts.
+func aggregateReseedMetrics(bouts []reseedBout, teamID int64) reseedEntry {
+	entry := reseedEntry{teamID: teamID, metrics: map[string]float64{}}
+	played, questionsAsked := 0.0, 0.0
+	for _, bout := range bouts {
+		var mine *reseedBoutRow
+		conceded := 0.0
+		for i := range bout.rows {
+			if bout.rows[i].teamID == teamID {
+				mine = &bout.rows[i]
+			} else {
+				conceded += bout.rows[i].takenBase
 			}
 		}
+		if mine == nil {
+			continue
+		}
+		entry.bouts = append(entry.bouts, bout.code)
+		entry.metrics["place_sum"] += mine.place
+		entry.metrics["total"] += float64(mine.total)
+		entry.metrics["plus"] += float64(mine.plus)
+		for _, key := range reseedCountMetrics {
+			entry.metrics[key] += numFromAny(mine.metrics[key])
+		}
+		entry.metrics["points"] += 2 * (2 - mine.place)
+		entry.metrics["taken_base"] += mine.takenBase
+		entry.metrics["conceded_base"] += conceded
+		played++
+		questionsAsked += bout.questions
 	}
-	return entry, rows.Err()
+	if played > 0 {
+		entry.metrics["points_share"] = entry.metrics["points"] / (2 * played)
+	}
+	if questionsAsked > 0 {
+		entry.metrics["taken_share"] = entry.metrics["taken_base"] / questionsAsked
+	}
+	entry.metrics["diff"] = entry.metrics["taken_base"] - entry.metrics["conceded_base"]
+	return entry
 }

@@ -48,16 +48,19 @@ type compiler struct {
 	in     Input
 	scheme store.FestScheme
 
-	venueCount int
-	position   int
-	prev       *blockOutputs
+	venueCount  int
+	position    int
+	prev        *blockOutputs
+	blockStages [][]string
 }
 
 // blockOutputs is what one expanded block offers the next block's Edge: per
-// Group, a way to reference each place.
+// Group, a way to reference each place. terminal marks a block nothing can
+// follow (its final is a series, so places have no single source bout).
 type blockOutputs struct {
 	groups     []groupOut
 	proceeding int
+	terminal   bool
 }
 
 type groupOut struct {
@@ -105,7 +108,7 @@ var protocolParams = map[string]map[string]string{
 var blockKeys = map[string]bool{
 	"type": true, "title": true, "groups": true, "teams_in_group": true, "teams": true,
 	"proceeding_teams": true, "reseed": true, "sorting": true, "points": true,
-	"venues": true, "bronze": true,
+	"venues": true, "bronze": true, "stats_from": true, "best_of": true,
 }
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true, "points": true}
@@ -131,7 +134,7 @@ func (c *compiler) checkKeys() error {
 		for key, v := range blk.Values {
 			base, _, dotted := strings.Cut(key, ".")
 			if dotted {
-				if _, isParam := c.protocolConfigKey(base); !isParam && base != "venues" {
+				if _, isParam := c.protocolConfigKey(base); !isParam && base != "venues" && base != "best_of" {
 					return errAt(v.Line, "неизвестный ключ %s", key)
 				}
 				continue // round suffixes are validated by the block's kind
@@ -304,10 +307,17 @@ func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
 	return config
 }
 
+// rrOrder resolves the groups' comparator order. On a block with an incoming
+// reseed the sorting key describes the Edge (reseedSortRules), so the groups
+// fall back to [defaults] or the canon.
 func (c *compiler) rrOrder(blk Section) ([]string, error) {
-	rules, ok, err := blk.Sorting("sorting")
-	if err != nil {
-		return nil, err
+	var rules []SortRule
+	var ok bool
+	var err error
+	if incoming, _ := blockReseedSpec(blk); !incoming {
+		if rules, ok, err = blk.Sorting("sorting"); err != nil {
+			return nil, err
+		}
 	}
 	if !ok {
 		if rules, ok, err = c.doc.Defaults.Sorting("sorting"); err != nil {
@@ -438,8 +448,10 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 			rules = append(rules, store.SchemeSortRule{Metric: "place_sum", Dir: "asc"})
 		case "taken":
 			rules = append(rules, store.SchemeSortRule{Metric: "taken", Dir: "desc"})
+		case "points_share", "taken_share", "diff":
+			rules = append(rules, store.SchemeSortRule{Metric: token.Metric, Dir: "desc"})
 		default:
-			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве (есть points, taken)", token.Metric)
+			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве (есть points, taken, points_share, taken_share, diff)", token.Metric)
 		}
 	}
 	return rules, nil
@@ -456,9 +468,10 @@ func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
 	return out
 }
 
-// reseedStage materialises one reseed Edge over the given source stages and
-// returns its code; rank refs against it seat whatever follows.
-func (c *compiler) reseedStage(index int, blk Section, sources []string) (string, error) {
+// reseedStage materialises one reseed Edge: teams is who is re-ranked (place
+// selectors into the feeding round), sources is whose bouts the stats are
+// summed over. Returns the stage code; rank refs against it seat what follows.
+func (c *compiler) reseedStage(index int, blk Section, sources []string, teams []store.SchemeSlot) (string, error) {
 	sort, err := c.reseedSortRules(blk)
 	if err != nil {
 		return "", err
@@ -471,6 +484,7 @@ func (c *compiler) reseedStage(index int, blk Section, sources []string) (string
 		StageType: "reseed",
 		Kind:      "reseed",
 		Position:  c.position,
+		Teams:     teams,
 		Sources:   sources,
 		Sort:      json.RawMessage(util.MustJSON(sort)),
 	})
@@ -485,6 +499,40 @@ func (c *compiler) prevStageCodes() []string {
 	return codes
 }
 
+// reseedSources resolves what a block-grain reseed sums its stats over: the
+// previous block's stages, or — with stats_from — every stage of the listed
+// blocks (регламент КИНСБФ 3.3.5 counts both the groups and the DE).
+func (c *compiler) reseedSources(index int, blk Section) ([]string, error) {
+	tokens, ok, err := blk.List("stats_from")
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return c.prevStageCodes(), nil
+	}
+	var sources []string
+	for _, token := range tokens {
+		var n int
+		if _, err := fmt.Sscanf(token, "s%d", &n); err != nil || n < 1 || n > index {
+			return nil, errAt(blk.Values["stats_from"].Line, "stats_from: %s — доступны блоки s1..s%d", token, index)
+		}
+		sources = append(sources, c.blockStages[n-1]...)
+	}
+	return sources, nil
+}
+
+// prevPlaceSlots lists everyone the previous block sends onward — the reseed's
+// eligibility set (place selectors, one per proceeding place per group).
+func (c *compiler) prevPlaceSlots() []store.SchemeSlot {
+	var teams []store.SchemeSlot
+	for _, g := range c.prev.groups {
+		for p := 1; p <= c.prev.proceeding; p++ {
+			teams = append(teams, g.place(p))
+		}
+	}
+	return teams
+}
+
 func reseedRankSlot(stage string, rank int) store.SchemeSlot {
 	return store.SchemeSlot{
 		Reseed: &store.SchemeReseedRef{Stage: stage, Rank: rank},
@@ -495,7 +543,14 @@ func reseedRankSlot(stage string, rank int) store.SchemeSlot {
 // dealReseed materialises the block-grain Edge: a reseed stage over every
 // previous group, then a snake deal of its ranks.
 func (c *compiler) dealReseed(index int, blk Section, groups, size int) ([][]store.SchemeSlot, error) {
-	code, err := c.reseedStage(index, blk, c.prevStageCodes())
+	if supply := len(c.prev.groups) * c.prev.proceeding; supply != groups*size {
+		return nil, errAt(blk.Line, "из предыдущего блока выходят %d команд, а блоку нужно %d", supply, groups*size)
+	}
+	sources, err := c.reseedSources(index, blk)
+	if err != nil {
+		return nil, err
+	}
+	code, err := c.reseedStage(index, blk, sources, c.prevPlaceSlots())
 	if err != nil {
 		return nil, err
 	}
@@ -543,7 +598,16 @@ func (c *compiler) dealDeterministic(blk Section, groups, size int) ([][]store.S
 
 func (c *compiler) expandBlock(index int) error {
 	blk := c.doc.Blocks[index]
+	if index > 0 && c.prev.terminal {
+		return errAt(blk.Line, "предыдущий блок кончается серией боёв — за ним нельзя продолжить схему")
+	}
+	if v, present := blk.Values["stats_from"]; present {
+		if incoming, _ := blockReseedSpec(blk); !incoming {
+			return errAt(v.Line, "stats_from работает только вместе с reseed: true")
+		}
+	}
 	kind, _ := blk.Str("type")
+	firstStage := len(c.scheme.Stages)
 	var out *blockOutputs
 	var err error
 	switch kind {
@@ -563,6 +627,13 @@ func (c *compiler) expandBlock(index int) error {
 	if err != nil {
 		return err
 	}
+	var emitted []string
+	for _, stage := range c.scheme.Stages[firstStage:] {
+		if stage.StageType == "matches" {
+			emitted = append(emitted, stage.Code)
+		}
+	}
+	c.blockStages = append(c.blockStages, emitted)
 	if proceeding, ok := blk.Int("proceeding_teams"); ok {
 		out.proceeding = proceeding
 	}
@@ -571,8 +642,11 @@ func (c *compiler) expandBlock(index int) error {
 }
 
 func (c *compiler) groupTitle(blk Section, group, groups int) string {
-	if title, ok := blk.Str("title"); ok && groups == 1 {
-		return title
+	if title, ok := blk.Str("title"); ok {
+		if groups == 1 {
+			return title
+		}
+		return fmt.Sprintf("%s. Группа %d", title, group)
 	}
 	if groups == 1 && len(c.doc.Blocks) == 1 {
 		return "Группа"
@@ -736,13 +810,33 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 	prevCodes := []string{}
 	var prevStages []string
 	var semifinalCodes []string
+	seriesFinal := false
 	for remaining := teams; remaining >= 2; remaining /= 2 {
 		names := seRoundNames(remaining)
 		stageCode := fmt.Sprintf("%s-%s", blockCode, names[0])
 		count := remaining / 2
+		bestOf := 0
+		if remaining == 2 {
+			if v, ok := paramInt(c.doc.Defaults, blk, "best_of", names); ok {
+				if v < 3 || v%2 == 0 {
+					return nil, errAt(blk.Line, "best_of: серия играется до большинства побед — нечётное число боёв от 3")
+				}
+				bestOf = v
+			}
+		} else {
+			for _, name := range names {
+				if _, ok := blk.Int("best_of." + name); ok {
+					return nil, errAt(blk.Values["best_of."+name].Line, "best_of: серия возможна только в финале")
+				}
+			}
+		}
 		var reseedCode string
 		if remaining == boundaryAt {
-			if reseedCode, err = c.reseedStage(index, blk, prevStages); err != nil {
+			winners := make([]store.SchemeSlot, len(prevCodes))
+			for i, prev := range prevCodes {
+				winners[i] = fromMatchSlot(prev, 1)
+			}
+			if reseedCode, err = c.reseedStage(index, blk, prevStages, winners); err != nil {
 				return nil, err
 			}
 		}
@@ -779,6 +873,24 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 				Slots:            slots,
 			}
 		}
+		if bestOf > 1 {
+			// The series is sequential бои at one стол, so it never wave-splits.
+			base := matches[0]
+			series := make([]store.SchemeMatch, bestOf)
+			for k := 1; k <= bestOf; k++ {
+				series[k-1] = store.SchemeMatch{
+					Code:             fmt.Sprintf("%s-m%d", stageCode, k),
+					Title:            fmt.Sprintf("Финал. Бой %d", k),
+					Venue:            base.Venue,
+					ParticipantCount: 2,
+					Slots:            base.Slots,
+				}
+			}
+			c.appendManualStage(blk, stageCode, seRoundTitle(remaining), names, series)
+			seriesFinal = true
+			prevCodes = codes
+			continue
+		}
 		prevStages = c.appendSERound(blk, stageCode, seRoundTitle(remaining), names, venues, matches)
 		if remaining == 4 {
 			semifinalCodes = codes
@@ -786,7 +898,7 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 		prevCodes = codes
 	}
 	finalCode := prevCodes[0]
-	out := &blockOutputs{groups: []groupOut{{
+	out := &blockOutputs{terminal: seriesFinal, groups: []groupOut{{
 		stageCode: finalCode,
 		label:     "Финал",
 		place: func(p int) store.SchemeSlot {

@@ -2,6 +2,7 @@ package schemedsl
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -101,16 +102,21 @@ func TestCompileSingleGroupBrain(t *testing.T) {
 	}
 }
 
+// kinsbfSrc is the actual СтудЧР-2026 КИНСБФ scheme (регламент разделы 3–4,
+// verified against the tournament's gsheet tables and generate_kinsbf.py):
+// basket lottery, 12 groups over 6 столов in two захода, six 4-team DE groups,
+// пересев by 3.3.5 over group+DE stats, PF snake, alternating cross, and a
+// best-of-three final.
 const kinsbfSrc = `
 [defaults]
 venues: 6
 questions: 5
 
 [init]
-seed: kvrm
-sorting: [points desc, rating desc]
+seed: xlsx
 
 [scheme]
+title: 1-й групповой этап
 type: roundrobin
 groups: 12
 teams_in_group: 4
@@ -120,12 +126,16 @@ type: double_elimination
 groups: 6
 proceeding_teams: 2
 ---
+title: 2-й групповой этап
 type: roundrobin
 groups: 4
 teams_in_group: 3
 reseed: true
+stats_from: [s1, s2]
+sorting: [points_share desc, diff desc, taken_share desc]
 proceeding_teams: 2
 ---
+title: 3-й групповой этап
 type: roundrobin
 groups: 2
 teams_in_group: 4
@@ -136,16 +146,14 @@ teams: 4
 bronze: true
 questions: 7
 questions.final: 5
+best_of.final: 3
 `
 
 func TestCompileKinsbf(t *testing.T) {
 	scheme := compileSrc(t, kinsbfSrc, Input{Slug: "brain-1", Title: "Брейн", GameType: "brain"})
 
-	if scheme.Seeding == nil || scheme.Seeding.Source != "kvrm" {
+	if scheme.Seeding == nil || scheme.Seeding.Source != "xlsx" {
 		t.Fatalf("seeding = %+v", scheme.Seeding)
-	}
-	if len(scheme.Seeding.Sort) != 2 || scheme.Seeding.Sort[1].Metric != "rating" {
-		t.Fatalf("seeding sort = %+v", scheme.Seeding.Sort)
 	}
 	if len(scheme.Venues) != 6 {
 		t.Fatalf("venues = %d", len(scheme.Venues))
@@ -157,6 +165,9 @@ func TestCompileKinsbf(t *testing.T) {
 
 	// Block 1: seeds snake-dealt across baskets of 12.
 	g1 := stageByCode(t, scheme, "s1-g1")
+	if g1.Title != "1-й групповой этап. Группа 1" {
+		t.Fatalf("s1-g1 title = %q", g1.Title)
+	}
 	wantSeeds := []int{1, 24, 25, 48}
 	config := stageConfig(t, g1)
 	entrants := config["entrants"].([]any)
@@ -199,8 +210,32 @@ func TestCompileKinsbf(t *testing.T) {
 	if reseed.StageType != "reseed" {
 		t.Fatalf("reseed stage type = %s", reseed.StageType)
 	}
-	if len(reseed.Sources) != 6 || reseed.Sources[0] != "s2-g1" {
+	// Регламент 3.3.5: stats over the group stage AND the DE, eligibility =
+	// the 12 DE qualifiers (w(бой 3), w(бой 5) per group), rates order.
+	if len(reseed.Sources) != 18 || reseed.Sources[0] != "s1-g1" || reseed.Sources[17] != "s2-g6" {
 		t.Fatalf("reseed sources = %v", reseed.Sources)
+	}
+	if len(reseed.Teams) != 12 {
+		t.Fatalf("reseed teams = %d, want 12", len(reseed.Teams))
+	}
+	if fm := reseed.Teams[0].FromMatch; fm == nil || fm.Match != "s2-g1-m3" || fm.Place != 1 {
+		t.Fatalf("reseed team 0 = %+v", reseed.Teams[0])
+	}
+	if fm := reseed.Teams[1].FromMatch; fm == nil || fm.Match != "s2-g1-m5" || fm.Place != 1 {
+		t.Fatalf("reseed team 1 = %+v", reseed.Teams[1])
+	}
+	var sortRules []map[string]string
+	if err := json.Unmarshal(reseed.Sort, &sortRules); err != nil {
+		t.Fatal(err)
+	}
+	wantSort := []string{"points_share", "diff", "taken_share"}
+	if len(sortRules) != 3 {
+		t.Fatalf("reseed sort = %v", sortRules)
+	}
+	for i, want := range wantSort {
+		if sortRules[i]["metric"] != want || sortRules[i]["dir"] != "desc" {
+			t.Fatalf("reseed sort %d = %v, want %s desc", i, sortRules[i], want)
+		}
 	}
 	pf1 := stageByCode(t, scheme, "s3-g1")
 	wantRanks := []int{1, 8, 9}
@@ -237,10 +272,19 @@ func TestCompileKinsbf(t *testing.T) {
 	if sm1[0].Reseed.Stage != "s4-g1" || sm1[0].Reseed.Rank != 1 || sm1[1].Reseed.Stage != "s4-g2" || sm1[1].Reseed.Rank != 2 {
 		t.Fatalf("semifinal m1: %+v %+v", sm1[0].Reseed, sm1[1].Reseed)
 	}
+	// Регламент 3.7: финал — победитель двух боёв из трёх.
 	final := stageByCode(t, scheme, "s5-final")
-	fm := final.Matches[0].Slots
-	if fm[0].FromMatch.Match != "s5-semifinal-m1" || fm[0].FromMatch.Place != 1 {
-		t.Fatalf("final slot 0: %+v", fm[0].FromMatch)
+	if len(final.Matches) != 3 {
+		t.Fatalf("final matches = %d, want a best-of-3", len(final.Matches))
+	}
+	for k, match := range final.Matches {
+		if match.Code != fmt.Sprintf("s5-final-m%d", k+1) || match.Title != fmt.Sprintf("Финал. Бой %d", k+1) {
+			t.Fatalf("final match %d = %s %q", k, match.Code, match.Title)
+		}
+		if match.Slots[0].FromMatch.Match != "s5-semifinal-m1" || match.Slots[0].FromMatch.Place != 1 ||
+			match.Slots[1].FromMatch.Match != "s5-semifinal-m2" || match.Slots[1].FromMatch.Place != 1 {
+			t.Fatalf("final match %d slots: %+v %+v", k, match.Slots[0].FromMatch, match.Slots[1].FromMatch)
+		}
 	}
 	bronze := stageByCode(t, scheme, "s5-bronze")
 	bm := bronze.Matches[0].Slots
@@ -254,6 +298,9 @@ func TestCompileKinsbf(t *testing.T) {
 	}
 	if stageConfig(t, final)["questions"] != float64(5) {
 		t.Fatalf("final questions = %v", stageConfig(t, final)["questions"])
+	}
+	if stageConfig(t, bronze)["questions"] != float64(7) {
+		t.Fatalf("bronze questions = %v", stageConfig(t, bronze)["questions"])
 	}
 }
 
@@ -430,6 +477,49 @@ sorting: [taken, points]
 	}
 }
 
+func TestCompileInitSorting(t *testing.T) {
+	src := "[init]\nseed: kvrm\nsorting: [points desc, rating desc]\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n"
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	if scheme.Seeding == nil || scheme.Seeding.Source != "kvrm" {
+		t.Fatalf("seeding = %+v", scheme.Seeding)
+	}
+	if len(scheme.Seeding.Sort) != 2 || scheme.Seeding.Sort[1].Metric != "rating" {
+		t.Fatalf("seeding sort = %+v", scheme.Seeding.Sort)
+	}
+}
+
+// A reseed after an rr block re-ranks the groups' top places — its eligibility
+// set is rank refs into the group standings.
+func TestCompileReseedEligibilityFromGroups(t *testing.T) {
+	src := `
+[scheme]
+type: roundrobin
+groups: 2
+teams_in_group: 4
+proceeding_teams: 2
+---
+type: roundrobin
+groups: 2
+teams_in_group: 2
+reseed: true
+`
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	reseed := stageByCode(t, scheme, "s2-reseed")
+	if len(reseed.Teams) != 4 {
+		t.Fatalf("reseed teams = %d, want 4", len(reseed.Teams))
+	}
+	want := []struct {
+		stage string
+		rank  int
+	}{{"s1-g1", 1}, {"s1-g1", 2}, {"s1-g2", 1}, {"s1-g2", 2}}
+	for i, w := range want {
+		ref := reseed.Teams[i].Reseed
+		if ref == nil || ref.Stage != w.stage || ref.Rank != w.rank {
+			t.Fatalf("reseed team %d = %+v, want %+v", i, reseed.Teams[i], w)
+		}
+	}
+}
+
 func TestCompileEntrantCountMismatch(t *testing.T) {
 	doc, err := Parse(singleGroupSrc)
 	if err != nil {
@@ -455,6 +545,11 @@ func TestCompileErrors(t *testing.T) {
 		{"no deterministic template", "[scheme]\ntype: roundrobin\ngroups: 5\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 5\n", "reseed"},
 		{"reseed round on rr", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: r4\n", "раунда"},
 		{"reseed sorting unmappable", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: true\nsorting: [head2head]\n", "пересев"},
+		{"best_of outside final", "[scheme]\ntype: single_elimination\nteams: 8\nbest_of.semifinal: 3\n", "только в финале"},
+		{"best_of even", "[scheme]\ntype: single_elimination\nteams: 4\nbest_of.final: 2\n", "нечётное"},
+		{"block after series", "[scheme]\ntype: single_elimination\nteams: 4\nproceeding_teams: 2\nbest_of.final: 3\n---\ntype: roundrobin\nteams_in_group: 2\n", "серией"},
+		{"stats_from without reseed", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nstats_from: [s1]\n", "reseed: true"},
+		{"stats_from unknown block", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: true\nstats_from: [s3]\n", "s3"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

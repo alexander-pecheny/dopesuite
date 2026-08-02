@@ -18,11 +18,13 @@ import (
 )
 
 // MatchOutcome is one match of a stage as the Structure layer sees it: the
-// Protocol scorer's per-slot output, in slot order.
+// Protocol scorer's per-slot output, in slot order. Questions is the bout's
+// base question count (без перестрелок) — the denominator for share metrics.
 type MatchOutcome struct {
-	Code     string
-	Finished bool
-	Slots    []SlotOutcome
+	Code      string
+	Finished  bool
+	Questions int
+	Slots     []SlotOutcome
 }
 
 // SlotOutcome is one seat's result in a match: who sat there, the effective
