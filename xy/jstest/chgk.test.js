@@ -189,14 +189,14 @@ test("printRuns tags an (img …) run with its filename as the last token", () =
 });
 
 test("applyOverride peels a !!Label override (~ → space) off a field value", () => {
-  assert.deepEqual(xyChgk.applyOverride("!!Авторка Арина Далецкая"),
-    { label: "Авторка", text: "Арина Далецкая" });
+  assert.deepEqual(xyChgk.applyOverride("!!Авторка Анна Смирнова"),
+    { label: "Авторка", text: "Анна Смирнова" });
   assert.deepEqual(xyChgk.applyOverride("!!Верный~ответ Москва"),
     { label: "Верный ответ", text: "Москва" });
 });
 
 test("applyOverride leaves a normal value untouched", () => {
-  assert.deepEqual(xyChgk.applyOverride("Арина Далецкая"), { label: null, text: "Арина Далецкая" });
+  assert.deepEqual(xyChgk.applyOverride("Анна Смирнова"), { label: null, text: "Анна Смирнова" });
   assert.deepEqual(xyChgk.applyOverride("- один\n- два"), { label: null, text: "- один\n- два" });
 });
 
@@ -412,11 +412,11 @@ test("parseHndtMetaByQuestion strips content, keeps settings by question", () =>
 const { parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText } = xyChgk;
 
 test("parseTestCard reads the new {testers} shape", () => {
-  const desc = JSON.stringify({ datetime: "2026-06-29 12:00", title: "Алиев", testers: [
+  const desc = JSON.stringify({ datetime: "2026-06-29 12:00", title: "Иван Иванов", testers: [
     { text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }] });
   const m = parseTestCard(desc);
   assert.equal(m.datetime, "2026-06-29 12:00");
-  assert.equal(m.title, "Алиев");
+  assert.equal(m.title, "Иван Иванов");
   assert.deepEqual(m.testers, [
     { text: "Александр Иванов", type: "player" }, { text: "Ромашка", type: "team" }]);
 });

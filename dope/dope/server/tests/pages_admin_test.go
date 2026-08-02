@@ -32,7 +32,7 @@ func TestAdminCreateUsersHappyPath(t *testing.T) {
 	srv := newAuthTestServer(t)
 	cookie := makeUserWithSession(t, srv, "pecheny")
 
-	form := url.Values{"usernames": {"anton\nanya_a\n\n anton \ndasha"}}
+	form := url.Values{"usernames": {"ivanov\npetrova\n\n ivanov \nsidorov"}}
 	req := httptest.NewRequest(http.MethodPost, "/admin/create_users", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
@@ -43,16 +43,16 @@ func TestAdminCreateUsersHappyPath(t *testing.T) {
 		t.Fatalf("status = %d, body %s", resp.Code, resp.Body.String())
 	}
 	body := resp.Body.String()
-	for _, name := range []string{"anton", "anya_a", "dasha"} {
+	for _, name := range []string{"ivanov", "petrova", "sidorov"} {
 		if !strings.Contains(body, name) {
 			t.Fatalf("created username %q missing from page: %s", name, body)
 		}
 	}
 
-	// Three distinct users created (the duplicate "anton" line is collapsed).
+	// Three distinct users created (the duplicate "ivanov" line is collapsed).
 	var count int
 	if err := srv.Eng().DB.QueryRow(
-		`select count(*) from users where username in ('anton','anya_a','dasha')`).Scan(&count); err != nil {
+		`select count(*) from users where username in ('ivanov','petrova','sidorov')`).Scan(&count); err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if count != 3 {
@@ -61,7 +61,7 @@ func TestAdminCreateUsersHappyPath(t *testing.T) {
 
 	// Every created user must be able to log in with the password shown on the
 	// page, and the stored hash must be bcrypt (password_salt null).
-	for _, name := range []string{"anton", "anya_a", "dasha"} {
+	for _, name := range []string{"ivanov", "petrova", "sidorov"} {
 		password := passwordFromPage(t, body, name)
 		var hash, salt *string
 		if err := srv.Eng().DB.QueryRow(
@@ -82,15 +82,15 @@ func TestAdminCreateUsersSkipsExisting(t *testing.T) {
 	t.Setenv("DOPE_ADMIN_USER", "pecheny")
 	srv := newAuthTestServer(t)
 	cookie := makeUserWithSession(t, srv, "pecheny")
-	// Pre-create "anton".
+	// Pre-create "ivanov".
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := srv.Eng().DB.Exec(`
 insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
-values(null, null, 'anton', 0, ?, ?)`, now, now); err != nil {
-		t.Fatalf("seed anton: %v", err)
+values(null, null, 'ivanov', 0, ?, ?)`, now, now); err != nil {
+		t.Fatalf("seed ivanov: %v", err)
 	}
 
-	form := url.Values{"usernames": {"anton\nnikita\nx!bad"}}
+	form := url.Values{"usernames": {"ivanov\nkuznetsov\nx!bad"}}
 	req := httptest.NewRequest(http.MethodPost, "/admin/create_users", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: cookie})
@@ -101,18 +101,18 @@ values(null, null, 'anton', 0, ?, ?)`, now, now); err != nil {
 		t.Fatalf("status = %d, body %s", resp.Code, resp.Body.String())
 	}
 	body := resp.Body.String()
-	if !strings.Contains(body, "пропущены") || !strings.Contains(body, "anton") {
-		t.Fatalf("expected anton reported as skipped: %s", body)
+	if !strings.Contains(body, "пропущены") || !strings.Contains(body, "ivanov") {
+		t.Fatalf("expected ivanov reported as skipped: %s", body)
 	}
 	if !strings.Contains(body, "недопустимый") {
 		t.Fatalf("expected x!bad reported as invalid: %s", body)
 	}
-	var antonCount int
-	if err := srv.Eng().DB.QueryRow(`select count(*) from users where username = 'anton'`).Scan(&antonCount); err != nil {
-		t.Fatalf("count anton: %v", err)
+	var ivanovCount int
+	if err := srv.Eng().DB.QueryRow(`select count(*) from users where username = 'ivanov'`).Scan(&ivanovCount); err != nil {
+		t.Fatalf("count ivanov: %v", err)
 	}
-	if antonCount != 1 {
-		t.Fatalf("anton count = %d, want 1 (not duplicated)", antonCount)
+	if ivanovCount != 1 {
+		t.Fatalf("ivanov count = %d, want 1 (not duplicated)", ivanovCount)
 	}
 }
 
@@ -126,8 +126,8 @@ func TestAdminUsersPage(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := srv.Eng().DB.Exec(`
 insert into users(telegram_user_id, telegram_username, username, is_system, created_at, updated_at)
-values(null, 'anton_tg', 'anton', 0, ?, ?)`, now, now); err != nil {
-		t.Fatalf("seed anton: %v", err)
+values(null, 'ivanov_tg', 'ivanov', 0, ?, ?)`, now, now); err != nil {
+		t.Fatalf("seed ivanov: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
@@ -139,7 +139,7 @@ values(null, 'anton_tg', 'anton', 0, ?, ?)`, now, now); err != nil {
 		t.Fatalf("status = %d, body %s", resp.Code, resp.Body.String())
 	}
 	body := resp.Body.String()
-	for _, want := range []string{"anton_tg", "Активность", time.Now().Format("2006-01-02"), "—"} {
+	for _, want := range []string{"ivanov_tg", "Активность", time.Now().Format("2006-01-02"), "—"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("users page missing %q: %s", want, body)
 		}
@@ -155,7 +155,7 @@ values(null, 'anton_tg', 'anton', 0, ?, ?)`, now, now); err != nil {
 	if !strings.Contains(sorted, "Активность ↑") || !strings.Contains(sorted, "sort=last&amp;dir=desc") {
 		t.Fatalf("sorted page missing the flip affordance: %s", sorted)
 	}
-	if strings.Index(sorted, "anton") > strings.Index(sorted, "pecheny") {
+	if strings.Index(sorted, "ivanov") > strings.Index(sorted, "pecheny") {
 		t.Fatalf("ascending should list the never-logged-in account first: %s", sorted)
 	}
 }

@@ -32,7 +32,7 @@ and its editor. Nothing derives a label's name any more; labels are just labels.
   payload, so `--labels` collects every question taken at ANY test into one
   «взяли» bucket, where before it produced one bucket per session.
 - The migration is 1↔1 and needs no decryption: an existing test label becomes a
-  plain board label keeping the exact name it already has («26 июля · Алиев и
+  plain board label keeping the exact name it already has («26 июля · Иван Иванов и
   др. · взяли»), and each also yields its Playing. Those names are redundant
   under the new model — the playing already says which test — but they are the
   user's own text, so they are preserved rather than regenerated, and can be

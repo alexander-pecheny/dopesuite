@@ -22,7 +22,7 @@ and — unplanned, but it falls out — [#2](https://code.pecheny.me/pecheny/dop
 ## The one idea
 
 Today a test label's only tie to its test session is the string baked into its
-name at creation (`"2026-07-20 19:00 Алиев и др. взяли"`). Every one of the five
+name at creation (`"2026-07-20 19:00 Иван Иванов и др. взяли"`). Every one of the five
 issues is that string: it can't be renamed (#25), it's too long (#8), it carries
 a timestamp nobody can re-render in another zone (#7, #33), and it says
 взяли/не взяли when the user wanted "видел" (#12).

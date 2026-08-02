@@ -33,16 +33,16 @@ func TestDefaultMatchScores(t *testing.T) {
 	view := store.BuildView(state)
 
 	wantTotals := map[string]int{
-		"ВШЭстером":       120,
-		"Тина Терияки":    130,
-		"Вина России":     0,
-		"Злая щитоспинка": 130,
+		"Альфа":  120,
+		"Бета":   130,
+		"Гамма":  0,
+		"Дельта": 130,
 	}
 	wantPlaces := map[string]float64{
-		"Злая щитоспинка": 1,
-		"Тина Терияки":    2,
-		"ВШЭстером":       3,
-		"Вина России":     4,
+		"Дельта": 1,
+		"Бета":   2,
+		"Альфа":  3,
+		"Гамма":  4,
 	}
 
 	for _, team := range view.Teams {
@@ -1092,13 +1092,13 @@ func TestHostPlayerOverrideRowsGroupGames(t *testing.T) {
 	roster := []rosterpkg.FestRosterImportTeam{
 		{
 			RatingID: 101,
-			Name:     "Команда добра и позитива",
+			Name:     "Альфа",
 			City:     "Москва",
 			Players: []rosterpkg.FestRosterImportPlayer{
-				{RatingID: 1001, FirstName: "Василиса", LastName: "Павлейчук"},
+				{RatingID: 1001, FirstName: "Мария", LastName: "Сидорова"},
 			},
 		},
-		{RatingID: 102, Name: "Bikes for Peace", City: "Москва"},
+		{RatingID: 102, Name: "Бета", City: "Москва"},
 	}
 	if _, err := imports.ImportFestRoster(srv.Eng(), t.Context(), festID, 13533, roster); err != nil {
 		t.Fatalf("import roster: %v", err)
@@ -1151,7 +1151,7 @@ values(?, ?, ?, ?, ?, ?, ?)`,
 	if err != nil {
 		t.Fatalf("load override rows: %v", err)
 	}
-	if len(rows) != 1 || rows[0].Player != "Василиса Павлейчук" || rows[0].SourceTeam != "Команда добра и позитива" || rows[0].OverrideTeam != "Bikes for Peace" || rows[0].Games != "КСИ, ЭК" {
+	if len(rows) != 1 || rows[0].Player != "Мария Сидорова" || rows[0].SourceTeam != "Альфа" || rows[0].OverrideTeam != "Бета" || rows[0].Games != "КСИ, ЭК" {
 		t.Fatalf("override rows = %#v, want one grouped row", rows)
 	}
 	if !rows[0].HasGame(ksiGameID) || !rows[0].HasGame(ekGameID) {
