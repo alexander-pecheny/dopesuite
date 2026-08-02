@@ -108,4 +108,34 @@ where m.game_id = ? and m.code = ? and ms.slot_index = ?`, brainID, matchCode, s
 	if a, b := teamAtSeat("s1-g1-1", 0), teamAtSeat("s1-g1-1", 1); a != "Берёза" || b != "Астра" {
 		t.Fatalf("после отказа бой 1 = %s vs %s, want Берёза vs Астра", a, b)
 	}
+
+	// Бой 1 gets played; un-declining Гинкго shifts the ladder back, but a
+	// finished бой holds its participants — the vacancy logic only moves
+	// through unplayed matches.
+	patch := map[string]any{"ops": []map[string]any{
+		{"path": []any{"teams", 0, "rows", 0, "mark"}, "value": "right"},
+	}}
+	if resp := scopedAPIRequest(t, srv, http.MethodPatch,
+		fmt.Sprintf("/api/fest/%d/games/%d/matches/s1-g1-1/state", festID, brainID), patch, token); resp.Code != http.StatusOK {
+		t.Fatalf("patch status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	if resp := scopedAPIRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/fest/%d/games/%d/matches/s1-g1-1/finish", festID, brainID),
+		map[string]any{"finished": true}, token); resp.Code != http.StatusOK {
+		t.Fatalf("finish status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	if resp := scopedAPIRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/fest/%d/games/%d/seed-import/decline", festID, brainID),
+		map[string]any{"teamID": ginkgoID, "declined": false}, token); resp.Code != http.StatusOK {
+		t.Fatalf("un-decline status = %d, body %s", resp.Code, resp.Body.String())
+	}
+	if a, b := teamAtSeat("s1-g1-1", 0), teamAtSeat("s1-g1-1", 1); a != "Берёза" || b != "Астра" {
+		t.Fatalf("сыгранный бой пересажен: %s vs %s, want Берёза vs Астра held", a, b)
+	}
+	var result string
+	if err := srv.Eng().DB.QueryRow(`
+select count(*) from match_results r join matches m on m.id = r.match_id
+where m.game_id = ? and m.code = 's1-g1-1'`, brainID).Scan(&result); err != nil || result != "2" {
+		t.Fatalf("finished бой results = %s err %v, want 2 kept", result, err)
+	}
 }

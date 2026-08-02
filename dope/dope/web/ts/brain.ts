@@ -802,8 +802,12 @@ function buildGroupTable(stage: BrainSchemeStage): HTMLElement {
 let seedImport: SeedImportData | null = null;
 let seedError = "";
 let seedLoaded = false;
+let seedBusy = false;
 
 async function seedAction(run: () => Promise<Response>): Promise<void> {
+  if (seedBusy) return;
+  seedBusy = true;
+  render({preserveScroll: true});
   try {
     const response = await run();
     if (!response.ok) throw new Error(await response.text());
@@ -813,6 +817,7 @@ async function seedAction(run: () => Promise<Response>): Promise<void> {
   } catch (error) {
     seedError = error instanceof Error ? error.message.trim() : String(error);
   }
+  seedBusy = false;
   render({preserveScroll: true});
 }
 
@@ -822,11 +827,17 @@ function loadSeedView(): void {
   fetch(`${route.apiBase}/seed-import`)
     .then(async (response) => {
       if (!response.ok) throw new Error(await response.text());
-      seedImport = await response.json() as SeedImportData;
-      render({preserveScroll: true});
+      const data = await response.json() as SeedImportData;
+      // An action's response may have landed while this GET was in flight —
+      // the freshly imported ladder must not be clobbered by the stale read.
+      if (!seedImport) {
+        seedImport = data;
+        render({preserveScroll: true});
+      }
     })
-    .catch(() => {
-      seedLoaded = false;
+    .catch(async (error: unknown) => {
+      seedError = error instanceof Error ? error.message.trim() : String(error);
+      render({preserveScroll: true});
     });
 }
 
@@ -849,6 +860,7 @@ function buildSeedView(): HTMLElement {
     upload.type = "button";
     upload.className = "btn";
     upload.textContent = "Загрузить посев из xlsx";
+    upload.disabled = seedBusy;
     upload.addEventListener("click", () => {
       const chosen = file.files?.[0];
       if (!chosen) {
@@ -866,6 +878,7 @@ function buildSeedView(): HTMLElement {
     importButton.type = "button";
     importButton.className = "btn";
     importButton.textContent = source === "random" ? "Провести жребий" : `Импортировать посев из ${source}`;
+    importButton.disabled = seedBusy;
     importButton.addEventListener("click", () => {
       void seedAction(() => fetch(`${route.apiBase}/seed-import/run`, {method: "POST"}));
     });
@@ -921,6 +934,7 @@ function buildSeedView(): HTMLElement {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = Boolean(row.declined);
+    checkbox.disabled = seedBusy;
     checkbox.addEventListener("change", () => {
       void seedAction(() => fetch(`${route.apiBase}/seed-import/decline`, {
         method: "POST",

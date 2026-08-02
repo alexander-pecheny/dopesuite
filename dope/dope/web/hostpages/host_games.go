@@ -269,28 +269,31 @@ select count(*) from games where fest_id = ? and slug = ? and id <> ?`, festID, 
 		}
 		slugValue = slug
 	}
-	if _, err := s.h.Engine().WriteExec(r.Context(), `
+	// One transaction for the whole save: a refused recompile must not leave a
+	// half-applied rename behind.
+	err := s.h.Engine().WithWriteTx(r.Context(), festID, "game-settings", func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
 update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = ?`,
-		title, slugValue, util.UtcNow(), gameID, festID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if dsl := r.Form.Get("brain_dsl"); strings.TrimSpace(dsl) != "" {
+			title, slugValue, util.UtcNow(), gameID, festID); err != nil {
+			return err
+		}
+		dsl := r.Form.Get("brain_dsl")
+		if strings.TrimSpace(dsl) == "" {
+			return nil
+		}
 		var stored string
-		if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
+		if err := tx.QueryRowContext(ctx, `
 select coalesce(scheme_dsl, '') from games where id = ?`, gameID).Scan(&stored); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return err
 		}
-		if strings.TrimSpace(stored) != strings.TrimSpace(dsl) {
-			err := s.h.Engine().WithWriteTx(r.Context(), festID, "game-recompile", func(ctx context.Context, tx *sql.Tx) error {
-				return recompileBrainGameTx(ctx, tx, festID, gameID, dsl)
-			})
-			if err != nil {
-				s.renderHostGameSettings(w, r, festID, gameID, err.Error())
-				return
-			}
+		if strings.TrimSpace(stored) == strings.TrimSpace(dsl) {
+			return nil
 		}
+		return recompileBrainGameTx(ctx, tx, festID, gameID, dsl)
+	})
+	if err != nil {
+		s.renderHostGameSettings(w, r, festID, gameID, err.Error())
+		return
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
 	gameRef := slug
@@ -1174,21 +1177,23 @@ func seedSeaterTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) (func(s
 		if slot.Seed == nil {
 			return nil
 		}
+		// Number-refs seat by team number only; Position-refs by the seed
+		// ladder only — a number missing from the roster must NOT fall through
+		// to the rank-keyed assignments (15 the team ≠ 15 the seed rank).
 		if slot.Seed.Number > 0 {
 			if id, ok := byNumber[slot.Seed.Number]; ok {
 				return id
 			}
+			return nil
 		}
-		key := slot.Seed.Number
-		if key == 0 {
-			key = slot.Seed.Position
-		}
-		basket := slot.Seed.Basket
-		if basket <= 0 {
-			basket = 1
-		}
-		if id, ok := assignments[[2]int{basket, key}]; ok {
-			return id
+		if slot.Seed.Position > 0 {
+			basket := slot.Seed.Basket
+			if basket <= 0 {
+				basket = 1
+			}
+			if id, ok := assignments[[2]int{basket, slot.Seed.Position}]; ok {
+				return id
+			}
 		}
 		return nil
 	}, nil
