@@ -181,13 +181,21 @@ function build(): void {
     document.body.appendChild(wrap);
   }
 
+  // A menu row is read by its words; the glyph is an anchor for the eye, so it
+  // always leads and always leaves a gap after itself.
+  function leadGlyph(name: string): SVGElement {
+    const glyph = icon(name as IconName);
+    glyph.setAttribute("class", "ico ico-lead");
+    return glyph;
+  }
+
   function itemNode(item: MenuItem): HTMLElement {
     if (item.kind === "appearance") {
       const appearance = document.createElement("button");
       appearance.type = "button";
       appearance.className = "menu-item";
       appearance.setAttribute("role", "menuitem");
-      appearance.textContent = "Оформление";
+      appearance.append(leadGlyph(item.icon), "Оформление");
       appearance.addEventListener("click", () => {
         closeMenu();
         openModal();
@@ -199,11 +207,7 @@ function build(): void {
       button.type = "button";
       button.className = "menu-item";
       button.setAttribute("role", "menuitem");
-      if (item.icon) {
-        const glyph = icon(item.icon as IconName);
-        glyph.setAttribute("class", "ico ico-lead");
-        button.append(glyph);
-      }
+      if (item.icon) button.append(leadGlyph(item.icon));
       button.append(item.label);
       if (item.title) button.title = item.title;
       button.addEventListener("click", () => {
@@ -216,7 +220,8 @@ function build(): void {
     link.className = "menu-item";
     link.setAttribute("role", "menuitem");
     link.href = item.href;
-    link.textContent = item.label;
+    if (item.icon) link.append(leadGlyph(item.icon));
+    link.append(item.label);
     if (item.title) link.title = item.title;
     if (item.external) {
       link.target = "_blank";
