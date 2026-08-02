@@ -273,6 +273,163 @@ teams_in_group: 2
 	}
 }
 
+// Four groups feeding an se of 8 must not seat pod-mates adjacently: the
+// second opening match comes from the OTHER pod, so pod survivors only meet
+// again in the final half.
+func TestCompileSECrossPodPairing(t *testing.T) {
+	src := `
+[scheme]
+type: roundrobin
+groups: 4
+teams_in_group: 4
+proceeding_teams: 2
+---
+type: single_elimination
+teams: 8
+`
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	r8 := stageByCode(t, scheme, "s2-r8")
+	wantPairs := [][2]struct {
+		stage string
+		rank  int
+	}{
+		{{"s1-g1", 1}, {"s1-g2", 2}},
+		{{"s1-g3", 1}, {"s1-g4", 2}},
+		{{"s1-g2", 1}, {"s1-g1", 2}},
+		{{"s1-g4", 1}, {"s1-g3", 2}},
+	}
+	for i, want := range wantPairs {
+		slots := r8.Matches[i].Slots
+		for side := 0; side < 2; side++ {
+			if slots[side].Reseed.Stage != want[side].stage || slots[side].Reseed.Rank != want[side].rank {
+				t.Fatalf("r8 m%d side %d = %+v, want %+v", i+1, side, slots[side].Reseed, want[side])
+			}
+		}
+	}
+}
+
+func TestCompileWaveSplit(t *testing.T) {
+	src := `
+[defaults]
+venues: 2
+
+[scheme]
+type: single_elimination
+teams: 8
+`
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	w1 := stageByCode(t, scheme, "s1-r8-w1")
+	w2 := stageByCode(t, scheme, "s1-r8-w2")
+	if len(w1.Matches) != 2 || len(w2.Matches) != 2 {
+		t.Fatalf("wave matches = %d + %d, want 2 + 2", len(w1.Matches), len(w2.Matches))
+	}
+	if w2.Matches[0].Code != "s1-r8-m3" || w2.Matches[0].Venue != 1 {
+		t.Fatalf("wave 2 opens with %s at venue %d", w2.Matches[0].Code, w2.Matches[0].Venue)
+	}
+	semi := stageByCode(t, scheme, "s1-semifinal")
+	if len(semi.Matches) != 2 {
+		t.Fatalf("semifinal fits one wave, got %d matches", len(semi.Matches))
+	}
+}
+
+func TestCompileVenueRestriction(t *testing.T) {
+	src := `
+[defaults]
+venues: [Москва-1, Рим]
+
+[scheme]
+type: single_elimination
+teams: 4
+venues.final: [Рим]
+`
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	if got := stageByCode(t, scheme, "s1-final").Matches[0].Venue; got != 2 {
+		t.Fatalf("final venue = %d, want 2 (Рим)", got)
+	}
+	if got := stageByCode(t, scheme, "s1-semifinal").Matches[0].Venue; got != 1 {
+		t.Fatalf("semifinal venue = %d, want 1", got)
+	}
+}
+
+// reseed: <round> re-ranks mid-block: the named round seats from a reseed
+// stage over the previous round instead of from_match refs. r4 is an accepted
+// alias for semifinal (and r2 for final) in every round-addressing key.
+func TestCompileIntraBlockReseed(t *testing.T) {
+	src := `
+[scheme]
+type: roundrobin
+groups: 4
+teams_in_group: 4
+proceeding_teams: 2
+---
+type: single_elimination
+teams: 8
+reseed: r4
+questions.r4: 9
+`
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	reseed := stageByCode(t, scheme, "s2-reseed")
+	if len(reseed.Sources) != 1 || reseed.Sources[0] != "s2-r8" {
+		t.Fatalf("reseed sources = %v, want [s2-r8]", reseed.Sources)
+	}
+	semi := stageByCode(t, scheme, "s2-semifinal")
+	m1 := semi.Matches[0].Slots
+	if m1[0].Reseed.Stage != "s2-reseed" || m1[0].Reseed.Rank != 1 || m1[1].Reseed.Rank != 4 {
+		t.Fatalf("semifinal m1 = %+v %+v, want reseed ranks 1 vs 4", m1[0].Reseed, m1[1].Reseed)
+	}
+	if stageConfig(t, semi)["questions"] != float64(9) {
+		t.Fatalf("questions.r4 alias did not reach semifinal: %v", stageConfig(t, semi)["questions"])
+	}
+
+	// A wave-split previous round must be sourced wave by wave.
+	waveSrc := "[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 8\nreseed: semifinal\n"
+	waved := compileSrc(t, waveSrc, Input{GameType: "brain"})
+	wavedReseed := stageByCode(t, waved, "s1-reseed")
+	if len(wavedReseed.Sources) != 2 || wavedReseed.Sources[1] != "s1-r8-w2" {
+		t.Fatalf("wave reseed sources = %v, want both r8 waves", wavedReseed.Sources)
+	}
+}
+
+func TestCompileDETeamsAlias(t *testing.T) {
+	src := `
+[scheme]
+type: double_elimination
+teams: 8
+`
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	stageByCode(t, scheme, "s1-g1")
+	stageByCode(t, scheme, "s1-g2")
+	if len(scheme.Stages) != 2 {
+		t.Fatalf("stages = %d, want 2 DE groups", len(scheme.Stages))
+	}
+}
+
+func TestCompileReseedSorting(t *testing.T) {
+	src := `
+[scheme]
+type: roundrobin
+groups: 2
+teams_in_group: 4
+proceeding_teams: 2
+---
+type: roundrobin
+groups: 2
+teams_in_group: 2
+reseed: true
+sorting: [taken, points]
+`
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	reseed := stageByCode(t, scheme, "s2-reseed")
+	var rules []map[string]string
+	if err := json.Unmarshal(reseed.Sort, &rules); err != nil {
+		t.Fatal(err)
+	}
+	want := []map[string]string{{"metric": "taken", "dir": "desc"}, {"metric": "place_sum", "dir": "asc"}}
+	if len(rules) != 2 || rules[0]["metric"] != want[0]["metric"] || rules[1]["metric"] != want[1]["metric"] || rules[1]["dir"] != "asc" {
+		t.Fatalf("reseed sort = %v, want %v", rules, want)
+	}
+}
+
 func TestCompileEntrantCountMismatch(t *testing.T) {
 	doc, err := Parse(singleGroupSrc)
 	if err != nil {
@@ -296,6 +453,8 @@ func TestCompileErrors(t *testing.T) {
 		{"unknown round suffix", "[scheme]\ntype: single_elimination\nteams: 4\nquestions.r16: 9\n", "r16"},
 		{"no proceeding", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\n---\ntype: single_elimination\nteams: 4\n", "proceeding_teams"},
 		{"no deterministic template", "[scheme]\ntype: roundrobin\ngroups: 5\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 5\n", "reseed"},
+		{"reseed round on rr", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: r4\n", "раунда"},
+		{"reseed sorting unmappable", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: true\nsorting: [head2head]\n", "пересев"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

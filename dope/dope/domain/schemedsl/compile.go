@@ -37,10 +37,8 @@ const (
 	kindDE = "double_elimination"
 )
 
-// canonOrder is the КИНСБФ §4.2 comparator order, same default as rr.Standings.
 var canonOrder = []string{"points", "h2h", "taken", "diff"}
 
-// rrMetricAliases maps DSL sorting tokens to rr comparator codes.
 var rrMetricAliases = map[string]string{
 	"points": "points", "head2head": "h2h", "h2h": "h2h", "taken": "taken", "diff": "diff",
 }
@@ -207,11 +205,58 @@ func (c *compiler) venueFor(index int) int {
 	return (index-1)%c.venueCount + 1
 }
 
+// blockVenues resolves a block's (or, dotted, one round's) `venues` subset to
+// venue numbers, by title or number; nil = no restriction.
+func (c *compiler) blockVenues(blk Section, rounds []string) ([]int, error) {
+	keys := []string{}
+	for _, round := range rounds {
+		keys = append(keys, "venues."+round)
+	}
+	keys = append(keys, "venues")
+	for _, key := range keys {
+		items, ok, err := blk.List(key)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		nums := make([]int, len(items))
+		for i, item := range items {
+			nums[i] = 0
+			for _, venue := range c.scheme.Venues {
+				if venue.Title == item || fmt.Sprint(venue.Number) == item {
+					nums[i] = venue.Number
+					break
+				}
+			}
+			if nums[i] == 0 {
+				return nil, errAt(blk.Values[key].Line, "%s: стол %q не объявлен в venues", key, item)
+			}
+		}
+		if len(nums) == 0 {
+			return nil, errAt(blk.Values[key].Line, "%s: пустой список столов", key)
+		}
+		return nums, nil
+	}
+	return nil, nil
+}
+
+// venuePick assigns the i-th lane a venue, cycling the restricted subset when
+// one is declared.
+func (c *compiler) venuePick(restricted []int, i int) int {
+	if len(restricted) == 0 {
+		return c.venueFor(i)
+	}
+	return restricted[(i-1)%len(restricted)]
+}
+
 // --- cascade ---------------------------------------------------------------
 
-// paramValue resolves one protocol/config key through defaults < block < round.
-func paramInt(defaults, blk Section, key, round string) (int, bool) {
-	if round != "" {
+// paramInt resolves one protocol/config key through defaults < block < round;
+// rounds lists the stage's round code plus its aliases (r4 for semifinal).
+func paramInt(defaults, blk Section, key string, rounds []string) (int, bool) {
+	for _, round := range rounds {
 		if v, ok := blk.Int(key + "." + round); ok {
 			return v, true
 		}
@@ -225,8 +270,8 @@ func paramInt(defaults, blk Section, key, round string) (int, bool) {
 	return 0, false
 }
 
-func paramBool(defaults, blk Section, key, round string) (bool, bool) {
-	if round != "" {
+func paramBool(defaults, blk Section, key string, rounds []string) (bool, bool) {
+	for _, round := range rounds {
 		if v, ok := blk.Bool(key + "." + round); ok {
 			return v, true
 		}
@@ -240,18 +285,18 @@ func paramBool(defaults, blk Section, key, round string) (bool, bool) {
 	return false, false
 }
 
-// protocolConfig collects the game's protocol params for one stage (round ""
-// means the block default).
-func (c *compiler) protocolConfig(blk Section, round string) map[string]any {
+// protocolConfig collects the game's protocol params for one stage (rounds
+// empty means the block default).
+func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
 	config := map[string]any{}
 	for dslKey, configKey := range protocolParams[c.in.GameType] {
 		switch dslKey {
 		case "tiebreak_questions":
-			if v, ok := paramBool(c.doc.Defaults, blk, dslKey, round); ok {
+			if v, ok := paramBool(c.doc.Defaults, blk, dslKey, rounds); ok {
 				config[configKey] = v
 			}
 		default:
-			if v, ok := paramInt(c.doc.Defaults, blk, dslKey, round); ok {
+			if v, ok := paramInt(c.doc.Defaults, blk, dslKey, rounds); ok {
 				config[configKey] = v
 			}
 		}
@@ -348,17 +393,55 @@ func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]
 	if supply != total {
 		return nil, errAt(blk.Line, "из предыдущего блока выходят %d команд, а блоку нужно %d", supply, total)
 	}
-	if c.blockReseed(blk) {
+	if incoming, _ := blockReseedSpec(blk); incoming {
 		return c.dealReseed(index, blk, groups, size)
 	}
 	return c.dealDeterministic(blk, groups, size)
 }
 
-func (c *compiler) blockReseed(blk Section) bool {
-	if v, ok := blk.Bool("reseed"); ok {
-		return v
+// rejectRoundReseed fails a round-code reseed on kinds with no addressable
+// rounds (rr, de).
+func rejectRoundReseed(blk Section) error {
+	if _, round := blockReseedSpec(blk); round != "" {
+		return errAt(blk.Values["reseed"].Line, "reseed: в этом блоке нет раунда %s — только true/false", round)
 	}
-	return false
+	return nil
+}
+
+// blockReseedSpec parses the reseed key: `true` re-ranks the incoming Edge,
+// a round code re-ranks at that boundary inside the block (se only).
+func blockReseedSpec(blk Section) (incoming bool, round string) {
+	if v, ok := blk.Bool("reseed"); ok {
+		return v, ""
+	}
+	if v, ok := blk.Str("reseed"); ok {
+		return false, v
+	}
+	return false, ""
+}
+
+// reseedSortRules maps the block's sorting tokens onto reseed metrics; absent
+// sorting keeps the canonical place_sum-then-taken order.
+func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) {
+	tokens, ok, err := blk.Sorting("sorting")
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return []store.SchemeSortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "taken", Dir: "desc"}}, nil
+	}
+	var rules []store.SchemeSortRule
+	for _, token := range tokens {
+		switch token.Metric {
+		case "points":
+			rules = append(rules, store.SchemeSortRule{Metric: "place_sum", Dir: "asc"})
+		case "taken":
+			rules = append(rules, store.SchemeSortRule{Metric: "taken", Dir: "desc"})
+		default:
+			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве (есть points, taken)", token.Metric)
+		}
+	}
+	return rules, nil
 }
 
 func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
@@ -372,14 +455,14 @@ func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
 	return out
 }
 
-// dealReseed materialises the block-grain Edge: a reseed stage over every
-// previous group, then a snake deal of its ranks.
-func (c *compiler) dealReseed(index int, blk Section, groups, size int) ([][]store.SchemeSlot, error) {
-	code := fmt.Sprintf("s%d-reseed", index+1)
-	sources := make([]string, len(c.prev.groups))
-	for i, g := range c.prev.groups {
-		sources[i] = g.stageCode
+// reseedStage materialises one reseed Edge over the given source stages and
+// returns its code; rank refs against it seat whatever follows.
+func (c *compiler) reseedStage(index int, blk Section, sources []string) (string, error) {
+	sort, err := c.reseedSortRules(blk)
+	if err != nil {
+		return "", err
 	}
+	code := fmt.Sprintf("s%d-reseed", index+1)
 	c.position++
 	c.scheme.Stages = append(c.scheme.Stages, store.SchemeStage{
 		Code:      code,
@@ -388,15 +471,37 @@ func (c *compiler) dealReseed(index int, blk Section, groups, size int) ([][]sto
 		Kind:      "reseed",
 		Position:  c.position,
 		Sources:   sources,
-		Sort:      json.RawMessage(util.MustJSON([]store.SchemeSortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "taken", Dir: "desc"}})),
+		Sort:      json.RawMessage(util.MustJSON(sort)),
 	})
+	return code, nil
+}
+
+func (c *compiler) prevStageCodes() []string {
+	codes := make([]string, len(c.prev.groups))
+	for i, g := range c.prev.groups {
+		codes[i] = g.stageCode
+	}
+	return codes
+}
+
+func reseedRankSlot(stage string, rank int) store.SchemeSlot {
+	return store.SchemeSlot{
+		Reseed: &store.SchemeReseedRef{Stage: stage, Rank: rank},
+		Label:  fmt.Sprintf("Пересев-%d", rank),
+	}
+}
+
+// dealReseed materialises the block-grain Edge: a reseed stage over every
+// previous group, then a snake deal of its ranks.
+func (c *compiler) dealReseed(index int, blk Section, groups, size int) ([][]store.SchemeSlot, error) {
+	code, err := c.reseedStage(index, blk, c.prevStageCodes())
+	if err != nil {
+		return nil, err
+	}
 	out := make([][]store.SchemeSlot, groups)
 	for g, ranks := range snakeDeal(groups, size) {
 		for _, rank := range ranks {
-			out[g] = append(out[g], store.SchemeSlot{
-				Reseed: &store.SchemeReseedRef{Stage: code, Rank: rank},
-				Label:  fmt.Sprintf("Пересев-%d", rank),
-			})
+			out[g] = append(out[g], reseedRankSlot(code, rank))
 		}
 	}
 	return out, nil
@@ -464,7 +569,7 @@ func (c *compiler) expandBlock(index int) error {
 	return nil
 }
 
-func (c *compiler) groupTitle(blk Section, blockIndex, group, groups int) string {
+func (c *compiler) groupTitle(blk Section, group, groups int) string {
 	if title, ok := blk.Str("title"); ok && groups == 1 {
 		return title
 	}
@@ -489,6 +594,13 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 	if err := c.rejectRoundKeys(blk, nil); err != nil {
 		return nil, err
 	}
+	if err := rejectRoundReseed(blk); err != nil {
+		return nil, err
+	}
+	venues, err := c.blockVenues(blk, nil)
+	if err != nil {
+		return nil, err
+	}
 	entrants, err := c.blockEntrants(index, blk, groups, size)
 	if err != nil {
 		return nil, err
@@ -503,17 +615,17 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 	}
 	rr, ok := structure.Kind("rr")
 	if !ok {
-		return nil, errAt(0, "rr stage kind is not registered")
+		return nil, errAt(0, "rr не зарегистрирован в реестре видов")
 	}
 	out := &blockOutputs{}
 	for g := 1; g <= groups; g++ {
 		code := fmt.Sprintf("s%d-g%d", index+1, g)
-		config := c.protocolConfig(blk, "")
+		config := c.protocolConfig(blk, nil)
 		config["code"] = code
 		config["entrants"] = entrants[g-1]
 		config["order"] = order
 		config["points"] = map[string]int{"win": points[0], "draw": points[1], "loss": points[2]}
-		config["venue"] = c.venueFor(g)
+		config["venue"] = c.venuePick(venues, g)
 		configJSON, err := json.Marshal(config)
 		if err != nil {
 			return nil, err
@@ -525,7 +637,7 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 		c.position++
 		c.scheme.Stages = append(c.scheme.Stages, store.SchemeStage{
 			Code:      code,
-			Title:     c.groupTitle(blk, index, g, groups),
+			Title:     c.groupTitle(blk, g, groups),
 			StageType: "matches",
 			Kind:      "rr",
 			Position:  c.position,
@@ -548,22 +660,6 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 	return out, nil
 }
 
-// bracketOrder folds 1-based seed ranks into the standard bracket layout
-// (same shape as structure/se.go's).
-func bracketOrder(n int) []int {
-	order := []int{1}
-	for len(order) < n {
-		grown := make([]int, 0, len(order)*2)
-		mirror := len(order)*2 + 1
-		for _, rank := range order {
-			grown = append(grown, rank, mirror-rank)
-		}
-		order = grown
-	}
-	return order
-}
-
-// seRoundCode names a single-elimination round by teams remaining.
 func seRoundCode(remaining int) string {
 	switch remaining {
 	case 2:
@@ -572,6 +668,16 @@ func seRoundCode(remaining int) string {
 		return "semifinal"
 	}
 	return fmt.Sprintf("r%d", remaining)
+}
+
+// seRoundNames is the round's canonical code plus its r{N} alias — both are
+// accepted in every round-addressing key (questions.r4 ≡ questions.semifinal).
+func seRoundNames(remaining int) []string {
+	code := seRoundCode(remaining)
+	if remaining == 2 || remaining == 4 {
+		return []string{code, fmt.Sprintf("r%d", remaining)}
+	}
+	return []string{code}
 }
 
 func seRoundTitle(remaining int) string {
@@ -595,13 +701,30 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 	bronze, _ := blk.Bool("bronze")
 	rounds := []string{}
 	for remaining := teams; remaining >= 2; remaining /= 2 {
-		rounds = append(rounds, seRoundCode(remaining))
+		rounds = append(rounds, seRoundNames(remaining)...)
 	}
 	if bronze && teams >= 4 {
 		rounds = append(rounds, "bronze")
 	}
 	if err := c.rejectRoundKeys(blk, rounds); err != nil {
 		return nil, err
+	}
+	_, boundary := blockReseedSpec(blk)
+	boundaryAt := 0
+	if boundary != "" {
+		for remaining := teams; remaining >= 2; remaining /= 2 {
+			for _, name := range seRoundNames(remaining) {
+				if name == boundary {
+					boundaryAt = remaining
+				}
+			}
+		}
+		if boundaryAt == 0 {
+			return nil, errAt(blk.Values["reseed"].Line, "reseed: в этом блоке нет раунда %s", boundary)
+		}
+		if boundaryAt == teams {
+			return nil, errAt(blk.Values["reseed"].Line, "reseed: %s — первый раунд, пишите reseed: true", boundary)
+		}
 	}
 
 	first, err := c.seFirstRound(index, blk, teams)
@@ -610,34 +733,52 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 	}
 	blockCode := fmt.Sprintf("s%d", index+1)
 	prevCodes := []string{}
+	var prevStages []string
 	var semifinalCodes []string
 	for remaining := teams; remaining >= 2; remaining /= 2 {
-		round := seRoundCode(remaining)
-		stageCode := fmt.Sprintf("%s-%s", blockCode, round)
+		names := seRoundNames(remaining)
+		stageCode := fmt.Sprintf("%s-%s", blockCode, names[0])
 		count := remaining / 2
-		var matches []store.SchemeMatch
+		var reseedCode string
+		if remaining == boundaryAt {
+			if reseedCode, err = c.reseedStage(index, blk, prevStages); err != nil {
+				return nil, err
+			}
+		}
+		venues, err := c.blockVenues(blk, names)
+		if err != nil {
+			return nil, err
+		}
+		matches := make([]store.SchemeMatch, count)
 		codes := make([]string, count)
+		rankOrder := structure.BracketOrder(remaining)
 		for i := 1; i <= count; i++ {
 			code := fmt.Sprintf("%s-m%d", stageCode, i)
 			codes[i-1] = code
 			var slots []store.SchemeSlot
-			if remaining == teams {
+			switch {
+			case reseedCode != "":
+				slots = []store.SchemeSlot{
+					reseedRankSlot(reseedCode, rankOrder[2*i-2]),
+					reseedRankSlot(reseedCode, rankOrder[2*i-1]),
+				}
+			case remaining == teams:
 				slots = first[i-1]
-			} else {
+			default:
 				slots = []store.SchemeSlot{
 					fromMatchSlot(prevCodes[2*i-2], 1),
 					fromMatchSlot(prevCodes[2*i-1], 1),
 				}
 			}
-			matches = append(matches, store.SchemeMatch{
+			matches[i-1] = store.SchemeMatch{
 				Code:             code,
 				Title:            fmt.Sprintf("Бой %d", i),
-				Venue:            c.venueFor(i),
+				Venue:            c.venuePick(venues, i),
 				ParticipantCount: 2,
 				Slots:            slots,
-			})
+			}
 		}
-		c.appendManualStage(blk, stageCode, seRoundTitle(remaining), round, matches)
+		prevStages = c.appendSERound(blk, stageCode, seRoundTitle(remaining), names, venues, matches)
 		if remaining == 4 {
 			semifinalCodes = codes
 		}
@@ -653,19 +794,50 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 	}}}
 	if bronze && teams >= 4 {
 		stageCode := blockCode + "-bronze"
+		venues, err := c.blockVenues(blk, []string{"bronze"})
+		if err != nil {
+			return nil, err
+		}
 		matches := []store.SchemeMatch{{
 			Code:             stageCode + "-m1",
 			Title:            "Матч за 3-е место",
-			Venue:            c.venueFor(1),
+			Venue:            c.venuePick(venues, 1),
 			ParticipantCount: 2,
 			Slots: []store.SchemeSlot{
 				fromMatchSlot(semifinalCodes[0], 2),
 				fromMatchSlot(semifinalCodes[1], 2),
 			},
 		}}
-		c.appendManualStage(blk, stageCode, "Матч за 3-е место", "bronze", matches)
+		c.appendManualStage(blk, stageCode, "Матч за 3-е место", []string{"bronze"}, matches)
 	}
 	return out, nil
+}
+
+// appendSERound emits one round as ⌈matches/venues⌉ Wave stages — one stage
+// when everything fits, `-w{k}` codes when the venue count forces turns — and
+// returns the stage codes it created (a following reseed sources them).
+func (c *compiler) appendSERound(blk Section, stageCode, title string, rounds []string, venues []int, matches []store.SchemeMatch) []string {
+	perWave := len(venues)
+	if perWave == 0 {
+		perWave = c.venueCount
+	}
+	if len(matches) <= perWave {
+		c.appendManualStage(blk, stageCode, title, rounds, matches)
+		return []string{stageCode}
+	}
+	var codes []string
+	for wave := 0; wave*perWave < len(matches); wave++ {
+		end := (wave + 1) * perWave
+		if end > len(matches) {
+			end = len(matches)
+		}
+		code := fmt.Sprintf("%s-w%d", stageCode, wave+1)
+		c.appendManualStage(blk, code,
+			fmt.Sprintf("%s, заход %d", title, wave+1),
+			rounds, matches[wave*perWave:end])
+		codes = append(codes, code)
+	}
+	return codes
 }
 
 // seFirstRound seats the opening round: bracket order over seeds, or the
@@ -676,7 +848,7 @@ func (c *compiler) seFirstRound(index int, blk Section, teams int) ([][]store.Sc
 		if len(c.in.Entrants) > 0 && len(c.in.Entrants) != teams {
 			return nil, errAt(blk.Line, "схеме нужно %d команд, а посеяно %d", teams, len(c.in.Entrants))
 		}
-		order := bracketOrder(teams)
+		order := structure.BracketOrder(teams)
 		first := make([][]store.SchemeSlot, count)
 		for i := 0; i < count; i++ {
 			first[i] = []store.SchemeSlot{
@@ -690,7 +862,7 @@ func (c *compiler) seFirstRound(index int, blk Section, teams int) ([][]store.Sc
 	if prev.proceeding <= 0 {
 		return nil, errAt(blk.Line, "предыдущему блоку нужен proceeding_teams, чтобы продолжить схему")
 	}
-	if c.blockReseed(blk) {
+	if incoming, _ := blockReseedSpec(blk); incoming {
 		dealt, err := c.dealReseed(index, blk, count, 2)
 		if err != nil {
 			return nil, err
@@ -700,13 +872,15 @@ func (c *compiler) seFirstRound(index int, blk Section, teams int) ([][]store.Sc
 	if prev.proceeding != 2 || len(prev.groups)%2 != 0 || len(prev.groups)*2 != teams {
 		return nil, errAt(blk.Line, "нет шаблона рассадки из этих групп — добавьте reseed: true")
 	}
+	// Pods (paired groups) fill opposite bracket halves: winners' matches
+	// first, runners-up-led rematches in the second half, so pod survivors
+	// can only meet again in the final rounds.
 	first := make([][]store.SchemeSlot, count)
-	for g := 0; g < len(prev.groups); g++ {
-		partner := g ^ 1
-		first[g] = []store.SchemeSlot{
-			prev.groups[g].place(1),
-			prev.groups[partner].place(2),
-		}
+	half := len(prev.groups) / 2
+	for p := 0; p < half; p++ {
+		a, b := prev.groups[2*p], prev.groups[2*p+1]
+		first[p] = []store.SchemeSlot{a.place(1), b.place(2)}
+		first[half+p] = []store.SchemeSlot{b.place(1), a.place(2)}
 	}
 	return first, nil
 }
@@ -734,7 +908,6 @@ var deMatchPlan = []struct {
 	}},
 }
 
-// dePlaces maps a DE group's final places to their deciding matches.
 var dePlaces = map[int]struct {
 	match int
 	place int
@@ -743,12 +916,23 @@ var dePlaces = map[int]struct {
 func (c *compiler) expandDoubleElim(index int, blk Section) (*blockOutputs, error) {
 	groups, ok := blk.Int("groups")
 	if !ok {
-		return nil, errAt(blk.Line, "double_elimination: нужен groups")
+		if teams, hasTeams := blk.Int("teams"); hasTeams && teams > 0 && teams%4 == 0 {
+			groups = teams / 4
+		} else {
+			return nil, errAt(blk.Line, "double_elimination: нужен groups (или teams, кратный 4)")
+		}
 	}
 	if size, ok := blk.Int("teams_in_group"); ok && size != 4 {
 		return nil, errAt(blk.Line, "double_elimination: группа всегда из 4 команд")
 	}
 	if err := c.rejectRoundKeys(blk, nil); err != nil {
+		return nil, err
+	}
+	if err := rejectRoundReseed(blk); err != nil {
+		return nil, err
+	}
+	venues, err := c.blockVenues(blk, nil)
+	if err != nil {
 		return nil, err
 	}
 	entrants, err := c.blockEntrants(index, blk, groups, 4)
@@ -771,12 +955,12 @@ func (c *compiler) expandDoubleElim(index int, blk Section) (*blockOutputs, erro
 			matches = append(matches, store.SchemeMatch{
 				Code:             matchCode(i + 1),
 				Title:            plan.title,
-				Venue:            c.venueFor(g),
+				Venue:            c.venuePick(venues, g),
 				ParticipantCount: 2,
 				Slots:            plan.slots(entrants[g-1], matchCode),
 			})
 		}
-		c.appendManualStage(blk, stageCode, fmt.Sprintf("DE %d", g), "", matches)
+		c.appendManualStage(blk, stageCode, fmt.Sprintf("DE %d", g), nil, matches)
 		label := fmt.Sprintf("DE %d", g)
 		out.groups = append(out.groups, groupOut{
 			stageCode: stageCode,
@@ -794,9 +978,8 @@ func fromMatchSlot(matchCode string, place int) store.SchemeSlot {
 	return store.SchemeSlot{FromMatch: &store.SchemeFromMatchRef{Match: matchCode, Place: place}}
 }
 
-// appendManualStage adds one matches-kind stage carrying its protocol config.
-func (c *compiler) appendManualStage(blk Section, code, title, round string, matches []store.SchemeMatch) {
-	config := c.protocolConfig(blk, round)
+func (c *compiler) appendManualStage(blk Section, code, title string, rounds []string, matches []store.SchemeMatch) {
+	config := c.protocolConfig(blk, rounds)
 	configJSON, _ := json.Marshal(config)
 	c.position++
 	c.scheme.Stages = append(c.scheme.Stages, store.SchemeStage{

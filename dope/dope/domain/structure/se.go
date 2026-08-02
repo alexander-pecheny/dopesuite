@@ -23,10 +23,10 @@ type seConfig struct {
 	Entrants []store.SchemeSlot `json:"entrants"`
 }
 
-// bracketOrder returns 1-based entrant ranks in standard bracket layout: the
+// BracketOrder returns 1-based entrant ranks in standard bracket layout: the
 // classic recursive fold that keeps top seeds apart until the late rounds
 // (for 8: 1,8,4,5,3,6,2,7).
-func bracketOrder(n int) []int {
+func BracketOrder(n int) []int {
 	order := []int{1}
 	for len(order) < n {
 		grown := make([]int, 0, len(order)*2)
@@ -71,7 +71,7 @@ func (singleElim) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store
 	for size := n; size > 1; size /= 2 {
 		rounds++
 	}
-	order := bracketOrder(n)
+	order := BracketOrder(n)
 	for i := 0; i < n/2; i++ {
 		emit(code(1, i+1), roundTitle(rounds, 1, i+1),
 			[2]store.SchemeSlot{conf.Entrants[order[2*i]-1], conf.Entrants[order[2*i+1]-1]})

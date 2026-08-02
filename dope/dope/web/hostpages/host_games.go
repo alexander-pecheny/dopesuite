@@ -458,10 +458,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			schemeDSL = defaultBrainDSL(count)
-			if questions := games.BrainQuestions(schemeJSON); questions > 0 {
-				schemeDSL = strings.Replace(schemeDSL, "questions: 5", fmt.Sprintf("questions: %d", questions), 1)
-			}
+			schemeDSL = defaultBrainDSL(count, games.BrainQuestions(schemeJSON))
 			if _, err := tx.ExecContext(r.Context(), `update games set scheme_dsl = ? where id = ?`, schemeDSL, gameID); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -561,7 +558,7 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 	if brainDSL == "" {
 		var count int
 		_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&count)
-		brainDSL = defaultBrainDSL(count)
+		brainDSL = defaultBrainDSL(count, 5)
 	}
 	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameCreateDoc(hostGameCreateData{Fest: fest, Error: errMsg, SelectedType: selectedType, BrainDSL: brainDSL}))
 }
@@ -771,12 +768,20 @@ func brainSchemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, slug, t
 		return store.FestScheme{}, err
 	}
 	input := schemedsl.Input{Slug: slug, Title: title, GameType: games.Brain}
-	if _, hasSeed := doc.Init.Str("seed"); !hasSeed {
+	if seed, hasSeed := doc.Init.Str("seed"); !hasSeed {
 		entrants, err := brainSeedEntrantsTx(ctx, tx, festID)
 		if err != nil {
 			return store.FestScheme{}, err
 		}
 		input.Entrants = entrants
+	} else if seed != "random" && seed != "xlsx" {
+		var known int
+		if err := tx.QueryRowContext(ctx, `select count(*) from games where fest_id = ? and code = ?`, festID, seed).Scan(&known); err != nil {
+			return store.FestScheme{}, err
+		}
+		if known == 0 {
+			return store.FestScheme{}, fmt.Errorf("seed: %s — не random, не xlsx и не код игры этого феста", seed)
+		}
 	}
 	return schemedsl.Compile(doc, input)
 }
@@ -802,11 +807,14 @@ func brainSeedEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64) ([]store
 
 // defaultBrainDSL is the creation form's prefill: today's shortcut — one group
 // over the whole fest — written in the DSL so the host sees something editable.
-func defaultBrainDSL(teams int) string {
+func defaultBrainDSL(teams, questions int) string {
 	if teams < 2 {
 		teams = 4
 	}
-	return fmt.Sprintf("[defaults]\nquestions: 5\n\n[scheme]\ntype: roundrobin\nteams_in_group: %d\n", teams)
+	if questions <= 0 {
+		questions = 5
+	}
+	return fmt.Sprintf("[defaults]\nquestions: %d\n\n[scheme]\ntype: roundrobin\nteams_in_group: %d\n", questions, teams)
 }
 
 // buildBrainStructureTx materialises a brain scheme into stage/match/slot rows.
