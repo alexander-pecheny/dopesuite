@@ -63,7 +63,7 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEn
 			for key, value := range slot.Metrics {
 				entry.Metrics[key] += value
 			}
-			entry.Metrics["points"] += 2 * (2 - slot.Place)
+			entry.Metrics["points"] += BoutPoints(slot.Place)
 			entry.Metrics["taken_base"] += slot.Metrics["takenBase"]
 			entry.Metrics["conceded_base"] += takenSum - slot.Metrics["takenBase"]
 			entry.Metrics["bouts"]++
@@ -80,6 +80,9 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEn
 			entry.Metrics["taken_share"] = entry.Metrics["taken_base"] / asked
 		}
 		entry.Metrics["diff"] = entry.Metrics["taken_base"] - entry.Metrics["conceded_base"]
+		for _, scratch := range []string{"points", "bouts", "questions_asked", "conceded_base"} {
+			delete(entry.Metrics, scratch)
+		}
 		entries = append(entries, *entry)
 	}
 

@@ -440,8 +440,6 @@ function adoptFestStages(fresh: FestInfo | null): void {
   }
 }
 
-// A reseed calculates once every бой of its source stages is finished —
-// derived from the live match views, not the init snapshot.
 function reseedPendingBouts(stage: BrainSchemeStage): string[] {
   const sources = new Set(stage.sources || []);
   const pending: string[] = [];
@@ -502,25 +500,19 @@ function buildProtocols(): HTMLElement {
   const multi = stages.length > 1;
   let rendered = 0;
   for (const stage of stages) {
-    if (stageKind(stage) === "reseed") {
-      rendered++;
-      if (multi) {
-        const head = document.createElement("h2");
-        head.className = "brain-stage-head";
-        head.textContent = stage.title || stage.code || "";
-        wrap.appendChild(head);
-      }
-      wrap.appendChild(buildBrainReseedPanel(stage));
-      continue;
-    }
-    const bouts = stageBouts(stage);
-    if (!bouts.length) continue;
+    const isReseed = stageKind(stage) === "reseed";
+    const bouts = isReseed ? [] : stageBouts(stage);
+    if (!isReseed && !bouts.length) continue;
     rendered++;
     if (multi) {
       const head = document.createElement("h2");
       head.className = "brain-stage-head";
       head.textContent = stage.title || stage.code || "";
       wrap.appendChild(head);
+    }
+    if (isReseed) {
+      wrap.appendChild(buildBrainReseedPanel(stage));
+      continue;
     }
     const row = document.createElement("div");
     row.className = "brain-bouts";

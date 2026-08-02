@@ -106,7 +106,8 @@ func TestCompileSingleGroupBrain(t *testing.T) {
 // verified against the tournament's gsheet tables and generate_kinsbf.py):
 // basket lottery, 12 groups over 6 столов in two захода, six 4-team DE groups,
 // пересев by 3.3.5 over group+DE stats, PF snake, alternating cross, and a
-// best-of-three final.
+// best-of-three final. NB the tournament sheet sorted its пересев % взятых
+// before разница, against регламент 3.3.5 — this DSL follows the регламент.
 const kinsbfSrc = `
 [defaults]
 venues: 6
@@ -229,8 +230,8 @@ func TestCompileKinsbf(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantSort := []string{"points_share", "diff", "taken_share"}
-	if len(sortRules) != 3 {
-		t.Fatalf("reseed sort = %v", sortRules)
+	if len(sortRules) != 4 || sortRules[3]["metric"] != "draw" {
+		t.Fatalf("reseed sort = %v, want жребий last", sortRules)
 	}
 	for i, want := range wantSort {
 		if sortRules[i]["metric"] != want || sortRules[i]["dir"] != "desc" {
@@ -471,8 +472,8 @@ sorting: [taken, points]
 	if err := json.Unmarshal(reseed.Sort, &rules); err != nil {
 		t.Fatal(err)
 	}
-	want := []map[string]string{{"metric": "taken", "dir": "desc"}, {"metric": "place_sum", "dir": "asc"}}
-	if len(rules) != 2 || rules[0]["metric"] != want[0]["metric"] || rules[1]["metric"] != want[1]["metric"] || rules[1]["dir"] != "asc" {
+	want := []map[string]string{{"metric": "taken", "dir": "desc"}, {"metric": "place_sum", "dir": "asc"}, {"metric": "draw", "dir": "asc"}}
+	if len(rules) != 3 || rules[0]["metric"] != want[0]["metric"] || rules[1]["metric"] != want[1]["metric"] || rules[1]["dir"] != "asc" || rules[2]["metric"] != "draw" {
 		t.Fatalf("reseed sort = %v, want %v", rules, want)
 	}
 }

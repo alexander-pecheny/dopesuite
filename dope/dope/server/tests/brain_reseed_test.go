@@ -67,7 +67,6 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 	}
 	playBout("s1-g1-1", [2]int{0, 3}) // Астра 3:0 Гинкго
 
-	// Half the sources are still running — the calculate must refuse.
 	early := scopedAPIRequest(t, srv, http.MethodPost,
 		fmt.Sprintf("/api/fest/%d/games/%d/stages/s2-reseed/reseed", festID, brainID), nil, token)
 	if early.Code != http.StatusBadRequest {

@@ -38,6 +38,17 @@ type SlotOutcome struct {
 	Metrics     map[string]float64
 }
 
+// BoutPoints maps a 2-seat bout place to очки — 2/1/0 for победа/ничья/
+// поражение (КИНСБФ 4.1). Places beyond the second clamp to 0: share metrics
+// are only defined for head-to-head bouts.
+func BoutPoints(place float64) float64 {
+	points := 2 * (2 - place)
+	if points < 0 {
+		return 0
+	}
+	return points
+}
+
 // RankedEntry is one participant's row in a stage's standings. Equal ranks are
 // shared on a full tie of the configured order keys.
 type RankedEntry struct {

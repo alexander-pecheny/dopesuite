@@ -976,7 +976,7 @@ func aggregateReseedMetrics(bouts []reseedBout, teamID int64) reseedEntry {
 		for _, key := range reseedCountMetrics {
 			entry.metrics[key] += numFromAny(mine.metrics[key])
 		}
-		entry.metrics["points"] += 2 * (2 - mine.place)
+		entry.metrics["points"] += structure.BoutPoints(mine.place)
 		entry.metrics["taken_base"] += mine.takenBase
 		entry.metrics["conceded_base"] += conceded
 		played++

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"dope/dope/domain/games"
 	"dope/dope/domain/structure"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -289,7 +290,8 @@ func paramBool(defaults, blk Section, key string, rounds []string) (bool, bool) 
 }
 
 // protocolConfig collects the game's protocol params for one stage (rounds
-// empty means the block default).
+// empty means the block default). Brain always pins questions — reseed share
+// metrics divide by it, so it must never be implicit.
 func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
 	config := map[string]any{}
 	for dslKey, configKey := range protocolParams[c.in.GameType] {
@@ -302,6 +304,11 @@ func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
 			if v, ok := paramInt(c.doc.Defaults, blk, dslKey, rounds); ok {
 				config[configKey] = v
 			}
+		}
+	}
+	if c.in.GameType == "brain" {
+		if _, ok := config["questions"]; !ok {
+			config["questions"] = games.BrainQuestionCount
 		}
 	}
 	return config
@@ -411,10 +418,13 @@ func (c *compiler) blockEntrants(index int, blk Section, groups, size int) ([][]
 }
 
 // rejectRoundReseed fails a round-code reseed on kinds with no addressable
-// rounds (rr, de).
+// rounds (rr, de). The same kinds have no финал for a best_of series.
 func rejectRoundReseed(blk Section) error {
 	if _, round := blockReseedSpec(blk); round != "" {
 		return errAt(blk.Values["reseed"].Line, "reseed: в этом блоке нет раунда %s — только true/false", round)
+	}
+	if v, ok := blk.Values["best_of"]; ok {
+		return errAt(v.Line, "best_of: серия возможна только в финале single_elimination")
 	}
 	return nil
 }
@@ -432,16 +442,17 @@ func blockReseedSpec(blk Section) (incoming bool, round string) {
 }
 
 // reseedSortRules maps the block's sorting tokens onto reseed metrics; absent
-// sorting keeps the canonical place_sum-then-taken order.
+// sorting keeps the canonical place_sum-then-taken order. Жребий closes every
+// order — the resolver only lots ties when a draw rule is present to use them.
 func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) {
 	tokens, ok, err := blk.Sorting("sorting")
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		return []store.SchemeSortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "taken", Dir: "desc"}}, nil
-	}
 	var rules []store.SchemeSortRule
+	if !ok {
+		rules = []store.SchemeSortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "taken", Dir: "desc"}}
+	}
 	for _, token := range tokens {
 		switch token.Metric {
 		case "points":
@@ -454,7 +465,7 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве (есть points, taken, points_share, taken_share, diff)", token.Metric)
 		}
 	}
-	return rules, nil
+	return append(rules, store.SchemeSortRule{Metric: "draw", Dir: "asc"}), nil
 }
 
 func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
@@ -521,8 +532,8 @@ func (c *compiler) reseedSources(index int, blk Section) ([]string, error) {
 	return sources, nil
 }
 
-// prevPlaceSlots lists everyone the previous block sends onward — the reseed's
-// eligibility set (place selectors, one per proceeding place per group).
+// prevPlaceSlots is the reseed's eligibility set: the previous block's
+// proceeding places.
 func (c *compiler) prevPlaceSlots() []store.SchemeSlot {
 	var teams []store.SchemeSlot
 	for _, g := range c.prev.groups {
@@ -817,7 +828,13 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 		count := remaining / 2
 		bestOf := 0
 		if remaining == 2 {
-			if v, ok := paramInt(c.doc.Defaults, blk, "best_of", names); ok {
+			v, ok := blk.Int("best_of")
+			for _, name := range names {
+				if dotted, dok := blk.Int("best_of." + name); dok {
+					v, ok = dotted, true
+				}
+			}
+			if ok {
 				if v < 3 || v%2 == 0 {
 					return nil, errAt(blk.Line, "best_of: серия играется до большинства побед — нечётное число боёв от 3")
 				}
