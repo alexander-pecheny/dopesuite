@@ -162,7 +162,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
       placeholder: "Europe/Moscow", autocomplete: "off",
     }) as HTMLInputElement;
     autocomplete(tzInp, zoneChoices);
-    const titleInp = el("input", { class: "input", type: "text", value: m.title, placeholder: "короткое имя теста — напр. «Алиев и др.»" }) as HTMLInputElement;
+    const titleInp = el("input", { class: "input", type: "text", value: m.title, placeholder: "короткое имя теста — напр. «Иван Иванов и др.»" }) as HTMLInputElement;
 
     box.append(
       field("Дата", dateInp),

@@ -118,7 +118,7 @@ func createUsersFormSection() *ui.Element {
 	return ui.Section(
 		ui.Form(ui.DirCol, ui.SpaceMD, ui.Method("post"), ui.Action("/admin/create_users"), ui.Autocomplete("off"),
 			ui.Field(ui.Label("Логины (по одному в строке)"),
-				ui.Editor(ui.Name("usernames"), ui.Rows("10"), ui.Placeholder("anton\nanya_a\ndasha"), ui.Required()),
+				ui.Editor(ui.Name("usernames"), ui.Rows("10"), ui.Placeholder("ivanov\npetrova\nsidorov"), ui.Required()),
 			),
 			ui.Row(
 				ui.Button(ui.Submit(), ui.Text("Создать")),

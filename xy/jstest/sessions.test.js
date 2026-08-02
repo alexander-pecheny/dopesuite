@@ -20,7 +20,7 @@ const base = {
   date: "2026-07-20",
   time: "19:00",
   tz: "Europe/Moscow",
-  title: "Алиев и др.",
+  title: "Иван Иванов и др.",
   testers: [{ text: "Иванов Иван", type: "player" }],
   cities: [],
   key: "k",
@@ -30,13 +30,13 @@ test("parseSession folds the legacy {datetime} shape forward", () => {
   // migrateV18 could not decrypt, so a pre-refactor session arrives verbatim.
   const legacy = JSON.stringify({
     datetime: "2026-07-20 19:00",
-    title: "Алиев и др.",
+    title: "Иван Иванов и др.",
     testers: [{ text: "Иванов Иван", type: "player" }],
   });
   const m = parseSession(legacy);
   assert.equal(m.date, "2026-07-20");
   assert.equal(m.time, "19:00");
-  assert.equal(m.title, "Алиев и др.");
+  assert.equal(m.title, "Иван Иванов и др.");
   assert.equal(m.testers.length, 1);
 });
 
@@ -69,8 +69,8 @@ test("the origin stamp survives a round trip", () => {
 });
 
 test("sessionLabel honours the reader's title mode", () => {
-  assert.equal(sessionLabel(base, "date-title"), "20 июля · Алиев и др.");
-  assert.equal(sessionLabel(base, "title"), "Алиев и др.");
+  assert.equal(sessionLabel(base, "date-title"), "20 июля · Иван Иванов и др.");
+  assert.equal(sessionLabel(base, "title"), "Иван Иванов и др.");
   assert.equal(sessionLabel(base, "date"), "20 июля");
 });
 
