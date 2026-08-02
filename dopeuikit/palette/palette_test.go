@@ -439,43 +439,96 @@ func TestWashesAreOneTier(t *testing.T) {
 func TestSetsAreOfferable(t *testing.T) {
 	yin, yang := Anchor("yin"), Anchor("yang")
 	for _, name := range SetNames() {
-		t.Run(name, func(t *testing.T) {
-			seen := map[string]string{}
-			for _, c := range Set(name) {
-				if prev, dup := seen[c.Hex]; dup {
-					t.Errorf("%q and %q are both %s — a picker would show one twice", prev, c.Name, c.Hex)
-				}
-				seen[c.Hex] = c.Name
+		themes := Themes(name)
+		if len(themes) == 0 {
+			themes = []string{""}
+		}
+		for _, theme := range themes {
+			t.Run(strings.TrimSuffix(name+"/"+theme, "/"), func(t *testing.T) {
+				seen := map[string]string{}
+				for _, c := range Set(name, theme) {
+					if prev, dup := seen[c.Hex]; dup {
+						t.Errorf("%q and %q are both %s — a picker would show one twice", prev, c.Name, c.Hex)
+					}
+					seen[c.Hex] = c.Name
 
+					fill := fromHex(strings.TrimPrefix(c.Hex, "#"))
+					best := math.Max(Contrast(fill, yin), Contrast(fill, yang))
+					if best < 4.5 {
+						t.Errorf("%s (%s) reaches only %.2f:1 against uchu's ink and paper — nothing can be written on it",
+							c.Name, c.Hex, best)
+					}
+				}
+			})
+		}
+	}
+}
+
+// TestLabelSetStandsOffItsCard is the promise the label palette makes, and the
+// reason a label stores a name rather than a hex: whatever the reader's theme,
+// the dot on a card is a dot you can see. No single colour manages that on both
+// — the band that clears 3:1 on a near-white card and the band that clears it on
+// a mid-grey one do not overlap — so the rung is the theme's to choose, and this
+// asserts it chose one that works. The ground is read out of core.css rather
+// than restated here, so moving a surface moves the test with it.
+//
+// Two registers, two measures. The default one owes WCAG's 3:1 and gets it. The
+// -deep one is three rungs below that on purpose, and what keeps it visible is
+// CHROMA — a saturated purple on a mid grey reads perfectly well while WCAG,
+// which weighs luminance alone, scores it 1.4:1. So it is held to a perceptual
+// distance instead. Refusing the second register on WCAG's number would be
+// deferring to the wrong measurement, not to accessibility.
+func TestLabelSetStandsOffItsCard(t *testing.T) {
+	css := core(t)
+	// The card an xy label is drawn on: --kanban-card, which xy's layer aliases
+	// to --surface on light and --structure on dark.
+	ground := map[string]string{"light": "surface", "dark": "structure"}
+	for _, th := range themes[:2] { // the two plain themes; high contrast only lifts the floor
+		t.Run(th.name, func(t *testing.T) {
+			tokens := tokensFor(t, css, th.selector)
+			card, _, ok := resolve(tokens, ground[th.name])
+			if !ok {
+				t.Fatalf("no %s in %s", ground[th.name], th.selector)
+			}
+			for _, c := range Set("label", th.name) {
 				fill := fromHex(strings.TrimPrefix(c.Hex, "#"))
-				best := math.Max(Contrast(fill, yin), Contrast(fill, yang))
-				if best < 4.5 {
-					t.Errorf("%s (%s) reaches only %.2f:1 against uchu's ink and paper — nothing can be written on it",
-						c.Name, c.Hex, best)
+				if Tone("label", c.Name) == 0 {
+					if got := Contrast(fill, card); got < 3.0 {
+						t.Errorf("label %s is %s here and reaches only %.2f:1 on the card — pick a lighter rung",
+							c.Name, c.Hex, got)
+					}
+					continue
+				}
+				if got := Distance(fill, card); got < 0.15 {
+					t.Errorf("label %s is %s here and sits %.3f from the card on the OKLab solid — too close to see",
+						c.Name, c.Hex, got)
 				}
 			}
 		})
 	}
 }
 
-// TestLabelSetIsOneRung is what "one rung across the set" actually claims: every
-// entry is the SAME INDEX of its own hue's ramp. It is not a claim about
-// lightness — uchu's rung 5 spans L 0.46 (purple) to 0.88 (yellow), because a
-// rung equalises the palette's design step and not its luminance. The value of
-// the property is that the set moves together: re-rung the palette and all eight
-// shift as one, which is the thing a hand-assembled list cannot do.
-func TestLabelSetIsOneRung(t *testing.T) {
-	spec := sets["label"]
-	got := Set("label")
-	if len(got) != len(spec.Hues) {
-		t.Fatalf("label set has %d entries for %d hues", len(got), len(spec.Hues))
-	}
-	for i, c := range got {
-		want := Rung(spec.Variant, spec.Hues[i], spec.Rung).Hex()
-		if c.Hex != want {
-			t.Errorf("%s is %s, want %s (%s %s rung %d) — the set has drifted off its rung",
-				c.Name, c.Hex, want, spec.Variant, spec.Hues[i], spec.Rung)
-		}
+// A deep tone that lands on its own default is a colour the picker shows twice.
+// TestSetsAreOfferable catches the duplicate, but not what it means, so name it
+// here — and assert the gap is wide enough to be a CHOICE, not a near-miss.
+func TestLabelTonesAreDistinct(t *testing.T) {
+	for _, theme := range Themes("label") {
+		t.Run(theme, func(t *testing.T) {
+			bright := map[string]string{}
+			for _, c := range Set("label", theme) {
+				if Tone("label", c.Name) == 0 {
+					bright[c.Name] = c.Hex
+					continue
+				}
+				base := strings.TrimSuffix(c.Name, "-deep")
+				gap := Distance(fromHex(strings.TrimPrefix(c.Hex, "#")),
+					fromHex(strings.TrimPrefix(bright[base], "#")))
+				if gap < 0.1 {
+					t.Errorf("%s (%s) sits %.3f from %s (%s) — too close to offer as a separate colour",
+						c.Name, c.Hex, gap, base, bright[base])
+				}
+			}
+		})
 	}
 }
 

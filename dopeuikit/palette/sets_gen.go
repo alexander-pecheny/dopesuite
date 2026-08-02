@@ -2,18 +2,6 @@
 
 package palette
 
-// LabelColors is the label colour set, in offer order.
-var LabelColors = []NamedColor{
-	{Name: "red", Hex: "#a84151"},
-	{Name: "orange", Hex: "#d69870"},
-	{Name: "yellow", Hex: "#ebd697"},
-	{Name: "green", Hex: "#77bb79"},
-	{Name: "blue", Hex: "#3d64ac"},
-	{Name: "purple", Hex: "#674292"},
-	{Name: "pink", Hex: "#e5b5c7"},
-	{Name: "gray", Hex: "#bfc1c3"},
-}
-
 // StickerColors is the sticker colour set, in offer order.
 var StickerColors = []NamedColor{
 	{Name: "white", Hex: "#ffffff"},

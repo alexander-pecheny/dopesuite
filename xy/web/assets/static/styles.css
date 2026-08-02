@@ -11,6 +11,123 @@
 :root { --canvas: var(--paper); --kanban-col: var(--structure); --kanban-card: var(--surface); --board-tile: var(--structure); }
 :root[data-theme="dark"] { --canvas: var(--structure); --kanban-col: var(--surface); --kanban-card: var(--structure); --board-tile: var(--surface); }
 
+/* Board labels. A label stores a NAME (`green`, `teal`), and the theme decides
+   which rung of that hue it paints — because no single hex clears 3:1 against
+   both a near-white card and a mid-grey one, so a hex that reads on light is
+   invisible on dark. The rung is chosen by cmd/palettegen: the most chromatic
+   one that still clears the card it is drawn on. Edit palette/sets.json, run
+   `go generate ./palette` from dopeuikit, and both blocks below are rewritten.
+   The -ink twin is what may be written ON the colour, for the named chips in
+   the card detail. */
+:root {
+  /* ---- BEGIN GENERATED label-colours-light (go generate ./palette) ---- */
+  --label-red: #e50e3f;
+  --label-red-ink: #fdfdfd;
+  --label-orange: #cd6f2c;
+  --label-orange-ink: #080a0d;
+  --label-brown: #876049;
+  --label-brown-ink: #fdfdfd;
+  --label-yellow: #9c853c;
+  --label-yellow-ink: #080a0d;
+  --label-lime: #859627;
+  --label-lime-ink: #080a0d;
+  --label-green: #2e943a;
+  --label-green-ink: #080a0d;
+  --label-teal: #00957c;
+  --label-teal-ink: #080a0d;
+  --label-cyan: #009ab2;
+  --label-cyan-ink: #080a0d;
+  --label-blue: #0965ef;
+  --label-blue-ink: #fdfdfd;
+  --label-purple: #7532c8;
+  --label-purple-ink: #fdfdfd;
+  --label-magenta: #c469c5;
+  --label-magenta-ink: #080a0d;
+  --label-pink: #b57790;
+  --label-pink-ink: #080a0d;
+  --label-gray: #878a8b;
+  --label-gray-ink: #080a0d;
+  --label-red-deep: #84001f;
+  --label-red-deep-ink: #fdfdfd;
+  --label-orange-deep: #7a3800;
+  --label-orange-deep-ink: #fdfdfd;
+  --label-brown-deep: #533019;
+  --label-brown-deep-ink: #fdfdfd;
+  --label-yellow-deep: #5b4800;
+  --label-yellow-deep-ink: #fdfdfd;
+  --label-lime-deep: #495400;
+  --label-lime-deep-ink: #fdfdfd;
+  --label-green-deep: #005412;
+  --label-green-deep-ink: #fdfdfd;
+  --label-teal-deep: #005344;
+  --label-teal-deep-ink: #fdfdfd;
+  --label-cyan-deep: #005664;
+  --label-cyan-deep-ink: #fdfdfd;
+  --label-blue-deep: #00368b;
+  --label-blue-deep-ink: #fdfdfd;
+  --label-purple-deep: #44007f;
+  --label-purple-deep-ink: #fdfdfd;
+  --label-magenta-deep: #7c237f;
+  --label-magenta-deep-ink: #fdfdfd;
+  --label-pink-deep: #713951;
+  --label-pink-deep-ink: #fdfdfd;
+  /* ---- END GENERATED ---- */
+}
+:root[data-theme="dark"] {
+  /* ---- BEGIN GENERATED label-colours-dark (go generate ./palette) ---- */
+  --label-red: #ef6d8b;
+  --label-red-ink: #080a0d;
+  --label-orange: #ff8834;
+  --label-orange-ink: #080a0d;
+  --label-brown: #dd9c75;
+  --label-brown-ink: #080a0d;
+  --label-yellow: #fed75c;
+  --label-yellow-ink: #080a0d;
+  --label-lime: #bbd330;
+  --label-lime-ink: #080a0d;
+  --label-green: #3fcf4e;
+  --label-green-ink: #080a0d;
+  --label-teal: #00caa8;
+  --label-teal-ink: #080a0d;
+  --label-cyan: #00c6e4;
+  --label-cyan-ink: #080a0d;
+  --label-blue: #6aa2f5;
+  --label-blue-ink: #080a0d;
+  --label-purple: #ac83de;
+  --label-purple-ink: #080a0d;
+  --label-magenta: #c469c5;
+  --label-magenta-ink: #080a0d;
+  --label-pink: #ffa6c8;
+  --label-pink-ink: #080a0d;
+  --label-gray: #878a8b;
+  --label-gray-ink: #080a0d;
+  --label-red-deep: #9d1e47;
+  --label-red-deep-ink: #fdfdfd;
+  --label-orange-deep: #974700;
+  --label-orange-deep-ink: #fdfdfd;
+  --label-brown-deep: #8b502b;
+  --label-brown-deep-ink: #fdfdfd;
+  --label-yellow-deep: #977900;
+  --label-yellow-deep-ink: #080a0d;
+  --label-lime-deep: #697800;
+  --label-lime-deep-ink: #fdfdfd;
+  --label-green-deep: #00781a;
+  --label-green-deep-ink: #fdfdfd;
+  --label-teal-deep: #00735f;
+  --label-teal-deep-ink: #fdfdfd;
+  --label-cyan-deep: #007082;
+  --label-cyan-deep-ink: #fdfdfd;
+  --label-blue-deep: #2358a5;
+  --label-blue-deep-ink: #fdfdfd;
+  --label-purple-deep: #673e92;
+  --label-purple-deep-ink: #fdfdfd;
+  --label-magenta-deep: #7c237f;
+  --label-magenta-deep-ink: #fdfdfd;
+  --label-pink-deep: #a15172;
+  --label-pink-deep-ink: #fdfdfd;
+  /* ---- END GENERATED ---- */
+}
+
 /* The app shell (header + the section under it) sits on the canvas, not on the
    kit's structure gray. */
 .host,
@@ -281,19 +398,21 @@
 }
 /* auto/directive question number reads as scaffolding, not content */
 .kcard-num { color: var(--muted); }
-/* Every unit on this row is exactly --chip-h tall — a bare label, a lone 🧪, a
-   test group with three verdicts in it. Widths differ and must: a test group
+/* Every unit on this row is exactly --chip-h tall — a bare label, a lone flask,
+   a test group with three verdicts in it. Widths differ and must: a test group
    holds however many verdicts it holds. Heights differing is what read as
    broken, and it happened by default — the row is a flex line, so `stretch`
-   grew the bare 🧪 to match the tallest item while the labels, having an
-   explicit height, stayed short and hung off the top. */
+   grew the bare flask to match the tallest item while the labels, having an
+   explicit height, stayed short and hung off the top.
+   --chip-h is the badge's own size, so a badge fills its chip instead of
+   overflowing it. */
 .kcard-labels {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
   margin-bottom: var(--space-1);
-  --chip-h: 12px;
+  --chip-h: 14px;
 }
 /* A card that isn't a question isn't a tile: no fill, so the list shows through
    and the eye can tell scaffolding (headings, meta) from the questions. */
@@ -353,22 +472,25 @@
 }
 
 /* labels */
-/* A label on a card is a TAG filled with its colour, next to the flask filled
-   with a test's verdicts. Two glyphs, both coloured by what they carry — which
-   is what makes the row parse at a glance now that neither is a bare dot.
-   Their outlines are drawn lighter and in --muted: a badge marks a card, it
-   does not label it, and at body-text weight the row shouted over the question
-   it belongs to. The FILL still carries the user's colour at full strength. */
-.kcard-label .ico, .kcard-test-icon .ico, .kcard-handout .ico {
-  color: var(--muted);
-  stroke-width: 1.5;
-}
+/* A label on a card is a DISC of its own colour — no glyph. A card badge
+   renders at ~14px, where flat colour is the only thing that survives.
+   It is drawn a few pixels under --chip-h: a filled circle packs more ink than
+   an outlined glass of the same height, and at the row's own height it
+   out-weighed every flask beside it.
+   No rim, and none is needed: every colour the picker offers clears 3:1 against
+   the card of the theme it is drawn in, because the theme picks the rung (see
+   the --label-* block at the top of this file). Contrast is a property of the
+   palette here, not something a hairline has to rescue afterwards. */
 .kcard-label {
-  display: inline-flex;
-  align-items: center;
-  height: var(--chip-h);
-  font-size: 13px;
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: var(--radius-full);
+  background: var(--muted);
 }
+/* The handout mark is the row's only outline glyph — it marks a fact about the
+   text, not a colour someone chose — so it takes the ink at full strength. */
+.kcard-handout .ico { color: var(--text); --ico-size: 15px; stroke-width: 1.5; }
 
 /* card detail overlay — occupies the whole lower section (below the fixed
    header), fully obscuring the kanban; the panel itself scrolls internally so
@@ -498,11 +620,12 @@
 }
 .menu-dropdown.color-pop { min-width: 0; width: max-content; gap: var(--space-2); padding: var(--space-2); }
 .menu-dropdown.menu-fixed.color-pop { z-index: var(--z-modal-dropdown); }
-.color-grid { display: grid; grid-template-columns: repeat(4, 26px); gap: var(--space-1); }
-.color-cell { width: 26px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: var(--cursor-action); }
+/* Hue across, tone down: 13 columns is the palette's own shape, and the -deep
+   row lands directly under the colour it is a deeper version of. The last cell
+   of that row is empty — grey is offered in one register only (see sets.json). */
+.color-grid { display: grid; grid-template-columns: repeat(13, 20px); gap: 3px; }
+.color-cell { width: 20px; height: 20px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: var(--cursor-action); }
 .color-cell.is-on { outline: 2px solid var(--text); outline-offset: 1px; }
-.color-hex { width: 100%; font-family: var(--font-mono); }
-.color-hex.is-bad { border-color: var(--danger); background: var(--wash-negative); }
 
 /* timeline */
 .timeline { display: flex; flex-direction: column; gap: var(--space-2); max-height: 320px; overflow-y: auto; }
@@ -1375,19 +1498,39 @@ body {
   height: var(--chip-h);
   gap: 2px;
 }
-/* The flask carries the verdicts as liquid now (see flaskIcon), so there is no
-   capsule and no row of dots — just the glyph, at a size where two or three
-   bands of colour still read apart. */
+/* The flask is SOLID and single-coloured — the first verdict recorded at that
+   test, or --muted when there is none. Outline plus poured-in liquid needed
+   three inks inside 14 pixels and arrived as a smudge. Fill and stroke are both
+   currentColor, so the glyph is one silhouette. */
 .kcard-test-icon {
-  font-size: 13px;
   display: inline-flex;
   align-items: center;
   height: var(--chip-h);
+  color: var(--muted);
+}
+.kcard-test-icon .ico { --ico-size: var(--chip-h); }
+/* Verdicts past the first, beside the flask: a braille cell — fill a column of
+   three top-down, then start the next one. Six is the cell's capacity, and the
+   test's tooltip names every verdict regardless. Column wrap rather than a grid
+   so the block is only as tall as the dots it holds: an explicit 3-row grid
+   leaves a lone dot pinned to the top of an empty cell. */
+.kcard-verdicts {
+  display: flex;
+  flex-flow: column wrap;
+  align-content: flex-start;
+  align-self: center;
+  gap: 1px;
+  max-height: 14px;
+}
+.kcard-verdict {
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--muted);
 }
 /* The handout mark stands on the label row rather than inside a capsule, so it
    takes the row's own height. */
 .kcard-handout {
-  font-size: 11px;
   display: inline-flex;
   align-items: center;
   height: var(--chip-h);

@@ -2,10 +2,31 @@
   "_doc": "Named colour sets the apps offer as a closed choice. uchu.json is vendored data; this file is ours. Each set is emitted to every language that needs it (CSS custom properties, a Go enum, a TypeScript array) by cmd/palettegen, so a set has exactly one definition.",
 
   "label": {
-    "_doc": "xy Board Labels. One rung across all eight hues, which is what an OKLCH palette buys: they read as equals rather than one loud colour beside seven quiet ones. A Label stores its own hex, so this list is a set of presets and changing it never orphans an existing Label.",
-    "variant": "pastel",
-    "rung": 5,
-    "hues": ["red", "orange", "yellow", "green", "blue", "purple", "pink", "gray"]
+    "_doc": "xy Board Labels. A Label stores a NAME here, not a hex: no single colour clears 3:1 against both a near-white card and a mid-grey one, so a hex that reads on one theme is invisible on the other. Each theme names the ground its cards are drawn on and the contrast the palette owes it, and the rung follows. `ramp` is a vendored uchu hue; `mix` and `desat` derive one, which is how the set offers teal, cyan, lime, magenta and brown without inventing a colour off the ladder. Order is the picker's order: round the wheel, with brown beside the orange it is drained from.",
+    "themes": {
+      "light": { "ground": "yang", "floor": 3.1 },
+      "dark": { "ground": "yin-8", "floor": 3.1 }
+    },
+    "_tones": "Every hue is offered twice. The first register is the rung the floor picks; the second is that rung with a third of its lightness taken away, hue and chroma held. It drops below the floor on purpose, and stays visible because a card is a mid grey rather than black — a saturated deep colour differs from it in CHROMA, which WCAG's ratio does not measure. TestLabelSetStandsOffItsCard measures that instead.",
+    "tones": [
+      { "suffix": "", "darken": 0 },
+      { "suffix": "-deep", "darken": 0.34 }
+    ],
+    "colors": [
+      { "name": "red", "ramp": "red" },
+      { "name": "orange", "ramp": "orange" },
+      { "name": "brown", "desat": ["orange", 0.55], "bias": { "light": 2 } },
+      { "name": "yellow", "ramp": "yellow" },
+      { "name": "lime", "mix": ["yellow", "green", 0.5] },
+      { "name": "green", "ramp": "green" },
+      { "name": "teal", "mix": ["green", "blue", 0.26] },
+      { "name": "cyan", "mix": ["green", "blue", 0.6] },
+      { "name": "blue", "ramp": "blue" },
+      { "name": "purple", "ramp": "purple" },
+      { "name": "magenta", "mix": ["purple", "pink", 0.5] },
+      { "name": "pink", "ramp": "pink" },
+      { "name": "gray", "ramp": "gray", "single": true }
+    ]
   },
 
   "sticker": {

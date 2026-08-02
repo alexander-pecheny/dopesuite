@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LABEL_COLORS, normalizeHex, textOn } from "../web/assets/static/dist/colorpick.js";
+import { LABEL_COLORS, labelFill, labelInk, labelName, normalizeHex, textOn } from "../web/assets/static/dist/colorpick.js";
 
 test("normalizeHex canonicalises what a person types", () => {
   assert.equal(normalizeHex("#4A88CC"), "#4a88cc");
@@ -15,24 +15,47 @@ test("normalizeHex rejects anything that is not a colour yet", () => {
   }
 });
 
-// The palette is only usable because the ink follows the fill; a fixed white is
-// what forced the previous palette to be uniformly dark.
-const lum = (hex) => {
-  const [r, g, b] = [1, 3, 5]
-    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-    .map((u) => (u <= 0.04045 ? u / 12.92 : ((u + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-};
-const contrast = (a, b) => {
-  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-};
+// The palette is a list of NAMES now, and the hex a name paints lives in CSS —
+// one per theme, because no single colour clears the card on both. What this
+// module owes the caller is the mapping: name in, custom property out.
+test("a palette name resolves to its custom property", () => {
+  assert.ok(LABEL_COLORS.includes("teal"));
+  assert.equal(labelName("teal"), "teal");
+  assert.equal(labelFill("teal"), "var(--label-teal)");
+  assert.equal(labelInk("teal"), "var(--label-teal-ink)");
+});
 
-test("every palette colour clears WCAG AA against the ink textOn picks", () => {
-  for (const bg of LABEL_COLORS) {
-    const ratio = contrast(bg, textOn(bg));
-    assert.ok(ratio >= 4.5, `${bg} on ${textOn(bg)} is only ${ratio.toFixed(2)}:1`);
+// Boards created before the palette was named stored the picker's hex. Those
+// eight are the same eight hues, so they are read as the name they always were
+// and no board needs migrating.
+test("a label stored as one of the old palette hexes reads as its name", () => {
+  assert.equal(labelName("#77bb79"), "green");
+  assert.equal(labelName("#674292"), "purple");
+  assert.equal(labelFill("#EBD697"), "var(--label-yellow)");
+});
+
+// A hex somebody typed into the custom field, which no longer exists, is
+// snapped onto the palette so it gets a colour that reads on both themes.
+test("a hand-typed hex snaps to the nearest palette name", () => {
+  assert.equal(labelName("#ff0000"), "red");
+  assert.equal(labelName("#0000ff"), "blue");
+  assert.equal(labelName("#00ffff"), "cyan");
+  assert.equal(labelFill("#123456"), "var(--label-blue)");
+});
+
+// Hue is what decides, so a washed-out blue still finds blue rather than the
+// paler name whose rung it happens to sit closest to.
+test("snapping follows hue, not how saturated the colour is", () => {
+  assert.equal(labelName("#4a88cc"), "blue");
+});
+
+// No hue at all is the one case hue cannot answer.
+test("anything without chroma is gray, and an empty value has no name", () => {
+  for (const bg of ["#000000", "#ffffff", "#808080", "#bfc1c3"]) {
+    assert.equal(labelName(bg), "gray", bg);
   }
+  assert.equal(labelName(""), "");
+  assert.equal(labelFill(""), "var(--muted)");
 });
 
 test("textOn puts dark ink on light fills and light ink on dark ones", () => {
