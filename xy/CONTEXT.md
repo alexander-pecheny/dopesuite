@@ -50,7 +50,11 @@ The tester names this device has seen, gathered from every Board whose key it ho
 _Avoid_: people database, contacts
 
 **Timeline**:
-A Card's or a Test Session's history: comments plus recorded description edits (word-level diffs). A comment may belong to a Card, to a Session, or to a question as discussed at a particular session.
+A Card's or a Test Session's history, in three kinds of entry: comments (the discussion), description edits (word-level diffs) and the metadata trail — labels attached or removed, attachments added, replaced or deleted. A comment may belong to a Card, to a Session, or to a question as discussed at a particular session. A reader may narrow the лента to one kind (see Feed Default); the kinds partition it, so no entry is invisible in every mode.
+
+**Feed Default**:
+Which kind of Timeline entry a reader's лента shows when a Card opens. Theirs, not the Board's — one editor reads for the discussion, another for what the question used to say, and they read the same Card side by side. Narrowing the лента inside an open Card is a look at that Card, not a change of the default: it dies when the Card closes.
+_Avoid_: feed filter, view mode (the narrowing is transient; only the default is a preference)
 
 **4s**:
 chgksuite's plain-text question format — xy's interchange format for import, export, and the card editor's Текст view. Parity with chgksuite is byte-for-byte and oracle-tested; never extend the format unilaterally.

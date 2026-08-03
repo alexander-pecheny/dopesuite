@@ -301,12 +301,14 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     firstrun.ts        the two questions every account answers once (timezone, default
                        author), asked on whichever page is opened first
     wordlist.ts        EFF diceware list for generated passphrases (data only)
-    profile.ts         /profile: username set-once, logout, and four dialogs — change
+    profile.ts         /profile: username set-once, logout, and five dialogs — change
                        password, board sizes (three sliders + a to-scale pseudo-board
                        preview, wireframe bars for text; defaults 1512px / 280px / 3
                        lines, max slider position = unlimited/null; debounced POST
                        /api/auth/sizes), default author (POST /api/auth/default-author),
-                       card title (POST /api/auth/card-title — question text vs answer).
+                       card title (POST /api/auth/card-title — question text vs answer),
+                       лента (POST /api/auth/feed-default — which kind of timeline
+                       entry an opened card starts on).
                        Shared defaults/ranges/sanitize/apply live in app.ts (xySizes)
                        so this write path and board.ts's read path agree
     tokens.ts          /profile/tokens — create/revoke API tokens for the Trello API

@@ -61,6 +61,9 @@ export interface TimelineState {
   cards: Array<{ id: number; createdAt: string | null }>;
   me?: AuthMe | null;
   memberNames?: Record<number, string>;
+  // The reader's own лента default (users.feed_default, edited on /profile),
+  // delivered in the board snapshot so an offline card open obeys it too.
+  feedDefault?: string;
 }
 
 export interface TimelineDeps {
@@ -95,6 +98,12 @@ export interface Timeline {
   // The board's loadAttachments hands over the fresh attachment list; the
   // timeline keeps the выписка-flagged ones and refreshes the counter.
   setAttachments(atts: AttachmentLike[]): void;
+  // Drops a card's narrowing of the лента: opening a card starts from the
+  // reader's own default, never from what the previous card was left on.
+  resetFilter(): void;
+  // Which unread watermarks the лента as currently filtered may clear.
+  readBuckets(): { content: boolean; comments: boolean };
+  ensureVisible(type: string): Promise<void>;
 }
 
 // ---- pure decision helpers (exported for tests) ----
@@ -154,6 +163,31 @@ export function feedOrderOf(raw: string | null): "old" | "new" {
   return raw === "old" ? "old" : "new";
 }
 
+// A лента holds three kinds of entry, and a reader may narrow it to one of them:
+// comments (the discussion), edits (desc_edit — what the question used to say)
+// and meta (labels and attachments). "all" is every kind.
+export type FeedFilter = "all" | "comments" | "edits" | "meta";
+const FEED_FILTERS: readonly string[] = ["all", "comments", "edits", "meta"];
+
+export function feedFilterOf(raw: string | null | undefined): FeedFilter {
+  return FEED_FILTERS.includes(raw || "") ? (raw as FeedFilter) : "all";
+}
+
+export function feedFilterKeeps(type: string, filter: FeedFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "comments") return type === "comment";
+  if (filter === "edits") return type === "desc_edit";
+  return type !== "comment" && type !== "desc_edit";
+}
+
+// readBucketsOf: which unread watermarks a лента read under this filter may
+// advance. A reader who narrowed the лента to comments never saw the edits, so
+// their dot must survive. The content bucket is one watermark over both edits
+// and meta (migrateV7), so those two cannot be told apart here.
+export function readBucketsOf(filter: FeedFilter): { content: boolean; comments: boolean } {
+  return { content: filter !== "comments", comments: filter === "all" || filter === "comments" };
+}
+
 // orderFeedEvents: events are oldest→newest (by id), so "сначала новое" is the
 // reverse.
 export function orderFeedEvents<T>(events: readonly T[], order: "old" | "new"): T[] {
@@ -201,6 +235,12 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   let openCardExcerptAtts: AttachmentLike[] = [];
   let threadRootId: number | null = null;
 
+  // The лента's current narrowing. It starts from the reader's saved default and
+  // is dropped when the card closes (resetFilter), so a card always opens the way
+  // /profile says — the selects are a look at this card, not a stored preference.
+  let filter: FeedFilter = "all";
+  const shown = (events: readonly CardEvent[]): CardEvent[] => events.filter((e) => feedFilterKeeps(e.type, filter));
+
   const feedOverlay = byId("feedOverlay");
   const threadOverlay = byId("threadOverlay");
   const excerptsOverlay = byId("excerptsOverlay");
@@ -234,7 +274,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     if (cardId === deps.card.openCardId()) { openCardEvents = events; renderExcerptCount(); }
     // Newest first: events are oldest→newest (by id); show them reversed.
     const frag = document.createDocumentFragment();
-    for (const ev of [...events].reverse()) {
+    for (const ev of shown(events).reverse()) {
       let payload = "";
       try {
         const dk = deps.getDK();
@@ -398,6 +438,25 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     sel.addEventListener("change", () => { void setDiffView(sel.value); });
   }
 
+  // ---- показать: which kind of entry the лента shows ----
+  // Both selects and the two «Вид правок» rows follow one value: a диффвид
+  // control governs nothing when no правки are on screen.
+  async function setFilter(v: string, reload: boolean): Promise<void> {
+    filter = feedFilterOf(v);
+    for (const id of ["feedFilter", "feedFilterFull"]) byId<HTMLSelectElement>(id).value = filter;
+    const showsEdits = feedFilterKeeps("desc_edit", filter);
+    for (const id of ["feedDiffViewRow", "feedDiffViewFullRow"]) byId(id).hidden = !showsEdits;
+    if (!reload) return;
+    const oc = deps.card.openCardId();
+    if (oc) await load(oc);
+    if (!feedOverlay.hidden) await renderFeedGrid();
+  }
+
+  for (const id of ["feedFilter", "feedFilterFull"]) {
+    const sel = byId<HTMLSelectElement>(id);
+    sel.addEventListener("change", () => { void setFilter(sel.value, true); });
+  }
+
   // ---- expanded лента ----
   // The card panel gives the лента ~320px of height; on a long discussion that is
   // a keyhole. Развернуть re-renders the same events full-screen, flowed into
@@ -417,7 +476,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const grid = byId("feedGrid");
     const frag = document.createDocumentFragment();
     // openCardEvents is oldest→newest (by id), so "сначала новое" is the reverse.
-    const ordered = orderFeedEvents(openCardEvents || [], feedOrder());
+    const ordered = orderFeedEvents(shown(openCardEvents || []), feedOrder());
     for (const ev of ordered) {
       let payload = "";
       if (!ev.deleted) {
@@ -690,6 +749,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     setAttachments(atts: AttachmentLike[]): void {
       openCardExcerptAtts = atts.filter((a) => !!a.is_excerpt);
       renderExcerptCount();
+    },
+    resetFilter(): void { void setFilter(state().feedDefault || "all", false); },
+    readBuckets: () => readBucketsOf(filter),
+    // A link INTO the лента — a 🔔 row, a ?comment= deep link — must land on the
+    // entry it names, whatever the reader's default hides.
+    async ensureVisible(type: string): Promise<void> {
+      if (!feedFilterKeeps(type, filter)) await setFilter("all", true);
     },
   };
 }

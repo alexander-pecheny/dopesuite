@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import {
   eventAuthor, replyCountsOf, orderThreadReplies, orderFeedEvents,
   feedOrderOf, diffViewOf, excerptComments, fullDiffSides,
+  feedFilterOf, feedFilterKeeps, readBucketsOf,
 } from "../web/assets/static/dist/timeline.js";
 
 const me = { user_id: 1, username: "ya" };
@@ -72,6 +73,35 @@ test("stored display preferences fall back on anything unrecognized", () => {
   assert.equal(diffViewOf("bogus"), "brief");
   assert.equal(feedOrderOf("old"), "old");
   assert.equal(feedOrderOf(null), "new");
+});
+
+test("feedFilterOf falls back to all on anything unrecognized", () => {
+  assert.equal(feedFilterOf("comments"), "comments");
+  assert.equal(feedFilterOf("edits"), "edits");
+  assert.equal(feedFilterOf("meta"), "meta");
+  assert.equal(feedFilterOf("all"), "all");
+  assert.equal(feedFilterOf(null), "all");
+  assert.equal(feedFilterOf(""), "all");
+  assert.equal(feedFilterOf("жираф"), "all");
+});
+
+test("feedFilterKeeps sorts every event type into exactly one bucket", () => {
+  const types = ["comment", "desc_edit", "label_add", "label_remove", "attach_add", "attach_remove", "attach_replace"];
+  for (const type of types) {
+    assert.equal(feedFilterKeeps(type, "all"), true, type);
+    const buckets = ["comments", "edits", "meta"].filter((f) => feedFilterKeeps(type, f));
+    assert.deepEqual(buckets.length, 1, `${type} landed in ${buckets.join()}`);
+  }
+  assert.equal(feedFilterKeeps("comment", "comments"), true);
+  assert.equal(feedFilterKeeps("desc_edit", "edits"), true);
+  assert.equal(feedFilterKeeps("label_add", "meta"), true);
+});
+
+test("readBucketsOf clears only the bucket the лента showed", () => {
+  assert.deepEqual(readBucketsOf("all"), { content: true, comments: true });
+  assert.deepEqual(readBucketsOf("comments"), { content: false, comments: true });
+  assert.deepEqual(readBucketsOf("edits"), { content: true, comments: false });
+  assert.deepEqual(readBucketsOf("meta"), { content: true, comments: false });
 });
 
 test("excerptComments keeps only выписка-flagged comments", () => {

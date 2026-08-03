@@ -107,6 +107,9 @@ export interface BoardState {
   sizes: Sizes;
   defaultAuthor: string;
   cardTitle: string;
+  // Which kind of лента entry an opened card starts on — the reader's own
+  // choice (users.feed_default, /profile). "" is the default, "all".
+  feedDefault: string;
   timezone: string;
   announceCities: unknown;
   // Which form a session's derived name takes — the reader's own choice, per
@@ -123,6 +126,7 @@ export interface Snapshot {
   sizes?: unknown;
   default_author?: string;
   card_title?: string;
+  feed_default?: string;
   card_labels?: Array<{ card_id: number; label_id: number; session_id?: number | null }>;
   unread?: Record<string, UnreadFlags>;
   lists?: Array<{ id: number; type: string; rank: string; group_id?: number | null; title_enc: string }>;
@@ -320,6 +324,7 @@ export function createUnlock(deps: UnlockDeps): Unlock {
         sizes,
         defaultAuthor: snap.default_author || "",
         cardTitle: snap.card_title || "question",
+        feedDefault: snap.feed_default || "all",
         timezone: snap.timezone || "",
         sessionTitleMode: snap.session_title_mode || "",
         announceCities: snap.announce_cities ?? null,

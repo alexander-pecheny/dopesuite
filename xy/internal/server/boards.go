@@ -238,6 +238,10 @@ type boardSnapshot struct {
 	// users.card_title), delivered like Sizes so the board renders previews the
 	// reader's way straight from the cached snapshot. A card's alias wins over it.
 	CardTitle string `json:"card_title,omitempty"`
+	// FeedDefault is the kind of лента entry an opened card starts on
+	// ("all" / "comments" / "edits" / "meta", users.feed_default), delivered like
+	// Sizes so a card opened offline still obeys the reader's choice.
+	FeedDefault string `json:"feed_default,omitempty"`
 	// Timezone is the caller's IANA zone (users.timezone): the default anchor for
 	// a new session and the first city of its announce set. AnnounceCities is
 	// their saved default set. Both are per-user, delivered like Sizes.
@@ -287,6 +291,7 @@ func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	}
 	snap.DefaultAuthor = prefs.DefaultAuthor.String
 	snap.CardTitle = prefs.CardTitle.String
+	snap.FeedDefault = prefs.FeedDefault.String
 	snap.Timezone = prefs.Timezone.String
 	snap.SessionTitleMode = prefs.SessionTitleMode.String
 

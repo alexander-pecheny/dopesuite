@@ -88,11 +88,13 @@ type meResponse struct {
 	Telegram *string `json:"telegram"`
 	// Display preferences, editable on /profile: the board layout (see
 	// handleSetSizes) and the author name pre-filled into new question cards
-	// (see handleSetDefaultAuthor), and which field a card's list preview
-	// derives its title from (see handleSetCardTitle).
+	// (see handleSetDefaultAuthor), which field a card's list preview
+	// derives its title from (see handleSetCardTitle), and which kind of
+	// timeline entry an opened card's лента shows (see handleSetFeedDefault).
 	Sizes         json.RawMessage `json:"sizes,omitempty"`
 	DefaultAuthor string          `json:"default_author,omitempty"`
 	CardTitle     string          `json:"card_title,omitempty"`
+	FeedDefault   string          `json:"feed_default,omitempty"`
 	// The test-session preferences, and the first-run stamp every page checks.
 	Timezone         string          `json:"timezone,omitempty"`
 	AnnounceCities   json.RawMessage `json:"announce_cities,omitempty"`
@@ -118,6 +120,7 @@ type userPrefs struct {
 	Sizes            sql.NullString
 	DefaultAuthor    sql.NullString
 	CardTitle        sql.NullString
+	FeedDefault      sql.NullString
 	Timezone         sql.NullString
 	AnnounceCities   sql.NullString
 	SessionTitleMode sql.NullString
@@ -127,9 +130,9 @@ type userPrefs struct {
 func loadUserPrefs(ctx context.Context, q rowQuerier, uid int64) (userPrefs, error) {
 	var p userPrefs
 	err := q.QueryRowContext(ctx, `
-select sizes, default_author, card_title, timezone, announce_cities, session_title_mode, onboarded_at
+select sizes, default_author, card_title, feed_default, timezone, announce_cities, session_title_mode, onboarded_at
 from users where id = ?`, uid).
-		Scan(&p.Sizes, &p.DefaultAuthor, &p.CardTitle, &p.Timezone, &p.AnnounceCities, &p.SessionTitleMode, &p.OnboardedAt)
+		Scan(&p.Sizes, &p.DefaultAuthor, &p.CardTitle, &p.FeedDefault, &p.Timezone, &p.AnnounceCities, &p.SessionTitleMode, &p.OnboardedAt)
 	return p, err
 }
 
@@ -151,6 +154,7 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.DefaultAuthor = p.DefaultAuthor.String
 	resp.CardTitle = p.CardTitle.String
+	resp.FeedDefault = p.FeedDefault.String
 	resp.Timezone = p.Timezone.String
 	resp.SessionTitleMode = p.SessionTitleMode.String
 	resp.OnboardedAt = p.OnboardedAt.String
@@ -769,6 +773,40 @@ func (s *server) handleSetCardTitle(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.withWriteTx(r.Context(), "set-card-title", func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `update users set card_title = ?, updated_at = ? where id = ?`,
+			mode, rfc3339(time.Now()), u.UserID)
+		return err
+	})
+	if handleErr(w, err) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// feedDefaults allowlists the values of users.feed_default (see migrateV20):
+// which kind of timeline entry an opened card's лента shows. "" means the
+// default, "all".
+var feedDefaults = map[string]bool{"": true, "all": true, "comments": true, "edits": true, "meta": true}
+
+// handleSetFeedDefault stores which kind of лента entry a card opens on
+// (users.feed_default, see migrateV20).
+func (s *server) handleSetFeedDefault(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		FeedDefault string `json:"feed_default"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	mode := strings.TrimSpace(req.FeedDefault)
+	if !feedDefaults[mode] {
+		httpError(w, http.StatusBadRequest, "bad feed_default")
+		return
+	}
+	err := s.withWriteTx(r.Context(), "set-feed-default", func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `update users set feed_default = ?, updated_at = ? where id = ?`,
 			mode, rfc3339(time.Now()), u.UserID)
 		return err
 	})

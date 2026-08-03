@@ -22,6 +22,7 @@ page title="Профиль · xy" kind="sheet" scripts="dist/profile.js"
     button kind="ghost" id="sizesBtn" "Настройка ширины / высоты"
     button kind="ghost" id="authorBtn" "Автор по умолчанию"
     button kind="ghost" id="cardTitleBtn" "Заголовок карточки"
+    button kind="ghost" id="feedDefaultBtn" "Лента"
     button kind="ghost" id="tzBtn" "Часовой пояс и города"
     button kind="ghost" href="/profile/tokens" "API-токены"
     button kind="ghost" id="logoutBtn" "Выйти"
@@ -77,6 +78,20 @@ page title="Профиль · xy" kind="sheet" scripts="dist/profile.js"
         button submit "Сохранить"
         button kind="ghost" id="tzCancel" "Отмена"
     message id="tzMessage"
+
+  -- лента dialog: which kind of entry an opened card's лента shows
+  modal id="feedDefaultOverlay" label="Лента" title="Лента"
+    form id="feedDefaultForm" dir="col"
+      fieldset
+        radio name="feedDefault" value="all" "Всё"
+        radio name="feedDefault" value="comments" "Комментарии"
+        radio name="feedDefault" value="edits" "Правки"
+        radio name="feedDefault" value="meta" "Метки и вложения"
+      hint "С чего начинается лента открытой карточки. В самой карточке это можно переключить — до её закрытия."
+      row gap="sm" wrap
+        button submit "Сохранить"
+        button kind="ghost" id="feedDefaultCancel" "Отмена"
+    message id="feedDefaultMessage"
 
   -- card-title dialog: which field a card shows in the board list
   modal id="cardTitleOverlay" label="Заголовок карточки" title="Заголовок карточки"
