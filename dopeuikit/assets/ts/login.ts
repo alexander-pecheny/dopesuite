@@ -6,7 +6,7 @@
 // Registration is not a separate flow: the telegram button creates the account.
 // The flow decisions live in login-model.ts; this file only binds the DOM.
 
-import { claimOutcome, errorMessage, pollTelegram, tgStartView } from "./login-model";
+import { claimOutcome, errorMessage, loginMethods, pollTelegram, tgStartView } from "./login-model";
 
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -62,6 +62,17 @@ async function bootstrap(): Promise<void> {
     }
   } catch {
     // not logged in — fine
+  }
+  let methods = { telegram: true };
+  try {
+    methods = loginMethods((await fetchJSON("/api/auth/methods")) as { telegram?: boolean });
+  } catch {
+    // older server, or none of our business — leave both ways in place
+  }
+  if (!methods.telegram) {
+    tgLoginBtn.hidden = true;
+    showStep("password");
+    return;
   }
   showStep("method");
 }

@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"pecheny.me/dopecore/buildinfo"
 	"pecheny.me/dopecore/tgbot"
 )
 
@@ -47,7 +48,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	log.Println("xy telegram bot started")
+	log.Printf("xy telegram bot %s started", buildinfo.Version())
 	if err := client.Run(ctx, handler(bridge)); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("bot: %v", err)
 	}

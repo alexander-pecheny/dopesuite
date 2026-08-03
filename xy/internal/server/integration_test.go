@@ -16,6 +16,9 @@ import (
 // server with the full route set.
 func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	t.Helper()
+	// These tests register through the telegram handshake, which an instance
+	// with no bot of its own now refuses.
+	t.Setenv("XY_BOT_SECRET", "test-secret")
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := openDB(dbPath)
 	if err != nil {
