@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {claimOutcome, pollTelegram, tgStartView} from "../assets/dist/esm/login-model.js";
+import {claimOutcome, loginMethods, pollTelegram, tgStartView} from "../assets/dist/esm/login-model.js";
 
 test("tgStartView builds the deep link only when the bot is known", () => {
   const full = tgStartView({code: "AB CD", bot_username: "dope_bot"});
@@ -56,4 +56,11 @@ test("claim outcomes map every server status", () => {
   assert.equal(claimOutcome("username_taken").kind, "username_taken");
   assert.equal(claimOutcome(undefined).kind, "error");
   assert.equal(claimOutcome("garbage").kind, "error");
+});
+
+test("telegram login is offered unless the server denies it", () => {
+  assert.equal(loginMethods({telegram: false}).telegram, false);
+  assert.equal(loginMethods({telegram: true}).telegram, true);
+  assert.equal(loginMethods({}).telegram, true);
+  assert.equal(loginMethods(null).telegram, true);
 });

@@ -1,0 +1,69 @@
+name: release xy
+
+# Releases are cut by pushing a CalVer tag, e.g. `xy/2026.08.03` (`.2` for a
+# second release the same day). Nothing runs on ordinary pushes — see
+# docs/adr/0003-releases-are-built-on-github.md.
+on:
+  push:
+    tags: ["xy/*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: xy/go.mod
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install just
+        run: curl -fsSL https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+
+      # typst is embedded as wasm and the 30 MB artifact is not in git, so every
+      # release compiles it. ~5 minutes, and the only step that needs Rust.
+      - name: Build typst.wasm
+        run: |
+          rustup target add wasm32-wasip1
+          cd xy && just build-wasm
+
+      - name: Test
+        run: cd xy && just test
+
+      - name: Build
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          for arch in amd64 arm64; do
+            out="dist/xy-${VERSION#xy/}-linux-$arch"
+            mkdir -p "$out"
+            for pkg in xy-server telegram-bot; do
+              CGO_ENABLED=0 GOOS=linux GOARCH=$arch go -C xy build \
+                -trimpath -ldflags "-s -w -X pecheny.me/dopecore/buildinfo.stamped=$VERSION" \
+                -o "../$out/$pkg" "./cmd/$pkg"
+            done
+            cp LICENSE NOTICE "$out/"
+            tar -czf "$out.tar.gz" -C dist "$(basename "$out")"
+          done
+          cd dist && sha256sum *.tar.gz > SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prev=$(git describe --tags --abbrev=0 --match 'xy/*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          { if [ -n "$prev" ]; then git log --pretty='- %s' "$prev..${GITHUB_REF_NAME}" -- xy dopeuikit dopecore
+            else git log --pretty='- %s' -20 -- xy dopeuikit dopecore
+            fi
+            echo; echo "Установка и обновление: [xy/docs/selfhosting.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/xy/docs/selfhosting.md)"
+          } > notes.md
+          gh release create "${GITHUB_REF_NAME}" dist/*.tar.gz dist/SHA256SUMS \
+            --title "${GITHUB_REF_NAME}" --notes-file notes.md

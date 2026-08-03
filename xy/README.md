@@ -22,6 +22,13 @@ list is readable without unlocking every board (see the trust model in `AGENTS.m
 See [`AGENTS.md`](AGENTS.md) for the codebase map, the crypto/trust model, and
 conventions.
 
+## Run your own
+
+Releases are prebuilt binaries on
+[GitHub](https://github.com/alexander-pecheny/dopesuite/releases); the step-by-step
+install (in Russian, for the people who asked for it) is
+[`docs/selfhosting.md`](docs/selfhosting.md).
+
 ## Develop
 
 ```sh

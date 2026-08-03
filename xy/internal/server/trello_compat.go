@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -243,11 +242,7 @@ where c.board_id = ? and c.deleted_at is null`, boardID)
 }
 
 func trelloBoardURL(bid int64) string {
-	base := strings.TrimRight(os.Getenv("XY_PUBLIC_URL"), "/")
-	if base == "" {
-		base = "https://xy.pecheny.me"
-	}
-	return base + "/board/" + idStr(bid)
+	return publicURL() + "/board/" + idStr(bid)
 }
 
 // ---- GET /1/boards/{id}/lists ----

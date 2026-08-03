@@ -24,6 +24,13 @@ export function tgStartView(res: { code?: string; bot_username?: string }): TgSt
   };
 }
 
+// /api/auth/methods contract: which ways in this instance offers. An instance
+// that runs no telegram bot says so; anything else — an older server, a failed
+// request — leaves the button up, because hiding it there would be a regression.
+export function loginMethods(res: { telegram?: boolean } | null | undefined): { telegram: boolean } {
+  return { telegram: res?.telegram !== false };
+}
+
 export type PollOutcome =
   | { kind: "redirect" }
   | { kind: "step"; step: "username" }

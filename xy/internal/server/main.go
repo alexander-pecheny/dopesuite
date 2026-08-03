@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"pecheny.me/dopecore/buildinfo"
 	"pecheny.me/dopecore/session"
 	"pecheny.me/dopecore/webassets"
 )
@@ -16,23 +18,33 @@ import (
 // its own env-var name for the production switch.
 func init() { session.ProdEnvVar = "XY_ENV" }
 
-// Main is the server entry point, invoked by cmd/xy-server. The `invite`
-// subcommand mints a one-shot registration invite and prints it.
+// Main is the server entry point, invoked by cmd/xy-server. With no argument it
+// serves; the subcommands are maintenance tools that run against an existing DB.
 func Main() {
-	if len(os.Args) > 1 && os.Args[1] == "invite" {
-		requireExistingDB()
-		runMintInvite(os.Args[2:])
+	if len(os.Args) > 1 {
+		switch cmd := os.Args[1]; cmd {
+		case "version":
+			fmt.Println(buildinfo.Version())
+		case "invite":
+			requireExistingDB()
+			runMintInvite(os.Args[2:])
+		case "adduser":
+			requireExistingDB()
+			runAddUser(os.Args[2:])
+		case "backup":
+			requireExistingDB()
+			runBackup(os.Args[2:])
+		case "gc":
+			requireExistingDB()
+			runGC()
+		default:
+			log.Fatalf("unknown command %q (invite, adduser, backup, gc, version)", cmd)
+		}
 		return
 	}
-	if len(os.Args) > 1 && os.Args[1] == "adduser" {
-		requireExistingDB()
-		runAddUser(os.Args[2:])
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "gc" {
-		requireExistingDB()
-		runGC()
-		return
+
+	if err := checkPublicURL(session.SecureCookies(), os.Getenv("XY_PUBLIC_URL")); err != nil {
+		log.Fatal(err)
 	}
 
 	srv, err := newServer()
@@ -73,6 +85,7 @@ func Main() {
 		"static/favicon.ico", "image/x-icon", "public, max-age=86400", nil))
 
 	// ---- auth API ----
+	mux.HandleFunc("GET /api/auth/methods", srv.handleLoginMethods)
 	mux.HandleFunc("POST /api/auth/tg/start", srv.handleTgStart)
 	mux.HandleFunc("GET /api/auth/tg/status", srv.handleTgStatus)
 	mux.HandleFunc("POST /api/auth/tg/claim", srv.handleTgClaim)
@@ -205,7 +218,7 @@ func Main() {
 	srv.warmTypst()
 	go srv.reapLoop()
 
-	log.Printf("xy serving on %s (assets from %s)", addr, srv.assets.Mode)
+	log.Printf("xy %s serving on %s (assets from %s)", buildinfo.Version(), addr, srv.assets.Mode)
 
 	httpSrv := &http.Server{
 		Handler:           webassets.Gzip(mux),

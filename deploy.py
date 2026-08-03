@@ -197,13 +197,22 @@ def detect_goarch(host: str) -> str:
         raise SystemExit(f"Unsupported remote architecture: {machine}")
 
 
+def describe_build() -> str:
+    completed = subprocess.run(
+        ["git", "describe", "--tags", "--always", "--dirty"],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
+    return completed.stdout.strip() or "dev"
+
+
 def build_binary(target: Target, goarch: str) -> Path:
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     output = DIST_DIR / target.binary
     env = os.environ.copy()
     env.update({"CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": goarch})
+    ldflags = f"-s -w -X pecheny.me/dopecore/buildinfo.stamped={describe_build()}"
     run(
-        ["go", "build", "-trimpath", "-ldflags", "-s -w", "-o", output, target.package],
+        ["go", "build", "-trimpath", "-ldflags", ldflags, "-o", output, target.package],
         cwd=target.module,
         env=env,
     )

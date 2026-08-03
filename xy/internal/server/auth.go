@@ -180,19 +180,29 @@ type tgStartResponse struct {
 	BotUsername string `json:"bot_username,omitempty"`
 }
 
-// botUsername is the login bot's @handle, used to build the t.me deep link the
-// login page offers. XY_BOT_NAME overrides the default.
-func botUsername() string {
-	if v := strings.TrimSpace(os.Getenv("XY_BOT_NAME")); v != "" {
-		return v
-	}
-	return "xy_pecheny_bot"
+// telegramConfigured reports whether this instance has a bot of its own: without
+// the shared secret the bot cannot talk to the server, so telegram is not a way in.
+func telegramConfigured() bool { return strings.TrimSpace(os.Getenv("XY_BOT_SECRET")) != "" }
+
+// handleLoginMethods tells the login page which ways in to offer, so a bot-less
+// instance stops advertising a telegram login that can never complete.
+func (s *server) handleLoginMethods(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]bool{"telegram": telegramConfigured()})
 }
+
+// botUsername is the login bot's @handle, used to build the t.me deep link the
+// login page offers. Empty on an instance that runs no bot of its own — the page
+// then shows the code without a link, rather than a link to someone else's bot.
+func botUsername() string { return strings.TrimSpace(os.Getenv("XY_BOT_NAME")) }
 
 // handleTgStart mints a bot code for the telegram handshake. The visitor sends it
 // to the bot; handleTgStatus then resolves who they are — no username needed up
 // front (that comes later, and only for a brand-new telegram account).
 func (s *server) handleTgStart(w http.ResponseWriter, r *http.Request) {
+	if !telegramConfigured() {
+		httpError(w, http.StatusServiceUnavailable, "telegram login is not configured")
+		return
+	}
 	var out tgStartResponse
 	now := time.Now()
 	err := s.withWriteTx(r.Context(), "tg-start", func(ctx context.Context, tx *sql.Tx) error {
@@ -873,7 +883,7 @@ func (s *server) handleTelegramLogin(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	writeJSON(w, tgbridge.Response{Message: "Пришлите код со страницы входа. Если его нет — откройте https://xy.pecheny.me/login и нажмите «Войти через телеграм»."})
+	writeJSON(w, tgbridge.Response{Message: "Пришлите код со страницы входа. Если его нет — откройте " + publicURL() + "/login и нажмите «Войти через телеграм»."})
 }
 
 func nullStr(s string) sql.NullString {

@@ -25,6 +25,9 @@ func New(dir string) (*Store, error) {
 	return &Store{root: dir}, nil
 }
 
+// Root is the directory holding the tree, for callers that back it up.
+func (s *Store) Root() string { return s.root }
+
 func newRef() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
