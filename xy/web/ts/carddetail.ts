@@ -109,6 +109,9 @@ export interface ReadMarkerSeam {
 export interface TimelineSeam {
   load(cardId: number): Promise<void>;
   events(): CardEvent[];
+  resetFilter(): void;
+  readBuckets(): { content: boolean; comments: boolean };
+  ensureVisible(type: string): Promise<void>;
 }
 
 export interface CardDetailDeps {
@@ -163,7 +166,7 @@ export interface CardDetail {
   closeCard(): void;
   openCardId(): number | null;
   maybeOpenDeepLink(): void;
-  highlightComment(eventId: number): void;
+  highlightComment(eventId: number): Promise<void>;
   copyCommentLink(eventId: number): Promise<void>;
   // The clipboard write, with its insecure-context fallback — the Тесты panel
   // copies invite and tester lines through the same path.
@@ -965,13 +968,14 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (!card) return;
     const commentId = Number(params.get("comment")) || null;
     history.replaceState(null, "", location.pathname);
-    openCard(card).then(() => { if (commentId) highlightComment(commentId); }).catch(() => {});
+    openCard(card).then(() => { if (commentId) void highlightComment(commentId); }).catch(() => {});
   }
 
-  // highlightComment scrolls a comment into view and flashes it. The timeline is
-  // rendered newest-first inside the card detail; the event node carries id
-  // "tlev-{eventId}".
-  function highlightComment(eventId: number): void {
+  // highlightComment scrolls a comment into view and flashes it. The event node
+  // carries id "tlev-{eventId}" — and only exists if the лента's filter shows
+  // comments at all, which is what ensureVisible settles first.
+  async function highlightComment(eventId: number): Promise<void> {
+    await deps.timeline.ensureVisible("comment");
     const node = document.getElementById("tlev-" + eventId);
     if (!node) return;
     node.scrollIntoView({ block: "center" });
@@ -1028,6 +1032,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // sequentially, to cut the total round-trip.
     // A card just created has nothing to preview, so it opens on the editor.
     setCardView(freshCard ? lastEditView : "preview");
+    // Before the load: a card opens on the reader's own лента default, whatever
+    // the previously open card was narrowed to.
+    deps.timeline.resetFilter();
     await Promise.all([deps.attachments.load(card.id), deps.timeline.load(card.id), populateMoveBoards()]);
     armReadTracking(card);
   }
@@ -1043,9 +1050,11 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // armReadTracking shows/clears the in-card unread dots and arms the read
   // triggers. Both content edits (desc_edit) and comments are recorded as entries
   // in the timeline (лента) — that's where a reader actually sees *what* changed —
-  // so viewing the timeline clears whichever buckets are unread. Content also
-  // clears after a 10s dwell on the card body itself (a secondary trigger, for the
-  // reader who studies the question text without scrolling down to the лента).
+  // so viewing the timeline clears whichever buckets are unread — but only those
+  // the лента's filter actually put on screen. Content also clears after a 10s
+  // dwell on the card body itself (a secondary trigger, for the reader who studies
+  // the question text without scrolling down to the лента) — deliberately NOT
+  // filter-aware: that dwell is on the new text, which is the edit's result.
   function armReadTracking(card: BoardCard): void {
     const u = state().unread[card.id] || {};
     byId("contentUnreadDot").hidden = !u.content;
@@ -1066,7 +1075,8 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
           if (entry.isIntersecting && entry.intersectionRatio > 0) {
             if (!dwellTimer) {
               dwellTimer = setTimeout(() => {
-                if (openCardId === card.id) void markCardRead(card.id, { content: !!u.content, comments: !!u.comments });
+                const seen = deps.timeline.readBuckets();
+                if (openCardId === card.id) void markCardRead(card.id, { content: !!u.content && seen.content, comments: !!u.comments && seen.comments });
               }, 2000);
             }
           } else if (dwellTimer) {

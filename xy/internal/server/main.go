@@ -85,6 +85,7 @@ func Main() {
 	mux.HandleFunc("POST /api/auth/sizes", srv.handleSetSizes)
 	mux.HandleFunc("POST /api/auth/default-author", srv.handleSetDefaultAuthor)
 	mux.HandleFunc("POST /api/auth/card-title", srv.handleSetCardTitle)
+	mux.HandleFunc("POST /api/auth/feed-default", srv.handleSetFeedDefault)
 	mux.HandleFunc("POST /api/auth/profile-defaults", srv.handleSetProfileDefaults)
 	mux.HandleFunc("POST /api/auth/announce-cities", srv.handleSetAnnounceCities)
 

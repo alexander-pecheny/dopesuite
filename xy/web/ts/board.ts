@@ -74,7 +74,7 @@ const titleNode = byId("boardTitle");
 // members roster boardmembers.js merges onto it.
 type LiveState = BoardState & MembersState;
 
-const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", timezone: "", announceCities: null, sessionTitleMode: "" };
+const state: LiveState = { role: "editor", name: "", lists: [], groups: [], cards: [], labels: [], sessions: [], cardLabels: [], cardSessions: [], tourTesters: [], members: [], memberNames: {}, me: null, unread: {}, sizes: { ...xySizes.DEFAULT }, defaultAuthor: "", cardTitle: "question", feedDefault: "all", timezone: "", announceCities: null, sessionTitleMode: "" };
 let dk: DataKey | null = null;
 function mustDK(): DataKey {
   if (!dk) throw new Error("нет ключа доски");
@@ -417,7 +417,7 @@ async function openNotifPanel(): Promise<void> {
     row.append(bodyWrap);
     row.addEventListener("click", () => {
       closeNotifPanel();
-      void cardDetail.openCard(card).then(() => { if (ev.type === "comment") cardDetail.highlightComment(ev.id); });
+      void cardDetail.openCard(card).then(() => { if (ev.type === "comment") void cardDetail.highlightComment(ev.id); });
     });
     body.append(row);
   }
@@ -2545,6 +2545,9 @@ const cardDetail = createCardDetail({
   timeline: {
     load: (cardId) => timeline.load(cardId),
     events: () => timeline.events(),
+    resetFilter: () => timeline.resetFilter(),
+    readBuckets: () => timeline.readBuckets(),
+    ensureVisible: (type) => timeline.ensureVisible(type),
   },
 });
 timeline = createTimeline({

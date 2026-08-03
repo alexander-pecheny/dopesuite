@@ -148,13 +148,22 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       button small id="moveBtn" "Переместить"
 
     label "Лента " (unreaddot id="commentsUnreadDot" title="Непрочитанные комментарии")
-    -- вид правок controls how desc_edit events render: краткий shows only the
-    -- changed words with a little context, подробный the whole before/after.
+    -- показать narrows the лента to one kind of entry, only until the card
+    -- closes; вид правок governs how a desc_edit renders, so it goes away in the
+    -- modes that show none.
     row gap="sm" align="center" wrap
-      label for="feedDiffView" "Вид правок"
-      selectfield id="feedDiffView" compact title="Вид правок"
-        option value="brief" "краткий"
-        option value="full" "подробный"
+      row gap="sm" align="center"
+        label for="feedFilter" "Показать"
+        selectfield id="feedFilter" compact title="Что показывать в ленте"
+          option value="all" "всё"
+          option value="comments" "комментарии"
+          option value="edits" "правки"
+          option value="meta" "метки и вложения"
+      row id="feedDiffViewRow" gap="sm" align="center"
+        label for="feedDiffView" "Вид правок"
+        selectfield id="feedDiffView" compact title="Вид правок"
+          option value="brief" "краткий"
+          option value="full" "подробный"
       button small kind="ghost" icon="maximize-2" id="feedExpand" title="Развернуть ленту на весь экран" "Развернуть"
     mount id="timeline" kind="timeline"
     form id="commentForm" dir="col"
@@ -310,15 +319,22 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
 
   -- expanded лента: the same feed on the whole screen, flowed into columns so a
   -- long discussion can be read without scrolling a 320px-tall panel
-  -- No «Лента» title: after «Развернуть» it is obvious where you are. Both
+  -- No «Лента» title: after «Развернуть» it is obvious where you are. The
   -- labelled selects sit on ONE line (desktop has the room, and a second row
   -- would only eat into the feed); on a phone they shrink and wrap.
   docoverlay id="feedOverlay" kind="doc" variant="feed" label="Лента"
     headrow
       headactions
         -- each label+select is one nowrap unit, so when the row wraps on a phone
-        -- the label never orphans from its select (two clean pairs, one each row)
+        -- the label never orphans from its select (clean pairs, one each row)
         row gap="sm" align="center"
+          label for="feedFilterFull" "Показать"
+          selectfield id="feedFilterFull" compact title="Что показывать в ленте"
+            option value="all" "всё"
+            option value="comments" "комментарии"
+            option value="edits" "правки"
+            option value="meta" "метки и вложения"
+        row id="feedDiffViewFullRow" gap="sm" align="center"
           label for="feedDiffViewFull" "Вид правок"
           selectfield id="feedDiffViewFull" compact title="Вид правок"
             option value="brief" "краткий"

@@ -7,6 +7,7 @@ export interface AuthMe {
   telegram?: string | null;
   default_author?: string | null;
   card_title?: string | null;
+  feed_default?: string | null;
   sizes?: unknown;
   timezone?: string | null;
   announce_cities?: unknown;

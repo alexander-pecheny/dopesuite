@@ -1,5 +1,6 @@
-// profile.ts — username management, logout, and the three settings dialogs:
-// change password, board sizes (with a pseudo-board preview), default author.
+// profile.ts — username management, logout, and the settings dialogs: change
+// password, board sizes (with a pseudo-board preview), default author, card
+// title, timezone, and which kind of entry an opened card's лента shows.
 import { xyApp, xySizes } from "./app.js";
 import { COMMON_CITIES, guessZone } from "./sessions.js";
 import { autocomplete, townChoices, zoneChoices } from "./suggest.js";
@@ -44,6 +45,7 @@ function wireModal(overlayId: string, openBtnId: string, cancelBtnId: string | n
 let sizes: Sizes = { ...xySizes.DEFAULT };
 let defaultAuthor = "";
 let cardTitle = "question"; // which field a card's board preview shows
+let feedDefault = "all"; // which kind of entry an opened card's лента shows
 let timezone = "";
 let announceCities: Array<{ zone: string; name: string }> = [];
 let sessionTitleMode = "date-title";
@@ -57,6 +59,7 @@ async function boot(): Promise<void> {
   sizes = xySizes.sanitize(m.sizes);
   defaultAuthor = m.default_author || "";
   cardTitle = m.card_title || "question";
+  feedDefault = m.feed_default || "all";
   timezone = m.timezone || "";
   announceCities = Array.isArray(m.announce_cities) ? (m.announce_cities as Array<{ zone: string; name: string }>) : [];
   sessionTitleMode = m.session_title_mode || "date-title";
@@ -308,6 +311,30 @@ cardTitleForm.addEventListener("submit", async (e) => {
     cardTitleModal.close();
   } catch (err) {
     setText(cardTitleMessage, errMsg(err));
+  }
+});
+
+// ---- лента (which kind of entry an opened card's лента shows) ----
+const feedDefaultForm = byId<HTMLFormElement>("feedDefaultForm");
+const feedDefaultMessage = byId("feedDefaultMessage");
+const feedDefaultRadios = () => feedDefaultForm.querySelectorAll<HTMLInputElement>('input[name="feedDefault"]');
+const feedDefaultModal = wireModal("feedDefaultOverlay", "feedDefaultBtn", "feedDefaultCancel", async () => {
+  await booted;
+  for (const r of feedDefaultRadios()) r.checked = r.value === feedDefault;
+  setText(feedDefaultMessage, "");
+});
+
+feedDefaultForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setText(feedDefaultMessage, "");
+  const picked = [...feedDefaultRadios()].find((r) => r.checked);
+  const v = picked ? picked.value : "all";
+  try {
+    await jpost("/api/auth/feed-default", { feed_default: v });
+    feedDefault = v;
+    feedDefaultModal.close();
+  } catch (err) {
+    setText(feedDefaultMessage, errMsg(err));
   }
 });
 

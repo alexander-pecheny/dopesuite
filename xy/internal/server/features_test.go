@@ -607,6 +607,40 @@ func TestCardAliasRoundTrip(t *testing.T) {
 	}
 }
 
+// TestFeedDefaultPreference covers users.feed_default (migrateV20): which kind
+// of лента entry an opened card starts on. Like card_title it reaches the client
+// through both /api/auth/me and the board snapshot — the snapshot is what an
+// offline card open reads.
+func TestFeedDefaultPreference(t *testing.T) {
+	c, boardID, _ := boardWithList(t)
+
+	snap := getSnapshotFor(t, c, boardID)
+	if snap.FeedDefault != "" {
+		t.Fatalf("feed_default should start unset, got %q", snap.FeedDefault)
+	}
+
+	mustStatus(t, c.do("POST", "/api/auth/feed-default", map[string]string{"feed_default": "comments"}), 204)
+
+	snap = getSnapshotFor(t, c, boardID)
+	if snap.FeedDefault != "comments" {
+		t.Fatalf("snapshot feed_default = %q, want comments", snap.FeedDefault)
+	}
+	resp := c.do("GET", "/api/auth/me", nil)
+	mustStatus(t, resp, 200)
+	var me meResponse
+	c.decode(resp, &me)
+	if me.FeedDefault != "comments" {
+		t.Fatalf("me feed_default = %q, want comments", me.FeedDefault)
+	}
+
+	mustStatus(t, c.do("POST", "/api/auth/feed-default", map[string]string{"feed_default": "meta"}), 204)
+	mustStatus(t, c.do("POST", "/api/auth/feed-default", map[string]string{"feed_default": "жираф"}), 400)
+	snap = getSnapshotFor(t, c, boardID)
+	if snap.FeedDefault != "meta" {
+		t.Fatalf("feed_default = %q, want meta", snap.FeedDefault)
+	}
+}
+
 // TestCardTitlePreference covers users.card_title (migrateV13): the per-user
 // choice of which field a card's board preview shows. It reaches the client
 // through both /api/auth/me and the board snapshot.
