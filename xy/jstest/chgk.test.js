@@ -648,3 +648,98 @@ test("an imported «!!АвторкаМария» is recovered rather than shown 
   assert.equal(f.authorLabel, "Авторка");
   assert.deepEqual(f.authors, ["Мария"]);
 });
+
+// ---- hidden comments (chgksuite 1.4.0b1) ----
+// (hidden-comment …) is an editor's note that reaches no rendering. Only Текст
+// (the source verbatim) and Поля (whose fields are raw 4s) show one.
+const { previewText, versionName, setVersionName } = xyChgk;
+
+test("a hidden comment reaches no rendering", () => {
+  assert.equal(screenText("Текст (hidden-comment проверить у Ани) дальше."), "Текст дальше.");
+  assert.deepEqual(parse4sElem("Ответ\n(hidden-comment записка)\nещё"), [["", "Ответ\nещё"]]);
+});
+
+test("an unterminated hidden comment stays literal, hiding nothing by accident", () => {
+  const s = "Текст (hidden-comment забыл скобку";
+  assert.equal(parse4sElem(s).map((p) => p[1]).join(""), s);
+});
+
+test("a hidden comment swallows the directives inside it", () => {
+  assert.equal(screenText("Текст (hidden-comment см. (img foo.jpg)) дальше."), "Текст дальше.");
+});
+
+test("a card on the board shows no hidden comment in its title", () => {
+  assert.equal(previewText("question", "? Вопрос (hidden-comment спросить Аню)?", null), "Вопрос?");
+});
+
+// ---- version names ----
+test("a version is named by a hidden comment, and the name is no part of its text", () => {
+  const q = "(hidden-comment xy-version: полегче)\nЛёгкая?\n(PAGEBREAK)\nТрудная?";
+  assert.equal(versionName(q, 0), "полегче");
+  assert.equal(versionText(q, 0), "Лёгкая?");
+  assert.equal(versionName(q, 1), null);
+});
+
+test("a note is not a name, and stays where the editor typed it", () => {
+  const q = "Вопрос? (hidden-comment спросить Аню)";
+  assert.equal(versionName(q, 0), null);
+  assert.equal(versionText(q, 0), "Вопрос? (hidden-comment спросить Аню)");
+});
+
+test("naming a version writes the name as the segment's first line", () => {
+  const q = "Первая?\n(PAGEBREAK)\nВторая?";
+  const named = setVersionName(q, 1, "полегче");
+  assert.equal(named, "Первая?\n(PAGEBREAK)\n(hidden-comment xy-version: полегче)\nВторая?");
+  assert.equal(versionText(named, 0), "Первая?");
+  assert.equal(versionText(named, 1), "Вторая?");
+});
+
+test("an empty name clears it", () => {
+  const named = setVersionName("Первая?", 0, "полегче");
+  assert.equal(setVersionName(named, 0, ""), "Первая?");
+});
+
+test("a name typed mid-text is canonicalised to the top on save", () => {
+  const q = setVersion("Первая?", 0, "Переписанная? (hidden-comment xy-version: полегче)");
+  assert.equal(q, "(hidden-comment xy-version: полегче)\nПереписанная?");
+});
+
+test("editing a version keeps the name it already had", () => {
+  const q = "(hidden-comment xy-version: полегче)\nПервая?";
+  assert.equal(setVersion(q, 0, "Переписанная?"), "(hidden-comment xy-version: полегче)\nПереписанная?");
+});
+
+test("a cloned version is unnamed — two tabs reading «полегче» tell you nothing", () => {
+  const r = addVersion("(hidden-comment xy-version: полегче)\nПервая?", 0);
+  assert.equal(versionName(r.question, 0), "полегче");
+  assert.equal(versionName(r.question, 1), null);
+  assert.equal(versionText(r.question, 1), "Первая?");
+});
+
+test("promoting a version carries its name to the front with it", () => {
+  const q = "А?\n(PAGEBREAK)\n(hidden-comment xy-version: полегче)\nБ?";
+  assert.equal(versionName(promoteVersion(q, 1).question, 0), "полегче");
+});
+
+test("a name reaches no tester", () => {
+  const desc = "? (hidden-comment xy-version: полегче)\nВопрос?\n! Ответ";
+  assert.equal(copyTargets(desc, 5, 0)[0].text, "Вопрос 5. Вопрос?");
+});
+
+test("a name cannot break out of its own directive", () => {
+  const q = setVersionName("Первая?", 0, "смайл :) и\nперенос");
+  assert.equal(versionName(q, 0), "смайл : и перенос");
+  assert.equal(versionText(q, 0), "Первая?");
+});
+
+test("a second name is dropped where the first one wins", () => {
+  const q = "(hidden-comment xy-version: полегче)\n(hidden-comment xy-version: посложнее)\nВопрос?";
+  assert.equal(versionName(q, 0), "полегче");
+  assert.equal(versionText(q, 0), "Вопрос?");
+  assert.equal(setVersion(q, 0, versionText(q, 0)), "(hidden-comment xy-version: полегче)\nВопрос?");
+});
+
+test("a раздатка carries no hidden comment to the print", () => {
+  const desc = "? [Раздаточный материал: текст (hidden-comment вырезать)] Вопрос?\n! Ответ";
+  assert.deepEqual(xyChgk.handoutForCard(desc), { kind: "text", text: "текст" });
+});

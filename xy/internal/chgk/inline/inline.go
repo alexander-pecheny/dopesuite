@@ -14,12 +14,13 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 // run is one inline element of 4s markup (port of chgksuite _parse_4s_elem /
 // xy chgk.js parse4sElem). Kind is "" for plain text, or one of italic/bold/
 // underline/italicbold/boldunderline/italicboldunderline/strike/sc/img/screen/
-// linebreak/pagebreak/hyperlink.
+// linebreak/pagebreak/hyperlink/hidden-comment.
 type Run struct {
 	Kind      string
 	Text      string
@@ -91,7 +92,39 @@ func HTTPURLSpans(s string) [][2]int {
 }
 
 func isSpace(r rune) bool {
-	return r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '\f' || r == '\v'
+	return unicode.IsSpace(r)
+}
+
+const hiddenComment = "(hidden-comment"
+
+// startsHiddenComment: the keyword must end the bracket or be followed by space,
+// so a question about a "(hidden-commentary)" is not swallowed as a directive.
+func startsHiddenComment(r []rune, i int) bool {
+	if !hasPrefixAt(r, i, hiddenComment) {
+		return false
+	}
+	j := i + len(hiddenComment)
+	return j >= len(r) || r[j] == ')' || isSpace(r[j])
+}
+
+// dropHiddenComments removes hidden-comment runs and welds the plain text back
+// together, so the space the directive took with it is not counted twice.
+func dropHiddenComments(parts []Run) []Run {
+	var result []Run
+	justDropped := false
+	for _, p := range parts {
+		if p.Kind == "hidden-comment" {
+			justDropped = true
+			continue
+		}
+		if justDropped && p.Kind == "" && len(result) > 0 && result[len(result)-1].Kind == "" {
+			result[len(result)-1].Text += p.Text
+		} else {
+			result = append(result, p)
+		}
+		justDropped = false
+	}
+	return result
 }
 
 func hasPrefixAt(r []rune, i int, p string) bool {
@@ -157,8 +190,20 @@ func ProcessEsc(s string) string {
 	return s
 }
 
-// parse4sElem tokenizes a 4s inline string into runs.
+// Parse4sElem tokenizes a 4s inline string into runs, dropping hidden comments —
+// what every exporter wants, since a hidden comment reaches no rendering.
 func Parse4sElem(s string) []Run {
+	return dropHiddenComments(tokenize(s))
+}
+
+// Parse4sElemKeep is the same tokenizer with the hidden comments left in, as
+// Kind "hidden-comment" runs carrying their payload (chgksuite's
+// keep_hidden_comments=True): for a caller reading them as directives.
+func Parse4sElemKeep(s string) []Run {
+	return tokenize(s)
+}
+
+func tokenize(s string) []Run {
 	s = strings.ReplaceAll(s, "\\_", underscorePlaceholder)
 	s = strings.ReplaceAll(s, "\\~", tildePlaceholder)
 
@@ -190,6 +235,7 @@ func Parse4sElem(s string) []Run {
 
 	r := []rune(s)
 	var topart []int
+	hiddenStarts := map[int]bool{}
 	i := 0
 	for i < len(r) {
 		if r[i] == '_' || r[i] == '~' {
@@ -217,6 +263,21 @@ func Parse4sElem(s string) []Run {
 			topart = append(topart, i)
 			if close := findMatchingBracket(r, i); close != -1 {
 				topart = append(topart, close+1)
+				i = close
+			}
+		}
+		if startsHiddenComment(r, i) {
+			// Unterminated, it stays literal: eating the rest of the field would
+			// hide more than the editor meant to hide.
+			if close := findMatchingBracket(r, i); close != -1 {
+				start, end := i, close+1
+				if start > 0 && isSpace(r[start-1]) {
+					start--
+				} else if end < len(r) && isSpace(r[end]) {
+					end++
+				}
+				hiddenStarts[start] = true
+				topart = append(topart, start, end)
 				i = close
 			}
 		}
@@ -250,15 +311,21 @@ func Parse4sElem(s string) []Run {
 
 	sort.Ints(topart)
 	segs := partition(r, topart)
+	starts := append([]int{0}, topart...)
 	var parts []Run
-	for _, seg := range segs {
+	for k, seg := range segs {
 		text := strings.ReplaceAll(seg, "敥", "")
-		parts = append(parts, Run{Kind: "", Text: text})
+		parts = append(parts, Run{Kind: kindAt(hiddenStarts, starts, k), Text: text})
 	}
 
 	for idx := range parts {
 		p := &parts[idx]
 		if p.Text == "" {
+			continue
+		}
+		if p.Kind == "hidden-comment" {
+			body := strings.TrimSpace(p.Text)
+			p.Text = ProcessEsc(strings.TrimSpace(body[len(hiddenComment) : len(body)-1]))
 			continue
 		}
 		if strings.HasPrefix(p.Text, "_") && strings.HasSuffix(p.Text, "_") {
@@ -330,6 +397,15 @@ func Parse4sElem(s string) []Run {
 		p.Text = ProcessEsc(p.Text)
 	}
 	return parts
+}
+
+// kindAt marks segment k by the offset it starts at, which is how chgksuite tells
+// a hidden comment from the text around it.
+func kindAt(hidden map[int]bool, starts []int, k int) string {
+	if k < len(starts) && hidden[starts[k]] {
+		return "hidden-comment"
+	}
+	return ""
 }
 
 func partition(r []rune, indices []int) []string {

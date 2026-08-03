@@ -20,8 +20,12 @@ A Card's own short display label, stored as its own encrypted column — deliber
 A named, ordered run of **consecutive** Lists sharing one question-numbering sequence and a combined export. A group always moves as one block. (Schema name: `list_of_lists`.)
 
 **Version**:
-One candidate wording of a Card's question, kept alongside its siblings so the editors can weigh them before choosing. Only the question has Versions — never the answer or the comment. They live in the question text itself, separated by chgksuite's `(PAGEBREAK)`, so every Version reaches the export and pruning the rejected ones is an editorial act, not an automatic one. A Version has no name, author or date: it is a wording and nothing else.
+One candidate wording of a Card's question, kept alongside its siblings so the editors can weigh them before choosing. Only the question has Versions — never the answer or the comment. They live in the question text itself, separated by chgksuite's `(PAGEBREAK)`, so every Version reaches the export and pruning the rejected ones is an editorial act, not an automatic one. A Version may carry a **Name** — «полегче», «посложнее» — written as a Hidden Comment, so it says in one word what «Версия 2» cannot. It has nothing else: no author and no date.
 _Avoid_: draft, variant, revision (a Version is a live alternative, not a superseded past state — that is what the Timeline records)
+
+**Hidden Comment**:
+chgksuite's `(hidden-comment …)`: text an editor writes for editors, which reaches no rendering of the question. It is a note, unless its payload opens with `xy-version:` — that one names a Version and is read rather than shown. Only the Текст view (the source verbatim) and Поля (whose fields are raw 4s) show a note at all; Просмотр, the board, what is copied for a tester and every export but the .4s drop it.
+_Avoid_: comment (that is the Timeline's word — a Hidden Comment is nobody's to reply to)
 
 **Label**:
 A named, coloured tag on a Board, assignable to any of its Cards, renameable and recolourable at will. An assignment carries an optional Playing: unscoped it is the author's own view of the question, scoped it is what the testers thought at that sitting. So «взяли» is ONE Board Label composed onto a Playing, not a label per session.

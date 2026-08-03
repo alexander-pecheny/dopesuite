@@ -122,6 +122,10 @@ function answerText(desc: string | null | undefined): string {
 // the faster way to recognize it. An answerless question falls back to its text —
 // a blank card is worse than the old default.
 function previewText(kind: string, desc: string | null | undefined, mode: string | null | undefined): string {
+  return dropHidden(titleSource(kind, desc, mode));
+}
+
+function titleSource(kind: string, desc: string | null | undefined, mode: string | null | undefined): string {
   if (kind === "question" && mode === "answer") {
     const a = answerText(desc);
     if (a !== "") return a;
@@ -343,29 +347,28 @@ function partition(s: string, indices: number[]): string[] {
   return out;
 }
 
-function parse4sElem(s: string): Run[] {
-  s = s.replace(/\\_/g, UNDERSCORE_PLACEHOLDER).replace(/\\~/g, TILDE_PLACEHOLDER);
+const HIDDEN_COMMENT = "(hidden-comment";
 
-  // protect underscores/tildes inside URLs
-  {
-    let res = "", last = 0;
-    for (const [start, end] of iterHttpUrlSpans(s)) {
-      res += s.slice(last, start);
-      res += s.slice(start, end).replace(/_/g, UNDERSCORE_PLACEHOLDER).replace(/~/g, TILDE_PLACEHOLDER);
-      last = end;
-    }
-    res += s.slice(last);
-    s = res;
-  }
+// startsHiddenComment: the keyword must end the bracket or be followed by a
+// space, so a question about a "(hidden-commentary)" is not swallowed.
+function startsHiddenComment(s: string, i: number): boolean {
+  if (!s.startsWith(HIDDEN_COMMENT, i)) return false;
+  const nxt = s[i + HIDDEN_COMMENT.length];
+  return nxt === undefined || nxt === ")" || /\s/.test(nxt);
+}
 
-  // percent-decode (longest matches first so a short one can't split a long one)
-  const grs = [...new Set(s.match(/(%[0-9a-fA-F]{2})+/g) || [])].sort((a, b) => b.length - a.length);
-  for (const gr of grs) {
-    try { s = s.split(gr).join(decodeURIComponent(gr)); } catch (_) { /* leave as-is */ }
-  }
+// A hidden comment's span in the source, brackets and the one whitespace
+// character it takes with it included.
+export interface HiddenSpan { start: number; end: number; body: string }
 
-  let i = 0;
+// scanDirectives walks a 4s element once and reports every index the tokenizer
+// must cut at, plus where the hidden comments are. The two callers need the same
+// walk: parse4sElem builds runs from it, and the version-name helpers edit the
+// raw source with it — a second scanner would be a second set of bugs.
+function scanDirectives(s: string): { topart: number[]; hidden: HiddenSpan[] } {
   const topart: number[] = [];
+  const hidden: HiddenSpan[] = [];
+  let i = 0;
   while (i < s.length) {
     if (s[i] === "_" || s[i] === "~") {
       let j = i + 1;
@@ -389,6 +392,19 @@ function parse4sElem(s: string): Run[] {
       const close = findMatchingClosingBracket(s, i);
       if (close !== null) { topart.push(close + 1); i = close; }
     }
+    if (startsHiddenComment(s, i)) {
+      // Unterminated, it stays literal: eating the rest of the field would hide
+      // more than the editor meant to hide.
+      const close = findMatchingClosingBracket(s, i);
+      if (close !== null) {
+        let start = i, end = close + 1;
+        if (start > 0 && /\s/.test(s[start - 1])) start--;
+        else if (end < s.length && /\s/.test(s[end])) end++;
+        hidden.push({ start, end, body: s.slice(i + HIDDEN_COMMENT.length, close).trim() });
+        topart.push(start, end);
+        i = close;
+      }
+    }
     if (s.startsWith("(PAGEBREAK)", i)) {
       topart.push(i);
       topart.push(i + "(PAGEBREAK)".length);
@@ -411,9 +427,61 @@ function parse4sElem(s: string): Run[] {
     }
     i++;
   }
+  return { topart, hidden };
+}
+
+// dropHiddenComments removes the hidden-comment runs and welds the plain text
+// back together, so the space a directive took with it is not counted twice.
+function dropHiddenComments(parts: Run[]): Run[] {
+  const result: Run[] = [];
+  let justDropped = false;
+  for (const part of parts) {
+    const prev = result[result.length - 1];
+    if (part[0] === "hidden-comment") { justDropped = true; continue; }
+    if (justDropped && part[0] === "" && prev && prev[0] === "") prev[1] = String(prev[1]) + String(part[1]);
+    else result.push(part);
+    justDropped = false;
+  }
+  return result;
+}
+
+// parse4sElem drops hidden comments, as every renderer wants; parse4sElemKeep
+// returns them as "hidden-comment" runs for a caller reading them as directives
+// (chgksuite's keep_hidden_comments=True).
+function parse4sElem(s: string): Run[] {
+  return dropHiddenComments(parse4sElemKeep(s));
+}
+
+function parse4sElemKeep(s: string): Run[] {
+  s = s.replace(/\\_/g, UNDERSCORE_PLACEHOLDER).replace(/\\~/g, TILDE_PLACEHOLDER);
+
+  // protect underscores/tildes inside URLs
+  {
+    let res = "", last = 0;
+    for (const [start, end] of iterHttpUrlSpans(s)) {
+      res += s.slice(last, start);
+      res += s.slice(start, end).replace(/_/g, UNDERSCORE_PLACEHOLDER).replace(/~/g, TILDE_PLACEHOLDER);
+      last = end;
+    }
+    res += s.slice(last);
+    s = res;
+  }
+
+  // percent-decode (longest matches first so a short one can't split a long one)
+  const grs = [...new Set(s.match(/(%[0-9a-fA-F]{2})+/g) || [])].sort((a, b) => b.length - a.length);
+  for (const gr of grs) {
+    try { s = s.split(gr).join(decodeURIComponent(gr)); } catch (_) { /* leave as-is */ }
+  }
+
+  const { topart, hidden } = scanDirectives(s);
+  const hiddenStarts = new Set(hidden.map((h) => h.start));
 
   topart.sort((a, b) => a - b);
-  const parts: Run[] = partition(s, topart).map((x): Run => ["", x.replace(/敥/g, "")]);
+  // A segment is marked by the offset it starts at, which is how chgksuite tells
+  // a hidden comment from the text around it.
+  const starts = [0, ...topart];
+  const parts: Run[] = partition(s, topart)
+    .map((x, k): Run => [hiddenStarts.has(starts[k]) ? "hidden-comment" : "", x.replace(/敥/g, "")]);
 
   const process = (str: unknown): string => String(str)
     .replace(/\\_/g, "_")
@@ -424,6 +492,11 @@ function parse4sElem(s: string): Run[] {
   for (const part of parts) {
     if (typeof part[1] !== "string" || !part[1]) continue;
     try {
+      if (part[0] === "hidden-comment") {
+        const body = part[1].trim();
+        part[1] = process(body.slice(HIDDEN_COMMENT.length, -1).trim());
+        continue;
+      }
       if (part[1].startsWith("_") && part[1].endsWith("_")) {
         let j = 1;
         while (j < part[1].length && part[1][j] === "_" && part[1][part[1].length - j - 1] === "_") j++;
@@ -464,6 +537,16 @@ function parse4sElem(s: string): Run[] {
   }
 
   return parts;
+}
+
+// dropHidden removes every hidden comment from raw 4s, markup and all. The
+// renderers get this for free from the tokenizer; this is for the places that
+// show a card's source text unrendered, like the board's card titles.
+function dropHidden(s: string | null | undefined): string {
+  const src = s || "";
+  let out = "", last = 0;
+  for (const h of scanDirectives(src).hidden) { out += src.slice(last, h.start); last = h.end; }
+  return out + src.slice(last);
 }
 
 // renderRunsForScreen flattens parsed runs to the plain text players see (screen
@@ -685,21 +768,77 @@ function splitVersions(question: string | null | undefined): string[] {
   return (question || "").split(VERSION_SEP);
 }
 
+// A version's name — «полегче», «посложнее» — is a hidden comment with a
+// namespaced payload (ADR-0006): invisible in every rendering, carried by the 4s
+// itself, and ours alone, since chgksuite may claim keywords of its own. Any
+// other hidden comment is an ordinary note and is left where the editor typed it.
+const VERSION_NAME = "xy-version:";
+
+// nameSpans are the comments that name a version. The first one is the name; a
+// later one is a leftover, dropped by the next write rather than obeyed.
+function nameSpans(segment: string): HiddenSpan[] {
+  return scanDirectives(segment).hidden.filter((h) => h.body.startsWith(VERSION_NAME));
+}
+
+function versionName(question: string | null | undefined, i: number): string | null {
+  const seg = splitVersions(question)[i];
+  if (seg === undefined) return null;
+  const h = nameSpans(seg)[0];
+  return h ? h.body.slice(VERSION_NAME.length).trim() || null : null;
+}
+
+function stripName(segment: string): string {
+  let out = segment;
+  for (const h of nameSpans(segment).reverse()) out = out.slice(0, h.start) + out.slice(h.end);
+  return out;
+}
+
+// A name is typed into a prompt, and a stray bracket there would close the
+// directive early and spill into the question — so it can hold neither brackets
+// nor line breaks.
+function cleanName(name: string | null | undefined): string | null {
+  return (name || "").replace(/[()]/g, "").replace(/\s+/g, " ").trim() || null;
+}
+
+// composeVersion is the canonical spelling of a named version: the name on its
+// own first line, which is where every write puts it however it was typed.
+function composeVersion(name: string | null, text: string): string {
+  const clean = cleanName(name);
+  return clean ? `(hidden-comment ${VERSION_NAME} ${clean})\n${text}` : text;
+}
+
+// writeVersion is the one way a version's text is put back: the whitespace that
+// framed it is kept, so retyping version 2 cannot reflow how version 1 breaks.
+function writeVersion(question: string | null | undefined, i: number, fn: (segment: string) => string): string {
+  const parts = splitVersions(question);
+  if (i < 0 || i >= parts.length) return question || "";
+  const lead = /^\s*/.exec(parts[i])![0];
+  const trail = /\s*$/.exec(parts[i])![0];
+  parts[i] = lead + fn(parts[i]) + trail;
+  return parts.join(VERSION_SEP);
+}
+
 // versionText is one version as the editor should see it — the surrounding
-// whitespace belongs to the separator, not to the wording.
+// whitespace belongs to the separator, not to the wording, and the name belongs
+// to the tab strip.
 function versionText(question: string | null | undefined, i: number): string {
-  return (splitVersions(question)[i] || "").trim();
+  return stripName(splitVersions(question)[i] || "").trim();
 }
 
 // setVersion writes one version back, keeping the whitespace that framed it so
 // editing version 2 cannot silently reflow how version 1 breaks in the export.
 function setVersion(question: string | null | undefined, i: number, text: string): string {
-  const parts = splitVersions(question);
-  if (i < 0 || i >= parts.length) return question || "";
-  const lead = /^\s*/.exec(parts[i])![0];
-  const trail = /\s*$/.exec(parts[i])![0];
-  parts[i] = lead + text + trail;
-  return parts.join(VERSION_SEP);
+  // A name typed into the text wins over the one the version had, and lands on
+  // the first line either way.
+  const typed = nameSpans(text)[0];
+  const name = typed ? typed.body.slice(VERSION_NAME.length) : versionName(question, i);
+  return writeVersion(question, i, () => composeVersion(name, typed ? stripName(text) : text));
+}
+
+// setVersionName renames one version, or clears the name when given an empty
+// string. Both go through the same canonical spelling as every other write.
+function setVersionName(question: string | null | undefined, i: number, name: string): string {
+  return writeVersion(question, i, (seg) => composeVersion(name, stripName(seg).trim()));
 }
 
 // joinVersions is the canonical spelling: each version on its own lines with the
@@ -713,10 +852,11 @@ function joinVersions(parts: ReadonlyArray<string>): string {
 // addVersion clones version `i` and inserts the copy after it, returning the new
 // field and the index to switch to. Cloning rather than starting blank is what
 // «Добавить версию» is for: a version is a rewording of what is already there.
+// The copy is unnamed — two tabs reading «полегче» tell the editor nothing.
 function addVersion(question: string | null | undefined, i: number): { question: string; index: number } {
   const parts = splitVersions(question);
   const at = Math.min(Math.max(i, 0), parts.length - 1);
-  parts.splice(at + 1, 0, parts[at]);
+  parts.splice(at + 1, 0, stripName(parts[at]));
   return { question: joinVersions(parts), index: at + 1 };
 }
 
@@ -1055,7 +1195,7 @@ const HNDT_RESERVED = new Set([
 const HNDT_DEFAULT_META = "columns: 3";
 
 function postprocessHandout(s: string | null | undefined): string {
-  return (s || "").replace(/\\_/g, "_");
+  return dropHidden(s).replace(/\\_/g, "_").trim();
 }
 
 // handoutForCard extracts a question card's handout: the inline
@@ -1281,7 +1421,8 @@ export const xyChgk = {
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,
   splitFields, composeFields, parseHandoutBlock, authorBlock, composeAuthors, AUTHOR_LABELS,
-  splitVersions, versionText, setVersion, addVersion, removeVersion, promoteVersion,
+  splitVersions, versionText, versionName, setVersion, setVersionName,
+  addVersion, removeVersion, promoteVersion,
   copyTargets,
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
   parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText, testerNames,
