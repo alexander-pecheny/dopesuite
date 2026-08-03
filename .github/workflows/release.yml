@@ -6,6 +6,8 @@ name: release xy
 on:
   push:
     tags: ["xy/*"]
+  # Re-run a release build without moving the tag; pick the tag as the ref.
+  workflow_dispatch:
 
 permissions:
   contents: write
