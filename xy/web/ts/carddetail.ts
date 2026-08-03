@@ -761,9 +761,9 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   // renderVersionTabs draws the second strip. It only appears once there is more
   // than one version — a plain question must not grow a row of chrome that says
-  // «Версия 1» and nothing else. ↑ and × ride on the selected tab rather than on
-  // every one: three controls per version is a lot on a phone, and both act on
-  // what you are looking at.
+  // «Версия 1» and nothing else, and a name is there to tell siblings apart. ↑ ✎ ×
+  // ride on the selected tab rather than on every one: three controls per version
+  // is a lot on a phone, and all of them act on what you are looking at.
   function renderVersionTabs(): void {
     const box = byId("cardVersions");
     const n = versionCount();
@@ -771,9 +771,11 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const show = n > 1 && fieldsAvailable() && cardView !== "text";
     box.hidden = !show;
     if (!show) { box.replaceChildren(); return; }
+    const whole = questionField();
     const nodes: HTMLElement[] = [];
     for (let i = 0; i < n; i++) {
-      const btn = el("button", { class: "seg-btn" + (i === versionIdx ? " active" : ""), type: "button", role: "tab", text: `Версия ${i + 1}` });
+      const name = xyChgk.versionName(whole, i);
+      const btn = el("button", { class: "seg-btn" + (i === versionIdx ? " active" : ""), type: "button", role: "tab", text: name || `Версия ${i + 1}` });
       btn.addEventListener("click", () => { captureDraft(); selectVersion(i); });
       nodes.push(btn);
       if (i !== versionIdx) continue;
@@ -782,6 +784,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
         up.addEventListener("click", () => applyVersions((q) => xyChgk.promoteVersion(q, i)));
         nodes.push(up);
       }
+      const ren = el("button", { class: "vtab-act", type: "button", title: "Назвать версию — название видно только здесь, ни в один экспорт оно не попадёт", "aria-label": "Назвать версию", text: "✎" });
+      ren.addEventListener("click", () => {
+        const typed = prompt("Название версии:", name || "");
+        if (typed === null) return;
+        applyVersions((q) => ({ question: xyChgk.setVersionName(q, i, typed), index: i }));
+      });
+      nodes.push(ren);
       const rm = el("button", { class: "vtab-act", type: "button", title: "Удалить эту версию", "aria-label": "Удалить версию", text: "×" });
       rm.addEventListener("click", () => applyVersions((q) => xyChgk.removeVersion(q, i)));
       nodes.push(rm);

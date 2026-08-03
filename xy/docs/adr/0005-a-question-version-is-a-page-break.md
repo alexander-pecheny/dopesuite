@@ -13,8 +13,9 @@ verb, and a versioned card round-trips through chgksuite untouched, which a
 marker of ours could not (the same reasoning that made the Alias its own column
 rather than a 4s marker).
 
-The price is that a version is not a first-class thing. It has no name, no
-author, no timestamp, and nowhere to hang one: a segment of text is all it is.
+The price is that a version is not a first-class thing. It has no author, no
+timestamp, and nowhere to hang one: a segment of text is all it is. (It did have
+no name either, until chgksuite gave us a directive to hang one on — ADR-0006.)
 Only the question can be versioned — never the answer or the comment — because
 only the question is one field whose content the directive may split.
 
