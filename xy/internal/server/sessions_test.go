@@ -135,3 +135,78 @@ func TestProfileDefaults(t *testing.T) {
 		t.Error("announce cities missing from the snapshot")
 	}
 }
+
+// A comment is tagged with the test it came out of after the fact, from its own
+// ⋯ menu: the tag moves between tests and clears with a 0, and it may not point
+// at a test on another board.
+func TestCommentSessionRetag(t *testing.T) {
+	c, board, listID := boardWithList(t)
+
+	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description_enc": enc("q"), "rank": "m"})
+	mustStatus(t, resp, 200)
+	var card struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &card)
+	cardID := itoa(card.ID)
+
+	newSession := func(cl *apiClient, boardID string) int64 {
+		t.Helper()
+		r := cl.do("POST", "/api/boards/"+boardID+"/sessions", map[string]string{"meta_enc": enc("s")})
+		mustStatus(t, r, 200)
+		var s struct {
+			ID int64 `json:"id"`
+		}
+		cl.decode(r, &s)
+		return s.ID
+	}
+	first, second := newSession(c, board), newSession(c, board)
+
+	resp = c.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload_enc": enc("формулировка споткнулась")})
+	mustStatus(t, resp, 204)
+
+	comment := func() timelineEventDTO {
+		t.Helper()
+		r := c.do("GET", "/api/cards/"+cardID+"/timeline", nil)
+		mustStatus(t, r, 200)
+		var tl []timelineEventDTO
+		c.decode(r, &tl)
+		if len(tl) != 1 {
+			t.Fatalf("timeline len = %d, want 1", len(tl))
+		}
+		return tl[0]
+	}
+	ev := itoa(comment().ID)
+	if got := comment().SessionID; got != nil {
+		t.Fatalf("a fresh comment carries session %d, want none", *got)
+	}
+
+	// Tagging, then moving the tag to the other test.
+	for _, want := range []int64{first, second} {
+		resp = c.do("PATCH", "/api/comments/"+ev, map[string]any{"session_id": want})
+		mustStatus(t, resp, 204)
+		if got := comment().SessionID; got == nil || *got != want {
+			t.Fatalf("session after retag = %v, want %d", got, want)
+		}
+	}
+
+	resp = c.do("PATCH", "/api/comments/"+ev, map[string]any{"session_id": 0})
+	mustStatus(t, resp, 204)
+	if got := comment().SessionID; got != nil {
+		t.Fatalf("session after clearing = %d, want none", *got)
+	}
+
+	// Another board's test is not a choice here, however it is asked for.
+	resp = c.do("POST", "/api/boards", map[string]string{
+		"name": "other", "kdf_salt": enc("s"),
+		"kdf_params": `{"kdf":"scrypt","N":1,"r":1,"p":1}`, "wrapped_key": enc("w"), "verify_token": enc("v"),
+	})
+	mustStatus(t, resp, 200)
+	var otherBoard struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &otherBoard)
+	foreign := newSession(c, itoa(otherBoard.ID))
+	resp = c.do("PATCH", "/api/comments/"+ev, map[string]any{"session_id": foreign})
+	mustStatus(t, resp, 400)
+}

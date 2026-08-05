@@ -673,6 +673,11 @@
    rather than discussion while scanning the лента */
 .tl-event.tl-excerpt { background: var(--structure); border-color: var(--border); }
 .tl-badge { font-size: var(--text-2xs); color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 var(--space-1); }
+/* The test badge carries the flask the Тесты section is marked with, so the two
+   read as the same thing; the glyph rides the 2xs type rather than the 24px it
+   is drawn at. */
+.tl-badge-session { display: inline-flex; align-items: center; gap: var(--space-1); }
+.tl-badge-session .ico { width: 1.1em; height: 1.1em; }
 /* in-place comment editor (board.js#startCommentEdit) */
 .tl-editbox { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-1); }
 .tl-editrow { display: flex; gap: var(--space-2); }

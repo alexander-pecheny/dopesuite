@@ -154,15 +154,12 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
         selectfield id="feedDiffView" compact title="Вид правок"
           option value="brief" "краткий"
           option value="full" "подробный"
-      button small kind="ghost" icon="maximize-2" id="feedExpand" title="Развернуть ленту на весь экран" "Развернуть"
+      -- glyph only: with its caption the row wrapped onto a second line beside
+      -- the two labelled selects, and the words live on in title/aria-label
+      button small kind="ghost" icon="maximize-2" id="feedExpand" title="Развернуть ленту на весь экран" aria-label="Развернуть ленту"
     mount id="timeline" kind="timeline"
     form id="commentForm" dir="col"
       editor id="commentInput" kind="comment" placeholder="Комментарий…" spellcheck="false"
-      -- tag the comment with the test it came out of («на этом тесте команда
-      -- споткнулась о формулировку»); hidden unless the card carries a session
-      row id="commentSessionRow" gap="sm" align="center" wrap hidden
-        label for="commentSession" "На тесте"
-        selectfield id="commentSession" compact title="Тест, на котором это обсуждали"
       button small submit "Отправить"
 
   -- list preview overlay (docx-style render, JS-only)
