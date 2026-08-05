@@ -1293,7 +1293,14 @@ select.fld-label-select:hover, select.fld-label-select:focus { border-color: var
 .fld-rm:hover, .fld-row-rm:hover, .fld-tag-rm:hover { color: var(--red); }
 .fld-body { margin-top: var(--space-1); }
 .fld-input { width: 100%; }
-/* rows=1 + no floor: a one-line answer takes one line; autoGrow adds the rest */
+/* Every control in Поля holds the same 4s text, so they all wear the same face —
+   half the form in mono and half in sans read as two different editors. */
+.card-fields .fld-input,
+.card-fields .fld-row-input,
+.card-fields .fld-tag-input,
+.card-fields .fld-tag { font-family: var(--font-mono); }
+/* rows=1 + no floor: a one-line answer takes one line; autoGrow adds the rest.
+   A field asking for more rows keeps them (Зачёт), so no min-height here. */
 textarea.fld-input { min-height: 0; padding-block: var(--space-2); }
 /* desktop: shave the 38px control floor inside Поля — it reads airy repeated
    over nine fields; phones keep the full touch target */
@@ -1313,6 +1320,15 @@ textarea.fld-input { min-height: 0; padding-block: var(--space-2); }
 .fld-rows { display: flex; flex-direction: column; gap: var(--space-1); }
 .fld-row { display: flex; align-items: center; gap: var(--space-1); }
 .fld-row-input { flex: 1; }
+/* A source is usually a URL: it gets a size of its own so more of it fits, and
+   `anywhere` breaks the link mid-token instead of letting it run off the card. */
+textarea.fld-src {
+  width: 100%;
+  min-height: 0;
+  padding-block: var(--space-2);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
 .fld-add-row { align-self: flex-start; font-size: var(--text-sm); margin-top: var(--space-1); cursor: var(--cursor-action); padding: var(--space-1) var(--space-2); width: auto; }
 /* hand-drawn autocomplete (suggestWrap in board.js — <datalist> never opens on
    iOS Safari, so the dropdown is ours) */

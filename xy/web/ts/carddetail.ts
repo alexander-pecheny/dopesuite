@@ -321,7 +321,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // inside it (CSS min-height still sets the floor). scrollHeight is 0 while the
   // element is display:none, so callers fit on render / when a field is revealed.
   function fitTextarea(ta: HTMLTextAreaElement): void {
-    ta.style.height = "auto";
+    // "" — not "auto" — so the floor is whatever `rows` and CSS say; a field
+    // asking for three lines keeps them while its content is one line long.
+    ta.style.height = "";
+    if (ta.scrollHeight <= ta.clientHeight) return;
     // box-sizing is border-box, so the height must include the borders that
     // scrollHeight (content + padding only) omits, else the last line is clipped.
     const border = ta.offsetHeight - ta.clientHeight;
@@ -368,12 +371,14 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // Safari simply never shows its options, so the suggestions are drawn by hand.
   // `values` is captured at build time — the board's authors/sources don't change
   // while the editor is open. onPick (optional) runs after a suggestion is taken.
-  function suggestWrap(input: HTMLInputElement, values: string[], onPick?: (v: string) => void): HTMLElement {
+  function suggestWrap(input: HTMLInputElement | HTMLTextAreaElement, values: string[], onPick?: (v: string) => void): HTMLElement {
     const menu = el("div", { class: "suggest-menu", hidden: true });
     const wrap = el("div", { class: "suggest-wrap" }, input, menu);
     let items: string[] = [], active = -1;
     const close = (): void => { menu.hidden = true; menu.replaceChildren(); items = []; active = -1; };
-    const pick = (v: string): void => { input.value = v; close(); if (onPick) onPick(v); };
+    // The "input" event is what the editor listens to — a picked suggestion has
+    // to grow the field and arm Сохранить exactly as typing it would.
+    const pick = (v: string): void => { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); close(); if (onPick) onPick(v); };
     const setActive = (i: number): void => {
       active = i;
       [...menu.children].forEach((n, j) => n.classList.toggle("active", j === i));
@@ -397,7 +402,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     input.addEventListener("blur", close);
     // Registered before any caller keydown handler (Enter-commits-tag in the
     // authors field), so a menu pick can stopImmediatePropagation past it.
-    input.addEventListener("keydown", (e) => {
+    // Bound through HTMLElement: on the input|textarea union TS drops the typed
+    // event map and hands the listener a bare Event.
+    const node: HTMLElement = input;
+    node.addEventListener("keydown", (e) => {
       if (menu.hidden) return;
       if (e.key === "ArrowDown") { e.preventDefault(); setActive((active + 1) % items.length); }
       else if (e.key === "ArrowUp") { e.preventDefault(); setActive((active - 1 + items.length) % items.length); }
@@ -487,13 +495,13 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
 
   // buildField is the generic absent/present field control: a "+ label" pill when
   // absent, a labelled input with a "×" (back to absent) when present.
-  function buildField(label: string, kind: "area" | "input", initial: string | null | undefined, opts: { muted?: boolean; open?: boolean } = {}): FieldReader<string | null> {
+  function buildField(label: string, kind: "area" | "input", initial: string | null | undefined, opts: { muted?: boolean; open?: boolean; rows?: number } = {}): FieldReader<string | null> {
     const wrap = el("div", { class: "fld" + (opts.muted ? " fld-muted" : "") });
     const addBtn = el("button", { class: "fld-add", type: "button", text: "+ " + label, title: "Добавить поле" });
     const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
     const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: label }), rmBtn);
     const input = (kind === "area"
-      ? el("textarea", { class: "card-desc fld-input", spellcheck: "false", rows: "1" })
+      ? el("textarea", { class: "card-desc fld-input", spellcheck: "false", rows: String(opts.rows || 1) })
       : el("input", { class: "input fld-input", type: "text" })) as HTMLTextAreaElement | HTMLInputElement;
     const body = el("div", { class: "fld-body" }, input);
     if (kind === "area") autoGrow(input as HTMLTextAreaElement);
@@ -581,10 +589,18 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const rmBtn = el("button", { class: "fld-rm", type: "button", text: "×", title: "Убрать поле" });
     const head = el("div", { class: "fld-head" }, el("span", { class: "fld-label", text: "Источник" }), rmBtn);
     const rows = el("div", { class: "fld-rows" });
-    const addRow = (val: string): HTMLInputElement => {
-      const inp = el("input", { class: "input fld-row-input", type: "text", value: val || "" }) as HTMLInputElement;
+    // A source is one line of the 4s but often a URL longer than the card is
+    // wide, so it is a textarea: it wraps and grows instead of scrolling out of
+    // sight. Enter still belongs to the row list, not to the text.
+    const addRow = (val: string): HTMLTextAreaElement => {
+      const inp = el("textarea", { class: "card-desc fld-row-input fld-src", spellcheck: "false", rows: "1" }) as HTMLTextAreaElement;
+      inp.value = val || "";
+      autoGrow(inp);
       const rrm = el("button", { class: "fld-row-rm", type: "button", text: "×", title: "Удалить строку" });
       const row = el("div", { class: "fld-row" }, suggestWrap(inp, suggestions), rrm);
+      // After suggestWrap, so an Enter that takes a suggestion is stopped before
+      // it reaches this and opens a row nobody asked for.
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addRow("").focus(); } });
       rrm.addEventListener("click", () => row.remove());
       rows.append(row);
       return inp;
@@ -599,7 +615,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     rmBtn.addEventListener("click", () => { present = false; sync(); });
     wrap.append(addBtn, head, body);
     sync();
-    return { node: wrap, read: () => (present ? [...rows.querySelectorAll<HTMLInputElement>(".fld-row-input")].map((i) => i.value) : null) };
+    return { node: wrap, read: () => (present ? [...rows.querySelectorAll<HTMLTextAreaElement>(".fld-row-input")].map((i) => i.value) : null) };
   }
 
   // buildAuthorsField: a tag input (like labels) seeded with autocomplete from the
@@ -671,8 +687,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       handout: buildHandoutField(f.handout),
       question: buildField("Текст вопроса", "area", f.question == null ? null : xyChgk.versionText(f.question, versionIdx), { open: fresh }),
       answer: buildField("Ответ", "area", f.answer, { open: fresh }),
-      zachet: buildField("Зачёт", "input", f.zachet),
-      nezachet: buildField("Незачёт", "input", f.nezachet),
+      // Three lines, and growing: a зачёт is a list of accepted wordings, and
+      // one line of it was a slot you wrote a paragraph through.
+      zachet: buildField("Зачёт", "area", f.zachet, { rows: 3 }),
+      nezachet: buildField("Незачёт", "area", f.nezachet, { rows: 3 }),
       comment: buildField("Комментарий", "area", f.comment),
       sources: buildSourcesField(f.sources, boardSources()),
       authors: buildAuthorsField(f.authors, boardAuthors(), f.authorLabel),
