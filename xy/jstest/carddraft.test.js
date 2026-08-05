@@ -17,11 +17,10 @@ test("normalizeAlias: blank → null, non-blank trimmed", () => {
   assert.equal(normalizeAlias("  hi "), "hi");
 });
 
-test("contentDirty new card: blank is clean, any content or alias is dirty", () => {
-  assert.equal(contentDirty({ isNew: true, desc: "", alias: null }), false);
-  assert.equal(contentDirty({ isNew: true, desc: "   ", alias: null }), false);
-  assert.equal(contentDirty({ isNew: true, desc: "? q", alias: null }), true);
-  assert.equal(contentDirty({ isNew: true, desc: "", alias: "лейбл" }), true);
+test("contentDirty new card: blank is clean, any 4s content is dirty", () => {
+  assert.equal(contentDirty({ isNew: true, desc: "" }), false);
+  assert.equal(contentDirty({ isNew: true, desc: "   " }), false);
+  assert.equal(contentDirty({ isNew: true, desc: "? q" }), true);
 });
 
 test("contentDirty existing card: desc or meta change, alias excluded", () => {
@@ -51,18 +50,9 @@ test("create(): open a card → clean until edited, commit resets baseline", () 
   d.commitContent(d.desc, d.normalizedMeta());
   assert.equal(d.contentDirty(false), false);
 
+  // the alias saves itself, so its baseline moves on its own
   assert.equal(d.aliasDirty("alias2"), true);
   d.commitAlias("alias2");
   assert.equal(d.aliasDirty("alias2"), false);
-  assert.equal(d.alias, "alias2");
-});
-
-test("create(): blank() resets the working draft for a new card", () => {
-  const d = create();
-  d.open("old", "meta", "al");
-  d.blank();
-  assert.equal(d.desc, "");
-  assert.equal(d.meta, null);
-  assert.equal(d.alias, null);
-  assert.equal(d.contentDirty(true), false);
+  assert.equal(d.contentDirty(false), false);
 });

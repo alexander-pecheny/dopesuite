@@ -1144,14 +1144,17 @@ select card_id, coalesce(reply_to_id, id) from timeline_events where id = ? and 
 type patchCommentRequest struct {
 	PayloadEnc *string `json:"payload_enc"`
 	IsExcerpt  *bool   `json:"is_excerpt"`
+	// The test this comment came out of; 0 clears it (the optBlob convention).
+	SessionID *int64 `json:"session_id"`
 }
 
-// handlePatchComment edits a comment's text and/or flips its «выписка» flag.
-// The two fields carry different permissions: rewriting what someone said is
-// the author's business alone, while marking a comment as an excerpt is
-// curation any board member may do (the same trust level as adding one).
+// handlePatchComment edits a comment's text, flips its «выписка» flag and/or
+// retags the test it came out of. The fields carry different permissions:
+// rewriting what someone said is the author's business alone, while marking a
+// comment as an excerpt or naming the test behind it is curation any board
+// member may do (the same trust level as adding one).
 func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
-	uid, evID, _, _, author, ok := s.requireComment(w, r)
+	uid, evID, bid, _, author, ok := s.requireComment(w, r)
 	if !ok {
 		return
 	}
@@ -1163,7 +1166,26 @@ func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusForbidden, "редактировать может только автор")
 		return
 	}
+	if req.SessionID != nil && *req.SessionID != 0 {
+		sbid, err := boardOfSession(r.Context(), s.db, *req.SessionID)
+		if handleErr(w, err) {
+			return
+		}
+		if sbid != bid {
+			httpError(w, http.StatusBadRequest, "session belongs to another board")
+			return
+		}
+	}
 	err := s.withWriteTx(r.Context(), "patch-comment", func(ctx context.Context, tx *sql.Tx) error {
+		if req.SessionID != nil {
+			var sid *int64
+			if *req.SessionID != 0 {
+				sid = req.SessionID
+			}
+			if _, err := tx.ExecContext(ctx, `update timeline_events set session_id = ? where id = ?`, sid, evID); err != nil {
+				return err
+			}
+		}
 		if req.IsExcerpt != nil {
 			flag := 0
 			if *req.IsExcerpt {

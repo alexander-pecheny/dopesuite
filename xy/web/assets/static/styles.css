@@ -318,6 +318,7 @@
   --z-card-overlay: 50;
   --z-timer: 130;
   --z-board-header: 60;
+  --z-card-head: 1;       /* the pinned card header, over its own scrolling siblings */
   --klist-w: 280px;
   --kcard-lines: none;    /* none = card shows the whole question, unclamped */
   --kcard-font: 14px;     /* card text size — smaller packs more questions on screen */
@@ -376,19 +377,9 @@
   line-clamp: var(--kcard-lines);
   overflow: hidden;
 }
-/* The alias sits below the view panels, between Метки and Вложения: it belongs
-   to the card rather than to any one view, so it stays put as the tabs change. */
-#cardAliasRow { margin-bottom: var(--space-2); gap: 0; }
-/* The alias input and its save button are one fused control — a visual cue that
-   the alias saves on its own, apart from the card's «Сохранить». Both are
-   control-h, so they meet flush; the shared edge is a single divider. */
-#cardAlias { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-#cardAliasSave {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  border-left: 1px solid var(--border);
-  white-space: nowrap;
-}
+/* Double gap under the alias: it is a section of its own down there, not a row
+   of the Выписки block that follows it. */
+#cardAlias { margin-bottom: var(--space-2); }
 
 /* An alias is the card's name; it reads like any other card title (no special
    weight). It's already short, so the --kcard-lines clamp has nothing to do. */
@@ -509,12 +500,16 @@
   z-index: var(--z-card-overlay);
 }
 .card-detail {
+  /* named because the pinned head below has to cancel exactly this much padding,
+     and the phone breakpoint changes it */
+  --card-pad-y: var(--space-5);
+  --card-pad-x: var(--space-5);
   width: min(680px, 100%);
   height: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-5);
+  padding: var(--card-pad-y) var(--card-pad-x);
   overflow-y: auto;
   background: var(--surface);
   box-shadow: var(--shadow-modal);
@@ -523,8 +518,26 @@
    natural size (flex: none) so nothing is compressed — iOS WebKit otherwise
    shrinks native <select>s below their min-height and clips the value text. */
 .card-detail > * { flex: none; }
-/* type selector, copy button and close × share one line */
-.card-detail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+/* type selector, copy button and close × share one line, pinned to the top of
+   the scrolling detail: the way out of a card must not scroll away under a long
+   лента. The negative margins pull the row over .card-detail's own padding, and
+   `top` matches them because sticky pins the MARGIN box — at top: 0 the row
+   parks one padding lower and content scrolls visibly through the gap. */
+.card-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  position: sticky;
+  top: calc(-1 * var(--card-pad-y));
+  z-index: var(--z-card-head);
+  background: var(--surface);
+  margin: calc(-1 * var(--card-pad-y)) calc(-1 * var(--card-pad-x)) 0;
+  /* its own padding, not the container's: the strip is chrome, and inheriting
+     --card-pad-y put 24px over the row against 8px under it */
+  padding: var(--space-3) var(--card-pad-x);
+  border-bottom: 1px solid var(--border);
+}
 .card-kind-select { flex: 0 1 auto; width: auto; min-width: 0; }
 /* Test-card session heading (shown instead of the kind selector). */
 .card-detail-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: var(--text-base); font-weight: var(--fw-semibold); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -552,7 +565,12 @@
   resize: vertical;
 }
 .card-desc:focus { border-color: var(--blue); }
-.comment-input { min-height: 52px; }
+/* five lines: a comment on a question is a paragraph, and two lines of visible
+   text made you write it through a slot. Padding is on top of the five. */
+.comment-input {
+  line-height: var(--leading-relaxed);
+  min-height: calc(5 * var(--leading-relaxed) * var(--text-sm) + 2 * var(--space-3));
+}
 
 /* label picker */
 .label-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -655,6 +673,11 @@
    rather than discussion while scanning the лента */
 .tl-event.tl-excerpt { background: var(--structure); border-color: var(--border); }
 .tl-badge { font-size: var(--text-2xs); color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 var(--space-1); }
+/* The test badge carries the flask the Тесты section is marked with, so the two
+   read as the same thing; the glyph rides the 2xs type rather than the 24px it
+   is drawn at. */
+.tl-badge-session { display: inline-flex; align-items: center; gap: var(--space-1); }
+.tl-badge-session .ico { width: 1.1em; height: 1.1em; }
 /* in-place comment editor (board.js#startCommentEdit) */
 .tl-editbox { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-1); }
 .tl-editrow { display: flex; gap: var(--space-2); }
@@ -755,13 +778,15 @@
   position: absolute;
   top: var(--space-3);
   right: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 2rem;
   height: 2rem;
   border: none;
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
-  font-size: var(--text-xl);
   line-height: 1;
   cursor: var(--cursor-action);
 }
@@ -1002,7 +1027,7 @@
   .kcard-title { font-size: min(var(--kcard-font), var(--text-xs)); }
   /* keep the label pills off the card's top edge */
   .kcard-labels { margin-top: var(--space-1); }
-  .card-detail { padding: var(--space-4) var(--space-3); }
+  .card-detail { --card-pad-y: var(--space-4); --card-pad-x: var(--space-3); }
   .preview-head { padding: var(--space-3) var(--space-4); }
   .preview-body { padding: var(--space-4) var(--space-4); font-size: var(--text-sm); }
   .card-desc { font-size: var(--text-xs-plus); min-height: 200px; }

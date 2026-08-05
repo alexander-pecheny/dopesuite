@@ -83,6 +83,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("POST /api/auth/profile-defaults", srv.handleSetProfileDefaults)
 	mux.HandleFunc("POST /api/auth/announce-cities", srv.handleSetAnnounceCities)
 	mux.HandleFunc("POST /api/cards/{id}/timeline/import", srv.handleImportEvents)
+	mux.HandleFunc("PATCH /api/comments/{id}", srv.handlePatchComment)
 	mux.HandleFunc("DELETE /api/comments/{id}", srv.handleDeleteComment)
 	mux.HandleFunc("POST /api/cards/{id}/read", srv.handleMarkRead)
 	mux.HandleFunc("GET /api/boards/{id}/activity", srv.handleBoardActivity)

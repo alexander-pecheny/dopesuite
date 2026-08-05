@@ -405,7 +405,7 @@ function lbZoomTo(next: number, cx: number, cy: number): void {
 function ensureLightbox(): LightboxEls {
   if (lbEls) return lbEls;
   const img = el("img", { class: "img-lb-img", alt: "" }) as HTMLImageElement;
-  const closeBtn = el("button", { class: "img-lb-close", type: "button", title: "Закрыть", text: "×" });
+  const closeBtn = el("button", { class: "img-lb-close", type: "button", title: "Закрыть", "aria-label": "Закрыть" }, icon("x"));
   const overlay = el("div", { class: "img-lb", role: "dialog", "aria-label": "Просмотр изображения", hidden: true }, img, closeBtn);
   document.body.append(overlay);
   lbEls = { overlay, img, closeBtn };

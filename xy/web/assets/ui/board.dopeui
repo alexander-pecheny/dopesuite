@@ -29,14 +29,15 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       -- nothing in the row agreed with anything else.
       -- Icons, not emoji-plus-caption: the row has to fit a phone, and an emoji
       -- keeps its own colours on every platform while an inline SVG follows the
-      -- button's text colour. The words live on in title/aria-label. board.js
-      -- swaps the glyphs in at boot — the vocabulary has no svg primitive.
+      -- button's text colour. The words live on in title/aria-label.
       headactions kind="detail"
         unreaddot id="contentUnreadDot" title="Непрочитанные изменения"
         button id="cardLink" icon="link" title="Скопировать прямую ссылку на карточку" aria-label="Ссылка на карточку"
         button id="cardCopy" hidden icon="clipboard" title="Скопировать вопрос или раздатку" aria-label="Копировать"
         button id="cardAddVersion" hidden icon="copy" title="Добавить версию — копию текущей формулировки, которую можно переписать" aria-label="Добавить версию"
-        iconbtn id="cardClose" icon="arrow-left" label="Назад"
+        -- Закрыть by default; openCard swaps in ← Назад when the card was opened
+        -- from a list preview, which is where closing it actually lands.
+        iconbtn id="cardClose" icon="x" label="Закрыть"
     mount id="cardCopyMsg" kind="card-copy-msg" hidden
 
     -- view switch: preview (read-only) / structured fields / raw 4s text
@@ -104,20 +105,9 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
 
     -- Алиас: the card's short name, shown in the list instead of its text. NOT a
     -- 4s field (its own encrypted column), so it lives out here below the views
-    -- rather than inside Поля, and captureDraft reads it whichever view is open.
-    -- Deliberately NOT, unlike every other section down here: those
-    -- need a persisted card (labels, attachments, timeline), an alias does not, and
-    -- hiding it would make it unsettable on the card-creation screen.
-    label id="cardAliasLabel" "Алиас"
-    -- The alias is its own column, saved on its OWN button fused to the input —
-    -- NOT via «Сохранить», which is about the card's 4s content. The two are
-    -- unrelated, and coupling them meant an alias could not be saved from the
-    -- read-only Просмотр view at all. The button is: on a card
-    -- being CREATED there is no alias column yet, so the alias rides along on the
-    -- initial create instead (see cardSave), and only an existing card needs it.
-    row id="cardAliasRow" gap="sm" align="center"
-      textfield id="cardAlias" placeholder="короткое имя карточки — показывается в списке вместо текста" autocomplete="off" maxlength="200" grow
-      button id="cardAliasSave" disabled title="Сохранить алиас" "Сохранить"
+    -- rather than inside Поля. No save button — it autosaves (saveAlias).
+    label "Алиас"
+    textfield id="cardAlias" placeholder="короткое имя карточки — показывается в списке вместо текста" autocomplete="off" maxlength="200"
 
     -- Выписки: the comments and attachments flagged as source excerpts, counted
     -- here and shown together in one modal — the point of the flag is to have the
@@ -164,15 +154,12 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
         selectfield id="feedDiffView" compact title="Вид правок"
           option value="brief" "краткий"
           option value="full" "подробный"
-      button small kind="ghost" icon="maximize-2" id="feedExpand" title="Развернуть ленту на весь экран" "Развернуть"
+      -- glyph only: with its caption the row wrapped onto a second line beside
+      -- the two labelled selects, and the words live on in title/aria-label
+      button small kind="ghost" icon="maximize-2" id="feedExpand" title="Развернуть ленту на весь экран" aria-label="Развернуть ленту"
     mount id="timeline" kind="timeline"
     form id="commentForm" dir="col"
       editor id="commentInput" kind="comment" placeholder="Комментарий…" spellcheck="false"
-      -- tag the comment with the test it came out of («на этом тесте команда
-      -- споткнулась о формулировку»); hidden unless the card carries a session
-      row id="commentSessionRow" gap="sm" align="center" wrap hidden
-        label for="commentSession" "На тесте"
-        selectfield id="commentSession" compact title="Тест, на котором это обсуждали"
       button small submit "Отправить"
 
   -- list preview overlay (docx-style render, JS-only)
@@ -181,7 +168,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       previewtitle id="previewTitle" "Предпросмотр"
       headactions
         checkbox id="previewScreen" kind="preview" title="Экранный режим: убрать пометки ведущему [в скобках] и ударения" " для экрана"
-        iconbtn id="previewClose" label="Закрыть" "×"
+        iconbtn id="previewClose" icon="x" label="Закрыть"
     mount id="previewBody" kind="preview-body"
 
   -- export picker: tick the formats, get one file — or a zip of all of them.
@@ -219,7 +206,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       headactions
         mount id="importCount" kind="import-count"
         button small id="importCommit" "Импортировать"
-        iconbtn id="importClose" label="Закрыть" "×"
+        iconbtn id="importClose" icon="x" label="Закрыть"
     split
       pane kind="src"
         editor id="importSource" kind="importsrc" spellcheck="false" aria-label="Исходник 4s"
@@ -231,7 +218,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     headrow
       previewtitle "Генерация раздаток"
       headactions
-        iconbtn id="handoutsClose" label="Закрыть" "×"
+        iconbtn id="handoutsClose" icon="x" label="Закрыть"
     split
       pane kind="src"
         -- both panes open with the same header row, so the two labels (and the
@@ -344,7 +331,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
           selectfield id="feedOrder" compact title="Порядок событий"
             option value="new" "сначала новое"
             option value="old" "сначала старое"
-        iconbtn id="feedClose" label="Закрыть" "×"
+        iconbtn id="feedClose" icon="x" label="Закрыть"
     mount id="feedGrid" kind="feed-grid"
 
   -- thread viewer: one comment and its replies, oldest→newest (the лента itself

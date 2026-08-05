@@ -980,7 +980,10 @@ function popupMenu(anchor: HTMLElement, items: MenuItem[]): void {
     // box from flipping optimistically — the caller re-renders from what the
     // server actually stored.
     if (it.checked !== undefined) {
-      const box = el("input", { type: "checkbox", role: "menuitemcheckbox" }) as HTMLInputElement;
+      // `radio` picks one of a set instead of flipping one flag — a comment
+      // belongs to at most one test, unlike a card, which is played at several.
+      const kind = it.radio ? "radio" : "checkbox";
+      const box = el("input", { type: kind, name: "menu-" + kind, role: "menuitem" + kind }) as HTMLInputElement;
       box.checked = !!it.checked;
       const row = el("label", { class: "menu-item menu-item-check" }, box, it.label);
       row.addEventListener("click", (e) => { e.preventDefault(); close(); it.onClick(); });
@@ -2562,6 +2565,7 @@ timeline = createTimeline({
   },
   labelName: (id) => { const l = labelById(id); return l ? l.name : ""; },
   cardSessions: (cardId) => playingsOf(cardId).map((id) => ({ id, label: sessionName(id) })),
+  sessionName,
   attachments: { url: attachments.attachmentUrl, download: attachments.download },
 });
 

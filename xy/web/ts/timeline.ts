@@ -34,6 +34,8 @@ export interface CardEvent extends TimelineEvent {
   edited_at?: string | null;
   is_excerpt?: boolean;
   reply_count?: number;
+  // The test this comment came out of, set from its ⋯ menu after the fact.
+  session_id?: number | null;
 }
 
 // The slice of an attachment the выписки overlay needs (board's attachment
@@ -47,11 +49,12 @@ export interface AttachmentLike {
 }
 
 // One popupMenu item (board.js's popupMenu contract): `checked` makes it a
-// checkbox row.
+// checkbox row, and `radio` makes that checkbox one choice among several.
 export interface MenuItem {
   label: string;
   onClick: () => void;
   checked?: boolean;
+  radio?: boolean;
   icon?: Node;
 }
 
@@ -83,9 +86,12 @@ export interface TimelineDeps {
   // immutable; now a rename — or a retimed session, whose labels derive their
   // names from it — would leave the whole history reading the old one.
   labelName(labelId: number): string;
-  // The test sessions the open card is tagged with, as {id, label} — the choices
-  // the comment box offers. Empty hides the picker entirely.
+  // The test sessions a card is tagged with, as {id, label} — the choices a
+  // comment's ⋯ menu offers. Empty offers none.
   cardSessions(cardId: number): Array<{ id: number; label: string }>;
+  // One session's CURRENT name, for the badge on a tagged comment: the card it
+  // hangs off may since have lost that playing.
+  sessionName(sessionId: number): string;
   attachments: {
     url(att: AttachmentLike): Promise<string>;
     download(att: AttachmentLike, name: string): Promise<void>;
@@ -258,7 +264,6 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // «Выписок: N». The container must never be shorter than its content.
   async function load(cardId: number): Promise<void> {
     const tl = byId("timeline");
-    renderSessionPicker(cardId);
     // Refresh the cached server timeline when online, then merge any pending
     // (un-synced) events synthesized from the outbox so offline edits/comments show.
     if (xySync.isOnline()) {
@@ -319,6 +324,11 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       if (ev.is_excerpt) {
         wrap.classList.add("tl-excerpt");
         metaRow.append(el("span", { class: "tl-badge", text: "выписка" }));
+      }
+      // Which test it came out of, since that is now set from the ⋯ menu and
+      // would otherwise be visible only from inside that menu.
+      if (ev.session_id != null) {
+        metaRow.append(el("span", { class: "tl-badge tl-badge-session" }, icon("flask-conical"), deps.sessionName(ev.session_id)));
       }
       // A reply keeps its place in the flat лента (it is part of the card's
       // history) but says what it answers, and links up to it. Added BEFORE
@@ -610,6 +620,21 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       label: "Выписка", checked: !!ev.is_excerpt,
       onClick: () => { void commentAction(() => jpatch(`/api/comments/${ev.id}`, { is_excerpt: !ev.is_excerpt })); },
     });
+    // The test this came out of, named after the fact — «на этом тесте команда
+    // споткнулась о формулировку». Radio, not checkboxes: a comment came out of
+    // one sitting, unlike the card, which is played at several. 0 clears it.
+    // A comment queued offline has no card_id of its own yet.
+    const cardId = typeof ev.card_id === "number" ? ev.card_id : deps.card.openCardId();
+    const sessions = cardId != null ? deps.cardSessions(cardId) : [];
+    if (sessions.length) {
+      const tag = (id: number): void => {
+        void commentAction(() => jpatch(`/api/comments/${ev.id}`, { session_id: id }));
+      };
+      items.push({ label: "без теста", checked: ev.session_id == null, radio: true, onClick: () => tag(0) });
+      for (const s of sessions) {
+        items.push({ label: s.label, checked: ev.session_id === s.id, radio: true, onClick: () => tag(s.id) });
+      }
+    }
     deps.popupMenu(anchor, items);
   }
 
@@ -662,20 +687,6 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     ta.focus();
   }
 
-  // renderSessionPicker offers the sessions this card is tagged with. Attaching
-  // is never automatic: one session is offered pre-selected, several are picked
-  // by hand, none hides the row.
-  function renderSessionPicker(cardId: number): void {
-    const row = byId("commentSessionRow");
-    const sel = byId<HTMLSelectElement>("commentSession");
-    const sessions = deps.cardSessions(cardId);
-    row.hidden = !sessions.length;
-    if (!sessions.length) { sel.replaceChildren(); return; }
-    sel.replaceChildren(el("option", { value: "", text: "— не отмечать —" }));
-    for (const s of sessions) sel.append(el("option", { value: String(s.id), text: s.label }));
-    if (sessions.length === 1) sel.value = String(sessions[0].id);
-  }
-
   submitOnCmdEnter("commentInput", "commentForm");
   byId("commentForm").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -684,11 +695,10 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const oc = deps.card.openCardId();
     if (!text || !oc) return;
     try {
-      const sel = byId<HTMLSelectElement>("commentSession");
-      const sessionId = sel.value ? Number(sel.value) : null;
+      // No test is named here: a comment is tagged from its own ⋯ menu once it
+      // exists, so writing one is just writing one.
       await deps.post("comment", `/api/cards/${oc}/comments`, {
         payload_enc: await xyCrypto.encField(mustDK(), text),
-        ...(sessionId ? { session_id: sessionId } : {}),
       });
       input.value = "";
       await load(oc);
