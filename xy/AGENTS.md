@@ -234,10 +234,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        4s marker: the 4s markers mirror chgksuite byte-for-byte, so a marker
                        of ours would break import/export parity or leak into exports). Being
                        no part of the 4s, its input sits BELOW the view panels, between Метки
-                       and Вложения (#cardAlias, read by captureDraft in every view) rather
-                       than inside Поля, and it wins on every card kind whenever set. It is
-                       the one control down there without data-edit-only: the rest need a
-                       persisted card, an alias does not, so it stays usable while creating one. The question/
+                       and Вложения (#cardAlias) rather than inside Поля, and it wins on every
+                       card kind whenever set. It has no save button: a second after the typing
+                       stops it PATCHes its own column, and every exit route flushes what is
+                       pending (saveAlias). The question/
                        answer fallback is the reader's own choice (users.card_title,
                        migrateV13, edited on /profile); an answerless question falls back to
                        its text rather than previewing blank. The snapshot also carries the caller's

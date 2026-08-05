@@ -16,7 +16,7 @@ import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
 import { parseSession, serializeSession } from "./sessions.js";
-import { xyCardDraft } from "./carddraft.js";
+import { normalizeAlias, xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
 import { byRank, rankForSlot } from "./dragrank.js";
 import type { BoardKeymeta, DataKey } from "./crypto.js";
@@ -236,7 +236,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   const cardMessageEl = byId("cardMessage");
   const cardFieldsEl = byId("cardFields");
   const cardSaveBtn = byId<HTMLButtonElement>("cardSave");
-  const cardAliasSaveBtn = byId<HTMLButtonElement>("cardAliasSave");
+  const cardCloseBtn = byId<HTMLButtonElement>("cardClose");
   const moveBoardSel = byId<HTMLSelectElement>("moveBoard");
   const moveListSel = byId<HTMLSelectElement>("moveList");
   const movePosSel = byId<HTMLSelectElement>("movePos");
@@ -410,10 +410,6 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // captureDraft folds the currently-visible view's edits back into the draft so
   // switching views never loses unsaved input.
   function captureDraft(): void {
-    // The alias is not a 4s field and belongs to no view: its input lives above
-    // the tabs, so it is read on every capture, whichever view is active (and for
-    // test cards too, which return early below).
-    draft.alias = cardAliasEl.value.trim() || null;
     if (cardView === "text") draft.desc = cardDescEl.value;
     else if (cardView === "fields" && cardFieldReaders) {
       const r = readCardFields(cardFieldReaders);
@@ -428,22 +424,12 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   function refreshSaveState(): void {
     captureDraft();
     const btn = cardSaveBtn;
-    // The alias is NOT part of this: it is a separate column with its own save
-    // button (refreshAliasState). «Сохранить» is about the card's 4s content.
     const dirty = draft.contentDirty(false);
     btn.disabled = !dirty;
     // Просмотр is read-only, so nothing can be dirty there; the button hides.
     btn.hidden = cardView === "preview" && !dirty;
     // A stale "Карточка сохранена." next to a re-enabled button reads as a lie.
     if (dirty && cardMessageEl.textContent === "Карточка сохранена.") cardMessageEl.textContent = "";
-    refreshAliasState();
-  }
-
-  // refreshAliasState enables the alias's own save button only when the input
-  // differs from what is persisted.
-  function refreshAliasState(): void {
-    const cur = cardAliasEl.value.trim() || null;
-    cardAliasSaveBtn.disabled = !draft.aliasDirty(cur);
   }
 
   function setCardView(view: string): void {
@@ -1016,6 +1002,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const openMeta = card.handoutMeta != null ? card.handoutMeta : null;
     const openAlias = card.alias != null ? card.alias : null;
     draft.open(card.desc, openMeta, openAlias);
+    cancelAliasSave(); // the previous card's pending write is its own to make
     cardAliasEl.value = openAlias || "";
     cardDescEl.value = card.desc;
     cardMessageEl.textContent = "";
@@ -1026,6 +1013,12 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // the numbered, screen-mode question text); hide it otherwise.
     byId("cardCopy").hidden = card.kind !== "question";
     byId("cardCopyMsg").hidden = true;
+    // The exit says what it does: opened from a list preview, closing lands back
+    // in that preview, so it is ← Назад; opened from the board, it is × Закрыть.
+    const back = !!cardReturn;
+    cardCloseBtn.replaceChildren(icon(back ? "arrow-left" : "x"));
+    cardCloseBtn.title = back ? "Назад" : "Закрыть";
+    cardCloseBtn.setAttribute("aria-label", cardCloseBtn.title);
     cardOverlay.hidden = false;
     // Opened from a list preview, the card takes that preview's place rather
     // than stacking on top of it — one step forward, so one back gets out.
@@ -1634,6 +1627,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // another board. There is nothing left to save, so the dirty gate is skipped.
   function dismissCard(): void {
     draft.open("", null, null); // clean baseline: nothing to prompt about
+    openCardId = null; // and no alias flush onto a card that is gone
     overlayStack.pop();
   }
 
@@ -1656,6 +1650,11 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // prompts; a failed save keeps you on the card with the error showing.
   function confirmLeaveCard(): Promise<boolean> {
     captureDraft(); // the active view's edits count, even if the caret left it
+    // A still-pending alias write goes out now, unawaited: its timer would fire
+    // after the card closed, with nothing left to save against. Only when
+    // pending — clicking ✕ blurs the input first, and that save is still in
+    // flight, so its baseline has not moved and this would send it twice.
+    if (aliasTimer) void saveAlias();
     if (!draft.contentDirty(false)) return Promise.resolve(true);
     byId("dirtyMessage").textContent = "";
     dirtyOverlay.hidden = false;
@@ -1714,7 +1713,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     void walkCard(e.key === "ArrowRight" ? 1 : -1);
   });
 
-  byId("cardClose").addEventListener("click", closeCard);
+  cardCloseBtn.addEventListener("click", closeCard);
   byId("cardLink").addEventListener("click", () => { void copyCardLink(); });
   cardOverlay.addEventListener("pointerdown", (e) => { if (e.target === cardOverlay) closeCard(); });
 
@@ -1729,8 +1728,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (!card) return false;
     const newDesc = draft.desc;
     const newMeta = draft.normalizedMeta();
-    // The alias is deliberately absent here — it saves on its own button
-    // (saveAlias). «Сохранить» touches the card's 4s content only.
+    // The alias is deliberately absent here — it autosaves (saveAlias).
     msg.textContent = "";
     try {
       const dk = mustDK();
@@ -1763,46 +1761,53 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // Re-evaluate the save button on every edit. Typing fires "input"; the Поля
   // view's +/× field pills and the tool buttons change the draft via clicks, which
   // bubble here after their own handlers have run.
-  // cardAlias is in the list because it sits outside the view panels — its edits
-  // reach the draft through captureDraft like any other, but no panel handler
-  // covers it.
-  for (const id of ["cardDesc", "cardFields", "cardAlias"]) {
+  for (const id of ["cardDesc", "cardFields"]) {
     const node = byId(id);
     node.addEventListener("input", refreshSaveState);
     node.addEventListener("click", refreshSaveState);
   }
-  // saveAlias persists the alias alone — its own column, its own PATCH, decoupled
-  // from the card's content save. "" clears it (same convention as the server's
-  // optBlob). Online-capable via the sync outbox like any other card mutation.
+
+  // ---- the alias, which saves itself ----
+  // Its own column, its own PATCH: coupling it to «Сохранить» meant no alias
+  // could be saved from the read-only Просмотр. "" clears it (optBlob).
+  const ALIAS_SAVE_DELAY = 1000;
+  let aliasTimer: ReturnType<typeof setTimeout> | null = null;
+  function cancelAliasSave(): void {
+    if (aliasTimer) clearTimeout(aliasTimer);
+    aliasTimer = null;
+  }
+
   async function saveAlias(): Promise<void> {
-    if (!openCardId) return;
-    const card = state().cards.find((c) => c.id === openCardId);
+    cancelAliasSave();
+    const card = openCardCard();
     if (!card) return;
-    const btn = cardAliasSaveBtn;
-    const next = cardAliasEl.value.trim() || null;
+    const next = normalizeAlias(cardAliasEl.value);
     if (!draft.aliasDirty(next)) return;
+    setStatus("saving");
     try {
       const body: OpBody = { alias_enc: next ? await xyCrypto.encField(mustDK(), next) : "" };
       await verbs.patch("patchCard", `/api/cards/${card.id}`, body);
       card.alias = next;
-      draft.commitAlias(next);
+      // Only while this card is still the open one: an exit flush resolves after
+      // the ←/→ walk has opened the next card, and the draft is that card's now.
+      if (openCardId === card.id) draft.commitAlias(next);
       deps.render(); // the board card previews the alias
-      btn.disabled = true;
-      btn.replaceChildren(icon("check"));
-      setTimeout(() => { btn.textContent = "Сохранить"; }, 1200);
-    } catch (err) { cardMessageEl.textContent = errMsg(err); }
+      setStatus("saved");
+    } catch (err) {
+      setStatus("error");
+      cardMessageEl.textContent = errMsg(err);
+    }
   }
-  cardAliasSaveBtn.addEventListener("click", () => { void saveAlias(); });
-  // The alias input sits outside any form, so plain Enter did nothing at all —
-  // the one field in the card you had to leave the keyboard to commit.
-  onCmdEnter(cardAliasEl, () => { void saveAlias(); });
-  cardAliasEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); void saveAlias(); }
+
+  cardAliasEl.addEventListener("input", () => {
+    cancelAliasSave();
+    aliasTimer = setTimeout(() => { void saveAlias(); }, ALIAS_SAVE_DELAY);
   });
+  cardAliasEl.addEventListener("blur", () => { void saveAlias(); });
   cardAliasEl.addEventListener("keydown", (e) => {
-    // Enter saves the alias (not the card); Cmd/Ctrl+Enter keeps the card-save
-    // shortcut for muscle memory, but on a saved card that too means the alias.
-    if (e.key === "Enter") { e.preventDefault(); void saveAlias(); }
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    cardAliasEl.blur(); // saves via blur, and drops the on-screen keyboard
   });
 
   byId("cardDelete").addEventListener("click", async () => {
