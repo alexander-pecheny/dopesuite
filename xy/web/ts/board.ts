@@ -1925,6 +1925,7 @@ exportOverlay.addEventListener("pointerdown", (e) => { if (e.target === exportOv
 const handoutsOverlay = byId("handoutsOverlay");
 let handoutsCtx: { list: BoardList; cards: BoardCard[]; numbers: Array<string | null>; title: string } | null = null;   // { list, cards, numbers }
 let handoutsPdfUrl: string | null = null;
+let handoutsDlUrl: string | null = null;
 
 function openHandouts(list: BoardList): void {
   // Grouped lists generate one set of handouts for the whole list_of_lists, with
@@ -1974,6 +1975,7 @@ function clearHandoutsPdf(): void {
   const dl = byId<HTMLAnchorElement>("handoutsDownload");
   dl.hidden = true;
   if (handoutsPdfUrl) { revokeNamedUrl(handoutsPdfUrl); handoutsPdfUrl = null; }
+  if (handoutsDlUrl) { URL.revokeObjectURL(handoutsDlUrl); handoutsDlUrl = null; }
 }
 
 // handoutFileBase names a generated раздатка after the board and the list it came
@@ -2036,10 +2038,14 @@ async function generateHandoutsPdf(): Promise<void> {
     const res = await fetch("/api/handouts/pdf", { method: "POST", credentials: "same-origin", body: fd });
     if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
     const name = handoutFileBase() + ".pdf";
-    handoutsPdfUrl = await namedUrl(await res.blob(), name);
+    const blob = await res.blob();
+    handoutsPdfUrl = await namedUrl(blob, name);
     byId("handoutsPdf").replaceChildren(pdfPreviewNode(handoutsPdfUrl));
+    // Only the preview needs /dl/ (the viewer's Save name); Chromium re-issues a
+    // download outside the worker, where that path 404s — so the button gets a blob.
+    handoutsDlUrl = URL.createObjectURL(blob);
     const dl = byId<HTMLAnchorElement>("handoutsDownload");
-    dl.href = handoutsPdfUrl;
+    dl.href = handoutsDlUrl;
     dl.setAttribute("download", name);
     dl.hidden = false;
     msg.textContent = "Готово.";
