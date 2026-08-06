@@ -1554,6 +1554,12 @@ body {
   color: var(--muted);
 }
 .kcard-test-icon .ico { --ico-size: var(--chip-h); }
+/* lucide's flask is a narrow shape in a square box, so a bare one sits ~2px
+   further from its neighbours on each side than a label dot does — the row's
+   gap plus that whitespace. Pull the box onto the ink so a row of flasks is
+   spaced like a row of dots. A flask WITH verdict dots keeps its full box: the
+   gap there separates one test's group from the next. */
+.kcard-test-bare .ico { margin: 0 -2px; }
 /* Verdicts past the first, beside the flask: a braille cell — fill a column of
    three top-down, then start the next one. Six is the cell's capacity, and the
    test's tooltip names every verdict regardless. Column wrap rather than a grid

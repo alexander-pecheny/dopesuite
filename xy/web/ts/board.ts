@@ -836,7 +836,11 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
       .filter((l): l is BoardLabel => !!l);
     const title = "Тест: " + sessionName(sid) +
       (verdicts.length ? " — " + verdicts.map((l) => l.name).join(", ") : "");
-    const test = el("span", { class: "kcard-test", title },
+    // A flask carrying no verdict dots is a lone glyph on a row of dots, and the
+    // glyph's own side bearing puts it further from its neighbours than the dots
+    // are from each other. It hugs (see .kcard-test-bare); only a flask that
+    // holds dots earns the wider gap, because there the gap separates groups.
+    const test = el("span", { class: "kcard-test" + (verdicts.length > 1 ? "" : " kcard-test-bare"), title },
       el("span", { class: "kcard-test-icon" }, flaskIcon(verdicts[0]?.color || "")));
     // The rest of the verdicts, as many as the grid holds; the tooltip above
     // still names every one of them.
@@ -2487,7 +2491,12 @@ function hidePreview(): void {
 async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   const group = wholeGroup && list.groupId != null ? groupById(list.groupId) : null;
   const scopeLists = group ? listsInGroup(list.groupId as number) : [list];
-  const cards = scopeLists.flatMap((l) => cardsOf(l.id));
+  // The preview is what the pack will look like, so a versioned card is folded
+  // the way exportSource folds it — every wording page-broken under one number.
+  // (The card editor's Просмотр is the other thing: there you are reading ONE
+  // version, so it renders the body it is handed.)
+  const cards = scopeLists.flatMap((l) => cardsOf(l.id))
+    .map((c) => (xyChgk.versionCount(c.desc) > 1 ? { ...c, desc: xyChgk.composeVersions(c.desc) } : c));
   const title = byId("previewTitle");
   if (group) title.replaceChildren(...iconed("link", group.name || "связанные списки"));
   else title.textContent = list.title || "Предпросмотр";
