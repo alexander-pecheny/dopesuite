@@ -1582,8 +1582,11 @@ body {
   height: var(--chip-h);
 }
 
+/* The count belongs to the icon, not to the label that follows it: tighter
+   inside than the row's own gap, or it reads as a label of its own. */
 .kcard-versions {
-  gap: 2px;
+  gap: 0;
+  margin-right: var(--space-2);
   color: var(--muted);
   font-size: var(--text-sm);
 }
