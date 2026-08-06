@@ -177,9 +177,6 @@ func Main() {
 	// ---- Trello import proxy (read-only passthrough to the Trello API) ----
 	mux.HandleFunc("POST /api/import/trello/proxy", srv.handleTrelloProxy)
 
-	// ---- typography (the card editor's «типограф» button) ----
-	mux.HandleFunc("POST /api/typo", srv.handleTypo)
-
 	// ---- handouts ----
 	mux.HandleFunc("POST /api/handouts/pdf", srv.handleHandoutsPDF)
 	mux.HandleFunc("POST /api/handouts/split_fit", srv.handleHandoutsSplitFit)

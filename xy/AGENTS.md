@@ -92,8 +92,6 @@ internal/server/       package server — the whole HTTP server
                        parsed in memory, nothing persisted; the client encrypts the result into a new list.
                        POST /api/import/text — the same pipeline without the file: one card's plain text
                        (a question pasted as prose) → 4s, behind the card editor's →.4s button
-  typo.go              POST /api/typo — one card's 4s through the typography pass (chgk/typoedit),
-                       behind the editor's «типограф» button. Plaintext in, plaintext out, nothing kept
   handouts.go          POST /api/handouts/{pdf,split_fit} — fully in-process (chgk/handout + typst as a wasm module, see typst.go). No Python, no typst binary, nothing written to disk. Normalize CRLF→LF first (browsers send multipart text as CRLF, which broke the .hndt "---" splitter)
   typst.go             the shared typst (wasm) pool: built once, warmed at boot, injectable so handler tests stub it. XY_WASM_CACHE must be persistent (~15s cold compile vs ~0.6s cached)
   sessions.go          test sessions (ADR-0004): a board-level entity, not a card in a list.
@@ -113,12 +111,15 @@ internal/chgk/         Go port of chgksuite's core (xy no longer shells out to P
                        chgksuite --debug), compose.go = compose_4s (structure → 4s text)
   typo/                typotools.py: the typography pass (quotes/dashes/stress accents/
                        %-decoding) + URL-aware underscore escaping
-  typoedit/            the editor's «типограф» button: typo (quotes/dashes/%-decoding — every
-                       knob but accents, which have their own button) + inline's nbsp/nbhyphen
-                       gluing, applied to 4s SOURCE rather than to a field's value.
+  typoedit/            the typography pass: typo (quotes/dashes/%-decoding — every knob but
+                       accents, which have their own button) + inline's nbsp/nbhyphen gluing,
+                       applied to 4s SOURCE rather than to a field's value.
                        Every line is split at its marker first (fsource.SplitMarker) — a pass
                        let loose on raw 4s reads a list item's leading "-" as a stray hyphen
-                       and turns it into an em dash, eating the list
+                       and turns it into an em dash, eating the list.
+                       NO PRODUCTION CALLER: the button runs the TypeScript port (web/ts/typo.ts),
+                       because question text must not be posted to a server that may not see it.
+                       This package is the parity ORACLE — both suites read testdata/pass_cases.json
   docxread/            .docx → plain text — a hand-rolled python-docx (zip/OPC, runs,
                        hyperlinks, numbering, tables, image extraction, in memory, no fs)
   textparse/           parser.py's ChgkParser: plain text → structure. A literal port,
@@ -199,7 +200,8 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        the card editor's tools row (under the Просмотр/Поля/Текст tabs):
                        ударение types a stress accent (U+0301) into whichever field the
                        caret was last in — a button steals focus on mousedown, so the field
-                       is remembered on focusin, not read at click time; типограф (/api/typo)
+                       is remembered on focusin, not read at click time; типограф (typo.ts, in
+                       the browser — every version of the card, offline-capable, nothing posted)
                        and, on Текст only, →.4s (/api/import/text) rewrite the WHOLE draft,
                        so they need no caret — in Текст the result is typed back into the
                        editor, in Поля the fields are re-rendered from the new draft. Every
@@ -258,6 +260,12 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        minute + 10s answer countdown, WebAudio bell cues
     chgk.ts            client-side 4s parser for card previews (display-only,
                        never rewrites the source)
+    typo.ts            the typography pass, ported from internal/chgk/{typo,typoedit}:
+                       quotes/dashes/%-decoding + nbsp gluing over 4s source, per version.
+                       In the browser so no question text is posted and it works offline;
+                       the Go packages stay as the oracle and both suites read
+                       internal/chgk/typoedit/testdata/pass_cases.json. One known
+                       divergence (the nbhyphen bounds) is documented at the top of the file
     import.ts          Trello board import → new encrypted board (implicit OAuth,
                        server proxy /api/import/trello/proxy, comments past the
                        1000-action cap, attachments); the pure Trello-card→xy-card

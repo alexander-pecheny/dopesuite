@@ -5,6 +5,7 @@ import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { type Tester, xyChgk } from "./chgk.js";
+import { xyTypo } from "./typo.js";
 import { xySync } from "./sync.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { createBoardMembers } from "./boardmembers.js";
@@ -135,7 +136,6 @@ const unlock = createUnlock({
   onState: (s) => {
     Object.assign(state, s);
     sessionMetaCache = new Map();
-    titleNode.textContent = state.name;
     document.title = state.name + " · xy";
     // Feed the person directory. The tester names are plaintext in hand at this
     // moment, so this costs a pass over a handful of sessions and no decryption.
@@ -205,6 +205,13 @@ window.dopeMenu?.setExtras([{
   label: "Исправить оформление Trello",
   title: "Убрать артефакты Trello (двойные переносы, экранирование, смарт-ссылки) во всех карточках",
   onClick: () => { void fixTrelloFormattingBoard(); },
+}, {
+  // wand-sparkles twice over: the vendored lucide set has no «type» glyph, and
+  // both items are the same kind of act — rewrite the text of every card at once.
+  icon: "wand-sparkles",
+  label: "Типографить всю доску",
+  title: "Кавычки-ёлочки, тире, неразрывные пробелы и раскодированные ссылки — во всех карточках и всех версиях",
+  onClick: () => { void typographBoard(); },
 }, {
   icon: "lock",
   label: "Забыть пароль доски",
@@ -312,6 +319,24 @@ async function fixTrelloFormattingBoard(): Promise<void> {
   } catch (err) {
     setStatus("error");
     alert("Ошибка при исправлении: " + errMsg(err));
+  }
+}
+
+// typographBoard runs the typography pass over every card on the board, every
+// version of it. It runs in the browser, so a whole package's question text is
+// never posted anywhere and this works offline like any other board edit.
+async function typographBoard(): Promise<void> {
+  const changes = collectDescChanges((c) => xyTypo.passVersions(c.desc));
+  if (!changes.length) { alert("Нечего типографить — вся доска уже в порядке."); return; }
+  if (!confirm(`Типографить ${changes.length} карточк(и/ек)? Кавычки, тире и пробелы в них будут изменены.`)) return;
+  setStatus("saving");
+  try {
+    await applyDescChanges(changes);
+    setStatus("saved");
+    alert(`Оттипографлено карточек: ${changes.length}.`);
+  } catch (err) {
+    setStatus("error");
+    alert("Ошибка при типографике: " + errMsg(err));
   }
 }
 
@@ -534,8 +559,19 @@ function questionCountLabel(n: number): string {
   return `${n} ${plural(n, "вопрос", "вопроса", "вопросов")}`;
 }
 
+// renderBoardTitle writes the crumb: the board's name, then how many questions
+// are on it. It rides on render() rather than on the snapshot, so adding or
+// deleting a card moves the number with it. Hidden at zero — a board with
+// nothing on it does not need telling.
+function renderBoardTitle(): void {
+  const n = state.cards.filter((c) => c.kind === "question").length;
+  titleNode.replaceChildren(state.name);
+  if (n) titleNode.append(el("span", { class: "board-qcount", text: questionCountLabel(n) }));
+}
+
 function render(): void {
   kanban.hidden = false;
+  renderBoardTitle();
   // The list "⋯" menu floats on <body>: a rebuild would strand it next to a
   // stale anchor, so close it with the DOM it was opened for.
   if (openListMenu) openListMenu.close();

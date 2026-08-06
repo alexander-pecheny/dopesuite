@@ -1,44 +1,49 @@
 package typoedit
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"testing"
+)
 
-// The pass inserts characters you cannot see, so every expectation below spells
-// them out:   is the non-breaking space, ‑ the non-breaking hyphen.
-func TestPass(t *testing.T) {
-	cases := []struct{ name, in, want string }{
-		{
-			"quotes, dashes, and the gluing that comes with them",
-			`? В романе "Мастер и Маргарита" ОН - кот.`,
-			"? В романе «Мастер и Маргарита» ОН — кот.",
-		},
-		{
-			// The whole reason this package exists: a leading "-" is a list item, not
-			// a dash flanked by whitespace, and a naive pass would eat the list.
-			"a list item's dash survives",
-			"^ Сборник:\n- Первый источник\n- Второй источник",
-			"^ Сборник:\n- Первый источник\n- Второй источник",
-		},
-		{
-			"short hyphenated words get a non-breaking hyphen",
-			"? Он что-то знал о нём.",
-			"? Он что‑то знал о нём.",
-		},
-		{
-			"markers and URLs are left alone",
-			"! Ответ\n= Зачёт\n^ https://example.com/a-b\n@ Иван Иванов",
-			"! Ответ\n= Зачёт\n^ https://example.com/a-b\n@ Иван Иванов",
-		},
-		{
-			// A pasted Wikipedia link, which is what chgk sources are made of.
-			"percent-escapes decode",
-			"^ https://ru.wikipedia.org/wiki/%D0%91%D0%B5%D0%B3%D0%B5%D0%BC%D0%BE%D1%82",
-			"^ https://ru.wikipedia.org/wiki/Бегемот",
-		},
+// The cases live in testdata/pass_cases.json because the pass has two
+// implementations now: this one, and the TypeScript port the browser runs
+// (web/ts/typo.ts), which is where the button actually goes — question text must
+// not be posted to a server that is never allowed to see it. Both suites read
+// THIS file, so the two cannot drift apart in silence. jstest/typo.test.js is
+// the other reader.
+type passCases struct {
+	Pass []struct {
+		Name string `json:"name"`
+		In   string `json:"in"`
+		Want string `json:"want"`
+	} `json:"pass"`
+	Idempotent []string `json:"idempotent"`
+}
+
+func loadCases(t *testing.T) passCases {
+	t.Helper()
+	b, err := os.ReadFile("testdata/pass_cases.json")
+	if err != nil {
+		t.Fatalf("read fixtures: %v", err)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := Pass(c.in); got != c.want {
-				t.Errorf("Pass(%q)\n got: %q\nwant: %q", c.in, got, c.want)
+	var c passCases
+	if err := json.Unmarshal(b, &c); err != nil {
+		t.Fatalf("parse fixtures: %v", err)
+	}
+	if len(c.Pass) == 0 {
+		t.Fatal("fixtures hold no cases")
+	}
+	return c
+}
+
+// The pass inserts characters you cannot see:   is the non-breaking space,
+// ‑ the non-breaking hyphen. The fixtures spell them out.
+func TestPass(t *testing.T) {
+	for _, c := range loadCases(t).Pass {
+		t.Run(c.Name, func(t *testing.T) {
+			if got := Pass(c.In); got != c.Want {
+				t.Errorf("Pass(%q)\n got: %q\nwant: %q", c.In, got, c.Want)
 			}
 		})
 	}
@@ -46,9 +51,10 @@ func TestPass(t *testing.T) {
 
 // TestPassIsIdempotent: the button is a button — a user will press it twice.
 func TestPassIsIdempotent(t *testing.T) {
-	src := "? В романе \"Мастер и Маргарита\" ОН - кот, что-то знавший о нём.\n! Бегемот"
-	once := Pass(src)
-	if twice := Pass(once); twice != once {
-		t.Errorf("second pass changed the text:\n once: %q\ntwice: %q", once, twice)
+	for _, src := range loadCases(t).Idempotent {
+		once := Pass(src)
+		if twice := Pass(once); twice != once {
+			t.Errorf("second pass changed the text:\n once: %q\ntwice: %q", once, twice)
+		}
 	}
 }

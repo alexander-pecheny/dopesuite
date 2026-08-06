@@ -962,6 +962,11 @@
    overlaid pencil used to obscure the question. */
 .pv-edit {
   display: inline-block;
+  /* Without this the glyph takes the UA's default button colour, which iOS
+     Safari renders blue while every desktop renders it as the theme's ink.
+     `buttontext` is that desktop answer, and it follows the declared
+     color-scheme, so it stays right in both themes. */
+  color: buttontext;
   border: 1px solid var(--action-border);
   background: var(--action-bg);
   border-radius: var(--radius-sm);
@@ -1582,6 +1587,9 @@ body {
 }
 /* The handout mark stands on the label row rather than inside a capsule, so it
    takes the row's own height. */
+/* how many questions the board holds, beside its name in the crumb trail */
+.board-qcount { margin-left: var(--space-2); color: var(--muted); font-size: var(--text-sm); font-weight: var(--fw-regular); }
+
 .kcard-handout,
 .kcard-versions {
   display: inline-flex;

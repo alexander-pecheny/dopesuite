@@ -49,6 +49,32 @@ function matchMarker(line: string): { type: MarkerType; rest: string } | null {
   return null;
 }
 
+// The markers SplitMarker knows, which is fsource.markerMapping — a superset of
+// MARKERS: battle/round/theme are chgksuite's and this parser has never modelled
+// them, but a line starting with one is still a marked line, and the typography
+// pass must leave the marker alone rather than turning «#B - раз» into an em dash.
+const MARKER_SET = new Set([...MARKERS.map(([m]) => m), "#B", "#R", "#T"]);
+
+// splitMarker cuts a 4s line into its leading marker (with the whitespace that
+// follows it) and the text after — the port of fsource.SplitMarker, and the
+// vocabulary lives here, so callers that must not touch a marker (the typography
+// pass) borrow this rather than keeping a second list. A bare leading "-" counts:
+// it is a list item, not a stray hyphen, which is the whole reason the pass
+// cannot be let loose on raw source.
+function splitMarker(line: string): { prefix: string; rest: string } {
+  const first = line.trim().split(/\s+/)[0] || "";
+  if (first === "") return { prefix: "", rest: line };
+  let head = first;
+  if (!MARKER_SET.has(first)) {
+    if (!line.replace(/^[ \t]+/, "").startsWith("-")) return { prefix: "", rest: line };
+    head = "-";
+  }
+  const idx = line.indexOf(head) + head.length;
+  const rest = line.slice(idx);
+  const lead = rest.length - rest.replace(/^[ \t]+/, "").length;
+  return { prefix: line.slice(0, idx) + rest.slice(0, lead), rest: rest.slice(lead) };
+}
+
 // parseBlocks splits a raw description into [{type, text}] blocks. Lines without
 // a marker continue the current block (multi-line questions/answers). Leading
 // lines before any marker form a "pre" block (a question card whose author
@@ -1556,7 +1582,7 @@ function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): 
 }
 
 export const xyChgk = {
-  parseBlocks, numberDirective, questionText, answerText, blockText, previewText,
+  parseBlocks, splitMarker, numberDirective, questionText, answerText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,

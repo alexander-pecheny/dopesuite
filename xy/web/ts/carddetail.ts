@@ -15,6 +15,7 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
+import { xyTypo } from "./typo.js";
 import { parseSession, serializeSession } from "./sessions.js";
 import { normalizeAlias, xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
@@ -890,39 +891,27 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (f) insertAtCaret(f, "́");
   });
 
-  // типограф runs the WHOLE card — not just the focused field — through chgksuite's
-  // typography pass (/api/typo: quotes → «ёлочки», hyphen runs → em dashes,
+  // типограф runs the WHOLE card — not just the focused field — through
+  // chgksuite's typography pass (quotes → «ёлочки», hyphen runs → em dashes,
   // non-breaking spaces and hyphens, percent-escapes decoded back into the words a
-  // pasted wiki link stands for). The draft is 4s either way, so Поля and Текст
-  // send the same text; only where the result lands differs. Online-only, like →.4s:
-  // the pass is the Go port on the server (it never keeps the text).
-  byId("cardTypo").addEventListener("click", async () => {
+  // pasted wiki link stands for). It runs in the browser (typo.ts), so it works
+  // offline and no question text is posted anywhere; the draft is 4s either way,
+  // so Поля and Текст feed it the same thing and only the landing differs.
+  byId("cardTypo").addEventListener("click", () => {
     captureDraft();
-    // The version being looked at, not the card: the other versions are nobody's
-    // business here, and their separators are xy's own markup rather than prose
-    // for a typographer to straighten.
-    if (!versionDesc().trim()) return;
-    if (!xySync.requireOnline("Типографика доступна только онлайн.")) return;
-    setStatus("saving");
-    try {
-      const res = await fetch("/api/typo", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: versionDesc() }),
-      });
-      if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
-      const { text } = (await res.json()) as { text: string };
-      setStatus("saved");
-      writeVersionDesc(text);
-      // In Текст the user is looking at the raw 4s, so type it back into the editor
-      // (undo intact); in Поля the fields are a view of the draft, so rebuild them.
-      if (cardView === "text") replaceField(cardDescEl, text);
-      else renderCardFields();
-    } catch (err) {
-      setStatus("error");
-      alert("Не удалось применить типографику: " + errMsg(err));
-    }
+    if (!draft.desc.trim()) return;
+    // EVERY version, not just the one on screen: the button says «типограф», and
+    // a wording you are not looking at has the same кавычки the one you are does.
+    // The pass runs per version and the card is reassembled, so the separators are
+    // never handed to it.
+    draft.desc = xyTypo.passVersions(draft.desc);
+    // In Текст the user is looking at the raw 4s, so type it back into the editor
+    // (undo intact); in Поля the fields are a view of the draft, so rebuild them.
+    if (cardView === "text") replaceField(cardDescEl, versionDesc());
+    else renderCardFields();
+    // The tools change the draft by clicking, not by typing, so nothing has fired
+    // the `input` that normally re-tests it against what is saved.
+    refreshSaveState();
   });
 
   // →.4s runs the raw editor's content through the server's chgk text parser — the
