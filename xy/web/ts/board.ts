@@ -836,11 +836,7 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
       .filter((l): l is BoardLabel => !!l);
     const title = "Тест: " + sessionName(sid) +
       (verdicts.length ? " — " + verdicts.map((l) => l.name).join(", ") : "");
-    // A flask carrying no verdict dots is a lone glyph on a row of dots, and the
-    // glyph's own side bearing puts it further from its neighbours than the dots
-    // are from each other. It hugs (see .kcard-test-bare); only a flask that
-    // holds dots earns the wider gap, because there the gap separates groups.
-    const test = el("span", { class: "kcard-test" + (verdicts.length > 1 ? "" : " kcard-test-bare"), title },
+    const test = el("span", { class: "kcard-test", title },
       el("span", { class: "kcard-test-icon" }, flaskIcon(verdicts[0]?.color || "")));
     // The rest of the verdicts, as many as the grid holds; the tooltip above
     // still names every one of them.
