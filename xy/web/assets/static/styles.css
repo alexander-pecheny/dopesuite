@@ -962,11 +962,12 @@
    overlaid pencil used to obscure the question. */
 .pv-edit {
   display: inline-block;
-  /* Without this the glyph takes the UA's default button colour, which iOS
-     Safari renders blue while every desktop renders it as the theme's ink.
-     `buttontext` is that desktop answer, and it follows the declared
-     color-scheme, so it stays right in both themes. */
-  color: buttontext;
+  /* The design system's on-colour for --action-bg, which is the fill below.
+     Left to the UA the glyph came out blue on iOS Safari; `buttontext` fixed
+     that but resolves through the UA's own palette, and iOS renders it black
+     against a dark board whatever color-scheme the page declares. A token the
+     app owns follows the theme by construction and asks WebKit for nothing. */
+  color: var(--action-fg);
   border: 1px solid var(--action-border);
   background: var(--action-bg);
   border-radius: var(--radius-sm);
