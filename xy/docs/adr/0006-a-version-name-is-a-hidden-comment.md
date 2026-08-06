@@ -1,5 +1,9 @@
 # A version's name is a hidden comment
 
+> **Amended by [ADR-0007](0007-a-version-is-a-whole-card-body.md).** The directive
+> chosen here now separates the versions as well as naming them, and it sits on
+> its own line rather than inside the question text.
+
 ADR-0005 left a version with no name and nowhere to hang one. Editors asked for
 one anyway: «полегче» and «посложнее» say in one word what a tab reading
 «Версия 2» cannot. chgksuite 1.4.0b1 added `(hidden-comment …)`, an inline

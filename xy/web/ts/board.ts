@@ -143,6 +143,7 @@ const unlock = createUnlock({
     render();
     renderNotifBadge();
     void boardMembers.load(); // best-effort: populate the author-name map for timelines (online only)
+    void convertLegacyVersionsBoard();
     cardDetail.maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
   },
   onUnavailable: () => {
@@ -266,36 +267,70 @@ async function deleteBoard(): Promise<void> {
   } catch (err) { alert("Не удалось удалить: " + errMsg(err)); }
 }
 
+// ---- board-wide description rewrites ----
+// Two things rewrite every card's 4s at once: the Trello clean-up and the version
+// conversion. Both are the same walk — collect what a transform changes, then
+// patch each changed card with a desc_edit timeline entry so the rewrite is
+// auditable and reversible — so they share it. A transform returns null for
+// «nothing to do here».
+
+interface DescChange { card: BoardCard; desc: string }
+
+function collectDescChanges(next: (c: BoardCard) => string | null): DescChange[] {
+  const out: DescChange[] = [];
+  for (const c of state.cards) {
+    const desc = next(c);
+    if (desc !== null && desc !== c.desc) out.push({ card: c, desc });
+  }
+  return out;
+}
+
+async function applyDescChanges(changes: ReadonlyArray<DescChange>): Promise<void> {
+  const key = mustDK();
+  for (const ch of changes) {
+    await patch("patchCard", `/api/cards/${ch.card.id}`, {
+      description_enc: await xyCrypto.encField(key, ch.desc),
+      desc_event_enc: await xyCrypto.encField(key, JSON.stringify({ before: ch.card.desc, after: ch.desc })),
+    });
+    ch.card.desc = ch.desc;
+  }
+  render();
+}
+
 // fixTrelloFormattingBoard re-applies chgksuite's Trello clean-up (the same fix
 // the importer runs) to every already-imported card whose description still
-// carries Trello artefacts. Each changed card is re-encrypted and patched with a
-// desc_edit timeline entry, so the change is auditable and reversible.
+// carries Trello artefacts.
 async function fixTrelloFormattingBoard(): Promise<void> {
-  const changes: Array<{ card: BoardCard; desc: string }> = [];
-  for (const c of state.cards) {
-    const fixed = xyChgk.fixTrelloFormatting(c.desc);
-    if (fixed !== c.desc) changes.push({ card: c, desc: fixed });
-  }
+  const changes = collectDescChanges((c) => xyChgk.fixTrelloFormatting(c.desc));
   if (!changes.length) { alert("Нечего исправлять — оформление уже в порядке."); return; }
   if (!confirm(`Исправить оформление Trello в ${changes.length} карточк(ах)? Описания будут изменены.`)) return;
   setStatus("saving");
-  let done = 0;
   try {
-    const key = mustDK();
-    for (const ch of changes) {
-      await patch("patchCard", `/api/cards/${ch.card.id}`, {
-        description_enc: await xyCrypto.encField(key, ch.desc),
-        desc_event_enc: await xyCrypto.encField(key, JSON.stringify({ before: ch.card.desc, after: ch.desc })),
-      });
-      ch.card.desc = ch.desc;
-      done++;
-    }
+    await applyDescChanges(changes);
     setStatus("saved");
-    render();
-    alert(`Исправлено карточек: ${done}.`);
+    alert(`Исправлено карточек: ${changes.length}.`);
   } catch (err) {
     setStatus("error");
     alert("Ошибка при исправлении: " + errMsg(err));
+  }
+}
+
+// convertLegacyVersionsBoard rewrites the cards written under the old scheme,
+// where a Version was a run of question text between (PAGEBREAK) directives and
+// every other field was shared. They become whole bodies the first time their
+// board is opened after this release. Idempotent — a converted card offers
+// nothing left to find — so the cost of running it on every load is one pass over
+// the descriptions. Each rewrite carries a desc_edit entry, like any other edit.
+async function convertLegacyVersionsBoard(): Promise<void> {
+  if (!xySync.isOnline()) return;
+  const changes = collectDescChanges((c) => (c.kind === "question" ? xyChgk.convertLegacyVersions(c.desc) : null));
+  if (!changes.length) return;
+  try {
+    await applyDescChanges(changes);
+  } catch (err) {
+    // Nothing is lost by failing: the cards keep their old spelling and the next
+    // load tries again.
+    console.error("не удалось перевести версии карточек", err);
   }
 }
 
@@ -779,6 +814,12 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   // can take it off, unlike everything after it.
   if (card.kind === "question" && xyChgk.handoutForCard(card.desc)) {
     labelRow.append(el("span", { class: "kcard-handout", title: "Раздаточный материал" }, icon("file-text")));
+  }
+  // Which questions the group has not settled on yet — the card itself shows
+  // version 1, and this is the only sign the others exist.
+  const versions = xyChgk.versionCount(card.desc);
+  if (card.kind === "question" && versions > 1) {
+    labelRow.append(el("span", { class: "kcard-versions", title: `Версий: ${versions}` }, ...iconed("copy", String(versions))));
   }
   // The board card shows the author's own labels; a test's verdict belongs to the
   // card detail, where it can say WHICH test it came from.
@@ -1763,9 +1804,11 @@ function exportScope(list: BoardList): { cards: BoardCard[]; title: string } {
 }
 
 // exportSource is the 4s document a list exports as: its cards' descriptions in
-// board order, blank-line separated. Every format is rendered from this one string.
+// board order, blank-line separated. Every format is rendered from this one
+// string, which is why the versions are folded back into one question block here
+// and nowhere else — a versioned card is still one numbered question.
 function exportSource(cards: ReadonlyArray<BoardCard>): string {
-  return cards.map((c) => c.desc.trim()).filter(Boolean).join("\n\n") + "\n";
+  return cards.map((c) => xyChgk.composeVersions(c.desc).trim()).filter(Boolean).join("\n\n") + "\n";
 }
 
 // The export modal's five formats, in the order they are offered. `server` marks

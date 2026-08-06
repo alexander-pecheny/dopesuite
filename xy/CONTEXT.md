@@ -20,11 +20,11 @@ A Card's own short display label, stored as its own encrypted column — deliber
 A named, ordered run of **consecutive** Lists sharing one question-numbering sequence and a combined export. A group always moves as one block. (Schema name: `list_of_lists`.)
 
 **Version**:
-One candidate wording of a Card's question, kept alongside its siblings so the editors can weigh them before choosing. Only the question has Versions — never the answer or the comment. They live in the question text itself, separated by chgksuite's `(PAGEBREAK)`, so every Version reaches the export and pruning the rejected ones is an editorial act, not an automatic one. A Version may carry a **Name** — «полегче», «посложнее» — written as a Hidden Comment, so it says in one word what «Версия 2» cannot. It has nothing else: no author and no date.
+One candidate form of a Card, kept alongside its siblings so the editors can weigh them before choosing. It is the whole question — wording, ответ, зачёт, раздатка, автор — because a rewording answers to its own зачёт and may carry its own picture. Versions live in the Card's own content, one after another, so they cost no column; the first is the one the board shows and every export merges the rest back into that single numbered question. A Version may carry a **Name** — «полегче», «посложнее» — so it says in one word what «Версия 2» cannot; the Name is the editors' alone and reaches no export. It has nothing else: no author and no date.
 _Avoid_: draft, variant, revision (a Version is a live alternative, not a superseded past state — that is what the Timeline records)
 
 **Hidden Comment**:
-chgksuite's `(hidden-comment …)`: text an editor writes for editors, which reaches no rendering of the question. It is a note, unless its payload opens with `xy-version:` — that one names a Version and is read rather than shown. Only the Текст view (the source verbatim) and Поля (whose fields are raw 4s) show a note at all; Просмотр, the board, what is copied for a tester and every export but the .4s drop it.
+chgksuite's `(hidden-comment …)`: text an editor writes for editors, which reaches no rendering of the question. It is a note, unless it is a line of its own whose payload opens with `xy-version:` — that one both starts a Version and names it, and is read rather than shown. Only the Текст view (the source verbatim) and Поля (whose fields are raw 4s) show a note at all; Просмотр, the board, what is copied for a tester and every export but the .4s drop it.
 _Avoid_: comment (that is the Timeline's word — a Hidden Comment is nobody's to reply to)
 
 **Label**:
