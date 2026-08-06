@@ -327,13 +327,16 @@ async function fixTrelloFormattingBoard(): Promise<void> {
 // never posted anywhere and this works offline like any other board edit.
 async function typographBoard(): Promise<void> {
   const changes = collectDescChanges((c) => xyTypo.passVersions(c.desc));
+  const total = state.cards.length;
   if (!changes.length) { alert("Нечего типографить — вся доска уже в порядке."); return; }
-  if (!confirm(`Типографить ${changes.length} карточк(и/ек)? Кавычки, тире и пробелы в них будут изменены.`)) return;
+  // «N из M», because the rest were already right: the pass only rewrites a card
+  // whose text it actually changes, and a bare count reads like it skipped some.
+  if (!confirm(`Типографить ${changes.length} из ${total}? В остальных карточках менять нечего.`)) return;
   setStatus("saving");
   try {
     await applyDescChanges(changes);
     setStatus("saved");
-    alert(`Оттипографлено карточек: ${changes.length}.`);
+    alert(`Оттипографлено карточек: ${changes.length} из ${total}.`);
   } catch (err) {
     setStatus("error");
     alert("Ошибка при типографике: " + errMsg(err));
