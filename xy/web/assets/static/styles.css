@@ -482,6 +482,7 @@
 /* The handout mark is the row's only outline glyph — it marks a fact about the
    text, not a colour someone chose — so it takes the ink at full strength. */
 .kcard-handout .ico { color: var(--text); --ico-size: 15px; stroke-width: 1.5; }
+.kcard-versions .ico { --ico-size: 14px; stroke-width: 1.5; }
 
 /* card detail overlay — occupies the whole lower section (below the fixed
    header), fully obscuring the kanban; the panel itself scrolls internally so
@@ -652,6 +653,9 @@
    share a line, and unwrapped the pieces stretched apart around a stranded «·» */
 .tl-meta { font-size: var(--text-2xs); color: var(--muted); display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }
 .tl-comment { white-space: pre-wrap; font-size: var(--text-sm); margin-top: var(--space-1); }
+/* one section per version in a desc_edit, so an edit says which wording it hit */
+.tl-versions { display: flex; flex-direction: column; gap: var(--space-1); }
+.tl-vname { font-size: var(--text-2xs); color: var(--muted); }
 /* copy-link affordance on a comment; revealed on hover/focus to stay quiet */
 .tl-link { border: none; background: none; cursor: pointer; padding: 0; font-size: var(--text-2xs); line-height: 1; opacity: 0; transition: opacity 0.1s; }
 .tl-event:hover .tl-link, .tl-link:focus-visible { opacity: 0.7; }
@@ -958,6 +962,11 @@
    overlaid pencil used to obscure the question. */
 .pv-edit {
   display: inline-block;
+  /* Without this the glyph takes the UA's default button colour, which iOS
+     Safari renders blue while every desktop renders it as the theme's ink.
+     `buttontext` is that desktop answer, and it follows the declared
+     color-scheme, so it stays right in both themes. */
+  color: buttontext;
   border: 1px solid var(--action-border);
   background: var(--action-bg);
   border-radius: var(--radius-sm);
@@ -1537,7 +1546,9 @@ body {
   align-items: center;
   box-sizing: border-box;
   height: var(--chip-h);
-  gap: 2px;
+  /* Tighter than the row's own gap, so a test's verdict dots read as hanging off
+     the flask to their left rather than the flask to their right. */
+  gap: 1px;
 }
 /* The flask is SOLID and single-coloured — the first verdict recorded at that
    test, or --muted when there is none. Outline plus poured-in liquid needed
@@ -1550,6 +1561,11 @@ body {
   color: var(--muted);
 }
 .kcard-test-icon .ico { --ico-size: var(--chip-h); }
+/* lucide's flask is a narrow shape in a square box, so it sits ~2px further from
+   its neighbours on each side than a label dot does — the row's gap plus that
+   whitespace. Pull the box onto the ink, so a row of flasks is spaced like a row
+   of dots and a flask's own verdict dots sit where the gap above puts them. */
+.kcard-test .ico { margin: 0 -2px; }
 /* Verdicts past the first, beside the flask: a braille cell — fill a column of
    three top-down, then start the next one. Six is the cell's capacity, and the
    test's tooltip names every verdict regardless. Column wrap rather than a grid
@@ -1571,10 +1587,23 @@ body {
 }
 /* The handout mark stands on the label row rather than inside a capsule, so it
    takes the row's own height. */
-.kcard-handout {
+/* how many questions the board holds, beside its name in the crumb trail */
+.board-qcount { margin-left: var(--space-2); color: var(--muted); font-size: var(--text-sm); font-weight: var(--fw-regular); }
+
+.kcard-handout,
+.kcard-versions {
   display: inline-flex;
   align-items: center;
   height: var(--chip-h);
+}
+
+/* The count belongs to the icon, not to the label that follows it: tighter
+   inside than the row's own gap, or it reads as a label of its own. */
+.kcard-versions {
+  gap: 0;
+  margin-right: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */

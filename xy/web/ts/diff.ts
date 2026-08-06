@@ -100,6 +100,18 @@ function clusterChanges(ops: DiffOp[]): DiffOp[] {
       j++;
     }
     const del = join(dels), add = join(adds);
+    // A cluster that trims away to nothing was a change of whitespace ALONE —
+    // most of what the typography pass does, since it swaps ordinary spaces for
+    // non-breaking ones. Dropping it outright welded the words either side
+    // together («В восьмидесятые» → «Ввосьмидесятые»), so the лента read as
+    // though the edit had deleted every space in the question. Kept verbatim
+    // instead: the words stay apart, and the highlight says where the pass
+    // touched even though no reader can see one kind of space from the other.
+    if (!del && !add && (dels.length || adds.length)) {
+      out.push(adds.length
+        ? { type: "add", text: adds.join("") }
+        : { type: "del", text: dels.join("") });
+    }
     if (del) out.push({ type: "del", text: del });
     if (add) out.push({ type: "add", text: add });
     // whitespace trailing the last real change separates the cluster from what

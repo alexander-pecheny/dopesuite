@@ -11,6 +11,7 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyDiff } from "./diff.js";
+import { xyChgk } from "./chgk.js";
 import type { AuthMe } from "./app.js";
 import type { DataKey } from "./crypto.js";
 import type { DiffOp } from "./diff.js";
@@ -365,12 +366,11 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     } else if (ev.type === "desc_edit") {
       let diff: { before?: string; after?: string; author?: string } = {};
       try { diff = JSON.parse(payload) as { before?: string; after?: string; author?: string }; } catch (_) {}
-      const ops = xyDiff.diffTokens(diff.before || "", diff.after || "");
       // An imported edit (Trello history) names its author inside the payload —
       // they are not an xy user, so author_user_id has nobody to point at.
       const editor = diff.author ? `${diff.author} · ` : meta("");
       wrap.append(el("div", { class: "tl-meta", text: editor + "правка описания · " + when }),
-        diffView() === "brief" ? renderBriefDiff(ops) : renderFullDiff(ops));
+        renderDescDiff(diff.before || "", diff.after || ""));
     } else {
       let info: { label?: string; file?: string; label_id?: number } = {};
       try { info = JSON.parse(payload) as { label?: string; file?: string; label_id?: number }; } catch (_) {}
@@ -398,6 +398,29 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   const DIFF_VIEW_KEY = "xy.diffView";
   function diffView(): "full" | "brief" {
     return diffViewOf(localStorage.getItem(DIFF_VIEW_KEY));
+  }
+
+  // renderDescDiff diffs each version against its own counterpart rather than the
+  // card against the card. The versions of one card are near-duplicates, and a
+  // token diff let loose across all of them latches version 2's words onto
+  // version 1's and reports a change nobody made. Versions are paired by
+  // position, so an added version reads as one addition.
+  function renderDescDiff(before: string, after: string): HTMLElement {
+    const b = xyChgk.splitVersions(before), a = xyChgk.splitVersions(after);
+    const one = (x: string, y: string): HTMLElement => {
+      const ops = xyDiff.diffTokens(x, y);
+      return diffView() === "brief" ? renderBriefDiff(ops) : renderFullDiff(ops);
+    };
+    if (b.length <= 1 && a.length <= 1) return one(before, after);
+    const box = el("div", { class: "tl-versions" });
+    for (let i = 0; i < Math.max(b.length, a.length); i++) {
+      const name = xyChgk.versionName(after, i) ?? xyChgk.versionName(before, i);
+      box.append(
+        el("div", { class: "tl-vname", text: name || `Версия ${i + 1}` }),
+        one(b[i] ?? "", a[i] ?? ""),
+      );
+    }
+    return box;
   }
 
   // renderFullDiff: two panes, changes highlighted within each — removed tokens

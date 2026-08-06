@@ -49,15 +49,47 @@ function matchMarker(line: string): { type: MarkerType; rest: string } | null {
   return null;
 }
 
+// The markers SplitMarker knows, which is fsource.markerMapping — a superset of
+// MARKERS: battle/round/theme are chgksuite's and this parser has never modelled
+// them, but a line starting with one is still a marked line, and the typography
+// pass must leave the marker alone rather than turning «#B - раз» into an em dash.
+const MARKER_SET = new Set([...MARKERS.map(([m]) => m), "#B", "#R", "#T"]);
+
+// splitMarker cuts a 4s line into its leading marker (with the whitespace that
+// follows it) and the text after — the port of fsource.SplitMarker, and the
+// vocabulary lives here, so callers that must not touch a marker (the typography
+// pass) borrow this rather than keeping a second list. A bare leading "-" counts:
+// it is a list item, not a stray hyphen, which is the whole reason the pass
+// cannot be let loose on raw source.
+function splitMarker(line: string): { prefix: string; rest: string } {
+  const first = line.trim().split(/\s+/)[0] || "";
+  if (first === "") return { prefix: "", rest: line };
+  let head = first;
+  if (!MARKER_SET.has(first)) {
+    if (!line.replace(/^[ \t]+/, "").startsWith("-")) return { prefix: "", rest: line };
+    head = "-";
+  }
+  const idx = line.indexOf(head) + head.length;
+  const rest = line.slice(idx);
+  const lead = rest.length - rest.replace(/^[ \t]+/, "").length;
+  return { prefix: line.slice(0, idx) + rest.slice(0, lead), rest: rest.slice(lead) };
+}
+
 // parseBlocks splits a raw description into [{type, text}] blocks. Lines without
 // a marker continue the current block (multi-line questions/answers). Leading
 // lines before any marker form a "pre" block (a question card whose author
 // didn't prefix "? ").
-function parseBlocks(desc: string | null | undefined): Block[] {
+// `keepVersionLines` is for the legacy converter alone, which has to read a name
+// that the old scheme wrote inside the question text.
+function parseBlocks(desc: string | null | undefined, keepVersionLines = false): Block[] {
   const lines = (desc || "").split(/\r?\n/);
   const blocks: Block[] = [];
   let cur: Block | null = null;
   for (const line of lines) {
+    // A version separator is xy's own metadata, not 4s content: dropping it here
+    // is what keeps every reader but the card editor — previews, numbering,
+    // handouts, copy-for-testers — seeing a versioned card as its version 1.
+    if (!keepVersionLines && versionLineName(line) !== null) continue;
     const m = matchMarker(line);
     if (m) {
       cur = { type: m.type, text: m.rest };
@@ -751,131 +783,262 @@ function fixTrelloLinks(desc: string): string {
 }
 
 
-// ── question versions ───────────────────────────────────────────────────────
-// A Version is one candidate wording of a question. They live in the question
-// field itself, separated by chgksuite's own (PAGEBREAK) directive — no marker
-// of ours (which would break import/export parity, the same reason the alias is
-// its own column) and no schema change. Every version reaches the export, page
-// broken, which is exactly what (PAGEBREAK) already meant; pruning before
-// delivery is the editor's job. Only the question is versioned — never the
-// answer or the comment.
-const VERSION_SEP = "(PAGEBREAK)";
+// ── versions ────────────────────────────────────────────────────────────────
+// A Version is a WHOLE 4s body — question, ответ, зачёт, раздатка, автор, all of
+// it. A card's description holds its versions concatenated, each introduced by a
+// standalone (hidden-comment xy-version: имя) line; the name is optional and the
+// line is xy's own metadata, dropped by parseBlocks, so every reader but the card
+// editor sees version 1 and never knows the rest are there. A card with one
+// version carries no such line at all — a plain question is stored exactly as it
+// always was.
+//
+// The export merges the versions back into ONE question block (composeVersions),
+// so a versioned card is still one numbered question: the `?` field carries every
+// wording page-broken, and any other field the versions disagree on prints each
+// value labelled by its version's NUMBER (never its name — a name is shorthand
+// between editors, and «полегче» above a question tells a tester how hard it is
+// meant to be before they have tried it).
+const PAGEBREAK = "(PAGEBREAK)";
+const VERSION_TAG = "xy-version:";
+const VERSION_LINE = /^\(hidden-comment\s+xy-version:([^()]*)\)$/;
 
-// splitVersions cuts the question field into its versions, verbatim. There is
-// always at least one, so a question with no (PAGEBREAK) is a one-version
-// question and nothing downstream needs a special case.
-function splitVersions(question: string | null | undefined): string[] {
-  return (question || "").split(VERSION_SEP);
-}
-
-// A version's name — «полегче», «посложнее» — is a hidden comment with a
-// namespaced payload (ADR-0006): invisible in every rendering, carried by the 4s
-// itself, and ours alone, since chgksuite may claim keywords of its own. Any
-// other hidden comment is an ordinary note and is left where the editor typed it.
-const VERSION_NAME = "xy-version:";
-
-// nameSpans are the comments that name a version. The first one is the name; a
-// later one is a leftover, dropped by the next write rather than obeyed.
-function nameSpans(segment: string): HiddenSpan[] {
-  return scanDirectives(segment).hidden.filter((h) => h.body.startsWith(VERSION_NAME));
-}
-
-function versionName(question: string | null | undefined, i: number): string | null {
-  const seg = splitVersions(question)[i];
-  if (seg === undefined) return null;
-  const h = nameSpans(seg)[0];
-  return h ? h.body.slice(VERSION_NAME.length).trim() || null : null;
-}
-
-function stripName(segment: string): string {
-  let out = segment;
-  for (const h of nameSpans(segment).reverse()) out = out.slice(0, h.start) + out.slice(h.end);
-  return out;
+// versionLineName reads a separator line's name: "" when it is the unnamed form,
+// null when the line is no separator at all. An ordinary hidden comment is a
+// note, and a note never splits a card.
+function versionLineName(line: string): string | null {
+  const m = VERSION_LINE.exec(line.trim());
+  return m ? m[1].trim() : null;
 }
 
 // A name is typed into a prompt, and a stray bracket there would close the
-// directive early and spill into the question — so it can hold neither brackets
-// nor line breaks.
+// directive early and spill into the card — so it can hold neither brackets nor
+// line breaks.
 function cleanName(name: string | null | undefined): string | null {
   return (name || "").replace(/[()]/g, "").replace(/\s+/g, " ").trim() || null;
 }
 
-// composeVersion is the canonical spelling of a named version: the name on its
-// own first line, which is where every write puts it however it was typed.
-function composeVersion(name: string | null, text: string): string {
+function composeVersionLine(name: string | null): string {
   const clean = cleanName(name);
-  return clean ? `(hidden-comment ${VERSION_NAME} ${clean})\n${text}` : text;
+  return clean ? `(hidden-comment ${VERSION_TAG} ${clean})` : `(hidden-comment ${VERSION_TAG})`;
 }
 
-// writeVersion is the one way a version's text is put back: the whitespace that
-// framed it is kept, so retyping version 2 cannot reflow how version 1 breaks.
-function writeVersion(question: string | null | undefined, i: number, fn: (segment: string) => string): string {
-  const parts = splitVersions(question);
-  if (i < 0 || i >= parts.length) return question || "";
-  const lead = /^\s*/.exec(parts[i])![0];
-  const trail = /\s*$/.exec(parts[i])![0];
-  parts[i] = lead + fn(parts[i]) + trail;
-  return parts.join(VERSION_SEP);
+interface Versions { bodies: string[]; names: Array<string | null> }
+
+// readVersions is the one parse: bodies and names, always at least one version.
+// Text sitting before the first separator is a version too — a hand-edited card
+// must not lose it.
+function readVersions(desc: string | null | undefined): Versions {
+  const bodies: string[] = [], names: Array<string | null> = [];
+  let cur: string[] = [], curName: string | null = null, seen = false;
+  const flush = (): void => {
+    const body = cur.join("\n").trim();
+    if (body !== "" || seen) { bodies.push(body); names.push(curName); }
+    cur = [];
+  };
+  for (const line of (desc || "").split(/\r?\n/)) {
+    const name = versionLineName(line);
+    if (name === null) { cur.push(line); continue; }
+    if (cur.join("\n").trim() !== "" || seen) flush();
+    else cur = [];
+    curName = name === "" ? null : name;
+    seen = true;
+  }
+  flush();
+  if (!bodies.length) { bodies.push(""); names.push(null); }
+  return { bodies, names };
 }
 
-// versionText is one version as the editor should see it — the surrounding
-// whitespace belongs to the separator, not to the wording, and the name belongs
-// to the tab strip.
-function versionText(question: string | null | undefined, i: number): string {
-  return stripName(splitVersions(question)[i] || "").trim();
+// joinVersions is the canonical spelling. One unnamed version is written bare, so
+// a card that never grew a second wording is byte-identical to what it was.
+function joinVersions(v: Versions): string {
+  if (v.bodies.length === 1 && !v.names[0]) return v.bodies[0].trim();
+  return v.bodies.map((b, i) => composeVersionLine(v.names[i]) + "\n" + b.trim()).join("\n");
 }
 
-// setVersion writes one version back, keeping the whitespace that framed it so
-// editing version 2 cannot silently reflow how version 1 breaks in the export.
-function setVersion(question: string | null | undefined, i: number, text: string): string {
-  // A name typed into the text wins over the one the version had, and lands on
-  // the first line either way.
-  const typed = nameSpans(text)[0];
-  const name = typed ? typed.body.slice(VERSION_NAME.length) : versionName(question, i);
-  return writeVersion(question, i, () => composeVersion(name, typed ? stripName(text) : text));
+function splitVersions(desc: string | null | undefined): string[] {
+  return readVersions(desc).bodies;
+}
+
+function versionCount(desc: string | null | undefined): number {
+  return readVersions(desc).bodies.length;
+}
+
+function versionBody(desc: string | null | undefined, i: number): string {
+  return readVersions(desc).bodies[i] ?? "";
+}
+
+function versionName(desc: string | null | undefined, i: number): string | null {
+  return readVersions(desc).names[i] ?? null;
+}
+
+// A body may not carry a separator of its own: it is ONE version, and a
+// separator inside it would split into more the next time the card is read —
+// which is how a card grew a version every time it was saved. The editor never
+// shows a separator, so one can only arrive by paste or from text written under
+// the old scheme, and dropping it is what those meant anyway.
+function stripVersionLines(body: string): string {
+  return body.split(/\r?\n/).filter((l) => versionLineName(l) === null).join("\n");
+}
+
+function setVersionBody(desc: string | null | undefined, i: number, body: string): string {
+  const v = readVersions(desc);
+  if (i < 0 || i >= v.bodies.length) return desc || "";
+  v.bodies[i] = stripVersionLines(body);
+  return joinVersions(v);
 }
 
 // setVersionName renames one version, or clears the name when given an empty
-// string. Both go through the same canonical spelling as every other write.
-function setVersionName(question: string | null | undefined, i: number, name: string): string {
-  return writeVersion(question, i, (seg) => composeVersion(name, stripName(seg).trim()));
+// string.
+function setVersionName(desc: string | null | undefined, i: number, name: string): string {
+  const v = readVersions(desc);
+  if (i < 0 || i >= v.bodies.length) return desc || "";
+  v.names[i] = cleanName(name);
+  return joinVersions(v);
 }
 
-// joinVersions is the canonical spelling: each version on its own lines with the
-// separator alone between them. Restructuring (add/delete/promote) normalises to
-// it; a plain edit does not, so merely retyping one wording never reflows how the
-// others break in the export.
-function joinVersions(parts: ReadonlyArray<string>): string {
-  return parts.map((s) => s.trim()).join("\n" + VERSION_SEP + "\n");
+// addVersion clones version `i` whole and inserts the copy after it. Cloning
+// rather than starting blank is what «Добавить версию» is for: a version is a
+// rewording of what is already there. The copy is unnamed — two tabs reading
+// «полегче» tell the editor nothing.
+function addVersion(desc: string | null | undefined, i: number): { desc: string; index: number } {
+  const v = readVersions(desc);
+  const at = Math.min(Math.max(i, 0), v.bodies.length - 1);
+  v.bodies.splice(at + 1, 0, v.bodies[at]);
+  v.names.splice(at + 1, 0, null);
+  return { desc: joinVersions(v), index: at + 1 };
 }
 
-// addVersion clones version `i` and inserts the copy after it, returning the new
-// field and the index to switch to. Cloning rather than starting blank is what
-// «Добавить версию» is for: a version is a rewording of what is already there.
-// The copy is unnamed — two tabs reading «полегче» tell the editor nothing.
-function addVersion(question: string | null | undefined, i: number): { question: string; index: number } {
-  const parts = splitVersions(question);
-  const at = Math.min(Math.max(i, 0), parts.length - 1);
-  parts.splice(at + 1, 0, stripName(parts[at]));
-  return { question: joinVersions(parts), index: at + 1 };
+// removeVersion drops one version. The last one cannot go — a card with no
+// version is not a card — so it is returned unchanged.
+function removeVersion(desc: string | null | undefined, i: number): { desc: string; index: number } {
+  const v = readVersions(desc);
+  if (v.bodies.length < 2 || i < 0 || i >= v.bodies.length) return { desc: desc || "", index: i };
+  v.bodies.splice(i, 1);
+  v.names.splice(i, 1);
+  return { desc: joinVersions(v), index: Math.max(0, i - 1) };
 }
 
-// removeVersion drops one version. The last one cannot go — a question with no
-// wording is not a question — so it is returned unchanged.
-function removeVersion(question: string | null | undefined, i: number): { question: string; index: number } {
-  const parts = splitVersions(question);
-  if (parts.length < 2 || i < 0 || i >= parts.length) return { question: question || "", index: i };
-  parts.splice(i, 1);
-  return { question: joinVersions(parts), index: Math.max(0, i - 1) };
+// promoteVersion moves one version to the front, name and all. Order is what the
+// board previews and what the export numbers, so «the good one goes first» is a
+// real edit, not a display preference.
+function promoteVersion(desc: string | null | undefined, i: number): { desc: string; index: number } {
+  const v = readVersions(desc);
+  if (i <= 0 || i >= v.bodies.length) return { desc: desc || "", index: i };
+  v.bodies.unshift(v.bodies.splice(i, 1)[0]);
+  v.names.unshift(v.names.splice(i, 1)[0]);
+  return { desc: joinVersions(v), index: 0 };
 }
 
-// promoteVersion moves one version to the front. Order is visible in the export,
-// so «the good one goes first» is a real edit, not a display preference.
-function promoteVersion(question: string | null | undefined, i: number): { question: string; index: number } {
-  const parts = splitVersions(question);
-  if (i <= 0 || i >= parts.length) return { question: question || "", index: i };
-  parts.unshift(parts.splice(i, 1)[0]);
-  return { question: joinVersions(parts), index: 0 };
+// ── the export: many bodies, one question ───────────────────────────────────
+
+// rawQuestion is the question block as written, handout bracket included —
+// splitFields lifts the bracket out into its own field, and for the merge each
+// version has to keep its own.
+function rawQuestion(desc: string | null | undefined, keepVersionLines = false): string {
+  const b = parseBlocks(desc, keepVersionLines).find((x) => x.type === "question" || x.type === "pre");
+  return b ? b.text : "";
+}
+
+const versionLabel = (i: number): string => `версия ${i + 1}: `;
+
+// mergeField prints one value when every version agrees and one labelled value
+// per version when they do not. A field one version simply lacks counts as
+// disagreement — inheriting it silently would put words in that version's mouth.
+function mergeField(values: Array<string | null>): string | null {
+  if (values.every((v) => v === values[0])) return values[0];
+  const out: string[] = [];
+  values.forEach((v, i) => { if (v !== null) out.push(versionLabel(i) + v); });
+  return out.length ? out.join("\n") : null;
+}
+
+const listKey = (v: ReadonlyArray<string> | null): string => JSON.stringify(v);
+
+function mergeSources(values: Array<string[] | null>): string[] | null {
+  if (values.every((v) => listKey(v) === listKey(values[0]))) return values[0];
+  const out: string[] = [];
+  values.forEach((v, i) => { if (v) out.push(versionLabel(i) + v.filter((s) => s !== "").join("; ")); });
+  return out.length ? out : null;
+}
+
+// Authors merge into ONE "@" block: a second marker would be a second author
+// line, and chgksuite reads that as a different question's author.
+function mergeAuthors(values: Array<string[] | null>): string[] | null {
+  if (values.every((v) => listKey(v) === listKey(values[0]))) return values[0];
+  const out: string[] = [];
+  values.forEach((v, i) => { if (v) out.push(versionLabel(i) + v.join(", ")); });
+  return out.length ? [out.join("\n")] : null;
+}
+
+// composeVersions is what every export renders: the versions folded back into a
+// single question block. Structural leftovers (a "№" directive, anything the
+// field editor does not model) come from version 1 — they belong to the question,
+// not to a wording of it.
+function composeVersions(desc: string | null | undefined): string {
+  const bodies = splitVersions(desc);
+  // The BODY, not the description: a lone version keeps its separator line when
+  // it was named (delete one of a named pair and the survivor still carries its
+  // name), and a name reaches no export.
+  if (bodies.length < 2) return bodies[0] ?? "";
+  const fs = bodies.map((b) => splitFields(b));
+  const f0 = fs[0];
+  return composeFields({
+    preMarkup: f0.preMarkup,
+    handout: null, // each version's own bracket rides inside its question text
+    question: bodies
+      .map((b, i) => `Версия ${i + 1}: ${rawQuestion(b).trim()}`)
+      .join("\n" + PAGEBREAK + "\n"),
+    answer: mergeField(fs.map((f) => f.answer)),
+    zachet: mergeField(fs.map((f) => f.zachet)),
+    nezachet: mergeField(fs.map((f) => f.nezachet)),
+    comment: mergeField(fs.map((f) => f.comment)),
+    sources: mergeSources(fs.map((f) => f.sources)),
+    authors: mergeAuthors(fs.map((f) => f.authors)),
+    authorLabel: f0.authorLabel,
+    extra: f0.extra,
+  });
+}
+
+// ── the cards written under the old scheme (ADR-0005) ───────────────────────
+// A version used to be a run of question text between (PAGEBREAK) directives,
+// with everything else shared. convertLegacyVersions turns one into whole bodies
+// that clone the shared fields, and returns null when there is nothing to do.
+
+function legacyNameSpans(segment: string): HiddenSpan[] {
+  return scanDirectives(segment).hidden.filter((h) => h.body.startsWith(VERSION_TAG));
+}
+
+function stripLegacyName(segment: string): string {
+  let out = segment;
+  for (const h of legacyNameSpans(segment).reverse()) out = out.slice(0, h.start) + out.slice(h.end);
+  return out;
+}
+
+function convertLegacyVersions(desc: string | null | undefined): string | null {
+  // A card in the new form always OPENS with a separator, so that first line is
+  // what tells the two apart. Anything else that looks like one is the old
+  // scheme's name, written inside the question text — and a (PAGEBREAK) in a card
+  // that opens with a separator is a genuine page break, which is the whole point
+  // of not overloading the directive any more.
+  const first = (desc || "").split(/\r?\n/).find((l) => l.trim() !== "");
+  if (first !== undefined && versionLineName(first) !== null) return null;
+  const q = rawQuestion(desc, true);
+  if (!q.includes(PAGEBREAK)) return null;
+  const f = splitFields(desc);
+  // The раздатка was shared, and it physically sat in the first version's text —
+  // so it is lifted out here and composed back into EVERY body. Leave it in the
+  // text and versions 2+ lose the picture their question asks about.
+  const inline = extractInlineHandout(q);
+  const v: Versions = { bodies: [], names: [] };
+  for (const part of (inline ? inline.rest : q).split(PAGEBREAK)) {
+    const named = legacyNameSpans(part)[0];
+    v.names.push(named ? cleanName(named.body.slice(VERSION_TAG.length)) : null);
+    v.bodies.push(composeFields({
+      ...f,
+      handout: inline ? inline.handout : f.handout,
+      question: stripLegacyName(part).trim(),
+    }));
+  }
+  return joinVersions(v);
 }
 
 // ── what a card offers to copy ──────────────────────────────────────────────
@@ -891,10 +1054,11 @@ export interface CopyTarget {
   image?: string;
 }
 
-// copyTargets enumerates a question card's copyable pieces for the version being
-// looked at. The blitz rule: the lead-in («Блиц:») rides with the first leg and
-// is not repeated, because the legs are pasted into one conversation in order.
-function copyTargets(desc: string | null | undefined, number: string | number | null | undefined, versionIdx = 0): CopyTarget[] {
+// copyTargets enumerates a question card's copyable pieces. `desc` is one
+// version's body — the caller passes the one being looked at. The blitz rule: the
+// lead-in («Блиц:») rides with the first leg and is not repeated, because the
+// legs are pasted into one conversation in order.
+function copyTargets(desc: string | null | undefined, number: string | number | null | undefined): CopyTarget[] {
   const f = splitFields(desc);
   const out: CopyTarget[] = [];
   if (f.handout) {
@@ -904,8 +1068,7 @@ function copyTargets(desc: string | null | undefined, number: string | number | 
   }
   // splitFields lifts an inline handout out of the question and leaves the bare
   // anchor where it stood; that marks a position, and has no business in a paste.
-  const q = screenText(versionText(f.question ?? "", versionIdx))
-    .split(HANDOUT_ANCHOR).join("").trim();
+  const q = screenText(f.question ?? "").split(HANDOUT_ANCHOR).join("").trim();
   const head = number ? `Вопрос ${number}. ` : "";
   const lst = splitList(q);
   if (lst.items) {
@@ -1246,6 +1409,10 @@ function generateHndt(
   const blocks: string[] = [];
   cards.forEach((c, i) => {
     if (c.kind !== "question") return;
+    // Version 1's раздатка, like every other reader outside the card editor. A
+    // block per version would print two раздатки under one question number, and
+    // split-fit names its output by that number — the second would overwrite the
+    // first in the zip.
     const handout = handoutForCard(c.desc);
     if (!handout) return;
     const n = numbers[i];
@@ -1415,14 +1582,14 @@ function testerCopyText(testers: ReadonlyArray<TesterLike> | null | undefined): 
 }
 
 export const xyChgk = {
-  parseBlocks, numberDirective, questionText, answerText, blockText, previewText,
+  parseBlocks, splitMarker, numberDirective, questionText, answerText, blockText, previewText,
   isZeroNumber, numberQuestionCards,
   removeAccents, removeSquareBrackets, screenText, parse4sElem,
   printRuns, renderRuns, splitList, applyOverride, replaceNoBreak,
   fixTrelloFormatting,
   splitFields, composeFields, parseHandoutBlock, authorBlock, composeAuthors, AUTHOR_LABELS,
-  splitVersions, versionText, versionName, setVersion, setVersionName,
-  addVersion, removeVersion, promoteVersion,
+  splitVersions, versionCount, versionBody, versionName, setVersionBody, setVersionName,
+  addVersion, removeVersion, promoteVersion, composeVersions, convertLegacyVersions,
   copyTargets,
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
   parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText, testerNames,

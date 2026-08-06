@@ -1,5 +1,8 @@
 # A question version is a page break
 
+> **Superseded by [ADR-0007](0007-a-version-is-a-whole-card-body.md).** A Version
+> is a whole 4s body now, and `(PAGEBREAK)` means a page break again.
+
 An editor reworking a question wants the old wording kept beside the new one
 until the group picks between them. The obvious homes for that are a
 `versions_enc` column on the card, or a `card_versions` table with a row per

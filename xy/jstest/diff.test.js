@@ -106,3 +106,16 @@ test("clusterChanges is a no-op on a pure insertion", () => {
   const raw = xyDiff.diffTokens("", "совсем новый текст");
   assert.deepEqual(xyDiff.clusterChanges(raw).map((o) => o.type), ["add"]);
 });
+
+// The typography pass mostly swaps ordinary spaces for non-breaking ones, and a
+// краткий diff that dropped those clusters welded the words either side together
+// — «В восьмидесятые» rendered as «Ввосьмидесятые», so a лента full of typography
+// edits read as if every space had been deleted.
+test("a whitespace-only change keeps the words either side apart", () => {
+  const NB = String.fromCharCode(0xa0);
+  const ops = xyDiff.clusterChanges(
+    xyDiff.diffTokens("В восьмидесятые годы", "В" + NB + "восьмидесятые годы"));
+  assert.equal(ops.map((o) => o.text).join(""), "В" + NB + "восьмидесятые годы");
+  // and it still reads as a change, rather than vanishing into the context
+  assert.ok(ops.some((o) => o.type === "add" && o.text === NB));
+});

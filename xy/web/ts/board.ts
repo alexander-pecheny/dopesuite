@@ -5,6 +5,7 @@ import { xyApp, xySizes } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xyRank } from "./rank.js";
 import { type Tester, xyChgk } from "./chgk.js";
+import { xyTypo } from "./typo.js";
 import { xySync } from "./sync.js";
 import { xyHandoutSession } from "./handoutsession.js";
 import { createBoardMembers } from "./boardmembers.js";
@@ -135,7 +136,6 @@ const unlock = createUnlock({
   onState: (s) => {
     Object.assign(state, s);
     sessionMetaCache = new Map();
-    titleNode.textContent = state.name;
     document.title = state.name + " · xy";
     // Feed the person directory. The tester names are plaintext in hand at this
     // moment, so this costs a pass over a handful of sessions and no decryption.
@@ -143,6 +143,7 @@ const unlock = createUnlock({
     render();
     renderNotifBadge();
     void boardMembers.load(); // best-effort: populate the author-name map for timelines (online only)
+    void convertLegacyVersionsBoard();
     cardDetail.maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
   },
   onUnavailable: () => {
@@ -205,6 +206,13 @@ window.dopeMenu?.setExtras([{
   title: "Убрать артефакты Trello (двойные переносы, экранирование, смарт-ссылки) во всех карточках",
   onClick: () => { void fixTrelloFormattingBoard(); },
 }, {
+  // wand-sparkles twice over: the vendored lucide set has no «type» glyph, and
+  // both items are the same kind of act — rewrite the text of every card at once.
+  icon: "wand-sparkles",
+  label: "Типографить всю доску",
+  title: "Кавычки-ёлочки, тире, неразрывные пробелы и раскодированные ссылки — во всех карточках и всех версиях",
+  onClick: () => { void typographBoard(); },
+}, {
   icon: "lock",
   label: "Забыть пароль доски",
   title: "Забыть пароль доски на этом устройстве",
@@ -266,36 +274,91 @@ async function deleteBoard(): Promise<void> {
   } catch (err) { alert("Не удалось удалить: " + errMsg(err)); }
 }
 
+// ---- board-wide description rewrites ----
+// Two things rewrite every card's 4s at once: the Trello clean-up and the version
+// conversion. Both are the same walk — collect what a transform changes, then
+// patch each changed card with a desc_edit timeline entry so the rewrite is
+// auditable and reversible — so they share it. A transform returns null for
+// «nothing to do here».
+
+interface DescChange { card: BoardCard; desc: string }
+
+function collectDescChanges(next: (c: BoardCard) => string | null): DescChange[] {
+  const out: DescChange[] = [];
+  for (const c of state.cards) {
+    const desc = next(c);
+    if (desc !== null && desc !== c.desc) out.push({ card: c, desc });
+  }
+  return out;
+}
+
+async function applyDescChanges(changes: ReadonlyArray<DescChange>): Promise<void> {
+  const key = mustDK();
+  for (const ch of changes) {
+    await patch("patchCard", `/api/cards/${ch.card.id}`, {
+      description_enc: await xyCrypto.encField(key, ch.desc),
+      desc_event_enc: await xyCrypto.encField(key, JSON.stringify({ before: ch.card.desc, after: ch.desc })),
+    });
+    ch.card.desc = ch.desc;
+  }
+  render();
+}
+
 // fixTrelloFormattingBoard re-applies chgksuite's Trello clean-up (the same fix
 // the importer runs) to every already-imported card whose description still
-// carries Trello artefacts. Each changed card is re-encrypted and patched with a
-// desc_edit timeline entry, so the change is auditable and reversible.
+// carries Trello artefacts.
 async function fixTrelloFormattingBoard(): Promise<void> {
-  const changes: Array<{ card: BoardCard; desc: string }> = [];
-  for (const c of state.cards) {
-    const fixed = xyChgk.fixTrelloFormatting(c.desc);
-    if (fixed !== c.desc) changes.push({ card: c, desc: fixed });
-  }
+  const changes = collectDescChanges((c) => xyChgk.fixTrelloFormatting(c.desc));
   if (!changes.length) { alert("Нечего исправлять — оформление уже в порядке."); return; }
   if (!confirm(`Исправить оформление Trello в ${changes.length} карточк(ах)? Описания будут изменены.`)) return;
   setStatus("saving");
-  let done = 0;
   try {
-    const key = mustDK();
-    for (const ch of changes) {
-      await patch("patchCard", `/api/cards/${ch.card.id}`, {
-        description_enc: await xyCrypto.encField(key, ch.desc),
-        desc_event_enc: await xyCrypto.encField(key, JSON.stringify({ before: ch.card.desc, after: ch.desc })),
-      });
-      ch.card.desc = ch.desc;
-      done++;
-    }
+    await applyDescChanges(changes);
     setStatus("saved");
-    render();
-    alert(`Исправлено карточек: ${done}.`);
+    alert(`Исправлено карточек: ${changes.length}.`);
   } catch (err) {
     setStatus("error");
     alert("Ошибка при исправлении: " + errMsg(err));
+  }
+}
+
+// typographBoard runs the typography pass over every card on the board, every
+// version of it. It runs in the browser, so a whole package's question text is
+// never posted anywhere and this works offline like any other board edit.
+async function typographBoard(): Promise<void> {
+  const changes = collectDescChanges((c) => xyTypo.passVersions(c.desc));
+  const total = state.cards.length;
+  if (!changes.length) { alert("Нечего типографить — вся доска уже в порядке."); return; }
+  // «N из M», because the rest were already right: the pass only rewrites a card
+  // whose text it actually changes, and a bare count reads like it skipped some.
+  if (!confirm(`Типографить ${changes.length} из ${total}? В остальных карточках менять нечего.`)) return;
+  setStatus("saving");
+  try {
+    await applyDescChanges(changes);
+    setStatus("saved");
+    alert(`Оттипографлено карточек: ${changes.length} из ${total}.`);
+  } catch (err) {
+    setStatus("error");
+    alert("Ошибка при типографике: " + errMsg(err));
+  }
+}
+
+// convertLegacyVersionsBoard rewrites the cards written under the old scheme,
+// where a Version was a run of question text between (PAGEBREAK) directives and
+// every other field was shared. They become whole bodies the first time their
+// board is opened after this release. Idempotent — a converted card offers
+// nothing left to find — so the cost of running it on every load is one pass over
+// the descriptions. Each rewrite carries a desc_edit entry, like any other edit.
+async function convertLegacyVersionsBoard(): Promise<void> {
+  if (!xySync.isOnline()) return;
+  const changes = collectDescChanges((c) => (c.kind === "question" ? xyChgk.convertLegacyVersions(c.desc) : null));
+  if (!changes.length) return;
+  try {
+    await applyDescChanges(changes);
+  } catch (err) {
+    // Nothing is lost by failing: the cards keep their old spelling and the next
+    // load tries again.
+    console.error("не удалось перевести версии карточек", err);
   }
 }
 
@@ -499,8 +562,19 @@ function questionCountLabel(n: number): string {
   return `${n} ${plural(n, "вопрос", "вопроса", "вопросов")}`;
 }
 
+// renderBoardTitle writes the crumb: the board's name, then how many questions
+// are on it. It rides on render() rather than on the snapshot, so adding or
+// deleting a card moves the number with it. Hidden at zero — a board with
+// nothing on it does not need telling.
+function renderBoardTitle(): void {
+  const n = state.cards.filter((c) => c.kind === "question").length;
+  titleNode.replaceChildren(state.name);
+  if (n) titleNode.append(el("span", { class: "board-qcount", text: questionCountLabel(n) }));
+}
+
 function render(): void {
   kanban.hidden = false;
+  renderBoardTitle();
   // The list "⋯" menu floats on <body>: a rebuild would strand it next to a
   // stale anchor, so close it with the DOM it was opened for.
   if (openListMenu) openListMenu.close();
@@ -779,6 +853,12 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   // can take it off, unlike everything after it.
   if (card.kind === "question" && xyChgk.handoutForCard(card.desc)) {
     labelRow.append(el("span", { class: "kcard-handout", title: "Раздаточный материал" }, icon("file-text")));
+  }
+  // Which questions the group has not settled on yet — the card itself shows
+  // version 1, and this is the only sign the others exist.
+  const versions = xyChgk.versionCount(card.desc);
+  if (card.kind === "question" && versions > 1) {
+    labelRow.append(el("span", { class: "kcard-versions", title: `Версий: ${versions}` }, ...iconed("copy", String(versions))));
   }
   // The board card shows the author's own labels; a test's verdict belongs to the
   // card detail, where it can say WHICH test it came from.
@@ -1763,9 +1843,11 @@ function exportScope(list: BoardList): { cards: BoardCard[]; title: string } {
 }
 
 // exportSource is the 4s document a list exports as: its cards' descriptions in
-// board order, blank-line separated. Every format is rendered from this one string.
+// board order, blank-line separated. Every format is rendered from this one
+// string, which is why the versions are folded back into one question block here
+// and nowhere else — a versioned card is still one numbered question.
 function exportSource(cards: ReadonlyArray<BoardCard>): string {
-  return cards.map((c) => c.desc.trim()).filter(Boolean).join("\n\n") + "\n";
+  return cards.map((c) => xyChgk.composeVersions(c.desc).trim()).filter(Boolean).join("\n\n") + "\n";
 }
 
 // The export modal's five formats, in the order they are offered. `server` marks
@@ -2444,7 +2526,12 @@ function hidePreview(): void {
 async function previewList(list: BoardList, wholeGroup = false): Promise<void> {
   const group = wholeGroup && list.groupId != null ? groupById(list.groupId) : null;
   const scopeLists = group ? listsInGroup(list.groupId as number) : [list];
-  const cards = scopeLists.flatMap((l) => cardsOf(l.id));
+  // The preview is what the pack will look like, so a versioned card is folded
+  // the way exportSource folds it — every wording page-broken under one number.
+  // (The card editor's Просмотр is the other thing: there you are reading ONE
+  // version, so it renders the body it is handed.)
+  const cards = scopeLists.flatMap((l) => cardsOf(l.id))
+    .map((c) => (xyChgk.versionCount(c.desc) > 1 ? { ...c, desc: xyChgk.composeVersions(c.desc) } : c));
   const title = byId("previewTitle");
   if (group) title.replaceChildren(...iconed("link", group.name || "связанные списки"));
   else title.textContent = list.title || "Предпросмотр";

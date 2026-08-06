@@ -15,6 +15,7 @@ import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
 import { xyChgk } from "./chgk.js";
+import { xyTypo } from "./typo.js";
 import { parseSession, serializeSession } from "./sessions.js";
 import { normalizeAlias, xyCardDraft } from "./carddraft.js";
 import { xyRank } from "./rank.js";
@@ -250,9 +251,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // 4s stub, the two fields opened ready to type into, and hiding Просмотр,
   // which has nothing to show yet.
   let freshCard = false;
-  // Which version of the question the Просмотр and Поля views are scoped to.
-  // Purely a view cursor — versions live in the 4s itself (see chgk.js), so
-  // nothing about it is persisted, and Формат 4s ignores it entirely.
+  // Which version the card editor is scoped to. A version is a whole 4s body, so
+  // all three views — Просмотр, Поля and Текст — show this one and no other.
+  // Purely a view cursor: versions live in the card's own description (see
+  // chgk.js), and nothing about the cursor is persisted.
   let versionIdx = 0;
   // cardReturn remembers where the open card was launched from so its ↩️ back
   // button lands there: null → plain close (board view); {listId, cardId} → reopen
@@ -418,10 +420,10 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // captureDraft folds the currently-visible view's edits back into the draft so
   // switching views never loses unsaved input.
   function captureDraft(): void {
-    if (cardView === "text") draft.desc = cardDescEl.value;
+    if (cardView === "text") writeVersionDesc(cardDescEl.value);
     else if (cardView === "fields" && cardFieldReaders) {
       const r = readCardFields(cardFieldReaders);
-      draft.desc = r.desc;
+      writeVersionDesc(r.desc);
       draft.meta = r.meta;
     }
   }
@@ -468,7 +470,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     byId("cardDescLabel").textContent = "Описание";
     if (view === "text") {
       const ta = cardDescEl;
-      ta.value = draft.desc;
+      ta.value = versionDesc();
       // A brand-new question opens on an empty editor, which says nothing about what
       // the format wants. Seed the markers so the writer fills in blanks instead of
       // recalling 4s from memory; the caret lands after the "?". "Empty" includes
@@ -674,7 +676,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   // renderCardFields rebuilds the Поля editor from the current draft (and handout
   // settings). The last field (handout-gen markup) binds to draft.meta, not the 4s.
   function renderCardFields(): void {
-    const f = xyChgk.splitFields(draft.desc);
+    const f = xyChgk.splitFields(versionDesc());
     // A brand-new card pre-fills the user's default author (a /profile setting)
     // and opens the two fields every question has, ready to type into.
     const fresh = freshCard && !draft.desc.trim();
@@ -685,7 +687,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     box.replaceChildren();
     const R: FieldReaders = {
       handout: buildHandoutField(f.handout),
-      question: buildField("Текст вопроса", "area", f.question == null ? null : xyChgk.versionText(f.question, versionIdx), { open: fresh }),
+      question: buildField("Текст вопроса", "area", f.question, { open: fresh }),
       answer: buildField("Ответ", "area", f.answer, { open: fresh }),
       // Three lines, and growing: a зачёт is a list of accepted wordings, and
       // one line of it was a slot you wrote a paragraph through.
@@ -703,62 +705,50 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     cardFieldReaders = R;
   }
 
-  // ---- question versions ----
-  // The Поля editor shows one version; the field it writes back is the whole
-  // thing, with only that version replaced. Reading the current field off the
-  // draft rather than off the editor is what keeps the versions you cannot see
-  // from being dropped on save.
-  function questionField(): string | null {
-    const q = xyChgk.splitFields(draft.desc).question;
-    return q == null ? null : q;
+  // ---- versions ----
+  // draft.desc holds the card whole — every version of it. The editor works on
+  // one: versionDesc is the window all three views read, writeVersionDesc the one
+  // they write back through. Both go through the draft rather than the editor,
+  // which is what keeps the versions you cannot see from being dropped on save.
+  function versionDesc(): string {
+    return xyChgk.versionBody(draft.desc, versionIdx);
   }
 
-  function writeQuestionVersion(edited: string | null): string | null {
-    if (edited == null) return null;
-    const whole = questionField();
-    if (whole == null) return edited;
-    return xyChgk.setVersion(whole, versionIdx, edited);
+  function writeVersionDesc(body: string): void {
+    draft.desc = xyChgk.setVersionBody(draft.desc, versionIdx, body);
   }
 
   function versionCount(): number {
-    const q = questionField();
-    return q == null ? 1 : xyChgk.splitVersions(q).length;
+    return xyChgk.versionCount(draft.desc);
   }
 
-  // previewDesc is the draft as Просмотр should render it: scoped to the selected
-  // version. The list preview and every export still show all of them — a version
-  // IS a page break — but inside the editor you are looking at one wording.
-  function previewDesc(): string {
-    const whole = questionField();
-    if (whole == null || xyChgk.splitVersions(whole).length < 2) return draft.desc;
-    const f = xyChgk.splitFields(draft.desc);
-    f.question = xyChgk.versionText(whole, versionIdx);
-    return xyChgk.composeFields(f);
-  }
-
-  // applyVersions writes a reshaped question field back through the draft and
-  // re-renders. Every version edit — add, delete, promote — goes through here, so
-  // there is one place that keeps draft, cursor and views in step.
-  // The transform is passed in rather than its result: the draft has to be
-  // captured BEFORE the current question field is read, or an in-flight edit is
-  // reshuffled away.
-  function applyVersions(fn: (question: string) => { question: string; index: number }): void {
+  // applyVersions reshapes the card's versions and re-renders. Every version edit
+  // — add, delete, promote, rename — goes through here, so there is one place that
+  // keeps draft, cursor and views in step. The transform is passed in rather than
+  // its result: the draft has to be captured BEFORE the description is read, or an
+  // in-flight edit is reshuffled away.
+  function applyVersions(fn: (desc: string) => { desc: string; index: number }): void {
     captureDraft();
-    const next = fn(questionField() ?? "");
-    const f = xyChgk.splitFields(draft.desc);
-    f.question = next.question;
-    draft.desc = xyChgk.composeFields(f);
-    cardDescEl.value = draft.desc;
+    const next = fn(draft.desc);
+    draft.desc = next.desc;
     selectVersion(next.index);
   }
 
-  // selectVersion moves the cursor and redraws. Dropping the field readers first
-  // is the whole trick: setCardView captures the draft before rendering, and a
-  // capture taken after the cursor moved would file the outgoing version's text
-  // under the incoming version. renderCardFields rebuilds them immediately.
+  // selectVersion moves the cursor and redraws. It captures nothing itself: both
+  // callers fold their edits in first, and a capture taken after the cursor moved
+  // files the outgoing version's words under the incoming one — which is how
+  // editing a freshly added version used to change both, and how promoting one
+  // could overwrite the version it swapped with.
+  //
+  // Every editor still holds the OUTGOING version at this point, and setCardView
+  // opens with a capture of its own, so both have to be re-pointed BEFORE it runs:
+  // the field readers are dropped (renderCardFields rebuilds them immediately) and
+  // the raw editor is retyped, which makes that capture a write of the incoming
+  // body onto itself.
   function selectVersion(i: number): void {
     versionIdx = i;
     cardFieldReaders = null;
+    cardDescEl.value = versionDesc();
     setCardView(cardView || "fields");
     refreshSaveState();
   }
@@ -773,38 +763,39 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const box = byId("cardVersions");
     const n = versionCount();
     if (versionIdx >= n) versionIdx = n - 1;
-    const show = n > 1 && fieldsAvailable() && cardView !== "text";
+    // All three views are scoped to one version now, Текст included, so the strip
+    // belongs above every one of them.
+    const show = n > 1 && fieldsAvailable();
     box.hidden = !show;
     if (!show) { box.replaceChildren(); return; }
-    const whole = questionField();
     const nodes: HTMLElement[] = [];
     for (let i = 0; i < n; i++) {
-      const name = xyChgk.versionName(whole, i);
+      const name = xyChgk.versionName(draft.desc, i);
       const btn = el("button", { class: "seg-btn" + (i === versionIdx ? " active" : ""), type: "button", role: "tab", text: name || `Версия ${i + 1}` });
       btn.addEventListener("click", () => { captureDraft(); selectVersion(i); });
       nodes.push(btn);
       if (i !== versionIdx) continue;
       if (i > 0) {
-        const up = el("button", { class: "vtab-act", type: "button", title: "Сделать первой — порядок версий виден в экспорте", "aria-label": "Сделать первой" }, icon("arrow-up"));
-        up.addEventListener("click", () => applyVersions((q) => xyChgk.promoteVersion(q, i)));
+        const up = el("button", { class: "vtab-act", type: "button", title: "Сделать первой — первая версия и есть та, которую видно на доске", "aria-label": "Сделать первой" }, icon("arrow-up"));
+        up.addEventListener("click", () => applyVersions((d) => xyChgk.promoteVersion(d, i)));
         nodes.push(up);
       }
       const ren = el("button", { class: "vtab-act", type: "button", title: "Назвать версию — название видно только здесь, ни в один экспорт оно не попадёт", "aria-label": "Назвать версию" }, icon("pencil"));
       ren.addEventListener("click", () => {
         const typed = prompt("Название версии:", name || "");
         if (typed === null) return;
-        applyVersions((q) => ({ question: xyChgk.setVersionName(q, i, typed), index: i }));
+        applyVersions((d) => ({ desc: xyChgk.setVersionName(d, i, typed), index: i }));
       });
       nodes.push(ren);
-      const rm = el("button", { class: "vtab-act", type: "button", title: "Удалить эту версию", "aria-label": "Удалить версию" }, icon("trash-2"));
-      rm.addEventListener("click", () => applyVersions((q) => xyChgk.removeVersion(q, i)));
+      const rm = el("button", { class: "vtab-act", type: "button", title: "Удалить эту версию целиком", "aria-label": "Удалить версию" }, icon("trash-2"));
+      rm.addEventListener("click", () => applyVersions((d) => xyChgk.removeVersion(d, i)));
       nodes.push(rm);
     }
     box.replaceChildren(...nodes);
   }
 
   byId("cardAddVersion").addEventListener("click", () => {
-    applyVersions((q) => xyChgk.addVersion(q, versionIdx));
+    applyVersions((d) => xyChgk.addVersion(d, versionIdx));
   });
 
   // readCardFields collapses the Поля editor back into a 4s description + handout
@@ -814,7 +805,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const rec: Partial<CardFields> = {
       preMarkup: cardFieldsPre,
       handout: R.handout.read(),
-      question: writeQuestionVersion(R.question.read()),
+      question: R.question.read(),
       answer: R.answer.read(),
       zachet: R.zachet.read(),
       nezachet: R.nezachet.read(),
@@ -833,7 +824,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const body = byId("cardPreviewBody");
     if (!draft.desc.trim()) { body.replaceChildren(el("p", { class: "pv-empty", text: "Пусто." })); return; }
     const c = openCardCard();
-    const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: previewDesc(), listId: c ? c.listId : 0 };
+    const card: PreviewCardLike = { id: c ? c.id : 0, kind: draftKind(), desc: versionDesc(), listId: c ? c.listId : 0 };
     const number = card.kind === "question" ? deps.questionNumberFor(card) : null;
     const reqId = openCardId;
     const screen = byId<HTMLInputElement>("cardPreviewScreen").checked;
@@ -900,36 +891,27 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     if (f) insertAtCaret(f, "́");
   });
 
-  // типограф runs the WHOLE card — not just the focused field — through chgksuite's
-  // typography pass (/api/typo: quotes → «ёлочки», hyphen runs → em dashes,
+  // типограф runs the WHOLE card — not just the focused field — through
+  // chgksuite's typography pass (quotes → «ёлочки», hyphen runs → em dashes,
   // non-breaking spaces and hyphens, percent-escapes decoded back into the words a
-  // pasted wiki link stands for). The draft is 4s either way, so Поля and Текст
-  // send the same text; only where the result lands differs. Online-only, like →.4s:
-  // the pass is the Go port on the server (it never keeps the text).
-  byId("cardTypo").addEventListener("click", async () => {
+  // pasted wiki link stands for). It runs in the browser (typo.ts), so it works
+  // offline and no question text is posted anywhere; the draft is 4s either way,
+  // so Поля and Текст feed it the same thing and only the landing differs.
+  byId("cardTypo").addEventListener("click", () => {
     captureDraft();
     if (!draft.desc.trim()) return;
-    if (!xySync.requireOnline("Типографика доступна только онлайн.")) return;
-    setStatus("saving");
-    try {
-      const res = await fetch("/api/typo", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: draft.desc }),
-      });
-      if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`);
-      const { text } = (await res.json()) as { text: string };
-      setStatus("saved");
-      draft.desc = text;
-      // In Текст the user is looking at the raw 4s, so type it back into the editor
-      // (undo intact); in Поля the fields are a view of the draft, so rebuild them.
-      if (cardView === "text") replaceField(cardDescEl, text);
-      else renderCardFields();
-    } catch (err) {
-      setStatus("error");
-      alert("Не удалось применить типографику: " + errMsg(err));
-    }
+    // EVERY version, not just the one on screen: the button says «типограф», and
+    // a wording you are not looking at has the same кавычки the one you are does.
+    // The pass runs per version and the card is reassembled, so the separators are
+    // never handed to it.
+    draft.desc = xyTypo.passVersions(draft.desc);
+    // In Текст the user is looking at the raw 4s, so type it back into the editor
+    // (undo intact); in Поля the fields are a view of the draft, so rebuild them.
+    if (cardView === "text") replaceField(cardDescEl, versionDesc());
+    else renderCardFields();
+    // The tools change the draft by clicking, not by typing, so nothing has fired
+    // the `input` that normally re-tests it against what is saved.
+    refreshSaveState();
   });
 
   // →.4s runs the raw editor's content through the server's chgk text parser — the
@@ -1022,7 +1004,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     draft.open(card.desc, openMeta, openAlias);
     cancelAliasSave(); // the previous card's pending write is its own to make
     cardAliasEl.value = openAlias || "";
-    cardDescEl.value = card.desc;
+    cardDescEl.value = xyChgk.versionBody(card.desc, 0);
     cardMessageEl.textContent = "";
     cardKindEl.hidden = false;
     cardKindEl.value = card.kind || "question";
@@ -1609,7 +1591,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const card = openCardCard();
     if (!card) return;
     captureDraft(); // copy what is on screen, not what was last saved
-    const targets = xyChgk.copyTargets(draft.desc, deps.questionNumberFor(card), versionIdx);
+    const targets = xyChgk.copyTargets(versionDesc(), deps.questionNumberFor(card));
     if (targets.length === 1) { copyAndReport(targets[0]); return; }
     deps.popupMenu(byId("cardCopy"), targets.map((t) => ({ label: t.label, onClick: () => copyAndReport(t) })));
   });
@@ -1764,7 +1746,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
       draft.commitContent(newDesc, newMeta);
       deps.render();
       await deps.timeline.load(card.id);
-      cardDescEl.value = newDesc;
+      cardDescEl.value = versionDesc();
       // The rendered preview is itself the confirmation that the edits landed.
       setCardView("preview");
       msg.textContent = "Карточка сохранена.";

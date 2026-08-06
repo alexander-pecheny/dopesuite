@@ -1,0 +1,47 @@
+{
+  "idempotent": [
+    "? В романе \"Мастер и Маргарита\" ОН - кот, что-то знавший о нём.\n! Бегемот"
+  ],
+  "pass": [
+    {
+      "in": "? В романе \"Мастер и Маргарита\" ОН - кот.",
+      "name": "quotes, dashes, and the gluing that comes with them",
+      "want": "? В романе «Мастер и Маргарита» ОН — кот."
+    },
+    {
+      "in": "^ Сборник:\n- Первый источник\n- Второй источник",
+      "name": "a list item's dash survives",
+      "want": "^ Сборник:\n- Первый источник\n- Второй источник"
+    },
+    {
+      "in": "? Он что-то знал о нём.",
+      "name": "short hyphenated words get a non-breaking hyphen",
+      "want": "? Он что‑то знал о нём."
+    },
+    {
+      "in": "! Ответ\n= Зачёт\n^ https://example.com/a-b\n@ Иван Иванов",
+      "name": "markers and URLs are left alone",
+      "want": "! Ответ\n= Зачёт\n^ https://example.com/a-b\n@ Иван Иванов"
+    },
+    {
+      "in": "^ https://ru.wikipedia.org/wiki/%D0%91%D0%B5%D0%B3%D0%B5%D0%BC%D0%BE%D1%82",
+      "name": "percent-escapes decode",
+      "want": "^ https://ru.wikipedia.org/wiki/Бегемот"
+    },
+    {
+      "in": "#B Раунд - первый",
+      "name": "a battle/round/theme marker is a marker, not prose",
+      "want": "#B Раунд — первый"
+    },
+    {
+      "in": "^ %EF%BB%BFисточник",
+      "name": "a decoded BOM stays a character",
+      "want": "^ ﻿источник"
+    },
+    {
+      "in": "? раз- два",
+      "name": "NEL counts as whitespace around a dash",
+      "want": "? раз— два"
+    }
+  ]
+}
