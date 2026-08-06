@@ -1560,6 +1560,11 @@ body {
    spaced like a row of dots. A flask WITH verdict dots keeps its full box: the
    gap there separates one test's group from the next. */
 .kcard-test-bare .ico { margin: 0 -2px; }
+/* A flask that HOLDS dots is a group, and the dots sit 2px from it — so what
+   surrounds it has to stand further off than that, or the dots read as
+   belonging to the next flask instead of their own. Both sides, so the group
+   sits evenly in the row rather than leaning left. */
+.kcard-test:not(.kcard-test-bare) { margin: 0 var(--space-1); }
 /* Verdicts past the first, beside the flask: a braille cell — fill a column of
    three top-down, then start the next one. Six is the cell's capacity, and the
    test's tooltip names every verdict regardless. Column wrap rather than a grid
