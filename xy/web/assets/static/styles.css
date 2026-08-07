@@ -1601,14 +1601,11 @@ body {
 /* The count belongs to the icon, not to the label that follows it: tighter
    inside than the row's own gap, or it reads as a label of its own. */
 .kcard-versions {
-  gap: 0;
+  gap: 2px;
   margin-right: var(--space-2);
   color: var(--muted);
   font-size: var(--text-sm);
 }
-/* The count belongs to the icon: pull it onto the glyph's right side bearing,
-   which is empty box rather than ink and was doing the spacing's talking. */
-.kcard-versions .ico { margin-right: -1px; }
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
 #cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
