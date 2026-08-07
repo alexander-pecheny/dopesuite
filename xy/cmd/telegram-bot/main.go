@@ -22,6 +22,7 @@ import (
 
 	"pecheny.me/dopecore/buildinfo"
 	"pecheny.me/dopecore/tgbot"
+	"pecheny.me/dopecore/tgbridge"
 )
 
 const (
@@ -48,10 +49,25 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// The server shares this host and asks here whether telegram login is worth
+	// offering. Loopback, and a working default on both sides on purpose: a
+	// REQUIRED new variable would mean a deploy that installs a healthy bot the
+	// server then reports as unreachable.
+	go tgbot.ServeHealth(ctx, healthAddr(), client)
+
 	log.Printf("xy telegram bot %s started", buildinfo.Version())
 	if err := client.Run(ctx, handler(bridge)); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("bot: %v", err)
 	}
+}
+
+// healthAddr is where the bot answers "am I working?". Shared with the server
+// as a constant, overridable together when the default port is taken.
+func healthAddr() string {
+	if a := strings.TrimSpace(os.Getenv("XY_BOT_HEALTH_ADDR")); a != "" {
+		return a
+	}
+	return tgbridge.DefaultHealthAddr
 }
 
 // intentKind is what an incoming message asks the bot to do.

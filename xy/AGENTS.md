@@ -58,7 +58,10 @@ Russian-language UI.
 ## Layout
 ```
 cmd/xy-server/         thin main() → server.Main(); also `xy-server invite [days]`
-cmd/telegram-bot/      login bot, bridges to server via shared secret (no DB handle)
+cmd/telegram-bot/      login bot, bridges to server via shared secret (no DB handle);
+                       serves /healthz on 127.0.0.1:9676 (tgbridge.DefaultHealthAddr) so the
+                       server can ask whether telegram login is worth offering — the answer is
+                       about POLLING, not the process: a bot with a revoked token is up and useless
 cmd/uic/               compile one .dopeui page to HTML on stdout (xy overlay; debug/diff tool)
 internal/ui/           xy's overlay on DopeUIKit's kit: overlay vocab.json (xy primitives +
                        enum extensions), expand.go (checkbox/editor overrides + xy

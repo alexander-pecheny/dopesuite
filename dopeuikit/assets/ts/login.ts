@@ -63,15 +63,20 @@ async function bootstrap(): Promise<void> {
   } catch {
     // not logged in — fine
   }
-  let methods = { telegram: true };
+  let methods = loginMethods(undefined);
   try {
-    methods = loginMethods((await fetchJSON("/api/auth/methods")) as { telegram?: boolean });
+    methods = loginMethods((await fetchJSON("/api/auth/methods")) as { telegram?: boolean; telegram_status?: string });
   } catch {
     // older server, or none of our business — leave both ways in place
   }
   if (!methods.telegram) {
     tgLoginBtn.hidden = true;
     showStep("password");
+    // Say why, rather than silently offering one way in less: a visitor who came
+    // for telegram should learn that the instance is broken, not that it changed.
+    // On the password step, because that is the one now on screen — the method
+    // step's own message goes down with it.
+    setText(passwordMessage, methods.telegramNote);
     return;
   }
   showStep("method");

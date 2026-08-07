@@ -20,6 +20,14 @@ import (
 	"net/http"
 )
 
+// DefaultHealthAddr is where a bot answers "am I working?" and where a server
+// sharing its host looks. Both sides default to it so that neither needs a new
+// environment variable to find the other — a REQUIRED one would mean a deploy
+// that installs a healthy bot the server then reports as unreachable, which is
+// the failure this whole endpoint exists to prevent. Loopback: whether the bot
+// works is nobody's business from outside the host.
+const DefaultHealthAddr = "127.0.0.1:9676"
+
 // RegisterRequest is the bot's POST body when a user sends it a register code.
 type RegisterRequest struct {
 	Code             string `json:"code"`
