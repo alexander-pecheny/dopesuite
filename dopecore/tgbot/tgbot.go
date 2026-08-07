@@ -72,7 +72,9 @@ type Client struct {
 	http           *http.Client
 
 	mu       sync.Mutex
+	started  time.Time // when Run began polling
 	lastPoll time.Time // last getUpdates that actually answered
+	lastErr  time.Time // last getUpdates that failed
 }
 
 // Handler processes one update whose Message, From and Chat are all non-nil.
@@ -104,10 +106,27 @@ func New(cfg Config) *Client {
 // HTTP is the client's HTTP client, so a Bridge can share it.
 func (c *Client) HTTP() *http.Client { return c.http }
 
-func (c *Client) markPolled() {
+func (c *Client) markPoll(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err != nil {
+		c.lastErr = time.Now()
+		return
+	}
 	c.lastPoll = time.Now()
+}
+
+func (c *Client) markStarted() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.started = time.Now()
+}
+
+// pollState is what a health check needs, read under one lock.
+func (c *Client) pollState() (started, lastPoll, lastErr time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.started, c.lastPoll, c.lastErr
 }
 
 // LastPoll is when getUpdates last answered — zero before the first one returns.
@@ -127,15 +146,14 @@ func (c *Client) PollTimeout() time.Duration { return c.pollTimeout }
 // Run long-polls until ctx is cancelled, dispatching each message update to h.
 // It returns ctx.Err() on shutdown.
 func (c *Client) Run(ctx context.Context, h Handler) error {
+	c.markStarted()
 	var offset int64
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		updates, err := c.GetUpdates(ctx, offset)
-		if err == nil {
-			c.markPolled()
-		}
+		c.markPoll(err)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()

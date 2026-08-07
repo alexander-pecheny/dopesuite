@@ -31,10 +31,18 @@ type Health struct {
 // HealthOf reports the client's polling health. A poll is stale once more than
 // twice the long-poll timeout has passed: one timeout is the normal quiet case,
 // two means the loop is not coming back.
+//
+// Starting up counts as healthy. A long poll on a quiet bot takes the full
+// timeout to return, so the first one lands up to a minute after boot, and
+// calling that minute "unreachable" would report every bot restart — every
+// deploy — as an outage on the login page. A bot that is actually broken does
+// not sit silent: getUpdates fails within seconds (401 on a revoked token) and
+// lastErr ends the grace immediately.
 func HealthOf(c *Client, now time.Time) Health {
-	last := c.LastPoll()
+	started, last, failed := c.pollState()
 	if last.IsZero() {
-		return Health{OK: false}
+		warming := !started.IsZero() && failed.IsZero() && now.Sub(started) <= 2*c.PollTimeout()
+		return Health{OK: warming}
 	}
 	age := now.Sub(last)
 	h := Health{OK: age <= 2*c.PollTimeout(), LastPoll: last.UTC().Format(time.RFC3339)}
