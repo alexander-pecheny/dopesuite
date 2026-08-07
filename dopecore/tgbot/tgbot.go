@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -69,6 +70,9 @@ type Client struct {
 	allowedUpdates []string
 	retryDelay     time.Duration
 	http           *http.Client
+
+	mu       sync.Mutex
+	lastPoll time.Time // last getUpdates that actually answered
 }
 
 // Handler processes one update whose Message, From and Chat are all non-nil.
@@ -100,6 +104,26 @@ func New(cfg Config) *Client {
 // HTTP is the client's HTTP client, so a Bridge can share it.
 func (c *Client) HTTP() *http.Client { return c.http }
 
+func (c *Client) markPolled() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lastPoll = time.Now()
+}
+
+// LastPoll is when getUpdates last answered — zero before the first one returns.
+// A bot whose process is up but whose polling is wedged (revoked token, blocked
+// network) is useless to a login page in exactly the way a dead one is, and this
+// is what tells them apart. See ServeHealth.
+func (c *Client) LastPoll() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.lastPoll
+}
+
+// PollTimeout is the long-poll timeout, so a health check can decide how stale
+// LastPoll has to be before it counts as stale.
+func (c *Client) PollTimeout() time.Duration { return c.pollTimeout }
+
 // Run long-polls until ctx is cancelled, dispatching each message update to h.
 // It returns ctx.Err() on shutdown.
 func (c *Client) Run(ctx context.Context, h Handler) error {
@@ -109,6 +133,9 @@ func (c *Client) Run(ctx context.Context, h Handler) error {
 			return ctx.Err()
 		}
 		updates, err := c.GetUpdates(ctx, offset)
+		if err == nil {
+			c.markPolled()
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()

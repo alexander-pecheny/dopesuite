@@ -64,3 +64,19 @@ test("telegram login is offered unless the server denies it", () => {
   assert.equal(loginMethods({}).telegram, true);
   assert.equal(loginMethods(null).telegram, true);
 });
+
+// A visitor who came for telegram should learn the instance is broken, not that
+// it quietly changed — so a "no" that names its reason carries a note.
+test("a refused telegram login says which kind of no it is", () => {
+  const bad = loginMethods({telegram: false, telegram_status: "misconfigured"});
+  assert.equal(bad.telegram, false);
+  assert.match(bad.telegramNote, /настроен неверно/);
+
+  const down = loginMethods({telegram: false, telegram_status: "unreachable"});
+  assert.match(down.telegramNote, /недоступен/);
+
+  // A server older than telegram_status says nothing rather than guessing.
+  assert.equal(loginMethods({telegram: false}).telegramNote, "");
+  // And a working one has nothing to say.
+  assert.equal(loginMethods({telegram: true, telegram_status: "ok"}).telegramNote, "");
+});

@@ -27,8 +27,28 @@ export function tgStartView(res: { code?: string; bot_username?: string }): TgSt
 // /api/auth/methods contract: which ways in this instance offers. An instance
 // that runs no telegram bot says so; anything else — an older server, a failed
 // request — leaves the button up, because hiding it there would be a regression.
-export function loginMethods(res: { telegram?: boolean } | null | undefined): { telegram: boolean } {
-  return { telegram: res?.telegram !== false };
+//
+// `telegram_status` says WHICH kind of no it is, so the page can name the
+// problem instead of quietly dropping the button and leaving a visitor who came
+// for telegram wondering where it went. A server that doesn't send one is older
+// than this: fall back to the bare boolean and say nothing.
+export type TelegramStatus = "ok" | "misconfigured" | "unreachable";
+
+export interface LoginMethods {
+  telegram: boolean;
+  telegramNote: string;
+}
+
+const TG_NOTES: Record<string, string> = {
+  misconfigured: "Телеграм-логин настроен неверно.",
+  unreachable: "Бот для телеграм-логина недоступен.",
+};
+
+export function loginMethods(
+  res: { telegram?: boolean; telegram_status?: string } | null | undefined,
+): LoginMethods {
+  const telegram = res?.telegram !== false;
+  return { telegram, telegramNote: telegram ? "" : (TG_NOTES[res?.telegram_status ?? ""] ?? "") };
 }
 
 export type PollOutcome =
