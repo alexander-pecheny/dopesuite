@@ -1606,6 +1606,9 @@ body {
   color: var(--muted);
   font-size: var(--text-sm);
 }
+/* The count belongs to the icon: pull it onto the glyph's right side bearing,
+   which is empty box rather than ink and was doing the spacing's talking. */
+.kcard-versions .ico { margin-right: -1px; }
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
 #cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
@@ -1704,3 +1707,11 @@ body {
    feed. */
 #sessionForm .fld:first-child { margin-top: 0; }
 #sessionForm .fld-head { margin-top: var(--space-4); margin-bottom: var(--space-1); }
+
+/* «Типографить всю доску» → the stress-mark review: one row per distinct word
+   the pass would accent, however many cards it appears in. */
+.accent-picks { display: flex; flex-direction: column; gap: var(--space-1); max-height: 50vh; overflow-y: auto; }
+.accent-pick { display: flex; align-items: baseline; gap: var(--space-2); cursor: var(--cursor-action); }
+.accent-from { color: var(--muted); }
+.accent-arrow { color: var(--muted); font-size: var(--text-sm); }
+.accent-to { font-weight: var(--fw-bold); }

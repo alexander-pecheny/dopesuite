@@ -325,13 +325,25 @@ async function fixTrelloFormattingBoard(): Promise<void> {
 // typographBoard runs the typography pass over every card on the board, every
 // version of it. It runs in the browser, so a whole package's question text is
 // never posted anywhere and this works offline like any other board edit.
+// Stress marks are the one part of the pass that guesses. chgk writes stress by
+// capitalising the vowel («брАзер»), and a camel-cased compound («ГазпромИнвест»)
+// is exactly the same shape, so a board-wide press asks first — one tick per
+// distinct word, however many cards it appears in. Everything else the pass does
+// (quotes, dashes, spaces, percent-escapes) is not a guess and is not asked about.
 async function typographBoard(): Promise<void> {
-  const changes = collectDescChanges((c) => xyTypo.passVersions(c.desc));
+  const picks = xyTypo.accentPicks(state.cards.map((c) => c.desc));
+  if (!picks.length) { await runTypographBoard(null); return; }
+  openAccentReview(picks, (allow) => { void runTypographBoard(allow); });
+}
+
+async function runTypographBoard(allow: Set<string> | null): Promise<void> {
+  const opts = allow ? { allow } : {};
+  const changes = collectDescChanges((c) => xyTypo.passVersions(c.desc, opts));
   const total = state.cards.length;
   if (!changes.length) { alert("Нечего типографить — вся доска уже в порядке."); return; }
   // «N из M», because the rest were already right: the pass only rewrites a card
   // whose text it actually changes, and a bare count reads like it skipped some.
-  if (!confirm(`Типографить ${changes.length} из ${total}? В остальных карточках менять нечего.`)) return;
+  if (!allow && !confirm(`Типографить ${changes.length} из ${total}? В остальных карточках менять нечего.`)) return;
   setStatus("saving");
   try {
     await applyDescChanges(changes);
@@ -342,6 +354,43 @@ async function typographBoard(): Promise<void> {
     alert("Ошибка при типографике: " + errMsg(err));
   }
 }
+
+// ---- the stress-mark review ----
+const accentOverlay = byId("accentOverlay");
+let accentApply: ((allow: Set<string>) => void) | null = null;
+
+function hideAccentReview(): void {
+  accentOverlay.hidden = true;
+  accentApply = null;
+}
+
+function closeAccentReview(): void { overlayStack.pop(); }
+
+function openAccentReview(picks: ReadonlyArray<{ from: string; to: string }>, apply: (allow: Set<string>) => void): void {
+  const box = byId("accentPicks");
+  box.replaceChildren(...picks.map((p) => {
+    const cb = el("input", { type: "checkbox", checked: "checked" }) as HTMLInputElement;
+    cb.dataset.word = p.from;
+    return el("label", { class: "accent-pick" }, cb,
+      el("span", { class: "accent-from", text: p.from }),
+      el("span", { class: "accent-arrow", text: "→" }),
+      el("span", { class: "accent-to", text: p.to }));
+  }));
+  accentApply = apply;
+  accentOverlay.hidden = false;
+  overlayStack.open({ el: accentOverlay, close: hideAccentReview });
+}
+
+byId("accentCancel").addEventListener("click", closeAccentReview);
+byId("accentRun").addEventListener("click", () => {
+  const allow = new Set<string>();
+  for (const cb of byId("accentPicks").querySelectorAll<HTMLInputElement>("input:checked")) {
+    if (cb.dataset.word) allow.add(cb.dataset.word);
+  }
+  const apply = accentApply;
+  closeAccentReview();
+  apply?.(allow);
+});
 
 // convertLegacyVersionsBoard rewrites the cards written under the old scheme,
 // where a Version was a run of question text between (PAGEBREAK) directives and

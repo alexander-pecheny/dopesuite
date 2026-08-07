@@ -280,6 +280,7 @@ var MountCardVersions = Attr{Name: "kind", Value: "card-versions"}
 var MountMassBar = Attr{Name: "kind", Value: "mass-bar"}
 var MountMassBody = Attr{Name: "kind", Value: "mass-body"}
 var MountTesterList = Attr{Name: "kind", Value: "tester-list"}
+var MountAccentPicks = Attr{Name: "kind", Value: "accent-picks"}
 var MountColorField = Attr{Name: "kind", Value: "color-field"}
 var PageWide = Attr{Name: "kind", Value: "wide"}
 var PageBoard = Attr{Name: "kind", Value: "board"}
