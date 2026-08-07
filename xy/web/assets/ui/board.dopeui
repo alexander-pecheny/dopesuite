@@ -186,6 +186,17 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
         button kind="ghost" id="exportCancel" "Отмена"
     message id="exportMessage"
 
+  -- «Типографить всю доску» stops here when the pass wants to add stress marks:
+  -- chgk writes stress by capitalising the vowel («брАзер»), and a camel-cased
+  -- compound («ГазпромИнвест») is the same shape, so the editor confirms each
+  -- word once for the whole board. Nothing else in the pass is reviewable.
+  modal id="accentOverlay" label="Ударения" title="Ударения"
+    hint "Проверьте ударения — снимите галочку там, где заглавная буква не означает ударение."
+    mount id="accentPicks" kind="accent-picks"
+    row gap="sm" wrap
+      button id="accentRun" "Типографить"
+      button kind="ghost" id="accentCancel" "Отмена"
+
   -- import picker: the package file plus how it lands on the board — one list,
   -- or (разбить по турам) one list per "## " section, linked into a group with
   -- continuous numbering and combined export

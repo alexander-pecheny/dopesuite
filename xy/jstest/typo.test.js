@@ -47,3 +47,36 @@ test("percent-escapes decode only when they are UTF-8", () => {
   assert.equal(xyTypo.percentDecode("100%FF"), "100%FF");
   assert.equal(xyTypo.percentDecode("нет escape"), "нет escape");
 });
+
+// Stress detection is a heuristic on capitalisation, so what it leaves ALONE is
+// half the specification: an all-caps ИХ is chgk's own convention for «them».
+for (const c of cases.passAccents) {
+  test(`accents: ${c.name}`, () => {
+    assert.equal(xyTypo.passAccents(c.in), c.want);
+  });
+}
+
+// ---- the board's review list ----
+test("accentPicks reports what the pass would accent, without doing it", () => {
+  const cards = ["? Слово брАзер.", "? Холдинг ГазпромИнвест и снова брАзер."];
+  const picks = xyTypo.accentPicks(cards);
+  assert.deepEqual(picks.map((p) => p.from).sort(), ["ГазпромИнвест", "брАзер"]);
+  assert.equal(picks.find((p) => p.from === "брАзер").to, "бра́зер");
+  // reporting must not rewrite anything
+  assert.equal(cards[0], "? Слово брАзер.");
+});
+
+test("an unticked word is left alone everywhere, the ticked ones still land", () => {
+  const src = "? Слово брАзер в холдинге ГазпромИнвест.";
+  const out = xyTypo.passAccents(src, { allow: new Set(["брАзер"]) });
+  assert.ok(out.includes("бра́зер"));
+  assert.ok(out.includes("ГазпромИнвест"));
+});
+
+test("the rest of the pass runs whatever the review decides", () => {
+  const src = '? Он сказал "да" - и ушёл, брАзер.';
+  const out = xyTypo.passAccents(src, { allow: new Set() });
+  assert.ok(out.includes("«да»"));
+  assert.ok(out.includes("—"));
+  assert.ok(out.includes("брАзер")); // untouched: nothing was ticked
+});

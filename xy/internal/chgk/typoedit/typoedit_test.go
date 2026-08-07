@@ -12,13 +12,16 @@ import (
 // not be posted to a server that is never allowed to see it. Both suites read
 // THIS file, so the two cannot drift apart in silence. jstest/typo.test.js is
 // the other reader.
+type kase struct {
+	Name string `json:"name"`
+	In   string `json:"in"`
+	Want string `json:"want"`
+}
+
 type passCases struct {
-	Pass []struct {
-		Name string `json:"name"`
-		In   string `json:"in"`
-		Want string `json:"want"`
-	} `json:"pass"`
-	Idempotent []string `json:"idempotent"`
+	Pass        []kase   `json:"pass"`
+	PassAccents []kase   `json:"passAccents"`
+	Idempotent  []string `json:"idempotent"`
 }
 
 func loadCases(t *testing.T) passCases {
@@ -44,6 +47,19 @@ func TestPass(t *testing.T) {
 		t.Run(c.Name, func(t *testing.T) {
 			if got := Pass(c.In); got != c.Want {
 				t.Errorf("Pass(%q)\n got: %q\nwant: %q", c.In, got, c.Want)
+			}
+		})
+	}
+}
+
+// Stress detection is a heuristic on capitalisation, so what it must NOT touch
+// matters as much as what it must: an all-caps ИХ is chgk's own convention, not
+// a stressed word.
+func TestPassAccents(t *testing.T) {
+	for _, c := range loadCases(t).PassAccents {
+		t.Run(c.Name, func(t *testing.T) {
+			if got := PassAccents(c.In); got != c.Want {
+				t.Errorf("PassAccents(%q)\n got: %q\nwant: %q", c.In, got, c.Want)
 			}
 		})
 	}

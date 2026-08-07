@@ -10,6 +10,11 @@
 // its marker first (fsource.SplitMarker), because a pass that sees the raw source
 // would read a list item's leading "-" as a stray hyphen and turn it into an em
 // dash — silently destroying the list.
+//
+// NO PRODUCTION CALLER: the button runs the TypeScript port (web/ts/typo.ts),
+// because question text must not be posted to a server that is not allowed to
+// see it. This package is the parity ORACLE, and testdata/pass_cases.json is
+// read by its tests AND by jstest/typo.test.js.
 package typoedit
 
 import (
@@ -22,21 +27,30 @@ import (
 
 // opts: the typotools knobs the button promises. Percent-decoding turns the
 // escapes in a pasted Wikipedia URL back into the words they stand for, which is
-// what chgk sources are full of. Accents are the one knob left off: detect_accent
-// rewrites any mixed-case word ("мОсква") whether or not stress was meant, and the
-// editor has a dedicated button for the cases where it was.
+// what chgk sources are full of.
 var opts = typo.Options{Quotes: true, Dashes: true, Percent: true}
+
+// accentOpts adds detect_accent: chgk marks stress by capitalising the vowel
+// («брАзер»), and this turns that into a real combining acute («бра́зер»). It is a
+// heuristic on capitalisation, so it is its own mode rather than part of the
+// default — see PassAccents.
+var accentOpts = typo.Options{Quotes: true, Dashes: true, Percent: true, Accents: true}
 
 // Pass typographs 4s source, marker by marker. It is idempotent: the gluing
 // rules match plain spaces, so text that already carries the NBSPs is left alone.
-func Pass(source string) string {
+func Pass(source string) string { return pass(source, opts) }
+
+// PassAccents is Pass plus stress-mark detection.
+func PassAccents(source string) string { return pass(source, accentOpts) }
+
+func pass(source string, o typo.Options) string {
 	lines := strings.Split(source, "\n")
 	for i, line := range lines {
 		prefix, rest := fsource.SplitMarker(line)
 		if strings.TrimSpace(rest) == "" {
 			continue
 		}
-		lines[i] = prefix + inline.ReplaceNoBreak(typo.Typography(rest, opts))
+		lines[i] = prefix + inline.ReplaceNoBreak(typo.Typography(rest, o))
 	}
 	return strings.Join(lines, "\n")
 }

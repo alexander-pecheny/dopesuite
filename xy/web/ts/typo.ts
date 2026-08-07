@@ -96,6 +96,7 @@ function getQuotesRight(s: string): string {
 // U+0085 (NEL) and includes U+FEFF, so using it here would disagree with the
 // oracle on both characters.
 const RE_GO_SPACE = /[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]/;
+const RE_GO_SPACE_RUN = /[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/;
 
 // A run of hyphens flanked by whitespace becomes an em dash. Anything else — a
 // hyphenated word, a list item's leading "-" (which never reaches here, see
@@ -147,12 +148,123 @@ function percentDecode(s: string): string {
   return s;
 }
 
+// ── stress accents ──────────────────────────────────────────────────────────
+// chgk marks stress by capitalising the vowel («брАзер»), and detect_accent
+// turns that into a real combining acute («бра́зер»). It is a HEURISTIC on
+// capitalisation, so its guards are the whole substance: an all-caps word is a
+// word in caps, not a stressed one; a capital next to another capital is part of
+// a run; «Мак…» and «О'…» are name prefixes, not stress.
+const COMB_ACUTE = "\u0301";
+const LOWER_RU = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя";
+const UPPER_RU = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
+const POTENTIAL_ACCENT = "АОУЫЭЯЕЮИ";
+const BAD_BEGINNINGS = new Set(["Мак", "мак", "О'", "о’", "О’", "о'"]);
+const RE_NOT_RUSSIAN = new RegExp("[^" + LOWER_RU + UPPER_RU + "]+");
+const ACCENTS_TO_FIX = new Set(["\u0300", "\u0341", "\u0301"]);
+const LETTERS_MAPPING: Record<string, string> = {
+  a: "а", e: "е", y: "у", o: "о", u: "и",
+  A: "А", E: "Е", Y: "У", O: "О", U: "И",
+};
+
+const isUpper = (c: string): boolean => /\p{Lu}/u.test(c);
+const isLetter = (c: string): boolean => /\p{L}/u.test(c);
+const isCyrillic = (c: string): boolean => LOWER_RU.includes(c.toLowerCase());
+
+// One word the heuristic would accent, as the board's review list shows it.
+export interface AccentPick { from: string; to: string }
+
+// `seen` collects what the pass WOULD do without doing it; `allow` restricts it
+// to the pairs the editor ticked. Both are undefined for a plain pass, which is
+// then chgksuite's own function exactly — the parity fixtures run that way.
+// Reviewing is xy's, not chgksuite's, so the algorithm is untouched: this only
+// watches it and, at the last moment, declines.
+function detectAccent(s: string, seen?: Map<string, AccentPick>, allow?: Set<string>): string {
+  for (const word of s.split(RE_NOT_RUSSIAN)) {
+    if (word === "" || word.toUpperCase() === word || [...word].length <= 1) continue;
+    let w = [...word];
+    for (let i = 1; i < w.length; i++) {
+      if (!POTENTIAL_ACCENT.includes(w[i])) continue;
+      if (BAD_BEGINNINGS.has(w.slice(0, i).join(""))) continue;
+      if (i !== 1 && isUpper(w[i - 1])) continue;
+      if (i + 1 !== w.length && isUpper(w[i + 1])) continue;
+      w = [...w.slice(0, i), w[i].toLowerCase(), COMB_ACUTE, ...w.slice(i + 1)];
+      i++; // step over the combining mark just inserted
+    }
+    const nw = w.join("");
+    if (nw === word) continue;
+    if (seen) seen.set(word, { from: word, to: nw });
+    if (allow && !allow.has(word)) continue;
+    const idx = s.indexOf(word);
+    if (idx >= 0) s = s.slice(0, idx) + nw + s.slice(idx + word.length);
+  }
+  return s;
+}
+
+// cyrLatCheckChar: a Latin letter wedged between Cyrillic ones and carrying a
+// combining accent is a homoglyph typo — «мoсквá» typed with a Latin "o".
+function cyrLatCheckChar(i: number, word: string[]): string {
+  const char = word[i];
+  if (isCyrillic(char)) return "";
+  const leftOK = i === 0 || isCyrillic(word[i - 1]) || !isLetter(word[i - 1]);
+  const rightOK = i === word.length - 1 || isCyrillic(word[i + 1]) || !isLetter(word[i + 1]);
+  if (!leftOK || !rightOK) return "";
+  const norm = [...char.normalize("NFD")];
+  if (norm.length > 1 && norm[0] !== char) {
+    const mapped = LETTERS_MAPPING[norm[0]];
+    if (mapped && ACCENTS_TO_FIX.has(norm[1])) return mapped + COMB_ACUTE + norm.slice(2).join("");
+  }
+  return "";
+}
+
+function cyrLatCheckWord(word: string): string {
+  const w = [...word];
+  if (w.length === 1) return "";
+  const reps: Array<[string, string]> = [];
+  for (let i = 0; i < w.length; i++) {
+    const fixed = cyrLatCheckChar(i, w);
+    if (fixed !== "") reps.push([w[i], fixed]);
+    else if (isCyrillic(w[i]) && i < w.length - 1 && ACCENTS_TO_FIX.has(w[i + 1])) {
+      reps.push([w[i] + w[i + 1], w[i] + COMB_ACUTE]);
+    }
+  }
+  if (!reps.length) return "";
+  let out = word;
+  const seen = new Set<string>();
+  for (const [from, to] of reps) {
+    if (seen.has(from)) continue;
+    seen.add(from);
+    out = out.split(from).join(to);
+  }
+  return out;
+}
+
+function fixAccents(s: string, seen?: Map<string, AccentPick>, allow?: Set<string>): string {
+  s = detectAccent(s, seen, allow);
+  const reps: Array<[string, string]> = [];
+  const done = new Set<string>();
+  for (const word of s.split(RE_GO_SPACE_RUN).filter((x) => x !== "")) {
+    if (done.has(word)) continue;
+    const fixed = cyrLatCheckWord(word);
+    if (fixed !== "") {
+      done.add(word);
+      reps.push([word, fixed]);
+    }
+  }
+  for (const [from, to] of reps) s = s.split(from).join(to);
+  return s;
+}
+
 // ── the pass ────────────────────────────────────────────────────────────────
 
-function typography(s: string): string {
+// How the caller wants stress marks handled: off, on, watched (`seen` fills with
+// what it would do), or restricted to the words in `allow`.
+export interface AccentOpts { seen?: Map<string, AccentPick>; allow?: Set<string> }
+
+function typography(s: string, accents = false, o: AccentOpts = {}): string {
   s = getQuotesRight(s);
   s = s.split("'s").join("’s");
   s = getDashesRight(s);
+  if (accents) s = fixAccents(s, o.seen, o.allow);
   return percentDecode(s);
 }
 
@@ -161,25 +273,43 @@ function typography(s: string): string {
 // leading "-" as a stray hyphen and turns it into an em dash, eating the list.
 // Idempotent — the gluing rules match plain spaces, so text that already carries
 // its NBSPs is left alone, and a button is something a user presses twice.
-export function pass(source: string | null | undefined): string {
+export function pass(source: string | null | undefined, accents = false, o: AccentOpts = {}): string {
   const lines = (source || "").split("\n");
   return lines.map((line) => {
     const { prefix, rest } = xyChgk.splitMarker(line);
     if (rest.trim() === "") return line;
-    return prefix + xyChgk.replaceNoBreak(typography(rest));
+    return prefix + xyChgk.replaceNoBreak(typography(rest, accents, o));
   }).join("\n");
+}
+
+// passAccents is pass plus stress-mark detection — what the buttons run.
+export function passAccents(source: string | null | undefined, o: AccentOpts = {}): string {
+  return pass(source, true, o);
+}
+
+// accentPicks reports every word the pass WOULD accent in these texts, without
+// touching them: the board's review list, where an editor drops the compound
+// nouns the heuristic cannot tell from a stress mark («ГазпромИнвест»). Keyed by
+// the original word, so the same word across thirty cards is one decision.
+export function accentPicks(texts: ReadonlyArray<string>): AccentPick[] {
+  const seen = new Map<string, AccentPick>();
+  for (const t of texts) passAccents(t, { seen });
+  return [...seen.values()];
 }
 
 // passVersions typographs a whole card — every version of it — and reassembles.
 // The separators are xy's own markup, not prose, so they are never handed to the
 // pass; and a wording the editor is not looking at needs straightening just as
 // much as the one it is.
-export function passVersions(desc: string | null | undefined): string {
+export function passVersions(desc: string | null | undefined, o: AccentOpts = {}): string {
   let out = desc || "";
   xyChgk.splitVersions(out).forEach((body, i) => {
-    out = xyChgk.setVersionBody(out, i, pass(body));
+    out = xyChgk.setVersionBody(out, i, passAccents(body, o));
   });
   return out;
 }
 
-export const xyTypo = { pass, passVersions, typography, getQuotesRight, getDashesRight, percentDecode };
+export const xyTypo = {
+  pass, passAccents, passVersions, accentPicks, typography,
+  getQuotesRight, getDashesRight, percentDecode,
+};

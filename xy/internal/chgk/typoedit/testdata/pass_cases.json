@@ -43,5 +43,47 @@
       "name": "NEL counts as whitespace around a dash",
       "want": "? раз— два"
     }
+  ],
+  "passAccents": [
+    {
+      "in": "? Слово брАзер.",
+      "name": "a capitalised vowel becomes a real stress mark",
+      "want": "? Слово бра́зер."
+    },
+    {
+      "in": "? Город МОсква.",
+      "name": "the word keeps its own leading capital",
+      "want": "? Город Мо́сква."
+    },
+    {
+      "in": "? Назовите ИХ одним словом.",
+      "name": "AN ALL-CAPS WORD IS CAPS, NOT STRESS — ИХ is chgk's own convention",
+      "want": "? Назовите ИХ одним словом."
+    },
+    {
+      "in": "? Джон МакАртур и О'Брайен.",
+      "name": "a Мак-/О'- prefix is a name, not a stress",
+      "want": "? Джон МакАртур и О'Брайен."
+    },
+    {
+      "in": "? Аббревиатура ГЭСАЭС тут.",
+      "name": "a capital inside a run of capitals is part of the run",
+      "want": "? Аббревиатура ГЭСАЭС тут."
+    },
+    {
+      "in": "? Смартфон iPhone тут.",
+      "name": "a latin word is left alone",
+      "want": "? Смартфон iPhone тут."
+    },
+    {
+      "in": "? Компания СберБанк тут.",
+      "name": "a consonant capital is no stress mark",
+      "want": "? Компания СберБанк тут."
+    },
+    {
+      "in": "? Холдинг ГазпромИнвест тут.",
+      "name": "a camel-cased vowel IS taken as stress — the known false positive",
+      "want": "? Холдинг Газпроми́нвест тут."
+    }
   ]
 }
