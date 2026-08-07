@@ -479,9 +479,7 @@
   border-radius: var(--radius-full);
   background: var(--muted);
 }
-/* The handout mark is the row's only outline glyph — it marks a fact about the
-   text, not a colour someone chose — so it takes the ink at full strength. */
-.kcard-handout .ico { color: var(--text); --ico-size: 15px; stroke-width: 1.5; }
+.kcard-handout .ico { --ico-size: 15px; stroke-width: 1.5; }
 .kcard-versions .ico { --ico-size: 14px; stroke-width: 1.5; }
 
 /* card detail overlay — occupies the whole lower section (below the fixed
@@ -1596,16 +1594,18 @@ body {
   display: inline-flex;
   align-items: center;
   height: var(--chip-h);
+  color: var(--muted);
 }
 
 /* The count belongs to the icon, not to the label that follows it: tighter
-   inside than the row's own gap, or it reads as a label of its own. */
+   inside than the row's own gap, or it reads as a label of its own. The kit's
+   0.4em lead is meant for WORDS after a glyph, and here it is the whole gap. */
 .kcard-versions {
-  gap: 2px;
+  gap: 1px;
   margin-right: var(--space-2);
-  color: var(--muted);
   font-size: var(--text-sm);
 }
+.kcard-versions .ico-lead { margin-right: 0; }
 
 /* «Видели»: derived from the sessions a card is tagged with, stored nowhere. */
 #cardSeen { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
