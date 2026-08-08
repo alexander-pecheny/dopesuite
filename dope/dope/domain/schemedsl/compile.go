@@ -1110,65 +1110,230 @@ var dePlaces = map[int]struct {
 	place int
 }{1: {3, 1}, 2: {5, 1}, 3: {5, 2}, 4: {4, 2}}
 
+// expandDoubleElim expands an elimination where two Losses end a tournament —
+// КИнСБФ's pods of four and личная СИ's whole play-off are the same Kind, told
+// apart only by their size and by how many Participants leave the block.
+//
+// Pods (groups > 1) stay one stage each: a pod's five бои run in sequence at
+// its own стол, so the pod is the unit a host works with. A single bracket
+// emits one stage per round, because a round is what plays at once across every
+// стол — and, when the block reseeds, what gets re-ranked between rounds.
 func (c *compiler) expandDoubleElim(index int, blk Section) (*blockOutputs, error) {
-	groups, ok := blk.Int("groups")
-	if !ok {
-		if teams, hasTeams := blk.Int("teams"); hasTeams && teams > 0 && teams%4 == 0 {
-			groups = teams / 4
-		} else {
+	winning := 1
+	if v, ok := blk.Int("winning_places"); ok {
+		winning = v
+	}
+	size := 2
+	if v, ok := blk.Int("match_size"); ok {
+		size = v
+	}
+	groups, hasGroups := blk.Int("groups")
+	perGroup, hasSize := blk.Int("teams_in_group")
+	teams, hasTeams := blk.Int("teams")
+	switch {
+	case hasGroups && hasSize:
+	case hasGroups && hasTeams:
+		perGroup = teams / groups
+	case hasSize && hasTeams:
+		groups = teams / perGroup
+	case hasTeams && size == 2 && winning == 1:
+		// The classic pod: four to a group unless the scheme says otherwise.
+		if teams%4 != 0 {
 			return nil, errAt(blk.Line, "double_elimination: нужен groups (или teams, кратный 4)")
 		}
+		groups, perGroup = teams/4, 4
+	case hasGroups && !hasTeams && !hasSize && size == 2 && winning == 1:
+		perGroup = 4
+	case hasTeams:
+		groups, perGroup = 1, teams
+	default:
+		return nil, errAt(blk.Line, "double_elimination: нужен teams (или groups и teams_in_group)")
 	}
-	if size, ok := blk.Int("teams_in_group"); ok && size != 4 {
-		return nil, errAt(blk.Line, "double_elimination: группа всегда из 4 команд")
+	if groups < 1 || perGroup < 2 {
+		return nil, errAt(blk.Line, "double_elimination: %d групп по %d — так не бывает", groups, perGroup)
 	}
-	if err := c.rejectRoundKeys(blk, nil); err != nil {
+	proceeding := 1
+	if v, ok := blk.Int("proceeding_teams"); ok {
+		proceeding = v
+	}
+	opening := snakeChunks
+	if index > 0 {
+		opening = straightChunks
+	}
+	plan, err := planLivesDrawn(perGroup, 2, winning, proceeding,
+		func(round, members int) int { return size }, opening)
+	if err != nil {
+		return nil, errAt(blk.Line, "double_elimination: %s", err)
+	}
+	roundNames := make([]string, len(plan.rounds))
+	for i := range plan.rounds {
+		roundNames[i] = fmt.Sprintf("r%d", i+1)
+	}
+	if err := c.rejectRoundKeys(blk, roundNames); err != nil {
 		return nil, err
 	}
 	if err := rejectRoundReseed(blk); err != nil {
 		return nil, err
 	}
-	venues, err := c.blockVenues(blk, nil)
+	venues, err := c.blockVenues(blk, roundNames)
 	if err != nil {
 		return nil, err
 	}
-	entrants, err := c.blockEntrants(index, blk, groups, 4)
+	entrants, err := c.blockEntrants(index, blk, groups, perGroup)
 	if err != nil {
 		return nil, err
 	}
-	if index == 0 {
-		// Seed-dealt groups open bracket-style: best meets worst.
-		for g := range entrants {
-			e := entrants[g]
-			entrants[g] = []store.SchemeSlot{e[0], e[3], e[1], e[2]}
-		}
-	}
-	out := &blockOutputs{}
+	reranked, _ := blk.Bool("reseed")
+
+	out := &blockOutputs{proceeding: proceeding}
 	for g := 1; g <= groups; g++ {
-		stageCode := fmt.Sprintf("s%d-g%d", index+1, g)
-		matchCode := func(m int) string { return fmt.Sprintf("%s-m%d", stageCode, m) }
-		var matches []store.SchemeMatch
-		for i, plan := range deMatchPlan {
-			matches = append(matches, store.SchemeMatch{
-				Code:             matchCode(i + 1),
-				Title:            plan.title,
-				Venue:            c.venuePick(venues, g),
-				ParticipantCount: 2,
-				Slots:            plan.slots(entrants[g-1], matchCode),
-			})
+		codes, stages, err := c.emitLivesBracket(index, blk, g, groups, plan, entrants[g-1], venues, reranked)
+		if err != nil {
+			return nil, err
 		}
-		c.appendManualStage(blk, stageCode, fmt.Sprintf("DE %d", g), nil, matches)
 		label := fmt.Sprintf("DE %d", g)
-		out.groups = append(out.groups, groupOut{
-			stageCode: stageCode,
-			label:     label,
-			place: func(p int) store.SchemeSlot {
-				spec := dePlaces[p]
-				return fromMatchSlot(matchCode(spec.match), spec.place)
-			},
-		})
+		if groups == 1 {
+			label = blockTitle(blk, "Плей-офф")
+		}
+		place := func(p int) store.SchemeSlot {
+			if p < 1 || p > len(plan.survivor) {
+				return store.SchemeSlot{}
+			}
+			source := plan.survivor[p-1]
+			return fromMatchSlot(codes[source.bout], source.place)
+		}
+		out.groups = append(out.groups, groupOut{stageCode: stages[len(stages)-1], label: label, place: place})
 	}
 	return out, nil
+}
+
+// emitLivesBracket writes one bracket's stages and returns each planned бой's
+// match code plus the stage codes, newest last.
+func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, plan *dePlan, entrants []store.SchemeSlot, venues []int, reranked bool) ([]string, []string, error) {
+	blockCode := fmt.Sprintf("s%d", index+1)
+	stageCode := fmt.Sprintf("%s-g%d", blockCode, group)
+	if groups == 1 {
+		stageCode = blockCode
+	}
+	codes := make([]string, len(plan.bouts))
+	var stages []string
+	seq := 0
+	var prevStages []string
+	for r, round := range plan.rounds {
+		var reseedCode string
+		if reranked && r > 0 {
+			alive := make([]store.SchemeSlot, 0, len(round)*4)
+			for _, source := range roundEntrants(plan, r) {
+				alive = append(alive, fromMatchSlot(codes[source.bout], source.place))
+			}
+			var err error
+			if reseedCode, err = c.reseedStage(index*100+r, blk, prevStages, alive); err != nil {
+				return nil, nil, err
+			}
+		}
+		var matches []store.SchemeMatch
+		roundStage := stageCode
+		if groups == 1 {
+			roundStage = fmt.Sprintf("%s-r%d", blockCode, r+1)
+		}
+		for i, boutIndex := range round {
+			seq++
+			code := fmt.Sprintf("%s-m%d", roundStage, i+1)
+			if groups > 1 {
+				code = fmt.Sprintf("%s-m%d", stageCode, seq)
+			}
+			codes[boutIndex] = code
+			bout := plan.bouts[boutIndex]
+			slots := make([]store.SchemeSlot, 0, len(bout.sources))
+			for _, source := range bout.sources {
+				switch {
+				case reseedCode != "":
+					slots = append(slots, reseedRankSlot(reseedCode, source.rank))
+				case source.entrant != 0:
+					slots = append(slots, entrants[source.entrant-1])
+				default:
+					slots = append(slots, fromMatchSlot(codes[source.bout], source.place))
+				}
+			}
+			title := fmt.Sprintf("Бой %d", seq)
+			if groups == 1 {
+				title = fmt.Sprintf("Бой %d", i+1)
+			}
+			matches = append(matches, store.SchemeMatch{
+				Code:             code,
+				Title:            title,
+				Venue:            c.venuePick(venues, boutIndex+1),
+				ParticipantCount: len(slots),
+				Slots:            slots,
+			})
+		}
+		if groups > 1 {
+			if r < len(plan.rounds)-1 {
+				continue // pods emit once, below
+			}
+			all := make([]store.SchemeMatch, 0, len(plan.bouts))
+			for _, boutIndex := range flatBouts(plan) {
+				all = append(all, podMatch(plan, codes, boutIndex, entrants, c.venuePick(venues, group)))
+			}
+			c.appendManualStage(blk, stageCode, fmt.Sprintf("DE %d", group), nil, all)
+			return codes, []string{stageCode}, nil
+		}
+		c.appendManualStage(blk, roundStage, fmt.Sprintf("Раунд %d", r+1), []string{fmt.Sprintf("r%d", r+1)}, matches)
+		prevStages = []string{roundStage}
+		stages = append(stages, roundStage)
+	}
+	return codes, stages, nil
+}
+
+// roundEntrants lists everyone a re-ranked round seats, in the ranking order
+// the model defines: bracket first, place second.
+func roundEntrants(plan *dePlan, round int) []deSource {
+	seen := map[[2]int]bool{}
+	var out []deSource
+	for _, boutIndex := range plan.rounds[round] {
+		for _, source := range plan.bouts[boutIndex].sources {
+			key := [2]int{source.bout, source.place}
+			if source.entrant == 0 && !seen[key] {
+				seen[key] = true
+				out = append(out, source)
+			}
+		}
+	}
+	return out
+}
+
+func flatBouts(plan *dePlan) []int {
+	var out []int
+	for _, round := range plan.rounds {
+		out = append(out, round...)
+	}
+	return out
+}
+
+func podMatch(plan *dePlan, codes []string, boutIndex int, entrants []store.SchemeSlot, venue int) store.SchemeMatch {
+	bout := plan.bouts[boutIndex]
+	slots := make([]store.SchemeSlot, 0, len(bout.sources))
+	for _, source := range bout.sources {
+		if source.entrant != 0 {
+			slots = append(slots, entrants[source.entrant-1])
+			continue
+		}
+		slots = append(slots, fromMatchSlot(codes[source.bout], source.place))
+	}
+	return store.SchemeMatch{
+		Code:             codes[boutIndex],
+		Title:            fmt.Sprintf("Бой %d", boutIndex+1),
+		Venue:            venue,
+		ParticipantCount: len(slots),
+		Slots:            slots,
+	}
+}
+
+func blockTitle(blk Section, fallback string) string {
+	if title, ok := blk.Str("title"); ok {
+		return title
+	}
+	return fallback
 }
 
 func fromMatchSlot(matchCode string, place int) store.SchemeSlot {

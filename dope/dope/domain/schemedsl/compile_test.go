@@ -637,3 +637,53 @@ match_size.r3: 3
 		t.Fatalf("вторая раунд, бой 1 = %s", got)
 	}
 }
+
+// Личная СИ's play-off is one double elimination: 24 игрока, бой на четверых,
+// проходят двое, и пересев после каждого раунда. Seven rounds, 24 бои, and a
+// grand final that hands out places 1–4 — all of it derived.
+func TestCompileStudchrSIPlayoff(t *testing.T) {
+	src := `
+[defaults]
+venues: 3
+[scheme]
+type: double_elimination
+teams: 24
+match_size: 4
+winning_places: 2
+reseed: true
+sorting: [place_sum, total, plus]
+`
+	scheme := compileSrc(t, src, Input{GameType: "ksi"})
+	var rounds []store.SchemeStage
+	reseeds := 0
+	for _, stage := range scheme.Stages {
+		switch stage.StageType {
+		case "reseed":
+			reseeds++
+		default:
+			rounds = append(rounds, stage)
+		}
+	}
+	wantBouts := []int{6, 6, 5, 3, 2, 1, 1}
+	if len(rounds) != len(wantBouts) {
+		t.Fatalf("раундов = %d, want %d", len(rounds), len(wantBouts))
+	}
+	for i, want := range wantBouts {
+		if len(rounds[i].Matches) != want {
+			t.Fatalf("раунд %d: %d боёв, want %d", i+1, len(rounds[i].Matches), want)
+		}
+	}
+	if reseeds != len(rounds)-1 {
+		t.Fatalf("пересевов = %d, want %d — по одному между раундами", reseeds, len(rounds)-1)
+	}
+	// ПО-3 seats its upper bracket three to a table and its lower four.
+	third := rounds[2].Matches
+	if len(third[0].Slots) != 3 || len(third[2].Slots) != 4 {
+		t.Fatalf("ПО-3: верхняя по %d, нижняя по %d — want 3 и 4", len(third[0].Slots), len(third[2].Slots))
+	}
+	// The grand final seats four and hands out four places.
+	final := rounds[len(rounds)-1].Matches[0]
+	if len(final.Slots) != 4 {
+		t.Fatalf("грандфинал на %d мест, want 4", len(final.Slots))
+	}
+}

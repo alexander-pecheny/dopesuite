@@ -144,3 +144,178 @@ func elimDraw(remaining, bouts, size, winning int) [][]int {
 	}
 	return snakeChunks(remaining, bouts)
 }
+
+// --- the bracket with lives ----------------------------------------------
+
+// deSource is where one seat of a planned бой comes from: an entrant rank
+// before anything has been played, or a place in an earlier бой.
+type deSource struct {
+	entrant int // 1-based entrant rank, 0 when the seat comes from a бой
+	bout    int // index into dePlan.bouts
+	place   int
+	rank    int // 1-based rank among all survivors, for a re-ranked round
+}
+
+// deBout is one planned бой: the Losses its seats carry into it, and where
+// those seats come from.
+type deBout struct {
+	losses  int
+	sources []deSource
+}
+
+// dePlan is a whole elimination with lives: бои in play order, grouped into
+// rounds, and who is left when it stops.
+type dePlan struct {
+	bouts    []deBout
+	rounds   [][]int
+	survivor []deSource // block qualifiers, best first
+}
+
+// planLives lays out an elimination where `lives` Losses end a tournament.
+//
+// Every round, each bracket (0 Losses, 1 Loss, …) plays its own бои; the
+// winning places stay where they are and everyone else moves down a bracket or
+// out. A bracket that is already down to its winning places stops playing — it
+// has produced its finalists and waits. The block ends when the survivors fit
+// the block's proceeding count, or when a single бой seats all of them: that
+// бой is the final and decides their places.
+//
+// Ordering is the model's one real convention: survivors rank by bracket first
+// and place second, and a Participant just dropped from the bracket above
+// ranks ahead of one that survived the bracket below. Both are what «fewer
+// losses first» means, and both are what the СтудЧР sheets do.
+func planLives(entrants, lives, winning, proceeding int, sizeFor func(round, members int) int) (*dePlan, error) {
+	return planLivesDrawn(entrants, lives, winning, proceeding, sizeFor, snakeChunks)
+}
+
+// planLivesDrawn is planLives with the opening round's draw spelled out: a
+// bracket seeded from a ranking deals it as a snake, while one fed by the
+// previous block's template takes its entrants in the order that template
+// already balanced them.
+func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round, members int) int, opening func(n, bouts int) [][]int) (*dePlan, error) {
+	if lives < 1 {
+		return nil, fmt.Errorf("нужна хотя бы одна жизнь")
+	}
+	if winning < 1 {
+		return nil, fmt.Errorf("winning_places должен быть хотя бы 1")
+	}
+	if proceeding < 1 {
+		proceeding = 1
+	}
+	plan := &dePlan{}
+	brackets := make([][]deSource, lives)
+	for rank := 1; rank <= entrants; rank++ {
+		brackets[0] = append(brackets[0], deSource{entrant: rank})
+	}
+	for round := 1; ; round++ {
+		alive := 0
+		for _, bracket := range brackets {
+			alive += len(bracket)
+		}
+		if alive <= proceeding {
+			plan.survivor = flattenBrackets(brackets)
+			return plan, nil
+		}
+		if size := sizeFor(round, alive); alive <= size {
+			seats := rankSources(flattenBrackets(brackets))
+			plan.bouts = append(plan.bouts, deBout{losses: 0, sources: seats})
+			plan.rounds = append(plan.rounds, []int{len(plan.bouts) - 1})
+			last := len(plan.bouts) - 1
+			for place := 1; place <= len(seats); place++ {
+				plan.survivor = append(plan.survivor, deSource{bout: last, place: place})
+			}
+			return plan, nil
+		}
+
+		var roundBouts []int
+		next := make([][]deSource, lives)
+		rankBase := 0
+		played := false
+		for b := 0; b < lives; b++ {
+			members := brackets[b]
+			start := rankBase
+			rankBase += len(members)
+			if len(members) <= winning {
+				next[b] = append(next[b], members...)
+				continue
+			}
+			size, err := bracketBoutSize(len(members), winning, sizeFor(round, len(members)))
+			if err != nil {
+				return nil, fmt.Errorf("раунд %d, сетка %d: %w", round, b+1, err)
+			}
+			count := len(members) / size
+			chunks := snakeChunks(len(members), count)
+			if round == 1 && b == 0 {
+				chunks = opening(len(members), count)
+			}
+			played = true
+			var winners, losers []deSource
+			for _, chunk := range chunks {
+				seats := make([]deSource, len(chunk))
+				for i, position := range chunk {
+					seats[i] = members[position-1]
+					seats[i].rank = start + position
+				}
+				plan.bouts = append(plan.bouts, deBout{losses: b, sources: seats})
+				index := len(plan.bouts) - 1
+				roundBouts = append(roundBouts, index)
+				for place := 1; place <= size; place++ {
+					who := deSource{bout: index, place: place}
+					if place <= winning {
+						winners = append(winners, who)
+					} else {
+						losers = append(losers, who)
+					}
+				}
+			}
+			// Droppers head the bracket below: fewer Losses so far, so ahead of
+			// everyone who has been down here already.
+			if b+1 < lives {
+				next[b+1] = append(next[b+1], losers...)
+			}
+			next[b] = append(next[b], winners...)
+		}
+		if !played {
+			plan.survivor = flattenBrackets(brackets)
+			return plan, nil
+		}
+		plan.rounds = append(plan.rounds, roundBouts)
+		brackets = next
+		if round > 64 {
+			return nil, fmt.Errorf("слишком много раундов — проверьте match_size и winning_places")
+		}
+	}
+}
+
+// bracketBoutSize picks the largest бой a bracket divides into evenly, capped
+// by what the scheme asked for. СИ's playoff needs this: the same round seats
+// its upper bracket of six three at a table and its lower bracket of twelve
+// four at a table.
+func bracketBoutSize(members, winning, want int) (int, error) {
+	if want < 2 {
+		want = 2
+	}
+	for size := want; size > winning; size-- {
+		if members%size == 0 && members/size >= 1 {
+			return size, nil
+		}
+	}
+	return 0, fmt.Errorf("%d участников не делятся на бои не больше чем по %d, из которых выходит %d", members, want, winning)
+}
+
+func flattenBrackets(brackets [][]deSource) []deSource {
+	var out []deSource
+	for _, bracket := range brackets {
+		out = append(out, bracket...)
+	}
+	return rankSources(out)
+}
+
+func rankSources(sources []deSource) []deSource {
+	out := make([]deSource, len(sources))
+	for i, source := range sources {
+		source.rank = i + 1
+		out[i] = source
+	}
+	return out
+}
