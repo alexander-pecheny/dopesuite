@@ -18,17 +18,26 @@ test("a hit names its board and list and shows the match", () => {
   assert.equal(questions[0].boardName, "Синхрон");
   assert.equal(questions[0].list, "Тур 1");
   assert.equal(questions[0].card, 3);
-  assert.equal(questions[0].snippet.text.slice(questions[0].snippet.start, questions[0].snippet.end), "Пушкин");
+  const m = questions[0].snippet.marks[0];
+  assert.equal(questions[0].snippet.text.slice(m.start, m.end), "Пушкин");
   assert.equal(questions[0].more, 0);
   assert.equal(questions[0].comment, undefined);
 });
 
-test("further matches on the same card are counted, not listed", () => {
-  const idx = [board("Б", [card(1, "? Пушкин про Пушкина\n! Пушкин")])];
-  const { questions, questionTotal } = search(idx, "Пушкин", 50);
-  assert.equal(questions.length, 1);
-  assert.equal(questionTotal, 1);
-  assert.equal(questions[0].more, 2);
+// A card is one result however often the needle lands in it: the matches the
+// snippet shows are all marked, and only the ones past its window are counted.
+test("one row per card; matches beyond the snippet are counted", () => {
+  const near = [board("Б", [card(1, "? Пушкин про Пушкина\n! Пушкин")])];
+  const shown = search(near, "Пушкин", 50);
+  assert.equal(shown.questions.length, 1);
+  assert.equal(shown.questionTotal, 1);
+  assert.equal(shown.questions[0].snippet.marks.length, 3);
+  assert.equal(shown.questions[0].more, 0);
+
+  const far = [board("Б", [card(1, "? Пушкин " + "а".repeat(300) + " Пушкин")])];
+  const split = search(far, "Пушкин", 50);
+  assert.equal(split.questions[0].snippet.marks.length, 1);
+  assert.equal(split.questions[0].more, 1);
 });
 
 // A question and the discussion about it answer «где это было?» differently, so
@@ -45,6 +54,7 @@ test("comments are their own results, one row each", () => {
   assert.equal(commentTotal, 2);
   assert.deepEqual(comments.map((h) => h.comment), [42, 43]);
   assert.ok(comments[0].snippet.text.includes("зачёт"));
+  assert.equal(comments[0].snippet.marks.length, 1);
   // The card it hangs off is still what the tile is titled by.
   assert.equal(comments[0].card, 1);
 });

@@ -170,11 +170,16 @@ function renderHits(into: HTMLElement, hits: Hit[]): void {
   into.replaceChildren(...hits.map((h) => {
     const href = `/board/${h.board}?card=${h.card}` + (h.comment ? `&comment=${h.comment}` : "");
     const where = h.list ? `${h.boardName} · ${h.list}` : h.boardName;
-    const snip = el("span", { class: "hit-snippet" },
-      h.snippet.text.slice(0, h.snippet.start),
-      el("mark", { text: h.snippet.text.slice(h.snippet.start, h.snippet.end) }),
-      h.snippet.text.slice(h.snippet.end),
-    );
+    // Every match the window reaches is marked — one highlighted and its
+    // neighbour left plain reads as a bug, because it is one.
+    const parts: Array<Node | string> = [];
+    let at = 0;
+    for (const m of h.snippet.marks) {
+      parts.push(h.snippet.text.slice(at, m.start), el("mark", { text: h.snippet.text.slice(m.start, m.end) }));
+      at = m.end;
+    }
+    parts.push(h.snippet.text.slice(at));
+    const snip = el("span", { class: "hit-snippet" }, ...parts);
     if (h.more) snip.append(el("span", { class: "hit-more", text: ` +${h.more}` }));
     return el("a", { class: "board-card hit-card", href },
       el("span", { class: "hit-title", text: h.title }),

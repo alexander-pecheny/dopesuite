@@ -1790,6 +1790,12 @@ body {
 .accent-arrow { color: var(--muted); font-size: var(--text-sm); }
 .accent-to { font-weight: var(--fw-bold); }
 
+/* A replacement is reviewed by reading question text, not by reading a form:
+   the dialog is nearly twice the kit's default so an occurrence and its context
+   fit on one line instead of wrapping three times. */
+#replaceOverlay .appearance-modal { width: min(760px, 100%); }
+#replaceFrom, #replaceTo { width: 100%; }
+
 /* «Найти и заменить» → the occurrence review: a card heading with its own tick,
    then one row per occurrence with the context that makes it a decision. */
 .replace-hits { display: flex; flex-direction: column; gap: var(--space-1); max-height: 50vh; overflow-y: auto; }

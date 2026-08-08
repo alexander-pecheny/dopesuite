@@ -296,14 +296,14 @@ export function search(
       if (inDesc.length || inAlias.length) {
         questionTotal++;
         if (questions.length < limit) {
-          const [text, span] = inDesc.length
-            ? [card.card.desc, inDesc[0]]
-            : [card.card.alias, inAlias[0]];
-          questions.push({
-            ...where,
-            snippet: xyFind.snippet(text, span),
-            more: inDesc.length + inAlias.length - 1,
-          });
+          // The snippet is drawn around the field the needle first landed in;
+          // matches in the OTHER field are elsewhere by definition, so they join
+          // the count of what the window cannot show.
+          const [text, spans, elsewhere] = inDesc.length
+            ? [card.card.desc, inDesc, inAlias.length]
+            : [card.card.alias, inAlias, 0];
+          const snip = xyFind.snippet(text, spans);
+          questions.push({ ...where, snippet: snip, more: snip.hidden + elsewhere });
         }
       }
       // The discussion: one hit per COMMENT, since each is its own remark and
@@ -313,12 +313,8 @@ export function search(
         if (!spans.length) continue;
         commentTotal++;
         if (comments.length >= limit) continue;
-        comments.push({
-          ...where,
-          snippet: xyFind.snippet(c.comment.text, spans[0]),
-          more: spans.length - 1,
-          comment: c.comment.id,
-        });
+        const snip = xyFind.snippet(c.comment.text, spans);
+        comments.push({ ...where, snippet: snip, more: snip.hidden, comment: c.comment.id });
       }
     }
   }

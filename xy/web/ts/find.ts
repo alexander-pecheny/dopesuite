@@ -162,19 +162,28 @@ export function applySpans(source: string, picked: ReadonlyArray<Span>, to: stri
 
 // ── showing a hit ───────────────────────────────────────────────────────────
 
-// One hit as a result tile shows it: a window of text with the match's place in
-// THAT window, since the ellipsis shifts every offset.
-export interface Snippet { text: string; start: number; end: number }
+// One hit as a result tile shows it: a window of text, and the place of every
+// match INSIDE that window — offsets into the window, since the ellipsis shifts
+// them all. `hidden` counts the matches the window does not reach, so a tile
+// says «+2» about matches that are genuinely elsewhere rather than about ones
+// the reader can see sitting there unmarked.
+export interface Snippet { text: string; marks: Span[]; hidden: number }
 
-export function snippet(text: string, span: Span, radius = 40): Snippet {
-  const from = Math.max(0, span.start - radius);
-  const to = Math.min(text.length, span.end + radius);
+// The window is drawn around the FIRST match; every other match that falls
+// inside it is marked too. Spans arrive in order — that is how both matchers
+// report them.
+export function snippet(text: string, spans: ReadonlyArray<Span>, radius = 40): Snippet {
+  if (!spans.length) return { text, marks: [], hidden: 0 };
+  const from = Math.max(0, spans[0].start - radius);
+  const to = Math.min(text.length, spans[0].end + radius);
   const head = from > 0 ? "…" : "";
-  const tail = to < text.length ? "…" : "";
+  const shift = head.length - from;
+  const marks = spans.filter((s) => s.start >= from && s.end <= to)
+    .map((s) => ({ start: s.start + shift, end: s.end + shift }));
   return {
-    text: head + text.slice(from, to) + tail,
-    start: span.start - from + head.length,
-    end: span.end - from + head.length,
+    text: head + text.slice(from, to) + (to < text.length ? "…" : ""),
+    marks,
+    hidden: spans.length - marks.length,
   };
 }
 

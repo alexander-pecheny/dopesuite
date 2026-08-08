@@ -466,19 +466,21 @@ function renderReplace(): void {
         el("span", { class: "replace-card-name", text: xySearchIndex.cardTitle(o.card, state.cardTitle, "(пустая карточка)") }),
         el("span", { class: "replace-card-count", text: `${ids.length}` })));
     }
-    const snip = xyFind.snippet(o.card.desc, o.span, 60);
+    const snip = xyFind.snippet(o.card.desc, [o.span], 60);
     const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
     cb.checked = replacePicked.has(o.i);
     cb.addEventListener("change", () => {
       replacePicked = xyMass.toggleOne(replacePicked, o.i);
       renderReplace();
     });
+    // One occurrence, one window: the mark is this occurrence's own span.
+    const at = snip.marks[0];
     rows.push(el("label", { class: "replace-hit" }, cb,
       el("span", { class: "replace-hit-text" },
-        snip.text.slice(0, snip.start),
-        el("del", { text: snip.text.slice(snip.start, snip.end) }),
+        snip.text.slice(0, at.start),
+        el("del", { text: snip.text.slice(at.start, at.end) }),
         ...(to ? [el("ins", { text: to })] : []),
-        snip.text.slice(snip.end))));
+        snip.text.slice(at.end))));
   }
   box.replaceChildren(...rows);
   byId("replacePage").textContent = occurrences.length ? `Страница ${replacePageNo + 1} из ${pages}` : "";

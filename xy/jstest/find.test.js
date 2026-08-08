@@ -108,12 +108,30 @@ test("an empty replacement deletes the span", () => {
 
 test("a snippet centres on the hit and marks where it fell", () => {
   const text = "а".repeat(100) + "Пушкин" + "б".repeat(100);
-  const hit = searchSpans(text, "Пушкин")[0];
-  const snip = xyFind.snippet(text, hit, 20);
-  assert.equal(snip.text.slice(snip.start, snip.end), "Пушкин");
+  const snip = xyFind.snippet(text, searchSpans(text, "Пушкин"), 20);
+  assert.equal(snip.marks.length, 1);
+  assert.equal(snip.text.slice(snip.marks[0].start, snip.marks[0].end), "Пушкин");
   assert.ok(snip.text.length < 70, snip.text);
   assert.ok(snip.text.startsWith("…") && snip.text.endsWith("…"));
   // A short text is shown whole, with no ellipsis and no offset drift.
-  const short = xyFind.snippet("Пушкин жил", { start: 0, end: 6 }, 20);
-  assert.deepEqual(short, { text: "Пушкин жил", start: 0, end: 6 });
+  const short = xyFind.snippet("Пушкин жил", [{ start: 0, end: 6 }], 20);
+  assert.deepEqual(short, { text: "Пушкин жил", marks: [{ start: 0, end: 6 }], hidden: 0 });
+});
+
+// «wol» highlighted in «wolves» and left plain in «wolverines» two words later
+// reads as a bug, because it is one: the window shows both.
+test("every match inside the window is marked, the rest are counted", () => {
+  const text = "reintroduction of wolves, lynx, wolverines, beavers";
+  const spans = searchSpans(text, "wol");
+  assert.equal(spans.length, 2);
+  const snip = xyFind.snippet(text, spans, 40);
+  assert.equal(snip.marks.length, 2);
+  assert.deepEqual(snip.marks.map((m) => snip.text.slice(m.start, m.end)), ["wol", "wol"]);
+  assert.equal(snip.hidden, 0);
+
+  // A match beyond the window is not marked — it is counted instead.
+  const far = "wolf" + " ".repeat(200) + "wolf";
+  const farSnip = xyFind.snippet(far, searchSpans(far, "wolf"), 20);
+  assert.equal(farSnip.marks.length, 1);
+  assert.equal(farSnip.hidden, 1);
 });
