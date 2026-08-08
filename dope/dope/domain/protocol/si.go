@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"dope/dope/domain/games"
 	"dope/dope/domain/structure"
@@ -68,7 +69,34 @@ func (si) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error)
 		for _, value := range store.QuestionValues {
 			metrics[fmt.Sprintf("taken%d", value)] = float64(player.Correct[value])
 		}
-		outcomes[player.Index] = structure.SlotOutcome{Place: player.Place, Metrics: metrics}
+		outcomes[player.Index] = structure.SlotOutcome{Metrics: metrics}
 	}
+	placeBySum(outcomes)
 	return outcomes, nil
+}
+
+// placeBySum ranks a бой by сумма alone, sharing a place on equal sums — two
+// players who both took 110 finish 1.5, not 1 and 2. КСИ splits such a tie by
+// Σ+ and then by взятые по номиналам, but личная СИ pays очки by place, so a
+// split there would invent a difference the бой did not produce. Those metrics
+// are still emitted; the standings sort on them.
+func placeBySum(outcomes []structure.SlotOutcome) {
+	order := make([]int, 0, len(outcomes))
+	for i := range outcomes {
+		order = append(order, i)
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return outcomes[order[a]].Metrics["total"] > outcomes[order[b]].Metrics["total"]
+	})
+	for start := 0; start < len(order); {
+		end := start + 1
+		for end < len(order) && outcomes[order[end]].Metrics["total"] == outcomes[order[start]].Metrics["total"] {
+			end++
+		}
+		place := float64(start+end+1) / 2
+		for i := start; i < end; i++ {
+			outcomes[order[i]].Place = place
+		}
+		start = end
+	}
 }

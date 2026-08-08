@@ -1572,14 +1572,15 @@ func uniqueSchemeSlug(base string) string {
 	return fmt.Sprintf("%s-%d", base, time.Now().UnixNano())
 }
 
-// seedPlayerEntrantsTx lists the fest's players as entrants, in roster order.
-// They are numbered here rather than in the roster because a fest numbers its
-// teams; an individual game numbers the players it seats.
+// seedPlayerEntrantsTx lists the fest's players as entrants, in the order they
+// were registered — that order IS the seeding, the way a fest's registration
+// list is. They are numbered here rather than in the roster because a fest
+// numbers its teams; an individual game numbers the players it seats.
 func seedPlayerEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64) ([]store.SchemeSlot, error) {
 	rows, err := tx.QueryContext(ctx, `
 select p.id, trim(p.first_name || ' ' || p.last_name)
 from fest_players p where p.fest_id = ?
-order by p.last_name, p.first_name, p.id`, festID)
+order by p.id`, festID)
 	if err != nil {
 		return nil, err
 	}
@@ -1620,7 +1621,7 @@ on conflict(game_id, basket, number) do update set participant_id = excluded.par
 		rows, err := tx.QueryContext(ctx, `
 select p.id, trim(p.first_name || ' ' || p.last_name)
 from fest_players p where p.fest_id = ?
-order by p.last_name, p.first_name, p.id`, festID)
+order by p.id`, festID)
 		if err != nil {
 			return err
 		}
