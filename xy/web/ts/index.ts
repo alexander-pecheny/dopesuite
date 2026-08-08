@@ -34,6 +34,8 @@ const commentNode = byId("commentList");
 const searchBox = byId<HTMLInputElement>("boardSearch");
 const cardNote = byId("cardNote");
 const commentNote = byId("commentNote");
+const moreQuestions = byId("moreQuestions");
+const moreComments = byId("moreComments");
 const message = byId("message");
 const overlay = byId("createOverlay");
 const createForm = byId<HTMLFormElement>("createForm");
@@ -102,7 +104,12 @@ async function refresh(): Promise<void> {
 // The grid above filters to boards this query can NAME; the grid below shows the
 // cards it can quote. Every board therefore appears in exactly one place, and
 // the top grid keeps meaning one thing.
-const HIT_LIMIT = 50;
+// One screenful of results at a time, with a button for the next — a query that
+// names four hundred questions wants narrowing, but «показаны первые 50» with no
+// way to see the fifty-first is just a wall.
+const HIT_PAGE = 50;
+let shownQuestions = HIT_PAGE;
+let shownComments = HIT_PAGE;
 
 let allBoards: BoardListItem[] = [];
 let indexes: Array<{ board: number; index: BoardIndex }> | null = null;
@@ -133,8 +140,10 @@ function setNote(node: HTMLElement, text: string): void {
   node.hidden = !text;
 }
 
-async function runSearch(query: string): Promise<void> {
+async function runSearch(query: string, keepShown = false): Promise<void> {
   const q = query.trim();
+  // A new query starts from the first page again; «Показать ещё» does not.
+  if (!keepShown) { shownQuestions = HIT_PAGE; shownComments = HIT_PAGE; }
   document.body.classList.toggle("searching", !!q);
   hitNode.hidden = !q;
   commentNode.hidden = !q;
@@ -143,6 +152,8 @@ async function runSearch(query: string): Promise<void> {
     commentNode.replaceChildren();
     setNote(cardNote, "");
     setNote(commentNote, "");
+    moreQuestions.hidden = true;
+    moreComments.hidden = true;
     listNode.hidden = false;
     renderBoards(allBoards);
     return;
@@ -155,9 +166,11 @@ async function runSearch(query: string): Promise<void> {
   // section shows only when it has something, and its count says the rest.
   listNode.hidden = !named.length;
   const held = await loadIndexes();
-  const res = xySearchIndex.search(held, q, HIT_LIMIT);
+  const res = xySearchIndex.search(held, q, shownQuestions, shownComments);
   renderHits(hitNode, res.questions);
   renderHits(commentNode, res.comments);
+  moreQuestions.hidden = res.questionTotal <= res.questions.length;
+  moreComments.hidden = res.commentTotal <= res.comments.length;
   setNote(cardNote, note("Вопросы", res.questionTotal, res.questions.length, held.length));
   setNote(commentNote, res.commentTotal ? note("Комментарии", res.commentTotal, res.comments.length, held.length) : "");
   hitNode.hidden = !res.questions.length;
@@ -169,7 +182,7 @@ function note(what: string, total: number, shown: number, boards: number): strin
     return "Ни одна доска не скачана на это устройство — «Прогрев поиска» в меню ☰ сделает их искомыми.";
   }
   if (!total) return `${what}: ничего не найдено.`;
-  if (total > shown) return `${what}: ${total}, показаны первые ${shown}.`;
+  if (total > shown) return `${what}: ${total}, показаны ${shown}.`;
   return `${what}: ${total}.`;
 }
 
@@ -194,6 +207,15 @@ function renderHits(into: HTMLElement, hits: Hit[]): void {
       snip);
   }));
 }
+
+moreQuestions.addEventListener("click", () => {
+  shownQuestions += HIT_PAGE;
+  void runSearch(searchBox.value, true);
+});
+moreComments.addEventListener("click", () => {
+  shownComments += HIT_PAGE;
+  void runSearch(searchBox.value, true);
+});
 
 let searchTimer = 0;
 searchBox.addEventListener("input", () => {

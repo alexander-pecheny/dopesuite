@@ -568,7 +568,7 @@ replaceTo.addEventListener("input", () => renderReplace());
 byId("replacePrev").addEventListener("click", () => { replacePageNo--; renderReplace(); });
 byId("replaceNext").addEventListener("click", () => { replacePageNo++; renderReplace(); });
 byId("replaceRun").addEventListener("click", () => { void runReplace(); });
-byId("replaceCancel").addEventListener("click", () => overlayStack.pop());
+byId("replaceClose").addEventListener("click", () => overlayStack.pop());
 
 // ---- the stress-mark review ----
 const accentOverlay = byId("accentOverlay");

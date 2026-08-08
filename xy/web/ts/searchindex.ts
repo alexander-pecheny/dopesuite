@@ -275,6 +275,7 @@ export function search(
   indexes: ReadonlyArray<{ board: number; index: BoardIndex }>,
   query: string,
   limit: number,
+  commentLimit = limit,
 ): SearchResult {
   const questions: Hit[] = [];
   const comments: Hit[] = [];
@@ -312,7 +313,7 @@ export function search(
         const spans = xyFind.searchIn(c.text, query);
         if (!spans.length) continue;
         commentTotal++;
-        if (comments.length >= limit) continue;
+        if (comments.length >= commentLimit) continue;
         const snip = xyFind.snippet(c.comment.text, spans);
         comments.push({ ...where, snippet: snip, more: snip.hidden, comment: c.comment.id });
       }

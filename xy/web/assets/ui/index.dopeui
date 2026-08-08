@@ -19,8 +19,10 @@ page title="Мои доски · xy" kind="full" scripts="dist/index.js"
   -- left on the page still takes its share of the column and clips the board
   -- list mid-row. runSearch shows each one only when it has something.
   mount id="hitList" kind="board-grid" hidden
+  button kind="ghost" id="moreQuestions" hidden "Показать ещё"
   muted id="commentNote" hidden
   mount id="commentList" kind="board-grid" hidden
+  button kind="ghost" id="moreComments" hidden "Показать ещё"
   message id="message"
 
   -- create-board dialog
