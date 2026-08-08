@@ -145,6 +145,10 @@ func (c *compiler) run() error {
 // stage-config names they compile to.
 var protocolParams = map[string]map[string]string{
 	"brain": {"questions": "questions", "tiebreak_questions": "tiebreakQuestions"},
+	"ksi":   {"themes": "themes"},
+	"si":    {"themes": "themes", "participants": "participants"},
+	"od":    {"tour_comp": "tourComp"},
+	"ek":    {"themes": "themes"},
 }
 
 var blockKeys = map[string]bool{
