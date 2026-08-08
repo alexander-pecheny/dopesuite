@@ -98,6 +98,7 @@ export interface AttachmentsSeam {
   clearImageNames(): void;
   upload(file: File, lossless: boolean, name: string): Promise<void>;
   resolveImages(cards: ReadonlyArray<{ id: number }>, wanted: Set<string>): Promise<Map<string, string>>;
+  imageBlob(cardId: number, name: string): Promise<Blob | null>;
 }
 
 // The board-owned halves of read tracking: the kanban card dot and the 🔔 badge.
@@ -1543,16 +1544,14 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     copyMsgTimer = setTimeout(() => { node.hidden = true; }, 2500);
   }
 
-  // imagePng fetches a handout picture and re-encodes it as PNG — the one image
+  // imagePng decrypts a handout picture and re-encodes it as PNG — the one image
   // type both Chrome and Firefox accept on the clipboard. The attachment is very
   // likely a WebP (that is what the upload offers), which neither will take.
   async function imagePng(name: string): Promise<Blob> {
     const card = openCardCard();
     if (!card) throw new Error("карточка не открыта");
-    const urls = await deps.attachments.resolveImages([{ id: card.id }], new Set([name]));
-    const url = urls.get(name);
-    if (!url) throw new Error("картинка не найдена среди вложений");
-    const blob = await (await fetch(url)).blob();
+    const blob = await deps.attachments.imageBlob(card.id, name);
+    if (!blob) throw new Error("картинка не найдена среди вложений");
     if (blob.type === "image/png") return blob;
     const bmp = await createImageBitmap(blob);
     const canvas = document.createElement("canvas");
@@ -1564,18 +1563,23 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     });
   }
 
-  // runCopy performs one target. The image branch hands ClipboardItem a promise
-  // built in the click's own turn rather than awaiting first: Safari only honours
-  // a write that was issued synchronously from the gesture.
+  // runCopy performs one target. The image is written twice over because the
+  // browsers disagree: Safari only honours a write issued in the click's own turn,
+  // so the ClipboardItem gets a promise; Firefox refuses a promise outright, so the
+  // retry hands it the decoded picture (its user activation is a time window, not
+  // one task). Both failing reports the FIRST error — the real one.
   async function runCopy(t: CopyTarget): Promise<void> {
-    if (t.image) {
-      if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
-        throw new Error("браузер не умеет копировать картинки");
-      }
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": imagePng(t.image) })]);
-      return;
+    if (!t.image) { await copyText(t.text || ""); return; }
+    if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
+      throw new Error("браузер не умеет копировать картинки");
     }
-    await copyText(t.text || "");
+    const png = imagePng(t.image);
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+    } catch (err) {
+      const blob = await png; // an unusable picture raises its own error, which is the real one
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]).catch(() => { throw err; });
+    }
   }
 
   function copyAndReport(t: CopyTarget): void {

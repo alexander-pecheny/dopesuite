@@ -2323,12 +2323,7 @@ handoutsOverlay.addEventListener("pointerdown", (e) => { if (e.target === handou
 // transient draft card, or an import-verify block (which has no list yet).
 interface PvCard { id: number; kind: string; desc: string; listId?: number }
 
-// Field labels mirror chgksuite/resources/labels_ru.toml (question_labels).
-const PV_LABELS: Record<string, string> = {
-  answer: "Ответ", zachet: "Зачёт", nezachet: "Незачёт",
-  comment: "Комментарий", source: "Источник", author: "Автор",
-  handout: "Раздаточный материал", editor: "Редактор", date: "Дата",
-};
+const PV_LABELS = xyChgk.QUESTION_LABELS;
 const previewOverlay = byId("previewOverlay");
 
 // imgName extracts the referenced filename from an (img …) run value: like
@@ -2362,20 +2357,14 @@ function fillPreviewImages(root: ParentNode, imgMap: Map<string, string>): void 
   }
 }
 
-// Fields that accept a "!!Label " label override (chgksuite OVERRIDE_PREFIX).
-const PV_OVERRIDABLE = new Set(["question", "answer", "zachet", "nezachet", "comment", "source", "author"]);
-
 // fieldOpts returns the render options for a field given the screen-mode toggle.
-// Screen mode strips stress accents everywhere and host-only [ … ] notes — except
-// answers and zachet, which keep their brackets (matching chgksuite docx screen
-// mode). Meta/headings are never screen-transformed. `nbsp` (non-breaking
-// spaces/hyphens) applies everywhere except sources and handouts, like docx.
+// Meta/headings are never screen-transformed. `nbsp` (non-breaking spaces/
+// hyphens) applies everywhere except sources and handouts, like docx.
 interface RichOpts { accents?: boolean; brackets?: boolean; nbsp?: boolean }
 function fieldOpts(field: string, screen: boolean): RichOpts {
   const nbsp = field !== "source" && field !== "handout";
   if (!screen) return { accents: false, brackets: false, nbsp };
-  const keepBrackets = field === "answer" || field === "zachet";
-  return { accents: true, brackets: !keepBrackets, nbsp };
+  return { accents: true, brackets: !xyChgk.fieldKeepsBrackets(field), nbsp };
 }
 
 // renderRich turns a 4s text element into DOM, mirroring the docx render: inline
@@ -2457,16 +2446,14 @@ function pvSmallCls(field: string): string {
   return field === "source" || field === "author" ? "pv-small" : "";
 }
 
-// pvField renders a "Label: value" line: peels a "!!Label" override, numbers any
-// "- …" list, and (for sources that became a list) uses the plural label.
-function pvField(field: string, defaultLabel: string, text: string, imgMap: Map<string, string>, screen: boolean, cls: string): HTMLElement {
-  const ov: { label: string | null; text: string } = PV_OVERRIDABLE.has(field) ? xyChgk.applyOverride(text) : { label: null, text };
-  const lst = xyChgk.splitList(ov.text);
-  let label = ov.label || defaultLabel;
-  if (!ov.label && field === "source" && lst.items) label = "Источники";
+// pvField renders a "Label: value" line, numbering any "- …" list. The caption
+// rules (a "!!Label" override, the plural source label) are xyChgk's, shared with
+// the copy targets.
+function pvField(field: string, text: string, imgMap: Map<string, string>, screen: boolean, cls: string): HTMLElement {
+  const cap = xyChgk.fieldCaption(field, text);
   const node = el("div", { class: "pv-field" + (cls ? " " + cls : "") },
-    el("strong", { class: "pv-label", text: label + ": " }));
-  node.append(renderFieldBody(ov.text, imgMap, fieldOpts(field, screen)));
+    el("strong", { class: "pv-label", text: cap.label + ": " }));
+  node.append(renderFieldBody(cap.text, imgMap, fieldOpts(field, screen)));
   return node;
 }
 
@@ -2501,7 +2488,7 @@ function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<stri
   if (card.kind === "question" || find("question")) {
     const wrap = el("article", { class: "pv-q", dataset: { cardId: card.id } });
     const handout = find("handout");
-    if (handout) wrap.append(pvField("handout", PV_LABELS.handout, handout.text, imgMap, screen, "pv-handout"));
+    if (handout) wrap.append(pvField("handout", handout.text, imgMap, screen, "pv-handout"));
     // Question line: small inline ✏️ (edit lists only) + bold "Вопрос N." label
     // (overridable) + question text (which may itself be a blitz/duplet list).
     const qov = xyChgk.applyOverride(xyChgk.questionText(card.desc));
@@ -2513,7 +2500,7 @@ function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<stri
     wrap.append(qline);
     for (const f of ["answer", "zachet", "nezachet", "comment", "source", "author"]) {
       const b = find(f);
-      if (b) wrap.append(pvField(f, PV_LABELS[f], b.text, imgMap, screen, pvSmallCls(f)));
+      if (b) wrap.append(pvField(f, b.text, imgMap, screen, pvSmallCls(f)));
     }
     return wrap;
   }
@@ -2531,7 +2518,7 @@ function renderPreviewCard(card: PvCard, number: string | null, imgMap: Map<stri
       h.append(renderRich(b.text, imgMap, { nbsp: true }));
       wrap.append(h);
     } else if (PV_LABELS[b.type]) {
-      wrap.append(pvField(b.type, PV_LABELS[b.type], b.text, imgMap, false, pvSmallCls(b.type)));
+      wrap.append(pvField(b.type, b.text, imgMap, false, pvSmallCls(b.type)));
     } else {
       const p = el("p", { class: "pv-meta" });
       p.append(renderRich(b.text, imgMap, { nbsp: true }));

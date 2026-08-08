@@ -105,6 +105,8 @@ test("a legacy \"> \" handout block is still offered as its own paste", () => {
   const t = xyChgk.copyTargets("> Схема ме́тро\n? Что на схеме?\n! круг", "3");
   assert.deepEqual(t.map((x) => x.text), [
     "Раздаточный материал:\nСхема метро",
+    "Раздаточный материал:\nСхема метро\n\nВопрос 3. Что на схеме?",
+    "Раздаточный материал:\nСхема метро\n\nВопрос 3. Что на схеме?\n\nОтвет: круг",
     "Вопрос 3. Что на схеме?",
   ]);
 });
@@ -704,17 +706,29 @@ test("nothing to convert leaves the card untouched", () => {
 // ---- what a card offers to copy (issue #45) ----
 const { copyTargets } = xyChgk;
 
-test("a plain question offers exactly one thing to copy", () => {
-  const t = copyTargets("? Простой вопрос?\n! Ответ", 12);
+test("a question with nothing but its text offers exactly one thing to copy", () => {
+  const t = copyTargets("? Простой вопрос?", 12);
   assert.deepEqual(t, [{ label: "Вопрос", text: "Вопрос 12. Простой вопрос?" }]);
+});
+
+test("an answer earns its own target, alongside the question the testers get", () => {
+  const t = copyTargets("? Простой вопрос?\n! Ответ", 12);
+  assert.deepEqual(t.map((x) => x.label), ["Вопрос с ответом", "Вопрос"]);
+  assert.equal(t[0].text, "Вопрос 12. Простой вопрос?\n\nОтвет: Ответ");
 });
 
 test("a handout is its own paste, and no longer rides along with the question", () => {
   const t = copyTargets("? [Раздаточный материал: схема] Что на схеме?\n! круг", 3);
-  assert.equal(t.length, 2);
-  assert.equal(t[0].label, "Раздатка");
+  assert.deepEqual(t.map((x) => x.label),
+    ["Раздатка", "Вопрос целиком", "Вопрос с ответом", "Вопрос"]);
   assert.equal(t[0].text, "Раздаточный материал:\nсхема");
-  assert.equal(t[1].text, "Вопрос 3. Что на схеме?");
+  assert.equal(t.at(-1).text, "Вопрос 3. Что на схеме?");
+});
+
+test("a text handout and its question are also offered as one paste", () => {
+  const t = copyTargets("? [Раздаточный материал: схема] Что на схеме?\n! круг", 3);
+  assert.equal(t[1].label, "Вопрос целиком");
+  assert.equal(t[1].text, "Раздаточный материал:\nсхема\n\nВопрос 3. Что на схеме?");
 });
 
 test("an image handout offers the picture, not its filename", () => {
@@ -722,23 +736,67 @@ test("an image handout offers the picture, not its filename", () => {
   assert.deepEqual(t[0], { label: "Раздатка", image: "map.png" });
 });
 
+test("a picture cannot be pasted with the text, so «целиком» points at it instead", () => {
+  const t = copyTargets("? [Раздаточный материал: (img map.png)] Что тут?\n! круг", 1);
+  assert.equal(t[1].text, "[Раздаточный материал: см. изображение]\n\nВопрос 1. Что тут?");
+});
+
 test("a blitz offers one paste per leg, the lead-in only on the first", () => {
   const desc = "? Блиц:\n- Первый вопрос?\n- Второй вопрос?\n- Третий вопрос?\n! ответы";
   const t = copyTargets(desc, 12);
-  assert.deepEqual(t.map((x) => x.label), ["Вопрос 1", "Вопрос 2", "Вопрос 3"]);
-  assert.equal(t[0].text, "Вопрос 12. Блиц:\n1. Первый вопрос?");
-  assert.equal(t[1].text, "2. Второй вопрос?");
-  assert.equal(t[2].text, "3. Третий вопрос?");
+  assert.deepEqual(t.map((x) => x.label),
+    ["Вопрос целиком", "Вопрос с ответом", "Вопрос 1", "Вопрос 2", "Вопрос 3"]);
+  const legs = t.filter((x) => /^Вопрос \d+$/.test(x.label));
+  assert.equal(legs[0].text, "Вопрос 12. Блиц:\n1. Первый вопрос?");
+  assert.equal(legs[1].text, "2. Второй вопрос?");
+  assert.equal(legs[2].text, "3. Третий вопрос?");
+});
+
+test("«целиком» is every leg of a blitz in one paste", () => {
+  const desc = "? Блиц:\n- Первый вопрос?\n- Второй вопрос?\n! ответы";
+  assert.equal(copyTargets(desc, 12)[0].text,
+    "Вопрос 12. Блиц:\n1. Первый вопрос?\n2. Второй вопрос?");
+});
+
+test("«с ответом» carries every field the exports print, in their order", () => {
+  const desc = "? Вопрос?\n! Ответ\n= Зачёт\n!= Незачёт\n/ Комментарий\n^ Источник\n@ Иванов";
+  assert.equal(copyTargets(desc, 7)[0].text,
+    "Вопрос 7. Вопрос?\n\nОтвет: Ответ\nЗачёт: Зачёт\nНезачёт: Незачёт\n" +
+    "Комментарий: Комментарий\nИсточник: Источник\nАвтор: Иванов");
+});
+
+test("«с ответом» numbers a list answer and pluralises several sources", () => {
+  const desc = "? Блиц:\n- Раз?\n- Два?\n! - Один\n- Два\n^ - книга\n- сайт";
+  assert.equal(copyTargets(desc, 4).find((x) => x.label === "Вопрос с ответом").text,
+    "Вопрос 4. Блиц:\n1. Раз?\n2. Два?\n\nОтвет:\n1. Один\n2. Два\nИсточники:\n1. книга\n2. сайт");
+});
+
+test("«с ответом» honours a !!Label caption, on a field and on the authors", () => {
+  const desc = "? Вопрос?\n! !!Верный~ответ Москва\n@ !!Авторка Мария";
+  assert.equal(copyTargets(desc, 1)[0].text,
+    "Вопрос 1. Вопрос?\n\nВерный ответ: Москва\nАвторка: Мария");
+});
+
+test("an answer keeps its bracketed alternatives — they are part of the answer", () => {
+  const desc = "? Вопрос?\n! Москва [или Москова]\n= Подмосковье [тоже]\n/ Комментарий [для ведущего]";
+  assert.equal(copyTargets(desc, 1)[0].text,
+    "Вопрос 1. Вопрос?\n\nОтвет: Москва [или Москова]\nЗачёт: Подмосковье [тоже]\nКомментарий: Комментарий");
+});
+
+test("a field that is a bare marker prints nothing rather than an empty caption", () => {
+  const t = copyTargets("? Вопрос?\n! Ответ\n=\n/", 1);
+  assert.equal(t[0].text, "Вопрос 1. Вопрос?\n\nОтвет: Ответ");
 });
 
 test("copying takes the version you are looking at", () => {
-  assert.equal(copyTargets(versionBody(TWO, 0), 5)[0].text, "Вопрос 5. Первая?");
-  assert.equal(copyTargets(versionBody(TWO, 1), 5)[0].text, "Вопрос 5. Вторая?");
+  const q = (desc) => copyTargets(desc, 5).find((x) => x.label === "Вопрос").text;
+  assert.equal(q(versionBody(TWO, 0)), "Вопрос 5. Первая?");
+  assert.equal(q(versionBody(TWO, 1)), "Вопрос 5. Вторая?");
 });
 
 test("screen mode still applies — host notes and accents are not sent to testers", () => {
   const t = copyTargets("? [Ведущему: не читать] Вопро́с?\n! Ответ", 1);
-  assert.equal(t[0].text, "Вопрос 1. Вопрос?");
+  assert.equal(t.find((x) => x.label === "Вопрос").text, "Вопрос 1. Вопрос?");
 });
 
 // ---- author caption (issue #44) ----
