@@ -540,7 +540,7 @@ func TestCompileErrors(t *testing.T) {
 		{"unknown kind", "[scheme]\ntype: whist\n", "whist"},
 		{"unknown key", "[scheme]\ntype: roundrobin\nteam_in_group: 4\n", "team_in_group"},
 		{"rr needs size", "[scheme]\ntype: roundrobin\n", "teams_in_group"},
-		{"se power of two", "[scheme]\ntype: single_elimination\nteams: 6\n", "степень"},
+		{"se uneven rounds", "[scheme]\ntype: single_elimination\nteams: 6\n", "не делятся"},
 		{"unknown round suffix", "[scheme]\ntype: single_elimination\nteams: 4\nquestions.r16: 9\n", "r16"},
 		{"no proceeding", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\n---\ntype: single_elimination\nteams: 4\n", "proceeding_teams"},
 		{"no deterministic template", "[scheme]\ntype: roundrobin\ngroups: 5\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 5\n", "reseed"},
@@ -593,5 +593,47 @@ func TestSortingAcceptsAnyDeclaredMetric(t *testing.T) {
 	}
 	if _, err := Compile(doc, Input{GameType: "brain"}); err == nil {
 		t.Fatal("a metric no protocol measures must be a compile error")
+	}
+}
+
+// ЭК's bracket is a single elimination of four-seat бои where two proceed —
+// the same Kind as a classic bracket, at a different size. The 1/4 is played
+// three to a table, so the size is a per-round override.
+func TestCompileMultiSeatElimination(t *testing.T) {
+	src := `
+[scheme]
+type: single_elimination
+teams: 48
+match_size: 4
+winning_places: 2
+match_size.r3: 3
+`
+	scheme := compileSrc(t, src, Input{GameType: "ek"})
+	want := []struct {
+		bouts, seats int
+	}{{12, 4}, {6, 4}, {4, 3}, {2, 4}, {1, 4}}
+	if len(scheme.Stages) != len(want) {
+		t.Fatalf("stages = %d, want %d", len(scheme.Stages), len(want))
+	}
+	for i, w := range want {
+		stage := scheme.Stages[i]
+		if len(stage.Matches) != w.bouts {
+			t.Fatalf("round %d: %d боёв, want %d", i+1, len(stage.Matches), w.bouts)
+		}
+		for _, match := range stage.Matches {
+			if len(match.Slots) != w.seats {
+				t.Fatalf("round %d бой %s: %d мест, want %d", i+1, match.Code, len(match.Slots), w.seats)
+			}
+		}
+	}
+	// The second round's first бой seats the first two бои's qualifiers.
+	second := scheme.Stages[1].Matches[0]
+	from := make([]string, len(second.Slots))
+	for i, slot := range second.Slots {
+		from[i] = fmt.Sprintf("%s#%d", slot.FromMatch.Match, slot.FromMatch.Place)
+	}
+	got := strings.Join(from, " ")
+	if got != "s1-r1-m1#1 s1-r1-m1#2 s1-r1-m2#1 s1-r1-m2#2" {
+		t.Fatalf("вторая раунд, бой 1 = %s", got)
 	}
 }

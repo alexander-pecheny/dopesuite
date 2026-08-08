@@ -149,6 +149,7 @@ var blockKeys = map[string]bool{
 	"type": true, "title": true, "groups": true, "teams_in_group": true, "teams": true,
 	"proceeding_teams": true, "reseed": true, "sorting": true, "points": true,
 	"venues": true, "bronze": true, "stats_from": true, "best_of": true,
+	"match_size": true, "winning_places": true,
 }
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true, "points": true}
@@ -174,7 +175,7 @@ func (c *compiler) checkKeys() error {
 		for key, v := range blk.Values {
 			base, _, dotted := strings.Cut(key, ".")
 			if dotted {
-				if _, isParam := c.protocolConfigKey(base); !isParam && base != "venues" && base != "best_of" {
+				if _, isParam := c.protocolConfigKey(base); !isParam && base != "venues" && base != "best_of" && base != "match_size" {
 					return errAt(v.Line, "неизвестный ключ %s", key)
 				}
 				continue // round suffixes are validated by the block's kind
@@ -825,13 +826,30 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 	if !ok {
 		return nil, errAt(blk.Line, "single_elimination: нужен teams")
 	}
-	if teams < 2 || teams&(teams-1) != 0 {
-		return nil, errAt(blk.Line, "single_elimination: teams должен быть степенью двойки")
+	winning := 1
+	if v, ok := blk.Int("winning_places"); ok {
+		winning = v
+	}
+	// match_size may differ round by round — ЭК plays its 1/4 three to a table
+	// and everything else four — so the size is asked for per round.
+	sizeFor := func(round, entering int) int {
+		size := 2
+		if v, ok := blk.Int("match_size"); ok {
+			size = v
+		}
+		if v, ok := blk.Int(fmt.Sprintf("match_size.r%d", round)); ok {
+			size = v
+		}
+		return size
+	}
+	plan, err := planElimRounds(teams, winning, sizeFor)
+	if err != nil {
+		return nil, errAt(blk.Line, "single_elimination: %s", err)
 	}
 	bronze, _ := blk.Bool("bronze")
 	rounds := []string{}
-	for remaining := teams; remaining >= 2; remaining /= 2 {
-		rounds = append(rounds, seRoundNames(remaining)...)
+	for i, r := range plan {
+		rounds = append(rounds, elimRoundNames(r, i, winning)...)
 	}
 	if bronze && teams >= 4 {
 		rounds = append(rounds, "bronze")
@@ -842,10 +860,10 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 	_, boundary := blockReseedSpec(blk)
 	boundaryAt := 0
 	if boundary != "" {
-		for remaining := teams; remaining >= 2; remaining /= 2 {
-			for _, name := range seRoundNames(remaining) {
+		for i, r := range plan {
+			for _, name := range elimRoundNames(r, i, winning) {
 				if name == boundary {
-					boundaryAt = remaining
+					boundaryAt = r.entering
 				}
 			}
 		}
@@ -857,7 +875,7 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 		}
 	}
 
-	first, err := c.seFirstRound(index, blk, teams)
+	first, err := c.seFirstRound(index, blk, plan[0], winning)
 	if err != nil {
 		return nil, err
 	}
@@ -866,12 +884,12 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 	var prevStages []string
 	var semifinalCodes []string
 	seriesFinal := false
-	for remaining := teams; remaining >= 2; remaining /= 2 {
-		names := seRoundNames(remaining)
+	for roundIndex, round := range plan {
+		remaining, size, count := round.entering, round.size, round.bouts
+		names := elimRoundNames(round, roundIndex, winning)
 		stageCode := fmt.Sprintf("%s-%s", blockCode, names[0])
-		count := remaining / 2
 		bestOf := 0
-		if remaining == 2 {
+		if round.terminal {
 			v, ok := blk.Int("best_of")
 			for _, name := range names {
 				if dotted, dok := blk.Int("best_of." + name); dok {
@@ -907,30 +925,33 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 		}
 		matches := make([]store.SchemeMatch, count)
 		codes := make([]string, count)
-		rankOrder := structure.BracketOrder(remaining)
+		// Who meets whom: a reseed re-ranks everyone and deals the бои by the
+		// draw, so the round's best meets its worst; without one the bracket
+		// template carries each бой's winners forward in бой order.
+		drawn := elimDraw(remaining, count, size, winning)
+		template := straightChunks(remaining, count)
 		for i := 1; i <= count; i++ {
 			code := fmt.Sprintf("%s-m%d", stageCode, i)
 			codes[i-1] = code
 			var slots []store.SchemeSlot
 			switch {
 			case reseedCode != "":
-				slots = []store.SchemeSlot{
-					reseedRankSlot(reseedCode, rankOrder[2*i-2]),
-					reseedRankSlot(reseedCode, rankOrder[2*i-1]),
+				for _, rank := range drawn[i-1] {
+					slots = append(slots, reseedRankSlot(reseedCode, rank))
 				}
-			case remaining == teams:
+			case roundIndex == 0:
 				slots = first[i-1]
 			default:
-				slots = []store.SchemeSlot{
-					fromMatchSlot(prevCodes[2*i-2], 1),
-					fromMatchSlot(prevCodes[2*i-1], 1),
+				for _, rank := range template[i-1] {
+					from, place := (rank-1)/winning, (rank-1)%winning+1
+					slots = append(slots, fromMatchSlot(prevCodes[from], place))
 				}
 			}
 			matches[i-1] = store.SchemeMatch{
 				Code:             code,
 				Title:            fmt.Sprintf("Бой %d", i),
 				Venue:            c.venuePick(venues, i),
-				ParticipantCount: 2,
+				ParticipantCount: len(slots),
 				Slots:            slots,
 			}
 		}
@@ -1016,21 +1037,23 @@ func (c *compiler) appendSERound(blk Section, stageCode, title string, rounds []
 
 // seFirstRound seats the opening round: bracket order over seeds, or the
 // winner-meets-runner-up template over the previous block's paired groups.
-func (c *compiler) seFirstRound(index int, blk Section, teams int) ([][]store.SchemeSlot, error) {
-	count := teams / 2
+func (c *compiler) seFirstRound(index int, blk Section, opening elimRound, winning int) ([][]store.SchemeSlot, error) {
+	teams, count := opening.entering, opening.bouts
 	if index == 0 {
 		if len(c.in.Entrants) > 0 && len(c.in.Entrants) != teams {
 			return nil, errAt(blk.Line, "схеме нужно %d команд, а посеяно %d", teams, len(c.in.Entrants))
 		}
-		order := structure.BracketOrder(teams)
+		draw := elimDraw(teams, count, opening.size, winning)
 		first := make([][]store.SchemeSlot, count)
 		for i := 0; i < count; i++ {
-			first[i] = []store.SchemeSlot{
-				c.seedSlot(order[2*i]),
-				c.seedSlot(order[2*i+1]),
+			for _, rank := range draw[i] {
+				first[i] = append(first[i], c.seedSlot(rank))
 			}
 		}
 		return first, nil
+	}
+	if opening.size != 2 || winning != 1 {
+		return nil, errAt(blk.Line, "нет шаблона рассадки в бои по %d из предыдущего блока — добавьте reseed: true", opening.size)
 	}
 	prev := c.prev
 	if prev.proceeding <= 0 {
