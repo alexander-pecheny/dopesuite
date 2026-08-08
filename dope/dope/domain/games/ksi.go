@@ -147,3 +147,42 @@ func KSIStickerMarkValue(stickerID, mark string, value int) int {
 		}
 	}
 }
+
+// SIThemeCount is личная СИ's usual бой: eight themes. The regulation varies it
+// by round (six early, twelve in the grand final), so a game's scheme overrides
+// it — this is only the default.
+const SIThemeCount = 8
+
+// SIEmptyGameJSON builds the pristine scheme/state for a личная СИ бой: the
+// same themes × participants grid as КСИ, sized for the players at one table.
+func SIEmptyGameJSON(slug, title string, themesCount, participants int) ([]byte, []byte) {
+	if themesCount <= 0 {
+		themesCount = SIThemeCount
+	}
+	seats := make([]map[string]any, participants)
+	for i := range seats {
+		seats[i] = map[string]any{"number": i + 1, "name": ""}
+	}
+	themes := make([]map[string]any, themesCount)
+	for i := range themes {
+		answers := make([][]string, participants)
+		for p := range answers {
+			answers[p] = make([]string, 5)
+		}
+		themes[i] = map[string]any{"answers": answers}
+	}
+	schemeJSON := []byte(mustJSON(map[string]any{
+		"schemaVersion": 2,
+		"slug":          slug,
+		"title":         title,
+		"gameType":      SI,
+		"participants":  seats,
+		"themes":        themesCount,
+	}))
+	stateJSON := []byte(mustJSON(map[string]any{
+		"participants": seats,
+		"themes":       themes,
+		"finished":     false,
+	}))
+	return schemeJSON, stateJSON
+}

@@ -134,12 +134,20 @@ func ComputeKSIResults(schemeJSON, stateJSON string, values []int) ([]KSIResults
 		}
 		return true
 	}
-	for i := range ranked {
-		if i > 0 && sameMetrics(ranked[i], ranked[i-1]) {
-			ranked[i].Place = ranked[i-1].Place
-		} else {
-			ranked[i].Place = float64(i + 1)
+	// A shared place is the mean of the places it covers — «среднее
+	// арифметическое поделённых мест». Two firsts are 1.5 each, not 1 each:
+	// places are what the Structure layer pays очки on, and only the mean
+	// keeps a group's очки independent of how the ties fell (CONTEXT.md).
+	for start := 0; start < len(ranked); {
+		end := start + 1
+		for end < len(ranked) && sameMetrics(ranked[end], ranked[start]) {
+			end++
 		}
+		place := float64(start+end+1) / 2
+		for i := start; i < end; i++ {
+			ranked[i].Place = place
+		}
+		start = end
 	}
 	return ranked, nil
 }

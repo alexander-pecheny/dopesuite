@@ -35,3 +35,27 @@ func TestKSIStickerMarkValue(t *testing.T) {
 		}
 	}
 }
+
+// Поделённое место — среднее арифметическое поделённых мест, а не меньшее из
+// них: два первых получают по 1,5. Место — это то, за что Структура платит
+// очки, и только среднее не зависит от того, как легли ничьи.
+func TestKSISharedPlaceIsTheMean(t *testing.T) {
+	scheme := `{"themes":[{},{}],"participants":[{"number":1,"name":"А"},{"number":2,"name":"Б"},{"number":3,"name":"В"}]}`
+	// А и Б берут по одному вопросу на 10, В не берёт ничего.
+	state := `{"participants":[{"number":1,"name":"А"},{"number":2,"name":"Б"},{"number":3,"name":"В"}],
+	  "themes":[{"answers":[["right","","","",""],["right","","","",""],["","","","",""]]},
+	            {"answers":[["","","","",""],["","","","",""],["","","","",""]]}]}`
+	ranked, err := ComputeKSIResults(scheme, state, []int{10, 20, 30, 40, 50})
+	if err != nil {
+		t.Fatalf("ComputeKSIResults: %v", err)
+	}
+	if len(ranked) != 3 {
+		t.Fatalf("строк = %d, want 3", len(ranked))
+	}
+	if ranked[0].Place != 1.5 || ranked[1].Place != 1.5 {
+		t.Errorf("поделённое первое = %v и %v, want 1.5", ranked[0].Place, ranked[1].Place)
+	}
+	if ranked[2].Place != 3 {
+		t.Errorf("третье место = %v, want 3", ranked[2].Place)
+	}
+}

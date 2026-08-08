@@ -201,3 +201,44 @@ func TestBrainScore(t *testing.T) {
 		t.Errorf("empty state shape = %s", empty)
 	}
 }
+
+// Личная СИ считает тот же бланк, что и КСИ, только за столом игроки: трое,
+// восемь тем. Поделённое место — среднее.
+func TestSIScore(t *testing.T) {
+	p, ok := Get("si")
+	if !ok {
+		t.Fatal("si protocol not registered")
+	}
+	empty, err := p.EmptyState(json.RawMessage(`{"themes":8,"participants":3}`))
+	if err != nil {
+		t.Fatalf("EmptyState: %v", err)
+	}
+	var parsed struct {
+		Participants []struct{} `json:"participants"`
+		Themes       []struct {
+			Answers [][]string `json:"answers"`
+		} `json:"themes"`
+	}
+	if err := json.Unmarshal(empty, &parsed); err != nil {
+		t.Fatalf("parse empty state: %v", err)
+	}
+	if len(parsed.Participants) != 3 || len(parsed.Themes) != 8 {
+		t.Fatalf("бланк = %d игроков × %d тем, want 3 × 8", len(parsed.Participants), len(parsed.Themes))
+	}
+
+	state := `{"participants":[{"number":1,"name":"А"},{"number":2,"name":"Б"},{"number":3,"name":"В"}],
+	  "themes":[{"answers":[["right","","","",""],["right","","","",""],["","","","",""]]}]}`
+	outcomes, err := p.Score(json.RawMessage(`{"themes":1}`), json.RawMessage(state))
+	if err != nil {
+		t.Fatalf("Score: %v", err)
+	}
+	if len(outcomes) != 3 {
+		t.Fatalf("outcomes = %d, want 3", len(outcomes))
+	}
+	if outcomes[0].Place != 1.5 || outcomes[1].Place != 1.5 || outcomes[2].Place != 3 {
+		t.Errorf("места = %v/%v/%v, want 1.5/1.5/3", outcomes[0].Place, outcomes[1].Place, outcomes[2].Place)
+	}
+	if outcomes[0].Metrics["taken10"] != 1 {
+		t.Errorf("взятых на 10 = %v, want 1", outcomes[0].Metrics["taken10"])
+	}
+}
