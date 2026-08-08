@@ -137,7 +137,7 @@ values(?, ?, ?, ?, ?)`, festID, venue.Number, venue.Title, now, now)
 	assignmentTeams := make(map[[2]int]int64, len(scheme.Teams))
 	for _, team := range scheme.Teams {
 		teamID, err := store.InsertReturningID(ctx, tx, `
-insert into teams(fest_id, name, city)
+insert into participants(fest_id, name, city)
 values(?, ?, ?)`, festID, team.Name, team.City)
 		if err != nil {
 			return store.FestView{}, err
@@ -155,14 +155,14 @@ values(?, ?, ?)`, festID, firstName, lastName)
 				return store.FestView{}, err
 			}
 			if _, err := tx.ExecContext(ctx, `
-insert into team_players(team_id, player_id, roster_order)
+insert into participant_players(participant_id, player_id, roster_order)
 values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 				return store.FestView{}, err
 			}
 		}
 		if _, err := tx.ExecContext(ctx, `
-insert into game_assignments(game_id, basket, number, team_id, player_id)
-values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil {
+insert into game_assignments(game_id, basket, number, participant_id)
+values(?, ?, ?, ?)`, gameID, team.Basket, team.Number, teamID); err != nil {
 			return store.FestView{}, err
 		}
 		assignmentTeams[[2]int{team.Basket, team.Number}] = teamID
@@ -217,7 +217,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Co
 					resolvedTeamID = assignmentTeams[[2]int{slot.Seed.Basket, number}]
 				}
 				if _, err := tx.ExecContext(ctx, `
-insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
+insert into match_slots(match_id, slot_index, source_type, source_ref_json, participant_id, locked)
 values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, util.NullableInt64(resolvedTeamID)); err != nil {
 					return store.FestView{}, err
 				}
@@ -315,7 +315,7 @@ values(?, ?, ?, ?, ?)`, festID, venue.Number, venue.Title, now, now)
 	assignmentTeams := make(map[[2]int]int64, len(scheme.Teams))
 	for _, team := range scheme.Teams {
 		teamID, err := store.InsertReturningID(ctx, tx, `
-insert into teams(fest_id, name, city)
+insert into participants(fest_id, name, city)
 values(?, ?, ?)`, festID, team.Name, team.City)
 		if err != nil {
 			return err
@@ -333,14 +333,14 @@ values(?, ?, ?)`, festID, firstName, lastName)
 				return err
 			}
 			if _, err := tx.ExecContext(ctx, `
-insert into team_players(team_id, player_id, roster_order)
+insert into participant_players(participant_id, player_id, roster_order)
 values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 				return err
 			}
 		}
 		if _, err := tx.ExecContext(ctx, `
-insert into game_assignments(game_id, basket, number, team_id, player_id)
-values(?, ?, ?, ?, null)`, gameID, team.Basket, team.Number, teamID); err != nil {
+insert into game_assignments(game_id, basket, number, participant_id)
+values(?, ?, ?, ?)`, gameID, team.Basket, team.Number, teamID); err != nil {
 			return err
 		}
 		assignmentTeams[[2]int{team.Basket, team.Number}] = teamID
@@ -391,7 +391,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Co
 					resolvedTeamID = assignmentTeams[[2]int{slot.Seed.Basket, number}]
 				}
 				if _, err := tx.ExecContext(ctx, `
-insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
+insert into match_slots(match_id, slot_index, source_type, source_ref_json, participant_id, locked)
 values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, util.NullableInt64(resolvedTeamID)); err != nil {
 					return err
 				}
@@ -415,8 +415,8 @@ func clearFestImportData(ctx context.Context, tx *sql.Tx, festID int64) error {
 	statements := []string{
 		`delete from journal where fest_id = ?`,
 		`delete from games where fest_id = ?`,
-		`delete from team_players where team_id in (select id from teams where fest_id = ?)`,
-		`delete from teams where fest_id = ?`,
+		`delete from participant_players where participant_id in (select id from participants where fest_id = ?)`,
+		`delete from participants where fest_id = ?`,
 		`delete from players where fest_id = ?`,
 		`delete from venues where fest_id = ?`,
 	}
@@ -441,12 +441,11 @@ func clearImportedData(ctx context.Context, tx *sql.Tx) error {
 		"stages",
 		"game_assignments",
 		"game_team_players",
-		"game_players",
-		"game_teams",
+		"game_participants",
 		"games",
-		"team_players",
+		"participant_players",
 		"players",
-		"teams",
+		"participants",
 		"venues",
 		"fest_organizers",
 		"fests",

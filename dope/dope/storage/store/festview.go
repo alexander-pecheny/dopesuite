@@ -31,7 +31,7 @@ func LoadReseedEntries(ctx context.Context, q Queryer, stageID int64) ([]ReseedE
 	return CollectRows(ctx, q, `
 select re.rank, re.participant_id, coalesce(t.name, ''), re.metrics_json
 from stage_standings re
-left join teams t on t.id = re.participant_id
+left join participants t on t.id = re.participant_id
 where re.stage_id = ?
 order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error) {
 		var entry ReseedEntryView
@@ -103,8 +103,8 @@ func LoadMatchSummaries(ctx context.Context, q Queryer, matchID int64) ([]MatchT
 select t.name, ms.source_type, ms.source_ref_json, coalesce(r.place, 0), coalesce(r.total, 0),
        coalesce(r.plus, 0), coalesce(r.tiebreak, 0)
 from match_slots ms
-left join teams t on t.id = ms.team_id
-left join match_results r on r.match_id = ms.match_id and r.team_id = ms.team_id
+left join participants t on t.id = ms.participant_id
+left join match_results r on r.match_id = ms.match_id and r.participant_id = ms.participant_id
 where ms.match_id = ?
 order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchTeamSummary, error) {
 		var team MatchTeamSummary

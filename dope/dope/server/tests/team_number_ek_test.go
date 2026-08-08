@@ -19,7 +19,7 @@ func TestEnsureSeedTeamByNumberKeysByNumber(t *testing.T) {
 
 	festID, _, _ := createRosterPropagationFixture(t, db)
 	ctx := t.Context()
-	if _, err := db.Exec(`delete from teams where fest_id = ?`, festID); err != nil {
+	if _, err := db.Exec(`delete from participants where fest_id = ?`, festID); err != nil {
 		t.Fatalf("clear teams: %v", err)
 	}
 	tx, err := db.BeginTx(ctx, nil)
@@ -49,7 +49,7 @@ func TestEnsureSeedTeamByNumberKeysByNumber(t *testing.T) {
 		t.Fatalf("re-seed by number must reuse the row, got %d want %d", id7b, id7)
 	}
 	var name string
-	if err := tx.QueryRow(`select name from teams where id = ?`, id7).Scan(&name); err != nil {
+	if err := tx.QueryRow(`select name from participants where id = ?`, id7).Scan(&name); err != nil {
 		t.Fatalf("read name: %v", err)
 	}
 	if name != "Дубль-2" {
@@ -83,7 +83,7 @@ func TestBackfillEKTeamNumbers(t *testing.T) {
 			t.Fatalf("exec %q: %v", q, err)
 		}
 	}
-	mustExec(`delete from teams where fest_id = ?`, festID)
+	mustExec(`delete from participants where fest_id = ?`, festID)
 	mustExec(`delete from fest_teams where fest_id = ?`, festID)
 
 	ftIns := `insert into fest_teams(fest_id, rating_id, name, city, position, number, deleted) values(?, ?, ?, '', ?, ?, 0)`
@@ -91,7 +91,7 @@ func TestBackfillEKTeamNumbers(t *testing.T) {
 	mustExec(ftIns, festID, 2, "Бета", 2, 2)
 	mustExec(ftIns, festID, 3, "Дубль", 3, 3)
 	mustExec(ftIns, festID, 4, "Дубль", 4, 4) // ambiguous name
-	teamIns := `insert into teams(fest_id, name, city) values(?, ?, '')`
+	teamIns := `insert into participants(fest_id, name, city) values(?, ?, '')`
 	mustExec(teamIns, festID, "Альфа")
 	mustExec(teamIns, festID, "Бета")
 	mustExec(teamIns, festID, "Дубль")
@@ -103,7 +103,7 @@ func TestBackfillEKTeamNumbers(t *testing.T) {
 	checkNum := func(name string, want any) {
 		t.Helper()
 		var num any
-		if err := db.QueryRow(`select number from teams where fest_id = ? and name = ?`, festID, name).Scan(&num); err != nil {
+		if err := db.QueryRow(`select number from participants where fest_id = ? and name = ?`, festID, name).Scan(&num); err != nil {
 			t.Fatalf("read %s number: %v", name, err)
 		}
 		var got any

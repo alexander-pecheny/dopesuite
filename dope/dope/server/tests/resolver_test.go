@@ -305,7 +305,7 @@ func assertReseedState(t *testing.T, stage store.StageView, ready bool, pending 
 func slotTeams(t *testing.T, db *sql.DB, gameID int64, matchCode string) []int64 {
 	t.Helper()
 	rows, err := db.QueryContext(context.Background(), `
-select coalesce(ms.team_id, 0)
+select coalesce(ms.participant_id, 0)
 from match_slots ms
 join matches m on m.id = ms.match_id
 where m.game_id = ? and m.code = ?

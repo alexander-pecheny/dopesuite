@@ -600,8 +600,8 @@ func replaceSeedAssignments(ctx context.Context, tx *sql.Tx, gameID int64, rows 
 		}
 		seedNumber++
 		if _, err := tx.ExecContext(ctx, `
-insert into game_assignments(game_id, basket, number, team_id, player_id)
-values(?, 1, ?, ?, null)`, gameID, seedNumber, row.TeamID); err != nil {
+insert into game_assignments(game_id, basket, number, participant_id)
+values(?, 1, ?, ?)`, gameID, seedNumber, row.TeamID); err != nil {
 			return nil, err
 		}
 		assignments[[2]int{1, seedNumber}] = row.TeamID
@@ -644,7 +644,7 @@ order by ms.id`, []any{gameID}, func(rows *sql.Rows) (slotRecord, error) {
 		basket, number := seedRefKey(slot.SourceRef)
 		teamID := assignments[[2]int{basket, number}]
 		touchedMatches[slot.MatchID] = struct{}{}
-		if _, err := tx.ExecContext(ctx, `update match_slots set team_id = ? where id = ?`, util.NullableInt64(teamID), slot.ID); err != nil {
+		if _, err := tx.ExecContext(ctx, `update match_slots set participant_id = ? where id = ?`, util.NullableInt64(teamID), slot.ID); err != nil {
 			return err
 		}
 	}
@@ -664,7 +664,7 @@ where match_id = ?
     select 1
     from match_slots ms
     where ms.match_id = match_results.match_id
-      and ms.team_id = match_results.team_id
+      and ms.participant_id = match_results.participant_id
   )`, matchID); err != nil {
 		return err
 	}
@@ -674,7 +674,7 @@ where match_id = ?
 		return nil
 	}
 	seated, err := store.CollectRows(ctx, tx, `
-select team_id from match_slots where match_id = ? and team_id is not null`,
+select participant_id from match_slots where match_id = ? and participant_id is not null`,
 		[]any{matchID}, func(rows *sql.Rows) (int64, error) {
 			var id int64
 			return id, rows.Scan(&id)
@@ -1080,10 +1080,10 @@ func EnsureSeedTeamByNumber(ctx context.Context, tx *sql.Tx, festID, number int6
 	var teamID int64
 	var existingName, existingCity string
 	err := tx.QueryRowContext(ctx, `
-select id, name, city from teams where fest_id = ? and number = ? limit 1`, festID, number).Scan(&teamID, &existingName, &existingCity)
+select id, name, city from participants where fest_id = ? and number = ? limit 1`, festID, number).Scan(&teamID, &existingName, &existingCity)
 	if errors.Is(err, sql.ErrNoRows) {
 		teamID, err = store.InsertReturningID(ctx, tx, `
-insert into teams(fest_id, name, city, number) values(?, ?, ?, ?)`, festID, name, city, number)
+insert into participants(fest_id, name, city, number) values(?, ?, ?, ?)`, festID, name, city, number)
 		if err != nil {
 			return 0, "", err
 		}
@@ -1100,7 +1100,7 @@ insert into teams(fest_id, name, city, number) values(?, ?, ?, ?)`, festID, name
 			newCity = city
 		}
 		if newName != existingName || newCity != existingCity {
-			if _, err := tx.ExecContext(ctx, `update teams set name = ?, city = ? where id = ?`, newName, newCity, teamID); err != nil {
+			if _, err := tx.ExecContext(ctx, `update participants set name = ?, city = ? where id = ?`, newName, newCity, teamID); err != nil {
 				return 0, "", err
 			}
 			existingCity = newCity

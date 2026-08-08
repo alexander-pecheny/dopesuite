@@ -66,9 +66,9 @@ func RecalculateMatchResultsForStateTx(ctx context.Context, tx *sql.Tx, match DB
 			place = *pin
 		}
 		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, team_id, place, total, plus, tiebreak, metrics_json)
+insert into match_results(match_id, participant_id, place, total, plus, tiebreak, metrics_json)
 values(?, ?, ?, ?, ?, ?, ?)
-on conflict(match_id, team_id) do update set
+on conflict(match_id, participant_id) do update set
   place = excluded.place,
   total = excluded.total,
   plus = excluded.plus,

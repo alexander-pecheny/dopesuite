@@ -83,7 +83,7 @@ var (
 	ResolveGameID             = resolveGameID
 	DefaultGameID             = defaultGameID
 	DefaultMatch              = defaultMatch
-	BackfillEKTeamNumbers     = backfillEKTeamNumbers
+	BackfillEKTeamNumbers     = backfillEKParticipantNumbers
 	BackfillFestTeamNumbers   = backfillFestTeamNumbers
 	EnsureSystemUser          = ensureSystemUser
 	RecalculateMatchResultsTx = recalculateMatchResultsTx

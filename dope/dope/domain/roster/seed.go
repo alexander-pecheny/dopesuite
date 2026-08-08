@@ -26,13 +26,13 @@ func EnsureSeedTeam(ctx context.Context, tx *sql.Tx, festID int64, name, city st
 	var existingCity string
 	err := tx.QueryRowContext(ctx, `
 select id, city
-from teams
+from participants
 where fest_id = ? and name = ?
 order by case when city = ? then 0 when city = '' then 1 else 2 end, id
 limit 1`, festID, name, city).Scan(&teamID, &existingCity)
 	if errors.Is(err, sql.ErrNoRows) {
 		teamID, err = store.InsertReturningID(ctx, tx, `
-insert into teams(fest_id, name, city)
+insert into participants(fest_id, name, city)
 values(?, ?, ?)`, festID, name, city)
 		if err != nil {
 			return 0, "", err
@@ -42,7 +42,7 @@ values(?, ?, ?)`, festID, name, city)
 		return 0, "", err
 	}
 	if city != "" && existingCity == "" {
-		if _, err := tx.ExecContext(ctx, `update teams set city = ? where id = ?`, city, teamID); err != nil {
+		if _, err := tx.ExecContext(ctx, `update participants set city = ? where id = ?`, city, teamID); err != nil {
 			return 0, "", err
 		}
 		existingCity = city
@@ -56,7 +56,7 @@ values(?, ?, ?)`, festID, name, city)
 }
 
 func ReplaceSeedTeamRoster(ctx context.Context, tx *sql.Tx, festID, teamID int64, players []SeedRosterPlayer) error {
-	if _, err := tx.ExecContext(ctx, `delete from team_players where team_id = ?`, teamID); err != nil {
+	if _, err := tx.ExecContext(ctx, `delete from participant_players where participant_id = ?`, teamID); err != nil {
 		return err
 	}
 	for rosterOrder, player := range players {
@@ -70,7 +70,7 @@ func ReplaceSeedTeamRoster(ctx context.Context, tx *sql.Tx, festID, teamID int64
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
-insert or ignore into team_players(team_id, player_id, roster_order)
+insert or ignore into participant_players(participant_id, player_id, roster_order)
 values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 			return err
 		}

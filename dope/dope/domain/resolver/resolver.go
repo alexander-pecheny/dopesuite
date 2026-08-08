@@ -62,7 +62,7 @@ func nullableInt64(value int64) any {
 //   - reseed stages: update readiness. Held reseed_entries are not deleted when a
 //     source bout goes temporarily un-final (so untick/retick doesn't wipe them);
 //     live match edits do not create reseed_entries, an explicit calculate does.
-//   - from_match / reseed slots: fill match_slots.team_id once the upstream
+//   - from_match / reseed slots: fill match_slots.participant_id once the upstream
 //     source is final, and (for EK) create that team's themes.
 //
 // It is idempotent and non-destructive: a slot is only rewritten when its
@@ -266,9 +266,9 @@ select id, code, status from matches where stage_id = ? order by position, id`,
 			metrics string
 		}
 		slots, err := store.CollectRows(ctx, tx, `
-select coalesce(ms.team_id, 0), coalesce(mr.place, 0), coalesce(mr.total, 0), coalesce(mr.plus, 0), coalesce(mr.metrics_json, '{}')
+select coalesce(ms.participant_id, 0), coalesce(mr.place, 0), coalesce(mr.total, 0), coalesce(mr.plus, 0), coalesce(mr.metrics_json, '{}')
 from match_slots ms
-left join match_results mr on mr.match_id = ms.match_id and mr.team_id = ms.team_id
+left join match_results mr on mr.match_id = ms.match_id and mr.participant_id = ms.participant_id
 where ms.match_id = ?
 order by ms.slot_index`, []any{m.id}, func(rows *sql.Rows) (slotRes, error) {
 			var s slotRes
@@ -310,7 +310,7 @@ func resolveStageSlotsTx(ctx context.Context, tx *sql.Tx, gameID, stageID int64,
 		teamID     int64
 	}
 	slots, err := store.CollectRows(ctx, tx, `
-select ms.id, ms.match_id, ms.source_type, ms.source_ref_json, coalesce(ms.team_id, 0)
+select ms.id, ms.match_id, ms.source_type, ms.source_ref_json, coalesce(ms.participant_id, 0)
 from match_slots ms
 join matches m on m.id = ms.match_id
 where m.stage_id = ? and ms.locked = 0 and ms.source_type in ('from_match', 'reseed')
@@ -358,7 +358,7 @@ func teamAtMatchPlace(ctx context.Context, q store.Queryer, gameID int64, matchC
 	}
 	var teamID int64
 	err := q.QueryRowContext(ctx, `
-select mr.team_id
+select mr.participant_id
 from match_results mr
 join matches m on m.id = mr.match_id
 where m.game_id = ? and m.code = ? and m.status = 'finished' and mr.place = ?`,
@@ -440,7 +440,7 @@ func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, curre
 			return false, err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `update match_slots set team_id = ? where id = ?`, nullableInt64(desired), slotID); err != nil {
+	if _, err := tx.ExecContext(ctx, `update match_slots set participant_id = ? where id = ?`, nullableInt64(desired), slotID); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -891,7 +891,7 @@ func loadReseedBouts(ctx context.Context, q store.Queryer, sourceMatchIDs []int6
 		args = append(args, id)
 	}
 	rows, err := q.QueryContext(ctx, fmt.Sprintf(`
-select m.id, m.code, s.config_json, mr.team_id, mr.place, mr.total, mr.plus, mr.metrics_json
+select m.id, m.code, s.config_json, mr.participant_id, mr.place, mr.total, mr.plus, mr.metrics_json
 from match_results mr
 join matches m on m.id = mr.match_id
 join stages s on s.id = m.stage_id

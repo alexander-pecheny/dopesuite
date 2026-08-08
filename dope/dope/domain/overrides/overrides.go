@@ -627,7 +627,7 @@ func MaterializeGameRosterOverridesTx(ctx context.Context, tx *sql.Tx, festID, g
 				return err
 			}
 			if _, err := tx.ExecContext(ctx, `
-insert into game_team_players(game_id, team_id, player_id, roster_order)
+insert into game_team_players(game_id, participant_id, player_id, roster_order)
 values(?, ?, ?, ?)`, gameID, teamID, playerID, rosterOrder); err != nil {
 				return err
 			}

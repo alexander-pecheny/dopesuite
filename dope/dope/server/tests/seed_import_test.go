@@ -281,7 +281,7 @@ func seedImportSlotNames(t *testing.T, db *sql.DB, gameID int64) []string {
 select coalesce(t.name, '')
 from match_slots ms
 join matches m on m.id = ms.match_id
-left join teams t on t.id = ms.team_id
+left join participants t on t.id = ms.participant_id
 where m.game_id = ? and m.code = 'A'
 order by ms.slot_index`, gameID)
 	if err != nil {

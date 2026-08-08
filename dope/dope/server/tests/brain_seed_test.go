@@ -64,7 +64,7 @@ update matches set state_json = ? where game_id = ?`, odState, odGameID); err !=
 	var seated int
 	if err := srv.Eng().DB.QueryRow(`
 select count(*) from match_slots ms join matches m on m.id = ms.match_id
-where m.game_id = ? and ms.team_id is not null`, brainID).Scan(&seated); err != nil || seated != 0 {
+where m.game_id = ? and ms.participant_id is not null`, brainID).Scan(&seated); err != nil || seated != 0 {
 		t.Fatalf("pre-import seated = %d, err %v; want 0 (Посев placeholders)", seated, err)
 	}
 
@@ -80,7 +80,7 @@ where m.game_id = ? and ms.team_id is not null`, brainID).Scan(&seated); err != 
 		if err := srv.Eng().DB.QueryRow(`
 select tm.name from match_slots ms
 join matches m on m.id = ms.match_id
-join teams tm on tm.id = ms.team_id
+join participants tm on tm.id = ms.participant_id
 where m.game_id = ? and m.code = ? and ms.slot_index = ?`, brainID, matchCode, slot).Scan(&name); err != nil {
 			t.Fatalf("seat %s/%d: %v", matchCode, slot, err)
 		}
@@ -96,7 +96,7 @@ where m.game_id = ? and m.code = ? and ms.slot_index = ?`, brainID, matchCode, s
 
 	// Гинкго declines: everyone moves up the ladder, seed 1 is now Берёза.
 	var ginkgoID int64
-	if err := srv.Eng().DB.QueryRow(`select team_id from game_assignments where game_id = ? and number = 1`, brainID).Scan(&ginkgoID); err != nil {
+	if err := srv.Eng().DB.QueryRow(`select participant_id from game_assignments where game_id = ? and number = 1`, brainID).Scan(&ginkgoID); err != nil {
 		t.Fatalf("assignment 1: %v", err)
 	}
 	declineResp := scopedAPIRequest(t, srv, http.MethodPost,

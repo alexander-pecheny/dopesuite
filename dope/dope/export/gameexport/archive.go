@@ -76,11 +76,10 @@ var gameRelSpecs = []gameRelSpec{
 	{"stages", `select * from stages where game_id = ?`, []string{"id"}},
 	{"matches", `select * from matches where game_id = ?`, []string{"id"}},
 	{"match_slots", `select * from match_slots where match_id in (select id from matches where game_id = ?)`, []string{"id"}},
-	{"match_results", `select * from match_results where match_id in (select id from matches where game_id = ?)`, []string{"match_id", "team_id"}},
+	{"match_results", `select * from match_results where match_id in (select id from matches where game_id = ?)`, []string{"match_id", "participant_id"}},
 	{"stage_standings", `select * from stage_standings where stage_id in (select id from stages where game_id = ?)`, []string{"stage_id", "rank"}},
-	{"game_teams", `select * from game_teams where game_id = ?`, []string{"game_id", "team_id"}},
-	{"game_players", `select * from game_players where game_id = ?`, []string{"game_id", "player_id"}},
-	{"game_team_players", `select * from game_team_players where game_id = ?`, []string{"game_id", "team_id", "player_id"}},
+	{"game_participants", `select * from game_participants where game_id = ?`, []string{"game_id", "participant_id"}},
+	{"game_team_players", `select * from game_team_players where game_id = ?`, []string{"game_id", "participant_id", "player_id"}},
 	{"game_assignments", `select * from game_assignments where game_id = ?`, []string{"game_id", "basket", "number"}},
 	{"game_player_team_overrides", `select * from game_player_team_overrides where game_id = ?`, []string{"fest_id", "game_id", "player_id"}},
 }
@@ -94,9 +93,9 @@ var festContextSpecs = []struct {
 	{"fest_teams", `select * from fest_teams where fest_id = ?`},
 	{"fest_players", `select * from fest_players where fest_id = ?`},
 	{"fest_team_players", `select * from fest_team_players where team_id in (select id from fest_teams where fest_id = ?)`},
-	{"teams", `select * from teams where fest_id = ?`},
+	{"participants", `select * from participants where fest_id = ?`},
 	{"players", `select * from players where fest_id = ?`},
-	{"team_players", `select * from team_players where team_id in (select id from teams where fest_id = ?)`},
+	{"participant_players", `select * from participant_players where participant_id in (select id from participants where fest_id = ?)`},
 	{"venues", `select * from venues where fest_id = ?`},
 }
 

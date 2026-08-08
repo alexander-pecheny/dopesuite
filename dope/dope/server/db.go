@@ -80,6 +80,13 @@ func migrateDB(db *sql.DB) error {
 	if err := auditmw.DropLegacyAuditTriggers(db); err != nil {
 		return err
 	}
+	// v20: the Participant rename (ADR-0007). It runs BEFORE the create-table
+	// block below, because that block would otherwise create an empty
+	// `participants` alongside the legacy `teams`, and the rename would mistake
+	// that for an already-migrated database.
+	if err := migrate.RunParticipantRename(db); err != nil {
+		return err
+	}
 	_, err := db.Exec(`
 create table if not exists schema_versions(
   version integer primary key,
@@ -194,11 +201,17 @@ create table if not exists game_player_team_overrides(
   primary key(fest_id, game_id, player_id)
 );
 
-create table if not exists teams(
+-- The game-side Participant registry: whoever occupies a Slot and is scored.
+-- The roster column says which Fest roster the row was drawn from — a team, or
+-- one player in an individual format (личная СИ). See ADR-0007.
+create table if not exists participants(
   id integer primary key,
   fest_id integer not null references fests(id) on delete cascade,
+  roster text not null default 'team' check (roster in ('team','player')),
   name text not null,
-  city text not null default ''
+  city text not null default '',
+  fest_team_id integer references fest_teams(id),
+  fest_player_id integer references fest_players(id)
 );
 
 create table if not exists players(
@@ -208,11 +221,11 @@ create table if not exists players(
   last_name text not null default ''
 );
 
-create table if not exists team_players(
-  team_id integer not null references teams(id) on delete cascade,
+create table if not exists participant_players(
+  participant_id integer not null references participants(id) on delete cascade,
   player_id integer not null references players(id) on delete cascade,
   roster_order integer not null,
-  primary key(team_id, player_id)
+  primary key(participant_id, player_id)
 );
 
 create table if not exists games(
@@ -233,36 +246,27 @@ create table if not exists games(
   unique(fest_id, code)
 );
 
-create table if not exists game_teams(
+create table if not exists game_participants(
   game_id integer not null references games(id) on delete cascade,
-  team_id integer not null references teams(id) on delete cascade,
+  participant_id integer not null references participants(id) on delete cascade,
   position integer not null,
-  primary key(game_id, team_id)
-);
-
-create table if not exists game_players(
-  game_id integer not null references games(id) on delete cascade,
-  player_id integer not null references players(id) on delete cascade,
-  position integer not null,
-  primary key(game_id, player_id)
+  primary key(game_id, participant_id)
 );
 
 create table if not exists game_team_players(
   game_id integer not null references games(id) on delete cascade,
-  team_id integer not null references teams(id) on delete cascade,
+  participant_id integer not null references participants(id) on delete cascade,
   player_id integer not null references players(id) on delete cascade,
   roster_order integer not null,
-  primary key(game_id, team_id, player_id)
+  primary key(game_id, participant_id, player_id)
 );
 
 create table if not exists game_assignments(
   game_id integer not null references games(id) on delete cascade,
   basket integer not null,
   number integer not null,
-  team_id integer references teams(id),
-  player_id integer references players(id),
-  primary key(game_id, basket, number),
-  check ((team_id is not null) <> (player_id is not null))
+  participant_id integer references participants(id),
+  primary key(game_id, basket, number)
 );
 
 create table if not exists venues(
@@ -309,21 +313,20 @@ create table if not exists match_slots(
   slot_index integer not null,
   source_type text not null check (source_type in ('seed','from_match','reseed','placeholder')),
   source_ref_json text not null default '{}',
-  team_id integer references teams(id),
-  player_id integer references players(id),
+  participant_id integer references participants(id),
   locked integer not null default 0,
   unique(match_id, slot_index)
 );
 
 create table if not exists match_results(
   match_id integer not null references matches(id) on delete cascade,
-  team_id integer not null references teams(id) on delete cascade,
+  participant_id integer not null references participants(id) on delete cascade,
   place real not null default 0,
   total integer not null default 0,
   plus integer not null default 0,
   tiebreak integer not null default 0,
   metrics_json text not null default '{}',
-  primary key(match_id, team_id)
+  primary key(match_id, participant_id)
 );
 
 -- journal is the single forward edit log: it is BOTH the durable, replayable
@@ -382,15 +385,15 @@ create table if not exists journal_checkpoint(
 );
 
 create trigger if not exists team_players_max_9
-before insert on team_players
-when (select count(*) from team_players where team_id = new.team_id) >= 9
+before insert on participant_players
+when (select count(*) from participant_players where participant_id = new.participant_id) >= 9
 begin
   select raise(abort, 'team roster is limited to 9 players');
 end;
 
 create trigger if not exists game_team_players_max_9
 before insert on game_team_players
-when (select count(*) from game_team_players where game_id = new.game_id and team_id = new.team_id) >= 9
+when (select count(*) from game_team_players where game_id = new.game_id and participant_id = new.participant_id) >= 9
 begin
   select raise(abort, 'team roster is limited to 9 players');
 end;
@@ -592,12 +595,12 @@ insert or ignore into schema_versions(version, applied_at) values(11, strftime('
 	// gameplay rows (ON DELETE CASCADE preserved); number drives seed matching so
 	// re-seeding follows teams by identity and same-named teams stay distinct.
 	// Nullable: scheme-defined teams without a printed number keep working.
-	if err := store.AddColumnsIfMissing(db, "teams", []store.ColumnSpec{
+	if err := store.AddColumnsIfMissing(db, "participants", []store.ColumnSpec{
 		{Name: "number", Type: "INTEGER"},
 	}); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`create unique index if not exists teams_fest_number_idx on teams(fest_id, number) where number is not null`); err != nil {
+	if _, err := db.Exec(`create unique index if not exists participants_fest_number_idx on participants(fest_id, number) where number is not null`); err != nil {
 		return err
 	}
 	var hasV14 int
@@ -605,7 +608,7 @@ insert or ignore into schema_versions(version, applied_at) values(11, strftime('
 		return err
 	}
 	if hasV14 == 0 {
-		if err := backfillEKTeamNumbers(db); err != nil {
+		if err := backfillEKParticipantNumbers(db); err != nil {
 			return err
 		}
 		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(14, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
@@ -744,17 +747,22 @@ create table if not exists stage_standings(
 			return err
 		}
 	}
+	// v20 ran at the top of this function, before the create-table block. The row
+	// is recorded here so the version table stays a readable history.
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(20, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
 	return nil
 }
 
-// backfillEKTeamNumbers gives existing EK `teams` rows a number, matched to
+// backfillEKParticipantNumbers gives existing EK `teams` rows a number, matched to
 // fest_teams by name, so re-seeding finds them by identity instead of creating
 // duplicates. Best-effort and conflict-free: ambiguous (duplicate) names are
 // skipped, and a number already claimed by another teams row in the fest is not
 // reused — those rows stay null (the unresolvable legacy ambiguity this whole
 // change exists to prevent going forward). Gated by the caller to run once.
-func backfillEKTeamNumbers(db *sql.DB) error {
-	festRows, err := db.Query(`select distinct fest_id from teams where number is null`)
+func backfillEKParticipantNumbers(db *sql.DB) error {
+	festRows, err := db.Query(`select distinct fest_id from participants where number is null`)
 	if err != nil {
 		return err
 	}
@@ -806,7 +814,7 @@ func backfillEKTeamNumbers(db *sql.DB) error {
 
 		// Numbers already claimed by teams rows in this fest.
 		claimed := map[int64]bool{}
-		clRows, err := db.Query(`select number from teams where fest_id = ? and number is not null`, festID)
+		clRows, err := db.Query(`select number from participants where fest_id = ? and number is not null`, festID)
 		if err != nil {
 			return err
 		}
@@ -824,7 +832,7 @@ func backfillEKTeamNumbers(db *sql.DB) error {
 		}
 		clRows.Close()
 
-		teamRows, err := db.Query(`select id, name from teams where fest_id = ? and number is null order by id`, festID)
+		teamRows, err := db.Query(`select id, name from participants where fest_id = ? and number is null order by id`, festID)
 		if err != nil {
 			return err
 		}
@@ -852,7 +860,7 @@ func backfillEKTeamNumbers(db *sql.DB) error {
 		}
 		teamRows.Close()
 		for _, a := range assigns {
-			if _, err := db.Exec(`update teams set number = ? where id = ?`, a.num, a.id); err != nil {
+			if _, err := db.Exec(`update participants set number = ? where id = ?`, a.num, a.id); err != nil {
 				return err
 			}
 		}

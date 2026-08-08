@@ -412,8 +412,7 @@ select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') f
 		`delete from matches where game_id = ?`,
 		`delete from stages where game_id = ?`,
 		`delete from game_assignments where game_id = ?`,
-		`delete from game_teams where game_id = ?`,
-		`delete from game_players where game_id = ?`,
+		`delete from game_participants where game_id = ?`,
 		`delete from game_team_players where game_id = ?`,
 		`delete from game_player_team_overrides where game_id = ?`,
 	} {
@@ -872,8 +871,8 @@ func buildBrainStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64
 				return err
 			}
 			if _, err := tx.ExecContext(ctx, `
-insert into game_assignments(game_id, basket, number, team_id) values(?, 1, ?, ?)
-on conflict(game_id, basket, number) do update set team_id = excluded.team_id`,
+insert into game_assignments(game_id, basket, number, participant_id) values(?, 1, ?, ?)
+on conflict(game_id, basket, number) do update set participant_id = excluded.participant_id`,
 				gameID, team.Number, teamID); err != nil {
 				return err
 			}
@@ -1157,7 +1156,7 @@ func seedSeaterTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) (func(s
 		}
 	}
 	assignments := map[[2]int]int64{}
-	rows, err := tx.QueryContext(ctx, `select basket, number, team_id from game_assignments where game_id = ?`, gameID)
+	rows, err := tx.QueryContext(ctx, `select basket, number, participant_id from game_assignments where game_id = ?`, gameID)
 	if err != nil {
 		return nil, err
 	}
@@ -1203,7 +1202,7 @@ func insertMatchSlots(ctx context.Context, tx *sql.Tx, matchID int64, slots []st
 	for slotIndex, slot := range slots {
 		sourceType, sourceRef := storeutil.SlotSource(slot)
 		if _, err := tx.ExecContext(ctx, `
-insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
+insert into match_slots(match_id, slot_index, source_type, source_ref_json, participant_id, locked)
 values(?, ?, ?, ?, ?, 0)`, matchID, slotIndex, sourceType, sourceRef, seat(slot)); err != nil {
 			return err
 		}
@@ -1440,7 +1439,7 @@ values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Co
 			for slotIndex, slot := range match.Slots {
 				sourceType, sourceRef := storeutil.SlotSource(slot)
 				if _, err := tx.ExecContext(ctx, `
-insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
+insert into match_slots(match_id, slot_index, source_type, source_ref_json, participant_id, locked)
 values(?, ?, ?, ?, null, 0)`, matchID, slotIndex, sourceType, sourceRef); err != nil {
 					return err
 				}

@@ -288,7 +288,7 @@ func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 	}
 
 	var teamID int64
-	if err := db.QueryRow(`select id from teams where fest_id = ? order by id limit 1`, festID).Scan(&teamID); err != nil {
+	if err := db.QueryRow(`select id from participants where fest_id = ? order by id limit 1`, festID).Scan(&teamID); err != nil {
 		t.Fatalf("team id: %v", err)
 	}
 	for i := 0; i < 3; i++ {
@@ -296,7 +296,7 @@ func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 		if err != nil {
 			t.Fatalf("insert player %d: %v", i, err)
 		}
-		_, err = db.Exec(`insert into team_players(team_id, player_id, roster_order) values(?, ?, ?)`, teamID, playerID, 90+i)
+		_, err = db.Exec(`insert into participant_players(participant_id, player_id, roster_order) values(?, ?, ?)`, teamID, playerID, 90+i)
 		if i < 2 && err != nil {
 			t.Fatalf("insert extra roster player %d: %v", i, err)
 		}
@@ -708,7 +708,7 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 	if err := db.QueryRow(`select count(*) from fest_players where fest_id = ?`, festID).Scan(&playersCount); err != nil {
 		t.Fatalf("count fest players: %v", err)
 	}
-	if err := db.QueryRow(`select count(*) from teams where fest_id = ?`, festID).Scan(&ekTeamsCount); err != nil {
+	if err := db.QueryRow(`select count(*) from participants where fest_id = ?`, festID).Scan(&ekTeamsCount); err != nil {
 		t.Fatalf("count existing game teams: %v", err)
 	}
 	if teamsCount != 2 || playersCount != 3 {

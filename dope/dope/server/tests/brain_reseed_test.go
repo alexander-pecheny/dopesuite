@@ -85,7 +85,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 	rows, err := srv.Eng().DB.Query(`
 select tm.name, ss.metrics_json from stage_standings ss
 join stages s on s.id = ss.stage_id
-join teams tm on tm.id = ss.participant_id
+join participants tm on tm.id = ss.participant_id
 where s.game_id = ? and s.code = 's2-reseed' order by ss.rank`, brainID)
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +120,7 @@ where s.game_id = ? and s.code = 's2-reseed' order by ss.rank`, brainID)
 		if err := srv.Eng().DB.QueryRow(`
 select tm.name from match_slots ms
 join matches m on m.id = ms.match_id
-join teams tm on tm.id = ms.team_id
+join participants tm on tm.id = ms.participant_id
 where m.game_id = ? and m.code = 's2-g1-1' and ms.slot_index = ?`, brainID, slot).Scan(&name); err != nil {
 			t.Fatalf("seat %d: %v", slot, err)
 		}

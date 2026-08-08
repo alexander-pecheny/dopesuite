@@ -155,9 +155,9 @@ type nameResolver struct {
 	names         []string         // KSI participants / OD team names by index
 	odNum         map[int]string   // OD team number -> name (entries store numbers)
 	ekAnswer      map[int64]ekCell // answer id -> resolved cell
-	ekAnswerTeam  map[int64]int64  // answer id -> team_id (pre-name-resolution)
+	ekAnswerTeam  map[int64]int64  // answer id -> participant_id (pre-name-resolution)
 	ekAnswerMatch map[int64]int64  // answer id -> match_id
-	ekTeam        map[int64]string // team_id -> name
+	ekTeam        map[int64]string // participant_id -> name
 	ekMatch       map[int64]string // match_id -> code
 	ekPlayer      map[int64]string // player_id -> name
 }
@@ -258,14 +258,14 @@ func (r *nameResolver) prepareEK(ctx context.Context, db store.Queryer, allOps [
 					answerIDs[id] = true
 				}
 			case "match_results":
-				if id, ok := rowInt(row, "team_id"); ok {
+				if id, ok := rowInt(row, "participant_id"); ok {
 					teamIDs[id] = true
 				}
 				if id, ok := rowInt(row, "match_id"); ok {
 					matchIDs[id] = true
 				}
 			case "themes":
-				if id, ok := rowInt(row, "team_id"); ok {
+				if id, ok := rowInt(row, "participant_id"); ok {
 					teamIDs[id] = true
 				}
 				if id, ok := rowInt(row, "match_id"); ok {
@@ -284,7 +284,7 @@ func (r *nameResolver) prepareEK(ctx context.Context, db store.Queryer, allOps [
 	// answers -> theme/team/match/indices
 	for _, batch := range chunkIDs(keysOfInt(answerIDs), 400) {
 		rows, err := db.QueryContext(ctx, `
-select a.id, t.team_id, t.theme_index, a.answer_index, t.match_id
+select a.id, t.participant_id, t.theme_index, a.answer_index, t.match_id
 from answers a join themes t on a.theme_id = t.id
 where a.id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 		if err != nil {
@@ -304,7 +304,7 @@ where a.id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 		rows.Close()
 	}
 	for _, batch := range chunkIDs(keysOfInt(teamIDs), 400) {
-		rows, err := db.QueryContext(ctx, `select id, name from teams where id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
+		rows, err := db.QueryContext(ctx, `select id, name from participants where id in (`+placeholders(len(batch))+`)`, idArgs(batch)...)
 		if err != nil {
 			continue
 		}
@@ -478,14 +478,14 @@ func (r *nameResolver) describeEK(ops []journalOpRow) []string {
 			lines = append(lines, fmt.Sprintf("%s%s, тема %d, вопрос %d: %s",
 				matchPrefix(cell.match), teamOr(cell.team), cell.theme+1, cell.question+1, mark))
 		case "match_results":
-			teamID, _ := rowInt(row, "team_id")
+			teamID, _ := rowInt(row, "participant_id")
 			matchID, _ := rowInt(row, "match_id")
 			if rank, ok := rowInt(row, "rank"); ok {
 				lines = append(lines, fmt.Sprintf("%s%s: место %d",
 					matchPrefix(r.ekMatch[matchID]), teamOr(r.ekTeam[teamID]), rank))
 			}
 		case "themes":
-			teamID, _ := rowInt(row, "team_id")
+			teamID, _ := rowInt(row, "participant_id")
 			matchID, _ := rowInt(row, "match_id")
 			theme, _ := rowInt(row, "theme_index")
 			prefix := fmt.Sprintf("%s%s, тема %d: ",

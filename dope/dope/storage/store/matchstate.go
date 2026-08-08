@@ -194,10 +194,10 @@ where `+where, args...).
 	}
 
 	slotRows, err := q.QueryContext(ctx, `
-select ms.slot_index, ms.team_id, coalesce(t.name, ''), coalesce(r.place, 0), ms.source_type, ms.source_ref_json
+select ms.slot_index, ms.participant_id, coalesce(t.name, ''), coalesce(r.place, 0), ms.source_type, ms.source_ref_json
 from match_slots ms
-left join teams t on t.id = ms.team_id
-left join match_results r on r.match_id = ms.match_id and r.team_id = ms.team_id
+left join participants t on t.id = ms.participant_id
+left join match_results r on r.match_id = ms.match_id and r.participant_id = ms.participant_id
 where ms.match_id = ?
 order by ms.slot_index`, match.MatchID)
 	if err != nil {
@@ -332,9 +332,9 @@ func blobPlayerNames(ctx context.Context, q Queryer, blob MatchBlob) (func(int64
 func LoadTeamRoster(ctx context.Context, q Queryer, gameID int64, rosterSource string, teamID int64) ([]RosterMember, error) {
 	rosterQuery := `
 select p.id, p.first_name, p.last_name
-from team_players tp
+from participant_players tp
 join players p on p.id = tp.player_id
-where tp.team_id = ?
+where tp.participant_id = ?
 order by tp.roster_order`
 	rosterArgs := []any{teamID}
 	if rosterSource == "game" {
@@ -342,7 +342,7 @@ order by tp.roster_order`
 select p.id, p.first_name, p.last_name
 from game_team_players gtp
 join players p on p.id = gtp.player_id
-where gtp.game_id = ? and gtp.team_id = ?
+where gtp.game_id = ? and gtp.participant_id = ?
 order by gtp.roster_order`
 		rosterArgs = []any{gameID, teamID}
 	}

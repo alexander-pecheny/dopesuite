@@ -58,7 +58,7 @@ type historyReport struct {
 var ekDetailTables = map[string]bool{
 	"answers": true, "match_results": true, "matches": true, "themes": true,
 	"match_slots": true, "reseed_entries": true, "game_assignments": true,
-	"game_teams": true, "game_players": true, "game_team_players": true, "stages": true,
+	"game_participants": true, "game_team_players": true, "stages": true,
 }
 
 func convertHistory(db *sql.DB) (historyReport, error) {

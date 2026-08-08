@@ -57,7 +57,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 	}
 	if err := srv.Eng().DB.QueryRow(`
 select count(*) from match_slots ms join matches m on m.id = ms.match_id
-where m.game_id = ? and ms.team_id is not null`, gameID).Scan(&seatedSlots); err != nil || seatedSlots != 12 {
+where m.game_id = ? and ms.participant_id is not null`, gameID).Scan(&seatedSlots); err != nil || seatedSlots != 12 {
 		t.Fatalf("seated slots = %d, err %v; want 12", seatedSlots, err)
 	}
 
@@ -103,13 +103,13 @@ where m.game_id = ? and ms.team_id is not null`, gameID).Scan(&seatedSlots); err
 	var takenA float64
 	if err := srv.Eng().DB.QueryRow(`
 select r.place, r.metrics_json ->> '$.taken' from match_results r
-join teams tm on tm.id = r.team_id join matches m on m.id = r.match_id
+join participants tm on tm.id = r.participant_id join matches m on m.id = r.match_id
 where m.game_id = ? and m.code = 's1-g1-1' and tm.name = 'Яблоко'`, gameID).Scan(&placeA, &takenA); err != nil {
 		t.Fatalf("result Яблоко: %v", err)
 	}
 	if err := srv.Eng().DB.QueryRow(`
 select r.place from match_results r
-join teams tm on tm.id = r.team_id join matches m on m.id = r.match_id
+join participants tm on tm.id = r.participant_id join matches m on m.id = r.match_id
 where m.game_id = ? and m.code = 's1-g1-1' and tm.name = 'Ель'`, gameID).Scan(&placeB); err != nil {
 		t.Fatalf("result Ель: %v", err)
 	}
@@ -120,7 +120,7 @@ where m.game_id = ? and m.code = 's1-g1-1' and tm.name = 'Ель'`, gameID).Scan
 	var points float64
 	if err := srv.Eng().DB.QueryRow(`
 select ss.metrics_json ->> '$.points' from stage_standings ss
-join teams tm on tm.id = ss.participant_id join stages s on s.id = ss.stage_id
+join participants tm on tm.id = ss.participant_id join stages s on s.id = ss.stage_id
 where s.game_id = ? and tm.name = 'Яблоко'`, gameID).Scan(&points); err != nil {
 		t.Fatalf("standings Яблоко: %v", err)
 	}

@@ -59,9 +59,9 @@ func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMa
 			metrics[key] = value
 		}
 		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, team_id, place, total, plus, metrics_json)
+insert into match_results(match_id, participant_id, place, total, plus, metrics_json)
 values(?, ?, ?, ?, ?, ?)
-on conflict(match_id, team_id) do update set
+on conflict(match_id, participant_id) do update set
   place = excluded.place,
   total = excluded.total,
   plus = excluded.plus,

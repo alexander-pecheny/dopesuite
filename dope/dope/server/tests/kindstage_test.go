@@ -38,9 +38,9 @@ func TestKindStageStandingsAndRankResolution(t *testing.T) {
 	festID := id(mustExec(`insert into fests(slug, title, description, revision, created_at, updated_at) values('kf', 'KF', '', 1, 'now', 'now')`))
 	gameID := id(mustExec(`insert into games(fest_id, code, title, game_type, position, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
 values(?, 'g', 'G', 'ek', 1, '{}', '{}', 'active', 'fest', 'fest', 1, 'now', 'now')`, festID))
-	teamA := id(mustExec(`insert into teams(fest_id, name, city) values(?, 'A', '')`, festID))
-	teamB := id(mustExec(`insert into teams(fest_id, name, city) values(?, 'B', '')`, festID))
-	teamC := id(mustExec(`insert into teams(fest_id, name, city) values(?, 'C', '')`, festID))
+	teamA := id(mustExec(`insert into participants(fest_id, name, city) values(?, 'A', '')`, festID))
+	teamB := id(mustExec(`insert into participants(fest_id, name, city) values(?, 'B', '')`, festID))
+	teamC := id(mustExec(`insert into participants(fest_id, name, city) values(?, 'C', '')`, festID))
 
 	groupID := id(mustExec(`insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json)
 values(?, ?, 'grp', 'Группа', 'matches', 'rr', 1, 'active', '{"config":{}}')`, festID, gameID))
@@ -50,8 +50,8 @@ values(?, ?, 'fin', 'Финал', 'matches', 'matches', 2, 'active', '{}')`, fes
 	bout := func(code string, position int, a, b int64) int64 {
 		matchID := id(mustExec(`insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, status, revision)
 values(?, ?, ?, ?, ?, ?, 2, 'active', 0)`, festID, gameID, groupID, code, code, position))
-		mustExec(`insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id) values(?, 0, 'seed', '{}', ?)`, matchID, a)
-		mustExec(`insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id) values(?, 1, 'seed', '{}', ?)`, matchID, b)
+		mustExec(`insert into match_slots(match_id, slot_index, source_type, source_ref_json, participant_id) values(?, 0, 'seed', '{}', ?)`, matchID, a)
+		mustExec(`insert into match_slots(match_id, slot_index, source_type, source_ref_json, participant_id) values(?, 1, 'seed', '{}', ?)`, matchID, b)
 		return matchID
 	}
 	m1 := bout("grp-1", 1, teamA, teamB)
@@ -65,11 +65,11 @@ values(?, ?, ?, 'fin-1', 'Финал', 1, 2, 'active', 0)`, festID, gameID, fina
 
 	finish := func(matchID int64, takenA, takenB int, a, b int64) {
 		t.Helper()
-		mustExec(`insert into match_results(match_id, team_id, place, total) values(?, ?, ?, ?)
-on conflict(match_id, team_id) do update set place = excluded.place, total = excluded.total`,
+		mustExec(`insert into match_results(match_id, participant_id, place, total) values(?, ?, ?, ?)
+on conflict(match_id, participant_id) do update set place = excluded.place, total = excluded.total`,
 			matchID, a, boolPlace(takenA >= takenB), takenA)
-		mustExec(`insert into match_results(match_id, team_id, place, total) values(?, ?, ?, ?)
-on conflict(match_id, team_id) do update set place = excluded.place, total = excluded.total`,
+		mustExec(`insert into match_results(match_id, participant_id, place, total) values(?, ?, ?, ?)
+on conflict(match_id, participant_id) do update set place = excluded.place, total = excluded.total`,
 			matchID, b, boolPlace(takenB >= takenA), takenB)
 		mustExec(`update matches set status = 'finished' where id = ?`, matchID)
 	}

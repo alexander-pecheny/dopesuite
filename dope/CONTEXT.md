@@ -14,11 +14,19 @@ One competition inside a Fest, played to completion under a single format (e.g. 
 The bracket of a Game: Blocks connected by Edges, creating Matches, seating Participants into their Slots, and advancing them. Game-agnostic — it never knows Protocol rules, only per-Slot outcomes.
 
 **Block**:
-One scheme element: one Kind plus its config. The unit of composition a scheme author thinks in. A flat game (ЧГК, КСИ) is a degenerate Structure: one manual Block, one Match seating everyone.
+One scheme element: one Kind plus its config. The unit of composition a scheme author thinks in. A flat game (ЧГК, КСИ) is a degenerate Structure: one `flat` Block, one Match seating everyone.
 _Avoid_: Stage — the retired term (and legacy DB name); half its uses meant Block, half Round.
 
 **Kind**:
-A registered macroexpansion algorithm that turns a Block's config into Rounds of Matches and defines how the Block's Participants are ranked: `roundrobin`, `single_elimination`, `double_elimination`, `swiss`. One more Kind exists only below the DSL: `manual` — hand-enumerated pairings, the compiled form of imported or hand-authored schemes (chr2026's EK bracket), never a DSL word.
+A registered macroexpansion algorithm that turns a Block's config into Rounds of Matches and defines how the Block's Participants are ranked: `flat`, `roundrobin`, `single_elimination`, `double_elimination`, `swiss`. One more Kind exists only below the DSL: `manual` — hand-enumerated pairings, the compiled form of imported or hand-authored schemes (chr2026's EK bracket), never a DSL word.
+
+The two elimination Kinds are told apart by how many Losses end a Participant's tournament — one, or two — and by nothing else. Neither implies a Match of two seats nor a single survivor: ЭК plays its bracket four to a table with two proceeding, and личная СИ's entire play-off is a double elimination of four-seat бои. A Block ranks Participants who never met by how far they got and how they placed on the way out.
+
+**Loss (Поражение)**:
+Failing to be among a Match's Winning places. It is the only currency the elimination Kinds count — a Participant leaves the Block on its first or second one.
+
+**Winning places**:
+How many of a Match's places count as winning it, so the rest take a Loss. One in a two-seat бой; two at ЭК's and личная СИ's tables of four («места 1–2 считаются победой»). Distinct from a Block's proceeding count, which says how many Participants leave the Block for the next one — a КИнСБФ pod of four stops as soon as its two qualifiers exist, while личная СИ plays on to a champion.
 
 **Edge**:
 An advancement rule connecting outcomes to future seats. Match-grain: place N in Match X fills a Slot (how brackets chain). Block-grain: rank N of a standings computed over source Blocks or Groups fills a Slot — carrying the proceeding count, sorting comparators, and tie lots.
@@ -45,11 +53,18 @@ _Avoid_: bout as a distinct concept — бой is just the brain-format word for
 **Protocol**:
 The in-match ruleset: state shape, scoring, and rendering for what happens inside one Match (EK's 12 themes, КСИ's grid, ЧГК's question grid via the `od` protocol; brain's K buzzer questions once it ships). Registered once; the Structure only consumes its output (place + metrics per Slot). Protocol params may vary across one Game (6 themes in early Rounds, 12 in the final): a Game carries defaults plus per-Block or per-Round overrides.
 
+**Metric**:
+One named number attached to a Participant. A Protocol declares and emits the ones it can measure inside a Match (взятые, Σ, Σ+, взятые за 50); the Structure derives the rest (place, очки, сумма мест, Losses). Every ranking rule — a Block's sorting, a reseed Edge's order — names Metrics, and a Scoring rule can define new ones. A Protocol that starts measuring something new makes it rankable everywhere by declaring it.
+
+**Scoring rule**:
+An arithmetic expression a scheme author writes to derive a Metric, at one of two grains: per Match, evaluated for each Participant over that бой's outcome and summed into the standings (`4 − место`); or per standings, evaluated once over those sums (`очки / (2 × бои)`). The grain matters — summing a per-Match rule is not the same as evaluating it on the sums, which is why both exist.
+
 **Slot**:
 One seat in a Match. Declares where its occupant comes from (a seed, or an Edge — a place in a prior Match, a rank in a standings) and who currently sits in it.
 
 **Participant**:
-Whoever occupies a Slot — a team in team formats, an individual player in individual formats (individual СИ).
+Whoever occupies a Slot and is scored: a team in team formats, one player in individual ones (личная СИ). It is the identity every Match result, standing and Edge is keyed on, and it points back at the Fest roster entry it was drawn from — either a team or a player, recorded as its `roster` (the word Kind is spoken for; see below).
+_Avoid_: calling a Participant a team. A team is one of the two things a Participant can be, not the general word for it.
 
 **Numbering guard**:
 Every Participant needs a number before results can be entered — the number is the identity every format scores against, so entering results before they exist would attach data to an unstable key. The server refuses writes while any is missing (409), and a game page shows the guard's message in place of its input sheet, naming the teams still without one.

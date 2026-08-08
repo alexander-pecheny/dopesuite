@@ -35,7 +35,7 @@ type ekPlanTheme struct {
 }
 
 type ekPlanTeam struct {
-	TeamID int64         `json:"team_id"`
+	TeamID int64         `json:"participant_id"`
 	Place  *float64      `json:"place"`
 	Themes []ekPlanTheme `json:"themes"`
 }
@@ -129,7 +129,7 @@ func importEKMatch(ctx context.Context, tx *sql.Tx, plan ekPlan, code string) er
 		return fmt.Errorf("load match: %w", err)
 	}
 
-	// Map team_id -> slot index from the (already resolved) match slots, and
+	// Map participant_id -> slot index from the (already resolved) match slots, and
 	// verify the plan's teams are exactly the bout's occupants. A mismatch means
 	// the app advanced a different team than the sheet did — abort loudly.
 	slotOf := map[int64]int{}
@@ -154,8 +154,8 @@ func importEKMatch(ctx context.Context, tx *sql.Tx, plan ekPlan, code string) er
 	for _, t := range pm.Teams {
 		if t.Place != nil {
 			if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, team_id, place) values(?, ?, ?)
-on conflict(match_id, team_id) do update set place = excluded.place`,
+insert into match_results(match_id, participant_id, place) values(?, ?, ?)
+on conflict(match_id, participant_id) do update set place = excluded.place`,
 				match.MatchID, t.TeamID, *t.Place); err != nil {
 				return err
 			}
@@ -204,7 +204,7 @@ func printStandings(ctx context.Context, tx *sql.Tx, gameID int64) {
 select m.code, t.name, r.place, r.total, r.plus, m.status
 from match_results r
 join matches m on m.id = r.match_id
-join teams t on t.id = r.team_id
+join participants t on t.id = r.participant_id
 where m.game_id = ?
 order by m.position, m.code, r.place`, gameID)
 	if err != nil {
