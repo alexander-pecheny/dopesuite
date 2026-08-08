@@ -211,17 +211,50 @@ func firstMatchCode(t *testing.T, db *sql.DB, gameID int64) string {
 }
 
 // patchSIMarks gives the three seats 2, 1 and 0 taken questions, so the бой
-// ranks 1/2/3 cleanly.
+// ranks 1/2/3 cleanly. Личная СИ is EK-shaped, so a mark addresses the blob:
+// participant id, theme, answer index.
 func patchSIMarks(t *testing.T, srv *dopeserver.Server, festID, gameID int64, code, token string) {
 	t.Helper()
+	seats := matchSeatIDs(t, srv.Eng().DB, gameID, code)
+	if len(seats) != 3 {
+		t.Fatalf("мест в бою = %d, want 3", len(seats))
+	}
+	mark := func(participantID int64, theme, answer int) map[string]any {
+		return map[string]any{
+			"path":  []any{"participants", fmt.Sprint(participantID), "themes", theme, "answers", answer},
+			"value": "right",
+		}
+	}
 	ops := []map[string]any{
-		{"path": []any{"themes", 0, "answers", 0, 0}, "value": "right"},
-		{"path": []any{"themes", 1, "answers", 0, 0}, "value": "right"},
-		{"path": []any{"themes", 0, "answers", 1, 0}, "value": "right"},
+		mark(seats[0], 0, 0), mark(seats[0], 1, 0),
+		mark(seats[1], 0, 0),
 	}
 	if resp := scopedAPIRequest(t, srv, http.MethodPatch,
 		fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/state", festID, gameID, code),
 		map[string]any{"ops": ops}, token); resp.Code != http.StatusOK {
 		t.Fatalf("patch %s = %d, body %s", code, resp.Code, resp.Body.String())
 	}
+}
+
+// matchSeatIDs lists a бой's Participants in seat order.
+func matchSeatIDs(t *testing.T, db *sql.DB, gameID int64, code string) []int64 {
+	t.Helper()
+	rows, err := db.Query(`
+select ms.participant_id from match_slots ms
+join matches m on m.id = ms.match_id
+where m.game_id = ? and m.code = ? and ms.participant_id is not null
+order by ms.slot_index`, gameID, code)
+	if err != nil {
+		t.Fatalf("seats: %v", err)
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	return ids
 }

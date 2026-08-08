@@ -202,33 +202,28 @@ func TestBrainScore(t *testing.T) {
 	}
 }
 
-// Личная СИ считает тот же бланк, что и КСИ, только за столом игроки: трое,
-// восемь тем. Поделённое место — среднее.
+// Личная СИ играется на том же бланке, что и ЭК, и место в бою считается по
+// сумме: равные суммы делят место.
 func TestSIScore(t *testing.T) {
 	p, ok := Get("si")
 	if !ok {
 		t.Fatal("si protocol not registered")
 	}
-	empty, err := p.EmptyState(json.RawMessage(`{"themes":8,"participants":3}`))
+	empty, err := p.EmptyState(nil)
 	if err != nil {
 		t.Fatalf("EmptyState: %v", err)
 	}
-	var parsed struct {
-		Participants []struct{} `json:"participants"`
-		Themes       []struct {
-			Answers [][]string `json:"answers"`
-		} `json:"themes"`
-	}
-	if err := json.Unmarshal(empty, &parsed); err != nil {
-		t.Fatalf("parse empty state: %v", err)
-	}
-	if len(parsed.Participants) != 3 || len(parsed.Themes) != 8 {
-		t.Fatalf("бланк = %d игроков × %d тем, want 3 × 8", len(parsed.Participants), len(parsed.Themes))
+	if string(empty) != "{}" {
+		t.Fatalf("пустой бланк = %s, want {}", empty)
 	}
 
-	state := `{"participants":[{"number":1,"name":"А"},{"number":2,"name":"Б"},{"number":3,"name":"В"}],
-	  "themes":[{"answers":[["right","","","",""],["right","","","",""],["","","","",""]]}]}`
-	outcomes, err := p.Score(json.RawMessage(`{"themes":1}`), json.RawMessage(state))
+	// Трое за столом: двое взяли по одному вопросу на 10, третий ничего.
+	state := `{"participants":[
+		{"name":"А","themes":[{"player":"А","answers":["right","","","",""]}]},
+		{"name":"Б","themes":[{"player":"Б","answers":["right","","","",""]}]},
+		{"name":"В","themes":[{"player":"В","answers":["","","","",""]}]}
+	]}`
+	outcomes, err := p.Score(nil, json.RawMessage(state))
 	if err != nil {
 		t.Fatalf("Score: %v", err)
 	}
@@ -238,7 +233,7 @@ func TestSIScore(t *testing.T) {
 	if outcomes[0].Place != 1.5 || outcomes[1].Place != 1.5 || outcomes[2].Place != 3 {
 		t.Errorf("места = %v/%v/%v, want 1.5/1.5/3", outcomes[0].Place, outcomes[1].Place, outcomes[2].Place)
 	}
-	if outcomes[0].Metrics["taken10"] != 1 {
-		t.Errorf("взятых на 10 = %v, want 1", outcomes[0].Metrics["taken10"])
+	if outcomes[0].Metrics["total"] != 10 || outcomes[0].Metrics["taken10"] != 1 {
+		t.Errorf("метрики первого = %v", outcomes[0].Metrics)
 	}
 }

@@ -121,6 +121,11 @@ let recorder: ClientRecorder | null = null;
 // can tear down a dead connection and re-establish it. null while disconnected.
 let fest: FestView | null = null;
 let venues: Venue[] = [];
+
+// A fest with no столы answers `null`, not `[]` — normalise wherever it lands.
+function venueList(raw: unknown): Venue[] {
+  return Array.isArray(raw) ? raw as Venue[] : [];
+}
 const stageCache = createStageCache({
   container: viewerRoot,
   apiBase: () => route.apiBase!,
@@ -220,6 +225,7 @@ function consumeViewerInit(): boolean {
 
   adoptFestView(init.fest);
   if (Array.isArray(init.venues)) venues = init.venues;
+
   writeFestCache(init.fest);
 
   if (route.mode === "match") {
@@ -394,7 +400,7 @@ async function loadVenuesPage(): Promise<void> {
   ]);
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  const freshVenues = (await venuesResponse.json()) as Venue[];
+  const freshVenues = venueList(await venuesResponse.json());
   const freshFest = (await festResponse.json()) as FestView;
   const changed = !cached || JSON.stringify(freshVenues) !== JSON.stringify(venues);
   venues = freshVenues;
@@ -492,7 +498,7 @@ function dispatchStateMessage(message: ScopedEventMessage): void {
     return;
   }
   if (route.mode === "venues" && message.scope === venuesScope) {
-    venues = message.data as Venue[];
+    venues = venueList(message.data);
     renderVenues();
     setLive(true);
     return;

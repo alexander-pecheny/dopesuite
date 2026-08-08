@@ -78,7 +78,7 @@ where m.id = ?`, matchID)
 	rows.Close()
 
 	var encoded []byte
-	if gameType == "" || gameType == "ek" {
+	if gameType == "" || gameType == "ek" || gameType == "si" {
 		var doc any = map[string]any{}
 		if raw != "" && raw != "{}" {
 			dec := json.NewDecoder(strings.NewReader(raw))

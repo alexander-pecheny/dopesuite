@@ -55,13 +55,13 @@ def import_bouts():
     gid = db.execute("select id from games where fest_id=? and game_type='si'", (FEST,)).fetchone()[0]
     by_players, seat_index = {}, {}
     for match_id, code in db.execute("select id, code from matches where game_id=?", (gid,)):
-        seats = db.execute("""select ms.slot_index, p.name from match_slots ms
+        seats = db.execute("""select p.id, p.name from match_slots ms
             join participants p on p.id = ms.participant_id
             where ms.match_id = ? order by ms.slot_index""", (match_id,)).fetchall()
         if not seats:
             continue
         by_players[frozenset(name for _, name in seats)] = code
-        seat_index[code] = {name: index for index, name in seats}
+        seat_index[code] = {name: pid for pid, name in seats}
 
     sheets = [b for round_bouts in data["rounds"].values() for b in round_bouts]
     done = missing = 0
@@ -75,11 +75,14 @@ def import_bouts():
         seats = seat_index[code]
         ops = []
         for player in bout["players"]:
-            seat = seats[player["name"]]
+            # Личная СИ is EK-shaped: a mark addresses the participant's own
+            # section of the бой's blob, not a row index in a shared grid.
+            seat = str(seats[player["name"]])
             for t, answers in enumerate(player["themes"]):
                 for q, value in enumerate(answers):
                     if value:
-                        ops.append({"path": ["themes", t, "answers", seat, q], "value": value})
+                        ops.append({"path": ["participants", seat, "themes", t, "answers", q],
+                                    "value": value})
         if ops:
             status, body = api("PATCH", f"/api/fest/{FEST}/games/{gid}/matches/{code}/state", {"ops": ops})
             if status != 200:

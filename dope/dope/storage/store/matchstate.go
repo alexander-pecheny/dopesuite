@@ -41,8 +41,11 @@ type DBMatchState struct {
 // IsEKShaped reports whether the match's state blob follows the EK team-keyed
 // blob vocabulary (matchops/MatchBlob); every other protocol owns its state as
 // an opaque JSON document addressed by generic set ops.
+// Личная СИ shares the shape: «участник × тема × пять ответов» is one blob,
+// so it is edited, viewed, replayed and scored on ЭК's path rather than owning
+// a second implementation of the same grid.
 func (m DBMatchState) IsEKShaped() bool {
-	return m.GameType == "" || m.GameType == "ek"
+	return m.GameType == "" || m.GameType == "ek" || m.GameType == "si"
 }
 
 // MatchViewFrom scores a loaded match into its client-facing view, joining the

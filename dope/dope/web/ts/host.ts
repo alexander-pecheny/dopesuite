@@ -191,6 +191,13 @@ if (!embedded && route.apiBase) gameTable.mountGameDownloads({apiBase: route.api
 let state: HostMatchView | null = null;
 let fest: HostFestView | null = null;
 let venues: Venue[] = [];
+
+// A fest that declares no столы answers `null`, not `[]`. One such answer used
+// to take the whole page down on the first `venues.length`, so the list is
+// normalised at every seam it enters by.
+function venueList(raw: unknown): Venue[] {
+  return Array.isArray(raw) ? raw as Venue[] : [];
+}
 let stageSelection: CellRangeSelection | null = null;            // points at the active pane's selection helper
 const stageCache = createStageCache({
   container: hostRoot,
@@ -418,7 +425,7 @@ async function loadStage(): Promise<void> {
     if (!response.ok) throw new Error(await response.text());
     if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
     const fresh = await response.json() as HostFestView;
-    const freshVenues = await venuesResponse.json() as Venue[];
+    const freshVenues = venueList(await venuesResponse.json());
     venues = freshVenues;
     adoptFestView(fresh);
     writeFestCache(fresh);
@@ -445,7 +452,7 @@ async function loadMatch(): Promise<void> {
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
   state = overlayPendingMatch(route.matchCode, await matchResponse.json() as HostMatchView);
-  venues = await venuesResponse.json() as Venue[];
+  venues = venueList(await venuesResponse.json());
   adoptFestView(await festResponse.json() as HostFestView);
   writeFestCache(fest);
   render();
@@ -508,7 +515,7 @@ async function loadVenuesPage(): Promise<void> {
   ]);
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  const freshVenues = await venuesResponse.json() as Venue[];
+  const freshVenues = venueList(await venuesResponse.json());
   const freshFest = await festResponse.json() as HostFestView;
   const changed = !cached || JSON.stringify(freshVenues) !== JSON.stringify(venues);
   venues = freshVenues;

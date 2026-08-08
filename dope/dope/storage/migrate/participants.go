@@ -188,7 +188,7 @@ func renameBlobSections(db *sql.DB) error {
 		rows, err := db.Query(`
 select m.id, m.state_json from matches m
 left join games g on g.id = m.game_id
-where m.id > ? and coalesce(g.game_type, '') in ('', 'ek')
+where m.id > ? and coalesce(g.game_type, '') in ('', 'ek', 'si')
   and m.state_json like '%"teams"%'
 order by m.id limit ?`, after, page)
 		if err != nil {
