@@ -89,8 +89,9 @@ export interface AttachmentsDeps {
 export function create(deps: AttachmentsDeps) {
 
 const attListCache = new Map<number, NamedAttachment[]>(); // cardId → [{ ...att, name }]
-const attUrlCache = new Map<string, string>();  // id:rev → decrypted object URL
-const ATT_URL_CACHE_MAX = 64;
+const attBlobCache = new Map<string, Blob>();   // id:rev → decrypted bytes
+const attUrlCache = new Map<string, string>();  // id:rev → object URL over those bytes
+const ATT_CACHE_MAX = 64;
 
 // cardAttachments lists one card's attachments with their filenames decrypted.
 async function cardAttachments(cardId: number, refresh = false): Promise<NamedAttachment[]> {
@@ -108,14 +109,15 @@ async function cardAttachments(cardId: number, refresh = false): Promise<NamedAt
   return out;
 }
 
-// attachmentUrl decrypts one attachment into an object URL, reading its
-// ciphertext through the offline IndexedDB mirror (so a reload doesn't
-// re-download) and memoizing the result.
-async function attachmentUrl(att: Attachment): Promise<string> {
+// attachmentBlob decrypts one attachment, reading its ciphertext through the
+// offline IndexedDB mirror (so a reload doesn't re-download) and memoizing the
+// result. Callers that want the BYTES take them from here rather than fetching
+// the object URL below: the CSP's connect-src 'self' forbids fetching a blob:.
+async function attachmentBlob(att: Attachment): Promise<Blob> {
   const rev = att.rev || 0;
   const key = `${att.id}:${rev}`;
-  const hit = attUrlCache.get(key);
-  if (hit) { attUrlCache.delete(key); attUrlCache.set(key, hit); return hit; } // LRU touch
+  const hit = attBlobCache.get(key);
+  if (hit) { attBlobCache.delete(key); attBlobCache.set(key, hit); return hit; } // LRU touch
   let cipher: Uint8Array<ArrayBuffer>;
   // The offline mirror is keyed by id alone; a stale rev there means the bytes
   // are the ones a replace superseded, so refetch instead of trusting them.
@@ -129,13 +131,31 @@ async function attachmentUrl(att: Attachment): Promise<string> {
     try { await xySync.putAttachment(att.id, { mime: att.mime, bytes: cipher, rev }); } catch (_) {}
   }
   const plain = await xyCrypto.decBytes(deps.mustDK(), cipher);
-  const url = URL.createObjectURL(new Blob([plain], { type: att.mime }));
-  attUrlCache.set(key, url);
-  for (const stale of [...attUrlCache.keys()].slice(0, attUrlCache.size - ATT_URL_CACHE_MAX)) {
+  const blob = new Blob([plain], { type: att.mime });
+  attBlobCache.set(key, blob);
+  for (const stale of [...attBlobCache.keys()].slice(0, attBlobCache.size - ATT_CACHE_MAX)) {
     URL.revokeObjectURL(attUrlCache.get(stale) || "");
     attUrlCache.delete(stale);
+    attBlobCache.delete(stale);
   }
+  return blob;
+}
+
+// attachmentUrl is the same bytes as a URL, for the DOM (previews, lightbox,
+// downloads). It is revoked with the blob it points at, by the eviction above.
+async function attachmentUrl(att: Attachment): Promise<string> {
+  const key = `${att.id}:${att.rev || 0}`;
+  const blob = await attachmentBlob(att);
+  let url = attUrlCache.get(key);
+  if (!url) { url = URL.createObjectURL(blob); attUrlCache.set(key, url); }
   return url;
+}
+
+// imageBlob hands one named image on a card to a caller that needs its bytes —
+// the clipboard. Null when the card has no attachment by that name.
+async function imageBlob(cardId: number, name: string): Promise<Blob | null> {
+  const att = gatherTargets([await cardAttachments(cardId)], new Set([name])).get(name);
+  return att ? await attachmentBlob(att) : null;
 }
 
 // resolveImages maps each wanted image name → a decrypted object URL, scanning
@@ -508,6 +528,7 @@ async function removeAttachment(att: NamedAttachment, name: string): Promise<voi
     cardAttachments,
     attachmentUrl,
     resolveImages,
+    imageBlob,
     load: loadAttachments,
     imageNames: (): string[] => cardImageNames,
     clearImageNames: (): void => { cardImageNames = []; },

@@ -1054,32 +1054,106 @@ export interface CopyTarget {
   image?: string;
 }
 
+// The captions chgksuite prints (resources/labels_ru.toml, question_labels).
+// The list preview prints the same ones, and so does a copied question.
+const QUESTION_LABELS: Readonly<Record<string, string>> = {
+  answer: "Ответ", zachet: "Зачёт", nezachet: "Незачёт",
+  comment: "Комментарий", source: "Источник", author: "Автор",
+  handout: "Раздаточный материал", editor: "Редактор", date: "Дата",
+};
+const SOURCE_PLURAL = "Источники";
+
+// A picture cannot ride along in a text paste, so «целиком» says where it is and
+// leaves the copying of it to the Раздатка target above.
+const IMAGE_HANDOUT_NOTE = `[${QUESTION_LABELS.handout}: см. изображение]`;
+
+// The fields chgksuite lets a "!!Label " override rename (OVERRIDE_PREFIX).
+const OVERRIDABLE: ReadonlySet<string> = new Set(
+  ["question", "answer", "zachet", "nezachet", "comment", "source", "author"]);
+
+// fieldCaption resolves what one field is printed under: an override in the 4s
+// wins, and a source that turned into a list pluralises. Shared by the preview
+// and the copy targets so they cannot drift apart.
+function fieldCaption(field: string, text: string): { label: string; text: string } {
+  const ov = OVERRIDABLE.has(field) ? applyOverride(text) : { label: null, text };
+  const plural = field === "source" && splitList(ov.text).items;
+  return { label: ov.label || (plural ? SOURCE_PLURAL : QUESTION_LABELS[field] || field), text: ov.text };
+}
+
+// Screen mode drops host-only [ … ] notes — except in an answer or a зачёт,
+// where a bracketed alternative IS part of the answer (as chgksuite's docx has it).
+function fieldKeepsBrackets(field: string): boolean {
+  return field === "answer" || field === "zachet";
+}
+
+function fieldScreenText(field: string, text: string): string {
+  return renderRunsForScreen(renderRuns(text, { accents: true, brackets: !fieldKeepsBrackets(field) }));
+}
+
+// fieldLine prints one «Ответ: …» the way the preview renders it, with a "- …"
+// list numbered under its caption. Empty when the field is a bare marker.
+function fieldLine(field: string, text: string): string {
+  const cap = fieldCaption(field, text);
+  const lst = splitList(fieldScreenText(field, cap.text));
+  const lead = lst.preamble.trim();
+  if (!lst.items) return lead ? `${cap.label}: ${lead}` : "";
+  const items = lst.items.map((it, i) => `${i + 1}. ${it.trim()}`).join("\n");
+  return `${cap.label}:${lead ? " " + lead : ""}\n${items}`;
+}
+
+// answerBlock is everything a question carries besides the question itself, in
+// the order the exports print it. Empty when the card is a bare question.
+function answerBlock(f: CardFields): string[] {
+  const out: string[] = [];
+  for (const field of ["answer", "zachet", "nezachet", "comment"] as const) {
+    const line = f[field] === null ? "" : fieldLine(field, f[field] as string);
+    if (line) out.push(line);
+  }
+  const srcs = (f.sources || []).map((s) => fieldScreenText("source", s).trim()).filter(Boolean);
+  if (srcs.length === 1) out.push(`${QUESTION_LABELS.source}: ${srcs[0]}`);
+  else if (srcs.length) out.push(`${SOURCE_PLURAL}:\n` + srcs.map((s, i) => `${i + 1}. ${s}`).join("\n"));
+  const authors = (f.authors || []).map((a) => fieldScreenText("author", a).trim()).filter(Boolean);
+  if (authors.length) out.push(`${f.authorLabel || QUESTION_LABELS.author}: ${authors.join(", ")}`);
+  return out;
+}
+
 // copyTargets enumerates a question card's copyable pieces. `desc` is one
 // version's body — the caller passes the one being looked at. The blitz rule: the
 // lead-in («Блиц:») rides with the first leg and is not repeated, because the
-// legs are pasted into one conversation in order.
+// legs are pasted into one conversation in order. A card with more than one piece
+// also offers all of them as a single paste, for a chat where the question is one
+// message rather than three.
 function copyTargets(desc: string | null | undefined, number: string | number | null | undefined): CopyTarget[] {
   const f = splitFields(desc);
   const out: CopyTarget[] = [];
-  if (f.handout) {
-    out.push(f.handout.kind === "image"
-      ? { label: "Раздатка", image: f.handout.name }
-      : { label: "Раздатка", text: "Раздаточный материал:\n" + screenText(f.handout.text) });
-  }
+  const h = f.handout;
+  const handoutTarget: CopyTarget | null = !h ? null
+    : h.kind === "image" ? { label: "Раздатка", image: h.name }
+    : { label: "Раздатка", text: `${QUESTION_LABELS.handout}:\n${screenText(h.text)}` };
+  // A picture is not pastable text, so the aggregates carry the note instead.
+  const handout = !handoutTarget ? "" : handoutTarget.text || IMAGE_HANDOUT_NOTE;
+  if (handoutTarget) out.push(handoutTarget);
   // splitFields lifts an inline handout out of the question and leaves the bare
   // anchor where it stood; that marks a position, and has no business in a paste.
   const q = screenText(f.question ?? "").split(HANDOUT_ANCHOR).join("").trim();
   const head = number ? `Вопрос ${number}. ` : "";
   const lst = splitList(q);
+  const pieces: CopyTarget[] = [];
   if (lst.items) {
+    const lead = lst.preamble.trim();
     lst.items.forEach((item, i) => {
       const line = `${i + 1}. ${item.trim()}`;
-      const lead = lst.preamble.trim();
-      out.push({ label: `Вопрос ${i + 1}`, text: i === 0 ? head + (lead ? lead + "\n" : "") + line : line });
+      pieces.push({ label: `Вопрос ${i + 1}`, text: i === 0 ? head + (lead ? lead + "\n" : "") + line : line });
     });
   } else {
-    out.push({ label: "Вопрос", text: head + q });
+    pieces.push({ label: "Вопрос", text: head + q });
   }
+  const body = pieces.map((p) => p.text).join("\n");
+  const whole = handout ? handout + "\n\n" + body : body;
+  if (handout || pieces.length > 1) out.push({ label: "Вопрос целиком", text: whole });
+  const tail = answerBlock(f);
+  if (tail.length) out.push({ label: "Вопрос с ответом", text: whole + "\n\n" + tail.join("\n") });
+  out.push(...pieces);
   return out;
 }
 
@@ -1590,7 +1664,7 @@ export const xyChgk = {
   splitFields, composeFields, parseHandoutBlock, authorBlock, composeAuthors, AUTHOR_LABELS,
   splitVersions, versionCount, versionBody, versionName, setVersionBody, setVersionName,
   addVersion, removeVersion, promoteVersion, composeVersions, convertLegacyVersions,
-  copyTargets,
+  copyTargets, QUESTION_LABELS, fieldCaption, fieldKeepsBrackets,
   generateHndt, handoutForCard, parseHndtMetaByQuestion, HNDT_DEFAULT_META,
   parseTestCard, serializeTestCard, testersToText, testersFromText, testerCopyText, testerNames,
 };
