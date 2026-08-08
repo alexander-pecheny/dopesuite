@@ -12,9 +12,12 @@ page title="Мои доски · xy" kind="full" scripts="dist/index.js"
   searchfield id="boardSearch" placeholder="Поиск по доскам, вопросам и комментариям" label="Поиск"
   mount id="boardList" kind="board-grid"
   muted id="cardNote"
-  mount id="hitList" kind="board-grid"
+  -- both result grids start hidden: they are .board-grid too, so an empty one
+  -- left on the page still takes its share of the column and clips the board
+  -- list mid-row. runSearch shows each one only when it has something.
+  mount id="hitList" kind="board-grid" hidden
   muted id="commentNote"
-  mount id="commentList" kind="board-grid"
+  mount id="commentList" kind="board-grid" hidden
   message id="message"
 
   -- create-board dialog
