@@ -47,11 +47,11 @@ func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMa
 		return err
 	}
 	for index, outcome := range outcomes {
-		if index >= len(match.TeamIDs) || match.TeamIDs[index] == 0 {
+		if index >= len(match.ParticipantIDs) || match.ParticipantIDs[index] == 0 {
 			continue
 		}
 		place := outcome.Place
-		if pin := match.Blob.Pin(match.TeamIDs[index]); pin != nil {
+		if pin := match.Blob.Pin(match.ParticipantIDs[index]); pin != nil {
 			place = *pin
 		}
 		metrics := map[string]any{}
@@ -66,7 +66,7 @@ on conflict(match_id, participant_id) do update set
   total = excluded.total,
   plus = excluded.plus,
   metrics_json = excluded.metrics_json`,
-			match.MatchID, match.TeamIDs[index], place,
+			match.MatchID, match.ParticipantIDs[index], place,
 			int(outcome.Metrics["total"]), int(outcome.Metrics["plus"]), util.MustJSON(metrics)); err != nil {
 			return err
 		}

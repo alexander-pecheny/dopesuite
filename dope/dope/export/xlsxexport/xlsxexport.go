@@ -361,7 +361,7 @@ func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv store.Ma
 	nv := len(mv.QuestionValues)
 
 	maxThemes, maxShootout := 0, 0
-	for _, t := range mv.Teams {
+	for _, t := range mv.Participants {
 		if len(t.Themes) > maxThemes {
 			maxThemes = len(t.Themes)
 		}
@@ -433,7 +433,7 @@ func writeEKMatchBlock(f *excelize.File, sheet string, startRow int, mv store.Ma
 		}
 	}
 
-	for _, team := range mv.Teams {
+	for _, team := range mv.Participants {
 		place := interface{}(nil)
 		if team.Place > 0 {
 			place = formatPlace(team.Place)
@@ -520,7 +520,7 @@ func computeEKPlayerStats(stages []store.StageMatches) []ekPlayerStat {
 	for _, stage := range stages {
 		for _, match := range stage.Matches {
 			battleID := stage.Code + match.Code
-			for _, team := range match.Teams {
+			for _, team := range match.Participants {
 				for _, theme := range team.Themes {
 					player := strings.TrimSpace(theme.Player)
 					if player == "" {

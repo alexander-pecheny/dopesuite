@@ -133,7 +133,7 @@ func importEKMatch(ctx context.Context, tx *sql.Tx, plan ekPlan, code string) er
 	// verify the plan's teams are exactly the bout's occupants. A mismatch means
 	// the app advanced a different team than the sheet did — abort loudly.
 	slotOf := map[int64]int{}
-	for i, id := range match.TeamIDs {
+	for i, id := range match.ParticipantIDs {
 		if id != 0 {
 			slotOf[id] = i
 		}
@@ -142,10 +142,10 @@ func importEKMatch(ctx context.Context, tx *sql.Tx, plan ekPlan, code string) er
 	for _, t := range pm.Teams {
 		planIDs[t.TeamID] = true
 		if _, ok := slotOf[t.TeamID]; !ok {
-			return fmt.Errorf("plan team %d not present in bout %s slots %v", t.TeamID, code, match.TeamIDs)
+			return fmt.Errorf("plan team %d not present in bout %s slots %v", t.TeamID, code, match.ParticipantIDs)
 		}
 	}
-	for _, id := range match.TeamIDs {
+	for _, id := range match.ParticipantIDs {
 		if id != 0 && !planIDs[id] {
 			return fmt.Errorf("bout %s has team %d not in plan", code, id)
 		}

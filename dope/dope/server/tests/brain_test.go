@@ -74,8 +74,8 @@ where m.game_id = ? and ms.participant_id is not null`, gameID).Scan(&seatedSlot
 		t.Fatalf("match patch status = %d, body %s", patchResp.Code, patchResp.Body.String())
 	}
 	view := decodeJSON[store.MatchView](t, patchResp)
-	if len(view.Teams) != 2 || view.Teams[0].Name != "Яблоко" || view.Teams[1].Name != "Ель" {
-		t.Fatalf("match view teams = %+v, want Яблоко vs Ель", view.Teams)
+	if len(view.Participants) != 2 || view.Participants[0].Name != "Яблоко" || view.Participants[1].Name != "Ель" {
+		t.Fatalf("match view teams = %+v, want Яблоко vs Ель", view.Participants)
 	}
 	var state struct {
 		Teams []struct {

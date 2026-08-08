@@ -309,9 +309,9 @@ func seedImportRegularThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
 		t.Fatalf("load match state: %v", err)
 	}
 	count := 0
-	for i, id := range match.TeamIDs {
+	for i, id := range match.ParticipantIDs {
 		if id != 0 {
-			count += len(match.State.Teams[i].Themes)
+			count += len(match.State.Participants[i].Themes)
 		}
 	}
 	return count
@@ -326,13 +326,13 @@ func seedImportExtraThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
 		t.Fatalf("load match state: %v", err)
 	}
 	seated := map[string]bool{}
-	for _, id := range match.TeamIDs {
+	for _, id := range match.ParticipantIDs {
 		if id != 0 {
 			seated[strconv.FormatInt(id, 10)] = true
 		}
 	}
 	count := 0
-	for key := range match.Blob.Teams {
+	for key := range match.Blob.Participants {
 		if !seated[key] {
 			count++
 		}
@@ -349,16 +349,16 @@ func seedImportRowNames(view imports.SeedImportView) []string {
 }
 
 func matchTeamNames(view store.MatchView) []string {
-	out := make([]string, len(view.Teams))
-	for i, team := range view.Teams {
+	out := make([]string, len(view.Participants))
+	for i, team := range view.Participants {
 		out[i] = team.Name
 	}
 	return out
 }
 
 func matchTeamPlaces(view store.MatchView) []float64 {
-	out := make([]float64, len(view.Teams))
-	for i, team := range view.Teams {
+	out := make([]float64, len(view.Participants))
+	for i, team := range view.Participants {
 		out[i] = team.Place
 	}
 	return out

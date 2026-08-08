@@ -44,10 +44,12 @@ func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, 
 	if op.Op != "" && op.Op != "set" && !remove {
 		return fmt.Errorf("unsupported patch op %q", op.Op)
 	}
-	if len(path) < 3 || path[0].IsIndex || path[0].Key != "teams" {
+	// `teams` is the pre-rename spelling (ADR-0007): a browser holding a cached
+	// bundle mid-tournament keeps working.
+	if len(path) < 3 || path[0].IsIndex || (path[0].Key != "participants" && path[0].Key != "teams") {
 		return errors.New("patch path is not a match-state path")
 	}
-	teamID, slot, err := resolveTeam(match, path[1])
+	participantID, slot, err := resolveParticipant(match, path[1])
 	if err != nil {
 		return err
 	}
@@ -57,14 +59,14 @@ func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, 
 			return errors.New("bad pin path")
 		}
 		if remove {
-			blob.SetPin(teamID, nil)
+			blob.SetPin(participantID, nil)
 			return nil
 		}
 		place, err := decodeNumber(op.Value)
 		if err != nil || place < 0 {
 			return errors.New("bad place")
 		}
-		blob.SetPin(teamID, &place)
+		blob.SetPin(participantID, &place)
 		return nil
 	}
 
@@ -86,9 +88,9 @@ func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, 
 			return errors.New("regular themes are fixed")
 		}
 		if remove {
-			blob.RemoveTheme(teamID, kind, themeIndex)
+			blob.RemoveTheme(participantID, kind, themeIndex)
 		} else {
-			blob.EnsureTheme(teamID, kind, themeIndex)
+			blob.EnsureTheme(participantID, kind, themeIndex)
 		}
 		return nil
 	}
@@ -102,7 +104,7 @@ func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, 
 			return errors.New("bad player path")
 		}
 		if remove {
-			blob.SetPlayer(teamID, kind, themeIndex, 0)
+			blob.SetPlayer(participantID, kind, themeIndex, 0)
 			return nil
 		}
 		playerID, err := decodeInt(op.Value)
@@ -112,7 +114,7 @@ func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, 
 		if playerID != 0 && !inRoster(match, slot, playerID) {
 			return errors.New("player is not in roster")
 		}
-		blob.SetPlayer(teamID, kind, themeIndex, playerID)
+		blob.SetPlayer(participantID, kind, themeIndex, playerID)
 		return nil
 	case "answers":
 		if len(path) != 6 || !path[5].IsIndex {
@@ -127,28 +129,28 @@ func applyOne(blob *store.MatchBlob, match store.DBMatchState, op edit.PatchOp, 
 				return errors.New("bad mark")
 			}
 		}
-		blob.SetAnswer(teamID, kind, themeIndex, path[5].Index, mark)
+		blob.SetAnswer(participantID, kind, themeIndex, path[5].Index, mark)
 		return nil
 	}
 	return errors.New("patch path is not a match-state path")
 }
 
-// resolveTeam maps the path's team segment to a team id that actually occupies
-// a slot of this match, returning its slot index for roster lookups.
-func resolveTeam(match store.DBMatchState, seg edit.JSONPathSegment) (int64, int, error) {
+// resolveParticipant maps the path's id segment to a Participant that actually
+// occupies a slot of this match, returning its slot index for roster lookups.
+func resolveParticipant(match store.DBMatchState, seg edit.JSONPathSegment) (int64, int, error) {
 	if seg.IsIndex {
-		return 0, 0, errors.New("team must be addressed by id")
+		return 0, 0, errors.New("participant must be addressed by id")
 	}
-	teamID, err := strconv.ParseInt(seg.Key, 10, 64)
+	participantID, err := strconv.ParseInt(seg.Key, 10, 64)
 	if err != nil {
-		return 0, 0, errors.New("bad team id")
+		return 0, 0, errors.New("bad participant id")
 	}
-	for slot, id := range match.TeamIDs {
-		if id == teamID {
-			return teamID, slot, nil
+	for slot, id := range match.ParticipantIDs {
+		if id == participantID {
+			return participantID, slot, nil
 		}
 	}
-	return 0, 0, errors.New("team is not in this match")
+	return 0, 0, errors.New("participant is not in this match")
 }
 
 func themeKind(seg edit.JSONPathSegment) (string, error) {
@@ -176,10 +178,10 @@ func checkThemeIndex(kind string, index int) error {
 }
 
 func inRoster(match store.DBMatchState, slot int, playerID int64) bool {
-	if slot >= len(match.State.Teams) {
+	if slot >= len(match.State.Participants) {
 		return false
 	}
-	for _, member := range match.State.Teams[slot].Roster {
+	for _, member := range match.State.Participants[slot].Roster {
 		if member.ID == playerID {
 			return true
 		}

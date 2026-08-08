@@ -15,7 +15,7 @@ import type {
   PendingOps,
   ScopedEventMessage,
   ScrollEdgeBinding,
-  TeamView,
+  ParticipantView,
   ThemeView,
   Venue,
 } from "./match-table.js";
@@ -51,7 +51,7 @@ interface HostRosterMember {
   name: string;
 }
 
-interface HostTeamView extends TeamView {
+interface HostParticipantView extends ParticipantView {
   id?: number;
   roster?: HostRosterMember[];
   themes: HostThemeView[];
@@ -66,7 +66,7 @@ interface HostMatchView extends CachedMatchView {
   stageCode?: string;
   venue?: {number: number; title?: string} | null;
   questionValues: number[];
-  teams: HostTeamView[];
+  participants: HostParticipantView[];
 }
 
 type HostStageMatch = {
@@ -808,9 +808,9 @@ function sendMatchOps(matchCode: string, ops: BlobOp[]): Promise<HostMatchView> 
 function shootoutThemeOps(matchCode: string, themeIndex: number, remove: boolean): BlobOp[] {
   const view = matchBase(matchCode);
   const ops: BlobOp[] = [];
-  for (const team of view?.teams || []) {
+  for (const team of view?.participants || []) {
     if (!team.id) continue;
-    const path = ["teams", String(team.id), "shootoutThemes", themeIndex];
+    const path = ["participants", String(team.id), "shootoutThemes", themeIndex];
     ops.push(remove ? {op: "remove", path} : {path, value: {answers: ["", "", "", "", ""]}});
   }
   return ops;
@@ -930,7 +930,7 @@ function refreshMatchPendingMarkers(matchCode: string | undefined): void {
       const answer = Number(cell.dataset.answer);
       if (Number.isInteger(team) && Number.isInteger(theme) && Number.isInteger(answer)) {
         const themeKey = cell.dataset.shootout === "1" ? "shootoutThemes" : "themes";
-        pending = entry.ops.has(["teams", team, themeKey, theme, "answers", answer]);
+        pending = entry.ops.has(["participants", team, themeKey, theme, "answers", answer]);
       }
     }
     cell.classList.toggle("pending", pending);
@@ -955,10 +955,10 @@ function recoverMatchPendingEdits(): void {
 // the server's matchDeltaOps shape). Returns null for non-cell (structural)
 // payloads, which must not be overlay-tracked.
 function payloadToOpPath(payload: EKCellPayload): Array<string | number> | null {
-  if (payload.place !== undefined) return ["teams", payload.team, "place"];
+  if (payload.place !== undefined) return ["participants", payload.team, "place"];
   const themesKey = payload.shootout ? "shootoutThemes" : "themes";
-  if (payload.player !== undefined) return ["teams", payload.team, themesKey, payload.theme!, "player"];
-  if (payload.mark !== undefined) return ["teams", payload.team, themesKey, payload.theme!, "answers", payload.answer!];
+  if (payload.player !== undefined) return ["participants", payload.team, themesKey, payload.theme!, "player"];
+  if (payload.mark !== undefined) return ["participants", payload.team, themesKey, payload.theme!, "answers", payload.answer!];
   return null;
 }
 
@@ -975,22 +975,22 @@ function payloadToOpValue(payload: EKCellPayload): unknown {
 // is dropped rather than retried forever.
 function opToBlobOp(op: PendingOp, view: HostMatchView): BlobOp | null {
   const [, slot, key, theme, leaf, answer] = op.path;
-  const team = view.teams?.[slot as number];
+  const team = view.participants?.[slot as number];
   if (!team?.id) return null;
   const teamKey = String(team.id);
   if (op.path.length === 3) {
     // Emptying the place box clears the pin rather than pinning zero, handing
     // the place back to the scorer at the next recompute.
-    const path = ["teams", teamKey, "pin"];
+    const path = ["participants", teamKey, "pin"];
     return op.value ? {path, value: op.value} : {op: "remove", path};
   }
   if (leaf === "player") {
     const name = op.value as string;
     const member = (team.roster || []).find((player) => player.name === name);
     if (name && !member) return null;
-    return {path: ["teams", teamKey, key as string, theme as number, "player"], value: member?.id ?? 0};
+    return {path: ["participants", teamKey, key as string, theme as number, "player"], value: member?.id ?? 0};
   }
-  return {path: ["teams", teamKey, key as string, theme as number, "answers", answer as number], value: op.value};
+  return {path: ["participants", teamKey, key as string, theme as number, "answers", answer as number], value: op.value};
 }
 
 // queueEKEdits records cell edits as pending ops and schedules a batched flush.
@@ -1866,7 +1866,7 @@ function stageRowOffset(matchIndex: number): number {
   let offset = 0;
   for (let i = 0; i < matchIndex && i < matches.length; i++) {
     const s = byCode?.get(matches[i]?.code ?? "");
-    offset += s?.teams?.length || 0;
+    offset += s?.participants?.length || 0;
   }
   return offset;
 }
@@ -1896,7 +1896,7 @@ function stageCellAtCoord(coord: CellCoord | null): HTMLElement | null {
   for (const match of currentStageMatches()) {
     const matchState = byCode?.get(match.code ?? "");
     if (!matchState) continue;
-    const teamCount = matchState.teams?.length || 0;
+    const teamCount = matchState.participants?.length || 0;
     if (remaining < teamCount) {
       const team = remaining;
       const answers = answerCountFor(matchState);
@@ -1983,7 +1983,7 @@ function answerCountFor(matchState: HostMatchView | null | undefined): number {
 }
 
 function regularThemeCountFor(matchState: HostMatchView | null | undefined): number {
-  return matchState?.teams?.[0]?.themes?.length || 0;
+  return matchState?.participants?.[0]?.themes?.length || 0;
 }
 
 function ekCoordOf(cell: {dataset: DOMStringMap}, matchState: HostMatchView): CellCoord | null {
@@ -2053,7 +2053,7 @@ function ekApplyValues(matchCode: string, matchState: HostMatchView, edits: Cell
     const theme = Number((cell as HTMLElement).dataset.theme);
     const answer = Number((cell as HTMLElement).dataset.answer);
     const shootout = (cell as HTMLElement).dataset.shootout === "1";
-    const target = shootout ? shootoutThemesFor(matchState.teams[team])[theme] : matchState.teams[team]?.themes?.[theme];
+    const target = shootout ? shootoutThemesFor(matchState.participants[team])[theme] : matchState.participants[team]?.themes?.[theme];
     if (target?.answers) target.answers[answer] = mark;
     const payload: EKCellPayload = {team, theme, answer, mark};
     if (shootout) payload.shootout = true;
@@ -2234,7 +2234,7 @@ function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
   const hasShootout = shootoutThemeCount() > 0;
   const showPlaceColumn = true;
   const themes = renderedThemeHeaders();
-  const rows = state!.teams.map((team, teamIndex) => {
+  const rows = state!.participants.map((team, teamIndex) => {
     const themeCellsList: ScoreTableThemeRowSpec[] = [];
     team.themes.forEach((theme, themeIndex) => {
       themeCellsList.push(themeCells(team, teamIndex, theme, themeIndex, false));
@@ -2309,7 +2309,7 @@ function trailingHeaders(hasShootout: boolean): Array<HTMLElement | {content: st
   return headers;
 }
 
-function teamNameCell(team: HostTeamView, teamIndex: number): HTMLElement {
+function teamNameCell(team: HostParticipantView, teamIndex: number): HTMLElement {
   const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: 2});
   cell.dataset.team = String(teamIndex);
   const labelText = team.name || "";
@@ -2334,13 +2334,13 @@ function teamNameCell(team: HostTeamView, teamIndex: number): HTMLElement {
   return cell;
 }
 
-function totalCell(team: HostTeamView, teamIndex: number): HTMLElement {
+function totalCell(team: HostParticipantView, teamIndex: number): HTMLElement {
   const cell = td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2});
   cell.dataset.team = String(teamIndex);
   return cell;
 }
 
-function placeCell(team: HostTeamView, teamIndex: number, matchCode: string): HTMLElement {
+function placeCell(team: HostParticipantView, teamIndex: number, matchCode: string): HTMLElement {
   const input = document.createElement("input");
   input.type = "text";
   input.inputMode = "decimal";
@@ -2374,7 +2374,7 @@ function placeCell(team: HostTeamView, teamIndex: number, matchCode: string): HT
     if (!commitPlace()) return;
     if (isForward || isBackward) {
       const direction = isForward ? 1 : -1;
-      const nextTeam = clamp(teamIndex + direction, 0, state!.teams.length - 1);
+      const nextTeam = clamp(teamIndex + direction, 0, state!.participants.length - 1);
       focusPlaceInput(nextTeam, {select: true, matchCode});
     }
   });
@@ -2386,7 +2386,7 @@ function placeCell(team: HostTeamView, teamIndex: number, matchCode: string): HT
   return cell;
 }
 
-function themeCells(team: HostTeamView, teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean): ScoreTableThemeRowSpec {
+function themeCells(team: HostParticipantView, teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean): ScoreTableThemeRowSpec {
   const matchCode = currentMatchCode();
   const playerCell = document.createElement("td");
   playerCell.colSpan = state!.questionValues.length;
@@ -2465,7 +2465,7 @@ function themeCells(team: HostTeamView, teamIndex: number, theme: HostThemeView,
   return {playerCell, scoreCell, gapClassName: gapClass, answers};
 }
 
-function trailingCells(team: HostTeamView, teamIndex: number, hasShootout: boolean): HTMLElement[] {
+function trailingCells(team: HostParticipantView, teamIndex: number, hasShootout: boolean): HTMLElement[] {
   const cells = [td("", "shootout-controls-cell", {rowSpan: 2})];
   if (hasShootout) {
     const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
@@ -2697,7 +2697,7 @@ function selectAnswerCell(team: number, shootout: boolean, theme: number, answer
 }
 
 function moveActiveCell(teamDelta: number, answerDelta: number, extend = false): void {
-  const maxTeam = state!.teams.length - 1;
+  const maxTeam = state!.participants.length - 1;
   const maxColumn = totalThemeCount() * state!.questionValues.length - 1;
   const column = activeCellColumn();
   let nextTeam = activeCell.team + teamDelta;
@@ -2707,7 +2707,7 @@ function moveActiveCell(teamDelta: number, answerDelta: number, extend = false):
     const sibling = adjacentStageMatch(nextMatchCode, nextTeam < 0 ? -1 : 1);
     if (sibling) {
       nextMatchCode = sibling.code;
-      const siblingMaxTeam = (sibling.state?.teams?.length || 1) - 1;
+      const siblingMaxTeam = (sibling.state?.participants?.length || 1) - 1;
       nextTeam = nextTeam < 0 ? siblingMaxTeam : 0;
     } else {
       nextTeam = clamp(nextTeam, 0, maxTeam);
@@ -2856,7 +2856,7 @@ function advanceActivePlaceInput(direction: number): void {
   input.dispatchEvent(new Event("change")); // commit current value before moving
   const team = Number(input.dataset.team);
   if (!Number.isInteger(team) || !state) return;
-  const nextTeam = clamp(team + direction, 0, state.teams.length - 1);
+  const nextTeam = clamp(team + direction, 0, state.participants.length - 1);
   focusPlaceInput(nextTeam, {select: true, matchCode: input.dataset.matchCode});
 }
 
@@ -2921,8 +2921,8 @@ function isActiveCell(team: number, shootout: boolean, theme: number, answer: nu
 }
 
 function normalizeActiveCell(): void {
-  if (!state?.teams?.length || totalThemeCount() === 0) return;
-  const team = clamp(activeCell.team, 0, state.teams.length - 1);
+  if (!state?.participants?.length || totalThemeCount() === 0) return;
+  const team = clamp(activeCell.team, 0, state.participants.length - 1);
   const column = clamp(activeCellColumn(), 0, totalThemeCount() * state.questionValues.length - 1);
   activeCell = cellFromColumn(team, column);
 }
@@ -2958,18 +2958,18 @@ function removeLastShootoutTheme(matchCode: string = currentMatchCode()): void {
 }
 
 function regularThemeCount(): number {
-  return state!.teams[0].themes.length;
+  return state!.participants[0].themes.length;
 }
 
 function shootoutThemeCount(): number {
-  return shootoutThemesFor(state!.teams[0]).length;
+  return shootoutThemesFor(state!.participants[0]).length;
 }
 
 function totalThemeCount(): number {
   return regularThemeCount() + shootoutThemeCount();
 }
 
-function shootoutThemesFor(team: HostTeamView): HostThemeView[] {
+function shootoutThemesFor(team: HostParticipantView): HostThemeView[] {
   return team.shootoutThemes || [];
 }
 

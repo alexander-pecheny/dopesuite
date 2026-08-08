@@ -348,7 +348,7 @@ function started(view: BrainMatchView): boolean {
 }
 
 function teamName(view: BrainMatchView, side: number): string {
-  return view.teams?.[side]?.name || `Команда ${side + 1}`;
+  return view.participants?.[side]?.name || `Команда ${side + 1}`;
 }
 
 function rowLabel(index: number, base: number): string {
@@ -593,8 +593,8 @@ function nameHead(view: BrainMatchView, side: number, planned: BrainSchemeMatch)
   th.className = "brain-name-head";
   const name = document.createElement("span");
   name.className = "brain-name";
-  name.textContent = view.teams?.[side]?.name || planned.slots?.[side]?.label || "—";
-  name.classList.toggle("brain-name-pending", !view.teams?.[side]?.id);
+  name.textContent = view.participants?.[side]?.name || planned.slots?.[side]?.label || "—";
+  name.classList.toggle("brain-name-pending", !view.participants?.[side]?.id);
   th.appendChild(name);
   return th;
 }
@@ -773,8 +773,8 @@ function buildGroupTable(stage: BrainSchemeStage): HTMLElement {
     const a = indexByKey.get(slotKey(planned.slots?.[0]));
     const b = indexByKey.get(slotKey(planned.slots?.[1]));
     if (a === undefined || b === undefined) continue;
-    if (view.teams?.[0]?.name) rows[a].name = view.teams[0].name;
-    if (view.teams?.[1]?.name) rows[b].name = view.teams[1].name;
+    if (view.participants?.[0]?.name) rows[a].name = view.participants[0].name;
+    if (view.participants?.[1]?.name) rows[b].name = view.participants[1].name;
     const ta = taken(view, 0);
     const tb = taken(view, 1);
     if (view.finished || started(view)) {

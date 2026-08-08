@@ -40,7 +40,7 @@ func createDefaultFestFixture(t *testing.T, db *sql.DB, state store.MatchState) 
 				"stage_type": "matches",
 				"position":   1,
 				"matches": []map[string]any{
-					{"code": dopeserver.DefaultMatchCode, "title": state.Title, "venue": 1, "participantCount": len(state.Teams)},
+					{"code": dopeserver.DefaultMatchCode, "title": state.Title, "venue": 1, "participantCount": len(state.Participants)},
 				},
 			},
 		},
@@ -88,12 +88,12 @@ values(?, ?, 'r16', '1/16 финала', 'matches', 1, 'active', '{}')`, festID,
 	}
 	matchID, err := store.InsertReturningID(ctx, tx, `
 insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, festID, gameID, stageID, dopeserver.DefaultMatchCode, state.Title, len(state.Teams), venueID, status, util.MaxInt64(state.Revision, 1))
+values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, festID, gameID, stageID, dopeserver.DefaultMatchCode, state.Title, len(state.Participants), venueID, status, util.MaxInt64(state.Revision, 1))
 	if err != nil {
 		t.Fatalf("insert match: %v", err)
 	}
 
-	for teamIndex, team := range state.Teams {
+	for teamIndex, team := range state.Participants {
 		teamID, err := store.InsertReturningID(ctx, tx, `
 insert into participants(fest_id, name, city)
 values(?, ?, '')`, festID, team.Name)

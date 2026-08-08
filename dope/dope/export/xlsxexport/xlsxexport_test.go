@@ -280,7 +280,7 @@ func TestBuildEKSheets(t *testing.T) {
 		StageTitle:     "Плей-офф",
 		StageCode:      "po",
 		QuestionValues: [5]int{10, 20, 30, 40, 50},
-		Teams: []store.TeamView{
+		Participants: []store.ParticipantView{
 			{
 				Name:  "Эпсилон",
 				Total: 40,

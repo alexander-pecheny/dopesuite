@@ -20,7 +20,7 @@ export interface FestGridSlotObject {
 
 export type FestGridSlot = string | FestGridSlotObject;
 
-export interface FestGridLiveTeam {
+export interface FestGridLiveParticipant {
   name?: string;
   source?: string;
   total?: unknown;
@@ -33,7 +33,7 @@ export interface FestGridMatch {
   status?: string;
   venue?: FestGridVenue;
   slots?: FestGridSlot[];
-  teams?: FestGridLiveTeam[];
+  participants?: FestGridLiveParticipant[];
   participantCount?: number | string;
 }
 
@@ -260,7 +260,7 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
   grid.appendChild(matchHeadCell(match, venue, options));
   grid.appendChild(gridHeadCell("slot-total-head", "Σ"));
   grid.appendChild(gridHeadCell("slot-place-head", "М"));
-  const liveTeams = liveMatch?.teams || [];
+  const liveTeams = liveMatch?.participants || [];
   const slots = match.slots || [];
   const rowCount = gridSlotRowCount(match, slots);
   const realRows: HTMLElement[][] = [];
@@ -525,7 +525,7 @@ function updateFestGridNameOverflow(root: HTMLElement): void {
   });
 }
 
-function slotLabel(slot: FestGridSlot, live: FestGridLiveTeam = {}): string {
+function slotLabel(slot: FestGridSlot, live: FestGridLiveParticipant = {}): string {
   if (typeof slot === "string") return slot;
   if (live.name && live.name !== live.source) return live.name;
   if (slot.label) return slot.label;

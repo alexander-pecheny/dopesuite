@@ -73,7 +73,7 @@ test("patchScoreTable writes shared value cells through the index", () => {
   const themeScore = idx.register("themeScore", {team: 0, shootout: "0", theme: 1});
   const answer = idx.register("answer", {team: 0, shootout: "0", theme: 1, answer: 2});
   const state = {
-    teams: [
+    participants: [
       {total: 170, plus: 0, shootoutTotal: 7, correctCounts: [3, 0, 0, 0, 9],
         themes: [{score: 0, answers: []}, {score: 60, answers: ["", "", "right"]}], shootoutThemes: []},
       {total: 0, plus: 110, correctCounts: [0, 0, 0, 0, 0],
@@ -95,7 +95,7 @@ test("patchScoreTable clears a stale mark before applying the new one", () => {
   const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS));
   const answer = idx.register("answer", {team: 0, shootout: "0", theme: 0, answer: 0});
   answer.classList.add("wrong");
-  const state = {teams: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
+  const state = {participants: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
     themes: [{score: 0, answers: ["right"]}]}]};
   T.patchScoreTable(idx, state, {formatNumber: String});
   assert.ok(answer.classList.contains("right"));
@@ -106,7 +106,7 @@ test("patchScoreTable syncs the per-round player name in place", () => {
   const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS));
   const player0 = idx.register("playerText", {team: 0, shootout: "0", theme: 0});
   const player1 = idx.register("playerText", {team: 0, shootout: "0", theme: 1});
-  const state = {teams: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
+  const state = {participants: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
     themes: [{score: 0, answers: [], player: "Alice"}, {score: 0, answers: [], player: "Bob"}]}]};
   T.patchScoreTable(idx, state, {formatNumber: String});
   assert.equal(player0.textContent, "Alice", "player text patched from MatchView, not just marks");
@@ -126,23 +126,23 @@ test("scoreCellSpecs declares a sync for every live cell, incl. the player", () 
 test("patchScoreTable tolerates cells missing from the index", () => {
   const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS)); // specs present, nothing registered
   assert.doesNotThrow(() =>
-    T.patchScoreTable(idx, {teams: [{total: 1, plus: 1, correctCounts: [], themes: [], shootoutThemes: []}]}, {formatNumber: String}));
+    T.patchScoreTable(idx, {participants: [{total: 1, plus: 1, correctCounts: [], themes: [], shootoutThemes: []}]}, {formatNumber: String}));
 });
 
 test("canPatchScoreShape: identical shape is patchable", () => {
   const base = {code: "C", finished: false, questionValues: [10, 20],
-    teams: [{name: "X", themes: [{}, {}], shootoutThemes: []}, {name: "Y", themes: [{}, {}], shootoutThemes: []}]};
+    participants: [{name: "X", themes: [{}, {}], shootoutThemes: []}, {name: "Y", themes: [{}, {}], shootoutThemes: []}]};
   assert.equal(T.canPatchScoreShape(base, structuredClone(base)), true);
 });
 
 test("canPatchScoreShape: shape changes force a rebuild", () => {
   const base = {code: "C", finished: false, questionValues: [10, 20],
-    teams: [{name: "X", themes: [{}, {}], shootoutThemes: []}, {name: "Y", themes: [{}, {}], shootoutThemes: []}]};
+    participants: [{name: "X", themes: [{}, {}], shootoutThemes: []}, {name: "Y", themes: [{}, {}], shootoutThemes: []}]};
   const cases = {
-    "team count": (s) => s.teams.push({name: "Z", themes: [], shootoutThemes: []}),
-    "team name": (s) => (s.teams[0].name = "X2"),
-    "theme count": (s) => s.teams[0].themes.push({}),
-    "shootout count": (s) => s.teams[0].shootoutThemes.push({}),
+    "team count": (s) => s.participants.push({name: "Z", themes: [], shootoutThemes: []}),
+    "team name": (s) => (s.participants[0].name = "X2"),
+    "theme count": (s) => s.participants[0].themes.push({}),
+    "shootout count": (s) => s.participants[0].shootoutThemes.push({}),
     "finished flag": (s) => (s.finished = true),
     "question values": (s) => (s.questionValues = [10, 20, 30]),
     "code": (s) => (s.code = "D"),
@@ -278,7 +278,7 @@ test("createClientRecorder is a safe no-op when localStorage is unavailable", ()
 test("computeEKPlayerStats aggregates per player across battles, regular themes only", () => {
   const stages = [
     {code: "r16", matches: [
-      {code: "A", teams: [
+      {code: "A", participants: [
         {name: "Alpha", themes: [
           {player: "Ann", answers: ["right", "wrong", "", "", "right"]},
           {player: "Bob", answers: ["", "", "right", "", ""]},
@@ -289,7 +289,7 @@ test("computeEKPlayerStats aggregates per player across battles, regular themes 
       ]},
     ]},
     {code: "r8", matches: [
-      {code: "M", teams: [
+      {code: "M", participants: [
         {name: "Alpha", themes: [
           {player: "Ann", answers: ["right", "", "", "", ""]},
         ]},
@@ -317,15 +317,15 @@ test("computeEKPlayerStats aggregates per player across battles, regular themes 
 test("computeEKPlayerStats keys by (team, player) — concatenation collisions stay separate", () => {
   const stages = [
     {code: "r16", matches: [
-      {code: "A", teams: [
+      {code: "A", participants: [
         {name: "Альфа", themes: [{player: "Бета", answers: ["right", "", "", "", ""]}]},
         {name: "АльфаБ", themes: [{player: "ета", answers: ["", "right", "", "", ""]}]},
       ]},
       // battle-id collision: (stage "r16", match "8") vs (stage "r168", match "")
-      {code: "8", teams: [{name: "Альфа", themes: [{player: "Бета", answers: ["right", "", "", "", ""]}]}]},
+      {code: "8", participants: [{name: "Альфа", themes: [{player: "Бета", answers: ["right", "", "", "", ""]}]}]},
     ]},
     {code: "r168", matches: [
-      {code: "", teams: [{name: "Альфа", themes: [{player: "Бета", answers: ["", "", "right", "", ""]}]}]},
+      {code: "", participants: [{name: "Альфа", themes: [{player: "Бета", answers: ["", "", "right", "", ""]}]}]},
     ]},
   ];
   const rows = T.computeEKPlayerStats(stages);
@@ -337,7 +337,7 @@ test("computeEKPlayerStats keys by (team, player) — concatenation collisions s
 test("computeEKPlayerStats team-share zeroes out non-helpers", () => {
   const stages = [
     {code: "r16", matches: [
-      {code: "A", teams: [
+      {code: "A", participants: [
         // Share is over POSITIVE contributors only; negatives are 0.
         {name: "Plus", themes: [
           {player: "Up", answers: ["right", "right", "", "", ""]},   // +30

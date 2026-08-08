@@ -3,7 +3,9 @@ package migrate
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"dope/dope/storage/journal"
 )
@@ -17,21 +19,55 @@ import (
 // millions), so this never materialises a result set — the one backfill that
 // reads data streams a cursor per fest.
 
-// RunParticipantRename renames the registry and everything keyed on it. It is
-// safe to call on an already-migrated database: the first check short-circuits.
+// RunParticipantRename renames the registry and everything keyed on it. The
+// guard is the schema_versions row, written only once every step has succeeded,
+// so a crash between the DDL and the backfills resumes instead of stranding a
+// half-migrated database behind an "already renamed" check.
 func RunParticipantRename(db *sql.DB) error {
-	migrated, err := tableExists(db, "participants")
-	if err != nil {
+	if _, err := db.Exec(`create table if not exists schema_versions(
+  version integer primary key,
+  applied_at text not null
+)`); err != nil {
 		return err
 	}
-	if migrated {
+	var done int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 20`).Scan(&done); err != nil {
+		return err
+	}
+	if done > 0 {
 		return nil
 	}
+	// A fresh database has none of these tables yet — server/db.go creates them
+	// in the new shape right after, so there is nothing to migrate and the
+	// version row simply records that.
 	if legacy, err := tableExists(db, "teams"); err != nil {
 		return err
-	} else if !legacy {
-		return nil // a fresh database — server/db.go created the new shape already
+	} else if legacy {
+		if err := renameRegistry(db); err != nil {
+			return err
+		}
 	}
+	if matches, err := tableExists(db, "matches"); err != nil {
+		return err
+	} else if matches {
+		if err := renameBlobSections(db); err != nil {
+			return err
+		}
+	}
+	if registry, err := tableExists(db, "participants"); err != nil {
+		return err
+	} else if registry {
+		if err := backfillRosterLinks(db); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(`insert or ignore into schema_versions(version, applied_at)
+values(20, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`)
+	return err
+}
+
+// renameRegistry is the DDL half: one transaction, all or nothing.
+func renameRegistry(db *sql.DB) error {
 
 	// Row-op triggers name their table and columns; drop them so the rename's
 	// own DDL churn is never journaled, and let EnsureTriggers reinstall against
@@ -122,6 +158,13 @@ select game_id, basket, number, team_id from game_assignments`); err != nil {
 		return err
 	}
 
+	// RENAME TO rewrites a trigger's body but keeps its name, so the roster-limit
+	// trigger would survive under the old name and be created a second time under
+	// the new one. Drop it; server/db.go recreates it as participant_players_max_9.
+	if _, err := tx.ExecContext(ctx, `drop trigger if exists team_players_max_9`); err != nil {
+		return err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return err
 	}
@@ -129,10 +172,91 @@ select game_id, basket, number, team_id from game_assignments`); err != nil {
 		return err
 	}
 	fkOff = false
-	if err := verifyForeignKeys(db); err != nil {
-		return err
+	return verifyForeignKeys(db)
+}
+
+// renameBlobSections moves the EK match blob's `teams` container to
+// `participants`, matching store.MatchBlob and the journal's patch paths. Only
+// EK's blob is keyed this way; a flat game's document owns its own `teams` and
+// is left alone.
+//
+// Paged by id, so the whole matches table is never in memory at once.
+func renameBlobSections(db *sql.DB) error {
+	const page = 200
+	var after int64
+	for {
+		rows, err := db.Query(`
+select m.id, m.state_json from matches m
+left join games g on g.id = m.game_id
+where m.id > ? and coalesce(g.game_type, '') in ('', 'ek')
+  and m.state_json like '%"teams"%'
+order by m.id limit ?`, after, page)
+		if err != nil {
+			return err
+		}
+		type blobRow struct {
+			id  int64
+			raw string
+		}
+		var batch []blobRow
+		for rows.Next() {
+			var row blobRow
+			if err := rows.Scan(&row.id, &row.raw); err != nil {
+				rows.Close()
+				return err
+			}
+			batch = append(batch, row)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if len(batch) == 0 {
+			return nil
+		}
+		for _, row := range batch {
+			after = row.id
+			moved, ok, err := moveBlobTeamsKey(row.raw)
+			if err != nil {
+				return fmt.Errorf("match %d blob: %w", row.id, err)
+			}
+			if !ok {
+				continue
+			}
+			if _, err := db.Exec(`update matches set state_json = ? where id = ?`, moved, row.id); err != nil {
+				return err
+			}
+		}
 	}
-	return backfillRosterLinks(db)
+}
+
+// moveBlobTeamsKey renames the document's top-level `teams` key, reporting
+// whether anything changed. A blob that already speaks the new name, or whose
+// `teams` is not an object, is left exactly as it was.
+func moveBlobTeamsKey(raw string) (string, bool, error) {
+	if raw == "" || raw == "{}" {
+		return raw, false, nil
+	}
+	var doc map[string]any
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&doc); err != nil {
+		return "", false, err
+	}
+	section, ok := doc["teams"].(map[string]any)
+	if !ok {
+		return raw, false, nil
+	}
+	if _, taken := doc["participants"]; taken {
+		return raw, false, nil
+	}
+	delete(doc, "teams")
+	doc["participants"] = section
+	encoded, err := json.Marshal(doc)
+	if err != nil {
+		return "", false, err
+	}
+	return string(encoded), true, nil
 }
 
 // rebuildTable swaps a table for a new shape: create under a scratch name, copy,
@@ -186,9 +310,11 @@ update participants set fest_team_id = (
 where fest_id = ? and fest_team_id is null and number is not null`, fest); err != nil {
 			return err
 		}
+		// An aggregate select is one group, so HAVING decides whether the name is
+		// unique in the fest; min(ft.id) is then the only id it could be.
 		if _, err := db.Exec(`
 update participants set fest_team_id = (
-  select ft.id from fest_teams ft
+  select min(ft.id) from fest_teams ft
   where ft.fest_id = participants.fest_id and ft.deleted = 0
     and lower(ft.name) = lower(participants.name)
   having count(*) = 1)

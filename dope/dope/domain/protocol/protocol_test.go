@@ -14,7 +14,7 @@ func TestEKScore(t *testing.T) {
 	if !ok {
 		t.Fatal("ek protocol not registered")
 	}
-	state := `{"teams":[
+	state := `{"participants":[
 		{"name":"A","place":2,"themes":[{"player":"P1","answers":["right","wrong","right","",""]}]},
 		{"name":"B","place":1,"themes":[{"player":"P2","answers":["wrong","","","","right"]}]}
 	]}`

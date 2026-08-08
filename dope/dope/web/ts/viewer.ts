@@ -12,7 +12,7 @@ import type {
   ScrollEdgeBinding,
   ScoreTableTheme,
   ScoreTableThemeRow,
-  TeamView,
+  ParticipantView,
   ThemeView,
   Venue,
   VenueLike,
@@ -36,7 +36,7 @@ interface FestView {
 
 type ViewerTheme = Omit<ThemeView, "answers"> & {answers: Array<string | null | undefined>};
 
-type ViewerTeam = Omit<TeamView, "themes" | "shootoutThemes" | "correctCounts"> & {
+type ViewerParticipant = Omit<ParticipantView, "themes" | "shootoutThemes" | "correctCounts"> & {
   themes: ViewerTheme[];
   shootoutThemes?: ViewerTheme[];
   correctCounts: number[];
@@ -50,7 +50,7 @@ type ViewerMatchView = {
   venue?: VenueLike;
   finished?: boolean;
   questionValues: Array<string | number>;
-  teams: ViewerTeam[];
+  participants: ViewerParticipant[];
   [key: string]: unknown;
 };
 
@@ -768,8 +768,8 @@ function canPatchMatchTable(previous: ViewerMatchView | null | undefined, next: 
   if (!previous || !next) return false;
   if (matchTitleFor(previous) !== matchTitleFor(next)) return false;
   if (!gameTable.canPatchScoreShape(previous, next)) return false;
-  const prevTeams = previous.teams || [];
-  const nextTeams = next.teams || [];
+  const prevTeams = previous.participants || [];
+  const nextTeams = next.participants || [];
   for (let i = 0; i < nextTeams.length; i++) {
     if (formatPlace(prevTeams[i].place) !== formatPlace(nextTeams[i].place)) return false;
   }
@@ -887,7 +887,7 @@ function withMatchState<T>(matchState: ViewerMatchView, callback: () => T): T {
 function buildReadonlyTable(): HTMLTableElement {
   const hasShootout = shootoutThemeCount() > 0;
   const themes = readonlyThemeHeaders();
-  const rows = state!.teams.map((team, teamIndex) => {
+  const rows = state!.participants.map((team, teamIndex) => {
     const themeCells: ScoreTableThemeRow[] = [];
     team.themes.forEach((theme, themeIndex) => {
       themeCells.push(readonlyThemeCells(teamIndex, theme, themeIndex, false));
@@ -914,7 +914,7 @@ function buildReadonlyTable(): HTMLTableElement {
   });
 }
 
-function readonlyTeamNameCell(team: ViewerTeam, teamIndex: number): HTMLElement {
+function readonlyTeamNameCell(team: ViewerParticipant, teamIndex: number): HTMLElement {
   const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: 2, dataset: {team: teamIndex}});
   const labelText = team.name || "";
   const layout = document.createElement("span");
@@ -1033,7 +1033,7 @@ function readonlyThemeCells(teamIndex: number, theme: ViewerTheme, themeIndex: n
   };
 }
 
-function readonlyTrailingCells(team: ViewerTeam, teamIndex: number, hasShootout: boolean): HTMLElement[] {
+function readonlyTrailingCells(team: ViewerParticipant, teamIndex: number, hasShootout: boolean): HTMLElement[] {
   const cells: HTMLElement[] = [];
   if (hasShootout) {
     const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
@@ -1050,18 +1050,18 @@ function readonlyTrailingCells(team: ViewerTeam, teamIndex: number, hasShootout:
 }
 
 function regularThemeCount(): number {
-  return state!.teams[0].themes.length;
+  return state!.participants[0].themes.length;
 }
 
 function shootoutThemeCount(): number {
-  return shootoutThemesFor(state!.teams[0]).length;
+  return shootoutThemesFor(state!.participants[0]).length;
 }
 
 function totalThemeCount(): number {
   return regularThemeCount() + shootoutThemeCount();
 }
 
-function shootoutThemesFor(team: ViewerTeam): ViewerTheme[] {
+function shootoutThemesFor(team: ViewerParticipant): ViewerTheme[] {
   return team.shootoutThemes || [];
 }
 

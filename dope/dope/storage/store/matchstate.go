@@ -19,23 +19,23 @@ var QuestionValues = [5]int{10, 20, 30, 40, 50}
 // DBMatchState is a match's full state as loaded from the DB: the match header,
 // its venue, the scored MatchState, and the per-slot team ids.
 type DBMatchState struct {
-	MatchID      int64
-	GameID       int64
-	GameType     string
-	Code         string
-	Title        string
-	Status       string
-	Revision     int64
-	FestRevision int64
-	UpdatedAt    time.Time
-	StageCode    string
-	StageTitle   string
-	Venue        *VenueView
-	State        MatchState
-	Blob         MatchBlob
-	RawState     string // verbatim matches.state_json — the Protocol document for non-EK games
-	TeamIDs      []int64
-	RosterSource string
+	MatchID        int64
+	GameID         int64
+	GameType       string
+	Code           string
+	Title          string
+	Status         string
+	Revision       int64
+	FestRevision   int64
+	UpdatedAt      time.Time
+	StageCode      string
+	StageTitle     string
+	Venue          *VenueView
+	State          MatchState
+	Blob           MatchBlob
+	RawState       string // verbatim matches.state_json — the Protocol document for non-EK games
+	ParticipantIDs []int64
+	RosterSource   string
 }
 
 // IsEKShaped reports whether the match's state blob follows the EK team-keyed
@@ -51,21 +51,21 @@ func (m DBMatchState) IsEKShaped() bool {
 // the shape, the view only frames it.
 func MatchViewFrom(match DBMatchState) MatchView {
 	if !match.IsEKShaped() {
-		teams := make([]TeamView, len(match.State.Teams))
-		for i, team := range match.State.Teams {
-			teams[i] = TeamView{ID: team.ID, Name: team.Name, Place: team.Place}
+		teams := make([]ParticipantView, len(match.State.Participants))
+		for i, team := range match.State.Participants {
+			teams[i] = ParticipantView{ID: team.ID, Name: team.Name, Place: team.Place}
 		}
 		return MatchView{
-			Title:      match.Title,
-			Code:       match.Code,
-			StageCode:  match.StageCode,
-			StageTitle: match.StageTitle,
-			Venue:      match.Venue,
-			Finished:   match.Status == "finished",
-			Revision:   match.Revision,
-			UpdatedAt:  match.UpdatedAt.Format(time.RFC3339),
-			State:      json.RawMessage(match.RawState),
-			Teams:      teams,
+			Title:        match.Title,
+			Code:         match.Code,
+			StageCode:    match.StageCode,
+			StageTitle:   match.StageTitle,
+			Venue:        match.Venue,
+			Finished:     match.Status == "finished",
+			Revision:     match.Revision,
+			UpdatedAt:    match.UpdatedAt.Format(time.RFC3339),
+			State:        json.RawMessage(match.RawState),
+			Participants: teams,
 		}
 	}
 	view := BuildView(match.State)
@@ -117,32 +117,32 @@ func NormalizeState(state *MatchState) {
 		state.UpdatedAt = time.Now()
 	}
 	shootoutThemeCount := 0
-	for i := range state.Teams {
-		if len(state.Teams[i].ShootoutThemes) > shootoutThemeCount {
-			shootoutThemeCount = len(state.Teams[i].ShootoutThemes)
+	for i := range state.Participants {
+		if len(state.Participants[i].ShootoutThemes) > shootoutThemeCount {
+			shootoutThemeCount = len(state.Participants[i].ShootoutThemes)
 		}
 	}
-	for i := range state.Teams {
-		state.Teams[i].Tiebreak = 0
-		if len(state.Teams[i].Themes) < ThemeCount {
-			missing := ThemeCount - len(state.Teams[i].Themes)
-			state.Teams[i].Themes = append(state.Teams[i].Themes, make([]ThemeEntry, missing)...)
+	for i := range state.Participants {
+		state.Participants[i].Tiebreak = 0
+		if len(state.Participants[i].Themes) < ThemeCount {
+			missing := ThemeCount - len(state.Participants[i].Themes)
+			state.Participants[i].Themes = append(state.Participants[i].Themes, make([]ThemeEntry, missing)...)
 		}
-		if len(state.Teams[i].Themes) > ThemeCount {
-			state.Teams[i].Themes = state.Teams[i].Themes[:ThemeCount]
+		if len(state.Participants[i].Themes) > ThemeCount {
+			state.Participants[i].Themes = state.Participants[i].Themes[:ThemeCount]
 		}
-		for t := range state.Teams[i].Themes {
-			for a := range state.Teams[i].Themes[t].Answers {
-				state.Teams[i].Themes[t].Answers[a] = NormalizeMark(state.Teams[i].Themes[t].Answers[a])
+		for t := range state.Participants[i].Themes {
+			for a := range state.Participants[i].Themes[t].Answers {
+				state.Participants[i].Themes[t].Answers[a] = NormalizeMark(state.Participants[i].Themes[t].Answers[a])
 			}
 		}
-		if len(state.Teams[i].ShootoutThemes) < shootoutThemeCount {
-			missing := shootoutThemeCount - len(state.Teams[i].ShootoutThemes)
-			state.Teams[i].ShootoutThemes = append(state.Teams[i].ShootoutThemes, make([]ThemeEntry, missing)...)
+		if len(state.Participants[i].ShootoutThemes) < shootoutThemeCount {
+			missing := shootoutThemeCount - len(state.Participants[i].ShootoutThemes)
+			state.Participants[i].ShootoutThemes = append(state.Participants[i].ShootoutThemes, make([]ThemeEntry, missing)...)
 		}
-		for t := range state.Teams[i].ShootoutThemes {
-			for a := range state.Teams[i].ShootoutThemes[t].Answers {
-				state.Teams[i].ShootoutThemes[t].Answers[a] = NormalizeMark(state.Teams[i].ShootoutThemes[t].Answers[a])
+		for t := range state.Participants[i].ShootoutThemes {
+			for a := range state.Participants[i].ShootoutThemes[t].Answers {
+				state.Participants[i].ShootoutThemes[t].Answers[a] = NormalizeMark(state.Participants[i].ShootoutThemes[t].Answers[a])
 			}
 		}
 	}
@@ -206,12 +206,12 @@ order by ms.slot_index`, match.MatchID)
 	defer slotRows.Close()
 
 	type slotRecord struct {
-		Index      int
-		TeamID     sql.NullInt64
-		Name       string
-		Place      float64
-		SourceType string
-		SourceRef  string
+		Index         int
+		ParticipantID sql.NullInt64
+		Name          string
+		Place         float64
+		SourceType    string
+		SourceRef     string
 	}
 	var slots []slotRecord
 	for slotRows.Next() {
@@ -225,12 +225,12 @@ order by ms.slot_index`, match.MatchID)
 			return DBMatchState{}, err
 		}
 		slots = append(slots, slotRecord{
-			Index:      slotIndex,
-			TeamID:     teamID,
-			Name:       name,
-			Place:      place,
-			SourceType: sourceType,
-			SourceRef:  sourceRef,
+			Index:         slotIndex,
+			ParticipantID: teamID,
+			Name:          name,
+			Place:         place,
+			SourceType:    sourceType,
+			SourceRef:     sourceRef,
 		})
 	}
 	if err := slotRows.Err(); err != nil {
@@ -241,17 +241,17 @@ order by ms.slot_index`, match.MatchID)
 	}
 	if !match.IsEKShaped() {
 		for _, slot := range slots {
-			for len(match.State.Teams) <= slot.Index {
-				match.State.Teams = append(match.State.Teams, TeamState{})
-				match.TeamIDs = append(match.TeamIDs, 0)
+			for len(match.State.Participants) <= slot.Index {
+				match.State.Participants = append(match.State.Participants, ParticipantState{})
+				match.ParticipantIDs = append(match.ParticipantIDs, 0)
 			}
 			name := slot.Name
-			if !slot.TeamID.Valid {
+			if !slot.ParticipantID.Valid {
 				name = SlotSourceLabel(slot.SourceType, slot.SourceRef)
 			} else {
-				match.TeamIDs[slot.Index] = slot.TeamID.Int64
+				match.ParticipantIDs[slot.Index] = slot.ParticipantID.Int64
 			}
-			match.State.Teams[slot.Index] = TeamState{ID: match.TeamIDs[slot.Index], Name: name, Place: slot.Place}
+			match.State.Participants[slot.Index] = ParticipantState{ID: match.ParticipantIDs[slot.Index], Name: name, Place: slot.Place}
 		}
 		return match, nil
 	}
@@ -260,25 +260,25 @@ order by ms.slot_index`, match.MatchID)
 		return DBMatchState{}, err
 	}
 	for _, slot := range slots {
-		for len(match.State.Teams) <= slot.Index {
-			match.State.Teams = append(match.State.Teams, TeamState{})
-			match.TeamIDs = append(match.TeamIDs, 0)
+		for len(match.State.Participants) <= slot.Index {
+			match.State.Participants = append(match.State.Participants, ParticipantState{})
+			match.ParticipantIDs = append(match.ParticipantIDs, 0)
 		}
-		if !slot.TeamID.Valid {
-			match.State.Teams[slot.Index] = TeamState{
+		if !slot.ParticipantID.Valid {
+			match.State.Participants[slot.Index] = ParticipantState{
 				Name:   SlotSourceLabel(slot.SourceType, slot.SourceRef),
 				Themes: make([]ThemeEntry, ThemeCount),
 			}
 			continue
 		}
-		roster, err := LoadTeamRoster(ctx, q, match.GameID, match.RosterSource, slot.TeamID.Int64)
+		roster, err := LoadParticipantRoster(ctx, q, match.GameID, match.RosterSource, slot.ParticipantID.Int64)
 		if err != nil {
 			return DBMatchState{}, err
 		}
-		match.State.Teams[slot.Index] = TeamStateFromBlob(
-			match.Blob.Teams[strconv.FormatInt(slot.TeamID.Int64, 10)],
-			slot.TeamID.Int64, slot.Name, roster, slot.Place, playerName)
-		match.TeamIDs[slot.Index] = slot.TeamID.Int64
+		match.State.Participants[slot.Index] = ParticipantStateFromBlob(
+			match.Blob.Participants[strconv.FormatInt(slot.ParticipantID.Int64, 10)],
+			slot.ParticipantID.Int64, slot.Name, roster, slot.Place, playerName)
+		match.ParticipantIDs[slot.Index] = slot.ParticipantID.Int64
 	}
 	NormalizeState(&match.State)
 	return match, nil
@@ -288,7 +288,7 @@ order by ms.slot_index`, match.MatchID)
 // its display name.
 func blobPlayerNames(ctx context.Context, q Queryer, blob MatchBlob) (func(int64) string, error) {
 	ids := map[int64]bool{}
-	for _, section := range blob.Teams {
+	for _, section := range blob.Participants {
 		for _, theme := range section.Themes {
 			if theme.Player != 0 {
 				ids[theme.Player] = true
@@ -327,9 +327,9 @@ func blobPlayerNames(ctx context.Context, q Queryer, blob MatchBlob) (func(int64
 	return func(id int64) string { return names[id] }, nil
 }
 
-// LoadTeamRoster loads one team's roster, from the fest-wide roster or the
+// LoadParticipantRoster loads one team's roster, from the fest-wide roster or the
 // game-scoped one per the game's roster_source.
-func LoadTeamRoster(ctx context.Context, q Queryer, gameID int64, rosterSource string, teamID int64) ([]RosterMember, error) {
+func LoadParticipantRoster(ctx context.Context, q Queryer, gameID int64, rosterSource string, teamID int64) ([]RosterMember, error) {
 	rosterQuery := `
 select p.id, p.first_name, p.last_name
 from participant_players tp

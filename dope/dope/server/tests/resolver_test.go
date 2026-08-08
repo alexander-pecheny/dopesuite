@@ -216,7 +216,7 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 		}
 		t.Fatalf("finishing the 1/8 did not cascade the 1/4 match C; cascaded=%v", got)
 	}
-	if len(cView.Teams) == 0 {
+	if len(cView.Participants) == 0 {
 		t.Fatalf("cascaded match C carried no teams view")
 	}
 }
@@ -331,9 +331,9 @@ func regularThemeCount(t *testing.T, db *sql.DB, gameID int64, matchCode string,
 	if err != nil {
 		t.Fatalf("load match state: %v", err)
 	}
-	for i, id := range match.TeamIDs {
+	for i, id := range match.ParticipantIDs {
 		if id == teamID {
-			return len(match.State.Teams[i].Themes)
+			return len(match.State.Participants[i].Themes)
 		}
 	}
 	return 0

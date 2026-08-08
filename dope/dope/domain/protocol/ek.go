@@ -13,7 +13,7 @@ import (
 func init() { Register(ek{}) }
 
 // ek wraps the existing EK (эрудит-квартет) pure scoring: state is
-// store.MatchState, totals come from store.ScoreTeam, and places are the
+// store.MatchState, totals come from store.ScoreParticipant, and places are the
 // host-entered ones (auto-placement arrives with the migration; parity with
 // the current system requires manual places for now).
 type ek struct{}
@@ -31,7 +31,7 @@ func (ek) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 			return nil, fmt.Errorf("ek config: %w", err)
 		}
 	}
-	state := store.MatchState{Teams: make([]store.TeamState, conf.Participants)}
+	state := store.MatchState{Participants: make([]store.ParticipantState, conf.Participants)}
 	store.NormalizeState(&state)
 	return json.Marshal(state)
 }
@@ -49,8 +49,8 @@ func (ek) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error)
 		return nil, fmt.Errorf("ek state: %w", err)
 	}
 	view := store.BuildView(state)
-	outcomes := make([]structure.SlotOutcome, len(view.Teams))
-	for i, team := range view.Teams {
+	outcomes := make([]structure.SlotOutcome, len(view.Participants))
+	for i, team := range view.Participants {
 		outcomes[i] = structure.SlotOutcome{
 			Place: team.Place,
 			Metrics: map[string]float64{

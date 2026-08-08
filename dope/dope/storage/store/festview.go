@@ -36,7 +36,7 @@ where re.stage_id = ?
 order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error) {
 		var entry ReseedEntryView
 		var metricsJSON string
-		if err := rows.Scan(&entry.Rank, &entry.TeamID, &entry.Name, &metricsJSON); err != nil {
+		if err := rows.Scan(&entry.Rank, &entry.ParticipantID, &entry.Name, &metricsJSON); err != nil {
 			return entry, err
 		}
 		entry.Metrics = json.RawMessage(NonEmptyJSON(metricsJSON))
@@ -90,7 +90,7 @@ order by m.position, m.id`, stageID)
 		if err != nil {
 			return nil, err
 		}
-		record.Match.Teams = teams
+		record.Match.Participants = teams
 		matches = append(matches, record.Match)
 	}
 	return matches, nil
@@ -98,7 +98,7 @@ order by m.position, m.id`, stageID)
 
 // LoadMatchSummaries returns the per-team summary rows for a match, ordered by
 // slot index, resolving each slot's source label.
-func LoadMatchSummaries(ctx context.Context, q Queryer, matchID int64) ([]MatchTeamSummary, error) {
+func LoadMatchSummaries(ctx context.Context, q Queryer, matchID int64) ([]MatchParticipantSummary, error) {
 	return CollectRows(ctx, q, `
 select t.name, ms.source_type, ms.source_ref_json, coalesce(r.place, 0), coalesce(r.total, 0),
        coalesce(r.plus, 0), coalesce(r.tiebreak, 0)
@@ -106,8 +106,8 @@ from match_slots ms
 left join participants t on t.id = ms.participant_id
 left join match_results r on r.match_id = ms.match_id and r.participant_id = ms.participant_id
 where ms.match_id = ?
-order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchTeamSummary, error) {
-		var team MatchTeamSummary
+order by ms.slot_index`, []any{matchID}, func(rows *sql.Rows) (MatchParticipantSummary, error) {
+		var team MatchParticipantSummary
 		var name sql.NullString
 		var sourceRef string
 		if err := rows.Scan(&name, &team.SourceType, &sourceRef, &team.Place, &team.Total, &team.Plus, &team.Tiebreak); err != nil {

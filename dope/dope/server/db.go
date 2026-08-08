@@ -384,7 +384,7 @@ create table if not exists journal_checkpoint(
   primary key(game_id, seq)
 );
 
-create trigger if not exists team_players_max_9
+create trigger if not exists participant_players_max_9
 before insert on participant_players
 when (select count(*) from participant_players where participant_id = new.participant_id) >= 9
 begin
@@ -746,11 +746,6 @@ create table if not exists stage_standings(
 		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(19, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 			return err
 		}
-	}
-	// v20 ran at the top of this function, before the create-table block. The row
-	// is recorded here so the version table stays a readable history.
-	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(20, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
-		return err
 	}
 	return nil
 }

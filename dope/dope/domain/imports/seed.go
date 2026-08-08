@@ -687,9 +687,9 @@ select participant_id from match_slots where match_id = ? and participant_id is 
 		for _, id := range seated {
 			keep[strconv.FormatInt(id, 10)] = true
 		}
-		for key := range blob.Teams {
+		for key := range blob.Participants {
 			if !keep[key] {
-				blob.RemoveTeam(key)
+				blob.RemoveParticipant(key)
 			}
 		}
 		return nil

@@ -470,7 +470,7 @@ export interface ThemeView {
   answers?: Array<string | null | undefined>;
 }
 
-export interface TeamView {
+export interface ParticipantView {
   name?: string;
   total?: number | string | null;
   plus?: number | string | null;
@@ -486,7 +486,7 @@ export interface MatchView {
   code?: string;
   finished?: boolean;
   questionValues?: unknown[];
-  teams?: TeamView[];
+  participants?: ParticipantView[];
 }
 
 export interface PatchScoreTableOptions {
@@ -548,11 +548,11 @@ export function createScoreTableIndex(root: ParentNode, options: ScoreTableIndex
   return createNodeIndex(root, scoreCellSpecs(options).concat(options.extraSpecs || []));
 }
 
-// scoreTeamOf / scoreThemeOf resolve the MatchView team / theme a built cell
+// scoreTeamOf / scoreThemeOf resolve the MatchView participant / theme a built cell
 // refers to, straight from the cell's own data-* coordinates — so a sync needs
 // nothing but the node and the new state.
-function scoreTeamOf(node: HTMLElement, matchState: MatchView): TeamView | null {
-  return (matchState.teams || [])[Number(node.dataset.team)] || null;
+function scoreTeamOf(node: HTMLElement, matchState: MatchView): ParticipantView | null {
+  return (matchState.participants || [])[Number(node.dataset.team)] || null;
 }
 
 function scoreThemeOf(node: HTMLElement, matchState: MatchView): ThemeView | null {
@@ -670,8 +670,8 @@ export function canPatchScoreShape(previous: MatchView | null | undefined, next:
   if (!previous || !next) return false;
   if (previous.code !== next.code || previous.finished !== next.finished) return false;
   if (!sameArray(previous.questionValues, next.questionValues)) return false;
-  const prevTeams = previous.teams || [];
-  const nextTeams = next.teams || [];
+  const prevTeams = previous.participants || [];
+  const nextTeams = next.participants || [];
   if (prevTeams.length !== nextTeams.length) return false;
   for (let i = 0; i < nextTeams.length; i++) {
     if (prevTeams[i].name !== nextTeams[i].name) return false;
@@ -1090,7 +1090,7 @@ export interface EKPlayerStatsRow {
 // battle of an EK game. `stages` is the payload from /stages/matches:
 // [{code, matches: [MatchView, ...]}, ...]. Only regular themes are counted —
 // shootout ("перестрелка") themes are a tiebreaker and are excluded, matching
-// the Σ+ semantics shown in a battle (TeamView.plus ignores shootouts too).
+// the Σ+ semantics shown in a battle (ParticipantView.plus ignores shootouts too).
 //
 // Players are keyed by (team, player) so namesakes on different teams stay
 // separate. The team-share column ("% от команды") is a positive player's
@@ -1104,7 +1104,7 @@ export function computeEKPlayerStats(stages: EKStage[] | null | undefined): EKPl
   for (const stage of stages || []) {
     for (const match of stage.matches || []) {
       const battleID = `${stage.code || ""}\x1f${match.code || ""}`;
-      for (const team of match.teams || []) {
+      for (const team of match.participants || []) {
         const teamName = team.name || "";
         for (const theme of team.themes || []) {
           const playerName = String(theme.player || "").trim();

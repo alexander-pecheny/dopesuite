@@ -46,7 +46,7 @@ func DecodeMatchPatch(payload []byte) (int64, []store.BlobOp, error) {
 // rewritten history never hard-fails mid-stream.
 //
 // Semantics dispatch on the match's Protocol: EK blobs replay through the
-// EK-shaped applier (answers bound, theme padding, team pruning — the
+// EK-shaped applier (answers bound, theme padding, empty-section pruning — the
 // converter-parity behaviour), everything else replays with the same generic
 // JSON-set semantics the live editbatch path uses, so live writes and replays
 // stay byte-identical for flat games too.
@@ -88,9 +88,9 @@ where m.id = ?`, matchID)
 			}
 		}
 		for _, op := range ops {
-			doc = applyBlobOp(doc, op)
+			doc = applyBlobOp(doc, renameBlobOpPath(op))
 		}
-		pruneEmptyTeams(doc)
+		pruneEmptyParticipants(doc)
 		if encoded, err = json.Marshal(doc); err != nil {
 			return err
 		}
@@ -262,8 +262,9 @@ func applyBlobOp(doc any, op store.BlobOp) any {
 
 // isIndex reports whether a numeric segment addresses an array position given
 // the node it lands on: an existing container decides by its own type; a
-// missing one falls back to the schema heuristic (directly under "teams" the
-// EK blob keys an object by team id, everywhere else numbers index arrays).
+// missing one falls back to the schema heuristic (directly under "participants"
+// the EK blob keys an object by participant id, everywhere else numbers index
+// arrays).
 func isIndex(node any, key string, parentKey string) (int, bool) {
 	index, err := strconv.Atoi(key)
 	if err != nil {
@@ -275,7 +276,7 @@ func isIndex(node any, key string, parentKey string) (int, bool) {
 	case map[string]any:
 		return 0, false
 	}
-	return index, parentKey != "teams"
+	return index, parentKey != "participants"
 }
 
 // ensurePath pads containers along the way so the addressed theme exists,
@@ -310,7 +311,7 @@ func ensurePath(node any, parts []string, parentKey string) any {
 		return obj
 	}
 	if child == nil {
-		if _, err := strconv.Atoi(parts[1]); err == nil && key != "teams" {
+		if _, err := strconv.Atoi(parts[1]); err == nil && key != "participants" {
 			child = []any{}
 		} else {
 			child = map[string]any{}
@@ -320,8 +321,8 @@ func ensurePath(node any, parts []string, parentKey string) any {
 	return obj
 }
 
-// A numeric segment addresses an array index — except directly under "teams",
-// where team-id keys are numeric strings inside an object.
+// A numeric segment addresses an array index — except directly under
+// "participants", where participant-id keys are numeric strings in an object.
 func setPath(node any, parts []string, value any, parentKey string) any {
 	key := parts[0]
 	if index, ok := isIndex(node, key, parentKey); ok {
@@ -368,7 +369,7 @@ func setPath(node any, parts []string, value any, parentKey string) any {
 	}
 	child := obj[key]
 	if child == nil {
-		if _, err := strconv.Atoi(parts[1]); err == nil && key != "teams" {
+		if _, err := strconv.Atoi(parts[1]); err == nil && key != "participants" {
 			child = []any{}
 		} else {
 			child = map[string]any{}
@@ -409,15 +410,29 @@ func removePath(node any, parts []string, parentKey string) any {
 	return obj
 }
 
-// pruneEmptyTeams drops team sections that carry nothing — no themes, no
-// shootout themes, no pin — and the teams container itself when it empties,
-// normalising spliced-away history to the converter's shape.
-func pruneEmptyTeams(doc any) {
+// renameBlobOpPath moves an op recorded before the Participant rename onto the
+// new container (ADR-0007). The journal is forward-only, so replay translates
+// on read. Only the EK blob's ops come through here — a flat game's `/teams/`
+// is its own document's array and must not move.
+func renameBlobOpPath(op store.BlobOp) store.BlobOp {
+	switch {
+	case op.Path == "/teams":
+		op.Path = "/participants"
+	case strings.HasPrefix(op.Path, "/teams/"):
+		op.Path = "/participants/" + strings.TrimPrefix(op.Path, "/teams/")
+	}
+	return op
+}
+
+// pruneEmptyParticipants drops Participant sections that carry nothing — no
+// themes, no shootout themes, no pin — and the container itself when it
+// empties, normalising spliced-away history to the converter's shape.
+func pruneEmptyParticipants(doc any) {
 	obj, ok := doc.(map[string]any)
 	if !ok {
 		return
 	}
-	teams, ok := obj["teams"].(map[string]any)
+	teams, ok := obj["participants"].(map[string]any)
 	if !ok {
 		return
 	}
@@ -442,6 +457,6 @@ func pruneEmptyTeams(doc any) {
 		}
 	}
 	if len(teams) == 0 {
-		delete(obj, "teams")
+		delete(obj, "participants")
 	}
 }
