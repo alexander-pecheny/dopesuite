@@ -567,11 +567,14 @@ func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
 // selectors into the feeding round), sources is whose bouts the stats are
 // summed over. Returns the stage code; rank refs against it seat what follows.
 func (c *compiler) reseedStage(index int, blk Section, sources []string, teams []store.SchemeSlot) (string, error) {
+	return c.reseedStageCoded(fmt.Sprintf("s%d-reseed", index+1), blk, sources, teams)
+}
+
+func (c *compiler) reseedStageCoded(code string, blk Section, sources []string, teams []store.SchemeSlot) (string, error) {
 	sort, err := c.reseedSortRules(blk)
 	if err != nil {
 		return "", err
 	}
-	code := fmt.Sprintf("s%d-reseed", index+1)
 	c.position++
 	c.scheme.Stages = append(c.scheme.Stages, store.SchemeStage{
 		Code:      code,
@@ -1363,7 +1366,8 @@ func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, p
 				alive = append(alive, fromMatchSlot(codes[source.bout], source.place))
 			}
 			var err error
-			if reseedCode, err = c.reseedStage(index*100+r, blk, prevStages, alive); err != nil {
+			roundReseed := fmt.Sprintf("%s-r%d-reseed", blockCode, r+1)
+			if reseedCode, err = c.reseedStageCoded(roundReseed, blk, prevStages, alive); err != nil {
 				return nil, nil, err
 			}
 		}

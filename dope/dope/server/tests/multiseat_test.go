@@ -30,6 +30,17 @@ func createSchemeGame(t *testing.T, db *sql.DB, festID int64, gameType, label, d
 	return gameID
 }
 
+func seedFestPlayers(t *testing.T, db *sql.DB, festID int64, n int) {
+	t.Helper()
+	for i := 1; i <= n; i++ {
+		if _, err := db.Exec(`
+insert into fest_players(fest_id, first_name, last_name) values(?, ?, ?)`,
+			festID, "Игрок", fmt.Sprintf("%03d", i)); err != nil {
+			t.Fatalf("insert fest player %d: %v", i, err)
+		}
+	}
+}
+
 func seedFestTeams(t *testing.T, db *sql.DB, festID int64, n int) {
 	t.Helper()
 	for i := 1; i <= n; i++ {
@@ -48,7 +59,7 @@ func TestMultiSeatGroupPlaysAndRanks(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
-	seedFestTeams(t, srv.Eng().DB, festID, 9)
+	seedFestPlayers(t, srv.Eng().DB, festID, 9)
 
 	dsl := "[scheme]\ntype: roundrobin\nteams_in_group: 9\nmatch_size: 3\nthemes: 2\n" +
 		"bout.points: seats + 1 - place\nsorting: [points, total]\n"
@@ -112,7 +123,7 @@ where m.code = ? and m.game_id = ? order by place`, code, gameID)
 func TestMultiSeatEliminationAdvancesTwo(t *testing.T) {
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
-	seedFestTeams(t, srv.Eng().DB, festID, 16)
+	seedFestPlayers(t, srv.Eng().DB, festID, 16)
 
 	dsl := "[scheme]\ntype: single_elimination\nteams: 16\nmatch_size: 4\nwinning_places: 2\nthemes: 2\n"
 	gameID := createSchemeGame(t, srv.Eng().DB, festID, "si", "Личная СИ", dsl)

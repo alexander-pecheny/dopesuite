@@ -1113,3 +1113,31 @@ insert into participants(fest_id, name, city, number) values(?, ?, ?, ?)`, festI
 	}
 	return teamID, existingCity, nil
 }
+
+// EnsureSeedPlayerByNumber is EnsureSeedTeamByNumber for an individual format:
+// the Participant it ensures is one player of the fest roster, carrying
+// roster='player' and a link back to the fest_players row it was drawn from
+// (ADR-0007). Личная СИ seats these.
+func EnsureSeedPlayerByNumber(ctx context.Context, tx *sql.Tx, festID, number int64, name string, festPlayerID int64) (int64, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return 0, errors.New("empty player name")
+	}
+	var participantID int64
+	err := tx.QueryRowContext(ctx, `
+select id from participants where fest_id = ? and number = ? limit 1`, festID, number).Scan(&participantID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.InsertReturningID(ctx, tx, `
+insert into participants(fest_id, roster, name, city, number, fest_player_id)
+values(?, 'player', ?, '', ?, ?)`, festID, name, number, festPlayerID)
+	}
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+update participants set roster = 'player', name = ?, fest_player_id = ? where id = ?`,
+		name, festPlayerID, participantID); err != nil {
+		return 0, err
+	}
+	return participantID, nil
+}

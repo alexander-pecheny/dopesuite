@@ -45,6 +45,7 @@ type hostGameCreateData struct {
 	Error        string
 	SelectedType string
 	BrainDSL     string
+	SIDSL        string
 }
 
 type gameIdentity struct {
@@ -137,6 +138,7 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			gameTypeRadio("ksi_stickers", "КСИ со стикерами", sel),
 			gameTypeRadio("brain", "Брейн", sel),
 			gameTypeRadio("ek", "ЭК", sel),
+			gameTypeRadio("si", "Личная СИ", sel),
 		),
 		gameSettings("od", sel,
 			dopeui.Field(dopeui.Label("Количество туров"), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
@@ -158,7 +160,15 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.BrainDSL))),
 			dopeui.Hint(dopeui.Text("Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, типы roundrobin / single_elimination / double_elimination.")),
 		),
+		gameSettings("si", sel,
+			dopeui.Field(dopeui.Label("Схема"),
+				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SIDSL))),
+			dopeui.Hint(dopeui.Text("Тот же язык схем: за столом сидят игроки, а не команды. Бой на троих — match_size: 3, проходят двое — winning_places: 2.")),
+		),
 		gameSettings("ek", sel,
+			dopeui.Field(dopeui.Label("Схема"),
+				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Placeholder("[scheme]\ntype: single_elimination\nteams: 48\nmatch_size: 4\nwinning_places: 2"))),
+			dopeui.Hint(dopeui.Text("Либо схемой, либо готовым JSON ниже — что заполнено, то и используется.")),
 			dopeui.Field(dopeui.Label("JSON-схема"),
 				dopeui.Editor(dopeui.Name("ek_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`))),
 		),
@@ -597,7 +607,12 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 		_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&count)
 		brainDSL = defaultBrainDSL(count, 5)
 	}
-	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameCreateDoc(hostGameCreateData{Fest: fest, Error: errMsg, SelectedType: selectedType, BrainDSL: brainDSL}))
+	var teamCount int
+	_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&teamCount)
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameCreateDoc(hostGameCreateData{
+		Fest: fest, Error: errMsg, SelectedType: selectedType,
+		BrainDSL: brainDSL, SIDSL: defaultSIDSL(teamCount),
+	}))
 }
 
 func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -619,7 +634,8 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 		return 0, errors.New("sqlite is not enabled")
 	}
 	gameType = strings.TrimSpace(gameType)
-	if gameType != games.OD && gameType != games.KSI && gameType != games.EK && gameType != games.Brain && gameType != ksiStickersGameType {
+	if gameType != games.OD && gameType != games.KSI && gameType != games.EK && gameType != games.Brain &&
+		gameType != games.SI && gameType != ksiStickersGameType {
 		return 0, errors.New("выберите тип игры")
 	}
 
@@ -675,10 +691,25 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 			if err != nil {
 				return err
 			}
+		case games.SI:
+			gameID, err = CreateSchemeGameTx(ctx, tx, festID, games.SI, "Личная СИ", form.Get("brain_dsl"))
+			if err != nil {
+				return err
+			}
 		case games.EK:
+			// ЭК's bracket is describable in the scheme language now that an
+			// elimination counts Losses rather than seats, so a DSL wins over
+			// the pasted JSON when both are offered.
+			if dsl := strings.TrimSpace(form.Get("brain_dsl")); dsl != "" {
+				gameID, err = CreateSchemeGameTx(ctx, tx, festID, games.EK, "ЭК", dsl)
+				if err != nil {
+					return err
+				}
+				break
+			}
 			raw := strings.TrimSpace(form.Get("ek_scheme"))
 			if raw == "" {
-				return errors.New("Вставьте JSON-схему ЭК")
+				return errors.New("Вставьте JSON-схему ЭК или опишите её схемой")
 			}
 			var scheme store.FestScheme
 			if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
@@ -818,7 +849,7 @@ func schemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, sl
 	}
 	input := schemedsl.Input{Slug: slug, Title: title, GameType: gameType}
 	if seed, hasSeed := doc.Init.Str("seed"); !hasSeed {
-		entrants, err := seedEntrantsTx(ctx, tx, festID)
+		entrants, err := seedEntrantsTx(ctx, tx, festID, gameType)
 		if err != nil {
 			return store.FestScheme{}, err
 		}
@@ -835,7 +866,13 @@ func schemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, sl
 	return schemedsl.Compile(doc, input)
 }
 
-func seedEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64) ([]store.SchemeSlot, error) {
+// seedEntrantsTx is the fest's own roster as scheme entrants: teams in a team
+// format, players in an individual one. A Participant is whoever the format
+// seats, and the seeding is where that first shows up.
+func seedEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string) ([]store.SchemeSlot, error) {
+	if games.IsIndividual(gameType) {
+		return seedPlayerEntrantsTx(ctx, tx, festID)
+	}
 	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
 		return nil, err
@@ -864,6 +901,15 @@ func defaultBrainDSL(teams, questions int) string {
 		questions = 5
 	}
 	return fmt.Sprintf("[defaults]\nquestions: %d\n\n[scheme]\ntype: roundrobin\nteams_in_group: %d\n", questions, teams)
+}
+
+// defaultSIDSL is личная СИ's shape at its smallest: one table, everyone at it,
+// eight themes. A real tournament edits it into groups and a play-off.
+func defaultSIDSL(players int) string {
+	if players < 3 {
+		players = 3
+	}
+	return fmt.Sprintf("[scheme]\ntype: roundrobin\nteams_in_group: %d\nmatch_size: 3\nthemes: 8\nbout.points: seats + 1 - place\nsorting: [points, total, plus]\n", players)
 }
 
 // buildBrainStructureTx materialises a brain scheme into stage/match/slot rows.
@@ -905,26 +951,13 @@ func buildBrainStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64
 // only thing that was ever брейн-specific about it was the empty state.
 func buildSchemeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme) error {
 	// A declared seed source owns game_assignments — «Import seed» writes them
-	// by seed rank, so creation must not pre-fill them by team number.
+	// by seed rank, so creation must not pre-fill them by number.
 	if scheme.Seeding == nil {
-		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
-		if err != nil {
+		if err := seatRosterTx(ctx, tx, festID, gameID, gameType); err != nil {
 			return err
 		}
-		for _, team := range teams {
-			teamID, _, err := imports.EnsureSeedTeamByNumber(ctx, tx, festID, team.Number, team.Name, team.City, nil)
-			if err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx, `
-insert into game_assignments(game_id, basket, number, participant_id) values(?, 1, ?, ?)
-on conflict(game_id, basket, number) do update set participant_id = excluded.participant_id`,
-				gameID, team.Number, teamID); err != nil {
-				return err
-			}
-		}
 	}
-	seat, err := seedSeaterTx(ctx, tx, festID, gameID)
+	seat, err := seedSeaterTx(ctx, tx, festID, gameID, gameType)
 	if err != nil {
 		return err
 	}
@@ -962,10 +995,10 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
 // бои must survive with identical slot sources — else the whole edit is
 // refused, naming them.
 func recompileBrainGameTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, dsl string) error {
-	var oldSchemeJSON string
+	var oldSchemeJSON, gameType string
 	if err := tx.QueryRowContext(ctx, `
-select coalesce(scheme_json, '{}') from games where id = ? and fest_id = ? and game_type = 'brain'`,
-		gameID, festID).Scan(&oldSchemeJSON); err != nil {
+select coalesce(scheme_json, '{}'), game_type from games where id = ? and fest_id = ? and scheme_dsl is not null`,
+		gameID, festID).Scan(&oldSchemeJSON, &gameType); err != nil {
 		return err
 	}
 	var meta struct {
@@ -973,7 +1006,7 @@ select coalesce(scheme_json, '{}') from games where id = ? and fest_id = ? and g
 		Title string `json:"title"`
 	}
 	_ = json.Unmarshal([]byte(oldSchemeJSON), &meta)
-	scheme, err := brainSchemeFromDSLTx(ctx, tx, festID, meta.Slug, meta.Title, dsl)
+	scheme, err := schemeFromDSLTx(ctx, tx, festID, gameType, meta.Slug, meta.Title, dsl)
 	if err != nil {
 		return err
 	}
@@ -1046,7 +1079,7 @@ select id, stage_id, code, status, coalesce(state_json, '{}') from matches where
 		return fmt.Errorf("нельзя менять начатые бои: %s — уберите их изменения или снимите отметку «Закончен» и очистите протокол", strings.Join(blocked, ", "))
 	}
 
-	seat, err := seedSeaterTx(ctx, tx, festID, gameID)
+	seat, err := seedSeaterTx(ctx, tx, festID, gameID, gameType)
 	if err != nil {
 		return err
 	}
@@ -1186,19 +1219,42 @@ func slotIdentity(sourceType, refJSON string) string {
 // seedSeaterTx builds the seat lookup a recompile reuses: fest teams by
 // number (roster-seeded games) plus the seed-import ladder's assignments
 // (declared-seed games).
-func seedSeaterTx(ctx context.Context, tx *sql.Tx, festID, gameID int64) (func(slot store.SchemeSlot) any, error) {
-	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
-	if err != nil {
-		return nil, err
-	}
-	byNumber := make(map[int]int64, len(teams))
-	for _, team := range teams {
-		if team.Number > 0 {
-			teamID, _, err := imports.EnsureSeedTeamByNumber(ctx, tx, festID, team.Number, team.Name, team.City, nil)
-			if err != nil {
+func seedSeaterTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string) (func(slot store.SchemeSlot) any, error) {
+	byNumber := map[int]int64{}
+	if games.IsIndividual(gameType) {
+		// An individual game numbers the players it seats, and the assignment
+		// rows written at creation already carry that numbering.
+		rows, err := tx.QueryContext(ctx, `
+select number, participant_id from game_assignments where game_id = ? and basket = 1`, gameID)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var number int
+			var participantID int64
+			if err := rows.Scan(&number, &participantID); err != nil {
+				rows.Close()
 				return nil, err
 			}
-			byNumber[int(team.Number)] = teamID
+			byNumber[number] = participantID
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	} else {
+		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
+		if err != nil {
+			return nil, err
+		}
+		for _, team := range teams {
+			if team.Number > 0 {
+				teamID, _, err := imports.EnsureSeedTeamByNumber(ctx, tx, festID, team.Number, team.Name, team.City, nil)
+				if err != nil {
+					return nil, err
+				}
+				byNumber[int(team.Number)] = teamID
+			}
 		}
 	}
 	assignments := map[[2]int]int64{}
@@ -1514,4 +1570,101 @@ func uniqueSchemeSlug(base string) string {
 		base = "game"
 	}
 	return fmt.Sprintf("%s-%d", base, time.Now().UnixNano())
+}
+
+// seedPlayerEntrantsTx lists the fest's players as entrants, in roster order.
+// They are numbered here rather than in the roster because a fest numbers its
+// teams; an individual game numbers the players it seats.
+func seedPlayerEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64) ([]store.SchemeSlot, error) {
+	rows, err := tx.QueryContext(ctx, `
+select p.id, trim(p.first_name || ' ' || p.last_name)
+from fest_players p where p.fest_id = ?
+order by p.last_name, p.first_name, p.id`, festID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entrants []store.SchemeSlot
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		entrants = append(entrants, store.SchemeSlot{
+			Seed:  &store.SchemeSeedRef{Basket: 1, Number: len(entrants) + 1},
+			Label: name,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(entrants) < 3 {
+		return nil, errors.New("для личной игры нужны игроки в ростере феста")
+	}
+	return entrants, nil
+}
+
+// seatRosterTx pre-fills a game's seed assignments from the fest roster —
+// teams in a team format, players in an individual one, each becoming a
+// Participant of the matching kind.
+func seatRosterTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string) error {
+	assign := func(number, participantID int64) error {
+		_, err := tx.ExecContext(ctx, `
+insert into game_assignments(game_id, basket, number, participant_id) values(?, 1, ?, ?)
+on conflict(game_id, basket, number) do update set participant_id = excluded.participant_id`,
+			gameID, number, participantID)
+		return err
+	}
+	if games.IsIndividual(gameType) {
+		rows, err := tx.QueryContext(ctx, `
+select p.id, trim(p.first_name || ' ' || p.last_name)
+from fest_players p where p.fest_id = ?
+order by p.last_name, p.first_name, p.id`, festID)
+		if err != nil {
+			return err
+		}
+		type entry struct {
+			id   int64
+			name string
+		}
+		var players []entry
+		for rows.Next() {
+			var e entry
+			if err := rows.Scan(&e.id, &e.name); err != nil {
+				rows.Close()
+				return err
+			}
+			players = append(players, e)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for i, player := range players {
+			number := int64(i + 1)
+			participantID, err := imports.EnsureSeedPlayerByNumber(ctx, tx, festID, number, player.name, player.id)
+			if err != nil {
+				return err
+			}
+			if err := assign(number, participantID); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
+	if err != nil {
+		return err
+	}
+	for _, team := range teams {
+		teamID, _, err := imports.EnsureSeedTeamByNumber(ctx, tx, festID, team.Number, team.Name, team.City, nil)
+		if err != nil {
+			return err
+		}
+		if err := assign(team.Number, teamID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
