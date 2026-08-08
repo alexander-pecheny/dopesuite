@@ -125,6 +125,14 @@ async function loadIndexes(): Promise<Array<{ board: number; index: BoardIndex }
   return indexes;
 }
 
+// setNote writes a count line and takes it off the page when there is nothing to
+// count: an empty span is still a line box, and two of them under the board grid
+// cost it a row.
+function setNote(node: HTMLElement, text: string): void {
+  node.textContent = text;
+  node.hidden = !text;
+}
+
 async function runSearch(query: string): Promise<void> {
   const q = query.trim();
   document.body.classList.toggle("searching", !!q);
@@ -133,8 +141,8 @@ async function runSearch(query: string): Promise<void> {
   if (!q) {
     hitNode.replaceChildren();
     commentNode.replaceChildren();
-    cardNote.textContent = "";
-    commentNote.textContent = "";
+    setNote(cardNote, "");
+    setNote(commentNote, "");
     listNode.hidden = false;
     renderBoards(allBoards);
     return;
@@ -150,10 +158,9 @@ async function runSearch(query: string): Promise<void> {
   const res = xySearchIndex.search(held, q, HIT_LIMIT);
   renderHits(hitNode, res.questions);
   renderHits(commentNode, res.comments);
-  cardNote.textContent = note("Вопросы", res.questionTotal, res.questions.length, held.length);
-  commentNote.textContent = note("Комментарии", res.commentTotal, res.comments.length, held.length);
+  setNote(cardNote, note("Вопросы", res.questionTotal, res.questions.length, held.length));
+  setNote(commentNote, res.commentTotal ? note("Комментарии", res.commentTotal, res.comments.length, held.length) : "");
   hitNode.hidden = !res.questions.length;
-  commentNote.hidden = !res.commentTotal;
   commentNode.hidden = !res.comments.length;
 }
 
@@ -203,11 +210,11 @@ async function prewarm(): Promise<void> {
   try {
     const indexed = await xySearchIndex.prewarm(
       allBoards.map((b) => ({ id: b.id, name: b.name })),
-      (done, total) => { cardNote.textContent = `Прогрев: ${done} из ${total}…`; },
+      (done, total) => { setNote(cardNote, `Прогрев: ${done} из ${total}…`); },
     );
     indexes = null;
-    cardNote.textContent = `Прогрев закончен: досок скачано ${indexed} из ${allBoards.length}.` +
-      (indexed < allBoards.length ? " Остальные заперты — их пароль на этом устройстве не сохранён." : "");
+    setNote(cardNote, `Прогрев закончен: досок скачано ${indexed} из ${allBoards.length}.` +
+      (indexed < allBoards.length ? " Остальные заперты — их пароль на этом устройстве не сохранён." : ""));
     if (searchBox.value.trim()) await runSearch(searchBox.value);
   } finally {
     searching = false;
