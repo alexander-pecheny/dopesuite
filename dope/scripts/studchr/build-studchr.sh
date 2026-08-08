@@ -34,4 +34,12 @@ post() { curl -s -o /dev/null -w '%{http_code} ' -b "session=$TOKEN" "$@" "$B/ho
 post --data-urlencode "game_type=si" --data-urlencode "brain_dsl=$(cat $T/si.dsl)"; echo "СИ"
 post --data-urlencode "game_type=ek" --data-urlencode "brain_dsl=$(cat $T/ek.dsl)"; echo "ЭК"
 post -d "game_type=od" -d "od_tours=6" -d "od_questions=15"; echo "ОД"
+python3 - <<'SEED'
+import json, importlib.util, sqlite3
+spec = importlib.util.spec_from_file_location("flat", ".tmp/import-flat.py")
+flat = importlib.util.module_from_spec(spec); spec.loader.exec_module(flat)
+db = sqlite3.connect(".tmp/work.db")
+gid = db.execute("select id from games where fest_id=14 and game_type='od'").fetchone()[0]
+flat.seat_od_teams(".tmp/work.db", gid, json.load(open(".tmp/od-data.json"))["teams"])
+SEED
 post -d "game_type=ksi" -d "ksi_themes=20"; echo "КСИ"
