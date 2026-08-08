@@ -193,7 +193,7 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
   -- Найти и заменить: one replacement over the whole board, one list or one
   -- group. Every occurrence is shown with its context and ticked one by one,
   -- because «г.» in «г. Москва» and in «1917 г.» are two different decisions.
-  modal id="replaceOverlay" label="Найти и заменить" title="Найти и заменить"
+  modal id="replaceOverlay" label="Найти и заменить" title="Найти и заменить" done="Закрыть" doneid="replaceClose"
     -- one control per line: «найти» and «заменить на» read as a pair, and a pair
     -- that wraps mid-row reads as neither
     row gap="sm" align="center" wrap
@@ -207,9 +207,10 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
       button small kind="ghost" id="replacePrev" "Назад"
       muted id="replacePage"
       button small kind="ghost" id="replaceNext" "Дальше"
+    -- «Закрыть», never «Отмена»: nothing here is undone by leaving, and a run
+    -- that already happened is in each card's ленте, not in this dialog.
     row gap="sm" wrap
       button id="replaceRun" "Заменить"
-      button kind="ghost" id="replaceCancel" "Отмена"
     message id="replaceMessage"
 
   modal id="accentOverlay" label="Ударения" title="Ударения"
