@@ -687,3 +687,101 @@ sorting: [place_sum, total, plus]
 		t.Fatalf("грандфинал на %d мест, want 4", len(final.Slots))
 	}
 }
+
+// ОД и КСИ — это один блок и один бой, за которым сидят все. Kind у них
+// теперь есть, и схема умеет это сказать.
+func TestCompileFlat(t *testing.T) {
+	scheme := compileSrc(t, "[scheme]\ntype: flat\nteams: 90\ntitle: КВРМ\n", Input{GameType: "od"})
+	if len(scheme.Stages) != 1 {
+		t.Fatalf("stages = %d, want 1", len(scheme.Stages))
+	}
+	stage := scheme.Stages[0]
+	if stage.Kind != "flat" || stage.Title != "КВРМ" || len(stage.Matches) != 1 {
+		t.Fatalf("stage = %+v", stage)
+	}
+	if got := len(stage.Matches[0].Slots); got != 90 {
+		t.Fatalf("за столом %d, want 90", got)
+	}
+	if stage.Matches[0].ParticipantCount != 90 {
+		t.Fatalf("participantCount = %d, want 90", stage.Matches[0].ParticipantCount)
+	}
+}
+
+// Группа личной СИ: девять игроков, бой на троих, четыре круга, «4 − место»
+// прописано выражением — и по нему же можно сортировать.
+func TestCompileSIGroupStage(t *testing.T) {
+	src := `
+[scheme]
+type: roundrobin
+groups: 6
+teams_in_group: 9
+match_size: 3
+proceeding_teams: 4
+bout.points: seats + 1 - place
+sorting: [points, total, plus]
+`
+	scheme := compileSrc(t, src, Input{GameType: "ksi"})
+	if len(scheme.Stages) != 6 {
+		t.Fatalf("групп = %d, want 6", len(scheme.Stages))
+	}
+	group := scheme.Stages[0]
+	if len(group.Matches) != 12 {
+		t.Fatalf("боёв в группе = %d, want 12", len(group.Matches))
+	}
+	for _, match := range group.Matches {
+		if len(match.Slots) != 3 {
+			t.Fatalf("бой %s на %d мест, want 3", match.Code, len(match.Slots))
+		}
+	}
+	var conf struct {
+		MatchSize int      `json:"matchSize"`
+		Order     []string `json:"order"`
+		Rules     struct {
+			Bout map[string]string `json:"bout"`
+		} `json:"rules"`
+	}
+	if err := json.Unmarshal(group.Config, &conf); err != nil {
+		t.Fatal(err)
+	}
+	if conf.MatchSize != 3 {
+		t.Fatalf("matchSize = %d, want 3", conf.MatchSize)
+	}
+	if conf.Rules.Bout["points"] != "seats + 1 - place" {
+		t.Fatalf("правило очков = %q", conf.Rules.Bout["points"])
+	}
+	if len(conf.Order) != 3 || conf.Order[0] != "points" {
+		t.Fatalf("order = %v", conf.Order)
+	}
+}
+
+// Правило подсчёта определяет метрику, и по ней сразу можно сортировать —
+// вот та самая брейновая раскладка 3/2/1/0.
+func TestSchemeDefinedMetricIsRankable(t *testing.T) {
+	src := `
+[scheme]
+type: roundrobin
+groups: 2
+teams_in_group: 4
+bout.points: taken == 0 ? 0 : (tied > 0 ? 2 : (place == 1 ? 3 : 1))
+standings.take_rate: bouts > 0 ? taken / bouts : 0
+sorting: [points, take_rate]
+`
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	var conf struct {
+		Order []string `json:"order"`
+	}
+	if err := json.Unmarshal(scheme.Stages[0].Config, &conf); err != nil {
+		t.Fatal(err)
+	}
+	if len(conf.Order) != 2 || conf.Order[1] != "take_rate" {
+		t.Fatalf("order = %v, want [points take_rate]", conf.Order)
+	}
+
+	doc, err := Parse("[scheme]\ntype: roundrobin\nteams_in_group: 4\nbout.points: 4 - \n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Compile(doc, Input{GameType: "brain"}); err == nil {
+		t.Fatal("сломанное выражение должно быть ошибкой компиляции")
+	}
+}

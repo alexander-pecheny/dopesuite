@@ -1,6 +1,12 @@
 package structure
 
-import "testing"
+import (
+	"encoding/json"
+	"fmt"
+	"testing"
+
+	"dope/dope/storage/store"
+)
 
 func bout(finished bool, questions int, slots ...SlotOutcome) MatchOutcome {
 	return MatchOutcome{Finished: finished, Questions: questions, Slots: slots}
@@ -137,5 +143,90 @@ func TestBadExpressionNamesItsRule(t *testing.T) {
 	}
 	if got := err.Error(); got[:12] != "bout.points:" {
 		t.Fatalf("error %q does not name the rule", got)
+	}
+}
+
+// The СИ group: nine players, three at a table, four круга, and no pair ever
+// meets twice — the affine plane AG(2,3), in the reference sheets' own order.
+func TestSIGroupScheduleMeetsEveryoneOnce(t *testing.T) {
+	rr, ok := Kind("rr")
+	if !ok {
+		t.Fatal("rr not registered")
+	}
+	entrants := make([]store.SchemeSlot, 9)
+	for i := range entrants {
+		entrants[i] = store.SchemeSlot{Label: fmt.Sprintf("П%d", i+1)}
+	}
+	cfg, err := json.Marshal(map[string]any{
+		"code": "g1", "entrants": entrants, "matchSize": 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches, err := rr.Schedule(cfg, nil)
+	if err != nil {
+		t.Fatalf("Schedule: %v", err)
+	}
+	if len(matches) != 12 {
+		t.Fatalf("боёв = %d, want 12 (четыре круга по три)", len(matches))
+	}
+	met := map[[2]string]int{}
+	played := map[string]int{}
+	for _, match := range matches {
+		if len(match.Slots) != 3 {
+			t.Fatalf("бой %s на %d мест, want 3", match.Code, len(match.Slots))
+		}
+		for i, a := range match.Slots {
+			played[a.Label]++
+			for _, b := range match.Slots[i+1:] {
+				key := [2]string{a.Label, b.Label}
+				if key[0] > key[1] {
+					key[0], key[1] = key[1], key[0]
+				}
+				met[key]++
+			}
+		}
+	}
+	for pair, times := range met {
+		if times != 1 {
+			t.Errorf("%s и %s встретились %d раза, want 1", pair[0], pair[1], times)
+		}
+	}
+	if len(met) != 36 {
+		t.Errorf("встреч = %d, want 36 — каждый с каждым", len(met))
+	}
+	for who, bouts := range played {
+		if bouts != 4 {
+			t.Errorf("%s сыграл %d боёв, want 4", who, bouts)
+		}
+	}
+}
+
+// Очки за бой на троих: 4 − место, и поделённое место платит среднее.
+func TestSIGroupStandingsPayByPlace(t *testing.T) {
+	rr, _ := Kind("rr")
+	cfg, _ := json.Marshal(map[string]any{"matchSize": 3, "order": []string{"points", "total"}})
+	results := []MatchOutcome{
+		bout(true, 6,
+			seat(1, 1, map[string]float64{"total": 90}),
+			seat(2, 2, map[string]float64{"total": 60}),
+			seat(3, 3, map[string]float64{"total": 30})),
+		bout(true, 6,
+			seat(1, 1.5, map[string]float64{"total": 50}),
+			seat(2, 1.5, map[string]float64{"total": 50}),
+			seat(3, 3, map[string]float64{"total": 10})),
+	}
+	ranked, err := rr.Standings(cfg, results)
+	if err != nil {
+		t.Fatalf("Standings: %v", err)
+	}
+	want := map[int64]float64{1: 3 + 2.5, 2: 2 + 2.5, 3: 1 + 1}
+	for _, entry := range ranked {
+		if entry.Metrics["points"] != want[entry.Participant] {
+			t.Errorf("участник %d: очки %v, want %v", entry.Participant, entry.Metrics["points"], want[entry.Participant])
+		}
+	}
+	if ranked[0].Participant != 1 || ranked[0].Rank != 1 {
+		t.Errorf("первый = %d (место %d), want участник 1", ranked[0].Participant, ranked[0].Rank)
 	}
 }

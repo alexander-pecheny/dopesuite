@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"dope/dope/domain/expr"
 	"dope/dope/domain/games"
 	"dope/dope/domain/protocol"
 	"dope/dope/domain/structure"
@@ -35,9 +36,10 @@ func Compile(doc *Doc, in Input) (store.FestScheme, error) {
 }
 
 const (
-	kindRR = "roundrobin"
-	kindSE = "single_elimination"
-	kindDE = "double_elimination"
+	kindFlat = "flat"
+	kindRR   = "roundrobin"
+	kindSE   = "single_elimination"
+	kindDE   = "double_elimination"
 )
 
 var canonOrder = []string{"points", "h2h", "taken", "diff"}
@@ -149,7 +151,7 @@ var blockKeys = map[string]bool{
 	"type": true, "title": true, "groups": true, "teams_in_group": true, "teams": true,
 	"proceeding_teams": true, "reseed": true, "sorting": true, "points": true,
 	"venues": true, "bronze": true, "stats_from": true, "best_of": true,
-	"match_size": true, "winning_places": true,
+	"match_size": true, "winning_places": true, "rounds": true,
 }
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true, "points": true}
@@ -175,7 +177,8 @@ func (c *compiler) checkKeys() error {
 		for key, v := range blk.Values {
 			base, _, dotted := strings.Cut(key, ".")
 			if dotted {
-				if _, isParam := c.protocolConfigKey(base); !isParam && base != "venues" && base != "best_of" && base != "match_size" {
+				if _, isParam := c.protocolConfigKey(base); !isParam && base != "venues" && base != "best_of" &&
+					base != "match_size" && base != "bout" && base != "standings" {
 					return errAt(v.Line, "неизвестный ключ %s", key)
 				}
 				continue // round suffixes are validated by the block's kind
@@ -352,6 +355,38 @@ func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
 		}
 	}
 	return config
+}
+
+// blockRules reads the block's scoring rules — bout.<name> is evaluated per бой
+// and summed, standings.<name> once over the sums (ADR-0008). Whatever they
+// define becomes rankable, so `sorting:` may name it.
+func (c *compiler) blockRules(blk Section) (structure.Rules, error) {
+	rules := structure.Rules{}
+	for key, value := range blk.Values {
+		grain, name, dotted := strings.Cut(key, ".")
+		if !dotted || name == "" {
+			continue
+		}
+		switch grain {
+		case "bout":
+			if rules.Bout == nil {
+				rules.Bout = map[string]string{}
+			}
+			rules.Bout[name] = value.Raw
+		case "standings":
+			if rules.Standings == nil {
+				rules.Standings = map[string]string{}
+			}
+			rules.Standings[name] = value.Raw
+		default:
+			continue
+		}
+		if _, err := expr.Parse(value.Raw); err != nil {
+			return structure.Rules{}, errAt(value.Line, "%s: %s", key, err)
+		}
+		c.ruleMetrics = append(c.ruleMetrics, name)
+	}
+	return rules, nil
 }
 
 // rrOrder resolves the groups' comparator order. On a block with an incoming
@@ -667,6 +702,8 @@ func (c *compiler) expandBlock(index int) error {
 	var out *blockOutputs
 	var err error
 	switch kind {
+	case kindFlat:
+		out, err = c.expandFlat(index, blk)
 	case kindRR:
 		out, err = c.expandRoundRobin(index, blk)
 	case kindSE:
@@ -695,6 +732,84 @@ func (c *compiler) expandBlock(index int) error {
 	}
 	c.prev = out
 	return nil
+}
+
+// expandFlat is the whole bracket of a flat game: one Match seating everyone.
+// ОД and КСИ have always been this shape in the database; the Kind only lets a
+// scheme say so.
+func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
+	teams, ok := blk.Int("teams")
+	if !ok {
+		if len(c.in.Entrants) == 0 {
+			return nil, errAt(blk.Line, "flat: нужен teams")
+		}
+		teams = len(c.in.Entrants)
+	}
+	if err := c.rejectRoundKeys(blk, nil); err != nil {
+		return nil, err
+	}
+	if err := rejectRoundReseed(blk); err != nil {
+		return nil, err
+	}
+	venues, err := c.blockVenues(blk, nil)
+	if err != nil {
+		return nil, err
+	}
+	entrants, err := c.blockEntrants(index, blk, 1, teams)
+	if err != nil {
+		return nil, err
+	}
+	kind, ok := structure.Kind("flat")
+	if !ok {
+		return nil, errAt(0, "flat не зарегистрирован в реестре видов")
+	}
+	code := fmt.Sprintf("s%d", index+1)
+	rules, err := c.blockRules(blk)
+	if err != nil {
+		return nil, err
+	}
+	config := c.protocolConfig(blk, nil)
+	config["code"] = code
+	config["entrants"] = entrants[0]
+	config["title"] = blockTitle(blk, "Игра")
+	config["venue"] = c.venuePick(venues, 1)
+	if len(rules.Bout)+len(rules.Standings) > 0 {
+		config["rules"] = rules
+	}
+	if order, ok, err := blk.Sorting("sorting"); err != nil {
+		return nil, err
+	} else if ok {
+		names := make([]string, len(order))
+		for i, rule := range order {
+			names[i] = rule.Metric
+		}
+		config["order"] = names
+	}
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return nil, err
+	}
+	matches, err := kind.Schedule(configJSON, nil)
+	if err != nil {
+		return nil, errAt(blk.Line, "%s", err.Error())
+	}
+	c.position++
+	c.scheme.Stages = append(c.scheme.Stages, store.SchemeStage{
+		Code:      code,
+		Title:     blockTitle(blk, "Игра"),
+		StageType: "matches",
+		Kind:      "flat",
+		Position:  c.position,
+		Matches:   matches,
+		Config:    configJSON,
+	})
+	return &blockOutputs{groups: []groupOut{{
+		stageCode: code,
+		label:     blockTitle(blk, "Игра"),
+		place: func(p int) store.SchemeSlot {
+			return fromMatchSlot(matches[0].Code, p)
+		},
+	}}}, nil
 }
 
 func (c *compiler) groupTitle(blk Section, group, groups int) string {
@@ -736,6 +851,14 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 	if err != nil {
 		return nil, err
 	}
+	rules, err := c.blockRules(blk)
+	if err != nil {
+		return nil, err
+	}
+	matchSize := 2
+	if v, ok := blk.Int("match_size"); ok {
+		matchSize = v
+	}
 	order, err := c.rrOrder(blk)
 	if err != nil {
 		return nil, err
@@ -757,6 +880,15 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 		config["order"] = order
 		config["points"] = map[string]int{"win": points[0], "draw": points[1], "loss": points[2]}
 		config["venue"] = c.venuePick(venues, g)
+		if matchSize > 2 {
+			config["matchSize"] = matchSize
+		}
+		if rounds, ok := blk.Int("rounds"); ok {
+			config["rounds"] = rounds
+		}
+		if len(rules.Bout)+len(rules.Standings) > 0 {
+			config["rules"] = rules
+		}
 		configJSON, err := json.Marshal(config)
 		if err != nil {
 			return nil, err
@@ -1363,9 +1495,9 @@ func (c *compiler) rejectRoundKeys(blk Section, rounds []string) error {
 		known[code] = true
 	}
 	for key, v := range blk.Values {
-		_, suffix, dotted := strings.Cut(key, ".")
-		if !dotted {
-			continue
+		prefix, suffix, dotted := strings.Cut(key, ".")
+		if !dotted || prefix == "bout" || prefix == "standings" {
+			continue // a scoring rule's suffix is a metric name, not a round
 		}
 		if !known[suffix] {
 			return errAt(v.Line, "%s: в этом блоке нет раунда %s", key, suffix)
