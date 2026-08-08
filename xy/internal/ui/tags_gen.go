@@ -181,6 +181,7 @@ var IconPaperclip = base.IconPaperclip
 var IconPencil = base.IconPencil
 var IconPlus = base.IconPlus
 var IconReplace = base.IconReplace
+var IconSearch = base.IconSearch
 var IconSettings = base.IconSettings
 var IconTag = base.IconTag
 var IconTags = base.IconTags
@@ -209,6 +210,10 @@ var SpaceLG = base.SpaceLG
 var SpaceXL = base.SpaceXL
 
 // Primitive constructors.
+
+func Searchfield(items ...Item) *Element {
+	return base.New("searchfield", items...)
+}
 
 func Previewtitle(items ...Item) *Element {
 	return base.New("previewtitle", items...)

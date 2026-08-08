@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"pecheny.me/dopeuikit/icons"
 	base "pecheny.me/dopeuikit/kit"
 )
 
@@ -51,6 +52,29 @@ func expandEditor(c *base.ExpandCtx, p *base.Element) []base.Node {
 		e.Block = c.Nodes(p.Block)
 	}
 	return one(e)
+}
+
+// expandSearchfield is the one search box: a magnifier and an input that reads
+// as a single control. The glyph has to be INSIDE the field to say what the
+// field is for, which no kit primitive does — a textfield takes no icon, and a
+// row of icon + input is two controls to the eye and to the tab key.
+func expandSearchfield(c *base.ExpandCtx, p *base.Element) []base.Node {
+	body, found := icons.Body("search")
+	if !found {
+		panic("xy ui: the search icon is not vendored — run `just icons-add search`")
+	}
+	glyph := base.Raw(`<svg class="ico searchbox-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+		`stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` + body + `</svg>`)
+	attrs := []base.Attr{base.ClassAttr("input", "searchbox-input")}
+	attrs = append(attrs, base.At("type", "search"), base.At("autocomplete", "off"), base.At("spellcheck", "false"))
+	attrs = append(attrs, base.IDAttr(p)...)
+	attrs = append(attrs, base.CopyProps(p, "placeholder")...)
+	if label, ok := base.Get(p, "label"); ok && label != "" {
+		attrs = append(attrs, base.At("aria-label", label))
+	}
+	attrs = append(attrs, base.MetaAttrs(p)...)
+	return one(base.Inl("div", []base.Attr{base.ClassAttr(base.GrowClasses([]string{"searchbox"}, p)...)},
+		glyph, base.El("input", attrs)))
 }
 
 func expandDocoverlay(c *base.ExpandCtx, p *base.Element) []base.Node {

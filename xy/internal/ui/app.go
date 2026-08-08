@@ -31,6 +31,7 @@ func mustApp() *base.App {
 			"previewtitle": func(c *base.ExpandCtx, p *base.Element) []base.Node {
 				return one(base.Leaf(c, "h2", []string{"preview-title"}, nil, p))
 			},
+			"searchfield": expandSearchfield,
 			"docoverlay":  expandDocoverlay,
 			"headrow":     expandHeadrow,
 			"headactions": expandHeadactions,

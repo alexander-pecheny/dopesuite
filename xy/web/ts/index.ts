@@ -30,8 +30,10 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
 const statusNode = byId("status");
 const listNode = byId("boardList");
 const hitNode = byId("hitList");
+const commentNode = byId("commentList");
 const searchBox = byId<HTMLInputElement>("boardSearch");
-const searchNote = byId("searchNote");
+const cardNote = byId("cardNote");
+const commentNote = byId("commentNote");
 const message = byId("message");
 const overlay = byId("createOverlay");
 const createForm = byId<HTMLFormElement>("createForm");
@@ -125,34 +127,47 @@ async function loadIndexes(): Promise<Array<{ board: number; index: BoardIndex }
 
 async function runSearch(query: string): Promise<void> {
   const q = query.trim();
-  listNode.classList.toggle("grid-collapsed", !!q);
+  document.body.classList.toggle("searching", !!q);
   hitNode.hidden = !q;
+  commentNode.hidden = !q;
   if (!q) {
     hitNode.replaceChildren();
-    searchNote.textContent = "";
+    commentNode.replaceChildren();
+    cardNote.textContent = "";
+    commentNote.textContent = "";
+    listNode.hidden = false;
     renderBoards(allBoards);
     return;
   }
   // A board matches by name without any key — names are plaintext (v2). A legacy
   // board whose name is still encrypted matches nothing until it is migrated.
-  renderBoards(allBoards.filter((b) => xyFind.searchSpans(b.name || "", q).length > 0));
+  const named = allBoards.filter((b) => xyFind.searchSpans(b.name || "", q).length > 0);
+  renderBoards(named);
+  // An empty grid is not a result — it is padding with a message in it. Each
+  // section shows only when it has something, and its count says the rest.
+  listNode.hidden = !named.length;
   const held = await loadIndexes();
-  const { hits, total } = xySearchIndex.search(held, q, HIT_LIMIT);
-  renderHits(hits);
-  searchNote.textContent = note(total, hits.length, held.length);
+  const res = xySearchIndex.search(held, q, HIT_LIMIT);
+  renderHits(hitNode, res.questions);
+  renderHits(commentNode, res.comments);
+  cardNote.textContent = note("Вопросы", res.questionTotal, res.questions.length, held.length);
+  commentNote.textContent = note("Комментарии", res.commentTotal, res.comments.length, held.length);
+  hitNode.hidden = !res.questions.length;
+  commentNote.hidden = !res.commentTotal;
+  commentNode.hidden = !res.comments.length;
 }
 
-function note(total: number, shown: number, boards: number): string {
+function note(what: string, total: number, shown: number, boards: number): string {
   if (!boards) {
     return "Ни одна доска не скачана на это устройство — «Прогрев поиска» в меню ☰ сделает их искомыми.";
   }
-  if (!total) return "В карточках ничего не найдено.";
-  if (total > shown) return `Карточек: ${total}, показаны первые ${shown}.`;
-  return `Карточек: ${total}.`;
+  if (!total) return `${what}: ничего не найдено.`;
+  if (total > shown) return `${what}: ${total}, показаны первые ${shown}.`;
+  return `${what}: ${total}.`;
 }
 
-function renderHits(hits: Hit[]): void {
-  hitNode.replaceChildren(...hits.map((h) => {
+function renderHits(into: HTMLElement, hits: Hit[]): void {
+  into.replaceChildren(...hits.map((h) => {
     const href = `/board/${h.board}?card=${h.card}` + (h.comment ? `&comment=${h.comment}` : "");
     const where = h.list ? `${h.boardName} · ${h.list}` : h.boardName;
     const snip = el("span", { class: "hit-snippet" },
@@ -178,15 +193,15 @@ searchBox.addEventListener("input", () => {
 // unlock, so search stops depending on which boards happened to be opened.
 async function prewarm(): Promise<void> {
   if (searching) return;
-  if (!xySync.requireOnline("Прогрев доступен только онлайн.", searchNote)) return;
+  if (!xySync.requireOnline("Прогрев доступен только онлайн.", cardNote)) return;
   searching = true;
   try {
     const indexed = await xySearchIndex.prewarm(
       allBoards.map((b) => ({ id: b.id, name: b.name })),
-      (done, total) => { searchNote.textContent = `Прогрев: ${done} из ${total}…`; },
+      (done, total) => { cardNote.textContent = `Прогрев: ${done} из ${total}…`; },
     );
     indexes = null;
-    searchNote.textContent = `Прогрев закончен: досок скачано ${indexed} из ${allBoards.length}.` +
+    cardNote.textContent = `Прогрев закончен: досок скачано ${indexed} из ${allBoards.length}.` +
       (indexed < allBoards.length ? " Остальные заперты — их пароль на этом устройстве не сохранён." : "");
     if (searchBox.value.trim()) await runSearch(searchBox.value);
   } finally {

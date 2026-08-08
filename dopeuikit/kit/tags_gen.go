@@ -497,6 +497,7 @@ var IconPaperclip = Attr{Name: "icon", Value: "paperclip"}
 var IconPencil = Attr{Name: "icon", Value: "pencil"}
 var IconPlus = Attr{Name: "icon", Value: "plus"}
 var IconReplace = Attr{Name: "icon", Value: "replace"}
+var IconSearch = Attr{Name: "icon", Value: "search"}
 var IconSettings = Attr{Name: "icon", Value: "settings"}
 var IconTag = Attr{Name: "icon", Value: "tag"}
 var IconTags = Attr{Name: "icon", Value: "tags"}

@@ -33,7 +33,7 @@ export interface BoardIndex {
   comments: IndexComment[];
 }
 
-// One card as a result tile shows it.
+// One result as a tile shows it.
 export interface Hit {
   board: number;
   boardName: string;
@@ -41,11 +41,20 @@ export interface Hit {
   card: number;
   title: string;
   snippet: Snippet;
-  // Further matches on the same card, however many fields they fall in.
+  // Further matches in the same place, whichever field they fall in.
   more: number;
-  // Set when the snippet came from a comment — the tile marks it and deep-links
-  // to that entry rather than to the card's text.
+  // Set on a comment hit: the entry the tile deep-links to.
   comment?: number;
+}
+
+// A question and the discussion about it are two different answers to «где это
+// было?», so they are counted and listed apart. Each half caps independently —
+// a needle that names a hundred questions must not bury the one comment.
+export interface SearchResult {
+  questions: Hit[];
+  comments: Hit[];
+  questionTotal: number;
+  commentTotal: number;
 }
 
 const empty = (name = ""): BoardIndex => ({ name, lists: [], cards: [], comments: [] });
@@ -266,38 +275,54 @@ export function search(
   indexes: ReadonlyArray<{ board: number; index: BoardIndex }>,
   query: string,
   limit: number,
-): { hits: Hit[]; total: number } {
-  const hits: Hit[] = [];
-  let total = 0;
+): SearchResult {
+  const questions: Hit[] = [];
+  const comments: Hit[] = [];
+  let questionTotal = 0, commentTotal = 0;
   for (const { board, index } of indexes) {
     const { listName, cards } = folded(index);
-    for (const { card, desc, alias, comments } of cards) {
-      const inDesc = xyFind.searchIn(desc, query);
-      const inAlias = xyFind.searchIn(alias, query);
-      const inComments = comments.map((c) => ({ c: c.comment, spans: xyFind.searchIn(c.text, query) }))
-        .filter((x) => x.spans.length > 0);
-      const count = inDesc.length + inAlias.length + inComments.reduce((n, x) => n + x.spans.length, 0);
-      if (!count) continue;
-      total++;
-      if (hits.length >= limit) continue;
-      const first = inDesc.length
-        ? { text: card.desc, span: inDesc[0], comment: undefined }
-        : inAlias.length
-        ? { text: card.alias, span: inAlias[0], comment: undefined }
-        : { text: inComments[0].c.text, span: inComments[0].spans[0], comment: inComments[0].c.id };
-      hits.push({
+    for (const card of cards) {
+      const where = {
         board,
         boardName: index.name,
-        list: listName.get(card.list) || "",
-        card: card.id,
-        title: cardTitle(card),
-        snippet: xyFind.snippet(first.text, first.span),
-        more: count - 1,
-        comment: first.comment,
-      });
+        list: listName.get(card.card.list) || "",
+        card: card.card.id,
+        title: cardTitle(card.card),
+      };
+      // The question: one hit per card, whether the needle landed in its 4s or
+      // in its alias.
+      const inDesc = xyFind.searchIn(card.desc, query);
+      const inAlias = xyFind.searchIn(card.alias, query);
+      if (inDesc.length || inAlias.length) {
+        questionTotal++;
+        if (questions.length < limit) {
+          const [text, span] = inDesc.length
+            ? [card.card.desc, inDesc[0]]
+            : [card.card.alias, inAlias[0]];
+          questions.push({
+            ...where,
+            snippet: xyFind.snippet(text, span),
+            more: inDesc.length + inAlias.length - 1,
+          });
+        }
+      }
+      // The discussion: one hit per COMMENT, since each is its own remark and
+      // its own link.
+      for (const c of card.comments) {
+        const spans = xyFind.searchIn(c.text, query);
+        if (!spans.length) continue;
+        commentTotal++;
+        if (comments.length >= limit) continue;
+        comments.push({
+          ...where,
+          snippet: xyFind.snippet(c.comment.text, spans[0]),
+          more: spans.length - 1,
+          comment: c.comment.id,
+        });
+      }
     }
   }
-  return { hits, total };
+  return { questions, comments, questionTotal, commentTotal };
 }
 
 export const xySearchIndex = {

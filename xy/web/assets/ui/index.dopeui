@@ -6,12 +6,15 @@ page title="Мои доски · xy" kind="full" scripts="dist/index.js"
     iconlink href="/import" icon="file-up" label="Импорт из Trello"
     iconbtn id="newBoardBtn" icon="plus" label="Новая доска"
 
-  -- one box over both grids: boards it can name, then cards it can quote
-  row gap="sm" align="center"
-    textfield id="boardSearch" placeholder="Поиск по доскам и карточкам" autocomplete="off" spellcheck="false" grow
+  -- one box over three grids: boards it can name, then the questions it can
+  -- quote, then the comments — a question and a discussion about it are two
+  -- different answers to «где это было?»
+  searchfield id="boardSearch" placeholder="Поиск по доскам, вопросам и комментариям" label="Поиск"
   mount id="boardList" kind="board-grid"
-  muted id="searchNote"
+  muted id="cardNote"
   mount id="hitList" kind="board-grid"
+  muted id="commentNote"
+  mount id="commentList" kind="board-grid"
   message id="message"
 
   -- create-board dialog

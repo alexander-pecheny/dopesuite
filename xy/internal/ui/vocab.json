@@ -18,6 +18,11 @@
     ] }
   },
   "primitives": [
+    { "name": "searchfield", "props": [
+        { "name": "id", "required": true },
+        { "name": "placeholder" },
+        { "name": "label" }
+      ] },
     { "name": "previewtitle", "props": [], "children": "text" },
 
     { "name": "docoverlay",
