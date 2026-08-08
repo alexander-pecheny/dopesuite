@@ -15,6 +15,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/domain/imports"
+	"dope/dope/domain/protocol"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/schemedsl"
@@ -759,11 +760,19 @@ func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questi
 // with the pristine protocol state; seed slots seat the fest's numbered teams
 // unless [init] declares a seed source to import later.
 func createBrainGameTx(ctx context.Context, tx *sql.Tx, festID int64, dsl string) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "brain", "Брейн")
+	return CreateSchemeGameTx(ctx, tx, festID, games.Brain, "Брейн", dsl)
+}
+
+// CreateSchemeGameTx creates a game of any type from a scheme DSL: compile,
+// store the scheme with its source, and materialise the structure. Every game
+// type reaches the same plumbing — the DSL is the way a bracket is described,
+// not a брейн feature.
+func CreateSchemeGameTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, label, dsl string) (int64, error) {
+	identity, err := nextGameIdentityTx(ctx, tx, festID, gameType, label)
 	if err != nil {
 		return 0, err
 	}
-	scheme, err := brainSchemeFromDSLTx(ctx, tx, festID, identity.Code, identity.Title, dsl)
+	scheme, err := schemeFromDSLTx(ctx, tx, festID, gameType, identity.Code, identity.Title, dsl)
 	if err != nil {
 		return 0, err
 	}
@@ -780,12 +789,12 @@ values(?, ?, 2, ?, ?)`, uniqueSchemeSlug(identity.Code), identity.Title, string(
 	}
 	gameID, err := store.InsertReturningID(ctx, tx, `
 insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, scheme_dsl, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
-values(?, ?, ?, 'brain', ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
-		festID, identity.Code, identity.Title, identity.Position, schemeID, string(schemeJSON), dsl, now, now)
+values(?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
+		festID, identity.Code, identity.Title, gameType, identity.Position, schemeID, string(schemeJSON), dsl, now, now)
 	if err != nil {
 		return 0, err
 	}
-	if err := buildBrainStructureTx(ctx, tx, festID, gameID, scheme); err != nil {
+	if err := buildSchemeStructureTx(ctx, tx, festID, gameID, gameType, scheme); err != nil {
 		return 0, err
 	}
 	return gameID, nil
@@ -796,16 +805,20 @@ values(?, ?, ?, 'brain', ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 // order is team numbers, not the roster view's alphabetical order — and the
 // count must match the scheme's draw.
 func brainSchemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, slug, title, dsl string) (store.FestScheme, error) {
+	return schemeFromDSLTx(ctx, tx, festID, games.Brain, slug, title, dsl)
+}
+
+func schemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, slug, title, dsl string) (store.FestScheme, error) {
 	if strings.TrimSpace(dsl) == "" {
-		return store.FestScheme{}, errors.New("опишите схему брейна")
+		return store.FestScheme{}, errors.New("опишите схему игры")
 	}
 	doc, err := schemedsl.Parse(dsl)
 	if err != nil {
 		return store.FestScheme{}, err
 	}
-	input := schemedsl.Input{Slug: slug, Title: title, GameType: games.Brain}
+	input := schemedsl.Input{Slug: slug, Title: title, GameType: gameType}
 	if seed, hasSeed := doc.Init.Str("seed"); !hasSeed {
-		entrants, err := brainSeedEntrantsTx(ctx, tx, festID)
+		entrants, err := seedEntrantsTx(ctx, tx, festID)
 		if err != nil {
 			return store.FestScheme{}, err
 		}
@@ -822,19 +835,19 @@ func brainSchemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, slug, t
 	return schemedsl.Compile(doc, input)
 }
 
-func brainSeedEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64) ([]store.SchemeSlot, error) {
+func seedEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64) ([]store.SchemeSlot, error) {
 	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 	if err != nil {
 		return nil, err
 	}
 	if len(teams) < 2 {
-		return nil, errors.New("для брейна нужны хотя бы две команды в фесте")
+		return nil, errors.New("для схемы нужны хотя бы два участника в фесте")
 	}
 	sort.Slice(teams, func(i, j int) bool { return teams[i].Number < teams[j].Number })
 	entrants := make([]store.SchemeSlot, len(teams))
 	for i, team := range teams {
 		if team.Number <= 0 {
-			return nil, errors.New("перед созданием брейна пронумеруйте команды феста")
+			return nil, errors.New("перед созданием игры пронумеруйте участников феста")
 		}
 		entrants[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: int(team.Number)}, Label: team.Name}
 	}
@@ -857,7 +870,40 @@ func defaultBrainDSL(teams, questions int) string {
 // Seed slots are occupied immediately: each fest team is ensured a teams-table
 // row by number (shared with the EK seed import) and pinned into its slot and
 // game_assignments, so the group is playable the moment it exists.
+// stageEmptyState builds a match's pristine Protocol document for a stage of a
+// compiled scheme. The Protocol owns the shape — a брейн бой is a row of
+// questions, a СИ бой a grid of themes — so the builder asks it rather than
+// knowing. Falls back to брейн's for schemes compiled before Protocols carried
+// their own config.
+func stageEmptyState(gameType string, stage store.SchemeStage, seats, fallbackQuestions int) string {
+	p, ok := protocol.Get(gameType)
+	if !ok {
+		return string(games.BrainEmptyStateJSON(stageQuestions(stage, fallbackQuestions)))
+	}
+	config := map[string]any{}
+	if len(stage.Config) > 0 {
+		_ = json.Unmarshal(stage.Config, &config)
+	}
+	config["participants"] = seats
+	cfgJSON, err := json.Marshal(config)
+	if err != nil {
+		return "{}"
+	}
+	state, err := p.EmptyState(cfgJSON)
+	if err != nil || len(state) == 0 {
+		return "{}"
+	}
+	return string(state)
+}
+
 func buildBrainStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, scheme store.FestScheme) error {
+	return buildSchemeStructureTx(ctx, tx, festID, gameID, "brain", scheme)
+}
+
+// buildSchemeStructureTx materialises a compiled scheme into stages, matches
+// and slots for any game type — the plumbing used to be брейн's alone, and the
+// only thing that was ever брейн-specific about it was the empty state.
+func buildSchemeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme) error {
 	// A declared seed source owns game_assignments — «Import seed» writes them
 	// by seed rank, so creation must not pre-fill them by team number.
 	if scheme.Seeding == nil {
@@ -883,7 +929,6 @@ on conflict(game_id, basket, number) do update set participant_id = excluded.par
 		return err
 	}
 	for stageIndex, stage := range scheme.Stages {
-		emptyState := string(games.BrainEmptyStateJSON(stageQuestions(stage, scheme.Questions)))
 		position := stage.Position
 		if position == 0 {
 			position = stageIndex + 1
@@ -896,6 +941,7 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
 			return err
 		}
 		for matchIndex, match := range stage.Matches {
+			emptyState := stageEmptyState(gameType, stage, len(match.Slots), scheme.Questions)
 			matchID, err := store.InsertReturningID(ctx, tx, `
 insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, status, revision, state_json)
 values(?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
