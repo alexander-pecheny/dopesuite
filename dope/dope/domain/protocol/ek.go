@@ -20,6 +20,9 @@ type ek struct{}
 
 func (ek) Code() string { return "ek" }
 
+// Metrics: Σ, Σ+ (положительные ответы), перестрелка и тайбрейк.
+func (ek) Metrics() []string { return []string{"total", "plus", "shootoutTotal", "tiebreak"} }
+
 type ekConfig struct {
 	Participants int `json:"participants"`
 }

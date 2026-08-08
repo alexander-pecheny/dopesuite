@@ -568,3 +568,30 @@ func TestCompileErrors(t *testing.T) {
 		})
 	}
 }
+
+// A sorting key is any metric the game's Protocol declares — no Go change is
+// needed to rank on one. takenBase is brain's; ЭК's Σ+ is not, in a brain game.
+func TestSortingAcceptsAnyDeclaredMetric(t *testing.T) {
+	src := func(metric string) string {
+		return "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nsorting: [points, " + metric + "]\n"
+	}
+	scheme := compileSrc(t, src("takenBase"), Input{GameType: "brain"})
+	stage := scheme.Stages[0]
+	var conf struct {
+		Order []string `json:"order"`
+	}
+	if err := json.Unmarshal(stage.Config, &conf); err != nil {
+		t.Fatal(err)
+	}
+	if len(conf.Order) != 2 || conf.Order[1] != "takenBase" {
+		t.Fatalf("order = %v, want [points takenBase]", conf.Order)
+	}
+
+	doc, err := Parse(src("shootoutTotal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Compile(doc, Input{GameType: "brain"}); err == nil {
+		t.Fatal("a metric no protocol measures must be a compile error")
+	}
+}

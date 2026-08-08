@@ -3,9 +3,11 @@ package schemedsl
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"dope/dope/domain/games"
+	"dope/dope/domain/protocol"
 	"dope/dope/domain/structure"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
@@ -40,14 +42,51 @@ const (
 
 var canonOrder = []string{"points", "h2h", "taken", "diff"}
 
-var rrMetricAliases = map[string]string{
-	"points": "points", "head2head": "h2h", "h2h": "h2h", "taken": "taken", "diff": "diff",
+// Спеллинги, которые DSL принимал раньше и продолжает принимать.
+var rrMetricAliases = map[string]string{"head2head": "h2h"}
+
+// На пересеве points исторически значит «сумма мест по возрастанию» — это
+// алиас, а не метрика, поэтому он разворачивается в правило целиком.
+var reseedMetricAliases = map[string]store.SchemeSortRule{
+	"points": {Metric: "place_sum", Dir: "asc"},
+}
+
+// Метрики, которые всегда меньше-лучше: место и жребий.
+var ascendingMetrics = map[string]bool{"place_sum": true, "draw": true, "place": true, "losses": true}
+
+// rankable — всё, по чему в этой игре можно сортировать: что объявил Протокол,
+// что выводит Структура, и что определили правила подсчёта самой схемы.
+func (c *compiler) rankable() map[string]bool {
+	names := map[string]bool{}
+	for _, name := range protocol.Metrics(c.in.GameType) {
+		names[name] = true
+	}
+	for _, name := range structure.DerivedMetrics() {
+		names[name] = true
+	}
+	for _, name := range c.ruleMetrics {
+		names[name] = true
+	}
+	return names
+}
+
+// sortDir выбирает направление: как написал автор, иначе по смыслу метрики.
+func sortDir(rule SortRule) string {
+	if rule.Dir != "" {
+		return rule.Dir
+	}
+	if ascendingMetrics[rule.Metric] {
+		return "asc"
+	}
+	return "desc"
 }
 
 type compiler struct {
 	doc    *Doc
 	in     Input
 	scheme store.FestScheme
+
+	ruleMetrics []string // метрики, определённые правилами подсчёта схемы
 
 	venueCount  int
 	position    int
@@ -334,11 +373,16 @@ func (c *compiler) rrOrder(blk Section) ([]string, error) {
 	if !ok {
 		return canonOrder, nil
 	}
+	known := c.rankable()
 	order := make([]string, len(rules))
 	for i, rule := range rules {
-		metric, known := rrMetricAliases[rule.Metric]
-		if !known {
-			return nil, errAt(blk.Line, "sorting: %s — не групповой компаратор (есть points, head2head, taken, diff)", rule.Metric)
+		metric := rule.Metric
+		if alias, ok := rrMetricAliases[metric]; ok {
+			metric = alias
+		}
+		if !known[metric] {
+			return nil, errAt(blk.Line, "sorting: %s не считается — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",
+				rule.Metric, strings.Join(sortedNames(known), ", "))
 		}
 		order[i] = metric
 	}
@@ -453,17 +497,17 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 	if !ok {
 		rules = []store.SchemeSortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "taken", Dir: "desc"}}
 	}
+	known := c.rankable()
 	for _, token := range tokens {
-		switch token.Metric {
-		case "points":
-			rules = append(rules, store.SchemeSortRule{Metric: "place_sum", Dir: "asc"})
-		case "taken":
-			rules = append(rules, store.SchemeSortRule{Metric: "taken", Dir: "desc"})
-		case "points_share", "taken_share", "diff":
-			rules = append(rules, store.SchemeSortRule{Metric: token.Metric, Dir: "desc"})
-		default:
-			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве (есть points, taken, points_share, taken_share, diff)", token.Metric)
+		if alias, ok := reseedMetricAliases[token.Metric]; ok {
+			rules = append(rules, alias)
+			continue
 		}
+		if !known[token.Metric] {
+			return nil, errAt(blk.Line, "sorting: %s не считается на пересеве — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",
+				token.Metric, strings.Join(sortedNames(known), ", "))
+		}
+		rules = append(rules, store.SchemeSortRule{Metric: token.Metric, Dir: sortDir(token)})
 	}
 	return append(rules, store.SchemeSortRule{Metric: "draw", Dir: "asc"}), nil
 }
@@ -1140,4 +1184,15 @@ func (c *compiler) rejectRoundKeys(blk Section, rounds []string) error {
 		}
 	}
 	return nil
+}
+
+// sortedNames renders a name set for an error message, so a typo is answered
+// with the list the author could have meant.
+func sortedNames(set map[string]bool) []string {
+	names := make([]string, 0, len(set))
+	for name := range set {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

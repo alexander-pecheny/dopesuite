@@ -20,10 +20,25 @@ import (
 // zero — who sits where is the Structure layer's knowledge. Both take the
 // match config because scoring rules legitimately live there (tour
 // composition, sticker rules, question values).
+//
+// Metrics names every metric Score can put on a slot. It is what makes a
+// number rankable: a scheme may sort a group or a reseed by any name declared
+// here, and the compiler rejects the ones nobody measures. A Protocol that
+// starts measuring something new declares it and it is rankable everywhere —
+// no Go change anywhere else (ADR-0008).
 type Protocol interface {
 	Code() string
+	Metrics() []string
 	EmptyState(cfg json.RawMessage) (json.RawMessage, error)
 	Score(cfg, state json.RawMessage) ([]structure.SlotOutcome, error)
+}
+
+// Metrics returns the metrics a protocol declares, or nil for an unknown code.
+func Metrics(code string) []string {
+	if p, ok := Get(code); ok {
+		return p.Metrics()
+	}
+	return nil
 }
 
 // registry is the single source of truth for known protocols. Add a format by

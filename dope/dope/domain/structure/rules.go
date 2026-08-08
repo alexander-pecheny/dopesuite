@@ -18,6 +18,30 @@ import (
 // The two are not interchangeable even for linear rules, which is why both
 // exist and why a scheme says which it means.
 
+// DerivedMetrics are the names the Structure layer itself puts on a standings
+// row, whatever the Protocol measures — so a scheme may sort on them without
+// declaring anything. Everything else a sorting key names must come from the
+// Protocol's own declaration or from the scheme's scoring rules.
+func DerivedMetrics() []string {
+	return []string{
+		"points",    // очки, by the block's scoring rule
+		"place_sum", // сумма мест
+		"bouts",     // сыгранные бои
+		"losses",    // поражения — the currency the eliminations count
+		"h2h",       // личная встреча, a comparator over the still-tied
+		"draw",      // жребий
+		"diff",      // разница
+		"taken",     // взятые, summed from the Protocol's score metric
+		"conceded",  // пропущенные
+
+		// The reseed's shares, which only exist after the sum: доля очков от
+		// возможных and доля взятых от заданных.
+		"points_share",
+		"taken_share",
+		"taken_base",
+	}
+}
+
 // Rules are the scheme's scoring rules, name → expression, at each grain.
 type Rules struct {
 	Bout      map[string]string `json:"bout"`

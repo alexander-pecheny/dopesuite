@@ -18,6 +18,9 @@ type od struct{}
 
 func (od) Code() string { return "od" }
 
+// Metrics: взятые вопросы и рейтинг по Бухгольцу.
+func (od) Metrics() []string { return []string{"total", "rating"} }
+
 func (od) RatingRosterStateKey() string { return "teams" }
 
 func (od) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {

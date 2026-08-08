@@ -18,6 +18,10 @@ type brain struct{}
 
 func (brain) Code() string { return "brain" }
 
+// Metrics: взятые вопросы, и они же без перестрелки — знаменатель долей на
+// пересеве считается по основным вопросам боя.
+func (brain) Metrics() []string { return []string{"taken", "takenBase"} }
+
 func (brain) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	return games.BrainEmptyStateJSON(games.BrainQuestions(string(cfg))), nil
 }

@@ -18,6 +18,9 @@ type ksi struct{}
 
 func (ksi) Code() string { return "ksi" }
 
+// Metrics: сумма и сумма положительных ответов.
+func (ksi) Metrics() []string { return []string{"total", "plus"} }
+
 func (ksi) RatingRosterStateKey() string { return "participants" }
 
 func (ksi) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
