@@ -1,6 +1,9 @@
 // index.ts — board list + create-board flow.
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
+import { xyFind } from "./find.js";
+import { xySearchIndex } from "./searchindex.js";
+import type { BoardIndex, Hit } from "./searchindex.js";
 import { xySync } from "./sync.js";
 import type { SyncStatus } from "./sync.js";
 import { iconed } from "./icons_gen.js";
@@ -26,6 +29,9 @@ const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(
 
 const statusNode = byId("status");
 const listNode = byId("boardList");
+const hitNode = byId("hitList");
+const searchBox = byId<HTMLInputElement>("boardSearch");
+const searchNote = byId("searchNote");
 const message = byId("message");
 const overlay = byId("createOverlay");
 const createForm = byId<HTMLFormElement>("createForm");
@@ -52,19 +58,37 @@ async function boot(): Promise<void> {
   await refresh();
 }
 
+// Прогрев lives in the site-wide burger, next to nothing else on this page: it
+// is a rare, deliberate act, and it is what makes search cover boards this
+// device has not opened.
+window.dopeMenu?.setExtras([{
+  icon: "cloud-download",
+  label: "Прогрев поиска",
+  title: "Скачать все доски, от которых есть ключ, чтобы искать по ним и офлайн",
+  onClick: () => { void prewarm(); },
+}]);
+
 async function refresh(): Promise<void> {
   setStatus("saving");
   try {
     const boards = (await fetchJSON("/api/boards")) as BoardListItem[];
     await xySync.putBoardList(boards);
+    allBoards = boards;
+    // The index is assembled FROM this list, so a search that ran before it
+    // arrived cached an empty one. Drop it and re-answer whatever is in the box.
+    indexes = null;
     renderBoards(boards);
     setStatus("saved");
+    if (searchBox.value.trim()) await runSearch(searchBox.value);
   } catch (e) {
     // Offline (or the server is unreachable): fall back to the cached board list.
     const cached = await xySync.getBoardList().catch(() => null);
     if (cached) {
-      renderBoards(cached as BoardListItem[]);
+      allBoards = cached as BoardListItem[];
+      indexes = null;
+      renderBoards(allBoards);
       setStatus("saved");
+      if (searchBox.value.trim()) await runSearch(searchBox.value);
     } else {
       message.textContent = errMsg(e);
       setStatus("error");
@@ -72,10 +96,108 @@ async function refresh(): Promise<void> {
   }
 }
 
+// ---- search ----
+// The grid above filters to boards this query can NAME; the grid below shows the
+// cards it can quote. Every board therefore appears in exactly one place, and
+// the top grid keeps meaning one thing.
+const HIT_LIMIT = 50;
+
+let allBoards: BoardListItem[] = [];
+let indexes: Array<{ board: number; index: BoardIndex }> | null = null;
+let searching = false;
+
+// loadIndexes reads every Search Index this device holds, in board-list order
+// (last visited first), and takes each board's name from the list rather than
+// the index — the list is authoritative and a rename may not have reached the
+// index yet.
+async function loadIndexes(): Promise<Array<{ board: number; index: BoardIndex }>> {
+  if (indexes) return indexes;
+  // Nothing to assemble yet — and nothing to cache either, or a query typed
+  // while /api/boards was still in flight would leave the page searchless.
+  if (!allBoards.length) return [];
+  const held = new Map((await xySearchIndex.all()).map((r) => [r.board, r.index]));
+  indexes = allBoards.flatMap((b) => {
+    const index = held.get(b.id);
+    return index ? [{ board: b.id, index: { ...index, name: b.name || index.name } }] : [];
+  });
+  return indexes;
+}
+
+async function runSearch(query: string): Promise<void> {
+  const q = query.trim();
+  listNode.classList.toggle("grid-collapsed", !!q);
+  hitNode.hidden = !q;
+  if (!q) {
+    hitNode.replaceChildren();
+    searchNote.textContent = "";
+    renderBoards(allBoards);
+    return;
+  }
+  // A board matches by name without any key — names are plaintext (v2). A legacy
+  // board whose name is still encrypted matches nothing until it is migrated.
+  renderBoards(allBoards.filter((b) => xyFind.searchSpans(b.name || "", q).length > 0));
+  const held = await loadIndexes();
+  const { hits, total } = xySearchIndex.search(held, q, HIT_LIMIT);
+  renderHits(hits);
+  searchNote.textContent = note(total, hits.length, held.length);
+}
+
+function note(total: number, shown: number, boards: number): string {
+  if (!boards) {
+    return "Ни одна доска не скачана на это устройство — «Прогрев поиска» в меню ☰ сделает их искомыми.";
+  }
+  if (!total) return "В карточках ничего не найдено.";
+  if (total > shown) return `Карточек: ${total}, показаны первые ${shown}.`;
+  return `Карточек: ${total}.`;
+}
+
+function renderHits(hits: Hit[]): void {
+  hitNode.replaceChildren(...hits.map((h) => {
+    const href = `/board/${h.board}?card=${h.card}` + (h.comment ? `&comment=${h.comment}` : "");
+    const where = h.list ? `${h.boardName} · ${h.list}` : h.boardName;
+    const snip = el("span", { class: "hit-snippet" },
+      h.snippet.text.slice(0, h.snippet.start),
+      el("mark", { text: h.snippet.text.slice(h.snippet.start, h.snippet.end) }),
+      h.snippet.text.slice(h.snippet.end),
+    );
+    if (h.more) snip.append(el("span", { class: "hit-more", text: ` +${h.more}` }));
+    return el("a", { class: "board-card hit-card", href },
+      el("span", { class: "hit-title", text: h.title }),
+      el("span", { class: "hit-where" }, ...(h.comment ? iconed("message-circle", where) : [where])),
+      snip);
+  }));
+}
+
+let searchTimer = 0;
+searchBox.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { void runSearch(searchBox.value); }, 120);
+});
+
+// прогрев: fill the Mirror and the Search Index for every board this device can
+// unlock, so search stops depending on which boards happened to be opened.
+async function prewarm(): Promise<void> {
+  if (searching) return;
+  if (!xySync.requireOnline("Прогрев доступен только онлайн.", searchNote)) return;
+  searching = true;
+  try {
+    const indexed = await xySearchIndex.prewarm(
+      allBoards.map((b) => ({ id: b.id, name: b.name })),
+      (done, total) => { searchNote.textContent = `Прогрев: ${done} из ${total}…`; },
+    );
+    indexes = null;
+    searchNote.textContent = `Прогрев закончен: досок скачано ${indexed} из ${allBoards.length}.` +
+      (indexed < allBoards.length ? " Остальные заперты — их пароль на этом устройстве не сохранён." : "");
+    if (searchBox.value.trim()) await runSearch(searchBox.value);
+  } finally {
+    searching = false;
+  }
+}
+
 function renderBoards(boards: BoardListItem[]): void {
   listNode.replaceChildren();
   if (!boards.length) {
-    listNode.append(el("p", { class: "empty", text: "Пока нет досок. Нажмите + чтобы создать." }));
+    listNode.append(el("p", { class: "empty", text: searchBox.value.trim() ? "Досок с таким названием нет." : "Пока нет досок. Нажмите + чтобы создать." }));
     return;
   }
   // Boards arrive already ordered by the caller's last visit (server-side).

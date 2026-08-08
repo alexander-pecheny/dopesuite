@@ -6,7 +6,12 @@ page title="Мои доски · xy" kind="full" scripts="dist/index.js"
     iconlink href="/import" icon="file-up" label="Импорт из Trello"
     iconbtn id="newBoardBtn" icon="plus" label="Новая доска"
 
+  -- one box over both grids: boards it can name, then cards it can quote
+  row gap="sm" align="center"
+    textfield id="boardSearch" placeholder="Поиск по доскам и карточкам" autocomplete="off" spellcheck="false" grow
   mount id="boardList" kind="board-grid"
+  muted id="searchNote"
+  mount id="hitList" kind="board-grid"
   message id="message"
 
   -- create-board dialog

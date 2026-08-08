@@ -222,6 +222,33 @@
   height: 10px;
 }
 
+/* While a query is live the board grid holds only the boards it can name, so it
+   must shrink to them: left flexing, an empty grid would eat the viewport and
+   push the card hits off the bottom of a phone. */
+.list-page .board-grid.grid-collapsed { flex: 0 0 auto; overflow: visible; padding-bottom: 0; }
+
+/* A found card is the same tile as a board, in smaller type: it has three lines
+   to say rather than one, and the two grids read as one surface. */
+.hit-card { gap: var(--space-1); font-size: var(--text-sm); }
+.hit-title {
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hit-where { font-size: var(--text-xs); color: var(--muted); }
+.hit-where .ico { --ico-size: 0.9em; }
+/* The snippet is the point of the tile, so it gets the room the title doesn't:
+   four lines, then clipped. */
+.hit-snippet {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text-muted);
+}
+.hit-more { color: var(--muted); }
+
 /* trello import */
 .import-form { max-width: 760px; margin: 0 auto; }
 .import-form .card-desc { min-height: 320px; }
@@ -1712,3 +1739,31 @@ body {
 .accent-from { color: var(--muted); }
 .accent-arrow { color: var(--muted); font-size: var(--text-sm); }
 .accent-to { font-weight: var(--fw-bold); }
+
+/* «Найти и заменить» → the occurrence review: a card heading with its own tick,
+   then one row per occurrence with the context that makes it a decision. */
+.replace-hits { display: flex; flex-direction: column; gap: var(--space-1); max-height: 50vh; overflow-y: auto; }
+.replace-card {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  cursor: var(--cursor-action);
+}
+.replace-card-name {
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.replace-card-count { color: var(--muted); font-size: var(--text-xs); }
+.replace-hit {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
+  cursor: var(--cursor-action);
+}
+.replace-hit-text { font-size: var(--text-sm); color: var(--text-muted); }
+.replace-hit-text del { color: var(--muted); }
+.replace-hit-text ins { font-weight: var(--fw-bold); text-decoration: none; }

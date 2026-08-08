@@ -1003,6 +1003,51 @@ type timelineEventDTO struct {
 	CardID    *int64 `json:"card_id,omitempty"`
 }
 
+// boardCommentDTO is one comment as прогрев indexes it: which card it hangs off,
+// its ciphertext, and the id a search hit deep-links to. Nothing else — an
+// author or a date would only be shown by a лента, and the лента asks per card.
+type boardCommentDTO struct {
+	ID         int64  `json:"id"`
+	CardID     int64  `json:"card_id"`
+	PayloadEnc string `json:"payload_enc"`
+}
+
+// handleGetBoardComments returns every live comment on a board's cards in one
+// response, so the client's Search Index can cover comments without a request
+// per card. Comments only: a desc_edit payload carries the whole before/after
+// text of a question, which would make an index of every old wording.
+func (s *server) handleGetBoardComments(w http.ResponseWriter, r *http.Request) {
+	_, bid, _, ok := s.requireBoard(w, r, "id")
+	if !ok {
+		return
+	}
+	rows, err := s.db.QueryContext(r.Context(), `
+select e.id, e.card_id, e.payload_enc
+from timeline_events e
+join cards c on c.id = e.card_id
+where c.board_id = ? and e.type = 'comment'
+  and e.deleted_at is null and c.deleted_at is null
+order by e.id`, bid)
+	if handleErr(w, err) {
+		return
+	}
+	defer rows.Close()
+	out := []boardCommentDTO{}
+	for rows.Next() {
+		var e boardCommentDTO
+		var payload []byte
+		if err := rows.Scan(&e.ID, &e.CardID, &payload); handleErr(w, err) {
+			return
+		}
+		e.PayloadEnc = b64(payload)
+		out = append(out, e)
+	}
+	if err := rows.Err(); handleErr(w, err) {
+		return
+	}
+	writeJSON(w, out)
+}
+
 func (s *server) handleGetTimeline(w http.ResponseWriter, r *http.Request) {
 	_, cardID, _, ok := s.requireChildAccess(w, r, boardOfCard)
 	if !ok {

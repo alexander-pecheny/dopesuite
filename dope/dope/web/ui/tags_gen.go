@@ -158,6 +158,7 @@ var IconArrowUpDown = base.IconArrowUpDown
 var IconBell = base.IconBell
 var IconCheck = base.IconCheck
 var IconClipboard = base.IconClipboard
+var IconCloudDownload = base.IconCloudDownload
 var IconColumns3 = base.IconColumns3
 var IconCopy = base.IconCopy
 var IconDices = base.IconDices

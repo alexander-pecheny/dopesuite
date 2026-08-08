@@ -25,6 +25,9 @@ import { type ColorField, colorField, labelFill, labelInk, LABEL_COLORS } from "
 import { anchorPopup } from "./popup.js";
 import { type MassAction, plural, xyMass } from "./massaction.js";
 import { namedUrl, revokeNamedUrl } from "./namedurl.js";
+import { xySearchIndex } from "./searchindex.js";
+import { xyFind } from "./find.js";
+import type { Span as FindSpan } from "./find.js";
 import type { DataKey } from "./crypto.js";
 import type { SyncStatus } from "./sync.js";
 import type { OpBody } from "./store.js";
@@ -144,6 +147,7 @@ const unlock = createUnlock({
     renderNotifBadge();
     void boardMembers.load(); // best-effort: populate the author-name map for timelines (online only)
     void convertLegacyVersionsBoard();
+    if (dk) void xySearchIndex.refreshComments(boardId, dk);
     cardDetail.maybeOpenDeepLink(); // open a ?card=… / &comment=… deep link on first load
   },
   onUnavailable: () => {
@@ -206,6 +210,11 @@ window.dopeMenu?.setExtras([{
   title: "Убрать артефакты Trello (двойные переносы, экранирование, смарт-ссылки) во всех карточках",
   onClick: () => { void fixTrelloFormattingBoard(); },
 }, {
+  icon: "replace",
+  label: "Найти и заменить",
+  title: "Заменить один и тот же текст во всех карточках доски, списка или группы",
+  onClick: () => openReplace(),
+}, {
   // wand-sparkles twice over: the vendored lucide set has no «type» glyph, and
   // both items are the same kind of act — rewrite the text of every card at once.
   icon: "wand-sparkles",
@@ -220,7 +229,10 @@ window.dopeMenu?.setExtras([{
     await xyCrypto.forgetDK(boardId);
     // The names this board contributed to the person directory outlive nothing:
     // once the DK is gone its content is ciphertext with no key on this device.
+    // Its Search Index goes the same way, and for a sharper reason (ADR-0008):
+    // plaintext that outlived its key would keep the board readable with none.
     people.forget(boardId);
+    await xySearchIndex.forget(boardId);
     location.reload();
   },
 }, {
@@ -270,6 +282,7 @@ async function deleteBoard(): Promise<void> {
     await jdelete(`/api/boards/${boardId}`);
     try { await xyCrypto.forgetDK(boardId); } catch (_) {}
     people.forget(boardId);
+    await xySearchIndex.forget(boardId);
     location.href = "/";
   } catch (err) { alert("Не удалось удалить: " + errMsg(err)); }
 }
@@ -354,6 +367,206 @@ async function runTypographBoard(allow: Set<string> | null): Promise<void> {
     alert("Ошибка при типографике: " + errMsg(err));
   }
 }
+
+// ---- найти и заменить ----
+// One replacement over the whole board, one list or one group. The matching is
+// literal (find.ts) and the structure is out of its reach, so what is left to
+// judge is context: the same needle in two places can want two different
+// answers, which is why the preview ticks Occurrences and not cards.
+const replaceOverlay = byId("replaceOverlay");
+const replaceScope = byId<HTMLSelectElement>("replaceScope");
+const replaceFrom = byId<HTMLInputElement>("replaceFrom");
+const replaceTo = byId<HTMLInputElement>("replaceTo");
+const replaceCase = byId<HTMLInputElement>("replaceCase");
+const replaceMessage = byId("replaceMessage");
+
+interface Occurrence { i: number; card: BoardCard; span: FindSpan }
+
+// Rendering thousands of rows with a checkbox each freezes the tab; a page holds
+// a hundred. Ticks live over ALL occurrences, so what is off-screen is still
+// replaced and still counted.
+const REPLACE_PAGE = 100;
+let occurrences: Occurrence[] = [];
+let perCard = new Map<number, number[]>();
+// The text each card had when the plan was drawn, BY VALUE. A card object is
+// mutated in place by the editor and swapped wholesale by a snapshot reload, so
+// neither the reference nor its current .desc can say whether the spans still
+// point where the preview said they did.
+let plannedDesc = new Map<number, string>();
+let replacePicked = new Set<number>();
+let replacePageNo = 0;
+
+// cardsInBoardOrder walks lists in board order and cards by rank within them, so
+// the preview reads down the board rather than in whatever order the state is in.
+function cardsInBoardOrder(cards: readonly BoardCard[]): BoardCard[] {
+  const order = new Map([...state.lists].sort(byRank).map((l, i) => [l.id, i]));
+  return [...cards].sort((a, b) => (order.get(a.listId) ?? 0) - (order.get(b.listId) ?? 0) || byRank(a, b));
+}
+
+function scopeCards(): BoardCard[] {
+  const v = replaceScope.value;
+  if (v.startsWith("list:")) {
+    const id = Number(v.slice(5));
+    return cardsInBoardOrder(state.cards.filter((c) => c.listId === id));
+  }
+  if (v.startsWith("group:")) {
+    const id = Number(v.slice(6));
+    const ids = new Set(state.lists.filter((l) => l.groupId === id).map((l) => l.id));
+    return cardsInBoardOrder(state.cards.filter((c) => ids.has(c.listId)));
+  }
+  return cardsInBoardOrder(state.cards);
+}
+
+function planReplace(): void {
+  const from = replaceFrom.value;
+  occurrences = [];
+  perCard = new Map();
+  plannedDesc = new Map();
+  if (from) {
+    for (const card of scopeCards()) {
+      for (const span of xyFind.replaceSpans(card.desc, from, replaceCase.checked)) {
+        const o = { i: occurrences.length, card, span };
+        occurrences.push(o);
+        const ids = perCard.get(card.id);
+        if (ids) ids.push(o.i); else perCard.set(card.id, [o.i]);
+        plannedDesc.set(card.id, card.desc);
+      }
+    }
+  }
+  // A fresh plan is a fresh set of occurrences, so everything starts ticked —
+  // which is why only the three inputs that CHANGE what was found re-plan; the
+  // «Заменить на» field merely redraws (see the wiring below), or an editor's
+  // unticking would be undone by fixing a typo in it.
+  replacePicked = new Set(occurrences.map((o) => o.i));
+  replacePageNo = 0;
+  renderReplace();
+}
+
+function renderReplace(): void {
+  const box = byId("replaceHits");
+  const pages = Math.max(1, Math.ceil(occurrences.length / REPLACE_PAGE));
+  replacePageNo = Math.min(replacePageNo, pages - 1);
+  const slice = occurrences.slice(replacePageNo * REPLACE_PAGE, (replacePageNo + 1) * REPLACE_PAGE);
+  const to = replaceTo.value;
+  const rows: HTMLElement[] = [];
+  // null, not -1: a card created offline HAS the id -1 (the first temp id), and
+  // would then never get its heading row.
+  let shownCard: number | null = null;
+  for (const o of slice) {
+    if (o.card.id !== shownCard) {
+      shownCard = o.card.id;
+      const ids = perCard.get(o.card.id) || [];
+      const head = el("input", { type: "checkbox" }) as HTMLInputElement;
+      head.checked = xyMass.allSelected(replacePicked, ids);
+      head.addEventListener("change", () => {
+        replacePicked = xyMass.toggleAll(replacePicked, ids);
+        renderReplace();
+      });
+      rows.push(el("label", { class: "replace-card" }, head,
+        el("span", { class: "replace-card-name", text: xySearchIndex.cardTitle(o.card, state.cardTitle, "(пустая карточка)") }),
+        el("span", { class: "replace-card-count", text: `${ids.length}` })));
+    }
+    const snip = xyFind.snippet(o.card.desc, o.span, 60);
+    const cb = el("input", { type: "checkbox" }) as HTMLInputElement;
+    cb.checked = replacePicked.has(o.i);
+    cb.addEventListener("change", () => {
+      replacePicked = xyMass.toggleOne(replacePicked, o.i);
+      renderReplace();
+    });
+    rows.push(el("label", { class: "replace-hit" }, cb,
+      el("span", { class: "replace-hit-text" },
+        snip.text.slice(0, snip.start),
+        el("del", { text: snip.text.slice(snip.start, snip.end) }),
+        ...(to ? [el("ins", { text: to })] : []),
+        snip.text.slice(snip.end))));
+  }
+  box.replaceChildren(...rows);
+  byId("replacePage").textContent = occurrences.length ? `Страница ${replacePageNo + 1} из ${pages}` : "";
+  byId<HTMLButtonElement>("replacePrev").disabled = replacePageNo === 0;
+  byId<HTMLButtonElement>("replaceNext").disabled = replacePageNo >= pages - 1;
+  const picked = occurrences.filter((o) => replacePicked.has(o.i));
+  const cards = new Set(picked.map((o) => o.card.id)).size;
+  const run = byId<HTMLButtonElement>("replaceRun");
+  run.disabled = picked.length === 0;
+  // An empty «на» deletes, and the button says so rather than promising a
+  // replacement with nothing.
+  const verb = replaceTo.value ? "Заменить" : "Удалить";
+  run.textContent = picked.length ? `${verb} ${picked.length} в ${xyMass.cardCount(cards)}` : verb;
+  replaceMessage.textContent = replaceFrom.value && !occurrences.length ? "Ничего не найдено." : "";
+}
+
+async function runReplace(): Promise<void> {
+  const to = replaceTo.value;
+  const byCard = new Map<number, { card: BoardCard; spans: FindSpan[] }>();
+  for (const o of occurrences) {
+    if (!replacePicked.has(o.i)) continue;
+    const entry = byCard.get(o.card.id) || { card: o.card, spans: [] };
+    entry.spans.push(o.span);
+    byCard.set(o.card.id, entry);
+  }
+  // Spans are offsets into the text as it was when the preview was drawn. If that
+  // text has moved since — a co-author's edit arriving with a snapshot reload, or
+  // this editor's own save — applying them would corrupt the card and record a
+  // desc_edit whose «before» never existed. Such a card is left out and said out
+  // loud rather than rewritten blind.
+  const changes: DescChange[] = [];
+  let stale = 0;
+  for (const x of byCard.values()) {
+    const live = state.cards.find((c) => c.id === x.card.id);
+    if (!live || live.desc !== plannedDesc.get(x.card.id)) { stale++; continue; }
+    changes.push({ card: live, desc: xyFind.applySpans(live.desc, x.spans, to) });
+  }
+  if (!changes.length && !stale) return;
+  setStatus("saving");
+  try {
+    await applyDescChanges(changes);
+    setStatus("saved");
+    // Re-plan first: what is left to replace has changed, and renderReplace owns
+    // the message line, so the report has to be written after it.
+    planReplace();
+    replaceMessage.textContent = `Готово: ${xyMass.cardCount(changes.length)}.` +
+      (stale ? ` ${xyMass.cardCount(stale)} изменились, пока шёл просмотр — они пропущены, найдите заново.` : "");
+  } catch (err) {
+    setStatus("error");
+    replaceMessage.textContent = "Ошибка при замене: " + errMsg(err);
+  }
+}
+
+function openReplace(): void {
+  // The scope list is built on open, so a list renamed or grouped since last time
+  // is named correctly.
+  const groups = new Map(state.groups.map((g) => [g.id, g.name]));
+  const seen = new Set<number>();
+  const opts = [el("option", { value: "board", text: "Вся доска" })];
+  for (const l of [...state.lists].sort(byRank)) {
+    if (l.groupId != null && !seen.has(l.groupId)) {
+      seen.add(l.groupId);
+      opts.push(el("option", { value: `group:${l.groupId}`, text: `Группа: ${groups.get(l.groupId) || ""}` }));
+    }
+    opts.push(el("option", { value: `list:${l.id}`, text: l.title }));
+  }
+  replaceScope.replaceChildren(...opts);
+  replaceMessage.textContent = "";
+  planReplace();
+  replaceOverlay.hidden = false;
+  overlayStack.open({ el: replaceOverlay, close: () => { replaceOverlay.hidden = true; } });
+  replaceFrom.focus();
+}
+
+// Typing re-scans every card in scope, so it waits for a pause; the case toggle
+// and the scope select change the answer at once and re-plan immediately.
+let planTimer = 0;
+replaceFrom.addEventListener("input", () => {
+  clearTimeout(planTimer);
+  planTimer = setTimeout(planReplace, 200);
+});
+for (const node of [replaceCase, replaceScope]) node.addEventListener("input", () => planReplace());
+// What is replaced has not changed — only what the preview shows it becoming.
+replaceTo.addEventListener("input", () => renderReplace());
+byId("replacePrev").addEventListener("click", () => { replacePageNo--; renderReplace(); });
+byId("replaceNext").addEventListener("click", () => { replacePageNo++; renderReplace(); });
+byId("replaceRun").addEventListener("click", () => { void runReplace(); });
+byId("replaceCancel").addEventListener("click", () => overlayStack.pop());
 
 // ---- the stress-mark review ----
 const accentOverlay = byId("accentOverlay");
@@ -621,8 +834,28 @@ function renderBoardTitle(): void {
   if (n) titleNode.append(el("span", { class: "board-qcount", text: questionCountLabel(n) }));
 }
 
+// The Search Index is written by whoever holds the key (ADR-0008), and on this
+// page that is every render: the state it reads is already plaintext, so this
+// costs a walk over the cards and one IndexedDB put, no decryption. Debounced,
+// because a drag renders on every frame.
+let reindexTimer = 0;
+function scheduleReindex(): void {
+  clearTimeout(reindexTimer);
+  reindexTimer = setTimeout(() => {
+    const lists = [...state.lists].sort(byRank);
+    const cards = cardsInBoardOrder(state.cards);
+    void xySearchIndex.putCards(
+      boardId,
+      state.name,
+      lists.map((l) => ({ id: l.id, title: l.title })),
+      cards.map((c) => ({ id: c.id, list: c.listId, kind: c.kind, desc: c.desc, alias: c.alias || "" })),
+    );
+  }, 800);
+}
+
 function render(): void {
   kanban.hidden = false;
+  scheduleReindex();
   renderBoardTitle();
   // The list "⋯" menu floats on <body>: a rebuild would strand it next to a
   // stale anchor, so close it with the DOM it was opened for.

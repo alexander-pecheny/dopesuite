@@ -474,6 +474,7 @@ var IconArrowUpDown = Attr{Name: "icon", Value: "arrow-up-down"}
 var IconBell = Attr{Name: "icon", Value: "bell"}
 var IconCheck = Attr{Name: "icon", Value: "check"}
 var IconClipboard = Attr{Name: "icon", Value: "clipboard"}
+var IconCloudDownload = Attr{Name: "icon", Value: "cloud-download"}
 var IconColumns3 = Attr{Name: "icon", Value: "columns-3"}
 var IconCopy = Attr{Name: "icon", Value: "copy"}
 var IconDices = Attr{Name: "icon", Value: "dices"}
