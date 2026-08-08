@@ -1083,7 +1083,7 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 			default:
 				for _, rank := range template[i-1] {
 					from, place := (rank-1)/winning, (rank-1)%winning+1
-					slots = append(slots, fromMatchSlot(prevCodes[from], place))
+					slots = append(slots, labelledFromMatch(prevCodes[from], fmt.Sprintf("Бой %d", from+1), place))
 				}
 			}
 			matches[i-1] = store.SchemeMatch{
@@ -1107,12 +1107,12 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 					Slots:            base.Slots,
 				}
 			}
-			c.appendManualStage(blk, stageCode, seRoundTitle(remaining), names, series)
+			c.appendManualStage(blk, stageCode, elimRoundTitle(round, roundIndex, winning), names, series)
 			seriesFinal = true
 			prevCodes = codes
 			continue
 		}
-		prevStages = c.appendSERound(blk, stageCode, seRoundTitle(remaining), names, venues, matches)
+		prevStages = c.appendSERound(blk, stageCode, elimRoundTitle(round, roundIndex, winning), names, venues, matches)
 		if remaining == 4 {
 			semifinalCodes = codes
 		}
@@ -1478,6 +1478,14 @@ func blockTitle(blk Section, fallback string) string {
 
 func fromMatchSlot(matchCode string, place int) store.SchemeSlot {
 	return store.SchemeSlot{FromMatch: &store.SchemeFromMatchRef{Match: matchCode, Place: place}}
+}
+
+// labelledFromMatch is fromMatchSlot with the label a host reads while the seat
+// is still empty — «Бой 3, место 2», not the internal бой code.
+func labelledFromMatch(matchCode, boutLabel string, place int) store.SchemeSlot {
+	slot := fromMatchSlot(matchCode, place)
+	slot.Label = fmt.Sprintf("%s, м. %d", boutLabel, place)
+	return slot
 }
 
 func (c *compiler) appendManualStage(blk Section, code, title string, rounds []string, matches []store.SchemeMatch) {

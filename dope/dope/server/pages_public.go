@@ -237,8 +237,12 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 				case "od":
 					s.serveGameHTMLWithInit(w, r, "static/od.html", scope)
 					return
-				case "si", "ksi":
+				case "ksi":
 					s.serveGameHTMLWithInit(w, r, "static/si.html", scope)
+					return
+				case "si":
+					// Личная СИ is a bracket; its viewer is ЭК's, not КСИ's.
+					s.serveViewerHTMLWithInit(w, r, scope, parts[1:])
 					return
 				case "brain":
 					s.serveGameHTMLWithInit(w, r, "static/brain.html", scope)

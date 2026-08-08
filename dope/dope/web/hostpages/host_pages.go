@@ -597,8 +597,13 @@ func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, festI
 	switch gameType {
 	case "od":
 		s.h.ServeGameHTMLWithInit(w, r, "static/od.html", scope)
-	case "si", "ksi":
+	case "ksi":
 		s.h.ServeGameHTMLWithInit(w, r, "static/si.html", scope)
+	case "si":
+		// Личная СИ is a bracket of бои, and a бой's protocol is participants ×
+		// themes × five answers — the exact shape ЭК's page already draws. It
+		// gets that page rather than КСИ's flat single-grid one.
+		s.h.ServeHostHTMLWithInit(w, r, scope, parts)
 	case "brain":
 		s.h.ServeGameHTMLWithInit(w, r, "static/brain.html", scope)
 	default:

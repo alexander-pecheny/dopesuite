@@ -101,8 +101,8 @@ func renameRegistry(db *sql.DB) error {
 		`alter table participants add column fest_team_id integer references fest_teams(id)`,
 		`alter table participants add column fest_player_id integer references fest_players(id)`,
 		`drop index if exists teams_fest_number_idx`,
-		`create unique index if not exists participants_fest_number_idx
-		   on participants(fest_id, number) where number is not null`,
+		`create unique index if not exists participants_fest_roster_number_idx
+		   on participants(fest_id, roster, number) where number is not null`,
 
 		`alter table match_results rename column team_id to participant_id`,
 		`alter table game_team_players rename column team_id to participant_id`,

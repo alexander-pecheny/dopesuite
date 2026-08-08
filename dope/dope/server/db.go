@@ -600,7 +600,15 @@ insert or ignore into schema_versions(version, applied_at) values(11, strftime('
 	}); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`create unique index if not exists participants_fest_number_idx on participants(fest_id, number) where number is not null`); err != nil {
+	// Numbering is per Kind: «команда 12» and «игрок 12» are different
+	// identities, and a fest that runs both a team format and an individual one
+	// numbers each from 1. A single fest-wide number space would have the
+	// individual game claim the teams' rows (ADR-0007).
+	if _, err := db.Exec(`drop index if exists participants_fest_number_idx`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`create unique index if not exists participants_fest_roster_number_idx
+  on participants(fest_id, roster, number) where number is not null`); err != nil {
 		return err
 	}
 	var hasV14 int

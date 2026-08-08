@@ -280,10 +280,13 @@
 
 /* The game header's trail is the kit's .crumbs, sized down: it shares a fixed
    44px bar with the stage tabs, so it runs at the small end and gives up room
-   to them rather than pushing them off. */
+   to them rather than pushing them off. The floor is what the last crumb — the
+   game's own name — needs: a game with a dozen stages used to squeeze the whole
+   trail down to one letter per crumb, which reads as broken rather than terse.
+   The tab strip scrolls, so the room comes from there. */
 .game-host-top .crumbs {
   flex: 0 1 auto;
-  min-width: 120px;
+  min-width: min(52vw, 230px);
   max-width: min(34vw, 420px);
   font-size: var(--text-xs);
   line-height: var(--leading-tight);

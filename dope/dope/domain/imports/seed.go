@@ -1080,10 +1080,11 @@ func EnsureSeedTeamByNumber(ctx context.Context, tx *sql.Tx, festID, number int6
 	var teamID int64
 	var existingName, existingCity string
 	err := tx.QueryRowContext(ctx, `
-select id, name, city from participants where fest_id = ? and number = ? limit 1`, festID, number).Scan(&teamID, &existingName, &existingCity)
+select id, name, city from participants
+where fest_id = ? and roster = 'team' and number = ? limit 1`, festID, number).Scan(&teamID, &existingName, &existingCity)
 	if errors.Is(err, sql.ErrNoRows) {
 		teamID, err = store.InsertReturningID(ctx, tx, `
-insert into participants(fest_id, name, city, number) values(?, ?, ?, ?)`, festID, name, city, number)
+insert into participants(fest_id, roster, name, city, number) values(?, 'team', ?, ?, ?)`, festID, name, city, number)
 		if err != nil {
 			return 0, "", err
 		}
@@ -1125,7 +1126,8 @@ func EnsureSeedPlayerByNumber(ctx context.Context, tx *sql.Tx, festID, number in
 	}
 	var participantID int64
 	err := tx.QueryRowContext(ctx, `
-select id from participants where fest_id = ? and number = ? limit 1`, festID, number).Scan(&participantID)
+select id from participants
+where fest_id = ? and roster = 'player' and number = ? limit 1`, festID, number).Scan(&participantID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.InsertReturningID(ctx, tx, `
 insert into participants(fest_id, roster, name, city, number, fest_player_id)
@@ -1135,7 +1137,7 @@ values(?, 'player', ?, '', ?, ?)`, festID, name, number, festPlayerID)
 		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, `
-update participants set roster = 'player', name = ?, fest_player_id = ? where id = ?`,
+update participants set name = ?, fest_player_id = ? where id = ?`,
 		name, festPlayerID, participantID); err != nil {
 		return 0, err
 	}
