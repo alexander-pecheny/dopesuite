@@ -675,3 +675,42 @@ func TestCardTitlePreference(t *testing.T) {
 		t.Fatalf("card_title = %q, want question", snap.CardTitle)
 	}
 }
+
+// TestBoardComments covers the прогрев endpoint: every comment on the board in
+// one response, and nothing else — a desc_edit carries the whole before/after
+// text and has no business in a search index.
+func TestBoardComments(t *testing.T) {
+	c, boardID, listID := boardWithList(t)
+	resp := c.do("POST", "/api/lists/"+listID+"/cards", map[string]string{"description_enc": enc("? q"), "rank": "m"})
+	mustStatus(t, resp, 200)
+	var card struct {
+		ID int64 `json:"id"`
+	}
+	c.decode(resp, &card)
+	cardID := itoa(card.ID)
+
+	mustStatus(t, c.do("POST", "/api/cards/"+cardID+"/comments", map[string]string{"payload_enc": enc("нужен зачёт")}), 204)
+	mustStatus(t, c.do("PATCH", "/api/cards/"+cardID, map[string]string{
+		"description_enc": enc("? q2"), "desc_event_enc": enc(`{"before":"? q","after":"? q2"}`),
+	}), 204)
+
+	resp = c.do("GET", "/api/boards/"+boardID+"/comments", nil)
+	mustStatus(t, resp, 200)
+	var got []boardCommentDTO
+	c.decode(resp, &got)
+	if len(got) != 1 {
+		t.Fatalf("comments = %d, want 1 (the desc_edit must not be here)", len(got))
+	}
+	if got[0].CardID != card.ID || got[0].PayloadEnc != enc("нужен зачёт") {
+		t.Fatalf("comment = %+v, want the one on card %d", got[0], card.ID)
+	}
+
+	// A deleted comment is gone from the index, tombstone or not.
+	mustStatus(t, c.do("DELETE", "/api/comments/"+itoa(got[0].ID), nil), 204)
+	resp = c.do("GET", "/api/boards/"+boardID+"/comments", nil)
+	mustStatus(t, resp, 200)
+	c.decode(resp, &got)
+	if len(got) != 0 {
+		t.Fatalf("comments after delete = %d, want 0", len(got))
+	}
+}

@@ -190,6 +190,28 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
   -- chgk writes stress by capitalising the vowel («брАзер»), and a camel-cased
   -- compound («ГазпромИнвест») is the same shape, so the editor confirms each
   -- word once for the whole board. Nothing else in the pass is reviewable.
+  -- Найти и заменить: one replacement over the whole board, one list or one
+  -- group. Every occurrence is shown with its context and ticked one by one,
+  -- because «г.» in «г. Москва» and in «1917 г.» are two different decisions.
+  modal id="replaceOverlay" label="Найти и заменить" title="Найти и заменить"
+    -- one control per line: «найти» and «заменить на» read as a pair, and a pair
+    -- that wraps mid-row reads as neither
+    row gap="sm" align="center" wrap
+      selectfield id="replaceScope" compact
+        option value="board" selected "Вся доска"
+      checkbox id="replaceCase" checked "Учитывать регистр"
+    textfield id="replaceFrom" placeholder="Найти" autocomplete="off" spellcheck="false"
+    textfield id="replaceTo" placeholder="Заменить на" autocomplete="off" spellcheck="false"
+    mount id="replaceHits" kind="replace-hits"
+    row gap="sm" align="center" wrap
+      button small kind="ghost" id="replacePrev" "Назад"
+      muted id="replacePage"
+      button small kind="ghost" id="replaceNext" "Дальше"
+    row gap="sm" wrap
+      button id="replaceRun" "Заменить"
+      button kind="ghost" id="replaceCancel" "Отмена"
+    message id="replaceMessage"
+
   modal id="accentOverlay" label="Ударения" title="Ударения"
     hint "Проверьте ударения — снимите галочку там, где заглавная буква не означает ударение."
     mount id="accentPicks" kind="accent-picks"

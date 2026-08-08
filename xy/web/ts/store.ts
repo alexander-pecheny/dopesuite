@@ -121,7 +121,7 @@ export interface AttachmentRecord {
 }
 
 const DB_NAME = "xy-offline";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // Object stores:
 //   snapshots  key=boardId(number)   → board snapshot (GET /api/boards/{id} shape)
@@ -131,7 +131,8 @@ const DB_VERSION = 1;
 //   outbox     keyPath="seq" auto    → queued mutation op
 //   idmap      key=tempId(number<0)  → realId(number)
 //   meta       key=string            → scalar (e.g. tempCounter)
-const STORES = ["snapshots", "boardlist", "timeline", "attachments", "outbox", "idmap", "meta"];
+//   searchindex key=boardId(number)  → one board's Search Index, PLAINTEXT (ADR-0008)
+const STORES = ["snapshots", "boardlist", "timeline", "attachments", "outbox", "idmap", "meta", "searchindex"];
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 function db(): Promise<IDBDatabase> {
@@ -146,7 +147,17 @@ function db(): Promise<IDBDatabase> {
         else d.createObjectStore(name);
       }
     };
-    req.onsuccess = () => resolve(req.result);
+    // A version bump only upgrades once every other tab has let go. Without
+    // these two the app hangs on the second tab of an older build: the open
+    // blocks and neither handler below ever fires. onversionchange makes THIS
+    // tab step aside for a newer one; onblocked says so rather than waiting
+    // forever, since a rejected promise surfaces as an error the reader can act
+    // on and a pending one looks like a spinner that never ends.
+    req.onblocked = () => reject(new Error("Другая вкладка xy держит старую версию хранилища — закройте её и обновите страницу."));
+    req.onsuccess = () => {
+      req.result.onversionchange = () => { req.result.close(); dbPromise = null; };
+      resolve(req.result);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
@@ -186,6 +197,20 @@ const putSnapshot = (boardId: number | string, snap: BoardSnapshot): Promise<IDB
   tx("snapshots", "readwrite", (s) => req(s.put(snap, Number(boardId))));
 const deleteSnapshot = (boardId: number | string): Promise<undefined> =>
   tx("snapshots", "readwrite", (s) => req(s.delete(Number(boardId))));
+
+// ---- search index (PLAINTEXT — see searchindex.ts and ADR-0008) ----
+const getIndex = (boardId: number | string): Promise<unknown | undefined> =>
+  tx("searchindex", "readonly", (s) => req<unknown>(s.get(Number(boardId))));
+const putIndex = (boardId: number | string, idx: unknown): Promise<IDBValidKey> =>
+  tx("searchindex", "readwrite", (s) => req(s.put(idx, Number(boardId))));
+const deleteIndex = (boardId: number | string): Promise<undefined> =>
+  tx("searchindex", "readwrite", (s) => req(s.delete(Number(boardId))));
+const allIndexes = (): Promise<Array<{ board: number; index: unknown }>> =>
+  tx("searchindex", "readonly", async (s) => {
+    const keys = await req(s.getAllKeys());
+    const vals = await req<unknown[]>(s.getAll());
+    return keys.map((k, i) => ({ board: Number(k), index: vals[i] }));
+  });
 
 // ---- board list ----
 const getBoardList = (): Promise<unknown[] | undefined> =>
@@ -248,6 +273,7 @@ async function nextTempId(): Promise<number> {
 export const xyStore = {
   getSnapshot, putSnapshot, deleteSnapshot,
   getBoardList, putBoardList,
+  getIndex, putIndex, deleteIndex, allIndexes,
   getTimeline, putTimeline,
   getAttachment, putAttachment,
   addOp, allOps, deleteOp, putOp, countOps,

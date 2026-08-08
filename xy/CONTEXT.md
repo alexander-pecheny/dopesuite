@@ -72,5 +72,18 @@ The one wire format for ciphertext: `magic("xy1") | alg | nonce | ct+tag`, base6
 **Outbox**:
 The offline mutation queue (`sync.js`): entities created offline get negative temp ids, remapped to real ids on flush.
 
+**Mirror**:
+This device's ciphertext copy of a Board — the snapshot, and once prewarmed the comments too. What lets a Board open, and be searched, with no network.
+
+**Search Index**:
+What this device can find: the readable words of every Board whose key it holds — each Card's 4s, its Alias, and the comments on it. Never synced and never a server entity; it is written only by code that already holds a data key, and dies with that key, so forgetting a Board's password takes its findability with it.
+_Avoid_: cache (the Mirror is the cache; this is the readable half)
+
+**Folding**:
+The forgiving comparison a search matches by, so that a stress mark, a non-breaking space or a «ёлочка» the typography pass put there cannot hide a question from the editor who wrote it. A replacement deliberately does not fold: over-finding costs a glance, over-replacing costs a package.
+
+**Occurrence**:
+One matched span in one Card's 4s — the unit an editor ticks before a replacement runs, because «г.» in «г. Москва» and «г.» in «1917 г.» are two different decisions.
+
 **Tombstone**:
 Any deleted entity during its 14-day grace period: hidden from the app and from quota, restorable on request. After 14 days it is reaped — permanently destroyed, including attachment bytes.

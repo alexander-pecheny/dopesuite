@@ -78,7 +78,11 @@ internal/server/       package server — the whole HTTP server
   errors.go            appError → status mapping
   auth.go              sessions, login/register/password, telegram bridge
   boards.go            boards CRUD, keymeta (passphrase re-wrap), members, ACL helpers
-  lists_cards.go       lists/cards/labels/timeline + list-group handlers, DTOs/scanners
+  lists_cards.go       lists/cards/labels/timeline + list-group handlers, DTOs/scanners.
+                       GET /api/boards/{id}/comments returns every live comment on a board in
+                       one response (ciphertext, comments only) — what прогрев indexes; a
+                       desc_edit payload carries a whole question's before/after and is
+                       deliberately excluded
   tokens.go            API tokens: month-lived bearer creds (manage at /profile/tokens)
   trello_compat.go     Trello-compatible API for chgksuite (token-authed via key+token)
   rank.go              server-side fractional-index keyAfter (Trello card upload)
@@ -175,6 +179,19 @@ internal/blobstore/    attachment bytes ON DISK (random-ref, sharded, write-once
 web/ts/                strict-TS ES-module sources; built by `just build-web` into
                        the gitignored web/assets/static/dist/ (see Stack above)
     crypto.ts          envelope format + board key lifecycle + IndexedDB key cache
+    find.ts            the matching rules behind search and find-and-replace, all pure:
+                       folding (search sees through the accents/NBSP/«ёлочки» the typography
+                       pass wrote), literal matching for a replacement (space matches NBSP,
+                       hyphen matches NBHY, case toggle), the guard that makes a marker
+                       prefix and a (hidden-comment xy-version: …) head unmatchable, and the
+                       snippet a hit is shown by
+    searchindex.ts     the Search Index (ADR-0008): one PLAINTEXT record per board in
+                       IndexedDB ("searchindex" store) with each card's 4s, its alias and the
+                       comments on it. Written only where a data key is already held —
+                       board.ts on every render, and «Прогрев поиска» (☰ on the index page),
+                       which downloads every board this device can unlock so coverage stops
+                       depending on which boards were opened. Dropped with the key
+                       (forgetDK / board delete). search() is pure and jstest-covered
     store.ts           offline IndexedDB layer: snapshot/timeline/attachment mirror,
                        mutation outbox, temp-id↔real-id map (DB "xy-offline")
     sync.ts            offline engine: mutate()/flush() outbox replay with negative
@@ -194,7 +211,10 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
     rank.ts            fractional indexing (LexoRank-style keyBetween)
     app.ts             shared fetch/DOM helpers, derived titles, offline-tolerant requireLogin
     diff.ts            word-level token diff for desc_edit timeline highlighting
-    index.ts           board list + create-board (passphrase) flow; offline board-list cache
+    index.ts           board list + create-board (passphrase) flow; offline board-list cache;
+                       the search box over both grids — the top grid filters to boards the
+                       query can NAME (names are plaintext), the grid below shows the cards
+                       it can quote, so a board appears in exactly one place
     board.ts           kanban orchestrator over the extracted kernels (unlock.ts =
                        boot/unlock/snapshot-load, dragrank.ts, carddetail.ts,
                        carddraft.ts = draft/dirty rules, timeline.ts,
@@ -224,6 +244,12 @@ web/ts/                strict-TS ES-module sources; built by `just build-web` in
                        stopping at both ends, and firing only when the caret is outside a
                        field; leaving a dirty card by ANY route (↩️, Escape, back, backdrop,
                        the arrows) raises the Save / Discard prompt instead of discarding;
+                       «Найти и заменить» (☰ menu) replaces one literal string across the
+                       board, one list or one group: every occurrence is ticked with its
+                       context (100 per page), markers and version separators are
+                       unmatchable, and the write is the same collectDescChanges /
+                       applyDescChanges pair the typography pass uses, so each card gets its
+                       desc_edit diff and it works offline;
                        «Управление списками» modal groups consecutive lists into a
                        list_of_lists (☰ menu); all mutations via sync.ts (offline-capable);
                        display sizes (users.sizes, edited on /profile — see profile.ts) are
@@ -344,8 +370,9 @@ The app is an installable PWA that works offline and resyncs on reconnect.
 - **Data mirror**: `store.ts` keeps a per-board ciphertext snapshot, per-card
   timelines, the board list and downloaded attachment bytes in IndexedDB
   (DB `xy-offline`). Everything stored is ciphertext (same as the server) except
-  plaintext board names; the cached DK in `xy-keys` decrypts the rest. No
-  encrypted *content* is persisted in the clear.
+  plaintext board names — and the Search Index, which is deliberately plaintext
+  (ADR-0008: the raw DK already sits in `xy-keys`, so plaintext beside it adds no
+  exposure; it is purged whenever the key is).
 - **Outbox + resync**: every board mutation flows through `sync.ts#mutate`. Online
   with an empty queue it's sent immediately; otherwise it's queued. Entities
   created offline get **negative temp ids** (which flow transparently through the
@@ -409,9 +436,8 @@ Run the built binary from `/tmp` (not the repo dir) to get embed mode + `?v=`
 asset versioning. Still worth a manual pass before release: the full board/card
 UI flows and service-worker install/offline behaviour.
 
-**Not built yet**: encrypted client-side search (an IndexedDB index built from
-decrypted content as boards are opened; server-side encrypted search is out of
-scope).
+**Search** is client-side and local-only (ADR-0008, `searchindex.ts`); server-side
+encrypted search stays out of scope.
 
 ## List groups (list_of_lists)
 A named, ordered run of **consecutive** lists, sharing one question-numbering

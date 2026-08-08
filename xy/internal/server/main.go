@@ -154,6 +154,7 @@ func Main() {
 	mux.HandleFunc("PUT /api/cards/{id}/sessions", srv.handleSetCardSessions)
 	mux.HandleFunc("PUT /api/boards/{id}/tour-testers", srv.handleSetTourTesters)
 	mux.HandleFunc("GET /api/cards/{id}/timeline", srv.handleGetTimeline)
+	mux.HandleFunc("GET /api/boards/{id}/comments", srv.handleGetBoardComments)
 	mux.HandleFunc("POST /api/cards/{id}/comments", srv.handleAddComment)
 	mux.HandleFunc("POST /api/cards/{id}/timeline/import", srv.handleImportEvents)
 	mux.HandleFunc("PATCH /api/comments/{id}", srv.handlePatchComment)

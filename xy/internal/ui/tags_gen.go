@@ -158,6 +158,7 @@ var IconArrowUpDown = base.IconArrowUpDown
 var IconBell = base.IconBell
 var IconCheck = base.IconCheck
 var IconClipboard = base.IconClipboard
+var IconCloudDownload = base.IconCloudDownload
 var IconColumns3 = base.IconColumns3
 var IconCopy = base.IconCopy
 var IconDices = base.IconDices
@@ -180,6 +181,7 @@ var IconPaperclip = base.IconPaperclip
 var IconPencil = base.IconPencil
 var IconPlus = base.IconPlus
 var IconReplace = base.IconReplace
+var IconSearch = base.IconSearch
 var IconSettings = base.IconSettings
 var IconTag = base.IconTag
 var IconTags = base.IconTags
@@ -208,6 +210,10 @@ var SpaceLG = base.SpaceLG
 var SpaceXL = base.SpaceXL
 
 // Primitive constructors.
+
+func Searchfield(items ...Item) *Element {
+	return base.New("searchfield", items...)
+}
 
 func Previewtitle(items ...Item) *Element {
 	return base.New("previewtitle", items...)
@@ -282,6 +288,7 @@ var MountMassBody = Attr{Name: "kind", Value: "mass-body"}
 var MountTesterList = Attr{Name: "kind", Value: "tester-list"}
 var MountAccentPicks = Attr{Name: "kind", Value: "accent-picks"}
 var MountColorField = Attr{Name: "kind", Value: "color-field"}
+var MountReplaceHits = Attr{Name: "kind", Value: "replace-hits"}
 var PageWide = Attr{Name: "kind", Value: "wide"}
 var PageBoard = Attr{Name: "kind", Value: "board"}
 var PaneSrc = Attr{Name: "kind", Value: "src"}

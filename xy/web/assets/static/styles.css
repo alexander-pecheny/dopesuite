@@ -222,6 +222,83 @@
   height: 10px;
 }
 
+/* Unsearched, the board grid is the page's one scroller (see above). A query
+   turns the page into three stacked grids — boards, questions, comments — and
+   three nested scrollers would each show a row and a half of their own. So while
+   a query is live every grid sizes to its content and the column scrolls once. */
+.list-page.searching .match-main { overflow-y: auto; }
+.list-page.searching .board-grid { flex: 0 0 auto; overflow: visible; }
+.list-page.searching #boardList { padding-bottom: 0; }
+
+/* The search box is one control: a magnifier sitting inside the field. A third
+   of a laptop screen is as wide as a query ever needs; a phone gives it the row. */
+.searchbox {
+  position: relative;
+  width: 33%;
+  min-width: 280px;
+  max-width: 560px;
+  margin: var(--space-2) auto 0;
+}
+.searchbox-input { width: 100%; padding-left: calc(var(--space-3) * 2 + 1em); }
+.searchbox-ico {
+  position: absolute;
+  left: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+@media (max-width: 720px) { .searchbox { width: 100%; min-width: 0; } }
+
+/* Each count labels the grid UNDER it, so it sits against that grid rather than
+   halfway between two of them. */
+#cardNote, #commentNote { display: block; margin-top: var(--space-4); color: var(--muted); }
+#cardNote + .board-grid, #commentNote + .board-grid { padding-top: var(--space-2); }
+
+/* A found card is the same tile as a board, in smaller type — but laid out as a
+   BLOCK, not as .board-card's flex column: a flex child that clips its overflow
+   has min-height 0, so the three lines squeeze each other and every one of them
+   comes out sliced through the middle. */
+.hit-card {
+  display: block;
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  padding: var(--space-3);
+  /* A clamped (-webkit-box) child contributes no intrinsic height to the grid
+     row, so the row would take .board-card's 90px and every tile would spill its
+     text over the next one. The tile therefore states the height it shows —
+     title 2 lines, source 1, snippet 4 — and clips anything past it. */
+  min-height: 10.4em;
+  overflow: hidden;
+}
+.hit-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-weight: var(--fw-semibold);
+}
+.hit-where {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-top: var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hit-where .ico { --ico-size: 0.9em; }
+/* The snippet is the point of the tile, so it gets the room the title doesn't. */
+.hit-snippet {
+  display: -webkit-box;
+  margin-top: var(--space-1);
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text-muted);
+}
+.hit-more { color: var(--muted); }
+
 /* trello import */
 .import-form { max-width: 760px; margin: 0 auto; }
 .import-form .card-desc { min-height: 320px; }
@@ -1712,3 +1789,37 @@ body {
 .accent-from { color: var(--muted); }
 .accent-arrow { color: var(--muted); font-size: var(--text-sm); }
 .accent-to { font-weight: var(--fw-bold); }
+
+/* A replacement is reviewed by reading question text, not by reading a form:
+   the dialog is nearly twice the kit's default so an occurrence and its context
+   fit on one line instead of wrapping three times. */
+#replaceOverlay .appearance-modal { width: min(760px, 100%); }
+#replaceFrom, #replaceTo { width: 100%; }
+
+/* «Найти и заменить» → the occurrence review: a card heading with its own tick,
+   then one row per occurrence with the context that makes it a decision. */
+.replace-hits { display: flex; flex-direction: column; gap: var(--space-1); max-height: 50vh; overflow-y: auto; }
+.replace-card {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  cursor: var(--cursor-action);
+}
+.replace-card-name {
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.replace-card-count { color: var(--muted); font-size: var(--text-xs); }
+.replace-hit {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
+  cursor: var(--cursor-action);
+}
+.replace-hit-text { font-size: var(--text-sm); color: var(--text-muted); }
+.replace-hit-text del { color: var(--muted); }
+.replace-hit-text ins { font-weight: var(--fw-bold); text-decoration: none; }

@@ -6,7 +6,21 @@ page title="Мои доски · xy" kind="full" scripts="dist/index.js"
     iconlink href="/import" icon="file-up" label="Импорт из Trello"
     iconbtn id="newBoardBtn" icon="plus" label="Новая доска"
 
+  -- one box over three grids: boards it can name, then the questions it can
+  -- quote, then the comments — a question and a discussion about it are two
+  -- different answers to «где это было?»
+  searchfield id="boardSearch" placeholder="Поиск по доскам, вопросам и комментариям" label="Поиск"
   mount id="boardList" kind="board-grid"
+  -- both counts start hidden for the same reason as the grids: an empty line
+  -- box under the board list is 20px of nothing, and it pushed the last row of
+  -- boards out of view
+  muted id="cardNote" hidden
+  -- both result grids start hidden: they are .board-grid too, so an empty one
+  -- left on the page still takes its share of the column and clips the board
+  -- list mid-row. runSearch shows each one only when it has something.
+  mount id="hitList" kind="board-grid" hidden
+  muted id="commentNote" hidden
+  mount id="commentList" kind="board-grid" hidden
   message id="message"
 
   -- create-board dialog
