@@ -10,7 +10,11 @@ import (
 	"time"
 )
 
-// ThemeCount is the number of regular themes per team in a match.
+// ThemeCount is how many regular themes a бой has when nothing says otherwise —
+// ЭК's twelve. A Kind that plays a different number says so in its stage config
+// (личная СИ's группы play six, its play-off eight, its grand final twelve), and
+// a бой padded to twelve when it played six draws six empty columns nobody can
+// fill.
 const ThemeCount = 12
 
 // QuestionValues is the EK/KSI per-answer point scale (lowest to highest).
@@ -36,6 +40,9 @@ type DBMatchState struct {
 	RawState       string // verbatim matches.state_json — the Protocol document for non-EK games
 	ParticipantIDs []int64
 	RosterSource   string
+	// Themes is how many regular themes this бой plays, from its stage. Zero
+	// means the default — a бой whose stage never said.
+	Themes int
 }
 
 // IsEKShaped reports whether the match's state blob follows the EK team-keyed
@@ -106,10 +113,19 @@ func NormalizeMark(mark string) string {
 	}
 }
 
-// NormalizeState fills defaults and pads/clamps each team's themes to a uniform
-// shape, normalising every answer mark, so a freshly-loaded or hand-edited
-// state is well-formed before scoring/serving.
+// NormalizeState is NormalizeStateTo at the default theme count.
 func NormalizeState(state *MatchState) {
+	NormalizeStateTo(state, ThemeCount)
+}
+
+// NormalizeStateTo fills defaults and pads/clamps each team's themes to a
+// uniform shape, normalising every answer mark, so a freshly-loaded or
+// hand-edited state is well-formed before scoring/serving. themes <= 0 means
+// the default.
+func NormalizeStateTo(state *MatchState, themes int) {
+	if themes <= 0 {
+		themes = ThemeCount
+	}
 	if state.Title == "" {
 		state.Title = "Бой A"
 	}
@@ -127,12 +143,12 @@ func NormalizeState(state *MatchState) {
 	}
 	for i := range state.Participants {
 		state.Participants[i].Tiebreak = 0
-		if len(state.Participants[i].Themes) < ThemeCount {
-			missing := ThemeCount - len(state.Participants[i].Themes)
+		if len(state.Participants[i].Themes) < themes {
+			missing := themes - len(state.Participants[i].Themes)
 			state.Participants[i].Themes = append(state.Participants[i].Themes, make([]ThemeEntry, missing)...)
 		}
-		if len(state.Participants[i].Themes) > ThemeCount {
-			state.Participants[i].Themes = state.Participants[i].Themes[:ThemeCount]
+		if len(state.Participants[i].Themes) > themes {
+			state.Participants[i].Themes = state.Participants[i].Themes[:themes]
 		}
 		for t := range state.Participants[i].Themes {
 			for a := range state.Participants[i].Themes[t].Answers {
@@ -164,9 +180,11 @@ func LoadDBMatchStateWhere(ctx context.Context, q Queryer, where string, args ..
 	var venueNumber sql.NullInt64
 	var venueTitle sql.NullString
 	var stateJSON string
+	var stageConfig string
 	if err := q.QueryRowContext(ctx, `
 select m.id, m.game_id, g.game_type, m.code, m.title, m.status, m.revision, m.state_json,
-       t.revision, t.updated_at, s.code, s.title, v.number, v.title, g.roster_source
+       t.revision, t.updated_at, s.code, s.title, v.number, v.title, g.roster_source,
+       coalesce(s.config_json, '')
 from matches m
 join fests t on t.id = m.fest_id
 join games g on g.id = m.game_id
@@ -174,9 +192,11 @@ join stages s on s.id = m.stage_id
 left join venues v on v.id = m.venue_id
 where `+where, args...).
 		Scan(&match.MatchID, &match.GameID, &match.GameType, &match.Code, &match.Title, &match.Status, &match.Revision, &stateJSON,
-			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle, &match.RosterSource); err != nil {
+			&match.FestRevision, &updatedAt, &match.StageCode, &match.StageTitle, &venueNumber, &venueTitle, &match.RosterSource,
+			&stageConfig); err != nil {
 		return DBMatchState{}, err
 	}
+	match.Themes = stageThemeCount(stageConfig)
 	match.RawState = stateJSON
 	if match.IsEKShaped() {
 		blob, err := ParseMatchBlob(stateJSON)
@@ -283,8 +303,25 @@ order by ms.slot_index`, match.MatchID)
 			slot.ParticipantID.Int64, slot.Name, roster, slot.Place, playerName)
 		match.ParticipantIDs[slot.Index] = slot.ParticipantID.Int64
 	}
-	NormalizeState(&match.State)
+	NormalizeStateTo(&match.State, match.Themes)
 	return match, nil
+}
+
+// stageThemeCount reads how many themes a stage's бои play. The scheme writes it
+// under the stage's protocol config; anything else means the default.
+func stageThemeCount(configJSON string) int {
+	if strings.TrimSpace(configJSON) == "" {
+		return 0
+	}
+	var wrapper struct {
+		Config struct {
+			Themes int `json:"themes"`
+		} `json:"config"`
+	}
+	if err := json.Unmarshal([]byte(configJSON), &wrapper); err != nil {
+		return 0
+	}
+	return wrapper.Config.Themes
 }
 
 // blobPlayerNames batch-resolves every player id referenced by a match blob to

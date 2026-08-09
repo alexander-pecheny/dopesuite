@@ -754,6 +754,73 @@ export interface StageRef {
   title?: string;
   stage_type?: string;
   type?: string;
+  grain?: {block?: string; wave?: number; group?: string};
+  matches?: StageRefMatch[];
+  // members names the server stages a displayed stage is assembled from.
+  members?: string[];
+}
+
+export interface StageRefMatch {
+  code?: string;
+  title?: string;
+  round?: number;
+  group?: string;
+}
+
+// roundStages turns a Block of Groups into one tab per круг. The sheets enter
+// protocols by круг — «Круг 1» through «Круг 4», every группа at once — because
+// that is the order the бои are played in; a tab per группа is the order they
+// are ranked in, which is what the Сетка already shows.
+//
+// A Block with a single Group is left alone: there is no круг to gather across.
+export function roundStages(stages: StageRef[]): StageRef[] {
+  const out: StageRef[] = [];
+  const emitted = new Set<string>();
+  for (const stage of stages) {
+    const block = stage.grain?.block || "";
+    if (!block || !stage.grain?.group) {
+      out.push(stage);
+      continue;
+    }
+    if (emitted.has(block)) continue;
+    emitted.add(block);
+    const groups = stages.filter((s) => s.grain?.block === block && s.grain?.group);
+    if (groups.length < 2) {
+      out.push(stage);
+      continue;
+    }
+    out.push(...gatherRounds(block, groups));
+  }
+  return out;
+}
+
+function gatherRounds(block: string, groups: StageRef[]): StageRef[] {
+  const byRound = new Map<number, StageRefMatch[]>();
+  for (const group of groups) {
+    for (const match of group.matches || []) {
+      const round = Number(match.round || 1);
+      const titled = {...match, group: groupLabel(group)};
+      const list = byRound.get(round);
+      if (list) list.push(titled);
+      else byRound.set(round, [titled]);
+    }
+  }
+  const members = groups.map((group) => group.code);
+  return Array.from(byRound.keys()).sort((a, b) => a - b).map((round) => ({
+    code: `${block}@r${round}`,
+    title: `Круг ${round}`,
+    stage_type: "matches",
+    matches: byRound.get(round) || [],
+    members,
+  }));
+}
+
+// groupLabel is what a бой is prefixed with once круги mix the группы together:
+// «Группа 3. Бой 7» says which table it was, which the tab no longer does.
+function groupLabel(stage: StageRef): string {
+  const title = String(stage.title || "");
+  const named = title.match(/Группа\s*\S+$/);
+  return named ? named[0] : `Группа ${stage.grain?.group || "?"}`;
 }
 
 export function stageType(stage: {stage_type?: string; type?: string} | null | undefined): string {
@@ -1287,6 +1354,7 @@ export const DopeTable = {
   formatNumber,
   formatPlace,
   stageType,
+  roundStages,
   stageTabLabel,
   teamListCell,
   buildVenuesTable,

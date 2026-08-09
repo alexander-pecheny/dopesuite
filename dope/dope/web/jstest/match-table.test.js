@@ -479,3 +479,41 @@ test("notifyEmbeddedResize stays a no-op outside an embed", () => {
   T.notifyEmbeddedResize(true);
   assert.equal(posted, 0, "no parent frame -> no postMessage");
 });
+
+// The sheets enter protocols by круг — «Круг 1» through «Круг 4», every группа
+// at once — because that is the order the бои are played in. A tab per группа is
+// the order they are ranked in, which the Сетка already shows.
+test("roundStages gathers a Block's Groups into one tab per круг", () => {
+  const group = (n) => ({
+    code: `s1-g${n}`,
+    title: `Групповой этап. Группа ${n}`,
+    stage_type: "matches",
+    grain: {block: "s1", group: String(n)},
+    matches: [
+      {code: `s1-g${n}-1`, title: "Бой 1", round: 1},
+      {code: `s1-g${n}-2`, title: "Бой 2", round: 2},
+    ],
+  });
+  const playoff = {code: "s2-r1", title: "Финал", stage_type: "matches", grain: {block: "s2"}, matches: []};
+  const stages = T.roundStages([group(1), group(2), playoff]);
+
+  assert.deepEqual(stages.map((s) => s.title), ["Круг 1", "Круг 2", "Финал"]);
+  assert.deepEqual(stages[0].matches.map((m) => m.code), ["s1-g1-1", "s1-g2-1"]);
+  // Six группы of «Бой 1» need to say which table they were.
+  assert.deepEqual(stages[0].matches.map((m) => m.group), ["Группа 1", "Группа 2"]);
+  // The tab is assembled from real server stages, which is what gets fetched.
+  assert.deepEqual(stages[0].members, ["s1-g1", "s1-g2"]);
+  assert.equal(playoff.members, undefined, "этап без групп остаётся собой");
+});
+
+// A Block with one Group has no круг to gather across — it stays as it is.
+test("roundStages leaves a lone Group alone", () => {
+  const only = {
+    code: "s1-g1",
+    title: "Группа",
+    stage_type: "matches",
+    grain: {block: "s1", group: "1"},
+    matches: [{code: "s1-g1-1", round: 1}],
+  };
+  assert.deepEqual(T.roundStages([only]), [only]);
+});

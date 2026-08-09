@@ -49,6 +49,14 @@ a best-of-three final. Only the жеребьёвка is input; every pod, every 
 and every finalist is seated from what came before, so the replay asserts the
 entire structure of the largest game dope runs.
 
+## What the фест looks like
+
+The Сетка draws a Group as its standings — место against player — the way the
+sheets do; the бои live in the protocol tabs. Those are split by круг, «Круг 1»
+through «Круг 4», with every группа's бои of that круг together, because that is
+the order they were played in and the order the sheets enter them. A бой names
+its группа, since every группа has a «Бой 1».
+
 ## A mistake the transfer preserves
 
 The брейн пересев (регламент 3.3.5) ranks by % очков, then разница, then

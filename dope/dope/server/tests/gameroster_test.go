@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 
@@ -304,5 +305,38 @@ func TestGameKeepsItsGivenTitle(t *testing.T) {
 		if title != want {
 			t.Errorf("игра названа %q, want %q", title, want)
 		}
+	}
+}
+
+// The numbering guard asks the Game, not the фест's registry (ADR-0009). A
+// фест may register a team that plays nothing — СтудЧР registered 65 and its ЭК
+// seated 48 — and an unnumbered row it never seats says nothing about whether
+// the ЭК can be scored.
+func TestNumberingGuardAsksTheGame(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	all := seedParticipants(t, db, festID, 4)
+
+	// A registry row with no number, of a kind the game does not seat.
+	if _, err := db.Exec(`
+insert into fest_teams(fest_id, name, city, position, number) values(?, 'Не играет', '', 99, null)`,
+		festID); err != nil {
+		t.Fatal(err)
+	}
+
+	gameID := createSchemeGameFor(t, db, festID, "brain", "Брейн",
+		"[scheme]\ntype: roundrobin\nteams_in_group: 4\nquestions: 5\n", all)
+	code := firstMatchCode(t, db, gameID)
+
+	resp := scopedAPIRequest(t, srv, http.MethodPatch,
+		"/api/fest/"+itoa(festID)+"/games/"+itoa(gameID)+"/matches/"+code+"/state",
+		map[string]any{"ops": []map[string]any{{"path": []any{"teams", 0, "rows", 0, "mark"}, "value": "right"}}}, token)
+	if resp.Code == http.StatusConflict {
+		t.Fatalf("игру заблокировали из-за команды, которая в ней не играет: %s", resp.Body.String())
+	}
+	if resp.Code != http.StatusOK {
+		t.Fatalf("правка боя: %d %s", resp.Code, resp.Body.String())
 	}
 }

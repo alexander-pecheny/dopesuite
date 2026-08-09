@@ -10,6 +10,7 @@ import type {
   NodeIndex,
   ScopedEventMessage,
   ScrollEdgeBinding,
+  StageRef,
   ScoreTableTheme,
   ScoreTableThemeRow,
   ParticipantView,
@@ -130,9 +131,10 @@ const stageCache = createStageCache({
   container: viewerRoot,
   apiBase: () => route.apiBase!,
   schemeStages: () => (fest ? viewerStages() : []),
-  findStage: (code) => findStage(fest!, code),
+  findStage: (code) => viewerStages().find((stage) => stage.code === code) || findStage(fest!, code),
   stageType: (stage) => stageType(stage as ViewerStage | null | undefined),
   getMatches: (stage) => (stage as ViewerStage | null | undefined)?.matches || [],
+  stageMembers: (stage) => (stage as ViewerStage | null | undefined)?.members || [],
   buildPaneContent: ({pane, stageCode, stage, data}) => {
     if (stageType(stage as ViewerStage | null | undefined) === "reseed") {
       pane.appendChild(buildReseedStagePanel(mergedStage(fest!, stageCode)));
@@ -316,6 +318,17 @@ function repaintStagePane(pane: HTMLElement, stageCode: string, data: StageData)
   if (pane.isConnected && !pane.hidden) scheduleReadonlyNameOverflowUpdate(pane);
 }
 
+// labelFrameGroup names the группа a бой was played in. A круг pane shows six of
+// them together, and every группа has a «Бой 1» — so the бой's own title names
+// six different tables. Written from the title rather than prefixed onto
+// whatever is there, so a repaint cannot stack «Группа 1. Группа 1. Бой 1».
+function labelFrameGroup(frame: StageFrameElement, table: HTMLElement, title: string): void {
+  const group = frame.dataset.group;
+  if (!group || !title) return;
+  const heading = table.querySelector<HTMLElement>(".readonly-battle-title, .battle-title");
+  if (heading) heading.textContent = `${group}. ${title}`;
+}
+
 function paintStageFrame(frame: StageFrameElement, matchState: ViewerMatchView | null | undefined, descriptor: ViewerStageMatch | null | undefined): void {
   if (matchState) {
     // Patch scores/marks into the existing table when only those changed, so a
@@ -327,6 +340,7 @@ function paintStageFrame(frame: StageFrameElement, matchState: ViewerMatchView |
     } else {
       const table = withMatchState(matchState, () => buildReadonlyTable());
       frame.replaceChildren(table);
+      labelFrameGroup(frame, table, matchState.title || descriptor?.title || "");
       frame.__scoreIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
     }
     frame.__matchState = matchState;
@@ -336,7 +350,8 @@ function paintStageFrame(frame: StageFrameElement, matchState: ViewerMatchView |
   frame.__matchState = null;
   const placeholder = document.createElement("div");
   placeholder.className = "stage-match-placeholder";
-  placeholder.textContent = descriptor?.title || `Бой ${descriptor?.code || ""}`;
+  const title = descriptor?.title || `Бой ${descriptor?.code || ""}`;
+  placeholder.textContent = frame.dataset.group ? `${frame.dataset.group}. ${title}` : title;
   frame.replaceChildren(placeholder);
 }
 
@@ -347,6 +362,8 @@ function buildReadonlyStageTables(data: StageData): HTMLElement {
     const frame = document.createElement("section") as StageFrameElement;
     frame.className = "stage-match-frame";
     frame.dataset.matchCode = match.code || "";
+    const group = (match as {group?: string}).group;
+    if (group) frame.dataset.group = group;
     paintStageFrame(frame, data.stateByCode.get(match.code!) as ViewerMatchView | undefined, match as ViewerStageMatch);
     wrapper.appendChild(frame);
   }
@@ -1100,10 +1117,13 @@ function currentRoute(): ViewerRoute {
   return {mode: "missing"};
 }
 
+// The same tabs the host sees: a Block of Groups is shown круг by круг, not
+// группа by группа. A spectator and a ведущий disagreeing about what a tab is
+// would be worse than either arrangement.
 function viewerStages(): ViewerStage[] {
   const scheme = parseScheme(fest?.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : fest?.stages || [];
-  return stages as ViewerStage[];
+  return DopeTable.roundStages(stages as StageRef[]) as ViewerStage[];
 }
 
 function findStage(data: FestView, code: string): ViewerStage | undefined {

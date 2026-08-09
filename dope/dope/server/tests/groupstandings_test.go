@@ -64,3 +64,44 @@ func TestGroupStageCarriesItsStandings(t *testing.T) {
 		t.Errorf("боёв = %d, want 12", len(stage.Matches))
 	}
 }
+
+// A бой draws as many theme columns as it plays. Twelve is ЭК's number and used
+// to be everyone's: личная СИ's группы play six, its play-off eight, its grand
+// final twelve, and padding them all to twelve drew empty columns nobody could
+// fill and hid the шапка the sheet prints.
+func TestThemeCountFollowsTheStage(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	token := createTestSession(t, srv, systemUserID(t, db))
+	seedFestPlayers(t, db, festID, 4)
+
+	gameID := createSchemeGame(t, db, festID, "si", "Личная СИ",
+		"[scheme]\ntype: roundrobin\nteams_in_group: 4\nthemes: 6\nproceeding_teams: 2\n---\n"+
+			"type: single_elimination\nteams: 2\nthemes: 9\nreseed: true\n")
+
+	for _, c := range []struct {
+		stage string
+		want  int
+	}{{"s1-g1", 6}, {"s2-final", 9}} {
+		resp := scopedAPIRequest(t, srv, http.MethodGet,
+			"/api/fest/"+itoa(festID)+"/games/"+itoa(gameID)+"/stages/"+c.stage+"/matches", nil, token)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", c.stage, resp.Code, resp.Body.String())
+		}
+		var matches []struct {
+			Participants []struct {
+				Themes []struct{} `json:"themes"`
+			} `json:"participants"`
+		}
+		if err := json.Unmarshal(resp.Body.Bytes(), &matches); err != nil {
+			t.Fatal(err)
+		}
+		if len(matches) == 0 || len(matches[0].Participants) == 0 {
+			t.Fatalf("%s: пусто", c.stage)
+		}
+		if got := len(matches[0].Participants[0].Themes); got != c.want {
+			t.Errorf("%s: тем в бою = %d, want %d", c.stage, got, c.want)
+		}
+	}
+}

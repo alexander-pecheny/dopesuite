@@ -15,6 +15,7 @@ import type {
   PendingOps,
   ScopedEventMessage,
   ScrollEdgeBinding,
+  StageRef,
   ParticipantView,
   ThemeView,
   Venue,
@@ -72,6 +73,10 @@ interface HostMatchView extends CachedMatchView {
 type HostStageMatch = {
   code?: string;
   title?: string;
+  round?: number;
+  // group labels a бой inside a круг pane, where six группы are shown together
+  // and «Бой 1» alone names three of them.
+  group?: string;
 };
 
 type HostStage = {
@@ -81,9 +86,13 @@ type HostStage = {
   type?: string;
   status?: string;
   config?: unknown;
+  grain?: {block?: string; wave?: number; group?: string};
   reseedReady?: boolean;
   reseedEntries?: ReseedEntry[];
   matches?: HostStageMatch[];
+  // members names the server stages a круг is assembled from; empty on an
+  // ordinary stage, which is its own.
+  members?: string[];
 };
 
 type HostFestView = {
@@ -203,9 +212,10 @@ const stageCache = createStageCache({
   container: hostRoot,
   apiBase: () => route.apiBase,
   schemeStages: () => (fest ? ekSchemeStages() : []),
-  findStage: (code) => findStage(fest, code),
+  findStage: (code) => ekSchemeStages().find((stage) => stage.code === code) || findStage(fest, code),
   stageType: (stage) => stageType(stage as HostStage | null | undefined),
   getMatches: (stage) => (stage as HostStage | null | undefined)?.matches || [],
+  stageMembers: (stage) => (stage as HostStage | null | undefined)?.members || [],
   // Re-overlay un-acked local edits onto every MatchView the cache stores, so a
   // background refetch (prefetchStage/prefetchAllStages) or an SSE update can
   // never wipe an optimistically-marked cell before the server confirms it.
@@ -1321,6 +1331,10 @@ function stageCodeForMatch(matchCode: string | undefined): string {
 }
 
 function ekSchemeStages(): HostStage[] {
+  return gameTable.roundStages(rawSchemeStages() as StageRef[]) as HostStage[];
+}
+
+function rawSchemeStages(): HostStage[] {
   const scheme = parseScheme(fest?.schemaJson);
   return (scheme?.stages?.length ? scheme.stages : fest?.stages || []) as HostStage[];
 }
@@ -1638,6 +1652,7 @@ function buildStageTableStack(data: StageData | undefined): HTMLElement {
     const frame = document.createElement("section");
     frame.className = "stage-match-frame";
     frame.dataset.matchCode = match.code || "";
+    if (match.group) frame.dataset.group = match.group;
     frame.appendChild(buildStageMatchPlaceholder(match));
     wrapper.appendChild(frame);
   });
@@ -1647,7 +1662,8 @@ function buildStageTableStack(data: StageData | undefined): HTMLElement {
 function buildStageMatchPlaceholder(match: HostStageMatch): HTMLElement {
   const placeholder = document.createElement("div");
   placeholder.className = "stage-match-placeholder";
-  placeholder.textContent = match.title || `Бой ${match.code}`;
+  const title = match.title || `Бой ${match.code}`;
+  placeholder.textContent = match.group ? `${match.group}. ${title}` : title;
   return placeholder;
 }
 
@@ -1715,6 +1731,12 @@ function renderStageMatchFrame(frame: StageFrame, matchState: HostMatchView, opt
   frame.dataset.rendered = "1";
   const stageTable = withMatchState(matchState, () => buildTable({compact: true}));
   frame.replaceChildren(stageTable);
+  // In a круг pane six группы sit together, and every one has a «Бой 1» — so the
+  // бой says which table it was. Written from the title rather than prefixed
+  // onto whatever is there, so a repaint cannot stack the группа twice.
+  const group = frame.dataset.group;
+  const heading = group ? stageTable.querySelector<HTMLElement>(".battle-title") : null;
+  if (heading && matchState.title) heading.textContent = `${group}. ${matchState.title}`;
   // Per-frame score index + last state, so a later same-shape update patches
   // this frame's cells in place (updateStageFrame) instead of rebuilding it —
   // the rebuild is what flickered the cell being edited.

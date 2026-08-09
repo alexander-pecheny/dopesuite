@@ -96,7 +96,7 @@ func (s *server) matchEditScope(w http.ResponseWriter, r *http.Request, scope fe
 	if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 		return matchScope{}, false
 	}
-	if !s.requireNumberedTeams(w, r, scope.FestID) {
+	if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 		return matchScope{}, false
 	}
 	mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
@@ -196,7 +196,14 @@ func (s *server) requireFestTableEditor(w http.ResponseWriter, r *http.Request, 
 // A fest with no teams at all is not blocked (nothing to number yet). Called at
 // the write gates right after requireFestTableEditor.
 func (s *server) requireNumberedTeams(w http.ResponseWriter, r *http.Request, festID int64) bool {
-	blocked, err := numbering.HasUnnumbered(r.Context(), s.eng.DB, festID)
+	return s.requireNumberedEntrants(w, r, festID, 0)
+}
+
+// requireNumberedEntrants is requireNumberedTeams for a write that knows which
+// Game it is editing: the guard then asks that Game's entrants rather than the
+// фест's whole registry (ADR-0009).
+func (s *server) requireNumberedEntrants(w http.ResponseWriter, r *http.Request, festID, gameID int64) bool {
+	blocked, err := numbering.GameHasUnnumbered(r.Context(), s.eng.DB, festID, gameID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return false
@@ -537,7 +544,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
 		defer r.Body.Close()
@@ -578,7 +585,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
 		// Edit-path timing: tE2E marks request-in; we stamp e2e at response-out so
@@ -928,7 +935,7 @@ func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scop
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
 		data, cascaded, revision, err := s.calculateScopedReseed(r.Context(), scope, sub[0])
@@ -1308,7 +1315,7 @@ func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, 
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
 		view, revision, stateJSON, err := imports.ImportSeedsFromKSI(&s.eng, r.Context(), scope)
@@ -1323,7 +1330,7 @@ func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, 
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
 		view, revision, stateJSON, err := imports.ImportSeedsFromScheme(&s.eng, r.Context(), scope)
@@ -1339,7 +1346,7 @@ func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, 
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
 		if err := r.ParseMultipartForm(4 << 20); err != nil {

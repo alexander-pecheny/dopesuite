@@ -858,6 +858,16 @@ values(?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 	return gameID, nil
 }
 
+// hasAssignmentsTx reports whether the Game's seats are already claimed.
+func hasAssignmentsTx(ctx context.Context, tx *sql.Tx, gameID int64) (bool, error) {
+	var count int
+	if err := tx.QueryRowContext(ctx, `
+select count(*) from game_assignments where game_id = ?`, gameID).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 // seatChosenTx numbers the Game's chosen Participants from 1, in the order
 // given. It runs before the Structure is built, so the Slots resolve against
 // these numbers rather than against the фест's.
@@ -1086,8 +1096,14 @@ func buildBrainStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64
 // only thing that was ever брейн-specific about it was the empty state.
 func buildSchemeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string, scheme store.FestScheme) error {
 	// A declared seed source owns game_assignments — «Import seed» writes them
-	// by seed rank, so creation must not pre-fill them by number.
-	if scheme.Seeding == nil {
+	// by seed rank, so creation must not pre-fill them by number. Nor may it when
+	// the Game already named its entrants: seating the фест's registry on top
+	// would add the teams this Game does not play.
+	seated, err := hasAssignmentsTx(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	if scheme.Seeding == nil && !seated {
 		if err := seatRosterTx(ctx, tx, festID, gameID, gameType); err != nil {
 			return err
 		}

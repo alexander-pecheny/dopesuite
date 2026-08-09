@@ -25,6 +25,7 @@ func (ek) Metrics() []string { return []string{"total", "plus", "shootoutTotal",
 
 type ekConfig struct {
 	Participants int `json:"participants"`
+	Themes       int `json:"themes"`
 }
 
 func (ek) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
@@ -35,7 +36,7 @@ func (ek) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 		}
 	}
 	state := store.MatchState{Participants: make([]store.ParticipantState, conf.Participants)}
-	store.NormalizeState(&state)
+	store.NormalizeStateTo(&state, conf.Themes)
 	return json.Marshal(state)
 }
 
