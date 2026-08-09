@@ -12,3 +12,9 @@ A Fest's registry row holds identity — name, city, players — and no playing 
 - `game_participants` stops being a vestigial table and becomes the entrant list: who plays this Game, under which number, in what seed order. A team knocked out before its first бой is still visibly an entrant.
 - Every read of a participant's number is now scoped by Game. The Numbering guard checks a Game's entrants, not a Fest's registry.
 - A Fest may still carry a registration number for its own paperwork; it is not a playing number and nothing scores against it.
+
+## Where it stands
+
+Done: a Game is created with its entrants spelled out (`CreateSchemeGameForTx`), they are numbered from 1 inside it, and the list is written from the seating rather than from the request — so it can never claim somebody the Structure did not seat. `TestStudchrGamesShareOneFest` holds one Fest with the ЭК's 48 and the брейн's different 48.
+
+Not done: the reads. `participants.number` is still what most of the tree consults, and the host UI has no way to choose a Game's entrants — today only a caller with the list can. Until both land, a Fest built through the UI still numbers Fest-wide.

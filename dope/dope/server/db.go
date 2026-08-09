@@ -250,6 +250,7 @@ create table if not exists game_participants(
   game_id integer not null references games(id) on delete cascade,
   participant_id integer not null references participants(id) on delete cascade,
   position integer not null,
+  number integer not null default 0,
   primary key(game_id, participant_id)
 );
 
@@ -779,6 +780,19 @@ create table if not exists stage_standings(
 		{Name: "round", Type: "INTEGER NOT NULL DEFAULT 0"},
 		{Name: "wave", Type: "INTEGER NOT NULL DEFAULT 0"},
 	}); err != nil {
+		return err
+	}
+	// v22: a Participant's playing number belongs to its Game (ADR-0009). A фест
+	// registers teams; a Game seats some of them and numbers those from 1, so the
+	// same team is «2» in the ЭК and «4» in the ОД. Existing rows keep number 0
+	// until their game is next compiled — a Game that has never had an entrant
+	// list is not improved by inventing one.
+	if err := store.AddColumnsIfMissing(db, "game_participants", []store.ColumnSpec{
+		{Name: "number", Type: "INTEGER NOT NULL DEFAULT 0"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(22, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(21, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {

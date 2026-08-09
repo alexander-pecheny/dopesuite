@@ -799,11 +799,24 @@ func createBrainGameTx(ctx context.Context, tx *sql.Tx, festID int64, dsl string
 // type reaches the same plumbing — the DSL is the way a bracket is described,
 // not a брейн feature.
 func CreateSchemeGameTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, label, dsl string) (int64, error) {
+	return CreateSchemeGameForTx(ctx, tx, festID, gameType, label, dsl, nil)
+}
+
+// CreateSchemeGameForTx is CreateSchemeGameTx with the Game's entrants spelled
+// out: which of the фест's Participants play it, in seed order. Absent, the whole
+// фест plays, which is what a one-game фест wants and what every caller did
+// before Games could differ.
+//
+// A фест's Games rarely share an entrant list (ADR-0009): СтудЧР-2026 registered
+// 65 teams, its ОД seated all of them, its ЭК seated 48 and its брейн a
+// different 48. Numbers are dealt from 1 inside the Game, so the same team is
+// «2» in one and «4» in another.
+func CreateSchemeGameForTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, label, dsl string, entrants []int64) (int64, error) {
 	identity, err := nextGameIdentityTx(ctx, tx, festID, gameType, label)
 	if err != nil {
 		return 0, err
 	}
-	scheme, err := schemeFromDSLTx(ctx, tx, festID, gameType, identity.Code, identity.Title, dsl)
+	scheme, err := schemeForEntrantsTx(ctx, tx, festID, gameType, identity.Code, identity.Title, dsl, entrants)
 	if err != nil {
 		return 0, err
 	}
@@ -825,10 +838,73 @@ values(?, ?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 	if err != nil {
 		return 0, err
 	}
+	if len(entrants) > 0 {
+		if err := seatChosenTx(ctx, tx, gameID, entrants); err != nil {
+			return 0, err
+		}
+	}
 	if err := buildSchemeStructureTx(ctx, tx, festID, gameID, gameType, scheme); err != nil {
 		return 0, err
 	}
+	if err := recordGameEntrantsTx(ctx, tx, gameID); err != nil {
+		return 0, err
+	}
 	return gameID, nil
+}
+
+// seatChosenTx numbers the Game's chosen Participants from 1, in the order
+// given. It runs before the Structure is built, so the Slots resolve against
+// these numbers rather than against the фест's.
+func seatChosenTx(ctx context.Context, tx *sql.Tx, gameID int64, entrants []int64) error {
+	for i, participantID := range entrants {
+		if _, err := tx.ExecContext(ctx, `
+insert into game_assignments(game_id, basket, number, participant_id) values(?, 1, ?, ?)
+on conflict(game_id, basket, number) do update set participant_id = excluded.participant_id`,
+			gameID, i+1, participantID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// recordGameEntrantsTx writes who plays this Game, in seed order and under the
+// number the Game deals them. It reads back the seating rather than the list it
+// was given, so the entrant list can never claim somebody the Structure did not
+// seat. A team knocked out before its first бой is still visibly an entrant,
+// which is the point of keeping the list at all.
+func recordGameEntrantsTx(ctx context.Context, tx *sql.Tx, gameID int64) error {
+	rows, err := tx.QueryContext(ctx, `
+select participant_id, number from game_assignments
+where game_id = ? and basket = 1 and participant_id is not null order by number`, gameID)
+	if err != nil {
+		return err
+	}
+	type entry struct {
+		id     int64
+		number int
+	}
+	var seated []entry
+	for rows.Next() {
+		var e entry
+		if err := rows.Scan(&e.id, &e.number); err != nil {
+			rows.Close()
+			return err
+		}
+		seated = append(seated, e)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for position, e := range seated {
+		if _, err := tx.ExecContext(ctx, `
+insert into game_participants(game_id, participant_id, position, number) values(?, ?, ?, ?)
+on conflict(game_id, participant_id) do update set position = excluded.position, number = excluded.number`,
+			gameID, e.id, position+1, e.number); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // brainSchemeFromDSLTx compiles a brain DSL into the detailed scheme. Without
@@ -840,6 +916,10 @@ func brainSchemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, slug, t
 }
 
 func schemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, slug, title, dsl string) (store.FestScheme, error) {
+	return schemeForEntrantsTx(ctx, tx, festID, gameType, slug, title, dsl, nil)
+}
+
+func schemeForEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, slug, title, dsl string, chosen []int64) (store.FestScheme, error) {
 	if strings.TrimSpace(dsl) == "" {
 		return store.FestScheme{}, errors.New("опишите схему игры")
 	}
@@ -849,7 +929,7 @@ func schemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, sl
 	}
 	input := schemedsl.Input{Slug: slug, Title: title, GameType: gameType}
 	if seed, hasSeed := doc.Init.Str("seed"); !hasSeed {
-		entrants, err := seedEntrantsTx(ctx, tx, festID, gameType)
+		entrants, err := chosenEntrantsTx(ctx, tx, festID, gameType, chosen)
 		if err != nil {
 			return store.FestScheme{}, err
 		}
@@ -864,6 +944,27 @@ func schemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, sl
 		}
 	}
 	return schemedsl.Compile(doc, input)
+}
+
+// chosenEntrantsTx turns the Game's chosen Participants into scheme entrants,
+// numbered from 1 in the order given. Without a choice the whole фест plays.
+func chosenEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType string, chosen []int64) ([]store.SchemeSlot, error) {
+	if len(chosen) == 0 {
+		return seedEntrantsTx(ctx, tx, festID, gameType)
+	}
+	entrants := make([]store.SchemeSlot, len(chosen))
+	for i, participantID := range chosen {
+		var name string
+		if err := tx.QueryRowContext(ctx, `
+select name from participants where id = ? and fest_id = ?`, participantID, festID).Scan(&name); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("участника %d нет в этом фесте", participantID)
+			}
+			return nil, err
+		}
+		entrants[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i + 1}, Label: name}
+	}
+	return entrants, nil
 }
 
 // seedEntrantsTx is the fest's own roster as scheme entrants: teams in a team
