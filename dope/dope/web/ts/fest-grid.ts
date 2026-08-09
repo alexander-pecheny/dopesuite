@@ -128,6 +128,8 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
     const hiddenVenueMatches = repeatedVenueMatches(stage, liveStage, previousVenueByRow);
     columns.appendChild(buildMatchesStage(stage, liveStage, {...options, hiddenVenueMatches}));
   });
+  // The layout gives every stage a column, so it has to know how many there are.
+  root.style.setProperty("--fest-stages", String(columns.children.length));
   root.appendChild(columns);
   activeFestGridRoot = root;
   scheduleFestGridNameOverflowUpdate(root);

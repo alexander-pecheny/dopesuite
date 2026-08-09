@@ -8,7 +8,12 @@ function node(tag) {
     tag,
     children: [],
     dataset: {},
-    style: {setProperty() {}},
+    props: {},
+    style: {
+      setProperty(name, value) {
+        self.props[name] = value;
+      },
+    },
     classList: {
       add(...names) {
         self.className = [self.className, ...names].filter(Boolean).join(" ");
@@ -82,4 +87,14 @@ test("a round without standings still draws its бои", () => {
   }, {stageHeaderLink: false});
   assert.equal(withClass(grid, "grid-standings").length, 0);
   assert.equal(withClass(grid, "grid-match").length, 1);
+});
+
+// Every stage gets a column, so the layout has to be told how many there are —
+// six was hard-coded, and a game with more crushed the rest into slivers.
+test("the grid reports how many stages it drew", () => {
+  const stage = (code) => ({code, title: code, stage_type: "matches", matches: []});
+  const grid = buildFestGrid({
+    stages: ["a", "b", "c", "d", "e", "f", "g"].map(stage),
+  }, {stageHeaderLink: false});
+  assert.equal(grid.props["--fest-stages"], "7");
 });
