@@ -32,7 +32,31 @@ func Compile(doc *Doc, in Input) (store.FestScheme, error) {
 	if err := c.run(); err != nil {
 		return store.FestScheme{}, err
 	}
+	if err := uniqueCodes(c.scheme); err != nil {
+		return store.FestScheme{}, err
+	}
 	return c.scheme, nil
+}
+
+// uniqueCodes refuses a scheme whose stages or бои collide. The database says
+// the same thing — unique(game_id, code) — but it says it as a raw constraint
+// error at insert time, half a screen away from the scheme that caused it.
+func uniqueCodes(scheme store.FestScheme) error {
+	stages := map[string]bool{}
+	matches := map[string]string{}
+	for _, stage := range scheme.Stages {
+		if stages[stage.Code] {
+			return fmt.Errorf("этап %q собран дважды — у схемы столкнулись коды", stage.Code)
+		}
+		stages[stage.Code] = true
+		for _, match := range stage.Matches {
+			if where, taken := matches[match.Code]; taken {
+				return fmt.Errorf("бой %q есть и в этапе %q, и в %q", match.Code, where, stage.Code)
+			}
+			matches[match.Code] = stage.Code
+		}
+	}
+	return nil
 }
 
 const (
@@ -568,10 +592,10 @@ func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
 // summed over. Returns the stage code; rank refs against it seat what follows.
 func (c *compiler) reseedStage(index int, blk Section, sources []string, teams []store.SchemeSlot) (string, error) {
 	blockCode := fmt.Sprintf("s%d", index+1)
-	return c.reseedStageCoded(blockCode+"-reseed", blockCode, blk, sources, teams)
+	return c.reseedStageCoded(blockCode+"-reseed", at{block: blockCode}, blk, sources, teams)
 }
 
-func (c *compiler) reseedStageCoded(code, blockCode string, blk Section, sources []string, teams []store.SchemeSlot) (string, error) {
+func (c *compiler) reseedStageCoded(code string, where at, blk Section, sources []string, teams []store.SchemeSlot) (string, error) {
 	sort, err := c.reseedSortRules(blk)
 	if err != nil {
 		return "", err
@@ -583,7 +607,7 @@ func (c *compiler) reseedStageCoded(code, blockCode string, blk Section, sources
 		StageType: "reseed",
 		Kind:      "reseed",
 		Position:  c.position,
-		Grain:     at{block: blockCode}.grain(),
+		Grain:     where.grain(),
 		Teams:     teams,
 		Sources:   sources,
 		Sort:      json.RawMessage(util.MustJSON(sort)),
@@ -1389,8 +1413,11 @@ func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, p
 				alive = append(alive, fromMatchSlot(codes[source.bout], source.place))
 			}
 			var err error
-			roundReseed := fmt.Sprintf("%s-r%d-reseed", blockCode, r+1)
-			if reseedCode, err = c.reseedStageCoded(roundReseed, blockCode, blk, prevStages, alive); err != nil {
+			// The code is per bracket, not per block: several groups re-ranking
+			// the same round would otherwise all claim `s1-r2-reseed` and the
+			// insert would die on unique(game_id, code).
+			roundReseed := fmt.Sprintf("%s-r%d-reseed", stageCode, r+1)
+			if reseedCode, err = c.reseedStageCoded(roundReseed, at{block: blockCode, group: groupCode(groups, group)}, blk, prevStages, alive); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -1444,7 +1471,7 @@ func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, p
 				all = append(all, match)
 			}
 			c.appendManualStage(blk, stageCode, fmt.Sprintf("DE %d", group), nil,
-				at{block: blockCode, group: fmt.Sprint(group)}, all)
+				at{block: blockCode, group: groupCode(groups, group)}, all)
 			return codes, []string{stageCode}, nil
 		}
 		c.appendManualStage(blk, roundStage, fmt.Sprintf("Раунд %d", r+1), []string{fmt.Sprintf("r%d", r+1)},
@@ -1598,4 +1625,14 @@ func sortedNames(set map[string]bool) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// groupCode names a Group only where a Block has more than one: a single-group
+// block is the Block, and labelling it «группа 1» invents a distinction the
+// tournament does not make.
+func groupCode(groups, group int) string {
+	if groups <= 1 {
+		return ""
+	}
+	return fmt.Sprint(group)
 }

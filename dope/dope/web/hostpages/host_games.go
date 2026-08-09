@@ -973,11 +973,12 @@ func buildSchemeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int6
 		if position == 0 {
 			position = stageIndex + 1
 		}
+		grain := stage.Grain.Normalized()
 		stageID, err := store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index, group_code)
 values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
 			festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage),
-			stage.Grain.Block, stage.Grain.Wave, stage.Grain.Group)
+			grain.Block, grain.Wave, grain.Group)
 		if err != nil {
 			return err
 		}
@@ -996,6 +997,12 @@ values(?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
 		}
 	}
 	return nil
+}
+
+// RecompileSchemeGameTx is the settings page's DSL edit, as a seam tests can
+// drive — the same path a host takes when they change a scheme in place.
+func RecompileSchemeGameTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, dsl string) error {
+	return recompileBrainGameTx(ctx, tx, festID, gameID, dsl)
 }
 
 // recompileBrainGameTx re-expands an edited DSL onto a live game: stages and
@@ -1096,11 +1103,17 @@ select id, stage_id, code, status, coalesce(state_json, '{}') from matches where
 		if position == 0 {
 			position = stageIndex + 1
 		}
+		grain := stage.Grain.Normalized()
 		stageID, exists := existingStages[stage.Code]
 		if exists {
+			// The grain is refreshed here, not only on insert: a recompile is how
+			// a game whose stages predate the coordinates acquires them, and a
+			// block that moved needs its new ones.
 			if _, err := tx.ExecContext(ctx, `
-update stages set title = ?, stage_type = ?, kind = ?, position = ?, config_json = ? where id = ?`,
-				stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage), stageID); err != nil {
+update stages set title = ?, stage_type = ?, kind = ?, position = ?, config_json = ?,
+  block_code = ?, wave_index = ?, group_code = ? where id = ?`,
+				stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage),
+				grain.Block, grain.Wave, grain.Group, stageID); err != nil {
 				return err
 			}
 			delete(existingStages, stage.Code)
@@ -1109,7 +1122,7 @@ update stages set title = ?, stage_type = ?, kind = ?, position = ?, config_json
 insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index, group_code)
 values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
 				festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage),
-				stage.Grain.Block, stage.Grain.Wave, stage.Grain.Group); err != nil {
+				grain.Block, grain.Wave, grain.Group); err != nil {
 				return err
 			}
 		}
@@ -1121,15 +1134,15 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
 				started := existing.Status == "finished" || games.BrainStateStarted(existing.State)
 				if started {
 					if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, position = ? where id = ?`,
-						stageID, match.Title, matchIndex+1, existing.ID); err != nil {
+update matches set stage_id = ?, title = ?, position = ?, round = ? where id = ?`,
+						stageID, match.Title, matchIndex+1, match.Round, existing.ID); err != nil {
 						return err
 					}
 					continue
 				}
 				if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, position = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
-					stageID, match.Title, matchIndex+1, len(match.Slots), emptyState, existing.ID); err != nil {
+update matches set stage_id = ?, title = ?, position = ?, round = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
+					stageID, match.Title, matchIndex+1, match.Round, len(match.Slots), emptyState, existing.ID); err != nil {
 					return err
 				}
 				if _, err := tx.ExecContext(ctx, `delete from match_slots where match_id = ?`, existing.ID); err != nil {
@@ -1523,9 +1536,11 @@ func buildEKStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, s
 		if stageType == "" {
 			stageType = "matches"
 		}
+		grain := stage.Grain.Normalized()
 		stageID, err := store.InsertReturningID(ctx, tx, `
-insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
-values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
+insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json, block_code, wave_index, group_code)
+values(?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON,
+			grain.Block, grain.Wave, grain.Group)
 		if err != nil {
 			return err
 		}

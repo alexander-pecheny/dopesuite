@@ -179,10 +179,11 @@ values(?, ?, ?, ?)`, gameID, team.Basket, team.Number, teamID); err != nil {
 		if stageType == "" {
 			stageType = "matches"
 		}
+		grain := stage.Grain.Normalized()
 		stageID, err := store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json, block_code, wave_index, group_code)
 values(?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON,
-			stage.Grain.Block, stage.Grain.Wave, stage.Grain.Group)
+			grain.Block, grain.Wave, grain.Group)
 		if err != nil {
 			return store.FestView{}, err
 		}
@@ -357,10 +358,11 @@ values(?, ?, ?, ?)`, gameID, team.Basket, team.Number, teamID); err != nil {
 		if stageType == "" {
 			stageType = "matches"
 		}
+		grain := stage.Grain.Normalized()
 		stageID, err := store.InsertReturningID(ctx, tx, `
 insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json, block_code, wave_index, group_code)
 values(?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON,
-			stage.Grain.Block, stage.Grain.Wave, stage.Grain.Group)
+			grain.Block, grain.Wave, grain.Group)
 		if err != nil {
 			return err
 		}

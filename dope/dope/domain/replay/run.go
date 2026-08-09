@@ -56,14 +56,27 @@ func (f Finding) String() string {
 // The error return is for a Game that could not be driven at all. A
 // disagreement is not an error — it is the output.
 func Run(script Script, game Game) ([]Finding, error) {
-	silenced := map[string]bool{}
-	for _, over := range script.Overrides {
-		silenced[over.At.String()+"|"+over.Field] = true
+	silenced := make(map[string]*Override, len(script.Overrides))
+	used := map[string]bool{}
+	for i := range script.Overrides {
+		over := &script.Overrides[i]
+		silenced[overrideKey(over.At, over.Field, over.Participant)] = over
 	}
 	var findings []Finding
+	// An override silences the exact disagreement it was written about. One
+	// naming a participant covers only that participant; one without a name
+	// covers the бой, which is what a seating ruling needs. Either way the key
+	// is recorded as used, so an override that matched nothing can be reported
+	// rather than sitting on the discrepancies page as a reviewed deviation.
 	report := func(f Finding) {
-		if silenced[f.At.String()+"|"+f.Field] {
-			return
+		for _, key := range []string{
+			overrideKey(f.At, f.Field, f.Participant),
+			overrideKey(f.At, f.Field, ""),
+		} {
+			if silenced[key] != nil {
+				used[key] = true
+				return
+			}
 		}
 		findings = append(findings, f)
 	}
@@ -104,6 +117,15 @@ func Run(script Script, game Game) ([]Finding, error) {
 		if err != nil {
 			return findings, fmt.Errorf("%s: итог боя: %w", bout.At, err)
 		}
+		// Whom dope scored that the sheet never seated. Checking only the sheet's
+		// own names would accept a бой with an extra participant in it.
+		for name := range outcome {
+			if !hasSeat(bout.Seats, name) {
+				report(Finding{At: bout.At, Field: "лишний участник", Participant: name,
+					Sheet: "не сидел", Ours: fmt.Sprintf("Σ%d, место %s", outcome[name].Total, place(outcome[name].Place)),
+					Line: bout.Line})
+			}
+		}
 		for _, seat := range bout.Seats {
 			got, ok := outcome[seat.Name]
 			if !ok {
@@ -121,7 +143,33 @@ func Run(script Script, game Game) ([]Finding, error) {
 			}
 		}
 	}
+	// An override nobody needed is a claim that something is wrong when it is
+	// not — on the discrepancies page it reads as a reviewed deviation, so it
+	// has to be reported like any other disagreement.
+	for key, over := range silenced {
+		if used[key] {
+			continue
+		}
+		findings = append(findings, Finding{
+			At: over.At, Field: "лишнее расхождение", Participant: over.Participant,
+			Sheet: over.Reason, Ours: "здесь всё сошлось", Line: over.Line,
+		})
+	}
+	sort.SliceStable(findings, func(a, b int) bool { return findings[a].Line < findings[b].Line })
 	return findings, nil
+}
+
+func overrideKey(at Coord, field, participant string) string {
+	return at.String() + "|" + field + "|" + participant
+}
+
+func hasSeat(seats []Seat, name string) bool {
+	for _, seat := range seats {
+		if seat.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // sameSeating compares who is at the table, not in what order: a Protocol reads

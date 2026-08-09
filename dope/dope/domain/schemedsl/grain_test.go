@@ -129,3 +129,18 @@ func TestGrainSeparatesBlocks(t *testing.T) {
 		t.Fatalf("блоки = %v, want [s1 s2]", got)
 	}
 }
+
+// Несколько групп двойного выбывания с пересевом: каждая группа пересевает свой
+// раунд, и коды этапов не должны сталкиваться. Раньше все группы претендовали
+// на `s1-r2-reseed`, схема компилировалась, а падала уже вставка в базу.
+func TestMultiGroupDoubleEliminationCodesAreUnique(t *testing.T) {
+	src := "[defaults]\nvenues: 4\n\n[scheme]\ntype: double_elimination\ngroups: 2\nteams_in_group: 4\nreseed: true\n"
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	seen := map[string]bool{}
+	for _, stage := range scheme.Stages {
+		if seen[stage.Code] {
+			t.Fatalf("этап %q собран дважды", stage.Code)
+		}
+		seen[stage.Code] = true
+	}
+}

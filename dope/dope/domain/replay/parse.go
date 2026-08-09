@@ -44,20 +44,28 @@ const (
 	Wrong Mark = 'W'
 )
 
-// Coord is where a бой sits in its Game: which Block, which круг of it, which
-// заход of that круг, and which бой of the заход. It is the join key between a
-// transcript and dope, and deliberately not "whoever sat at the table" —
-// matching by participants only works when the seating is already right, so it
-// can never catch a seeding bug.
+// Coord is where a бой sits in its Game: which Block, which Group of it (only
+// where a Block has them), which круг, which заход of that круг, and which бой
+// of the заход. It is the join key between a transcript and dope, and
+// deliberately not "whoever sat at the table" — matching by participants only
+// works when the seating is already right, so it can never catch a seeding bug.
+//
+// The Group is not optional decoration: личная СИ's six группы all sit at Block
+// s1, заход 1, круги 1..4, so without it one coordinate names six different
+// бои and five of them are never checked.
 type Coord struct {
 	Block string
+	Group string
 	Round int
 	Wave  int
 	Match int
 }
 
 func (c Coord) String() string {
-	return fmt.Sprintf("%s/r%d/w%d/m%d", c.Block, c.Round, c.Wave, c.Match)
+	if c.Group == "" {
+		return fmt.Sprintf("%s/r%d/w%d/m%d", c.Block, c.Round, c.Wave, c.Match)
+	}
+	return fmt.Sprintf("%s/g%s/r%d/w%d/m%d", c.Block, c.Group, c.Round, c.Wave, c.Match)
 }
 
 type Entrant struct {
@@ -87,10 +95,11 @@ type Bout struct {
 // sheet says one thing, dope another, and this is which to believe and why.
 // Its Reason is mandatory — an override without one is a silenced defect.
 type Override struct {
-	At     Coord
-	Field  string
-	Reason string
-	Line   int
+	At          Coord
+	Field       string
+	Participant string
+	Reason      string
+	Line        int
 }
 
 type Script struct {
@@ -113,12 +122,21 @@ func Parse(src string) (Script, error) {
 	var script Script
 	section := ""
 	var bout *Bout
+	seen := map[string]int{}
+	var failure error
 
+	// flush closes the бой being read. A бой with no seats is refused here
+	// rather than replayed: it would seat nobody, assert nothing and pass, which
+	// is precisely how a truncated transcript reads as a clean tournament.
 	flush := func() {
-		if bout != nil {
-			script.Bouts = append(script.Bouts, *bout)
-			bout = nil
+		if bout == nil {
+			return
 		}
+		if len(bout.Seats) == 0 && failure == nil {
+			failure = errAt(bout.Line, "бой %s без единого места — оборванная стенограмма прошла бы молча", bout.At)
+		}
+		script.Bouts = append(script.Bouts, *bout)
+		bout = nil
 	}
 
 	for i, raw := range strings.Split(src, "\n") {
@@ -149,6 +167,14 @@ func Parse(src string) (Script, error) {
 					return Script{}, err
 				}
 				flush()
+				if failure != nil {
+					return Script{}, failure
+				}
+				if prev, taken := seen[at.String()]; taken {
+					return Script{}, errAt(line,
+						"бой %s уже записан на строке %d — по одной координате играется один бой, иначе один из них молча пропадёт", at, prev)
+				}
+				seen[at.String()] = line
 				section = "бой"
 				bout = &Bout{At: at, Draw: rest == "жребий", Line: line}
 				if rest != "" && rest != "жребий" {
@@ -188,14 +214,52 @@ func Parse(src string) (Script, error) {
 		}
 	}
 	flush()
+	if failure != nil {
+		return Script{}, failure
+	}
+	if err := checkRoster(script); err != nil {
+		return Script{}, err
+	}
 	return script, nil
 }
 
+// stripComment drops a whole-line comment only. A '#' mid-line stays: teams are
+// called things like «Решётка #1», and silently truncating one turns every бой
+// it played into an unexplained seating disagreement.
 func stripComment(raw string) string {
-	if i := strings.IndexByte(raw, '#'); i >= 0 {
-		return raw[:i]
+	if strings.HasPrefix(strings.TrimSpace(raw), "#") {
+		return ""
 	}
 	return raw
+}
+
+// checkRoster holds seat lines to the roster where one is given. A misspelt
+// name would otherwise reach the Game, which would report it as a seating
+// disagreement — a real defect's symptom pinned on a typo.
+func checkRoster(script Script) error {
+	if len(script.Roster) == 0 {
+		return nil
+	}
+	known := make(map[string]bool, len(script.Roster))
+	numbers := make(map[int]string, len(script.Roster))
+	for _, entrant := range script.Roster {
+		if known[entrant.Name] {
+			return fmt.Errorf("участник %q записан в [roster] дважды", entrant.Name)
+		}
+		if prev, taken := numbers[entrant.Number]; taken {
+			return fmt.Errorf("номер %d занят и %q, и %q", entrant.Number, prev, entrant.Name)
+		}
+		known[entrant.Name] = true
+		numbers[entrant.Number] = entrant.Name
+	}
+	for _, bout := range script.Bouts {
+		for _, seat := range bout.Seats {
+			if !known[seat.Name] {
+				return errAt(seat.Line, "в бою %s сидит %q, которого нет в [roster]", bout.At, seat.Name)
+			}
+		}
+	}
+	return nil
 }
 
 // splitHeader takes `[s1/r1/w1/m1] жребий` apart into its bracketed head and
@@ -208,14 +272,23 @@ func splitHeader(text string, line int) (string, string, error) {
 	return strings.TrimSpace(text[1:end]), strings.TrimSpace(text[end+1:]), nil
 }
 
-// parseCoord reads `s1/r1/w1/m1`. All four coordinates are required: a бой that
-// does not say which заход it is cannot be told from its twin.
+// parseCoord reads `s1/r1/w1/m1`, or `s1/g3/r1/w1/m1` in a Block that has
+// Groups. Круг, заход and бой are always required: a бой that does not say
+// which заход it is cannot be told from its twin.
 func parseCoord(text string, line int) (Coord, error) {
 	parts := strings.Split(text, "/")
-	if len(parts) != 4 {
-		return Coord{}, errAt(line, "координата — это блок/круг/заход/бой, например s1/r1/w1/m1, а не %q", text)
-	}
 	coord := Coord{Block: parts[0]}
+	if len(parts) == 5 {
+		if !strings.HasPrefix(parts[1], "g") || len(parts[1]) < 2 {
+			return Coord{}, errAt(line, "группа пишется как g3, а не %q", parts[1])
+		}
+		coord.Group = parts[1][1:]
+		parts = append(parts[:1], parts[2:]...)
+	}
+	if len(parts) != 4 {
+		return Coord{}, errAt(line,
+			"координата — это блок[/группа]/круг/заход/бой, например s1/r1/w1/m1 или s1/g3/r1/w1/m1, а не %q", text)
+	}
 	if coord.Block == "" {
 		return Coord{}, errAt(line, "координата без блока: %q", text)
 	}
@@ -319,7 +392,10 @@ func parseTheme(text string, line int) ([5]Mark, error) {
 	return marks, nil
 }
 
-// parseOverride reads `override [s1/r2/w1/m1] место: причина`.
+// parseOverride reads `override [s1/r2/w1/m1] место: причина`, or, scoped to
+// one participant, `override [s1/r2/w1/m1] место Ктулху: причина`. Naming the
+// participant matters: a бой-wide ruling hides the same field for everyone at
+// the table, so a real defect in the other three seats would go unreported.
 func parseOverride(text string, line int) (Override, error) {
 	head, rest, err := splitHeader(strings.TrimSpace(strings.TrimPrefix(text, "override")), line)
 	if err != nil {
@@ -329,11 +405,12 @@ func parseOverride(text string, line int) (Override, error) {
 	if err != nil {
 		return Override{}, err
 	}
-	field, reason, ok := strings.Cut(rest, ":")
-	field, reason = strings.TrimSpace(field), strings.TrimSpace(reason)
-	if !ok || field == "" || reason == "" {
+	subject, reason, ok := strings.Cut(rest, ":")
+	subject, reason = strings.TrimSpace(subject), strings.TrimSpace(reason)
+	if !ok || subject == "" || reason == "" {
 		return Override{}, errAt(line,
-			"расхождение пишется как «override [координата] поле: почему листу верить нельзя» — без причины это молча спрятанная ошибка")
+			"расхождение пишется как «override [координата] поле [участник]: почему листу верить нельзя» — без причины это молча спрятанная ошибка")
 	}
-	return Override{At: at, Field: field, Reason: reason, Line: line}, nil
+	field, participant, _ := strings.Cut(subject, " ")
+	return Override{At: at, Field: field, Participant: strings.TrimSpace(participant), Reason: reason, Line: line}, nil
 }

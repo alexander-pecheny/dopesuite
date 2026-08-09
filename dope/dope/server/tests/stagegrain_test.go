@@ -1,8 +1,11 @@
 package tests
 
 import (
+	"context"
 	"database/sql"
 	"testing"
+
+	"dope/dope/web/hostpages"
 )
 
 // A scheme knows where each stage sits; these tests hold the database to the
@@ -128,5 +131,55 @@ func TestStageGrainOfWaves(t *testing.T) {
 				t.Errorf("%s: круг боя %d, want %d", stage.code, round, w.round)
 			}
 		}
+	}
+}
+
+// A recompile is how a game whose stages predate the coordinates acquires them.
+// The update branch used to leave the grain untouched, so a game could never be
+// repaired and a moved бой kept a stale круг.
+func TestRecompileRefreshesGrain(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	seedFestTeams(t, db, festID, 16)
+
+	dsl := "[defaults]\nvenues: 4\n\n[scheme]\ntype: single_elimination\nteams: 16\nmatch_size: 4\nwinning_places: 2\n"
+	gameID := createSchemeGame(t, db, festID, "ek", "ЭК", dsl)
+
+	// Blank the coordinates the way a pre-v21 game carries them.
+	if _, err := db.Exec(`
+update stages set block_code = '', wave_index = 0, group_code = '' where game_id = ?`, gameID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+update matches set round = 0 where game_id = ?`, gameID); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := hostpages.RecompileSchemeGameTx(context.Background(), tx, festID, gameID, dsl+"themes: 3\n"); err != nil {
+		tx.Rollback()
+		t.Fatalf("пересборка: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	var blank int
+	if err := db.QueryRow(`
+select count(*) from stages where game_id = ? and (block_code = '' or wave_index = 0)`, gameID).Scan(&blank); err != nil {
+		t.Fatal(err)
+	}
+	if blank != 0 {
+		t.Errorf("после пересборки %d этапов без координат", blank)
+	}
+	if err := db.QueryRow(`select count(*) from matches where game_id = ? and round = 0`, gameID).Scan(&blank); err != nil {
+		t.Fatal(err)
+	}
+	if blank != 0 {
+		t.Errorf("после пересборки %d боёв без круга", blank)
 	}
 }

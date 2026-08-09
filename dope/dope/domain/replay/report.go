@@ -26,11 +26,15 @@ func Discrepancies(scripts ...Script) string {
 			title = script.Game
 		}
 		fmt.Fprintf(&out, "\n## %s\n\n", title)
-		out.WriteString("| Бой | Что | Почему листу верить нельзя |\n|---|---|---|\n")
+		out.WriteString("| Бой | Что | У кого | Почему листу верить нельзя |\n|---|---|---|---|\n")
 		overrides := append([]Override(nil), script.Overrides...)
 		sort.SliceStable(overrides, func(a, b int) bool { return overrides[a].Line < overrides[b].Line })
 		for _, over := range overrides {
-			fmt.Fprintf(&out, "| `%s` | %s | %s |\n", over.At, over.Field, over.Reason)
+			who := over.Participant
+			if who == "" {
+				who = "весь бой"
+			}
+			fmt.Fprintf(&out, "| `%s` | %s | %s | %s |\n", over.At, over.Field, who, over.Reason)
 			total++
 		}
 	}

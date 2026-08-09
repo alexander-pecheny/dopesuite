@@ -82,6 +82,21 @@ type SchemeGrain struct {
 	Group string `json:"group,omitempty"`
 }
 
+// Normalized is what every writer must store. A stage that knows its Block is
+// at least the first заход, so wave 0 there means "nobody said", not "заход
+// zero" — and a scheme unmarshalled from JSON written before grain existed has
+// no wave at all. Without this, the same tournament compiled from DSL and
+// imported from JSON lands on different coordinates.
+//
+// A stage with no Block is unknown throughout, and stays that way: guessing a
+// coordinate is the habit the grain columns exist to end.
+func (g SchemeGrain) Normalized() SchemeGrain {
+	if g.Block != "" && g.Wave == 0 {
+		g.Wave = 1
+	}
+	return g
+}
+
 type SchemeMatch struct {
 	Code             string       `json:"code"`
 	Title            string       `json:"title"`
