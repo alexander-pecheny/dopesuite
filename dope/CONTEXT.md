@@ -43,6 +43,10 @@ One venue's ordered string of Matches within a Wave. In one-sitting formats a La
 **Group**:
 One ranking scope inside a round-robin Block: the Participants who all play each other and are ranked together. A Block may hold many Groups (групповой этап of 8 groups = one Block).
 
+**Draw (Жеребьёвка)**:
+A seating no result implies: the initial deal into Groups, ЭК's hand-drawn bracket, a table swapped on the day for a no-show. A Draw is *input* to a Structure and is written into the Edges that fill those Slots, as against derived seating, which the Structure computes from prior results and recomputes whenever they change. A hand-placed derived seat is not a Draw — it is a seat the Structure will overwrite, correctly.
+_Avoid_: recording an observed seating as fact without deciding which it is. If the Structure should have produced it, a mismatch is a defect; if nothing could have produced it, it is a Draw.
+
 **Scheme**:
 The declarative document describing a Game's Structure — its Blocks, Edges, and Slot sources. The source of truth for authoring: hand-written, imported, or emitted from the simplified scheme DSL.
 
@@ -65,6 +69,9 @@ One seat in a Match. Declares where its occupant comes from (a seed, or an Edge 
 **Participant**:
 Whoever occupies a Slot and is scored: a team in team formats, one player in individual ones (личная СИ). It is the identity every Match result, standing and Edge is keyed on, and it points back at the Fest roster entry it was drawn from — either a team or a player, recorded as its `roster` (the word Kind is spoken for; see below).
 _Avoid_: calling a Participant a team. A team is one of the two things a Participant can be, not the general word for it.
+
+**Number**:
+What a Participant is called by in one Game — the number a host announces and a protocol sheet prints, dealt from 1 within that Game. The same team carries different numbers in different Games of one Fest (ЭК numbers its 48 entrants, ОД its 65), so a Number belongs to a Participant's entry in a Game. The Fest registry holds identity — name, city, players — and never a playing number.
 
 **Numbering guard**:
 Every Participant needs a number before results can be entered — the number is the identity every format scores against, so entering results before they exist would attach data to an unstable key. The server refuses writes while any is missing (409), and a game page shows the guard's message in place of its input sheet, naming the teams still without one.

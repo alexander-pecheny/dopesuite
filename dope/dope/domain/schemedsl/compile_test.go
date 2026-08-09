@@ -785,3 +785,25 @@ sorting: [points, take_rate]
 		t.Fatal("сломанное выражение должно быть ошибкой компиляции")
 	}
 }
+
+// Раунд может назваться сам: у ЭК двенадцать боёв на четверых зовут «1/16
+// финала», потому что так их зовёт турнир, а не потому что это следует из
+// арифметики.
+func TestRoundTitleOverride(t *testing.T) {
+	src := `
+[scheme]
+type: single_elimination
+teams: 16
+match_size: 4
+winning_places: 2
+title.r1: 1/8 финала
+title.r2: Полуфиналы
+`
+	scheme := compileSrc(t, src, Input{GameType: "ek"})
+	want := []string{"1/8 финала", "Полуфиналы", "Финал"}
+	for i, title := range want {
+		if scheme.Stages[i].Title != title {
+			t.Fatalf("раунд %d = %q, want %q", i+1, scheme.Stages[i].Title, title)
+		}
+	}
+}

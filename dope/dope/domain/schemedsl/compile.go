@@ -182,7 +182,7 @@ func (c *compiler) checkKeys() error {
 			base, _, dotted := strings.Cut(key, ".")
 			if dotted {
 				if _, isParam := c.protocolConfigKey(base); !isParam && base != "venues" && base != "best_of" &&
-					base != "match_size" && base != "bout" && base != "standings" {
+					base != "match_size" && base != "title" && base != "bout" && base != "standings" {
 					return errAt(v.Line, "неизвестный ключ %s", key)
 				}
 				continue // round suffixes are validated by the block's kind
@@ -819,6 +819,19 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 	}}}, nil
 }
 
+// roundTitle lets a scheme name a round itself — `title.r1: 1/16 финала` —
+// falling back to the derived name. The traditional 1/N names are arithmetic
+// only in a bracket that halves; anywhere else they are the tournament's own
+// word for the round, so the scheme says them.
+func (c *compiler) roundTitle(blk Section, names []string, derived string) string {
+	for _, name := range names {
+		if title, ok := blk.Str("title." + name); ok {
+			return title
+		}
+	}
+	return derived
+}
+
 func (c *compiler) groupTitle(blk Section, group, groups int) string {
 	if title, ok := blk.Str("title"); ok {
 		if groups == 1 {
@@ -1107,12 +1120,12 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 					Slots:            base.Slots,
 				}
 			}
-			c.appendManualStage(blk, stageCode, elimRoundTitle(round, roundIndex, winning), names, series)
+			c.appendManualStage(blk, stageCode, c.roundTitle(blk, names, elimRoundTitle(round, roundIndex, winning)), names, series)
 			seriesFinal = true
 			prevCodes = codes
 			continue
 		}
-		prevStages = c.appendSERound(blk, stageCode, elimRoundTitle(round, roundIndex, winning), names, venues, matches)
+		prevStages = c.appendSERound(blk, stageCode, c.roundTitle(blk, names, elimRoundTitle(round, roundIndex, winning)), names, venues, matches)
 		if remaining == 4 {
 			semifinalCodes = codes
 		}
