@@ -21,8 +21,11 @@ def run():
     data = json.load(open(".tmp/ek-data.json"))
     db = sqlite3.connect(DB)
     gid = db.execute("select id from games where fest_id=? and game_type='ek'", (FEST,)).fetchone()[0]
+    # A finished бой refuses edits, so re-runs skip it: the bracket fills a
+    # round at a time as results propagate into the next round's seats.
     by_teams, seats_of = {}, {}
-    for match_id, code in db.execute("select id, code from matches where game_id=?", (gid,)):
+    for match_id, code in db.execute(
+            "select id, code from matches where game_id=? and status != 'finished'", (gid,)):
         seats = db.execute("""select p.id, p.name from match_slots ms
             join participants p on p.id = ms.participant_id
             where ms.match_id = ? order by ms.slot_index""", (match_id,)).fetchall()
@@ -46,11 +49,16 @@ def run():
                         if value:
                             ops.append({"path": ["participants", seat, "themes", t, "answers", q],
                                         "value": value})
+                # ЭК ranks its бой by hand — the scorer keeps the host's place —
+                # so the sheet's место is entered as the pin it is.
+                if team.get("place") is not None:
+                    ops.append({"path": ["participants", seat, "pin"], "value": float(team["place"])})
             if ops:
                 api("PATCH", f"/api/fest/{FEST}/games/{gid}/matches/{code}/state", {"ops": ops})
             api("POST", f"/api/fest/{FEST}/games/{gid}/matches/{code}/finish", {"finished": True})
             done += 1
-    print(f"перенесено боёв: {done}, без пары: {missing}")
+    print(f"перенесено боёв: {done}, ждут результатов: {missing}")
+    return done
 
 
 if __name__ == "__main__":

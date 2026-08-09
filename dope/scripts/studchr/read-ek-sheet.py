@@ -70,6 +70,7 @@ def read_round(ws):
                     mismatch += 1
         current["teams"].append({"name": head, "themes": themes,
                                  "total": row[1] if isinstance(row[1], (int, float)) else None,
+                                 "place": row[2] if isinstance(row[2], (int, float)) else None,
                                  "mismatch": mismatch})
         i += 2
     return [b for b in bouts if b["teams"]]
