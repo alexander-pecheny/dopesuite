@@ -263,6 +263,20 @@ func TestCompileKinsbf(t *testing.T) {
 			t.Fatalf("s4-g1 entrant %d = %v, want %+v", i, entrant, want)
 		}
 	}
+	// The crossed Group takes the same four, listed in source-Group order rather
+	// than its own first. Both seat the same people; only own-first pairs them in
+	// a different заход, which is what the СтудЧР sheets caught.
+	config = stageConfig(t, stageByCode(t, scheme, "s4-g2"))
+	wantCross = []struct {
+		stage string
+		rank  int
+	}{{"s3-g1", 2}, {"s3-g2", 1}, {"s3-g3", 2}, {"s3-g4", 1}}
+	for i, want := range wantCross {
+		entrant := config["entrants"].([]any)[i].(map[string]any)["reseed"].(map[string]any)
+		if entrant["stage"] != want.stage || int(entrant["rank"].(float64)) != want.rank {
+			t.Fatalf("s4-g2 entrant %d = %v, want %+v", i, entrant, want)
+		}
+	}
 
 	// Block 5: semifinals cross group winners, final + bronze chain by place.
 	semi := stageByCode(t, scheme, "s5-semifinal")

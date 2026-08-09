@@ -132,15 +132,33 @@ gains `жребий` and its seating turns from an assertion into an input.
 
 ## What is written down
 
-`testdata/studchr2026/` holds ЭК, личная СИ and ТПШ, emitted by the scripts in
-`scripts/studchr/` and replayed by `TestReplayStudchr*`.
+`testdata/studchr2026/` holds ЭК, личная СИ, ТПШ and брейн — 263 бои — emitted by
+the scripts in `scripts/studchr/` and replayed by `TestReplayStudchr*`.
+
+## Брейн
+
+Брейн does not play themes: its бой is a duel over buzzer questions, and what the
+protocol records for each is who buzzed. So a брейн seat line lists its questions
+instead — comma-separated, because a player's name has a space in the middle of
+it and a бой has none to spare.
+
+```
+[s1/g1/r1/w1/m1]
+Рыб'ending | R Виктория Корнеева, -, R Санжи Сундуев, W Тимофей Маркин | 3 | 1
+Постпопс   | -, W Нина Андреева, -, R Нина Андреева | 1 | 2
+```
+
+Each entry is `-`, a bare mark, or a mark and whoever took it. Both sides can be
+marked on one question: in брейн one team buzzes and misses, then the other does.
+Questions past the бой's own are перестрелка — the sheets' «П» rows — and they
+are appended to both sides exactly as the «+ П» button does.
+
+Σ is the score, which for брейн is the questions a side took rather than points.
+The two forms are not interchangeable, and a бой written in the wrong one is a
+parse error rather than a transcript of a game nobody played.
 
 ## Not covered yet
 
-Брейн does not fit. Its бой is a score («4 : 0») plus who took each question,
-not a grid of themes, so it needs a second form of seat line. That arrives when
-КИнСБФ is transferred.
-
-ОД does not fit either, and for the opposite reason: it has no бои at all. Its
+ОД does not fit, and for the opposite reason to брейн: it has no бои at all. Its
 whole document is one grid of which teams took which question, held on the game
 rather than on a бой, so there is no seating and no place to assert.

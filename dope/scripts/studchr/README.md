@@ -12,6 +12,7 @@ new reader and nothing else.
 | ЭК | `read-ek-sheet.py` | `emit-ek.py` → `testdata/studchr2026/ek.transcript` |
 | личная СИ | `read-si-sheets.py` | `emit-si.py` → `testdata/studchr2026/si.transcript` |
 | ТПШ | `read-tpsh-sheet.py` | `emit-tpsh.py` → `testdata/studchr2026/tpsh.transcript` |
+| брейн | `read-brain-sheets.py` | `emit-brain.py` → `testdata/studchr2026/brain.transcript` |
 | ОД | `read-od-sheet.py` | — |
 
 СИ and ТПШ print the same grid, so its decoding lives once in `sheetgrid.py`.
@@ -41,6 +42,22 @@ the sheet still ranked them apart.
 that stops after its second stage — the six left are the winners and there is no
 final. Both bracket rounds are seeded from a пересев, so the отбор's ranking is
 checked where it decides something: in whom бой A seats.
+
+Брейн: 48 teams, 132 бои over five blocks — twelve групп of four, six DE pods, a
+пересев, a group stage of four threes, another of two fours, and semifinals with
+a best-of-three final. Only the жеребьёвка is input; every pod, every later group
+and every finalist is seated from what came before, so the replay asserts the
+entire structure of the largest game dope runs.
+
+## For the tournament's author
+
+One thing to rule on. The брейн пересев (регламент 3.3.5) ranks by % очков, then
+разница, then % взятых — but the «Пересев» tab sorted % взятых before разница,
+and that ordering is what seated the 2-й групповой этап as it was actually
+played. `brain.dsl` reproduces the tournament and therefore the sheet;
+`kinsbfSrc` in `schemedsl/compile_test.go` keeps the регламент, and the two
+disagree on purpose. If the регламент is what should have happened, the fest is
+faithful to a mistake.
 
 ## ОД has its own фест
 

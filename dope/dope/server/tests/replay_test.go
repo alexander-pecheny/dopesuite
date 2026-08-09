@@ -293,3 +293,14 @@ select state_json ->> '$.teams[0].rows[0].player' from matches where game_id = ?
 		t.Errorf("первый вопрос взял %q, want Аня", player)
 	}
 }
+
+// Брейн (КИнСБФ), the whole championship: 48 teams, 132 бои over five blocks —
+// twelve групп of four, six DE pods, a пересев, a group stage of four threes,
+// another of two fours, and semifinals with a best-of-three final.
+//
+// Only the жеребьёвка is input. Every pod, every group of the later stages and
+// every finalist is seated from what came before, so this replay asserts the
+// entire structure of the largest game dope runs.
+func TestReplayStudchrBrain(t *testing.T) {
+	replayFromTranscript(t, "brain", "brain", "Брейн")
+}

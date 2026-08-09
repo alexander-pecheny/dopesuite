@@ -722,11 +722,19 @@ func (c *compiler) dealDeterministic(blk Section, groups, size int) ([][]store.S
 	}
 	out := make([][]store.SchemeSlot, groups)
 	for g := 0; g < groups; g++ {
-		partner := g ^ 1
 		for row := 0; row < rows; row++ {
-			own := prev.groups[row*groups+g]
-			other := prev.groups[row*groups+partner]
-			out[g] = append(out[g], own.place(1), other.place(2))
+			// The pair this Group crosses with, taken in source-Group order: the
+			// winner out of its own and the runner-up out of its partner. Reading
+			// own-Group-first instead seats the same four but pairs them in a
+			// different заход, and a бой's turn at the стол is a fact about the
+			// tournament like any other.
+			for column := g &^ 1; column <= g|1; column++ {
+				place := 2
+				if column == g {
+					place = 1
+				}
+				out[g] = append(out[g], prev.groups[row*groups+column].place(place))
+			}
 		}
 	}
 	return out, nil
