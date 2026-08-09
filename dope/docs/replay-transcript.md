@@ -70,6 +70,12 @@ Then one line per seat: `who | marks | Σ | место`.
 - **Σ** and **место** are what the sheet printed. They are asserted, not
   applied: dope scores the marks itself and has to agree. A shared place is
   written as a fraction — `1.5` when two finish level.
+- A place written `3!` was **set by hand**. A перестрелка breaks a tie with
+  material the protocol grid never records, so that place cannot be derived from
+  the marks: it is input, exactly as a Draw is. The replayer writes it as a Pin
+  and does not assert it. Use it only where the grid genuinely cannot imply an
+  order — marking an ordinary place as pinned turns a real check into a
+  tautology.
 
 The table is checked both ways: that everyone the sheet lists played, and that
 dope seated nobody the sheet didn't.

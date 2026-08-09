@@ -22,6 +22,9 @@ type Game interface {
 	Seats(at Coord) ([]string, error)
 	// Play enters one participant's marks into a бой.
 	Play(at Coord, name string, marks [][5]Mark) error
+	// Pin sets a place the hosts assigned by hand, overriding what the marks
+	// score to. Called before Finish, so the бой closes on the host's ruling.
+	Pin(at Coord, name string, place float64) error
 	// Finish closes a бой so its results reach the rounds that follow.
 	Finish(at Coord) error
 	// Outcome reports the place and Σ dope computed, by participant.
@@ -110,6 +113,14 @@ func Run(script Script, game Game) ([]Finding, error) {
 				return findings, fmt.Errorf("%s, %s: отметки: %w", bout.At, seat.Name, err)
 			}
 		}
+		for _, seat := range bout.Seats {
+			if !seat.Pinned {
+				continue
+			}
+			if err := game.Pin(bout.At, seat.Name, seat.Place); err != nil {
+				return findings, fmt.Errorf("%s, %s: место вручную: %w", bout.At, seat.Name, err)
+			}
+		}
 		if err := game.Finish(bout.At); err != nil {
 			return findings, fmt.Errorf("%s: закрытие боя: %w", bout.At, err)
 		}
@@ -137,7 +148,9 @@ func Run(script Script, game Game) ([]Finding, error) {
 				report(Finding{At: bout.At, Field: "Σ", Participant: seat.Name,
 					Sheet: fmt.Sprint(seat.Total), Ours: fmt.Sprint(got.Total), Line: seat.Line})
 			}
-			if got.Place != seat.Place {
+			// A pinned place was written, not derived, so asserting it would only
+			// check that dope stored what it was told.
+			if got.Place != seat.Place && !seat.Pinned {
 				report(Finding{At: bout.At, Field: "место", Participant: seat.Name,
 					Sheet: place(seat.Place), Ours: place(got.Place), Line: seat.Line})
 			}

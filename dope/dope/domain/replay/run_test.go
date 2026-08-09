@@ -14,6 +14,7 @@ type fakeGame struct {
 	seated   map[string][]string
 	outcomes map[string]map[string]Result
 	finished []string
+	pinned   []string
 	// bend rewrites what the game reports, so a test can make dope "wrong".
 	bendSeats   func(Coord, []string) []string
 	bendOutcome func(Coord, map[string]Result) map[string]Result
@@ -230,5 +231,37 @@ func TestRunFinishesEveryBoutInOrder(t *testing.T) {
 		if game.finished[i] != want[i] {
 			t.Fatalf("порядок закрытия = %v, want %v", game.finished, want)
 		}
+	}
+}
+
+func (f *fakeGame) Pin(at Coord, name string, place float64) error {
+	key := at.String()
+	if f.outcomes[key] == nil {
+		f.outcomes[key] = map[string]Result{}
+	}
+	r := f.outcomes[key][name]
+	r.Place = place
+	f.outcomes[key][name] = r
+	f.pinned = append(f.pinned, key+"|"+name)
+	return nil
+}
+
+// A pinned place is written, not checked: a перестрелка settles a tie with
+// material the grid never recorded, so the marks cannot imply it.
+func TestRunWritesPinnedPlacesInsteadOfAsserting(t *testing.T) {
+	script, err := Parse("[game]\ntype: ek\n\n[s1/r1/w1/m1] жребий\nА | R---- | 10 | 2!\nБ | R---- | 10 | 1!\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := newFakeGame()
+	findings, err := Run(script, game)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("расставленное вручную место не проверяют: %v", findings)
+	}
+	if len(game.pinned) != 2 {
+		t.Errorf("проставлено мест = %d, want 2", len(game.pinned))
 	}
 }

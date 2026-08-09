@@ -81,7 +81,12 @@ type Seat struct {
 	Marks [][5]Mark
 	Total int
 	Place float64
-	Line  int
+	// Pinned marks a place the hosts set by hand rather than one the marks
+	// imply — written `3!`. A перестрелка breaks a tie with material the
+	// protocol grid never records, so the place is input, exactly as a Draw is:
+	// the replayer writes it and does not assert it.
+	Pinned bool
+	Line   int
 }
 
 type Bout struct {
@@ -362,9 +367,13 @@ func parseSeat(text string, line int) (Seat, error) {
 		return Seat{}, errAt(line, "Σ у %s — целое число, а не %q", seat.Name, strings.TrimSpace(fields[2]))
 	}
 	seat.Total = total
-	place, err := strconv.ParseFloat(strings.TrimSpace(fields[3]), 64)
+	placeText := strings.TrimSpace(fields[3])
+	if seat.Pinned = strings.HasSuffix(placeText, "!"); seat.Pinned {
+		placeText = strings.TrimSpace(strings.TrimSuffix(placeText, "!"))
+	}
+	place, err := strconv.ParseFloat(placeText, 64)
 	if err != nil || place <= 0 {
-		return Seat{}, errAt(line, "место у %s — число от 1 (делённое место пишется как 1.5), а не %q",
+		return Seat{}, errAt(line, "место у %s — число от 1 (делённое место пишется как 1.5, поставленное вручную — как 3!), а не %q",
 			seat.Name, strings.TrimSpace(fields[3]))
 	}
 	seat.Place = place
