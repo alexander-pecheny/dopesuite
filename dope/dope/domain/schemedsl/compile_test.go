@@ -478,6 +478,24 @@ sorting: [taken, points]
 	}
 }
 
+// Which way a metric reads is a property of the metric: место is lower-better,
+// очки are higher-better, and a scheme that names one without a direction means
+// the obvious one. Naming a direction still wins.
+func TestSortingDirectionFollowsTheMetric(t *testing.T) {
+	src := "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\n" +
+		"type: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: true\nsorting: [place_sum, taken, place_sum desc]\n"
+	scheme := compileSrc(t, src, Input{GameType: "brain"})
+	var rules []map[string]string
+	if err := json.Unmarshal(stageByCode(t, scheme, "s2-reseed").Sort, &rules); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{"asc", "desc", "desc"} {
+		if rules[i]["dir"] != want {
+			t.Errorf("%s: направление %q, want %q", rules[i]["metric"], rules[i]["dir"], want)
+		}
+	}
+}
+
 func TestCompileInitSorting(t *testing.T) {
 	src := "[init]\nseed: kvrm\nsorting: [points desc, rating desc]\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n"
 	scheme := compileSrc(t, src, Input{GameType: "brain"})

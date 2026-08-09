@@ -203,8 +203,8 @@ values(?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`, festID, gameID, stage.Code, st
 				venueID = id
 			}
 			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, round, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, participantCount, venueID)
+insert into matches(fest_id, game_id, stage_id, code, title, position, round, wave, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, match.Wave, participantCount, venueID)
 			if err != nil {
 				return store.FestView{}, err
 			}
@@ -379,8 +379,8 @@ values(?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`, festID, gameID, stage.Code, st
 				venueID = id
 			}
 			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, round, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, participantCount, venueID)
+insert into matches(fest_id, game_id, stage_id, code, title, position, round, wave, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, match.Wave, participantCount, venueID)
 			if err != nil {
 				return err
 			}

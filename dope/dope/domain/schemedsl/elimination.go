@@ -166,9 +166,14 @@ type deBout struct {
 // dePlan is a whole elimination with lives: бои in play order, grouped into
 // rounds, and who is left when it stops.
 type dePlan struct {
-	bouts    []deBout
-	rounds   [][]int
-	survivor []deSource // block qualifiers, best first
+	bouts  []deBout
+	rounds [][]int
+	// alive[r] is everyone still in at round r, in the rank order the reseed
+	// hands out — including the brackets that sit the round out, because they
+	// still hold their ranks and the бои of that round are numbered around them.
+	alive      [][]deSource
+	aliveBands [][][2]int // per round, per alive entry: (Losses now, Losses before)
+	survivor   []deSource // block qualifiers, best first
 }
 
 // planLives lays out an elimination where `lives` Losses end a tournament.
@@ -216,10 +221,23 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 			plan.survivor = flattenBrackets(brackets)
 			return plan, nil
 		}
+		aliveNow := flattenBrackets(brackets)
+		bandsNow := make([][2]int, 0, len(aliveNow))
+		for b := 0; b < lives; b++ {
+			for _, member := range brackets[b] {
+				from := b
+				if member.entrant == 0 {
+					from = plan.bouts[member.bout].losses
+				}
+				bandsNow = append(bandsNow, [2]int{b, from})
+			}
+		}
 		if size := sizeFor(round, alive); alive <= size {
 			seats := rankSources(flattenBrackets(brackets))
 			plan.bouts = append(plan.bouts, deBout{losses: 0, sources: seats})
 			plan.rounds = append(plan.rounds, []int{len(plan.bouts) - 1})
+			plan.alive = append(plan.alive, aliveNow)
+			plan.aliveBands = append(plan.aliveBands, bandsNow)
 			last := len(plan.bouts) - 1
 			for place := 1; place <= len(seats); place++ {
 				plan.survivor = append(plan.survivor, deSource{bout: last, place: place})
@@ -280,6 +298,8 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 			return plan, nil
 		}
 		plan.rounds = append(plan.rounds, roundBouts)
+		plan.alive = append(plan.alive, aliveNow)
+		plan.aliveBands = append(plan.aliveBands, bandsNow)
 		brackets = next
 		if round > 64 {
 			return nil, fmt.Errorf("слишком много раундов — проверьте match_size и winning_places")

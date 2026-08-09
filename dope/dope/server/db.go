@@ -304,6 +304,7 @@ create table if not exists matches(
   title text not null,
   position integer not null,
   round integer not null default 0,
+  wave integer not null default 0,
   participant_count integer not null,
   venue_id integer references venues(id),
   status text not null default 'active',
@@ -759,10 +760,12 @@ create table if not exists stage_standings(
 			return err
 		}
 	}
-	// v21: the schedule says where it sits. A stage row is a Wave, so it names
-	// its Block, its turn at the столы and — round-robin only — the Group it
-	// ranks; the remaining coordinate, the Round, is on the бой, because a Group
-	// plays all its круги at one стол. Existing rows stay blank: a game compiled
+	// v21: the schedule says where it sits. A stage row is usually a Wave, so it
+	// names its Block, its turn at the столы and — round-robin only — the Group
+	// it ranks. A Group is the exception: it holds one стол from its first бой
+	// to its last, so its stage spans every Round and every Wave, and both of
+	// those coordinates sit on the бой instead. Existing rows stay blank: a game
+	// compiled
 	// before this knows its shape only through its stage codes, and guessing
 	// coordinates back out of `s1-g7` is the habit these columns exist to end.
 	if err := store.AddColumnsIfMissing(db, "stages", []store.ColumnSpec{
@@ -774,6 +777,7 @@ create table if not exists stage_standings(
 	}
 	if err := store.AddColumnsIfMissing(db, "matches", []store.ColumnSpec{
 		{Name: "round", Type: "INTEGER NOT NULL DEFAULT 0"},
+		{Name: "wave", Type: "INTEGER NOT NULL DEFAULT 0"},
 	}); err != nil {
 		return err
 	}

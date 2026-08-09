@@ -29,19 +29,24 @@ type serverGame struct {
 
 func (g *serverGame) db() *sql.DB { return g.srv.Eng().DB }
 
-// matchAt turns a coordinate into a бой. The four columns are the whole point:
+// matchAt turns a coordinate into a бой. The columns are the whole point:
 // before them this had to be guessed out of a code string like `s1-g7`.
+//
+// The заход is read from the бой where it has one and from the stage otherwise.
+// A stage is normally a Wave, but a Group holds one стол across all of them, so
+// there the Wave is a property of the бой — as the Round already is.
 func (g *serverGame) matchAt(at replay.Coord) (int64, string, error) {
 	var id int64
 	var code string
 	err := g.db().QueryRow(`
 select m.id, m.code from matches m
 join stages s on s.id = m.stage_id
-where s.game_id = ? and s.block_code = ? and s.wave_index = ? and s.group_code = ?
+where s.game_id = ? and s.block_code = ? and s.group_code = ?
+  and coalesce(nullif(m.wave, 0), s.wave_index) = ?
   and m.round = ?
 order by m.position
 limit 1 offset ?`,
-		g.gameID, at.Block, at.Wave, at.Group, at.Round, at.Match-1).Scan(&id, &code)
+		g.gameID, at.Block, at.Group, at.Wave, at.Round, at.Match-1).Scan(&id, &code)
 	if err == sql.ErrNoRows {
 		return 0, "", fmt.Errorf("в игре нет боя по координате %s", at)
 	}
@@ -192,6 +197,42 @@ func (g *serverGame) Finish(at replay.Coord) error {
 		map[string]any{"finished": true}, g.token)
 	if resp.Code != http.StatusOK {
 		return fmt.Errorf("закрытие %s: %d %s", code, resp.Code, resp.Body.String())
+	}
+	return g.calculateReadyReseeds()
+}
+
+// calculateReadyReseeds does what a host does after closing the last бой of a
+// round: presses «рассчитать пересев». Finishing a бой only invalidates a
+// reseed — the ranking is recomputed on the host's word, not silently — so a
+// replay that never pressed the button would find the next round unseated and
+// blame the resolver.
+//
+// A stage that is not ready yet answers 400 and is simply left for later, which
+// is the same thing as the button being greyed out.
+func (g *serverGame) calculateReadyReseeds() error {
+	rows, err := g.db().Query(`
+select code from stages where game_id = ? and stage_type = 'reseed' order by position`, g.gameID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var codes []string
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return err
+		}
+		codes = append(codes, code)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, code := range codes {
+		resp := scopedAPIRequest(g.t, g.srv, http.MethodPost,
+			fmt.Sprintf("/api/fest/%d/games/%d/stages/%s/reseed", g.festID, g.gameID, code), nil, g.token)
+		if resp.Code != http.StatusOK && resp.Code != http.StatusBadRequest {
+			return fmt.Errorf("пересев %s: %d %s", code, resp.Code, resp.Body.String())
+		}
 	}
 	return nil
 }

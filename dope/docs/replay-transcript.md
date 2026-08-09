@@ -53,9 +53,11 @@ Groups, e.g. `[s1/g3/r2/w1/m4]`. Round, wave and match are always required.
 The coordinate is how a sheet's бой joins dope's. They cannot be joined by who
 sat at the table, because the seating is the thing under test.
 
-The Group is not decoration. All six групп of личная СИ sit in Block s1, wave 1,
-круги 1–4, so without a group number one coordinate names six different бои and
-five of them go unchecked.
+The Group is not decoration. All six групп of личная СИ play круги 1–4 in Block
+s1, so without a group number one coordinate names six different бои and five of
+them go unchecked. Inside a Group the бои of one круг are заходы — a Group holds
+one стол and plays them one after another — so личная СИ's group stage addresses
+`s1/g3/r2/w1/m1`, not three matches of one wave.
 
 `жребий` after the coordinate marks a Draw — this table was set by a person, not
 derived: the opening round of a bracket, the deal into groups, a swap for a
@@ -76,6 +78,11 @@ Then one line per seat: `who | marks | Σ | место`.
   and does not assert it. Use it only where the grid genuinely cannot imply an
   order — marking an ordinary place as pinned turns a real check into a
   tautology.
+
+  СтудЧР is the evidence that these really are перестрелки and not a sorting
+  rule nobody wrote down. Across ЭК and личная СИ, seats level on Σ are ranked
+  by the sheets sometimes toward the lower Σ+ and sometimes toward the higher —
+  no ordering of the protocol's own metrics produces both.
 
 The table is checked both ways: that everyone the sheet lists played, and that
 dope seated nobody the sheet didn't.

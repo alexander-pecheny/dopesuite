@@ -52,13 +52,22 @@ def theme_count(header):
     return count
 
 
+def number(cell):
+    if isinstance(cell, (int, float)):
+        return float(cell)
+    try:
+        return float(str(cell).strip().replace(",", "."))
+    except (ValueError, AttributeError):
+        return None
+
+
 def read_bouts(ws):
     """Each block is «Бой X» plus its player rows, until a blank line."""
     bouts, current, themes_here = [], None, 0
     for row in ws.iter_rows(values_only=True):
         head = str(row[0]).strip() if row[0] else ""
         if head.startswith("Бой "):
-            current = {"code": head, "players": []}
+            current = {"code": head.split("(")[0].strip(), "players": []}
             themes_here = theme_count(row)
             bouts.append(current)
             continue
@@ -80,7 +89,10 @@ def read_bouts(ws):
                           for i, a in enumerate(answers))
                 if got != round(stated):
                     MISREADS.append((head, t + 1, got, round(stated), [str(row[base + i]) for i in range(VALUES)]))
-        current["players"].append({"name": head, "themes": themes})
+        # Σ and место as the sheet printed them. They are what the replay holds
+        # dope against, so they are read verbatim and never recomputed here.
+        current["players"].append({"name": head, "themes": themes,
+                                   "total": number(row[1]), "place": number(row[2])})
     return [b for b in bouts if b["players"]]
 
 
@@ -106,6 +118,9 @@ rounds = {}
 for title in ["Круг 1 (протоколы)", "Круг 2 (протоколы)", "Круг 3 (протоколы)", "Круг 4 (протоколы)"]:
     rounds[title] = read_bouts(wb[title])
 playoff = read_bouts(wb["Плей-офф (протоколы)"])
+# The grand final sits on its own sheet because it is played over twelve themes
+# where the rest of the play-off has eight, so its grid is a different width.
+playoff += read_bouts(wb["Грандфинал (протокол)"])
 wb.close()
 
 out = {"players": players, "groups": groups, "rounds": rounds, "playoff": playoff}

@@ -231,7 +231,7 @@ func (c *compiler) readInit() error {
 	}
 	if ok {
 		for _, rule := range rules {
-			seeding.Sort = append(seeding.Sort, store.SchemeSortRule{Metric: rule.Metric, Dir: rule.Dir})
+			seeding.Sort = append(seeding.Sort, store.SchemeSortRule{Metric: rule.Metric, Dir: sortDir(rule)})
 		}
 	}
 	c.scheme.Seeding = seeding
@@ -596,6 +596,12 @@ func (c *compiler) reseedStage(index int, blk Section, sources []string, teams [
 }
 
 func (c *compiler) reseedStageCoded(code string, where at, blk Section, sources []string, teams []store.SchemeSlot) (string, error) {
+	return c.reseedStageBanded(code, where, blk, sources, teams, nil)
+}
+
+// reseedStageBanded is reseedStageCoded for a bracket with lives: bands says how
+// many Losses each team carries, and the ranking runs inside a band.
+func (c *compiler) reseedStageBanded(code string, where at, blk Section, sources []string, teams []store.SchemeSlot, bands []int) (string, error) {
 	sort, err := c.reseedSortRules(blk)
 	if err != nil {
 		return "", err
@@ -609,6 +615,7 @@ func (c *compiler) reseedStageCoded(code string, where at, blk Section, sources 
 		Position:  c.position,
 		Grain:     where.grain(),
 		Teams:     teams,
+		Bands:     bands,
 		Sources:   sources,
 		Sort:      json.RawMessage(util.MustJSON(sort)),
 	})
@@ -1342,8 +1349,11 @@ func (c *compiler) expandDoubleElim(index int, blk Section) (*blockOutputs, erro
 	if v, ok := blk.Int("proceeding_teams"); ok {
 		proceeding = v
 	}
+	// A пересев hands the block a ranking, so its opening round deals that
+	// ranking as a snake like every later round does. Only the deterministic
+	// template arrives pre-balanced, and slicing it in order is the point.
 	opening := snakeChunks
-	if index > 0 {
+	if reseeded, _ := blockReseedSpec(blk); index > 0 && !reseeded {
 		opening = straightChunks
 	}
 	plan, err := planLivesDrawn(perGroup, 2, winning, proceeding,
@@ -1408,8 +1418,9 @@ func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, p
 	for r, round := range plan.rounds {
 		var reseedCode string
 		if reranked && r > 0 {
-			alive := make([]store.SchemeSlot, 0, len(round)*4)
-			for _, source := range roundEntrants(plan, r) {
+			sources, bands := roundEntrantBands(plan, r)
+			alive := make([]store.SchemeSlot, 0, len(sources))
+			for _, source := range sources {
 				alive = append(alive, fromMatchSlot(codes[source.bout], source.place))
 			}
 			var err error
@@ -1417,7 +1428,7 @@ func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, p
 			// the same round would otherwise all claim `s1-r2-reseed` and the
 			// insert would die on unique(game_id, code).
 			roundReseed := fmt.Sprintf("%s-r%d-reseed", stageCode, r+1)
-			if reseedCode, err = c.reseedStageCoded(roundReseed, at{block: blockCode, group: groupCode(groups, group)}, blk, prevStages, alive); err != nil {
+			if reseedCode, err = c.reseedStageBanded(roundReseed, at{block: blockCode, group: groupCode(groups, group)}, blk, prevStages, alive, bands); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -1474,7 +1485,8 @@ func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, p
 				at{block: blockCode, group: groupCode(groups, group)}, all)
 			return codes, []string{stageCode}, nil
 		}
-		c.appendManualStage(blk, roundStage, fmt.Sprintf("Раунд %d", r+1), []string{fmt.Sprintf("r%d", r+1)},
+		names := []string{fmt.Sprintf("r%d", r+1)}
+		c.appendManualStage(blk, roundStage, c.roundTitle(blk, names, fmt.Sprintf("Раунд %d", r+1)), names,
 			at{block: blockCode, round: r + 1}, matches)
 		prevStages = []string{roundStage}
 		stages = append(stages, roundStage)
@@ -1485,18 +1497,53 @@ func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, p
 // roundEntrants lists everyone a re-ranked round seats, in the ranking order
 // the model defines: bracket first, place second.
 func roundEntrants(plan *dePlan, round int) []deSource {
-	seen := map[[2]int]bool{}
-	var out []deSource
-	for _, boutIndex := range plan.rounds[round] {
-		for _, source := range plan.bouts[boutIndex].sources {
-			key := [2]int{source.bout, source.place}
-			if source.entrant == 0 && !seen[key] {
-				seen[key] = true
-				out = append(out, source)
-			}
-		}
+	sources, _ := roundEntrantBands(plan, round)
+	return sources
+}
+
+// roundEntrantBands lists a round's entrants and, alongside, the band each is
+// ranked in. The reseed ranks inside a band and never across, so a band is
+// everything the ordering settles before a single metric is read.
+//
+// Two things settle it, and both are the model's convention rather than
+// anything the players did (planLives). Fewer Losses first: a Participant on one
+// Loss never outranks one on none. Then, inside a bracket, whoever has just
+// dropped into it outranks whoever was already there — they arrive with the
+// better record, having lost later.
+func roundEntrantBands(plan *dePlan, round int) ([]deSource, []int) {
+	// Everyone still in, not only everyone who plays. A bracket already down to
+	// its winning places sits the round out, and it keeps its ranks while it
+	// waits — the бои of this round are numbered around them, so a reseed that
+	// skipped them would hand every later rank to the wrong person.
+	return plan.alive[round], denseBands(plan.aliveBands[round])
+}
+
+// denseBands numbers the distinct (arriving, departing) pairs from best to
+// worst, so the resolver only has to know that a lower band ranks first.
+func denseBands(pairs [][2]int) []int {
+	distinct := map[[2]int]bool{}
+	for _, pair := range pairs {
+		distinct[pair] = true
 	}
-	return out
+	ordered := make([][2]int, 0, len(distinct))
+	for pair := range distinct {
+		ordered = append(ordered, pair)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i][0] != ordered[j][0] {
+			return ordered[i][0] < ordered[j][0]
+		}
+		return ordered[i][1] < ordered[j][1]
+	})
+	index := make(map[[2]int]int, len(ordered))
+	for i, pair := range ordered {
+		index[pair] = i
+	}
+	bands := make([]int, len(pairs))
+	for i, pair := range pairs {
+		bands[i] = index[pair]
+	}
+	return bands
 }
 
 func flatBouts(plan *dePlan) []int {

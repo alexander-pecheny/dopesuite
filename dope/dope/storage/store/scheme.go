@@ -65,6 +65,7 @@ type SchemeStage struct {
 	Grain     SchemeGrain     `json:"grain"`
 	Matches   []SchemeMatch   `json:"matches"`
 	Teams     []SchemeSlot    `json:"teams"`
+	Bands     []int           `json:"bands,omitempty"` // per Teams entry: how many Losses it carries
 	Sources   []string        `json:"sources"`
 	Sort      json.RawMessage `json:"sort"`
 	Config    json.RawMessage `json:"config"`
@@ -102,6 +103,7 @@ type SchemeMatch struct {
 	Title            string       `json:"title"`
 	Venue            int          `json:"venue"`
 	Round            int          `json:"round,omitempty"` // 1-based круг within the Block
+	Wave             int          `json:"wave,omitempty"`  // 1-based заход, set where the stage spans several
 	ParticipantCount int          `json:"participantCount"`
 	Slots            []SchemeSlot `json:"slots"`
 }

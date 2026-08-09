@@ -72,8 +72,11 @@ func TestParseExample(t *testing.T) {
 	}
 }
 
-func TestParseDefaultSortingDirections(t *testing.T) {
-	doc, err := Parse("[defaults]\nsorting: [points, head2head, taken, diff]\n")
+// The parser reports the direction the scheme wrote, and nothing more: an
+// unqualified metric leaves it empty so the compiler can read it off the metric
+// itself. Deciding here would override место and жребий, which are lower-better.
+func TestParseSortingDirections(t *testing.T) {
+	doc, err := Parse("[defaults]\nsorting: [points, place_sum, taken desc]\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,9 +84,14 @@ func TestParseDefaultSortingDirections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, rule := range sorting {
-		if rule.Dir != "desc" {
-			t.Fatalf("%s dir = %q, want desc default", rule.Metric, rule.Dir)
+	for i, want := range []string{"", "", "desc"} {
+		if sorting[i].Dir != want {
+			t.Errorf("%s dir = %q, want %q", sorting[i].Metric, sorting[i].Dir, want)
+		}
+	}
+	for i, want := range []string{"desc", "asc", "desc"} {
+		if got := sortDir(sorting[i]); got != want {
+			t.Errorf("%s: компилятор выбрал %q, want %q", sorting[i].Metric, got, want)
 		}
 	}
 }

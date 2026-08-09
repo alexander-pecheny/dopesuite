@@ -86,7 +86,9 @@ func (roundRobin) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store
 	var matches []store.SchemeMatch
 	seq := 0
 	for circle, round := range rounds {
-		for _, table := range round {
+		// A Group holds one стол for the whole block, so the бои of a круг are
+		// played one after another. Their order in the schedule is the заход.
+		for wave, table := range round {
 			seq++
 			slots := make([]store.SchemeSlot, 0, len(table))
 			for _, position := range table {
@@ -104,6 +106,7 @@ func (roundRobin) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store
 				Title:            fmt.Sprintf(title, seq),
 				Venue:            conf.Venue,
 				Round:            circle + 1,
+				Wave:             wave + 1,
 				ParticipantCount: len(slots),
 				Slots:            slots,
 			})

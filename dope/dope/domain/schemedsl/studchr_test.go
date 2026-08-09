@@ -1,6 +1,8 @@
 package schemedsl
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"dope/dope/storage/store"
@@ -41,7 +43,7 @@ title.r5: Финал
 // четверо из группы выходят в плей-офф на 24 с двумя жизнями.
 const studchrSISrc = `
 [defaults]
-venues: 18
+venues: 6
 
 [init]
 seed: xlsx
@@ -63,8 +65,16 @@ teams: 24
 match_size: 4
 winning_places: 2
 themes: 8
+themes.r7: 12
 reseed: true
-sorting: [place_sum, total, plus]
+sorting: [place_sum, total, plus, taken50, taken40, taken30, taken20]
+title.r1: 1 этап
+title.r2: 2 этап
+title.r3: 3 этап
+title.r4: 4 этап
+title.r5: 5 этап
+title.r6: Финал нижней сетки
+title.r7: Грандфинал
 `
 
 // ОД: командная викторина, шесть туров по пятнадцать вопросов, все девяносто
@@ -154,6 +164,45 @@ func TestStudchrSI(t *testing.T) {
 	if got := len(playoff[6].Matches[0].Slots); got != 4 {
 		t.Fatalf("грандфинал на %d мест, want 4", got)
 	}
+	// Бой G of the sheet seats ranks 1, 12, 13 and 24 — the snake every later
+	// round of this same bracket is already dealt with. A block fed by a
+	// пересев receives a ranking, not a balanced template, so its opening round
+	// has to deal that ranking rather than slice it 1-2-3-4.
+	if got := slotLabels(playoff[0].Matches[0]); got != "Пересев-1 Пересев-12 Пересев-13 Пересев-24" {
+		t.Errorf("первый бой плей-офф: %s", got)
+	}
+	// «Раунд 6» is not what anyone at the tournament called it. A bracket with
+	// lives has no arithmetic name for its rounds, so the scheme says them.
+	for i, want := range []string{"1 этап", "2 этап", "3 этап", "4 этап", "5 этап",
+		"Финал нижней сетки", "Грандфинал"} {
+		if playoff[i].Title != want {
+			t.Errorf("раунд %d назван %q, want %q", i+1, playoff[i].Title, want)
+		}
+	}
+	// The grand final is played over twelve themes where the rest of the
+	// play-off has eight.
+	if got := themeCount(t, playoff[6]); got != 12 {
+		t.Errorf("тем в грандфинале = %d, want 12", got)
+	}
+}
+
+func themeCount(t *testing.T, stage store.SchemeStage) int {
+	t.Helper()
+	var config struct {
+		Themes int `json:"themes"`
+	}
+	if err := json.Unmarshal(stage.Config, &config); err != nil {
+		t.Fatal(err)
+	}
+	return config.Themes
+}
+
+func slotLabels(match store.SchemeMatch) string {
+	names := make([]string, len(match.Slots))
+	for i, slot := range match.Slots {
+		names[i] = slot.Label
+	}
+	return strings.Join(names, " ")
 }
 
 func TestStudchrFlatGames(t *testing.T) {

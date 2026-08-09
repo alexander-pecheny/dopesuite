@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"dope/dope/domain/games"
 	"dope/dope/domain/replay"
 )
 
@@ -38,15 +39,26 @@ title: Мини-ЭК
 Ушки на макушке | R---- | 10 | 2
 `
 
+// newReplayGame builds the fest a transcript describes and creates its game.
+// The roster order is the seeding — for a scheme with no жребий at all, like
+// личная СИ, it is the tournament's only input.
 func newReplayGame(t *testing.T, dsl, gameType, title string, roster []string) *serverGame {
 	t.Helper()
 	srv := newAuthTestServer(t)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
 	for i, name := range roster {
-		if _, err := db.Exec(`
+		var err error
+		if games.IsIndividual(gameType) {
+			first, last, _ := strings.Cut(name, " ")
+			_, err = db.Exec(`
+insert into fest_players(fest_id, first_name, last_name) values(?, ?, ?)`, festID, first, last)
+		} else {
+			_, err = db.Exec(`
 insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?, ?)`,
-			festID, name, i+1, i+1); err != nil {
+				festID, name, i+1, i+1)
+		}
+		if err != nil {
 			t.Fatalf("состав: %v", err)
 		}
 	}
@@ -54,6 +66,37 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 	return &serverGame{
 		t: t, srv: srv, festID: festID, gameID: gameID,
 		token: createTestSession(t, srv, systemUserID(t, srv.Eng().DB)),
+	}
+}
+
+// replayFromTranscript runs a committed transcript against the scheme it names
+// and reports every disagreement, so one failing бой does not hide the rest.
+func replayFromTranscript(t *testing.T, name, gameType, title string) {
+	t.Helper()
+	src, err := os.ReadFile("../../../testdata/studchr2026/" + name + ".transcript")
+	if err != nil {
+		t.Skipf("стенограммы нет: %v", err)
+	}
+	script, err := replay.Parse(string(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dsl, err := os.ReadFile("../../../scripts/studchr/" + script.Scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, len(script.Roster))
+	for i, entrant := range script.Roster {
+		names[i] = entrant.Name
+	}
+	findings, err := replay.Run(script, newReplayGame(t, string(dsl), gameType, title, names))
+	// Findings first even when the run died: a бой that could not be played at
+	// all is usually explained by the disagreements that came before it.
+	for _, f := range findings {
+		t.Errorf("%s", f)
+	}
+	if err != nil {
+		t.Fatalf("прогон: %v", err)
 	}
 }
 
@@ -166,29 +209,17 @@ func TestReplayDrawSurvivesRecompute(t *testing.T) {
 // job it exists for — dope scores what the hosts entered and has to arrive at
 // the same Σ and the same место the tournament published.
 func TestReplayStudchrEK(t *testing.T) {
-	src, err := os.ReadFile("../../../testdata/studchr2026/ek.transcript")
-	if err != nil {
-		t.Skip("стенограммы ЭК нет")
-	}
-	script, err := replay.Parse(string(src))
-	if err != nil {
-		t.Fatal(err)
-	}
-	dsl, err := os.ReadFile("../../../scripts/studchr/ek.dsl")
-	if err != nil {
-		t.Fatal(err)
-	}
-	names := make([]string, len(script.Roster))
-	for i, entrant := range script.Roster {
-		names[i] = entrant.Name
-	}
-	game := newReplayGame(t, string(dsl), "ek", "ЭК", names)
+	replayFromTranscript(t, "ek", "ek", "ЭК")
+}
 
-	findings, err := replay.Run(script, game)
-	if err != nil {
-		t.Fatalf("прогон: %v", err)
-	}
-	for _, f := range findings {
-		t.Errorf("%s", f)
-	}
+// Личная СИ, the longest game of the championship: 54 players, six групп of
+// nine playing four круги three at a table, then a play-off of 24 on two lives
+// with a пересев before every round — 96 бои in all.
+//
+// Not one of them is a жребий. The roster order is the whole input: the snake
+// deals the групп from it, and every play-off бой is seated from the round
+// before. So this replay asserts the entire seating of the tournament, which is
+// what makes it the harder half of the harness.
+func TestReplayStudchrSI(t *testing.T) {
+	replayFromTranscript(t, "si", "si", "СИ")
 }

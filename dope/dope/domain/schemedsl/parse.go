@@ -243,7 +243,10 @@ func (s Section) Sorting(key string) ([]SortRule, bool, error) {
 	rules := make([]SortRule, len(items))
 	for i, item := range items {
 		fields := strings.Fields(item)
-		rule := SortRule{Dir: "desc"}
+		// No direction unless the scheme writes one. Which way a metric reads is
+		// a property of the metric — место and жребий are lower-is-better, очки
+		// are higher — and defaulting to desc here silently overrode that.
+		rule := SortRule{}
 		switch len(fields) {
 		case 1:
 			rule.Metric = fields[0]

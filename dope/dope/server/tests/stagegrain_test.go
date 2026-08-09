@@ -19,6 +19,7 @@ type stageRow struct {
 	wave   int
 	group  string
 	rounds []int
+	waves  []int
 }
 
 func stageRows(t *testing.T, db *sql.DB, gameID int64) []stageRow {
@@ -43,18 +44,19 @@ where s.game_id = ? order by s.position`, gameID)
 	}
 	for i := range out {
 		matchRows, err := db.Query(`
-select m.round from matches m join stages s on s.id = m.stage_id
+select m.round, m.wave from matches m join stages s on s.id = m.stage_id
 where s.game_id = ? and s.code = ? order by m.position`, gameID, out[i].code)
 		if err != nil {
 			t.Fatalf("matches of %s: %v", out[i].code, err)
 		}
 		for matchRows.Next() {
-			var round int
-			if err := matchRows.Scan(&round); err != nil {
+			var round, wave int
+			if err := matchRows.Scan(&round, &wave); err != nil {
 				matchRows.Close()
 				t.Fatal(err)
 			}
 			out[i].rounds = append(out[i].rounds, round)
+			out[i].waves = append(out[i].waves, wave)
 		}
 		matchRows.Close()
 	}
@@ -92,6 +94,14 @@ func TestStageGrainOfGroups(t *testing.T) {
 		for k, round := range want {
 			if stage.rounds[k] != round {
 				t.Fatalf("%s: круги = %v, want %v", stage.code, stage.rounds, want)
+			}
+		}
+		// A Group holds one стол, so the three бои of a круг are played one
+		// after another — three заходы, not three tables at once.
+		wantWaves := []int{1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3}
+		for k, wave := range wantWaves {
+			if stage.waves[k] != wave {
+				t.Fatalf("%s: заходы = %v, want %v", stage.code, stage.waves, wantWaves)
 			}
 		}
 	}

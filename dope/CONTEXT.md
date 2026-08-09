@@ -36,6 +36,7 @@ One dependency layer of a Block's expansion: a set of Matches with no ordering d
 
 **Wave (Заход)**:
 The venue-constrained realization of a Round: a set of Lanes running in parallel. A Round with more Matches than venues splits into several Waves. The Russian «заход» is only said aloud when there is more than one.
+A Wave is normally a stage of its own, but a round-robin Group is a Lane — it holds one table from its first Match to its last — so its stage spans every Round and every Wave, and both coordinates sit on the Match. Личная СИ's Group of nine plays its круг three at a table one after another: three Waves, not three tables.
 
 **Lane (Дорожка)**:
 One venue's ordered string of Matches within a Wave. In one-sitting formats a Lane is a single Match; a round-robin Group playing at one table is a Lane of all that Group's Matches.

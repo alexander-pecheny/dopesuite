@@ -450,6 +450,7 @@ func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, curre
 
 type reseedConfig struct {
 	Teams   []store.SchemeSlot `json:"teams"`
+	Bands   []int              `json:"bands"`
 	Sources []string           `json:"sources"`
 	Sort    []reseedSortRule   `json:"sort"`
 }
@@ -464,6 +465,7 @@ var reseedCountMetrics = []string{"correct_50", "correct_40", "correct_30", "cor
 
 type reseedEntry struct {
 	teamID  int64
+	band    int
 	metrics map[string]float64
 	bouts   []string
 }
@@ -616,8 +618,12 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 
 	// Advancing teams come from the place selectors in `teams` — a from_match
 	// place or a source stage's rank.
-	advancing := make([]int64, 0, len(cfg.Teams))
-	for _, slot := range cfg.Teams {
+	type contender struct {
+		teamID int64
+		band   int
+	}
+	advancing := make([]contender, 0, len(cfg.Teams))
+	for index, slot := range cfg.Teams {
 		teamID, source, err := eligibleTeam(ctx, tx, gameID, slot)
 		if err != nil {
 			return err
@@ -628,7 +634,11 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 		if teamID == 0 {
 			return clear() // a source bout is not finished yet
 		}
-		advancing = append(advancing, teamID)
+		band := 0
+		if index < len(cfg.Bands) {
+			band = cfg.Bands[index]
+		}
+		advancing = append(advancing, contender{teamID, band})
 	}
 	if len(advancing) == 0 {
 		return clear()
@@ -649,8 +659,10 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 		return err
 	}
 	entries := make([]reseedEntry, 0, len(advancing))
-	for _, teamID := range advancing {
-		entries = append(entries, aggregateReseedMetrics(bouts, teamID))
+	for _, who := range advancing {
+		entry := aggregateReseedMetrics(bouts, who.teamID)
+		entry.band = who.band
+		entries = append(entries, entry)
 	}
 
 	rules := cfg.Sort
@@ -702,6 +714,13 @@ values(?, ?, ?, ?)`, stageID, rank+1, entry.teamID, util.MustJSON(out)); err != 
 // as a final deterministic tiebreak.
 func sortReseedEntries(entries []reseedEntry, rules []reseedSortRule) {
 	sort.SliceStable(entries, func(i, j int) bool {
+		// Fewer Losses first, always. In a bracket with lives a Participant just
+		// dropped from the сетка above outranks one that survived the сетка
+		// below, however the two played — that is what the brackets mean, not
+		// something a scheme's sorting should have to remember to say.
+		if entries[i].band != entries[j].band {
+			return entries[i].band < entries[j].band
+		}
 		for _, rule := range rules {
 			a, b := entries[i].metrics[rule.Metric], entries[j].metrics[rule.Metric]
 			if a == b {
@@ -719,6 +738,9 @@ func sortReseedEntries(entries []reseedEntry, rules []reseedSortRule) {
 // tiedOnEveryMetricButDraw reports whether two entries are equal on every sort
 // metric except the lottery (draw) — i.e. only Жребий can separate them.
 func tiedOnEveryMetricButDraw(a, b reseedEntry, rules []reseedSortRule) bool {
+	if a.band != b.band {
+		return false
+	}
 	for _, rule := range rules {
 		if rule.Metric == "draw" {
 			continue
@@ -973,8 +995,18 @@ func aggregateReseedMetrics(bouts []reseedBout, teamID int64) reseedEntry {
 		entry.metrics["place_sum"] += mine.place
 		entry.metrics["total"] += float64(mine.total)
 		entry.metrics["plus"] += float64(mine.plus)
-		for _, key := range reseedCountMetrics {
-			entry.metrics[key] += numFromAny(mine.metrics[key])
+		// Every other scalar the Protocol emitted sums as itself, so a scheme can
+		// rank on one — личная СИ breaks a tie on who took more пятидесяток —
+		// without this function having to know its name. Listing the names here
+		// meant an unlisted metric compiled fine and then sorted on a silent zero.
+		// metrics_json also carries arrays, which are not summable and are skipped.
+		for key, value := range mine.metrics {
+			if key == "total" || key == "plus" {
+				continue // already taken from their own columns
+			}
+			if n, ok := value.(float64); ok {
+				entry.metrics[key] += n
+			}
 		}
 		entry.metrics["points"] += structure.BoutPoints(mine.place)
 		entry.metrics["taken_base"] += mine.takenBase
