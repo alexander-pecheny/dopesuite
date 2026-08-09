@@ -15,6 +15,10 @@ A Fest's registry row holds identity — name, city, players — and no playing 
 
 ## Where it stands
 
-Done: a Game is created with its entrants spelled out (`CreateSchemeGameForTx`), they are numbered from 1 inside it, and the list is written from the seating rather than from the request — so it can never claim somebody the Structure did not seat. `TestStudchrGamesShareOneFest` holds one Fest with the ЭК's 48 and the брейн's different 48.
+A Game is created with its entrants spelled out, they are numbered from 1 inside it, and the list is written from the seating rather than from the request — so it can never claim somebody the Structure did not seat. The host picks them on the creation page; ticking nothing seats the whole registry, which is what every Game did before Games could differ, and ticking the wrong kind (a team in an individual format) is refused by name.
 
-Not done: the reads. `participants.number` is still what most of the tree consults, and the host UI has no way to choose a Game's entrants — today only a caller with the list can. Until both land, a Fest built through the UI still numbers Fest-wide.
+The Numbering guard asks the Game (`numbering.GameHasUnnumbered`). A Fest may register a team that plays nothing — СтудЧР registered 65 and its ЭК seated 48 — and an unnumbered row a Game never seats says nothing about whether that Game can be scored. A Game without an entrant list of its own still falls back to the registry.
+
+`TestStudchrGamesShareOneFest` holds one Fest with the ЭК's 48 and the брейн's different 48, and `TestStudchrWholeFest` builds the whole championship on one Fest.
+
+What remains is display: the roster and export surfaces still read `participants.number` for a Fest-wide number. Nothing scores against it, so the games are correct either way — but two numbers for one team is one too many, and the Fest's should become the registration number the ADR describes.

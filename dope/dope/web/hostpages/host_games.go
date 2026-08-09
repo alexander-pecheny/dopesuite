@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,6 +47,15 @@ type hostGameCreateData struct {
 	SelectedType string
 	BrainDSL     string
 	SIDSL        string
+	// Entrants is the фест's registry offered as this Game's entrant list.
+	// A Game numbers whom it seats from 1 (ADR-0009), so a фест of 65 can hold
+	// an ЭК of 48 and a брейн of a different 48.
+	Entrants []gameEntrantOption
+}
+
+type gameEntrantOption struct {
+	ID    int64
+	Label string
 }
 
 type gameIdentity struct {
@@ -172,9 +182,29 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			dopeui.Field(dopeui.Label("JSON-схема"),
 				dopeui.Editor(dopeui.Name("ek_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`))),
 		),
+		entrantPicker(data),
 		dopeui.Row(submit...),
 	))
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
+
+// entrantPicker offers the фест's registry as this Game's entrant list. Ticking
+// nothing means everyone, which is what a one-game фест wants and what every
+// Game did before Games could differ.
+func entrantPicker(data hostGameCreateData) dopeui.Item {
+	if len(data.Entrants) == 0 {
+		return dopeui.Empty()
+	}
+	boxes := make([]dopeui.Item, 0, len(data.Entrants)+1)
+	boxes = append(boxes,
+		dopeui.Hint(dopeui.Text("Отметьте, кто играет в этой игре. Если не отметить никого, играют все — "+
+			"а номера игра раздаёт свои, с единицы, так что одна и та же команда бывает второй в ЭК и четвёртой в ОД. "+
+			"Командная игра сажает за стол команды, личная — игроков; сначала команды, потом игроки.")))
+	for _, entrant := range data.Entrants {
+		boxes = append(boxes, dopeui.Checkbox(dopeui.Name("entrant_id"),
+			dopeui.Value(strconv.FormatInt(entrant.ID, 10)), dopeui.Text(entrant.Label)))
+	}
+	return dopeui.Details(dopeui.Summary(dopeui.Text("Состав игры")), dopeui.Col(boxes...))
 }
 
 // hostGameSettingsDoc builds a game's settings page: a small form to rename the
@@ -609,10 +639,48 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 	}
 	var teamCount int
 	_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&teamCount)
+	entrants, err := festEntrantOptions(r.Context(), s.h.Engine().DB, festID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameCreateDoc(hostGameCreateData{
 		Fest: fest, Error: errMsg, SelectedType: selectedType,
-		BrainDSL: brainDSL, SIDSL: defaultSIDSL(teamCount),
+		BrainDSL: brainDSL, SIDSL: defaultSIDSL(teamCount), Entrants: entrants,
 	}))
+}
+
+// festEntrantOptions lists the фест's Participants a Game may seat, teams and
+// players alike — which kind a Game wants depends on its format, and the picker
+// offers both rather than guessing before the type is chosen.
+func festEntrantOptions(ctx context.Context, db *sql.DB, festID int64) ([]gameEntrantOption, error) {
+	return store.CollectRows(ctx, db, `
+select id, name, coalesce(city, ''), roster from participants
+where fest_id = ? order by roster desc, coalesce(nullif(number, 0), 1 << 30), id`,
+		[]any{festID}, func(rows *sql.Rows) (gameEntrantOption, error) {
+			var option gameEntrantOption
+			var city, roster string
+			if err := rows.Scan(&option.ID, &option.Label, &city, &roster); err != nil {
+				return option, err
+			}
+			if city != "" {
+				option.Label += " (" + city + ")"
+			}
+			return option, nil
+		})
+}
+
+// chosenEntrantIDs reads the picker: whom this Game seats, in the фест's order.
+// Nothing ticked means everyone, which is what every Game did before Games
+// could name their own.
+func chosenEntrantIDs(form url.Values) []int64 {
+	var out []int64
+	for _, raw := range form["entrant_id"] {
+		if id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && id > 0 {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -649,6 +717,7 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 			return sql.ErrNoRows
 		}
 
+		entrants := chosenEntrantIDs(form)
 		var err error
 		switch gameType {
 		case games.OD:
@@ -687,12 +756,12 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 				return err
 			}
 		case games.Brain:
-			gameID, err = createBrainGameTx(ctx, tx, festID, form.Get("brain_dsl"))
+			gameID, err = CreateSchemeGameForTx(ctx, tx, festID, games.Brain, "Брейн", form.Get("brain_dsl"), entrants)
 			if err != nil {
 				return err
 			}
 		case games.SI:
-			gameID, err = CreateSchemeGameTx(ctx, tx, festID, games.SI, "Личная СИ", form.Get("brain_dsl"))
+			gameID, err = CreateSchemeGameForTx(ctx, tx, festID, games.SI, "Личная СИ", form.Get("brain_dsl"), entrants)
 			if err != nil {
 				return err
 			}
@@ -701,7 +770,7 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 			// elimination counts Losses rather than seats, so a DSL wins over
 			// the pasted JSON when both are offered.
 			if dsl := strings.TrimSpace(form.Get("brain_dsl")); dsl != "" {
-				gameID, err = CreateSchemeGameTx(ctx, tx, festID, games.EK, "ЭК", dsl)
+				gameID, err = CreateSchemeGameForTx(ctx, tx, festID, games.EK, "ЭК", dsl, entrants)
 				if err != nil {
 					return err
 				}
@@ -989,15 +1058,28 @@ func chosenEntrantsTx(ctx context.Context, tx *sql.Tx, festID int64, gameType st
 	if len(chosen) == 0 {
 		return seedEntrantsTx(ctx, tx, festID, gameType)
 	}
+	// A team format seats teams and an individual one players, so a chosen
+	// Participant of the other kind is a mistake worth naming rather than a
+	// seat left empty at the стол.
+	want := "team"
+	if games.IsIndividual(gameType) {
+		want = "player"
+	}
 	entrants := make([]store.SchemeSlot, len(chosen))
 	for i, participantID := range chosen {
-		var name string
+		var name, roster string
 		if err := tx.QueryRowContext(ctx, `
-select name from participants where id = ? and fest_id = ?`, participantID, festID).Scan(&name); err != nil {
+select name, roster from participants where id = ? and fest_id = ?`, participantID, festID).Scan(&name, &roster); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, fmt.Errorf("участника %d нет в этом фесте", participantID)
 			}
 			return nil, err
+		}
+		if roster != want {
+			if want == "player" {
+				return nil, fmt.Errorf("%s — команда, а в этой игре за столом сидят игроки", name)
+			}
+			return nil, fmt.Errorf("%s — игрок, а в этой игре за столом сидят команды", name)
 		}
 		entrants[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Basket: 1, Number: i + 1}, Label: name}
 	}

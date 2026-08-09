@@ -5,11 +5,16 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
+	"strings"
 	"testing"
 
 	"dope/dope/domain/replay"
 	"dope/dope/web/hostpages"
+
+	"pecheny.me/dopecore/session"
 )
 
 // A фест's Games rarely share an entrant list. СтудЧР-2026 registered 65 teams;
@@ -338,5 +343,63 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, 'Не и
 	}
 	if resp.Code != http.StatusOK {
 		t.Fatalf("правка боя: %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+// The host picks who plays. Before this a Game could only be told its entrants
+// by a caller holding the list; the фест page had no way to say it, so every
+// Game seated the whole registry (ADR-0009).
+func TestCreateGameFormPicksEntrants(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	all := seedParticipants(t, db, festID, 6)
+
+	token := createTestSession(t, srv, systemUserID(t, db))
+	form := url.Values{}
+	form.Set("game_type", "brain")
+	form.Set("brain_dsl", "[scheme]\ntype: roundrobin\nteams_in_group: 4\nquestions: 5\n")
+	for _, id := range all[1:5] {
+		form.Add("entrant_id", itoa(id))
+	}
+	req := httptest.NewRequest(http.MethodPost, "/host/fest/"+itoa(festID)+"/game/new", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})
+	resp := httptest.NewRecorder()
+	srv.HostPageServer().HandleHostRouter(resp, req)
+	if resp.Code != http.StatusSeeOther {
+		t.Fatalf("создание игры: %d %s", resp.Code, resp.Body.String())
+	}
+	var gameID int64
+	if err := db.QueryRow(`select id from games where fest_id = ? and game_type = 'brain'`, festID).Scan(&gameID); err != nil {
+		t.Fatal(err)
+	}
+	got := gameEntrants(t, db, gameID)
+	if len(got) != 4 || got[0] != all[1] || got[3] != all[4] {
+		t.Fatalf("состав игры = %v, want %v", got, all[1:5])
+	}
+}
+
+// A team format seats teams and an individual one players. Ticking the wrong
+// kind is a mistake worth naming — the picker offers both, because which kind a
+// Game wants depends on a type chosen in the same form.
+func TestGameRefusesTheWrongKindOfEntrant(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	teams := seedParticipants(t, db, festID, 4)
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	_, err = hostpages.CreateSchemeGameForTx(context.Background(), tx, festID, "si", "Личная СИ",
+		"[scheme]\ntype: roundrobin\nteams_in_group: 4\nthemes: 2\n", teams)
+	if err == nil {
+		t.Fatal("личная игра приняла команды")
+	}
+	if !strings.Contains(err.Error(), "сидят игроки") {
+		t.Errorf("ошибка не объясняет, что не так: %v", err)
 	}
 }
