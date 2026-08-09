@@ -74,13 +74,26 @@ type Entrant struct {
 	City   string
 }
 
-// Seat is one participant's бой: the marks that were entered, then what the
-// sheet says those marks came to.
+// Answer is one буzzer question of a брейн бой from one side: whether they took
+// it, and who buzzed. The sheets do not always record the player, so a taken
+// question with nobody named is ordinary data rather than a hole.
+type Answer struct {
+	Mark   Mark
+	Player string
+}
+
+// Seat is one participant's бой: what was entered, then what the sheet says it
+// came to.
+//
+// The entered part has two shapes, and a бой is one or the other. Marks is the
+// theme grid of ЭК and своя игра — five cells per theme. Questions is брейн's
+// duel over buzzer questions, where a cell also names who took it.
 type Seat struct {
-	Name  string
-	Marks [][5]Mark
-	Total int
-	Place float64
+	Name      string
+	Marks     [][5]Mark
+	Questions []Answer
+	Total     int
+	Place     float64
 	// Pinned marks a place the hosts set by hand rather than one the marks
 	// imply — written `3!`. A перестрелка breaks a tie with material the
 	// protocol grid never records, so the place is input, exactly as a Draw is:
@@ -213,7 +226,7 @@ func Parse(src string) (Script, error) {
 			}
 			script.Roster = append(script.Roster, entrant)
 		case section == "бой":
-			seat, err := parseSeat(text, line)
+			seat, err := parseSeat(text, line, script.Game)
 			if err != nil {
 				return Script{}, err
 			}
@@ -346,8 +359,9 @@ func parseEntrant(text string, line int) (Entrant, error) {
 }
 
 // parseSeat reads `Ктулху | ----- ---R- RR--W | 120 | 1`: who sat there, what
-// they took, and the sheet's Σ and место for them.
-func parseSeat(text string, line int) (Seat, error) {
+// they took, and the sheet's Σ and место for them. In a брейн the middle field
+// is the бой's questions instead — `R Виктория Корнеева, -, W Санжи Сундуев`.
+func parseSeat(text string, line int, game string) (Seat, error) {
 	fields := strings.Split(text, "|")
 	if len(fields) != 4 {
 		return Seat{}, errAt(line, "место в бою — «кто | метки | Σ | место», а не %q", text)
@@ -356,15 +370,26 @@ func parseSeat(text string, line int) (Seat, error) {
 	if seat.Name == "" {
 		return Seat{}, errAt(line, "место без участника")
 	}
-	for _, theme := range strings.Fields(fields[1]) {
-		marks, err := parseTheme(theme, line)
+	if game == "brain" {
+		questions, err := parseQuestions(fields[1], seat.Name, line)
 		if err != nil {
 			return Seat{}, err
 		}
-		seat.Marks = append(seat.Marks, marks)
-	}
-	if len(seat.Marks) == 0 {
-		return Seat{}, errAt(line, "у %s нет ни одной темы", seat.Name)
+		seat.Questions = questions
+	} else {
+		if strings.Contains(fields[1], ",") {
+			return Seat{}, errAt(line, "у %s вопросы через запятую — так пишут брейн, а эта игра играет темы", seat.Name)
+		}
+		for _, theme := range strings.Fields(fields[1]) {
+			marks, err := parseTheme(theme, line)
+			if err != nil {
+				return Seat{}, err
+			}
+			seat.Marks = append(seat.Marks, marks)
+		}
+		if len(seat.Marks) == 0 {
+			return Seat{}, errAt(line, "у %s нет ни одной темы", seat.Name)
+		}
 	}
 	total, err := strconv.Atoi(strings.TrimSpace(fields[2]))
 	if err != nil {
@@ -430,4 +455,37 @@ func parseOverride(text string, line int) (Override, error) {
 	}
 	field, participant, _ := strings.Cut(subject, " ")
 	return Override{At: at, Field: field, Participant: strings.TrimSpace(participant), Reason: reason, Line: line}, nil
+}
+
+// parseQuestions reads a брейн seat's middle field: one entry per question,
+// comma-separated because a player's name has a space in the middle of it.
+// Each is `-`, or a mark with the player who took it — `R Виктория Корнеева` —
+// or a bare mark where the sheet did not record who buzzed.
+func parseQuestions(field, who string, line int) ([]Answer, error) {
+	var out []Answer
+	for _, entry := range strings.Split(field, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			return nil, errAt(line, "у %s пустой вопрос — незаданный пишется как -", who)
+		}
+		if entry == "-" {
+			out = append(out, Answer{})
+			continue
+		}
+		mark, player, _ := strings.Cut(entry, " ")
+		answer := Answer{Player: strings.TrimSpace(player)}
+		switch mark {
+		case "R":
+			answer.Mark = Right
+		case "W":
+			answer.Mark = Wrong
+		default:
+			return nil, errAt(line, "вопрос у %s начинается с R, W или -, а не с %q", who, mark)
+		}
+		out = append(out, answer)
+	}
+	if len(out) == 0 {
+		return nil, errAt(line, "у %s нет ни одного вопроса", who)
+	}
+	return out, nil
 }

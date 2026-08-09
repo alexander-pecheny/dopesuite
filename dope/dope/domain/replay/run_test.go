@@ -40,9 +40,14 @@ func (f *fakeGame) Seats(at Coord) ([]string, error) {
 	return names, nil
 }
 
-func (f *fakeGame) Play(at Coord, name string, marks [][5]Mark) error {
+func (f *fakeGame) Play(at Coord, name string, play Play) error {
 	total := 0
-	for _, theme := range marks {
+	for _, question := range play.Questions {
+		if question.Mark == Right {
+			total += 10
+		}
+	}
+	for _, theme := range play.Themes {
 		for i, mark := range theme {
 			switch mark {
 			case Right:

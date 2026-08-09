@@ -975,7 +975,7 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 			StageType: "matches",
 			Kind:      "rr",
 			Position:  c.position,
-			Grain:     at{block: blockCode, group: fmt.Sprint(g)}.grain(),
+			Grain:     at{block: blockCode, group: groupCode(groups, g)}.grain(),
 			Matches:   matches,
 			Config:    configJSON,
 		})

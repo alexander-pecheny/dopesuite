@@ -20,8 +20,8 @@ type Game interface {
 	Seat(at Coord, names []string) error
 	// Seats reports whom the Structure has seated, in slot order.
 	Seats(at Coord) ([]string, error)
-	// Play enters one participant's marks into a бой.
-	Play(at Coord, name string, marks [][5]Mark) error
+	// Play enters one participant's side of a бой.
+	Play(at Coord, name string, play Play) error
 	// Pin sets a place the hosts assigned by hand, overriding what the marks
 	// score to. Called before Finish, so the бой closes on the host's ruling.
 	Pin(at Coord, name string, place float64) error
@@ -29,6 +29,14 @@ type Game interface {
 	Finish(at Coord) error
 	// Outcome reports the place and Σ dope computed, by participant.
 	Outcome(at Coord) (map[string]Result, error)
+}
+
+// Play is what one participant did in a бой, in whichever of the two shapes the
+// game uses. It carries the play data alone — the sheet's Σ and место stay out,
+// so a Game cannot quietly apply the answer it is supposed to be checked against.
+type Play struct {
+	Themes    [][5]Mark
+	Questions []Answer
 }
 
 // Finding is one disagreement between the sheet and dope. It always shows both
@@ -109,7 +117,7 @@ func Run(script Script, game Game) ([]Finding, error) {
 			}
 		}
 		for _, seat := range bout.Seats {
-			if err := game.Play(bout.At, seat.Name, seat.Marks); err != nil {
+			if err := game.Play(bout.At, seat.Name, Play{Themes: seat.Marks, Questions: seat.Questions}); err != nil {
 				return findings, fmt.Errorf("%s, %s: отметки: %w", bout.At, seat.Name, err)
 			}
 		}

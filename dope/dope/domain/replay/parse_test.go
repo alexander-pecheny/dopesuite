@@ -143,3 +143,48 @@ func TestParseErrorsCarryLineNumbers(t *testing.T) {
 func hasLine(msg string) bool {
 	return strings.Contains(msg, "строка ")
 }
+
+// Брейн's бой is not a grid of themes: it is a duel over buzzer questions, and
+// what the protocol records for each is who took it. So a брейн seat line lists
+// its questions instead — comma-separated, because a player has a space in the
+// middle of their name and a бой has none to spare.
+func TestParseBrainSeatLine(t *testing.T) {
+	script, err := Parse("[game]\ntype: brain\n\n[s1/g1/r1/w1/m1]\n" +
+		"Рыб'ending | R Виктория Корнеева, -, R Санжи Сундуев, W Тимофей Маркин, R | 3 | 1\n" +
+		"Постпопс   | -, W Нина Андреева, -, -, - | 0 | 2\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seat := script.Bouts[0].Seats[0]
+	if len(seat.Questions) != 5 {
+		t.Fatalf("вопросов = %d, want 5", len(seat.Questions))
+	}
+	if seat.Questions[0].Mark != Right || seat.Questions[0].Player != "Виктория Корнеева" {
+		t.Errorf("первый вопрос = %+v", seat.Questions[0])
+	}
+	if seat.Questions[1].Mark != None || seat.Questions[1].Player != "" {
+		t.Errorf("нетронутый вопрос = %+v", seat.Questions[1])
+	}
+	if seat.Questions[3].Mark != Wrong {
+		t.Errorf("снятие = %+v", seat.Questions[3])
+	}
+	// A question taken with nobody named is still a taken question: the sheets
+	// do not always record who buzzed.
+	if seat.Questions[4].Mark != Right || seat.Questions[4].Player != "" {
+		t.Errorf("взятие без игрока = %+v", seat.Questions[4])
+	}
+	if len(seat.Marks) != 0 {
+		t.Errorf("у брейна нет тем, а прочитано %d", len(seat.Marks))
+	}
+}
+
+// The two forms are not interchangeable: a брейн бой written as a theme grid,
+// or an ЭК бой written as questions, is a transcript of a game nobody played.
+func TestParseRefusesTheWrongSeatForm(t *testing.T) {
+	if _, err := Parse("[game]\ntype: brain\n\n[s1/r1/w1/m1]\nА | ---R- | 40 | 1\n"); err == nil {
+		t.Error("брейн принял сетку тем")
+	}
+	if _, err := Parse("[game]\ntype: ek\n\n[s1/r1/w1/m1]\nА | R Иван Петров, - | 10 | 1\n"); err == nil {
+		t.Error("ЭК принял список вопросов")
+	}
+}

@@ -64,7 +64,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 	}
 	gameID := createSchemeGame(t, db, festID, gameType, title, dsl)
 	return &serverGame{
-		t: t, srv: srv, festID: festID, gameID: gameID,
+		t: t, srv: srv, festID: festID, gameID: gameID, gameType: gameType,
 		token: createTestSession(t, srv, systemUserID(t, srv.Eng().DB)),
 	}
 }
@@ -231,4 +231,65 @@ func TestReplayStudchrSI(t *testing.T) {
 // derive every one of them.
 func TestReplayStudchrTPSh(t *testing.T) {
 	replayFromTranscript(t, "tpsh", "si", "ТПШ")
+}
+
+// A брейн group of four, replayed through the real handlers. Its бой is a duel
+// over buzzer questions, so the transcript carries who took each one rather than
+// a grid of themes — and the last бой goes to a перестрелка, the «П» rows the
+// sheets append when a бой ends level.
+const miniBrainTranscript = `[game]
+type: brain
+title: Мини-брейн
+scheme: -
+
+[roster]
+1 | Постпопс   | Москва
+2 | Ъргхя      | Санкт-Петербург
+3 | Мыслители  | Казань
+4 | Дело в шляпе | Новосибирск
+
+[s1/r1/w1/m1]
+Постпопс   | R Аня, -, R Боря, -, R Аня | 3 | 1
+Ъргхя      | -, W Гриша, -, R Гриша, - | 1 | 2
+
+[s1/r1/w2/m1]
+Мыслители  | R Дима, R Дима, -, -, - | 2 | 1
+Дело в шляпе | -, -, W Витя, R Витя, - | 1 | 2
+
+[s1/r2/w1/m1]
+Постпопс   | R Аня, -, -, R Боря, -, R Аня | 3 | 1
+Дело в шляпе | -, R Витя, R Витя, -, -, - | 2 | 2
+`
+
+func TestReplayBrainBout(t *testing.T) {
+	script, err := replay.Parse(miniBrainTranscript)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, len(script.Roster))
+	for i, entrant := range script.Roster {
+		names[i] = entrant.Name
+	}
+	game := newReplayGame(t, "[defaults]\nvenues: 2\nquestions: 5\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n",
+		"brain", "Мини-брейн", names)
+
+	findings, err := replay.Run(script, game)
+	for _, f := range findings {
+		t.Errorf("%s", f)
+	}
+	if err != nil {
+		t.Fatalf("прогон: %v", err)
+	}
+
+	// The player who buzzed is protocol state and has to survive the round trip:
+	// it is the whole reason брейн gets a seat form of its own.
+	var player string
+	if err := game.db().QueryRow(`
+select state_json ->> '$.teams[0].rows[0].player' from matches where game_id = ? and code = 's1-g1-1'`,
+		game.gameID).Scan(&player); err != nil {
+		t.Fatal(err)
+	}
+	if player != "Аня" {
+		t.Errorf("первый вопрос взял %q, want Аня", player)
+	}
 }

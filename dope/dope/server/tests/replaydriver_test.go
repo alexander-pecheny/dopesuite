@@ -20,11 +20,12 @@ import (
 // authorisation, the write-tx discipline and the resolver exactly as a live
 // tournament does. Anything it can prove, a host could have done.
 type serverGame struct {
-	t      *testing.T
-	srv    *dopeserver.Server
-	festID int64
-	gameID int64
-	token  string
+	t        *testing.T
+	srv      *dopeserver.Server
+	festID   int64
+	gameID   int64
+	gameType string
+	token    string
 }
 
 func (g *serverGame) db() *sql.DB { return g.srv.Eng().DB }
@@ -146,9 +147,12 @@ where ms.match_id = ? order by ms.slot_index`, matchID)
 	return names, rows.Err()
 }
 
-// Play enters one participant's marks as state patches — the same ops the host
-// page sends when a judge taps a cell.
-func (g *serverGame) Play(at replay.Coord, name string, marks [][5]replay.Mark) error {
+// Play enters one participant's side of a бой as state patches — the same ops
+// the host page sends when a judge taps a cell.
+func (g *serverGame) Play(at replay.Coord, name string, play replay.Play) error {
+	if len(play.Questions) > 0 {
+		return g.playBrain(at, name, play.Questions)
+	}
 	_, code, err := g.matchAt(at)
 	if err != nil {
 		return err
@@ -158,7 +162,7 @@ func (g *serverGame) Play(at replay.Coord, name string, marks [][5]replay.Mark) 
 		return err
 	}
 	var ops []map[string]any
-	for theme, answers := range marks {
+	for theme, answers := range play.Themes {
 		for index, mark := range answers {
 			value := ""
 			switch mark {
@@ -242,8 +246,15 @@ func (g *serverGame) Outcome(at replay.Coord) (map[string]replay.Result, error) 
 	if err != nil {
 		return nil, err
 	}
+	// Σ is whatever the sheet printed as the бой's score, and that is not the
+	// same column in every game: ЭК and своя игра score points, брейн counts the
+	// questions a side took.
+	score := "r.total"
+	if g.gameType == "brain" {
+		score = "coalesce(cast(r.metrics_json ->> '$.taken' as integer), 0)"
+	}
 	rows, err := g.db().Query(`
-select p.name, r.place, r.total from match_results r
+select p.name, r.place, `+score+` from match_results r
 join participants p on p.id = r.participant_id
 where r.match_id = ?`, matchID)
 	if err != nil {
@@ -292,6 +303,72 @@ func (g *serverGame) Pin(at replay.Coord, name string, place float64) error {
 		}}}, g.token)
 	if resp.Code != http.StatusOK {
 		return fmt.Errorf("место вручную %s: %d %s", code, resp.Code, resp.Body.String())
+	}
+	return nil
+}
+
+// playBrain enters a брейн side. Its state is not a per-participant blob but two
+// index-aligned columns of rows, so the seat has to be found first: which side
+// of this бой the participant sits on is the Structure's knowledge, and the only
+// place it is written down is the slot order.
+//
+// Questions past the бой's own are перестрелка — the sheet's «П» rows. They are
+// appended to both sides, exactly as the «+ П» button does, and setting the same
+// index twice is harmless because every op is an assignment.
+func (g *serverGame) playBrain(at replay.Coord, name string, answers []replay.Answer) error {
+	matchID, code, err := g.matchAt(at)
+	if err != nil {
+		return err
+	}
+	participantID, err := g.participantID(name)
+	if err != nil {
+		return err
+	}
+	var side int
+	err = g.db().QueryRow(`
+select slot_index from match_slots where match_id = ? and participant_id = ?`, matchID, participantID).Scan(&side)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("%s не сидит в бою %s", name, code)
+	}
+	if err != nil {
+		return err
+	}
+	var rows int
+	if err := g.db().QueryRow(`
+select json_array_length(state_json -> '$.teams[0].rows') from matches where id = ?`, matchID).Scan(&rows); err != nil {
+		return err
+	}
+	var ops []map[string]any
+	for index := rows; index < len(answers); index++ {
+		ops = append(ops,
+			map[string]any{"path": []any{"tiebreaks"}, "value": index + 1 - rows},
+			map[string]any{"path": []any{"teams", 0, "rows", index}, "value": map[string]any{"player": "", "mark": ""}},
+			map[string]any{"path": []any{"teams", 1, "rows", index}, "value": map[string]any{"player": "", "mark": ""}})
+	}
+	for index, answer := range answers {
+		mark := ""
+		switch answer.Mark {
+		case replay.Right:
+			mark = "right"
+		case replay.Wrong:
+			mark = "wrong"
+		}
+		if mark == "" && answer.Player == "" {
+			continue
+		}
+		ops = append(ops, map[string]any{"path": []any{"teams", side, "rows", index, "mark"}, "value": mark})
+		if answer.Player != "" {
+			ops = append(ops, map[string]any{"path": []any{"teams", side, "rows", index, "player"}, "value": answer.Player})
+		}
+	}
+	if len(ops) == 0 {
+		return nil
+	}
+	resp := scopedAPIRequest(g.t, g.srv, http.MethodPatch,
+		fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/state", g.festID, g.gameID, code),
+		map[string]any{"ops": ops}, g.token)
+	if resp.Code != http.StatusOK {
+		return fmt.Errorf("вопросы %s: %d %s", code, resp.Code, resp.Body.String())
 	}
 	return nil
 }
