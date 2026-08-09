@@ -53,6 +53,7 @@ export interface FestGridStage {
   title?: string;
   stage_type?: string;
   type?: string;
+  standings?: ReseedEntry[];
   layout?: { columns?: number };
   matches?: FestGridMatch[];
   reseedEntries?: ReseedEntry[];
@@ -114,6 +115,14 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
   stages.forEach((stage) => {
     const liveStage = liveStages.get(stage.code) || stage;
     if ((stage.stage_type || stage.type) === "reseed") {
+      return;
+    }
+    // A Group is a table, not a wall of бои: a группа of nine plays twelve of
+    // them, and twelve boxes say less about who is winning than nine rows do.
+    // The бои are still there — the detailed tab lists them.
+    const standings = liveStage.standings || stage.standings || [];
+    if (standings.length) {
+      columns.appendChild(buildStandingsStage(stage, standings, options));
       return;
     }
     const hiddenVenueMatches = repeatedVenueMatches(stage, liveStage, previousVenueByRow);
@@ -218,6 +227,65 @@ function reseedBlockedMessage(stage: FestGridStage | null | undefined, options: 
   if (pending.length === 1) return `Бой ${pending[0]} не закончен`;
   if (pending.length > 1) return `Бои ${pending.join(", ")} не закончены`;
   return "";
+}
+
+// buildStandingsStage draws a ranking Kind as its own table — место, team, and
+// whatever the block ranks by. It is what the source sheets show for a группа,
+// and it fits a column where a dozen бой boxes do not.
+function buildStandingsStage(
+  stage: FestGridStage,
+  standings: ReseedEntry[],
+  options: FestGridOptions = {},
+): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "grid-stage grid-stage-standings";
+  if (stage.code) section.classList.add(`grid-stage-${stageClassSuffix(stage.code)}`);
+  section.dataset.stageCode = stage.code || "";
+  section.style.setProperty("--stage-columns", "1");
+
+  const header = document.createElement(options.stageHeaderLink === false ? "div" : "a");
+  header.className = "grid-stage-head";
+  if (header instanceof HTMLAnchorElement) {
+    header.href = stageHref(stage, options);
+    header.classList.add("grid-stage-link");
+  }
+  header.appendChild(el("h2", "", stage.title));
+  section.appendChild(header);
+
+  const metrics = standingsMetrics(standings);
+  const table = document.createElement("table");
+  table.className = "grid-standings";
+  const head = document.createElement("tr");
+  head.appendChild(el("th", "standings-place", "М"));
+  head.appendChild(el("th", "standings-name", ""));
+  metrics.forEach((metric) => head.appendChild(el("th", "standings-metric", reseedMetricLabel(metric))));
+  table.appendChild(head);
+  standings.forEach((entry) => {
+    const row = document.createElement("tr");
+    row.appendChild(el("td", "standings-place", placeText(entry.metrics?.place ?? entry.rank)));
+    row.appendChild(el("td", "standings-name", String(entry.name || "")));
+    metrics.forEach((metric) => {
+      row.appendChild(el("td", "standings-metric", reseedMetricValue(metric, entry.metrics?.[metric])));
+    });
+    table.appendChild(row);
+  });
+  section.appendChild(table);
+  return section;
+}
+
+// standingsMetrics picks the columns worth showing: what the block actually
+// ranks by, in the order it ranks, and never the lottery — a жребий that broke
+// no tie is a column of zeroes.
+function standingsMetrics(standings: ReseedEntry[]): string[] {
+  const present = new Set<string>();
+  standings.forEach((entry) => {
+    Object.entries(entry.metrics || {}).forEach(([key, value]) => {
+      if (typeof value === "number" && key !== "place" && key !== "draw") present.add(key);
+    });
+  });
+  const preferred = ["points", "total", "plus", "taken", "place_sum", "bouts"];
+  const ordered = preferred.filter((metric) => present.has(metric));
+  return ordered.length ? ordered : Array.from(present).sort().slice(0, 3);
 }
 
 function buildMatchesStage(stage: FestGridStage, liveStage: FestGridStage, options: FestGridOptions = {}): HTMLElement {
@@ -431,6 +499,9 @@ function reseedMetricLabel(metric: string): string {
     taken_share: "% взятых",
     diff: "+/−",
     taken_base: "Взятые б/п",
+    points: "Очки",
+    taken: "Взятые",
+    bouts: "Боёв",
     draw: "Жребий",
   };
   return labels[metric] || metric;

@@ -49,15 +49,18 @@ a best-of-three final. Only the жеребьёвка is input; every pod, every 
 and every finalist is seated from what came before, so the replay asserts the
 entire structure of the largest game dope runs.
 
-## For the tournament's author
+## A mistake the transfer preserves
 
-One thing to rule on. The брейн пересев (регламент 3.3.5) ranks by % очков, then
-разница, then % взятых — but the «Пересев» tab sorted % взятых before разница,
-and that ordering is what seated the 2-й групповой этап as it was actually
-played. `brain.dsl` reproduces the tournament and therefore the sheet;
-`kinsbfSrc` in `schemedsl/compile_test.go` keeps the регламент, and the two
-disagree on purpose. If the регламент is what should have happened, the fest is
-faithful to a mistake.
+The брейн пересев (регламент 3.3.5) ranks by % очков, then разница, then
+% взятых. The «Пересев» tab sorted % взятых before разница, and that ordering is
+what seated the 2-й групповой этап as it was played. Reviewed and ruled: the
+sheet is wrong, and `brain.dsl` keeps it anyway so the transfer reproduces the
+tournament rather than a corrected version of it. `kinsbfSrc` in
+`schemedsl/compile_test.go` carries the регламент order, which is what a future
+чемпионат uses.
+
+Finding this is what the declarative scheme is for. Six lines of sorting rules
+show a mis-ordered tiebreak; a spreadsheet full of formulas does not.
 
 ## Building the фест
 

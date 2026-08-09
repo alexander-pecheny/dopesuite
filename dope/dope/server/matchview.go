@@ -98,7 +98,7 @@ where t.id = ?`, gameID, festID).
 		stageArgs = append(stageArgs, gameID)
 	}
 	stageRows, err := q.QueryContext(ctx, `
-select id, code, title, stage_type, position, status, config_json
+select id, code, title, stage_type, kind, position, status, config_json
 from stages
 where `+stageWhere+`
 order by position, id`, stageArgs...)
@@ -109,18 +109,20 @@ order by position, id`, stageArgs...)
 
 	type stageRecord struct {
 		ID    int64
+		Kind  string
 		Stage store.StageView
 	}
 	var stageRecords []stageRecord
 	for stageRows.Next() {
 		var stageID int64
+		var kind string
 		var stage store.StageView
 		var configJSON string
-		if err := stageRows.Scan(&stageID, &stage.Code, &stage.Title, &stage.Type, &stage.Position, &stage.Status, &configJSON); err != nil {
+		if err := stageRows.Scan(&stageID, &stage.Code, &stage.Title, &stage.Type, &kind, &stage.Position, &stage.Status, &configJSON); err != nil {
 			return store.FestView{}, err
 		}
 		stage.Config = json.RawMessage(store.NonEmptyJSON(configJSON))
-		stageRecords = append(stageRecords, stageRecord{ID: stageID, Stage: stage})
+		stageRecords = append(stageRecords, stageRecord{ID: stageID, Kind: kind, Stage: stage})
 	}
 	if err := stageRows.Err(); err != nil {
 		return store.FestView{}, err
@@ -150,6 +152,16 @@ order by position, id`, stageArgs...)
 				return store.FestView{}, err
 			}
 			record.Stage.Matches = matches
+			// A Kind that ranks keeps its own table — the Сетка draws a Group as
+			// место against team, the way the sheets do, and the бои stay for the
+			// tab that lists them.
+			if resolver.RanksItsOwnStage(record.Kind) {
+				standings, err := store.LoadReseedEntries(ctx, q, record.ID)
+				if err != nil {
+					return store.FestView{}, err
+				}
+				record.Stage.Standings = standings
+			}
 		}
 		view.Stages = append(view.Stages, record.Stage)
 	}

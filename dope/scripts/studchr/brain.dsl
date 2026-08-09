@@ -19,8 +19,10 @@ groups: 4
 teams_in_group: 3
 reseed: true
 stats_from: [s1, s2]
-# The «Пересев» tab sorted % взятых before разница, against регламент 3.3.5.
-# This is the tournament as played; the регламент's order is in kinsbfSrc.
+# WRONG ON PURPOSE. Регламент 3.3.5 ranks by % очков, разница, % взятых; the
+# «Пересев» tab sorted % взятых before разница, and that is what seated the
+# 2-й групповой этап. Kept so the transfer reproduces the tournament as played.
+# A future чемпионат uses the регламент order — it is in kinsbfSrc already.
 sorting: [points_share desc, taken_share desc, diff desc]
 proceeding_teams: 2
 ---

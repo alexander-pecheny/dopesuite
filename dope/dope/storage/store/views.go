@@ -137,6 +137,10 @@ type StageView struct {
 	ReseedMessage string            `json:"reseedBlockedMessage,omitempty"`
 	Matches       []FestMatchView   `json:"matches,omitempty"`
 	ReseedEntries []ReseedEntryView `json:"reseedEntries,omitempty"`
+	// Standings is a ranking Kind's own table — a Group's место against team.
+	// It is the same shape and the same source as a пересев's entries; only the
+	// meaning differs, so the Сетка can draw a Group as the sheets do.
+	Standings []ReseedEntryView `json:"standings,omitempty"`
 }
 
 type ReseedEntryView struct {

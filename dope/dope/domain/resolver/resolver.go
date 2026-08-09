@@ -160,6 +160,10 @@ type resolverStage struct {
 	config    []byte
 }
 
+// RanksItsOwnStage reports whether a stage's kind computes its own Standings —
+// what lets a view show a Group as a table rather than as a wall of бои.
+func RanksItsOwnStage(kind string) bool { return isRankedKind(kind) }
+
 // isRankedKind reports whether a stage's kind carries its own Standings
 // computation (everything registered except the manual list and the
 // calculate-gated reseed, which keep their legacy flows).

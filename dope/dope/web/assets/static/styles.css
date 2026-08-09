@@ -1119,6 +1119,55 @@
   overflow: hidden;
 }
 
+/* A Group is drawn as its standings — место against team — the way the source
+   sheets draw it, so it wears the same skin as a бой box rather than a table of
+   its own. */
+.grid-standings {
+  width: 100%;
+  border-collapse: collapse;
+  border: var(--cell-gap) solid var(--structure);
+  border-radius: var(--radius-md);
+  background: var(--structure);
+  overflow: hidden;
+  font-size: var(--text-sm);
+}
+
+.grid-standings th,
+.grid-standings td {
+  height: 24px;
+  padding: 0 var(--space-1);
+  background: var(--surface);
+  border-bottom: var(--cell-gap) solid var(--structure);
+  font-weight: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.grid-standings tr:last-child th,
+.grid-standings tr:last-child td {
+  border-bottom: 0;
+}
+
+.grid-standings .standings-place {
+  width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.grid-standings .standings-name {
+  width: 100%;
+  max-width: 0;
+}
+
+.grid-standings .standings-metric {
+  width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 body:not(.embedded-match) .grid-match {
   content-visibility: auto;
   contain-intrinsic-size: auto 160px;

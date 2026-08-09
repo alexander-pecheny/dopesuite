@@ -29,9 +29,9 @@ func TestStudchrWholeFest(t *testing.T) {
 	srv := newAuthTestServer(t)
 	db := srv.Eng().DB
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
-	// A фест of its own. The bootstrap фест carries a demo game and demo teams,
-	// and a database meant to be published should hold the championship and
-	// nothing else.
+	// A фест of its own, beside the bootstrap one rather than inside it: the
+	// championship's registry is its own and should not inherit a demo game's
+	// teams.
 	festID := newFest(t, db, "studchr-2026", "Студенческий чемпионат России 2026",
 		systemUserID(t, srv.Eng().DB))
 
@@ -97,10 +97,6 @@ func TestStudchrWholeFest(t *testing.T) {
 	}
 	t.Logf("ОД: %d команд, %d вопросов", len(od.Teams), len(od.Entries))
 
-	// The bootstrap фест is the test server's demo, not the championship.
-	if _, err := db.Exec(`delete from fests where id <> ?`, festID); err != nil {
-		t.Fatalf("убрать демо-фест: %v", err)
-	}
 	_ = os.Remove(out)
 	if _, err := db.Exec(`vacuum into ?`, out); err != nil {
 		t.Fatalf("выгрузить базу: %v", err)
