@@ -537,13 +537,20 @@ func rejectRoundReseed(blk Section) error {
 	return nil
 }
 
-// blockReseedSpec parses the reseed key: `true` re-ranks the incoming Edge,
-// a round code re-ranks at that boundary inside the block (se only).
+// blockReseedSpec parses the reseed key: `true` re-ranks the incoming Edge, a
+// round code re-ranks at that boundary inside the block (se only), and `every`
+// does both — the incoming Edge and every round after it, which is what ТПШ
+// does and what `true` already means on a bracket with lives.
+const reseedEveryRound = "every"
+
 func blockReseedSpec(blk Section) (incoming bool, round string) {
 	if v, ok := blk.Bool("reseed"); ok {
 		return v, ""
 	}
 	if v, ok := blk.Str("reseed"); ok {
+		if v == reseedEveryRound {
+			return true, reseedEveryRound
+		}
 		return false, v
 	}
 	return false, ""
@@ -791,6 +798,7 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 	if err := rejectRoundReseed(blk); err != nil {
 		return nil, err
 	}
+	proceeding, _ := blk.Int("proceeding_teams")
 	venues, err := c.blockVenues(blk, nil)
 	if err != nil {
 		return nil, err
@@ -844,11 +852,19 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 		Matches:   matches,
 		Config:    configJSON,
 	})
-	return &blockOutputs{groups: []groupOut{{
+	label := blockTitle(blk, "Игра")
+	return &blockOutputs{proceeding: proceeding, groups: []groupOut{{
 		stageCode: code,
-		label:     blockTitle(blk, "Игра"),
+		label:     label,
+		// The block's standings rank, not the бой's место. A бой shares a place
+		// between seats that tie, and a shared place names nobody — ТПШ's отбор
+		// has ties inside its top 24, and «место 10.5» cannot seat anyone. The
+		// standings apply the block's whole sorting chain and rank distinctly.
 		place: func(p int) store.SchemeSlot {
-			return fromMatchSlot(matches[0].Code, p)
+			return store.SchemeSlot{
+				Reseed: &store.SchemeReseedRef{Stage: code, Rank: p},
+				Label:  fmt.Sprintf("%s-%d", label, p),
+			}
 		},
 	}}}, nil
 }
@@ -1030,7 +1046,8 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 		}
 		return size
 	}
-	plan, err := planElimRounds(teams, winning, sizeFor)
+	maxRounds, _ := blk.Int("rounds")
+	plan, err := planElimRounds(teams, winning, maxRounds, sizeFor)
 	if err != nil {
 		return nil, errAt(blk.Line, "single_elimination: %s", err)
 	}
@@ -1046,8 +1063,9 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 		return nil, err
 	}
 	_, boundary := blockReseedSpec(blk)
+	everyRound := boundary == reseedEveryRound
 	boundaryAt := 0
-	if boundary != "" {
+	if boundary != "" && !everyRound {
 		for i, r := range plan {
 			for _, name := range elimRoundNames(r, i, winning) {
 				if name == boundary {
@@ -1098,7 +1116,21 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 			}
 		}
 		var reseedCode string
-		if remaining == boundaryAt {
+		switch {
+		case everyRound && roundIndex > 0:
+			// Every place that survived the round before, best бой first — the
+			// reseed's own sorting decides the rest.
+			alive := make([]store.SchemeSlot, 0, len(prevCodes)*winning)
+			for _, prev := range prevCodes {
+				for place := 1; place <= winning; place++ {
+					alive = append(alive, fromMatchSlot(prev, place))
+				}
+			}
+			code := fmt.Sprintf("%s-r%d-reseed", blockCode, roundIndex+1)
+			if reseedCode, err = c.reseedStageCoded(code, at{block: blockCode, round: roundIndex + 1}, blk, prevStages, alive); err != nil {
+				return nil, err
+			}
+		case remaining == boundaryAt:
 			winners := make([]store.SchemeSlot, len(prevCodes))
 			for i, prev := range prevCodes {
 				winners[i] = fromMatchSlot(prev, 1)
@@ -1168,6 +1200,20 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 			semifinalCodes = codes
 		}
 		prevCodes = codes
+	}
+	if len(prevCodes) > 1 {
+		// The bracket stopped short of a final, so its last round's бои are what
+		// the block offers on: each is a Group sending its winning places.
+		out := &blockOutputs{proceeding: winning}
+		for i, code := range prevCodes {
+			code := code
+			out.groups = append(out.groups, groupOut{
+				stageCode: code,
+				label:     fmt.Sprintf("Бой %d", i+1),
+				place:     func(p int) store.SchemeSlot { return fromMatchSlot(code, p) },
+			})
+		}
+		return out, nil
 	}
 	finalCode := prevCodes[0]
 	out := &blockOutputs{terminal: seriesFinal, groups: []groupOut{{
@@ -1245,19 +1291,22 @@ func (c *compiler) seFirstRound(index int, blk Section, opening elimRound, winni
 		}
 		return first, nil
 	}
-	if opening.size != 2 || winning != 1 {
-		return nil, errAt(blk.Line, "нет шаблона рассадки в бои по %d из предыдущего блока — добавьте reseed: true", opening.size)
-	}
 	prev := c.prev
 	if prev.proceeding <= 0 {
 		return nil, errAt(blk.Line, "предыдущему блоку нужен proceeding_teams, чтобы продолжить схему")
 	}
+	// A пересев makes the бой's size irrelevant: it hands over a ranking, and the
+	// snake deals that ranking into бои of any size — ТПШ opens on four seats.
+	// Only the template below needs бои of two.
 	if incoming, _ := blockReseedSpec(blk); incoming {
-		dealt, err := c.dealReseed(index, blk, count, 2)
+		dealt, err := c.dealReseed(index, blk, count, opening.size)
 		if err != nil {
 			return nil, err
 		}
 		return dealt, nil
+	}
+	if opening.size != 2 || winning != 1 {
+		return nil, errAt(blk.Line, "нет шаблона рассадки в бои по %d из предыдущего блока — добавьте reseed: true", opening.size)
 	}
 	if prev.proceeding != 2 || len(prev.groups)%2 != 0 || len(prev.groups)*2 != teams {
 		return nil, errAt(blk.Line, "нет шаблона рассадки из этих групп — добавьте reseed: true")

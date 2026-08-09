@@ -223,3 +223,12 @@ func TestReplayStudchrEK(t *testing.T) {
 func TestReplayStudchrSI(t *testing.T) {
 	replayFromTranscript(t, "si", "si", "СИ")
 }
+
+// ТПШ: 91 players write one common отбор, and the best 24 play a bracket that
+// stops after its second stage — the six left are the winners, there is no
+// final. The отбор is the interesting half: its 91 places are ranked by Σ, then
+// Σ+, then how many 50s, 40s, 30s and 20s each player took, and dope has to
+// derive every one of them.
+func TestReplayStudchrTPSh(t *testing.T) {
+	replayFromTranscript(t, "tpsh", "si", "ТПШ")
+}

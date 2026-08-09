@@ -92,10 +92,11 @@ Block keys:
 |---|---|
 | `type` | Kind: `roundrobin`, `single_elimination`, `double_elimination` (`swiss` parses, reports unimplemented) |
 | `groups`, `teams_in_group` | roundrobin shape; each Group is one ranking scope. DE groups are always 4; `teams` (÷4) may stand in for `groups` |
-| `teams` | elimination draw size (se: power of two) |
+| `teams` | elimination draw size (se: power of two), or how many a `flat` бой seats |
+| `rounds` | play this many Rounds and stop: an rr Group's круги, or a bracket that ends short of a final (ТПШ's six winners) |
 | `proceeding_teams` | block-grain Edge: how many advance per Group (rr) or overall |
-| `reseed` | opt-in re-rank: `true` for the block's incoming Edge, or a round code (`r4`) for a boundary inside an se block — that round then seats from the re-rank of the previous round, bracket-ordered |
-| `sorting`, `points` | ranking comparators and win/draw/loss values for this block's standings. On a block with `reseed: true` the sorting key describes the Edge instead (groups fall back to `[defaults]`/canon) and maps onto reseed metrics: `points`→place_sum asc, `taken`→taken desc, plus the КИНСБФ 3.3.5 rates `points_share`, `taken_share`, `diff` (desc; очки from final outcomes, взятые без перестрелок, разница against opponents in own bouts); default is place_sum, then taken |
+| `reseed` | opt-in re-rank: `true` for the block's incoming Edge, a round code (`r4`) for a boundary inside an se block — that round then seats from the re-rank of the previous round, bracket-ordered — or `every` for both, the incoming Edge and every round after it (ТПШ) |
+| `sorting`, `points` | ranking comparators and win/draw/loss values for this block's standings. A metric's direction follows the metric — место and жребий ascend, everything else descends — unless the scheme writes `taken asc`. On a block with `reseed: true` the sorting key describes the Edge instead (groups fall back to `[defaults]`/canon) and maps onto reseed metrics: `points`→place_sum asc, `taken`→taken desc, plus the КИНСБФ 3.3.5 rates `points_share`, `taken_share`, `diff` (desc; очки from final outcomes, взятые без перестрелок, разница against opponents in own bouts); default is place_sum, then taken |
 | `stats_from` | reseed Edge only: which blocks' bouts the re-rank metrics are summed over (`stats_from: [s1, s2]`); default is the previous block. Eligibility is always the previous block's proceeding places — stats scope and eligibility are independent |
 | `best_of` | final Round only (`best_of.final: 3`, odd ≥ 3): the final becomes a series of identical бои («Финал. Бой k», one стол). No block can follow a series |
 | `venues` | restrict the block (or, dotted, one Round) to a venue subset, by title or number |

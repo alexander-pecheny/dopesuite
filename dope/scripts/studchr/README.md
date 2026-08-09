@@ -11,13 +11,16 @@ new reader and nothing else.
 |---|---|---|
 | ЭК | `read-ek-sheet.py` | `emit-ek.py` → `testdata/studchr2026/ek.transcript` |
 | личная СИ | `read-si-sheets.py` | `emit-si.py` → `testdata/studchr2026/si.transcript` |
+| ТПШ | `read-tpsh-sheet.py` | `emit-tpsh.py` → `testdata/studchr2026/tpsh.transcript` |
 | ОД | `read-od-sheet.py` | — |
+
+СИ and ТПШ print the same grid, so its decoding lives once in `sheetgrid.py`.
 
 Each reader checks its own decoding rather than trusting it. СИ's recomputes
 every theme's total from the marks it decoded and compares it with the total the
 sheet itself printed; ОД's checks that all 1853 takings name a team on the list.
 
-The schemes live beside them as `ek.dsl` and `si.dsl`, and the same text is in
+The schemes live beside them as `ek.dsl`, `si.dsl` and `tpsh.dsl`, and the same text is in
 `schemedsl/studchr_test.go`, where it is compiled against the регламент.
 
 ## What the replays prove
@@ -33,6 +36,11 @@ replay asserts the entire seating of the tournament.
 
 Eight places are pinned, in four бои where two players finished level on Σ and
 the sheet still ranked them apart.
+
+ТПШ: 91 players, 10 бои. One written отбор seating everyone, then a bracket of 24
+that stops after its second stage — the six left are the winners and there is no
+final. Both bracket rounds are seeded from a пересев, so the отбор's ranking is
+checked where it decides something: in whom бой A seats.
 
 ## ОД has its own фест
 
@@ -51,6 +59,6 @@ and not the data.
 Составы — who played for which team, and which player took which question — need
 a team roster the фест does not have. They do not affect Σ or место.
 
-КСИ has no data: of the six workbooks the оргкомитет handed over, none is a
-командная своя игра. The fifth (письменный отбор → плей-офф) is ТПШ, another
-individual tournament.
+КСИ was never played. Of the six workbooks the оргкомитет handed over none is a
+командная своя игра — the one that looked like it is ТПШ, which is now carried
+across — so the КСИ game does not belong on the фест at all.

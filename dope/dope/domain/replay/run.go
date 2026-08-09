@@ -149,8 +149,9 @@ func Run(script Script, game Game) ([]Finding, error) {
 					Sheet: fmt.Sprint(seat.Total), Ours: fmt.Sprint(got.Total), Line: seat.Line})
 			}
 			// A pinned place was written, not derived, so asserting it would only
-			// check that dope stored what it was told.
-			if got.Place != seat.Place && !seat.Pinned {
+			// check that dope stored what it was told; an unranked one the sheet
+			// never printed, so there is nothing to hold dope to.
+			if got.Place != seat.Place && !seat.Pinned && !seat.Unranked {
 				report(Finding{At: bout.At, Field: "место", Participant: seat.Name,
 					Sheet: place(seat.Place), Ours: place(got.Place), Line: seat.Line})
 			}

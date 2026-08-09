@@ -20,7 +20,7 @@ func shape(rounds []elimRound) string {
 
 // The classic halving bracket is the general engine at its smallest settings.
 func TestPlanClassicBracket(t *testing.T) {
-	rounds, err := planElimRounds(8, 1, fixedSize(2))
+	rounds, err := planElimRounds(8, 1, 0, fixedSize(2))
 	if err != nil {
 		t.Fatalf("planElimRounds: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestPlanEKBracket(t *testing.T) {
 		}
 		return 4
 	}
-	rounds, err := planElimRounds(48, 2, sizeFor)
+	rounds, err := planElimRounds(48, 2, 0, sizeFor)
 	if err != nil {
 		t.Fatalf("planElimRounds: %v", err)
 	}
@@ -57,13 +57,13 @@ func TestPlanEKBracket(t *testing.T) {
 }
 
 func TestPlanRejectsImpossibleShapes(t *testing.T) {
-	if _, err := planElimRounds(10, 1, fixedSize(4)); err == nil {
+	if _, err := planElimRounds(10, 1, 0, fixedSize(4)); err == nil {
 		t.Error("10 into бои of 4 must not divide")
 	}
-	if _, err := planElimRounds(8, 2, fixedSize(2)); err == nil {
+	if _, err := planElimRounds(8, 2, 0, fixedSize(2)); err == nil {
 		t.Error("a бой of two cannot advance two")
 	}
-	if _, err := planElimRounds(8, 1, fixedSize(1)); err == nil {
+	if _, err := planElimRounds(8, 1, 0, fixedSize(1)); err == nil {
 		t.Error("a бой of one is not a бой")
 	}
 }

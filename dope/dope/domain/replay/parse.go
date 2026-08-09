@@ -86,7 +86,11 @@ type Seat struct {
 	// protocol grid never records, so the place is input, exactly as a Draw is:
 	// the replayer writes it and does not assert it.
 	Pinned bool
-	Line   int
+	// Unranked marks a seat whose место the sheet never printed — ТПШ's written
+	// отбор prints Σ and leaves место to a standings tab. There is nothing to
+	// hold dope to, so the replay checks the Σ and says nothing about the place.
+	Unranked bool
+	Line     int
 }
 
 type Bout struct {
@@ -368,12 +372,16 @@ func parseSeat(text string, line int) (Seat, error) {
 	}
 	seat.Total = total
 	placeText := strings.TrimSpace(fields[3])
+	if placeText == "-" {
+		seat.Unranked = true
+		return seat, nil
+	}
 	if seat.Pinned = strings.HasSuffix(placeText, "!"); seat.Pinned {
 		placeText = strings.TrimSpace(strings.TrimSuffix(placeText, "!"))
 	}
 	place, err := strconv.ParseFloat(placeText, 64)
 	if err != nil || place <= 0 {
-		return Seat{}, errAt(line, "место у %s — число от 1 (делённое место пишется как 1.5, поставленное вручную — как 3!), а не %q",
+		return Seat{}, errAt(line, "место у %s — число от 1 (делённое место пишется как 1.5, поставленное вручную — как 3!, а не напечатанное листом — как -), а не %q",
 			seat.Name, strings.TrimSpace(fields[3]))
 	}
 	seat.Place = place

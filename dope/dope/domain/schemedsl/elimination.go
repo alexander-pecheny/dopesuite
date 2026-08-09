@@ -39,13 +39,19 @@ func (r elimRound) survivors(winning int) int {
 // and the block ends when a single бой seats everyone left. sizeFor is asked
 // per round so a scheme can play its 1/4 three to a table and its 1/2 four, the
 // way ЭК does.
-func planElimRounds(entrants, winning int, sizeFor func(round, entering int) int) ([]elimRound, error) {
+//
+// maxRounds stops the bracket short of a final. ТПШ plays two: three бои of four
+// each send two on, and those six are the winners — nobody plays again.
+func planElimRounds(entrants, winning, maxRounds int, sizeFor func(round, entering int) int) ([]elimRound, error) {
 	if winning < 1 {
 		return nil, fmt.Errorf("winning_places должен быть хотя бы 1")
 	}
 	var rounds []elimRound
 	entering := entrants
 	for round := 1; ; round++ {
+		if maxRounds > 0 && len(rounds) == maxRounds {
+			return rounds, nil
+		}
 		size := sizeFor(round, entering)
 		if size < 2 {
 			return nil, fmt.Errorf("match_size должен быть хотя бы 2")

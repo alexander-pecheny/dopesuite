@@ -77,6 +77,63 @@ title.r6: Финал нижней сетки
 title.r7: Грандфинал
 `
 
+// ТПШ: 91 игрок пишет общий письменный отбор, лучшие 24 играют сетку боёв на
+// четверых, из каждого проходят двое. Сетка обрывается после второго этапа:
+// шестеро оставшихся и есть победители, финала нет.
+const studchrTPShSrc = `
+[defaults]
+venues: 6
+
+[scheme]
+title: Письменный отбор
+type: flat
+teams: 91
+themes: 10
+proceeding_teams: 24
+sorting: [total, plus, taken50, taken40, taken30, taken20, taken10]
+---
+title: Плей-офф
+type: single_elimination
+teams: 24
+match_size: 4
+winning_places: 2
+rounds: 2
+themes: 9
+reseed: every
+sorting: [place_sum, total, plus, taken50, taken40, taken30, taken20, taken10]
+title.r1: 1 этап
+title.r2: 2 этап
+`
+
+func TestStudchrTPSh(t *testing.T) {
+	scheme := compileSrc(t, studchrTPShSrc, Input{Slug: "tpsh", GameType: "si"})
+	stages := matchStages(scheme)
+	if len(stages) != 3 {
+		t.Fatalf("этапов = %d, want 3 (отбор + два этапа)", len(stages))
+	}
+	if got := len(stages[0].Matches[0].Slots); got != 91 {
+		t.Fatalf("письменный отбор на %d мест, want 91", got)
+	}
+	for i, want := range []struct {
+		title string
+		bouts int
+	}{{"1 этап", 6}, {"2 этап", 3}} {
+		stage := stages[i+1]
+		if stage.Title != want.title || len(stage.Matches) != want.bouts {
+			t.Errorf("этап %d: %q, %d боёв — want %q, %d", i+1, stage.Title, len(stage.Matches), want.title, want.bouts)
+		}
+	}
+	// Бой A of the sheet seats the отбор's 1st, 12th, 13th and 24th.
+	if got := slotLabels(stages[1].Matches[0]); got != "Пересев-1 Пересев-12 Пересев-13 Пересев-24" {
+		t.Errorf("первый бой плей-офф: %s", got)
+	}
+	// The second stage is re-ranked too: бой G seats the survivors 1, 6, 7 and 12,
+	// not the winners of бои A and B in бой order.
+	if got := slotLabels(stages[2].Matches[0]); got != "Пересев-1 Пересев-6 Пересев-7 Пересев-12" {
+		t.Errorf("первый бой второго этапа: %s", got)
+	}
+}
+
 // ОД: командная викторина, шесть туров по пятнадцать вопросов, все девяносто
 // команд играют один общий бой.
 const studchrODSrc = `

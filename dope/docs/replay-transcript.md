@@ -72,6 +72,11 @@ Then one line per seat: `who | marks | Σ | место`.
 - **Σ** and **место** are what the sheet printed. They are asserted, not
   applied: dope scores the marks itself and has to agree. A shared place is
   written as a fraction — `1.5` when two finish level.
+- A место written `-` is one the sheet **never printed**. ТПШ's письменный отбор
+  prints Σ and leaves the order to a standings tab, which is a different thing
+  from a бой's место: a бой shares its place between seats that tie. There is
+  nothing to hold dope to, so only the Σ is checked — the ranking is checked
+  where it decides something, in whom the next round seats.
 - A place written `3!` was **set by hand**. A перестрелка breaks a tie with
   material the protocol grid never records, so that place cannot be derived from
   the marks: it is input, exactly as a Draw is. The replayer writes it as a Pin
@@ -125,8 +130,17 @@ gains `жребий` and its seating turns from an assertion into an input.
 `docs/studchr2026-discrepancies.md` is generated from these lines by
 `replay.Discrepancies`; it is never edited by hand.
 
+## What is written down
+
+`testdata/studchr2026/` holds ЭК, личная СИ and ТПШ, emitted by the scripts in
+`scripts/studchr/` and replayed by `TestReplayStudchr*`.
+
 ## Not covered yet
 
 Брейн does not fit. Its бой is a score («4 : 0») plus who took each question,
 not a grid of themes, so it needs a second form of seat line. That arrives when
 КИнСБФ is transferred.
+
+ОД does not fit either, and for the opposite reason: it has no бои at all. Its
+whole document is one grid of which teams took which question, held on the game
+rather than on a бой, so there is no seating and no place to assert.
