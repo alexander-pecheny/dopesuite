@@ -1,0 +1,149 @@
+package replay
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
+// Result is what dope made of a бой for one participant.
+type Result struct {
+	Place float64
+	Total int
+}
+
+// Game is the tournament under test. The replayer drives it through this seam
+// so the same script can run against a real server, an in-process one, or a
+// stub — and so nothing in here knows any SQL.
+type Game interface {
+	// Seat writes a Draw: these participants take the бой's slots, in order.
+	Seat(at Coord, names []string) error
+	// Seats reports whom the Structure has seated, in slot order.
+	Seats(at Coord) ([]string, error)
+	// Play enters one participant's marks into a бой.
+	Play(at Coord, name string, marks [][5]Mark) error
+	// Finish closes a бой so its results reach the rounds that follow.
+	Finish(at Coord) error
+	// Outcome reports the place and Σ dope computed, by participant.
+	Outcome(at Coord) (map[string]Result, error)
+}
+
+// Finding is one disagreement between the sheet and dope. It always shows both
+// sides: which is wrong is a judgement, and the replayer does not make it.
+type Finding struct {
+	At          Coord
+	Field       string
+	Participant string
+	Sheet       string
+	Ours        string
+	Line        int
+}
+
+func (f Finding) String() string {
+	who := ""
+	if f.Participant != "" {
+		who = ", " + f.Participant
+	}
+	return fmt.Sprintf("%s%s: %s — лист %s, у нас %s", f.At, who, f.Field, f.Sheet, f.Ours)
+}
+
+// Run replays a transcript against a Game and reports where the two disagree.
+//
+// It plays бои in written order and closes each one before the next, because a
+// round left open seats the round after it from stale results. A seating the
+// script marks as a Draw is written; every other seating is checked.
+//
+// The error return is for a Game that could not be driven at all. A
+// disagreement is not an error — it is the output.
+func Run(script Script, game Game) ([]Finding, error) {
+	silenced := map[string]bool{}
+	for _, over := range script.Overrides {
+		silenced[over.At.String()+"|"+over.Field] = true
+	}
+	var findings []Finding
+	report := func(f Finding) {
+		if silenced[f.At.String()+"|"+f.Field] {
+			return
+		}
+		findings = append(findings, f)
+	}
+
+	for _, bout := range script.Bouts {
+		names := make([]string, len(bout.Seats))
+		for i, seat := range bout.Seats {
+			names[i] = seat.Name
+		}
+		if bout.Draw {
+			if err := game.Seat(bout.At, names); err != nil {
+				return findings, fmt.Errorf("%s: посадка жребием: %w", bout.At, err)
+			}
+		} else {
+			seated, err := game.Seats(bout.At)
+			if err != nil {
+				return findings, fmt.Errorf("%s: кто посажен: %w", bout.At, err)
+			}
+			if !sameSeating(seated, names) {
+				report(Finding{
+					At:    bout.At,
+					Field: "посадка",
+					Sheet: strings.Join(names, ", "),
+					Ours:  strings.Join(seated, ", "),
+					Line:  bout.Line,
+				})
+			}
+		}
+		for _, seat := range bout.Seats {
+			if err := game.Play(bout.At, seat.Name, seat.Marks); err != nil {
+				return findings, fmt.Errorf("%s, %s: отметки: %w", bout.At, seat.Name, err)
+			}
+		}
+		if err := game.Finish(bout.At); err != nil {
+			return findings, fmt.Errorf("%s: закрытие боя: %w", bout.At, err)
+		}
+		outcome, err := game.Outcome(bout.At)
+		if err != nil {
+			return findings, fmt.Errorf("%s: итог боя: %w", bout.At, err)
+		}
+		for _, seat := range bout.Seats {
+			got, ok := outcome[seat.Name]
+			if !ok {
+				report(Finding{At: bout.At, Field: "итог", Participant: seat.Name,
+					Sheet: fmt.Sprintf("Σ%d, место %s", seat.Total, place(seat.Place)), Ours: "ничего", Line: seat.Line})
+				continue
+			}
+			if got.Total != seat.Total {
+				report(Finding{At: bout.At, Field: "Σ", Participant: seat.Name,
+					Sheet: fmt.Sprint(seat.Total), Ours: fmt.Sprint(got.Total), Line: seat.Line})
+			}
+			if got.Place != seat.Place {
+				report(Finding{At: bout.At, Field: "место", Participant: seat.Name,
+					Sheet: place(seat.Place), Ours: place(got.Place), Line: seat.Line})
+			}
+		}
+	}
+	return findings, nil
+}
+
+// sameSeating compares who is at the table, not in what order: a Protocol reads
+// its seats by participant, and столы are dealt by lot within a бой.
+func sameSeating(ours, sheet []string) bool {
+	if len(ours) != len(sheet) {
+		return false
+	}
+	a, b := append([]string(nil), ours...), append([]string(nil), sheet...)
+	sort.Strings(a)
+	sort.Strings(b)
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func place(value float64) string {
+	if value == float64(int(value)) {
+		return fmt.Sprint(int(value))
+	}
+	return fmt.Sprintf("%.1f", value)
+}

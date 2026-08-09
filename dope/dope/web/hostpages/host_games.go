@@ -974,18 +974,19 @@ func buildSchemeStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int6
 			position = stageIndex + 1
 		}
 		stageID, err := store.InsertReturningID(ctx, tx, `
-insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json)
-values(?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
-			festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage))
+insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index, group_code)
+values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+			festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage),
+			stage.Grain.Block, stage.Grain.Wave, stage.Grain.Group)
 		if err != nil {
 			return err
 		}
 		for matchIndex, match := range stage.Matches {
 			emptyState := stageEmptyState(gameType, stage, len(match.Slots), scheme.Questions)
 			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, status, revision, state_json)
-values(?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
-				festID, gameID, stageID, match.Code, match.Title, matchIndex+1, len(match.Slots), emptyState)
+insert into matches(fest_id, game_id, stage_id, code, title, position, round, participant_count, status, revision, state_json)
+values(?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
+				festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, len(match.Slots), emptyState)
 			if err != nil {
 				return err
 			}
@@ -1105,9 +1106,10 @@ update stages set title = ?, stage_type = ?, kind = ?, position = ?, config_json
 			delete(existingStages, stage.Code)
 		} else {
 			if stageID, err = store.InsertReturningID(ctx, tx, `
-insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json)
-values(?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
-				festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage)); err != nil {
+insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index, group_code)
+values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+				festID, gameID, stage.Code, stage.Title, stage.StageType, stage.Kind, position, storeutil.StageConfigJSON(stage),
+				stage.Grain.Block, stage.Grain.Wave, stage.Grain.Group); err != nil {
 				return err
 			}
 		}
@@ -1139,9 +1141,9 @@ update matches set stage_id = ?, title = ?, position = ?, participant_count = ?,
 				continue
 			}
 			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, status, revision, state_json)
-values(?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
-				festID, gameID, stageID, match.Code, match.Title, matchIndex+1, len(match.Slots), emptyState)
+insert into matches(fest_id, game_id, stage_id, code, title, position, round, participant_count, status, revision, state_json)
+values(?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
+				festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, len(match.Slots), emptyState)
 			if err != nil {
 				return err
 			}
@@ -1439,14 +1441,14 @@ values(?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
 // (kind matches) holding one 'main' match that carries the whole game state.
 func insertFlatMatchTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, title, stateJSON, now string) error {
 	stageID, err := store.InsertReturningID(ctx, tx, `
-insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json)
-values(?, ?, 'main', '', 'matches', 'matches', 1, 'active', '{}')`, festID, gameID)
+insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json, block_code, wave_index)
+values(?, ?, 'main', '', 'matches', 'matches', 1, 'active', '{}', 'main', 1)`, festID, gameID)
 	if err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, status, revision, state_json)
-values(?, ?, ?, 'main', ?, 1, 0, 'active', 0, ?)`, festID, gameID, stageID, title, stateJSON)
+insert into matches(fest_id, game_id, stage_id, code, title, position, round, participant_count, status, revision, state_json)
+values(?, ?, ?, 'main', ?, 1, 1, 0, 'active', 0, ?)`, festID, gameID, stageID, title, stateJSON)
 	return err
 }
 
@@ -1540,8 +1542,8 @@ values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title
 				venueID = id
 			}
 			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
+insert into matches(fest_id, game_id, stage_id, code, title, position, round, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, participantCount, venueID)
 			if err != nil {
 				return err
 			}

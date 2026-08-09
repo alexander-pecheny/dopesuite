@@ -47,6 +47,7 @@ func (flat) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store.Schem
 		Code:             code + "-m1",
 		Title:            title,
 		Venue:            conf.Venue,
+		Round:            1,
 		ParticipantCount: len(conf.Entrants),
 		Slots:            conf.Entrants,
 	}}, nil

@@ -12,10 +12,11 @@ import (
 // турниров и ни одного нового вида блока под них.
 
 // ЭК: 48 команд, сетка боёв на четверых, из каждого проходят двое. Регламент
-// играет четвертьфинал втроём и пересевает перед ним.
+// играет четвертьфинал втроём и пересевает перед ним. Столов шесть, поэтому
+// 1/16 финала идёт в два захода — как и было на турнире.
 const studchrEKSrc = `
 [defaults]
-venues: 12
+venues: 6
 
 [init]
 seed: xlsx
@@ -29,6 +30,11 @@ winning_places: 2
 match_size.r3: 3
 reseed: r3
 sorting: [total, plus]
+title.r1: 1/16 финала
+title.r2: 1/8 финала
+title.r3: 1/4 финала
+title.r4: Полуфиналы
+title.r5: Финал
 `
 
 // Личная СИ: 54 игрока, шесть групп по девять, бой на троих, четыре круга;
@@ -82,18 +88,37 @@ themes: 20
 
 func TestStudchrEK(t *testing.T) {
 	scheme := compileSrc(t, studchrEKSrc, Input{Slug: "ek", GameType: "ek"})
-	rounds := matchStages(scheme)
-	want := []struct{ bouts, seats int }{{12, 4}, {6, 4}, {4, 3}, {2, 4}, {1, 4}}
-	if len(rounds) != len(want) {
-		t.Fatalf("раундов = %d, want %d", len(rounds), len(want))
+	stages := matchStages(scheme)
+	// Шесть столов: двенадцать боёв 1/16 играются в два захода, дальше всё
+	// умещается в один. Заход — это отдельный этап, у него своё название.
+	want := []struct {
+		title               string
+		round, bouts, seats int
+	}{
+		{"1/16 финала, заход 1", 1, 6, 4},
+		{"1/16 финала, заход 2", 1, 6, 4},
+		{"1/8 финала", 2, 6, 4},
+		{"1/4 финала", 3, 4, 3},
+		{"Полуфиналы", 4, 2, 4},
+		{"Финал", 5, 1, 4},
+	}
+	if len(stages) != len(want) {
+		t.Fatalf("этапов = %d, want %d", len(stages), len(want))
 	}
 	for i, w := range want {
-		if len(rounds[i].Matches) != w.bouts {
-			t.Fatalf("раунд %d: %d боёв, want %d", i+1, len(rounds[i].Matches), w.bouts)
+		stage := stages[i]
+		if stage.Title != w.title {
+			t.Errorf("этап %d называется %q, want %q", i+1, stage.Title, w.title)
 		}
-		for _, match := range rounds[i].Matches {
+		if len(stage.Matches) != w.bouts {
+			t.Fatalf("%s: %d боёв, want %d", w.title, len(stage.Matches), w.bouts)
+		}
+		for _, match := range stage.Matches {
 			if len(match.Slots) != w.seats {
-				t.Fatalf("раунд %d, %s: %d мест, want %d", i+1, match.Code, len(match.Slots), w.seats)
+				t.Fatalf("%s, %s: %d мест, want %d", w.title, match.Code, len(match.Slots), w.seats)
+			}
+			if match.Round != w.round {
+				t.Fatalf("%s, %s: круг %d, want %d", w.title, match.Code, match.Round, w.round)
 			}
 		}
 	}

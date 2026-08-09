@@ -289,6 +289,9 @@ create table if not exists stages(
   position integer not null,
   status text not null default 'active',
   config_json text not null default '{}',
+  block_code text not null default '',
+  wave_index integer not null default 0,
+  group_code text not null default '',
   unique(game_id, code)
 );
 
@@ -300,6 +303,7 @@ create table if not exists matches(
   code text not null,
   title text not null,
   position integer not null,
+  round integer not null default 0,
   participant_count integer not null,
   venue_id integer references venues(id),
   status text not null default 'active',
@@ -754,6 +758,27 @@ create table if not exists stage_standings(
 		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(19, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 			return err
 		}
+	}
+	// v21: the schedule says where it sits. A stage row is a Wave, so it names
+	// its Block, its turn at the столы and — round-robin only — the Group it
+	// ranks; the remaining coordinate, the Round, is on the бой, because a Group
+	// plays all its круги at one стол. Existing rows stay blank: a game compiled
+	// before this knows its shape only through its stage codes, and guessing
+	// coordinates back out of `s1-g7` is the habit these columns exist to end.
+	if err := store.AddColumnsIfMissing(db, "stages", []store.ColumnSpec{
+		{Name: "block_code", Type: "TEXT NOT NULL DEFAULT ''"},
+		{Name: "wave_index", Type: "INTEGER NOT NULL DEFAULT 0"},
+		{Name: "group_code", Type: "TEXT NOT NULL DEFAULT ''"},
+	}); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "matches", []store.ColumnSpec{
+		{Name: "round", Type: "INTEGER NOT NULL DEFAULT 0"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(21, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
 	}
 	return nil
 }

@@ -85,7 +85,7 @@ func (roundRobin) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store
 	}
 	var matches []store.SchemeMatch
 	seq := 0
-	for _, round := range rounds {
+	for circle, round := range rounds {
 		for _, table := range round {
 			seq++
 			slots := make([]store.SchemeSlot, 0, len(table))
@@ -103,6 +103,7 @@ func (roundRobin) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store
 				Code:             fmt.Sprintf("%s-%d", conf.Code, seq),
 				Title:            fmt.Sprintf(title, seq),
 				Venue:            conf.Venue,
+				Round:            circle + 1,
 				ParticipantCount: len(slots),
 				Slots:            slots,
 			})

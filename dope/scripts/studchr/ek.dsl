@@ -1,5 +1,5 @@
 [defaults]
-venues: 12
+venues: 6
 
 [scheme]
 title: Плей-офф

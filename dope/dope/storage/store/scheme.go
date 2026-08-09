@@ -62,6 +62,7 @@ type SchemeStage struct {
 	StageType string          `json:"stage_type"`
 	Kind      string          `json:"kind,omitempty"` // registered StageKind ('rr', …); empty = stage_type
 	Position  int             `json:"position"`
+	Grain     SchemeGrain     `json:"grain"`
 	Matches   []SchemeMatch   `json:"matches"`
 	Teams     []SchemeSlot    `json:"teams"`
 	Sources   []string        `json:"sources"`
@@ -70,10 +71,22 @@ type SchemeStage struct {
 	Layout    json.RawMessage `json:"layout"`
 }
 
+// SchemeGrain says where a stage sits in its Game. A stage row is a Wave — the
+// finest grain the schedule has — so it names the Block it expands, the Group
+// it ranks (round-robin only) and which turn at the столы it is. The remaining
+// coordinate, the Round, lives on the Match: a Group plays all its круги at one
+// стол, so one stage spans several Rounds and only a бой knows which.
+type SchemeGrain struct {
+	Block string `json:"block,omitempty"`
+	Wave  int    `json:"wave,omitempty"`
+	Group string `json:"group,omitempty"`
+}
+
 type SchemeMatch struct {
 	Code             string       `json:"code"`
 	Title            string       `json:"title"`
 	Venue            int          `json:"venue"`
+	Round            int          `json:"round,omitempty"` // 1-based круг within the Block
 	ParticipantCount int          `json:"participantCount"`
 	Slots            []SchemeSlot `json:"slots"`
 }

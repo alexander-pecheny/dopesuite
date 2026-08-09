@@ -567,10 +567,11 @@ func (c *compiler) dealSeeds(groups, size int) [][]store.SchemeSlot {
 // selectors into the feeding round), sources is whose bouts the stats are
 // summed over. Returns the stage code; rank refs against it seat what follows.
 func (c *compiler) reseedStage(index int, blk Section, sources []string, teams []store.SchemeSlot) (string, error) {
-	return c.reseedStageCoded(fmt.Sprintf("s%d-reseed", index+1), blk, sources, teams)
+	blockCode := fmt.Sprintf("s%d", index+1)
+	return c.reseedStageCoded(blockCode+"-reseed", blockCode, blk, sources, teams)
 }
 
-func (c *compiler) reseedStageCoded(code string, blk Section, sources []string, teams []store.SchemeSlot) (string, error) {
+func (c *compiler) reseedStageCoded(code, blockCode string, blk Section, sources []string, teams []store.SchemeSlot) (string, error) {
 	sort, err := c.reseedSortRules(blk)
 	if err != nil {
 		return "", err
@@ -582,6 +583,7 @@ func (c *compiler) reseedStageCoded(code string, blk Section, sources []string, 
 		StageType: "reseed",
 		Kind:      "reseed",
 		Position:  c.position,
+		Grain:     at{block: blockCode}.grain(),
 		Teams:     teams,
 		Sources:   sources,
 		Sort:      json.RawMessage(util.MustJSON(sort)),
@@ -807,6 +809,7 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 		StageType: "matches",
 		Kind:      "flat",
 		Position:  c.position,
+		Grain:     at{block: code}.grain(),
 		Matches:   matches,
 		Config:    configJSON,
 	})
@@ -892,8 +895,9 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 		return nil, errAt(0, "rr не зарегистрирован в реестре видов")
 	}
 	out := &blockOutputs{}
+	blockCode := fmt.Sprintf("s%d", index+1)
 	for g := 1; g <= groups; g++ {
-		code := fmt.Sprintf("s%d-g%d", index+1, g)
+		code := fmt.Sprintf("%s-g%d", blockCode, g)
 		config := c.protocolConfig(blk, nil)
 		config["code"] = code
 		config["entrants"] = entrants[g-1]
@@ -924,6 +928,7 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 			StageType: "matches",
 			Kind:      "rr",
 			Position:  c.position,
+			Grain:     at{block: blockCode, group: fmt.Sprint(g)}.grain(),
 			Matches:   matches,
 			Config:    configJSON,
 		})
@@ -1120,12 +1125,14 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 					Slots:            base.Slots,
 				}
 			}
-			c.appendManualStage(blk, stageCode, c.roundTitle(blk, names, elimRoundTitle(round, roundIndex, winning)), names, series)
+			c.appendManualStage(blk, stageCode, c.roundTitle(blk, names, elimRoundTitle(round, roundIndex, winning)), names,
+				at{block: blockCode, round: roundIndex + 1}, series)
 			seriesFinal = true
 			prevCodes = codes
 			continue
 		}
-		prevStages = c.appendSERound(blk, stageCode, c.roundTitle(blk, names, elimRoundTitle(round, roundIndex, winning)), names, venues, matches)
+		prevStages = c.appendSERound(blk, stageCode, c.roundTitle(blk, names, elimRoundTitle(round, roundIndex, winning)), names, venues,
+			at{block: blockCode, round: roundIndex + 1}, matches)
 		if remaining == 4 {
 			semifinalCodes = codes
 		}
@@ -1155,7 +1162,8 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 				fromMatchSlot(semifinalCodes[1], 2),
 			},
 		}}
-		c.appendManualStage(blk, stageCode, "Матч за 3-е место", []string{"bronze"}, matches)
+		c.appendManualStage(blk, stageCode, "Матч за 3-е место", []string{"bronze"},
+			at{block: blockCode, round: len(plan) + 1}, matches)
 	}
 	return out, nil
 }
@@ -1163,13 +1171,13 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 // appendSERound emits one round as ⌈matches/venues⌉ Wave stages — one stage
 // when everything fits, `-w{k}` codes when the venue count forces turns — and
 // returns the stage codes it created (a following reseed sources them).
-func (c *compiler) appendSERound(blk Section, stageCode, title string, rounds []string, venues []int, matches []store.SchemeMatch) []string {
+func (c *compiler) appendSERound(blk Section, stageCode, title string, rounds []string, venues []int, where at, matches []store.SchemeMatch) []string {
 	perWave := len(venues)
 	if perWave == 0 {
 		perWave = c.venueCount
 	}
 	if len(matches) <= perWave {
-		c.appendManualStage(blk, stageCode, title, rounds, matches)
+		c.appendManualStage(blk, stageCode, title, rounds, where, matches)
 		return []string{stageCode}
 	}
 	var codes []string
@@ -1179,9 +1187,11 @@ func (c *compiler) appendSERound(blk Section, stageCode, title string, rounds []
 			end = len(matches)
 		}
 		code := fmt.Sprintf("%s-w%d", stageCode, wave+1)
+		waveAt := where
+		waveAt.wave = wave + 1
 		c.appendManualStage(blk, code,
 			fmt.Sprintf("%s, заход %d", title, wave+1),
-			rounds, matches[wave*perWave:end])
+			rounds, waveAt, matches[wave*perWave:end])
 		codes = append(codes, code)
 	}
 	return codes
@@ -1380,7 +1390,7 @@ func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, p
 			}
 			var err error
 			roundReseed := fmt.Sprintf("%s-r%d-reseed", blockCode, r+1)
-			if reseedCode, err = c.reseedStageCoded(roundReseed, blk, prevStages, alive); err != nil {
+			if reseedCode, err = c.reseedStageCoded(roundReseed, blockCode, blk, prevStages, alive); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -1424,14 +1434,21 @@ func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, p
 			if r < len(plan.rounds)-1 {
 				continue // pods emit once, below
 			}
+			// A pod plays all its rounds at one стол, so its stage spans them:
+			// each бой carries the round it belongs to, the stage carries none.
+			roundOf := boutRounds(plan)
 			all := make([]store.SchemeMatch, 0, len(plan.bouts))
 			for _, boutIndex := range flatBouts(plan) {
-				all = append(all, podMatch(plan, codes, boutIndex, entrants, c.venuePick(venues, group)))
+				match := podMatch(plan, codes, boutIndex, entrants, c.venuePick(venues, group))
+				match.Round = roundOf[boutIndex]
+				all = append(all, match)
 			}
-			c.appendManualStage(blk, stageCode, fmt.Sprintf("DE %d", group), nil, all)
+			c.appendManualStage(blk, stageCode, fmt.Sprintf("DE %d", group), nil,
+				at{block: blockCode, group: fmt.Sprint(group)}, all)
 			return codes, []string{stageCode}, nil
 		}
-		c.appendManualStage(blk, roundStage, fmt.Sprintf("Раунд %d", r+1), []string{fmt.Sprintf("r%d", r+1)}, matches)
+		c.appendManualStage(blk, roundStage, fmt.Sprintf("Раунд %d", r+1), []string{fmt.Sprintf("r%d", r+1)},
+			at{block: blockCode, round: r + 1}, matches)
 		prevStages = []string{roundStage}
 		stages = append(stages, roundStage)
 	}
@@ -1459,6 +1476,16 @@ func flatBouts(plan *dePlan) []int {
 	var out []int
 	for _, round := range plan.rounds {
 		out = append(out, round...)
+	}
+	return out
+}
+
+func boutRounds(plan *dePlan) map[int]int {
+	out := make(map[int]int, len(plan.bouts))
+	for r, round := range plan.rounds {
+		for _, boutIndex := range round {
+			out[boutIndex] = r + 1
+		}
 	}
 	return out
 }
@@ -1501,9 +1528,35 @@ func labelledFromMatch(matchCode, boutLabel string, place int) store.SchemeSlot 
 	return slot
 }
 
-func (c *compiler) appendManualStage(blk Section, code, title string, rounds []string, matches []store.SchemeMatch) {
+// at is where a stage sits: which Block it expands, which turn at the столы it
+// is, and — for the Kinds whose stage is one Round — which Round its бои play.
+// A stage spanning several Rounds (a round-robin Group, a DE pod) leaves round
+// zero and lets each бой carry its own.
+type at struct {
+	block string
+	round int
+	wave  int
+	group string
+}
+
+func (a at) grain() store.SchemeGrain {
+	wave := a.wave
+	if wave == 0 {
+		wave = 1
+	}
+	return store.SchemeGrain{Block: a.block, Wave: wave, Group: a.group}
+}
+
+func (c *compiler) appendManualStage(blk Section, code, title string, rounds []string, where at, matches []store.SchemeMatch) {
 	config := c.protocolConfig(blk, rounds)
 	configJSON, _ := json.Marshal(config)
+	if where.round > 0 {
+		for i := range matches {
+			if matches[i].Round == 0 {
+				matches[i].Round = where.round
+			}
+		}
+	}
 	c.position++
 	c.scheme.Stages = append(c.scheme.Stages, store.SchemeStage{
 		Code:      code,
@@ -1511,6 +1564,7 @@ func (c *compiler) appendManualStage(blk Section, code, title string, rounds []s
 		StageType: "matches",
 		Kind:      "matches",
 		Position:  c.position,
+		Grain:     where.grain(),
 		Matches:   matches,
 		Config:    configJSON,
 	})

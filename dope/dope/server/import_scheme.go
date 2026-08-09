@@ -180,8 +180,9 @@ values(?, ?, ?, ?)`, gameID, team.Basket, team.Number, teamID); err != nil {
 			stageType = "matches"
 		}
 		stageID, err := store.InsertReturningID(ctx, tx, `
-insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
-values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
+insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json, block_code, wave_index, group_code)
+values(?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON,
+			stage.Grain.Block, stage.Grain.Wave, stage.Grain.Group)
 		if err != nil {
 			return store.FestView{}, err
 		}
@@ -201,8 +202,8 @@ values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title
 				venueID = id
 			}
 			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
+insert into matches(fest_id, game_id, stage_id, code, title, position, round, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, participantCount, venueID)
 			if err != nil {
 				return store.FestView{}, err
 			}
@@ -357,8 +358,9 @@ values(?, ?, ?, ?)`, gameID, team.Basket, team.Number, teamID); err != nil {
 			stageType = "matches"
 		}
 		stageID, err := store.InsertReturningID(ctx, tx, `
-insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
-values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
+insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json, block_code, wave_index, group_code)
+values(?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON,
+			stage.Grain.Block, stage.Grain.Wave, stage.Grain.Group)
 		if err != nil {
 			return err
 		}
@@ -375,8 +377,8 @@ values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title
 				venueID = id
 			}
 			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
+insert into matches(fest_id, game_id, stage_id, code, title, position, round, participant_count, venue_id, status, revision)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, participantCount, venueID)
 			if err != nil {
 				return err
 			}
