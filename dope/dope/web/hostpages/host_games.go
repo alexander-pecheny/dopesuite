@@ -922,6 +922,13 @@ func defaultSIDSL(players int) string {
 // knowing. Falls back to брейн's for schemes compiled before Protocols carried
 // their own config.
 func stageEmptyState(gameType string, stage store.SchemeStage, seats, fallbackQuestions int) string {
+	// A blob-shaped Protocol (ЭК, личная СИ) stores an empty document: its
+	// seats come from the Slots and its marks arrive as edits. Seeding it with
+	// the Protocol's own state shape would write an array where the blob keys
+	// a map, and the first edit would fail to parse it.
+	if (store.DBMatchState{GameType: gameType}).IsEKShaped() {
+		return "{}"
+	}
 	p, ok := protocol.Get(gameType)
 	if !ok {
 		return string(games.BrainEmptyStateJSON(stageQuestions(stage, fallbackQuestions)))
