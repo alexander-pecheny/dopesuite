@@ -8,7 +8,7 @@ today is made an organiser of the championship.
 
 Run on the box, next to the two files:
 
-    python3 install-dopetest.py /var/lib/dopetest/fest.db studchr.db
+    python3 install-dopetest.py /var/lib/dopetest/fest.db studchr.db studchr-2026
 """
 import sqlite3
 import sys
@@ -18,21 +18,24 @@ import sys
 KEEP = ["users", "invites", "telegram_login_codes", "sessions"]
 
 
-def main(live, incoming):
+def main(live, incoming, slug):
     db = sqlite3.connect(incoming)
     db.execute("pragma foreign_keys = off")
     db.execute("attach database ? as old", (live,))
 
-    # The фест the new database carries, before its own accounts are cleared —
-    # its creator is about to stop existing.
-    fest = db.execute("select id from fests order by id limit 1").fetchone()
+    # The фест the new database carries, named rather than guessed: the incoming
+    # database also holds the test server's bootstrap фест, and making everyone
+    # an organiser of the demo instead of the championship is a silent no-op.
+    fest = db.execute("select id from fests where slug = ?", (slug,)).fetchone()
     if fest is None:
-        sys.exit("во входящей базе нет феста")
+        sys.exit(f"во входящей базе нет феста {slug}")
     festID = fest[0]
 
+    # Clear before copying, every time, so a re-run converges instead of
+    # colliding on the ids it inserted last time.
     db.execute("delete from fest_organizers")
-    db.execute("delete from sessions")
-    db.execute("delete from users")
+    for table in reversed(KEEP):
+        db.execute(f"delete from {table}")
     for table in KEEP:
         columns = [row[1] for row in db.execute(f"pragma table_info({table})")]
         shared = [c for c in columns if c in
@@ -56,4 +59,4 @@ insert or ignore into fest_organizers(fest_id, user_id, role, added_at) values(?
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], sys.argv[3])

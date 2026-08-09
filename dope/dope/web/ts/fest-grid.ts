@@ -263,7 +263,11 @@ function buildStandingsStage(
   standings.forEach((entry) => {
     const row = document.createElement("tr");
     row.appendChild(el("td", "standings-place", placeText(entry.metrics?.place ?? entry.rank)));
-    row.appendChild(el("td", "standings-name", String(entry.name || "")));
+    const name = el("td", "standings-name", String(entry.name || ""));
+    // The column is a glance wide, so a long name ellipsises — carry the whole
+    // one where a reader can still reach it.
+    name.setAttribute("title", String(entry.name || ""));
+    row.appendChild(name);
     metrics.forEach((metric) => {
       row.appendChild(el("td", "standings-metric", reseedMetricValue(metric, entry.metrics?.[metric])));
     });
@@ -274,10 +278,11 @@ function buildStandingsStage(
 }
 
 // standingsMetrics picks the columns worth showing. The Сетка is a glance, not a
-// report: место and who, then the two numbers the block ranks by. Everything
-// else — Σ+, сумма мест, how many бои — belongs on the stage's own page, and a
-// жребий that broke no tie is a column of zeroes.
-const STANDINGS_COLUMNS = 2;
+// report: место, who, and the one number the block ranks by first. A second
+// number costs forty pixels the names need — «Ярослав Кудымов» does not fit
+// beside two of them — and everything else belongs on the stage's own page. A
+// жребий that broke no tie is a column of zeroes either way.
+const STANDINGS_COLUMNS = 1;
 
 // The Сетка's columns are a glance wide, and it already writes М and Σ rather
 // than «место» and «сумма». The few metrics whose names do not fit get the same
