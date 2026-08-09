@@ -54,7 +54,11 @@ def run():
                 if team.get("place") is not None:
                     ops.append({"path": ["participants", seat, "pin"], "value": float(team["place"])})
             if ops:
-                api("PATCH", f"/api/fest/{FEST}/games/{gid}/matches/{code}/state", {"ops": ops})
+                try:
+                    api("PATCH", f"/api/fest/{FEST}/games/{gid}/matches/{code}/state", {"ops": ops})
+                except urllib.error.HTTPError as err:
+                    print(f"  {bout['code']} -> {code}: {err.code} {err.read()[:120].decode()}")
+                    continue
             api("POST", f"/api/fest/{FEST}/games/{gid}/matches/{code}/finish", {"finished": True})
             done += 1
     print(f"перенесено боёв: {done}, ждут результатов: {missing}")
