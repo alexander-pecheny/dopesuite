@@ -18,14 +18,17 @@ for row in wb["Подробно"].iter_rows(min_row=2, max_col=4, values_only=Tr
 
 grid = list(wb["Ввод"].iter_rows(values_only=True))
 wb.close()
-questions = sum(1 for c in grid[0][1:] if isinstance(c, (int, float)))
-completed = [bool(grid[1][q + 1]) for q in range(questions)]
+# The question columns are not contiguous — тур separators sit between them —
+# so each question's column is taken from the header rather than counted off.
+columns = [i for i, c in enumerate(grid[0]) if isinstance(c, (int, float))]
+questions = len(columns)
+completed = [bool(grid[1][col]) for col in columns]
 entries = []
-for q in range(questions):
+for col in columns:
     takers = []
     for row in grid[2:]:
-        if q + 1 < len(row) and isinstance(row[q + 1], (int, float)):
-            takers.append(int(row[q + 1]))
+        if col < len(row) and isinstance(row[col], (int, float)):
+            takers.append(int(row[col]))
     entries.append(sorted(takers))
 
 known = {t["number"] for t in teams}

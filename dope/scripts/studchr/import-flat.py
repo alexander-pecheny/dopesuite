@@ -3,13 +3,13 @@ through the same generic set-op path the page itself edits by, so the transfer
 is journaled like any other edit rather than written behind the server's back."""
 import json, sys, urllib.request
 
-FEST, BASE = 14, "http://127.0.0.1:19680"
+BASE = "http://127.0.0.1:19680"
 token = open(".tmp/token").read().strip()
 
 
-def patch(game_id, ops):
+def patch(fest_id, game_id, ops):
     body = json.dumps({"ops": ops}).encode()
-    req = urllib.request.Request(f"{BASE}/api/fest/{FEST}/games/{game_id}/state",
+    req = urllib.request.Request(f"{BASE}/api/fest/{fest_id}/games/{game_id}/state",
                                  data=body, method="PATCH",
                                  headers={"Content-Type": "application/json",
                                           "Cookie": "session=" + token})
@@ -35,12 +35,15 @@ def seat_od_teams(db_path, game_id, teams):
     db.commit()
 
 
-def import_od(game_id):
+def import_od(fest_id, game_id):
+    """ОД's teams come from its fest, the way every flat game's do — that is why
+    ОД gets its own fest: at СтудЧР it had 65 teams where the брейн had 48, and
+    the two numberings are different identities."""
     data = json.load(open(".tmp/od-data.json"))
     ops = [{"path": ["entries"], "value": data["entries"]},
            {"path": ["completed"], "value": data["completed"]}]
-    print("ОД:", patch(game_id, ops), f'{len(data["teams"])} команд, {len(data["entries"])} вопросов')
+    print("ОД:", patch(fest_id, game_id, ops), f'{len(data["teams"])} команд, {len(data["entries"])} вопросов')
 
 
 if __name__ == "__main__":
-    import_od(int(sys.argv[1]))
+    import_od(int(sys.argv[1]), int(sys.argv[2]))
