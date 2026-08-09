@@ -258,7 +258,7 @@ function buildStandingsStage(
   const head = document.createElement("tr");
   head.appendChild(el("th", "standings-place", "М"));
   head.appendChild(el("th", "standings-name", ""));
-  metrics.forEach((metric) => head.appendChild(el("th", "standings-metric", reseedMetricLabel(metric))));
+  metrics.forEach((metric) => head.appendChild(el("th", "standings-metric", standingsMetricLabel(metric))));
   table.appendChild(head);
   standings.forEach((entry) => {
     const row = document.createElement("tr");
@@ -273,9 +273,20 @@ function buildStandingsStage(
   return section;
 }
 
-// standingsMetrics picks the columns worth showing: what the block actually
-// ranks by, in the order it ranks, and never the lottery — a жребий that broke
-// no tie is a column of zeroes.
+// standingsMetrics picks the columns worth showing. The Сетка is a glance, not a
+// report: место and who, then the two numbers the block ranks by. Everything
+// else — Σ+, сумма мест, how many бои — belongs on the stage's own page, and a
+// жребий that broke no tie is a column of zeroes.
+const STANDINGS_COLUMNS = 2;
+
+// The Сетка's columns are a glance wide, and it already writes М and Σ rather
+// than «место» and «сумма». The few metrics whose names do not fit get the same
+// treatment; everything else keeps the word the пересев panel uses.
+function standingsMetricLabel(metric: string): string {
+  const short: Record<string, string> = {points: "О", taken: "В", bouts: "Б"};
+  return short[metric] || reseedMetricLabel(metric);
+}
+
 function standingsMetrics(standings: ReseedEntry[]): string[] {
   const present = new Set<string>();
   standings.forEach((entry) => {
@@ -283,9 +294,10 @@ function standingsMetrics(standings: ReseedEntry[]): string[] {
       if (typeof value === "number" && key !== "place" && key !== "draw") present.add(key);
     });
   });
-  const preferred = ["points", "total", "plus", "taken", "place_sum", "bouts"];
+  const preferred = ["points", "total", "taken", "plus", "place_sum"];
   const ordered = preferred.filter((metric) => present.has(metric));
-  return ordered.length ? ordered : Array.from(present).sort().slice(0, 3);
+  const chosen = ordered.length ? ordered : Array.from(present).sort();
+  return chosen.slice(0, STANDINGS_COLUMNS);
 }
 
 function buildMatchesStage(stage: FestGridStage, liveStage: FestGridStage, options: FestGridOptions = {}): HTMLElement {

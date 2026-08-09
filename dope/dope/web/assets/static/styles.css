@@ -1077,8 +1077,10 @@
   min-width: 0;
 }
 
-.grid-matches {
+.grid-matches,
+.grid-standings {
   grid-row: 2;
+  min-width: 0;
 }
 
 .grid-stage-head {
@@ -1124,6 +1126,9 @@
    its own. */
 .grid-standings {
   width: 100%;
+  /* Fixed layout so a long name truncates instead of widening the column: the
+     Сетка's columns are sized by the grid, not by the longest team. */
+  table-layout: fixed;
   border-collapse: collapse;
   border: var(--cell-gap) solid var(--structure);
   border-radius: var(--radius-md);
@@ -1157,13 +1162,14 @@
   color: var(--text-muted);
 }
 
+/* No width: under a fixed layout the unsized column takes whatever the sized
+   ones leave, and its content ellipsises inside that. */
 .grid-standings .standings-name {
-  width: 100%;
-  max-width: 0;
+  min-width: 0;
 }
 
 .grid-standings .standings-metric {
-  width: 34px;
+  width: 40px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

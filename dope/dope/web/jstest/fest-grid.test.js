@@ -64,8 +64,10 @@ test("a Group renders as a table of place against team", () => {
   assert.equal(withClass(grid, "grid-match").length, 0, "боёв в сетке быть не должно");
   const names = withClass(grid, "standings-name").map((cell) => cell.textContent);
   assert.deepEqual(names, ["", "Ктулху", "ВШЭстером"]);
+  // Two columns, not six: the Сетка is a glance. Headers are glyphs, like the
+  // М and Σ beside them.
   const heads = withClass(grid, "standings-metric").slice(0, 2).map((cell) => cell.textContent);
-  assert.deepEqual(heads, ["Очки", "Σ"], "колонки — то, по чему блок ранжирует");
+  assert.deepEqual(heads, ["О", "Σ"], "колонки — то, по чему блок ранжирует");
 });
 
 // A stage that ranks nothing — an elimination round — keeps its бои.
