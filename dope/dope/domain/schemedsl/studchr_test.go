@@ -134,13 +134,13 @@ func TestStudchrTPSh(t *testing.T) {
 	}
 }
 
-// ОД: командная викторина, шесть туров по пятнадцать вопросов, все девяносто
-// команд играют один общий бой.
+// ОД: командная викторина, шесть туров по пятнадцать вопросов, все шестьдесят
+// пять команд играют один общий бой. Девяносто — это вопросы, а не команды.
 const studchrODSrc = `
 [scheme]
 title: КВРМ
 type: flat
-teams: 90
+teams: 65
 tour_comp: [15, 15, 15, 15, 15, 15]
 `
 
@@ -267,7 +267,7 @@ func TestStudchrFlatGames(t *testing.T) {
 		name, src, gameType string
 		teams               int
 	}{
-		{"ОД", studchrODSrc, "od", 90},
+		{"ОД", studchrODSrc, "od", 65},
 		{"КСИ", studchrKSISrc, "ksi", 40},
 	} {
 		scheme := compileSrc(t, c.src, Input{GameType: c.gameType})

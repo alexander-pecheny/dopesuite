@@ -59,13 +59,24 @@ played. `brain.dsl` reproduces the tournament and therefore the sheet;
 disagree on purpose. If the регламент is what should have happened, the fest is
 faithful to a mistake.
 
-## ОД has its own фест
+## Building the фест
 
-At СтудЧР ОД had 65 teams where the брейн had 48, and «команда 12» means a
-different team in each. A flat game takes its teams from the фест's roster, and
-`team_list_source` is declared but never read, so ОД lives in its own фест. That
-is how the tournament looked anyway, and it needs no new feature — but a фест per
-game is not what a фест is for, and the seam should be closed.
+`TestStudchrWholeFest` assembles the championship into one database and replays
+every transcript into it:
+
+    DOPE_STUDCHR_FEST=/path/to/studchr.db go test ./dope/server/tests/ \
+      -run TestStudchrWholeFest -timeout 2400s
+
+It registers ОД's 65 teams as the фест's registry — both 48-team games are
+subsets of it — then creates each game with its own entrant list and plays it
+through. It skips unless the variable is set, because it takes minutes.
+
+## ОД used to need its own фест
+
+At СтудЧР ОД had 65 teams where the брейн had 48 and the ЭК a different 48, and
+«команда 12» means a different team in each. That used to need a фест per game.
+It no longer does: a Game carries its own entrant list and numbers it from 1
+(ADR-0009), so the five games sit on one фест as the championship did.
 
 ОД's own transfer is checked against the sheet's «Итог» tab: all 65 totals agree
 to the unit. R differs by a couple of percent, which is the бухгольц denominator

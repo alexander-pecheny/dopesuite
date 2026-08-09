@@ -251,3 +251,58 @@ func union(lists ...[]string) []string {
 	}
 	return out
 }
+
+// A recompile keeps the Game's entrants. Reading the фест's registry instead
+// would recompile a game of four against a roster of six and refuse the scheme
+// it was created from.
+func TestRecompileKeepsGameEntrants(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	all := seedParticipants(t, db, festID, 6)
+
+	dsl := "[scheme]\ntype: roundrobin\nteams_in_group: 4\nquestions: 5\n"
+	gameID := createSchemeGameFor(t, db, festID, "brain", "Брейн", dsl, all[1:5])
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if err := hostpages.RecompileSchemeGameTx(context.Background(), tx, festID, gameID,
+		dsl+"bout.points: seats + 1 - place\n"); err != nil {
+		t.Fatalf("пересборка: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	got := gameEntrants(t, db, gameID)
+	if len(got) != 4 || got[0] != all[1] {
+		t.Fatalf("после пересборки состав %v, want %v", got, all[1:5])
+	}
+}
+
+// A фест may hold two games of one type under names of their own: СтудЧР played
+// личная СИ and ТПШ, and both are `si`. Only a collision earns a suffix.
+func TestGameKeepsItsGivenTitle(t *testing.T) {
+	srv := newAuthTestServer(t)
+	festID, _ := scopedAPITestIDs(t, srv)
+	db := srv.Eng().DB
+	seedFestPlayers(t, db, festID, 4)
+
+	dsl := "[scheme]\ntype: roundrobin\nteams_in_group: 4\nthemes: 2\n"
+	for _, want := range []string{"СИ", "ТПШ", "СИ 2"} {
+		base := want
+		if want == "СИ 2" {
+			base = "СИ" // the third asks for a name already taken
+		}
+		gameID := createSchemeGame(t, db, festID, "si", base, dsl)
+		var title string
+		if err := db.QueryRow(`select title from games where id = ?`, gameID).Scan(&title); err != nil {
+			t.Fatal(err)
+		}
+		if title != want {
+			t.Errorf("игра названа %q, want %q", title, want)
+		}
+	}
+}

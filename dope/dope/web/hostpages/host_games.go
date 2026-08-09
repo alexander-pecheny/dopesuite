@@ -739,13 +739,19 @@ func nextGameIdentityTx(ctx context.Context, tx *sql.Tx, festID int64, gameType,
 	if err := tx.QueryRowContext(ctx, `select coalesce(max(position), 0) + 1 from games where fest_id = ?`, festID).Scan(&position); err != nil {
 		return gameIdentity{}, err
 	}
-	var typeCount int
-	if err := tx.QueryRowContext(ctx, `select count(*) from games where fest_id = ? and game_type = ?`, festID, gameType).Scan(&typeCount); err != nil {
-		return gameIdentity{}, err
-	}
+	// Suffix only to break a collision. A фест may hold two games of one type
+	// under names of their own — СтудЧР played личная СИ and ТПШ, both `si` —
+	// and numbering the second «ТПШ 2» renames a tournament that had a name.
 	title := titleBase
-	if typeCount > 0 && gameType != "ek" {
-		title = fmt.Sprintf("%s %d", titleBase, typeCount+1)
+	for n := 2; ; n++ {
+		var taken int
+		if err := tx.QueryRowContext(ctx, `select count(*) from games where fest_id = ? and title = ?`, festID, title).Scan(&taken); err != nil {
+			return gameIdentity{}, err
+		}
+		if taken == 0 {
+			break
+		}
+		title = fmt.Sprintf("%s %d", titleBase, n)
 	}
 	for suffix := position; ; suffix++ {
 		code := fmt.Sprintf("%s-%d", gameType, suffix)
@@ -913,6 +919,27 @@ on conflict(game_id, participant_id) do update set position = excluded.position,
 // count must match the scheme's draw.
 func brainSchemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, slug, title, dsl string) (store.FestScheme, error) {
 	return schemeFromDSLTx(ctx, tx, festID, games.Brain, slug, title, dsl)
+}
+
+// gameEntrantsTx is who this Game seats, in its own seed order — empty for a
+// Game created before Games could name their entrants, which then reads the
+// фест's registry as it always did.
+func gameEntrantsTx(ctx context.Context, tx *sql.Tx, gameID int64) ([]int64, error) {
+	rows, err := tx.QueryContext(ctx, `
+select participant_id from game_participants where game_id = ? order by position`, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 func schemeFromDSLTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, slug, title, dsl string) (store.FestScheme, error) {
@@ -1122,7 +1149,14 @@ select coalesce(scheme_json, '{}'), game_type from games where id = ? and fest_i
 		Title string `json:"title"`
 	}
 	_ = json.Unmarshal([]byte(oldSchemeJSON), &meta)
-	scheme, err := schemeFromDSLTx(ctx, tx, festID, gameType, meta.Slug, meta.Title, dsl)
+	// A Game that named its entrants keeps them across a recompile. Falling back
+	// to the фест's registry here would recompile a game of 48 against a roster
+	// of 65 and refuse the scheme it was created from.
+	entrants, err := gameEntrantsTx(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	scheme, err := schemeForEntrantsTx(ctx, tx, festID, gameType, meta.Slug, meta.Title, dsl, entrants)
 	if err != nil {
 		return err
 	}
@@ -1343,45 +1377,52 @@ func slotIdentity(sourceType, refJSON string) string {
 // number (roster-seeded games) plus the seed-import ladder's assignments
 // (declared-seed games).
 func seedSeaterTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, gameType string) (func(slot store.SchemeSlot) any, error) {
+	// A Game numbers the Participants it seats, and the assignment rows carry
+	// that numbering (ADR-0009). Reading them first is what lets one фест hold an
+	// ЭК of 48 and a брейн of a different 48.
 	byNumber := map[int]int64{}
-	if games.IsIndividual(gameType) {
-		// An individual game numbers the players it seats, and the assignment
-		// rows written at creation already carry that numbering.
-		rows, err := tx.QueryContext(ctx, `
-select number, participant_id from game_assignments where game_id = ? and basket = 1`, gameID)
-		if err != nil {
+	rows, err := tx.QueryContext(ctx, `
+select number, participant_id from game_assignments
+where game_id = ? and basket = 1 and participant_id is not null`, gameID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var number int
+		var participantID int64
+		if err := rows.Scan(&number, &participantID); err != nil {
+			rows.Close()
 			return nil, err
 		}
-		for rows.Next() {
-			var number int
-			var participantID int64
-			if err := rows.Scan(&number, &participantID); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			byNumber[number] = participantID
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
-	} else {
+		byNumber[number] = participantID
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if !games.IsIndividual(gameType) {
+		// A team Game that never named its entrants seats the фест's registry by
+		// its registration numbers, as every game did before Games could differ.
 		teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
 		if err != nil {
 			return nil, err
 		}
 		for _, team := range teams {
-			if team.Number > 0 {
-				teamID, _, err := imports.EnsureSeedTeamByNumber(ctx, tx, festID, team.Number, team.Name, team.City, nil)
-				if err != nil {
-					return nil, err
-				}
-				byNumber[int(team.Number)] = teamID
+			if team.Number <= 0 {
+				continue
 			}
+			if _, taken := byNumber[int(team.Number)]; taken {
+				continue
+			}
+			teamID, _, err := imports.EnsureSeedTeamByNumber(ctx, tx, festID, team.Number, team.Name, team.City, nil)
+			if err != nil {
+				return nil, err
+			}
+			byNumber[int(team.Number)] = teamID
 		}
 	}
 	assignments := map[[2]int]int64{}
-	rows, err := tx.QueryContext(ctx, `select basket, number, participant_id from game_assignments where game_id = ?`, gameID)
+	rows, err = tx.QueryContext(ctx, `select basket, number, participant_id from game_assignments where game_id = ?`, gameID)
 	if err != nil {
 		return nil, err
 	}
