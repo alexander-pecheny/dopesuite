@@ -1,17 +1,19 @@
-# Стенограмма турнира
+# Replay transcript
 
-Стенограмма — это то, что ведущие на самом деле вводили, бой за боем, записанное
-так, чтобы это можно было прочитать глазами. Реплейер проигрывает её через
-настоящие обработчики dope и сверяет с тем, что заявил лист.
+A transcript is what the hosts actually entered, бой by бой, written so a person
+can read it. The replayer plays it through dope's real handlers and holds the
+result against what the sheet claimed.
 
-Формат один на все турниры. У каждого свой вкус гугл-таблиц, поэтому под каждый
-пишется маленький читатель (`scripts/<турнир>/read-*.py`), который выдаёт вот
-это; сам реплейер про `.xlsx` не знает ничего.
+One format serves every tournament. Each has its own flavour of Google Sheets,
+so each gets a small reader (`scripts/<tournament>/read-*.py`) that emits this;
+the replayer never learns what an `.xlsx` is. Vocabulary — Block, Round, Wave,
+Group, Draw — is defined in [CONTEXT.md](../CONTEXT.md); the decision to build
+this at all is [ADR-0010](adr/0010-studchr-replay-is-the-conformance-harness.md).
 
-## Пример
+## Example
 
 ```
-# ЭК СтудЧР-2026 — сверено с листом 2026-08-09
+# ЭК СтудЧР-2026 — reconciled against the sheet 2026-08-09
 [game]
 type: ek
 title: ЭК
@@ -28,85 +30,90 @@ scheme: ek.dsl
 [s1/r2/w1/m1]
 Ктулху          | R---- ----- ----- |  10 | 2
 
-override [s1/r2/w1/m1] место: у листа Ктулху первый при меньшей сумме
+override [s1/r2/w1/m1] место Ктулху: the sheet ranks him first on a lower Σ
 ```
 
-## Шапка
+## Header
 
-`[game]` — три ключа: `type` (вид игры: `ek`, `si`, `od`, `brain`), `title` для
-человека и `scheme` — имя файла схемы, по которой строится структура.
+`[game]` takes three keys: `type` (`ek`, `si`, `od`, `brain`), `title` for a
+human, and `scheme` — the scheme file the Structure is built from.
 
-## Участники
+## Roster
 
-`[roster]` — по строке на участника: `номер | название | город`. Город
-необязателен. Разделитель — вертикальная черта, а не пробелы, потому что
-«Ушки на макушке Казань» иначе читается двояко.
+`[roster]` is one line per entrant: `number | name | city`. The city is
+optional. The separator is a bar rather than whitespace because «Ушки на
+макушке Казань» has no unambiguous reading without one.
 
 ## Бой
 
-Заголовок боя — его координата: `[блок/круг/заход/бой]`, например
-`[s1/r3/w2/m4]`, а в блоке с группами — `[блок/группа/круг/заход/бой]`, то есть
-`[s1/g3/r2/w1/m4]`. Круг, заход и бой обязательны всегда. Координата — это то,
-чем бой листа сцепляется с боем dope; по составу стола их сцеплять нельзя,
-потому что состав и есть то, что мы проверяем.
+A бой's header is its coordinate: `[block/round/wave/match]`, e.g.
+`[s1/r3/w2/m4]` — or `[block/group/round/wave/match]` in a Block that has
+Groups, e.g. `[s1/g3/r2/w1/m4]`. Round, wave and match are always required.
 
-Группа — не украшение: все шесть групп личной СИ сидят в блоке s1, в заходе 1,
-круги 1–4. Без номера группы одна координата называет шесть разных боёв, и пять
-из них никто не проверит.
+The coordinate is how a sheet's бой joins dope's. They cannot be joined by who
+sat at the table, because the seating is the thing under test.
 
-Слово `жребий` после координаты означает, что этот стол собрал не резольвер, а
-живой человек: первый круг сетки, раздача по группам, замена из-за неявки.
-Такая посадка — вход: реплейер запишет её в рёбра перед игрой. Без `жребий`
-посадку считает резольвер, и реплейер сверяет, что он посадил ровно этих.
+The Group is not decoration. All six групп of личная СИ sit in Block s1, wave 1,
+круги 1–4, so without a group number one coordinate names six different бои and
+five of them go unchecked.
 
-Дальше по строке на место: `кто | метки | Σ | место`.
+`жребий` after the coordinate marks a Draw — this table was set by a person, not
+derived: the opening round of a bracket, the deal into groups, a swap for a
+no-show. That seating is input, and the replayer writes it into the Edges before
+play. Without `жребий` the seating is the resolver's, and the replayer asserts it
+seated exactly these participants.
 
-- **метки** — по теме на группу из пяти знаков, темы через пробел. `R` — взял,
-  `W` — снял, `-` — не играл. `---R-` это «взял сороковку».
-- **Σ** и **место** — то, что напечатал лист. Их проверяют, а не применяют:
-  очки dope считает сам по меткам и обязан сойтись. Делённое место пишется
-  дробью — `1.5`, если двое набрали поровну.
+Then one line per seat: `who | marks | Σ | место`.
 
-Реплейер сверяет стол в обе стороны: и что каждый из листа сыграл, и что dope
-не посадил никого сверх листа.
+- **marks** — five characters per theme, themes separated by spaces. `R` taken,
+  `W` lost, `-` never played. `---R-` is «взял сороковку».
+- **Σ** and **место** are what the sheet printed. They are asserted, not
+  applied: dope scores the marks itself and has to agree. A shared place is
+  written as a fraction — `1.5` when two finish level.
 
-Строгость на входе того же рода. Бой без мест, две записи по одной координате,
-участник, которого нет в `[roster]`, — это ошибки разбора, а не молчаливо
-принятые данные: оракул, который проглатывает оборванную стенограмму, отчитается
-об успехе там, где ничего не проверял. `#` считается комментарием только в
-начале строки — команда «Решётка #1» так и останется собой.
+The table is checked both ways: that everyone the sheet lists played, and that
+dope seated nobody the sheet didn't.
 
-## Расхождения
+Strictness at the door is the same idea. A бой with no seats, two entries at one
+coordinate, a participant absent from `[roster]` — all are parse errors rather
+than quietly accepted data, because an oracle that swallows a truncated
+transcript reports success over work it never did. A `#` opens a comment only at
+the start of a line, so a team called «Решётка #1» keeps its name.
+
+## Disagreements
 
 ```
-override [s1/r2/w1/m1] место Ктулху: у листа он первый при меньшей сумме
-override [s1/r2/w1/m1] посадка: судьи поменяли столы из-за неявки
+override [s1/r2/w1/m1] место Ктулху: the sheet ranks him first on a lower Σ
+override [s1/r2/w1/m1] посадка: judges swapped the tables after a no-show
 ```
 
-Так автор турнира говорит: здесь листу верить нельзя, вот почему. Причина
-обязательна — расхождение без причины это не расхождение, а молча спрятанная
-ошибка. Всё, что расходится без `override`, останавливает прогон.
+This is the tournament's author saying: here the sheet is not to be believed,
+and why. The reason is mandatory — a disagreement without one is not a
+disagreement but a silenced defect. Anything that diverges without an `override`
+halts the replay.
 
-Участника после поля стоит называть: без имени `override` закрывает это поле
-всему бою, и настоящая ошибка у остальных троих за столом пройдёт молча. Без
-имени пишут то, что и правда про весь бой, — посадку.
+Name the participant after the field. Without a name the override covers that
+field for the whole table, so a real defect in the other three seats would pass
+unreported; write it unnamed only for what genuinely concerns the whole бой,
+like the seating.
 
-`override`, который ничего не закрыл, тоже расхождение: он заявляет ошибку,
-которой нет, а на странице расхождений читается как разобранный случай.
+An `override` that silenced nothing is itself reported: it asserts a defect that
+isn't there, and on the discrepancies page it reads as a reviewed case.
 
-Правило простое: `override` пишет автор таблиц, не реализатор. Если разошлись
-мы — чинится код или схема.
+The rule that matters: an `override` is written by the author of the sheets, not
+by the implementer. When dope is the one that diverges, the code or the scheme
+gets fixed.
 
-Расхождение по посадке — особый случай. Организаторы правда меняют столы по
-ходу турнира: неявка, опоздание, договорённость на месте. Это не наша ошибка и
-не ошибка листа, а жребий, которого мы не знали, — такой бой получает `жребий`,
-и посадка из проверки становится входом.
+A seating disagreement is the special case. Organisers really do move tables
+mid-tournament — a no-show, a late arrival, a decision on the day. That is
+neither our defect nor the sheet's, but a Draw we didn't know about, so the бой
+gains `жребий` and its seating turns from an assertion into an input.
 
-Страница `docs/studchr2026-discrepancies.md` собирается из этих строк
-(`replay.Discrepancies`), руками её не правят.
+`docs/studchr2026-discrepancies.md` is generated from these lines by
+`replay.Discrepancies`; it is never edited by hand.
 
-## Чего пока нет
+## Not covered yet
 
-Брейн сюда не ложится: его бой — это счёт «4 : 0» и то, кто взял каждый вопрос,
-а не сетка тем. Ему нужна вторая форма строки места; она появится, когда дойдут
-руки до переноса КИнСБФ.
+Брейн does not fit. Its бой is a score («4 : 0») plus who took each question,
+not a grid of themes, so it needs a second form of seat line. That arrives when
+КИнСБФ is transferred.
