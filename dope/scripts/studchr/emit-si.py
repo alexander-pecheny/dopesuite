@@ -106,6 +106,16 @@ def emit(data):
             out.append("")
             out.append(f"# {code}")
             bout(out, f"s2/r{circle}/w1/m{within}", playoff[code]["players"])
+
+    # The sheet's own aggregates: Счёт, Без − and Бои per player. One line the
+    # sheet cannot justify from its own protocols — reviewed and overridden.
+    out += ["", "[статистика]"]
+    stats = data["stats"]
+    width = max(len(s["player"]) for s in stats)
+    for s in stats:
+        out.append(f'{s["player"]:<{width}} | {s["sum"]:>4} | {s["plus"]:>4} | {s["bouts"]:>2}')
+    out += ["", "override [статистика] Σ+ Станислав Хамидулин: "
+            "лист сам с собой не сходится — в его «Без −» на одну взятую двадцатку больше, чем в его же протоколах; Σ сходится в обе стороны"]
     return "\n".join(out) + "\n"
 
 

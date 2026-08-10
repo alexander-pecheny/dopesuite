@@ -881,13 +881,22 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 // falling back to the derived name. The traditional 1/N names are arithmetic
 // only in a bracket that halves; anywhere else they are the tournament's own
 // word for the round, so the scheme says them.
+//
+// A titled block among other blocks says whose round it is — «Плей-офф.
+// 1 этап» — the same way a группа carries its block's title. A scheme of one
+// block has nothing to tell apart, so ЭК's «1/16 финала» stays bare.
 func (c *compiler) roundTitle(blk Section, names []string, derived string) string {
+	title := derived
 	for _, name := range names {
-		if title, ok := blk.Str("title." + name); ok {
-			return title
+		if named, ok := blk.Str("title." + name); ok {
+			title = named
+			break
 		}
 	}
-	return derived
+	if block, ok := blk.Str("title"); ok && len(c.doc.Blocks) > 1 {
+		return block + ". " + title
+	}
+	return title
 }
 
 func (c *compiler) groupTitle(blk Section, group, groups int) string {
@@ -1247,7 +1256,7 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 				fromMatchSlot(semifinalCodes[1], 2),
 			},
 		}}
-		c.appendManualStage(blk, stageCode, "Матч за 3-е место", []string{"bronze"},
+		c.appendManualStage(blk, stageCode, c.roundTitle(blk, []string{"bronze"}, "Матч за 3-е место"), []string{"bronze"},
 			at{block: blockCode, round: len(plan) + 1}, matches)
 	}
 	return out, nil

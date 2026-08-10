@@ -116,6 +116,7 @@ type FestView struct {
 	Slug              string      `json:"slug"`
 	Title             string      `json:"title"`
 	GameName          string      `json:"gameName,omitempty"`
+	GameType          string      `json:"gameType,omitempty"`
 	Revision          int64       `json:"revision"`
 	UpdatedAt         string      `json:"updatedAt"`
 	SchemaJSON        string      `json:"schemaJson,omitempty"`

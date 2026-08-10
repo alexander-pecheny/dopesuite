@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"dope/dope/domain/games"
@@ -47,12 +48,32 @@ func TestStudchrWholeFest(t *testing.T) {
 	// The фест's registry. ОД seated every team the championship registered, and
 	// both 48-team games are subsets of it, so its list in its own numbering is
 	// the фест's registry — which is what a registry is.
+	// The фест registry carries ОД's numbering — the fest_teams family below
+	// says the same numbers, and the two spaces must agree: game creation
+	// reconciles registry entries with fest teams BY NUMBER, so a registry
+	// numbered any other way gets its teams renamed into ОД's.
 	od := readOD(t)
-	teams := registerParticipants(t, db, festID, "team",
-		union(od.names(), rosterOf(scripts["ek"]), rosterOf(scripts["brain"])))
+	numbers := map[string]int{}
+	for _, team := range od.Teams {
+		numbers[team.Name] = team.Number
+	}
+	next := len(od.Teams)
+	for _, name := range union(od.names(), rosterOf(scripts["ek"]), rosterOf(scripts["brain"])) {
+		if numbers[name] == 0 {
+			next++
+			numbers[name] = next
+		}
+	}
+	teams := registerNumberedTeams(t, db, festID, numbers)
 	players := registerParticipants(t, db, festID, "player",
 		union(rosterOf(scripts["si"]), rosterOf(scripts["tpsh"])))
 	t.Logf("реестр феста: %d команд, %d игроков", len(teams), len(players))
+
+	// The фест-level Составы view reads the fest_teams family, so the games'
+	// составы are united into it: every registered team, with the players the
+	// брейн and ЭК workbooks agree it fielded.
+	registerFestRoster(t, db, festID, od,
+		unionLineups(scripts["brain"].Lineups, scripts["ek"].Lineups))
 
 	for _, c := range []struct{ name, gameType, title, scheme string }{
 		{"ek", games.EK, "ЭК", "ek.dsl"},
@@ -102,6 +123,87 @@ func TestStudchrWholeFest(t *testing.T) {
 		t.Fatalf("выгрузить базу: %v", err)
 	}
 	t.Logf("фест собран: %s", out)
+}
+
+// unionLineups merges the games' составы by team, first writer keeping order,
+// later ones appending only players it did not name.
+func unionLineups(lists ...[]replay.Lineup) map[string][]string {
+	out := map[string][]string{}
+	for _, list := range lists {
+		for _, lineup := range list {
+			have := out[lineup.Team]
+			known := make(map[string]bool, len(have))
+			for _, name := range have {
+				known[name] = true
+			}
+			for _, name := range lineup.Players {
+				if !known[name] {
+					have = append(have, name)
+				}
+			}
+			out[lineup.Team] = have
+		}
+	}
+	return out
+}
+
+// registerFestRoster writes the fest_teams/fest_players/fest_team_players
+// family the public Составы view reads — every registered team in ОД's
+// numbering, with its united состав.
+func registerFestRoster(t *testing.T, db *sql.DB, festID int64, od odData, lineups map[string][]string) {
+	t.Helper()
+	playerID := map[string]int64{}
+	for _, team := range od.Teams {
+		res, err := db.Exec(`
+insert into fest_teams(fest_id, name, city, position, number) values(?, ?, ?, ?, ?)`,
+			festID, team.Name, team.City, team.Number, team.Number)
+		if err != nil {
+			t.Fatalf("%s: %v", team.Name, err)
+		}
+		teamID, err := res.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for order, player := range lineups[team.Name] {
+			id, ok := playerID[player]
+			if !ok {
+				first, last, _ := strings.Cut(player, " ")
+				res, err := db.Exec(`
+insert into fest_players(fest_id, first_name, last_name) values(?, ?, ?)`, festID, first, last)
+				if err != nil {
+					t.Fatalf("%s: %v", player, err)
+				}
+				if id, err = res.LastInsertId(); err != nil {
+					t.Fatal(err)
+				}
+				playerID[player] = id
+			}
+			if _, err := db.Exec(`
+insert into fest_team_players(team_id, player_id, roster_order) values(?, ?, ?)`,
+				teamID, id, order); err != nil {
+				t.Fatalf("%s / %s: %v", team.Name, player, err)
+			}
+		}
+	}
+}
+
+func registerNumberedTeams(t *testing.T, db *sql.DB, festID int64, numbers map[string]int) map[string]int64 {
+	t.Helper()
+	out := map[string]int64{}
+	for name, number := range numbers {
+		res, err := db.Exec(`
+insert into participants(fest_id, roster, name, city, number) values(?, 'team', ?, '', ?)`,
+			festID, name, number)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[name] = id
+	}
+	return out
 }
 
 func registerParticipants(t *testing.T, db *sql.DB, festID int64, roster string, names []string) map[string]int64 {

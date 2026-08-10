@@ -2,8 +2,12 @@ package tests
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
+	"strconv"
+	"strings"
 	"testing"
 
 	"dope/dope/domain/replay"
@@ -148,7 +152,8 @@ where ms.match_id = ? order by ms.slot_index`, matchID)
 }
 
 // Play enters one participant's side of a бой as state patches — the same ops
-// the host page sends when a judge taps a cell.
+// the host page sends when a judge taps a cell: the theme's player from the
+// team's состав, then the marks.
 func (g *serverGame) Play(at replay.Coord, name string, play replay.Play) error {
 	if len(play.Questions) > 0 {
 		return g.playBrain(at, name, play.Questions)
@@ -162,6 +167,19 @@ func (g *serverGame) Play(at replay.Coord, name string, play replay.Play) error 
 		return err
 	}
 	var ops []map[string]any
+	for theme, player := range play.Players {
+		if player == "" {
+			continue
+		}
+		playerID, err := g.rosterPlayerID(participantID, player)
+		if err != nil {
+			return fmt.Errorf("тема %d у %s: %w", theme+1, name, err)
+		}
+		ops = append(ops, map[string]any{
+			"path":  []any{"participants", fmt.Sprint(participantID), "themes", theme, "player"},
+			"value": playerID,
+		})
+	}
 	for theme, answers := range play.Themes {
 		for index, mark := range answers {
 			value := ""
@@ -274,6 +292,62 @@ where r.match_id = ?`, matchID)
 	return out, rows.Err()
 }
 
+// Lineups writes the game's составы the way the scheme import does: players
+// into the fest pool, membership into participant_players, so the state patch
+// that names a theme's player finds him in the team's roster. Two games of one
+// фест share their participants, so a player another game already rostered is
+// kept rather than doubled.
+func (g *serverGame) Lineups(lineups []replay.Lineup) error {
+	for _, lineup := range lineups {
+		teamID, err := g.participantID(lineup.Team)
+		if err != nil {
+			return err
+		}
+		var next int
+		if err := g.db().QueryRow(`
+select count(*) from participant_players where participant_id = ?`, teamID).Scan(&next); err != nil {
+			return err
+		}
+		for _, player := range lineup.Players {
+			if _, err := g.rosterPlayerID(teamID, player); err == nil {
+				continue
+			}
+			first, last, _ := strings.Cut(player, " ")
+			res, err := g.db().Exec(`
+insert into players(fest_id, first_name, last_name) values(?, ?, ?)`, g.festID, first, last)
+			if err != nil {
+				return err
+			}
+			playerID, err := res.LastInsertId()
+			if err != nil {
+				return err
+			}
+			if _, err := g.db().Exec(`
+insert into participant_players(participant_id, player_id, roster_order)
+values(?, ?, ?)`, teamID, playerID, next); err != nil {
+				return err
+			}
+			next++
+		}
+	}
+	return nil
+}
+
+// rosterPlayerID resolves a player's display name inside one team's roster —
+// the same list the patch handler validates theme players against.
+func (g *serverGame) rosterPlayerID(participantID int64, name string) (int64, error) {
+	var id int64
+	err := g.db().QueryRow(`
+select p.id from players p
+join participant_players tp on tp.player_id = p.id
+where tp.participant_id = ? and trim(p.first_name || ' ' || p.last_name) = ?`,
+		participantID, name).Scan(&id)
+	if err == sql.ErrNoRows {
+		return 0, fmt.Errorf("игрока %q нет в составе", name)
+	}
+	return id, err
+}
+
 func (g *serverGame) participantID(name string) (int64, error) {
 	var id int64
 	err := g.db().QueryRow(`
@@ -282,6 +356,255 @@ select id from participants where fest_id = ? and name = ?`, g.festID, name).Sca
 		return 0, fmt.Errorf("в фесте нет участника %q", name)
 	}
 	return id, err
+}
+
+// PlayerStats aggregates the game's finished бои per player, in the same three
+// columns the transcript's [статистика] carries: ЭК — Σ, positive themes,
+// themes played; брейн — попытки, верно, неверно over the regular questions;
+// личная СИ — Σ, Σ+ and бои, the participant being the player.
+func (g *serverGame) PlayerStats() ([]replay.Stat, error) {
+	switch g.gameType {
+	case "brain":
+		return g.brainStats()
+	case "ek":
+		return g.ekStats()
+	}
+	return g.individualStats()
+}
+
+// finishedStates streams every finished бой's state with its seated
+// participants' names by id (slot order for брейн's index-aligned sides).
+func (g *serverGame) finishedStates(walk func(state string, seated []string, names map[int64]string) error) error {
+	rows, err := g.db().Query(`
+select m.id, coalesce(m.state_json, '{}') from matches m
+where m.game_id = ? and m.status = 'finished' order by m.position, m.id`, g.gameID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type finished struct {
+		id    int64
+		state string
+	}
+	var matches []finished
+	for rows.Next() {
+		var m finished
+		if err := rows.Scan(&m.id, &m.state); err != nil {
+			return err
+		}
+		matches = append(matches, m)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, m := range matches {
+		slots, err := g.db().Query(`
+select ms.slot_index, ms.participant_id, coalesce(p.name, '')
+from match_slots ms left join participants p on p.id = ms.participant_id
+where ms.match_id = ? order by ms.slot_index`, m.id)
+		if err != nil {
+			return err
+		}
+		var seated []string
+		names := map[int64]string{}
+		for slots.Next() {
+			var index int
+			var pid sql.NullInt64
+			var name string
+			if err := slots.Scan(&index, &pid, &name); err != nil {
+				slots.Close()
+				return err
+			}
+			seated = append(seated, name)
+			if pid.Valid {
+				names[pid.Int64] = name
+			}
+		}
+		slots.Close()
+		if err := slots.Err(); err != nil {
+			return err
+		}
+		if err := walk(m.state, seated, names); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// statRows folds an accumulation map into sorted Stat lines.
+func statRows(acc map[[2]string]*[3]int) []replay.Stat {
+	out := make([]replay.Stat, 0, len(acc))
+	for key, values := range acc {
+		out = append(out, replay.Stat{Player: key[0], Team: key[1], Values: *values})
+	}
+	sort.Slice(out, func(a, b int) bool {
+		return out[a].Player+"\x1f"+out[a].Team < out[b].Player+"\x1f"+out[b].Team
+	})
+	return out
+}
+
+func (g *serverGame) ekStats() ([]replay.Stat, error) {
+	playerName := map[int64]string{}
+	rows, err := g.db().Query(`select id, trim(first_name || ' ' || last_name) from players where fest_id = ?`, g.festID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		playerName[id] = name
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	values := []int{10, 20, 30, 40, 50}
+	acc := map[[2]string]*[3]int{}
+	err = g.finishedStates(func(state string, _ []string, names map[int64]string) error {
+		var blob struct {
+			Participants map[string]struct {
+				Themes []struct {
+					Player  int64     `json:"player"`
+					Answers [5]string `json:"answers"`
+				} `json:"themes"`
+			} `json:"participants"`
+		}
+		if err := json.Unmarshal([]byte(state), &blob); err != nil {
+			return err
+		}
+		for pid, section := range blob.Participants {
+			id, err := strconv.ParseInt(pid, 10, 64)
+			if err != nil {
+				return err
+			}
+			team := names[id]
+			for _, theme := range section.Themes {
+				if theme.Player == 0 {
+					continue
+				}
+				key := [2]string{playerName[theme.Player], team}
+				entry := acc[key]
+				if entry == nil {
+					entry = &[3]int{}
+					acc[key] = entry
+				}
+				sum := 0
+				for i, mark := range theme.Answers {
+					if mark == "right" {
+						sum += values[i]
+					} else if mark == "wrong" {
+						sum -= values[i]
+					}
+				}
+				entry[0] += sum
+				if sum > 0 {
+					entry[1]++
+				}
+				entry[2]++
+			}
+		}
+		return nil
+	})
+	return statRows(acc), err
+}
+
+func (g *serverGame) brainStats() ([]replay.Stat, error) {
+	acc := map[[2]string]*[3]int{}
+	err := g.finishedStates(func(state string, seated []string, _ map[int64]string) error {
+		var blob struct {
+			Teams []struct {
+				Rows []struct {
+					Player string `json:"player"`
+					Mark   string `json:"mark"`
+				} `json:"rows"`
+			} `json:"teams"`
+			Tiebreaks int `json:"tiebreaks"`
+		}
+		if err := json.Unmarshal([]byte(state), &blob); err != nil {
+			return err
+		}
+		for side, team := range blob.Teams {
+			if side >= len(seated) {
+				break
+			}
+			regular := len(team.Rows) - blob.Tiebreaks
+			for index, row := range team.Rows {
+				if index >= regular || row.Player == "" || row.Mark == "" {
+					continue
+				}
+				key := [2]string{row.Player, seated[side]}
+				entry := acc[key]
+				if entry == nil {
+					entry = &[3]int{}
+					acc[key] = entry
+				}
+				entry[0]++
+				if row.Mark == "right" {
+					entry[1]++
+				} else {
+					entry[2]++
+				}
+			}
+		}
+		return nil
+	})
+	return statRows(acc), err
+}
+
+func (g *serverGame) individualStats() ([]replay.Stat, error) {
+	values := []int{10, 20, 30, 40, 50}
+	acc := map[[2]string]*[3]int{}
+	entryFor := func(player string) *[3]int {
+		key := [2]string{player, ""}
+		entry := acc[key]
+		if entry == nil {
+			entry = &[3]int{}
+			acc[key] = entry
+		}
+		return entry
+	}
+	err := g.finishedStates(func(state string, seated []string, names map[int64]string) error {
+		// Бои are counted from the seating: a player who sat a бой and took
+		// nothing has no state section, and the sheet still counts the бой.
+		for _, name := range seated {
+			if name != "" {
+				entryFor(name)[2]++
+			}
+		}
+		var blob struct {
+			Participants map[string]struct {
+				Themes []struct {
+					Answers [5]string `json:"answers"`
+				} `json:"themes"`
+			} `json:"participants"`
+		}
+		if err := json.Unmarshal([]byte(state), &blob); err != nil {
+			return err
+		}
+		for pid, section := range blob.Participants {
+			id, err := strconv.ParseInt(pid, 10, 64)
+			if err != nil {
+				return err
+			}
+			entry := entryFor(names[id])
+			for _, theme := range section.Themes {
+				for i, mark := range theme.Answers {
+					if mark == "right" {
+						entry[0] += values[i]
+						entry[1] += values[i]
+					} else if mark == "wrong" {
+						entry[0] -= values[i]
+					}
+				}
+			}
+		}
+		return nil
+	})
+	return statRows(acc), err
 }
 
 // Pin writes a place the hosts set by hand. It is Protocol state (ADR-0005), so

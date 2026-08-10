@@ -188,3 +188,171 @@ func TestParseRefusesTheWrongSeatForm(t *testing.T) {
 		t.Error("ЭК принял список вопросов")
 	}
 }
+
+// Составы: a team game's transcript names each team's players, so the replay
+// can register them and the theme players below can be held to a real roster.
+func TestParseLineups(t *testing.T) {
+	script, err := Parse(`[game]
+type: ek
+
+[roster]
+1 | Ктулху
+2 | ВШЭстером
+
+[составы]
+Ктулху    | Иван Петров, Анна Ким
+ВШЭстером | Юлия Лапшина
+
+[s1/r1/w1/m1] жребий
+Ктулху    | R---- | 10 | 1
+ВШЭстером | ----- |  0 | 2
+`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(script.Lineups) != 2 {
+		t.Fatalf("составов = %d, want 2", len(script.Lineups))
+	}
+	first := script.Lineups[0]
+	if first.Team != "Ктулху" || len(first.Players) != 2 || first.Players[1] != "Анна Ким" {
+		t.Errorf("первый состав = %+v", first)
+	}
+}
+
+// An ЭК seat line may carry a fifth field: who played each theme, comma-
+// separated and aligned with the marks, `-` where the sheet named nobody.
+func TestParseEKThemePlayers(t *testing.T) {
+	script, err := Parse(`[game]
+type: ek
+
+[s1/r1/w1/m1] жребий
+Ктулху | R---- ---R- ----- | 50 | 1 | Иван Петров, -, Анна Ким
+`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	seat := script.Bouts[0].Seats[0]
+	want := []string{"Иван Петров", "", "Анна Ким"}
+	if len(seat.Players) != len(want) {
+		t.Fatalf("игроков = %d, want %d", len(seat.Players), len(want))
+	}
+	for i, name := range want {
+		if seat.Players[i] != name {
+			t.Errorf("игрок темы %d = %q, want %q", i+1, seat.Players[i], name)
+		}
+	}
+}
+
+func TestParseEKThemePlayersMustAlignWithThemes(t *testing.T) {
+	if _, err := Parse("[game]\ntype: ek\n\n[s1/r1/w1/m1]\nА | R---- ----- | 10 | 1 | Иван Петров\n"); err == nil {
+		t.Error("две темы и один игрок разобрались без ошибки")
+	}
+}
+
+// Статистика: the sheet's own per-player aggregates, asserted after the last
+// бой the way Σ and место are asserted after each one.
+func TestParseStats(t *testing.T) {
+	script, err := Parse(`[game]
+type: ek
+
+[roster]
+1 | Ктулху
+
+[составы]
+Ктулху | Иван Петров
+
+[s1/r1/w1/m1] жребий
+Ктулху | R---- | 10 | 1 | Иван Петров
+
+[статистика]
+Иван Петров | Ктулху | 10 | 1 | 1
+`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(script.Stats) != 1 {
+		t.Fatalf("строк статистики = %d, want 1", len(script.Stats))
+	}
+	row := script.Stats[0]
+	if row.Player != "Иван Петров" || row.Team != "Ктулху" || row.Values != [3]int{10, 1, 1} {
+		t.Errorf("статистика = %+v", row)
+	}
+}
+
+// In an individual game the participant is the player, so a stats line carries
+// no team and a составы section has nothing to say.
+func TestParseStatsIndividual(t *testing.T) {
+	script, err := Parse(`[game]
+type: si
+
+[roster]
+1 | Виктор Вега
+
+[s1/r1/w1/m1] жребий
+Виктор Вега | R---- | 10 | 1
+
+[статистика]
+Виктор Вега | 10 | 10 | 1
+`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	row := script.Stats[0]
+	if row.Player != "Виктор Вега" || row.Team != "" || row.Values != [3]int{10, 10, 1} {
+		t.Errorf("статистика = %+v", row)
+	}
+	if _, err := Parse("[game]\ntype: si\n\n[составы]\nКтулху | Иван Петров\n"); err == nil {
+		t.Error("личная игра приняла составы")
+	}
+}
+
+// A stats disagreement the author has ruled on is silenced by name, with the
+// section itself standing in for the бой coordinate.
+func TestParseStatsOverride(t *testing.T) {
+	script, err := Parse(`[game]
+type: si
+
+[roster]
+1 | Виктор Вега
+
+[s1/r1/w1/m1] жребий
+Виктор Вега | R---- | 10 | 1
+
+[статистика]
+Виктор Вега | 10 | 10 | 1
+
+override [статистика] Σ+ Виктор Вега: лист сам с собой не сходится
+`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	over := script.Overrides[0]
+	if over.At != StatsCoord || over.Field != "Σ+" || over.Participant != "Виктор Вега" {
+		t.Errorf("расхождение = %+v", over)
+	}
+	if StatsCoord.String() != "статистика" {
+		t.Errorf("координата статистики печатается как %q", StatsCoord.String())
+	}
+}
+
+// Составы and статистика are held to the transcript's own data: an unknown
+// team, an unknown player, or a theme player outside his team's состав is a
+// parse error, not data.
+func TestParseLineupAndStatsStrictness(t *testing.T) {
+	for _, c := range []struct{ name, src string }{
+		{"состав команды не из ростера", "[game]\ntype: ek\n\n[roster]\n1 | Ктулху\n\n[составы]\nПришельцы | Иван Петров\n\n[s1/r1/w1/m1] жребий\nКтулху | R---- | 10 | 1\n"},
+		{"игрок темы не из состава", "[game]\ntype: ek\n\n[roster]\n1 | Ктулху\n\n[составы]\nКтулху | Анна Ким\n\n[s1/r1/w1/m1] жребий\nКтулху | R---- | 10 | 1 | Иван Петров\n"},
+		{"статистика игрока не из состава", "[game]\ntype: ek\n\n[roster]\n1 | Ктулху\n\n[составы]\nКтулху | Анна Ким\n\n[s1/r1/w1/m1] жребий\nКтулху | R---- | 10 | 1\n\n[статистика]\nИван Петров | Ктулху | 10 | 1 | 1\n"},
+		{"статистика команды не из ростера", "[game]\ntype: ek\n\n[roster]\n1 | Ктулху\n\n[s1/r1/w1/m1] жребий\nКтулху | R---- | 10 | 1\n\n[статистика]\nИван Петров | Пришельцы | 10 | 1 | 1\n"},
+		{"личная статистика игрока не из ростера", "[game]\ntype: si\n\n[roster]\n1 | Виктор Вега\n\n[s1/r1/w1/m1] жребий\nВиктор Вега | R---- | 10 | 1\n\n[статистика]\nНикто Такой | 10 | 10 | 1\n"},
+		{"игроки у брейна", "[game]\ntype: brain\n\n[s1/r1/w1/m1]\nА | R Иван, - | 1 | 1 | Иван\nБ | -, - | 0 | 2\n"},
+		{"игроки у личной игры", "[game]\ntype: si\n\n[s1/r1/w1/m1]\nА | R---- | 10 | 1 | Иван Петров\n"},
+		{"состав записан дважды", "[game]\ntype: ek\n\n[roster]\n1 | Ктулху\n\n[составы]\nКтулху | Иван Петров\nКтулху | Анна Ким\n\n[s1/r1/w1/m1] жребий\nКтулху | R---- | 10 | 1\n"},
+	} {
+		if _, err := Parse(c.src); err == nil {
+			t.Errorf("%s: разобралось без ошибки", c.name)
+		} else if !hasLine(err.Error()) && !strings.Contains(err.Error(), "запис") {
+			t.Errorf("%s: ошибка без адреса: %v", c.name, err)
+		}
+	}
+}

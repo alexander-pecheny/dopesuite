@@ -117,7 +117,7 @@ func TestStudchrTPSh(t *testing.T) {
 	for i, want := range []struct {
 		title string
 		bouts int
-	}{{"1 этап", 6}, {"2 этап", 3}} {
+	}{{"Плей-офф. 1 этап", 6}, {"Плей-офф. 2 этап", 3}} {
 		stage := stages[i+1]
 		if stage.Title != want.title || len(stage.Matches) != want.bouts {
 			t.Errorf("этап %d: %q, %d боёв — want %q, %d", i+1, stage.Title, len(stage.Matches), want.title, want.bouts)
@@ -230,8 +230,9 @@ func TestStudchrSI(t *testing.T) {
 	}
 	// «Раунд 6» is not what anyone at the tournament called it. A bracket with
 	// lives has no arithmetic name for its rounds, so the scheme says them.
-	for i, want := range []string{"1 этап", "2 этап", "3 этап", "4 этап", "5 этап",
-		"Финал нижней сетки", "Грандфинал"} {
+	for i, want := range []string{"Плей-офф. 1 этап", "Плей-офф. 2 этап", "Плей-офф. 3 этап",
+		"Плей-офф. 4 этап", "Плей-офф. 5 этап",
+		"Плей-офф. Финал нижней сетки", "Плей-офф. Грандфинал"} {
 		if playoff[i].Title != want {
 			t.Errorf("раунд %d назван %q, want %q", i+1, playoff[i].Title, want)
 		}

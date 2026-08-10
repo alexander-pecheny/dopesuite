@@ -31,11 +31,40 @@ type Game interface {
 	Outcome(at Coord) (map[string]Result, error)
 }
 
+// LineupWriter is the half of Game a transcript with [составы] needs: register
+// each team's players before the first бой, so the theme players have somebody
+// to be. Optional — a Game that cannot take lineups fails such a script.
+type LineupWriter interface {
+	Lineups(lineups []Lineup) error
+}
+
+// StatsReader is the half of Game a transcript with [статистика] needs: the
+// per-player aggregates dope computed over the whole game, in the same three
+// columns the transcript's section carries. Optional, like LineupWriter.
+type StatsReader interface {
+	PlayerStats() ([]Stat, error)
+}
+
+// statColumns names the three [статистика] numbers per game, so a finding says
+// which column disagreed rather than "value 2".
+func statColumns(game string) [3]string {
+	switch game {
+	case "brain":
+		return [3]string{"попытки", "верно", "неверно"}
+	case "ek":
+		return [3]string{"Σ", "Σ+", "темы"}
+	}
+	return [3]string{"Σ", "Σ+", "бои"}
+}
+
 // Play is what one participant did in a бой, in whichever of the two shapes the
 // game uses. It carries the play data alone — the sheet's Σ and место stay out,
 // so a Game cannot quietly apply the answer it is supposed to be checked against.
+// Players, when the transcript carries them, name who played each theme,
+// aligned with Themes.
 type Play struct {
 	Themes    [][5]Mark
+	Players   []string
 	Questions []Answer
 }
 
@@ -92,6 +121,16 @@ func Run(script Script, game Game) ([]Finding, error) {
 		findings = append(findings, f)
 	}
 
+	if len(script.Lineups) > 0 {
+		writer, ok := game.(LineupWriter)
+		if !ok {
+			return findings, fmt.Errorf("в стенограмме есть составы, а игра не умеет их записывать")
+		}
+		if err := writer.Lineups(script.Lineups); err != nil {
+			return findings, fmt.Errorf("составы: %w", err)
+		}
+	}
+
 	for _, bout := range script.Bouts {
 		names := make([]string, len(bout.Seats))
 		for i, seat := range bout.Seats {
@@ -117,7 +156,7 @@ func Run(script Script, game Game) ([]Finding, error) {
 			}
 		}
 		for _, seat := range bout.Seats {
-			if err := game.Play(bout.At, seat.Name, Play{Themes: seat.Marks, Questions: seat.Questions}); err != nil {
+			if err := game.Play(bout.At, seat.Name, Play{Themes: seat.Marks, Players: seat.Players, Questions: seat.Questions}); err != nil {
 				return findings, fmt.Errorf("%s, %s: отметки: %w", bout.At, seat.Name, err)
 			}
 		}
@@ -165,6 +204,48 @@ func Run(script Script, game Game) ([]Finding, error) {
 			}
 		}
 	}
+	// Статистика is asserted the way Σ and место are, once, after the last бой:
+	// dope aggregates the game itself and has to agree with the sheet player by
+	// player — including players only one side knows about.
+	if len(script.Stats) > 0 {
+		reader, ok := game.(StatsReader)
+		if !ok {
+			return findings, fmt.Errorf("в стенограмме есть статистика, а игре не из чего её посчитать")
+		}
+		ours, err := reader.PlayerStats()
+		if err != nil {
+			return findings, fmt.Errorf("статистика: %w", err)
+		}
+		columns := statColumns(script.Game)
+		statKey := func(s Stat) string { return s.Player + "\x1f" + s.Team }
+		oursBy := make(map[string]Stat, len(ours))
+		for _, stat := range ours {
+			oursBy[statKey(stat)] = stat
+		}
+		sheetKeys := make(map[string]bool, len(script.Stats))
+		for _, want := range script.Stats {
+			sheetKeys[statKey(want)] = true
+			got, ok := oursBy[statKey(want)]
+			if !ok {
+				report(Finding{At: StatsCoord, Field: "статистика", Participant: want.Player,
+					Sheet: fmt.Sprint(want.Values), Ours: "ничего", Line: want.Line})
+				continue
+			}
+			for i := range want.Values {
+				if want.Values[i] != got.Values[i] {
+					report(Finding{At: StatsCoord, Field: columns[i], Participant: want.Player,
+						Sheet: fmt.Sprint(want.Values[i]), Ours: fmt.Sprint(got.Values[i]), Line: want.Line})
+				}
+			}
+		}
+		for _, stat := range ours {
+			if !sheetKeys[statKey(stat)] {
+				report(Finding{At: StatsCoord, Field: "статистика", Participant: stat.Player,
+					Sheet: "нет строки", Ours: fmt.Sprint(stat.Values)})
+			}
+		}
+	}
+
 	// An override nobody needed is a claim that something is wrong when it is
 	// not — on the discrepancies page it reads as a reviewed deviation, so it
 	// has to be reported like any other disagreement.

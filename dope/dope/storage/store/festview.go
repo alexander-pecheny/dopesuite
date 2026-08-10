@@ -46,7 +46,7 @@ order by re.rank`, []any{stageID}, func(rows *sql.Rows) (ReseedEntryView, error)
 
 // LoadFestMatches returns a stage's matches (with venue and team summaries)
 // ordered by position.
-func LoadFestMatches(ctx context.Context, q Queryer, stageID int64) ([]FestMatchView, error) {
+func LoadFestMatches(ctx context.Context, q Queryer, stageID int64, gameType string) ([]FestMatchView, error) {
 	rows, err := q.QueryContext(ctx, `
 select m.id, m.code, m.title, m.position, m.participant_count, m.status, m.revision,
        v.number, v.title
@@ -86,7 +86,7 @@ order by m.position, m.id`, stageID)
 
 	var matches []FestMatchView
 	for _, record := range records {
-		teams, err := LoadMatchSummaries(ctx, q, record.ID)
+		teams, err := LoadMatchSummaries(ctx, q, record.ID, gameType)
 		if err != nil {
 			return nil, err
 		}
@@ -97,10 +97,16 @@ order by m.position, m.id`, stageID)
 }
 
 // LoadMatchSummaries returns the per-team summary rows for a match, ordered by
-// slot index, resolving each slot's source label.
-func LoadMatchSummaries(ctx context.Context, q Queryer, matchID int64) ([]MatchParticipantSummary, error) {
+// slot index, resolving each slot's source label. The score is what the sheet
+// prints as the бой's счёт, and that is not the same column in every game:
+// брейн counts the questions a side took, everything else scores points.
+func LoadMatchSummaries(ctx context.Context, q Queryer, matchID int64, gameType string) ([]MatchParticipantSummary, error) {
+	score := "coalesce(r.total, 0)"
+	if gameType == "brain" {
+		score = "coalesce(cast(r.metrics_json ->> '$.taken' as integer), 0)"
+	}
 	return CollectRows(ctx, q, `
-select t.name, ms.source_type, ms.source_ref_json, coalesce(r.place, 0), coalesce(r.total, 0),
+select t.name, ms.source_type, ms.source_ref_json, coalesce(r.place, 0), `+score+`,
        coalesce(r.plus, 0), coalesce(r.tiebreak, 0)
 from match_slots ms
 left join participants t on t.id = ms.participant_id

@@ -99,6 +99,39 @@ def read_sheet(ws):
     return out
 
 
+def read_stats(ws):
+    """«Статистика»: Игрок | Команда | Попытки | Верно | Неверно."""
+    out = []
+    for row in ws.iter_rows(values_only=True):
+        if not row or not row[0] or text(row[0]) == "Игрок" or row[2] is None:
+            continue
+        out.append({"player": text(row[0]), "team": text(row[1]),
+                    "attempts": int(row[2]), "right": int(row[3]), "wrong": int(row[4])})
+    return out
+
+
+def check_stats(stages, stats):
+    """The tab's aggregates must equal what the decoded questions add up to.
+    Перестрелки stay out: the tab does not count them."""
+    computed = {}
+    for bouts in stages.values():
+        for b in bouts:
+            for question in b["questions"]:
+                if question["tiebreak"]:
+                    continue
+                for side, key in ((0, "left"), (1, "right")):
+                    cell = question[key]
+                    if not cell["player"] or not cell["mark"]:
+                        continue
+                    entry = computed.setdefault((cell["player"], b["teams"][side]["name"]), [0, 0, 0])
+                    entry[0] += 1
+                    entry[1 if cell["mark"] == "right" else 2] += 1
+    sheet = {(s["player"], s["team"]): [s["attempts"], s["right"], s["wrong"]] for s in stats}
+    bad = [key for key in set(computed) | set(sheet) if computed.get(key) != sheet.get(key)]
+    if bad:
+        sys.exit(f"статистика не сходится с протоколами: {sorted(bad)[:5]} и ещё {max(len(bad) - 5, 0)}")
+
+
 if __name__ == "__main__":
     wb = openpyxl.load_workbook(SRC, read_only=True, data_only=True)
     stages = {name: read_sheet(wb[name]) for name in SHEETS}
@@ -106,9 +139,11 @@ if __name__ == "__main__":
     for row in wb["Составы"].iter_rows(values_only=True):
         cells = [text(c) for c in row]
         if cells and cells[0]:
-            lineups[cells[0]] = [c for c in cells[1:] if c]
+            lineups.setdefault(cells[0], []).extend(c for c in cells[1:] if c)
+    stats = read_stats(wb["Статистика"])
     wb.close()
-    json.dump({"stages": stages, "lineups": lineups},
+    check_stats(stages, stats)
+    json.dump({"stages": stages, "lineups": lineups, "stats": stats},
               open("brain-data.json", "w"), ensure_ascii=False)
     total = 0
     for name, bouts in stages.items():

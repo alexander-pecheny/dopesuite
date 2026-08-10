@@ -44,6 +44,30 @@ human, and `scheme` — the scheme file the Structure is built from.
 optional. The separator is a bar rather than whitespace because «Ушки на
 макушке Казань» has no unambiguous reading without one.
 
+## Составы
+
+`[составы]` is one line per team — `Ктулху | Иван Петров, Анна Ким` — its
+players comma-separated, in roster order. It is input: the replay registers
+them before the first бой, and the theme players below are checked against it
+at the door. A personal game has no `[составы]`: the участник is the player.
+
+## Статистика
+
+`[статистика]` is the sheet's own per-player aggregates, asserted after the
+last бой the way Σ and место are asserted after each one: dope adds the бои up
+itself and has to agree, player by player, both ways. A line is
+`Игрок | Команда | a | b | c` (no team column in a personal game), and what
+the three numbers mean is the game's affair:
+
+- ЭК — Σ, positive themes, themes played;
+- брейн — попытки, верно, неверно, counted over the regular questions
+  (перестрелки stay out, as the sheet leaves them out);
+- личная СИ — Σ, Σ+ and бои.
+
+A stats disagreement the author has ruled on is silenced by
+`override [статистика] поле игрок: причина` — the section name standing in for
+the бой coordinate, because an aggregate holds the whole game.
+
 ## Бой
 
 A бой's header is its coordinate: `[block/round/wave/match]`, e.g.
@@ -65,7 +89,10 @@ no-show. That seating is input, and the replayer writes it into the Edges before
 play. Without `жребий` the seating is the resolver's, and the replayer asserts it
 seated exactly these participants.
 
-Then one line per seat: `who | marks | Σ | место`.
+Then one line per seat: `who | marks | Σ | место`, with an optional fifth
+field in ЭК naming who played each theme — comma-separated, aligned with the
+marks, `-` where the sheet named nobody. Each named player must be in his
+team's `[составы]`.
 
 - **marks** — five characters per theme, themes separated by spaces. `R` taken,
   `W` lost, `-` never played. `---R-` is «взял сороковку».

@@ -20,6 +20,10 @@ def marks(themes):
     return " ".join("".join(MARK[cell] for cell in theme) for theme in themes)
 
 
+def theme_players(seat):
+    return ", ".join(name if name else "-" for name in seat["players"])
+
+
 def place(value):
     if value is None:
         return None
@@ -44,15 +48,23 @@ def entrants(data, registry):
 
 
 def emit(data, registry):
-    roster = entrants(data, registry)
+    rounds = data["rounds"]
+    roster = entrants(rounds, registry)
     out = ["# ЭК СтудЧР-2026 — собрано emit-ek.py из протоколов турнира",
            "[game]", "type: ek", "title: ЭК", "scheme: ek.dsl", "", "[roster]"]
     width = max(len(team["name"]) for team in roster)
     for team in roster:
         out.append(f'{team["number"]:>2} | {team["name"]:<{width}} | {team.get("city", "")}')
 
+    out += ["", "[составы]"]
+    for team in roster:
+        players = data["lineups"].get(team["name"])
+        if not players:
+            sys.exit(f'у {team["name"]} нет состава на листе «Составы»')
+        out.append(f'{team["name"]:<{width}} | {", ".join(players)}')
+
     for key, circle, waves in ROUNDS:
-        bouts = data[key]
+        bouts = rounds[key]
         per_wave = len(bouts) // waves
         for index, bout in enumerate(bouts):
             wave, within = divmod(index, per_wave)
@@ -73,7 +85,17 @@ def emit(data, registry):
                     sys.exit(f"{bout['code']}: у {seat['name']} нет места — лист недоигран?")
                 pin = "!" if seat["total"] in tied else ""
                 out.append(f'{seat["name"]:<{names}} | {marks(seat["themes"])} | '
-                           f'{seat["total"]:>4} | {place(seat["place"])}{pin}')
+                           f'{seat["total"]:>4} | {place(seat["place"])}{pin} | {theme_players(seat)}')
+
+    # The sheet's own aggregates, asserted after the last бой: Счёт, plus-темы
+    # and how many тем the player sat down to.
+    out += ["", "[статистика]"]
+    stats = data["stats"]
+    player_width = max(len(s["player"]) for s in stats)
+    team_width = max(len(s["team"]) for s in stats)
+    for s in stats:
+        out.append(f'{s["player"]:<{player_width}} | {s["team"]:<{team_width}} | '
+                   f'{s["sum"]:>4} | {s["plus"]:>2} | {s["themes"]:>2}')
     return "\n".join(out) + "\n"
 
 

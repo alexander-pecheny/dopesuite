@@ -110,6 +110,19 @@ def emit(data):
     for number, name in enumerate(teams, 1):
         out.append(f"{number:>2} | {name:<{width}} |")
 
+    # The «Составы» tab misspells the case of a couple of team names («вина
+    # россии»), so lineups are matched case-insensitively to the protocols'
+    # canonical spelling.
+    canon = {name.lower(): name for name in teams}
+    lineups = {canon.get(team.lower(), team): players
+               for team, players in data["lineups"].items()}
+    out += ["", "[составы]"]
+    for name in teams:
+        players = lineups.get(name)
+        if not players:
+            sys.exit(f"у {name} нет состава на листе «Составы»")
+        out.append(f'{name:<{width}} | {", ".join(players)}')
+
     sheets = ["1-й групповой этап (протоколы)", "DE (протоколы)",
               "2-й групповой этап (протоколы)", "3-й групповой этап (протоколы)"]
     for (block, letters), sheet in zip(BLOCKS, sheets):
@@ -124,6 +137,19 @@ def emit(data):
 
     for bout, (circle, match) in zip(stages["Финальный этап (протоколы)"], FINAL):
         bout_lines(out, f"s5/r{circle}/w1/m{match}", bout)
+
+    # The sheet's own aggregates: Попытки, Верно, Неверно per player, counted
+    # over the regular questions — the sheet leaves перестрелки out.
+    out += ["", "[статистика]"]
+    stats = data["stats"]
+    player_width = max(len(s["player"]) for s in stats)
+    team_width = max(len(s["team"]) for s in stats)
+    for s in stats:
+        team = canon.get(s["team"].lower())
+        if team is None:
+            sys.exit(f'в статистике команда {s["team"]}, которой нет среди игравших')
+        out.append(f'{s["player"]:<{player_width}} | {team:<{team_width}} | '
+                   f'{s["attempts"]:>2} | {s["right"]:>2} | {s["wrong"]:>2}')
     return "\n".join(out) + "\n"
 
 

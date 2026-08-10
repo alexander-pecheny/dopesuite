@@ -93,10 +93,18 @@ It no longer does: a Game carries its own entrant list and numbers it from 1
 to the unit. R differs by a couple of percent, which is the бухгольц denominator
 and not the data.
 
-## Not carried across yet
+## Составы and статистика
 
-Составы — who played for which team, and which player took which question — need
-a team roster the фест does not have. They do not affect Σ or место.
+Составы ride in the transcripts (`[составы]`), and every ЭК бой names who
+played each theme, so the fest carries who played for which team and the
+individual stats compute from real data. The sheets' own aggregates ride along
+too (`[статистика]`) and the replay asserts them: ЭК's Статистика (Счёт,
+plus-темы, темы), брейн's (попытки, верно, неверно — перестрелки excluded, as
+the sheet excludes them), СИ's (Счёт, Без −, бои). One line the СИ sheet cannot
+justify from its own protocols is overridden in the transcript, with the
+reason written beside it.
+
+## Not carried across
 
 КСИ was never played. Of the six workbooks the оргкомитет handed over none is a
 командная своя игра — the one that looked like it is ТПШ, which is now carried

@@ -241,7 +241,8 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 					s.serveGameHTMLWithInit(w, r, "static/si.html", scope)
 					return
 				case "si":
-					// Личная СИ is a bracket; its viewer is ЭК's, not КСИ's.
+					// Личная СИ borrows ЭК's viewer for its bracket, not its
+					// blank — the page draws a player's seat as one row.
 					s.serveViewerHTMLWithInit(w, r, scope, parts[1:])
 					return
 				case "brain":

@@ -76,11 +76,11 @@ func (s *server) loadFestViewUsing(q store.Queryer, festID, gameID int64) (store
 	}
 	var updatedAt string
 	if err := q.QueryRowContext(ctx, `
-select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, ''), coalesce(g.title, '')
+select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, ''), coalesce(g.title, ''), coalesce(g.game_type, '')
 from fests t
 left join games g on g.fest_id = t.id and g.id = ?
 where t.id = ?`, gameID, festID).
-		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON, &view.GameName); err != nil {
+		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON, &view.GameName, &view.GameType); err != nil {
 		return store.FestView{}, err
 	}
 	view.UpdatedAt = updatedAt
@@ -147,7 +147,7 @@ order by position, id`, stageArgs...)
 				record.Stage.ReseedMessage = resolver.ReseedNotReadyMessage(state.PendingMatches)
 			}
 		} else {
-			matches, err := store.LoadFestMatches(ctx, q, record.ID)
+			matches, err := store.LoadFestMatches(ctx, q, record.ID, view.GameType)
 			if err != nil {
 				return store.FestView{}, err
 			}

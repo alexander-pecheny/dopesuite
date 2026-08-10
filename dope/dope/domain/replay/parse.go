@@ -62,6 +62,11 @@ type Coord struct {
 }
 
 func (c Coord) String() string {
+	if c.Round == 0 {
+		// Not a бой at all: the статистика pseudo-coordinate (a real круг
+		// starts at 1).
+		return c.Block
+	}
 	if c.Group == "" {
 		return fmt.Sprintf("%s/r%d/w%d/m%d", c.Block, c.Round, c.Wave, c.Match)
 	}
@@ -73,6 +78,30 @@ type Entrant struct {
 	Name   string
 	City   string
 }
+
+// Lineup is one team's состав: its players, in roster order. It is input the
+// replay registers, and the fence the theme players and the статистика are
+// checked against at the door.
+type Lineup struct {
+	Team    string
+	Players []string
+	Line    int
+}
+
+// Stat is one line of the sheet's own per-player aggregates, asserted after
+// the last бой the way Σ and место are asserted after each one. What the three
+// numbers mean is the game's affair: ЭК writes Σ, positive themes and themes
+// played; брейн — попытки, верно, неверно; личная СИ — Σ, Σ+ and бои.
+type Stat struct {
+	Player string
+	Team   string
+	Values [3]int
+	Line   int
+}
+
+// StatsCoord is the coordinate статистика findings and overrides live at: the
+// aggregates hold the whole game, so no бой coordinate can name them.
+var StatsCoord = Coord{Block: "статистика"}
 
 // Answer is one буzzer question of a брейн бой from one side: whether they took
 // it, and who buzzed. The sheets do not always record the player, so a taken
@@ -103,7 +132,11 @@ type Seat struct {
 	// отбор prints Σ and leaves место to a standings tab. There is nothing to
 	// hold dope to, so the replay checks the Σ and says nothing about the place.
 	Unranked bool
-	Line     int
+	// Players names who played each theme, aligned with Marks — ЭК's fifth
+	// field. Empty string is a theme the sheet named nobody for; a nil slice is
+	// a transcript that does not carry players at all.
+	Players []string
+	Line    int
 }
 
 type Bout struct {
@@ -129,9 +162,15 @@ type Script struct {
 	Title     string
 	Scheme    string
 	Roster    []Entrant
+	Lineups   []Lineup
+	Stats     []Stat
 	Bouts     []Bout
 	Overrides []Override
 }
+
+// individual reports whether the game seats players rather than teams — no
+// составы, no theme players, no team column in статистика.
+func (s Script) individual() bool { return s.Game == "si" }
 
 func errAt(line int, format string, args ...any) error {
 	return fmt.Errorf("строка %d: %s", line, fmt.Sprintf(format, args...))
@@ -180,7 +219,7 @@ func Parse(src string) (Script, error) {
 				return Script{}, err
 			}
 			switch head {
-			case "game", "roster":
+			case "game", "roster", "составы", "статистика":
 				flush()
 				section = head
 			default:
@@ -225,6 +264,21 @@ func Parse(src string) (Script, error) {
 				return Script{}, err
 			}
 			script.Roster = append(script.Roster, entrant)
+		case section == "составы":
+			if script.individual() {
+				return Script{}, errAt(line, "в личной игре нет составов — участник и есть игрок")
+			}
+			lineup, err := parseLineup(text, line)
+			if err != nil {
+				return Script{}, err
+			}
+			script.Lineups = append(script.Lineups, lineup)
+		case section == "статистика":
+			stat, err := parseStat(text, line, script.individual())
+			if err != nil {
+				return Script{}, err
+			}
+			script.Stats = append(script.Stats, stat)
 		case section == "бой":
 			seat, err := parseSeat(text, line, script.Game)
 			if err != nil {
@@ -279,6 +333,54 @@ func checkRoster(script Script) error {
 			if !known[seat.Name] {
 				return errAt(seat.Line, "в бою %s сидит %q, которого нет в [roster]", bout.At, seat.Name)
 			}
+		}
+	}
+	return checkLineups(script, known)
+}
+
+// checkLineups holds составы, theme players and статистика to each other: a
+// состав names a rostered team, a theme player and a статистика line name
+// someone from his team's состав. A misspelt name held only by the Game would
+// surface as a defect somewhere downstream; here it is a typo with a line
+// number.
+func checkLineups(script Script, teams map[string]bool) error {
+	players := map[string]map[string]bool{}
+	for _, lineup := range script.Lineups {
+		if !teams[lineup.Team] {
+			return errAt(lineup.Line, "состав команды %q, которой нет в [roster]", lineup.Team)
+		}
+		if players[lineup.Team] != nil {
+			return errAt(lineup.Line, "состав %s записан дважды", lineup.Team)
+		}
+		names := make(map[string]bool, len(lineup.Players))
+		for _, name := range lineup.Players {
+			names[name] = true
+		}
+		players[lineup.Team] = names
+	}
+	if len(script.Lineups) > 0 {
+		for _, bout := range script.Bouts {
+			for _, seat := range bout.Seats {
+				for theme, name := range seat.Players {
+					if name != "" && !players[seat.Name][name] {
+						return errAt(seat.Line, "тему %d у %s играет %q, которого нет в его составе", theme+1, seat.Name, name)
+					}
+				}
+			}
+		}
+	}
+	for _, stat := range script.Stats {
+		if stat.Team == "" {
+			if !teams[stat.Player] {
+				return errAt(stat.Line, "статистика %q, которого нет в [roster]", stat.Player)
+			}
+			continue
+		}
+		if !teams[stat.Team] {
+			return errAt(stat.Line, "статистика команды %q, которой нет в [roster]", stat.Team)
+		}
+		if len(script.Lineups) > 0 && !players[stat.Team][stat.Player] {
+			return errAt(stat.Line, "статистика %q, которого нет в составе %s", stat.Player, stat.Team)
 		}
 	}
 	return nil
@@ -336,6 +438,66 @@ func parseCoord(text string, line int) (Coord, error) {
 	return coord, nil
 }
 
+// parseLineup reads `Ктулху | Иван Петров, Анна Ким` — a team and its players,
+// comma-separated because a player's name has a space in the middle of it.
+func parseLineup(text string, line int) (Lineup, error) {
+	team, rest, ok := strings.Cut(text, "|")
+	lineup := Lineup{Team: strings.TrimSpace(team), Line: line}
+	if !ok || lineup.Team == "" {
+		return Lineup{}, errAt(line, "состав — «команда | игрок, игрок, …», а не %q", text)
+	}
+	seen := map[string]bool{}
+	for _, name := range strings.Split(rest, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return Lineup{}, errAt(line, "в составе %s пустое имя", lineup.Team)
+		}
+		if seen[name] {
+			return Lineup{}, errAt(line, "в составе %s игрок %q записан дважды", lineup.Team, name)
+		}
+		seen[name] = true
+		lineup.Players = append(lineup.Players, name)
+	}
+	if len(lineup.Players) == 0 {
+		return Lineup{}, errAt(line, "состав %s без единого игрока", lineup.Team)
+	}
+	return lineup, nil
+}
+
+// parseStat reads one line of the sheet's aggregates: `Игрок | Команда | a | b
+// | c` in a team game, `Игрок | a | b | c` in an individual one, where the
+// участник already is the player.
+func parseStat(text string, line int, individual bool) (Stat, error) {
+	fields := strings.Split(text, "|")
+	want := 5
+	if individual {
+		want = 4
+	}
+	if len(fields) != want {
+		return Stat{}, errAt(line, "строка статистики — %d полей через |, а не %q", want, text)
+	}
+	stat := Stat{Player: strings.TrimSpace(fields[0]), Line: line}
+	if stat.Player == "" {
+		return Stat{}, errAt(line, "строка статистики без игрока")
+	}
+	numbers := fields[1:]
+	if !individual {
+		stat.Team = strings.TrimSpace(fields[1])
+		if stat.Team == "" {
+			return Stat{}, errAt(line, "статистика %s без команды", stat.Player)
+		}
+		numbers = fields[2:]
+	}
+	for i, field := range numbers {
+		value, err := strconv.Atoi(strings.TrimSpace(field))
+		if err != nil {
+			return Stat{}, errAt(line, "статистика %s — числа, а не %q", stat.Player, strings.TrimSpace(field))
+		}
+		stat.Values[i] = value
+	}
+	return stat, nil
+}
+
 // parseEntrant reads `1 | Ктулху | Москва` — number, name, optional city. The
 // bars are what a seat line uses too, and they are here for the same reason:
 // «Ушки на макушке Казань» has no unambiguous reading without them.
@@ -361,9 +523,17 @@ func parseEntrant(text string, line int) (Entrant, error) {
 // parseSeat reads `Ктулху | ----- ---R- RR--W | 120 | 1`: who sat there, what
 // they took, and the sheet's Σ and место for them. In a брейн the middle field
 // is the бой's questions instead — `R Виктория Корнеева, -, W Санжи Сундуев`.
+// An ЭК line may carry a fifth field naming who played each theme.
 func parseSeat(text string, line int, game string) (Seat, error) {
 	fields := strings.Split(text, "|")
-	if len(fields) != 4 {
+	if len(fields) == 5 {
+		if game == "brain" {
+			return Seat{}, errAt(line, "у брейна игрок пишется в самом вопросе, а не пятым полем")
+		}
+		if game == "si" {
+			return Seat{}, errAt(line, "в личной игре игрок не пишется — участник и есть игрок")
+		}
+	} else if len(fields) != 4 {
 		return Seat{}, errAt(line, "место в бою — «кто | метки | Σ | место», а не %q", text)
 	}
 	seat := Seat{Name: strings.TrimSpace(fields[0]), Line: line}
@@ -389,6 +559,19 @@ func parseSeat(text string, line int, game string) (Seat, error) {
 		}
 		if len(seat.Marks) == 0 {
 			return Seat{}, errAt(line, "у %s нет ни одной темы", seat.Name)
+		}
+		if len(fields) == 5 {
+			for _, name := range strings.Split(fields[4], ",") {
+				name = strings.TrimSpace(name)
+				if name == "-" {
+					name = ""
+				}
+				seat.Players = append(seat.Players, name)
+			}
+			if len(seat.Players) != len(seat.Marks) {
+				return Seat{}, errAt(line, "у %s тем %d, а игроков %d — игроки пишутся по одному на тему, «-» где лист никого не назвал",
+					seat.Name, len(seat.Marks), len(seat.Players))
+			}
 		}
 	}
 	total, err := strconv.Atoi(strings.TrimSpace(fields[2]))
@@ -443,9 +626,11 @@ func parseOverride(text string, line int) (Override, error) {
 	if err != nil {
 		return Override{}, err
 	}
-	at, err := parseCoord(head, line)
-	if err != nil {
-		return Override{}, err
+	at := StatsCoord
+	if head != StatsCoord.Block {
+		if at, err = parseCoord(head, line); err != nil {
+			return Override{}, err
+		}
 	}
 	subject, reason, ok := strings.Cut(rest, ":")
 	subject, reason = strings.TrimSpace(subject), strings.TrimSpace(reason)

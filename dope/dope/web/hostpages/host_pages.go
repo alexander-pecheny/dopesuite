@@ -600,9 +600,10 @@ func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, festI
 	case "ksi":
 		s.h.ServeGameHTMLWithInit(w, r, "static/si.html", scope)
 	case "si":
-		// Личная СИ is a bracket of бои, and a бой's protocol is participants ×
-		// themes × five answers — the exact shape ЭК's page already draws. It
-		// gets that page rather than КСИ's flat single-grid one.
+		// Личная СИ borrows ЭК's page for its bracket — stage tabs, пересевы,
+		// бои — not for its blank: a seat of one player has no per-theme player
+		// cell, so the page draws it as one row (КСИ-shaped) where a team's
+		// takes two.
 		s.h.ServeHostHTMLWithInit(w, r, scope, parts)
 	case "brain":
 		s.h.ServeGameHTMLWithInit(w, r, "static/brain.html", scope)

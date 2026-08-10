@@ -51,6 +51,9 @@ _Avoid_: recording an observed seating as fact without deciding which it is. If 
 **Scheme**:
 The declarative document describing a Game's Structure — its Blocks, Edges, and Slot sources. The source of truth for authoring: hand-written, imported, or emitted from the simplified scheme DSL.
 
+**Сетка**:
+The one-glance map of a whole Game: every Block's standings at the coarsest grain worth a glance (М, at most Σ), the single entry point where anyone playing finds who proceeds where. Compact on purpose — crosstabs, protocols and per-Metric detail belong to a Block's own views, never to the Сетка.
+
 **Match**:
 One sitting of Participants scored together under one Protocol. The unit the Structure schedules and the unit a host edits.
 _Avoid_: bout as a distinct concept — бой is just the brain-format word for a Match.

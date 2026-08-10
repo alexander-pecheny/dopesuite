@@ -32,6 +32,7 @@ groups: 2
 teams_in_group: 4
 proceeding_teams: 2
 ---
+title: Финальный этап
 type: single_elimination
 teams: 4
 bronze: true

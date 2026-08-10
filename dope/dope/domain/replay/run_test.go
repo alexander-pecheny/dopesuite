@@ -15,6 +15,8 @@ type fakeGame struct {
 	outcomes map[string]map[string]Result
 	finished []string
 	pinned   []string
+	lineups  []string
+	stats    []Stat
 	// bend rewrites what the game reports, so a test can make dope "wrong".
 	bendSeats   func(Coord, []string) []string
 	bendOutcome func(Coord, map[string]Result) map[string]Result
@@ -268,5 +270,114 @@ func TestRunWritesPinnedPlacesInsteadOfAsserting(t *testing.T) {
 	}
 	if len(game.pinned) != 2 {
 		t.Errorf("проставлено мест = %d, want 2", len(game.pinned))
+	}
+}
+
+func (f *fakeGame) Lineups(lineups []Lineup) error {
+	for _, lineup := range lineups {
+		f.lineups = append(f.lineups, lineup.Team)
+	}
+	return nil
+}
+
+func (f *fakeGame) PlayerStats() ([]Stat, error) {
+	return f.stats, nil
+}
+
+const statsSample = `[game]
+type: ek
+
+[roster]
+1 | Ктулху
+2 | ВШЭстером
+
+[составы]
+Ктулху    | Иван Петров
+ВШЭстером | Анна Ким
+
+[s1/r1/w1/m1] жребий
+Ктулху    | ---R- | 40 | 1 | Иван Петров
+ВШЭстером | R---- | 10 | 2 | Анна Ким
+
+[статистика]
+Иван Петров | Ктулху    | 40 | 1 | 1
+Анна Ким    | ВШЭстером | 10 | 1 | 1
+`
+
+// Составы are input: the replay registers them before the first бой, so the
+// theme players have somebody to be.
+func TestRunWritesLineups(t *testing.T) {
+	script, err := Parse(statsSample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := newFakeGame()
+	game.stats = []Stat{
+		{Player: "Иван Петров", Team: "Ктулху", Values: [3]int{40, 1, 1}},
+		{Player: "Анна Ким", Team: "ВШЭстером", Values: [3]int{10, 1, 1}},
+	}
+	findings, err := Run(script, game)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("расхождения на сходящемся листе: %v", findings)
+	}
+	if len(game.lineups) != 2 {
+		t.Errorf("составов записано = %d, want 2", len(game.lineups))
+	}
+}
+
+// Статистика is asserted like Σ and место: dope aggregates the бои itself and
+// has to agree with what the sheet printed, player by player, both ways.
+func TestRunReportsStatsDisagreements(t *testing.T) {
+	script, err := Parse(statsSample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := newFakeGame()
+	game.stats = []Stat{
+		{Player: "Иван Петров", Team: "Ктулху", Values: [3]int{40, 2, 1}},
+		{Player: "Лишний Игрок", Team: "Ктулху", Values: [3]int{10, 1, 1}},
+	}
+	findings, err := Run(script, game)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(findings) != 3 {
+		t.Fatalf("расхождений = %d (%v), want 3: Σ+ Петрова, лишний игрок, пропавшая Ким", len(findings), findings)
+	}
+	fields := map[string]bool{}
+	for _, f := range findings {
+		if f.At != StatsCoord {
+			t.Errorf("расхождение статистики с координатой боя: %+v", f)
+		}
+		fields[f.Field+"|"+f.Participant] = true
+	}
+	for _, want := range []string{"Σ+|Иван Петров", "статистика|Лишний Игрок", "статистика|Анна Ким"} {
+		if !fields[want] {
+			t.Errorf("нет расхождения %q среди %v", want, findings)
+		}
+	}
+}
+
+// A stats override silences exactly one player's column, the way a бой
+// override silences one field of one seat.
+func TestStatsOverrideSilencesOnlyItsOwn(t *testing.T) {
+	script, err := Parse(statsSample + "override [статистика] Σ+ Иван Петров: лист сам с собой не сходится\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := newFakeGame()
+	game.stats = []Stat{
+		{Player: "Иван Петров", Team: "Ктулху", Values: [3]int{40, 2, 1}},
+		{Player: "Анна Ким", Team: "ВШЭстером", Values: [3]int{10, 1, 1}},
+	}
+	findings, err := Run(script, game)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("закрытое расхождение всё равно сообщено: %v", findings)
 	}
 }
