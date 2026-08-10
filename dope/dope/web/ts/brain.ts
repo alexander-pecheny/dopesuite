@@ -8,9 +8,9 @@
 
 import {DopeTable} from "./match-table.js";
 import type {CellCoord, CellEdit, CellRangeSelection, GameInitLike, RosterTeam, ScopedEventMessage} from "./match-table.js";
-import {rankGroup} from "./brain-rank.js";
-import type {RankDuel, RankTeam} from "./brain-rank.js";
-import {buildReseedStagePanel} from "./fest-grid.js";
+import {computeBrainPlayerStats, rankGroup} from "./brain-rank.js";
+import type {RankDuel, RankTeam, StatsBout} from "./brain-rank.js";
+import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
 import type {FestGridStage} from "./fest-grid.js";
 
 interface PageGlobals {
@@ -41,6 +41,7 @@ interface BrainMatchView {
   revision?: number;
   state?: BrainMatchState | null;
   teams?: BrainSlotTeam[];
+  participants?: Array<{id?: number; name?: string; place?: number} | null>;
   seq?: number;
 }
 
@@ -72,6 +73,7 @@ interface BrainSchemeStage {
   title?: string;
   kind?: string;
   stage_type?: string;
+  grain?: {block?: string; group?: string; wave?: number};
   matches?: BrainSchemeMatch[];
   sources?: string[];
   config?: BrainStageRules | null;
@@ -118,11 +120,33 @@ const gameTable = DopeTable;
 const setStatus = gameTable.createStatusReporter(statusNode);
 const viewerCounter = gameTable.createViewerCounter(statusNode);
 
-const BRAIN_TABS = [
-  {key: "protocol", label: "Протоколы"},
-  {key: "table", label: "Таблица"},
-  {key: "roster", label: "Составы"},
-];
+// Long team names fade at their fixed width and carry a popover — the same
+// treatment the ЭК tables give theirs.
+const floatingPopover = gameTable.createFloatingPopover({root: brainRoot, specs: [
+  {trigger: ".brain-name-head.brain-name-truncated", popover: ".brain-name-popover", anchor: ".brain-name-wrap"},
+  {trigger: ".brain-cross-team.brain-name-truncated", popover: ".brain-name-popover", anchor: ".brain-name-wrap"},
+]});
+floatingPopover.bind();
+
+let brainNameOverflowFrame = 0;
+function scheduleBrainNameOverflowUpdate(): void {
+  if (brainNameOverflowFrame) cancelAnimationFrame(brainNameOverflowFrame);
+  brainNameOverflowFrame = requestAnimationFrame(() => {
+    brainNameOverflowFrame = 0;
+    gameTable.markNameOverflow(brainRoot, {
+      cellSelector: ".brain-name-head",
+      nameSelector: ".brain-name",
+      truncatedClass: "brain-name-truncated",
+    });
+    gameTable.markNameOverflow(brainRoot, {
+      cellSelector: ".brain-cross-team",
+      nameSelector: ".brain-name",
+      truncatedClass: "brain-name-truncated",
+    });
+  });
+}
+window.addEventListener("resize", scheduleBrainNameOverflowUpdate);
+
 const SEED_TAB = {key: "seed", label: "Посев"};
 
 const route = gameTable.parseGameRoute();
@@ -144,14 +168,77 @@ const fest = (init?.fest || null) as FestInfo | null;
 const matches = new Map<string, BrainMatchView>();
 let festRoster: RosterTeam[] = [];
 let rosterView: HTMLElement | null = null;
-let activeTab = tabFromHash() || "protocol";
+let activeTab = tabFromHash() || "grid";
 let resyncScheduled = false;
 
-// The Посев tab appears only for the host of a game whose scheme declares an
-// [init] seed source.
+// BlockBucket is one scheme Block's stages, in scheme order: the unit the
+// tabs think in — one crosstab tab (when the Block ranks) plus one протоколы
+// tab per Block, mirroring the source workbook's tab pairs.
+interface BlockBucket {
+  block: string;
+  label: string;
+  stages: BrainSchemeStage[];
+  ranks: boolean;
+}
+
+function blockBuckets(): BlockBucket[] {
+  const buckets: BlockBucket[] = [];
+  let current: BlockBucket | null = null;
+  for (const stage of scheme.stages || []) {
+    if (stageKind(stage) === "reseed") {
+      current = null;
+      continue;
+    }
+    const block = stage.grain?.block || stage.code || "";
+    if (!current || current.block !== block) {
+      current = {block, label: "", stages: [], ranks: false};
+      buckets.push(current);
+    }
+    current.stages.push(stage);
+    if (stageKind(stage) === "rr") current.ranks = true;
+  }
+  for (const bucket of buckets) bucket.label = blockLabel(bucket);
+  return buckets;
+}
+
+// blockLabel names a Block's tabs: the групп's common prefix («1-й групповой
+// этап. Группа 1» → «1-й групповой этап», «DE 1» → «DE»), or for a bracket of
+// titled rounds their common prefix, else «Плей-офф».
+function blockLabel(bucket: BlockBucket): string {
+  const first = String(bucket.stages[0]?.title || "");
+  const grouped = bucket.stages.some((stage) => stage.grain?.group);
+  if (grouped) {
+    const named = first.replace(/\.?\s*Группа\s*\S+$/, "");
+    if (named !== first) return named;
+    return first.replace(/\s*\d+$/, "") || first;
+  }
+  if (bucket.stages.length === 1) return first;
+  const prefix = first.split(". ")[0];
+  if (prefix !== first && bucket.stages.every((stage) => String(stage.title || "").startsWith(prefix + ". "))) {
+    return prefix;
+  }
+  return "Плей-офф";
+}
+
+function reseedStages(): BrainSchemeStage[] {
+  return (scheme.stages || []).filter((stage) => stageKind(stage) === "reseed");
+}
+
+// The tab set mirrors the source workbook: the Сетка first, then per Block its
+// crosstabs and its протоколы, the one folded Пересев, the player stats and
+// the составы. The Посев tab appears only for the host of a game whose scheme
+// declares an [init] seed source.
 function visibleTabs(): Array<{key: string; label: string}> {
-  if (viewer || !scheme.seeding?.source) return BRAIN_TABS;
-  return [...BRAIN_TABS, SEED_TAB];
+  const tabs = [{key: "grid", label: "Сетка"}];
+  for (const bucket of blockBuckets()) {
+    if (bucket.ranks) tabs.push({key: `block:${bucket.block}`, label: bucket.label});
+    tabs.push({key: `protocol:${bucket.block}`, label: `${bucket.label} (протоколы)`});
+  }
+  if (reseedStages().length) tabs.push({key: "reseed", label: "Пересев"});
+  tabs.push({key: "stats", label: "Индивидуальная статистика"});
+  tabs.push({key: "roster", label: "Составы"});
+  if (!viewer && scheme.seeding?.source) tabs.push(SEED_TAB);
+  return tabs;
 }
 
 function stageKind(stage: BrainSchemeStage): string {
@@ -162,10 +249,6 @@ function stageKind(stage: BrainSchemeStage): string {
 // reseed edges, in scheme order.
 function protocolStages(): BrainSchemeStage[] {
   return (scheme.stages || []).filter((s) => stageKind(s) !== "reseed");
-}
-
-function rrStages(): BrainSchemeStage[] {
-  return (scheme.stages || []).filter((s) => stageKind(s) === "rr");
 }
 
 const stageByMatch = new Map<string, BrainSchemeStage>();
@@ -401,15 +484,23 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   renderTabs();
   const frame = brainRoot.closest(".sheet-frame");
   const scrollTop = frame?.scrollTop || 0;
+  const bucket = blockBuckets().find((b) => activeTab === `block:${b.block}` || activeTab === `protocol:${b.block}`);
   const node = activeTab === "roster"
     ? (rosterView ||= gameTable.buildRosterView(route.festID))
-    : activeTab === "table"
-      ? buildCrosstable()
-      : activeTab === "seed"
-        ? buildSeedView()
-        : buildProtocols();
+    : activeTab === "seed"
+      ? buildSeedView()
+      : activeTab === "stats"
+        ? buildStatsView()
+        : activeTab === "reseed"
+          ? buildReseedTab()
+          : bucket && activeTab.startsWith("block:")
+            ? buildCrosstable(bucket)
+            : bucket
+              ? buildProtocols(bucket)
+              : buildGrid();
   brainRoot.replaceChildren(node);
   brainRoot.classList.toggle("fits-frame", activeTab === "roster");
+  scheduleBrainNameOverflowUpdate();
   if (options.preserveScroll && frame) frame.scrollTop = scrollTop;
   restoreSelection();
 }
@@ -490,29 +581,22 @@ function buildBrainReseedPanel(stage: BrainSchemeStage): HTMLElement {
   return panel;
 }
 
-// buildProtocols lays each stage's бої side by side — the sheet's протоколы
-// tab — and stacks the stages (groups, reseed edges, knockout rounds)
-// vertically in scheme order.
-function buildProtocols(): HTMLElement {
+// buildProtocols lays one Block's бої out the way the sheet's протоколы tab
+// does: a section per stage (группа, pod, round), its бої side by side.
+function buildProtocols(bucket: BlockBucket): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "brain-protocol";
-  const stages = scheme.stages || [];
-  const multi = stages.length > 1;
+  const multi = bucket.stages.length > 1;
   let rendered = 0;
-  for (const stage of stages) {
-    const isReseed = stageKind(stage) === "reseed";
-    const bouts = isReseed ? [] : stageBouts(stage);
-    if (!isReseed && !bouts.length) continue;
+  for (const stage of bucket.stages) {
+    const bouts = stageBouts(stage);
+    if (!bouts.length) continue;
     rendered++;
     if (multi) {
       const head = document.createElement("h2");
       head.className = "brain-stage-head";
       head.textContent = stage.title || stage.code || "";
       wrap.appendChild(head);
-    }
-    if (isReseed) {
-      wrap.appendChild(buildBrainReseedPanel(stage));
-      continue;
     }
     const row = document.createElement("div");
     row.className = "brain-bouts";
@@ -530,6 +614,100 @@ function buildProtocols(): HTMLElement {
   return wrap;
 }
 
+// buildGrid is the Сетка: the whole Game at a glance from the same fest data
+// the ЭК pages draw — every Block one column, М-grain, no protocol detail.
+function buildGrid(): HTMLElement {
+  const stages: FestGridStage[] = [];
+  for (const viewStage of fest?.stages || []) {
+    if (viewStage?.code) stages.push(festStages.get(viewStage.code) || viewStage);
+  }
+  return buildFestGrid({schemaJson: fest?.schemaJson, stages},
+    {stageHeaderLink: false, matchTitleLink: false});
+}
+
+// buildReseedTab stacks every reseed's panel, each under the name of the
+// stage it seats.
+function buildReseedTab(): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "reseed-fold";
+  const stages = scheme.stages || [];
+  const reseeds = reseedStages();
+  for (const stage of reseeds) {
+    if (reseeds.length > 1) {
+      const index = stages.indexOf(stage);
+      const next = stages.slice(index + 1).find((s) => stageKind(s) !== "reseed");
+      const head = document.createElement("h3");
+      head.className = "reseed-fold-head";
+      head.textContent = String(next?.title || "");
+      wrap.appendChild(head);
+    }
+    wrap.appendChild(buildBrainReseedPanel(stage));
+  }
+  return wrap;
+}
+
+// buildStatsView is the sheet's «Индивидуальная статистика»: попытки, верно,
+// неверно per (player, team) over the regular questions of finished бои.
+function buildStatsView(): HTMLElement {
+  const bouts: StatsBout[] = [];
+  for (const {code, view} of allBouts()) {
+    const rowCount = matchRows(view, 0).length;
+    const rows: StatsBout["rows"] = [];
+    for (let q = 0; q < rowCount; q++) {
+      rows.push([matchRows(view, 0)[q] || {}, matchRows(view, 1)[q] || {}]);
+    }
+    bouts.push({teams: [teamName(view, 0), teamName(view, 1)], regular: questionsFor(code), rows});
+  }
+  const stats = computeBrainPlayerStats(bouts);
+  const wrapper = document.createElement("div");
+  wrapper.className = "results-wrapper brain-stats-wrapper";
+  if (!stats.length) {
+    const empty = document.createElement("p");
+    empty.className = "roster-empty";
+    empty.textContent = "Пока никто не жал на кнопку.";
+    wrapper.appendChild(empty);
+    return wrapper;
+  }
+  const table = document.createElement("table");
+  table.className = "results-table brain-stats-table";
+  const thead = document.createElement("thead");
+  const head = document.createElement("tr");
+  const th = (text: string, className = "number") => {
+    const cell = document.createElement("th");
+    cell.className = className;
+    cell.textContent = text;
+    head.appendChild(cell);
+  };
+  th("Игрок", "results-team-head brain-stats-name-head");
+  th("Команда", "results-team-head brain-stats-name-head");
+  th("Попытки");
+  th("Верно");
+  th("Неверно");
+  th("% верных");
+  thead.appendChild(head);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const row of stats) {
+    const tr = document.createElement("tr");
+    const td = (text: string, className = "number") => {
+      const cell = document.createElement("td");
+      cell.className = className;
+      cell.textContent = text;
+      tr.appendChild(cell);
+    };
+    td(row.player, "results-team brain-stats-name");
+    td(row.team, "results-team brain-stats-name");
+    td(String(row.attempts));
+    td(String(row.right));
+    td(String(row.wrong));
+    td(row.attempts ? `${Math.round((row.right / row.attempts) * 100)}%` : "");
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+  return wrapper;
+}
+
 function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   const section = document.createElement("section");
   section.className = "brain-bout";
@@ -540,22 +718,31 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   table.classList.toggle("match-finished", Boolean(view.finished));
   table.dataset.match = code;
 
+  // Team names take the header row at double width — each spans its player and
+  // mark columns, the way the sheet merges them — and the score gets a row of
+  // its own beneath. Double width fits most names; the rest fade to a popover.
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
   const corner = document.createElement("th");
   corner.className = "row-marker brain-bout-corner";
+  corner.rowSpan = 2;
   corner.textContent = (code.split("-").pop() || code).replace(/^m/, "");
   corner.title = view.title || code;
   head.appendChild(corner);
   head.appendChild(nameHead(view, 0, planned));
-  const score = document.createElement("th");
-  score.className = "number brain-score-head";
-  score.colSpan = 2;
-  score.textContent = `${taken(view, 0)} : ${taken(view, 1)}`;
-  head.appendChild(score);
   head.appendChild(nameHead(view, 1, planned));
   head.appendChild(finishHead(code, view));
   thead.appendChild(head);
+  const scoreRow = document.createElement("tr");
+  const score = document.createElement("th");
+  score.className = "number brain-score-head";
+  score.colSpan = 4;
+  score.textContent = `${taken(view, 0)} : ${taken(view, 1)}`;
+  scoreRow.appendChild(score);
+  const scoreGap = document.createElement("th");
+  scoreGap.className = "brain-finish-gap";
+  scoreRow.appendChild(scoreGap);
+  thead.appendChild(scoreRow);
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
@@ -591,11 +778,22 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
 function nameHead(view: BrainMatchView, side: number, planned: BrainSchemeMatch): HTMLElement {
   const th = document.createElement("th");
   th.className = "brain-name-head";
+  th.colSpan = 2;
+  const label = view.participants?.[side]?.name || planned.slots?.[side]?.label || "—";
+  const wrap = document.createElement("span");
+  wrap.className = "brain-name-wrap";
   const name = document.createElement("span");
   name.className = "brain-name";
-  name.textContent = view.participants?.[side]?.name || planned.slots?.[side]?.label || "—";
+  name.textContent = label;
+  name.tabIndex = 0;
+  name.setAttribute("aria-label", label);
   name.classList.toggle("brain-name-pending", !view.participants?.[side]?.id);
-  th.appendChild(name);
+  wrap.appendChild(name);
+  th.appendChild(wrap);
+  const popover = document.createElement("span");
+  popover.className = "popover popover-inline brain-name-popover";
+  popover.textContent = label;
+  th.appendChild(popover);
   return th;
 }
 
@@ -730,10 +928,10 @@ function slotKey(slot: SchemeSlotRef | null | undefined): string {
 // opponent, then О (head-to-head points, finished бои only), + / − / +/−
 // (questions taken and conceded across all бои), М (place, ranked by the
 // stage's comparator order — КИНСБФ §4.2 by default).
-function buildCrosstable(): HTMLElement {
+function buildCrosstable(bucket: BlockBucket): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "brain-protocol";
-  const groups = rrStages();
+  const groups = bucket.stages.filter((stage) => stageKind(stage) === "rr");
   if (!groups.length) {
     const empty = document.createElement("p");
     empty.className = "roster-empty";
@@ -840,7 +1038,19 @@ function buildGroupTable(stage: BrainSchemeStage): HTMLElement {
     tr.appendChild(marker);
     const name = document.createElement("td");
     name.className = "brain-cross-team";
-    name.textContent = row.name;
+    const wrap = document.createElement("span");
+    wrap.className = "brain-name-wrap";
+    const label = document.createElement("span");
+    label.className = "brain-name";
+    label.textContent = row.name;
+    label.tabIndex = 0;
+    label.setAttribute("aria-label", row.name);
+    wrap.appendChild(label);
+    name.appendChild(wrap);
+    const popover = document.createElement("span");
+    popover.className = "popover popover-inline brain-name-popover";
+    popover.textContent = row.name;
+    name.appendChild(popover);
     tr.appendChild(name);
     rows.forEach((_, j) => {
       const cell = document.createElement("td");

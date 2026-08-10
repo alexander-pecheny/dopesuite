@@ -914,6 +914,8 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
 // renderTabBar fills a gametopbar tabs mount with .match-tab buttons — the one
 // tab strip every game page shares (od/si/brain). The caller owns which tabs
 // are visible and what selecting one does.
+const tabBarScrollBindings = new WeakMap<HTMLElement, ScrollEdgeBinding>();
+
 export function renderTabBar(
   root: HTMLElement,
   tabs: Array<{key: string; label: string}>,
@@ -933,6 +935,19 @@ export function renderTabBar(
     });
     root.appendChild(btn);
   }
+  // A dozen tabs overflow at any width — fade whichever edge hides more, the
+  // same treatment the ЭК tab bar gets.
+  let binding = tabBarScrollBindings.get(root);
+  if (!binding) {
+    binding = bindScrollEdges(root, ({left, right}, bar) => {
+      bar.classList.toggle("tabs-scroll-left", left);
+      bar.classList.toggle("tabs-scroll-right", right);
+    });
+    tabBarScrollBindings.set(root, binding);
+  } else {
+    binding.refresh();
+  }
+  root.querySelector<HTMLElement>(".match-tab.active")?.scrollIntoView({block: "nearest", inline: "nearest"});
 }
 
 // fitScrollFade caps a scroll frame's edge shadows (the kit's scroll-fade

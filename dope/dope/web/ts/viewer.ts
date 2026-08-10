@@ -23,6 +23,7 @@ import type {MatchView as CachedMatchView, StageData} from "./stage-cache.js";
 import {DopeStatsSync} from "./stats-sync.js";
 import type {StatsMatchEvent, StatsSyncGameTable} from "./stats-sync.js";
 import {buildFestGrid, buildReseedStagePanel, parseScheme} from "./fest-grid.js";
+import {computeGroupRounds} from "./group-stats.js";
 import type {FestGridMatch, FestGridStage, FestScheme} from "./fest-grid.js";
 
 interface FestView {
@@ -32,6 +33,7 @@ interface FestView {
   venues?: Venue[];
   title?: string;
   gameName?: string;
+  gameType?: string;
   [key: string]: unknown;
 }
 
@@ -121,6 +123,17 @@ let recorder: ClientRecorder | null = null;
 // Live SSE stream, kept at module scope so the visibility/online recovery below
 // can tear down a dead connection and re-establish it. null while disconnected.
 let fest: FestView | null = null;
+
+// Личная СИ runs on this page for its bracket, not its blank: a seat of one
+// player has no per-theme player cell, so it takes one row (КСИ-shaped) where
+// a team's takes two.
+function individualGame(): boolean {
+  return fest?.gameType === "si";
+}
+
+function seatRowSpan(): number {
+  return individualGame() ? 1 : 2;
+}
 let venues: Venue[] = [];
 
 // A fest with no столы answers `null`, not `[]` — normalise wherever it lands.
@@ -134,10 +147,13 @@ const stageCache = createStageCache({
   findStage: (code) => viewerStages().find((stage) => stage.code === code) || findStage(fest!, code),
   stageType: (stage) => stageType(stage as ViewerStage | null | undefined),
   getMatches: (stage) => (stage as ViewerStage | null | undefined)?.matches || [],
-  stageMembers: (stage) => (stage as ViewerStage | null | undefined)?.members || [],
+  stageMembers: (stage) => ((stage as ViewerStage | null | undefined)?.members as string[] | undefined) || [],
   buildPaneContent: ({pane, stageCode, stage, data}) => {
-    if (stageType(stage as ViewerStage | null | undefined) === "reseed") {
-      pane.appendChild(buildReseedStagePanel(mergedStage(fest!, stageCode)));
+    const kind = stageType(stage as ViewerStage | null | undefined);
+    if (kind === "reseed") {
+      pane.appendChild(buildReseedPanes(stageCode));
+    } else if (kind === "standings") {
+      pane.appendChild(buildGroupStandingsPane(stage as ViewerStage));
     } else {
       pane.appendChild(buildReadonlyStageTables(data!));
     }
@@ -304,9 +320,9 @@ async function loadStage(): Promise<void> {
 }
 
 function repaintStagePane(pane: HTMLElement, stageCode: string, data: StageData): void {
-  const stage = mergedStage(fest!, stageCode);
+  const stage = viewerStages().find((s) => s.code === stageCode) || mergedStage(fest!, stageCode);
   if (stageType(stage) === "reseed") {
-    pane.replaceChildren(buildReseedStagePanel(stage));
+    pane.replaceChildren(buildReseedPanes(stageCode));
     return;
   }
   const frames = pane.querySelectorAll<StageFrameElement>(".stage-match-frame");
@@ -471,8 +487,12 @@ function renderStats(): void {
 // in. Cheap (in-memory over the cached MatchViews); no network. Re-runs the
 // name overflow pass so long player/team names get the fade + popover.
 function rerenderStatsTable(): void {
-  const rows = gameTable.computeEKPlayerStats(statsStagesFromCache());
-  viewerRoot.replaceChildren(gameTable.buildEKStatsTable(rows));
+  // A personal game has no per-theme players — the participant is the player,
+  // so the aggregate is per seat.
+  const node = individualGame()
+    ? gameTable.buildIndividualStatsTable(gameTable.computeIndividualPlayerStats(statsStagesFromCache()))
+    : gameTable.buildEKStatsTable(gameTable.computeEKPlayerStats(statsStagesFromCache()));
+  viewerRoot.replaceChildren(node);
   scheduleReadonlyNameOverflowUpdate();
 }
 
@@ -652,14 +672,16 @@ function renderStage(): void {
   const stageCode = route.stageCode;
   if (!stageCode) return;
   resetReadonlyTableIndex();
-  const stage = mergedStage(fest, stageCode);
+  const stage = viewerStages().find((s) => s.code === stageCode) || mergedStage(fest, stageCode);
   setViewerMode(stageType(stage) === "reseed" ? "grid" : "match");
   setHeading("ЭК");
   document.title = pageTitle();
   renderViewerTabs();
   const pane = stageCache.showStage(stageCode);
   if (stageType(stage) === "reseed") {
-    pane?.replaceChildren(buildReseedStagePanel(stage));
+    pane?.replaceChildren(buildReseedPanes(stageCode));
+  } else if (stageType(stage) === "standings") {
+    pane?.replaceChildren(buildGroupStandingsPane(stage as ViewerStage));
   }
 }
 
@@ -920,14 +942,15 @@ function buildReadonlyTable(): HTMLTableElement {
     });
     return {
       nameCell: readonlyTeamNameCell(team, teamIndex),
-      totalCell: td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2, dataset: {team: teamIndex}}),
-      placeCell: td(formatPlace(team.place), "sticky sticky-place number place-cell", {rowSpan: 2, dataset: {team: teamIndex}}),
+      totalCell: td(team.total, "sticky sticky-total number total-cell", {rowSpan: seatRowSpan(), dataset: {team: teamIndex}}),
+      placeCell: td(formatPlace(team.place), "sticky sticky-place number place-cell", {rowSpan: seatRowSpan(), dataset: {team: teamIndex}}),
       themes: themeCells,
       afterThemeCells: readonlyTrailingCells(team, teamIndex, hasShootout),
     };
   });
 
-  return gameTable.buildTwoRowScoreTable({
+  const build = individualGame() ? gameTable.buildFlatScoreTable : gameTable.buildTwoRowScoreTable;
+  return build({
     className: "match-table compact-score-table ek-stage-table readonly-table",
     nameHeader: {content: readonlyBattleTitleNode(state!), className: "sticky sticky-name battle readonly-battle-head readonly-battle-with-popover"},
     themes,
@@ -938,7 +961,7 @@ function buildReadonlyTable(): HTMLTableElement {
 }
 
 function readonlyTeamNameCell(team: ViewerParticipant, teamIndex: number): HTMLElement {
-  const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: 2, dataset: {team: teamIndex}});
+  const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: seatRowSpan(), dataset: {team: teamIndex}});
   const labelText = team.name || "";
   const layout = document.createElement("span");
   layout.className = "od-detailed-team-layout";
@@ -1013,6 +1036,23 @@ function readonlyTrailingHeaders(hasShootout: boolean): CellSpec[] {
 }
 
 function readonlyThemeCells(teamIndex: number, theme: ViewerTheme, themeIndex: number, isShootout: boolean): ScoreTableThemeRow {
+  const answers = theme.answers.map((mark, answerIndex) => {
+    const className = answerIndex === 0
+      ? `answer-cell theme-block theme-block-bottom-left ${mark}`
+      : `answer-cell theme-block ${mark}`;
+    const cell = td("", className);
+    cell.dataset.team = String(teamIndex);
+    cell.dataset.shootout = isShootout ? "1" : "0";
+    cell.dataset.theme = String(themeIndex);
+    cell.dataset.answer = String(answerIndex);
+    return cell;
+  });
+  const scoreCell = td(theme.score, "number theme-score theme-block theme-block-score", {
+    rowSpan: seatRowSpan(),
+    dataset: {team: teamIndex, shootout: isShootout ? "1" : "0", theme: themeIndex},
+  });
+  // A player seats himself: his бой row needs no player cell at all.
+  if (individualGame()) return {scoreCell, answers};
   const playerCell = document.createElement("td");
   playerCell.colSpan = state!.questionValues.length;
   playerCell.className = "readonly-player theme-block theme-block-top-left";
@@ -1035,23 +1075,9 @@ function readonlyThemeCells(teamIndex: number, theme: ViewerTheme, themeIndex: n
   playerPopover.className = "popover popover-inline readonly-player-popover";
   playerPopover.textContent = playerLabel;
   playerCell.appendChild(playerPopover);
-  const answers = theme.answers.map((mark, answerIndex) => {
-    const className = answerIndex === 0
-      ? `answer-cell theme-block theme-block-bottom-left ${mark}`
-      : `answer-cell theme-block ${mark}`;
-    const cell = td("", className);
-    cell.dataset.team = String(teamIndex);
-    cell.dataset.shootout = isShootout ? "1" : "0";
-    cell.dataset.theme = String(themeIndex);
-    cell.dataset.answer = String(answerIndex);
-    return cell;
-  });
   return {
     playerCell,
-    scoreCell: td(theme.score, "number theme-score theme-block theme-block-score", {
-      rowSpan: 2,
-      dataset: {team: teamIndex, shootout: isShootout ? "1" : "0", theme: themeIndex},
-    }),
+    scoreCell,
     answers,
   };
 }
@@ -1060,12 +1086,12 @@ function readonlyTrailingCells(team: ViewerParticipant, teamIndex: number, hasSh
   const cells: HTMLElement[] = [];
   if (hasShootout) {
     const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
-    cells.push(td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2, dataset: {team: teamIndex}}));
+    cells.push(td(shootoutTotal, "number tiebreak-cell", {rowSpan: seatRowSpan(), dataset: {team: teamIndex}}));
   }
-  cells.push(td(team.plus, "number plus-cell", {rowSpan: 2, dataset: {team: teamIndex}}));
+  cells.push(td(team.plus, "number plus-cell", {rowSpan: seatRowSpan(), dataset: {team: teamIndex}}));
   [0, 1, 2, 3, 4].forEach((idx) => {
     cells.push(td(team.correctCounts[4 - idx], "number narrow correct-count-cell", {
-      rowSpan: 2,
+      rowSpan: seatRowSpan(),
       dataset: {team: teamIndex, valueIndex: idx},
     }));
   });
@@ -1123,7 +1149,61 @@ function currentRoute(): ViewerRoute {
 function viewerStages(): ViewerStage[] {
   const scheme = parseScheme(fest?.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : fest?.stages || [];
-  return DopeTable.roundStages(stages as StageRef[]) as ViewerStage[];
+  return DopeTable.foldReseedStages(DopeTable.roundStages(stages as StageRef[])) as ViewerStage[];
+}
+
+function rawViewerStages(): ViewerStage[] {
+  const scheme = parseScheme(fest?.schemaJson);
+  return (scheme?.stages?.length ? scheme.stages : fest?.stages || []) as ViewerStage[];
+}
+
+// buildGroupStandingsPane is the sheets' «Группы» view: every группа of the
+// Block on one tab — a player, his очки, and the split by круг, computed from
+// the cached бои by the Block's own scoring rule.
+function buildGroupStandingsPane(stage: ViewerStage): HTMLElement {
+  const groups = ((stage.members as string[] | undefined) || []).map((code) => {
+    const schemeStage = rawViewerStages().find((s) => s.code === code);
+    const config = (schemeStage?.config || {}) as {rules?: {bout?: {points?: string}}; entrants?: Array<{label?: string}>};
+    const planned = (schemeStage?.matches || []) as Array<{code?: string; round?: number}>;
+    const roundCount = Math.max(1, ...planned.map((m) => Number(m.round || 1)));
+    const matches = planned.map((m) => {
+      const view = stageCache.matchState(m.code || "") as ViewerMatchView | null;
+      return {round: m.round, finished: Boolean(view?.finished), participants: view?.participants};
+    });
+    const rows = computeGroupRounds({matches, pointsRule: config.rules?.bout?.points, roundCount});
+    if (!rows.length) {
+      for (const entrant of config.entrants || []) {
+        if (entrant.label) rows.push({name: entrant.label, points: 0, rounds: new Array<number>(roundCount).fill(0)});
+      }
+    }
+    const title = String(schemeStage?.title || "").match(/Группа\s*\S+$/)?.[0] || String(schemeStage?.title || code);
+    return {title, roundCount, rows};
+  });
+  return gameTable.buildGroupStandingsView(groups);
+}
+
+// buildReseedPanes fills a reseed pane: the folded «Пересев» tab stacks every
+// этап's table, each under the name of the round it seats; a lone reseed keeps
+// its single panel.
+function buildReseedPanes(stageCode: string): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "reseed-fold";
+  const members = stageCode === DopeTable.RESEED_TAB_CODE
+    ? (viewerStages().find((stage) => stage.code === stageCode)?.members as string[] | undefined || [])
+    : [stageCode];
+  const raw = rawViewerStages();
+  for (const code of members) {
+    if (members.length > 1) {
+      const index = raw.findIndex((stage) => stage.code === code);
+      const next = raw.slice(index + 1).find((stage) => stageType(stage) !== "reseed");
+      const head = document.createElement("h3");
+      head.className = "reseed-fold-head";
+      head.textContent = String(next?.title || "");
+      wrap.appendChild(head);
+    }
+    wrap.appendChild(buildReseedStagePanel(mergedStage(fest!, code)));
+  }
+  return wrap;
 }
 
 function findStage(data: FestView, code: string): ViewerStage | undefined {

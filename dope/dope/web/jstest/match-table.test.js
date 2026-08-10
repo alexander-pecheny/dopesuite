@@ -497,12 +497,16 @@ test("roundStages gathers a Block's Groups into one tab per круг", () => {
   const playoff = {code: "s2-r1", title: "Финал", stage_type: "matches", grain: {block: "s2"}, matches: []};
   const stages = T.roundStages([group(1), group(2), playoff]);
 
-  assert.deepEqual(stages.map((s) => s.title), ["Круг 1", "Круг 2", "Финал"]);
-  assert.deepEqual(stages[0].matches.map((m) => m.code), ["s1-g1-1", "s1-g2-1"]);
-  // Six группы of «Бой 1» need to say which table they were.
-  assert.deepEqual(stages[0].matches.map((m) => m.group), ["Группа 1", "Группа 2"]);
-  // The tab is assembled from real server stages, which is what gets fetched.
+  // The Block's own tab leads — the sheets' «Группы» view, every группа's
+  // standings on one tab — followed by the круг protocol tabs.
+  assert.deepEqual(stages.map((s) => s.title), ["Групповой этап", "Круг 1", "Круг 2", "Финал"]);
+  assert.equal(stages[0].stage_type, "standings");
   assert.deepEqual(stages[0].members, ["s1-g1", "s1-g2"]);
+  assert.deepEqual(stages[1].matches.map((m) => m.code), ["s1-g1-1", "s1-g2-1"]);
+  // Six группы of «Бой 1» need to say which table they were.
+  assert.deepEqual(stages[1].matches.map((m) => m.group), ["Группа 1", "Группа 2"]);
+  // The tab is assembled from real server stages, which is what gets fetched.
+  assert.deepEqual(stages[1].members, ["s1-g1", "s1-g2"]);
   assert.equal(playoff.members, undefined, "этап без групп остаётся собой");
 });
 
@@ -516,4 +520,56 @@ test("roundStages leaves a lone Group alone", () => {
     matches: [{code: "s1-g1-1", round: 1}],
   };
   assert.deepEqual(T.roundStages([only]), [only]);
+});
+
+// Every reseed used to be a tab of its own — личная СИ showed seven of them.
+// They fold into one «Пересев», keeping their codes as members so the pane can
+// draw each этап's table; a lone reseed keeps its own name and place.
+test("foldReseedStages folds every reseed into one tab", () => {
+  const stages = [
+    {code: "s1", title: "Групповой этап", stage_type: "matches"},
+    {code: "s2-reseed", title: "Пересев", stage_type: "reseed"},
+    {code: "s2-r1", title: "Плей-офф. 1 этап", stage_type: "matches"},
+    {code: "s2-r2-reseed", title: "Пересев", stage_type: "reseed"},
+    {code: "s2-r2", title: "Плей-офф. 2 этап", stage_type: "matches"},
+  ];
+  const folded = T.foldReseedStages(stages);
+  assert.deepEqual(folded.map((s) => s.code), ["s1", T.RESEED_TAB_CODE, "s2-r1", "s2-r2"]);
+  const tab = folded[1];
+  assert.equal(tab.title, "Пересев");
+  assert.deepEqual(tab.members, ["s2-reseed", "s2-r2-reseed"]);
+});
+
+test("foldReseedStages leaves a lone reseed alone", () => {
+  const stages = [
+    {code: "s1-reseed", title: "Пересев", stage_type: "reseed"},
+    {code: "s1-r3", title: "1/4 финала", stage_type: "matches"},
+  ];
+  assert.deepEqual(T.foldReseedStages(stages), stages);
+});
+
+// Личная СИ's Статистика: the participant is the player, so the aggregate is
+// per seat — Σ, Σ+ (positive points), бои and the taken counts per value —
+// regular themes only, sorted by Σ.
+test("computeIndividualPlayerStats aggregates per participant", () => {
+  const stages = [{
+    code: "s1",
+    matches: [{
+      code: "m1",
+      participants: [
+        {name: "Виктор Вега", themes: [{answers: ["right", "", "", "", ""]}, {answers: ["", "wrong", "", "", ""]}]},
+        {name: "Николай Зотов", themes: [{answers: ["", "", "", "", "right"]}]},
+      ],
+    }, {
+      code: "m2",
+      participants: [
+        {name: "Виктор Вега", themes: [{answers: ["", "", "right", "", ""]}]},
+      ],
+    }],
+  }];
+  const rows = T.computeIndividualPlayerStats(stages);
+  assert.deepEqual(rows, [
+    {player: "Николай Зотов", sum: 50, plus: 50, battles: 1, right: [0, 0, 0, 0, 1]},
+    {player: "Виктор Вега", sum: 20, plus: 40, battles: 2, right: [1, 0, 1, 0, 0]},
+  ]);
 });

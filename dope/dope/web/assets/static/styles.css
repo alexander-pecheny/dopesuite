@@ -1077,9 +1077,68 @@
 }
 
 .grid-matches,
-.grid-standings {
+.grid-standings,
+.grid-block-stack {
   grid-row: 2;
   min-width: 0;
+}
+
+/* A ranking Block's column: its групп's tables stacked under one header.
+   contain: inline-size keeps the fixed-layout tables inside from blowing the
+   column track to Chromium's "infinite" width during intrinsic sizing — the
+   track sizes from the header, and the tables take the track's width. */
+.grid-block-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  contain: inline-size;
+}
+
+.grid-block-stack .grid-matches,
+.grid-block-stack .grid-standings {
+  grid-row: auto;
+}
+
+.grid-stage-subhead {
+  display: block;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* The «Групповой этап» tab: every группа's table on one tab, the sheets'
+   «Группы» view. */
+.group-standings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.group-standings-head {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-md);
+}
+
+.group-standings-table {
+  --results-place-col: 48px;
+  --results-team-col: 260px;
+}
+
+/* The folded «Пересев» tab: every этап's table stacked, each under the name
+   of the round it seats. */
+.reseed-fold {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.reseed-fold-head {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-md);
 }
 
 .grid-stage-head {
@@ -1155,7 +1214,8 @@
 }
 
 .grid-standings .standings-place {
-  width: 28px;
+  /* Wide enough for a shared place («10.5») — «1…» said nothing. */
+  width: 44px;
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
@@ -1675,39 +1735,46 @@ body:not(.embedded-match) .grid-match {
   box-shadow: none;
 }
 
-@media (max-width: 760px) {
-  .ek-page .ek-tabs {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
+/* A брейн or личная СИ carries a dozen tabs — the bar scrolls at every
+   width, fading at whichever edge hides more. */
+.ek-page .ek-tabs,
+.game-host-top .match-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
 
-  .ek-page .ek-tabs::-webkit-scrollbar {
-    display: none;
-  }
+.ek-page .ek-tabs::-webkit-scrollbar,
+.game-host-top .match-tabs::-webkit-scrollbar {
+  display: none;
+}
 
-  .ek-page .ek-tabs .match-tab {
-    flex: 0 0 auto;
-  }
+.ek-page .ek-tabs .match-tab,
+.game-host-top .match-tabs .match-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 
-  .ek-page .ek-tabs.tabs-scroll-left {
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 28px);
-    mask-image: linear-gradient(to right, transparent, #000 28px);
-  }
+.ek-page .ek-tabs.tabs-scroll-left,
+.game-host-top .match-tabs.tabs-scroll-left {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px);
+  mask-image: linear-gradient(to right, transparent, #000 28px);
+}
 
-  .ek-page .ek-tabs.tabs-scroll-right {
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-  }
+.ek-page .ek-tabs.tabs-scroll-right,
+.game-host-top .match-tabs.tabs-scroll-right {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
 
-  .ek-page .ek-tabs.tabs-scroll-left.tabs-scroll-right {
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
-    mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
-  }
+.ek-page .ek-tabs.tabs-scroll-left.tabs-scroll-right,
+.game-host-top .match-tabs.tabs-scroll-left.tabs-scroll-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
 }
 
 .od-pane {
@@ -3866,6 +3933,32 @@ body:not(.embedded-match) .grid-match {
   color: var(--text-strong);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A team name spans its player and mark columns — double width fits most
+   names; the rest clip under a fade and carry a popover. */
+.brain-name-wrap {
+  position: relative;
+  display: block;
+  margin: 0 auto;
+  min-width: 0;
+  max-width: calc(var(--team-col) + var(--question-col));
+}
+
+.brain-name-truncated .brain-name-wrap::after {
+  content: "";
+  position: absolute;
+  top: var(--space-0);
+  right: var(--space-0);
+  bottom: var(--space-0);
+  width: var(--inline-fade-width);
+  background: var(--inline-fade-bg);
+  pointer-events: none;
+}
+
+.brain-name-truncated .brain-name {
+  text-overflow: clip;
 }
 
 .match-table.brain-detailed .brain-score-head {
@@ -3889,10 +3982,19 @@ body:not(.embedded-match) .grid-match {
 .match-table.brain-crosstable .brain-cross-team {
   width: var(--team-col);
   min-width: var(--team-col);
+  max-width: var(--team-col);
   text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.match-table.brain-crosstable .brain-cross-team .brain-name-wrap {
+  margin: var(--space-0);
+  max-width: var(--team-col);
+}
+
+.match-table.brain-crosstable .brain-cross-team .brain-name {
+  text-align: left;
+  font-weight: inherit;
+  color: inherit;
 }
 
 .match-table.brain-crosstable .brain-cross-cell {

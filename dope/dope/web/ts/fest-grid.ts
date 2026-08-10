@@ -53,6 +53,7 @@ export interface FestGridStage {
   title?: string;
   stage_type?: string;
   type?: string;
+  grain?: {block?: string; group?: string; wave?: number};
   standings?: ReseedEntry[];
   layout?: { columns?: number };
   matches?: FestGridMatch[];
@@ -112,11 +113,16 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
   const liveStages = new Map((data.stages || []).map((stage) => [stage.code, stage]));
   const previousVenueByRow = new Map<number, string>();
 
-  stages.forEach((stage) => {
-    const liveStage = liveStages.get(stage.code) || stage;
-    if ((stage.stage_type || stage.type) === "reseed") {
+  // A ranking Block is one column: its групп's tables (or a pod Block's бои)
+  // stack under one header rather than sprawling a column per группа. Rounds
+  // carry no group, so a bracket keeps its column per заход.
+  groupStagesByBlock(stages).forEach((bucket) => {
+    if (bucket.length > 1) {
+      columns.appendChild(buildBlockColumn(bucket, liveStages, options));
       return;
     }
+    const stage = bucket[0];
+    const liveStage = liveStages.get(stage.code) || stage;
     // A Group is a table, not a wall of бои: a группа of nine plays twelve of
     // them, and twelve boxes say less about who is winning than nine rows do.
     // The бои are still there — the detailed tab lists them.
@@ -135,6 +141,93 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
   scheduleFestGridNameOverflowUpdate(root);
 
   return root;
+}
+
+// groupStagesByBlock buckets consecutive group stages of one Block together
+// (reseeds dropped — the Пересев tab holds those), leaving every other stage
+// in a bucket of its own.
+function groupStagesByBlock(stages: FestGridStage[]): FestGridStage[][] {
+  const buckets: FestGridStage[][] = [];
+  let block = "";
+  for (const stage of stages) {
+    if ((stage.stage_type || stage.type) === "reseed") {
+      block = "";
+      continue;
+    }
+    const grouped = stage.grain?.block && stage.grain?.group ? stage.grain.block : "";
+    if (grouped && grouped === block) {
+      buckets[buckets.length - 1].push(stage);
+    } else {
+      buckets.push([stage]);
+    }
+    block = grouped;
+  }
+  return buckets;
+}
+
+// blockColumnTitle is what the shared column is called: the группы's common
+// prefix («Групповой этап. Группа 1» → «Групповой этап», «DE 1» → «DE»).
+function blockColumnTitle(stage: FestGridStage): string {
+  const title = String(stage.title || "");
+  const named = title.replace(/\.?\s*Группа\s*\S+$/, "");
+  if (named !== title) return named;
+  return title.replace(/\s*\d+$/, "") || title;
+}
+
+// blockGroupLabel is the sub-heading a группа keeps inside its Block's column.
+function blockGroupLabel(stage: FestGridStage): string {
+  const title = String(stage.title || "");
+  const named = title.match(/Группа\s*\S+$/);
+  if (named) return named[0];
+  return title;
+}
+
+function buildBlockColumn(
+  bucket: FestGridStage[],
+  liveStages: Map<string | undefined, FestGridStage>,
+  options: FestGridOptions = {},
+): HTMLElement {
+  const first = bucket[0];
+  const section = document.createElement("section");
+  section.className = "grid-stage grid-stage-standings grid-stage-block";
+  if (first.code) section.classList.add(`grid-stage-${stageClassSuffix(first.code)}`);
+  section.dataset.stageCode = first.code || "";
+  section.style.setProperty("--stage-columns", "1");
+
+  const header = document.createElement("div");
+  header.className = "grid-stage-head";
+  header.appendChild(el("h2", "", blockColumnTitle(first)));
+  section.appendChild(header);
+
+  // One container for the whole stack: .grid-stage lays out via
+  // `display: contents`, so loose children would each take a column.
+  const stack = document.createElement("div");
+  stack.className = "grid-block-stack";
+  bucket.forEach((stage) => {
+    const liveStage = liveStages.get(stage.code) || stage;
+    const sub = document.createElement(options.stageHeaderLink === false ? "div" : "a");
+    sub.className = "grid-stage-subhead";
+    if (sub instanceof HTMLAnchorElement) {
+      sub.href = stageHref(stage, options);
+      sub.classList.add("grid-stage-link");
+    }
+    sub.textContent = blockGroupLabel(stage);
+    stack.appendChild(sub);
+    const standings = liveStage.standings || stage.standings || [];
+    if (standings.length) {
+      stack.appendChild(buildStandingsTable(standings));
+      return;
+    }
+    const matches = document.createElement("div");
+    matches.className = "grid-matches";
+    const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
+    (stage.matches || []).forEach((match) => {
+      matches.appendChild(buildMatchBox(match, liveMatches.get(match.code), options));
+    });
+    stack.appendChild(matches);
+  });
+  section.appendChild(stack);
+  return section;
 }
 
 export function buildReseedStagePanel(
@@ -253,7 +346,11 @@ function buildStandingsStage(
   }
   header.appendChild(el("h2", "", stage.title));
   section.appendChild(header);
+  section.appendChild(buildStandingsTable(standings));
+  return section;
+}
 
+function buildStandingsTable(standings: ReseedEntry[]): HTMLElement {
   const metrics = standingsMetrics(standings);
   const table = document.createElement("table");
   table.className = "grid-standings";
@@ -264,7 +361,7 @@ function buildStandingsStage(
   table.appendChild(head);
   standings.forEach((entry) => {
     const row = document.createElement("tr");
-    row.appendChild(el("td", "standings-place", placeText(entry.metrics?.place ?? entry.rank)));
+    row.appendChild(el("td", "standings-place", placeText(Number(entry.metrics?.place ?? entry.rank) || null)));
     const name = el("td", "standings-name", String(entry.name || ""));
     // The column is a glance wide, so a long name ellipsises — carry the whole
     // one where a reader can still reach it.
@@ -275,8 +372,7 @@ function buildStandingsStage(
     });
     table.appendChild(row);
   });
-  section.appendChild(table);
-  return section;
+  return table;
 }
 
 // standingsMetrics picks the columns worth showing. The Сетка is a glance, not a
@@ -509,6 +605,11 @@ function reseedMetricLabel(metric: string): string {
     correct_30: "+30",
     correct_20: "+20",
     correct_10: "+10",
+    taken50: "+50",
+    taken40: "+40",
+    taken30: "+30",
+    taken20: "+20",
+    taken10: "+10",
     wrong_50: "−50",
     wrong_40: "−40",
     wrong_30: "−30",

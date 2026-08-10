@@ -767,6 +767,87 @@ export interface StageRefMatch {
   group?: string;
 }
 
+// One группа of the «Групповой этап» tab: its title and the rows the sheets'
+// «Группы» view draws — a player, his очки, and the split by круг.
+export interface GroupStandingsGroup {
+  title: string;
+  roundCount: number;
+  rows: Array<{name: string; points: number; rounds: number[]}>;
+}
+
+// buildGroupStandingsView is the sheets' «Группы» view: all групп on one tab,
+// each a table of Игрок | Очки | Круг 1..N.
+export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "group-standings";
+  const score = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+  for (const group of groups) {
+    const head = document.createElement("h3");
+    head.className = "group-standings-head";
+    head.textContent = group.title;
+    wrap.appendChild(head);
+    const wrapper = document.createElement("div");
+    wrapper.className = "results-wrapper group-standings-wrapper";
+    const table = document.createElement("table");
+    table.className = "results-table group-standings-table";
+    const thead = document.createElement("thead");
+    const header = document.createElement("tr");
+    header.appendChild(th("М", "results-place-head"));
+    header.appendChild(th("Игрок", "results-team-head"));
+    header.appendChild(th("Очки", "number"));
+    for (let round = 1; round <= group.roundCount; round++) {
+      header.appendChild(th(`Круг ${round}`, "number"));
+    }
+    thead.appendChild(header);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    group.rows.forEach((row, index) => {
+      const tr = document.createElement("tr");
+      tr.appendChild(td(index + 1, "results-place results-num"));
+      tr.appendChild(td(row.name, "results-team"));
+      tr.appendChild(td(score(row.points), "number"));
+      for (let round = 0; round < group.roundCount; round++) {
+        tr.appendChild(td(score(row.rounds[round] || 0), "number"));
+      }
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    wrap.appendChild(wrapper);
+  }
+  return wrap;
+}
+
+// RESEED_TAB_CODE names the one displayed stage all reseeds fold into.
+export const RESEED_TAB_CODE = "reseeds";
+
+// foldReseedStages gathers every reseed into one «Пересев» tab, sitting where
+// the first one sat, with the server stages as members — личная СИ reseeds
+// before every play-off round, and seven identical tabs said nothing six of
+// them didn't. A lone reseed keeps its own tab.
+export function foldReseedStages(stages: StageRef[]): StageRef[] {
+  const reseeds = stages.filter((stage) => stageType(stage) === "reseed");
+  if (reseeds.length < 2) return stages;
+  const out: StageRef[] = [];
+  let emitted = false;
+  for (const stage of stages) {
+    if (stageType(stage) !== "reseed") {
+      out.push(stage);
+      continue;
+    }
+    if (!emitted) {
+      emitted = true;
+      out.push({
+        code: RESEED_TAB_CODE,
+        title: "Пересев",
+        stage_type: "reseed",
+        members: reseeds.map((reseed) => reseed.code),
+      });
+    }
+  }
+  return out;
+}
+
 // roundStages turns a Block of Groups into one tab per круг. The sheets enter
 // protocols by круг — «Круг 1» through «Круг 4», every группа at once — because
 // that is the order the бои are played in; a tab per группа is the order they
@@ -806,13 +887,30 @@ function gatherRounds(block: string, groups: StageRef[]): StageRef[] {
     }
   }
   const members = groups.map((group) => group.code);
-  return Array.from(byRound.keys()).sort((a, b) => a - b).map((round) => ({
+  // The Block's own tab leads: the sheets' «Группы» view, every группа's
+  // standings on one tab, before the круг protocol tabs.
+  const standings: StageRef = {
+    code: `${block}@standings`,
+    title: blockTabTitle(groups[0]),
+    stage_type: "standings",
+    members,
+  };
+  return [standings, ...Array.from(byRound.keys()).sort((a, b) => a - b).map((round) => ({
     code: `${block}@r${round}`,
     title: `Круг ${round}`,
     stage_type: "matches",
     matches: byRound.get(round) || [],
     members,
-  }));
+  }))];
+}
+
+// blockTabTitle is what a Block of Groups is called on its own tab: the
+// групп's shared prefix («Групповой этап. Группа 1» → «Групповой этап»).
+function blockTabTitle(group: StageRef | undefined): string {
+  const title = String(group?.title || "");
+  const named = title.replace(/\.?\s*Группа\s*\S+$/, "");
+  if (named && named !== title) return named;
+  return "Групповой этап";
 }
 
 // groupLabel is what a бой is prefixed with once круги mix the группы together:
@@ -1237,6 +1335,107 @@ export function computeEKPlayerStats(stages: EKStage[] | null | undefined): EKPl
   return rows;
 }
 
+export interface IndividualStatsRow {
+  player: string;
+  sum: number;
+  plus: number;
+  battles: number;
+  right: number[];
+}
+
+// computeIndividualPlayerStats aggregates a personal game per participant —
+// the participant is the player, so there is no per-theme player to read.
+// Σ, Σ+ (positive points), бои, and the taken counts per value; regular themes
+// only, sorted by Σ.
+export function computeIndividualPlayerStats(stages: EKStage[] | null | undefined): IndividualStatsRow[] {
+  const values = [10, 20, 30, 40, 50];
+  const players = new Map<string, IndividualStatsRow>();
+  for (const stage of stages || []) {
+    for (const match of stage.matches || []) {
+      for (const seat of match.participants || []) {
+        const name = (seat.name || "").trim();
+        if (!name) continue;
+        let row = players.get(name);
+        if (!row) {
+          row = {player: name, sum: 0, plus: 0, battles: 0, right: [0, 0, 0, 0, 0]};
+          players.set(name, row);
+        }
+        row.battles++;
+        for (const theme of seat.themes || []) {
+          (theme.answers || []).forEach((mark, i) => {
+            if (mark === "right") {
+              row.sum += values[i] || 0;
+              row.plus += values[i] || 0;
+              row.right[i]++;
+            } else if (mark === "wrong") {
+              row.sum -= values[i] || 0;
+            }
+          });
+        }
+      }
+    }
+  }
+  const rows = Array.from(players.values());
+  rows.sort((a, b) => b.sum - a.sum || b.plus - a.plus || a.player.localeCompare(b.player, "ru"));
+  return rows;
+}
+
+// buildIndividualStatsTable renders computeIndividualPlayerStats rows — the
+// source's Статистика columns: Игрок, Счёт, Σ+, Бои, takens per value.
+export function buildIndividualStatsTable(rows: IndividualStatsRow[] | null | undefined): HTMLElement {
+  const wrapper = document.createElement("div");
+  wrapper.className = "results-wrapper ek-stats-wrapper";
+  if (!rows || rows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "roster-empty";
+    empty.textContent = "Пока нет ни одной сыгранной темы.";
+    wrapper.appendChild(empty);
+    return wrapper;
+  }
+  const table = document.createElement("table");
+  table.className = "results-table ek-stats-table";
+  const thead = document.createElement("thead");
+  const head = document.createElement("tr");
+  head.appendChild(th("Игрок", "results-team-head ek-stats-name-head ek-stats-player-head"));
+  head.appendChild(th("Σ", "number ek-stats-sum-head"));
+  head.appendChild(th("Σ+", "number"));
+  head.appendChild(th("Бои", "number"));
+  for (const value of [50, 40, 30, 20, 10]) {
+    head.appendChild(th(`+${value}`, "number narrow"));
+  }
+  thead.appendChild(head);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const cell = td("", "results-team ek-stats-name ek-stats-player");
+    const wrap = document.createElement("span");
+    wrap.className = "results-team-name-wrap";
+    const label = document.createElement("span");
+    label.className = "results-team-name";
+    label.textContent = row.player;
+    label.tabIndex = 0;
+    label.setAttribute("aria-label", row.player);
+    wrap.appendChild(label);
+    cell.appendChild(wrap);
+    const popover = document.createElement("span");
+    popover.className = "popover popover-inline results-team-name-popover";
+    popover.textContent = row.player;
+    cell.appendChild(popover);
+    tr.appendChild(cell);
+    tr.appendChild(td(row.sum, "number ek-stats-sum"));
+    tr.appendChild(td(row.plus, "number"));
+    tr.appendChild(td(row.battles, "number"));
+    for (let i = 4; i >= 0; i--) {
+      tr.appendChild(td(row.right[i] || 0, "number narrow"));
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrapper.appendChild(table);
+  return wrapper;
+}
+
 // buildEKStatsTable renders the rows from computeEKPlayerStats into the
 // "Статистика" table. Columns: Игрок, Команда, Σ, Σ+, Бои, 50/40/30/20/10
 // (correct counts, descending nominal), −50…−10 (wrong counts, shown as a
@@ -1355,6 +1554,9 @@ export const DopeTable = {
   formatPlace,
   stageType,
   roundStages,
+  foldReseedStages,
+  RESEED_TAB_CODE,
+  buildGroupStandingsView,
   stageTabLabel,
   teamListCell,
   buildVenuesTable,
@@ -1386,5 +1588,7 @@ export const DopeTable = {
   fitEKStageTeamName,
   createCellRangeSelection,
   computeEKPlayerStats,
+  computeIndividualPlayerStats,
+  buildIndividualStatsTable,
   buildEKStatsTable,
 };

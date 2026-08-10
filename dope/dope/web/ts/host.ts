@@ -25,6 +25,7 @@ import type { MatchDescriptor, MatchView as CachedMatchView, StageData } from ".
 import { create as createStatsSync } from "./stats-sync.js";
 import type { StatsMatchEvent, StatsSyncGameTable } from "./stats-sync.js";
 import { buildFestGrid, buildReseedStagePanel, parseScheme } from "./fest-grid.js";
+import { computeGroupRounds } from "./group-stats.js";
 import type { ReseedEntry } from "./fest-grid.js";
 import { icon } from "./icons_gen.js";
 
@@ -99,6 +100,7 @@ type HostFestView = {
   slug?: string;
   title?: string;
   gameName?: string;
+  gameType?: string;
   revision?: number;
   schemaJson?: unknown;
   venues?: Venue[];
@@ -201,6 +203,17 @@ let state: HostMatchView | null = null;
 let fest: HostFestView | null = null;
 let venues: Venue[] = [];
 
+// Личная СИ runs on this page for its bracket, not its blank: a seat of one
+// player has no per-theme player cell, so it takes one row (КСИ-shaped) where
+// a team's takes two.
+function individualGame(): boolean {
+  return fest?.gameType === "si";
+}
+
+function seatRowSpan(): number {
+  return individualGame() ? 1 : 2;
+}
+
 // A fest that declares no столы answers `null`, not `[]`. One such answer used
 // to take the whole page down on the first `venues.length`, so the list is
 // normalised at every seam it enters by.
@@ -222,7 +235,11 @@ const stageCache = createStageCache({
   overlayMatch: (view) => overlayPendingMatch(view?.code, view as HostMatchView),
   buildPaneContent: ({pane, stageCode, stage, data}) => {
     if (stageType(stage as HostStage | null | undefined) === "reseed") {
-      pane.appendChild(buildHostReseedStagePanel(mergedStage(fest, stageCode)));
+      pane.appendChild(buildReseedPanes(stageCode));
+      return;
+    }
+    if (gameTable.stageType(stage as StageRef) === "standings") {
+      pane.appendChild(buildGroupStandingsPane(stage as HostStage));
       return;
     }
     pane.appendChild(buildStageTableStack(data));
@@ -1156,7 +1173,7 @@ function renderStage(): void {
   if (!fest) return;
   resetMatchTableIndex();
   const stageCode = route.stageCode!;
-  const stage = mergedStage(fest, stageCode);
+  const stage = ekSchemeStages().find((s) => s.code === stageCode) || mergedStage(fest, stageCode);
   setHostMode("grid");
   setHeading("ЭК");
   setViewerLink(`${route.viewerBase}/stage/${encodeURIComponent(stageCode)}`, "Открыть этап для зрителя");
@@ -1164,7 +1181,10 @@ function renderStage(): void {
   renderEKTabs();
   const pane = stageCache.showStage(stageCode);
   if (stageType(stage) === "reseed") {
-    pane?.replaceChildren(buildHostReseedStagePanel(stage));
+    pane?.replaceChildren(buildReseedPanes(stageCode));
+    scheduleResultsTeamNameOverflowUpdate();
+  } else if (stageType(stage) === "standings") {
+    pane?.replaceChildren(buildGroupStandingsPane(stage));
     scheduleResultsTeamNameOverflowUpdate();
   }
   refreshPresence();
@@ -1208,8 +1228,12 @@ function renderStats(): void {
 // in. Cheap (in-memory over the cached MatchViews); no network. Re-runs the
 // results-name overflow pass so long player/team names get the fade + popover.
 function rerenderStatsTable(): void {
-  const rows = gameTable.computeEKPlayerStats(statsStagesFromCache());
-  hostRoot.replaceChildren(gameTable.buildEKStatsTable(rows));
+  // A personal game has no per-theme players — the participant is the player,
+  // so the aggregate is per seat.
+  const node = individualGame()
+    ? gameTable.buildIndividualStatsTable(gameTable.computeIndividualPlayerStats(statsStagesFromCache()))
+    : gameTable.buildEKStatsTable(gameTable.computeEKPlayerStats(statsStagesFromCache()));
+  hostRoot.replaceChildren(node);
   scheduleResultsTeamNameOverflowUpdate();
 }
 
@@ -1331,7 +1355,56 @@ function stageCodeForMatch(matchCode: string | undefined): string {
 }
 
 function ekSchemeStages(): HostStage[] {
-  return gameTable.roundStages(rawSchemeStages() as StageRef[]) as HostStage[];
+  return gameTable.foldReseedStages(gameTable.roundStages(rawSchemeStages() as StageRef[])) as HostStage[];
+}
+
+// buildGroupStandingsPane is the sheets' «Группы» view: every группа of the
+// Block on one tab — a player, his очки, and the split by круг, computed from
+// the cached бои by the Block's own scoring rule.
+function buildGroupStandingsPane(stage: HostStage): HTMLElement {
+  const groups = ((stage.members as string[] | undefined) || []).map((code) => {
+    const schemeStage = rawSchemeStages().find((s) => s.code === code);
+    const config = (schemeStage?.config || {}) as {rules?: {bout?: {points?: string}}; entrants?: Array<{label?: string}>};
+    const planned = (schemeStage?.matches || []) as Array<{code?: string; round?: number}>;
+    const roundCount = Math.max(1, ...planned.map((m) => Number(m.round || 1)));
+    const matches = planned.map((m) => {
+      const view = stageCache.matchState(m.code || "") as HostMatchView | null;
+      return {round: m.round, finished: Boolean(view?.finished), participants: view?.participants};
+    });
+    const rows = computeGroupRounds({matches, pointsRule: config.rules?.bout?.points, roundCount});
+    if (!rows.length) {
+      for (const entrant of config.entrants || []) {
+        if (entrant.label) rows.push({name: entrant.label, points: 0, rounds: new Array<number>(roundCount).fill(0)});
+      }
+    }
+    const title = String(schemeStage?.title || "").match(/Группа\s*\S+$/)?.[0] || String(schemeStage?.title || code);
+    return {title, roundCount, rows};
+  });
+  return gameTable.buildGroupStandingsView(groups);
+}
+
+// buildReseedPanes fills a reseed pane: the folded «Пересев» tab stacks every
+// этап's table, each under the name of the round it seats; a lone reseed keeps
+// its single panel.
+function buildReseedPanes(stageCode: string): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "reseed-fold";
+  const members = stageCode === gameTable.RESEED_TAB_CODE
+    ? (ekSchemeStages().find((stage) => stage.code === stageCode)?.members || [])
+    : [stageCode];
+  const raw = rawSchemeStages();
+  for (const code of members) {
+    if (members.length > 1) {
+      const index = raw.findIndex((stage) => stage.code === code);
+      const next = raw.slice(index + 1).find((stage) => gameTable.stageType(stage as StageRef) !== "reseed");
+      const head = document.createElement("h3");
+      head.className = "reseed-fold-head";
+      head.textContent = String(next?.title || "");
+      wrap.appendChild(head);
+    }
+    wrap.appendChild(buildHostReseedStagePanel(mergedStage(fest, code)));
+  }
+  return wrap;
 }
 
 function rawSchemeStages(): HostStage[] {
@@ -1702,9 +1775,9 @@ function setupStageTableObserver(pane: StagePane): void {
 // immediately; the rest stay as placeholders until the observer fires.
 function refreshPaneFrames(pane: StagePane, data: StageData): void {
   if (!pane || !data) return;
-  const stage = mergedStage(fest, pane.dataset.stageCode!);
-  if (stageType(stage) === "reseed") {
-    pane.replaceChildren(buildHostReseedStagePanel(stage));
+  const paneStage = ekSchemeStages().find((s) => s.code === pane.dataset.stageCode) || mergedStage(fest, pane.dataset.stageCode!);
+  if (stageType(paneStage) === "reseed") {
+    pane.replaceChildren(buildReseedPanes(pane.dataset.stageCode!));
     return;
   }
   let rebuilt = false;
@@ -2281,7 +2354,8 @@ function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
     };
   });
 
-  const table = gameTable.buildTwoRowScoreTable({
+  const build = individualGame() ? gameTable.buildFlatScoreTable : gameTable.buildTwoRowScoreTable;
+  const table = build({
     className: options.compact ? "match-table compact-score-table ek-stage-table" : "match-table",
     attrs: {dataset: {matchCode}},
     rowMarkerColumn: !options.compact,
@@ -2339,7 +2413,7 @@ function trailingHeaders(hasShootout: boolean): Array<HTMLElement | {content: st
 }
 
 function teamNameCell(team: HostParticipantView, teamIndex: number): HTMLElement {
-  const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: 2});
+  const cell = td("", "sticky sticky-name team-name ek-team-cell", {rowSpan: seatRowSpan()});
   cell.dataset.team = String(teamIndex);
   const labelText = team.name || "";
   const layout = document.createElement("span");
@@ -2364,7 +2438,7 @@ function teamNameCell(team: HostParticipantView, teamIndex: number): HTMLElement
 }
 
 function totalCell(team: HostParticipantView, teamIndex: number): HTMLElement {
-  const cell = td(team.total, "sticky sticky-total number total-cell", {rowSpan: 2});
+  const cell = td(team.total, "sticky sticky-total number total-cell", {rowSpan: seatRowSpan()});
   cell.dataset.team = String(teamIndex);
   return cell;
 }
@@ -2409,7 +2483,7 @@ function placeCell(team: HostParticipantView, teamIndex: number, matchCode: stri
   });
   const cell = document.createElement("td");
   cell.className = "sticky sticky-place number place-cell";
-  cell.rowSpan = 2;
+  cell.rowSpan = seatRowSpan();
   cell.dataset.team = String(teamIndex);
   cell.appendChild(input);
   return cell;
@@ -2417,6 +2491,46 @@ function placeCell(team: HostParticipantView, teamIndex: number, matchCode: stri
 
 function themeCells(team: HostParticipantView, teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean): ScoreTableThemeRowSpec {
   const matchCode = currentMatchCode();
+  // A player seats himself: his бой row needs no player cell at all.
+  const playerCell = individualGame() ? null : buildPlayerSelectCell(team, teamIndex, theme, themeIndex, isShootout, matchCode);
+  const scoreCell = td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: seatRowSpan()});
+  scoreCell.dataset.team = String(teamIndex);
+  scoreCell.dataset.shootout = isShootout ? "1" : "0";
+  scoreCell.dataset.theme = String(themeIndex);
+  const gapClass = isLastRenderedTheme(isShootout, themeIndex) ? "gap shootout-adjacent-gap" : "gap";
+
+  const answers = theme.answers.map((mark, answerIndex) => {
+    const cell = document.createElement("td");
+    cell.className = `answer-cell theme-block ${mark}`;
+    if (answerIndex === 0) {
+      cell.classList.add("theme-block-bottom-left");
+    }
+    if (!state!.finished && isActiveCell(teamIndex, isShootout, themeIndex, answerIndex)) {
+      cell.classList.add("active");
+    }
+    cell.tabIndex = state!.finished ? -1 : 0;
+    cell.dataset.team = String(teamIndex);
+    cell.dataset.matchCode = matchCode;
+    cell.dataset.shootout = isShootout ? "1" : "0";
+    cell.dataset.theme = String(themeIndex);
+    cell.dataset.answer = String(answerIndex);
+    cell.title = `${team.name}, ${isShootout ? "П" : "Т"}${themeIndex + 1}, ${state!.questionValues[answerIndex]}`;
+    if (!state!.finished) {
+      cell.addEventListener("click", () => {
+        selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {matchCode});
+      });
+      cell.addEventListener("focus", () => {
+        selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {focus: false, matchCode});
+      });
+    }
+    return cell;
+  });
+
+  if (!playerCell) return {scoreCell, gapClassName: gapClass, answers};
+  return {playerCell, scoreCell, gapClassName: gapClass, answers};
+}
+
+function buildPlayerSelectCell(team: HostParticipantView, teamIndex: number, theme: HostThemeView, themeIndex: number, isShootout: boolean, matchCode: string): HTMLElement {
   const playerCell = document.createElement("td");
   playerCell.colSpan = state!.questionValues.length;
   playerCell.className = "player-cell theme-block theme-block-top-left";
@@ -2458,55 +2572,22 @@ function themeCells(team: HostParticipantView, teamIndex: number, theme: HostThe
   editor.appendChild(selectWrap);
 
   playerCell.appendChild(editor);
-  const scoreCell = td(theme.score, "number theme-score theme-block theme-block-score", {rowSpan: 2});
-  scoreCell.dataset.team = String(teamIndex);
-  scoreCell.dataset.shootout = isShootout ? "1" : "0";
-  scoreCell.dataset.theme = String(themeIndex);
-  const gapClass = isLastRenderedTheme(isShootout, themeIndex) ? "gap shootout-adjacent-gap" : "gap";
-
-  const answers = theme.answers.map((mark, answerIndex) => {
-    const cell = document.createElement("td");
-    cell.className = `answer-cell theme-block ${mark}`;
-    if (answerIndex === 0) {
-      cell.classList.add("theme-block-bottom-left");
-    }
-    if (!state!.finished && isActiveCell(teamIndex, isShootout, themeIndex, answerIndex)) {
-      cell.classList.add("active");
-    }
-    cell.tabIndex = state!.finished ? -1 : 0;
-    cell.dataset.team = String(teamIndex);
-    cell.dataset.matchCode = matchCode;
-    cell.dataset.shootout = isShootout ? "1" : "0";
-    cell.dataset.theme = String(themeIndex);
-    cell.dataset.answer = String(answerIndex);
-    cell.title = `${team.name}, ${isShootout ? "П" : "Т"}${themeIndex + 1}, ${state!.questionValues[answerIndex]}`;
-    if (!state!.finished) {
-      cell.addEventListener("click", () => {
-        selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {matchCode});
-      });
-      cell.addEventListener("focus", () => {
-        selectAnswerCell(teamIndex, isShootout, themeIndex, answerIndex, {focus: false, matchCode});
-      });
-    }
-    return cell;
-  });
-
-  return {playerCell, scoreCell, gapClassName: gapClass, answers};
+  return playerCell;
 }
 
 function trailingCells(team: HostParticipantView, teamIndex: number, hasShootout: boolean): HTMLElement[] {
-  const cells = [td("", "shootout-controls-cell", {rowSpan: 2})];
+  const cells = [td("", "shootout-controls-cell", {rowSpan: seatRowSpan()})];
   if (hasShootout) {
     const shootoutTotal = team.shootoutTotal ?? team.tiebreak;
-    const tiebreakCell = td(shootoutTotal, "number tiebreak-cell", {rowSpan: 2});
+    const tiebreakCell = td(shootoutTotal, "number tiebreak-cell", {rowSpan: seatRowSpan()});
     tiebreakCell.dataset.team = String(teamIndex);
     cells.push(tiebreakCell);
   }
-  const plusCell = td(team.plus, "number plus-cell", {rowSpan: 2});
+  const plusCell = td(team.plus, "number plus-cell", {rowSpan: seatRowSpan()});
   plusCell.dataset.team = String(teamIndex);
   cells.push(plusCell);
   [0, 1, 2, 3, 4].forEach((idx) => {
-    const correctCell = td(team.correctCounts[4 - idx], "number narrow correct-count-cell", {rowSpan: 2});
+    const correctCell = td(team.correctCounts[4 - idx], "number narrow correct-count-cell", {rowSpan: seatRowSpan()});
     correctCell.dataset.team = String(teamIndex);
     correctCell.dataset.valueIndex = String(idx);
     cells.push(correctCell);
@@ -2652,7 +2733,7 @@ function shootoutControlsHeader(): HTMLElement {
   return node;
 }
 
-type ScoreTableThemeRowSpec = {playerCell: HTMLElement; scoreCell: HTMLElement; gapClassName: string; answers: HTMLElement[]};
+type ScoreTableThemeRowSpec = {playerCell?: HTMLElement; scoreCell: HTMLElement; gapClassName: string; answers: HTMLElement[]};
 
 function handleGlobalKeydown(event: KeyboardEvent): void {
   if ((route.mode !== "match" && route.mode !== "stage") || isFormControl(event.target)) return;

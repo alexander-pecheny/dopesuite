@@ -98,3 +98,55 @@ test("the grid reports how many stages it drew", () => {
   }, {stageHeaderLink: false});
   assert.equal(grid.props["--fest-stages"], "7");
 });
+
+// A ranking Block is one column: its groups' tables stack under one header
+// rather than sprawling six columns wide. The Сетка is a glance.
+test("a Block's groups share one column", () => {
+  const group = (n) => ({
+    code: `s1-g${n}`,
+    title: `Групповой этап. Группа ${n}`,
+    stage_type: "matches",
+    grain: {block: "s1", group: String(n)},
+    standings: [{rank: 1, name: `Лидер ${n}`, metrics: {place: 1, points: 9}}],
+    matches: [],
+  });
+  const grid = buildFestGrid({stages: [group(1), group(2), group(3)]}, {stageHeaderLink: false});
+  assert.equal(grid.props["--fest-stages"], "1", "групповой этап — одна колонка");
+  assert.equal(withClass(grid, "grid-standings").length, 3, "таблица каждой группы на месте");
+  const blockHeads = withClass(grid, "grid-stage-head");
+  assert.equal(blockHeads.length, 1, "у колонки один заголовок блока");
+  assert.equal(walk(blockHeads[0]).find((n) => n.tag === "h2").textContent, "Групповой этап");
+  const groupHeads = withClass(grid, "grid-stage-subhead").map((n) => n.textContent);
+  assert.deepEqual(groupHeads, ["Группа 1", "Группа 2", "Группа 3"]);
+});
+
+// A Block of pods that rank by Losses has no standings tables; its бои still
+// share the one column, grouped per pod.
+test("a Block of pods without standings shares one column", () => {
+  const pod = (n) => ({
+    code: `s2-g${n}`,
+    title: `DE ${n}`,
+    stage_type: "matches",
+    grain: {block: "s2", group: String(n)},
+    matches: [{code: `s2-g${n}-m1`, participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
+  });
+  const grid = buildFestGrid({stages: [pod(1), pod(2)]}, {stageHeaderLink: false});
+  assert.equal(grid.props["--fest-stages"], "1");
+  assert.equal(withClass(grid, "grid-match").length, 2);
+  const groupHeads = withClass(grid, "grid-stage-subhead").map((n) => n.textContent);
+  assert.deepEqual(groupHeads, ["DE 1", "DE 2"]);
+});
+
+// Bracket rounds carry no group, so they keep a column each — ЭК's Сетка
+// stays a column per заход.
+test("rounds without groups keep their own columns", () => {
+  const round = (code, title) => ({
+    code, title, stage_type: "matches",
+    grain: {block: "s1", wave: 1},
+    matches: [{code: `${code}-m1`, participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
+  });
+  const grid = buildFestGrid({
+    stages: [round("s1-r1-w1", "1/16, заход 1"), round("s1-r1-w2", "1/16, заход 2")],
+  }, {stageHeaderLink: false});
+  assert.equal(grid.props["--fest-stages"], "2");
+});
