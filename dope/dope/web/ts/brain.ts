@@ -189,7 +189,9 @@ function blockBuckets(): BlockBucket[] {
       current = null;
       continue;
     }
-    const block = stage.grain?.block || stage.code || "";
+    // scheme_json written before grain existed unmarshals without one; the
+    // -gN code convention still names the Block.
+    const block = stage.grain?.block || String(stage.code || "").replace(/-g\d+$/, "") || "";
     if (!current || current.block !== block) {
       current = {block, label: "", stages: [], ranks: false};
       buckets.push(current);
@@ -280,7 +282,13 @@ function questionsFor(code: string): number {
 }
 
 function tabFromHash(): string | null {
-  const key = (window.location.hash || "").replace(/^#/, "");
+  let key = (window.location.hash || "").replace(/^#/, "");
+  // The pre-Block tabs: one crosstable, one протоколы. Old bookmarks land on
+  // the first Block's pair rather than silently falling back to the Сетка.
+  if (key === "table" || key === "protocol") {
+    const first = blockBuckets().find((bucket) => key === "table" ? bucket.ranks : true);
+    key = first ? (key === "table" ? `block:${first.block}` : `protocol:${first.block}`) : "grid";
+  }
   return visibleTabs().some((t) => t.key === key) ? key : null;
 }
 

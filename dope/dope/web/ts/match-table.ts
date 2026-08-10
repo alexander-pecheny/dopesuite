@@ -1346,12 +1346,14 @@ export interface IndividualStatsRow {
 // computeIndividualPlayerStats aggregates a personal game per participant —
 // the participant is the player, so there is no per-theme player to read.
 // Σ, Σ+ (positive points), бои, and the taken counts per value; regular themes
-// only, sorted by Σ.
+// only, finished бои only — a seeded but unplayed бой is not a бой played —
+// sorted by Σ.
 export function computeIndividualPlayerStats(stages: EKStage[] | null | undefined): IndividualStatsRow[] {
   const values = [10, 20, 30, 40, 50];
   const players = new Map<string, IndividualStatsRow>();
   for (const stage of stages || []) {
     for (const match of stage.matches || []) {
+      if (!match.finished) continue;
       for (const seat of match.participants || []) {
         const name = (seat.name || "").trim();
         if (!name) continue;

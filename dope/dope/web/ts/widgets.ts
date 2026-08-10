@@ -915,6 +915,7 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
 // tab strip every game page shares (od/si/brain). The caller owns which tabs
 // are visible and what selecting one does.
 const tabBarScrollBindings = new WeakMap<HTMLElement, ScrollEdgeBinding>();
+const tabBarActiveKeys = new WeakMap<HTMLElement, string>();
 
 export function renderTabBar(
   root: HTMLElement,
@@ -947,7 +948,12 @@ export function renderTabBar(
   } else {
     binding.refresh();
   }
-  root.querySelector<HTMLElement>(".match-tab.active")?.scrollIntoView({block: "nearest", inline: "nearest"});
+  // Reveal the active tab only when it changed: a live-update rerender must
+  // not yank the bar away from wherever the user scrolled it.
+  if (tabBarActiveKeys.get(root) !== activeKey) {
+    tabBarActiveKeys.set(root, activeKey);
+    root.querySelector<HTMLElement>(".match-tab.active")?.scrollIntoView({block: "nearest", inline: "nearest"});
+  }
 }
 
 // fitScrollFade caps a scroll frame's edge shadows (the kit's scroll-fade

@@ -556,14 +556,22 @@ test("computeIndividualPlayerStats aggregates per participant", () => {
     code: "s1",
     matches: [{
       code: "m1",
+      finished: true,
       participants: [
         {name: "Виктор Вега", themes: [{answers: ["right", "", "", "", ""]}, {answers: ["", "wrong", "", "", ""]}]},
         {name: "Николай Зотов", themes: [{answers: ["", "", "", "", "right"]}]},
       ],
     }, {
       code: "m2",
+      finished: true,
       participants: [
         {name: "Виктор Вега", themes: [{answers: ["", "", "right", "", ""]}]},
+      ],
+    }, {
+      // Seeded but unplayed: not a бой played, nothing counted.
+      code: "m3",
+      participants: [
+        {name: "Виктор Вега", themes: [{answers: ["right", "", "", "", ""]}]},
       ],
     }],
   }];

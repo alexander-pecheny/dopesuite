@@ -7,7 +7,7 @@
 // variables, + - * / and parens — over a бой's outcome. Anything it cannot
 // read is 0: a broken rule must not take the whole tab down.
 export function evalScoringRule(expr: string, vars: Record<string, number>): number {
-  const tokens = String(expr).match(/\d+(?:\.\d+)?|[a-zа-яё_][a-za-яё0-9_]*|[-+*/()]/gi) || [];
+  const tokens = String(expr).match(/\d+(?:\.\d+)?|[a-zа-яё_][a-zа-яё0-9_]*|[-+*/()]/gi) || [];
   let pos = 0;
   const peek = () => tokens[pos];
   const take = () => tokens[pos++];

@@ -146,6 +146,15 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
 // groupStagesByBlock buckets consecutive group stages of one Block together
 // (reseeds dropped — the Пересев tab holds those), leaving every other stage
 // in a bucket of its own.
+// blockOf names a group stage's Block: the grain where the scheme carries it,
+// else the -gN code convention — scheme_json written before grain existed
+// unmarshals without one, and its групп must still share a column.
+function blockOf(stage: FestGridStage): string {
+  if (stage.grain?.block && stage.grain?.group) return stage.grain.block;
+  const match = String(stage.code || "").match(/^(.+)-g\d+$/);
+  return match ? match[1] : "";
+}
+
 function groupStagesByBlock(stages: FestGridStage[]): FestGridStage[][] {
   const buckets: FestGridStage[][] = [];
   let block = "";
@@ -154,7 +163,7 @@ function groupStagesByBlock(stages: FestGridStage[]): FestGridStage[][] {
       block = "";
       continue;
     }
-    const grouped = stage.grain?.block && stage.grain?.group ? stage.grain.block : "";
+    const grouped = blockOf(stage);
     if (grouped && grouped === block) {
       buckets[buckets.length - 1].push(stage);
     } else {
@@ -170,7 +179,7 @@ function groupStagesByBlock(stages: FestGridStage[]): FestGridStage[][] {
 function blockColumnTitle(stage: FestGridStage): string {
   const title = String(stage.title || "");
   const named = title.replace(/\.?\s*Группа\s*\S+$/, "");
-  if (named !== title) return named;
+  if (named !== title) return named || "Групповой этап";
   return title.replace(/\s*\d+$/, "") || title;
 }
 
