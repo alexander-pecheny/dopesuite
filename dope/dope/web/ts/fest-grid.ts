@@ -1,4 +1,5 @@
 import { markNameOverflow } from "./widgets.js";
+import { matchLetterMap, letteredTitle, type StageRef } from "./match-table.js";
 
 export interface FestGridVenueObject {
   number?: unknown;
@@ -84,6 +85,9 @@ export interface FestGridOptions {
   matchTitleLink?: boolean;
   hiddenVenueMatches?: Set<string | undefined>;
   hideVenue?: boolean;
+  // letters overrides the бой-letter map — a caller drawing a slice of the
+  // scheme passes the whole game's, so «Бой BU» does not restart at A.
+  letters?: Map<string, string>;
 }
 
 let festGridNameOverflowFrame = 0;
@@ -110,6 +114,7 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
 
   const scheme = parseScheme(data.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : data.stages || [];
+  boutLetters = options.letters || matchLetterMap(stages as StageRef[]);
   const liveStages = new Map((data.stages || []).map((stage) => [stage.code, stage]));
   const previousVenueByRow = new Map<number, string>();
 
@@ -125,10 +130,17 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
     const liveStage = liveStages.get(stage.code) || stage;
     // A Group is a table, not a wall of бои: a группа of nine plays twelve of
     // them, and twelve boxes say less about who is winning than nine rows do.
-    // The бои are still there — the detailed tab lists them.
+    // The бои are still there — the detailed tab lists them. A lone pod ranks
+    // itself the same way. Bracket rounds carry no group and keep their boxes.
+    const grouped = blockOf(stage) !== "";
+    const order = grouped ? stageSlotOrder(stage, liveStage) : [];
     const standings = liveStage.standings || stage.standings || [];
     if (standings.length) {
-      columns.appendChild(buildStandingsStage(stage, standings, options));
+      columns.appendChild(buildStandingsStage(stage, standings, options, order));
+      return;
+    }
+    if (grouped) {
+      columns.appendChild(buildStandingsStage(stage, podStandings(stage, liveStage, order), options, order));
       return;
     }
     const hiddenVenueMatches = repeatedVenueMatches(stage, liveStage, previousVenueByRow);
@@ -222,18 +234,15 @@ function buildBlockColumn(
     }
     sub.textContent = blockGroupLabel(stage);
     stack.appendChild(sub);
+    const order = stageSlotOrder(stage, liveStage);
     const standings = liveStage.standings || stage.standings || [];
     if (standings.length) {
-      stack.appendChild(buildStandingsTable(standings));
+      stack.appendChild(buildStandingsTable(standings, order));
       return;
     }
-    const matches = document.createElement("div");
-    matches.className = "grid-matches";
-    const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
-    (stage.matches || []).forEach((match) => {
-      matches.appendChild(buildMatchBox(match, liveMatches.get(match.code), options));
-    });
-    stack.appendChild(matches);
+    // A pod ranks nobody server-side, but the Сетка still shows who finished
+    // where — the бои belong to the block's own tab, not here.
+    stack.appendChild(buildStandingsTable(podStandings(stage, liveStage, order), order));
   });
   section.appendChild(stack);
   return section;
@@ -340,6 +349,7 @@ function buildStandingsStage(
   stage: FestGridStage,
   standings: ReseedEntry[],
   options: FestGridOptions = {},
+  order: string[] = [],
 ): HTMLElement {
   const section = document.createElement("section");
   section.className = "grid-stage grid-stage-standings";
@@ -355,33 +365,104 @@ function buildStandingsStage(
   }
   header.appendChild(el("h2", "", stage.title));
   section.appendChild(header);
-  section.appendChild(buildStandingsTable(standings));
+  section.appendChild(buildStandingsTable(standings, order));
   return section;
 }
 
-function buildStandingsTable(standings: ReseedEntry[]): HTMLElement {
+// stageSlotOrder is the seating order of a stage's participants — first
+// appearance across its бои, which is how the schedule dealt them. The Сетка's
+// rows sit in this order, not place order, so a live группа never reshuffles
+// under the reader.
+function stageSlotOrder(stage: FestGridStage, liveStage: FestGridStage): string[] {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
+  (stage.matches || []).forEach((match) => {
+    for (const seat of liveMatches.get(match.code)?.participants || match.participants || []) {
+      const name = String(seat?.name || "");
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      order.push(name);
+    }
+  });
+  return order;
+}
+
+// podStandings ranks a pod from its бои, since the server keeps no table for
+// one: the never-eliminated first (fewest Losses), then by how late the second
+// Loss came. Survivors of an unfinished pod stay unplaced — their места are
+// still being played.
+function podStandings(stage: FestGridStage, liveStage: FestGridStage, order: string[]): ReseedEntry[] {
+  const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
+  const losses = new Map<string, number>();
+  const eliminated = new Map<string, number>();
+  let allFinished = true;
+  (stage.matches || []).forEach((match) => {
+    const live = liveMatches.get(match.code);
+    if (live?.status !== "finished") {
+      allFinished = false;
+      return;
+    }
+    const round = Number((match as {round?: number}).round || 1);
+    for (const seat of live.participants || []) {
+      const name = String(seat?.name || "");
+      if (!name || !seat?.place || seat.place <= 1) continue;
+      const count = (losses.get(name) || 0) + 1;
+      losses.set(name, count);
+      if (count === 2 && !eliminated.has(name)) eliminated.set(name, round);
+    }
+  });
+  const ranked = order.slice().sort((a, b) => {
+    const outA = eliminated.get(a), outB = eliminated.get(b);
+    if (outA === undefined || outB === undefined) {
+      if (outA !== outB) return outA === undefined ? -1 : 1;
+      return (losses.get(a) || 0) - (losses.get(b) || 0);
+    }
+    return outB - outA;
+  });
+  return order.map((name) => {
+    const rank = ranked.indexOf(name) + 1;
+    const placed = eliminated.has(name) || allFinished;
+    return {name, metrics: placed ? {place: rank} : {}};
+  });
+}
+
+function buildStandingsTable(standings: ReseedEntry[], order: string[] = []): HTMLElement {
   const metrics = standingsMetrics(standings);
   const table = document.createElement("table");
   table.className = "grid-standings";
   const head = document.createElement("tr");
-  head.appendChild(el("th", "standings-place", "М"));
   head.appendChild(el("th", "standings-name", ""));
   metrics.forEach((metric) => head.appendChild(el("th", "standings-metric", standingsMetricLabel(metric))));
+  head.appendChild(el("th", "standings-place", "М"));
   table.appendChild(head);
-  standings.forEach((entry) => {
+  const rows = order.length
+    ? standings.slice().sort((a, b) => slotIndex(order, a) - slotIndex(order, b))
+    : standings;
+  rows.forEach((entry) => {
     const row = document.createElement("tr");
-    row.appendChild(el("td", "standings-place", placeText(Number(entry.metrics?.place ?? entry.rank) || null)));
-    const name = el("td", "standings-name", String(entry.name || ""));
-    // The column is a glance wide, so a long name ellipsises — carry the whole
-    // one where a reader can still reach it.
-    name.setAttribute("title", String(entry.name || ""));
+    const name = el("td", "standings-name grid-slot-team", "");
+    const label = String(entry.name || "");
+    const inner = el("span", "grid-slot-team-name", label);
+    inner.tabIndex = 0;
+    inner.setAttribute("aria-label", label);
+    name.appendChild(inner);
+    name.appendChild(el("span", "popover popover-inline grid-slot-team-popover", label));
     row.appendChild(name);
     metrics.forEach((metric) => {
       row.appendChild(el("td", "standings-metric", reseedMetricValue(metric, entry.metrics?.[metric])));
     });
+    row.appendChild(el("td", "standings-place", placeText(Number(entry.metrics?.place ?? entry.rank) || null)));
     table.appendChild(row);
   });
   return table;
+}
+
+// slotIndex finds an entry's seat in the slot order; a name the schedule never
+// seated sinks below everyone it did.
+function slotIndex(order: string[], entry: ReseedEntry): number {
+  const index = order.indexOf(String(entry.name || ""));
+  return index < 0 ? order.length + Number(entry.rank || 0) : index;
 }
 
 // standingsMetrics picks the columns worth showing. The Сетка is a glance, not a
@@ -688,10 +769,14 @@ function basePath(options: FestGridOptions = {}): string {
   return options.basePath || "";
 }
 
+// The бои wear their буква — the sheets' A..Z, AA.. handle — dealt by
+// buildFestGrid over the whole scheme in schedule order.
+let boutLetters: Map<string, string> | null = null;
+
 function matchLabel(match: FestGridMatch): string {
-  const defaultTitle = `Бой ${match.code}`;
-  if (!match.title || match.title === defaultTitle) return `Бой ${match.code}`;
-  return match.title;
+  const letter = boutLetters?.get(match.code || "");
+  if (!match.title || match.title === `Бой ${match.code}`) return `Бой ${letter || match.code}`;
+  return letteredTitle(match.title, letter);
 }
 
 function slotTeamCell(label: string): HTMLElement {
@@ -728,7 +813,10 @@ function updateFestGridNameOverflow(root: HTMLElement): void {
 function slotLabel(slot: FestGridSlot, live: FestGridLiveParticipant = {}): string {
   if (typeof slot === "string") return slot;
   if (live.name && live.name !== live.source) return live.name;
-  if (slot.label) return slot.label;
+  if (slot.label) {
+    const letter = slot.fromMatch ? boutLetters?.get(String(slot.fromMatch.match || "")) : "";
+    return letteredTitle(slot.label, letter || undefined);
+  }
   if (slot.seed) {
     const number = slot.seed.number || slot.seed.position;
     if (slot.seed.basket) return `К${slot.seed.basket}-${number}`;

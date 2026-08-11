@@ -501,6 +501,17 @@ test("roundStages gathers a Block's Groups into one tab per круг", () => {
   // standings on one tab — followed by the круг protocol tabs.
   assert.deepEqual(stages.map((s) => s.title), ["Групповой этап", "Круг 1", "Круг 2", "Финал"]);
   assert.equal(stages[0].stage_type, "standings");
+  // The synthetic tabs live in URLs, so their codes read as words — the block's
+  // slug when the scheme names one, `-standings`/`-rN` otherwise — and the old
+  // `@` spellings stay reachable through canonicalStageCode.
+  assert.deepEqual(stages.slice(0, 3).map((s) => s.code), ["s1-standings", "s1-r1", "s1-r2"]);
+  assert.equal(T.canonicalStageCode(stages, "s1@standings"), "s1-standings");
+  assert.equal(T.canonicalStageCode(stages, "s1@r2"), "s1-r2");
+  assert.equal(T.canonicalStageCode(stages, "s1-r2"), "s1-r2");
+  const slugged = T.roundStages([
+    {...group(1), slug: "group-stage"}, {...group(2), slug: "group-stage"}, playoff]);
+  assert.deepEqual(slugged.slice(0, 3).map((s) => s.code), ["group-stage", "group-stage-r1", "group-stage-r2"]);
+  assert.equal(T.canonicalStageCode(slugged, "s1@standings"), "group-stage");
   assert.deepEqual(stages[0].members, ["s1-g1", "s1-g2"]);
   assert.deepEqual(stages[1].matches.map((m) => m.code), ["s1-g1-1", "s1-g2-1"]);
   // Six группы of «Бой 1» need to say which table they were.
@@ -580,4 +591,35 @@ test("computeIndividualPlayerStats aggregates per participant", () => {
     {player: "Николай Зотов", sum: 50, plus: 50, battles: 1, right: [0, 0, 0, 0, 1]},
     {player: "Виктор Вега", sum: 20, plus: 40, battles: 2, right: [1, 0, 1, 0, 0]},
   ]);
+});
+
+// Every бой of a game carries a letter — A..Z, then AA.. — assigned across the
+// scheme's stages in schedule order. It is the human handle the sheets print
+// («Бой DW»), display-only: codes stay s1-r1-m1.
+test("matchLetterMap letters бои across stages in schedule order", () => {
+  const stages = [
+    {code: "s1-g1", matches: [{code: "s1-g1-1"}, {code: "s1-g1-2"}]},
+    {code: "s1-reseed", stage_type: "reseed"},
+    {code: "s2-r1", matches: [{code: "s2-r1-m1"}]},
+  ];
+  const letters = T.matchLetterMap(stages);
+  assert.equal(letters.get("s1-g1-1"), "A");
+  assert.equal(letters.get("s1-g1-2"), "B");
+  assert.equal(letters.get("s2-r1-m1"), "C");
+  // The 27th бой rolls into two letters, sheets-style.
+  const many = T.matchLetterMap([{
+    code: "s1",
+    matches: Array.from({length: 28}, (_, i) => ({code: `m${i}`})),
+  }]);
+  assert.equal(many.get("m25"), "Z");
+  assert.equal(many.get("m26"), "AA");
+  assert.equal(many.get("m27"), "AB");
+});
+
+test("letteredTitle rewrites the «Бой N» part and leaves the rest", () => {
+  assert.equal(T.letteredTitle("Бой 3", "C"), "Бой C");
+  assert.equal(T.letteredTitle("Группа 1. Бой 3", "C"), "Группа 1. Бой C");
+  assert.equal(T.letteredTitle("Финал. Бой 2", "EA"), "Финал. Бой EA");
+  assert.equal(T.letteredTitle("Письменный отбор", "A"), "Письменный отбор");
+  assert.equal(T.letteredTitle("Бой 3", undefined), "Бой 3");
 });

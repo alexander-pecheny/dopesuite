@@ -367,6 +367,7 @@ const writeFestCache = (view: HostFestView | null) => festCache().write(view);
 
 function adoptFestView(view: HostFestView): void {
   fest = view;
+  boutLetters = null;
   if (Array.isArray(view?.venues)) venues = view.venues;
   stageCache.adoptFest(view);
 }
@@ -459,7 +460,11 @@ async function loadStage(): Promise<void> {
   });
   const stagePromise = stageCache.prefetchStage(stageCode);
   await Promise.all([festPromise, stagePromise]);
-  if (route.mode !== "stage" || route.stageCode !== stageCode) return;
+  if (route.mode !== "stage") return;
+  // A legacy code survives until the fest arrives and renderStage translates
+  // it — that translation must not read as "the user switched tabs".
+  if (route.stageCode !== stageCode &&
+    gameTable.canonicalStageCode(ekSchemeStages(), stageCode) !== route.stageCode) return;
   renderStage();
   // Background prefetch of every other stage. Each payload is small and makes
   // subsequent tab switches instant (data + pane already cached).
@@ -1172,6 +1177,7 @@ function renderFest(): void {
 function renderStage(): void {
   if (!fest) return;
   resetMatchTableIndex();
+  if (route.stageCode) route.stageCode = gameTable.canonicalStageCode(ekSchemeStages(), route.stageCode);
   const stageCode = route.stageCode!;
   const stage = ekSchemeStages().find((s) => s.code === stageCode) || mergedStage(fest, stageCode);
   setHostMode("grid");
@@ -1410,6 +1416,14 @@ function buildReseedPanes(stageCode: string): HTMLElement {
 function rawSchemeStages(): HostStage[] {
   const scheme = parseScheme(fest?.schemaJson);
   return (scheme?.stages?.length ? scheme.stages : fest?.stages || []) as HostStage[];
+}
+
+// Every бой of the game carries a буква — the sheets' A..Z, AA.. handle — dealt
+// once per fest view over the scheme's schedule order.
+let boutLetters: Map<string, string> | null = null;
+function letteredBoutTitle(matchCode: string | undefined, title: string): string {
+  if (!boutLetters) boutLetters = gameTable.matchLetterMap(rawSchemeStages() as StageRef[]);
+  return gameTable.letteredTitle(title, boutLetters.get(matchCode || ""));
 }
 
 function scheduleGridNameOverflowUpdate(root: ParentNode = hostRoot): void {
@@ -1735,7 +1749,7 @@ function buildStageTableStack(data: StageData | undefined): HTMLElement {
 function buildStageMatchPlaceholder(match: HostStageMatch): HTMLElement {
   const placeholder = document.createElement("div");
   placeholder.className = "stage-match-placeholder";
-  const title = match.title || `Бой ${match.code}`;
+  const title = letteredBoutTitle(match.code, match.title || `Бой ${match.code}`);
   placeholder.textContent = match.group ? `${match.group}. ${title}` : title;
   return placeholder;
 }
@@ -1809,7 +1823,9 @@ function renderStageMatchFrame(frame: StageFrame, matchState: HostMatchView, opt
   // onto whatever is there, so a repaint cannot stack the группа twice.
   const group = frame.dataset.group;
   const heading = group ? stageTable.querySelector<HTMLElement>(".battle-title") : null;
-  if (heading && matchState.title) heading.textContent = `${group}. ${matchState.title}`;
+  if (heading && matchState.title) {
+    heading.textContent = `${group}. ${letteredBoutTitle(matchState.code, matchState.title)}`;
+  }
   // Per-frame score index + last state, so a later same-shape update patches
   // this frame's cells in place (updateStageFrame) instead of rebuilding it —
   // the rebuild is what flickered the cell being edited.
@@ -2355,8 +2371,9 @@ function buildTable(options: {compact?: boolean} = {}): HTMLTableElement {
   });
 
   const build = individualGame() ? gameTable.buildFlatScoreTable : gameTable.buildTwoRowScoreTable;
+  const individual = individualGame() ? " individual-blank" : "";
   const table = build({
-    className: options.compact ? "match-table compact-score-table ek-stage-table" : "match-table",
+    className: options.compact ? `match-table compact-score-table ek-stage-table${individual}` : `match-table${individual}`,
     attrs: {dataset: {matchCode}},
     rowMarkerColumn: !options.compact,
     rowMarkerHeaderClassName: "sticky row-marker row-marker-head active-row-marker",
@@ -2605,7 +2622,7 @@ function battleHeader(): HTMLElement {
 
   const title = document.createElement("span");
   title.className = "battle-title";
-  title.textContent = state!.title || matchTitle();
+  title.textContent = letteredBoutTitle(matchCode, state!.title || matchTitle());
   layout.appendChild(title);
 
   if (venues.length > 0) {
@@ -3167,7 +3184,12 @@ function breadcrumbCurrentTitle(gameTitle: string): string {
   if (route.mode === "stats") return "Статистика";
   if (route.mode === "seedImport") return "Импорт команд";
   if (route.mode === "match") return state?.title || route.matchCode || "";
-  if (route.mode === "stage") return findStage(fest, route.stageCode!)?.title || route.stageCode || "";
+  if (route.mode === "stage") {
+    // The displayed tabs first: a synthetic stage (standings, круг) exists
+    // nowhere server-side, and its code is no title for a crumb.
+    return ekSchemeStages().find((stage) => stage.code === route.stageCode)?.title ||
+      findStage(fest, route.stageCode!)?.title || route.stageCode || "";
+  }
   return gameTitle;
 }
 

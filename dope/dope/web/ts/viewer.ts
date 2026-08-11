@@ -274,8 +274,21 @@ const writeFestCache = (view: unknown) => festCache().write(view);
 
 function adoptFestView(view: FestView): void {
   fest = view;
+  boutLetters = null;
   if (Array.isArray(view?.venues)) venues = view.venues;
   stageCache.adoptFest(view);
+}
+
+// Every бой of the game carries a буква — the sheets' A..Z, AA.. handle — dealt
+// once per fest view over the scheme's schedule order.
+let boutLetters: Map<string, string> | null = null;
+function letteredBoutTitle(matchCode: string | undefined, title: string): string {
+  if (!boutLetters) {
+    const scheme = parseScheme(fest?.schemaJson);
+    boutLetters = DopeTable.matchLetterMap(
+      (scheme?.stages?.length ? scheme.stages : fest?.stages || []) as StageRef[]);
+  }
+  return DopeTable.letteredTitle(title, boutLetters.get(matchCode || ""));
 }
 
 function hydrateFestFromCache(): boolean {
@@ -301,6 +314,7 @@ async function loadFest(): Promise<void> {
 async function loadStage(): Promise<void> {
   const cached = hydrateFestFromCache();
   if (cached) renderStage();
+  // renderStage may have translated a legacy `@` bookmark; fetch what it shows.
   const stageCode = route.stageCode!;
   // Revalidate fest and fetch this stage's matches in parallel.
   // adoptFestView clears stage caches if the revision changed.
@@ -312,7 +326,11 @@ async function loadStage(): Promise<void> {
   });
   const stagePromise = stageCache.prefetchStage(stageCode);
   await Promise.all([festPromise, stagePromise]);
-  if (route.mode !== "stage" || route.stageCode !== stageCode) return;
+  if (route.mode !== "stage") return;
+  // A legacy code survives until the fest arrives and renderStage translates
+  // it — that translation must not read as "the user switched tabs".
+  if (route.stageCode !== stageCode &&
+    DopeTable.canonicalStageCode(viewerStages(), stageCode) !== route.stageCode) return;
   renderStage();
   // Background prefetch of every other stage. Each payload is <10KB and
   // makes subsequent tab switches instant (cache hit + pane already built).
@@ -356,7 +374,8 @@ function paintStageFrame(frame: StageFrameElement, matchState: ViewerMatchView |
     } else {
       const table = withMatchState(matchState, () => buildReadonlyTable());
       frame.replaceChildren(table);
-      labelFrameGroup(frame, table, matchState.title || descriptor?.title || "");
+      labelFrameGroup(frame, table,
+        letteredBoutTitle(matchState.code, matchState.title || descriptor?.title || ""));
       frame.__scoreIndex = gameTable.createScoreTableIndex(table, {entity: "team", shootout: true});
     }
     frame.__matchState = matchState;
@@ -366,7 +385,7 @@ function paintStageFrame(frame: StageFrameElement, matchState: ViewerMatchView |
   frame.__matchState = null;
   const placeholder = document.createElement("div");
   placeholder.className = "stage-match-placeholder";
-  const title = descriptor?.title || `Бой ${descriptor?.code || ""}`;
+  const title = letteredBoutTitle(descriptor?.code, descriptor?.title || `Бой ${descriptor?.code || ""}`);
   placeholder.textContent = frame.dataset.group ? `${frame.dataset.group}. ${title}` : title;
   frame.replaceChildren(placeholder);
 }
@@ -669,6 +688,7 @@ function renderFest(): void {
 
 function renderStage(): void {
   if (!fest) return;
+  if (route.stageCode) route.stageCode = DopeTable.canonicalStageCode(viewerStages(), route.stageCode);
   const stageCode = route.stageCode;
   if (!stageCode) return;
   resetReadonlyTableIndex();
@@ -951,7 +971,7 @@ function buildReadonlyTable(): HTMLTableElement {
 
   const build = individualGame() ? gameTable.buildFlatScoreTable : gameTable.buildTwoRowScoreTable;
   return build({
-    className: "match-table compact-score-table ek-stage-table readonly-table",
+    className: `match-table compact-score-table ek-stage-table readonly-table${individualGame() ? " individual-blank" : ""}`,
     nameHeader: {content: readonlyBattleTitleNode(state!), className: "sticky sticky-name battle readonly-battle-head readonly-battle-with-popover"},
     themes,
     afterThemeHeaders: readonlyTrailingHeaders(hasShootout),
@@ -1262,7 +1282,12 @@ function breadcrumbCurrentTitle(gameTitle: string): string {
   if (route.mode === "venues") return "Площадки";
   if (route.mode === "stats") return "Статистика";
   if (route.mode === "match") return state?.title || route.matchCode || "";
-  if (route.mode === "stage") return findStage(fest!, route.stageCode!)?.title || route.stageCode || "";
+  if (route.mode === "stage") {
+    // The displayed tabs first: a synthetic stage (standings, круг) exists
+    // nowhere server-side, and its code is no title for a crumb.
+    return viewerStages().find((stage) => stage.code === route.stageCode)?.title ||
+      findStage(fest!, route.stageCode!)?.title || route.stageCode || "";
+  }
   return gameTitle;
 }
 
@@ -1295,7 +1320,7 @@ function readonlyBattleTitleNode(matchState: ViewerMatchView): HTMLElement {
 
   const battle = document.createElement("span");
   battle.className = "readonly-battle-name";
-  battle.textContent = matchState?.title || "";
+  battle.textContent = letteredBoutTitle(matchState?.code, matchState?.title || "");
   title.appendChild(battle);
 
   if (matchState?.venue) {

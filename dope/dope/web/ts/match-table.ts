@@ -754,6 +754,10 @@ export interface StageRef {
   title?: string;
   stage_type?: string;
   type?: string;
+  // slug is the block's readable URL handle from the scheme, carried by its
+  // stages; legacy is the pre-slug `@` spelling a synthetic tab answers to.
+  slug?: string;
+  legacy?: string;
   grain?: {block?: string; wave?: number; group?: string};
   matches?: StageRefMatch[];
   // members names the server stages a displayed stage is assembled from.
@@ -775,17 +779,40 @@ export interface GroupStandingsGroup {
   rows: Array<{name: string; points: number; rounds: number[]}>;
 }
 
+// resultsTeamCell is the canonical name cell of a results table: the name
+// clips into a fade with the full text on a popover, never an ellipsis.
+export function resultsTeamCell(name: string, className = "results-team"): HTMLElement {
+  const cell = td("", className);
+  const wrap = document.createElement("span");
+  wrap.className = "results-team-name-wrap";
+  const label = document.createElement("span");
+  label.className = "results-team-name";
+  label.textContent = name;
+  label.tabIndex = 0;
+  label.setAttribute("aria-label", name);
+  wrap.appendChild(label);
+  cell.appendChild(wrap);
+  const popover = document.createElement("span");
+  popover.className = "popover popover-inline results-team-name-popover";
+  popover.textContent = name;
+  cell.appendChild(popover);
+  return cell;
+}
+
 // buildGroupStandingsView is the sheets' «Группы» view: all групп on one tab,
-// each a table of Игрок | Очки | Круг 1..N.
+// each a table of Игрок | Очки | Круг 1..N, two abreast where the screen fits
+// them.
 export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "group-standings";
   const score = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
   for (const group of groups) {
+    const item = document.createElement("section");
+    item.className = "group-standings-item";
     const head = document.createElement("h3");
     head.className = "group-standings-head";
     head.textContent = group.title;
-    wrap.appendChild(head);
+    item.appendChild(head);
     const wrapper = document.createElement("div");
     wrapper.className = "results-wrapper group-standings-wrapper";
     const table = document.createElement("table");
@@ -804,7 +831,7 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
     group.rows.forEach((row, index) => {
       const tr = document.createElement("tr");
       tr.appendChild(td(index + 1, "results-place results-num"));
-      tr.appendChild(td(row.name, "results-team"));
+      tr.appendChild(resultsTeamCell(row.name));
       tr.appendChild(td(score(row.points), "number"));
       for (let round = 0; round < group.roundCount; round++) {
         tr.appendChild(td(score(row.rounds[round] || 0), "number"));
@@ -813,7 +840,8 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
     });
     table.appendChild(tbody);
     wrapper.appendChild(table);
-    wrap.appendChild(wrapper);
+    item.appendChild(wrapper);
+    wrap.appendChild(item);
   }
   return wrap;
 }
@@ -887,21 +915,65 @@ function gatherRounds(block: string, groups: StageRef[]): StageRef[] {
     }
   }
   const members = groups.map((group) => group.code);
+  // The synthetic codes land in URLs, so they read as words: the block's slug
+  // where the scheme names one, `-standings`/`-rN` otherwise. The old `@`
+  // spellings ride along as `legacy` for bookmarks.
+  const slug = groups[0].slug || "";
   // The Block's own tab leads: the sheets' «Группы» view, every группа's
   // standings on one tab, before the круг protocol tabs.
   const standings: StageRef = {
-    code: `${block}@standings`,
+    code: slug || `${block}-standings`,
+    legacy: `${block}@standings`,
     title: blockTabTitle(groups[0]),
     stage_type: "standings",
     members,
   };
   return [standings, ...Array.from(byRound.keys()).sort((a, b) => a - b).map((round) => ({
-    code: `${block}@r${round}`,
+    code: `${slug || block}-r${round}`,
+    legacy: `${block}@r${round}`,
     title: `Круг ${round}`,
     stage_type: "matches",
     matches: byRound.get(round) || [],
     members,
   }))];
+}
+
+// matchLetterMap deals every бой of a game its буква — A..Z, then AA.., the
+// way the sheets label them — across the scheme's stages in schedule order.
+// Display-only: the structural codes stay the identity everywhere else.
+export function matchLetterMap(stages: StageRef[]): Map<string, string> {
+  const letters = new Map<string, string>();
+  for (const stage of stages) {
+    for (const match of stage.matches || []) {
+      if (!match.code || letters.has(match.code)) continue;
+      letters.set(match.code, boutLetter(letters.size));
+    }
+  }
+  return letters;
+}
+
+function boutLetter(index: number): string {
+  let label = "";
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+    label = String.fromCharCode(65 + ((n - 1) % 26)) + label;
+  }
+  return label;
+}
+
+// letteredTitle swaps a title's «Бой N» for the бой's letter; a title that
+// never says «Бой» (the письменный отбор) is left alone.
+export function letteredTitle(title: string, letter: string | undefined): string {
+  if (!letter) return title;
+  return title.replace(/Бой\s+\d+/, `Бой ${letter}`);
+}
+
+// canonicalStageCode resolves a requested stage code against the displayed
+// tabs, translating the legacy `s1@standings`-style spellings old bookmarks
+// still carry into whatever the tab is called now.
+export function canonicalStageCode(stages: StageRef[], code: string): string {
+  if (stages.some((stage) => stage.code === code)) return code;
+  const legacy = stages.find((stage) => stage.legacy === code);
+  return legacy ? legacy.code : code;
 }
 
 // blockTabTitle is what a Block of Groups is called on its own tab: the
@@ -1556,6 +1628,9 @@ export const DopeTable = {
   formatPlace,
   stageType,
   roundStages,
+  canonicalStageCode,
+  matchLetterMap,
+  letteredTitle,
   foldReseedStages,
   RESEED_TAB_CODE,
   buildGroupStandingsView,

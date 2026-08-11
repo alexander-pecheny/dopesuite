@@ -7,7 +7,7 @@
 // side-effect module bundled by pages/brain.ts.
 
 import {DopeTable} from "./match-table.js";
-import type {CellCoord, CellEdit, CellRangeSelection, GameInitLike, RosterTeam, ScopedEventMessage} from "./match-table.js";
+import type {CellCoord, CellEdit, CellRangeSelection, GameInitLike, RosterTeam, ScopedEventMessage, StageRef} from "./match-table.js";
 import {computeBrainPlayerStats, rankGroup} from "./brain-rank.js";
 import type {RankDuel, RankTeam, StatsBout} from "./brain-rank.js";
 import {buildFestGrid, buildReseedStagePanel} from "./fest-grid.js";
@@ -233,7 +233,7 @@ function reseedStages(): BrainSchemeStage[] {
 function visibleTabs(): Array<{key: string; label: string}> {
   const tabs = [{key: "grid", label: "Сетка"}];
   for (const bucket of blockBuckets()) {
-    if (bucket.ranks) tabs.push({key: `block:${bucket.block}`, label: bucket.label});
+    if (bucket.ranks || podBucket(bucket)) tabs.push({key: `block:${bucket.block}`, label: bucket.label});
     tabs.push({key: `protocol:${bucket.block}`, label: `${bucket.label} (протоколы)`});
   }
   if (reseedStages().length) tabs.push({key: "reseed", label: "Пересев"});
@@ -246,6 +246,18 @@ function visibleTabs(): Array<{key: string; label: string}> {
 function stageKind(stage: BrainSchemeStage): string {
   return stage.kind || stage.stage_type || "";
 }
+
+// podBucket is a Block of pods — grouped stages that rank nobody server-side
+// (Double Elimination). Its detail tab lays the бои out per round, since a
+// crosstab has nothing to cross.
+function podBucket(bucket: BlockBucket): boolean {
+  return !bucket.ranks && bucket.stages.some(
+    (stage) => stage.grain?.group || /-g\d+$/.test(String(stage.code || "")));
+}
+
+// Every бой of the game carries a буква — the sheets' A..Z, AA.. handle —
+// dealt once over the scheme's schedule order. Display-only.
+const boutLetters = DopeTable.matchLetterMap((scheme.stages || []) as StageRef[]);
 
 // protocolStages are the stages whose бої the page draws — everything except
 // reseed edges, in scheme order.
@@ -502,7 +514,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
         : activeTab === "reseed"
           ? buildReseedTab()
           : bucket && activeTab.startsWith("block:")
-            ? buildCrosstable(bucket)
+            ? (bucket.ranks ? buildCrosstable(bucket) : buildPodBoard(bucket))
             : bucket
               ? buildProtocols(bucket)
               : buildGrid();
@@ -630,7 +642,32 @@ function buildGrid(): HTMLElement {
     if (viewStage?.code) stages.push(festStages.get(viewStage.code) || viewStage);
   }
   return buildFestGrid({schemaJson: fest?.schemaJson, stages},
-    {stageHeaderLink: false, matchTitleLink: false});
+    {stageHeaderLink: false, matchTitleLink: false, letters: boutLetters});
+}
+
+// buildPodBoard is a pod Block's detail tab, the sheet's «Double Elimination»
+// view: one column per round, each бой a box with its буква, teams and Σ. The
+// same boxes the Сетка once carried — moved where detail belongs.
+function buildPodBoard(bucket: BlockBucket): HTMLElement {
+  type GridMatch = NonNullable<FestGridStage["matches"]>[number];
+  const byRound = new Map<number, GridMatch[]>();
+  for (const stage of bucket.stages) {
+    const live = new Map((festStages.get(stage.code || "")?.matches || []).map((m) => [m.code, m]));
+    for (const planned of stage.matches || []) {
+      const round = Number((planned as {round?: number}).round || 1);
+      const merged = {...(planned as GridMatch), ...(live.get(planned.code) || {})};
+      const list = byRound.get(round);
+      if (list) list.push(merged);
+      else byRound.set(round, [merged]);
+    }
+  }
+  const stages = Array.from(byRound.keys()).sort((a, b) => a - b).map((round): FestGridStage => ({
+    code: `${bucket.block}-round-${round}`,
+    title: `Раунд ${round}`,
+    stage_type: "matches",
+    matches: byRound.get(round),
+  }));
+  return buildFestGrid({stages}, {stageHeaderLink: false, matchTitleLink: false, letters: boutLetters});
 }
 
 // buildReseedTab stacks every reseed's panel, each under the name of the
@@ -734,7 +771,7 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   const corner = document.createElement("th");
   corner.className = "row-marker brain-bout-corner";
   corner.rowSpan = 2;
-  corner.textContent = (code.split("-").pop() || code).replace(/^m/, "");
+  corner.textContent = boutLetters.get(code) || (code.split("-").pop() || code).replace(/^m/, "");
   corner.title = view.title || code;
   head.appendChild(corner);
   head.appendChild(nameHead(view, 0, planned));
