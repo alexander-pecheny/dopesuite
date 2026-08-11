@@ -66,6 +66,8 @@ type Play struct {
 	Themes    [][5]Mark
 	Players   []string
 	Questions []Answer
+	// Shootout is the net перестрелка points, zero for a seat that played none.
+	Shootout int
 }
 
 // Finding is one disagreement between the sheet and dope. It always shows both
@@ -156,7 +158,7 @@ func Run(script Script, game Game) ([]Finding, error) {
 			}
 		}
 		for _, seat := range bout.Seats {
-			if err := game.Play(bout.At, seat.Name, Play{Themes: seat.Marks, Players: seat.Players, Questions: seat.Questions}); err != nil {
+			if err := game.Play(bout.At, seat.Name, Play{Themes: seat.Marks, Players: seat.Players, Questions: seat.Questions, Shootout: seat.Shootout}); err != nil {
 				return findings, fmt.Errorf("%s, %s: отметки: %w", bout.At, seat.Name, err)
 			}
 		}

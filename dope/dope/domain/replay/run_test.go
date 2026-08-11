@@ -11,19 +11,20 @@ import (
 // replayer's own logic can be tested without a database — what it must catch
 // is a disagreement, and a disagreement is easiest to stage by hand.
 type fakeGame struct {
-	seated   map[string][]string
-	outcomes map[string]map[string]Result
-	finished []string
-	pinned   []string
-	lineups  []string
-	stats    []Stat
+	seated    map[string][]string
+	outcomes  map[string]map[string]Result
+	finished  []string
+	pinned    []string
+	lineups   []string
+	stats     []Stat
+	shootouts map[string]int
 	// bend rewrites what the game reports, so a test can make dope "wrong".
 	bendSeats   func(Coord, []string) []string
 	bendOutcome func(Coord, map[string]Result) map[string]Result
 }
 
 func newFakeGame() *fakeGame {
-	return &fakeGame{seated: map[string][]string{}, outcomes: map[string]map[string]Result{}}
+	return &fakeGame{seated: map[string][]string{}, outcomes: map[string]map[string]Result{}, shootouts: map[string]int{}}
 }
 
 func (f *fakeGame) Seat(at Coord, names []string) error {
@@ -62,6 +63,9 @@ func (f *fakeGame) Play(at Coord, name string, play Play) error {
 	key := at.String()
 	if f.outcomes[key] == nil {
 		f.outcomes[key] = map[string]Result{}
+	}
+	if play.Shootout != 0 {
+		f.shootouts[key+"|"+name] = play.Shootout
 	}
 	f.outcomes[key][name] = Result{Total: total}
 	if _, ok := f.seated[key]; !ok {
@@ -379,5 +383,32 @@ func TestStatsOverrideSilencesOnlyItsOwn(t *testing.T) {
 	}
 	if len(findings) != 0 {
 		t.Fatalf("закрытое расхождение всё равно сообщено: %v", findings)
+	}
+}
+
+// A перестрелка rides into Play as the net value the sheet kept, and the place
+// it settles is derived, not pinned — the game ranks with it and the sheet's
+// place is asserted like any other.
+func TestRunPassesShootoutIntoPlay(t *testing.T) {
+	script, err := Parse(`[game]
+type: si
+
+[s1/r1/w1/m1] жребий
+А | ---R- | 40 | 1
+Б | ---R- | 40 | 2
+перестрелка А: 20
+`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	game := newFakeGame()
+	if _, err := Run(script, game); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := game.shootouts["s1/r1/w1/m1|А"]; got != 20 {
+		t.Errorf("перестрелка А дошла как %d, want 20", got)
+	}
+	if got := game.shootouts["s1/r1/w1/m1|Б"]; got != 0 {
+		t.Errorf("перестрелка Б дошла как %d, want 0", got)
 	}
 }

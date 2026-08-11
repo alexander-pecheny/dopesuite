@@ -356,3 +356,40 @@ func TestParseLineupAndStatsStrictness(t *testing.T) {
 		}
 	}
 }
+
+// A перестрелка is extra material the protocol grid never records — the sheet
+// keeps only its net points per player. The line rides inside the бой it broke,
+// and the seat carries the value, so ranking can use it instead of a pin.
+func TestParseShootout(t *testing.T) {
+	script, err := Parse(`[game]
+type: si
+
+[s1/r1/w1/m1]
+А | R---R | 60 | 1
+Б | -R--R | 60 | 2
+перестрелка А: 60
+перестрелка Б: -50
+`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	seats := script.Bouts[0].Seats
+	if seats[0].Shootout != 60 || seats[1].Shootout != -50 {
+		t.Errorf("перестрелка = %d и %d, want 60 и -50", seats[0].Shootout, seats[1].Shootout)
+	}
+}
+
+func TestParseShootoutStrictness(t *testing.T) {
+	for _, c := range []struct{ name, src string }{
+		{"не сидящий в бою", "[game]\ntype: si\n\n[s1/r1/w1/m1]\nА | R---- | 10 | 1\nперестрелка Б: 20\n"},
+		{"записана дважды", "[game]\ntype: si\n\n[s1/r1/w1/m1]\nА | R---- | 10 | 1\nперестрелка А: 20\nперестрелка А: 30\n"},
+		{"не число", "[game]\ntype: si\n\n[s1/r1/w1/m1]\nА | R---- | 10 | 1\nперестрелка А: много\n"},
+		{"вне боя", "[game]\ntype: si\n\nперестрелка А: 20\n"},
+	} {
+		if _, err := Parse(c.src); err == nil {
+			t.Errorf("%s: разобралось без ошибки", c.name)
+		} else if !hasLine(err.Error()) {
+			t.Errorf("%s: ошибка без номера строки: %v", c.name, err)
+		}
+	}
+}

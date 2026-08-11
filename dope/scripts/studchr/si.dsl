@@ -4,6 +4,7 @@ venues: 6
 [scheme]
 title: Групповой этап
 type: roundrobin
+slug: group-stage
 groups: 6
 teams_in_group: 9
 match_size: 3

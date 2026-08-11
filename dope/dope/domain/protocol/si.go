@@ -25,10 +25,10 @@ type si struct{}
 
 func (si) Code() string { return "si" }
 
-// Metrics: сумма, сумма положительных ответов, и счётчики взятых по номиналам —
-// СИ ранжирует по ним, когда суммы равны.
+// Metrics: сумма, сумма положительных ответов, перестрелка и счётчики взятых
+// по номиналам — СИ ранжирует по ним, когда суммы равны.
 func (si) Metrics() []string {
-	return []string{"total", "plus", "taken50", "taken40", "taken30", "taken20", "taken10"}
+	return []string{"total", "plus", "shootoutTotal", "taken50", "taken40", "taken30", "taken20", "taken10"}
 }
 
 // EmptyState is the empty blob: a бой's seats come from its Slots and its marks
@@ -51,7 +51,7 @@ func (si) WriteResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMatchSta
 		if pin := match.Blob.Pin(match.ParticipantIDs[index]); pin != nil {
 			place = *pin
 		}
-		metrics := map[string]any{"total": player.Total, "plus": player.Plus}
+		metrics := map[string]any{"total": player.Total, "plus": player.Plus, "shootoutTotal": player.ShootoutTotal}
 		for i, value := range store.QuestionValues {
 			metrics[fmt.Sprintf("taken%d", value)] = player.CorrectCounts[i]
 		}
@@ -83,8 +83,9 @@ func (si) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error)
 	outcomes := make([]structure.SlotOutcome, len(view.Participants))
 	for i, player := range view.Participants {
 		metrics := map[string]float64{
-			"total": float64(player.Total),
-			"plus":  float64(player.Plus),
+			"total":         float64(player.Total),
+			"plus":          float64(player.Plus),
+			"shootoutTotal": float64(player.ShootoutTotal),
 		}
 		for k, value := range store.QuestionValues {
 			metrics[fmt.Sprintf("taken%d", value)] = float64(player.CorrectCounts[k])
@@ -94,23 +95,29 @@ func (si) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error)
 	return outcomes, nil
 }
 
-// placesBySum ranks a бой by сумма alone, sharing a place on equal sums — two
-// players who both took 110 finish 1.5, not 1 and 2. ЭК would split such a tie
-// with a перестрелка and КСИ by Σ+, but личная СИ pays очки by place, so a
-// split here would invent a difference the бой did not produce. Σ+ and the
-// per-value counts are still emitted; the group table sorts on them.
+// placesBySum ranks a бой by сумма, then by перестрелка where sums tie — extra
+// material played exactly to break the tie, held outside Σ. A tie the
+// перестрелка did not touch stays shared: two players who both took 110 finish
+// 1.5, not 1 and 2, because личная СИ pays очки by place and a split here would
+// invent a difference the бой did not produce. Σ+ and the per-value counts are
+// still emitted; the group table sorts on them.
 func placesBySum(players []store.ParticipantView) []float64 {
 	order := make([]int, len(players))
 	for i := range order {
 		order[i] = i
 	}
+	rank := func(p store.ParticipantView) [2]int { return [2]int{p.Total, p.ShootoutTotal} }
 	sort.SliceStable(order, func(a, b int) bool {
-		return players[order[a]].Total > players[order[b]].Total
+		ra, rb := rank(players[order[a]]), rank(players[order[b]])
+		if ra[0] != rb[0] {
+			return ra[0] > rb[0]
+		}
+		return ra[1] > rb[1]
 	})
 	places := make([]float64, len(players))
 	for start := 0; start < len(order); {
 		end := start + 1
-		for end < len(order) && players[order[end]].Total == players[order[start]].Total {
+		for end < len(order) && rank(players[order[end]]) == rank(players[order[start]]) {
 			end++
 		}
 		place := float64(start+end+1) / 2

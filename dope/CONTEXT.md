@@ -54,6 +54,9 @@ The declarative document describing a Game's Structure — its Blocks, Edges, an
 **Сетка**:
 The one-glance map of a whole Game: every Block's standings at the coarsest grain worth a glance (М, at most Σ), the single entry point where anyone playing finds who proceeds where. Compact on purpose — crosstabs, protocols and per-Metric detail belong to a Block's own views, never to the Сетка.
 
+**Буква боя**:
+A Match's human handle: one letter sequence per Game — A..Z, then AA.. — assigned in schedule order (Block, then Round, then Match). It is display-only; the structural code (s1-r2-m3) stays the stored identity, URLs included.
+
 **Match**:
 One sitting of Participants scored together under one Protocol. The unit the Structure schedules and the unit a host edits.
 _Avoid_: bout as a distinct concept — бой is just the brain-format word for a Match.

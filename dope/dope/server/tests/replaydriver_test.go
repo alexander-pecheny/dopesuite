@@ -197,6 +197,13 @@ func (g *serverGame) Play(at replay.Coord, name string, play replay.Play) error 
 			})
 		}
 	}
+	if play.Shootout != 0 {
+		shootout, err := g.shootoutOps(at, participantID, play.Shootout)
+		if err != nil {
+			return fmt.Errorf("перестрелка у %s: %w", name, err)
+		}
+		ops = append(ops, shootout...)
+	}
 	if len(ops) == 0 {
 		return nil
 	}
@@ -207,6 +214,107 @@ func (g *serverGame) Play(at replay.Coord, name string, play replay.Play) error 
 		return fmt.Errorf("отметки %s: %d %s", code, resp.Code, resp.Body.String())
 	}
 	return nil
+}
+
+// shootoutOps writes one seat's перестрелка into the blob's shootout theme: the
+// sheet kept a net total, so the marks are synthesized — greedily, distinct
+// nominals from 50 down — faithful in total, invented in composition. Every
+// seated participant gets the theme (the live host page keeps the grid in
+// lockstep the same way), but only ones that do not have it yet, so an earlier
+// seat's marks in the same бой survive.
+func (g *serverGame) shootoutOps(at replay.Coord, participantID int64, net int) ([]map[string]any, error) {
+	matchID, _, err := g.matchAt(at)
+	if err != nil {
+		return nil, err
+	}
+	var state string
+	if err := g.db().QueryRow(`
+select coalesce(state_json, '{}') from matches where id = ?`, matchID).Scan(&state); err != nil {
+		return nil, err
+	}
+	var blob struct {
+		Participants map[string]struct {
+			ShootoutThemes []any `json:"shootoutThemes"`
+		} `json:"participants"`
+	}
+	if err := json.Unmarshal([]byte(state), &blob); err != nil {
+		return nil, err
+	}
+	themes := shootoutMarks(net)
+	check := 0
+	for _, theme := range themes {
+		for index, mark := range theme {
+			if mark == "right" {
+				check += (index + 1) * 10
+			} else if mark == "wrong" {
+				check -= (index + 1) * 10
+			}
+		}
+	}
+	if check != net {
+		return nil, fmt.Errorf("нетто %d не раскладывается по номиналам", net)
+	}
+	var ops []map[string]any
+	rows, err := g.db().Query(`
+select participant_id from match_slots where match_id = ? and participant_id is not null order by slot_index`, matchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		have := len(blob.Participants[fmt.Sprint(id)].ShootoutThemes)
+		for t := have; t < len(themes); t++ {
+			ops = append(ops, map[string]any{
+				"path":  []any{"participants", fmt.Sprint(id), "shootoutThemes", t},
+				"value": map[string]any{"answers": []any{"", "", "", "", ""}},
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for t, theme := range themes {
+		for index, mark := range theme {
+			if mark == "" {
+				continue
+			}
+			ops = append(ops, map[string]any{
+				"path":  []any{"participants", fmt.Sprint(participantID), "shootoutThemes", t, "answers", index},
+				"value": mark,
+			})
+		}
+	}
+	return ops, nil
+}
+
+// shootoutMarks decomposes a net total into theme marks on the 10..50 scale:
+// one right (or, negative, wrong) per nominal, highest first, a further theme
+// if ±150 per theme is not enough.
+func shootoutMarks(net int) [][5]string {
+	sign, remaining := "right", net
+	if net < 0 {
+		sign, remaining = "wrong", -net
+	}
+	var themes [][5]string
+	for remaining > 0 {
+		var theme [5]string
+		for index := 4; index >= 0; index-- {
+			value := (index + 1) * 10
+			if remaining >= value {
+				theme[index] = sign
+				remaining -= value
+			}
+		}
+		if theme == ([5]string{}) {
+			break
+		}
+		themes = append(themes, theme)
+	}
+	return themes
 }
 
 func (g *serverGame) Finish(at replay.Coord) error {

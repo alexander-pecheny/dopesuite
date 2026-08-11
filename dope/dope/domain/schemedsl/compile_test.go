@@ -839,3 +839,46 @@ title.r2: Полуфиналы
 		}
 	}
 }
+
+// A block may carry a slug — the readable handle its synthetic tabs (the
+// «Групповой этап» standings, the круг protocol views) use as their URL stage
+// code, instead of s1-flavoured internals.
+func TestCompileBlockSlug(t *testing.T) {
+	scheme := compileSrc(t, `[init]
+seed: xlsx
+
+[scheme]
+title: Групповой этап
+type: roundrobin
+slug: group-stage
+groups: 2
+teams_in_group: 3
+proceeding_teams: 2
+---
+type: single_elimination
+teams: 4
+`, Input{Slug: "si-1", Title: "СИ", GameType: "si"})
+	for _, code := range []string{"s1-g1", "s1-g2"} {
+		if got := stageByCode(t, scheme, code).Slug; got != "group-stage" {
+			t.Errorf("%s slug = %q, want group-stage", code, got)
+		}
+	}
+	if got := stageByCode(t, scheme, "s2-final").Slug; got != "" {
+		t.Errorf("slug утёк в другой блок: %q", got)
+	}
+	doc, err := Parse(`[init]
+seed: xlsx
+
+[scheme]
+type: roundrobin
+slug: Групповой этап
+groups: 2
+teams_in_group: 3
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Compile(doc, Input{Slug: "si-1", Title: "СИ", GameType: "si"}); err == nil {
+		t.Error("slug с пробелами и кириллицей прошёл — в URL ему нельзя")
+	}
+}

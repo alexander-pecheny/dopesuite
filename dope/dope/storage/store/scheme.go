@@ -61,6 +61,7 @@ type SchemeStage struct {
 	Title     string          `json:"title"`
 	StageType string          `json:"stage_type"`
 	Kind      string          `json:"kind,omitempty"` // registered StageKind ('rr', …); empty = stage_type
+	Slug      string          `json:"slug,omitempty"` // the Block's readable URL handle for synthetic tabs
 	Position  int             `json:"position"`
 	Grain     SchemeGrain     `json:"grain"`
 	Matches   []SchemeMatch   `json:"matches"`

@@ -136,7 +136,11 @@ type Seat struct {
 	// field. Empty string is a theme the sheet named nobody for; a nil slice is
 	// a transcript that does not carry players at all.
 	Players []string
-	Line    int
+	// Shootout is the net перестрелка points the sheet recorded for this seat —
+	// extra material the theme grid never holds, written as its own line inside
+	// the бой. It is input, like a Draw: dope replays it and ranks with it.
+	Shootout int
+	Line     int
 }
 
 type Bout struct {
@@ -279,6 +283,10 @@ func Parse(src string) (Script, error) {
 				return Script{}, err
 			}
 			script.Stats = append(script.Stats, stat)
+		case section == "бой" && strings.HasPrefix(text, "перестрелка "):
+			if err := parseShootout(text, line, bout); err != nil {
+				return Script{}, err
+			}
 		case section == "бой":
 			seat, err := parseSeat(text, line, script.Game)
 			if err != nil {
@@ -594,6 +602,33 @@ func parseSeat(text string, line int, game string) (Seat, error) {
 	}
 	seat.Place = place
 	return seat, nil
+}
+
+// parseShootout reads `перестрелка Ктулху: 60` — the net points a перестрелка
+// came to for one seat of the бой it sits in. Zero is refused rather than
+// stored: a seat with no line nets zero already, so an explicit one is either a
+// duplicate or a misread sheet.
+func parseShootout(text string, line int, bout *Bout) error {
+	name, points, ok := strings.Cut(strings.TrimPrefix(text, "перестрелка "), ":")
+	name = strings.TrimSpace(name)
+	if !ok || name == "" {
+		return errAt(line, "перестрелка пишется как «перестрелка Ктулху: 60», а не %q", text)
+	}
+	value, err := strconv.Atoi(strings.TrimSpace(points))
+	if err != nil || value == 0 {
+		return errAt(line, "перестрелка у %s — ненулевое целое, а не %q", name, strings.TrimSpace(points))
+	}
+	for i := range bout.Seats {
+		if bout.Seats[i].Name != name {
+			continue
+		}
+		if bout.Seats[i].Shootout != 0 {
+			return errAt(line, "перестрелка у %s записана дважды", name)
+		}
+		bout.Seats[i].Shootout = value
+		return nil
+	}
+	return errAt(line, "перестрелка у %s, которого нет в бою %s", name, bout.At)
 }
 
 // parseTheme reads one theme's five cells: R taken, W lost, - never played.

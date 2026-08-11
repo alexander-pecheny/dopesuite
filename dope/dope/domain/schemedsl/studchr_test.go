@@ -51,6 +51,7 @@ seed: xlsx
 [scheme]
 title: Групповой этап
 type: roundrobin
+slug: group-stage
 groups: 6
 teams_in_group: 9
 match_size: 3
@@ -202,6 +203,9 @@ func TestStudchrSI(t *testing.T) {
 		t.Fatalf("этапов = %d, want 13", len(stages))
 	}
 	for g := 0; g < 6; g++ {
+		if stages[g].Slug != "group-stage" {
+			t.Fatalf("группа %d: slug %q, want group-stage", g+1, stages[g].Slug)
+		}
 		if len(stages[g].Matches) != 12 {
 			t.Fatalf("группа %d: %d боёв, want 12", g+1, len(stages[g].Matches))
 		}

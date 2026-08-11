@@ -104,17 +104,23 @@ team's `[составы]`.
   from a бой's место: a бой shares its place between seats that tie. There is
   nothing to hold dope to, so only the Σ is checked — the ranking is checked
   where it decides something, in whom the next round seats.
-- A place written `3!` was **set by hand**. A перестрелка breaks a tie with
-  material the protocol grid never records, so that place cannot be derived from
-  the marks: it is input, exactly as a Draw is. The replayer writes it as a Pin
-  and does not assert it. Use it only where the grid genuinely cannot imply an
-  order — marking an ordinary place as pinned turns a real check into a
-  tautology.
+- A place written `3!` was **set by hand**. Use it only where the grid genuinely
+  cannot imply an order and no перестрелка line covers it — marking an ordinary
+  place as pinned turns a real check into a tautology. The replayer writes it as
+  a Pin and does not assert it.
 
-  СтудЧР is the evidence that these really are перестрелки and not a sorting
-  rule nobody wrote down. Across ЭК and личная СИ, seats level on Σ are ranked
-  by the sheets sometimes toward the lower Σ+ and sometimes toward the higher —
-  no ordering of the protocol's own metrics produces both.
+  СтудЧР is the evidence that ties split by something outside the grid really
+  are перестрелки and not a sorting rule nobody wrote down. Across ЭК and личная
+  СИ, seats level on Σ are ranked by the sheets sometimes toward the lower Σ+
+  and sometimes toward the higher — no ordering of the protocol's own metrics
+  produces both.
+- `перестрелка Ктулху: 60` inside a бой is that seat's **net перестрелка
+  points** — extra material the theme grid never records, held outside Σ, the
+  thing that split the tie. It is input: the replayer writes it into the blob's
+  shootout theme (the marks are synthesized greedily from the nominals — total
+  faithful, composition invented, since the sheets keep only the net) and the
+  game ranks by Σ, then by it, so the sheet's места stay asserted. Zero is never
+  written — a seat with no line nets zero.
 
 The table is checked both ways: that everyone the sheet lists played, and that
 dope seated nobody the sheet didn't.

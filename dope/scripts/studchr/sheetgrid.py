@@ -61,12 +61,17 @@ def theme_count(header):
 
 def read_bouts(ws):
     """Each block is «Бой X» plus its player rows, until a blank line."""
-    bouts, current, themes_here = [], None, 0
+    bouts, current, themes_here, shootout_col = [], None, 0, None
     for row in ws.iter_rows(values_only=True):
         head = str(row[0]).strip() if row[0] else ""
         if head.startswith("Бой ") or head == "Письменный отбор":
             current = {"code": head.split("(")[0].strip(), "players": []}
             themes_here = theme_count(row)
+            # Right after the last theme block the play-off sheets keep «П» —
+            # the net перестрелка points, outside Σ, breaking the бой's tie.
+            shootout_col = FIRST_VALUE_COL + themes_here * THEME_STRIDE
+            if shootout_col >= len(row) or str(row[shootout_col]).strip() != "П":
+                shootout_col = None
             bouts.append(current)
             continue
         if not head or current is None:
@@ -88,6 +93,8 @@ def read_bouts(ws):
                                      [str(row[base + i]) for i in range(VALUES)]))
         # Σ and место as the sheet printed them. They are what the replay holds
         # dope against, so they are read verbatim and never recomputed here.
+        shootout = number(row[shootout_col]) if shootout_col is not None else None
         current["players"].append({"name": head, "themes": themes,
-                                   "total": number(row[1]), "place": number(row[2])})
+                                   "total": number(row[1]), "place": number(row[2]),
+                                   "shootout": int(shootout) if shootout else 0})
     return [b for b in bouts if b["players"]]

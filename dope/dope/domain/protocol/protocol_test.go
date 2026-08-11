@@ -237,3 +237,28 @@ func TestSIScore(t *testing.T) {
 		t.Errorf("метрики первого = %v", outcomes[0].Metrics)
 	}
 }
+
+// Перестрелка ломает равенство сумм: место делится только там, где и сумма, и
+// перестрелка равны. Сама перестрелка в Σ не входит — она отдельная метрика.
+func TestSIShootoutBreaksTies(t *testing.T) {
+	p, _ := Get("si")
+	state := `{"participants":[
+		{"name":"А","themes":[{"player":"А","answers":["right","","","",""]}]},
+		{"name":"Б","themes":[{"player":"Б","answers":["right","","","",""]}],
+		 "shootoutThemes":[{"answers":["","right","","",""]}]},
+		{"name":"В","themes":[{"player":"В","answers":["","","","",""]}]}
+	]}`
+	outcomes, err := p.Score(nil, json.RawMessage(state))
+	if err != nil {
+		t.Fatalf("Score: %v", err)
+	}
+	if outcomes[1].Place != 1 || outcomes[0].Place != 2 || outcomes[2].Place != 3 {
+		t.Errorf("места = %v/%v/%v, want 2/1/3", outcomes[0].Place, outcomes[1].Place, outcomes[2].Place)
+	}
+	if outcomes[1].Metrics["total"] != 10 {
+		t.Errorf("Σ с перестрелкой = %v, want 10 — перестрелка в сумму не входит", outcomes[1].Metrics["total"])
+	}
+	if outcomes[1].Metrics["shootoutTotal"] != 20 || outcomes[0].Metrics["shootoutTotal"] != 0 {
+		t.Errorf("перестрелка = %v и %v, want 20 и 0", outcomes[1].Metrics["shootoutTotal"], outcomes[0].Metrics["shootoutTotal"])
+	}
+}

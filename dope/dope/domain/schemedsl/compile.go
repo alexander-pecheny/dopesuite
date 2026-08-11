@@ -176,7 +176,7 @@ var protocolParams = map[string]map[string]string{
 }
 
 var blockKeys = map[string]bool{
-	"type": true, "title": true, "groups": true, "teams_in_group": true, "teams": true,
+	"type": true, "title": true, "slug": true, "groups": true, "teams_in_group": true, "teams": true,
 	"proceeding_teams": true, "reseed": true, "sorting": true, "points": true,
 	"venues": true, "bronze": true, "stats_from": true, "best_of": true,
 	"match_size": true, "winning_places": true, "rounds": true,
@@ -877,6 +877,22 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 	}}}, nil
 }
 
+// blockSlug reads a block's `slug:` — the readable URL handle its synthetic
+// tabs use as their stage code. It lands in a URL path, so only what survives
+// one unescaped is allowed.
+func (c *compiler) blockSlug(blk Section) (string, error) {
+	slug, ok := blk.Str("slug")
+	if !ok {
+		return "", nil
+	}
+	for _, r := range slug {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+			return "", errAt(blk.Line, "slug — латиница, цифры и дефис, а не %q", slug)
+		}
+	}
+	return slug, nil
+}
+
 // roundTitle lets a scheme name a round itself — `title.r1: 1/16 финала` —
 // falling back to the derived name. The traditional 1/N names are arithmetic
 // only in a bracket that halves; anywhere else they are the tournament's own
@@ -985,12 +1001,17 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 		if err != nil {
 			return nil, errAt(blk.Line, "%s", err.Error())
 		}
+		slug, err := c.blockSlug(blk)
+		if err != nil {
+			return nil, err
+		}
 		c.position++
 		c.scheme.Stages = append(c.scheme.Stages, store.SchemeStage{
 			Code:      code,
 			Title:     c.groupTitle(blk, g, groups),
 			StageType: "matches",
 			Kind:      "rr",
+			Slug:      slug,
 			Position:  c.position,
 			Grain:     at{block: blockCode, group: groupCode(groups, g)}.grain(),
 			Matches:   matches,
