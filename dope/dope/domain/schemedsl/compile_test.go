@@ -882,3 +882,64 @@ teams_in_group: 3
 		t.Error("slug с пробелами и кириллицей прошёл — в URL ему нельзя")
 	}
 }
+
+// A slug is a synthetic stage code on the client, so collisions and silent
+// drops are compile errors, not production surprises.
+func TestCompileBlockSlugStrictness(t *testing.T) {
+	compileErr := func(src string) error {
+		t.Helper()
+		doc, err := Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = Compile(doc, Input{Slug: "si-1", Title: "СИ", GameType: "si"})
+		return err
+	}
+	if err := compileErr(`[init]
+seed: xlsx
+
+[scheme]
+type: roundrobin
+slug: group-stage
+groups: 2
+teams_in_group: 3
+proceeding_teams: 2
+---
+type: roundrobin
+slug: group-stage
+groups: 2
+teams_in_group: 2
+`); err == nil {
+		t.Error("два блока с одним slug прошли")
+	}
+	if err := compileErr(`[init]
+seed: xlsx
+
+[scheme]
+type: roundrobin
+slug: s2-final
+groups: 2
+teams_in_group: 3
+proceeding_teams: 2
+---
+type: single_elimination
+teams: 4
+`); err == nil {
+		t.Error("slug, совпавший с кодом этапа, прошёл")
+	}
+	if err := compileErr(`[init]
+seed: xlsx
+
+[scheme]
+type: roundrobin
+groups: 2
+teams_in_group: 3
+proceeding_teams: 2
+---
+type: single_elimination
+slug: playoff
+teams: 4
+`); err == nil {
+		t.Error("slug на плей-офф молча проглочен")
+	}
+}

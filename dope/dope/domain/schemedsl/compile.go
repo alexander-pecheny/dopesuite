@@ -35,7 +35,35 @@ func Compile(doc *Doc, in Input) (store.FestScheme, error) {
 	if err := uniqueCodes(c.scheme); err != nil {
 		return store.FestScheme{}, err
 	}
+	if err := uniqueSlugs(c.scheme); err != nil {
+		return store.FestScheme{}, err
+	}
 	return c.scheme, nil
+}
+
+// uniqueSlugs refuses slugs that collide: a slug is a synthetic stage code on
+// the client, so two blocks sharing one — or a slug shadowing a real stage
+// code — would key two different tabs the same.
+func uniqueSlugs(scheme store.FestScheme) error {
+	codes := map[string]bool{}
+	for _, stage := range scheme.Stages {
+		codes[stage.Code] = true
+	}
+	owner := map[string]string{}
+	for _, stage := range scheme.Stages {
+		if stage.Slug == "" {
+			continue
+		}
+		if codes[stage.Slug] {
+			return fmt.Errorf("slug %q совпадает с кодом этапа — вкладки перепутаются", stage.Slug)
+		}
+		block := stage.Grain.Block
+		if held, taken := owner[stage.Slug]; taken && held != block {
+			return fmt.Errorf("slug %q носят два блока — вкладки перепутаются", stage.Slug)
+		}
+		owner[stage.Slug] = block
+	}
+	return nil
 }
 
 // uniqueCodes refuses a scheme whose stages or бои collide. The database says
@@ -213,6 +241,13 @@ func (c *compiler) checkKeys() error {
 			}
 			if _, isParam := c.protocolConfigKey(key); !blockKeys[key] && !isParam {
 				return errAt(v.Line, "неизвестный ключ %s", key)
+			}
+			// Only roundrobin reads it; anywhere else it would be silently
+			// dropped and the author would meet the s2-… URLs in production.
+			if key == "slug" {
+				if kind, _ := blk.Str("type"); kind != kindRR {
+					return errAt(v.Line, "slug умеет только roundrobin — у блока %s его вкладки кода не поменяют", kind)
+				}
 			}
 		}
 	}

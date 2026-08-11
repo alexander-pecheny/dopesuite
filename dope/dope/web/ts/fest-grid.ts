@@ -54,6 +54,7 @@ export interface FestGridStage {
   title?: string;
   stage_type?: string;
   type?: string;
+  kind?: string;
   grain?: {block?: string; group?: string; wave?: number};
   standings?: ReseedEntry[];
   layout?: { columns?: number };
@@ -131,16 +132,17 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
     // A Group is a table, not a wall of бои: a группа of nine plays twelve of
     // them, and twelve boxes say less about who is winning than nine rows do.
     // The бои are still there — the detailed tab lists them. A lone pod ranks
-    // itself the same way. Bracket rounds carry no group and keep their boxes.
-    const grouped = blockOf(stage) !== "";
-    const order = grouped ? stageSlotOrder(stage, liveStage) : [];
+    // itself the same way. Bracket rounds carry no group and keep their boxes,
+    // and so does a legacy grouped stage the scheme never graded.
+    const order = blockOf(stage) !== "" ? stageSlotOrder(stage, liveStage) : [];
     const standings = liveStage.standings || stage.standings || [];
     if (standings.length) {
       columns.appendChild(buildStandingsStage(stage, standings, options, order));
       return;
     }
-    if (grouped) {
-      columns.appendChild(buildStandingsStage(stage, podStandings(stage, liveStage, order), options, order));
+    const table = ungradedStandings(stage, liveStage, order);
+    if (table) {
+      columns.appendChild(buildStandingsStage(stage, table, options, order));
       return;
     }
     const hiddenVenueMatches = repeatedVenueMatches(stage, liveStage, previousVenueByRow);
@@ -240,9 +242,18 @@ function buildBlockColumn(
       stack.appendChild(buildStandingsTable(standings, order));
       return;
     }
-    // A pod ranks nobody server-side, but the Сетка still shows who finished
-    // where — the бои belong to the block's own tab, not here.
-    stack.appendChild(buildStandingsTable(podStandings(stage, liveStage, order), order));
+    const table = ungradedStandings(stage, liveStage, order);
+    if (table) {
+      stack.appendChild(buildStandingsTable(table, order));
+      return;
+    }
+    const matches = document.createElement("div");
+    matches.className = "grid-matches";
+    const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
+    (stage.matches || []).forEach((match) => {
+      matches.appendChild(buildMatchBox(match, liveMatches.get(match.code), options));
+    });
+    stack.appendChild(matches);
   });
   section.appendChild(stack);
   return section;
@@ -372,14 +383,20 @@ function buildStandingsStage(
 // stageSlotOrder is the seating order of a stage's participants — first
 // appearance across its бои, which is how the schedule dealt them. The Сетка's
 // rows sit in this order, not place order, so a live группа never reshuffles
-// under the reader.
+// under the reader. An unseated slot contributes its label («Пересев-3»), so
+// the map of who proceeds where survives until the reseed fills the names.
 function stageSlotOrder(stage: FestGridStage, liveStage: FestGridStage): string[] {
   const order: string[] = [];
   const seen = new Set<string>();
   const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
   (stage.matches || []).forEach((match) => {
-    for (const seat of liveMatches.get(match.code)?.participants || match.participants || []) {
-      const name = String(seat?.name || "");
+    const live = liveMatches.get(match.code);
+    const liveTeams = live?.participants || match.participants || [];
+    const slots = match.slots || [];
+    const count = Math.max(liveTeams.length, slots.length);
+    for (let index = 0; index < count; index += 1) {
+      const name = String(liveTeams[index]?.name || "") ||
+        (slots[index] !== undefined ? slotLabel(slots[index], liveTeams[index] || {}) : "");
       if (!name || seen.has(name)) continue;
       seen.add(name);
       order.push(name);
@@ -388,15 +405,29 @@ function stageSlotOrder(stage: FestGridStage, liveStage: FestGridStage): string[
   return order;
 }
 
+// ungradedStandings is the compact table for a grouped stage the server keeps
+// no ranking for. A pod earns derived места; a graded Kind whose table simply
+// has not been computed yet gets placeless rows; a legacy stage the scheme
+// never graded (kind unknown, blockOf by code convention alone) gets nothing —
+// its бои stay, because inventing pod rules for a round-robin misranks it.
+function ungradedStandings(stage: FestGridStage, liveStage: FestGridStage, order: string[]): ReseedEntry[] | null {
+  if (!stage.grain?.group || !order.length) return null;
+  if (stage.kind === "matches") return podStandings(stage, liveStage, order);
+  if (stage.kind) return order.map((name) => ({name, metrics: {}}));
+  return null;
+}
+
 // podStandings ranks a pod from its бои, since the server keeps no table for
 // one: the never-eliminated first (fewest Losses), then by how late the second
-// Loss came. Survivors of an unfinished pod stay unplaced — their места are
-// still being played.
+// Loss came. A tie the бои did not settle shares its place, the way every
+// scorer here does; survivors of an unfinished pod stay unplaced — their места
+// are still being played. Only an outright lost бой counts: a shared place is
+// a tie, not a Loss.
 function podStandings(stage: FestGridStage, liveStage: FestGridStage, order: string[]): ReseedEntry[] {
   const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
   const losses = new Map<string, number>();
   const eliminated = new Map<string, number>();
-  let allFinished = true;
+  let allFinished = (stage.matches || []).length > 0;
   (stage.matches || []).forEach((match) => {
     const live = liveMatches.get(match.code);
     if (live?.status !== "finished") {
@@ -406,24 +437,32 @@ function podStandings(stage: FestGridStage, liveStage: FestGridStage, order: str
     const round = Number((match as {round?: number}).round || 1);
     for (const seat of live.participants || []) {
       const name = String(seat?.name || "");
-      if (!name || !seat?.place || seat.place <= 1) continue;
+      const place = Number(seat?.place || 0);
+      if (!name || place < 2 || !Number.isInteger(place)) continue;
       const count = (losses.get(name) || 0) + 1;
       losses.set(name, count);
       if (count === 2 && !eliminated.has(name)) eliminated.set(name, round);
     }
   });
-  const ranked = order.slice().sort((a, b) => {
-    const outA = eliminated.get(a), outB = eliminated.get(b);
-    if (outA === undefined || outB === undefined) {
-      if (outA !== outB) return outA === undefined ? -1 : 1;
-      return (losses.get(a) || 0) - (losses.get(b) || 0);
-    }
-    return outB - outA;
-  });
+  // Rank key: alive before eliminated, fewer Losses first, later elimination
+  // first. Equal keys are ties the pod never split — they share a place.
+  const key = (name: string): number => {
+    const out = eliminated.get(name);
+    if (out !== undefined) return 1000 - out;
+    return (losses.get(name) || 0) - 1000;
+  };
+  const ranked = order.slice().sort((a, b) => key(a) - key(b));
+  const places = new Map<string, number>();
+  for (let start = 0; start < ranked.length;) {
+    let end = start + 1;
+    while (end < ranked.length && key(ranked[end]) === key(ranked[start])) end += 1;
+    const shared = (start + end + 1) / 2;
+    for (let i = start; i < end; i += 1) places.set(ranked[i], shared);
+    start = end;
+  }
   return order.map((name) => {
-    const rank = ranked.indexOf(name) + 1;
     const placed = eliminated.has(name) || allFinished;
-    return {name, metrics: placed ? {place: rank} : {}};
+    return {name, metrics: placed ? {place: places.get(name) || 0} : {}};
   });
 }
 

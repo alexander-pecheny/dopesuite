@@ -940,12 +940,15 @@ function gatherRounds(block: string, groups: StageRef[]): StageRef[] {
 
 // matchLetterMap deals every бой of a game its буква — A..Z, then AA.., the
 // way the sheets label them — across the scheme's stages in schedule order.
-// Display-only: the structural codes stay the identity everywhere else.
+// Display-only: the structural codes stay the identity everywhere else. A
+// match that is not a «Бой» (ТПШ's письменный отбор) never shows a letter, so
+// it takes none — otherwise every letter after it sits one off the paper.
 export function matchLetterMap(stages: StageRef[]): Map<string, string> {
   const letters = new Map<string, string>();
   for (const stage of stages) {
     for (const match of stage.matches || []) {
       if (!match.code || letters.has(match.code)) continue;
+      if (match.title && !/Бой\s+\d+/.test(match.title)) continue;
       letters.set(match.code, boutLetter(letters.size));
     }
   }

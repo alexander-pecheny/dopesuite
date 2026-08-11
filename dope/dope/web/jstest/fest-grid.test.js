@@ -142,6 +142,7 @@ test("a Block of pods draws место against team, not бои", () => {
     code: "s2-g1",
     title: "DE 1",
     stage_type: "matches",
+    kind: "matches",
     grain: {block: "s2", group: "1"},
     matches: [
       bout("s2-g1-m1", 1, "А", 1, "Б", 2),
@@ -164,6 +165,24 @@ test("a Block of pods draws место against team, not бои", () => {
   assert.deepEqual(places, ["М", "1", "3", "2", "4"]);
 });
 
+// A legacy grouped stage — matched by its -gN code alone, kind unknown — keeps
+// its бои: the pod rules would misrank a round-robin группа.
+test("a legacy group without standings keeps its бои", () => {
+  const legacy = (n) => ({
+    code: `s1-g${n}`,
+    title: `Группа ${n}`,
+    stage_type: "matches",
+    matches: [{
+      code: `s1-g${n}-1`, status: "finished", participantCount: 2,
+      slots: [{label: "А"}, {label: "Б"}],
+      participants: [{name: "А", place: 1}, {name: "Б", place: 2}],
+    }],
+  });
+  const grid = buildFestGrid({stages: [legacy(1), legacy(2)]}, {stageHeaderLink: false});
+  assert.equal(withClass(grid, "grid-standings").length, 0);
+  assert.equal(withClass(grid, "grid-match").length, 2, "legacy бои остаются в Сетке");
+});
+
 // A pod still mid-play ranks only the eliminated: survivors' места are not
 // invented while their бои are open.
 test("an unfinished pod leaves survivors unplaced", () => {
@@ -175,6 +194,7 @@ test("an unfinished pod leaves survivors unplaced", () => {
     code: "s2-g1",
     title: "DE 1",
     stage_type: "matches",
+    kind: "matches",
     grain: {block: "s2", group: "1"},
     matches: [
       bout("s2-g1-m1", 1, "А", 1, "Б", 2, "finished"),

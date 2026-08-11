@@ -24,6 +24,12 @@
   --narrow-col: 30px;
   --sheet-corner-col: 56px;
   --sheet-corner-row: 32px;
+  /* Сетка geometry: column bounds shared by every game's grid, the бой-box
+     cell padding the standings tables borrow, and the группа-table track. */
+  --fest-col-min: 190px;
+  --fest-col-max: 240px;
+  --grid-cell-pad: 3px 6px;
+  --group-standings-col: 520px;
   --od-detailed-number-digits: 3ch;
   --od-detailed-number-pad-left: var(--space-0-5);
   --od-detailed-number-pad-right: var(--space-1);
@@ -1077,7 +1083,7 @@
   grid-auto-flow: column;
   /* Capped: a game of three stages must not stretch each into a banner —
      every game's Сетка reads at the same column width ЭК's does. */
-  grid-auto-columns: minmax(190px, 240px);
+  grid-auto-columns: minmax(var(--fest-col-min), var(--fest-col-max));
   grid-template-rows: auto 1fr;
   gap: 8px;
   align-items: start;
@@ -1128,7 +1134,8 @@
    «Группы» view — two abreast where the screen fits them. */
 .group-standings {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(520px, max-content));
+  /* min() lets a phone shrink the track below the two-abreast width. */
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--group-standings-col), 100%), max-content));
   gap: var(--space-2) var(--space-4);
   align-items: start;
 }
@@ -1219,7 +1226,7 @@
 .grid-standings th,
 .grid-standings td {
   height: 24px;
-  padding: 3px 6px;
+  padding: var(--grid-cell-pad);
   background: var(--paper);
   border-bottom: var(--cell-gap) solid var(--structure);
   font-weight: inherit;
@@ -1304,7 +1311,7 @@ body:not(.embedded-match) .grid-match {
   height: 24px;
   min-width: 0;
   box-sizing: border-box;
-  padding: 3px 6px;
+  padding: var(--grid-cell-pad);
   border-bottom: var(--cell-gap) solid var(--structure);
   background: var(--paper);
   font-size: var(--text-xs);

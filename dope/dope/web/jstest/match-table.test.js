@@ -604,6 +604,14 @@ test("matchLetterMap letters бои across stages in schedule order", () => {
   ];
   const letters = T.matchLetterMap(stages);
   assert.equal(letters.get("s1-g1-1"), "A");
+  // A match that is no «Бой» — ТПШ's письменный отбор — takes no letter, or
+  // every letter after it would sit one off the paper sheets.
+  const withOtbor = T.matchLetterMap([
+    {code: "s1", matches: [{code: "s1-m1", title: "Письменный отбор"}]},
+    {code: "s2-r1", matches: [{code: "s2-r1-m1", title: "Бой 1"}]},
+  ]);
+  assert.equal(withOtbor.get("s1-m1"), undefined);
+  assert.equal(withOtbor.get("s2-r1-m1"), "A");
   assert.equal(letters.get("s1-g1-2"), "B");
   assert.equal(letters.get("s2-r1-m1"), "C");
   // The 27th бой rolls into two letters, sheets-style.
