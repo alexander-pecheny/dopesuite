@@ -1150,10 +1150,11 @@ function copyTargets(desc: string | null | undefined, number: string | number | 
   }
   const body = pieces.map((p) => p.text).join("\n");
   const whole = handout ? handout + "\n\n" + body : body;
+  out.push(...pieces);
+  if (head) out.push({ label: "Вопрос без номера", text: body.slice(head.length) });
   if (handout || pieces.length > 1) out.push({ label: "Вопрос целиком", text: whole });
   const tail = answerBlock(f);
   if (tail.length) out.push({ label: "Вопрос с ответом", text: whole + "\n\n" + tail.join("\n") });
-  out.push(...pieces);
   return out;
 }
 
