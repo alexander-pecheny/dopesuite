@@ -673,6 +673,7 @@ interface ActivityEvent {
   created_at: string;
   unread?: boolean;
   mention?: boolean;
+  mention_reply?: boolean;
   reply_to_id?: number | null;
   payload_enc?: string;
   author_user_id?: number | null;
@@ -744,7 +745,7 @@ async function openNotifPanel(): Promise<void> {
       attach_add: "вложение добавлено", attach_remove: "вложение удалено", attach_replace: "вложение заменено",
       reaction: "реакция",
     };
-    const verb = ev.mention ? (ev.reply_to_id ? "ответ вам" : "упомянул(а) вас") : (verbs[ev.type] || ev.type);
+    const verb = ev.mention ? (ev.mention_reply ? "ответ вам" : "упомянул(а) вас") : (verbs[ev.type] || ev.type);
     const when = new Date(ev.created_at).toLocaleString("ru-RU");
     const bodyWrap = el("div", { class: "notif-row-body" },
       el("div", { class: "notif-row-meta", text: `${eventAuthor(ev, state.me, state.memberNames)} ${verb} · ${cardTitle(card)} · ${when}` }));

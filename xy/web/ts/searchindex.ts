@@ -16,7 +16,7 @@ import { xyChgk } from "./chgk.js";
 import { xyCrypto } from "./crypto.js";
 import type { DataKey } from "./crypto.js";
 import { byRank } from "./dragrank.js";
-import { decodeCommentPayload } from "./timeline.js";
+import { decodeCommentPayload } from "./commentpayload.js";
 import { xyFind } from "./find.js";
 import type { Haystack, Snippet } from "./find.js";
 import { xyStore } from "./store.js";

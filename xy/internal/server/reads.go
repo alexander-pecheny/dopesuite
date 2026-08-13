@@ -63,10 +63,13 @@ type activityEventDTO struct {
 	CreatedAt  string `json:"created_at"`
 	PayloadEnc string `json:"payload_enc"`
 	Unread     bool   `json:"unread"`
-	// Mention: this row names the caller (an @ or a reply to their comment) —
-	// the 🔔 panel paints it red while Unread holds.
-	Mention   bool   `json:"mention"`
-	ReplyToID *int64 `json:"reply_to_id"`
+	// Mention: this row names the caller — the 🔔 panel paints it red while
+	// Unread holds. MentionReply: it does so by replying to their comment
+	// (the two are told apart so the row's wording can be honest: a reply to
+	// a THIRD person that @-mentions you is not «ответ вам»).
+	Mention      bool   `json:"mention"`
+	MentionReply bool   `json:"mention_reply"`
+	ReplyToID    *int64 `json:"reply_to_id"`
 }
 
 // handleBoardActivity returns the board's other-authored events, newest first,
@@ -94,9 +97,11 @@ select e.id, e.card_id, e.type, e.author_user_id, e.created_at, e.payload_enc, e
       and e.id > coalesce(cr.content_read_id,0) then 1
     else 0 end as unread,
   case when e.type = 'comment'
-    and (exists(select 1 from event_mentions em where em.event_id = e.id and em.user_id = ?)
-      or exists(select 1 from timeline_events p where p.id = e.reply_to_id and p.author_user_id = ?))
-    then 1 else 0 end as mention
+    and exists(select 1 from event_mentions em where em.event_id = e.id and em.user_id = ?)
+    then 1 else 0 end as mention_explicit,
+  case when e.type = 'comment'
+    and exists(select 1 from timeline_events p where p.id = e.reply_to_id and p.author_user_id = ?)
+    then 1 else 0 end as mention_reply
 from timeline_events e
 join cards c on c.id = e.card_id and c.deleted_at is null
 left join card_reads cr on cr.card_id = e.card_id and cr.user_id = ?
@@ -112,13 +117,14 @@ limit ?`, uid, uid, uid, bid, uid, limit)
 		var e activityEventDTO
 		var payload []byte
 		var replyTo sql.NullInt64
-		var unread, mention int
-		if err := rows.Scan(&e.ID, &e.CardID, &e.Type, &e.AuthorID, &e.CreatedAt, &payload, &replyTo, &unread, &mention); handleErr(w, err) {
+		var unread, explicit, reply int
+		if err := rows.Scan(&e.ID, &e.CardID, &e.Type, &e.AuthorID, &e.CreatedAt, &payload, &replyTo, &unread, &explicit, &reply); handleErr(w, err) {
 			return
 		}
 		e.PayloadEnc = b64(payload)
 		e.Unread = unread == 1
-		e.Mention = mention == 1
+		e.Mention = explicit == 1 || reply == 1
+		e.MentionReply = reply == 1 && explicit == 0
 		if replyTo.Valid {
 			e.ReplyToID = &replyTo.Int64
 		}
