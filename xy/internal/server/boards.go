@@ -87,6 +87,9 @@ type boardSummary struct {
 	UpdatedAt     string  `json:"updated_at"`
 	LastVisitedAt *string `json:"last_visited_at"` // nil = never visited on record
 	Unread        bool    `json:"unread"`          // any card has an unread change by another member
+	// UnreadMentions: some unread comment mentions the caller (or replies to
+	// them) — the red rung of the same ladder.
+	UnreadMentions bool `json:"unread_mentions"`
 }
 
 func (s *server) handleListBoards(w http.ResponseWriter, r *http.Request) {
@@ -104,9 +107,21 @@ select b.id, b.name, b.name_enc, b.schema_version, m.role, b.created_at, b.updat
     join cards c on c.id = e.card_id and c.deleted_at is null
     left join card_reads cr on cr.card_id = e.card_id and cr.user_id = m.user_id
     where e.board_id = b.id and e.author_user_id is not null and e.author_user_id <> m.user_id
-      and ((e.type =  'comment' and e.id > coalesce(cr.comment_read_id,0))
-        or (e.type <> 'comment' and e.id > coalesce(cr.content_read_id,0)))
-  ) as unread
+      and (((e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
+              and e.id > coalesce(cr.comment_read_id,0))
+        or (not (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
+              and e.id > coalesce(cr.content_read_id,0)))
+  ) as unread,
+  exists(
+    select 1 from timeline_events e
+    join cards c on c.id = e.card_id and c.deleted_at is null
+    left join card_reads cr on cr.card_id = e.card_id and cr.user_id = m.user_id
+    where e.board_id = b.id and e.deleted_at is null
+      and e.author_user_id is not null and e.author_user_id <> m.user_id
+      and e.type = 'comment' and e.id > coalesce(cr.comment_read_id,0)
+      and (exists(select 1 from event_mentions em where em.event_id = e.id and em.user_id = m.user_id)
+        or exists(select 1 from timeline_events p where p.id = e.reply_to_id and p.author_user_id = m.user_id))
+  ) as unread_mentions
 from boards b join board_members m on m.board_id = b.id
 where m.user_id = ? and b.deleted_at is null
 order by m.last_visited_at is null, m.last_visited_at desc, b.updated_at desc`, u.UserID)
@@ -120,8 +135,8 @@ order by m.last_visited_at is null, m.last_visited_at desc, b.updated_at desc`, 
 		var name sql.NullString
 		var nameEnc []byte
 		var lastVisited sql.NullString
-		var unread int
-		if err := rows.Scan(&b.ID, &name, &nameEnc, &b.SchemaVersion, &b.Role, &b.CreatedAt, &b.UpdatedAt, &lastVisited, &unread); handleErr(w, err) {
+		var unread, unreadMentions int
+		if err := rows.Scan(&b.ID, &name, &nameEnc, &b.SchemaVersion, &b.Role, &b.CreatedAt, &b.UpdatedAt, &lastVisited, &unread, &unreadMentions); handleErr(w, err) {
 			return
 		}
 		b.Name = name.String
@@ -130,6 +145,7 @@ order by m.last_visited_at is null, m.last_visited_at desc, b.updated_at desc`, 
 			b.LastVisitedAt = &lastVisited.String
 		}
 		b.Unread = unread == 1
+		b.UnreadMentions = unreadMentions == 1
 		out = append(out, b)
 	}
 	writeJSON(w, out)
@@ -258,6 +274,9 @@ type boardSnapshot struct {
 type unreadDTO struct {
 	Content  bool `json:"content"`
 	Comments bool `json:"comments"`
+	// Mentions: an unread comment mentions the caller (an @ or a reply to
+	// them). Always a subset of Comments — the red rung, same watermark.
+	Mentions bool `json:"mentions"`
 }
 
 func (s *server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
@@ -390,25 +409,35 @@ where c.board_id = ? and c.deleted_at is null`, bid)
 	// cards are omitted entirely to keep the payload small.
 	unreadRows, err := s.db.QueryContext(ctx, `
 select e.card_id,
-  max(case when e.type =  'comment' and e.id > coalesce(cr.comment_read_id,0) then 1 else 0 end),
-  max(case when e.type <> 'comment' and e.id > coalesce(cr.content_read_id,0) then 1 else 0 end)
+  max(case when (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
+        and e.id > coalesce(cr.comment_read_id,0) then 1 else 0 end),
+  max(case when not (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
+        and e.id > coalesce(cr.content_read_id,0) then 1 else 0 end),
+  max(case when e.type = 'comment' and e.id > coalesce(cr.comment_read_id,0)
+        and (exists(select 1 from event_mentions em where em.event_id = e.id and em.user_id = ?)
+          or exists(select 1 from timeline_events p where p.id = e.reply_to_id and p.author_user_id = ?))
+      then 1 else 0 end)
 from timeline_events e
 join cards c on c.id = e.card_id and c.deleted_at is null
 left join card_reads cr on cr.card_id = e.card_id and cr.user_id = ?
 where e.board_id = ? and e.deleted_at is null and e.author_user_id is not null and e.author_user_id <> ?
-group by e.card_id`, uid, bid, uid)
+group by e.card_id`, uid, uid, uid, bid, uid)
 	if handleErr(w, err) {
 		return
 	}
 	defer unreadRows.Close()
 	for unreadRows.Next() {
 		var cardID int64
-		var commentsUnread, contentUnread int
-		if err := unreadRows.Scan(&cardID, &commentsUnread, &contentUnread); handleErr(w, err) {
+		var commentsUnread, contentUnread, mentionsUnread int
+		if err := unreadRows.Scan(&cardID, &commentsUnread, &contentUnread, &mentionsUnread); handleErr(w, err) {
 			return
 		}
 		if commentsUnread == 1 || contentUnread == 1 {
-			snap.Unread[strconv.FormatInt(cardID, 10)] = unreadDTO{Content: contentUnread == 1, Comments: commentsUnread == 1}
+			snap.Unread[strconv.FormatInt(cardID, 10)] = unreadDTO{
+				Content:  contentUnread == 1,
+				Comments: commentsUnread == 1,
+				Mentions: mentionsUnread == 1,
+			}
 		}
 	}
 	if err := unreadRows.Err(); handleErr(w, err) {

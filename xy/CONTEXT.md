@@ -53,8 +53,16 @@ The cities a Test Session's start time is announced in, and the source of the in
 The tester names this device has seen, gathered from every Board whose key it holds. A suggestion source for typing a Test Session's testers — never an identity, never synced, never a server entity.
 _Avoid_: people database, contacts
 
+**Mention**:
+An @username in a Card comment naming a Board member, resolved against the roster when the comment is posted or edited. The resolved member ids are plaintext event metadata — the routing truth the server notifies by (ADR-0009); the text is only the rendering. A reply to a member's comment mentions them implicitly — no @ needed. A Mention outranks an ordinary comment: its unread signal is red where a comment's is blue, and it may reach the member as a telegram nudge. It rides the comment read-watermark — reading the лента clears both.
+_Avoid_: tag (a Label's word), ping (that is the nudge, not the Mention itself)
+
+**Reaction**:
+An emoji — any emoji — a member puts on a comment or on the Card itself, toggled off by putting it again. Reactions aggregate into chips on their target rather than becoming rows of the лента, count as an ordinary (blue) unread signal, and appear in the 🔔 feed. Which emoji stays as private as a comment's text; toggling one off removes it without a Tombstone — a Reaction is applause, not content.
+_Avoid_: like (one emoji is not privileged), vote (that is a Label's job)
+
 **Timeline**:
-A Card's or a Test Session's history, in three kinds of entry: comments (the discussion), description edits (word-level diffs) and the metadata trail — labels attached or removed, attachments added, replaced or deleted. A comment may belong to a Card, to a Session, or to a question as discussed at a particular session. A reader may narrow the лента to one kind (see Feed Default); the kinds partition it, so no entry is invisible in every mode.
+A Card's or a Test Session's history, in three kinds of entry: comments (the discussion), description edits (word-level diffs) and the metadata trail — labels attached or removed, attachments added, replaced or deleted. Reactions ride the Timeline too, but render as chips on their target, never as rows. A comment may belong to a Card, to a Session, or to a question as discussed at a particular session. A reader may narrow the лента to one kind (see Feed Default); the kinds partition it, so no entry is invisible in every mode.
 
 **Feed Default**:
 Which kind of Timeline entry a reader's лента shows when a Card opens. Theirs, not the Board's — one editor reads for the discussion, another for what the question used to say, and they read the same Card side by side. Narrowing the лента inside an open Card is a look at that Card, not a change of the default: it dies when the Card closes.

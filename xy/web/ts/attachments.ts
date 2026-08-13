@@ -84,6 +84,10 @@ export interface AttachmentsDeps {
     load(cardId: number): Promise<void>;
     setAttachments(list: NamedAttachment[]): void;
   };
+  // An image pasted while the caret was in the comment box still uploads as a
+  // card attachment, but ALSO joins the pending comment (its ref rides the
+  // encrypted payload).
+  onCommentImage?(attId: number): void;
 }
 
 export function create(deps: AttachmentsDeps) {
@@ -291,9 +295,9 @@ async function recompressToWebp(file: File): Promise<{ bytes: Uint8Array<ArrayBu
 // both re-encode each picture for the size it is drawn at (imgconv.ForExport), so
 // throwing away the original on the way in bought nothing but a worse original.
 // Online-only — callers must gate on xySync.isOnline(). Refreshes list+timeline.
-async function uploadAttachment(file: File, lossless: boolean, name: string): Promise<void> {
+async function uploadAttachment(file: File, lossless: boolean, name: string): Promise<number | null> {
   const oc = deps.openCardId();
-  if (!file || oc == null) return;
+  if (!file || oc == null) return null;
   const msg = byId("cardMessage");
   msg.textContent = "Шифрование…";
   let bytes: Uint8Array<ArrayBuffer>, mime: string;
@@ -310,9 +314,11 @@ async function uploadAttachment(file: File, lossless: boolean, name: string): Pr
   fd.append("blob", new Blob([cipher], { type: "application/octet-stream" }), "blob");
   const res = await fetch(`/api/cards/${oc}/attachments`, { method: "POST", credentials: "same-origin", body: fd });
   if (!res.ok) throw new Error((await res.text()) || "ошибка загрузки");
+  const made = (await res.json().catch(() => null)) as { id?: number } | null;
   msg.textContent = "";
   await loadAttachments(oc);
   await deps.timeline.load(oc);
+  return made?.id ?? null;
 }
 
 byId("attachUpload").addEventListener("click", async () => {
@@ -333,6 +339,7 @@ byId("attachUpload").addEventListener("click", async () => {
 // filename + whether to WebP-compress (off by default, like the file picker)
 // before encrypting and uploading it as an attachment.
 let pastedFile: File | null = null;
+let pasteForComment = false;
 const pasteOverlay = byId("pasteOverlay");
 const cardOverlay = byId("cardOverlay");
 
@@ -354,6 +361,7 @@ document.addEventListener("paste", (e) => {
   if (!file) return;
   e.preventDefault();
   pastedFile = file;
+  pasteForComment = document.activeElement?.id === "commentInput";
   const nameInput = byId<HTMLInputElement>("pasteName");
   // Clipboard images usually arrive as the generic "image.png"; offer a friendlier
   // default the user can overwrite.
@@ -370,12 +378,14 @@ byId("pasteForm").addEventListener("submit", async (e) => {
   if (!pastedFile) return;
   const msg = byId("cardMessage");
   const file = pastedFile;
+  const forComment = pasteForComment;
   const compress = byId<HTMLInputElement>("pasteCompress").checked;
   const name = withExt(byId<HTMLInputElement>("pasteName").value, compress ? "webp" : extFromMime(file.type));
   closePasteModal();
   if (!xySync.requireOnline("Загрузка вложений доступна только онлайн.", msg)) return;
   try {
-    await uploadAttachment(file, !compress, name);
+    const id = await uploadAttachment(file, !compress, name);
+    if (forComment && id != null) deps.onCommentImage?.(id);
   } catch (err) { msg.textContent = errMsg(err); }
 });
 

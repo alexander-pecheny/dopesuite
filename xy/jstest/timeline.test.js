@@ -8,6 +8,7 @@ import {
   eventAuthor, replyCountsOf, orderThreadReplies, orderFeedEvents,
   feedOrderOf, diffViewOf, excerptComments, fullDiffSides,
   feedFilterOf, feedFilterKeeps, readBucketsOf, linkSegments,
+  resolveMentions, encodeCommentPayload, decodeCommentPayload, aggregateReactions,
 } from "../web/assets/static/dist/timeline.js";
 
 const me = { user_id: 1, username: "ya" };
@@ -185,4 +186,73 @@ test("several URLs, one per line, each become their own link", () => {
 
 test("a comment with no URL is a single text segment", () => {
   assert.deepEqual(linkSegments("просто текст"), [{ text: "просто текст" }]);
+});
+
+// ---- mentions (resolved at submit — the picker is only typing help) ----
+
+const roster = [
+  { user_id: 1, username: "ann" },
+  { user_id: 2, username: "anna" },
+  { user_id: 3, username: "b.c-d_e" },
+  { user_id: 4, username: null },
+];
+
+test("resolveMentions finds @names of board members, ids deduped", () => {
+  assert.deepEqual(resolveMentions("@anna посмотри, @ann тоже; @anna?", roster), [2, 1]);
+});
+
+test("a longer username is not eaten by its prefix", () => {
+  assert.deepEqual(resolveMentions("@anna", roster), [2]);
+  assert.deepEqual(resolveMentions("@ann", roster), [1]);
+});
+
+test("an @ glued to a word, or a stranger's name, mentions nobody", () => {
+  assert.deepEqual(resolveMentions("почта ann@mail.ru и @гость", roster), []);
+});
+
+test("punctuation and dots in usernames resolve", () => {
+  assert.deepEqual(resolveMentions("привет, @b.c-d_e!", roster), [3]);
+});
+
+// ---- comment payload codec (text + attachment refs in one envelope) ----
+
+test("a plain comment stays a plain string both ways", () => {
+  assert.equal(encodeCommentPayload("просто текст", []), "просто текст");
+  assert.deepEqual(decodeCommentPayload("просто текст"), { text: "просто текст", images: [] });
+});
+
+test("images ride the payload as JSON and fold back out", () => {
+  const raw = encodeCommentPayload("см. картинку", [7, 9]);
+  assert.deepEqual(decodeCommentPayload(raw), { text: "см. картинку", images: [7, 9] });
+});
+
+test("a comment that merely looks like JSON is not mistaken for the envelope", () => {
+  assert.deepEqual(decodeCommentPayload(`{"a":1}`), { text: `{"a":1}`, images: [] });
+});
+
+// ---- reaction chips ----
+
+test("aggregateReactions groups by target and emoji, counting and spotting mine", () => {
+  const rs = [
+    { id: 10, emoji: "👍", author: 1, target: 100 },
+    { id: 11, emoji: "👍", author: 2, target: 100 },
+    { id: 12, emoji: "🔥", author: 2, target: 100 },
+    { id: 13, emoji: "👍", author: 2, target: null },
+  ];
+  const chips = aggregateReactions(rs, 1);
+  assert.deepEqual(chips.get(100), [
+    { emoji: "👍", count: 2, mineId: 10, authors: [1, 2] },
+    { emoji: "🔥", count: 1, mineId: null, authors: [2] },
+  ]);
+  assert.deepEqual(chips.get(0), [{ emoji: "👍", count: 1, mineId: null, authors: [2] }]);
+});
+
+test("a reaction anchored to a comment is neither counted nor listed as a reply", () => {
+  const events = [
+    { id: 2, type: "comment", reply_to_id: null },
+    { id: 4, type: "comment", reply_to_id: 2 },
+    { id: 6, type: "reaction", reply_to_id: 2 },
+  ];
+  assert.equal(replyCountsOf(events).get(2), 1);
+  assert.deepEqual(orderThreadReplies(events, 2).map((e) => e.id), [4]);
 });

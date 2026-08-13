@@ -53,7 +53,7 @@ func main() {
 	// offering. Loopback, and a working default on both sides on purpose: a
 	// REQUIRED new variable would mean a deploy that installs a healthy bot the
 	// server then reports as unreachable.
-	go tgbot.ServeHealth(ctx, healthAddr(), client)
+	go tgbot.ServeLocal(ctx, healthAddr(), client, os.Getenv("XY_BOT_SECRET"))
 
 	log.Printf("xy telegram bot %s started", buildinfo.Version())
 	if err := client.Run(ctx, handler(bridge)); err != nil && !errors.Is(err, context.Canceled) {

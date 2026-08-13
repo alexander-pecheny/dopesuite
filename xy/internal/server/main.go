@@ -159,6 +159,8 @@ func Main() {
 	mux.HandleFunc("POST /api/cards/{id}/timeline/import", srv.handleImportEvents)
 	mux.HandleFunc("PATCH /api/comments/{id}", srv.handlePatchComment)
 	mux.HandleFunc("DELETE /api/comments/{id}", srv.handleDeleteComment)
+	mux.HandleFunc("POST /api/cards/{id}/reactions", srv.handleAddReaction)
+	mux.HandleFunc("DELETE /api/reactions/{id}", srv.handleDeleteReaction)
 
 	// ---- read markers / activity (blue dots + 🔔 bell) ----
 	mux.HandleFunc("POST /api/cards/{id}/read", srv.handleMarkRead)

@@ -63,6 +63,13 @@ type activityEventDTO struct {
 	CreatedAt  string `json:"created_at"`
 	PayloadEnc string `json:"payload_enc"`
 	Unread     bool   `json:"unread"`
+	// Mention: this row names the caller — the 🔔 panel paints it red while
+	// Unread holds. MentionReply: it does so by replying to their comment
+	// (the two are told apart so the row's wording can be honest: a reply to
+	// a THIRD person that @-mentions you is not «ответ вам»).
+	Mention      bool   `json:"mention"`
+	MentionReply bool   `json:"mention_reply"`
+	ReplyToID    *int64 `json:"reply_to_id"`
 }
 
 // handleBoardActivity returns the board's other-authored events, newest first,
@@ -82,17 +89,25 @@ func (s *server) handleBoardActivity(w http.ResponseWriter, r *http.Request) {
 		limit = 200
 	}
 	rows, err := s.db.QueryContext(r.Context(), `
-select e.id, e.card_id, e.type, e.author_user_id, e.created_at, e.payload_enc,
+select e.id, e.card_id, e.type, e.author_user_id, e.created_at, e.payload_enc, e.reply_to_id,
   case
-    when e.type =  'comment' and e.id > coalesce(cr.comment_read_id,0) then 1
-    when e.type <> 'comment' and e.id > coalesce(cr.content_read_id,0) then 1
-    else 0 end as unread
+    when (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
+      and e.id > coalesce(cr.comment_read_id,0) then 1
+    when not (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null))
+      and e.id > coalesce(cr.content_read_id,0) then 1
+    else 0 end as unread,
+  case when e.type = 'comment'
+    and exists(select 1 from event_mentions em where em.event_id = e.id and em.user_id = ?)
+    then 1 else 0 end as mention_explicit,
+  case when e.type = 'comment'
+    and exists(select 1 from timeline_events p where p.id = e.reply_to_id and p.author_user_id = ?)
+    then 1 else 0 end as mention_reply
 from timeline_events e
 join cards c on c.id = e.card_id and c.deleted_at is null
 left join card_reads cr on cr.card_id = e.card_id and cr.user_id = ?
 where e.board_id = ? and e.deleted_at is null and e.author_user_id is not null and e.author_user_id <> ?
 order by e.id desc
-limit ?`, uid, bid, uid, limit)
+limit ?`, uid, uid, uid, bid, uid, limit)
 	if handleErr(w, err) {
 		return
 	}
@@ -101,12 +116,18 @@ limit ?`, uid, bid, uid, limit)
 	for rows.Next() {
 		var e activityEventDTO
 		var payload []byte
-		var unread int
-		if err := rows.Scan(&e.ID, &e.CardID, &e.Type, &e.AuthorID, &e.CreatedAt, &payload, &unread); handleErr(w, err) {
+		var replyTo sql.NullInt64
+		var unread, explicit, reply int
+		if err := rows.Scan(&e.ID, &e.CardID, &e.Type, &e.AuthorID, &e.CreatedAt, &payload, &replyTo, &unread, &explicit, &reply); handleErr(w, err) {
 			return
 		}
 		e.PayloadEnc = b64(payload)
 		e.Unread = unread == 1
+		e.Mention = explicit == 1 || reply == 1
+		e.MentionReply = reply == 1 && explicit == 0
+		if replyTo.Valid {
+			e.ReplyToID = &replyTo.Int64
+		}
 		out = append(out, e)
 	}
 	if err := rows.Err(); handleErr(w, err) {
@@ -127,8 +148,8 @@ func (s *server) handleBoardReadAll(w http.ResponseWriter, r *http.Request) {
 		_, err := tx.ExecContext(ctx, `
 insert into card_reads(user_id, card_id, content_read_id, comment_read_id, updated_at)
 select ?, c.id,
-  coalesce(max(case when e.type <> 'comment' then e.id end), 0),
-  coalesce(max(case when e.type =  'comment' then e.id end), 0),
+  coalesce(max(case when not (e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null)) then e.id end), 0),
+  coalesce(max(case when e.type = 'comment' or (e.type = 'reaction' and e.reply_to_id is not null) then e.id end), 0),
   ?
 from cards c left join timeline_events e on e.card_id = c.id
 where c.board_id = ? and c.deleted_at is null

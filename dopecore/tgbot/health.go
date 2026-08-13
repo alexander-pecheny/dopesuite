@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"pecheny.me/dopecore/tgbridge"
 )
 
 // A bot is a long-polling client: nothing can connect to it, so nothing can ask
@@ -56,6 +58,15 @@ func HealthOf(c *Client, now time.Time) Health {
 // loopback: this says whether the bot is working, which is nobody's business
 // from outside the host.
 func ServeHealth(ctx context.Context, addr string, c *Client) {
+	ServeLocal(ctx, addr, c, "")
+}
+
+// ServeLocal is ServeHealth plus, when secret is non-empty, POST /send: the
+// server's way to DM a user through the bot it shares a host with (see
+// tgbridge.SendRequest). The secret is the same X-Bot-Secret the bridge already
+// shares; an empty one leaves /send off, so a bot deployed without it is
+// exactly the bot of before.
+func ServeLocal(ctx context.Context, addr string, c *Client, secret string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		h := HealthOf(c, time.Now())
@@ -65,6 +76,21 @@ func ServeHealth(ctx context.Context, addr string, c *Client) {
 		}
 		_ = json.NewEncoder(w).Encode(h)
 	})
+	if secret != "" {
+		mux.HandleFunc("POST /send", func(w http.ResponseWriter, r *http.Request) {
+			if ok, _ := tgbridge.SecretOK(r, secret); !ok {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			var req tgbridge.SendRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.TelegramUserID == 0 || req.Text == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			c.Send(r.Context(), req.TelegramUserID, req.Text)
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
