@@ -2931,6 +2931,7 @@ const cardDetail = createCardDetail({
     ensureVisible: (type) => timeline.ensureVisible(type),
     commentDraft: () => timeline.commentDraft(),
     postComment: () => timeline.postComment(),
+    clearCommentDraft: () => timeline.clearCommentDraft(),
   },
 });
 timeline = createTimeline({

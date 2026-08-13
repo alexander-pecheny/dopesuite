@@ -246,3 +246,13 @@ test("aggregateReactions groups by target and emoji, counting and spotting mine"
   ]);
   assert.deepEqual(chips.get(0), [{ emoji: "👍", count: 1, mineId: null, authors: [2] }]);
 });
+
+test("a reaction anchored to a comment is neither counted nor listed as a reply", () => {
+  const events = [
+    { id: 2, type: "comment", reply_to_id: null },
+    { id: 4, type: "comment", reply_to_id: 2 },
+    { id: 6, type: "reaction", reply_to_id: 2 },
+  ];
+  assert.equal(replyCountsOf(events).get(2), 1);
+  assert.deepEqual(orderThreadReplies(events, 2).map((e) => e.id), [4]);
+});

@@ -1119,20 +1119,23 @@ type addCommentRequest struct {
 	Mentions []int64 `json:"mentions"`
 }
 
-// requireMembers rejects a mention list naming anyone who is not on the board —
-// a mention routes a notification, so it must not address strangers.
-func requireMembers(ctx context.Context, q querier, bid int64, ids []int64) error {
+// memberMentions keeps only ids that are actually on the board — a mention
+// routes a notification, so it must not address strangers. Dropped rather than
+// rejected: an offline-queued comment may arrive after the named member left,
+// and a 400 would throw the comment itself away with the outbox op.
+func memberMentions(ctx context.Context, q querier, bid int64, ids []int64) ([]int64, error) {
+	var out []int64
 	for _, id := range ids {
 		var n int
 		if err := q.QueryRowContext(ctx,
 			`select count(*) from board_members where board_id = ? and user_id = ?`, bid, id).Scan(&n); err != nil {
-			return err
+			return nil, err
 		}
-		if n == 0 {
-			return errBadRequest("упомянутый пользователь не участник доски")
+		if n > 0 {
+			out = append(out, id)
 		}
 	}
-	return nil
+	return out, nil
 }
 
 func insertMentions(ctx context.Context, tx *sql.Tx, eventID int64, ids []int64) error {
@@ -1176,10 +1179,11 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := requireMembers(r.Context(), s.db, bid, req.Mentions); handleErr(w, err) {
+	mentions, err := memberMentions(r.Context(), s.db, bid, req.Mentions)
+	if handleErr(w, err) {
 		return
 	}
-	err := s.withWriteTx(r.Context(), "add-comment", func(ctx context.Context, tx *sql.Tx) error {
+	err = s.withWriteTx(r.Context(), "add-comment", func(ctx context.Context, tx *sql.Tx) error {
 		payload, err := unb64(req.PayloadEnc)
 		if err != nil {
 			return errBadRequest("invalid payload_enc")
@@ -1194,12 +1198,12 @@ values(?, ?, ?, 'comment', ?, ?, ?, ?)`, bid, cardID, req.SessionID, uid, rfc333
 		if err != nil {
 			return err
 		}
-		return insertMentions(ctx, tx, evID, req.Mentions)
+		return insertMentions(ctx, tx, evID, mentions)
 	})
 	if handleErr(w, err) {
 		return
 	}
-	s.notifyComment(bid, cardID, uid, req.Mentions, replyTo)
+	s.notifyComment(bid, cardID, uid, mentions, replyTo)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1255,9 +1259,11 @@ func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Mentions != nil {
-		if err := requireMembers(r.Context(), s.db, bid, *req.Mentions); handleErr(w, err) {
+		filtered, err := memberMentions(r.Context(), s.db, bid, *req.Mentions)
+		if handleErr(w, err) {
 			return
 		}
+		req.Mentions = &filtered
 	}
 	if req.SessionID != nil && *req.SessionID != 0 {
 		sbid, err := boardOfSession(r.Context(), s.db, *req.SessionID)

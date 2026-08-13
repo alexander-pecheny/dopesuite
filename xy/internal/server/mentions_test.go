@@ -126,12 +126,20 @@ func TestMentions(t *testing.T) {
 		t.Fatalf("C unread after reply to A = %+v, want no mentions", u)
 	}
 
-	// Mentioning a stranger is rejected.
+	// A stranger in the mention list is dropped, not bounced — the comment
+	// itself must land (an offline-queued op may outlive the roster it saw).
 	resp = b.do("POST", "/api/cards/"+cardID+"/comments", map[string]any{
 		"payload_enc": enc("@кто-то"),
 		"mentions":    []int64{999999},
 	})
-	mustStatus(t, resp, 400)
+	mustStatus(t, resp, 204)
+	var actC []activityEventDTO
+	ccl.decode(ccl.do("GET", "/api/boards/"+boardID+"/activity", nil), &actC)
+	for _, ev := range actC {
+		if ev.Mention {
+			t.Fatalf("stranger mention leaked into activity: %+v", ev)
+		}
+	}
 }
 
 // TestReactions: a reaction to a comment blue-dots the comment bucket, one to

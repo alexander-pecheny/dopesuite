@@ -116,6 +116,7 @@ export interface TimelineSeam {
   ensureVisible(type: string): Promise<void>;
   commentDraft(): string;
   postComment(): Promise<boolean>;
+  clearCommentDraft(): void;
 }
 
 export interface CardDetailDeps {
@@ -1686,7 +1687,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     }
     settleDirty(true);
   });
-  byId("dirtyDiscard").addEventListener("click", () => { settleDirty(true); });
+  byId("dirtyDiscard").addEventListener("click", () => { deps.timeline.clearCommentDraft(); settleDirty(true); });
   byId("dirtyCancel").addEventListener("click", () => { settleDirty(false); });
   dirtyOverlay.addEventListener("pointerdown", (e) => { if (e.target === dirtyOverlay) settleDirty(false); });
   document.addEventListener("keydown", (e) => {

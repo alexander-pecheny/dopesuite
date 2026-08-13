@@ -121,6 +121,8 @@ export interface Timeline {
   postComment(): Promise<boolean>;
   // A pasted image, already uploaded as a card attachment, joins the draft.
   addDraftImage(attId: number): void;
+  // Discarding from the leave prompt really discards — text and images both.
+  clearCommentDraft(): void;
 }
 
 // ---- pure decision helpers (exported for tests) ----
@@ -148,9 +150,12 @@ export function eventAuthor(
 // holds the card's WHOLE timeline (deleted replies already filtered out
 // server-side), so recounting over the merged list is equivalent online and
 // correct offline.
-export function replyCountsOf(events: ReadonlyArray<{ id: number; reply_to_id?: number | null }>): Map<number, number> {
+// A reaction anchors to its comment through the same reply_to_id — it is a
+// chip, not a reply, so both helpers here count comments only.
+export function replyCountsOf(events: ReadonlyArray<{ id: number; type?: string; reply_to_id?: number | null }>): Map<number, number> {
   const replies = new Map<number, number>();
   for (const e of events) {
+    if (e.type === "reaction") continue;
     if (e.reply_to_id != null) replies.set(e.reply_to_id, (replies.get(e.reply_to_id) || 0) + 1);
   }
   return replies;
@@ -160,11 +165,11 @@ export function replyCountsOf(events: ReadonlyArray<{ id: number; reply_to_id?: 
 // by id; un-synced ones are the newest of all but carry NEGATIVE temp ids, so a
 // plain id sort would float them to the top. They go last, in the order they
 // were queued (-1 queued before -2).
-export function orderThreadReplies<T extends { id: number; reply_to_id?: number | null }>(
+export function orderThreadReplies<T extends { id: number; type?: string; reply_to_id?: number | null }>(
   events: readonly T[],
   rootId: number,
 ): T[] {
-  const all = events.filter((e) => e.reply_to_id === rootId);
+  const all = events.filter((e) => e.reply_to_id === rootId && e.type !== "reaction");
   return [
     ...all.filter((e) => e.id > 0).sort((a, b) => a.id - b.id),
     ...all.filter((e) => e.id <= 0).sort((a, b) => b.id - a.id),
@@ -384,8 +389,12 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // expanded лента, threads, выписки and the card module's markCardRead can
   // reuse it without a re-fetch.
   let openCardEvents: CardEvent[] = [];
+  let openCardAtts: AttachmentLike[] = [];
   let openCardExcerptAtts: AttachmentLike[] = [];
   let threadRootId: number | null = null;
+  // Which card the composer's draft (text + pending images) belongs to; a
+  // different card starting to load clears it, so a draft never crosses cards.
+  let composerCard: number | null = null;
 
   // The лента's current narrowing. It starts from the reader's saved default and
   // is dropped when the card closes (resetFilter), so a card always opens the way
@@ -422,6 +431,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // «Выписок: N». The container must never be shorter than its content.
   async function load(cardId: number): Promise<void> {
     const tl = byId("timeline");
+    if (composerCard !== cardId) { composerCard = cardId; clearCommentDraft(); }
     // Refresh the cached server timeline when online, then merge any pending
     // (un-synced) events synthesized from the outbox so offline edits/comments show.
     if (xySync.isOnline()) {
@@ -528,11 +538,14 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   }
 
   // commentImageNodes renders a comment's referenced attachments inline;
-  // .pv-img wires each into the shared lightbox.
+  // .pv-img wires each into the shared lightbox. The real attachment record is
+  // looked up when known — the byte cache is keyed by (id, rev), so a bare
+  // {id} would pin the first revision forever after a replace.
   function commentImageNodes(ids: readonly number[]): HTMLElement[] {
     return ids.map((id) => {
+      const att = openCardAtts.find((a) => a.id === id) || { id };
       const img = el("img", { class: "tl-comment-img pv-img", alt: "картинка из комментария" }) as HTMLImageElement;
-      deps.attachments.url({ id }).then((u) => { img.src = u; }).catch(() => { img.remove(); });
+      deps.attachments.url(att).then((u) => { img.src = u; }).catch(() => { img.remove(); });
       return img;
     });
   }
@@ -894,6 +907,8 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     // Replying opens the thread (with its composer) — for a comment with no
     // replies yet, that is just the comment plus an empty answer box.
     const items: MenuItem[] = [{ icon: icon("message-circle"), label: "Ответить", onClick: () => { void openThread(ev.reply_to_id || ev.id); } }];
+    // A comment's FIRST reaction has no chip to click yet — this is its way in.
+    items.push({ icon: icon("plus"), label: "Реакция…", onClick: () => openReactionPicker(anchor, ev.id) });
     if (mine) {
       // The node is taken from the anchor, not looked up by id: the same comment
       // may also be rendered in the expanded лента, and the edit must open on the
@@ -1002,6 +1017,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
 
   function addDraftImage(attId: number): void {
     if (!draftImages.includes(attId)) draftImages.push(attId);
+    renderDraftImages();
+  }
+
+  function clearCommentDraft(): void {
+    const input = document.getElementById("commentInput") as HTMLInputElement | null;
+    if (input) input.value = "";
+    draftImages = [];
     renderDraftImages();
   }
 
@@ -1132,6 +1154,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     load,
     events: () => openCardEvents,
     setAttachments(atts: AttachmentLike[]): void {
+      openCardAtts = atts;
       openCardExcerptAtts = atts.filter((a) => !!a.is_excerpt);
       renderExcerptCount();
     },
@@ -1145,5 +1168,6 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     commentDraft,
     postComment,
     addDraftImage,
+    clearCommentDraft,
   };
 }
