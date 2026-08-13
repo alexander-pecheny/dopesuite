@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import {
   eventAuthor, replyCountsOf, orderThreadReplies, orderFeedEvents,
   feedOrderOf, diffViewOf, excerptComments, fullDiffSides,
-  feedFilterOf, feedFilterKeeps, readBucketsOf,
+  feedFilterOf, feedFilterKeeps, readBucketsOf, linkSegments,
 } from "../web/assets/static/dist/timeline.js";
 
 const me = { user_id: 1, username: "ya" };
@@ -132,4 +132,57 @@ test("fullDiffSides splits ops into before/after panes with change flags", () =>
       { changed: false, text: " d" },
     ],
   });
+});
+
+// ---- what a comment renders as links ----
+
+test("a URL in a comment becomes a link segment, the rest stays text", () => {
+  assert.deepEqual(linkSegments("см. https://example.com/x и дальше"), [
+    { text: "см. " },
+    { text: "https://example.com/x", href: "https://example.com/x" },
+    { text: " и дальше" },
+  ]);
+});
+
+test("a comment that is one long URL is one link", () => {
+  const u = "https://gotquestions.online/search?search=%D0%B0%D1%88&sSort=rel&pSort=p";
+  assert.deepEqual(linkSegments(u), [{ text: u, href: u }]);
+});
+
+test("trailing sentence punctuation stays outside the link", () => {
+  assert.deepEqual(linkSegments("вот: https://example.com/a."), [
+    { text: "вот: " },
+    { text: "https://example.com/a", href: "https://example.com/a" },
+    { text: "." },
+  ]);
+});
+
+test("a wikipedia-style path keeps its closing paren, a wrapping one loses it", () => {
+  const wiki = "https://ru.wikipedia.org/wiki/%D0%9C%D0%B8%D1%80_(%D1%84%D0%B8%D0%BB%D1%8C%D0%BC)";
+  assert.deepEqual(linkSegments(wiki), [{ text: wiki, href: wiki }]);
+  assert.deepEqual(linkSegments("(см. https://example.com/a)"), [
+    { text: "(см. " },
+    { text: "https://example.com/a", href: "https://example.com/a" },
+    { text: ")" },
+  ]);
+});
+
+test("a «ёлочка» ends the link, and a bare scheme is not one", () => {
+  assert.deepEqual(linkSegments("«https://example.com» и https:// текст"), [
+    { text: "«" },
+    { text: "https://example.com", href: "https://example.com" },
+    { text: "» и https:// текст" },
+  ]);
+});
+
+test("several URLs, one per line, each become their own link", () => {
+  assert.deepEqual(linkSegments("https://a.com/1\nhttps://b.com/2"), [
+    { text: "https://a.com/1", href: "https://a.com/1" },
+    { text: "\n" },
+    { text: "https://b.com/2", href: "https://b.com/2" },
+  ]);
+});
+
+test("a comment with no URL is a single text segment", () => {
+  assert.deepEqual(linkSegments("просто текст"), [{ text: "просто текст" }]);
 });
