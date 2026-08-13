@@ -96,7 +96,7 @@ export interface AttachmentsSeam {
   load(cardId: number): Promise<void>;
   imageNames(): string[];
   clearImageNames(): void;
-  upload(file: File, lossless: boolean, name: string): Promise<void>;
+  upload(file: File, lossless: boolean, name: string): Promise<number | null>;
   resolveImages(cards: ReadonlyArray<{ id: number }>, wanted: Set<string>): Promise<Map<string, string>>;
   imageBlob(cardId: number, name: string): Promise<Blob | null>;
 }
@@ -114,6 +114,8 @@ export interface TimelineSeam {
   resetFilter(): void;
   readBuckets(): { content: boolean; comments: boolean };
   ensureVisible(type: string): Promise<void>;
+  commentDraft(): string;
+  postComment(): Promise<boolean>;
 }
 
 export interface CardDetailDeps {
@@ -1063,6 +1065,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const u = state().unread[card.id] || {};
     byId("contentUnreadDot").hidden = !u.content;
     byId("commentsUnreadDot").hidden = !u.comments;
+    byId("commentsUnreadDot").classList.toggle("unread-dot-mention", !!u.mentions);
 
     if (u.content) {
       contentReadTimer = setTimeout(() => {
@@ -1100,9 +1103,14 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
   async function markCardRead(cardId: number, { content = false, comments = false }: { content?: boolean; comments?: boolean } = {}): Promise<void> {
     if (!xySync.isOnline()) return;
     const events = deps.timeline.events() || [];
+    // A reaction rides the bucket of its target: a comment's reaction clears
+    // with the comments, a card-level one with the content (mirrors the
+    // server's unread split).
+    const inCommentBucket = (e: CardEvent): boolean =>
+      e.type === "comment" || (e.type === "reaction" && e.reply_to_id != null);
     const maxId = (pred: (e: CardEvent) => boolean): number => events.filter(pred).reduce((m, e) => (e.id > m ? e.id : m), 0);
-    const contentReadId = content ? maxId((e) => e.type !== "comment") : 0;
-    const commentReadId = comments ? maxId((e) => e.type === "comment") : 0;
+    const contentReadId = content ? maxId((e) => !inCommentBucket(e)) : 0;
+    const commentReadId = comments ? maxId(inCommentBucket) : 0;
     if (!contentReadId && !commentReadId) return;
     try {
       await jpost(`/api/cards/${cardId}/read`, { content_read_id: contentReadId, comment_read_id: commentReadId });
@@ -1110,7 +1118,7 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     const st = state();
     const u: UnreadFlags = { ...(st.unread[cardId] || {}) };
     if (content) u.content = false;
-    if (comments) u.comments = false;
+    if (comments) { u.comments = false; u.mentions = false; }
     if (u.content || u.comments) st.unread[cardId] = u;
     else delete st.unread[cardId];
     if (content) byId("contentUnreadDot").hidden = true;
@@ -1659,15 +1667,23 @@ export function createCardDetail(deps: CardDetailDeps): CardDetail {
     // pending — clicking ✕ blurs the input first, and that save is still in
     // flight, so its baseline has not moved and this would send it twice.
     if (aliasTimer) void saveAlias();
-    if (!draft.contentDirty(false)) return Promise.resolve(true);
+    // A typed-but-unsent comment is unsaved work too: leaving raises the same
+    // prompt, where Сохранить posts it.
+    if (!draft.contentDirty(false) && !deps.timeline.commentDraft()) return Promise.resolve(true);
     byId("dirtyMessage").textContent = "";
     dirtyOverlay.hidden = false;
     return new Promise<boolean>((resolve) => { dirtyAnswer = resolve; });
   }
 
   byId("dirtySave").addEventListener("click", async () => {
-    const saved = await saveCard();
-    if (!saved) { byId("dirtyMessage").textContent = "Не удалось сохранить — карточка осталась открытой."; return; }
+    if (draft.contentDirty(false)) {
+      const saved = await saveCard();
+      if (!saved) { byId("dirtyMessage").textContent = "Не удалось сохранить — карточка осталась открытой."; return; }
+    }
+    if (deps.timeline.commentDraft() && !(await deps.timeline.postComment())) {
+      byId("dirtyMessage").textContent = "Не удалось отправить комментарий — карточка осталась открытой.";
+      return;
+    }
     settleDirty(true);
   });
   byId("dirtyDiscard").addEventListener("click", () => { settleDirty(true); });

@@ -48,6 +48,14 @@ type Response struct {
 	Message string `json:"message"`
 }
 
+// SendRequest is a server→bot ask to DM a user, posted over loopback to the
+// bot's local endpoint (see tgbot.ServeLocal). Best-effort by contract: the
+// caller treats any failure as "the nudge was not delivered", nothing more.
+type SendRequest struct {
+	TelegramUserID int64  `json:"telegram_user_id"`
+	Text           string `json:"text"`
+}
+
 // SecretOK checks the X-Bot-Secret header in constant time. configured is false
 // when no secret is set, which must disable the bridge outright (503) rather
 // than leave the code-issuing endpoints open to unauthenticated callers.

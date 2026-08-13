@@ -13,7 +13,7 @@ import { create as createAttachments } from "./attachments.js";
 import { gatherTargets } from "./attachments.js";
 import { createUnlock } from "./unlock.js";
 import { byRank, dragAfterIn, dragAfterInX, rankAfterMove, rankForSlot } from "./dragrank.js";
-import { createTimeline, eventAuthor } from "./timeline.js";
+import { createTimeline, decodeCommentPayload, eventAuthor } from "./timeline.js";
 import { createCardDetail, nowStamp } from "./carddetail.js";
 import {
   type AnnounceCity, parseSession, partialSeen, type SeenQuestion, type SessionMeta,
@@ -638,10 +638,19 @@ const boardMembers = createBoardMembers(state, boardId);
 const notifToggle = byId("notifToggle");
 const notifBadge = byId("notifBadge");
 
-// renderNotifBadge shows the 🔔 badge iff any card has an unread bucket.
+// renderNotifBadge shows the 🔔 badge iff any card has an unread bucket — red
+// when any of it mentions me.
 function renderNotifBadge(): void {
-  const any = Object.values(state.unread).some((u) => u.content || u.comments);
-  notifBadge.hidden = !any;
+  const flags = Object.values(state.unread);
+  notifBadge.hidden = !flags.some((u) => u.content || u.comments);
+  notifBadge.classList.toggle("unread-dot-mention", flags.some((u) => u.mentions));
+}
+
+// unreadDotFor builds a card's dot: red for a mention, blue otherwise.
+function unreadDotFor(u: { mentions?: boolean }, extra: string): HTMLElement {
+  const mention = u.mentions ? " unread-dot-mention" : "";
+  const title = u.mentions ? "Вас упомянули" : "Непрочитанные изменения";
+  return el("span", { class: "unread-dot " + extra + mention, title });
 }
 
 // refreshCardUnreadDot updates a single kanban card's dot in place (cheaper
@@ -652,8 +661,8 @@ function refreshCardUnreadDot(cardId: number): void {
   const u = state.unread[cardId];
   const wantDot = !!(u && (u.content || u.comments));
   const existing = node.querySelector(".kcard-unread");
-  if (wantDot && !existing) node.append(el("span", { class: "unread-dot unread-dot-corner kcard-unread", title: "Непрочитанные изменения" }));
-  else if (!wantDot && existing) existing.remove();
+  if (existing) existing.remove();
+  if (wantDot) node.append(unreadDotFor(u, "unread-dot-corner kcard-unread"));
 }
 
 // ---- 🔔 bell panel: recent other-authored activity, newest first ----
@@ -663,6 +672,8 @@ interface ActivityEvent {
   type: string;
   created_at: string;
   unread?: boolean;
+  mention?: boolean;
+  reply_to_id?: number | null;
   payload_enc?: string;
   author_user_id?: number | null;
 }
@@ -724,21 +735,23 @@ async function openNotifPanel(): Promise<void> {
     const card = state.cards.find((c) => c.id === ev.card_id);
     if (!card) continue; // card deleted/moved away since the event was recorded
     const row = el("button", { class: "notif-row", type: "button" });
-    if (ev.unread) row.append(el("span", { class: "unread-dot" }));
+    if (ev.unread) row.append(el("span", { class: "unread-dot" + (ev.mention ? " unread-dot-mention" : "") }));
     // Neutral noun-phrase wording (mirrors renderEvent's own verbs map, gender-
     // agnostic since we don't know the author's grammatical gender).
     const verbs: Record<string, string> = {
       comment: "комментарий", desc_edit: "правка описания",
       label_add: "добавлена метка", label_remove: "снята метка",
       attach_add: "вложение добавлено", attach_remove: "вложение удалено", attach_replace: "вложение заменено",
+      reaction: "реакция",
     };
-    const verb = verbs[ev.type] || ev.type;
+    const verb = ev.mention ? (ev.reply_to_id ? "ответ вам" : "упомянул(а) вас") : (verbs[ev.type] || ev.type);
     const when = new Date(ev.created_at).toLocaleString("ru-RU");
     const bodyWrap = el("div", { class: "notif-row-body" },
       el("div", { class: "notif-row-meta", text: `${eventAuthor(ev, state.me, state.memberNames)} ${verb} · ${cardTitle(card)} · ${when}` }));
-    if (ev.type === "comment") {
+    if (ev.type === "comment" || ev.type === "reaction") {
       let preview = "";
       try { preview = await xyCrypto.decField(mustDK(), ev.payload_enc || ""); } catch (_) {}
+      if (ev.type === "comment") preview = decodeCommentPayload(preview).text;
       bodyWrap.append(el("div", { class: "notif-row-preview", text: deriveTitle(preview, 120) }));
     }
     row.append(bodyWrap);
@@ -1177,7 +1190,7 @@ function renderCard(card: BoardCard, number?: string | null): HTMLElement {
   if (labelRow.children.length) node.append(labelRow);
   node.append(renderCardTitle(card, number));
   const u = state.unread[card.id];
-  if (u && (u.content || u.comments)) node.append(el("span", { class: "unread-dot unread-dot-corner kcard-unread", title: "Непрочитанные изменения" }));
+  if (u && (u.content || u.comments)) node.append(unreadDotFor(u, "unread-dot-corner kcard-unread"));
   node.addEventListener("dragstart", (e) => {
     e.stopPropagation();
     e.dataTransfer?.setData("text/xy-card", String(card.id));
@@ -2890,6 +2903,7 @@ const attachments = createAttachments({
     load: (cardId) => timeline.load(cardId),
     setAttachments: (list) => timeline.setAttachments(list),
   },
+  onCommentImage: (attId) => timeline.addDraftImage(attId),
 });
 
 const cardDetail = createCardDetail({
@@ -2915,6 +2929,8 @@ const cardDetail = createCardDetail({
     resetFilter: () => timeline.resetFilter(),
     readBuckets: () => timeline.readBuckets(),
     ensureVisible: (type) => timeline.ensureVisible(type),
+    commentDraft: () => timeline.commentDraft(),
+    postComment: () => timeline.postComment(),
   },
 });
 timeline = createTimeline({

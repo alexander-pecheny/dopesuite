@@ -217,7 +217,82 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV20(db); err != nil {
 		return err
 	}
+	if err := migrateV21(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV21 lets a Reaction ride the timeline (the type CHECK is rebuilt, so
+// the AUTOINCREMENT sequence is preserved the same way migrateV18 did) and adds
+// event_mentions: the plaintext member ids a comment names. Plaintext is the
+// point (ADR-0009) — it is the routing truth red dots and telegram nudges are
+// computed from, next to reply_to_id and is_excerpt which already leak the same
+// kind of structure.
+func migrateV21(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 21`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	var oldSeq sql.NullInt64
+	if err := db.QueryRow(`select seq from sqlite_sequence where name = 'timeline_events'`).Scan(&oldSeq); err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if _, err := db.Exec(`
+pragma foreign_keys = off;
+create table timeline_events_v21(
+  id integer primary key autoincrement,
+  board_id integer not null references boards(id) on delete cascade,
+  card_id integer references cards(id) on delete cascade,
+  session_id integer references test_sessions(id) on delete cascade,
+  type text not null check (type in (
+    'comment','desc_edit','label_add','label_remove',
+    'attach_add','attach_remove','attach_replace','reaction')),
+  author_user_id integer references users(id),
+  created_at text not null,
+  payload_enc blob not null,
+  deleted_at text,
+  edited_at text,
+  is_excerpt integer not null default 0,
+  reply_to_id integer references timeline_events(id),
+  check (card_id is not null or session_id is not null)
+);
+insert into timeline_events_v21(id, board_id, card_id, session_id, type, author_user_id,
+    created_at, payload_enc, deleted_at, edited_at, is_excerpt, reply_to_id)
+  select id, board_id, card_id, session_id, type, author_user_id,
+    created_at, payload_enc, deleted_at, edited_at, is_excerpt, reply_to_id
+  from timeline_events;
+drop table timeline_events;
+alter table timeline_events_v21 rename to timeline_events;
+create index if not exists idx_timeline_card on timeline_events(card_id);
+create index if not exists idx_timeline_session on timeline_events(session_id);
+create index if not exists idx_timeline_reply on timeline_events(reply_to_id);
+
+create table if not exists event_mentions(
+  event_id integer not null references timeline_events(id) on delete cascade,
+  user_id integer not null references users(id) on delete cascade,
+  primary key (event_id, user_id)
+);
+create index if not exists idx_event_mentions_user on event_mentions(user_id);
+pragma foreign_keys = on;
+`); err != nil {
+		return err
+	}
+	if oldSeq.Valid {
+		if _, err := db.Exec(
+			`update sqlite_sequence set seq = ? where name = 'timeline_events' and seq < ?`,
+			oldSeq.Int64, oldSeq.Int64); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(`
+insert or ignore into schema_versions(version, applied_at)
+  values(21, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV20 adds users.feed_default (the Feed Default of xy/CONTEXT.md): ""

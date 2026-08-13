@@ -1114,6 +1114,35 @@ type addCommentRequest struct {
 	PayloadEnc string `json:"payload_enc"`
 	ReplyToID  *int64 `json:"reply_to_id"`
 	SessionID  *int64 `json:"session_id"` // optional: the test this came out of
+	// Mentions: board-member ids the comment's text names, resolved by the
+	// client at compose time. Plaintext routing metadata (ADR-0009).
+	Mentions []int64 `json:"mentions"`
+}
+
+// requireMembers rejects a mention list naming anyone who is not on the board —
+// a mention routes a notification, so it must not address strangers.
+func requireMembers(ctx context.Context, q querier, bid int64, ids []int64) error {
+	for _, id := range ids {
+		var n int
+		if err := q.QueryRowContext(ctx,
+			`select count(*) from board_members where board_id = ? and user_id = ?`, bid, id).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return errBadRequest("упомянутый пользователь не участник доски")
+		}
+	}
+	return nil
+}
+
+func insertMentions(ctx context.Context, tx *sql.Tx, eventID int64, ids []int64) error {
+	for _, id := range ids {
+		if _, err := tx.ExecContext(ctx,
+			`insert or ignore into event_mentions(event_id, user_id) values(?, ?)`, eventID, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
@@ -1147,19 +1176,30 @@ func (s *server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := requireMembers(r.Context(), s.db, bid, req.Mentions); handleErr(w, err) {
+		return
+	}
 	err := s.withWriteTx(r.Context(), "add-comment", func(ctx context.Context, tx *sql.Tx) error {
 		payload, err := unb64(req.PayloadEnc)
 		if err != nil {
 			return errBadRequest("invalid payload_enc")
 		}
-		_, err = tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(ctx, `
 insert into timeline_events(board_id, card_id, session_id, type, author_user_id, created_at, payload_enc, reply_to_id)
 values(?, ?, ?, 'comment', ?, ?, ?, ?)`, bid, cardID, req.SessionID, uid, rfc3339(time.Now()), payload, replyTo)
-		return err
+		if err != nil {
+			return err
+		}
+		evID, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		return insertMentions(ctx, tx, evID, req.Mentions)
 	})
 	if handleErr(w, err) {
 		return
 	}
+	s.notifyComment(bid, cardID, uid, req.Mentions, replyTo)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1191,6 +1231,9 @@ type patchCommentRequest struct {
 	IsExcerpt  *bool   `json:"is_excerpt"`
 	// The test this comment came out of; 0 clears it (the optBlob convention).
 	SessionID *int64 `json:"session_id"`
+	// Mentions re-resolved from the edited text; nil = leave as they were.
+	// Only meaningful alongside PayloadEnc — mentions are the text's shadow.
+	Mentions *[]int64 `json:"mentions"`
 }
 
 // handlePatchComment edits a comment's text, flips its «выписка» flag and/or
@@ -1199,7 +1242,7 @@ type patchCommentRequest struct {
 // comment as an excerpt or naming the test behind it is curation any board
 // member may do (the same trust level as adding one).
 func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
-	uid, evID, bid, _, author, ok := s.requireComment(w, r)
+	uid, evID, bid, cardID, author, ok := s.requireComment(w, r)
 	if !ok {
 		return
 	}
@@ -1211,6 +1254,11 @@ func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusForbidden, "редактировать может только автор")
 		return
 	}
+	if req.Mentions != nil {
+		if err := requireMembers(r.Context(), s.db, bid, *req.Mentions); handleErr(w, err) {
+			return
+		}
+	}
 	if req.SessionID != nil && *req.SessionID != 0 {
 		sbid, err := boardOfSession(r.Context(), s.db, *req.SessionID)
 		if handleErr(w, err) {
@@ -1221,6 +1269,7 @@ func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	var addedMentions []int64
 	err := s.withWriteTx(r.Context(), "patch-comment", func(ctx context.Context, tx *sql.Tx) error {
 		if req.SessionID != nil {
 			var sid *int64
@@ -1249,11 +1298,45 @@ func (s *server) handlePatchComment(w http.ResponseWriter, r *http.Request) {
 update timeline_events set payload_enc = ?, edited_at = ? where id = ?`, payload, rfc3339(time.Now()), evID); err != nil {
 				return err
 			}
+			if req.Mentions != nil {
+				old := map[int64]bool{}
+				mrows, err := tx.QueryContext(ctx, `select user_id from event_mentions where event_id = ?`, evID)
+				if err != nil {
+					return err
+				}
+				for mrows.Next() {
+					var id int64
+					if err := mrows.Scan(&id); err != nil {
+						mrows.Close()
+						return err
+					}
+					old[id] = true
+				}
+				if err := mrows.Err(); err != nil {
+					mrows.Close()
+					return err
+				}
+				mrows.Close()
+				if _, err := tx.ExecContext(ctx, `delete from event_mentions where event_id = ?`, evID); err != nil {
+					return err
+				}
+				if err := insertMentions(ctx, tx, evID, *req.Mentions); err != nil {
+					return err
+				}
+				for _, id := range *req.Mentions {
+					if !old[id] {
+						addedMentions = append(addedMentions, id)
+					}
+				}
+			}
 		}
 		return nil
 	})
 	if handleErr(w, err) {
 		return
+	}
+	if len(addedMentions) > 0 {
+		s.notifyComment(bid, cardID, uid, addedMentions, nil)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

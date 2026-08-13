@@ -17,7 +17,7 @@ import type { BoardSession } from "./unlock.js";
 import type { Tester } from "./chgk.js";
 import * as people from "./people.js";
 import { icon, iconed } from "./icons_gen.js";
-import { commentBody } from "./timeline.js";
+import { commentBody, decodeCommentPayload } from "./timeline.js";
 
 export interface SessionsPanelDeps {
   boardId: number;
@@ -308,7 +308,7 @@ export function createSessionsPanel(deps: SessionsPanelDeps): SessionsPanel {
         const meta = [n.author, n.card ? "к вопросу" : "", shortWhen(n.when)].filter(Boolean).join(" · ");
         box.append(el("div", { class: "tl-event tl-comment" },
           el("div", { class: "tl-meta", text: meta }),
-          commentBody(n.text)));
+          commentBody(decodeCommentPayload(n.text).text)));
       }
     } catch (_) {
       box.replaceChildren(el("p", { class: "label-empty", text: "Не удалось загрузить." }));

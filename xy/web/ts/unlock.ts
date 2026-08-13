@@ -91,6 +91,9 @@ export interface BoardSession {
 export interface UnreadFlags {
   content?: boolean;
   comments?: boolean;
+  // An unread comment mentions me (an @ or a reply to my comment) — the red
+  // rung of the same ladder, always a subset of comments.
+  mentions?: boolean;
 }
 export interface BoardState {
   role: string;

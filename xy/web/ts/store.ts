@@ -260,6 +260,14 @@ const allIdMap = (): Promise<Record<number, number>> =>
   });
 const clearIdMap = (): Promise<undefined> => tx("idmap", "readwrite", (s) => req(s.clear()));
 
+// ---- members (plaintext roster, per board) ----
+// Cached so an offline card open still resolves author names and @-mentions;
+// membership is server-visible metadata, so caching it leaks nothing new.
+const getMembers = (boardId: number | string): Promise<unknown[] | undefined> =>
+  tx("meta", "readonly", (s) => req<unknown[] | undefined>(s.get("members:" + Number(boardId))));
+const putMembers = (boardId: number | string, members: unknown[]): Promise<IDBValidKey> =>
+  tx("meta", "readwrite", (s) => req(s.put(members, "members:" + Number(boardId))));
+
 // ---- meta / temp-id counter ----
 async function nextTempId(): Promise<number> {
   return tx("meta", "readwrite", async (s) => {
@@ -275,6 +283,7 @@ export const xyStore = {
   getBoardList, putBoardList,
   getIndex, putIndex, deleteIndex, allIndexes,
   getTimeline, putTimeline,
+  getMembers, putMembers,
   getAttachment, putAttachment,
   addOp, allOps, deleteOp, putOp, countOps,
   putIdMap, allIdMap, clearIdMap,

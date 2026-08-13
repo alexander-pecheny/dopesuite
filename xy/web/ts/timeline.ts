@@ -7,6 +7,7 @@
 // module is reached through the `card` seam (open-card id + comment-link copy),
 // which the orchestrator wires back to the carddetail factory's API.
 import { overlayStack } from "./overlaystack.js";
+import { anchorPopup } from "./popup.js";
 import { xyApp } from "./app.js";
 import { xyCrypto } from "./crypto.js";
 import { xySync } from "./sync.js";
@@ -18,7 +19,7 @@ import type { DiffOp } from "./diff.js";
 import type { OpBody, TimelineEvent } from "./store.js";
 import { icon, iconed } from "./icons_gen.js";
 
-const { fetchJSON, jpatch, jdelete, el, onCmdEnter } = xyApp;
+const { fetchJSON, jpost, jpatch, jdelete, el, onCmdEnter, deriveTitle } = xyApp;
 
 // requestSubmit, not submit(): the form's own submit listener is what posts the
 // comment, and a raw .submit() bypasses every listener and navigates the page.
@@ -65,6 +66,9 @@ export interface TimelineState {
   cards: Array<{ id: number; createdAt: string | null }>;
   me?: AuthMe | null;
   memberNames?: Record<number, string>;
+  // The roster (boardmembers.js writes it; mirrored for offline) — what @ can
+  // name and what resolveMentions resolves against.
+  members?: MentionMember[];
   // The reader's own лента default (users.feed_default, edited on /profile),
   // delivered in the board snapshot so an offline card open obeys it too.
   feedDefault?: string;
@@ -111,6 +115,12 @@ export interface Timeline {
   // Which unread watermarks the лента as currently filtered may clear.
   readBuckets(): { content: boolean; comments: boolean };
   ensureVisible(type: string): Promise<void>;
+  // The composer's pending comment ("" when empty) and the shared write path —
+  // what the card's Save-on-leave prompt saves.
+  commentDraft(): string;
+  postComment(): Promise<boolean>;
+  // A pasted image, already uploaded as a card attachment, joins the draft.
+  addDraftImage(attId: number): void;
 }
 
 // ---- pure decision helpers (exported for tests) ----
@@ -220,11 +230,114 @@ export function linkSegments(text: string): { text: string; href?: string }[] {
   return out;
 }
 
-export function commentBody(text: string): HTMLElement {
-  return el("div", { class: "tl-comment" },
-    linkSegments(text).map((s) => s.href
-      ? el("a", { href: s.href, target: "_blank", rel: "noopener noreferrer", text: s.text })
-      : document.createTextNode(s.text)));
+// ---- mentions ----
+// A Mention is resolved from the TEXT at submit time (the picker is only typing
+// help): every @username that names a board member, checked at both ends so
+// «ann@mail.ru» and a prefix of a longer name mention nobody. The resolved ids
+// are what the server routes red dots and nudges by (ADR-0009).
+
+const MENTION_CHARS = /[\p{L}\p{N}_.\-]/u;
+
+function mentionSpans(text: string, names: string[]): { start: number; name: string }[] {
+  const out: { start: number; name: string }[] = [];
+  // Longest first, so @anna never resolves as @ann + "a".
+  const sorted = [...names].sort((x, y) => y.length - x.length);
+  const taken: boolean[] = [];
+  for (const name of sorted) {
+    for (let from = 0; (from = text.indexOf("@" + name, from)) !== -1; from += 1) {
+      const prev = from === 0 ? "" : text[from - 1];
+      const next = text[from + name.length + 1] || "";
+      if ((prev && MENTION_CHARS.test(prev)) || (next && MENTION_CHARS.test(next))) continue;
+      if (taken.slice(from, from + name.length + 1).some(Boolean)) continue;
+      for (let i = from; i < from + name.length + 1; i++) taken[i] = true;
+      out.push({ start: from, name });
+    }
+  }
+  return out.sort((x, y) => x.start - y.start);
+}
+
+export interface MentionMember { user_id: number; username?: string | null }
+
+export function resolveMentions(text: string, members: readonly MentionMember[]): number[] {
+  const byName = new Map<string, number>();
+  for (const m of members) if (m.username) byName.set(m.username, m.user_id);
+  const out: number[] = [];
+  for (const s of mentionSpans(text, [...byName.keys()])) {
+    const id = byName.get(s.name)!;
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+// ---- comment payload codec ----
+// A comment's encrypted payload is a plain string until it carries images; then
+// it is {"xy":1,"t":text,"img":[attachment ids]}. The "xy" marker is what keeps
+// a hand-typed JSON comment from being mistaken for the envelope.
+
+export function encodeCommentPayload(text: string, images: readonly number[]): string {
+  if (!images.length) return text;
+  return JSON.stringify({ xy: 1, t: text, img: [...images] });
+}
+
+export function decodeCommentPayload(raw: string): { text: string; images: number[] } {
+  if (raw.startsWith("{")) {
+    try {
+      const p = JSON.parse(raw) as { xy?: unknown; t?: unknown; img?: unknown };
+      if (p && p.xy === 1 && typeof p.t === "string" && Array.isArray(p.img)) {
+        return { text: p.t, images: p.img.filter((n): n is number => typeof n === "number") };
+      }
+    } catch (_) { /* an ordinary comment that happens to open with { */ }
+  }
+  return { text: raw, images: [] };
+}
+
+// ---- reactions ----
+// Reactions aggregate into chips per target (0 = the card itself), never into
+// лента rows. mineId is the caller's own reaction event, the handle for the
+// toggle-off DELETE.
+
+export interface ReactionInput { id: number; emoji: string; author: number | null; target: number | null }
+export interface ReactionChip { emoji: string; count: number; mineId: number | null; authors: number[] }
+
+export function aggregateReactions(rs: readonly ReactionInput[], meId: number | null): Map<number, ReactionChip[]> {
+  const out = new Map<number, ReactionChip[]>();
+  for (const r of rs) {
+    const key = r.target ?? 0;
+    let chips = out.get(key);
+    if (!chips) out.set(key, chips = []);
+    let chip = chips.find((c) => c.emoji === r.emoji);
+    if (!chip) chips.push(chip = { emoji: r.emoji, count: 0, mineId: null, authors: [] });
+    chip.count++;
+    if (r.author != null && !chip.authors.includes(r.author)) chip.authors.push(r.author);
+    if (meId != null && r.author === meId) chip.mineId = r.id;
+  }
+  return out;
+}
+
+// commentBody renders a comment's text: URLs become links, and @names of board
+// members become highlighted mentions (never inside a URL — a link stays whole).
+export function commentBody(text: string, mentionNames: readonly string[] = [], meName?: string | null): HTMLElement {
+  const spans = mentionSpans(text, [...mentionNames]);
+  const out: Node[] = [];
+  let offset = 0;
+  for (const seg of linkSegments(text)) {
+    const end = offset + seg.text.length;
+    if (seg.href) {
+      out.push(el("a", { href: seg.href, target: "_blank", rel: "noopener noreferrer", text: seg.text }));
+    } else {
+      let cur = offset;
+      for (const sp of spans) {
+        if (sp.start < cur || sp.start + sp.name.length + 1 > end) continue;
+        if (sp.start > cur) out.push(document.createTextNode(text.slice(cur, sp.start)));
+        const cls = meName && sp.name === meName ? "tl-mention tl-mention-me" : "tl-mention";
+        out.push(el("span", { class: cls, text: "@" + sp.name }));
+        cur = sp.start + sp.name.length + 1;
+      }
+      if (cur < end) out.push(document.createTextNode(text.slice(cur, end)));
+    }
+    offset = end;
+  }
+  return el("div", { class: "tl-comment" }, out);
 }
 
 // orderFeedEvents: events are oldest→newest (by id), so "сначала новое" is the
@@ -278,7 +391,19 @@ export function createTimeline(deps: TimelineDeps): Timeline {
   // is dropped when the card closes (resetFilter), so a card always opens the way
   // /profile says — the selects are a look at this card, not a stored preference.
   let filter: FeedFilter = "all";
-  const shown = (events: readonly CardEvent[]): CardEvent[] => events.filter((e) => feedFilterKeeps(e.type, filter));
+  // Reactions never make rows — they render as chips on their target.
+  const shown = (events: readonly CardEvent[]): CardEvent[] =>
+    events.filter((e) => e.type !== "reaction" && feedFilterKeeps(e.type, filter));
+
+  // The open card's decrypted payloads (id → text) and aggregated reaction
+  // chips, rebuilt by load(); renderEvent reads both (quotes, chips).
+  let payloadOf = new Map<number, string>();
+  let openChips = new Map<number, ReactionChip[]>();
+
+  const rosterNames = (): string[] =>
+    (state().members || []).map((m) => m.username || "").filter(Boolean);
+  const myName = (): string | null => state().me?.username || null;
+  const mentionBody = (text: string): HTMLElement => commentBody(text, rosterNames(), myName());
 
   const feedOverlay = byId("feedOverlay");
   const threadOverlay = byId("threadOverlay");
@@ -309,21 +434,107 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     try { events = (await xySync.timelineFor(cardId)) as CardEvent[]; } catch (_) {}
     const replies = replyCountsOf(events);
     for (const e of events) e.reply_count = replies.get(e.id) || 0;
-    if (cardId === deps.card.openCardId()) { openCardEvents = events; renderExcerptCount(); }
-    // Newest first: events are oldest→newest (by id); show them reversed.
-    const frag = document.createDocumentFragment();
-    for (const ev of shown(events).reverse()) {
-      let payload = "";
+    // Every payload is decrypted up front: a reply quotes its parent and a
+    // reaction chip needs its emoji, whichever of the two the filter shows.
+    const payloads = new Map<number, string>();
+    for (const ev of events) {
       try {
         const dk = deps.getDK();
-        if (dk) payload = await xyCrypto.decField(dk, ev.payload_enc || "");
+        if (dk) payloads.set(ev.id, await xyCrypto.decField(dk, ev.payload_enc || ""));
       } catch (_) {}
-      frag.append(renderEvent(ev, payload));
+    }
+    if (cardId === deps.card.openCardId()) {
+      openCardEvents = events;
+      payloadOf = payloads;
+      openChips = aggregateReactions(
+        events.filter((e) => e.type === "reaction" && !e.deleted).map((e) => ({
+          id: e.id, emoji: payloads.get(e.id) || "", author: e.author_user_id ?? null, target: e.reply_to_id ?? null,
+        })).filter((r) => r.emoji),
+        state().me?.user_id ?? null);
+      renderExcerptCount();
+    }
+    // Newest first: events are oldest→newest (by id); show them reversed.
+    const frag = document.createDocumentFragment();
+    frag.append(cardReactionsRow());
+    for (const ev of shown(events).reverse()) {
+      frag.append(renderEvent(ev, payloads.get(ev.id) || ""));
     }
     // Oldest goes last in the newest-first лента.
     const born = cardCreatedNode(cardId);
     if (born) frag.append(born);
     tl.replaceChildren(frag);
+  }
+
+  // ---- reactions (chips + picker) ----
+  const QUICK_EMOJI = ["👍", "❤️", "🔥", "😂", "🤔", "👏"];
+
+  // toggleReaction: my chip off, anything else on. Online-only, like every
+  // comment mutation but the comment itself.
+  async function toggleReaction(targetId: number | null, emoji: string): Promise<void> {
+    const oc = deps.card.openCardId();
+    if (!oc) return;
+    const msg = byId("cardMessage");
+    if (!xySync.requireOnline("Реакции доступны только онлайн.", msg)) return;
+    const mine = (openChips.get(targetId ?? 0) || []).find((c) => c.emoji === emoji)?.mineId;
+    try {
+      if (mine) await jdelete(`/api/reactions/${mine}`);
+      else {
+        await jpost(`/api/cards/${oc}/reactions`, {
+          payload_enc: await xyCrypto.encField(mustDK(), emoji), target_id: targetId,
+        });
+      }
+      msg.textContent = "";
+      await refreshFeeds();
+    } catch (err) { msg.textContent = err instanceof Error ? err.message : String(err); }
+  }
+
+  function openReactionPicker(anchor: HTMLElement, targetId: number | null): void {
+    const items: MenuItem[] = QUICK_EMOJI.map((emoji) => ({
+      label: emoji, onClick: () => { void toggleReaction(targetId, emoji); },
+    }));
+    items.push({
+      label: "Другой…",
+      onClick: () => {
+        const raw = (prompt("Эмодзи:") || "").trim();
+        if (raw) void toggleReaction(targetId, raw);
+      },
+    });
+    deps.popupMenu(anchor, items);
+  }
+
+  // chipsRow renders a target's chips (клик = toggle) plus the add button.
+  // targetId null = the card itself.
+  function chipsRow(targetId: number | null, always: boolean): HTMLElement | null {
+    const chips = openChips.get(targetId ?? 0) || [];
+    if (!chips.length && !always) return null;
+    const row = el("div", { class: "tl-chips" });
+    const names = state().memberNames || {};
+    for (const c of chips) {
+      const who = c.authors.map((a) => names[a] || `#${a}`).join(", ");
+      row.append(el("button", {
+        class: "tl-chip" + (c.mineId ? " tl-chip-mine" : ""), type: "button", title: who,
+        text: c.count > 1 ? `${c.emoji} ${c.count}` : c.emoji,
+        onclick: () => { void toggleReaction(targetId, c.emoji); },
+      }));
+    }
+    const add = el("button", { class: "tl-chip tl-chip-add", type: "button", title: "Реакция" }, icon("plus"));
+    add.addEventListener("click", () => openReactionPicker(add, targetId));
+    row.append(add);
+    return row;
+  }
+
+  function cardReactionsRow(): HTMLElement {
+    return el("div", { class: "tl-card-reactions" }, chipsRow(null, true));
+  }
+
+  // commentImageNodes renders a comment's referenced attachments inline;
+  // .pv-img wires each into the shared lightbox.
+  function commentImageNodes(ids: readonly number[]): HTMLElement[] {
+    return ids.map((id) => {
+      const img = el("img", { class: "tl-comment-img pv-img", alt: "картинка из комментария" }) as HTMLImageElement;
+      deps.attachments.url({ id }).then((u) => { img.src = u; }).catch(() => { img.remove(); });
+      return img;
+    });
   }
 
   // cardCreatedNode is the «карточка создана» line closing the лента — the anchor
@@ -353,6 +564,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         wrap.append(row);
         return wrap;
       }
+      let quoteNode: HTMLElement | null = null;
       const metaRow = el("div", { class: "tl-meta" }, meta(when + (ev.edited_at ? " · изменён" : "")));
       if (ev.is_excerpt) {
         wrap.classList.add("tl-excerpt");
@@ -375,6 +587,15 @@ export function createTimeline(deps: TimelineDeps): Timeline {
           class: "tl-replyto", type: "button", title: "Открыть ветку",
           text: `↳ в ответ ${parentWho}`, onclick: () => { void openThread(rootId); },
         }));
+        // The parent's first line and a half, so the answer carries its
+        // question — old replies included, since this is derived at render.
+        const parentText = decodeCommentPayload(payloadOf.get(rootId) || "").text;
+        if (parent && !parent.deleted && parentText) {
+          quoteNode = el("button", {
+            class: "tl-quote", type: "button", title: "Открыть ветку",
+            text: deriveTitle(parentText, 110), onclick: () => { void openThread(rootId); },
+          });
+        }
       }
       // Synced comments have a stable event id → offer a copyable direct link, the
       // edit/delete/выписка menu, and an anchor target. Pending (offline) comments
@@ -393,7 +614,13 @@ export function createTimeline(deps: TimelineDeps): Timeline {
             onclick: (e: Event) => commentMenu(e.currentTarget as HTMLElement, ev, payload),
           }, icon("ellipsis"))));
       }
-      wrap.append(metaRow, commentBody(payload));
+      const decoded = decodeCommentPayload(payload);
+      wrap.append(metaRow);
+      if (quoteNode) wrap.append(quoteNode);
+      wrap.append(mentionBody(decoded.text));
+      for (const img of commentImageNodes(decoded.images)) wrap.append(img);
+      const chips = ev.id > 0 ? chipsRow(ev.id, false) : null;
+      if (chips) wrap.append(chips);
       if ((ev.reply_count || 0) > 0) wrap.append(threadButton(ev));
     } else if (ev.type === "desc_edit") {
       let diff: { before?: string; after?: string; author?: string } = {};
@@ -610,12 +837,14 @@ export function createTimeline(deps: TimelineDeps): Timeline {
           if (dk) text = await xyCrypto.decField(dk, ev.payload_enc || "");
         } catch (_) {}
       }
+      const decoded = decodeCommentPayload(text);
       const node = el("div", { class: "thread-item" + (ev.id === rootId ? " thread-root" : "") },
         el("div", { class: "tl-meta" },
           ev.deleted ? "комментарий удалён"
             : `${author(ev)} · ${new Date(ev.created_at).toLocaleString("ru-RU")}${ev.edited_at ? " · изменён" : ""}`,
           ev.is_excerpt ? el("span", { class: "tl-badge", text: "выписка" }) : null),
-        ev.deleted ? null : commentBody(text));
+        ev.deleted ? null : mentionBody(decoded.text),
+        ...(ev.deleted ? [] : commentImageNodes(decoded.images)));
       frag.append(node);
     }
     body.replaceChildren(frag);
@@ -636,6 +865,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       const dk = mustDK();
       await deps.post("comment", `/api/cards/${oc}/comments`, {
         payload_enc: await xyCrypto.encField(dk, text), reply_to_id: threadRootId,
+        mentions: resolveMentions(text, state().members || []),
       });
       input.value = "";
       await load(oc);
@@ -725,13 +955,19 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     const body = wrap.querySelector(".tl-comment");
     if (!body) return;
     const ta = el("textarea", { class: "card-desc comment-input tl-edit", spellcheck: "false" }) as HTMLTextAreaElement;
-    ta.value = payload;
+    // The textarea edits the TEXT; images the comment carries ride along
+    // untouched, and mentions are re-resolved from what the text now says.
+    const decoded = decodeCommentPayload(payload);
+    ta.value = decoded.text;
     const save = el("button", {
       class: "btn btn-small", type: "button", text: "Сохранить",
       onclick: async () => {
         const text = ta.value.trim();
         if (!text) return;
-        await commentAction(async () => jpatch(`/api/comments/${ev.id}`, { payload_enc: await xyCrypto.encField(mustDK(), text) }));
+        await commentAction(async () => jpatch(`/api/comments/${ev.id}`, {
+          payload_enc: await xyCrypto.encField(mustDK(), encodeCommentPayload(text, decoded.images)),
+          mentions: resolveMentions(text, state().members || []),
+        }));
       },
     });
     const cancel = el("button", {
@@ -742,23 +978,107 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     ta.focus();
   }
 
-  submitOnCmdEnter("commentInput", "commentForm");
-  byId("commentForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
+  // ---- the main composer ----
+  // Images pasted into the comment box become card attachments referenced by
+  // the payload; the chips row under the box is the pending list.
+  let draftImages: number[] = [];
+  const draftImagesRow = el("div", { class: "tl-draft-imgs", hidden: true });
+  byId("commentInput").insertAdjacentElement("afterend", draftImagesRow);
+
+  function renderDraftImages(): void {
+    draftImagesRow.replaceChildren();
+    draftImagesRow.hidden = !draftImages.length;
+    for (const id of draftImages) {
+      const chip = el("span", { class: "tl-draft-img" });
+      const img = el("img", { alt: "" }) as HTMLImageElement;
+      deps.attachments.url({ id }).then((u) => { img.src = u; }).catch(() => {});
+      chip.append(img, el("button", {
+        class: "attach-del", type: "button", title: "Убрать из комментария", text: "×",
+        onclick: () => { draftImages = draftImages.filter((x) => x !== id); renderDraftImages(); },
+      }));
+      draftImagesRow.append(chip);
+    }
+  }
+
+  function addDraftImage(attId: number): void {
+    if (!draftImages.includes(attId)) draftImages.push(attId);
+    renderDraftImages();
+  }
+
+  function commentDraft(): string {
+    return byId<HTMLInputElement>("commentInput").value.trim() || (draftImages.length ? "картинка" : "");
+  }
+
+  // postComment is the one write path: the submit handler and the card's
+  // Save-on-leave prompt both land here.
+  async function postComment(): Promise<boolean> {
     const input = byId<HTMLInputElement>("commentInput");
     const text = input.value.trim();
     const oc = deps.card.openCardId();
-    if (!text || !oc) return;
+    if ((!text && !draftImages.length) || !oc) return false;
     try {
       // No test is named here: a comment is tagged from its own ⋯ menu once it
       // exists, so writing one is just writing one.
       await deps.post("comment", `/api/cards/${oc}/comments`, {
-        payload_enc: await xyCrypto.encField(mustDK(), text),
+        payload_enc: await xyCrypto.encField(mustDK(), encodeCommentPayload(text, draftImages)),
+        mentions: resolveMentions(text, state().members || []),
       });
       input.value = "";
+      draftImages = [];
+      renderDraftImages();
       await load(oc);
-    } catch (err) { byId("cardMessage").textContent = err instanceof Error ? err.message : String(err); }
+      return true;
+    } catch (err) {
+      byId("cardMessage").textContent = err instanceof Error ? err.message : String(err);
+      return false;
+    }
+  }
+
+  submitOnCmdEnter("commentInput", "commentForm");
+  byId("commentForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    void postComment();
   });
+
+  // ---- @-mentions typing help ----
+  // A dropdown of member names once the caret sits in an @-token. Picking
+  // inserts through execCommand so the browser's undo stack survives (the
+  // repo-wide rule for programmatic edits).
+  function attachMentionPicker(input: HTMLTextAreaElement | HTMLInputElement): void {
+    let popup: { close(): void } | null = null;
+    const closePopup = (): void => { popup?.close(); popup = null; };
+    input.addEventListener("blur", () => setTimeout(closePopup, 150));
+    input.addEventListener("keydown", (e: Event) => {
+      if ((e as KeyboardEvent).key === "Escape" && popup) { e.stopPropagation(); closePopup(); }
+    });
+    input.addEventListener("input", () => {
+      closePopup();
+      const caret = input.selectionStart ?? input.value.length;
+      const head = input.value.slice(0, caret);
+      const m = head.match(/(^|\s)@([\p{L}\p{N}_.\-]*)$/u);
+      if (!m) return;
+      const token = m[2];
+      const names = rosterNames().filter((n) => n.toLowerCase().startsWith(token.toLowerCase()) && n !== token);
+      if (!names.length) return;
+      const list = el("div", { class: "menu-fixed suggest-menu" });
+      for (const name of names.slice(0, 8)) {
+        const btn = el("button", { class: "menu-item", type: "button", text: "@" + name });
+        // pointerdown + preventDefault, so the textarea never blurs (the
+        // suggestWrap trick) and the insert lands in one undo step.
+        btn.addEventListener("pointerdown", (e) => {
+          e.preventDefault();
+          input.setSelectionRange(caret - token.length - 1, caret);
+          input.focus();
+          document.execCommand("insertText", false, "@" + name + " ");
+          closePopup();
+        });
+        list.append(btn);
+      }
+      popup = anchorPopup(list, input, { onClose: () => { popup = null; } });
+    });
+  }
+  attachMentionPicker(byId<HTMLTextAreaElement>("commentInput"));
+  attachMentionPicker(byId<HTMLTextAreaElement>("threadInput"));
 
   // ---- выписки ----
   // A выписка is an excerpt from a source — a comment or an attachment flagged as
@@ -822,5 +1142,8 @@ export function createTimeline(deps: TimelineDeps): Timeline {
     async ensureVisible(type: string): Promise<void> {
       if (!feedFilterKeeps(type, filter)) await setFilter("all", true);
     },
+    commentDraft,
+    postComment,
+    addDraftImage,
   };
 }

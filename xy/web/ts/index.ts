@@ -17,6 +17,7 @@ interface BoardListItem {
   role: string;
   schema_version: number;
   unread?: boolean;
+  unread_mentions?: boolean;
 }
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -261,7 +262,9 @@ function renderBoards(boards: BoardListItem[]): void {
       el("span", { class: "board-card-role", text: b.role === "owner" ? "владелец" : "редактор" }),
     );
     if (b.unread) {
-      card.append(el("span", { class: "unread-dot unread-dot-corner board-card-unread", title: "Есть непрочитанные изменения" }));
+      const mention = b.unread_mentions ? " unread-dot-mention" : "";
+      const title = b.unread_mentions ? "Вас упомянули" : "Есть непрочитанные изменения";
+      card.append(el("span", { class: "unread-dot unread-dot-corner board-card-unread" + mention, title }));
     }
     if (!migrated) {
       // Decrypt the name lazily if we have the cached key, and — since we now hold

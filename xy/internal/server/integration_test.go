@@ -17,8 +17,10 @@ import (
 func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	t.Helper()
 	// These tests register through the telegram handshake, which an instance
-	// with no bot of its own now refuses.
+	// with no bot of its own now refuses. The health addr points at a dead
+	// port so a mention nudge never leaves the test (this box runs a real bot).
 	t.Setenv("XY_BOT_SECRET", "test-secret")
+	t.Setenv("XY_BOT_HEALTH_ADDR", "127.0.0.1:1")
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := openDB(dbPath)
 	if err != nil {
@@ -86,6 +88,8 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("POST /api/cards/{id}/timeline/import", srv.handleImportEvents)
 	mux.HandleFunc("PATCH /api/comments/{id}", srv.handlePatchComment)
 	mux.HandleFunc("DELETE /api/comments/{id}", srv.handleDeleteComment)
+	mux.HandleFunc("POST /api/cards/{id}/reactions", srv.handleAddReaction)
+	mux.HandleFunc("DELETE /api/reactions/{id}", srv.handleDeleteReaction)
 	mux.HandleFunc("POST /api/cards/{id}/read", srv.handleMarkRead)
 	mux.HandleFunc("GET /api/boards/{id}/activity", srv.handleBoardActivity)
 	mux.HandleFunc("POST /api/boards/{id}/read-all", srv.handleBoardReadAll)

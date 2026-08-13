@@ -11,6 +11,7 @@ import { overlayStack } from "./overlaystack.js";
 import { xyApp } from "./app.js";
 import type { AuthMe } from "./app.js";
 import { xySync } from "./sync.js";
+import { xyStore } from "./store.js";
 
 const { fetchJSON, jpost, jdelete, el } = xyApp;
 
@@ -36,16 +37,28 @@ export function roleLabel(role: string): string { return role === "owner" ? "Ð²Ð
 // createBoardMembers wires the members overlay against the shared board state and
 // board id, and returns { load, open } for board.js to call.
 export function createBoardMembers(state: MembersState, boardId: number | string): { load: () => Promise<void>; open: () => void } {
-  async function fetchMembers(): Promise<BoardMember[]> {
-    const members = (await fetchJSON(`/api/boards/${boardId}/members`)) as BoardMember[];
+  function applyMembers(members: BoardMember[]): void {
     state.members = members;
     state.memberNames = {};
     for (const m of members) state.memberNames[m.user_id] = memberName(m);
+  }
+
+  async function fetchMembers(): Promise<BoardMember[]> {
+    const members = (await fetchJSON(`/api/boards/${boardId}/members`)) as BoardMember[];
+    applyMembers(members);
+    void xyStore.putMembers(boardId, members).catch(() => {});
     return members;
   }
 
   async function load(): Promise<void> {
-    if (!xySync.isOnline()) return;
+    if (!xySync.isOnline()) {
+      // The mirrored roster: offline cards still get author names and @-mentions.
+      try {
+        const cached = (await xyStore.getMembers(boardId)) as BoardMember[] | undefined;
+        if (cached) applyMembers(cached);
+      } catch (_) {}
+      return;
+    }
     try { await fetchMembers(); } catch (_) {}
     if (!state.me) {
       try { state.me = (await fetchJSON(`/api/auth/me`)) as AuthMe; } catch (_) {}
