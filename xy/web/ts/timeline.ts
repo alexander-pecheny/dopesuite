@@ -195,6 +195,38 @@ export function readBucketsOf(filter: FeedFilter): { content: boolean; comments:
   return { content: filter !== "comments", comments: filter === "all" || filter === "comments" };
 }
 
+// linkSegments splits a comment's text into plain runs and URLs so the лента can
+// make links clickable without ever treating user text as markup. Trailing
+// sentence punctuation stays outside the link; a ")" is cut only when the URL
+// itself opened no "(" (wikipedia-style paths keep theirs).
+export function linkSegments(text: string): { text: string; href?: string }[] {
+  const out: { text: string; href?: string }[] = [];
+  let last = 0;
+  for (const m of text.matchAll(/https?:\/\/[^\s<>«»]+/g)) {
+    let url = m[0];
+    for (;;) {
+      const c = url.charAt(url.length - 1);
+      if (".,;:!?…'\"".includes(c)) { url = url.slice(0, -1); continue; }
+      if (c === ")" && !url.includes("(")) { url = url.slice(0, -1); continue; }
+      break;
+    }
+    if (url.endsWith("//")) continue; // a bare "https://" is not a link
+    const start = m.index ?? 0;
+    if (start > last) out.push({ text: text.slice(last, start) });
+    out.push({ text: url, href: url });
+    last = start + url.length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out;
+}
+
+export function commentBody(text: string): HTMLElement {
+  return el("div", { class: "tl-comment" },
+    linkSegments(text).map((s) => s.href
+      ? el("a", { href: s.href, target: "_blank", rel: "noopener noreferrer", text: s.text })
+      : document.createTextNode(s.text)));
+}
+
 // orderFeedEvents: events are oldest→newest (by id), so "сначала новое" is the
 // reverse.
 export function orderFeedEvents<T>(events: readonly T[], order: "old" | "new"): T[] {
@@ -361,7 +393,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
             onclick: (e: Event) => commentMenu(e.currentTarget as HTMLElement, ev, payload),
           }, icon("ellipsis"))));
       }
-      wrap.append(metaRow, el("div", { class: "tl-comment", text: payload }));
+      wrap.append(metaRow, commentBody(payload));
       if ((ev.reply_count || 0) > 0) wrap.append(threadButton(ev));
     } else if (ev.type === "desc_edit") {
       let diff: { before?: string; after?: string; author?: string } = {};
@@ -583,7 +615,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
           ev.deleted ? "комментарий удалён"
             : `${author(ev)} · ${new Date(ev.created_at).toLocaleString("ru-RU")}${ev.edited_at ? " · изменён" : ""}`,
           ev.is_excerpt ? el("span", { class: "tl-badge", text: "выписка" }) : null),
-        ev.deleted ? null : el("div", { class: "tl-comment", text }));
+        ev.deleted ? null : commentBody(text));
       frag.append(node);
     }
     body.replaceChildren(frag);
