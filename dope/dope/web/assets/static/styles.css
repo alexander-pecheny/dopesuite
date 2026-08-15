@@ -29,7 +29,7 @@
   --fest-col-min: 190px;
   --fest-col-max: 240px;
   --grid-row: 24px;
-  --grid-box-gap: 4px;
+  --grid-box-gap: var(--space-1);
   --grid-cell-pad: 3px 6px;
   --group-standings-col: 520px;
   --od-detailed-number-digits: 3ch;
@@ -1127,7 +1127,7 @@
   grid-auto-flow: column;
   grid-template-columns: repeat(var(--block-cols, 1), minmax(0, 1fr));
   grid-template-rows: repeat(var(--block-rows, 1), var(--grid-unit));
-  column-gap: 8px;
+  column-gap: var(--space-2);
   align-items: start;
   contain: inline-size;
 }
@@ -1247,7 +1247,6 @@
   background: var(--structure);
   color: var(--text);
   font-size: var(--text-xs-plus);
-  line-height: 15px;
 }
 
 .grid-standings tr:last-child td {
@@ -4033,7 +4032,12 @@ body:not(.embedded-match) .grid-match {
 }
 
 /* Every группа's crosstab the same width, so stacked tables read as columns:
-   a score cell fits «10 : 9», a stat cell «−12». */
+   a score cell fits «10 : 9», a stat cell «−12». The track is as wide as a
+   crosstab of four, so two go abreast only where two really fit. */
+.brain-groups {
+  --group-standings-col: 800px;
+}
+
 .brain-crosstable {
   width: max-content;
 }

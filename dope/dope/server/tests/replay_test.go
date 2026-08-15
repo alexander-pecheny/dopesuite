@@ -233,9 +233,8 @@ func TestReplayStudchrSI(t *testing.T) {
 // derive every one of them.
 func TestReplayStudchrTPSh(t *testing.T) {
 	game := replayFromTranscript(t, "tpsh", "si", "ТПШ")
-	// The Пересев sorts on how many 50s each player took, and its tab shows
-	// the column — so what it sorted on has to be what it stored. The writer
-	// used to persist a hand-list of ЭК's metric names and drop СИ's.
+	// The Пересев sorts on how many 50s each player took and shows the column,
+	// so what it sorted on has to be what it stored.
 	var stageCode string
 	if err := game.srv.Eng().DB.QueryRow(`
 select code from stages where game_id = ? and stage_type = 'reseed' order by position limit 1`,

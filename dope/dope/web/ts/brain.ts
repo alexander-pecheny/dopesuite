@@ -654,26 +654,26 @@ function buildGrid(): HTMLElement {
 function buildPodBoard(bucket: BlockBucket): HTMLElement {
   type GridMatch = NonNullable<FestGridStage["matches"]>[number];
   const byRound = new Map<number, GridMatch[]>();
-  const podRows = Math.max(1, ...bucket.stages.map((stage) => {
-    const perRound = new Map<number, number>();
-    for (const planned of stage.matches || []) {
-      const round = Number((planned as {round?: number}).round || 1);
-      perRound.set(round, (perRound.get(round) || 0) + 1);
-    }
-    return Math.max(0, ...perRound.values());
-  }));
+  const roundOf = (planned: BrainSchemeMatch) => Number((planned as {round?: number}).round || 1);
+  // slots[pod][i] is the бой's slot within its pod's round; podRows the widest.
+  const slots = bucket.stages.map((stage) => {
+    const seen = new Map<number, number>();
+    return (stage.matches || []).map((planned) => {
+      const slot = seen.get(roundOf(planned)) || 0;
+      seen.set(roundOf(planned), slot + 1);
+      return slot;
+    });
+  });
+  const podRows = Math.max(0, ...slots.flat()) + 1;
   bucket.stages.forEach((stage, pod) => {
     const live = new Map((festStages.get(stage.code || "")?.matches || []).map((m) => [m.code, m]));
-    const seen = new Map<number, number>();
-    for (const planned of stage.matches || []) {
-      const round = Number((planned as {round?: number}).round || 1);
-      const slot = seen.get(round) || 0;
-      seen.set(round, slot + 1);
-      const merged = {...(planned as GridMatch), ...(live.get(planned.code) || {}), row: pod * podRows + slot + 1};
+    (stage.matches || []).forEach((planned, i) => {
+      const round = roundOf(planned);
+      const merged = {...(planned as GridMatch), ...(live.get(planned.code) || {}), row: pod * podRows + slots[pod][i] + 1};
       const list = byRound.get(round);
       if (list) list.push(merged);
       else byRound.set(round, [merged]);
-    }
+    });
   });
   const stages = Array.from(byRound.keys()).sort((a, b) => a - b).map((round): FestGridStage => ({
     code: `${bucket.block}-round-${round}`,
@@ -982,7 +982,7 @@ function slotKey(slot: SchemeSlotRef | null | undefined): string {
 // every группа's crosstab, two abreast where the screen fits them.
 function buildCrosstable(bucket: BlockBucket): HTMLElement {
   const wrap = document.createElement("div");
-  wrap.className = "group-standings";
+  wrap.className = "group-standings brain-groups";
   const groups = bucket.stages.filter((stage) => stageKind(stage) === "rr");
   if (!groups.length) {
     const empty = document.createElement("p");

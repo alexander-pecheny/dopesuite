@@ -699,9 +699,8 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 			"diff":         entry.metrics["diff"],
 			"taken_base":   int(entry.metrics["taken_base"]),
 		}
-		// Every other Metric the entry summed is stored too — a Protocol that
-		// declares one makes it rankable, and the tab shows what the sort read.
-		// A hand-list here once kept ЭК's correct_50 and dropped СИ's taken50.
+		// Every other Metric the entry summed is stored too, so the tab can
+		// show whatever the sort read (СИ's taken50, not just ЭК's correct_50).
 		for key, value := range entry.metrics {
 			if _, listed := out[key]; !listed {
 				out[key] = value

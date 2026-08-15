@@ -257,41 +257,50 @@ function buildBlockColumn(
 // A Block of Groups wraps into as many columns as the screen's height asks
 // for: as many rows as fit below the block's head, then the next column — so
 // the whole Сетка fits one screen where its бой columns do. The row is the
-// unit the CSS sizes; the JS only counts.
-function unitsOf(items: HTMLElement[]): number[] {
-  return items.map((item) => Number(item.dataset.units) || 1);
+// unit the CSS sizes; the JS only counts, and evens the columns out.
+const MIN_BLOCK_ROWS = 2;
+
+function stackUnits(stack: HTMLElement): number[] {
+  return Array.from(stack.children).map((item) => Number((item as HTMLElement).dataset.units) || 1);
+}
+
+function setBlockShape(section: HTMLElement, rows: number, cols: number): void {
+  section.style.setProperty("--block-rows", String(rows));
+  section.style.setProperty("--block-cols", String(cols));
+}
+
+// columnsFor packs the stack the way CSS auto-placement will: down a column
+// while the next item fits, else the next column.
+function columnsFor(units: number[], rows: number): number {
+  let cols = 1;
+  let filled = 0;
+  for (const span of units) {
+    if (filled + span > rows) {
+      cols += 1;
+      filled = 0;
+    }
+    filled += span;
+  }
+  return cols;
 }
 
 function layoutBlockColumns(root: HTMLElement): void {
-  let columns = 0;
-  root.querySelectorAll<HTMLElement>(".fest-columns > section").forEach((section) => {
-    const stack = section.querySelector<HTMLElement>(".grid-block-stack");
-    if (!stack) {
-      columns += 1;
-      return;
-    }
+  let columns = root.querySelectorAll(".fest-columns > section").length;
+  for (const {section, stack} of blocks) {
     const unit = parseFloat(getComputedStyle(stack).gridTemplateRows) || 0;
-    if (!unit) {
-      columns += 1; // not laid out yet — settleRows' one column stands
-      return;
-    }
-    const units = unitsOf(Array.from(stack.children) as HTMLElement[]);
+    if (!unit) continue; // not laid out yet — settleRows' one column stands
+    const units = stackUnits(stack);
     const top = stack.getBoundingClientRect().top + window.scrollY;
     const fit = Math.floor((window.innerHeight - top) / unit);
-    const rows = Math.max(fit, ...units, 1);
-    let cols = 1;
-    let filled = 0;
-    for (const span of units) {
-      if (filled + span > rows) {
-        cols += 1;
-        filled = 0;
-      }
-      filled += span;
-    }
-    section.style.setProperty("--block-rows", String(rows));
-    section.style.setProperty("--block-cols", String(cols));
-    columns += cols;
-  });
+    const most = Math.max(fit, MIN_BLOCK_ROWS, ...units);
+    const cols = columnsFor(units, most);
+    // The fewest rows that still pack into that many columns — 12 групп at
+    // five to a column read as 4+4+4, not 5+5+2.
+    let rows = Math.ceil(units.reduce((sum, span) => sum + span, 0) / cols);
+    while (rows < most && columnsFor(units, rows) > cols) rows += 1;
+    setBlockShape(section, rows, cols);
+    columns += cols - 1;
+  }
   root.style.setProperty("--fest-stages", String(columns));
 }
 
@@ -660,9 +669,7 @@ function settleRows(root: HTMLElement): void {
     item.style.setProperty("grid-row", row ? `${row} / span ${units}` : `span ${units}`);
   }
   for (const {section, stack} of blocks) {
-    section.style.setProperty("--block-cols", "1");
-    section.style.setProperty("--block-rows", String(unitsOf(Array.from(stack.children) as HTMLElement[])
-      .reduce((sum, units) => sum + units, 0) || 1));
+    setBlockShape(section, stackUnits(stack).reduce((sum, units) => sum + units, 0) || 1, 1);
   }
 }
 
