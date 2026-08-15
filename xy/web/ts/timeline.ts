@@ -1062,7 +1062,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
       const token = m[2];
       const names = rosterNames().filter((n) => n.toLowerCase().startsWith(token.toLowerCase()) && n !== token);
       if (!names.length) return;
-      const list = el("div", { class: "menu-fixed suggest-menu" });
+      const list = el("div", { class: "menu-dropdown menu-fixed mention-menu" });
       for (const name of names.slice(0, 8)) {
         const btn = el("button", { class: "menu-item", type: "button", text: "@" + name });
         // pointerdown + preventDefault, so the textarea never blurs (the
@@ -1076,7 +1076,7 @@ export function createTimeline(deps: TimelineDeps): Timeline {
         });
         list.append(btn);
       }
-      popup = anchorPopup(list, input, { onClose: () => { popup = null; } });
+      popup = anchorPopup(list, input, { align: "start", onClose: () => { popup = null; } });
     });
   }
   attachMentionPicker(byId<HTMLTextAreaElement>("commentInput"));
