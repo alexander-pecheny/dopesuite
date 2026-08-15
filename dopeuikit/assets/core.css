@@ -1082,15 +1082,17 @@ input[type="radio"]:focus-visible {
 .crumb-home .ico { --ico-size: 21px; }
 
 /* The page you are on is the one that should read as the title: its
-   ancestors give up room first, down to a few letters each, before it starts
-   to ellipsise. */
+   ancestors give up room first, down to a few letters each, and only then
+   does it ellipsise. Its shrink is tiny rather than zero: zero would clip it
+   without an ellipsis once its ancestors hit their floor, and one would take
+   a sub-pixel share of the squeeze and ellipsise a name that fits. */
 .crumb:not(.crumb-current):not(.crumb-home) {
   flex-shrink: 1000;
   min-width: 5ch;
 }
 
 .crumb-current {
-  flex: 1 1 auto;
+  flex: 1 0.001 auto;
   color: var(--text-strong);
   font-weight: var(--fw-bold);
 }
