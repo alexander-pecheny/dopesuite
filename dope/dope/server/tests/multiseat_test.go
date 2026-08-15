@@ -3,12 +3,12 @@ package tests
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/gamebuild"
 	"fmt"
 	"net/http"
 	"testing"
 
 	dopeserver "dope/dope/server"
-	"dope/dope/web/hostpages"
 )
 
 // createSchemeGame makes a game of any type from a scheme DSL, the way the host
@@ -20,7 +20,7 @@ func createSchemeGame(t *testing.T, db *sql.DB, festID int64, gameType, label, d
 		t.Fatalf("begin: %v", err)
 	}
 	defer tx.Rollback()
-	gameID, err := hostpages.CreateSchemeGameTx(context.Background(), tx, festID, gameType, label, dsl)
+	gameID, err := gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: gameType, Label: label, DSL: dsl})
 	if err != nil {
 		t.Fatalf("create %s game: %v", gameType, err)
 	}

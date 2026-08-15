@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/core"
+	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/imports"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
-	"dope/dope/web/hostpages"
 	"encoding/json"
 	"path/filepath"
 	"strconv"
@@ -265,7 +265,7 @@ values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 	if err := json.Unmarshal([]byte(rawScheme), &scheme); err != nil {
 		t.Fatalf("decode ek scheme: %v", err)
 	}
-	ekGameID, err := hostpages.CreateEKGameTx(ctx, tx, festID, scheme)
+	ekGameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{FestID: festID, Type: "ek", EKScheme: &scheme})
 	if err != nil {
 		t.Fatalf("create ek: %v", err)
 	}

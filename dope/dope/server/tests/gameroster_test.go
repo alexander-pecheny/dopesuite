@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/gamebuild"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +13,6 @@ import (
 	"testing"
 
 	"dope/dope/domain/replay"
-	"dope/dope/web/hostpages"
 
 	"pecheny.me/dopecore/session"
 )
@@ -95,7 +95,7 @@ func createSchemeGameFor(t *testing.T, db *sql.DB, festID int64, gameType, label
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	gameID, err := hostpages.CreateSchemeGameForTx(context.Background(), tx, festID, gameType, label, dsl, entrants)
+	gameID, err := gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: gameType, Label: label, DSL: dsl, Entrants: entrants})
 	if err != nil {
 		t.Fatalf("создать %s: %v", label, err)
 	}
@@ -275,7 +275,7 @@ func TestRecompileKeepsGameEntrants(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if err := hostpages.RecompileSchemeGameTx(context.Background(), tx, festID, gameID,
+	if err := gamebuild.Recompile(context.Background(), tx, festID, gameID,
 		dsl+"bout.points: seats + 1 - place\n"); err != nil {
 		t.Fatalf("пересборка: %v", err)
 	}
@@ -394,8 +394,8 @@ func TestGameRefusesTheWrongKindOfEntrant(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	_, err = hostpages.CreateSchemeGameForTx(context.Background(), tx, festID, "si", "Личная СИ",
-		"[scheme]\ntype: roundrobin\nteams_in_group: 4\nthemes: 2\n", teams)
+	_, err = gamebuild.Create(context.Background(), tx, gamebuild.Spec{FestID: festID, Type: "si", Label: "Личная СИ",
+		DSL: "[scheme]\ntype: roundrobin\nteams_in_group: 4\nthemes: 2\n", Entrants: teams})
 	if err == nil {
 		t.Fatal("личная игра приняла команды")
 	}

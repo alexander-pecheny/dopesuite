@@ -3,9 +3,8 @@ package tests
 import (
 	"context"
 	"database/sql"
+	"dope/dope/domain/gamebuild"
 	"testing"
-
-	"dope/dope/web/hostpages"
 )
 
 // A scheme knows where each stage sits; these tests hold the database to the
@@ -170,7 +169,7 @@ update matches set round = 0 where game_id = ?`, gameID); err != nil {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := hostpages.RecompileSchemeGameTx(context.Background(), tx, festID, gameID, dsl+"themes: 3\n"); err != nil {
+	if err := gamebuild.Recompile(context.Background(), tx, festID, gameID, dsl+"themes: 3\n"); err != nil {
 		tx.Rollback()
 		t.Fatalf("пересборка: %v", err)
 	}
