@@ -691,3 +691,32 @@ func (s *server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleListCollaborators names everyone who shares a board with the caller,
+// most-shared first: the "who was my co-author again?" hint on the sharing form
+// (issue #64). Only users with a username — those are the ones addMember can find.
+func (s *server) handleListCollaborators(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	rows, err := s.db.QueryContext(r.Context(), `
+select u.username from board_members me
+join board_members o on o.board_id = me.board_id and o.user_id <> me.user_id
+join users u on u.id = o.user_id
+where me.user_id = ? and coalesce(u.username, '') <> ''
+group by u.id order by count(*) desc, u.username`, u.UserID)
+	if handleErr(w, err) {
+		return
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); handleErr(w, err) {
+			return
+		}
+		out = append(out, name)
+	}
+	writeJSON(w, out)
+}

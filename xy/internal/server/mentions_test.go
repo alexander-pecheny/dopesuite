@@ -222,3 +222,49 @@ func TestReactions(t *testing.T) {
 	})
 	mustStatus(t, resp, 404)
 }
+
+// TestCollaborators: the sharing hint lists everyone the caller shares a board
+// with, most-shared first, never the caller, and a stranger sees nobody.
+func TestCollaborators(t *testing.T) {
+	ts, srv := newTestServer(t)
+	a := registerUser(t, srv, ts, 880011, "collab-a")
+	b := registerUser(t, srv, ts, 880012, "collab-b")
+	c := registerUser(t, srv, ts, 880013, "collab-c")
+	d := registerUser(t, srv, ts, 880014, "collab-d")
+	var meB, meC meResponse
+	b.decode(b.do("GET", "/api/auth/me", nil), &meB)
+	c.decode(c.do("GET", "/api/auth/me", nil), &meC)
+	board := func(name string) int64 {
+		resp := a.do("POST", "/api/boards", map[string]string{
+			"name": name, "kdf_salt": enc("s"), "kdf_params": `{"kdf":"scrypt","N":32768,"r":8,"p":1}`,
+			"wrapped_key": enc("w"), "verify_token": enc("v"),
+		})
+		mustStatus(t, resp, 200)
+		var out struct {
+			ID int64 `json:"id"`
+		}
+		a.decode(resp, &out)
+		return out.ID
+	}
+	b1, b2 := board("one"), board("two")
+	addBoardMember(t, srv, b1, meB.UserID)
+	addBoardMember(t, srv, b1, meC.UserID)
+	addBoardMember(t, srv, b2, meC.UserID)
+
+	got := func(cl *apiClient) []string {
+		var names []string
+		resp := cl.do("GET", "/api/collaborators", nil)
+		mustStatus(t, resp, 200)
+		cl.decode(resp, &names)
+		return names
+	}
+	if names := got(a); len(names) != 2 || names[0] != "collab-c" || names[1] != "collab-b" {
+		t.Fatalf("A collaborators = %v, want [collab-c collab-b]", names)
+	}
+	if names := got(b); len(names) != 2 || names[0] != "collab-a" || names[1] != "collab-c" {
+		t.Fatalf("B collaborators = %v, want [collab-a collab-c]", names)
+	}
+	if names := got(d); len(names) != 0 {
+		t.Fatalf("stranger collaborators = %v, want none", names)
+	}
+}

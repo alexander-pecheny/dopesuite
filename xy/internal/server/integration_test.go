@@ -62,6 +62,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *server) {
 	mux.HandleFunc("DELETE /api/boards/{id}", srv.handleDeleteBoard)
 	mux.HandleFunc("POST /api/boards/{id}/visit", srv.handleBoardVisit)
 	mux.HandleFunc("GET /api/boards/{id}/keymeta", srv.handleGetKeymeta)
+	mux.HandleFunc("GET /api/collaborators", srv.handleListCollaborators)
 	mux.HandleFunc("POST /api/boards/{id}/lists", srv.handleCreateList)
 	mux.HandleFunc("PATCH /api/lists/{id}", srv.handlePatchList)
 	mux.HandleFunc("DELETE /api/lists/{id}", srv.handleDeleteList)

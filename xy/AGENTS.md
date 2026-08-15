@@ -77,7 +77,7 @@ internal/server/       package server — the whole HTTP server
   http.go              writeJSON/readJSON/httpError
   errors.go            appError → status mapping
   auth.go              sessions, login/register/password, telegram bridge
-  boards.go            boards CRUD, keymeta (passphrase re-wrap), members, ACL helpers
+  boards.go            boards CRUD, keymeta (passphrase re-wrap), members, /api/collaborators (who I share boards with), ACL helpers
   lists_cards.go       lists/cards/labels/timeline + list-group handlers, DTOs/scanners.
                        GET /api/boards/{id}/comments returns every live comment on a board in
                        one response (ciphertext, comments only) — what прогрев indexes; a
