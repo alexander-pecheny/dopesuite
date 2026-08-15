@@ -1,7 +1,7 @@
 # брейн (КИнСБФ) СтудЧР-2026 — собрано emit-brain.py из протоколов турнира
 [game]
 type: brain
-title: Брейн
+title: КИнСБФ
 scheme: brain.dsl
 
 [roster]

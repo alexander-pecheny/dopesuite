@@ -104,7 +104,7 @@ def bout_lines(out, at, bout):
 def emit(data):
     stages = data["stages"]
     out = ["# брейн (КИнСБФ) СтудЧР-2026 — собрано emit-brain.py из протоколов турнира",
-           "[game]", "type: brain", "title: Брейн", "scheme: brain.dsl", "", "[roster]"]
+           "[game]", "type: brain", "title: КИнСБФ", "scheme: brain.dsl", "", "[roster]"]
     teams = roster(stages)
     width = max(len(name) for name in teams)
     for number, name in enumerate(teams, 1):

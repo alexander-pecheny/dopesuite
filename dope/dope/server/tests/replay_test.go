@@ -319,5 +319,5 @@ select state_json ->> '$.teams[0].rows[0].player' from matches where game_id = ?
 // every finalist is seated from what came before, so this replay asserts the
 // entire structure of the largest game dope runs.
 func TestReplayStudchrBrain(t *testing.T) {
-	replayFromTranscript(t, "brain", "brain", "Брейн")
+	replayFromTranscript(t, "brain", "brain", "КИнСБФ")
 }

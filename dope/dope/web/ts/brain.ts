@@ -767,10 +767,9 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   table.classList.toggle("match-finished", Boolean(view.finished));
   table.dataset.match = code;
 
-  // Team names take the header row at double width — each spans its player and
-  // mark columns, the way the sheet merges them — with the бой's буква and the
-  // «Закончен» tick on the same line, and the score on a row of its own
-  // beneath. Double width fits most names; the rest fade to a popover.
+  // One head row, everything on one line: the бой's буква, a team over its
+  // player column, the score over the two mark columns, the other team, and
+  // the «Закончен» tick. A name wider than its column fades to a popover.
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
   const corner = document.createElement("th");
@@ -779,20 +778,14 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   corner.title = view.title || code;
   head.appendChild(corner);
   head.appendChild(nameHead(view, 0, planned));
+  const score = document.createElement("th");
+  score.className = "number brain-score-head";
+  score.colSpan = 2;
+  score.textContent = `${taken(view, 0)} : ${taken(view, 1)}`;
+  head.appendChild(score);
   head.appendChild(nameHead(view, 1, planned));
   head.appendChild(finishHead(code, view));
   thead.appendChild(head);
-  const scoreRow = document.createElement("tr");
-  scoreRow.appendChild(document.createElement("th")).className = "row-marker";
-  const score = document.createElement("th");
-  score.className = "number brain-score-head";
-  score.colSpan = 4;
-  score.textContent = `${taken(view, 0)} : ${taken(view, 1)}`;
-  scoreRow.appendChild(score);
-  const scoreGap = document.createElement("th");
-  scoreGap.className = "brain-finish-gap";
-  scoreRow.appendChild(scoreGap);
-  thead.appendChild(scoreRow);
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
@@ -828,7 +821,6 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
 function nameHead(view: BrainMatchView, side: number, planned: BrainSchemeMatch): HTMLElement {
   const th = document.createElement("th");
   th.className = "brain-name-head";
-  th.colSpan = 2;
   const label = view.participants?.[side]?.name || planned.slots?.[side]?.label || "—";
   const wrap = document.createElement("span");
   wrap.className = "brain-name-wrap";

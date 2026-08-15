@@ -77,7 +77,7 @@ func TestStudchrWholeFest(t *testing.T) {
 
 	for _, c := range []struct{ name, gameType, title, scheme string }{
 		{"ek", games.EK, "ЭК", "ek.dsl"},
-		{"brain", games.Brain, "Брейн", "brain.dsl"},
+		{"brain", games.Brain, "КИнСБФ", "brain.dsl"},
 		{"si", games.SI, "СИ", "si.dsl"},
 		{"tpsh", games.SI, "ТПШ", "tpsh.dsl"},
 	} {

@@ -1242,14 +1242,24 @@
 }
 
 /* The head row wears the бой box's head: «Группа 1 · пл. 1» on the paper's
-   structure colour, and the metrics beside it. */
+   structure colour, and the metrics beside it. Tight leading, or the head
+   outgrows the row and every row under it sits a pixel low. */
 .grid-standings th {
   background: var(--structure);
   color: var(--text);
   font-size: var(--text-xs-plus);
+  line-height: var(--leading-tight);
 }
 
-.grid-standings tr:last-child td {
+/* The paper block rounds its own corners, as a бой box's cells do — on the
+   dark ground the table's outer edge is invisible, so only the cells' corners
+   are seen. */
+.grid-standings tbody tr:first-child td:first-child { border-top-left-radius: var(--radius-md); }
+.grid-standings tbody tr:first-child td:last-child { border-top-right-radius: var(--radius-md); }
+.grid-standings tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius-md); }
+.grid-standings tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius-md); }
+
+.grid-standings tbody tr:last-child td {
   border-bottom: 0;
 }
 
@@ -2939,6 +2949,13 @@ body:not(.embedded-match) .grid-match {
 
 .results-row.results-group-last td:last-child { border-bottom-right-radius: var(--radius-md); }
 
+/* Every results table's paper block rounds its corners, marked rows or not:
+   the стата and крестовые tables of a брейн, СИ's групп, the составы. */
+.results-table tbody tr:first-child td:first-child { border-top-left-radius: var(--radius-md); }
+.results-table tbody tr:first-child td:last-child { border-top-right-radius: var(--radius-md); }
+.results-table tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius-md); }
+.results-table tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius-md); }
+
 /* Compact score tables for large OD/KSI grids. */
 .match-table.compact-score-table {
   --question-size: 24px;
@@ -4007,14 +4024,14 @@ body:not(.embedded-match) .grid-match {
   white-space: nowrap;
 }
 
-/* A team name spans its player and mark columns — double width fits most
-   names; the rest clip under a fade and carry a popover. */
+/* A team name sits over its player column; a longer one clips under a fade
+   and carries a popover. */
 .brain-name-wrap {
   position: relative;
   display: block;
   margin: 0 auto;
   min-width: 0;
-  max-width: calc(var(--team-col) + var(--question-col));
+  max-width: var(--team-col);
 }
 
 /* A mask, not a painted gradient: the head cell is structure-coloured, and a
@@ -4031,20 +4048,25 @@ body:not(.embedded-match) .grid-match {
   color: var(--text-strong);
 }
 
-/* Every группа's crosstab the same width, so stacked tables read as columns:
-   a score cell fits «10 : 9», a stat cell «−12». The track is as wide as a
+/* Every группа's crosstab the same width, so stacked tables read as columns,
+   and narrow enough that two sit abreast on a laptop: a score cell fits
+   «10 : 9», a name fades past the team column. The track is as wide as the
    crosstab of four, so two go abreast only where two really fit. */
 .brain-groups {
-  --group-standings-col: 800px;
+  --group-standings-col: 600px;
 }
 
 .brain-crosstable {
+  --results-place-col: 40px;
+  --results-team-col: 190px;
   width: max-content;
 }
 
 .brain-crosstable .number {
-  width: var(--results-total-col);
-  min-width: var(--results-total-col);
+  width: 40px;
+  min-width: 40px;
+  padding-left: var(--space-1);
+  padding-right: var(--space-1);
 }
 
 .brain-crosstable .brain-cross-diag {

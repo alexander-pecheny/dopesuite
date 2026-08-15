@@ -1081,7 +1081,14 @@ input[type="radio"]:focus-visible {
    larger words. */
 .crumb-home .ico { --ico-size: 21px; }
 
-/* The page you are on is the one that should read as the title. */
+/* The page you are on is the one that should read as the title: its
+   ancestors give up room first, down to a few letters each, before it starts
+   to ellipsise. */
+.crumb:not(.crumb-current):not(.crumb-home) {
+  flex-shrink: 1000;
+  min-width: 5ch;
+}
+
 .crumb-current {
   flex: 1 1 auto;
   color: var(--text-strong);

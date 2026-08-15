@@ -559,7 +559,8 @@ function buildStandingsTable(standings: ReseedEntry[], order: string[], head: Ta
   headRow.appendChild(title);
   metrics.forEach((metric) => headRow.appendChild(el("th", "standings-metric", standingsMetricLabel(metric))));
   headRow.appendChild(el("th", "standings-place", "М"));
-  table.appendChild(headRow);
+  table.appendChild(document.createElement("thead")).appendChild(headRow);
+  const body = table.appendChild(document.createElement("tbody"));
   const rows = order.length
     ? standings.slice().sort((a, b) => slotIndex(order, a) - slotIndex(order, b))
     : standings;
@@ -578,7 +579,7 @@ function buildStandingsTable(standings: ReseedEntry[], order: string[], head: Ta
       row.appendChild(el("td", "standings-metric", reseedMetricValue(metric, entry.metrics?.[metric])));
     });
     row.appendChild(el("td", "standings-place", placeText(Number(entry.metrics?.place ?? entry.rank) || null)));
-    table.appendChild(row);
+    body.appendChild(row);
   });
   return table;
 }
