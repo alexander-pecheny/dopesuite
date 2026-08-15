@@ -249,6 +249,7 @@ function consumeViewerInit(): boolean {
   if (route.mode === "match") {
     if (!init.match) return false;
     state = init.match;
+    adoptMatchCode(state);
     render();
     return true;
   }
@@ -283,11 +284,7 @@ function adoptFestView(view: FestView): void {
 // once per fest view over the scheme's schedule order.
 let boutLetters: Map<string, string> | null = null;
 function letterMap(): Map<string, string> {
-  if (!boutLetters) {
-    const scheme = parseScheme(fest?.schemaJson);
-    boutLetters = DopeTable.matchLetterMap(
-      (scheme?.stages?.length ? scheme.stages : fest?.stages || []) as StageRef[]);
-  }
+  if (!boutLetters) boutLetters = DopeTable.festLetters(fest?.stages as StageRef[] | undefined);
   return boutLetters;
 }
 function letteredBoutTitle(matchCode: string | undefined, title: string): string {
@@ -417,6 +414,7 @@ async function loadMatch(): Promise<void> {
   if (!matchResponse.ok) throw new Error(await matchResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
   state = (await matchResponse.json()) as ViewerMatchView;
+  adoptMatchCode(state);
   adoptFestView((await festResponse.json()) as FestView);
   writeFestCache(fest);
   render();
@@ -757,6 +755,12 @@ function applyReadonlyStageMatchUpdate(updated: ViewerMatchView): void {
 // scope (codes never contain ':', but join the tail defensively).
 function matchCodeFromScope(scope: string): string {
   return scope.split(":").slice(2).join(":");
+}
+
+// A URL names a бой by its буква; every scope, cache key and event names it
+// by code. Once the state is here, the route speaks code too.
+function adoptMatchCode(view: {code?: string} | null): void {
+  if (view?.code) route.matchCode = view.code;
 }
 
 function isFocusedMatch(code: string): boolean {

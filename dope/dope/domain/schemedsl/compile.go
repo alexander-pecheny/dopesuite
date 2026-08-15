@@ -188,7 +188,40 @@ func (c *compiler) run() error {
 			return err
 		}
 	}
+	c.assignLetters()
 	return nil
+}
+
+// assignLetters deals every бой its буква — A..Z, then AA.. — in schedule
+// order over the whole Game: Block, then stage, then бой. A block may decline
+// (`letters: false`): the письменный отбор is one sitting for everyone and
+// is not called a бой.
+func (c *compiler) assignLetters() {
+	dealt := 0
+	for i := range c.scheme.Stages {
+		stage := &c.scheme.Stages[i]
+		var block int
+		if _, err := fmt.Sscanf(stage.Grain.Block, "s%d", &block); err != nil || block < 1 || block > len(c.doc.Blocks) {
+			continue
+		}
+		if letters, ok := c.doc.Blocks[block-1].Bool("letters"); ok && !letters {
+			continue
+		}
+		for m := range stage.Matches {
+			stage.Matches[m].Letter = BoutLetter(dealt)
+			dealt++
+		}
+	}
+}
+
+// BoutLetter is the буква of the n-th бой (0-based): A..Z, then AA, AB.. —
+// the sheets' handle, base-26 without a zero.
+func BoutLetter(n int) string {
+	label := ""
+	for k := n + 1; k > 0; k = (k - 1) / 26 {
+		label = string(rune('A'+(k-1)%26)) + label
+	}
+	return label
 }
 
 // --- vocabulary ------------------------------------------------------------
@@ -207,7 +240,7 @@ var blockKeys = map[string]bool{
 	"type": true, "title": true, "slug": true, "groups": true, "teams_in_group": true, "teams": true,
 	"proceeding_teams": true, "reseed": true, "sorting": true, "points": true,
 	"venues": true, "bronze": true, "stats_from": true, "best_of": true,
-	"match_size": true, "winning_places": true, "rounds": true,
+	"match_size": true, "winning_places": true, "rounds": true, "letters": true,
 }
 
 var defaultsKeys = map[string]bool{"venues": true, "sorting": true, "points": true}

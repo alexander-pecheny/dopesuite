@@ -38,12 +38,16 @@ import (
 // uses core.FestScope directly.
 type festScope = core.FestScope
 
+// verifyMatchInScope resolves a бой by its code or its буква — a URL says
+// «BU», the store says s2-g1-m2 — and returns the code, which every scope key
+// downstream is built on.
 func (s *server) verifyMatchInScope(ctx context.Context, scope festScope, code string) (matchScope, error) {
 	row := s.eng.DB.QueryRowContext(ctx, `
-select id from matches where fest_id = ? and game_id = ? and code = ?`,
-		scope.FestID, scope.GameID, code)
+select id, code from matches where fest_id = ? and game_id = ? and (code = ? or (letter <> '' and letter = ?))
+order by code = ? desc limit 1`,
+		scope.FestID, scope.GameID, code, code, code)
 	var matchID int64
-	if err := row.Scan(&matchID); err != nil {
+	if err := row.Scan(&matchID, &code); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return matchScope{}, errMatchNotFound
 		}

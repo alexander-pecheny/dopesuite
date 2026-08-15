@@ -382,6 +382,12 @@ function hydrateFestFromCache(): boolean {
   return true;
 }
 
+// A URL names a бой by its буква; every scope, cache key and event names it
+// by code. Once the state is here, the route speaks code too.
+function adoptMatchCode(view: {code?: string} | null): void {
+  if (view?.code) route.matchCode = view.code;
+}
+
 // consumeHostInit renders the first frame from the server-inlined
 // window.__HOST_INIT__ payload, skipping the API round trips that loadX would
 // otherwise make. Returns true on success; on any shape mismatch, falls back
@@ -405,6 +411,7 @@ function consumeHostInit(): boolean {
   if (route.mode === "match") {
     if (!init.match) return false;
     state = init.match;
+    adoptMatchCode(state);
     render();
     return true;
   }
@@ -483,7 +490,9 @@ async function loadMatch(): Promise<void> {
   if (!matchResponse.ok) throw new Error(await matchResponse.text());
   if (!venuesResponse.ok) throw new Error(await venuesResponse.text());
   if (!festResponse.ok) throw new Error(await festResponse.text());
-  state = overlayPendingMatch(route.matchCode, await matchResponse.json() as HostMatchView);
+  const loaded = await matchResponse.json() as HostMatchView;
+  adoptMatchCode(loaded);
+  state = overlayPendingMatch(route.matchCode, loaded);
   venues = venueList(await venuesResponse.json());
   adoptFestView(await festResponse.json() as HostFestView);
   writeFestCache(fest);
@@ -1424,7 +1433,7 @@ function rawSchemeStages(): HostStage[] {
 // once per fest view over the scheme's schedule order.
 let boutLetters: Map<string, string> | null = null;
 function letterMap(): Map<string, string> {
-  if (!boutLetters) boutLetters = gameTable.matchLetterMap(rawSchemeStages() as StageRef[]);
+  if (!boutLetters) boutLetters = gameTable.festLetters(fest?.stages as StageRef[] | undefined);
   return boutLetters;
 }
 function letteredBoutTitle(matchCode: string | undefined, title: string): string {

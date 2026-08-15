@@ -1,5 +1,5 @@
 import { markNameOverflow } from "./widgets.js";
-import { matchLetterMap, letteredTitle, type StageRef } from "./match-table.js";
+import { festLetters, letteredTitle, type StageRef } from "./match-table.js";
 
 export interface FestGridVenueObject {
   number?: unknown;
@@ -32,6 +32,7 @@ export interface FestGridMatch {
   code?: string;
   title?: string;
   status?: string;
+  letter?: string;
   venue?: FestGridVenue;
   slots?: FestGridSlot[];
   participants?: FestGridLiveParticipant[];
@@ -88,8 +89,9 @@ export interface FestGridOptions {
   onCalculate?: () => void;
   stageHeaderLink?: boolean;
   matchTitleLink?: boolean;
-  // letters overrides the бой-letter map — a caller drawing a slice of the
-  // scheme passes the whole game's, so «Бой BU» does not restart at A.
+  // letters is the whole game's буква map — a caller drawing a slice of the
+  // scheme passes it, so a slot that names a бой outside the slice still
+  // reads «Бой BU».
   letters?: Map<string, string>;
 }
 
@@ -117,7 +119,7 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
 
   const scheme = parseScheme(data.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : data.stages || [];
-  boutLetters = options.letters || matchLetterMap(stages as StageRef[]);
+  boutLetters = options.letters || festLetters(data.stages as StageRef[]);
   placed = [];
   blocks = [];
   const liveStages = new Map((data.stages || []).map((stage) => [stage.code, stage]));
@@ -163,13 +165,10 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
 // groupStagesByBlock buckets consecutive group stages of one Block together
 // (reseeds dropped — the Пересев tab holds those), leaving every other stage
 // in a bucket of its own.
-// blockOf names a group stage's Block: the grain where the scheme carries it,
-// else the -gN code convention — scheme_json written before grain existed
-// unmarshals without one, and its групп must still share a column.
+// blockOf names a Group stage's Block, as the grain says; a stage without a
+// Group is its own column.
 function blockOf(stage: FestGridStage): string {
-  if (stage.grain?.block && stage.grain?.group) return stage.grain.block;
-  const match = String(stage.code || "").match(/^(.+)-g\d+$/);
-  return match ? match[1] : "";
+  return stage.grain?.group ? stage.grain.block || "" : "";
 }
 
 function groupStagesByBlock(stages: FestGridStage[]): FestGridStage[][] {
@@ -798,15 +797,16 @@ function stageHref(stage: FestGridStage, options: FestGridOptions = {}): string 
 }
 
 function matchHref(match: FestGridMatch, options: FestGridOptions = {}): string {
-  return `${basePath(options)}/matches/${encodeURIComponent(String(match.code))}`;
+  const code = String(match.code || "");
+  return `${basePath(options)}/matches/${encodeURIComponent(boutLetters?.get(code) || code)}`;
 }
 
 function basePath(options: FestGridOptions = {}): string {
   return options.basePath || "";
 }
 
-// The бои wear their буква — the sheets' A..Z, AA.. handle — dealt by
-// buildFestGrid over the whole scheme in schedule order.
+// The бои wear their буква — the sheets' A..Z, AA.. handle — as the compiler
+// dealt them and the fest view carries them; a URL says the буква too.
 let boutLetters: Map<string, string> | null = null;
 
 function matchLabel(match: FestGridMatch): string {

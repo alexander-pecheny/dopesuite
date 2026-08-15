@@ -189,9 +189,7 @@ function blockBuckets(): BlockBucket[] {
       current = null;
       continue;
     }
-    // scheme_json written before grain existed unmarshals without one; the
-    // -gN code convention still names the Block.
-    const block = stage.grain?.block || String(stage.code || "").replace(/-g\d+$/, "") || "";
+    const block = stage.grain?.block || "";
     if (!current || current.block !== block) {
       current = {block, label: "", stages: [], ranks: false};
       buckets.push(current);
@@ -250,13 +248,12 @@ function stageKind(stage: BrainSchemeStage): string {
 // podBucket is a Block of pods (Double Elimination). Its detail tab lays the
 // бои out per round, since a crosstab has nothing to cross.
 function podBucket(bucket: BlockBucket): boolean {
-  return !bucket.ranks && bucket.stages.some(
-    (stage) => stage.grain?.group || /-g\d+$/.test(String(stage.code || "")));
+  return !bucket.ranks && bucket.stages.some((stage) => stage.grain?.group);
 }
 
 // Every бой of the game carries a буква — the sheets' A..Z, AA.. handle —
-// dealt once over the scheme's schedule order. Display-only.
-const boutLetters = DopeTable.matchLetterMap((scheme.stages || []) as StageRef[]);
+// dealt by the compiler and carried on the fest view.
+const boutLetters = DopeTable.festLetters(fest?.stages as StageRef[] | undefined);
 
 // protocolStages are the stages whose бої the page draws — everything except
 // reseed edges, in scheme order.

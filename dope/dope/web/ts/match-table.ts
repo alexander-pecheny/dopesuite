@@ -767,6 +767,7 @@ export interface StageRef {
 export interface StageRefMatch {
   code?: string;
   title?: string;
+  letter?: string;
   round?: number;
   group?: string;
 }
@@ -938,29 +939,17 @@ function gatherRounds(block: string, groups: StageRef[]): StageRef[] {
   }))];
 }
 
-// matchLetterMap deals every бой of a game its буква — A..Z, then AA.., the
-// way the sheets label them — across the scheme's stages in schedule order.
-// Display-only: the structural codes stay the identity everywhere else. A
-// match that is not a «Бой» (ТПШ's письменный отбор) never shows a letter, so
-// it takes none — otherwise every letter after it sits one off the paper.
-export function matchLetterMap(stages: StageRef[]): Map<string, string> {
+// festLetters is every бой's буква by code, read off the fest view: the
+// compiler dealt them (A..Z, AA.. in schedule order, none for a block that
+// declined) and the store carries them, so a page never counts.
+export function festLetters(stages: ReadonlyArray<StageRef | null | undefined> | null | undefined): Map<string, string> {
   const letters = new Map<string, string>();
-  for (const stage of stages) {
-    for (const match of stage.matches || []) {
-      if (!match.code || letters.has(match.code)) continue;
-      if (match.title && !/Бой\s+\d+/.test(match.title)) continue;
-      letters.set(match.code, boutLetter(letters.size));
+  for (const stage of stages || []) {
+    for (const match of stage?.matches || []) {
+      if (match.code && match.letter) letters.set(match.code, match.letter);
     }
   }
   return letters;
-}
-
-function boutLetter(index: number): string {
-  let label = "";
-  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
-    label = String.fromCharCode(65 + ((n - 1) % 26)) + label;
-  }
-  return label;
 }
 
 // letteredTitle swaps a title's «Бой N» for the бой's letter; a title that
@@ -1634,7 +1623,7 @@ export const DopeTable = {
   stageType,
   roundStages,
   canonicalStageCode,
-  matchLetterMap,
+  festLetters,
   letteredTitle,
   foldReseedStages,
   RESEED_TAB_CODE,

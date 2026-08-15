@@ -1211,9 +1211,9 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
 		for matchIndex, match := range stage.Matches {
 			emptyState := stageEmptyState(gameType, stage, len(match.Slots), scheme.Questions)
 			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, round, wave, participant_count, status, revision, state_json)
-values(?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
-				festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, match.Wave, len(match.Slots), emptyState)
+insert into matches(fest_id, game_id, stage_id, code, title, letter, position, round, wave, participant_count, status, revision, state_json)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
+				festID, gameID, stageID, match.Code, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, len(match.Slots), emptyState)
 			if err != nil {
 				return err
 			}
@@ -1367,15 +1367,15 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
 				started := existing.Status == "finished" || games.BrainStateStarted(existing.State)
 				if started {
 					if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, position = ?, round = ?, wave = ? where id = ?`,
-						stageID, match.Title, matchIndex+1, match.Round, match.Wave, existing.ID); err != nil {
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ? where id = ?`,
+						stageID, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, existing.ID); err != nil {
 						return err
 					}
 					continue
 				}
 				if _, err := tx.ExecContext(ctx, `
-update matches set stage_id = ?, title = ?, position = ?, round = ?, wave = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
-					stageID, match.Title, matchIndex+1, match.Round, match.Wave, len(match.Slots), emptyState, existing.ID); err != nil {
+update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ?, participant_count = ?, status = 'active', state_json = ? where id = ?`,
+					stageID, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, len(match.Slots), emptyState, existing.ID); err != nil {
 					return err
 				}
 				if _, err := tx.ExecContext(ctx, `delete from match_slots where match_id = ?`, existing.ID); err != nil {
@@ -1387,9 +1387,9 @@ update matches set stage_id = ?, title = ?, position = ?, round = ?, wave = ?, p
 				continue
 			}
 			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, round, wave, participant_count, status, revision, state_json)
-values(?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
-				festID, gameID, stageID, match.Code, match.Title, matchIndex+1, match.Round, match.Wave, len(match.Slots), emptyState)
+insert into matches(fest_id, game_id, stage_id, code, title, letter, position, round, wave, participant_count, status, revision, state_json)
+values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?)`,
+				festID, gameID, stageID, match.Code, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, len(match.Slots), emptyState)
 			if err != nil {
 				return err
 			}

@@ -146,6 +146,10 @@ type StageView struct {
 	// order — the columns a table of Standings (or ReseedEntries) shows.
 	Kind string     `json:"kind,omitempty"`
 	Sort []SortRule `json:"sort,omitempty"`
+	// Grain says where the stage sits in its Game — the Block, the Group and
+	// the Wave — so a page groups stages by what the compiler wrote, never by
+	// what a code looks like.
+	Grain *SchemeGrain `json:"grain,omitempty"`
 }
 
 // SortRule is one key of a Ranker's order: the Metric and its direction.
@@ -164,6 +168,7 @@ type ReseedEntryView struct {
 type FestMatchView struct {
 	Code             string                    `json:"code"`
 	Title            string                    `json:"title"`
+	Letter           string                    `json:"letter,omitempty"`
 	Position         int                       `json:"position"`
 	ParticipantCount int                       `json:"participantCount"`
 	Status           string                    `json:"status"`

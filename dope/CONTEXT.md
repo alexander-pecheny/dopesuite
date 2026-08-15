@@ -56,7 +56,7 @@ The declarative document describing a Game's Structure — its Blocks, Edges, an
 The one-glance map of a whole Game: every Block's standings at the coarsest grain worth a glance (М, at most Σ), the single entry point where anyone playing finds who proceeds where. Compact on purpose — crosstabs, protocols and per-Metric detail belong to a Block's own views, never to the Сетка. Its rows are shared across columns like the sheet's: a Round is a column, a Group is a row, and a Block of Groups wraps into as many columns as the screen's height asks for.
 
 **Буква боя**:
-A Match's human handle: one letter sequence per Game — A..Z, then AA.. — assigned in schedule order (Block, then Round, then Match). It is display-only; the structural code (s1-r2-m3) stays the stored identity, URLs included.
+A Match's human handle: one letter sequence per Game — A..Z, then AA.. — dealt by the compiler in schedule order (Block, then Round, then Match) and stored on the Match. A Block may decline letters (ТПШ's письменный отбор is one sitting, not a бой). It is what a URL and a page say; the structural code (s1-r2-m3) stays the stored identity underneath, so a scheme edit that renumbers letters moves links, never results.
 
 **Match**:
 One sitting of Participants scored together under one Protocol. The unit the Structure schedules and the unit a host edits.

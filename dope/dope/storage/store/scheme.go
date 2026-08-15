@@ -102,6 +102,7 @@ func (g SchemeGrain) Normalized() SchemeGrain {
 type SchemeMatch struct {
 	Code             string       `json:"code"`
 	Title            string       `json:"title"`
+	Letter           string       `json:"letter,omitempty"` // Буква боя, dealt at compile time; "" for a бой that has none
 	Venue            int          `json:"venue"`
 	Round            int          `json:"round,omitempty"` // 1-based круг within the Block
 	Wave             int          `json:"wave,omitempty"`  // 1-based заход, set where the stage spans several

@@ -57,6 +57,7 @@ test("a Group renders as a table of place against team", () => {
       code: "s1-g1",
       title: "Группа 1",
       stage_type: "matches",
+      grain: {block: "s1", group: "1"},
       sort: [{metric: "points", dir: "desc"}, {metric: "total", dir: "desc"}],
       standings: [
         {rank: 1, name: "Ктулху", metrics: {place: 1, points: 9, total: 240}},
@@ -179,8 +180,8 @@ test("a Group without a table yet draws placeless rows", () => {
   assert.deepEqual(places, ["М", "", ""]);
 });
 
-// A legacy grouped stage — matched by its -gN code alone, kind unknown — keeps
-// its бои: the pod rules would misrank a round-robin группа.
+// A stage the compiler never grained — a code that merely looks grouped,
+// kind unknown — is no Group: it keeps its бои in a column of its own.
 test("a legacy group without standings keeps its бои", () => {
   const legacy = (n) => ({
     code: `s1-g${n}`,

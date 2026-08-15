@@ -88,6 +88,7 @@ venues: 6
 [scheme]
 title: Письменный отбор
 type: flat
+letters: false
 teams: 91
 themes: 10
 proceeding_teams: 24

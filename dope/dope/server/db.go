@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,7 @@ import (
 
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
+	"dope/dope/domain/schemedsl"
 	"dope/dope/platform/util"
 	"dope/dope/storage/auditmw"
 	"dope/dope/storage/festaccess"
@@ -815,8 +817,88 @@ create table if not exists stage_standings(
 			return err
 		}
 	}
+	// v24: a бой carries its буква in the store, dealt at compile time, so a
+	// URL can say «BU» and the view need not compute it. Existing games get
+	// theirs dealt once, in schedule order, skipping the бои that were never
+	// called one (a title without «Бой N» — the письменный отбор); a group
+	// stage from before grain existed gets its Block and Group from its code
+	// the one last time, so no page has to.
+	if err := store.AddColumnsIfMissing(db, "matches", []store.ColumnSpec{
+		{Name: "letter", Type: "TEXT NOT NULL DEFAULT ''"},
+	}); err != nil {
+		return err
+	}
+	var hasV24 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 24`).Scan(&hasV24); err != nil {
+		return err
+	}
+	if hasV24 == 0 {
+		if err := dealLettersBackfill(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`
+update stages set block_code = substr(code, 1, instr(code, '-g') - 1), group_code = substr(code, instr(code, '-g') + 2)
+where kind = 'rr' and block_code = '' and code glob 's[0-9]*-g[0-9]*'`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(24, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
+
+// dealLettersBackfill deals every existing game's бои their буквы the way the
+// browser used to: A.. in stage order then match order, skipping a бой whose
+// title is not «Бой N».
+func dealLettersBackfill(db *sql.DB) error {
+	rows, err := db.Query(`
+select m.id, m.game_id, m.title from matches m join stages s on s.id = m.stage_id
+order by m.game_id, s.position, s.id, m.position, m.id`)
+	if err != nil {
+		return err
+	}
+	type bout struct {
+		id, gameID int64
+		title      string
+	}
+	var bouts []bout
+	for rows.Next() {
+		var b bout
+		if err := rows.Scan(&b.id, &b.gameID, &b.title); err != nil {
+			rows.Close()
+			return err
+		}
+		bouts = append(bouts, b)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	var game int64 = -1
+	dealt := 0
+	for _, b := range bouts {
+		if b.gameID != game {
+			game, dealt = b.gameID, 0
+		}
+		if !boutTitle.MatchString(b.title) {
+			continue
+		}
+		if _, err := tx.Exec(`update matches set letter = ? where id = ?`, schemedsl.BoutLetter(dealt), b.id); err != nil {
+			tx.Rollback()
+			return err
+		}
+		dealt++
+	}
+	return tx.Commit()
+}
+
+var boutTitle = regexp.MustCompile(`Бой\s+\d+`)
 
 // rankPodsBackfill retags every pod stage as Kind «de» and lets the resolver
 // write its table, one game at a time.

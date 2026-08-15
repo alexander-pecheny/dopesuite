@@ -3,6 +3,7 @@ package schemedsl
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -950,5 +951,42 @@ slug: playoff
 teams: 4
 `); err == nil {
 		t.Error("slug на плей-офф молча проглочен")
+	}
+}
+
+
+// Every бой carries its буква, dealt in schedule order over the whole Game —
+// Block, stage, бой — and a block may decline: the письменный отбор is one
+// sitting for everyone, not a бой, so its match stays letterless and the
+// bracket after it starts at A.
+func TestCompileDealsLetters(t *testing.T) {
+	scheme := compileSrc(t, `[defaults]
+venues: 2
+
+[scheme]
+title: Отбор
+type: flat
+letters: false
+teams: 8
+proceeding_teams: 4
+---
+type: single_elimination
+teams: 4
+reseed: true
+`, Input{Slug: "l", Title: "L", GameType: "ek"})
+	if got := stageByCode(t, scheme, "s1").Matches[0].Letter; got != "" {
+		t.Fatalf("отбор letter = %q, want none", got)
+	}
+	var letters []string
+	for _, stage := range scheme.Stages[1:] {
+		for _, match := range stage.Matches {
+			letters = append(letters, match.Letter)
+		}
+	}
+	if want := []string{"A", "B", "C"}; !slices.Equal(letters, want) {
+		t.Fatalf("bracket letters = %v, want %v", letters, want)
+	}
+	if got := BoutLetter(26); got != "AA" {
+		t.Fatalf("BoutLetter(26) = %q, want AA", got)
 	}
 }

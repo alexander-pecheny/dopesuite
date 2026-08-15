@@ -593,35 +593,18 @@ test("computeIndividualPlayerStats aggregates per participant", () => {
   ]);
 });
 
-// Every бой of a game carries a letter — A..Z, then AA.. — assigned across the
-// scheme's stages in schedule order. It is the human handle the sheets print
-// («Бой DW»), display-only: codes stay s1-r1-m1.
-test("matchLetterMap letters бои across stages in schedule order", () => {
-  const stages = [
-    {code: "s1-g1", matches: [{code: "s1-g1-1"}, {code: "s1-g1-2"}]},
-    {code: "s1-reseed", stage_type: "reseed"},
-    {code: "s2-r1", matches: [{code: "s2-r1-m1"}]},
-  ];
-  const letters = T.matchLetterMap(stages);
-  assert.equal(letters.get("s1-g1-1"), "A");
-  // A match that is no «Бой» — ТПШ's письменный отбор — takes no letter, or
-  // every letter after it would sit one off the paper sheets.
-  const withOtbor = T.matchLetterMap([
+// A бой's буква is the compiler's, carried on the fest view; the page reads
+// it off by code and never counts. A бой the scheme left letterless (ТПШ's
+// письменный отбор) has none.
+test("festLetters reads each бой's letter off the fest view", () => {
+  const letters = T.festLetters([
     {code: "s1", matches: [{code: "s1-m1", title: "Письменный отбор"}]},
-    {code: "s2-r1", matches: [{code: "s2-r1-m1", title: "Бой 1"}]},
+    null,
+    {code: "s2-r1", matches: [{code: "s2-r1-m1", letter: "A"}, {code: "s2-r1-m2", letter: "B"}]},
   ]);
-  assert.equal(withOtbor.get("s1-m1"), undefined);
-  assert.equal(withOtbor.get("s2-r1-m1"), "A");
-  assert.equal(letters.get("s1-g1-2"), "B");
-  assert.equal(letters.get("s2-r1-m1"), "C");
-  // The 27th бой rolls into two letters, sheets-style.
-  const many = T.matchLetterMap([{
-    code: "s1",
-    matches: Array.from({length: 28}, (_, i) => ({code: `m${i}`})),
-  }]);
-  assert.equal(many.get("m25"), "Z");
-  assert.equal(many.get("m26"), "AA");
-  assert.equal(many.get("m27"), "AB");
+  assert.equal(letters.get("s1-m1"), undefined);
+  assert.equal(letters.get("s2-r1-m1"), "A");
+  assert.equal(letters.get("s2-r1-m2"), "B");
 });
 
 test("letteredTitle rewrites the «Бой N» part and leaves the rest", () => {
