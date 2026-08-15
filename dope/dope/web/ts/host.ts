@@ -1155,6 +1155,7 @@ async function calculateReseed(stageCode: string | undefined): Promise<void> {
 
 function buildHostReseedStagePanel(stage: HostStage): HTMLElement {
   return buildReseedStagePanel(stage, {
+    letters: letterMap(),
     editable: true,
     canCalculate: Boolean(stage?.reseedReady),
     onCalculate: () => calculateReseed(stage?.code || route.stageCode),
@@ -1305,9 +1306,10 @@ function gameSubnavItems(): Array<{href: string; label: string; key: string}> {
       key: `stage:${stage.code}`,
     });
   });
-  // Статистика and Составы sit at the very end, after all stage tabs.
+  // Статистика and Составы sit at the very end, after all stage tabs. An
+  // individual game has no составы: its Сетка already names every player.
   items.push({href: route.base + "/stats", label: "Статистика", key: "stats"});
-  items.push({href: route.base + "/roster", label: "Составы", key: "roster"});
+  if (!individualGame()) items.push({href: route.base + "/roster", label: "Составы", key: "roster"});
   return items;
 }
 
@@ -1421,9 +1423,12 @@ function rawSchemeStages(): HostStage[] {
 // Every бой of the game carries a буква — the sheets' A..Z, AA.. handle — dealt
 // once per fest view over the scheme's schedule order.
 let boutLetters: Map<string, string> | null = null;
-function letteredBoutTitle(matchCode: string | undefined, title: string): string {
+function letterMap(): Map<string, string> {
   if (!boutLetters) boutLetters = gameTable.matchLetterMap(rawSchemeStages() as StageRef[]);
-  return gameTable.letteredTitle(title, boutLetters.get(matchCode || ""));
+  return boutLetters;
+}
+function letteredBoutTitle(matchCode: string | undefined, title: string): string {
+  return gameTable.letteredTitle(title, letterMap().get(matchCode || ""));
 }
 
 function scheduleGridNameOverflowUpdate(root: ParentNode = hostRoot): void {

@@ -36,6 +36,9 @@ export interface FestGridMatch {
   slots?: FestGridSlot[];
   participants?: FestGridLiveParticipant[];
   participantCount?: number | string;
+  // row pins the бой to a row of the Сетка's shared grid (1-based); unset, it
+  // flows under the бой before it.
+  row?: number;
 }
 
 export interface ReseedSortRule {
@@ -84,8 +87,6 @@ export interface FestGridOptions {
   onCalculate?: () => void;
   stageHeaderLink?: boolean;
   matchTitleLink?: boolean;
-  hiddenVenueMatches?: Set<string | undefined>;
-  hideVenue?: boolean;
   // letters overrides the бой-letter map — a caller drawing a slice of the
   // scheme passes the whole game's, so «Бой BU» does not restart at A.
   letters?: Map<string, string>;
@@ -101,7 +102,7 @@ function bindFestGridResizeListener(): void {
   if (resizeListenerBound) return;
   resizeListenerBound = true;
   window.addEventListener("resize", () => {
-    if (activeFestGridRoot) scheduleFestGridNameOverflowUpdate(activeFestGridRoot);
+    if (activeFestGridRoot) scheduleFestGridUpdate(activeFestGridRoot);
   });
 }
 
@@ -116,8 +117,9 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
   const scheme = parseScheme(data.schemaJson);
   const stages = scheme?.stages?.length ? scheme.stages : data.stages || [];
   boutLetters = options.letters || matchLetterMap(stages as StageRef[]);
+  placed = [];
+  blocks = [];
   const liveStages = new Map((data.stages || []).map((stage) => [stage.code, stage]));
-  const previousVenueByRow = new Map<number, string>();
 
   // A ranking Block is one column: its групп's tables (or a pod Block's бои)
   // stack under one header rather than sprawling a column per группа. Rounds
@@ -137,22 +139,22 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
     const order = blockOf(stage) !== "" ? stageSlotOrder(stage, liveStage) : [];
     const standings = liveStage.standings || stage.standings || [];
     if (standings.length) {
-      columns.appendChild(buildStandingsStage(stage, standings, options, order));
+      columns.appendChild(buildStandingsStage(stage, liveStage, standings, options, order));
       return;
     }
     const table = ungradedStandings(stage, liveStage, order);
     if (table) {
-      columns.appendChild(buildStandingsStage(stage, table, options, order));
+      columns.appendChild(buildStandingsStage(stage, liveStage, table, options, order));
       return;
     }
-    const hiddenVenueMatches = repeatedVenueMatches(stage, liveStage, previousVenueByRow);
-    columns.appendChild(buildMatchesStage(stage, liveStage, {...options, hiddenVenueMatches}));
+    columns.appendChild(buildMatchesStage(stage, liveStage, options));
   });
   // The layout gives every stage a column, so it has to know how many there are.
   root.style.setProperty("--fest-stages", String(columns.children.length));
   root.appendChild(columns);
+  settleRows(root);
   activeFestGridRoot = root;
-  scheduleFestGridNameOverflowUpdate(root);
+  scheduleFestGridUpdate(root);
 
   return root;
 }
@@ -226,25 +228,18 @@ function buildBlockColumn(
   // `display: contents`, so loose children would each take a column.
   const stack = document.createElement("div");
   stack.className = "grid-block-stack";
+  blocks.push({section, stack});
   bucket.forEach((stage) => {
     const liveStage = liveStages.get(stage.code) || stage;
-    const sub = document.createElement(options.stageHeaderLink === false ? "div" : "a");
-    sub.className = "grid-stage-subhead";
-    if (sub instanceof HTMLAnchorElement) {
-      sub.href = stageHref(stage, options);
-      sub.classList.add("grid-stage-link");
-    }
-    sub.textContent = blockGroupLabel(stage);
-    stack.appendChild(sub);
     const order = stageSlotOrder(stage, liveStage);
     const standings = liveStage.standings || stage.standings || [];
     if (standings.length) {
-      stack.appendChild(buildStandingsTable(standings, order));
+      stack.appendChild(buildStandingsTable(standings, order, tableHead(stage, liveStage)));
       return;
     }
     const table = ungradedStandings(stage, liveStage, order);
     if (table) {
-      stack.appendChild(buildStandingsTable(table, order));
+      stack.appendChild(buildStandingsTable(table, order, tableHead(stage, liveStage)));
       return;
     }
     const matches = document.createElement("div");
@@ -257,6 +252,47 @@ function buildBlockColumn(
   });
   section.appendChild(stack);
   return section;
+}
+
+// A Block of Groups wraps into as many columns as the screen's height asks
+// for: as many rows as fit below the block's head, then the next column — so
+// the whole Сетка fits one screen where its бой columns do. The row is the
+// unit the CSS sizes; the JS only counts.
+function unitsOf(items: HTMLElement[]): number[] {
+  return items.map((item) => Number(item.dataset.units) || 1);
+}
+
+function layoutBlockColumns(root: HTMLElement): void {
+  let columns = 0;
+  root.querySelectorAll<HTMLElement>(".fest-columns > section").forEach((section) => {
+    const stack = section.querySelector<HTMLElement>(".grid-block-stack");
+    if (!stack) {
+      columns += 1;
+      return;
+    }
+    const unit = parseFloat(getComputedStyle(stack).gridTemplateRows) || 0;
+    if (!unit) {
+      columns += 1; // not laid out yet — settleRows' one column stands
+      return;
+    }
+    const units = unitsOf(Array.from(stack.children) as HTMLElement[]);
+    const top = stack.getBoundingClientRect().top + window.scrollY;
+    const fit = Math.floor((window.innerHeight - top) / unit);
+    const rows = Math.max(fit, ...units, 1);
+    let cols = 1;
+    let filled = 0;
+    for (const span of units) {
+      if (filled + span > rows) {
+        cols += 1;
+        filled = 0;
+      }
+      filled += span;
+    }
+    section.style.setProperty("--block-rows", String(rows));
+    section.style.setProperty("--block-cols", String(cols));
+    columns += cols;
+  });
+  root.style.setProperty("--fest-stages", String(columns));
 }
 
 export function buildReseedStagePanel(
@@ -288,7 +324,12 @@ export function buildReseedStagePanel(
   }
 
   const sortRules = reseedSortRules(stage);
-  const hasSourceMatch = entries.some((entry) => entry.metrics?.match);
+  // The source бои speak in буквы; a column that reads the same in every row
+  // — the отбор seats everyone from one бой — says nothing and goes.
+  const letters = options.letters || boutLetters;
+  const sources = entries.map((entry) => String(entry.metrics?.match || "").split("+").filter(Boolean)
+    .map((code) => letters?.get(code) || code).join(", "));
+  const hasSourceMatch = sources.some(Boolean) && new Set(sources).size > 1;
   const metricColumns = sortRules.length > 0
     ? sortRules
         .map((rule) => rule.metric)
@@ -316,7 +357,7 @@ export function buildReseedStagePanel(
     if (index === entries.length - 1) row.classList.add("results-group-last");
     row.appendChild(tableCell("td", entry.rank || index + 1, "results-place results-num"));
     row.appendChild(reseedTeamCell(entry.name || ""));
-    if (hasSourceMatch) row.appendChild(tableCell("td", entry.metrics?.match || "", "results-num reseed-source"));
+    if (hasSourceMatch) row.appendChild(tableCell("td", sources[index], "results-num reseed-source"));
     metricColumns.forEach((metric) => {
       row.appendChild(tableCell("td", reseedMetricValue(metric, entry.metrics?.[metric]), "results-num reseed-metric"));
     });
@@ -358,9 +399,10 @@ function reseedBlockedMessage(stage: FestGridStage | null | undefined, options: 
 // and it fits a column where a dozen бой boxes do not.
 function buildStandingsStage(
   stage: FestGridStage,
+  liveStage: FestGridStage,
   standings: ReseedEntry[],
-  options: FestGridOptions = {},
-  order: string[] = [],
+  options: FestGridOptions,
+  order: string[],
 ): HTMLElement {
   const section = document.createElement("section");
   section.className = "grid-stage grid-stage-standings";
@@ -374,10 +416,42 @@ function buildStandingsStage(
     header.href = stageHref(stage, options);
     header.classList.add("grid-stage-link");
   }
-  header.appendChild(el("h2", "", stage.title));
+  header.appendChild(el("h2", "", stage.grain?.group ? blockColumnTitle(stage) : stage.title));
   section.appendChild(header);
-  section.appendChild(buildStandingsTable(standings, order));
+  const body = document.createElement("div");
+  body.className = "grid-matches";
+  body.appendChild(buildStandingsTable(standings, order, tableHead(stage, liveStage)));
+  section.appendChild(body);
   return section;
+}
+
+// A table's head row names what the table is — the группа, or the Block when
+// it is the Block's only table — and the table it plays at, the way a бой box
+// says «Бой A · пл. 1». A Group holds one table, so the venue is its own.
+interface TableHead {
+  title: string;
+  venue: Venue | null;
+}
+
+function tableHead(stage: FestGridStage, liveStage: FestGridStage): TableHead {
+  return {
+    title: stage.grain?.group ? blockGroupLabel(stage) : String(stage.title || ""),
+    venue: stageVenue(stage, liveStage),
+  };
+}
+
+// stageVenue is the one table every бой of the stage sits at, or null when
+// they spread — a pod's бои share a table like a группа's do.
+function stageVenue(stage: FestGridStage, liveStage: FestGridStage): Venue | null {
+  const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
+  let found: Venue | null = null;
+  for (const match of stage.matches || []) {
+    const venue = firstVenue(liveMatches.get(match.code)?.venue, match.venue);
+    if (!venue) return null;
+    if (found && venueText(found) !== venueText(venue)) return null;
+    found = venue;
+  }
+  return found;
 }
 
 // stageSlotOrder is the seating order of a stage's participants — first
@@ -466,18 +540,21 @@ function podStandings(stage: FestGridStage, liveStage: FestGridStage, order: str
   });
 }
 
-function buildStandingsTable(standings: ReseedEntry[], order: string[] = []): HTMLElement {
+function buildStandingsTable(standings: ReseedEntry[], order: string[], head: TableHead): HTMLElement {
   const metrics = standingsMetrics(standings);
   const table = document.createElement("table");
   table.className = "grid-standings";
-  const head = document.createElement("tr");
-  head.appendChild(el("th", "standings-name", ""));
-  metrics.forEach((metric) => head.appendChild(el("th", "standings-metric", standingsMetricLabel(metric))));
-  head.appendChild(el("th", "standings-place", "М"));
-  table.appendChild(head);
+  const headRow = document.createElement("tr");
+  const title = el("th", "standings-name", "");
+  title.appendChild(headLayout(el("span", "grid-match-title", head.title), head.venue));
+  headRow.appendChild(title);
+  metrics.forEach((metric) => headRow.appendChild(el("th", "standings-metric", standingsMetricLabel(metric))));
+  headRow.appendChild(el("th", "standings-place", "М"));
+  table.appendChild(headRow);
   const rows = order.length
     ? standings.slice().sort((a, b) => slotIndex(order, a) - slotIndex(order, b))
     : standings;
+  placeOnRows(table, 1 + rows.length);
   rows.forEach((entry) => {
     const row = document.createElement("tr");
     const name = el("td", "standings-name grid-slot-team", "");
@@ -552,13 +629,41 @@ function buildMatchesStage(stage: FestGridStage, liveStage: FestGridStage, optio
   matches.className = "grid-matches";
   const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
   (stage.matches || []).forEach((match) => {
-    matches.appendChild(buildMatchBox(match, liveMatches.get(match.code), {
-      ...options,
-      hideVenue: options.hiddenVenueMatches?.has(match.code),
-    }));
+    matches.appendChild(buildMatchBox(match, liveMatches.get(match.code), options));
   });
   section.appendChild(matches);
   return section;
+}
+
+// The Сетка's rows are shared across its columns, like the sheet's: a row is
+// the grid's tallest box, up to a head and four seats, and anything taller
+// spans as many rows as it needs, so what stands beside it stays level. A
+// board of two-seat бои gets three-row units; every Сетка with a group table
+// gets five.
+const MAX_UNIT_ROWS = 5;
+let placed: Array<{item: HTMLElement; rows: number; row?: number}> = [];
+let blocks: Array<{section: HTMLElement; stack: HTMLElement}> = [];
+
+function placeOnRows(item: HTMLElement, rows: number, row?: number): void {
+  placed.push({item, rows, row});
+}
+
+// settleRows sizes the row once every box is built, then places them: each
+// item its span, each Block of Groups one column until layoutBlockColumns
+// has measured the screen.
+function settleRows(root: HTMLElement): void {
+  const unitRows = Math.min(MAX_UNIT_ROWS, Math.max(1, ...placed.map(({rows}) => rows)));
+  root.style.setProperty("--grid-unit-rows", String(unitRows));
+  for (const {item, rows, row} of placed) {
+    const units = Math.max(1, Math.ceil(rows / unitRows));
+    item.dataset.units = String(units);
+    item.style.setProperty("grid-row", row ? `${row} / span ${units}` : `span ${units}`);
+  }
+  for (const {section, stack} of blocks) {
+    section.style.setProperty("--block-cols", "1");
+    section.style.setProperty("--block-rows", String(unitsOf(Array.from(stack.children) as HTMLElement[])
+      .reduce((sum, units) => sum + units, 0) || 1));
+  }
 }
 
 function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefined, options: FestGridOptions = {}): HTMLElement {
@@ -575,6 +680,7 @@ function buildMatchBox(match: FestGridMatch, liveMatch: FestGridMatch | undefine
   const liveTeams = liveMatch?.participants || [];
   const slots = match.slots || [];
   const rowCount = gridSlotRowCount(match, slots);
+  placeOnRows(box, 1 + rowCount, match.row);
   const realRows: HTMLElement[][] = [];
   for (let index = 0; index < rowCount; index += 1) {
     const slot = slots[index];
@@ -633,17 +739,19 @@ function decorateGridSlotRows(rows: HTMLElement[][]): void {
   last[2].classList.add("grid-slot-bottom-right");
 }
 
-function matchHeadCell(match: FestGridMatch, venue: {number: number; title: string} | null, options: FestGridOptions = {}): HTMLElement {
+function matchHeadCell(match: FestGridMatch, venue: Venue | null, options: FestGridOptions = {}): HTMLElement {
   const cell = gridCell("grid-slot-head grid-match-head-cell", "");
+  cell.appendChild(headLayout(matchTitleNode(match, options), venue));
+  return cell;
+}
+
+function headLayout(title: HTMLElement, venue: Venue | null): HTMLElement {
   const layout = document.createElement("span");
   layout.className = "grid-match-head-layout";
-  layout.appendChild(matchTitleNode(match, options));
+  layout.appendChild(title);
   const venueLabel = venueText(venue);
-  if (venueLabel && !options.hideVenue) {
-    layout.appendChild(el("span", "grid-match-venue", venueLabel));
-  }
-  cell.appendChild(layout);
-  return cell;
+  if (venueLabel) layout.appendChild(el("span", "grid-match-venue", venueLabel));
+  return layout;
 }
 
 function matchTitleNode(match: FestGridMatch, options: FestGridOptions = {}): HTMLElement {
@@ -653,25 +761,6 @@ function matchTitleNode(match: FestGridMatch, options: FestGridOptions = {}): HT
   const link = el("a", "grid-match-title grid-match-title-link", matchLabel(match));
   link.href = matchHref(match, options);
   return link;
-}
-
-function repeatedVenueMatches(
-  stage: FestGridStage,
-  liveStage: FestGridStage,
-  previousVenueByRow: Map<number, string>,
-): Set<string | undefined> {
-  const hidden = new Set<string | undefined>();
-  const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
-  (stage.matches || []).forEach((match, index) => {
-    const liveMatch = liveMatches.get(match.code);
-    const label = venueText(firstVenue(liveMatch?.venue, match.venue));
-    if (!label) return;
-    if (previousVenueByRow.get(index) === label) {
-      hidden.add(match.code);
-    }
-    previousVenueByRow.set(index, label);
-  });
-  return hidden;
 }
 
 export function parseScheme(raw: unknown): FestScheme | null {
@@ -833,10 +922,11 @@ function slotTeamCell(label: string): HTMLElement {
   return cell;
 }
 
-function scheduleFestGridNameOverflowUpdate(root: HTMLElement): void {
+function scheduleFestGridUpdate(root: HTMLElement): void {
   if (festGridNameOverflowFrame) cancelAnimationFrame(festGridNameOverflowFrame);
   festGridNameOverflowFrame = requestAnimationFrame(() => {
     festGridNameOverflowFrame = 0;
+    layoutBlockColumns(root);
     updateFestGridNameOverflow(root);
   });
 }
@@ -846,6 +936,11 @@ function updateFestGridNameOverflow(root: HTMLElement): void {
     cellSelector: ".grid-slot-team",
     nameSelector: ".grid-slot-team-name",
     truncatedClass: "grid-slot-team-truncated",
+  });
+  markNameOverflow(root, {
+    cellSelector: ".grid-match-head-layout",
+    nameSelector: ".grid-match-title",
+    truncatedClass: "grid-head-truncated",
   });
 }
 
@@ -873,13 +968,15 @@ function reseedLabel(reseed: { rank?: number | string }): string {
   return Number.isFinite(rank) && rank > 0 ? `Пересев-${rank}` : "Пересев";
 }
 
-function venueText(venue: FestGridVenue | {number: number; title: string} | null): string {
+type Venue = {number: number; title: string};
+
+function venueText(venue: FestGridVenue | Venue | null): string {
   const normalized = normalizeVenue(venue);
   if (!normalized) return "";
   return normalized.title ? `пл. ${normalized.number} (${normalized.title})` : `пл. ${normalized.number}`;
 }
 
-function firstVenue(...venues: FestGridVenue[]): {number: number; title: string} | null {
+function firstVenue(...venues: FestGridVenue[]): Venue | null {
   for (const venue of venues) {
     const normalized = normalizeVenue(venue);
     if (normalized) return normalized;
@@ -887,7 +984,7 @@ function firstVenue(...venues: FestGridVenue[]): {number: number; title: string}
   return null;
 }
 
-function normalizeVenue(venue: FestGridVenue): {number: number; title: string} | null {
+function normalizeVenue(venue: FestGridVenue): Venue | null {
   if (!venue) return null;
   if (typeof venue === "number" || typeof venue === "string") {
     const number = Number(venue);

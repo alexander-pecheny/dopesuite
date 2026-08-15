@@ -282,13 +282,16 @@ function adoptFestView(view: FestView): void {
 // Every бой of the game carries a буква — the sheets' A..Z, AA.. handle — dealt
 // once per fest view over the scheme's schedule order.
 let boutLetters: Map<string, string> | null = null;
-function letteredBoutTitle(matchCode: string | undefined, title: string): string {
+function letterMap(): Map<string, string> {
   if (!boutLetters) {
     const scheme = parseScheme(fest?.schemaJson);
     boutLetters = DopeTable.matchLetterMap(
       (scheme?.stages?.length ? scheme.stages : fest?.stages || []) as StageRef[]);
   }
-  return DopeTable.letteredTitle(title, boutLetters.get(matchCode || ""));
+  return boutLetters;
+}
+function letteredBoutTitle(matchCode: string | undefined, title: string): string {
+  return DopeTable.letteredTitle(title, letterMap().get(matchCode || ""));
 }
 
 function hydrateFestFromCache(): boolean {
@@ -864,9 +867,10 @@ function viewerTabItems(): Array<{href: string; label: string; key: string}> {
       key: `stage:${stage.code}`,
     });
   });
-  // Статистика and Составы sit at the very end, after all stage tabs.
+  // Статистика and Составы sit at the very end, after all stage tabs. An
+  // individual game has no составы: its Сетка already names every player.
   items.push({href: route.base! + "/stats", label: "Статистика", key: "stats"});
-  items.push({href: route.base! + "/roster", label: "Составы", key: "roster"});
+  if (!individualGame()) items.push({href: route.base! + "/roster", label: "Составы", key: "roster"});
   return items;
 }
 
@@ -1221,7 +1225,7 @@ function buildReseedPanes(stageCode: string): HTMLElement {
       head.textContent = String(next?.title || "");
       wrap.appendChild(head);
     }
-    wrap.appendChild(buildReseedStagePanel(mergedStage(fest!, code)));
+    wrap.appendChild(buildReseedStagePanel(mergedStage(fest!, code), {letters: letterMap()}));
   }
   return wrap;
 }

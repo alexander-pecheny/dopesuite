@@ -71,7 +71,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 
 // replayFromTranscript runs a committed transcript against the scheme it names
 // and reports every disagreement, so one failing бой does not hide the rest.
-func replayFromTranscript(t *testing.T, name, gameType, title string) {
+func replayFromTranscript(t *testing.T, name, gameType, title string) *serverGame {
 	t.Helper()
 	src, err := os.ReadFile("../../../testdata/studchr2026/" + name + ".transcript")
 	if err != nil {
@@ -89,7 +89,8 @@ func replayFromTranscript(t *testing.T, name, gameType, title string) {
 	for i, entrant := range script.Roster {
 		names[i] = entrant.Name
 	}
-	findings, err := replay.Run(script, newReplayGame(t, string(dsl), gameType, title, names))
+	game := newReplayGame(t, string(dsl), gameType, title, names)
+	findings, err := replay.Run(script, game)
 	// Findings first even when the run died: a бой that could not be played at
 	// all is usually explained by the disagreements that came before it.
 	for _, f := range findings {
@@ -98,6 +99,7 @@ func replayFromTranscript(t *testing.T, name, gameType, title string) {
 	if err != nil {
 		t.Fatalf("прогон: %v", err)
 	}
+	return game
 }
 
 func TestReplayAgreesWithItsTranscript(t *testing.T) {
@@ -230,7 +232,23 @@ func TestReplayStudchrSI(t *testing.T) {
 // Σ+, then how many 50s, 40s, 30s and 20s each player took, and dope has to
 // derive every one of them.
 func TestReplayStudchrTPSh(t *testing.T) {
-	replayFromTranscript(t, "tpsh", "si", "ТПШ")
+	game := replayFromTranscript(t, "tpsh", "si", "ТПШ")
+	// The Пересев sorts on how many 50s each player took, and its tab shows
+	// the column — so what it sorted on has to be what it stored. The writer
+	// used to persist a hand-list of ЭК's metric names and drop СИ's.
+	var stageCode string
+	if err := game.srv.Eng().DB.QueryRow(`
+select code from stages where game_id = ? and stage_type = 'reseed' order by position limit 1`,
+		game.gameID).Scan(&stageCode); err != nil {
+		t.Fatalf("пересев: %v", err)
+	}
+	var taken50 float64
+	for _, entry := range reseedEntries(t, game.srv.Eng().DB, game.gameID, stageCode) {
+		taken50 += entry.num("taken50")
+	}
+	if taken50 == 0 {
+		t.Fatalf("Пересев ТПШ хранит taken50 = 0 у всех — метрика, по которой он сортирует, не сохранена")
+	}
 }
 
 // A брейн group of four, replayed through the real handlers. Its бой is a duel

@@ -42,7 +42,8 @@ A Wave is normally a stage of its own, but a round-robin Group is a Lane — it 
 One venue's ordered string of Matches within a Wave. In one-sitting formats a Lane is a single Match; a round-robin Group playing at one table is a Lane of all that Group's Matches.
 
 **Group**:
-One ranking scope inside a round-robin Block: the Participants who all play each other and are ranked together. A Block may hold many Groups (групповой этап of 8 groups = one Block).
+One ranking scope inside a Block: the Participants ranked together — a round-robin группа where all play each other, or an elimination pod (брейн's DE of six pods of four). A Block may hold many Groups (групповой этап of 8 groups = one Block). A Group is also the row of the Сетка: Group k of every Block sits in row k, which is what lines the columns up.
+_Avoid_: pod as a distinct concept — it is the DE word for a Group.
 
 **Draw (Жеребьёвка)**:
 A seating no result implies: the initial deal into Groups, ЭК's hand-drawn bracket, a table swapped on the day for a no-show. A Draw is *input* to a Structure and is written into the Edges that fill those Slots, as against derived seating, which the Structure computes from prior results and recomputes whenever they change. A hand-placed derived seat is not a Draw — it is a seat the Structure will overwrite, correctly.
@@ -52,7 +53,7 @@ _Avoid_: recording an observed seating as fact without deciding which it is. If 
 The declarative document describing a Game's Structure — its Blocks, Edges, and Slot sources. The source of truth for authoring: hand-written, imported, or emitted from the simplified scheme DSL.
 
 **Сетка**:
-The one-glance map of a whole Game: every Block's standings at the coarsest grain worth a glance (М, at most Σ), the single entry point where anyone playing finds who proceeds where. Compact on purpose — crosstabs, protocols and per-Metric detail belong to a Block's own views, never to the Сетка.
+The one-glance map of a whole Game: every Block's standings at the coarsest grain worth a glance (М, at most Σ), the single entry point where anyone playing finds who proceeds where. Compact on purpose — crosstabs, protocols and per-Metric detail belong to a Block's own views, never to the Сетка. Its rows are shared across columns like the sheet's: a Round is a column, a Group is a row, and a Block of Groups wraps into as many columns as the screen's height asks for.
 
 **Буква боя**:
 A Match's human handle: one letter sequence per Game — A..Z, then AA.. — assigned in schedule order (Block, then Round, then Match). It is display-only; the structural code (s1-r2-m3) stays the stored identity, URLs included.

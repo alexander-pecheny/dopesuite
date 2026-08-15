@@ -124,7 +124,7 @@ const viewerCounter = gameTable.createViewerCounter(statusNode);
 // treatment the ЭК tables give theirs.
 const floatingPopover = gameTable.createFloatingPopover({root: brainRoot, specs: [
   {trigger: ".brain-name-head.brain-name-truncated", popover: ".brain-name-popover", anchor: ".brain-name-wrap"},
-  {trigger: ".brain-cross-team.brain-name-truncated", popover: ".brain-name-popover", anchor: ".brain-name-wrap"},
+  {trigger: ".results-team-truncated", popover: ".results-team-name-popover", anchor: ".results-team-name"},
 ]});
 floatingPopover.bind();
 
@@ -139,9 +139,9 @@ function scheduleBrainNameOverflowUpdate(): void {
       truncatedClass: "brain-name-truncated",
     });
     gameTable.markNameOverflow(brainRoot, {
-      cellSelector: ".brain-cross-team",
-      nameSelector: ".brain-name",
-      truncatedClass: "brain-name-truncated",
+      cellSelector: ".results-team",
+      nameSelector: ".results-team-name",
+      truncatedClass: "results-team-truncated",
     });
   });
 }
@@ -586,6 +586,7 @@ function buildBrainReseedPanel(stage: BrainSchemeStage): HTMLElement {
     ? `Бой ${pending[0]} не закончен`
     : pending.length > 1 ? `Бои ${pending.join(", ")} не закончены` : "";
   const panel = buildReseedStagePanel({...(festStages.get(code) || {}), code}, {
+    letters: boutLetters,
     editable: !viewer,
     canCalculate: pending.length === 0,
     blockedMessage: blocked,
@@ -647,20 +648,33 @@ function buildGrid(): HTMLElement {
 
 // buildPodBoard is a pod Block's detail tab, the sheet's «Double Elimination»
 // view: one column per round, each бой a box with its буква, teams and Σ. The
-// same boxes the Сетка once carried — moved where detail belongs.
+// same boxes the Сетка once carried — moved where detail belongs. A pod is a
+// row band: its бои of every round sit in the band, so a round with one бой
+// per pod leaves the pod's other slot blank and the columns read across.
 function buildPodBoard(bucket: BlockBucket): HTMLElement {
   type GridMatch = NonNullable<FestGridStage["matches"]>[number];
   const byRound = new Map<number, GridMatch[]>();
-  for (const stage of bucket.stages) {
-    const live = new Map((festStages.get(stage.code || "")?.matches || []).map((m) => [m.code, m]));
+  const podRows = Math.max(1, ...bucket.stages.map((stage) => {
+    const perRound = new Map<number, number>();
     for (const planned of stage.matches || []) {
       const round = Number((planned as {round?: number}).round || 1);
-      const merged = {...(planned as GridMatch), ...(live.get(planned.code) || {})};
+      perRound.set(round, (perRound.get(round) || 0) + 1);
+    }
+    return Math.max(0, ...perRound.values());
+  }));
+  bucket.stages.forEach((stage, pod) => {
+    const live = new Map((festStages.get(stage.code || "")?.matches || []).map((m) => [m.code, m]));
+    const seen = new Map<number, number>();
+    for (const planned of stage.matches || []) {
+      const round = Number((planned as {round?: number}).round || 1);
+      const slot = seen.get(round) || 0;
+      seen.set(round, slot + 1);
+      const merged = {...(planned as GridMatch), ...(live.get(planned.code) || {}), row: pod * podRows + slot + 1};
       const list = byRound.get(round);
       if (list) list.push(merged);
       else byRound.set(round, [merged]);
     }
-  }
+  });
   const stages = Array.from(byRound.keys()).sort((a, b) => a - b).map((round): FestGridStage => ({
     code: `${bucket.block}-round-${round}`,
     title: `Раунд ${round}`,
@@ -705,7 +719,7 @@ function buildStatsView(): HTMLElement {
   }
   const stats = computeBrainPlayerStats(bouts);
   const wrapper = document.createElement("div");
-  wrapper.className = "results-wrapper brain-stats-wrapper";
+  wrapper.className = "results-wrapper ek-stats-wrapper";
   if (!stats.length) {
     const empty = document.createElement("p");
     empty.className = "roster-empty";
@@ -713,39 +727,29 @@ function buildStatsView(): HTMLElement {
     wrapper.appendChild(empty);
     return wrapper;
   }
+  // The same table ЭК's Статистика is — its name columns size to content and
+  // its numbers sit tight — with the buzzer's columns in place of the themes'.
   const table = document.createElement("table");
-  table.className = "results-table brain-stats-table";
+  table.className = "results-table ek-stats-table";
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  const th = (text: string, className = "number") => {
-    const cell = document.createElement("th");
-    cell.className = className;
-    cell.textContent = text;
-    head.appendChild(cell);
-  };
-  th("Игрок", "results-team-head brain-stats-name-head");
-  th("Команда", "results-team-head brain-stats-name-head");
-  th("Попытки");
-  th("Верно");
-  th("Неверно");
-  th("% верных");
+  head.appendChild(gameTable.th("Игрок", "results-team-head ek-stats-name-head ek-stats-player-head"));
+  head.appendChild(gameTable.th("Команда", "results-team-head ek-stats-name-head ek-stats-team-head"));
+  head.appendChild(gameTable.th("Попытки", "number"));
+  head.appendChild(gameTable.th("Верно", "number"));
+  head.appendChild(gameTable.th("Неверно", "number ek-stats-wrong-head"));
+  head.appendChild(gameTable.th("% верных", "number ek-stats-share-head"));
   thead.appendChild(head);
   table.appendChild(thead);
   const tbody = document.createElement("tbody");
   for (const row of stats) {
     const tr = document.createElement("tr");
-    const td = (text: string, className = "number") => {
-      const cell = document.createElement("td");
-      cell.className = className;
-      cell.textContent = text;
-      tr.appendChild(cell);
-    };
-    td(row.player, "results-team brain-stats-name");
-    td(row.team, "results-team brain-stats-name");
-    td(String(row.attempts));
-    td(String(row.right));
-    td(String(row.wrong));
-    td(row.attempts ? `${Math.round((row.right / row.attempts) * 100)}%` : "");
+    tr.appendChild(gameTable.resultsTeamCell(row.player, "results-team ek-stats-name ek-stats-player"));
+    tr.appendChild(gameTable.resultsTeamCell(row.team, "results-team ek-stats-name ek-stats-team"));
+    tr.appendChild(gameTable.td(row.attempts, "number"));
+    tr.appendChild(gameTable.td(row.right, "number"));
+    tr.appendChild(gameTable.td(row.wrong, "number ek-stats-wrong"));
+    tr.appendChild(gameTable.td(row.attempts ? `${Math.round((row.right / row.attempts) * 100)}%` : "", "number ek-stats-share"));
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
@@ -764,13 +768,13 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   table.dataset.match = code;
 
   // Team names take the header row at double width — each spans its player and
-  // mark columns, the way the sheet merges them — and the score gets a row of
-  // its own beneath. Double width fits most names; the rest fade to a popover.
+  // mark columns, the way the sheet merges them — with the бой's буква and the
+  // «Закончен» tick on the same line, and the score on a row of its own
+  // beneath. Double width fits most names; the rest fade to a popover.
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
   const corner = document.createElement("th");
   corner.className = "row-marker brain-bout-corner";
-  corner.rowSpan = 2;
   corner.textContent = boutLetters.get(code) || (code.split("-").pop() || code).replace(/^m/, "");
   corner.title = view.title || code;
   head.appendChild(corner);
@@ -779,6 +783,7 @@ function buildBout({code, view, planned}: BoutEntry): HTMLElement {
   head.appendChild(finishHead(code, view));
   thead.appendChild(head);
   const scoreRow = document.createElement("tr");
+  scoreRow.appendChild(document.createElement("th")).className = "row-marker";
   const score = document.createElement("th");
   score.className = "number brain-score-head";
   score.colSpan = 4;
@@ -973,9 +978,11 @@ function slotKey(slot: SchemeSlotRef | null | undefined): string {
 // opponent, then О (head-to-head points, finished бои only), + / − / +/−
 // (questions taken and conceded across all бои), М (place, ranked by the
 // stage's comparator order — КИНСБФ §4.2 by default).
+// buildCrosstable is the sheets' «Группы» view, on the same skin as СИ's:
+// every группа's crosstab, two abreast where the screen fits them.
 function buildCrosstable(bucket: BlockBucket): HTMLElement {
   const wrap = document.createElement("div");
-  wrap.className = "brain-protocol";
+  wrap.className = "group-standings";
   const groups = bucket.stages.filter((stage) => stageKind(stage) === "rr");
   if (!groups.length) {
     const empty = document.createElement("p");
@@ -985,7 +992,17 @@ function buildCrosstable(bucket: BlockBucket): HTMLElement {
     return wrap;
   }
   for (const stage of groups) {
-    wrap.appendChild(buildGroupTable(stage));
+    const item = document.createElement("section");
+    item.className = "group-standings-item";
+    const head = document.createElement("h3");
+    head.className = "group-standings-head";
+    head.textContent = gameTable.groupLabel(stage as StageRef);
+    item.appendChild(head);
+    const wrapper = document.createElement("div");
+    wrapper.className = "results-wrapper group-standings-wrapper";
+    wrapper.appendChild(buildGroupTable(stage));
+    item.appendChild(wrapper);
+    wrap.appendChild(item);
   }
   return wrap;
 }
@@ -1044,82 +1061,30 @@ function buildGroupTable(stage: BrainSchemeStage): HTMLElement {
   });
 
   const table = document.createElement("table");
-  table.className = "match-table brain-crosstable";
-
+  table.className = "results-table group-standings-table brain-crosstable";
   const thead = document.createElement("thead");
-  const group = document.createElement("tr");
-  const groupHead = document.createElement("th");
-  groupHead.colSpan = rows.length + 7;
-  groupHead.className = "brain-group-head";
-  groupHead.textContent = stage.title || "Группа";
-  group.appendChild(groupHead);
-  thead.appendChild(group);
-
   const cols = document.createElement("tr");
-  cols.className = "brain-cross-cols";
-  const headCell = (text: string, className: string) => {
-    const th = document.createElement("th");
-    th.className = className;
-    th.textContent = text;
-    cols.appendChild(th);
-  };
-  headCell("№", "row-marker");
-  headCell("Команда", "brain-cross-team-head");
-  rows.forEach((_, i) => headCell(String(i + 1), "brain-cross-num"));
-  headCell("О", "brain-cross-num");
-  headCell("+", "brain-cross-num");
-  headCell("−", "brain-cross-num");
-  headCell("+/−", "brain-cross-num");
-  headCell("М", "brain-cross-num");
+  cols.appendChild(gameTable.th("№", "results-place-head"));
+  cols.appendChild(gameTable.th("Команда", "results-team-head"));
+  rows.forEach((_, i) => cols.appendChild(gameTable.th(i + 1, "number")));
+  for (const text of ["О", "+", "−", "+/−", "М"]) cols.appendChild(gameTable.th(text, "number"));
   thead.appendChild(cols);
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
   rows.forEach((row, i) => {
     const tr = document.createElement("tr");
-    const marker = document.createElement("td");
-    marker.className = "row-marker";
-    marker.textContent = String(i + 1);
-    tr.appendChild(marker);
-    const name = document.createElement("td");
-    name.className = "brain-cross-team";
-    const wrap = document.createElement("span");
-    wrap.className = "brain-name-wrap";
-    const label = document.createElement("span");
-    label.className = "brain-name";
-    label.textContent = row.name;
-    label.tabIndex = 0;
-    label.setAttribute("aria-label", row.name);
-    wrap.appendChild(label);
-    name.appendChild(wrap);
-    const popover = document.createElement("span");
-    popover.className = "popover popover-inline brain-name-popover";
-    popover.textContent = row.name;
-    name.appendChild(popover);
-    tr.appendChild(name);
+    tr.appendChild(gameTable.td(i + 1, "results-place results-num"));
+    tr.appendChild(gameTable.resultsTeamCell(row.name));
     rows.forEach((_, j) => {
-      const cell = document.createElement("td");
-      cell.className = "number brain-cross-cell";
-      if (i === j) {
-        cell.textContent = "×";
-        cell.classList.add("brain-cross-diag");
-      } else {
-        cell.textContent = cellText[i][j];
-        cell.classList.toggle("brain-cross-live", cellMuted[i][j]);
-      }
+      const cell = gameTable.td(i === j ? "×" : cellText[i][j], "number brain-cross-cell");
+      if (i === j) cell.classList.add("brain-cross-diag");
+      else cell.classList.toggle("brain-cross-live", cellMuted[i][j]);
       tr.appendChild(cell);
     });
-    const stat = (value: string | number, extra = "") => {
-      const cell = document.createElement("td");
-      cell.className = "number" + (extra ? ` ${extra}` : "");
-      cell.textContent = gameTable.formatDisplayText(value);
-      tr.appendChild(cell);
-    };
-    stat(row.points);
-    stat(row.plus);
-    stat(row.minus);
-    stat(row.plus - row.minus);
-    stat(row.rank, "brain-cross-place");
+    for (const value of [row.points, row.plus, row.minus, row.plus - row.minus, row.rank]) {
+      tr.appendChild(gameTable.td(gameTable.formatDisplayText(value), "number"));
+    }
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
@@ -1234,7 +1199,6 @@ function buildSeedView(): HTMLElement {
   table.className = "match-table brain-seed-table";
   const thead = document.createElement("thead");
   const head = document.createElement("tr");
-  head.className = "brain-cross-cols";
   for (const text of ["Посев", "Команда", "Город", "Место в источнике", "Отказ"]) {
     const th = document.createElement("th");
     th.textContent = text;
@@ -1251,7 +1215,7 @@ function buildSeedView(): HTMLElement {
     seed.className = "number";
     seed.textContent = row.declined ? "—" : row.waitlist ? "запас" : String(row.seedNumber || "");
     const name = document.createElement("td");
-    name.className = "brain-cross-team";
+    name.className = "brain-seed-name";
     name.textContent = row.name || "";
     const city = document.createElement("td");
     city.textContent = row.city || "";

@@ -990,7 +990,7 @@ function blockTabTitle(group: StageRef | undefined): string {
 
 // groupLabel is what a бой is prefixed with once круги mix the группы together:
 // «Группа 3. Бой 7» says which table it was, which the tab no longer does.
-function groupLabel(stage: StageRef): string {
+export function groupLabel(stage: StageRef): string {
   const title = String(stage.title || "");
   const named = title.match(/Группа\s*\S+$/);
   return named ? named[0] : `Группа ${stage.grain?.group || "?"}`;
@@ -1595,6 +1595,8 @@ export function buildEKStatsTable(rows: EKPlayerStatsRow[] | null | undefined): 
 export const DopeTable = {
   th,
   td,
+  resultsTeamCell,
+  groupLabel,
   option,
   applyDeltaOps,
   createClientRecorder,

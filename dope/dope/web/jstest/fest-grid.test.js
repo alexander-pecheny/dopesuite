@@ -38,7 +38,7 @@ globalThis.requestAnimationFrame = () => 0;
 globalThis.document = {createElement: node};
 globalThis.HTMLAnchorElement = class {};
 
-const {buildFestGrid} = await import("./dist/fest-grid.js");
+const {buildFestGrid, buildReseedStagePanel} = await import("./dist/fest-grid.js");
 
 function walk(root, out = []) {
   out.push(root);
@@ -126,7 +126,8 @@ test("a Block's groups share one column", () => {
   const blockHeads = withClass(grid, "grid-stage-head");
   assert.equal(blockHeads.length, 1, "у колонки один заголовок блока");
   assert.equal(walk(blockHeads[0]).find((n) => n.tag === "h2").textContent, "Групповой этап");
-  const groupHeads = withClass(grid, "grid-stage-subhead").map((n) => n.textContent);
+  const groupHeads = withClass(grid, "grid-standings").map((table) =>
+    walk(withClass(table, "standings-name")[0]).find((n) => String(n.className).includes("grid-match-title")).textContent);
   assert.deepEqual(groupHeads, ["Группа 1", "Группа 2", "Группа 3"]);
 });
 
@@ -220,4 +221,117 @@ test("rounds without groups keep their own columns", () => {
     stages: [round("s1-r1-w1", "1/16, заход 1"), round("s1-r1-w2", "1/16, заход 2")],
   }, {stageHeaderLink: false});
   assert.equal(grid.props["--fest-stages"], "2");
+});
+
+// A бой's venue used to vanish when the бой in the same row of the previous
+// column sat on the same table — readers took the blank for «no table».
+test("every бой names its venue, however the previous column read", () => {
+  const round = (code) => ({
+    code, title: code, stage_type: "matches",
+    matches: [{code: `${code}-m1`, venue: 1, participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
+  });
+  const grid = buildFestGrid({stages: [round("s1-r1"), round("s1-r2")]}, {stageHeaderLink: false});
+  const venues = withClass(grid, "grid-match-venue").map((n) => n.textContent);
+  assert.deepEqual(venues, ["пл. 1", "пл. 1"]);
+});
+
+// A группа's table wears its name in its own head row, the way a бой box wears
+// «Бой A · пл. 1» — one head, not a sub-heading over a headless table. A Group
+// holds one table, so the venue is the Group's to show.
+test("a Group's table head names the группа and its table", () => {
+  const group = (n) => ({
+    code: `s1-g${n}`,
+    title: `Групповой этап. Группа ${n}`,
+    stage_type: "matches",
+    grain: {block: "s1", group: String(n)},
+    standings: [{rank: 1, name: `Лидер ${n}`, metrics: {place: 1, points: 9}}],
+    matches: [{code: `s1-g${n}-1`, venue: n + 2, slots: [], participants: [{name: `Лидер ${n}`}]}],
+  });
+  const grid = buildFestGrid({stages: [group(1), group(2)]}, {stageHeaderLink: false});
+  assert.equal(withClass(grid, "grid-stage-subhead").length, 0, "подзаголовков больше нет");
+  const heads = withClass(grid, "grid-standings").map((table) => {
+    const head = withClass(table, "standings-name")[0];
+    return walk(head).filter((n) => n.tag === "span" && n.textContent).map((n) => n.textContent);
+  });
+  assert.deepEqual(heads, [["Группа 1", "пл. 3"], ["Группа 2", "пл. 4"]]);
+});
+
+// A lone table — a flat Block — has no группа to name, so its head carries the
+// Block's title, as the ЭК sheet's stage table does.
+test("a lone table's head carries the Block title", () => {
+  const grid = buildFestGrid({
+    stages: [{
+      code: "s1", title: "Письменный отбор", stage_type: "matches",
+      standings: [{rank: 1, name: "Ктулху", metrics: {place: 1, total: 470}}],
+      matches: [{code: "s1-m1", slots: [], participants: [{name: "Ктулху"}]}],
+    }],
+  }, {stageHeaderLink: false});
+  const head = withClass(grid, "standings-name")[0];
+  const spans = walk(head).filter((n) => n.tag === "span" && n.textContent).map((n) => n.textContent);
+  assert.deepEqual(spans, ["Письменный отбор"]);
+});
+
+// The Сетка's rows are shared across columns like the sheet's. A бой that
+// names its row sits there — the DE board puts each pod's бои in the pod's
+// band, so a round with one бой per pod leaves the pod's second slot blank.
+test("a бой sits on the row it names", () => {
+  const grid = buildFestGrid({
+    stages: [{
+      code: "s2-r3", title: "Раунд 3", stage_type: "matches",
+      matches: [
+        {code: "a", row: 1, participantCount: 2, slots: [{label: "А"}, {label: "Б"}]},
+        {code: "b", row: 3, participantCount: 2, slots: [{label: "В"}, {label: "Г"}]},
+      ],
+    }],
+  }, {stageHeaderLink: false});
+  const rows = withClass(grid, "grid-match").map((box) => box.props["grid-row"]);
+  assert.deepEqual(rows, ["1 / span 1", "3 / span 1"]);
+});
+
+// A row is one бой box tall — a head and four seats. A группа of nine is two
+// of them, so the group after it starts level with the third бой beside it.
+test("a table taller than a бой spans as many rows as it needs", () => {
+  const nine = Array.from({length: 9}, (_, i) => ({rank: i + 1, name: `Игрок ${i + 1}`, metrics: {place: i + 1, points: 9 - i}}));
+  const group = (n) => ({
+    code: `s1-g${n}`, title: `Группа ${n}`, stage_type: "matches",
+    grain: {block: "s1", group: String(n)},
+    standings: nine, matches: [],
+  });
+  const grid = buildFestGrid({stages: [group(1), group(2)]}, {stageHeaderLink: false});
+  const spans = withClass(grid, "grid-standings").map((table) => table.props["grid-row"]);
+  assert.deepEqual(spans, ["span 2", "span 2"]);
+});
+
+// The row is the grid's tallest box, up to a head and four seats: a board of
+// two-seat бои packs three rows to the unit, a Сетка with a group of four five.
+test("the row is as tall as the grid's tallest box, up to a head and four seats", () => {
+  const bout = {code: "m", participantCount: 2, slots: [{label: "А"}, {label: "Б"}]};
+  const board = buildFestGrid({stages: [{code: "r1", title: "Раунд 1", stage_type: "matches", matches: [bout]}]}, {stageHeaderLink: false});
+  assert.equal(board.props["--grid-unit-rows"], "3");
+  const four = Array.from({length: 4}, (_, i) => ({rank: i + 1, name: `К${i}`, metrics: {place: i + 1, points: 1}}));
+  const grid = buildFestGrid({stages: [
+    {code: "r1", title: "Финал", stage_type: "matches", matches: [bout]},
+    {code: "s1-g1", title: "Группа 1", stage_type: "matches", grain: {block: "s1", group: "1"}, standings: four, matches: []},
+  ]}, {stageHeaderLink: false});
+  assert.equal(grid.props["--grid-unit-rows"], "5");
+});
+
+// The Пересев's «Бой» column speaks the sheet's language — буквы, not the
+// stored s1-g5-2 — and a player of личная СИ lists the four бои the sum came
+// from. A column that reads the same in every row (ТПШ's отбор seats all 24
+// from one бой) says nothing and is dropped.
+test("the Пересев names source бои by буква and drops a column that says one thing", () => {
+  const letters = new Map([["s1-g5-2", "AB"], ["s1-g5-6", "AF"], ["s1-m1", "A"]]);
+  const stage = (entries) => ({code: "s2", stage_type: "reseed", reseedEntries: entries});
+  const many = buildReseedStagePanel(stage([
+    {rank: 1, name: "Пётр", metrics: {match: "s1-g5-2+s1-g5-6", total: 600}},
+    {rank: 2, name: "Олег", metrics: {match: "s1-g5-6", total: 290}},
+  ]), {letters});
+  assert.deepEqual(withClass(many, "reseed-source").map((n) => n.textContent), ["AB, AF", "AF"]);
+  const same = buildReseedStagePanel(stage([
+    {rank: 1, name: "Пётр", metrics: {match: "s1-m1", total: 600}},
+    {rank: 2, name: "Олег", metrics: {match: "s1-m1", total: 290}},
+  ]), {letters});
+  assert.equal(withClass(same, "reseed-source").length, 0);
+  assert.equal(withClass(same, "reseed-source-head").length, 0);
 });
