@@ -1,11 +1,13 @@
 // Package structure holds the Structure half of the unified model
 // (docs/unified-model.md, ADR-0001): the registry of Stage Kinds — the
 // composable tournament primitives (round-robin groups, elimination brackets,
-// reseeds) every game type builds its bracket from. A Stage Kind owns two
-// separable concerns: producing a stage's match schedule and ranking the
-// stage's participants from match outcomes. It never knows Protocol rules;
-// it only consumes per-slot outcomes (place + metrics) the Protocol scorer
-// produced.
+// pods, reseeds) every game type builds its bracket from. A Kind has two
+// separable roles, registered separately: an Expander produces a stage's
+// match schedule at compile time, a Ranker ranks the stage's participants
+// from match outcomes at resolve time. Most Kinds are both; a pod is only a
+// Ranker (the DSL expands it), the hand-authored kind only an Expander. The
+// package never knows Protocol rules; it only consumes per-slot outcomes
+// (place + metrics) the Protocol scorer produced.
 //
 // This package is a leaf next to domain/games: it may import storage/store for
 // the scheme vocabulary but never the server, HTTP or DB layers.
@@ -23,6 +25,7 @@ import (
 type MatchOutcome struct {
 	Code      string
 	Finished  bool
+	Round     int
 	Questions int
 	Slots     []SlotOutcome
 }
@@ -50,39 +53,89 @@ func BoutPoints(place float64) float64 {
 }
 
 // RankedEntry is one participant's row in a stage's standings. Equal ranks are
-// shared on a full tie of the configured order keys.
+// shared on a full tie of the configured order keys; Rank 0 is unplaced — a
+// pod's survivor whose места are still being played. Bouts are the codes of
+// the бои the row was summed from, when the Kind counts them.
 type RankedEntry struct {
 	Rank        int
 	Participant int64
 	Metrics     map[string]float64
+	Bouts       []string
 }
 
-// StageKind is a registered structural primitive. Schedule produces the
-// stage's matches from its config (entrant slot sources plus kind-specific
-// options); for static kinds it is complete upfront and results are ignored,
-// while incremental kinds (swiss) extend the schedule as results arrive.
-// Standings ranks the stage's participants from its matches' outcomes.
-type StageKind interface {
+// SortRule is one key of a Ranker's order — the column a standings table
+// shows for it, and the direction it sorts by.
+type SortRule = store.SortRule
+
+// Expander is a Kind's compile-time role: Schedule produces the stage's
+// matches from its config (entrant slot sources plus kind-specific options).
+type Expander interface {
 	Code() string
-	Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store.SchemeMatch, error)
+	Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error)
+}
+
+// Ranker is a Kind's resolve-time role: Standings ranks the stage's
+// participants from its matches' outcomes, and Order names the Metrics it
+// ranked by, in order — what a table of those standings shows beside М.
+type Ranker interface {
+	Code() string
 	Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntry, error)
+	Order(cfg json.RawMessage) []SortRule
 }
 
-// registry is the single source of truth for known stage kinds. Add a new
-// structural primitive by registering a StageKind — never by a switch on kind
+// The registries are the single source of truth for known stage kinds. Add a
+// new structural primitive by registering it — never by a switch on kind
 // codes elsewhere.
-var registry = map[string]StageKind{}
+var (
+	expanders = map[string]Expander{}
+	rankers   = map[string]Ranker{}
+)
 
-// Register adds a stage kind; duplicate codes are a programming error.
-func Register(kind StageKind) {
-	if _, dup := registry[kind.Code()]; dup {
-		panic("structure: duplicate stage kind " + kind.Code())
+// Register adds a stage kind under whichever roles it implements; a duplicate
+// code, or a kind with neither role, is a programming error.
+func Register(kind interface{ Code() string }) {
+	registered := false
+	if expander, ok := kind.(Expander); ok {
+		if _, dup := expanders[kind.Code()]; dup {
+			panic("structure: duplicate stage kind " + kind.Code())
+		}
+		expanders[kind.Code()] = expander
+		registered = true
 	}
-	registry[kind.Code()] = kind
+	if ranker, ok := kind.(Ranker); ok {
+		if _, dup := rankers[kind.Code()]; dup {
+			panic("structure: duplicate stage kind " + kind.Code())
+		}
+		rankers[kind.Code()] = ranker
+		registered = true
+	}
+	if !registered {
+		panic("structure: kind " + kind.Code() + " is neither an Expander nor a Ranker")
+	}
 }
 
-// Kind looks up a registered stage kind by code.
-func Kind(code string) (StageKind, bool) {
-	kind, ok := registry[code]
+// sortRules turns a Kind's order keys into SortRules: места ascend, every
+// other Metric descends.
+func sortRules(order []string) []SortRule {
+	rules := make([]SortRule, 0, len(order))
+	for _, key := range order {
+		dir := "desc"
+		if key == "place" || key == "place_sum" || key == "losses" {
+			dir = "asc"
+		}
+		rules = append(rules, SortRule{Metric: key, Dir: dir})
+	}
+	return rules
+}
+
+// ExpanderFor looks up the Kind that schedules stages of this code.
+func ExpanderFor(code string) (Expander, bool) {
+	kind, ok := expanders[code]
+	return kind, ok
+}
+
+// RankerFor looks up the Kind that ranks stages of this code.
+func RankerFor(code string) (Ranker, bool) {
+	kind, ok := rankers[code]
 	return kind, ok
 }

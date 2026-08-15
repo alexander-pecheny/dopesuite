@@ -57,6 +57,7 @@ test("a Group renders as a table of place against team", () => {
       code: "s1-g1",
       title: "Группа 1",
       stage_type: "matches",
+      sort: [{metric: "points", dir: "desc"}, {metric: "total", dir: "desc"}],
       standings: [
         {rank: 1, name: "Ктулху", metrics: {place: 1, points: 9, total: 240}},
         {rank: 2, name: "ВШЭстером", metrics: {place: 2, points: 6, total: 180}},
@@ -78,7 +79,8 @@ test("a Group renders as a table of place against team", () => {
   assert.deepEqual(names, ["", "ВШЭстером", "Ктулху"]);
   const popovers = withClass(grid, "grid-slot-team-popover").map((n) => n.textContent);
   assert.deepEqual(popovers, ["ВШЭстером", "Ктулху"]);
-  // One metric column, then М last — команда, очки, место.
+  // One metric column, then М last — команда, очки, место: the first of the
+  // Ranker's sort rules the server sent, never guessed from the numbers.
   const heads = withClass(grid, "standings-metric").map((cell) => cell.textContent);
   assert.deepEqual(heads, ["О", "6", "9"], "колонка — то, по чему блок ранжирует первым");
   const places = withClass(grid, "standings-place").map((cell) => cell.textContent);
@@ -132,25 +134,22 @@ test("a Block's groups share one column", () => {
 });
 
 // A Block of pods draws compact tables too — the Сетка shows who finished
-// where, not the бои; those belong to the block's own tab. Места come from the
-// бои: the winner never eliminated, then by how late the second Loss came.
+// where, not the бои; those belong to the block's own tab. The места are the
+// server's: the pod Kind ranks on every finish and the view carries its table.
 test("a Block of pods draws место against team, not бои", () => {
-  const bout = (code, round, a, pa, b, pb, status = "finished") => ({
-    code, round, status, participantCount: 2, slots: [{label: a}, {label: b}],
-    participants: [{name: a, place: pa}, {name: b, place: pb}],
-  });
+  const bout = (code, a, b) => ({code, participantCount: 2, slots: [{label: a}, {label: b}]});
   const pod = {
     code: "s2-g1",
     title: "DE 1",
     stage_type: "matches",
-    kind: "matches",
+    kind: "de",
     grain: {block: "s2", group: "1"},
-    matches: [
-      bout("s2-g1-m1", 1, "А", 1, "Б", 2),
-      bout("s2-g1-m2", 1, "В", 1, "Г", 2),
-      bout("s2-g1-m3", 2, "А", 1, "В", 2),
-      bout("s2-g1-m4", 2, "Б", 1, "Г", 2),
-      bout("s2-g1-m5", 3, "В", 1, "Б", 2),
+    matches: [bout("s2-g1-m1", "А", "Б"), bout("s2-g1-m2", "В", "Г")],
+    standings: [
+      {rank: 1, name: "А", metrics: {place: 1, losses: 0}},
+      {rank: 2, name: "В", metrics: {place: 2, losses: 1}},
+      {rank: 3, name: "Б", metrics: {place: 3, losses: 2}},
+      {rank: 4, name: "Г", metrics: {place: 4, losses: 2}},
     ],
   };
   const grid = buildFestGrid({stages: [pod]}, {stageHeaderLink: false});
@@ -161,9 +160,23 @@ test("a Block of pods draws место against team, not бои", () => {
     walk(cell).find((n) => String(n.className || "").includes("grid-slot-team-name"))?.textContent ?? cell.textContent);
   assert.deepEqual(names, ["", "А", "Б", "В", "Г"], "ряды в порядке посева, не мест");
   const places = withClass(grid, "standings-place").map((cell) => cell.textContent);
-  // А won the winners' final and lost nothing; В took the last бой; Б fell in
-  // it; Г lost twice by round 2.
   assert.deepEqual(places, ["М", "1", "3", "2", "4"]);
+  // A pod's table is М alone: its Ranker sends no sort rules.
+  assert.equal(withClass(grid, "standings-metric").length, 0);
+});
+
+// A Group whose Ranker has not written a table yet — nothing finished — draws
+// placeless rows in seating order, so the map of who sits where is there
+// before a бой is played.
+test("a Group without a table yet draws placeless rows", () => {
+  const pod = {
+    code: "s2-g1", title: "DE 1", stage_type: "matches", kind: "de",
+    grain: {block: "s2", group: "1"},
+    matches: [{code: "s2-g1-m1", participantCount: 2, slots: [{label: "А"}, {label: "Б"}]}],
+  };
+  const grid = buildFestGrid({stages: [pod]}, {stageHeaderLink: false});
+  const places = withClass(grid, "standings-place").map((cell) => cell.textContent);
+  assert.deepEqual(places, ["М", "", ""]);
 });
 
 // A legacy grouped stage — matched by its -gN code alone, kind unknown — keeps
@@ -182,31 +195,6 @@ test("a legacy group without standings keeps its бои", () => {
   const grid = buildFestGrid({stages: [legacy(1), legacy(2)]}, {stageHeaderLink: false});
   assert.equal(withClass(grid, "grid-standings").length, 0);
   assert.equal(withClass(grid, "grid-match").length, 2, "legacy бои остаются в Сетке");
-});
-
-// A pod still mid-play ranks only the eliminated: survivors' места are not
-// invented while their бои are open.
-test("an unfinished pod leaves survivors unplaced", () => {
-  const bout = (code, round, a, pa, b, pb, status) => ({
-    code, round, status, participantCount: 2, slots: [{label: a}, {label: b}],
-    participants: [{name: a, place: pa}, {name: b, place: pb}],
-  });
-  const pod = {
-    code: "s2-g1",
-    title: "DE 1",
-    stage_type: "matches",
-    kind: "matches",
-    grain: {block: "s2", group: "1"},
-    matches: [
-      bout("s2-g1-m1", 1, "А", 1, "Б", 2, "finished"),
-      bout("s2-g1-m2", 1, "В", 1, "Г", 2, "finished"),
-      bout("s2-g1-m3", 2, "А", 0, "В", 0, "pending"),
-      bout("s2-g1-m4", 2, "Б", 1, "Г", 2, "finished"),
-    ],
-  };
-  const grid = buildFestGrid({stages: [pod]}, {stageHeaderLink: false});
-  const places = withClass(grid, "standings-place").map((cell) => cell.textContent);
-  assert.deepEqual(places, ["М", "", "", "", "4"]);
 });
 
 // Bracket rounds carry no group, so they keep a column each — ЭК's Сетка
@@ -322,7 +310,7 @@ test("the row is as tall as the grid's tallest box, up to a head and four seats"
 // from one бой) says nothing and is dropped.
 test("the Пересев names source бои by буква and drops a column that says one thing", () => {
   const letters = new Map([["s1-g5-2", "AB"], ["s1-g5-6", "AF"], ["s1-m1", "A"]]);
-  const stage = (entries) => ({code: "s2", stage_type: "reseed", reseedEntries: entries});
+  const stage = (entries) => ({code: "s2", stage_type: "reseed", sort: [{metric: "total", dir: "desc"}], reseedEntries: entries});
   const many = buildReseedStagePanel(stage([
     {rank: 1, name: "Пётр", metrics: {match: "s1-g5-2+s1-g5-6", total: 600}},
     {rank: 2, name: "Олег", metrics: {match: "s1-g5-6", total: 290}},

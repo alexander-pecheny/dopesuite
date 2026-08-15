@@ -27,7 +27,7 @@ type flatConfig struct {
 	Rules    Rules              `json:"rules"`
 }
 
-func (flat) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store.SchemeMatch, error) {
+func (flat) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	var conf flatConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("flat config: %w", err)
@@ -85,10 +85,7 @@ func (flat) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntr
 			ranked = append(ranked, RankedEntry{Participant: slot.Participant, Metrics: metrics})
 		}
 	}
-	order := conf.Order
-	if order == nil {
-		order = []string{"place"}
-	}
+	order := flatOrder(conf)
 	sort.SliceStable(ranked, func(i, j int) bool {
 		for _, key := range order {
 			a, b := ranked[i].Metrics[key], ranked[j].Metrics[key]
@@ -110,4 +107,19 @@ func (flat) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntr
 		}
 	}
 	return ranked, nil
+}
+
+func flatOrder(conf flatConfig) []string {
+	if conf.Order == nil {
+		return []string{"place"}
+	}
+	return conf.Order
+}
+
+func (flat) Order(cfg json.RawMessage) []SortRule {
+	var conf flatConfig
+	if err := json.Unmarshal(cfg, &conf); err != nil {
+		return nil
+	}
+	return sortRules(flatOrder(conf))
 }

@@ -39,7 +39,7 @@ func BracketOrder(n int) []int {
 	return order
 }
 
-func (singleElim) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store.SchemeMatch, error) {
+func (singleElim) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	var conf seConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("se config: %w", err)
@@ -102,6 +102,9 @@ func roundTitle(rounds, round, index int) string {
 		return fmt.Sprintf("1/%d финала %d", 1<<uint(rounds-round), index)
 	}
 }
+
+// A bracket ranks by progression, which no column shows; its table is М alone.
+func (singleElim) Order(cfg json.RawMessage) []SortRule { return nil }
 
 // Standings ranks by progression: the champion first, then losers by the round
 // they fell in, late rounds ranking higher. Participants still alive share the

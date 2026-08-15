@@ -56,7 +56,7 @@ var rrCanonTables = map[[2]int][][][]int{
 	},
 }
 
-func (roundRobin) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store.SchemeMatch, error) {
+func (roundRobin) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	var conf rrConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("rr config: %w", err)
@@ -244,10 +244,7 @@ func multiSeatStandings(conf rrStandingsConfig, results []MatchOutcome) ([]Ranke
 			return nil, err
 		}
 	}
-	order := conf.Order
-	if order == nil {
-		order = []string{"points", "total", "plus"}
-	}
+	order := rrOrder(conf)
 	byParticipant := map[int64]*RankedEntry{}
 	var appearance []int64
 	for _, match := range results {
@@ -313,6 +310,35 @@ func multiSeatStandings(conf rrStandingsConfig, results []MatchOutcome) ([]Ranke
 	return ranked, nil
 }
 
+// rrOrder is the group's ranking keys: the scheme's, else the two-seat
+// default with личная встреча or the multi-seat one without.
+func rrOrder(conf rrStandingsConfig) []string {
+	if conf.Order != nil {
+		return conf.Order
+	}
+	if conf.MatchSize > 2 || len(conf.Rules.Bout)+len(conf.Rules.Standings) > 0 {
+		return []string{"points", "total", "plus"}
+	}
+	return []string{"points", "h2h", "taken", "diff"}
+}
+
+// Order lists the group's keys as columns; личная встреча is a comparator
+// over the tied, not a number a row carries, so it is not one.
+func (roundRobin) Order(cfg json.RawMessage) []SortRule {
+	var conf rrStandingsConfig
+	if err := json.Unmarshal(cfg, &conf); err != nil {
+		return nil
+	}
+	rules := sortRules(rrOrder(conf))
+	out := rules[:0]
+	for _, rule := range rules {
+		if rule.Metric != "h2h" {
+			out = append(out, rule)
+		}
+	}
+	return out
+}
+
 func (roundRobin) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntry, error) {
 	var conf rrStandingsConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
@@ -329,10 +355,7 @@ func (roundRobin) Standings(cfg json.RawMessage, results []MatchOutcome) ([]Rank
 	if metric == "" {
 		metric = "taken"
 	}
-	order := conf.Order
-	if order == nil {
-		order = []string{"points", "h2h", "taken", "diff"}
-	}
+	order := rrOrder(conf)
 
 	byParticipant := map[int64]*RankedEntry{}
 	var appearance []int64

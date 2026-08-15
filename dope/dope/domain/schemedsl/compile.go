@@ -850,7 +850,7 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 	if err != nil {
 		return nil, err
 	}
-	kind, ok := structure.Kind("flat")
+	kind, ok := structure.ExpanderFor("flat")
 	if !ok {
 		return nil, errAt(0, "flat не зарегистрирован в реестре видов")
 	}
@@ -880,7 +880,7 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 	if err != nil {
 		return nil, err
 	}
-	matches, err := kind.Schedule(configJSON, nil)
+	matches, err := kind.Schedule(configJSON)
 	if err != nil {
 		return nil, errAt(blk.Line, "%s", err.Error())
 	}
@@ -1005,7 +1005,7 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 	if err != nil {
 		return nil, err
 	}
-	rr, ok := structure.Kind("rr")
+	rr, ok := structure.ExpanderFor("rr")
 	if !ok {
 		return nil, errAt(0, "rr не зарегистрирован в реестре видов")
 	}
@@ -1032,7 +1032,7 @@ func (c *compiler) expandRoundRobin(index int, blk Section) (*blockOutputs, erro
 		if err != nil {
 			return nil, err
 		}
-		matches, err := rr.Schedule(configJSON, nil)
+		matches, err := rr.Schedule(configJSON)
 		if err != nil {
 			return nil, errAt(blk.Line, "%s", err.Error())
 		}
@@ -1603,7 +1603,7 @@ func (c *compiler) emitLivesBracket(index int, blk Section, group, groups int, p
 				match.Round = roundOf[boutIndex]
 				all = append(all, match)
 			}
-			c.appendManualStage(blk, stageCode, fmt.Sprintf("DE %d", group), nil,
+			c.appendPodStage(blk, stageCode, fmt.Sprintf("DE %d", group), plan,
 				at{block: blockCode, group: groupCode(groups, group)}, all)
 			return codes, []string{stageCode}, nil
 		}
@@ -1764,6 +1764,20 @@ func (c *compiler) appendManualStage(blk Section, code, title string, rounds []s
 		Matches:   matches,
 		Config:    configJSON,
 	})
+}
+
+// appendPodStage is appendManualStage for a pod: the same hand-drawn бои, but
+// the stage ranks itself — Kind "de" — so its config carries what the Ranker
+// counts a Loss by, its lives and winning places.
+func (c *compiler) appendPodStage(blk Section, code, title string, plan *dePlan, where at, matches []store.SchemeMatch) {
+	c.appendManualStage(blk, code, title, nil, where, matches)
+	stage := &c.scheme.Stages[len(c.scheme.Stages)-1]
+	stage.Kind = "de"
+	config := map[string]any{}
+	_ = json.Unmarshal(stage.Config, &config)
+	config["lives"] = plan.lives
+	config["winning_places"] = plan.winning
+	stage.Config, _ = json.Marshal(config)
 }
 
 // rejectRoundKeys fails on dotted overrides whose suffix names no round of

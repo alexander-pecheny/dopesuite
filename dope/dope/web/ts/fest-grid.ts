@@ -41,13 +41,14 @@ export interface FestGridMatch {
   row?: number;
 }
 
-export interface ReseedSortRule {
-  metric?: string;
+export interface SortRule {
+  metric: string;
   dir?: string;
 }
 
 export interface ReseedEntry {
   rank?: number;
+  participantID?: number;
   name?: string;
   metrics?: Record<string, unknown>;
 }
@@ -60,13 +61,13 @@ export interface FestGridStage {
   kind?: string;
   grain?: {block?: string; group?: string; wave?: number};
   standings?: ReseedEntry[];
+  // sort is the Ranker's order, from the server: the columns a table shows.
+  sort?: SortRule[] | null;
   layout?: { columns?: number };
   matches?: FestGridMatch[];
   reseedEntries?: ReseedEntry[];
   reseedBlockedMessage?: string;
   reseedPendingMatches?: Array<string | number | null | undefined>;
-  config?: unknown;
-  configJson?: unknown;
 }
 
 export interface FestGridData {
@@ -142,7 +143,7 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
       columns.appendChild(buildStandingsStage(stage, liveStage, standings, options, order));
       return;
     }
-    const table = ungradedStandings(stage, liveStage, order);
+    const table = ungradedStandings(stage, order);
     if (table) {
       columns.appendChild(buildStandingsStage(stage, liveStage, table, options, order));
       return;
@@ -234,10 +235,10 @@ function buildBlockColumn(
     const order = stageSlotOrder(stage, liveStage);
     const standings = liveStage.standings || stage.standings || [];
     if (standings.length) {
-      stack.appendChild(buildStandingsTable(standings, order, tableHead(stage, liveStage)));
+      stack.appendChild(buildStandingsTable(standings, order, tableHead(stage, liveStage), liveStage.sort || stage.sort));
       return;
     }
-    const table = ungradedStandings(stage, liveStage, order);
+    const table = ungradedStandings(stage, order);
     if (table) {
       stack.appendChild(buildStandingsTable(table, order, tableHead(stage, liveStage)));
       return;
@@ -332,18 +333,16 @@ export function buildReseedStagePanel(
     wrapper.appendChild(actions);
   }
 
-  const sortRules = reseedSortRules(stage);
+  // The columns are the Ranker's sort rules, one each, as the server sent them.
+  const sortRules = stage?.sort || [];
+  const metricColumns = sortRules.map((rule) => rule.metric)
+    .filter((metric, index, values) => values.indexOf(metric) === index);
   // The source бои speak in буквы; a column that reads the same in every row
   // — the отбор seats everyone from one бой — says nothing and goes.
   const letters = options.letters || boutLetters;
   const sources = entries.map((entry) => String(entry.metrics?.match || "").split("+").filter(Boolean)
     .map((code) => letters?.get(code) || code).join(", "));
   const hasSourceMatch = sources.some(Boolean) && new Set(sources).size > 1;
-  const metricColumns = sortRules.length > 0
-    ? sortRules
-        .map((rule) => rule.metric)
-        .filter((metric, index, values): metric is string => Boolean(metric) && values.indexOf(metric) === index)
-    : fallbackReseedMetrics(entries);
 
   const table = document.createElement("table");
   table.className = "results-table reseed-results-table";
@@ -429,7 +428,7 @@ function buildStandingsStage(
   section.appendChild(header);
   const body = document.createElement("div");
   body.className = "grid-matches";
-  body.appendChild(buildStandingsTable(standings, order, tableHead(stage, liveStage)));
+  body.appendChild(buildStandingsTable(standings, order, tableHead(stage, liveStage), liveStage.sort || stage.sort));
   section.appendChild(body);
   return section;
 }
@@ -488,69 +487,18 @@ function stageSlotOrder(stage: FestGridStage, liveStage: FestGridStage): string[
   return order;
 }
 
-// ungradedStandings is the compact table for a grouped stage the server keeps
-// no ranking for. A pod earns derived места; a graded Kind whose table simply
-// has not been computed yet gets placeless rows; a legacy stage the scheme
-// never graded (kind unknown, blockOf by code convention alone) gets nothing —
-// its бои stay, because inventing pod rules for a round-robin misranks it.
-function ungradedStandings(stage: FestGridStage, liveStage: FestGridStage, order: string[]): ReseedEntry[] | null {
-  if (!stage.grain?.group || !order.length) return null;
-  if (stage.kind === "matches") return podStandings(stage, liveStage, order);
-  if (stage.kind) return order.map((name) => ({name, metrics: {}}));
-  return null;
+// ungradedStandings is the compact table for a Group whose Ranker has not
+// written a table yet — placeless rows in seating order, so the map of who
+// sits where is there before a бой is played. A legacy stage the scheme never
+// graded (kind unknown, blockOf by code convention alone) gets nothing — its
+// бои stay.
+function ungradedStandings(stage: FestGridStage, order: string[]): ReseedEntry[] | null {
+  if (!stage.grain?.group || !order.length || !stage.kind) return null;
+  return order.map((name) => ({name, metrics: {}}));
 }
 
-// podStandings ranks a pod from its бои, since the server keeps no table for
-// one: the never-eliminated first (fewest Losses), then by how late the second
-// Loss came. A tie the бои did not settle shares its place, the way every
-// scorer here does; survivors of an unfinished pod stay unplaced — their места
-// are still being played. Only an outright lost бой counts: a shared place is
-// a tie, not a Loss.
-function podStandings(stage: FestGridStage, liveStage: FestGridStage, order: string[]): ReseedEntry[] {
-  const liveMatches = new Map((liveStage.matches || []).map((match) => [match.code, match]));
-  const losses = new Map<string, number>();
-  const eliminated = new Map<string, number>();
-  let allFinished = (stage.matches || []).length > 0;
-  (stage.matches || []).forEach((match) => {
-    const live = liveMatches.get(match.code);
-    if (live?.status !== "finished") {
-      allFinished = false;
-      return;
-    }
-    const round = Number((match as {round?: number}).round || 1);
-    for (const seat of live.participants || []) {
-      const name = String(seat?.name || "");
-      const place = Number(seat?.place || 0);
-      if (!name || place < 2 || !Number.isInteger(place)) continue;
-      const count = (losses.get(name) || 0) + 1;
-      losses.set(name, count);
-      if (count === 2 && !eliminated.has(name)) eliminated.set(name, round);
-    }
-  });
-  // Rank key: alive before eliminated, fewer Losses first, later elimination
-  // first. Equal keys are ties the pod never split — they share a place.
-  const key = (name: string): number => {
-    const out = eliminated.get(name);
-    if (out !== undefined) return 1000 - out;
-    return (losses.get(name) || 0) - 1000;
-  };
-  const ranked = order.slice().sort((a, b) => key(a) - key(b));
-  const places = new Map<string, number>();
-  for (let start = 0; start < ranked.length;) {
-    let end = start + 1;
-    while (end < ranked.length && key(ranked[end]) === key(ranked[start])) end += 1;
-    const shared = (start + end + 1) / 2;
-    for (let i = start; i < end; i += 1) places.set(ranked[i], shared);
-    start = end;
-  }
-  return order.map((name) => {
-    const placed = eliminated.has(name) || allFinished;
-    return {name, metrics: placed ? {place: places.get(name) || 0} : {}};
-  });
-}
-
-function buildStandingsTable(standings: ReseedEntry[], order: string[], head: TableHead): HTMLElement {
-  const metrics = standingsMetrics(standings);
+function buildStandingsTable(standings: ReseedEntry[], order: string[], head: TableHead, sort?: SortRule[] | null): HTMLElement {
+  const metrics = (sort || []).slice(0, STANDINGS_COLUMNS).map((rule) => rule.metric);
   const table = document.createElement("table");
   table.className = "grid-standings";
   const headRow = document.createElement("tr");
@@ -591,11 +539,10 @@ function slotIndex(order: string[], entry: ReseedEntry): number {
   return index < 0 ? order.length + Number(entry.rank || 0) : index;
 }
 
-// standingsMetrics picks the columns worth showing. The Сетка is a glance, not a
-// report: место, who, and the one number the block ranks by first. A second
-// number costs forty pixels the names need — «Ярослав Кудымов» does not fit
-// beside two of them — and everything else belongs on the stage's own page. A
-// жребий that broke no tie is a column of zeroes either way.
+// The Сетка is a glance, not a report: место, who, and the one number the
+// Block ranks by first — the first of the Ranker's sort rules the server sent.
+// A second number costs forty pixels the names need, and everything else
+// belongs on the stage's own page.
 const STANDINGS_COLUMNS = 1;
 
 // The Сетка's columns are a glance wide, and it already writes М and Σ rather
@@ -604,19 +551,6 @@ const STANDINGS_COLUMNS = 1;
 function standingsMetricLabel(metric: string): string {
   const short: Record<string, string> = {points: "О", taken: "В", bouts: "Б"};
   return short[metric] || reseedMetricLabel(metric);
-}
-
-function standingsMetrics(standings: ReseedEntry[]): string[] {
-  const present = new Set<string>();
-  standings.forEach((entry) => {
-    Object.entries(entry.metrics || {}).forEach(([key, value]) => {
-      if (typeof value === "number" && key !== "place" && key !== "draw") present.add(key);
-    });
-  });
-  const preferred = ["points", "total", "taken", "plus", "place_sum"];
-  const ordered = preferred.filter((metric) => present.has(metric));
-  const chosen = ordered.length ? ordered : Array.from(present).sort();
-  return chosen.slice(0, STANDINGS_COLUMNS);
 }
 
 function buildMatchesStage(stage: FestGridStage, liveStage: FestGridStage, options: FestGridOptions = {}): HTMLElement {
@@ -780,41 +714,7 @@ export function parseScheme(raw: unknown): FestScheme | null {
   }
 }
 
-function reseedSortRules(stage: FestGridStage | null | undefined): ReseedSortRule[] {
-  const config = parseObject(stage?.config) || parseObject(stage?.configJson);
-  const sort = config?.sort;
-  return Array.isArray(sort)
-    ? (sort as ReseedSortRule[]).filter((rule) => rule?.metric)
-    : [];
-}
-
-function parseObject(value: unknown): Record<string, unknown> | null {
-  if (!value) return null;
-  if (typeof value === "object") return value as Record<string, unknown>;
-  if (typeof value !== "string") return null;
-  try {
-    return JSON.parse(value) as Record<string, unknown>;
-  } catch (error) {
-    return null;
-  }
-}
-
-function fallbackReseedMetrics(entries: ReseedEntry[]): string[] {
-  const preferred = ["place_sum", "total", "plus", "correct_50", "correct_40", "correct_30", "correct_20", "draw"];
-  const present = new Set<string>();
-  entries.forEach((entry) => {
-    Object.keys(entry.metrics || {}).forEach((metric) => {
-      if (metric !== "match") present.add(metric);
-    });
-  });
-  const ordered = preferred.filter((metric) => present.has(metric));
-  Array.from(present).sort().forEach((metric) => {
-    if (!ordered.includes(metric)) ordered.push(metric);
-  });
-  return ordered;
-}
-
-function reseedMetricHeader(metric: string, sortRules: ReseedSortRule[]): string {
+function reseedMetricHeader(metric: string, sortRules: SortRule[]): string {
   const rule = sortRules.find((item) => item.metric === metric);
   const direction = rule?.dir === "asc" ? "↑" : rule?.dir === "desc" ? "↓" : "";
   return direction ? `${reseedMetricLabel(metric)} ${direction}` : reseedMetricLabel(metric);

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"dope/dope/domain/resolver"
 	"dope/dope/domain/scoring"
+	"dope/dope/domain/structure"
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
@@ -131,6 +132,10 @@ order by position, id`, stageArgs...)
 		return store.FestView{}, err
 	}
 	for _, record := range stageRecords {
+		record.Stage.Kind = record.Kind
+		if ranker, ok := structure.RankerFor(record.Kind); ok {
+			record.Stage.Sort = ranker.Order(resolver.KindConfig(record.Stage.Config))
+		}
 		if record.Stage.Type == "reseed" {
 			entries, err := store.LoadReseedEntries(ctx, q, record.ID)
 			if err != nil {

@@ -142,6 +142,16 @@ type StageView struct {
 	// It is the same shape and the same source as a пересев's entries; only the
 	// meaning differs, so the Сетка can draw a Group as the sheets do.
 	Standings []ReseedEntryView `json:"standings,omitempty"`
+	// Kind is the stage's Kind code; Sort the Metrics its Ranker ranked by, in
+	// order — the columns a table of Standings (or ReseedEntries) shows.
+	Kind string     `json:"kind,omitempty"`
+	Sort []SortRule `json:"sort,omitempty"`
+}
+
+// SortRule is one key of a Ranker's order: the Metric and its direction.
+type SortRule struct {
+	Metric string `json:"metric"`
+	Dir    string `json:"dir"`
 }
 
 type ReseedEntryView struct {

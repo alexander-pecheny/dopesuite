@@ -1246,7 +1246,6 @@ function mergedStage(data: FestView, code: string): FestGridStage {
   return {
     ...schemeStage,
     ...liveStage,
-    config: liveStage.config || schemeStage.config,
     reseedEntries: liveStage.reseedEntries || schemeStage.reseedEntries || [],
   };
 }

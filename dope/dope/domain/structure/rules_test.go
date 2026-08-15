@@ -149,7 +149,7 @@ func TestBadExpressionNamesItsRule(t *testing.T) {
 // The СИ group: nine players, three at a table, four круга, and no pair ever
 // meets twice — the affine plane AG(2,3), in the reference sheets' own order.
 func TestSIGroupScheduleMeetsEveryoneOnce(t *testing.T) {
-	rr, ok := Kind("rr")
+	rr, ok := ExpanderFor("rr")
 	if !ok {
 		t.Fatal("rr not registered")
 	}
@@ -163,7 +163,7 @@ func TestSIGroupScheduleMeetsEveryoneOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matches, err := rr.Schedule(cfg, nil)
+	matches, err := rr.Schedule(cfg)
 	if err != nil {
 		t.Fatalf("Schedule: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestSIGroupScheduleMeetsEveryoneOnce(t *testing.T) {
 
 // Очки за бой на троих: 4 − место, и поделённое место платит среднее.
 func TestSIGroupStandingsPayByPlace(t *testing.T) {
-	rr, _ := Kind("rr")
+	rr, _ := RankerFor("rr")
 	cfg, _ := json.Marshal(map[string]any{"matchSize": 3, "order": []string{"points", "total"}})
 	results := []MatchOutcome{
 		bout(true, 6,

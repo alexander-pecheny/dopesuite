@@ -172,8 +172,9 @@ type deBout struct {
 // dePlan is a whole elimination with lives: бои in play order, grouped into
 // rounds, and who is left when it stops.
 type dePlan struct {
-	bouts  []deBout
-	rounds [][]int
+	lives, winning int
+	bouts          []deBout
+	rounds         [][]int
 	// alive[r] is everyone still in at round r, in the rank order the reseed
 	// hands out — including the brackets that sit the round out, because they
 	// still hold their ranks and the бои of that round are numbered around them.
@@ -213,7 +214,7 @@ func planLivesDrawn(entrants, lives, winning, proceeding int, sizeFor func(round
 	if proceeding < 1 {
 		proceeding = 1
 	}
-	plan := &dePlan{}
+	plan := &dePlan{lives: lives, winning: winning}
 	brackets := make([][]deSource, lives)
 	for rank := 1; rank <= entrants; rank++ {
 		brackets[0] = append(brackets[0], deSource{entrant: rank})

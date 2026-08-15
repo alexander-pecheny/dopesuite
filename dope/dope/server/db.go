@@ -12,6 +12,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/auditmw"
@@ -797,6 +798,63 @@ create table if not exists stage_standings(
 	}
 	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(21, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
 		return err
+	}
+	// v23: a pod ranks itself. Pods were compiled as hand-drawn «matches»
+	// stages and ranked in the browser; now the «de» Ranker writes their table
+	// like every other Group's, so the rows are retagged and ranked once. Only
+	// a Group of a manual stage is a pod — the grain says which.
+	var hasV23 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 23`).Scan(&hasV23); err != nil {
+		return err
+	}
+	if hasV23 == 0 {
+		if err := rankPodsBackfill(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(23, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// rankPodsBackfill retags every pod stage as Kind «de» and lets the resolver
+// write its table, one game at a time.
+func rankPodsBackfill(db *sql.DB) error {
+	rows, err := db.Query(`select distinct game_id from stages where kind = 'matches' and group_code <> ''`)
+	if err != nil {
+		return err
+	}
+	var gameIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		gameIDs = append(gameIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, gameID := range gameIDs {
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`update stages set kind = 'de' where game_id = ? and kind = 'matches' and group_code <> ''`, gameID); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if _, err := resolver.ResolveGameSlotsTx(context.Background(), tx, gameID); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

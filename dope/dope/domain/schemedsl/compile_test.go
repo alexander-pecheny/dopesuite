@@ -186,9 +186,18 @@ func TestCompileKinsbf(t *testing.T) {
 	}
 
 	// Block 2: DE group 1 draws rows (wave pairs) — s1-g1/1, s1-g2/2, s1-g7/1, s1-g8/2.
+	// A pod is hand-drawn бои that rank themselves: Kind "de", with the Loss
+	// rule (two lives, one winning place) in its config for the Ranker.
 	de1 := stageByCode(t, scheme, "s2-g1")
-	if de1.Kind != "matches" || de1.StageType != "matches" || len(de1.Matches) != 5 {
+	if de1.Kind != "de" || de1.StageType != "matches" || len(de1.Matches) != 5 {
 		t.Fatalf("de stage: kind=%s matches=%d", de1.Kind, len(de1.Matches))
+	}
+	var podRules struct {
+		Lives   int `json:"lives"`
+		Winning int `json:"winning_places"`
+	}
+	if err := json.Unmarshal(de1.Config, &podRules); err != nil || podRules.Lives != 2 || podRules.Winning != 1 {
+		t.Fatalf("de config = %s (%v), want lives 2, winning_places 1", de1.Config, err)
 	}
 	m1 := de1.Matches[0].Slots
 	if m1[0].Reseed.Stage != "s1-g1" || m1[0].Reseed.Rank != 1 || m1[1].Reseed.Stage != "s1-g2" || m1[1].Reseed.Rank != 2 {
