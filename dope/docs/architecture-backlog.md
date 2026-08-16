@@ -1,7 +1,7 @@
 # Architecture backlog — hand-off notes
 
 The 15 Aug 2026 architecture review of branch `dope-brain` named ten
-deepening candidates. Four were done on the branch; six are open, each with a
+deepening candidates. Five are done (four on `dope-brain`, #7 on `dope-refactor`); five are open, each with a
 note in this directory written for a fresh agent. The vocabulary is
 `CONTEXT.md`'s for the domain (Fest, Game, Block, Round, Wave, Group, Сетка,
 Бой, Protocol, Metric, Slot) and the `/codebase-design` skill's for the
@@ -18,6 +18,7 @@ them, and ask before widening a note's scope.
 | 2 | `domain/gamebuild` (`Spec` / `Create` / `Recompile` / `Rebuild`) out of the host pages | `cba2d5f` |
 | 4 | one ЭК page, `web/ts/ek.ts`, host and spectator gated on a `viewer` flag | `0bcf14a` |
 | — | Сетка geometry as tokens + `classcheck` geometry lint + verify matrix (from the 16 Aug phone review) | `74b1379` |
+| 7 | one skin: the Сетка's group table is a бой box (`grid-box` / `grid-slot-cell`), `standingsTable(spec)` + `resultsTeamCell` build every standings table and name cell | `8ad113c` |
 
 ## Open
 
@@ -25,14 +26,14 @@ them, and ask before widening a note's scope.
 |---|---|---|---|
 | 5 | [protocol-seam.md](protocol-seam.md) — widen `protocol.Protocol`, delete the string switches | worth exploring | — |
 | 6 | [game-tabs.md](game-tabs.md) — one `gameTabs` module, pages render tabs and never derive them | worth exploring | #3 (done) |
-| 7 | [setka-one-skin.md](setka-one-skin.md) — one cell class and one builder for every standings table and name cell | worth exploring; raised to *do next* by the 16 Aug review | — |
 | 8 | [replay-adapters.md](replay-adapters.md) — a Structure-level `replay.Game` adapter, coordinates and standings on the interface, one transcript codec per Protocol | worth exploring | #1, #2 (done) |
 | 9 | [kind-config-typing.md](kind-config-typing.md) — the Kind config as a Go type the DSL emits and the resolver reads | speculative | #1 (done, halved it) |
 | 10 | [fest-grid-planner.md](fest-grid-planner.md) — a pure layout planner in front of the Сетка painter | speculative | do with #7 or not at all |
 
-Suggested order: 7, then 6 (both client, both about the Сетка's tables and
-tabs), then 5 and 9 together (both about what a Protocol and a Kind declare),
-then 8. 10 only if the grid changes anyway.
+Suggested order: 6 (client, the Сетка's tabs), then 5 and 9 together (both
+about what a Protocol and a Kind declare), then 8. 10 only if the grid changes
+anyway; #7 rebuilt the group table as a бой box, so a planner would now front
+one box kind, not two.
 
 ## How to work a note
 
