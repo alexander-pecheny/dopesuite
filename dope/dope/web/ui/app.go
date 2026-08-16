@@ -75,11 +75,14 @@ func mustApp() *base.App {
 			DefaultKind:  "sheet",
 			PageKinds: map[string]base.PageKind{
 				"public": {Body: []string{"public"}, Main: []string{"public-main"}},
-				"sheet":  {Body: []string{"host", "import-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "import-frame"}},
-				"ek":     {Body: []string{"host", "host-compact", "ek-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
-				"od":     {Body: []string{"host", "host-compact", "od-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
-				"si":     {Body: []string{"host", "host-compact", "si-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
-				"brain":  {Body: []string{"host", "host-compact", "brain-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
+				// The gallery scrolls like a public page but takes the whole width;
+				// each of its sections is its own horizontal scroller.
+				"gallery": {Body: []string{"public"}, Main: []string{"public-main", "gallery-main"}},
+				"sheet":   {Body: []string{"host", "import-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "import-frame"}},
+				"ek":      {Body: []string{"host", "host-compact", "ek-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
+				"od":      {Body: []string{"host", "host-compact", "od-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
+				"si":      {Body: []string{"host", "host-compact", "si-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
+				"brain":   {Body: []string{"host", "host-compact", "brain-page"}, Main: []string{"match-main"}, Frame: []string{"sheet-frame", "fight-frame"}},
 			},
 			TopbarSync: base.SyncSpec{ID: "status", Class: "sync-status", State: "saved", Label: "Готово"},
 			HeadHook:   headHook,

@@ -83,6 +83,7 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 | `stage-cache.ts` | 289 | Shared pane cache (`createStageCache`) for EK — per-stage match state, deduped prefetch, SSE routing. Used by `ek.ts` |
 | `login.ts` (kit) | — | Multi-step auth UI — username → password/code branch, redirect on success (dopeuikit `assets/ts/`) |
 | `profile.ts` | 49 | Password change form (new password vs change password modes) |
+| `gallery.ts` | ~140 | The gallery (`/gallery`, dev mode only): every shared table and the Сетка from fixtures on one page — the skin sheet `scripts/matrix.py` (`just matrix`, the verify skill's hand-over matrix) shoots first |
 
 **Module seam (ADR-0003, amended by root ADR-0001)**: each game page loads ONE `dist/<page>.js` bundle built from `dope/web/ts/pages/<page>.ts` — the init-payload boot, then the self-booting page module. The SSE engine is `state-sync.ts` (one implementation: `createStateSync` for od/si state blobs, `createLiveEvents` for ЭК scoped dispatch; both take an injectable stream adapter for tests), re-exported through `match-table.ts` so consumers keep one import. Cross-file wiring is ES imports (`DopeTable` from `match-table.ts`, `createStageCache`, fest-grid exports); the only published globals are `window.dopeMenu`/`window.dopeMenuConfig` (typed in dopeuikit's `globals.d.ts`) and the server-inlined init payloads. Frontend tests import per-file ESM emitted to `web/jstest/dist/`.
 
@@ -119,7 +120,9 @@ Server listens on port **9672** by default (override with `$PORT`). Database def
 ## Testing UI Changes
 Use the `verify` skill (repo root `.claude/skills/verify/`): `agent-browser`
 drives a persistent headless Chrome from the shell (login/flow/screenshot/mobile
-emulation all documented there).
+emulation all documented there). `just matrix` is the skill's hand-over matrix
+as a tool: HEAD against the working tree, 22 pages × phone/desktop × light/dark,
+pixel-diffed, in ~2.5 minutes (`scripts/matrix.py`).
 
 ## UI markup (DopeUIKit)
 No hand-written HTML anywhere. **DopeUIKit** (`pecheny.me/dopeuikit`, vendored via

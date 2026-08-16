@@ -4550,3 +4550,21 @@ body.is-fullscreen.od-page .match-main {
      over-contrasty against the dark cells. */
   --ksi-sticker-dim: brightness(0.85);
 }
+
+/* The gallery (/gallery, dev mode): every shared table and the Сетка from
+   fixtures on one page, each in the host its page gives it. */
+.gallery-main {
+  max-width: none;
+  padding: 0;
+  gap: 0;
+}
+
+.gallery-section {
+  padding: var(--space-3) var(--space-4);
+  overflow-x: auto;
+}
+
+.gallery-head {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
+}
