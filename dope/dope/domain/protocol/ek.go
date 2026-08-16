@@ -13,15 +13,19 @@ import (
 func init() { Register(ek{}) }
 
 // ek wraps the existing EK (эрудит-квартет) pure scoring: state is
-// store.MatchState, totals come from store.ScoreTeam, and places are the
+// store.MatchState, totals come from store.ScoreParticipant, and places are the
 // host-entered ones (auto-placement arrives with the migration; parity with
 // the current system requires manual places for now).
 type ek struct{}
 
 func (ek) Code() string { return "ek" }
 
+// Metrics: Σ, Σ+ (положительные ответы), перестрелка и тайбрейк.
+func (ek) Metrics() []string { return []string{"total", "plus", "shootoutTotal", "tiebreak"} }
+
 type ekConfig struct {
 	Participants int `json:"participants"`
+	Themes       int `json:"themes"`
 }
 
 func (ek) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
@@ -31,8 +35,8 @@ func (ek) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 			return nil, fmt.Errorf("ek config: %w", err)
 		}
 	}
-	state := store.MatchState{Teams: make([]store.TeamState, conf.Participants)}
-	store.NormalizeState(&state)
+	state := store.MatchState{Participants: make([]store.ParticipantState, conf.Participants)}
+	store.NormalizeStateTo(&state, conf.Themes)
 	return json.Marshal(state)
 }
 
@@ -49,8 +53,8 @@ func (ek) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error)
 		return nil, fmt.Errorf("ek state: %w", err)
 	}
 	view := store.BuildView(state)
-	outcomes := make([]structure.SlotOutcome, len(view.Teams))
-	for i, team := range view.Teams {
+	outcomes := make([]structure.SlotOutcome, len(view.Participants))
+	for i, team := range view.Participants {
 		outcomes[i] = structure.SlotOutcome{
 			Place: team.Place,
 			Metrics: map[string]float64{

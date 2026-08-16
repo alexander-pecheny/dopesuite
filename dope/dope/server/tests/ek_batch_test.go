@@ -65,19 +65,19 @@ func TestBatchMatchUpdateAppliesAllEdits(t *testing.T) {
 		t.Fatalf("reload: %v", err)
 	}
 	for label, v := range map[string]store.MatchView{"returned": view, "reloaded": reloaded} {
-		if v.Teams[0].Themes[0].Answers[0] != "right" {
-			t.Fatalf("%s: team0 ans0 = %q, want right", label, v.Teams[0].Themes[0].Answers[0])
+		if v.Participants[0].Themes[0].Answers[0] != "right" {
+			t.Fatalf("%s: team0 ans0 = %q, want right", label, v.Participants[0].Themes[0].Answers[0])
 		}
-		if v.Teams[0].Themes[0].Answers[1] != "wrong" {
-			t.Fatalf("%s: team0 ans1 = %q, want wrong", label, v.Teams[0].Themes[0].Answers[1])
+		if v.Participants[0].Themes[0].Answers[1] != "wrong" {
+			t.Fatalf("%s: team0 ans1 = %q, want wrong", label, v.Participants[0].Themes[0].Answers[1])
 		}
-		if v.Teams[1].Themes[0].Answers[0] != "right" {
-			t.Fatalf("%s: team1 ans0 = %q, want right", label, v.Teams[1].Themes[0].Answers[0])
+		if v.Participants[1].Themes[0].Answers[0] != "right" {
+			t.Fatalf("%s: team1 ans0 = %q, want right", label, v.Participants[1].Themes[0].Answers[0])
 		}
-		if v.Teams[2].Themes[0].Answers[0] != "wrong" {
-			t.Fatalf("%s: team2 ans0 = %q, want wrong", label, v.Teams[2].Themes[0].Answers[0])
+		if v.Participants[2].Themes[0].Answers[0] != "wrong" {
+			t.Fatalf("%s: team2 ans0 = %q, want wrong", label, v.Participants[2].Themes[0].Answers[0])
 		}
-		if got, want := v.Teams[1].Total, store.QuestionValues[0]; got != want {
+		if got, want := v.Participants[1].Total, store.QuestionValues[0]; got != want {
 			t.Fatalf("%s: team1 total = %d, want %d", label, got, want)
 		}
 	}
@@ -101,7 +101,7 @@ func TestBatchMatchUpdateIsAtomic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if got := view.Teams[0].Themes[0].Answers[0]; got != "" {
+	if got := view.Participants[0].Themes[0].Answers[0]; got != "" {
 		t.Fatalf("team0 ans0 = %q after failed batch, want empty (rolled back)", got)
 	}
 }
@@ -160,7 +160,7 @@ func TestPinBeatsComputedPlace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("finish: %v", err)
 	}
-	if got := view.Teams[0].Place; got != 4 {
+	if got := view.Participants[0].Place; got != 4 {
 		t.Fatalf("pinned place = %v after finish, want 4 (the scorer wanted 1)", got)
 	}
 
@@ -169,7 +169,7 @@ func TestPinBeatsComputedPlace(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	if _, err := srv.SubmitMatchEdit(t.Context(), scope, []edit.PatchOp{
-		blobOp("remove", nil, "teams", teamKey(ids[0]), "pin"),
+		blobOp("remove", nil, "teams", participantKey(ids[0]), "pin"),
 	}); err != nil {
 		t.Fatalf("clear pin: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestPinBeatsComputedPlace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-finish: %v", err)
 	}
-	if got := view.Teams[0].Place; got != 1 {
+	if got := view.Participants[0].Place; got != 1 {
 		t.Fatalf("unpinned place = %v, want the scorer's 1", got)
 	}
 }
@@ -217,10 +217,10 @@ func TestBadEditDoesNotPoisonItsWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if got := view.Teams[1].Themes[1].Answers[2]; got != "right" {
+	if got := view.Participants[1].Themes[1].Answers[2]; got != "right" {
 		t.Fatalf("co-editor's mark = %q, want right", got)
 	}
-	if got := view.Teams[0].Themes[0].Answers[0]; got != "" {
+	if got := view.Participants[0].Themes[0].Answers[0]; got != "" {
 		t.Fatalf("failed edit's first op persisted (%q); its savepoint did not roll back", got)
 	}
 }

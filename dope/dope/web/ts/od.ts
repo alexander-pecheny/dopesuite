@@ -628,6 +628,7 @@ function restoreTabScroll(tab: string): void {
   frame.scrollLeft = pos.left;
 }
 
+DopeTable.fitScrollFade(document.querySelector(".sheet-frame"));
 const resultsScroll = DopeTable.bindScrollEdges(document.querySelector(".sheet-frame"), ({left}, frame) => {
   frame.classList.toggle("results-scroll-left", activeTab === "results" && left);
   frame.classList.toggle("detailed-scroll-left", activeTab === "detailed" && left);
@@ -666,24 +667,13 @@ function updateHeaderProgress(): void {
 }
 
 function renderTabs(): void {
-  odTabsRoot.replaceChildren();
-  for (const tab of TABS) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "match-tab" + (activeTab === tab.key ? " active" : "");
-    btn.textContent = tab.label;
-    btn.setAttribute("role", "tab");
-    btn.setAttribute("aria-selected", activeTab === tab.key ? "true" : "false");
-    btn.addEventListener("click", () => {
-      if (activeTab === tab.key) return;
-      activeTab = tab.key;
-      if (window.location.hash.replace(/^#/, "") !== tab.key) {
-        history.replaceState(null, "", `#${tab.key}`);
-      }
-      render();
-    });
-    odTabsRoot.appendChild(btn);
-  }
+  DopeTable.renderTabBar(odTabsRoot, TABS, activeTab, (key) => {
+    activeTab = key;
+    if (window.location.hash.replace(/^#/, "") !== key) {
+      history.replaceState(null, "", `#${key}`);
+    }
+    render();
+  });
 }
 
 // === Ввод ===

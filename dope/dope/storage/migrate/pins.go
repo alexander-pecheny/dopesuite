@@ -64,7 +64,7 @@ func backfillMatchPins(ctx context.Context, db *sql.DB, matchID int64) error {
 
 	pins := map[int64]float64{}
 	rows, err := tx.QueryContext(ctx,
-		`select team_id, place_override from match_results where match_id = ? and place_override is not null`, matchID)
+		`select participant_id, place_override from match_results where match_id = ? and place_override is not null`, matchID)
 	if err != nil {
 		return err
 	}

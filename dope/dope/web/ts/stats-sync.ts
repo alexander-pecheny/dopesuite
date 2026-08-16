@@ -1,5 +1,5 @@
 // stats-sync.ts — the live stats-page resync loop (DopeStatsSync),
-// factored out of host.js and viewer.js, which held byte-identical copies.
+// factored out of ek.js, whose host and viewer halves once held byte-identical copies.
 //
 // The EK stats table stays live off the same SSE stream the bracket uses: each
 // match-scoped event folds into the shared stage cache in place (a chained

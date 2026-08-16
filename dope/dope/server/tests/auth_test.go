@@ -329,7 +329,7 @@ func TestHostClearGameResetsToPristine(t *testing.T) {
 		t.Fatalf("fixture expected to have match_results before clear")
 	}
 	var teamsBefore int
-	if err := srv.Eng().DB.QueryRow(`select count(*) from teams where fest_id = ?`, festID).Scan(&teamsBefore); err != nil {
+	if err := srv.Eng().DB.QueryRow(`select count(*) from participants where fest_id = ?`, festID).Scan(&teamsBefore); err != nil {
 		t.Fatalf("teams before: %v", err)
 	}
 
@@ -363,7 +363,7 @@ func TestHostClearGameResetsToPristine(t *testing.T) {
 		t.Fatalf("matches after clear = %d, want 1 (rebuilt from scheme)", n)
 	}
 	var teamsAfter int
-	if err := srv.Eng().DB.QueryRow(`select count(*) from teams where fest_id = ?`, festID).Scan(&teamsAfter); err != nil {
+	if err := srv.Eng().DB.QueryRow(`select count(*) from participants where fest_id = ?`, festID).Scan(&teamsAfter); err != nil {
 		t.Fatalf("teams after: %v", err)
 	}
 	if teamsAfter != teamsBefore {

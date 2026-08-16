@@ -23,10 +23,10 @@ type seConfig struct {
 	Entrants []store.SchemeSlot `json:"entrants"`
 }
 
-// bracketOrder returns 1-based entrant ranks in standard bracket layout: the
+// BracketOrder returns 1-based entrant ranks in standard bracket layout: the
 // classic recursive fold that keeps top seeds apart until the late rounds
 // (for 8: 1,8,4,5,3,6,2,7).
-func bracketOrder(n int) []int {
+func BracketOrder(n int) []int {
 	order := []int{1}
 	for len(order) < n {
 		grown := make([]int, 0, len(order)*2)
@@ -39,7 +39,7 @@ func bracketOrder(n int) []int {
 	return order
 }
 
-func (singleElim) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store.SchemeMatch, error) {
+func (singleElim) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
 	var conf seConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("se config: %w", err)
@@ -51,11 +51,12 @@ func (singleElim) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store
 
 	var matches []store.SchemeMatch
 	code := func(round, index int) string { return fmt.Sprintf("%s-r%d-%d", conf.Code, round, index) }
-	emit := func(matchCode, title string, slots [2]store.SchemeSlot) {
+	emit := func(round int, matchCode, title string, slots [2]store.SchemeSlot) {
 		matches = append(matches, store.SchemeMatch{
 			Code:             matchCode,
 			Title:            title,
 			Venue:            conf.Venue,
+			Round:            round,
 			ParticipantCount: 2,
 			Slots:            slots[:],
 		})
@@ -71,21 +72,21 @@ func (singleElim) Schedule(cfg json.RawMessage, results []MatchOutcome) ([]store
 	for size := n; size > 1; size /= 2 {
 		rounds++
 	}
-	order := bracketOrder(n)
+	order := BracketOrder(n)
 	for i := 0; i < n/2; i++ {
-		emit(code(1, i+1), roundTitle(rounds, 1, i+1),
+		emit(1, code(1, i+1), roundTitle(rounds, 1, i+1),
 			[2]store.SchemeSlot{conf.Entrants[order[2*i]-1], conf.Entrants[order[2*i+1]-1]})
 	}
 	for round := 2; round <= rounds; round++ {
 		count := n >> uint(round)
 		for i := 0; i < count; i++ {
-			emit(code(round, i+1), roundTitle(rounds, round, i+1),
+			emit(round, code(round, i+1), roundTitle(rounds, round, i+1),
 				[2]store.SchemeSlot{winnerOf(code(round-1, 2*i+1)), winnerOf(code(round-1, 2*i+2))})
 		}
 	}
 	if conf.Bronze {
 		semi := rounds - 1
-		emit(fmt.Sprintf("%s-r%d-3p", conf.Code, rounds), "Матч за 3-е место",
+		emit(rounds, fmt.Sprintf("%s-r%d-3p", conf.Code, rounds), "Матч за 3-е место",
 			[2]store.SchemeSlot{loserOf(code(semi, 1)), loserOf(code(semi, 2))})
 	}
 	return matches, nil
@@ -101,6 +102,9 @@ func roundTitle(rounds, round, index int) string {
 		return fmt.Sprintf("1/%d финала %d", 1<<uint(rounds-round), index)
 	}
 }
+
+// A bracket ranks by progression, which no column shows; its table is М alone.
+func (singleElim) Order(cfg json.RawMessage) []SortRule { return nil }
 
 // Standings ranks by progression: the champion first, then losers by the round
 // they fell in, late rounds ranking higher. Participants still alive share the

@@ -499,6 +499,12 @@
 .table-scroll,
 .sheet-frame {
   --scroll-fade-bg: var(--surface);
+  /* The shadows are viewport-fixed frame backgrounds, so by default they span
+     the whole frame. When the content is smaller than the frame a side shadow
+     would run past it (a fade "beneath the table"); a script that knows the
+     content box caps them via these two vars (fitScrollFade). */
+  --scroll-fade-content-w: 100%;
+  --scroll-fade-content-h: 100%;
 }
 
 .scroll-fade-y {
@@ -507,13 +513,13 @@
     linear-gradient(transparent, var(--scroll-fade-bg) 70%),
     radial-gradient(farthest-side at 50% 0, var(--scroll-fade-color), transparent),
     radial-gradient(farthest-side at 50% 100%, var(--scroll-fade-color), transparent);
-  background-position: center top, center bottom, center top, center bottom;
+  background-position: left top, left bottom, left top, left bottom;
   background-repeat: no-repeat;
   background-size:
-    100% var(--scroll-fade-size),
-    100% var(--scroll-fade-size),
-    100% calc(var(--scroll-fade-size) * 0.5),
-    100% calc(var(--scroll-fade-size) * 0.5);
+    var(--scroll-fade-content-w) var(--scroll-fade-size),
+    var(--scroll-fade-content-w) var(--scroll-fade-size),
+    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5),
+    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5);
   background-attachment: local, local, scroll, scroll;
 }
 
@@ -530,20 +536,20 @@
     radial-gradient(farthest-side at 0 50%, var(--scroll-fade-color), transparent),
     radial-gradient(farthest-side at 100% 50%, var(--scroll-fade-color), transparent);
   background-position:
-    center top, center bottom,
-    left center, right center,
-    center top, center bottom,
-    left center, right center;
+    left top, left bottom,
+    left top, right top,
+    left top, left bottom,
+    left top, right top;
   background-repeat: no-repeat;
   background-size:
-    100% var(--scroll-fade-size),
-    100% var(--scroll-fade-size),
-    var(--scroll-fade-size) 100%,
-    var(--scroll-fade-size) 100%,
-    100% calc(var(--scroll-fade-size) * 0.5),
-    100% calc(var(--scroll-fade-size) * 0.5),
-    calc(var(--scroll-fade-size) * 0.5) 100%,
-    calc(var(--scroll-fade-size) * 0.5) 100%;
+    var(--scroll-fade-content-w) var(--scroll-fade-size),
+    var(--scroll-fade-content-w) var(--scroll-fade-size),
+    var(--scroll-fade-size) var(--scroll-fade-content-h),
+    var(--scroll-fade-size) var(--scroll-fade-content-h),
+    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5),
+    min(var(--scroll-fade-content-w), 100%) calc(var(--scroll-fade-size) * 0.5),
+    calc(var(--scroll-fade-size) * 0.5) min(var(--scroll-fade-content-h), 100%),
+    calc(var(--scroll-fade-size) * 0.5) min(var(--scroll-fade-content-h), 100%);
   background-attachment: local, local, local, local, scroll, scroll, scroll, scroll;
 }
 
@@ -1075,9 +1081,18 @@ input[type="radio"]:focus-visible {
    larger words. */
 .crumb-home .ico { --ico-size: 21px; }
 
-/* The page you are on is the one that should read as the title. */
+/* The page you are on is the one that should read as the title: its
+   ancestors give up room first, down to a few letters each, and only then
+   does it ellipsise. Its shrink is tiny rather than zero: zero would clip it
+   without an ellipsis once its ancestors hit their floor, and one would take
+   a sub-pixel share of the squeeze and ellipsise a name that fits. */
+.crumb:not(.crumb-current):not(.crumb-home) {
+  flex-shrink: 1000;
+  min-width: 5ch;
+}
+
 .crumb-current {
-  flex: 1 1 auto;
+  flex: 1 0.001 auto;
   color: var(--text-strong);
   font-weight: var(--fw-bold);
 }

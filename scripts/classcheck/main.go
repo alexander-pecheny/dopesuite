@@ -85,6 +85,7 @@ func main() {
 	}
 
 	styled := sites{}
+	geometry := 0
 	for _, sheet := range stylesheets {
 		src, err := os.ReadFile(sheet)
 		if err != nil {
@@ -93,6 +94,7 @@ func main() {
 		for _, name := range styledClasses(string(src)) {
 			styled.add(name, sheet)
 		}
+		geometry += reportGridLiterals(sheet, string(src))
 	}
 
 	literals := sites{} // generous: any class-shaped token inside a string literal
@@ -163,10 +165,10 @@ func main() {
 			strings.Join(emitted.files(name), ", "), name)
 	}
 
-	if n := len(orphans) + len(dead); n > 0 {
-		fmt.Fprintf(os.Stderr, "\nclasscheck: %d orphan rule(s), %d dead name(s).\n"+
+	if n := len(orphans) + len(dead) + geometry; n > 0 {
+		fmt.Fprintf(os.Stderr, "\nclasscheck: %d orphan rule(s), %d dead name(s), %d Сетка geometry literal(s).\n"+
 			"Delete them, or record the exception in scripts/classcheck/allow.txt with a reason.\n",
-			len(orphans), len(dead))
+			len(orphans), len(dead), geometry)
 		os.Exit(1)
 	}
 	// The exemption is the check's one blind spot, so it is reported every run

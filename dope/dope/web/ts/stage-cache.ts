@@ -7,7 +7,7 @@
 //   - matchCodeToStageCode matchCode -> stageCode (SSE routing)
 //   - cachesRevision     fest.revision the caches were built against (drop on bump)
 //
-// The consumer (host.js / viewer.js) provides callbacks that fill the pane's
+// The consumer (ek.js) provides callbacks that fill the pane's
 // DOM, react to data changes, and read fest scheme. Tab switching then reduces
 // to toggling `hidden` on an already-built pane.
 
@@ -47,6 +47,11 @@ export interface StageCacheOptions {
   findStage: (stageCode: string) => SchemeStage | null | undefined;
   stageType: (stage: SchemeStage | null | undefined) => string;
   getMatches: (stage: SchemeStage | null | undefined) => MatchDescriptor[] | null | undefined;
+  // stageMembers names the real server stages a displayed stage is assembled
+  // from. A круг spans every Group of its Block — the sheets enter protocols by
+  // круг, not by группа — so what the tabs show is not always what the server
+  // stores. Absent or empty means the stage is its own.
+  stageMembers?: (stage: SchemeStage | null | undefined) => string[];
   buildPaneContent: (args: {
     pane: HTMLElement;
     stageCode: string;
@@ -97,6 +102,7 @@ export function createStageCache(options: StageCacheOptions): StageCache {
     findStage,
     stageType,
     getMatches,
+    stageMembers,
     buildPaneContent,
     onStageDataChanged,
     onMatchUpdated,
@@ -196,18 +202,39 @@ export function createStageCache(options: StageCacheOptions): StageCache {
     return data;
   }
 
+  // routeBatch folds fetched matches into whichever displayed stage owns each
+  // one. A single server stage's бои can belong to different tabs — one круг per
+  // tab — so the batch is split by match rather than applied wholesale.
+  function routeBatch(batchedMatches: unknown): void {
+    if (!Array.isArray(batchedMatches)) return;
+    for (const stage of schemeStages() || []) ensureStageData(stage.code);
+    const byStage = new Map<string, MatchView[]>();
+    for (const m of batchedMatches as Array<MatchView | null | undefined>) {
+      if (!m?.code) continue;
+      const owner = matchCodeToStageCode.get(m.code);
+      if (!owner) continue;
+      const list = byStage.get(owner);
+      if (list) list.push(m);
+      else byStage.set(owner, [m]);
+    }
+    for (const [owner, matches] of byStage) applyStageBatch(owner, matches);
+  }
+
   function prefetchStage(stageCode: string): Promise<void> {
     if (!stageCode) return Promise.resolve();
     const inflight = stageFetchPromises.get(stageCode);
     if (inflight) return inflight;
-    const url = `${apiBase()}/stages/${encodeURIComponent(stageCode)}/matches`;
-    const promise = fetch(url)
-      .then(async (response) => {
-        if (!response.ok) throw new Error(await response.text());
-        return response.json();
-      })
-      .then((batchedMatches: unknown) => {
-        applyStageBatch(stageCode, batchedMatches);
+    const members = stageMembers?.(findStage(stageCode)) || [];
+    const codes = members.length ? members : [stageCode];
+    const promise = Promise.all(codes.map((code) =>
+      fetch(`${apiBase()}/stages/${encodeURIComponent(code)}/matches`)
+        .then(async (response) => {
+          if (!response.ok) throw new Error(await response.text());
+          return response.json();
+        })))
+      .then((batches: unknown[]) => {
+        if (members.length) batches.forEach(routeBatch);
+        else applyStageBatch(stageCode, batches[0]);
       })
       .catch((err) => {
         console.error("prefetch stage failed", stageCode, err);
@@ -234,10 +261,13 @@ export function createStageCache(options: StageCacheOptions): StageCache {
         if (!Array.isArray(stages)) return;
         for (const st of stages as Array<{code?: string; matches?: unknown} | null | undefined>) {
           if (!st?.code) continue;
-          applyStageBatch(st.code, st.matches);
-          // Mark fetched so a later single prefetch dedupes to the cache.
-          if (!stageFetchPromises.has(st.code)) {
-            stageFetchPromises.set(st.code, Promise.resolve());
+          routeBatch(st.matches);
+        }
+        // Mark every displayed stage fetched so a later single prefetch dedupes
+        // to the cache — including the ones assembled from several server stages.
+        for (const stage of schemeStages() || []) {
+          if (!stageFetchPromises.has(stage.code)) {
+            stageFetchPromises.set(stage.code, Promise.resolve());
           }
         }
       })

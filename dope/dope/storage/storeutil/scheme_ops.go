@@ -102,6 +102,10 @@ func StageConfigJSON(stage store.SchemeStage) string {
 		data, _ := json.Marshal(stage.Teams)
 		config["teams"] = data
 	}
+	if len(stage.Bands) > 0 {
+		data, _ := json.Marshal(stage.Bands)
+		config["bands"] = data
+	}
 	if len(stage.Sources) > 0 {
 		data, _ := json.Marshal(stage.Sources)
 		config["sources"] = data

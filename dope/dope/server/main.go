@@ -56,8 +56,8 @@ type server struct {
 	// live on eng (StaticMode/ReqRate/…); staticMu guards the per-route HTML
 	// snapshot cache, with staticBuilds providing per-route singleflight on misses.
 	staticMu     sync.RWMutex
-	staticCache  map[hostInitRoute]*staticEntry
-	staticBuilds map[hostInitRoute]*staticBuildCall
+	staticCache  map[ekInitRoute]*staticEntry
+	staticBuilds map[ekInitRoute]*staticBuildCall
 	staticCfg    staticConfig
 
 	// Edit-path instrumentation (DOPE_EDIT_METRICS), inert unless enabled. Holds
@@ -517,18 +517,18 @@ func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, 
 		}
 		switch req.Action {
 		case actionAddShootoutTheme:
-			for i := range s.eng.State.Teams {
-				s.eng.State.Teams[i].ShootoutThemes = append(s.eng.State.Teams[i].ShootoutThemes, store.ThemeEntry{})
+			for i := range s.eng.State.Participants {
+				s.eng.State.Participants[i].ShootoutThemes = append(s.eng.State.Participants[i].ShootoutThemes, store.ThemeEntry{})
 			}
 			return s.commitLocked()
 		case actionRemoveShootoutTheme:
-			if len(s.eng.State.Teams) == 0 || len(s.eng.State.Teams[0].ShootoutThemes) == 0 {
+			if len(s.eng.State.Participants) == 0 || len(s.eng.State.Participants[0].ShootoutThemes) == 0 {
 				return store.MatchView{}, nil, errors.New("no shootout themes to remove")
 			}
-			for i := range s.eng.State.Teams {
-				if len(s.eng.State.Teams[i].ShootoutThemes) > 0 {
-					last := len(s.eng.State.Teams[i].ShootoutThemes) - 1
-					s.eng.State.Teams[i].ShootoutThemes = s.eng.State.Teams[i].ShootoutThemes[:last]
+			for i := range s.eng.State.Participants {
+				if len(s.eng.State.Participants[i].ShootoutThemes) > 0 {
+					last := len(s.eng.State.Participants[i].ShootoutThemes) - 1
+					s.eng.State.Participants[i].ShootoutThemes = s.eng.State.Participants[i].ShootoutThemes[:last]
 				}
 			}
 			return s.commitLocked()
@@ -537,10 +537,10 @@ func (s *server) applyLegacyUpdate(req updateRequest) (store.MatchView, []byte, 
 		}
 	}
 
-	if req.Team < 0 || req.Team >= len(s.eng.State.Teams) {
+	if req.Team < 0 || req.Team >= len(s.eng.State.Participants) {
 		return store.MatchView{}, nil, errors.New("bad team index")
 	}
-	team := &s.eng.State.Teams[req.Team]
+	team := &s.eng.State.Participants[req.Team]
 
 	if req.Tiebreak != nil {
 		return store.MatchView{}, nil, errors.New("shootout total is calculated")
@@ -625,21 +625,21 @@ func hasTeamEdit(req updateRequest) bool {
 func assignComputedPlaces(state *store.MatchState) {
 	type rankedTeam struct {
 		index int
-		view  store.TeamView
+		view  store.ParticipantView
 	}
-	ranked := make([]rankedTeam, len(state.Teams))
-	for index, team := range state.Teams {
-		ranked[index] = rankedTeam{index: index, view: store.ScoreTeam(team)}
+	ranked := make([]rankedTeam, len(state.Participants))
+	for index, team := range state.Participants {
+		ranked[index] = rankedTeam{index: index, view: store.ScoreParticipant(team)}
 	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		return teamRanksHigher(ranked[i].view, ranked[j].view)
 	})
 	for place, team := range ranked {
-		state.Teams[team.index].Place = float64(place + 1)
+		state.Participants[team.index].Place = float64(place + 1)
 	}
 }
 
-func teamRanksHigher(a, b store.TeamView) bool {
+func teamRanksHigher(a, b store.ParticipantView) bool {
 	if a.Total != b.Total {
 		return a.Total > b.Total
 	}
@@ -673,7 +673,7 @@ func defaultMatch() store.MatchState {
 		Title:     "Бой A",
 		Revision:  1,
 		UpdatedAt: time.Now(),
-		Teams: []store.TeamState{
+		Participants: []store.ParticipantState{
 			{
 				Name:   "Альфа",
 				Roster: store.RosterOf("Мария Сидорова", "Пётр Петров", "Ольга Морозова", "Иван Иванов", "Сергей Смирнов", "Дмитрий Кириллов", "Анна Кузнецова"),

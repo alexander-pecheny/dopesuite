@@ -5,8 +5,7 @@ import (
 )
 
 // expandGameTopbar builds the game pages' header: the game-header-main column
-// (the breadcrumb nav the page scripts fill, an optional viewer heading, the
-// tabs mount, an optional OD
+// (the breadcrumb nav the page scripts fill, the tabs mount, an optional OD
 // progress readout) and the host-actions sync-stack dot. It is self-contained —
 // the ids and class variants the game scripts bind to are fixed here, not
 // authored per page.
@@ -16,10 +15,6 @@ func expandGameTopbar(c *base.ExpandCtx, p *base.Element) []base.Node {
 	kids := []base.Node{
 		base.El("nav", []base.Attr{base.ClassAttr("crumbs"), base.At("id", "gameBreadcrumbs"), base.At("aria-label", "Навигация")}),
 	}
-	if h, ok := base.Get(p, "heading"); ok {
-		kids = append(kids, base.Inl("h1", nil, &base.TextNode{Value: h}))
-	}
-
 	tabsCls := []string{"match-tabs"}
 	if base.Flag(p, "ektabs") {
 		tabsCls = append(tabsCls, "ek-tabs")

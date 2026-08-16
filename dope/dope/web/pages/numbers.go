@@ -347,7 +347,7 @@ func (s *Server) HandleHostClearFestNumbers(w http.ResponseWriter, r *http.Reque
 
 // purgeFestSoftDeletedTeams hard-deletes any soft-deleted fest_teams rows for
 // this fest. Used by the "assign numbers" and "clear" actions, which the host
-// has explicitly confirmed as destructive resets — archived numbers from teams
+// has explicitly confirmed as destructive resets — archived numbers from participants
 // that left the roster must not block reuse of those numbers.
 func (s *Server) purgeFestSoftDeletedTeams(reqCtx context.Context, festID int64) error {
 	return s.h.WithWriteTx(reqCtx, festID, "purge-soft-deleted-teams", func(ctx context.Context, tx *sql.Tx) error {

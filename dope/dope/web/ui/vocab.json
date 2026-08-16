@@ -4,9 +4,9 @@
       "prefix": "Page",
       "values": [
         "ek",
-        "viewer",
         "od",
         "si",
+        "brain",
         "public"
       ]
     },
@@ -156,9 +156,6 @@
         {
           "name": "tabshidden",
           "kind": "bare"
-        },
-        {
-          "name": "heading"
         },
         {
           "name": "progressid"

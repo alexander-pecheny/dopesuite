@@ -73,7 +73,7 @@ test("patchScoreTable writes shared value cells through the index", () => {
   const themeScore = idx.register("themeScore", {team: 0, shootout: "0", theme: 1});
   const answer = idx.register("answer", {team: 0, shootout: "0", theme: 1, answer: 2});
   const state = {
-    teams: [
+    participants: [
       {total: 170, plus: 0, shootoutTotal: 7, correctCounts: [3, 0, 0, 0, 9],
         themes: [{score: 0, answers: []}, {score: 60, answers: ["", "", "right"]}], shootoutThemes: []},
       {total: 0, plus: 110, correctCounts: [0, 0, 0, 0, 0],
@@ -95,7 +95,7 @@ test("patchScoreTable clears a stale mark before applying the new one", () => {
   const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS));
   const answer = idx.register("answer", {team: 0, shootout: "0", theme: 0, answer: 0});
   answer.classList.add("wrong");
-  const state = {teams: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
+  const state = {participants: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
     themes: [{score: 0, answers: ["right"]}]}]};
   T.patchScoreTable(idx, state, {formatNumber: String});
   assert.ok(answer.classList.contains("right"));
@@ -106,7 +106,7 @@ test("patchScoreTable syncs the per-round player name in place", () => {
   const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS));
   const player0 = idx.register("playerText", {team: 0, shootout: "0", theme: 0});
   const player1 = idx.register("playerText", {team: 0, shootout: "0", theme: 1});
-  const state = {teams: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
+  const state = {participants: [{total: 0, plus: 0, correctCounts: [], shootoutThemes: [],
     themes: [{score: 0, answers: [], player: "Alice"}, {score: 0, answers: [], player: "Bob"}]}]};
   T.patchScoreTable(idx, state, {formatNumber: String});
   assert.equal(player0.textContent, "Alice", "player text patched from MatchView, not just marks");
@@ -126,23 +126,23 @@ test("scoreCellSpecs declares a sync for every live cell, incl. the player", () 
 test("patchScoreTable tolerates cells missing from the index", () => {
   const idx = fakeIndex(T.scoreCellSpecs(SCORE_OPTS)); // specs present, nothing registered
   assert.doesNotThrow(() =>
-    T.patchScoreTable(idx, {teams: [{total: 1, plus: 1, correctCounts: [], themes: [], shootoutThemes: []}]}, {formatNumber: String}));
+    T.patchScoreTable(idx, {participants: [{total: 1, plus: 1, correctCounts: [], themes: [], shootoutThemes: []}]}, {formatNumber: String}));
 });
 
 test("canPatchScoreShape: identical shape is patchable", () => {
   const base = {code: "C", finished: false, questionValues: [10, 20],
-    teams: [{name: "X", themes: [{}, {}], shootoutThemes: []}, {name: "Y", themes: [{}, {}], shootoutThemes: []}]};
+    participants: [{name: "X", themes: [{}, {}], shootoutThemes: []}, {name: "Y", themes: [{}, {}], shootoutThemes: []}]};
   assert.equal(T.canPatchScoreShape(base, structuredClone(base)), true);
 });
 
 test("canPatchScoreShape: shape changes force a rebuild", () => {
   const base = {code: "C", finished: false, questionValues: [10, 20],
-    teams: [{name: "X", themes: [{}, {}], shootoutThemes: []}, {name: "Y", themes: [{}, {}], shootoutThemes: []}]};
+    participants: [{name: "X", themes: [{}, {}], shootoutThemes: []}, {name: "Y", themes: [{}, {}], shootoutThemes: []}]};
   const cases = {
-    "team count": (s) => s.teams.push({name: "Z", themes: [], shootoutThemes: []}),
-    "team name": (s) => (s.teams[0].name = "X2"),
-    "theme count": (s) => s.teams[0].themes.push({}),
-    "shootout count": (s) => s.teams[0].shootoutThemes.push({}),
+    "team count": (s) => s.participants.push({name: "Z", themes: [], shootoutThemes: []}),
+    "team name": (s) => (s.participants[0].name = "X2"),
+    "theme count": (s) => s.participants[0].themes.push({}),
+    "shootout count": (s) => s.participants[0].shootoutThemes.push({}),
     "finished flag": (s) => (s.finished = true),
     "question values": (s) => (s.questionValues = [10, 20, 30]),
     "code": (s) => (s.code = "D"),
@@ -278,7 +278,7 @@ test("createClientRecorder is a safe no-op when localStorage is unavailable", ()
 test("computeEKPlayerStats aggregates per player across battles, regular themes only", () => {
   const stages = [
     {code: "r16", matches: [
-      {code: "A", teams: [
+      {code: "A", participants: [
         {name: "Alpha", themes: [
           {player: "Ann", answers: ["right", "wrong", "", "", "right"]},
           {player: "Bob", answers: ["", "", "right", "", ""]},
@@ -289,7 +289,7 @@ test("computeEKPlayerStats aggregates per player across battles, regular themes 
       ]},
     ]},
     {code: "r8", matches: [
-      {code: "M", teams: [
+      {code: "M", participants: [
         {name: "Alpha", themes: [
           {player: "Ann", answers: ["right", "", "", "", ""]},
         ]},
@@ -317,15 +317,15 @@ test("computeEKPlayerStats aggregates per player across battles, regular themes 
 test("computeEKPlayerStats keys by (team, player) — concatenation collisions stay separate", () => {
   const stages = [
     {code: "r16", matches: [
-      {code: "A", teams: [
+      {code: "A", participants: [
         {name: "Альфа", themes: [{player: "Бета", answers: ["right", "", "", "", ""]}]},
         {name: "АльфаБ", themes: [{player: "ета", answers: ["", "right", "", "", ""]}]},
       ]},
       // battle-id collision: (stage "r16", match "8") vs (stage "r168", match "")
-      {code: "8", teams: [{name: "Альфа", themes: [{player: "Бета", answers: ["right", "", "", "", ""]}]}]},
+      {code: "8", participants: [{name: "Альфа", themes: [{player: "Бета", answers: ["right", "", "", "", ""]}]}]},
     ]},
     {code: "r168", matches: [
-      {code: "", teams: [{name: "Альфа", themes: [{player: "Бета", answers: ["", "", "right", "", ""]}]}]},
+      {code: "", participants: [{name: "Альфа", themes: [{player: "Бета", answers: ["", "", "right", "", ""]}]}]},
     ]},
   ];
   const rows = T.computeEKPlayerStats(stages);
@@ -337,7 +337,7 @@ test("computeEKPlayerStats keys by (team, player) — concatenation collisions s
 test("computeEKPlayerStats team-share zeroes out non-helpers", () => {
   const stages = [
     {code: "r16", matches: [
-      {code: "A", teams: [
+      {code: "A", participants: [
         // Share is over POSITIVE contributors only; negatives are 0.
         {name: "Plus", themes: [
           {player: "Up", answers: ["right", "right", "", "", ""]},   // +30
@@ -478,4 +478,139 @@ test("notifyEmbeddedResize stays a no-op outside an embed", () => {
   window.parent = window; // embed flag set, but there is no outer frame to message
   T.notifyEmbeddedResize(true);
   assert.equal(posted, 0, "no parent frame -> no postMessage");
+});
+
+// The sheets enter protocols by круг — «Круг 1» through «Круг 4», every группа
+// at once — because that is the order the бои are played in. A tab per группа is
+// the order they are ranked in, which the Сетка already shows.
+test("roundStages gathers a Block's Groups into one tab per круг", () => {
+  const group = (n) => ({
+    code: `s1-g${n}`,
+    title: `Групповой этап. Группа ${n}`,
+    stage_type: "matches",
+    grain: {block: "s1", group: String(n)},
+    matches: [
+      {code: `s1-g${n}-1`, title: "Бой 1", round: 1},
+      {code: `s1-g${n}-2`, title: "Бой 2", round: 2},
+    ],
+  });
+  const playoff = {code: "s2-r1", title: "Финал", stage_type: "matches", grain: {block: "s2"}, matches: []};
+  const stages = T.roundStages([group(1), group(2), playoff]);
+
+  // The Block's own tab leads — the sheets' «Группы» view, every группа's
+  // standings on one tab — followed by the круг protocol tabs.
+  assert.deepEqual(stages.map((s) => s.title), ["Групповой этап", "Круг 1", "Круг 2", "Финал"]);
+  assert.equal(stages[0].stage_type, "standings");
+  // The synthetic tabs live in URLs, so their codes read as words — the block's
+  // slug when the scheme names one, `-standings`/`-rN` otherwise — and the old
+  // `@` spellings stay reachable through canonicalStageCode.
+  assert.deepEqual(stages.slice(0, 3).map((s) => s.code), ["s1-standings", "s1-r1", "s1-r2"]);
+  assert.equal(T.canonicalStageCode(stages, "s1@standings"), "s1-standings");
+  assert.equal(T.canonicalStageCode(stages, "s1@r2"), "s1-r2");
+  assert.equal(T.canonicalStageCode(stages, "s1-r2"), "s1-r2");
+  const slugged = T.roundStages([
+    {...group(1), slug: "group-stage"}, {...group(2), slug: "group-stage"}, playoff]);
+  assert.deepEqual(slugged.slice(0, 3).map((s) => s.code), ["group-stage", "group-stage-r1", "group-stage-r2"]);
+  assert.equal(T.canonicalStageCode(slugged, "s1@standings"), "group-stage");
+  assert.deepEqual(stages[0].members, ["s1-g1", "s1-g2"]);
+  assert.deepEqual(stages[1].matches.map((m) => m.code), ["s1-g1-1", "s1-g2-1"]);
+  // Six группы of «Бой 1» need to say which table they were.
+  assert.deepEqual(stages[1].matches.map((m) => m.group), ["Группа 1", "Группа 2"]);
+  // The tab is assembled from real server stages, which is what gets fetched.
+  assert.deepEqual(stages[1].members, ["s1-g1", "s1-g2"]);
+  assert.equal(playoff.members, undefined, "этап без групп остаётся собой");
+});
+
+// A Block with one Group has no круг to gather across — it stays as it is.
+test("roundStages leaves a lone Group alone", () => {
+  const only = {
+    code: "s1-g1",
+    title: "Группа",
+    stage_type: "matches",
+    grain: {block: "s1", group: "1"},
+    matches: [{code: "s1-g1-1", round: 1}],
+  };
+  assert.deepEqual(T.roundStages([only]), [only]);
+});
+
+// Every reseed used to be a tab of its own — личная СИ showed seven of them.
+// They fold into one «Пересев», keeping their codes as members so the pane can
+// draw each этап's table; a lone reseed keeps its own name and place.
+test("foldReseedStages folds every reseed into one tab", () => {
+  const stages = [
+    {code: "s1", title: "Групповой этап", stage_type: "matches"},
+    {code: "s2-reseed", title: "Пересев", stage_type: "reseed"},
+    {code: "s2-r1", title: "Плей-офф. 1 этап", stage_type: "matches"},
+    {code: "s2-r2-reseed", title: "Пересев", stage_type: "reseed"},
+    {code: "s2-r2", title: "Плей-офф. 2 этап", stage_type: "matches"},
+  ];
+  const folded = T.foldReseedStages(stages);
+  assert.deepEqual(folded.map((s) => s.code), ["s1", T.RESEED_TAB_CODE, "s2-r1", "s2-r2"]);
+  const tab = folded[1];
+  assert.equal(tab.title, "Пересев");
+  assert.deepEqual(tab.members, ["s2-reseed", "s2-r2-reseed"]);
+});
+
+test("foldReseedStages leaves a lone reseed alone", () => {
+  const stages = [
+    {code: "s1-reseed", title: "Пересев", stage_type: "reseed"},
+    {code: "s1-r3", title: "1/4 финала", stage_type: "matches"},
+  ];
+  assert.deepEqual(T.foldReseedStages(stages), stages);
+});
+
+// Личная СИ's Статистика: the participant is the player, so the aggregate is
+// per seat — Σ, Σ+ (positive points), бои and the taken counts per value —
+// regular themes only, sorted by Σ.
+test("computeIndividualPlayerStats aggregates per participant", () => {
+  const stages = [{
+    code: "s1",
+    matches: [{
+      code: "m1",
+      finished: true,
+      participants: [
+        {name: "Виктор Вега", themes: [{answers: ["right", "", "", "", ""]}, {answers: ["", "wrong", "", "", ""]}]},
+        {name: "Николай Зотов", themes: [{answers: ["", "", "", "", "right"]}]},
+      ],
+    }, {
+      code: "m2",
+      finished: true,
+      participants: [
+        {name: "Виктор Вега", themes: [{answers: ["", "", "right", "", ""]}]},
+      ],
+    }, {
+      // Seeded but unplayed: not a бой played, nothing counted.
+      code: "m3",
+      participants: [
+        {name: "Виктор Вега", themes: [{answers: ["right", "", "", "", ""]}]},
+      ],
+    }],
+  }];
+  const rows = T.computeIndividualPlayerStats(stages);
+  assert.deepEqual(rows, [
+    {player: "Николай Зотов", sum: 50, plus: 50, battles: 1, right: [0, 0, 0, 0, 1]},
+    {player: "Виктор Вега", sum: 20, plus: 40, battles: 2, right: [1, 0, 1, 0, 0]},
+  ]);
+});
+
+// A бой's буква is the compiler's, carried on the fest view; the page reads
+// it off by code and never counts. A бой the scheme left letterless (ТПШ's
+// письменный отбор) has none.
+test("festLetters reads each бой's letter off the fest view", () => {
+  const letters = T.festLetters([
+    {code: "s1", matches: [{code: "s1-m1", title: "Письменный отбор"}]},
+    null,
+    {code: "s2-r1", matches: [{code: "s2-r1-m1", letter: "A"}, {code: "s2-r1-m2", letter: "B"}]},
+  ]);
+  assert.equal(letters.get("s1-m1"), undefined);
+  assert.equal(letters.get("s2-r1-m1"), "A");
+  assert.equal(letters.get("s2-r1-m2"), "B");
+});
+
+test("letteredTitle rewrites the «Бой N» part and leaves the rest", () => {
+  assert.equal(T.letteredTitle("Бой 3", "C"), "Бой C");
+  assert.equal(T.letteredTitle("Группа 1. Бой 3", "C"), "Группа 1. Бой C");
+  assert.equal(T.letteredTitle("Финал. Бой 2", "EA"), "Финал. Бой EA");
+  assert.equal(T.letteredTitle("Письменный отбор", "A"), "Письменный отбор");
+  assert.equal(T.letteredTitle("Бой 3", undefined), "Бой 3");
 });

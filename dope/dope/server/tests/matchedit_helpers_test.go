@@ -36,14 +36,14 @@ func markOp(teamID int64, shootout bool, theme, answer int, mark string) edit.Pa
 	if shootout {
 		kind = "shootoutThemes"
 	}
-	return blobOp("set", mark, "teams", teamKey(teamID), kind, theme, "answers", answer)
+	return blobOp("set", mark, "teams", participantKey(teamID), kind, theme, "answers", answer)
 }
 
 func pinOp(teamID int64, place float64) edit.PatchOp {
-	return blobOp("set", place, "teams", teamKey(teamID), "pin")
+	return blobOp("set", place, "teams", participantKey(teamID), "pin")
 }
 
-func teamKey(teamID int64) string { return strconv.FormatInt(teamID, 10) }
+func participantKey(teamID int64) string { return strconv.FormatInt(teamID, 10) }
 
 // matchTeamIDs reads the match's current slot→team-id mapping, which every op
 // path needs.
@@ -53,8 +53,8 @@ func matchTeamIDs(t *testing.T, srv *dopeserver.Server, scope dopeserver.MatchSc
 	if err != nil {
 		t.Fatalf("load match view: %v", err)
 	}
-	ids := make([]int64, len(view.Teams))
-	for i, team := range view.Teams {
+	ids := make([]int64, len(view.Participants))
+	for i, team := range view.Participants {
 		ids[i] = team.ID
 	}
 	return ids
@@ -74,7 +74,7 @@ func markBody(t *testing.T, srv *dopeserver.Server, festID int64, code string, s
 	if err != nil {
 		t.Fatalf("load match view: %v", err)
 	}
-	return edit.PatchRequest{Ops: []edit.PatchOp{markOp(view.Teams[slot].ID, false, theme, answer, mark)}}
+	return edit.PatchRequest{Ops: []edit.PatchOp{markOp(view.Participants[slot].ID, false, theme, answer, mark)}}
 }
 
 // editMark marks one answer cell of the slot-th team, the commonest edit.

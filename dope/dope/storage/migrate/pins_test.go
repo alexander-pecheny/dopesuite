@@ -28,11 +28,11 @@ func TestRunPinBackfill(t *testing.T) {
 	mustExec(`create table fests(id integer primary key, revision integer not null default 0)`)
 	mustExec(`create table journal(id integer primary key autoincrement, fest_id integer, game_id integer, seq integer,
 	  ts text, actor_user_id integer, request_id text, op integer, payload blob, created_at text)`)
-	mustExec(`create table match_results(match_id integer, team_id integer, place real, place_override real,
-	  primary key(match_id, team_id))`)
+	mustExec(`create table match_results(match_id integer, participant_id integer, place real, place_override real,
+	  primary key(match_id, participant_id))`)
 	mustExec(`insert into fests(id, revision) values(1, 3)`)
 	mustExec(`insert into matches(id, fest_id, game_id, state_json) values(1, 1, 1, '{}'), (2, 1, 1, '{}')`)
-	mustExec(`insert into match_results(match_id, team_id, place, place_override) values
+	mustExec(`insert into match_results(match_id, participant_id, place, place_override) values
 	  (1, 11, 2, 2), (1, 22, 1, null), (2, 33, 4, 4)`)
 
 	if err := RunPinBackfill(db); err != nil {

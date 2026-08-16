@@ -44,8 +44,8 @@ func HasRosterName(roster []RosterMember, name string) bool {
 	return false
 }
 
-// TeamState is one team's persisted match state.
-type TeamState struct {
+// ParticipantState is one Participant's persisted match state.
+type ParticipantState struct {
 	ID             int64          `json:"id,omitempty"`
 	Name           string         `json:"name"`
 	Roster         []RosterMember `json:"roster"`
@@ -57,11 +57,11 @@ type TeamState struct {
 
 // MatchState is the persisted state of a single match.
 type MatchState struct {
-	Title     string      `json:"title"`
-	Finished  bool        `json:"finished"`
-	Revision  int64       `json:"revision"`
-	UpdatedAt time.Time   `json:"updatedAt"`
-	Teams     []TeamState `json:"teams"`
+	Title        string             `json:"title"`
+	Finished     bool               `json:"finished"`
+	Revision     int64              `json:"revision"`
+	UpdatedAt    time.Time          `json:"updatedAt"`
+	Participants []ParticipantState `json:"participants"`
 }
 
 // ThemeView is a scored theme row (raw marks plus the computed score).
@@ -71,8 +71,8 @@ type ThemeView struct {
 	Score   int       `json:"score"`
 }
 
-// TeamView is a team's scored, client-facing projection.
-type TeamView struct {
+// ParticipantView is a Participant's scored, client-facing projection.
+type ParticipantView struct {
 	ID             int64          `json:"id,omitempty"`
 	Name           string         `json:"name"`
 	Roster         []RosterMember `json:"roster"`
@@ -116,6 +116,7 @@ type FestView struct {
 	Slug              string      `json:"slug"`
 	Title             string      `json:"title"`
 	GameName          string      `json:"gameName,omitempty"`
+	GameType          string      `json:"gameType,omitempty"`
 	Revision          int64       `json:"revision"`
 	UpdatedAt         string      `json:"updatedAt"`
 	SchemaJSON        string      `json:"schemaJson,omitempty"`
@@ -137,27 +138,46 @@ type StageView struct {
 	ReseedMessage string            `json:"reseedBlockedMessage,omitempty"`
 	Matches       []FestMatchView   `json:"matches,omitempty"`
 	ReseedEntries []ReseedEntryView `json:"reseedEntries,omitempty"`
+	// Standings is a ranking Kind's own table — a Group's место against team.
+	// It is the same shape and the same source as a пересев's entries; only the
+	// meaning differs, so the Сетка can draw a Group as the sheets do.
+	Standings []ReseedEntryView `json:"standings,omitempty"`
+	// Kind is the stage's Kind code; Sort the Metrics its Ranker ranked by, in
+	// order — the columns a table of Standings (or ReseedEntries) shows.
+	Kind string     `json:"kind,omitempty"`
+	Sort []SortRule `json:"sort,omitempty"`
+	// Grain says where the stage sits in its Game — the Block, the Group and
+	// the Wave — so a page groups stages by what the compiler wrote, never by
+	// what a code looks like.
+	Grain *SchemeGrain `json:"grain,omitempty"`
+}
+
+// SortRule is one key of a Ranker's order: the Metric and its direction.
+type SortRule struct {
+	Metric string `json:"metric"`
+	Dir    string `json:"dir"`
 }
 
 type ReseedEntryView struct {
-	Rank    int             `json:"rank"`
-	TeamID  int64           `json:"teamID"`
-	Name    string          `json:"name"`
-	Metrics json.RawMessage `json:"metrics,omitempty"`
+	Rank          int             `json:"rank"`
+	ParticipantID int64           `json:"participantID"`
+	Name          string          `json:"name"`
+	Metrics       json.RawMessage `json:"metrics,omitempty"`
 }
 
 type FestMatchView struct {
-	Code             string             `json:"code"`
-	Title            string             `json:"title"`
-	Position         int                `json:"position"`
-	ParticipantCount int                `json:"participantCount"`
-	Status           string             `json:"status"`
-	Revision         int64              `json:"revision"`
-	Venue            *VenueView         `json:"venue,omitempty"`
-	Teams            []MatchTeamSummary `json:"teams"`
+	Code             string                    `json:"code"`
+	Title            string                    `json:"title"`
+	Letter           string                    `json:"letter,omitempty"`
+	Position         int                       `json:"position"`
+	ParticipantCount int                       `json:"participantCount"`
+	Status           string                    `json:"status"`
+	Revision         int64                     `json:"revision"`
+	Venue            *VenueView                `json:"venue,omitempty"`
+	Participants     []MatchParticipantSummary `json:"participants"`
 }
 
-type MatchTeamSummary struct {
+type MatchParticipantSummary struct {
 	Name       string  `json:"name"`
 	Source     string  `json:"source,omitempty"`
 	SourceType string  `json:"sourceType,omitempty"`
@@ -169,17 +189,20 @@ type MatchTeamSummary struct {
 
 // MatchView is the scored, client-facing projection of a match.
 type MatchView struct {
-	Title          string         `json:"title"`
-	Code           string         `json:"code,omitempty"`
-	StageCode      string         `json:"stageCode,omitempty"`
-	StageTitle     string         `json:"stageTitle,omitempty"`
-	Venue          *VenueView     `json:"venue,omitempty"`
-	Finished       bool           `json:"finished"`
-	Revision       int64          `json:"revision"`
-	UpdatedAt      string         `json:"updatedAt"`
-	QuestionValues [5]int         `json:"questionValues"`
-	Teams          []TeamView     `json:"teams"`
-	Standings      []StandingView `json:"standings"`
+	Title          string            `json:"title"`
+	Code           string            `json:"code,omitempty"`
+	StageCode      string            `json:"stageCode,omitempty"`
+	StageTitle     string            `json:"stageTitle,omitempty"`
+	Venue          *VenueView        `json:"venue,omitempty"`
+	Finished       bool              `json:"finished"`
+	Revision       int64             `json:"revision"`
+	UpdatedAt      string            `json:"updatedAt"`
+	QuestionValues [5]int            `json:"questionValues"`
+	Participants   []ParticipantView `json:"participants"`
+	Standings      []StandingView    `json:"standings"`
+	// State carries a non-EK match's Protocol document verbatim; the per-protocol
+	// renderer owns its shape. Empty for EK, whose state is projected into Participants.
+	State json.RawMessage `json:"state,omitempty"`
 	// Seq is the match scope's current SSE sequence. GET responses carry the
 	// seq at fetch time, and mutating responses (update/finish/venue) carry the
 	// seq their own broadcast assigned — so the editor that issued the edit can

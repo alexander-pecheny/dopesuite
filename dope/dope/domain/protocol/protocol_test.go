@@ -14,7 +14,7 @@ func TestEKScore(t *testing.T) {
 	if !ok {
 		t.Fatal("ek protocol not registered")
 	}
-	state := `{"teams":[
+	state := `{"participants":[
 		{"name":"A","place":2,"themes":[{"player":"P1","answers":["right","wrong","right","",""]}]},
 		{"name":"B","place":1,"themes":[{"player":"P2","answers":["wrong","","","","right"]}]}
 	]}`
@@ -140,5 +140,125 @@ func TestODScore(t *testing.T) {
 		if tied[i].Place != wantPlace {
 			t.Errorf("tied team %d place = %v, want %v", i+1, tied[i].Place, wantPlace)
 		}
+	}
+}
+
+// Worked example, computed by hand. A 5-question бой plus one "П" tiebreak:
+// side 1 takes q1,q3,П (3 with tiebreaks, 2 base), side 2 takes q2,q4 (2/2).
+// Side 1 leads: places 1/2. The tied variant (П cleared) shares 1.5 — group
+// points are the rr stage's concern, gated on matches.status, not scored here.
+func TestBrainScore(t *testing.T) {
+	p, ok := Get("brain")
+	if !ok {
+		t.Fatal("brain protocol not registered")
+	}
+	state := func(lastMark string) json.RawMessage {
+		return json.RawMessage(`{"tiebreaks":1,"teams":[
+			{"rows":[{"player":"p1","mark":"right"},{"player":"","mark":""},{"player":"p2","mark":"right"},{"player":"p1","mark":"wrong"},{"player":"","mark":""},{"player":"p1","mark":"` + lastMark + `"}]},
+			{"rows":[{"player":"","mark":""},{"player":"q1","mark":"right"},{"player":"q2","mark":"wrong"},{"player":"q1","mark":"right"},{"player":"","mark":""},{"player":"","mark":""}]}]}`)
+	}
+	outcomes, err := p.Score(nil, state("right"))
+	if err != nil {
+		t.Fatalf("Score: %v", err)
+	}
+	want := []struct {
+		place, taken, takenBase float64
+	}{{1, 3, 2}, {2, 2, 2}}
+	if len(outcomes) != len(want) {
+		t.Fatalf("got %d outcomes, want %d", len(outcomes), len(want))
+	}
+	for i, w := range want {
+		o := outcomes[i]
+		if o.Place != w.place || o.Metrics["taken"] != w.taken || o.Metrics["takenBase"] != w.takenBase {
+			t.Errorf("side %d = place %v taken %v base %v, want %v/%v/%v",
+				i+1, o.Place, o.Metrics["taken"], o.Metrics["takenBase"], w.place, w.taken, w.takenBase)
+		}
+	}
+
+	tied, err := p.Score(nil, state(""))
+	if err != nil {
+		t.Fatalf("Score (tied): %v", err)
+	}
+	for i, o := range tied {
+		if o.Place != 1.5 {
+			t.Errorf("tied side %d place = %v, want 1.5", i+1, o.Place)
+		}
+	}
+
+	empty, err := p.EmptyState(json.RawMessage(`{"questions":4}`))
+	if err != nil {
+		t.Fatalf("EmptyState: %v", err)
+	}
+	var parsed struct {
+		Teams []struct {
+			Rows []struct{} `json:"rows"`
+		} `json:"teams"`
+	}
+	if err := json.Unmarshal(empty, &parsed); err != nil {
+		t.Fatalf("parse empty state: %v", err)
+	}
+	if len(parsed.Teams) != 2 || len(parsed.Teams[0].Rows) != 4 || len(parsed.Teams[1].Rows) != 4 {
+		t.Errorf("empty state shape = %s", empty)
+	}
+}
+
+// Личная СИ играется на том же бланке, что и ЭК, и место в бою считается по
+// сумме: равные суммы делят место.
+func TestSIScore(t *testing.T) {
+	p, ok := Get("si")
+	if !ok {
+		t.Fatal("si protocol not registered")
+	}
+	empty, err := p.EmptyState(nil)
+	if err != nil {
+		t.Fatalf("EmptyState: %v", err)
+	}
+	if string(empty) != "{}" {
+		t.Fatalf("пустой бланк = %s, want {}", empty)
+	}
+
+	// Трое за столом: двое взяли по одному вопросу на 10, третий ничего.
+	state := `{"participants":[
+		{"name":"А","themes":[{"player":"А","answers":["right","","","",""]}]},
+		{"name":"Б","themes":[{"player":"Б","answers":["right","","","",""]}]},
+		{"name":"В","themes":[{"player":"В","answers":["","","","",""]}]}
+	]}`
+	outcomes, err := p.Score(nil, json.RawMessage(state))
+	if err != nil {
+		t.Fatalf("Score: %v", err)
+	}
+	if len(outcomes) != 3 {
+		t.Fatalf("outcomes = %d, want 3", len(outcomes))
+	}
+	if outcomes[0].Place != 1.5 || outcomes[1].Place != 1.5 || outcomes[2].Place != 3 {
+		t.Errorf("места = %v/%v/%v, want 1.5/1.5/3", outcomes[0].Place, outcomes[1].Place, outcomes[2].Place)
+	}
+	if outcomes[0].Metrics["total"] != 10 || outcomes[0].Metrics["taken10"] != 1 {
+		t.Errorf("метрики первого = %v", outcomes[0].Metrics)
+	}
+}
+
+// Перестрелка ломает равенство сумм: место делится только там, где и сумма, и
+// перестрелка равны. Сама перестрелка в Σ не входит — она отдельная метрика.
+func TestSIShootoutBreaksTies(t *testing.T) {
+	p, _ := Get("si")
+	state := `{"participants":[
+		{"name":"А","themes":[{"player":"А","answers":["right","","","",""]}]},
+		{"name":"Б","themes":[{"player":"Б","answers":["right","","","",""]}],
+		 "shootoutThemes":[{"answers":["","right","","",""]}]},
+		{"name":"В","themes":[{"player":"В","answers":["","","","",""]}]}
+	]}`
+	outcomes, err := p.Score(nil, json.RawMessage(state))
+	if err != nil {
+		t.Fatalf("Score: %v", err)
+	}
+	if outcomes[1].Place != 1 || outcomes[0].Place != 2 || outcomes[2].Place != 3 {
+		t.Errorf("места = %v/%v/%v, want 2/1/3", outcomes[0].Place, outcomes[1].Place, outcomes[2].Place)
+	}
+	if outcomes[1].Metrics["total"] != 10 {
+		t.Errorf("Σ с перестрелкой = %v, want 10 — перестрелка в сумму не входит", outcomes[1].Metrics["total"])
+	}
+	if outcomes[1].Metrics["shootoutTotal"] != 20 || outcomes[0].Metrics["shootoutTotal"] != 0 {
+		t.Errorf("перестрелка = %v и %v, want 20 и 0", outcomes[1].Metrics["shootoutTotal"], outcomes[0].Metrics["shootoutTotal"])
 	}
 }

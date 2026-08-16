@@ -38,20 +38,20 @@ func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMa
 	if legacy, ok := p.(LegacyResultWriter); ok {
 		return legacy.WriteResultsTx(ctx, tx, match)
 	}
-	stateJSON, err := json.Marshal(match.State)
-	if err != nil {
-		return err
+	stateJSON := json.RawMessage(match.RawState)
+	if len(stateJSON) == 0 {
+		stateJSON = json.RawMessage("{}")
 	}
 	outcomes, err := p.Score(nil, stateJSON)
 	if err != nil {
 		return err
 	}
 	for index, outcome := range outcomes {
-		if index >= len(match.TeamIDs) || match.TeamIDs[index] == 0 {
+		if index >= len(match.ParticipantIDs) || match.ParticipantIDs[index] == 0 {
 			continue
 		}
 		place := outcome.Place
-		if pin := match.Blob.Pin(match.TeamIDs[index]); pin != nil {
+		if pin := match.Blob.Pin(match.ParticipantIDs[index]); pin != nil {
 			place = *pin
 		}
 		metrics := map[string]any{}
@@ -59,14 +59,14 @@ func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMa
 			metrics[key] = value
 		}
 		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, team_id, place, total, plus, metrics_json)
+insert into match_results(match_id, participant_id, place, total, plus, metrics_json)
 values(?, ?, ?, ?, ?, ?)
-on conflict(match_id, team_id) do update set
+on conflict(match_id, participant_id) do update set
   place = excluded.place,
   total = excluded.total,
   plus = excluded.plus,
   metrics_json = excluded.metrics_json`,
-			match.MatchID, match.TeamIDs[index], place,
+			match.MatchID, match.ParticipantIDs[index], place,
 			int(outcome.Metrics["total"]), int(outcome.Metrics["plus"]), util.MustJSON(metrics)); err != nil {
 			return err
 		}

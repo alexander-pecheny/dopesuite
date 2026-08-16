@@ -39,8 +39,7 @@ var journalGameTables = []struct {
 		return fmt.Sprintf("(select game_id from stages where id = %s.stage_id)", p)
 	}},
 	{"game_assignments", func(p string) string { return p + ".game_id" }},
-	{"game_teams", func(p string) string { return p + ".game_id" }},
-	{"game_players", func(p string) string { return p + ".game_id" }},
+	{"game_participants", func(p string) string { return p + ".game_id" }},
 	{"game_team_players", func(p string) string { return p + ".game_id" }},
 	{"game_player_team_overrides", func(p string) string { return p + ".game_id" }},
 }

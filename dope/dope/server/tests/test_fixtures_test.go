@@ -40,7 +40,7 @@ func createDefaultFestFixture(t *testing.T, db *sql.DB, state store.MatchState) 
 				"stage_type": "matches",
 				"position":   1,
 				"matches": []map[string]any{
-					{"code": dopeserver.DefaultMatchCode, "title": state.Title, "venue": 1, "participantCount": len(state.Teams)},
+					{"code": dopeserver.DefaultMatchCode, "title": state.Title, "venue": 1, "participantCount": len(state.Participants)},
 				},
 			},
 		},
@@ -88,14 +88,14 @@ values(?, ?, 'r16', '1/16 финала', 'matches', 1, 'active', '{}')`, festID,
 	}
 	matchID, err := store.InsertReturningID(ctx, tx, `
 insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, festID, gameID, stageID, dopeserver.DefaultMatchCode, state.Title, len(state.Teams), venueID, status, util.MaxInt64(state.Revision, 1))
+values(?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`, festID, gameID, stageID, dopeserver.DefaultMatchCode, state.Title, len(state.Participants), venueID, status, util.MaxInt64(state.Revision, 1))
 	if err != nil {
 		t.Fatalf("insert match: %v", err)
 	}
 
-	for teamIndex, team := range state.Teams {
+	for teamIndex, team := range state.Participants {
 		teamID, err := store.InsertReturningID(ctx, tx, `
-insert into teams(fest_id, name, city)
+insert into participants(fest_id, name, city)
 values(?, ?, '')`, festID, team.Name)
 		if err != nil {
 			t.Fatalf("insert team: %v", err)
@@ -103,12 +103,12 @@ values(?, ?, '')`, festID, team.Name)
 		basket := 1
 		number := teamIndex + 1
 		if _, err := tx.ExecContext(ctx, `
-insert into game_assignments(game_id, basket, number, team_id, player_id)
-values(?, ?, ?, ?, null)`, gameID, basket, number, teamID); err != nil {
+insert into game_assignments(game_id, basket, number, participant_id)
+values(?, ?, ?, ?)`, gameID, basket, number, teamID); err != nil {
 			t.Fatalf("insert assignment: %v", err)
 		}
 		if _, err := tx.ExecContext(ctx, `
-insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
+insert into match_slots(match_id, slot_index, source_type, source_ref_json, participant_id, locked)
 values(?, ?, 'seed', ?, ?, 0)`, matchID, teamIndex, util.MustJSON(map[string]any{"basket": basket, "number": number}), teamID); err != nil {
 			t.Fatalf("insert match slot: %v", err)
 		}
@@ -124,7 +124,7 @@ values(?, ?, ?)`, festID, firstName, lastName)
 				t.Fatalf("insert player: %v", err)
 			}
 			if _, err := tx.ExecContext(ctx, `
-insert into team_players(team_id, player_id, roster_order)
+insert into participant_players(participant_id, player_id, roster_order)
 values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 				t.Fatalf("insert team player: %v", err)
 			}
@@ -155,7 +155,7 @@ values(?, ?, ?)`, teamID, playerID, rosterOrder); err != nil {
 			t.Fatalf("write match blob: %v", err)
 		}
 		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, team_id, place)
+insert into match_results(match_id, participant_id, place)
 values(?, ?, ?)`, matchID, teamID, team.Place); err != nil {
 			t.Fatalf("insert match result: %v", err)
 		}
@@ -229,7 +229,7 @@ values(?, ?, 'creator', ?)`, festID, ownerID, now); err != nil {
 	}
 	for _, name := range []string{"Команда A", "Команда B", "Команда C", "Команда D"} {
 		if _, err := store.InsertReturningID(ctx, tx, `
-insert into teams(fest_id, name, city)
+insert into participants(fest_id, name, city)
 values(?, ?, '')`, festID, name); err != nil {
 			t.Fatalf("insert existing team: %v", err)
 		}

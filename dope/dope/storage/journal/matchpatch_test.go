@@ -66,27 +66,27 @@ func stateOfMatch(t *testing.T, db *sql.DB, matchID int64) string {
 func TestMatchPatchApply(t *testing.T) {
 	db := patchDB(t)
 	applyPatch(t, db, `{"m":5,"ops":[
-		{"k":"set","p":"/teams/7/themes/1/answers/4","v":"right"},
-		{"k":"set","p":"/teams/7/themes/1/player","v":55}
+		{"k":"set","p":"/participants/7/themes/1/answers/4","v":"right"},
+		{"k":"set","p":"/participants/7/themes/1/player","v":55}
 	]}`)
-	want := `{"teams":{"7":{"themes":[{"answers":["","","","",""]},{"answers":["","","","","right"],"player":55}]}}}`
+	want := `{"participants":{"7":{"themes":[{"answers":["","","","",""]},{"answers":["","","","","right"],"player":55}]}}}`
 	if got := stateOf(t, db); got != want {
 		t.Fatalf("state = %s\nwant   %s", got, want)
 	}
 
-	applyPatch(t, db, `{"m":5,"ops":[{"k":"remove","p":"/teams/7/themes/0"}]}`)
-	want = `{"teams":{"7":{"themes":[{"answers":["","","","","right"],"player":55}]}}}`
+	applyPatch(t, db, `{"m":5,"ops":[{"k":"remove","p":"/participants/7/themes/0"}]}`)
+	want = `{"participants":{"7":{"themes":[{"answers":["","","","","right"],"player":55}]}}}`
 	if got := stateOf(t, db); got != want {
 		t.Fatalf("after splice = %s\nwant %s", got, want)
 	}
 
-	applyPatch(t, db, `{"m":5,"ops":[{"k":"remove","p":"/teams/7/themes/0"}]}`)
+	applyPatch(t, db, `{"m":5,"ops":[{"k":"remove","p":"/participants/7/themes/0"}]}`)
 	if got := stateOf(t, db); got != `{}` {
 		t.Fatalf("emptied section should prune to {}: %s", got)
 	}
 
-	applyPatch(t, db, `{"m":5,"ops":[{"k":"set","p":"/teams/9/themes/9/answers/9","v":"x"},
-		{"k":"remove","p":"/teams/404/themes/3"}]}`)
+	applyPatch(t, db, `{"m":5,"ops":[{"k":"set","p":"/participants/9/themes/9/answers/9","v":"x"},
+		{"k":"remove","p":"/participants/404/themes/3"}]}`)
 	if got := stateOf(t, db); got != `{}` {
 		t.Fatalf("out-of-range answer index and missing-path remove must no-op: %s", got)
 	}
@@ -135,18 +135,18 @@ func TestMatchPatchFlatReplayMatchesLive(t *testing.T) {
 // exactly the same bytes hot or cold.
 func TestMatchPatchEncode(t *testing.T) {
 	payload := EncodeMatchPatch(5, []store.BlobOp{
-		{Kind: "set", Path: "/teams/7/themes/0/answers/2", Value: "wrong"},
-		{Kind: "remove", Path: "/teams/7/shootoutThemes/1"},
+		{Kind: "set", Path: "/participants/7/themes/0/answers/2", Value: "wrong"},
+		{Kind: "remove", Path: "/participants/7/shootoutThemes/1"},
 	})
 	db := patchDB(t)
 	applyPatch(t, db, string(payload))
-	want := `{"teams":{"7":{"themes":[{"answers":["","wrong","","",""]}]}}}`
+	want := `{"participants":{"7":{"themes":[{"answers":["","wrong","","",""]}]}}}`
 	_ = want
 	var raw string
 	if err := db.QueryRow(`select state_json from matches where id = 5`).Scan(&raw); err != nil {
 		t.Fatal(err)
 	}
-	if raw != `{"teams":{"7":{"themes":[{"answers":["","","wrong","",""]}]}}}` {
+	if raw != `{"participants":{"7":{"themes":[{"answers":["","","wrong","",""]}]}}}` {
 		t.Fatalf("state = %s", raw)
 	}
 }

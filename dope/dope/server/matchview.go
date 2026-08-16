@@ -3,7 +3,7 @@ package dopeserver
 import (
 	"context"
 	"database/sql"
-	"dope/dope/domain/resolver"
+	"dope/dope/domain/festview"
 	"dope/dope/domain/scoring"
 	"dope/dope/platform/metrics"
 	"dope/dope/platform/util"
@@ -59,101 +59,13 @@ func (s *server) loadFestViewSnapshot(festID, gameID int64) (store.FestView, err
 	return s.loadFestViewUsing(tx, festID, gameID)
 }
 
-// loadFestViewUsing runs every fest-view query against the given queryer, so the
-// snapshot path can pass a read-only tx (one WAL snapshot, off the write lock)
-// and the locked path can pass s.eng.DB while holding s.eng.Mu.
+// loadFestViewUsing builds the view against the given queryer, so the snapshot
+// path can pass a read-only tx (one WAL snapshot, off the write lock) and the
+// locked path can pass s.eng.DB while holding s.eng.Mu.
 func (s *server) loadFestViewUsing(q store.Queryer, festID, gameID int64) (store.FestView, error) {
 	ctx, cancel := festwrite.BoundedReadContext()
 	defer cancel()
-	var view store.FestView
-	view.QuestionValues = store.QuestionValues
-	view.RegularThemeCount = store.ThemeCount
-	if festID == 0 {
-		view.Slug = ""
-		view.Title = ""
-		view.UpdatedAt = ""
-		return view, nil
-	}
-	var updatedAt string
-	if err := q.QueryRowContext(ctx, `
-select coalesce(t.slug, ''), t.title, t.revision, t.updated_at, coalesce(g.scheme_json, ''), coalesce(g.title, '')
-from fests t
-left join games g on g.fest_id = t.id and g.id = ?
-where t.id = ?`, gameID, festID).
-		Scan(&view.Slug, &view.Title, &view.Revision, &updatedAt, &view.SchemaJSON, &view.GameName); err != nil {
-		return store.FestView{}, err
-	}
-	view.UpdatedAt = updatedAt
-
-	venues, err := store.LoadVenues(ctx, q, festID)
-	if err != nil {
-		return store.FestView{}, err
-	}
-	view.Venues = venues
-
-	stageWhere := "fest_id = ?"
-	stageArgs := []any{festID}
-	if gameID > 0 {
-		stageWhere += " and game_id = ?"
-		stageArgs = append(stageArgs, gameID)
-	}
-	stageRows, err := q.QueryContext(ctx, `
-select id, code, title, stage_type, position, status, config_json
-from stages
-where `+stageWhere+`
-order by position, id`, stageArgs...)
-	if err != nil {
-		return store.FestView{}, err
-	}
-	defer stageRows.Close()
-
-	type stageRecord struct {
-		ID    int64
-		Stage store.StageView
-	}
-	var stageRecords []stageRecord
-	for stageRows.Next() {
-		var stageID int64
-		var stage store.StageView
-		var configJSON string
-		if err := stageRows.Scan(&stageID, &stage.Code, &stage.Title, &stage.Type, &stage.Position, &stage.Status, &configJSON); err != nil {
-			return store.FestView{}, err
-		}
-		stage.Config = json.RawMessage(store.NonEmptyJSON(configJSON))
-		stageRecords = append(stageRecords, stageRecord{ID: stageID, Stage: stage})
-	}
-	if err := stageRows.Err(); err != nil {
-		return store.FestView{}, err
-	}
-	if err := stageRows.Close(); err != nil {
-		return store.FestView{}, err
-	}
-	for _, record := range stageRecords {
-		if record.Stage.Type == "reseed" {
-			entries, err := store.LoadReseedEntries(ctx, q, record.ID)
-			if err != nil {
-				return store.FestView{}, err
-			}
-			record.Stage.ReseedEntries = entries
-			state, err := resolver.ReseedPrerequisites(ctx, q, record.Stage.Config, gameID)
-			if err != nil {
-				return store.FestView{}, err
-			}
-			record.Stage.ReseedReady = state.Ready
-			record.Stage.ReseedPending = state.PendingMatches
-			if !state.Ready {
-				record.Stage.ReseedMessage = resolver.ReseedNotReadyMessage(state.PendingMatches)
-			}
-		} else {
-			matches, err := store.LoadFestMatches(ctx, q, record.ID)
-			if err != nil {
-				return store.FestView{}, err
-			}
-			record.Stage.Matches = matches
-		}
-		view.Stages = append(view.Stages, record.Stage)
-	}
-	return view, nil
+	return festview.Load(ctx, q, festID, gameID)
 }
 
 func (s *server) loadVenuesLocked(festID int64) ([]store.VenueView, error) {

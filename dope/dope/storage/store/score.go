@@ -13,9 +13,9 @@ import (
 
 // BuildView scores a whole match state into a MatchView.
 func BuildView(state MatchState) MatchView {
-	teams := make([]TeamView, len(state.Teams))
-	for i, team := range state.Teams {
-		teams[i] = ScoreTeam(team)
+	teams := make([]ParticipantView, len(state.Participants))
+	for i, team := range state.Participants {
+		teams[i] = ScoreParticipant(team)
 	}
 
 	standings := ManualStandings(teams)
@@ -35,14 +35,14 @@ func BuildView(state MatchState) MatchView {
 		Revision:       state.Revision,
 		UpdatedAt:      state.UpdatedAt.Format(time.RFC3339),
 		QuestionValues: QuestionValues,
-		Teams:          teams,
+		Participants:   teams,
 		Standings:      standings,
 	}
 }
 
-// ScoreTeam scores one team's themes and shootout themes into a TeamView.
-func ScoreTeam(team TeamState) TeamView {
-	view := TeamView{
+// ScoreParticipant scores one team's themes and shootout themes into a ParticipantView.
+func ScoreParticipant(team ParticipantState) ParticipantView {
+	view := ParticipantView{
 		ID:             team.ID,
 		Name:           team.Name,
 		Roster:         append([]RosterMember(nil), team.Roster...),
@@ -103,20 +103,20 @@ func ScoreTheme(theme ThemeEntry) ThemeView {
 // places. Finishing a match runs it, turning the live grid into a result; a
 // pinned place overrides it again at scoring time.
 func AssignComputedPlaces(state *MatchState) {
-	ranked := make([]int, len(state.Teams))
-	views := make([]TeamView, len(state.Teams))
-	for index, team := range state.Teams {
-		ranked[index], views[index] = index, ScoreTeam(team)
+	ranked := make([]int, len(state.Participants))
+	views := make([]ParticipantView, len(state.Participants))
+	for index, team := range state.Participants {
+		ranked[index], views[index] = index, ScoreParticipant(team)
 	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		return teamRanksHigher(views[ranked[i]], views[ranked[j]])
 	})
 	for place, index := range ranked {
-		state.Teams[index].Place = float64(place + 1)
+		state.Participants[index].Place = float64(place + 1)
 	}
 }
 
-func teamRanksHigher(a, b TeamView) bool {
+func teamRanksHigher(a, b ParticipantView) bool {
 	if a.Total != b.Total {
 		return a.Total > b.Total
 	}
@@ -136,9 +136,9 @@ func teamRanksHigher(a, b TeamView) bool {
 
 // ManualStandings orders teams by their manual place (placed first, sorted),
 // then unplaced in input order, projecting each to a StandingView.
-func ManualStandings(teams []TeamView) []StandingView {
-	placed := make([]TeamView, 0, len(teams))
-	unplaced := make([]TeamView, 0)
+func ManualStandings(teams []ParticipantView) []StandingView {
+	placed := make([]ParticipantView, 0, len(teams))
+	unplaced := make([]ParticipantView, 0)
 	for _, team := range teams {
 		if team.Place > 0 {
 			placed = append(placed, team)

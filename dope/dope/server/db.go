@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -12,7 +13,9 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"dope/dope/domain/resolver"
 	"dope/dope/domain/roster"
+	"dope/dope/domain/schemedsl"
 	"dope/dope/platform/util"
 	"dope/dope/storage/auditmw"
 	"dope/dope/storage/festaccess"
@@ -78,6 +81,13 @@ func migrateDB(db *sql.DB) error {
 	// to audited tables (fests/users/organizers), and once audit_log is dropped
 	// below those stale triggers would fail with "no such table: audit_log".
 	if err := auditmw.DropLegacyAuditTriggers(db); err != nil {
+		return err
+	}
+	// v20: the Participant rename (ADR-0007). It runs BEFORE the create-table
+	// block below, because that block would otherwise create an empty
+	// `participants` alongside the legacy `teams`, and the rename would mistake
+	// that for an already-migrated database.
+	if err := migrate.RunParticipantRename(db); err != nil {
 		return err
 	}
 	_, err := db.Exec(`
@@ -194,11 +204,17 @@ create table if not exists game_player_team_overrides(
   primary key(fest_id, game_id, player_id)
 );
 
-create table if not exists teams(
+-- The game-side Participant registry: whoever occupies a Slot and is scored.
+-- The roster column says which Fest roster the row was drawn from — a team, or
+-- one player in an individual format (личная СИ). See ADR-0007.
+create table if not exists participants(
   id integer primary key,
   fest_id integer not null references fests(id) on delete cascade,
+  roster text not null default 'team' check (roster in ('team','player')),
   name text not null,
-  city text not null default ''
+  city text not null default '',
+  fest_team_id integer references fest_teams(id),
+  fest_player_id integer references fest_players(id)
 );
 
 create table if not exists players(
@@ -208,11 +224,11 @@ create table if not exists players(
   last_name text not null default ''
 );
 
-create table if not exists team_players(
-  team_id integer not null references teams(id) on delete cascade,
+create table if not exists participant_players(
+  participant_id integer not null references participants(id) on delete cascade,
   player_id integer not null references players(id) on delete cascade,
   roster_order integer not null,
-  primary key(team_id, player_id)
+  primary key(participant_id, player_id)
 );
 
 create table if not exists games(
@@ -233,36 +249,28 @@ create table if not exists games(
   unique(fest_id, code)
 );
 
-create table if not exists game_teams(
+create table if not exists game_participants(
   game_id integer not null references games(id) on delete cascade,
-  team_id integer not null references teams(id) on delete cascade,
+  participant_id integer not null references participants(id) on delete cascade,
   position integer not null,
-  primary key(game_id, team_id)
-);
-
-create table if not exists game_players(
-  game_id integer not null references games(id) on delete cascade,
-  player_id integer not null references players(id) on delete cascade,
-  position integer not null,
-  primary key(game_id, player_id)
+  number integer not null default 0,
+  primary key(game_id, participant_id)
 );
 
 create table if not exists game_team_players(
   game_id integer not null references games(id) on delete cascade,
-  team_id integer not null references teams(id) on delete cascade,
+  participant_id integer not null references participants(id) on delete cascade,
   player_id integer not null references players(id) on delete cascade,
   roster_order integer not null,
-  primary key(game_id, team_id, player_id)
+  primary key(game_id, participant_id, player_id)
 );
 
 create table if not exists game_assignments(
   game_id integer not null references games(id) on delete cascade,
   basket integer not null,
   number integer not null,
-  team_id integer references teams(id),
-  player_id integer references players(id),
-  primary key(game_id, basket, number),
-  check ((team_id is not null) <> (player_id is not null))
+  participant_id integer references participants(id),
+  primary key(game_id, basket, number)
 );
 
 create table if not exists venues(
@@ -285,6 +293,9 @@ create table if not exists stages(
   position integer not null,
   status text not null default 'active',
   config_json text not null default '{}',
+  block_code text not null default '',
+  wave_index integer not null default 0,
+  group_code text not null default '',
   unique(game_id, code)
 );
 
@@ -296,6 +307,8 @@ create table if not exists matches(
   code text not null,
   title text not null,
   position integer not null,
+  round integer not null default 0,
+  wave integer not null default 0,
   participant_count integer not null,
   venue_id integer references venues(id),
   status text not null default 'active',
@@ -309,21 +322,20 @@ create table if not exists match_slots(
   slot_index integer not null,
   source_type text not null check (source_type in ('seed','from_match','reseed','placeholder')),
   source_ref_json text not null default '{}',
-  team_id integer references teams(id),
-  player_id integer references players(id),
+  participant_id integer references participants(id),
   locked integer not null default 0,
   unique(match_id, slot_index)
 );
 
 create table if not exists match_results(
   match_id integer not null references matches(id) on delete cascade,
-  team_id integer not null references teams(id) on delete cascade,
+  participant_id integer not null references participants(id) on delete cascade,
   place real not null default 0,
   total integer not null default 0,
   plus integer not null default 0,
   tiebreak integer not null default 0,
   metrics_json text not null default '{}',
-  primary key(match_id, team_id)
+  primary key(match_id, participant_id)
 );
 
 -- journal is the single forward edit log: it is BOTH the durable, replayable
@@ -381,16 +393,16 @@ create table if not exists journal_checkpoint(
   primary key(game_id, seq)
 );
 
-create trigger if not exists team_players_max_9
-before insert on team_players
-when (select count(*) from team_players where team_id = new.team_id) >= 9
+create trigger if not exists participant_players_max_9
+before insert on participant_players
+when (select count(*) from participant_players where participant_id = new.participant_id) >= 9
 begin
   select raise(abort, 'team roster is limited to 9 players');
 end;
 
 create trigger if not exists game_team_players_max_9
 before insert on game_team_players
-when (select count(*) from game_team_players where game_id = new.game_id and team_id = new.team_id) >= 9
+when (select count(*) from game_team_players where game_id = new.game_id and participant_id = new.participant_id) >= 9
 begin
   select raise(abort, 'team roster is limited to 9 players');
 end;
@@ -592,12 +604,20 @@ insert or ignore into schema_versions(version, applied_at) values(11, strftime('
 	// gameplay rows (ON DELETE CASCADE preserved); number drives seed matching so
 	// re-seeding follows teams by identity and same-named teams stay distinct.
 	// Nullable: scheme-defined teams without a printed number keep working.
-	if err := store.AddColumnsIfMissing(db, "teams", []store.ColumnSpec{
+	if err := store.AddColumnsIfMissing(db, "participants", []store.ColumnSpec{
 		{Name: "number", Type: "INTEGER"},
 	}); err != nil {
 		return err
 	}
-	if _, err := db.Exec(`create unique index if not exists teams_fest_number_idx on teams(fest_id, number) where number is not null`); err != nil {
+	// Numbering is per Kind: «команда 12» and «игрок 12» are different
+	// identities, and a fest that runs both a team format and an individual one
+	// numbers each from 1. A single fest-wide number space would have the
+	// individual game claim the teams' rows (ADR-0007).
+	if _, err := db.Exec(`drop index if exists participants_fest_number_idx`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`create unique index if not exists participants_fest_roster_number_idx
+  on participants(fest_id, roster, number) where number is not null`); err != nil {
 		return err
 	}
 	var hasV14 int
@@ -605,7 +625,7 @@ insert or ignore into schema_versions(version, applied_at) values(11, strftime('
 		return err
 	}
 	if hasV14 == 0 {
-		if err := backfillEKTeamNumbers(db); err != nil {
+		if err := backfillEKParticipantNumbers(db); err != nil {
 			return err
 		}
 		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(14, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
@@ -697,6 +717,7 @@ end`); err != nil {
 	}
 	if err := store.AddColumnsIfMissing(db, "games", []store.ColumnSpec{
 		{Name: "participant_kind", Type: "TEXT NOT NULL DEFAULT 'team'"},
+		{Name: "scheme_dsl", Type: "TEXT NOT NULL DEFAULT ''"},
 	}); err != nil {
 		return err
 	}
@@ -743,17 +764,191 @@ create table if not exists stage_standings(
 			return err
 		}
 	}
+	// v21: the schedule says where it sits. A stage row is usually a Wave, so it
+	// names its Block, its turn at the столы and — round-robin only — the Group
+	// it ranks. A Group is the exception: it holds one стол from its first бой
+	// to its last, so its stage spans every Round and every Wave, and both of
+	// those coordinates sit on the бой instead. Existing rows stay blank: a game
+	// compiled
+	// before this knows its shape only through its stage codes, and guessing
+	// coordinates back out of `s1-g7` is the habit these columns exist to end.
+	if err := store.AddColumnsIfMissing(db, "stages", []store.ColumnSpec{
+		{Name: "block_code", Type: "TEXT NOT NULL DEFAULT ''"},
+		{Name: "wave_index", Type: "INTEGER NOT NULL DEFAULT 0"},
+		{Name: "group_code", Type: "TEXT NOT NULL DEFAULT ''"},
+	}); err != nil {
+		return err
+	}
+	if err := store.AddColumnsIfMissing(db, "matches", []store.ColumnSpec{
+		{Name: "round", Type: "INTEGER NOT NULL DEFAULT 0"},
+		{Name: "wave", Type: "INTEGER NOT NULL DEFAULT 0"},
+	}); err != nil {
+		return err
+	}
+	// v22: a Participant's playing number belongs to its Game (ADR-0009). A фест
+	// registers teams; a Game seats some of them and numbers those from 1, so the
+	// same team is «2» in the ЭК and «4» in the ОД. Existing rows keep number 0
+	// until their game is next compiled — a Game that has never had an entrant
+	// list is not improved by inventing one.
+	if err := store.AddColumnsIfMissing(db, "game_participants", []store.ColumnSpec{
+		{Name: "number", Type: "INTEGER NOT NULL DEFAULT 0"},
+	}); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(22, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(21, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+		return err
+	}
+	// v23: a pod ranks itself. Pods were compiled as hand-drawn «matches»
+	// stages and ranked in the browser; now the «de» Ranker writes their table
+	// like every other Group's, so the rows are retagged and ranked once. Only
+	// a Group of a manual stage is a pod — the grain says which.
+	var hasV23 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 23`).Scan(&hasV23); err != nil {
+		return err
+	}
+	if hasV23 == 0 {
+		if err := rankPodsBackfill(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(23, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
+	// v24: a бой carries its буква in the store, dealt at compile time, so a
+	// URL can say «BU» and the view need not compute it. Existing games get
+	// theirs dealt once, in schedule order, skipping the бои that were never
+	// called one (a title without «Бой N» — the письменный отбор); a group
+	// stage from before grain existed gets its Block and Group from its code
+	// the one last time, so no page has to.
+	if err := store.AddColumnsIfMissing(db, "matches", []store.ColumnSpec{
+		{Name: "letter", Type: "TEXT NOT NULL DEFAULT ''"},
+	}); err != nil {
+		return err
+	}
+	var hasV24 int
+	if err := db.QueryRow(`select count(*) from schema_versions where version = 24`).Scan(&hasV24); err != nil {
+		return err
+	}
+	if hasV24 == 0 {
+		if err := dealLettersBackfill(db); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`
+update stages set block_code = substr(code, 1, instr(code, '-g') - 1), group_code = substr(code, instr(code, '-g') + 2)
+where kind = 'rr' and block_code = '' and code glob 's[0-9]*-g[0-9]*'`); err != nil {
+			return err
+		}
+		if _, err := db.Exec(`insert or ignore into schema_versions(version, applied_at) values(24, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-// backfillEKTeamNumbers gives existing EK `teams` rows a number, matched to
+// dealLettersBackfill deals every existing game's бои their буквы the way the
+// browser used to: A.. in stage order then match order, skipping a бой whose
+// title is not «Бой N».
+func dealLettersBackfill(db *sql.DB) error {
+	rows, err := db.Query(`
+select m.id, m.game_id, m.title from matches m join stages s on s.id = m.stage_id
+order by m.game_id, s.position, s.id, m.position, m.id`)
+	if err != nil {
+		return err
+	}
+	type bout struct {
+		id, gameID int64
+		title      string
+	}
+	var bouts []bout
+	for rows.Next() {
+		var b bout
+		if err := rows.Scan(&b.id, &b.gameID, &b.title); err != nil {
+			rows.Close()
+			return err
+		}
+		bouts = append(bouts, b)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	var game int64 = -1
+	dealt := 0
+	for _, b := range bouts {
+		if b.gameID != game {
+			game, dealt = b.gameID, 0
+		}
+		if !boutTitle.MatchString(b.title) {
+			continue
+		}
+		if _, err := tx.Exec(`update matches set letter = ? where id = ?`, schemedsl.BoutLetter(dealt), b.id); err != nil {
+			tx.Rollback()
+			return err
+		}
+		dealt++
+	}
+	return tx.Commit()
+}
+
+var boutTitle = regexp.MustCompile(`Бой\s+\d+`)
+
+// rankPodsBackfill retags every pod stage as Kind «de» and lets the resolver
+// write its table, one game at a time.
+func rankPodsBackfill(db *sql.DB) error {
+	rows, err := db.Query(`select distinct game_id from stages where kind = 'matches' and group_code <> ''`)
+	if err != nil {
+		return err
+	}
+	var gameIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		gameIDs = append(gameIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, gameID := range gameIDs {
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`update stages set kind = 'de' where game_id = ? and kind = 'matches' and group_code <> ''`, gameID); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if _, err := resolver.ResolveGameSlotsTx(context.Background(), tx, gameID); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// backfillEKParticipantNumbers gives existing EK `teams` rows a number, matched to
 // fest_teams by name, so re-seeding finds them by identity instead of creating
 // duplicates. Best-effort and conflict-free: ambiguous (duplicate) names are
 // skipped, and a number already claimed by another teams row in the fest is not
 // reused — those rows stay null (the unresolvable legacy ambiguity this whole
 // change exists to prevent going forward). Gated by the caller to run once.
-func backfillEKTeamNumbers(db *sql.DB) error {
-	festRows, err := db.Query(`select distinct fest_id from teams where number is null`)
+func backfillEKParticipantNumbers(db *sql.DB) error {
+	festRows, err := db.Query(`select distinct fest_id from participants where number is null`)
 	if err != nil {
 		return err
 	}
@@ -805,7 +1000,7 @@ func backfillEKTeamNumbers(db *sql.DB) error {
 
 		// Numbers already claimed by teams rows in this fest.
 		claimed := map[int64]bool{}
-		clRows, err := db.Query(`select number from teams where fest_id = ? and number is not null`, festID)
+		clRows, err := db.Query(`select number from participants where fest_id = ? and number is not null`, festID)
 		if err != nil {
 			return err
 		}
@@ -823,7 +1018,7 @@ func backfillEKTeamNumbers(db *sql.DB) error {
 		}
 		clRows.Close()
 
-		teamRows, err := db.Query(`select id, name from teams where fest_id = ? and number is null order by id`, festID)
+		teamRows, err := db.Query(`select id, name from participants where fest_id = ? and number is null order by id`, festID)
 		if err != nil {
 			return err
 		}
@@ -851,7 +1046,7 @@ func backfillEKTeamNumbers(db *sql.DB) error {
 		}
 		teamRows.Close()
 		for _, a := range assigns {
-			if _, err := db.Exec(`update teams set number = ? where id = ?`, a.num, a.id); err != nil {
+			if _, err := db.Exec(`update participants set number = ? where id = ?`, a.num, a.id); err != nil {
 				return err
 			}
 		}

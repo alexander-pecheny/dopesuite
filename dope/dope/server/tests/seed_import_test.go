@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/core"
+	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/imports"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
-	"dope/dope/web/hostpages"
 	"encoding/json"
 	"path/filepath"
 	"strconv"
@@ -265,7 +265,7 @@ values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 	if err := json.Unmarshal([]byte(rawScheme), &scheme); err != nil {
 		t.Fatalf("decode ek scheme: %v", err)
 	}
-	ekGameID, err := hostpages.CreateEKGameTx(ctx, tx, festID, scheme)
+	ekGameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{FestID: festID, Type: "ek", EKScheme: &scheme})
 	if err != nil {
 		t.Fatalf("create ek: %v", err)
 	}
@@ -281,7 +281,7 @@ func seedImportSlotNames(t *testing.T, db *sql.DB, gameID int64) []string {
 select coalesce(t.name, '')
 from match_slots ms
 join matches m on m.id = ms.match_id
-left join teams t on t.id = ms.team_id
+left join participants t on t.id = ms.participant_id
 where m.game_id = ? and m.code = 'A'
 order by ms.slot_index`, gameID)
 	if err != nil {
@@ -309,9 +309,9 @@ func seedImportRegularThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
 		t.Fatalf("load match state: %v", err)
 	}
 	count := 0
-	for i, id := range match.TeamIDs {
+	for i, id := range match.ParticipantIDs {
 		if id != 0 {
-			count += len(match.State.Teams[i].Themes)
+			count += len(match.State.Participants[i].Themes)
 		}
 	}
 	return count
@@ -326,13 +326,13 @@ func seedImportExtraThemeCount(t *testing.T, db *sql.DB, gameID int64) int {
 		t.Fatalf("load match state: %v", err)
 	}
 	seated := map[string]bool{}
-	for _, id := range match.TeamIDs {
+	for _, id := range match.ParticipantIDs {
 		if id != 0 {
 			seated[strconv.FormatInt(id, 10)] = true
 		}
 	}
 	count := 0
-	for key := range match.Blob.Teams {
+	for key := range match.Blob.Participants {
 		if !seated[key] {
 			count++
 		}
@@ -349,16 +349,16 @@ func seedImportRowNames(view imports.SeedImportView) []string {
 }
 
 func matchTeamNames(view store.MatchView) []string {
-	out := make([]string, len(view.Teams))
-	for i, team := range view.Teams {
+	out := make([]string, len(view.Participants))
+	for i, team := range view.Participants {
 		out[i] = team.Name
 	}
 	return out
 }
 
 func matchTeamPlaces(view store.MatchView) []float64 {
-	out := make([]float64, len(view.Teams))
-	for i, team := range view.Teams {
+	out := make([]float64, len(view.Participants))
+	for i, team := range view.Participants {
 		out[i] = team.Place
 	}
 	return out

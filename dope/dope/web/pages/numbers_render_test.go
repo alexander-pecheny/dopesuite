@@ -40,6 +40,6 @@ func TestHostNumbersDocRenders(t *testing.T) {
 	}
 	// Row 2 has no team id -> empty hidden value (matches the old {{if .TeamID}}).
 	if !strings.Contains(body, `name="team_id_2" value=""`) {
-		t.Errorf("row 2 team_id should be empty:\n%s", body)
+		t.Errorf("row 2 participant_id should be empty:\n%s", body)
 	}
 }

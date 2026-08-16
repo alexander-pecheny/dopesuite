@@ -21,7 +21,7 @@ func TestMatchBlobRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(raw, &back); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	section := back.Teams["17"]
+	section := back.Participants["17"]
 	if section == nil {
 		t.Fatalf("team 17 section missing: %s", raw)
 	}
@@ -31,7 +31,7 @@ func TestMatchBlobRoundTrip(t *testing.T) {
 	if section.Themes[2].Answers[4] != "right" || section.Themes[0].Player != 55 {
 		t.Fatalf("section = %+v", section)
 	}
-	if back.Team(99) == nil || len(back.Teams["99"].Themes) != 0 {
+	if back.Participant(99) == nil || len(back.Participants["99"].Themes) != 0 {
 		t.Fatal("untouched team section should exist empty after Team()")
 	}
 }
@@ -47,12 +47,12 @@ func TestMatchBlobShootout(t *testing.T) {
 	blob.SetAnswer(1, "shootout", 1, 0, "wrong")
 	blob.RemoveTheme(1, "shootout", 1)
 	blob.RemoveTheme(2, "shootout", 1)
-	if len(blob.Teams["1"].ShootoutThemes) != 1 || len(blob.Teams["2"].ShootoutThemes) != 1 {
+	if len(blob.Participants["1"].ShootoutThemes) != 1 || len(blob.Participants["2"].ShootoutThemes) != 1 {
 		t.Fatalf("shootout counts after remove: %d/%d, want 1/1",
-			len(blob.Teams["1"].ShootoutThemes), len(blob.Teams["2"].ShootoutThemes))
+			len(blob.Participants["1"].ShootoutThemes), len(blob.Participants["2"].ShootoutThemes))
 	}
 	blob.RemoveTheme(1, "shootout", 5) // out of range no-ops
-	if len(blob.Teams["1"].ShootoutThemes) != 1 {
+	if len(blob.Participants["1"].ShootoutThemes) != 1 {
 		t.Fatal("out-of-range remove should no-op")
 	}
 }
@@ -66,7 +66,7 @@ func TestMatchBlobPin(t *testing.T) {
 	if got := blob.Pin(7); got == nil || *got != 1 {
 		t.Fatalf("pin = %v, want 1", got)
 	}
-	team := TeamStateFromBlob(blob.Teams["7"], 7, "Команда", nil, 3.0, nil)
+	team := ParticipantStateFromBlob(blob.Participants["7"], 7, "Команда", nil, 3.0, nil)
 	if team.Place != 1 {
 		t.Fatalf("pinned place = %v, want 1 (scored place was 3)", team.Place)
 	}
@@ -74,23 +74,23 @@ func TestMatchBlobPin(t *testing.T) {
 	if blob.Pin(7) != nil {
 		t.Fatal("cleared pin should read back nil")
 	}
-	if team := TeamStateFromBlob(blob.Teams["7"], 7, "Команда", nil, 3.0, nil); team.Place != 3 {
+	if team := ParticipantStateFromBlob(blob.Participants["7"], 7, "Команда", nil, 3.0, nil); team.Place != 3 {
 		t.Fatalf("unpinned place = %v, want the scored 3", team.Place)
 	}
 }
 
-// TeamStateFromBlob projects a blob section into the legacy TeamState shape:
+// ParticipantStateFromBlob projects a blob section into the legacy ParticipantState shape:
 // theme players resolve id → display name, the grid pads to ThemeCount, and
 // marks normalise — so BuildView and every downstream consumer are unchanged.
-func TestTeamStateFromBlob(t *testing.T) {
+func TestParticipantStateFromBlob(t *testing.T) {
 	blob := MatchBlob{}
 	blob.SetPlayer(7, "regular", 1, 55)
 	blob.SetAnswer(7, "regular", 1, 0, "+")
 	blob.SetAnswer(7, "shootout", 0, 2, "Q")
-	section := blob.Teams["7"]
+	section := blob.Participants["7"]
 
 	names := map[int64]string{55: "Анна Б."}
-	team := TeamStateFromBlob(section, 7, "Команда", RosterOf("Анна Б."), 2.0,
+	team := ParticipantStateFromBlob(section, 7, "Команда", RosterOf("Анна Б."), 2.0,
 		func(id int64) string { return names[id] })
 	if team.Name != "Команда" || team.Place != 2.0 || len(team.Roster) != 1 {
 		t.Fatalf("identity fields: %+v", team)

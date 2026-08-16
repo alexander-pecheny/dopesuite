@@ -10,9 +10,9 @@ import (
 
 func testMatch() store.DBMatchState {
 	return store.DBMatchState{
-		MatchID: 1,
-		TeamIDs: []int64{11, 22},
-		State: store.MatchState{Teams: []store.TeamState{
+		MatchID:        1,
+		ParticipantIDs: []int64{11, 22},
+		State: store.MatchState{Participants: []store.ParticipantState{
 			{ID: 11, Roster: []store.RosterMember{{ID: 101, Name: "Анна Б."}}},
 			{ID: 22, Roster: []store.RosterMember{{ID: 202, Name: "Пётр В."}}},
 		}},
@@ -40,17 +40,17 @@ func TestApplyPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if got := blob.Teams["11"].Themes[2].Answers[4]; got != "right" {
+	if got := blob.Participants["11"].Themes[2].Answers[4]; got != "right" {
 		t.Fatalf("answer = %q", got)
 	}
-	if got := blob.Teams["11"].Themes[2].Player; got != 101 {
+	if got := blob.Participants["11"].Themes[2].Player; got != 101 {
 		t.Fatalf("player = %d", got)
 	}
 	if got := blob.Pin(22); got == nil || *got != 1.5 {
 		t.Fatalf("pin = %v", got)
 	}
-	if len(blob.Teams["22"].ShootoutThemes) != 1 {
-		t.Fatalf("shootout themes = %d", len(blob.Teams["22"].ShootoutThemes))
+	if len(blob.Participants["22"].ShootoutThemes) != 1 {
+		t.Fatalf("shootout themes = %d", len(blob.Participants["22"].ShootoutThemes))
 	}
 	if len(blob.Ops) != 4 {
 		t.Fatalf("recorded %d ops, want 4", len(blob.Ops))
@@ -72,10 +72,10 @@ func TestApplyRemove(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if blob.Pin(11) != nil || blob.Teams["11"].Themes[0].Player != 0 {
-		t.Fatalf("removes did not clear: %+v", blob.Teams["11"])
+	if blob.Pin(11) != nil || blob.Participants["11"].Themes[0].Player != 0 {
+		t.Fatalf("removes did not clear: %+v", blob.Participants["11"])
 	}
-	if len(blob.Teams["11"].ShootoutThemes) != 0 {
+	if len(blob.Participants["11"].ShootoutThemes) != 0 {
 		t.Fatal("shootout theme should be spliced out")
 	}
 }

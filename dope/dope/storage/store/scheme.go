@@ -24,8 +24,23 @@ type FestScheme struct {
 	TourComp          json.RawMessage `json:"tourComp,omitempty"`
 	NTeams            int             `json:"nTeams,omitempty"`
 	Themes            int             `json:"themes,omitempty"`
+	Questions         int             `json:"questions,omitempty"`
 	Participants      []string        `json:"participants,omitempty"`
 	Stickers          json.RawMessage `json:"stickers,omitempty"`
+	Seeding           *SchemeSeeding  `json:"seeding,omitempty"`
+}
+
+// SchemeSeeding is the [init] declaration compiled from the scheme DSL: where
+// the seeding comes from and how the source's metrics are ordered. It resolves
+// only when the host presses «Import seed» — never on its own.
+type SchemeSeeding struct {
+	Source string           `json:"source"`
+	Sort   []SchemeSortRule `json:"sort,omitempty"`
+}
+
+type SchemeSortRule struct {
+	Metric string `json:"metric"`
+	Dir    string `json:"dir"`
 }
 
 type SchemeTeam struct {
@@ -45,19 +60,52 @@ type SchemeStage struct {
 	Code      string          `json:"code"`
 	Title     string          `json:"title"`
 	StageType string          `json:"stage_type"`
+	Kind      string          `json:"kind,omitempty"` // registered StageKind ('rr', …); empty = stage_type
+	Slug      string          `json:"slug,omitempty"` // the Block's readable URL handle for synthetic tabs
 	Position  int             `json:"position"`
+	Grain     SchemeGrain     `json:"grain"`
 	Matches   []SchemeMatch   `json:"matches"`
 	Teams     []SchemeSlot    `json:"teams"`
+	Bands     []int           `json:"bands,omitempty"` // per Teams entry: how many Losses it carries
 	Sources   []string        `json:"sources"`
 	Sort      json.RawMessage `json:"sort"`
 	Config    json.RawMessage `json:"config"`
 	Layout    json.RawMessage `json:"layout"`
 }
 
+// SchemeGrain says where a stage sits in its Game. A stage row is a Wave — the
+// finest grain the schedule has — so it names the Block it expands, the Group
+// it ranks (round-robin only) and which turn at the столы it is. The remaining
+// coordinate, the Round, lives on the Match: a Group plays all its круги at one
+// стол, so one stage spans several Rounds and only a бой knows which.
+type SchemeGrain struct {
+	Block string `json:"block,omitempty"`
+	Wave  int    `json:"wave,omitempty"`
+	Group string `json:"group,omitempty"`
+}
+
+// Normalized is what every writer must store. A stage that knows its Block is
+// at least the first заход, so wave 0 there means "nobody said", not "заход
+// zero" — and a scheme unmarshalled from JSON written before grain existed has
+// no wave at all. Without this, the same tournament compiled from DSL and
+// imported from JSON lands on different coordinates.
+//
+// A stage with no Block is unknown throughout, and stays that way: guessing a
+// coordinate is the habit the grain columns exist to end.
+func (g SchemeGrain) Normalized() SchemeGrain {
+	if g.Block != "" && g.Wave == 0 {
+		g.Wave = 1
+	}
+	return g
+}
+
 type SchemeMatch struct {
 	Code             string       `json:"code"`
 	Title            string       `json:"title"`
+	Letter           string       `json:"letter,omitempty"` // Буква боя, dealt at compile time; "" for a бой that has none
 	Venue            int          `json:"venue"`
+	Round            int          `json:"round,omitempty"` // 1-based круг within the Block
+	Wave             int          `json:"wave,omitempty"`  // 1-based заход, set where the stage spans several
 	ParticipantCount int          `json:"participantCount"`
 	Slots            []SchemeSlot `json:"slots"`
 }

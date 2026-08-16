@@ -144,9 +144,9 @@ func (s *server) ServeGameHTMLWithInit(w http.ResponseWriter, r *http.Request, h
 	s.serveGameHTMLWithInit(w, r, htmlPath, scope)
 }
 
-// ServeHostHTMLWithInit serves the EK host.html page with init payload.
-func (s *server) ServeHostHTMLWithInit(w http.ResponseWriter, r *http.Request, scope core.FestScope, parts []string) {
-	s.serveHostHTMLWithInit(w, r, scope, parts)
+// ServeEKHTMLWithInit serves the ЭК page (static/ek.html) with init payload.
+func (s *server) ServeEKHTMLWithInit(w http.ResponseWriter, r *http.Request, scope core.FestScope, parts []string) {
+	s.serveEKHTMLWithInit(w, r, scope, parts)
 }
 
 // loadHostFestHeader loads the fest-header view model for the host pages. It

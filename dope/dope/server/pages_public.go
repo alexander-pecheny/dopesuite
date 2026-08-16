@@ -207,11 +207,11 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 			var gameType string
 			if err := s.eng.DB.QueryRowContext(r.Context(), `select game_type from games where id = ? and fest_id = ?`, gameID, id).Scan(&gameType); err == nil {
 				scope := festScope{FestID: id, GameID: gameID}
-				route := parseHostInitRoute(parts[1:], scope)
+				route := parseEKInitRoute(parts[1:], scope)
 				if games.IsChGK(gameType) {
 					// OD/SI viewers always render the whole game regardless of
 					// sub-route, so collapse to one snapshot cache key.
-					route = hostInitRoute{Mode: "grid", FestID: id, GameID: gameID}
+					route = ekInitRoute{Mode: "grid", FestID: id, GameID: gameID}
 				}
 				// Serve the static snapshot when forced (/static) or, under load,
 				// for cookie-less viewers. Cookie-bearing requests fall through to
@@ -237,17 +237,25 @@ func (s *server) handleFestRouter(w http.ResponseWriter, r *http.Request) {
 				case "od":
 					s.serveGameHTMLWithInit(w, r, "static/od.html", scope)
 					return
-				case "si", "ksi":
+				case "ksi":
 					s.serveGameHTMLWithInit(w, r, "static/si.html", scope)
 					return
+				case "si":
+					// Личная СИ borrows ЭК's viewer for its bracket, not its
+					// blank — the page draws a player's seat as one row.
+					s.serveEKHTMLWithInit(w, r, scope, parts[1:])
+					return
+				case "brain":
+					s.serveGameHTMLWithInit(w, r, "static/brain.html", scope)
+					return
 				default:
-					s.serveViewerHTMLWithInit(w, r, scope, parts[1:])
+					s.serveEKHTMLWithInit(w, r, scope, parts[1:])
 					return
 				}
 			}
 		}
 	}
-	s.serveViewerHTML(w, r)
+	s.serveEKHTML(w, r)
 }
 
 func (s *server) renderPublicFestPage(w http.ResponseWriter, r *http.Request, id int64) {

@@ -26,21 +26,21 @@ func (s *server) serveCompiledPage(path string) http.HandlerFunc {
 	}
 }
 
-// pageSources maps a served HTML shell path to its .dopeui source. These five
+// pageSources maps a served HTML shell path to its .dopeui source. These
 // pages are authored in the constrained UI DSL (dope/web/assets/ui) and compiled
 // to HTML — at startup in embed mode, per request in disk/dev mode. Their
 // compiled bytes feed the existing init-splice + versionAssetRefs pipeline
 // unchanged; everything else is read from the asset FS verbatim.
 var pageSources = map[string]string{
-	"static/login.html":  "ui/login.dopeui",
-	"static/host.html":   "ui/host.dopeui",
-	"static/viewer.html": "ui/viewer.dopeui",
-	"static/od.html":     "ui/od.dopeui",
-	"static/si.html":     "ui/si.dopeui",
+	"static/login.html": "ui/login.dopeui",
+	"static/ek.html":    "ui/ek.dopeui",
+	"static/od.html":    "ui/od.dopeui",
+	"static/si.html":    "ui/si.dopeui",
+	"static/brain.html": "ui/brain.dopeui",
 }
 
 // pageBytes returns the HTML for a shell path: the compiled .dopeui page for the
-// five DSL-authored shells (cached in embed mode, recompiled per request in disk
+// DSL-authored shells (cached in embed mode, recompiled per request in disk
 // mode), else the raw asset bytes.
 func (s *server) pageBytes(path string) ([]byte, error) {
 	src, ok := pageSources[path]

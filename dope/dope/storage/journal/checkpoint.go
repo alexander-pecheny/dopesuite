@@ -32,8 +32,7 @@ var gameScopedTables = []struct {
 	{"match_results", "match_id in (select id from matches where game_id = ?)"},
 	{"stage_standings", "stage_id in (select id from stages where game_id = ?)"},
 	{"game_assignments", "game_id = ?"},
-	{"game_teams", "game_id = ?"},
-	{"game_players", "game_id = ?"},
+	{"game_participants", "game_id = ?"},
 	{"game_team_players", "game_id = ?"},
 	{"game_player_team_overrides", "game_id = ?"},
 }

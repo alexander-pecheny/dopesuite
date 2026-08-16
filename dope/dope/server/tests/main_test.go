@@ -45,7 +45,7 @@ func TestDefaultMatchScores(t *testing.T) {
 		"Гамма":  4,
 	}
 
-	for _, team := range view.Teams {
+	for _, team := range view.Participants {
 		if team.Total != wantTotals[team.Name] {
 			t.Fatalf("%s total = %d, want %d", team.Name, team.Total, wantTotals[team.Name])
 		}
@@ -63,7 +63,7 @@ func TestDefaultMatchScores(t *testing.T) {
 
 func TestShootoutScoresDoNotAffectBattleStats(t *testing.T) {
 	state := store.MatchState{
-		Teams: []store.TeamState{
+		Participants: []store.ParticipantState{
 			{
 				Name: "A",
 				Themes: []store.ThemeEntry{
@@ -76,7 +76,7 @@ func TestShootoutScoresDoNotAffectBattleStats(t *testing.T) {
 		},
 	}
 
-	team := store.BuildView(state).Teams[0]
+	team := store.BuildView(state).Participants[0]
 	if team.Total != 10 {
 		t.Fatalf("total = %d, want 10", team.Total)
 	}
@@ -104,7 +104,7 @@ func TestShootoutThemeActions(t *testing.T) {
 	if _, _, err := srv.ApplyUpdate(dopeserver.UpdateRequest{Action: dopeserver.ActionAddShootoutTheme}); err != nil {
 		t.Fatalf("add shootout theme: %v", err)
 	}
-	for _, team := range srv.Eng().State.Teams {
+	for _, team := range srv.Eng().State.Participants {
 		if len(team.ShootoutThemes) != 1 {
 			t.Fatalf("%s shootout themes = %d, want 1", team.Name, len(team.ShootoutThemes))
 		}
@@ -124,24 +124,24 @@ func TestShootoutThemeActions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mark shootout answer: %v", err)
 	}
-	if view.Teams[0].ShootoutTotal != 50 {
-		t.Fatalf("shootout total = %d, want 50", view.Teams[0].ShootoutTotal)
+	if view.Participants[0].ShootoutTotal != 50 {
+		t.Fatalf("shootout total = %d, want 50", view.Participants[0].ShootoutTotal)
 	}
 
 	if _, _, err := srv.ApplyUpdate(dopeserver.UpdateRequest{Action: dopeserver.ActionRemoveShootoutTheme}); err != nil {
 		t.Fatalf("remove shootout theme: %v", err)
 	}
-	if len(srv.Eng().State.Teams[0].ShootoutThemes) != 0 {
-		t.Fatalf("shootout themes after remove = %d, want 0", len(srv.Eng().State.Teams[0].ShootoutThemes))
+	if len(srv.Eng().State.Participants[0].ShootoutThemes) != 0 {
+		t.Fatalf("shootout themes after remove = %d, want 0", len(srv.Eng().State.Participants[0].ShootoutThemes))
 	}
 }
 
 func TestManualStandingsAllowsSplitPlace(t *testing.T) {
 	state := dopeserver.DefaultMatch()
-	state.Teams[0].Place = 3.5
-	state.Teams[1].Place = 2
-	state.Teams[2].Place = 3.5
-	state.Teams[3].Place = 1
+	state.Participants[0].Place = 3.5
+	state.Participants[1].Place = 2
+	state.Participants[2].Place = 3.5
+	state.Participants[3].Place = 1
 
 	standings := store.BuildView(state).Standings
 	want := []float64{1, 2, 3.5, 3.5}
@@ -237,16 +237,16 @@ func TestSQLiteBootstrapAndMatchUpdate(t *testing.T) {
 		t.Fatalf("scope: %v", err)
 	}
 	view = editMark(t, srv, scope, 2, 0, 0, "right")
-	if view.Teams[2].Total != 10 {
-		t.Fatalf("updated total = %d, want 10", view.Teams[2].Total)
+	if view.Participants[2].Total != 10 {
+		t.Fatalf("updated total = %d, want 10", view.Participants[2].Total)
 	}
 
 	reloaded, err := srv.LoadMatchViewLocked(festID, dopeserver.DefaultMatchCode)
 	if err != nil {
 		t.Fatalf("reload match: %v", err)
 	}
-	if reloaded.Teams[2].Themes[0].Answers[0] != "right" {
-		t.Fatalf("persisted mark = %q, want right", reloaded.Teams[2].Themes[0].Answers[0])
+	if reloaded.Participants[2].Themes[0].Answers[0] != "right" {
+		t.Fatalf("persisted mark = %q, want right", reloaded.Participants[2].Themes[0].Answers[0])
 	}
 }
 
@@ -288,7 +288,7 @@ func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 	}
 
 	var teamID int64
-	if err := db.QueryRow(`select id from teams where fest_id = ? order by id limit 1`, festID).Scan(&teamID); err != nil {
+	if err := db.QueryRow(`select id from participants where fest_id = ? order by id limit 1`, festID).Scan(&teamID); err != nil {
 		t.Fatalf("team id: %v", err)
 	}
 	for i := 0; i < 3; i++ {
@@ -296,7 +296,7 @@ func TestSQLiteVenuesAndRosterLimit(t *testing.T) {
 		if err != nil {
 			t.Fatalf("insert player %d: %v", i, err)
 		}
-		_, err = db.Exec(`insert into team_players(team_id, player_id, roster_order) values(?, ?, ?)`, teamID, playerID, 90+i)
+		_, err = db.Exec(`insert into participant_players(participant_id, player_id, roster_order) values(?, ?, ?)`, teamID, playerID, 90+i)
 		if i < 2 && err != nil {
 			t.Fatalf("insert extra roster player %d: %v", i, err)
 		}
@@ -400,11 +400,11 @@ func TestImportMultiStageScheme(t *testing.T) {
 	if len(view.Stages[0].Matches) != 2 || len(view.Stages[1].Matches) != 1 {
 		t.Fatalf("matches = %d/%d, want 2/1", len(view.Stages[0].Matches), len(view.Stages[1].Matches))
 	}
-	if view.Stages[0].Matches[0].Teams[0].Name != "Alpha" {
-		t.Fatalf("first team = %q, want Alpha", view.Stages[0].Matches[0].Teams[0].Name)
+	if view.Stages[0].Matches[0].Participants[0].Name != "Alpha" {
+		t.Fatalf("first team = %q, want Alpha", view.Stages[0].Matches[0].Participants[0].Name)
 	}
 	final := view.Stages[1].Matches[0]
-	if final.Code != "C" || final.Teams[0].SourceType != "from_match" || final.Teams[1].SourceType != "from_match" {
+	if final.Code != "C" || final.Participants[0].SourceType != "from_match" || final.Participants[1].SourceType != "from_match" {
 		t.Fatalf("final = %#v, want match C with fromMatch slots", final)
 	}
 }
@@ -585,10 +585,10 @@ func TestImportSeedSlotsResolveViaAssignments(t *testing.T) {
 		t.Fatalf("import: %v", err)
 	}
 	match := view.Stages[0].Matches[0]
-	if match.Teams[0].Name != "Alpha" || match.Teams[1].Name != "Beta" {
-		t.Fatalf("slot teams = %q/%q, want Alpha/Beta", match.Teams[0].Name, match.Teams[1].Name)
+	if match.Participants[0].Name != "Alpha" || match.Participants[1].Name != "Beta" {
+		t.Fatalf("slot teams = %q/%q, want Alpha/Beta", match.Participants[0].Name, match.Participants[1].Name)
 	}
-	for _, team := range match.Teams {
+	for _, team := range match.Participants {
 		if team.SourceType != "seed" {
 			t.Fatalf("source type = %q, want seed", team.SourceType)
 		}
@@ -708,7 +708,7 @@ func TestImportFestRosterPropagatesToChGKAndKSI(t *testing.T) {
 	if err := db.QueryRow(`select count(*) from fest_players where fest_id = ?`, festID).Scan(&playersCount); err != nil {
 		t.Fatalf("count fest players: %v", err)
 	}
-	if err := db.QueryRow(`select count(*) from teams where fest_id = ?`, festID).Scan(&ekTeamsCount); err != nil {
+	if err := db.QueryRow(`select count(*) from participants where fest_id = ?`, festID).Scan(&ekTeamsCount); err != nil {
 		t.Fatalf("count existing game teams: %v", err)
 	}
 	if teamsCount != 2 || playersCount != 3 {

@@ -56,31 +56,31 @@ func FlatGameStateJSON(ctx context.Context, q Queryer, gameID int64) (string, er
 // from its in-memory state.
 func RecalculateMatchResultsForStateTx(ctx context.Context, tx *sql.Tx, match DBMatchState) error {
 	view := BuildView(match.State)
-	for index, team := range view.Teams {
-		if index >= len(match.TeamIDs) || match.TeamIDs[index] == 0 {
+	for index, team := range view.Participants {
+		if index >= len(match.ParticipantIDs) || match.ParticipantIDs[index] == 0 {
 			continue
 		}
 		metrics := matchMetricsJSON(team)
 		place := team.Place
-		if pin := match.Blob.Pin(match.TeamIDs[index]); pin != nil {
+		if pin := match.Blob.Pin(match.ParticipantIDs[index]); pin != nil {
 			place = *pin
 		}
 		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, team_id, place, total, plus, tiebreak, metrics_json)
+insert into match_results(match_id, participant_id, place, total, plus, tiebreak, metrics_json)
 values(?, ?, ?, ?, ?, ?, ?)
-on conflict(match_id, team_id) do update set
+on conflict(match_id, participant_id) do update set
   place = excluded.place,
   total = excluded.total,
   plus = excluded.plus,
   tiebreak = excluded.tiebreak,
-  metrics_json = excluded.metrics_json`, match.MatchID, match.TeamIDs[index], place, team.Total, team.Plus, team.Tiebreak, metrics); err != nil {
+  metrics_json = excluded.metrics_json`, match.MatchID, match.ParticipantIDs[index], place, team.Total, team.Plus, team.Tiebreak, metrics); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func matchMetricsJSON(team TeamView) string {
+func matchMetricsJSON(team ParticipantView) string {
 	metrics := map[string]any{
 		"correctCounts": team.CorrectCounts,
 		"wrongCounts":   team.WrongCounts,

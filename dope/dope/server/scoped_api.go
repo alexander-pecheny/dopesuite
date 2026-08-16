@@ -38,12 +38,16 @@ import (
 // uses core.FestScope directly.
 type festScope = core.FestScope
 
+// verifyMatchInScope resolves a бой by its code or its буква — a URL says
+// «BU», the store says s2-g1-m2 — and returns the code, which every scope key
+// downstream is built on.
 func (s *server) verifyMatchInScope(ctx context.Context, scope festScope, code string) (matchScope, error) {
 	row := s.eng.DB.QueryRowContext(ctx, `
-select id from matches where fest_id = ? and game_id = ? and code = ?`,
-		scope.FestID, scope.GameID, code)
+select id, code from matches where fest_id = ? and game_id = ? and (code = ? or (letter <> '' and letter = ?))
+order by code = ? desc limit 1`,
+		scope.FestID, scope.GameID, code, code, code)
 	var matchID int64
-	if err := row.Scan(&matchID); err != nil {
+	if err := row.Scan(&matchID, &code); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return matchScope{}, errMatchNotFound
 		}
@@ -96,7 +100,7 @@ func (s *server) matchEditScope(w http.ResponseWriter, r *http.Request, scope fe
 	if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 		return matchScope{}, false
 	}
-	if !s.requireNumberedTeams(w, r, scope.FestID) {
+	if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 		return matchScope{}, false
 	}
 	mscope, err := s.verifyMatchInScope(r.Context(), scope, code)
@@ -196,7 +200,14 @@ func (s *server) requireFestTableEditor(w http.ResponseWriter, r *http.Request, 
 // A fest with no teams at all is not blocked (nothing to number yet). Called at
 // the write gates right after requireFestTableEditor.
 func (s *server) requireNumberedTeams(w http.ResponseWriter, r *http.Request, festID int64) bool {
-	blocked, err := numbering.HasUnnumbered(r.Context(), s.eng.DB, festID)
+	return s.requireNumberedEntrants(w, r, festID, 0)
+}
+
+// requireNumberedEntrants is requireNumberedTeams for a write that knows which
+// Game it is editing: the guard then asks that Game's entrants rather than the
+// фест's whole registry (ADR-0009).
+func (s *server) requireNumberedEntrants(w http.ResponseWriter, r *http.Request, festID, gameID int64) bool {
+	blocked, err := numbering.GameHasUnnumbered(r.Context(), s.eng.DB, festID, gameID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return false
@@ -537,7 +548,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
 		defer r.Body.Close()
@@ -578,7 +589,7 @@ func (s *server) handleScopedGameState(w http.ResponseWriter, r *http.Request, s
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
 		// Edit-path timing: tE2E marks request-in; we stamp e2e at response-out so
@@ -928,7 +939,7 @@ func (s *server) handleScopedStages(w http.ResponseWriter, r *http.Request, scop
 		if _, ok := s.requireFestTableEditor(w, r, scope.FestID); !ok {
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
 		data, cascaded, revision, err := s.calculateScopedReseed(r.Context(), scope, sub[0])
@@ -1308,7 +1319,7 @@ func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, 
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !s.requireNumberedTeams(w, r, scope.FestID) {
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
 			return
 		}
 		view, revision, stateJSON, err := imports.ImportSeedsFromKSI(&s.eng, r.Context(), scope)
@@ -1316,6 +1327,48 @@ func (s *server) handleScopedSeedImport(w http.ResponseWriter, r *http.Request, 
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		s.eng.BroadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, stateJSON)
+		writeJSONValue(w, view)
+	case "run":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
+			return
+		}
+		view, revision, stateJSON, err := imports.ImportSeedsFromScheme(&s.eng, r.Context(), scope)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.eng.InvalidateFestViewCache(scope.FestID)
+		s.eng.BroadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, stateJSON)
+		writeJSONValue(w, view)
+	case "xlsx":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !s.requireNumberedEntrants(w, r, scope.FestID, scope.GameID) {
+			return
+		}
+		if err := r.ParseMultipartForm(4 << 20); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "нет файла", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		view, revision, stateJSON, err := imports.ImportSeedsFromXLSX(&s.eng, r.Context(), scope, file)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.eng.InvalidateFestViewCache(scope.FestID)
 		s.eng.BroadcastState(scope.FestID, fmt.Sprintf("game-state:%d", scope.GameID), revision, stateJSON)
 		writeJSONValue(w, view)
 	case "decline":

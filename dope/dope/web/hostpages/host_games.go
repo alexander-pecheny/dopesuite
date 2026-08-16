@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
-	"time"
 
 	"dope/dope/domain/core"
+	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/games"
 	"dope/dope/domain/roster"
 	"dope/dope/domain/view"
@@ -19,7 +20,6 @@ import (
 	"dope/dope/storage/festwrite"
 	"dope/dope/storage/journal"
 	"dope/dope/storage/store"
-	"dope/dope/storage/storeutil"
 	"dope/dope/web/pages"
 	dopeui "dope/dope/web/ui"
 
@@ -27,22 +27,29 @@ import (
 )
 
 type hostGameSettingsData struct {
-	Fest  view.HostFest
-	Game  PublicFestGame
-	Slug  string
-	Error string
+	Fest      view.HostFest
+	Game      PublicFestGame
+	Slug      string
+	Error     string
+	SchemeDSL string
+	HasDSL    bool
 }
 
 type hostGameCreateData struct {
 	Fest         view.HostFest
 	Error        string
 	SelectedType string
+	BrainDSL     string
+	SIDSL        string
+	// Entrants is the фест's registry offered as this Game's entrant list.
+	// A Game numbers whom it seats from 1 (ADR-0009), so a фест of 65 can hold
+	// an ЭК of 48 and a брейн of a different 48.
+	Entrants []gameEntrantOption
 }
 
-type gameIdentity struct {
-	Code     string
-	Title    string
-	Position int
+type gameEntrantOption struct {
+	ID    int64
+	Label string
 }
 
 // stickerPaletteColors is the fixed set of colours an organizer may assign to a
@@ -127,7 +134,9 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			gameTypeRadio("od", "ОД", sel),
 			gameTypeRadio("ksi", "КСИ", sel),
 			gameTypeRadio("ksi_stickers", "КСИ со стикерами", sel),
+			gameTypeRadio("brain", "Брейн", sel),
 			gameTypeRadio("ek", "ЭК", sel),
+			gameTypeRadio("si", "Личная СИ", sel),
 		),
 		gameSettings("od", sel,
 			dopeui.Field(dopeui.Label("Количество туров"), dopeui.Textfield(dopeui.Name("od_tours"), dopeui.Inputmode("numeric"), dopeui.Value("3"))),
@@ -144,13 +153,46 @@ func hostGameCreateDoc(data hostGameCreateData) *dopeui.Doc {
 			stickerRow("Без минуса (неправильные = 0)", "ksis_nowrong_max", "1", "ksis_nowrong_color", "#aded87"),
 			stickerRow("Пустой = минус (пустые = −номинал)", "ksis_emptywrong_max", "1", "ksis_emptywrong_color", "#ff7a6b"),
 		),
+		gameSettings("brain", sel,
+			dopeui.Field(dopeui.Label("Схема"),
+				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.BrainDSL))),
+			dopeui.Hint(dopeui.Text("Формат описан в docs/scheme-dsl.md: блоки [scheme] через ---, типы roundrobin / single_elimination / double_elimination.")),
+		),
+		gameSettings("si", sel,
+			dopeui.Field(dopeui.Label("Схема"),
+				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SIDSL))),
+			dopeui.Hint(dopeui.Text("Тот же язык схем: за столом сидят игроки, а не команды. Бой на троих — match_size: 3, проходят двое — winning_places: 2.")),
+		),
 		gameSettings("ek", sel,
+			dopeui.Field(dopeui.Label("Схема"),
+				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("10"), dopeui.Spellcheck("false"), dopeui.Placeholder("[scheme]\ntype: single_elimination\nteams: 48\nmatch_size: 4\nwinning_places: 2"))),
+			dopeui.Hint(dopeui.Text("Либо схемой, либо готовым JSON ниже — что заполнено, то и используется.")),
 			dopeui.Field(dopeui.Label("JSON-схема"),
 				dopeui.Editor(dopeui.Name("ek_scheme"), dopeui.Rows("14"), dopeui.Placeholder(`{"slug":"...","title":"...","gameType":"ek","stages":[...]}`))),
 		),
+		entrantPicker(data),
 		dopeui.Row(submit...),
 	))
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
+}
+
+// entrantPicker offers the фест's registry as this Game's entrant list. Ticking
+// nothing means everyone, which is what a one-game фест wants and what every
+// Game did before Games could differ.
+func entrantPicker(data hostGameCreateData) dopeui.Item {
+	if len(data.Entrants) == 0 {
+		return dopeui.Empty()
+	}
+	boxes := make([]dopeui.Item, 0, len(data.Entrants)+1)
+	boxes = append(boxes,
+		dopeui.Hint(dopeui.Text("Отметьте, кто играет в этой игре. Если не отметить никого, играют все — "+
+			"а номера игра раздаёт свои, с единицы, так что одна и та же команда бывает второй в ЭК и четвёртой в ОД. "+
+			"Командная игра сажает за стол команды, личная — игроков; сначала команды, потом игроки.")))
+	for _, entrant := range data.Entrants {
+		boxes = append(boxes, dopeui.Checkbox(dopeui.Name("entrant_id"),
+			dopeui.Value(strconv.FormatInt(entrant.ID, 10)), dopeui.Text(entrant.Label)))
+	}
+	return dopeui.Details(dopeui.Summary(dopeui.Text("Состав игры")), dopeui.Col(boxes...))
 }
 
 // hostGameSettingsDoc builds a game's settings page: a small form to rename the
@@ -164,13 +206,21 @@ func hostGameSettingsDoc(data hostGameSettingsData) *dopeui.Doc {
 	if data.Error != "" {
 		page = append(page, dopeui.Empty(dopeui.Text(data.Error)))
 	}
-	page = append(page, dopeui.Form(dopeui.DirCol, dopeui.Method("post"),
-		dopeui.Action("/host/fest/"+festRef+"/game/"+data.Game.Ref()+"/settings"), dopeui.Autocomplete("off"),
+	form := []dopeui.Item{dopeui.DirCol, dopeui.Method("post"),
+		dopeui.Action("/host/fest/" + festRef + "/game/" + data.Game.Ref() + "/settings"), dopeui.Autocomplete("off"),
 		dopeui.Field(dopeui.Label("Тип игры"), dopeui.Textfield(dopeui.Value(data.Game.Type), dopeui.Disabled())),
 		dopeui.Field(dopeui.Label("Название"), dopeui.Textfield(dopeui.Name("title"), dopeui.Value(data.Game.Title), dopeui.Required())),
 		dopeui.Field(dopeui.Label("Slug (необязательно, a-z, 0-9, дефис)"), dopeui.Textfield(dopeui.Name("slug"), dopeui.Value(data.Slug), dopeui.Pattern("[a-z0-9-]+"))),
-		dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text("Сохранить"))),
-	))
+	}
+	if data.HasDSL {
+		form = append(form,
+			dopeui.Field(dopeui.Label("Схема"),
+				dopeui.Editor(dopeui.Name("brain_dsl"), dopeui.Rows("14"), dopeui.Spellcheck("false"), dopeui.Text(data.SchemeDSL))),
+			dopeui.Hint(dopeui.Text("Пересборка меняет только не начатые бои: можно поменять число вопросов или добавить блок, но начатый бой должен сохраниться без изменений.")),
+		)
+	}
+	form = append(form, dopeui.Row(dopeui.Button(dopeui.Submit(), dopeui.Text("Сохранить"))))
+	page = append(page, dopeui.Form(form...))
 	return &dopeui.Doc{Nodes: []dopeui.Node{dopeui.Page(page...)}}
 }
 
@@ -185,19 +235,23 @@ func (s *Server) renderHostGameSettings(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	var (
-		code     string
-		title    string
-		gameType string
-		slug     sql.NullString
+		code      string
+		title     string
+		gameType  string
+		slug      sql.NullString
+		schemeDSL string
 	)
 	if err := s.h.Engine().DB.QueryRowContext(r.Context(), `
-select code, title, game_type, slug from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug); err != nil {
+select code, title, game_type, slug, coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`, gameID, festID).Scan(&code, &title, &gameType, &slug, &schemeDSL); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if submitted := strings.TrimSpace(r.Form.Get("brain_dsl")); submitted != "" && errMsg != "" {
+		schemeDSL = r.Form.Get("brain_dsl")
 	}
 	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameSettingsDoc(hostGameSettingsData{
 		Fest: fest,
@@ -208,8 +262,10 @@ select code, title, game_type, slug from games where id = ? and fest_id = ?`, ga
 			Title: title,
 			Type:  games.Label(gameType),
 		},
-		Slug:  slug.String,
-		Error: errMsg,
+		Slug:      slug.String,
+		Error:     errMsg,
+		SchemeDSL: schemeDSL,
+		HasDSL:    gameType == games.Brain && schemeDSL != "",
 	}))
 }
 
@@ -242,10 +298,30 @@ select count(*) from games where fest_id = ? and slug = ? and id <> ?`, festID, 
 		}
 		slugValue = slug
 	}
-	if _, err := s.h.Engine().WriteExec(r.Context(), `
+	// One transaction for the whole save: a refused recompile must not leave a
+	// half-applied rename behind.
+	err := s.h.Engine().WithWriteTx(r.Context(), festID, "game-settings", func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
 update games set title = ?, slug = ?, updated_at = ? where id = ? and fest_id = ?`,
-		title, slugValue, util.UtcNow(), gameID, festID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+			title, slugValue, util.UtcNow(), gameID, festID); err != nil {
+			return err
+		}
+		dsl := r.Form.Get("brain_dsl")
+		if strings.TrimSpace(dsl) == "" {
+			return nil
+		}
+		var stored string
+		if err := tx.QueryRowContext(ctx, `
+select coalesce(scheme_dsl, '') from games where id = ?`, gameID).Scan(&stored); err != nil {
+			return err
+		}
+		if strings.TrimSpace(stored) == strings.TrimSpace(dsl) {
+			return nil
+		}
+		return gamebuild.Recompile(ctx, tx, festID, gameID, dsl)
+	})
+	if err != nil {
+		s.renderHostGameSettings(w, r, festID, gameID, err.Error())
 		return
 	}
 	s.h.Engine().InvalidateFestViewCache(festID)
@@ -346,10 +422,10 @@ func (s *Server) handleHostClearGame(w http.ResponseWriter, r *http.Request, fes
 	}
 	defer tx.Rollback()
 
-	var gameType, title, schemeJSON string
+	var gameType, title, schemeJSON, schemeDSL string
 	if err := tx.QueryRowContext(r.Context(), `
-select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and fest_id = ?`,
-		gameID, festID).Scan(&gameType, &title, &schemeJSON); err != nil {
+select game_type, title, coalesce(scheme_json, '{}'), coalesce(scheme_dsl, '') from games where id = ? and fest_id = ?`,
+		gameID, festID).Scan(&gameType, &title, &schemeJSON, &schemeDSL); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.NotFound(w, r)
 			return
@@ -365,8 +441,7 @@ select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and
 		`delete from matches where game_id = ?`,
 		`delete from stages where game_id = ?`,
 		`delete from game_assignments where game_id = ?`,
-		`delete from game_teams where game_id = ?`,
-		`delete from game_players where game_id = ?`,
+		`delete from game_participants where game_id = ?`,
 		`delete from game_team_players where game_id = ?`,
 		`delete from game_player_team_overrides where game_id = ?`,
 	} {
@@ -439,23 +514,33 @@ select game_type, title, coalesce(scheme_json, '{}') from games where id = ? and
 				return
 			}
 		}
-	case "ek":
-		status = "pending"
-		var scheme store.FestScheme
-		if err := json.Unmarshal([]byte(schemeJSON), &scheme); err != nil {
-			http.Error(w, fmt.Sprintf("не удалось разобрать схему ЭК: %v", err), http.StatusInternalServerError)
+	case "brain":
+		// Pre-DSL games get their shortcut scheme re-expressed in the DSL, so a
+		// clear upgrades them onto the one authoring path.
+		if strings.TrimSpace(schemeDSL) == "" {
+			var count int
+			if err := tx.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&count); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			schemeDSL = defaultBrainDSL(count, games.BrainQuestions(schemeJSON))
+			if _, err := tx.ExecContext(r.Context(), `update games set scheme_dsl = ? where id = ?`, schemeDSL, gameID); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		if newScheme, err = gamebuild.Rebuild(r.Context(), tx, festID, gameID); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		scheme.Teams = nil // seeded teams come from a fresh import, not the scheme
-		if newScheme, err = json.Marshal(scheme); err != nil {
+		newState = []byte("{}")
+	case "ek":
+		status = "pending"
+		if newScheme, err = gamebuild.Rebuild(r.Context(), tx, festID, gameID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		newState = []byte("{}")
-		if err := buildEKStructureTx(r.Context(), tx, festID, gameID, scheme, now); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 	default:
 		http.Error(w, "очистка не поддерживается для этого типа игры", http.StatusBadRequest)
 		return
@@ -468,7 +553,7 @@ where id = ? and fest_id = ?`, string(newScheme), status, now, gameID, festID); 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if gameType != "ek" {
+	if gameType != "ek" && gameType != "brain" {
 		matchID, err := store.FlatMatchID(r.Context(), tx, gameID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -515,7 +600,56 @@ func (s *Server) renderHostCreateGamePage(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameCreateDoc(hostGameCreateData{Fest: fest, Error: errMsg, SelectedType: selectedType}))
+	brainDSL := strings.TrimSpace(r.Form.Get("brain_dsl"))
+	if brainDSL == "" {
+		var count int
+		_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&count)
+		brainDSL = defaultBrainDSL(count, 5)
+	}
+	var teamCount int
+	_ = s.h.Engine().DB.QueryRowContext(r.Context(), `select count(*) from fest_teams where fest_id = ?`, festID).Scan(&teamCount)
+	entrants, err := festEntrantOptions(r.Context(), s.h.Engine().DB, festID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	pages.RenderDoc(w, s.h.Engine().AssetETags, hostGameCreateDoc(hostGameCreateData{
+		Fest: fest, Error: errMsg, SelectedType: selectedType,
+		BrainDSL: brainDSL, SIDSL: defaultSIDSL(teamCount), Entrants: entrants,
+	}))
+}
+
+// festEntrantOptions lists the фест's Participants a Game may seat, teams and
+// players alike — which kind a Game wants depends on its format, and the picker
+// offers both rather than guessing before the type is chosen.
+func festEntrantOptions(ctx context.Context, db *sql.DB, festID int64) ([]gameEntrantOption, error) {
+	return store.CollectRows(ctx, db, `
+select id, name, coalesce(city, ''), roster from participants
+where fest_id = ? order by roster desc, coalesce(nullif(number, 0), 1 << 30), id`,
+		[]any{festID}, func(rows *sql.Rows) (gameEntrantOption, error) {
+			var option gameEntrantOption
+			var city, roster string
+			if err := rows.Scan(&option.ID, &option.Label, &city, &roster); err != nil {
+				return option, err
+			}
+			if city != "" {
+				option.Label += " (" + city + ")"
+			}
+			return option, nil
+		})
+}
+
+// chosenEntrantIDs reads the picker: whom this Game seats, in the фест's order.
+// Nothing ticked means everyone, which is what every Game did before Games
+// could name their own.
+func chosenEntrantIDs(form url.Values) []int64 {
+	var out []int64
+	for _, raw := range form["entrant_id"] {
+		if id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && id > 0 {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, festID int64) {
@@ -532,12 +666,63 @@ func (s *Server) handleHostCreateGame(w http.ResponseWriter, r *http.Request, fe
 	http.Redirect(w, r, fmt.Sprintf("/host/fest/%s/game/%s/", s.festRefOrID(r.Context(), festID), s.gameRefOrID(r.Context(), gameID)), http.StatusSeeOther)
 }
 
+// gameSpecFromForm reads the creation form into what gamebuild needs: the
+// format's label and DSL, the entrants ticked, and for the three pre-DSL
+// formats their own knobs.
+func gameSpecFromForm(festID int64, gameType string, form url.Values) (gamebuild.Spec, error) {
+	spec := gamebuild.Spec{FestID: festID, Type: gameType, Entrants: chosenEntrantIDs(form), DSL: strings.TrimSpace(form.Get("brain_dsl"))}
+	var err error
+	switch gameType {
+	case games.OD:
+		if spec.ODTours, err = parsePositiveFormInt(form, "od_tours", "Количество туров", 1, 20); err != nil {
+			return spec, err
+		}
+		if spec.ODQuestions, err = parsePositiveFormInt(form, "od_questions", "Количество вопросов в туре", 1, 100); err != nil {
+			return spec, err
+		}
+	case games.KSI:
+		if spec.KSIThemes, err = parsePositiveFormInt(form, "ksi_themes", "Количество тем", 1, 100); err != nil {
+			return spec, err
+		}
+	case ksiStickersGameType:
+		spec.Type = games.KSI
+		if spec.KSIThemes, err = parsePositiveFormInt(form, "ksis_themes", "Количество тем", 1, 100); err != nil {
+			return spec, err
+		}
+		if spec.KSIStickers, err = ksiStickerConfigFromForm(form); err != nil {
+			return spec, err
+		}
+	case games.Brain:
+		spec.Label = "Брейн"
+	case games.SI:
+		spec.Label = "Личная СИ"
+	case games.EK:
+		// ЭК's bracket is describable in the scheme language now that an
+		// elimination counts Losses rather than seats, so a DSL wins over
+		// the pasted JSON when both are offered.
+		spec.Label = "ЭК"
+		if spec.DSL == "" {
+			raw := strings.TrimSpace(form.Get("ek_scheme"))
+			if raw == "" {
+				return spec, errors.New("Вставьте JSON-схему ЭК или опишите её схемой")
+			}
+			var scheme store.FestScheme
+			if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
+				return spec, fmt.Errorf("Не удалось разобрать JSON: %w", err)
+			}
+			spec.EKScheme = &scheme
+		}
+	}
+	return spec, nil
+}
+
 func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType string, form url.Values) (int64, error) {
 	if s.h.Engine().DB == nil {
 		return 0, errors.New("sqlite is not enabled")
 	}
 	gameType = strings.TrimSpace(gameType)
-	if gameType != games.OD && gameType != games.KSI && gameType != games.EK && gameType != ksiStickersGameType {
+	if gameType != games.OD && gameType != games.KSI && gameType != games.EK && gameType != games.Brain &&
+		gameType != games.SI && gameType != ksiStickersGameType {
 		return 0, errors.New("выберите тип игры")
 	}
 
@@ -551,58 +736,13 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 			return sql.ErrNoRows
 		}
 
-		var err error
-		switch gameType {
-		case games.OD:
-			tours, err := parsePositiveFormInt(form, "od_tours", "Количество туров", 1, 20)
-			if err != nil {
-				return err
-			}
-			questions, err := parsePositiveFormInt(form, "od_questions", "Количество вопросов в туре", 1, 100)
-			if err != nil {
-				return err
-			}
-			gameID, err = createODGameTx(ctx, tx, festID, tours, questions)
-			if err != nil {
-				return err
-			}
-		case games.KSI:
-			themes, err := parsePositiveFormInt(form, "ksi_themes", "Количество тем", 1, 100)
-			if err != nil {
-				return err
-			}
-			gameID, err = createKSIGameTx(ctx, tx, festID, themes, nil)
-			if err != nil {
-				return err
-			}
-		case ksiStickersGameType:
-			themes, err := parsePositiveFormInt(form, "ksis_themes", "Количество тем", 1, 100)
-			if err != nil {
-				return err
-			}
-			stickers, err := ksiStickerConfigFromForm(form)
-			if err != nil {
-				return err
-			}
-			gameID, err = createKSIGameTx(ctx, tx, festID, themes, stickers)
-			if err != nil {
-				return err
-			}
-		case games.EK:
-			raw := strings.TrimSpace(form.Get("ek_scheme"))
-			if raw == "" {
-				return errors.New("Вставьте JSON-схему ЭК")
-			}
-			var scheme store.FestScheme
-			if err := json.Unmarshal([]byte(raw), &scheme); err != nil {
-				return fmt.Errorf("Не удалось разобрать JSON: %w", err)
-			}
-			gameID, err = CreateEKGameTx(ctx, tx, festID, scheme)
-			if err != nil {
-				return err
-			}
+		spec, err := gameSpecFromForm(festID, gameType, form)
+		if err != nil {
+			return err
 		}
-
+		if gameID, err = gamebuild.Create(ctx, tx, spec); err != nil {
+			return err
+		}
 		if _, err = festwrite.BumpFestRevisionTx(ctx, tx, festID, "game:create", util.MustJSON(map[string]any{
 			"gameID":   gameID,
 			"gameType": gameType,
@@ -616,56 +756,25 @@ func (s *Server) createHostGame(reqCtx context.Context, festID int64, gameType s
 	return gameID, err
 }
 
-func nextGameIdentityTx(ctx context.Context, tx *sql.Tx, festID int64, gameType, titleBase string) (gameIdentity, error) {
-	var position int
-	if err := tx.QueryRowContext(ctx, `select coalesce(max(position), 0) + 1 from games where fest_id = ?`, festID).Scan(&position); err != nil {
-		return gameIdentity{}, err
+// defaultBrainDSL is the creation form's prefill: today's shortcut — one group
+// over the whole fest — written in the DSL so the host sees something editable.
+func defaultBrainDSL(teams, questions int) string {
+	if teams < 2 {
+		teams = 4
 	}
-	var typeCount int
-	if err := tx.QueryRowContext(ctx, `select count(*) from games where fest_id = ? and game_type = ?`, festID, gameType).Scan(&typeCount); err != nil {
-		return gameIdentity{}, err
+	if questions <= 0 {
+		questions = 5
 	}
-	title := titleBase
-	if typeCount > 0 && gameType != "ek" {
-		title = fmt.Sprintf("%s %d", titleBase, typeCount+1)
-	}
-	for suffix := position; ; suffix++ {
-		code := fmt.Sprintf("%s-%d", gameType, suffix)
-		var existing int
-		if err := tx.QueryRowContext(ctx, `select count(*) from games where fest_id = ? and code = ?`, festID, code).Scan(&existing); err != nil {
-			return gameIdentity{}, err
-		}
-		if existing == 0 {
-			return gameIdentity{Code: code, Title: title, Position: position}, nil
-		}
-	}
+	return fmt.Sprintf("[defaults]\nquestions: %d\n\n[scheme]\ntype: roundrobin\nteams_in_group: %d\n", questions, teams)
 }
 
-func createODGameTx(ctx context.Context, tx *sql.Tx, festID int64, tours, questions int) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "od", "ОД")
-	if err != nil {
-		return 0, err
+// defaultSIDSL is личная СИ's shape at its smallest: one table, everyone at it,
+// eight themes. A real tournament edits it into groups and a play-off.
+func defaultSIDSL(players int) string {
+	if players < 3 {
+		players = 3
 	}
-	tourComp := make([]int, tours)
-	for i := range tourComp {
-		tourComp[i] = questions
-	}
-	schemeJSON, stateJSON := games.ODEmptyGameJSON(identity.Code, identity.Title, tourComp)
-	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
-	if err != nil {
-		return 0, err
-	}
-	if len(teams) > 0 {
-		schemeJSON, err = roster.ApplyRosterToChGKScheme(string(schemeJSON), teams)
-		if err != nil {
-			return 0, err
-		}
-		stateJSON, err = roster.ApplyRosterToChGKState(string(stateJSON), teams, nil)
-		if err != nil {
-			return 0, err
-		}
-	}
-	return insertJSONGameTx(ctx, tx, festID, identity, "od", schemeJSON, stateJSON)
+	return fmt.Sprintf("[scheme]\ntype: roundrobin\nteams_in_group: %d\nmatch_size: 3\nthemes: 8\nbout.points: seats + 1 - place\nsorting: [points, total, plus]\n", players)
 }
 
 // ksiStickersGameType is the creation-form value for the "KSI with stickers"
@@ -726,192 +835,4 @@ func isHexColor(value string) bool {
 		}
 	}
 	return true
-}
-
-func createKSIGameTx(ctx context.Context, tx *sql.Tx, festID int64, themesCount int, stickers json.RawMessage) (int64, error) {
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "ksi", "КСИ")
-	if err != nil {
-		return 0, err
-	}
-	schemeJSON, stateJSON := games.KSIStickersEmptyGameJSON(identity.Code, identity.Title, themesCount, stickers)
-	teams, err := roster.LoadFestRosterImportTeamsTx(ctx, tx, festID)
-	if err != nil {
-		return 0, err
-	}
-	if len(teams) > 0 {
-		schemeJSON, err = roster.ApplyRosterToKSIScheme(string(schemeJSON), teams)
-		if err != nil {
-			return 0, err
-		}
-		stateJSON, err = roster.ApplyRosterToKSIState(string(stateJSON), teams, themesCount)
-		if err != nil {
-			return 0, err
-		}
-	}
-	return insertJSONGameTx(ctx, tx, festID, identity, "ksi", schemeJSON, stateJSON)
-}
-
-func insertJSONGameTx(ctx context.Context, tx *sql.Tx, festID int64, identity gameIdentity, gameType string, schemeJSON, stateJSON []byte) (int64, error) {
-	now := util.UtcNow()
-	schemeID, err := store.InsertReturningID(ctx, tx, `
-insert into schemes(slug, title, version, schema_json, created_at)
-values(?, ?, 2, ?, ?)`, uniqueSchemeSlug(identity.Code), identity.Title, string(schemeJSON), now)
-	if err != nil {
-		return 0, err
-	}
-	gameID, err := store.InsertReturningID(ctx, tx, `
-insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?, ?, '{}', 'active', 'fest', 'fest', 1, ?, ?)`,
-		festID, identity.Code, identity.Title, gameType, identity.Position, schemeID, string(schemeJSON), now, now)
-	if err != nil {
-		return 0, err
-	}
-	if err := insertFlatMatchTx(ctx, tx, festID, gameID, identity.Title, string(stateJSON), now); err != nil {
-		return 0, err
-	}
-	return gameID, nil
-}
-
-// insertFlatMatchTx creates a flat game's unified structure: one 'main' stage
-// (kind matches) holding one 'main' match that carries the whole game state.
-func insertFlatMatchTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, title, stateJSON, now string) error {
-	stageID, err := store.InsertReturningID(ctx, tx, `
-insert into stages(fest_id, game_id, code, title, stage_type, kind, position, status, config_json)
-values(?, ?, 'main', '', 'matches', 'matches', 1, 'active', '{}')`, festID, gameID)
-	if err != nil {
-		return err
-	}
-	_, err = tx.ExecContext(ctx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, status, revision, state_json)
-values(?, ?, ?, 'main', ?, 1, 0, 'active', 0, ?)`, festID, gameID, stageID, title, stateJSON)
-	return err
-}
-
-func CreateEKGameTx(ctx context.Context, tx *sql.Tx, festID int64, scheme store.FestScheme) (int64, error) {
-	if scheme.GameType == "" {
-		scheme.GameType = games.Default
-	}
-	if scheme.GameType != games.Default {
-		return 0, errors.New("для ЭК нужна JSON-схема с gameType \"ek\"")
-	}
-	if err := storeutil.ValidateScheme(scheme); err != nil {
-		return 0, err
-	}
-	if len(scheme.Teams) > 0 {
-		return 0, errors.New("команды загружаются отдельным импортом посева; уберите teams из JSON-схемы")
-	}
-	schemaJSON, err := json.Marshal(scheme)
-	if err != nil {
-		return 0, err
-	}
-	title := strings.TrimSpace(scheme.Title)
-	if title == "" {
-		title = "ЭК"
-	}
-	identity, err := nextGameIdentityTx(ctx, tx, festID, "ek", title)
-	if err != nil {
-		return 0, err
-	}
-	identity.Title = title
-
-	now := util.UtcNow()
-	schemeID, err := store.InsertReturningID(ctx, tx, `
-insert into schemes(slug, title, version, schema_json, created_at)
-values(?, ?, ?, ?, ?)`, uniqueSchemeSlug(scheme.Slug), title, util.MaxInt(scheme.SchemaVersion, 2), string(schemaJSON), now)
-	if err != nil {
-		return 0, err
-	}
-	gameID, err := store.InsertReturningID(ctx, tx, `
-insert into games(fest_id, code, title, game_type, position, scheme_id, scheme_json, state_json, status, team_list_source, roster_source, revision, created_at, updated_at)
-values(?, ?, ?, ?, ?, ?, ?, '{}', 'pending', 'fest', 'fest', 1, ?, ?)`,
-		festID, identity.Code, title, games.Default, identity.Position, schemeID, string(schemaJSON), now, now)
-	if err != nil {
-		return 0, err
-	}
-
-	if err := buildEKStructureTx(ctx, tx, festID, gameID, scheme, now); err != nil {
-		return 0, err
-	}
-	return gameID, nil
-}
-
-// buildEKStructureTx materialises an EK game's bracket (venues, stages, matches
-// and their unresolved seed slots) from the scheme. Shared by game creation and
-// the "clear to pristine" path, which rebuilds the same empty bracket in place.
-func buildEKStructureTx(ctx context.Context, tx *sql.Tx, festID, gameID int64, scheme store.FestScheme, now string) error {
-	venueIDs := make(map[int]int64, len(scheme.Venues))
-	for _, venue := range scheme.Venues {
-		venueID, err := upsertVenueTx(ctx, tx, festID, venue, now)
-		if err != nil {
-			return err
-		}
-		venueIDs[venue.Number] = venueID
-	}
-
-	for stageIndex, stage := range scheme.Stages {
-		position := stage.Position
-		if position == 0 {
-			position = stageIndex + 1
-		}
-		configJSON := storeutil.StageConfigJSON(stage)
-		stageType := stage.StageType
-		if stageType == "" {
-			stageType = "matches"
-		}
-		stageID, err := store.InsertReturningID(ctx, tx, `
-insert into stages(fest_id, game_id, code, title, stage_type, position, status, config_json)
-values(?, ?, ?, ?, ?, ?, 'pending', ?)`, festID, gameID, stage.Code, stage.Title, stageType, position, configJSON)
-		if err != nil {
-			return err
-		}
-		if stageType != "matches" {
-			continue
-		}
-		for matchIndex, match := range stage.Matches {
-			participantCount := match.ParticipantCount
-			if participantCount == 0 {
-				participantCount = len(match.Slots)
-			}
-			var venueID any
-			if id, ok := venueIDs[match.Venue]; ok {
-				venueID = id
-			}
-			matchID, err := store.InsertReturningID(ctx, tx, `
-insert into matches(fest_id, game_id, stage_id, code, title, position, participant_count, venue_id, status, revision)
-values(?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`, festID, gameID, stageID, match.Code, match.Title, matchIndex+1, participantCount, venueID)
-			if err != nil {
-				return err
-			}
-			for slotIndex, slot := range match.Slots {
-				sourceType, sourceRef := storeutil.SlotSource(slot)
-				if _, err := tx.ExecContext(ctx, `
-insert into match_slots(match_id, slot_index, source_type, source_ref_json, team_id, locked)
-values(?, ?, ?, ?, null, 0)`, matchID, slotIndex, sourceType, sourceRef); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func upsertVenueTx(ctx context.Context, tx *sql.Tx, festID int64, venue store.SchemeVenue, now string) (int64, error) {
-	if _, err := tx.ExecContext(ctx, `
-insert into venues(fest_id, number, title, created_at, updated_at)
-values(?, ?, ?, ?, ?)
-on conflict(fest_id, number) do update set title = excluded.title, updated_at = excluded.updated_at`,
-		festID, venue.Number, venue.Title, now, now); err != nil {
-		return 0, err
-	}
-	var id int64
-	err := tx.QueryRowContext(ctx, `select id from venues where fest_id = ? and number = ?`, festID, venue.Number).Scan(&id)
-	return id, err
-}
-
-func uniqueSchemeSlug(base string) string {
-	base = strings.TrimSpace(base)
-	if base == "" {
-		base = "game"
-	}
-	return fmt.Sprintf("%s-%d", base, time.Now().UnixNano())
 }

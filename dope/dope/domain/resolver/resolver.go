@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"sort"
 	"strings"
 )
@@ -62,7 +61,7 @@ func nullableInt64(value int64) any {
 //   - reseed stages: update readiness. Held reseed_entries are not deleted when a
 //     source bout goes temporarily un-final (so untick/retick doesn't wipe them);
 //     live match edits do not create reseed_entries, an explicit calculate does.
-//   - from_match / reseed slots: fill match_slots.team_id once the upstream
+//   - from_match / reseed slots: fill match_slots.participant_id once the upstream
 //     source is final, and (for EK) create that team's themes.
 //
 // It is idempotent and non-destructive: a slot is only rewritten when its
@@ -160,21 +159,25 @@ type resolverStage struct {
 	config    []byte
 }
 
-// isRankedKind reports whether a stage's kind carries its own Standings
-// computation (everything registered except the manual list and the
-// calculate-gated reseed, which keep their legacy flows).
+// RanksItsOwnStage reports whether a stage's kind computes its own Standings —
+// what lets a view show a Group as a table rather than as a wall of бои.
+func RanksItsOwnStage(kind string) bool { return isRankedKind(kind) }
+
+// isRankedKind reports whether a stage's kind ranks itself live on every
+// recompute — every registered Ranker but the reseed, which ranks on the
+// host's explicit calculate.
 func isRankedKind(kind string) bool {
-	if kind == "" || kind == "matches" || kind == "reseed" {
-		return false
+	if kind == "reseed" {
+		return false // ranked too, but on the host's explicit calculate
 	}
-	_, ok := structure.Kind(kind)
+	_, ok := structure.RankerFor(kind)
 	return ok
 }
 
 // recomputeKindStandingsTx ranks a kind stage from its matches' current
 // results and replaces its stage_standings rows.
 func recomputeKindStandingsTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
-	kind, ok := structure.Kind(stage.kind)
+	ranker, ok := structure.RankerFor(stage.kind)
 	if !ok {
 		return nil
 	}
@@ -186,23 +189,32 @@ func recomputeKindStandingsTx(ctx context.Context, tx *sql.Tx, stage resolverSta
 	if err != nil {
 		return err
 	}
-	ranked, err := kind.Standings(kindStageConfig(stage.config, seed), outcomes)
+	ranked, err := ranker.Standings(kindStageConfig(stage.config, seed, nil), outcomes)
 	if err != nil {
 		return fmt.Errorf("stage %s standings: %w", stage.code, err)
 	}
-	if _, err := tx.ExecContext(ctx, `delete from stage_standings where stage_id = ?`, stage.id); err != nil {
+	return writeStandingsTx(ctx, tx, stage.id, ranked)
+}
+
+// writeStandingsTx replaces a stage's table with what its Ranker returned. The
+// stored rank is the distinct seat order (rank refs must resolve uniquely);
+// the Kind's shared display place travels in the metrics, and so do the бои
+// the row was summed from, joined for the Пересев's «Бой» column.
+func writeStandingsTx(ctx context.Context, tx *sql.Tx, stageID int64, ranked []structure.RankedEntry) error {
+	if _, err := tx.ExecContext(ctx, `delete from stage_standings where stage_id = ?`, stageID); err != nil {
 		return err
 	}
 	for seat, entry := range ranked {
-		// The stored rank is the distinct seat order (rank refs must resolve
-		// uniquely); the kind's shared display place travels in the metrics.
-		metrics := map[string]float64{"place": float64(entry.Rank)}
+		metrics := map[string]any{"place": float64(entry.Rank)}
 		for key, value := range entry.Metrics {
 			metrics[key] = value
 		}
+		if len(entry.Bouts) > 0 {
+			metrics["match"] = strings.Join(entry.Bouts, "+")
+		}
 		if _, err := tx.ExecContext(ctx, `
 insert into stage_standings(stage_id, rank, participant_id, metrics_json)
-values(?, ?, ?, ?)`, stage.id, seat+1, entry.Participant, util.MustJSON(metrics)); err != nil {
+values(?, ?, ?, ?)`, stageID, seat+1, entry.Participant, util.MustJSON(metrics)); err != nil {
 			return err
 		}
 	}
@@ -212,7 +224,15 @@ values(?, ?, ?, ?)`, stage.id, seat+1, entry.Participant, util.MustJSON(metrics)
 // kindStageConfig unwraps the persisted stage config (storeutil nests the
 // scheme's config under "config") and injects the game's deterministic seed
 // for tie lots.
-func kindStageConfig(raw []byte, seed string) json.RawMessage {
+// KindConfig is a stage's config as its Kind reads it — unwrapped from the
+// "config" envelope scheme-imported stages carry — for a caller that only asks
+// the Ranker its Order.
+func KindConfig(raw []byte) json.RawMessage { return kindStageConfig(raw, "", nil) }
+
+// kindStageConfig is what a Ranker reads: the stage's own config (nested under
+// "config" for scheme-imported stages) plus the game's random seed and, for a
+// reseed, the contenders the resolver named.
+func kindStageConfig(raw []byte, seed string, contenders []reseedContender) json.RawMessage {
 	var outer struct {
 		Config map[string]any `json:"config"`
 	}
@@ -226,33 +246,56 @@ func kindStageConfig(raw []byte, seed string) json.RawMessage {
 		cfg = map[string]any{}
 	}
 	cfg["seed"] = seed
+	if contenders != nil {
+		cfg["contenders"] = contenders
+	}
 	return json.RawMessage(util.MustJSON(cfg))
 }
 
 // stageMatchOutcomesTx loads a stage's matches as structure.MatchOutcome (slot
 // results in slot order) and reports whether every match is finished.
 func stageMatchOutcomesTx(ctx context.Context, tx *sql.Tx, stageID int64) ([]structure.MatchOutcome, bool, error) {
-	type matchRow struct {
-		id     int64
-		code   string
-		status string
-	}
-	matches, err := store.CollectRows(ctx, tx, `
-select id, code, status from matches where stage_id = ? order by position, id`,
-		[]any{stageID}, func(rows *sql.Rows) (matchRow, error) {
-			var m matchRow
-			return m, rows.Scan(&m.id, &m.code, &m.status)
+	ids, err := store.CollectRows(ctx, tx, `select id from matches where stage_id = ? order by position, id`,
+		[]any{stageID}, func(rows *sql.Rows) (int64, error) {
+			var id int64
+			return id, rows.Scan(&id)
 		})
 	if err != nil {
 		return nil, false, err
 	}
+	outcomes, err := matchOutcomesTx(ctx, tx, ids)
+	if err != nil {
+		return nil, false, err
+	}
 	allFinished := true
-	outcomes := make([]structure.MatchOutcome, 0, len(matches))
-	for _, m := range matches {
-		finished := m.status == "finished"
-		if !finished {
-			allFinished = false
+	for _, outcome := range outcomes {
+		allFinished = allFinished && outcome.Finished
+	}
+	return outcomes, allFinished, nil
+}
+
+// matchOutcomesTx loads the named matches, in the order given, as
+// structure.MatchOutcome: each with its round, its stage's base question count
+// (без перестрелок — the denominator for share metrics) and its slot results
+// in slot order.
+func matchOutcomesTx(ctx context.Context, tx *sql.Tx, matchIDs []int64) ([]structure.MatchOutcome, error) {
+	type matchRow struct {
+		id     int64
+		code   string
+		status string
+		round  int
+		config string
+	}
+	outcomes := make([]structure.MatchOutcome, 0, len(matchIDs))
+	for _, id := range matchIDs {
+		var m matchRow
+		if err := tx.QueryRowContext(ctx, `
+select m.id, m.code, m.status, m.round, s.config_json from matches m join stages s on s.id = m.stage_id where m.id = ?`,
+			id).Scan(&m.id, &m.code, &m.status, &m.round, &m.config); err != nil {
+			return nil, err
 		}
+		finished := m.status == "finished"
+		questions := int(stageConfigQuestions(m.config))
 		type slotRes struct {
 			teamID  int64
 			place   float64
@@ -261,18 +304,18 @@ select id, code, status from matches where stage_id = ? order by position, id`,
 			metrics string
 		}
 		slots, err := store.CollectRows(ctx, tx, `
-select coalesce(ms.team_id, 0), coalesce(mr.place, 0), coalesce(mr.total, 0), coalesce(mr.plus, 0), coalesce(mr.metrics_json, '{}')
+select coalesce(ms.participant_id, 0), coalesce(mr.place, 0), coalesce(mr.total, 0), coalesce(mr.plus, 0), coalesce(mr.metrics_json, '{}')
 from match_slots ms
-left join match_results mr on mr.match_id = ms.match_id and mr.team_id = ms.team_id
+left join match_results mr on mr.match_id = ms.match_id and mr.participant_id = ms.participant_id
 where ms.match_id = ?
 order by ms.slot_index`, []any{m.id}, func(rows *sql.Rows) (slotRes, error) {
 			var s slotRes
 			return s, rows.Scan(&s.teamID, &s.place, &s.total, &s.plus, &s.metrics)
 		})
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
-		outcome := structure.MatchOutcome{Code: m.code, Finished: finished}
+		outcome := structure.MatchOutcome{Code: m.code, Finished: finished, Round: m.round, Questions: questions}
 		for _, s := range slots {
 			metrics := map[string]float64{"total": s.total, "plus": s.plus}
 			var parsed map[string]any
@@ -291,7 +334,7 @@ order by ms.slot_index`, []any{m.id}, func(rows *sql.Rows) (slotRes, error) {
 		}
 		outcomes = append(outcomes, outcome)
 	}
-	return outcomes, allFinished, nil
+	return outcomes, nil
 }
 
 // resolveStageSlotsTx resolves every from_match/reseed slot of one stage and
@@ -305,7 +348,7 @@ func resolveStageSlotsTx(ctx context.Context, tx *sql.Tx, gameID, stageID int64,
 		teamID     int64
 	}
 	slots, err := store.CollectRows(ctx, tx, `
-select ms.id, ms.match_id, ms.source_type, ms.source_ref_json, coalesce(ms.team_id, 0)
+select ms.id, ms.match_id, ms.source_type, ms.source_ref_json, coalesce(ms.participant_id, 0)
 from match_slots ms
 join matches m on m.id = ms.match_id
 where m.stage_id = ? and ms.locked = 0 and ms.source_type in ('from_match', 'reseed')
@@ -353,7 +396,7 @@ func teamAtMatchPlace(ctx context.Context, q store.Queryer, gameID int64, matchC
 	}
 	var teamID int64
 	err := q.QueryRowContext(ctx, `
-select mr.team_id
+select mr.participant_id
 from match_results mr
 join matches m on m.id = mr.match_id
 where m.game_id = ? and m.code = ? and m.status = 'finished' and mr.place = ?`,
@@ -435,7 +478,7 @@ func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, curre
 			return false, err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `update match_slots set team_id = ? where id = ?`, nullableInt64(desired), slotID); err != nil {
+	if _, err := tx.ExecContext(ctx, `update match_slots set participant_id = ? where id = ?`, nullableInt64(desired), slotID); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -445,22 +488,15 @@ func applyResolvedSlotTx(ctx context.Context, tx *sql.Tx, slotID, matchID, curre
 
 type reseedConfig struct {
 	Teams   []store.SchemeSlot `json:"teams"`
+	Bands   []int              `json:"bands"`
 	Sources []string           `json:"sources"`
-	Sort    []reseedSortRule   `json:"sort"`
 }
 
-type reseedSortRule struct {
-	Metric string `json:"metric"`
-	Dir    string `json:"dir"`
-}
-
-// reseed metric keys persisted per entry, beyond the place_sum/total/plus sums.
-var reseedCountMetrics = []string{"correct_50", "correct_40", "correct_30", "correct_20"}
-
-type reseedEntry struct {
-	teamID  int64
-	metrics map[string]float64
-	bouts   []string
+// reseedContender is one Participant the reseed ranks and the band (Losses so
+// far) it ranks in — what the resolver hands the reseed Ranker.
+type reseedContender struct {
+	Participant int64 `json:"participant"`
+	Band        int   `json:"band"`
 }
 
 func syncReseedReadinessTx(ctx context.Context, tx *sql.Tx, stage resolverStage, gameID int64) error {
@@ -540,15 +576,15 @@ func ReseedPrerequisites(ctx context.Context, q store.Queryer, config []byte, ga
 
 	advancing := 0
 	for _, slot := range cfg.Teams {
-		if slot.FromMatch == nil {
-			continue
-		}
-		teamID, err := teamAtMatchPlace(ctx, q, gameID, slot.FromMatch.Match, slot.FromMatch.Place)
+		teamID, source, err := eligibleTeam(ctx, q, gameID, slot)
 		if err != nil {
 			return state, err
 		}
+		if source == "" {
+			continue
+		}
 		if teamID == 0 {
-			state.addPending(slot.FromMatch.Match)
+			state.addPending(source)
 		}
 		advancing++
 	}
@@ -592,44 +628,42 @@ func ReseedNotReadyMessage(pending []string) string {
 	}
 }
 
-// recomputeReseedEntriesTx rebuilds a reseed stage's entries from match
-// results. Metrics (place_sum, total, plus, correct_*) are summed across every
-// bout each advancing team played in the stages listed under config `sources`
-// (e.g. both the 1/16 and the 1/8). If `sources` is absent it falls back to the
-// single bout each team advanced from. Entries are cleared until every source
-// bout is finished, so downstream reseed slots stay unresolved until then.
+// recomputeReseedEntriesTx rebuilds a reseed stage's table: the resolver
+// names who advances (the place selectors in `teams`, each with its band) and
+// which бои count (the `sources` stages, else the бой each team advanced
+// from), and the reseed Ranker sums, orders and lots them. The table is
+// cleared until every source бой is finished, so downstream reseed slots stay
+// unresolved until then.
 func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, config []byte, gameID int64) error {
 	var cfg reseedConfig
 	if err := json.Unmarshal(config, &cfg); err != nil {
 		return err
 	}
-
 	clear := func() error {
 		_, err := tx.ExecContext(ctx, `delete from stage_standings where stage_id = ?`, stageID)
 		return err
 	}
-
-	// Advancing teams come from the fromMatch place selectors in `teams`.
-	advancing := make([]int64, 0, len(cfg.Teams))
-	for _, slot := range cfg.Teams {
-		if slot.FromMatch == nil {
-			continue
-		}
-		teamID, err := teamAtMatchPlace(ctx, tx, gameID, slot.FromMatch.Match, slot.FromMatch.Place)
+	contenders := make([]reseedContender, 0, len(cfg.Teams))
+	for index, slot := range cfg.Teams {
+		teamID, source, err := eligibleTeam(ctx, tx, gameID, slot)
 		if err != nil {
 			return err
+		}
+		if source == "" {
+			continue
 		}
 		if teamID == 0 {
 			return clear() // a source bout is not finished yet
 		}
-		advancing = append(advancing, teamID)
+		band := 0
+		if index < len(cfg.Bands) {
+			band = cfg.Bands[index]
+		}
+		contenders = append(contenders, reseedContender{Participant: teamID, Band: band})
 	}
-	if len(advancing) == 0 {
+	if len(contenders) == 0 {
 		return clear()
 	}
-
-	// Source bouts whose results are summed. Either the listed source stages or
-	// (fallback) just the bouts named in `teams`.
 	state, err := ReseedPrerequisites(ctx, tx, config, gameID)
 	if err != nil {
 		return err
@@ -637,117 +671,23 @@ func recomputeReseedEntriesTx(ctx context.Context, tx *sql.Tx, stageID int64, co
 	if !state.Ready {
 		return clear()
 	}
-
-	entries := make([]reseedEntry, 0, len(advancing))
-	for _, teamID := range advancing {
-		entry, err := aggregateReseedMetrics(ctx, tx, teamID, state.SourceMatchIDs)
-		if err != nil {
-			return err
-		}
-		entries = append(entries, entry)
+	outcomes, err := matchOutcomesTx(ctx, tx, state.SourceMatchIDs)
+	if err != nil {
+		return err
 	}
-
-	rules := cfg.Sort
-	if len(rules) == 0 {
-		rules = []reseedSortRule{{Metric: "place_sum", Dir: "asc"}}
-	}
-
-	// Жребий lots are derived deterministically from the game's fixed random
-	// seed, so a tie always breaks the same way no matter how many times the
-	// reseed is recomputed — re-finishing an edited source bout can never
-	// reshuffle the lottery.
+	// Жребий lots are derived from the game's fixed random seed, so a tie
+	// always breaks the same way no matter how many times the reseed is
+	// recomputed — re-finishing an edited source bout can never reshuffle it.
 	seed, err := gameRandomSeed(ctx, tx, gameID)
 	if err != nil {
 		return err
 	}
-
-	sortReseedEntries(entries, rules)
-	assignDrawLots(entries, rules, seed)
-	sortReseedEntries(entries, rules) // re-order now that tied groups have lots
-
-	if err := clear(); err != nil {
+	ranker, _ := structure.RankerFor("reseed")
+	ranked, err := ranker.Standings(kindStageConfig(config, seed, contenders), outcomes)
+	if err != nil {
 		return err
 	}
-	for rank, entry := range entries {
-		out := map[string]any{
-			"place_sum": entry.metrics["place_sum"],
-			"total":     int(entry.metrics["total"]),
-			"plus":      int(entry.metrics["plus"]),
-			"draw":      int(entry.metrics["draw"]),
-			"match":     strings.Join(entry.bouts, "+"),
-		}
-		for _, key := range reseedCountMetrics {
-			out[key] = int(entry.metrics[key])
-		}
-		if _, err := tx.ExecContext(ctx, `
-insert into stage_standings(stage_id, rank, participant_id, metrics_json)
-values(?, ?, ?, ?)`, stageID, rank+1, entry.teamID, util.MustJSON(out)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// sortReseedEntries orders entries by the configured sort rules, with team id
-// as a final deterministic tiebreak.
-func sortReseedEntries(entries []reseedEntry, rules []reseedSortRule) {
-	sort.SliceStable(entries, func(i, j int) bool {
-		for _, rule := range rules {
-			a, b := entries[i].metrics[rule.Metric], entries[j].metrics[rule.Metric]
-			if a == b {
-				continue
-			}
-			if rule.Dir == "desc" {
-				return a > b
-			}
-			return a < b
-		}
-		return entries[i].teamID < entries[j].teamID
-	})
-}
-
-// tiedOnEveryMetricButDraw reports whether two entries are equal on every sort
-// metric except the lottery (draw) — i.e. only Жребий can separate them.
-func tiedOnEveryMetricButDraw(a, b reseedEntry, rules []reseedSortRule) bool {
-	for _, rule := range rules {
-		if rule.Metric == "draw" {
-			continue
-		}
-		if a.metrics[rule.Metric] != b.metrics[rule.Metric] {
-			return false
-		}
-	}
-	return true
-}
-
-// assignDrawLots gives every team in a true tie group a Жребий lot derived
-// deterministically from the game's fixed random seed, so the lottery order is
-// stable across recomputes (untick/retick or an unrelated score edit can never
-// reshuffle a tie). Untied teams keep draw 0.
-func assignDrawLots(entries []reseedEntry, rules []reseedSortRule, seed string) {
-	i := 0
-	for i < len(entries) {
-		j := i + 1
-		for j < len(entries) && tiedOnEveryMetricButDraw(entries[i], entries[j], rules) {
-			j++
-		}
-		if j-i >= 2 {
-			for k := i; k < j; k++ {
-				entries[k].metrics["draw"] = float64(deterministicLot(seed, entries[k].teamID))
-			}
-		}
-		i = j
-	}
-}
-
-// deterministicLot derives a stable Жребий lot in [1, 1_000_000] for a team from
-// the game's fixed random seed. Same (seed, team) always yields the same lot, so
-// a reseed recomputes identically every time. A hash collision inside a tie group
-// is harmless: sortReseedEntries breaks any residual tie by team id.
-func deterministicLot(seed string, teamID int64) int64 {
-	h := fnv.New64a()
-	fmt.Fprintf(h, "%s:%d", seed, teamID)
-	return int64(h.Sum64()%1_000_000) + 1
+	return writeStandingsTx(ctx, tx, stageID, ranked)
 }
 
 // gameRandomSeed returns the game's fixed random seed (the basis for deterministic
@@ -838,47 +778,36 @@ func numFromAny(value any) float64 {
 	return 0
 }
 
-// aggregateReseedMetrics sums one team's place/total/plus/correct_* across the
-// given source bouts.
-func aggregateReseedMetrics(ctx context.Context, q store.Queryer, teamID int64, sourceMatchIDs []int64) (reseedEntry, error) {
-	entry := reseedEntry{teamID: teamID, metrics: map[string]float64{}}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(sourceMatchIDs)), ",")
-	args := []any{teamID}
-	for _, id := range sourceMatchIDs {
-		args = append(args, id)
+// eligibleTeam resolves one advancing-team selector — a from_match place or a
+// source stage's rank — returning the source's code so the caller can name what
+// still blocks it. 0 while the upstream is not final; "" when the slot has no
+// selector at all.
+func eligibleTeam(ctx context.Context, q store.Queryer, gameID int64, slot store.SchemeSlot) (int64, string, error) {
+	switch {
+	case slot.FromMatch != nil:
+		teamID, err := teamAtMatchPlace(ctx, q, gameID, slot.FromMatch.Match, slot.FromMatch.Place)
+		return teamID, slot.FromMatch.Match, err
+	case slot.Reseed != nil:
+		teamID, err := teamAtReseedRank(ctx, q, gameID, slot.Reseed.Stage, slot.Reseed.Rank)
+		return teamID, slot.Reseed.Stage, err
 	}
-	rows, err := q.QueryContext(ctx, fmt.Sprintf(`
-select m.code, mr.place, mr.total, mr.plus, mr.metrics_json
-from match_results mr
-join matches m on m.id = mr.match_id
-join stages s on s.id = m.stage_id
-where mr.team_id = ? and mr.match_id in (%s)
-order by s.position, m.position, m.id`, placeholders), args...)
-	if err != nil {
-		return entry, err
+	return 0, "", nil
+}
+
+// stageConfigQuestions reads a stage's per-bout base question count from its
+// persisted config (nested under "config" for scheme-imported stages).
+func stageConfigQuestions(raw string) float64 {
+	var outer struct {
+		Questions float64 `json:"questions"`
+		Config    struct {
+			Questions float64 `json:"questions"`
+		} `json:"config"`
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var code, rawMetrics string
-		var place float64
-		var total, plus int
-		if err := rows.Scan(&code, &place, &total, &plus, &rawMetrics); err != nil {
-			return entry, err
-		}
-		entry.bouts = append(entry.bouts, code)
-		entry.metrics["place_sum"] += place
-		entry.metrics["total"] += float64(total)
-		entry.metrics["plus"] += float64(plus)
-		// metrics_json mixes scalars (correct_50, draw, ...) with arrays
-		// (correctCounts, wrongCounts), so decode into map[string]any and pull
-		// just the scalar keys we sum — decoding into map[string]float64 would
-		// fail on the arrays and silently drop every count.
-		var parsed map[string]any
-		if err := json.Unmarshal([]byte(rawMetrics), &parsed); err == nil {
-			for _, key := range reseedCountMetrics {
-				entry.metrics[key] += numFromAny(parsed[key])
-			}
-		}
+	if json.Unmarshal([]byte(raw), &outer) != nil {
+		return 0
 	}
-	return entry, rows.Err()
+	if outer.Config.Questions > 0 {
+		return outer.Config.Questions
+	}
+	return outer.Questions
 }

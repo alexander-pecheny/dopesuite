@@ -14,10 +14,11 @@ import "encoding/json"
 
 // Canonical game_type codes as stored in the games.game_type column.
 const (
-	EK  = "ek"  // эрудит-квартет (bracket of small matches)
-	OD  = "od"  // ЧГК — командная викторина с раундами по минуте
-	KSI = "ksi" // командная своя игра
-	SI  = "si"  // legacy alias used by some viewers/renderers for KSI
+	EK    = "ek"    // эрудит-квартет (bracket of small matches)
+	OD    = "od"    // ЧГК — командная викторина с раундами по минуте
+	KSI   = "ksi"   // командная своя игра
+	SI    = "si"    // личная своя игра — за столом игроки, а не команды
+	Brain = "brain" // брейн-ринг — head-to-head buzzer бои
 )
 
 // Default is the game type assumed when a game has none recorded.
@@ -32,15 +33,26 @@ type Definition struct {
 	// single flat grid (OD, KSI, SI) as opposed to EK's per-match bracket. Used
 	// to collapse viewer/snapshot routing for those types.
 	ChGK bool
+	// Individual reports whether a Participant of this format is one player
+	// rather than a team (личная СИ). It decides what the game draws its
+	// Participants from and how the UI names them.
+	Individual bool
+}
+
+// IsIndividual reports whether the format seats players rather than teams.
+func IsIndividual(code string) bool {
+	d, ok := registry[code]
+	return ok && d.Individual
 }
 
 // registry is the single source of truth for known game types. Iteration order
 // is never relied upon; look-ups go through the helpers below.
 var registry = map[string]Definition{
-	EK:  {Code: EK, Label: "ЭК"},
-	OD:  {Code: OD, Label: "ЧГК", ChGK: true},
-	KSI: {Code: KSI, Label: "КСИ", ChGK: true},
-	SI:  {Code: SI, Label: "СИ", ChGK: true},
+	EK:    {Code: EK, Label: "ЭК"},
+	OD:    {Code: OD, Label: "ЧГК", ChGK: true},
+	KSI:   {Code: KSI, Label: "КСИ", ChGK: true},
+	SI:    {Code: SI, Label: "Личная СИ", ChGK: true, Individual: true},
+	Brain: {Code: Brain, Label: "Брейн", ChGK: true},
 }
 
 // Label returns the short display label for a game type, falling back to the

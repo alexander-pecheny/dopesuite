@@ -44,15 +44,15 @@ var idsCreatedByJS = map[string]bool{}
 
 // loadBearingClasses / substrings lists structural markup the page scripts bind
 // to (see DOPE-INVENTORY §JS contract). host-actions is on every page (topbar);
-// the game pages measure .sheet-frame and mount into .table-host; login and the
-// viewer set the title on `.host-top h1`.
+// the game pages measure .sheet-frame and mount into .table-host; login sets
+// the title on `.host-top h1`.
 var loadBearingSubstrings = map[string][]string{
-	"":       {"host-actions"},
-	"login":  {"host-top", "<h1>"},
-	"host":   {"game-host-top", "sheet-frame", "table-host"},
-	"viewer": {"game-host-top", "sheet-frame", "table-host", "<h1>"},
-	"od":     {"game-host-top", "sheet-frame", "table-host", "od-header-progress"},
-	"si":     {"game-host-top", "sheet-frame", "table-host"},
+	"":      {"host-actions"},
+	"login": {"host-top", "<h1>"},
+	"ek":    {"game-host-top", "sheet-frame", "table-host"},
+	"od":    {"game-host-top", "sheet-frame", "table-host", "od-header-progress"},
+	"si":    {"game-host-top", "sheet-frame", "table-host"},
+	"brain": {"game-host-top", "sheet-frame", "table-host"},
 }
 
 var (

@@ -910,3 +910,85 @@ export function createViewerCounter(statusNode: HTMLElement | null | undefined):
     },
   };
 }
+
+// renderTabBar fills a gametopbar tabs mount with .match-tab buttons — the one
+// tab strip every game page shares (od/si/brain). The caller owns which tabs
+// are visible and what selecting one does.
+const tabBarScrollBindings = new WeakMap<HTMLElement, ScrollEdgeBinding>();
+const tabBarActiveKeys = new WeakMap<HTMLElement, string>();
+
+export function renderTabBar(
+  root: HTMLElement,
+  tabs: Array<{key: string; label: string}>,
+  activeKey: string,
+  onSelect: (key: string) => void,
+): void {
+  root.replaceChildren();
+  for (const tab of tabs) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "match-tab" + (activeKey === tab.key ? " active" : "");
+    btn.textContent = tab.label;
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-selected", activeKey === tab.key ? "true" : "false");
+    btn.addEventListener("click", () => {
+      if (tab.key !== activeKey) onSelect(tab.key);
+    });
+    root.appendChild(btn);
+  }
+  // A dozen tabs overflow at any width — fade whichever edge hides more, the
+  // same treatment the ЭК tab bar gets.
+  let binding = tabBarScrollBindings.get(root);
+  if (!binding) {
+    binding = bindScrollEdges(root, ({left, right}, bar) => {
+      bar.classList.toggle("tabs-scroll-left", left);
+      bar.classList.toggle("tabs-scroll-right", right);
+    });
+    tabBarScrollBindings.set(root, binding);
+  } else {
+    binding.refresh();
+  }
+  // Reveal the active tab only when it changed: a live-update rerender must
+  // not yank the bar away from wherever the user scrolled it.
+  if (tabBarActiveKeys.get(root) !== activeKey) {
+    tabBarActiveKeys.set(root, activeKey);
+    root.querySelector<HTMLElement>(".match-tab.active")?.scrollIntoView({block: "nearest", inline: "nearest"});
+  }
+}
+
+// fitScrollFade caps a scroll frame's edge shadows (the kit's scroll-fade
+// backgrounds) to its content box — viewport-fixed, they would otherwise run
+// the frame's full height/width even where the table has long ended.
+export function fitScrollFade(frame: Element | null | undefined): void {
+  if (!frame || typeof ResizeObserver !== "function") return;
+  const el = frame as HTMLElement;
+  const apply = (): void => {
+    const bounds = el.getBoundingClientRect();
+    let width = 0;
+    let height = 0;
+    for (const child of el.children) {
+      const rect = child.getBoundingClientRect();
+      width = Math.max(width, rect.right - bounds.left + el.scrollLeft);
+      height = Math.max(height, rect.bottom - bounds.top + el.scrollTop);
+    }
+    if (width > 0 && height > 0) {
+      el.style.setProperty("--scroll-fade-content-w", `${Math.round(width)}px`);
+      el.style.setProperty("--scroll-fade-content-h", `${Math.round(height)}px`);
+    } else {
+      el.style.removeProperty("--scroll-fade-content-w");
+      el.style.removeProperty("--scroll-fade-content-h");
+    }
+  };
+  const observer = new ResizeObserver(apply);
+  const observeChildren = (): void => {
+    observer.disconnect();
+    observer.observe(el);
+    for (const child of el.children) observer.observe(child);
+  };
+  new MutationObserver(() => {
+    observeChildren();
+    apply();
+  }).observe(el, {childList: true});
+  observeChildren();
+  apply();
+}

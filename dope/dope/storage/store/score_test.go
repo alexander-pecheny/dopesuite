@@ -5,7 +5,7 @@ import "testing"
 func TestScoreTeam(t *testing.T) {
 	// One regular theme: right on 10 and 30, wrong on 20 → total 10-20+30 = 20,
 	// plus = 40, correct counts at idx0 and idx2, wrong count at idx1.
-	team := TeamState{
+	team := ParticipantState{
 		Name: "A",
 		Themes: []ThemeEntry{
 			{Player: "p1", Answers: [5]string{"right", "wrong", "right", "", ""}},
@@ -14,7 +14,7 @@ func TestScoreTeam(t *testing.T) {
 			{Player: "p1", Answers: [5]string{"right", "", "", "", ""}}, // +10 shootout
 		},
 	}
-	tv := ScoreTeam(team)
+	tv := ScoreParticipant(team)
 	if tv.Total != 20 {
 		t.Errorf("Total = %d, want 20", tv.Total)
 	}
@@ -38,7 +38,7 @@ func TestScoreTeam(t *testing.T) {
 func TestBuildViewStandings(t *testing.T) {
 	state := MatchState{
 		Title: "M",
-		Teams: []TeamState{
+		Participants: []ParticipantState{
 			{Name: "A", Place: 2, Themes: []ThemeEntry{{Answers: [5]string{"right", "", "", "", ""}}}},
 			{Name: "B", Place: 1, Themes: []ThemeEntry{{Answers: [5]string{"", "", "", "", "right"}}}},
 		},
@@ -49,7 +49,7 @@ func TestBuildViewStandings(t *testing.T) {
 		t.Fatalf("standings order = %+v", view.Standings)
 	}
 	// Places propagate back onto the team views.
-	for _, tm := range view.Teams {
+	for _, tm := range view.Participants {
 		if tm.Name == "B" && tm.Place != 1 {
 			t.Errorf("B place = %v, want 1", tm.Place)
 		}

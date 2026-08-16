@@ -24,6 +24,24 @@
   --narrow-col: 30px;
   --sheet-corner-col: 56px;
   --sheet-corner-row: 32px;
+  /* Сетка geometry, the whole of it: every fest-grid rule reads these
+     and states no length of its own (scripts/classcheck enforces it), so a
+     phone is a second set of values below, never a second set of rules —
+     and every game's Сетка is the same width, cell and type as ЭК's. */
+  --fest-col-min: 190px;
+  --fest-col-max: 240px;
+  --grid-row: 24px;
+  --grid-box-gap: var(--space-1);
+  --grid-cell-pad: 3px 6px;
+  --grid-cell-text: var(--text-xs);
+  --grid-head-text: var(--text-xs-plus);
+  --grid-title-text: var(--text-md);
+  --grid-num-col: 32px;
+  --grid-metric-col: 36px;
+  --grid-place-col: 44px;
+  --grid-fade: 34px;
+  --grid-stage-head-min: 42px;
+  --group-standings-col: 520px;
   --od-detailed-number-digits: 3ch;
   --od-detailed-number-pad-left: var(--space-0-5);
   --od-detailed-number-pad-right: var(--space-1);
@@ -77,6 +95,19 @@
   --inline-popover-left: var(--space-1);
 }
 
+/* One-line chrome text — headers, badges, previews — soft-clips: the mask
+   bites only when the content reaches the edge, so long text fades where an
+   «…» used to sit. Table names get the full fade+popover treatment instead. */
+.battle-title,
+.teams-cell span,
+.grid-head-truncated .grid-match-title,
+.readonly-battle-venue,
+.numbers-import-raw,
+.public-top h1 {
+  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+}
+
 /* Revealed on hover/focus of whichever cell the page marked truncated… */
 .player-select-truncated:hover .player-select-popover,
 .player-select-truncated:focus-within .player-select-popover,
@@ -84,6 +115,8 @@
 .grid-slot-team-truncated:focus-within .grid-slot-team-popover,
 .results-team-truncated:hover .results-team-name-popover,
 .results-team-truncated:focus-within .results-team-name-popover,
+.brain-name-truncated:hover .brain-name-popover,
+.brain-name-truncated:focus-within .brain-name-popover,
 .match-table.od-detailed .od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
 .match-table.od-detailed .od-detailed-team-cell-truncated:focus-within .od-detailed-team-name-popover,
 .match-table .ek-team-cell.od-detailed-team-cell-truncated:hover .od-detailed-team-name-popover,
@@ -274,16 +307,19 @@
   color: var(--muted);
   font-size: var(--text-xs-plus);
   line-height: var(--leading-tight);
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
 /* The game header's trail is the kit's .crumbs, sized down: it shares a fixed
    44px bar with the stage tabs, so it runs at the small end and gives up room
-   to them rather than pushing them off. */
+   to them rather than pushing them off. The floor is what the last crumb — the
+   game's own name — needs: a game with a dozen stages used to squeeze the whole
+   trail down to one letter per crumb, which reads as broken rather than terse.
+   The tab strip scrolls, so the room comes from there. */
 .game-host-top .crumbs {
   flex: 0 1 auto;
-  min-width: 120px;
+  min-width: min(52vw, 230px);
   max-width: min(34vw, 420px);
   font-size: var(--text-xs);
   line-height: var(--leading-tight);
@@ -399,9 +435,10 @@
 }
 
 .battle-title {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
 }
 
 .btn-xs.venue-edit-button {
@@ -437,6 +474,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1);
   color: var(--text-strong);
   font-size: var(--text-xs);
   line-height: var(--leading-tight);
@@ -804,7 +842,7 @@
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   box-shadow: var(--shadow-popover);
 }
 
@@ -940,6 +978,29 @@
   outline: 0;
 }
 
+/* Viewer pages disable controls in earnest but wear the enabled face: a
+   spectator knows the protocol isn't theirs to change, and the washed
+   disabled look would misread as "checkbox is off" / "field is broken". */
+.viewer-readonly input:disabled,
+.viewer-readonly select:disabled,
+.viewer-readonly textarea:disabled {
+  opacity: 1;
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+  cursor: default;
+}
+
+.viewer-readonly input[type="checkbox"]:disabled,
+.viewer-readonly input[type="radio"]:disabled {
+  background: var(--field-bg);
+}
+
+.viewer-readonly input[type="checkbox"]:disabled:checked,
+.viewer-readonly input[type="radio"]:disabled:checked {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
 .narrow {
   width: var(--narrow-col);
   min-width: var(--narrow-col);
@@ -949,7 +1010,7 @@
   display: block;
   max-width: 320px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -1023,21 +1084,22 @@
 
 .fest-grid {
   width: 100%;
-  min-width: 1140px;
-  padding-bottom: 24px;
+  /* The Сетка's row: its tallest box — a head and up to four seats, counted
+     per grid by fest-grid.ts — plus the gap under it. Every column places its
+     boxes and tables on these rows. Declared here, not on :root, so each grid
+     resolves it from its own --grid-unit-rows. */
+  --grid-unit: calc(var(--grid-unit-rows, 5) * var(--grid-row) + 2 * var(--cell-gap) + var(--grid-box-gap));
+  padding-bottom: var(--space-5);
 }
 
 .fest-columns {
   display: grid;
-  grid-template-columns:
-    minmax(190px, 1fr)
-    minmax(190px, 1fr)
-    minmax(190px, 1fr)
-    minmax(190px, 1fr)
-    minmax(190px, 1fr)
-    minmax(190px, 1fr);
+  grid-auto-flow: column;
+  /* Capped: a game of three stages must not stretch each into a banner —
+     every game's Сетка reads at the same column width ЭК's does. */
+  grid-auto-columns: minmax(var(--fest-col-min), var(--fest-col-max));
   grid-template-rows: auto 1fr;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: start;
 }
 
@@ -1050,15 +1112,76 @@
   min-width: 0;
 }
 
-.grid-matches {
+.grid-matches,
+.grid-block-stack {
   grid-row: 2;
+  min-width: 0;
+}
+
+/* A ranking Block's column: its групп's tables under one header, wrapping
+   into as many columns as fit the screen's height (--block-rows and
+   --block-cols are counted by fest-grid.ts). contain: inline-size keeps the
+   fixed-layout tables inside from blowing the column track to Chromium's
+   "infinite" width during intrinsic sizing — the track sizes from the header,
+   and the tables take the track's width. */
+.grid-stage-block .grid-stage-head,
+.grid-block-stack {
+  grid-column: span var(--block-cols, 1);
+}
+
+.grid-block-stack {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: repeat(var(--block-cols, 1), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--block-rows, 1), var(--grid-unit));
+  column-gap: var(--space-2);
+  align-items: start;
+  contain: inline-size;
+}
+
+/* The «Групповой этап» tab: every группа's table on one tab, the sheets'
+   «Группы» view — two abreast where the screen fits them. */
+.group-standings {
+  display: grid;
+  /* min() lets a phone shrink the track below the two-abreast width. */
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--group-standings-col), 100%), max-content));
+  gap: var(--space-2) var(--space-4);
+  align-items: start;
+}
+
+.group-standings-item {
+  min-width: 0;
+}
+
+.group-standings-head {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-md);
+}
+
+.group-standings-table {
+  --results-place-col: 48px;
+  --results-team-col: 260px;
+}
+
+/* The folded «Пересев» tab: every этап's table stacked, each under the name
+   of the round it seats. */
+.reseed-fold {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.reseed-fold-head {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-md);
 }
 
 .grid-stage-head {
   display: block;
-  min-height: 42px;
-  margin-bottom: 4px;
-  padding: 6px 8px;
+  min-height: var(--grid-stage-head-min);
+  margin-bottom: var(--space-1);
+  padding: var(--space-1-5) var(--space-2);
   border: var(--cell-gap) solid transparent;
   border-radius: var(--cell-radius);
   background:
@@ -1074,14 +1197,14 @@
 
 .grid-stage h2 {
   margin: 0;
-  font-size: var(--text-md);
+  font-size: var(--grid-title-text);
   line-height: 1.1;
 }
 
 .grid-matches {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-auto-rows: var(--grid-unit);
+  align-items: start;
   width: 100%;
 }
 
@@ -1092,15 +1215,97 @@
   overflow: hidden;
 }
 
+/* A Group is drawn as its standings — место against team — the way the source
+   sheets draw it, so it wears the same skin as a бой box rather than a table of
+   its own. */
+.grid-standings {
+  width: 100%;
+  /* Fixed layout so a long name fades instead of widening the column: the
+     Сетка's columns are sized by the grid, not by the longest team. One skin
+     with the бой boxes — same font, same cell height, same paper. */
+  table-layout: fixed;
+  /* Separate borders so the rows measure exactly what a бой box's do — the
+     table must be as tall as the бой it stands beside. */
+  border-collapse: separate;
+  border-spacing: 0;
+  border: var(--cell-gap) solid var(--structure);
+  border-radius: var(--radius-md);
+  background: var(--structure);
+  overflow: hidden;
+  font-size: var(--grid-cell-text);
+}
+
+.grid-standings th,
+.grid-standings td {
+  height: var(--grid-row);
+  box-sizing: border-box;
+  padding: var(--grid-cell-pad);
+  background: var(--paper);
+  border-bottom: var(--cell-gap) solid var(--structure);
+  font-weight: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* The head row wears the бой box's head: «Группа 1 · пл. 1» on the paper's
+   structure colour, and the metrics beside it. Tight leading, or the head
+   outgrows the row and every row under it sits a pixel low. */
+.grid-standings th {
+  background: var(--structure);
+  color: var(--text);
+  font-size: var(--grid-head-text);
+  line-height: var(--leading-tight);
+}
+
+/* The paper block rounds its own corners, as a бой box's cells do — on the
+   dark ground the table's outer edge is invisible, so only the cells' corners
+   are seen. */
+.grid-standings tbody tr:first-child td:first-child { border-top-left-radius: var(--radius-md); }
+.grid-standings tbody tr:first-child td:last-child { border-top-right-radius: var(--radius-md); }
+.grid-standings tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius-md); }
+.grid-standings tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius-md); }
+
+.grid-standings tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.grid-standings .standings-place {
+  /* Wide enough for a shared place («10.5») — «1…» said nothing. */
+  width: var(--grid-place-col);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.grid-standings td.standings-place {
+  color: var(--text-muted);
+}
+
+/* No width: under a fixed layout the unsized column takes whatever the sized
+   ones leave, and its content fades inside that. */
+.grid-standings .standings-name {
+  min-width: 0;
+}
+
+.grid-standings td.standings-name {
+  position: relative;
+}
+
+.grid-standings .standings-metric {
+  width: var(--grid-metric-col);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 body:not(.embedded-match) .grid-match {
   content-visibility: auto;
-  contain-intrinsic-size: auto 160px;
+  contain-intrinsic-size: auto var(--grid-unit);
 }
 
 .grid-match-title,
 .grid-match-venue {
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -1129,22 +1334,22 @@ body:not(.embedded-match) .grid-match {
 .grid-slot-grid {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px 32px;
-  grid-auto-rows: 24px;
+  grid-template-columns: minmax(0, 1fr) var(--grid-num-col) var(--grid-num-col);
+  grid-auto-rows: var(--grid-row);
   border-radius: inherit;
   overflow: hidden;
 }
 
 .grid-slot-cell {
-  height: 24px;
+  height: var(--grid-row);
   min-width: 0;
   box-sizing: border-box;
-  padding: 3px 6px;
+  padding: var(--grid-cell-pad);
   border-bottom: var(--cell-gap) solid var(--structure);
   background: var(--paper);
-  font-size: var(--text-xs);
+  font-size: var(--grid-cell-text);
   font-weight: var(--fw-regular);
-  line-height: 16px;
+  line-height: var(--leading-snug);
   display: flex;
   align-items: center;
 }
@@ -1152,8 +1357,8 @@ body:not(.embedded-match) .grid-match {
 .grid-slot-head {
   background: var(--structure);
   color: var(--text);
-  font-size: var(--text-xs-plus);
-  line-height: 15px;
+  font-size: var(--grid-head-text);
+  line-height: var(--leading-tight);
 }
 
 .grid-match-head-cell {
@@ -1163,24 +1368,29 @@ body:not(.embedded-match) .grid-match {
 .grid-match-head-layout {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--space-1-5);
   width: 100%;
   min-width: 0;
-  line-height: 15px;
+  line-height: var(--leading-tight);
 }
 
+/* The title fills the row and the venue yields to it; the soft-clip mask
+   above bites only once fest-grid.ts has measured the title clipped — a
+   «Группа 1» beside its venue fills its span exactly, and an always-on fade
+   would eat its digit. */
 .grid-match-head-layout .grid-match-title {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .grid-match-head-layout .grid-match-venue {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
 .grid-head-metric {
   display: block;
-  line-height: 15px;
+  line-height: var(--leading-tight);
 }
 
 .grid-slot-grid .slot-total-head,
@@ -1230,7 +1440,7 @@ body:not(.embedded-match) .grid-match {
   overflow: hidden;
   text-overflow: clip;
   white-space: nowrap;
-  outline-offset: -2px;
+  outline-offset: var(--focus-outline-offset-tight);
 }
 
 .grid-slot-team-truncated .grid-slot-team-name::after {
@@ -1239,7 +1449,7 @@ body:not(.embedded-match) .grid-match {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 34px;
+  width: var(--grid-fade);
   background: linear-gradient(to right, var(--paper-transparent), var(--paper));
   pointer-events: none;
 }
@@ -1462,36 +1672,15 @@ body:not(.embedded-match) .grid-match {
     max-width: 220px;
   }
 
-  .fest-grid {
-    min-width: 1020px;
-  }
-
-  .fest-columns {
-    grid-template-columns:
-      minmax(170px, 1fr)
-      minmax(170px, 1fr)
-      minmax(170px, 1fr)
-      minmax(170px, 1fr)
-      minmax(170px, 1fr)
-      minmax(170px, 1fr);
-  }
-
-  .grid-matches {
-    gap: 5px;
-  }
-
-  .grid-stage h2 {
-    font-size: var(--text-base);
-  }
-
-  .grid-slot-cell {
-    height: 24px;
-    padding: 3px 4px;
-    font-size: var(--text-xs-tight);
-  }
-
-  .grid-slot-grid {
-    grid-template-columns: minmax(0, 1fr) 30px 30px;
+  /* The phone's Сетка: the same rules, narrower values. */
+  :root {
+    --fest-col-min: 170px;
+    --fest-col-max: 178px;
+    --grid-cell-pad: 3px 4px;
+    --grid-cell-text: var(--text-xs-tight);
+    --grid-title-text: var(--text-base);
+    --grid-num-col: 30px;
+    --grid-fade: 28px;
   }
 
   .answer-cell:hover:not(.active),
@@ -1600,39 +1789,46 @@ body:not(.embedded-match) .grid-match {
   box-shadow: none;
 }
 
-@media (max-width: 760px) {
-  .ek-page .ek-tabs {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
+/* A брейн or личная СИ carries a dozen tabs — the bar scrolls at every
+   width, fading at whichever edge hides more. */
+.ek-page .ek-tabs,
+.game-host-top .match-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
 
-  .ek-page .ek-tabs::-webkit-scrollbar {
-    display: none;
-  }
+.ek-page .ek-tabs::-webkit-scrollbar,
+.game-host-top .match-tabs::-webkit-scrollbar {
+  display: none;
+}
 
-  .ek-page .ek-tabs .match-tab {
-    flex: 0 0 auto;
-  }
+.ek-page .ek-tabs .match-tab,
+.game-host-top .match-tabs .match-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 
-  .ek-page .ek-tabs.tabs-scroll-left {
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 28px);
-    mask-image: linear-gradient(to right, transparent, #000 28px);
-  }
+.ek-page .ek-tabs.tabs-scroll-left,
+.game-host-top .match-tabs.tabs-scroll-left {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px);
+  mask-image: linear-gradient(to right, transparent, #000 28px);
+}
 
-  .ek-page .ek-tabs.tabs-scroll-right {
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-  }
+.ek-page .ek-tabs.tabs-scroll-right,
+.game-host-top .match-tabs.tabs-scroll-right {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
 
-  .ek-page .ek-tabs.tabs-scroll-left.tabs-scroll-right {
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
-    mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
-  }
+.ek-page .ek-tabs.tabs-scroll-left.tabs-scroll-right,
+.game-host-top .match-tabs.tabs-scroll-left.tabs-scroll-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
 }
 
 .od-pane {
@@ -2457,7 +2653,9 @@ body:not(.embedded-match) .grid-match {
 .venues-results-table thead th.results-team-head,
 .venues-results-table .results-team,
 .reseed-results-table thead th.results-team-head,
-.reseed-results-table .results-team {
+.reseed-results-table .results-team,
+.group-standings-table thead th.results-team-head,
+.group-standings-table .results-team {
   width: var(--results-team-col);
   min-width: var(--results-team-col);
   max-width: var(--results-team-col);
@@ -2517,7 +2715,7 @@ body:not(.embedded-match) .grid-match {
 /* EK stage tables get the same scrolled-under fade as OD/KSI, drawn off the
    right edge of the place-gap (the rightmost frozen column) once the score
    columns have been scrolled. .stage-scroll-left is toggled on the scroll
-   frame by host.js / viewer.js. */
+   frame by ek.js. */
 .sheet-frame.stage-scroll-left .match-table.ek-stage-table .sticky-place-gap::after {
   content: "";
   position: absolute;
@@ -2743,6 +2941,13 @@ body:not(.embedded-match) .grid-match {
 
 .results-row.results-group-last td:last-child { border-bottom-right-radius: var(--radius-md); }
 
+/* Every results table's paper block rounds its corners, marked rows or not:
+   the стата and крестовые tables of a брейн, СИ's групп, the составы. */
+.results-table tbody tr:first-child td:first-child { border-top-left-radius: var(--radius-md); }
+.results-table tbody tr:first-child td:last-child { border-top-right-radius: var(--radius-md); }
+.results-table tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius-md); }
+.results-table tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius-md); }
+
 /* Compact score tables for large OD/KSI grids. */
 .match-table.compact-score-table {
   --question-size: 24px;
@@ -2878,10 +3083,11 @@ body:not(.embedded-match) .grid-match {
 }
 
 .readonly-battle-venue {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -2920,6 +3126,13 @@ body:not(.embedded-match) .grid-match {
   min-height: calc(var(--question-size) * 2 - var(--cell-gap) * 2);
   max-height: calc(var(--question-size) * 2 - var(--cell-gap) * 2);
   overflow: hidden;
+}
+
+/* Личная СИ: the seat is one row, so ЭК's two-row floor would stretch it. */
+.match-table.individual-blank .ek-team-cell .od-detailed-team-layout,
+.match-table.ek-stage-table.individual-blank .ek-team-cell .od-detailed-team-layout {
+  min-height: calc(var(--question-size) - var(--cell-gap) * 2);
+  max-height: none;
 }
 
 .match-table .ek-team-cell .od-detailed-team-name-popover {
@@ -2984,6 +3197,15 @@ body:not(.embedded-match) .grid-match {
 
 .match-table.ek-stage-table .ek-team-cell .od-detailed-team-name::-webkit-scrollbar {
   display: none;
+}
+
+/* Личная СИ's бой: one row per player, КСИ-height. The two-line wrap above is
+   ЭК's — its name cell spans two rows; here it would inflate the single row,
+   so the name keeps one line and fades into its popover instead. */
+.match-table.ek-stage-table.individual-blank .ek-team-cell .od-detailed-team-name,
+.viewer-readonly .match-table.ek-stage-table.readonly-table.individual-blank .ek-team-cell .od-detailed-team-name {
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .match-table.ek-stage-table .ek-team-cell.od-detailed-team-cell-truncated .od-detailed-team-name::after {
@@ -3189,7 +3411,7 @@ body:not(.embedded-match) .grid-match {
     top: 0;
     right: 0;
     bottom: 0;
-    width: 28px;
+    width: var(--grid-fade);
     background: linear-gradient(to right, var(--paper-transparent), var(--paper));
     pointer-events: none;
   }
@@ -3248,7 +3470,7 @@ body:not(.embedded-match) .grid-match {
 
   /* Scrolled-under fade off the frozen player column's right edge, drawn once
      the rest has scrolled — same cue as the OD/KSI results tables. The scroll
-     frame toggles .stage-scroll-left (viewer.js / host.js). */
+     frame toggles .stage-scroll-left (ek.js). */
   .sheet-frame.stage-scroll-left .ek-stats-table td.ek-stats-player::after,
   .sheet-frame.stage-scroll-left .ek-stats-table thead th.ek-stats-player-head::after {
     content: "";
@@ -3324,13 +3546,12 @@ body:not(.embedded-match) .grid-match {
   }
 }
 
-/* Public EK viewer tuning. */
+/* Public EK viewer tuning. The frame used to add a static right-edge inset
+   shadow as a "more content" cue; the kit's scroll fade now covers that
+   (content-capped, gone at scroll end), and the full-height shadow painted
+   past short tables' bottom edge. */
 .readonly-battle-popover {
   display: none;
-}
-
-.viewer-readonly .match-main:has(.fight-host) .fight-frame {
-  box-shadow: var(--shadow-scroll-inset);
 }
 
 .viewer-readonly .match-table.ek-stage-table.readonly-table {
@@ -3420,7 +3641,7 @@ body:not(.embedded-match) .grid-match {
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -3680,7 +3901,7 @@ body:not(.embedded-match) .grid-match {
 
 .numbers-import-raw {
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -3708,6 +3929,177 @@ body:not(.embedded-match) .grid-match {
 .numbers-import-row.is-fuzzy .numbers-import-badge { color: var(--warn-text); }
 
 .numbers-import-row.is-unmatched .numbers-import-badge { color: var(--muted-light); }
+
+/* Брейн: the бой protocol blocks, mirroring the reference sheet's structure —
+   a бой is № | player | mark | mark | player around a running-score header
+   with appendable «П» tiebreak rows. The group cross-table and the stats ride
+   the shared results-table skins (group-standings-table, ek-stats-table). */
+.brain-protocol {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.brain-bouts {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.brain-stage-head {
+  margin: var(--space-0);
+  font-size: var(--text-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+}
+
+.brain-name-pending {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.brain-seed-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.brain-seed-file {
+  max-width: calc(var(--team-col) + var(--space-8));
+}
+
+.brain-seed-error {
+  margin: var(--space-0);
+  color: var(--red);
+}
+
+.match-table.brain-seed-table td {
+  padding: var(--space-1) var(--space-2);
+}
+
+.brain-seed-waitlist {
+  color: var(--muted);
+}
+
+.brain-seed-declined .brain-seed-name {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.brain-bout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.match-table.brain-detailed .brain-name-head,
+.match-table.brain-detailed .brain-player-cell {
+  width: var(--team-col);
+  min-width: var(--team-col);
+  padding: var(--space-0);
+}
+
+.match-table.brain-detailed .brain-bout-corner {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.brain-name {
+  display: block;
+  text-align: center;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+/* A team name sits over its player column; a longer one clips under a fade
+   and carries a popover. */
+.brain-name-wrap {
+  position: relative;
+  display: block;
+  margin: 0 auto;
+  min-width: 0;
+  max-width: var(--team-col);
+}
+
+/* A mask, not a painted gradient: the head cell is structure-coloured, and a
+   fade painted in paper showed as a bar on it (and as nothing in the dark
+   theme). */
+.brain-name-truncated .brain-name {
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+  mask-image: linear-gradient(to right, var(--paper) calc(100% - var(--inline-fade-width)), transparent);
+}
+
+.match-table.brain-detailed .brain-score-head {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+/* Every группа's crosstab the same width, so stacked tables read as columns,
+   and narrow enough that two sit abreast on a laptop: a score cell fits
+   «10 : 9», a name fades past the team column. The track is as wide as the
+   crosstab of four, so two go abreast only where two really fit. */
+.brain-groups {
+  --group-standings-col: 600px;
+}
+
+.brain-crosstable {
+  --results-place-col: 40px;
+  --results-team-col: 190px;
+  width: max-content;
+}
+
+.brain-crosstable .number {
+  width: 40px;
+  min-width: 40px;
+  padding-left: var(--space-1);
+  padding-right: var(--space-1);
+}
+
+.brain-crosstable .brain-cross-diag {
+  color: var(--muted-light);
+}
+
+.brain-crosstable .brain-cross-live {
+  font-style: italic;
+  color: var(--muted);
+}
+
+.match-table.brain-detailed .brain-finish-head,
+.match-table.brain-detailed .brain-finish-gap {
+  --cell-fill: var(--structure);
+  border-radius: 0;
+  border-color: var(--structure);
+}
+
+.match-table.brain-detailed .brain-finish-head {
+  padding: var(--space-0-5) var(--space-1-5);
+}
+
+.brain-player-select {
+  width: 100%;
+  height: 100%;
+  min-height: var(--question-size);
+  padding: var(--space-0) var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.match-table.brain-detailed .brain-tiebreak-marker {
+  font-style: italic;
+}
+
+.brain-controls {
+  display: flex;
+  gap: var(--space-2);
+}
 
 /* ════════════════════════════════════════════════════════════════════════
    end of the section moved out of core.css — the original dope layer follows
@@ -3763,7 +4155,7 @@ body:not(.embedded-match) .grid-match {
   /* the bar's height is fixed (--header-h) — a long fest title must not wrap */
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 

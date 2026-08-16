@@ -305,10 +305,6 @@ func Tabshidden() Attr {
 	return Attr{Name: "tabshidden", Bare: true}
 }
 
-func Heading(v string) Attr {
-	return Attr{Name: "heading", Value: v}
-}
-
 func Progressid(v string) Attr {
 	return Attr{Name: "progressid", Value: v}
 }
@@ -329,9 +325,9 @@ func Newtab() Attr {
 
 var MountTableHost = Attr{Name: "kind", Value: "table-host"}
 var PageEK = Attr{Name: "kind", Value: "ek"}
-var PageViewer = Attr{Name: "kind", Value: "viewer"}
 var PageOD = Attr{Name: "kind", Value: "od"}
 var PageSI = Attr{Name: "kind", Value: "si"}
+var PageBrain = Attr{Name: "kind", Value: "brain"}
 var PagePublic = Attr{Name: "kind", Value: "public"}
 var SwatchWhite = Attr{Name: "color", Value: "white"}
 var SwatchYellow = Attr{Name: "color", Value: "yellow"}

@@ -4,13 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"dope/dope/domain/core"
+	"dope/dope/domain/gamebuild"
 	"dope/dope/domain/imports"
 	"dope/dope/domain/resolver"
 	"dope/dope/platform/realtime"
 	"dope/dope/platform/util"
 	dopeserver "dope/dope/server"
 	"dope/dope/storage/store"
-	"dope/dope/web/hostpages"
 	"encoding/json"
 	"errors"
 	"path/filepath"
@@ -216,7 +216,7 @@ func TestMatchUpdateBroadcastsCascade(t *testing.T) {
 		}
 		t.Fatalf("finishing the 1/8 did not cascade the 1/4 match C; cascaded=%v", got)
 	}
-	if len(cView.Teams) == 0 {
+	if len(cView.Participants) == 0 {
 		t.Fatalf("cascaded match C carried no teams view")
 	}
 }
@@ -305,7 +305,7 @@ func assertReseedState(t *testing.T, stage store.StageView, ready bool, pending 
 func slotTeams(t *testing.T, db *sql.DB, gameID int64, matchCode string) []int64 {
 	t.Helper()
 	rows, err := db.QueryContext(context.Background(), `
-select coalesce(ms.team_id, 0)
+select coalesce(ms.participant_id, 0)
 from match_slots ms
 join matches m on m.id = ms.match_id
 where m.game_id = ? and m.code = ?
@@ -331,9 +331,9 @@ func regularThemeCount(t *testing.T, db *sql.DB, gameID int64, matchCode string,
 	if err != nil {
 		t.Fatalf("load match state: %v", err)
 	}
-	for i, id := range match.TeamIDs {
+	for i, id := range match.ParticipantIDs {
 		if id == teamID {
-			return len(match.State.Teams[i].Themes)
+			return len(match.State.Participants[i].Themes)
 		}
 	}
 	return 0
@@ -505,7 +505,7 @@ values(?, ?, 'creator', ?)`, festID, systemID, now); err != nil {
 	if err := json.Unmarshal([]byte(rawScheme), &scheme); err != nil {
 		t.Fatalf("decode ek scheme: %v", err)
 	}
-	gameID, err := hostpages.CreateEKGameTx(ctx, tx, festID, scheme)
+	gameID, err := gamebuild.Create(ctx, tx, gamebuild.Spec{FestID: festID, Type: "ek", EKScheme: &scheme})
 	if err != nil {
 		t.Fatalf("create ek: %v", err)
 	}
