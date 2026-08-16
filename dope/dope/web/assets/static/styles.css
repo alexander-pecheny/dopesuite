@@ -1374,18 +1374,22 @@ body:not(.embedded-match) .grid-match {
   line-height: var(--leading-tight);
 }
 
-/* The title fills the row and the venue yields to it; the soft-clip mask
-   above bites only once fest-grid.ts has measured the title clipped — a
-   «Группа 1» beside its venue fills its span exactly, and an always-on fade
-   would eat its digit. */
+/* The title keeps its width and the venue yields to it — «Бой A» must never
+   fade so that «пл. 1 (Рим, Алиенора)» can stay whole. Only a title too long
+   for the row alone gets clipped, and the soft-clip mask above bites only
+   once fest-grid.ts has measured that: a «Группа 1» beside its venue fills
+   its span exactly, and an always-on fade would eat its digit. */
 .grid-match-head-layout .grid-match-title {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  max-width: 100%;
   min-width: 0;
 }
 
 .grid-match-head-layout .grid-match-venue {
   flex: 0 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .grid-head-metric {
