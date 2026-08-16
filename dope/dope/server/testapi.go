@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"time"
 
 	"pecheny.me/dopecore/authcred"
 
@@ -49,6 +50,10 @@ func (s *Server) Eng() *core.Engine { return &s.eng }
 
 // Metrics returns a pointer to the edit-metrics recorder.
 func (s *Server) Metrics() *metrics.Recorder { return &s.metrics }
+
+// SetEditBatchWindow shortens the edit batching window for a test that plays
+// many edits one after another and awaits each.
+func (s *Server) SetEditBatchWindow(d time.Duration) { s.editor().Window = d }
 
 // ----- exported type aliases (request/response + scope types) -----
 

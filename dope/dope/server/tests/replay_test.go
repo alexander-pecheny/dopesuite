@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"dope/dope/domain/games"
 	"dope/dope/domain/replay"
@@ -45,6 +46,9 @@ title: Мини-ЭК
 func newReplayGame(t *testing.T, dsl, gameType, title string, roster []string) *serverGame {
 	t.Helper()
 	srv := newAuthTestServer(t)
+	// One edit at a time, each awaited: the production batching window would
+	// cost 150ms per бой side — most of what made the replay four minutes.
+	srv.SetEditBatchWindow(time.Millisecond)
 	festID, _ := scopedAPITestIDs(t, srv)
 	db := srv.Eng().DB
 	for i, name := range roster {
@@ -73,6 +77,12 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 // and reports every disagreement, so one failing бой does not hide the rest.
 func replayFromTranscript(t *testing.T, name, gameType, title string) *serverGame {
 	t.Helper()
+	// A whole championship over HTTP is the conformance gate, not a unit test:
+	// the four take a minute and a half together, so `just test` skips them and
+	// `just test-full` (pre-commit, before a merge) plays them.
+	if testing.Short() {
+		t.Skip("heavy: the studchr replay runs without -short (just test-full)")
+	}
 	src, err := os.ReadFile("../../../testdata/studchr2026/" + name + ".transcript")
 	if err != nil {
 		t.Skipf("стенограммы нет: %v", err)

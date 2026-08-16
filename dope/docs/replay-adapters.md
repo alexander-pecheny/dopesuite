@@ -10,9 +10,16 @@ and the seam real, not about what it checks.
 `domain/replay.Game` (`run.go:18`: Seat, Seats, Play, Pin, Finish, Outcome;
 plus `LineupWriter`, `StatsReader`) is a deep interface with one real
 adapter, `serverGame` in `server/tests/replaydriver_test.go` (805 lines):
-it boots the whole server and drives it over HTTP with a session token, so
-every conformance run costs ~250 s (`TestReplayStudchr{EK,SI,TPSh,Brain}`).
-Consequences:
+it boots the whole server and drives it over HTTP with a session token.
+On 16 Aug the four (`TestReplayStudchr{EK,SI,TPSh,Brain}`) took 250 s, of
+which 150 s was the edit batcher's 150 ms window awaited once per edit;
+`Server.SetEditBatchWindow(time.Millisecond)` in the replay took them to
+94 s, and `just test` now skips them (`-short`), `just test-full` plays
+them. What is left is CPU: `editbatch.recomputeTouched` resolves the whole
+game after every edit (`resolveGameSlotsWithReseedModeTx`, then
+`writeStandingsTx` and `si.WriteResultsTx`) — 74 % of the profile — and a
+third of that is SQLite parsing unprepared statements. Consequences of the
+one-adapter design:
 
 - The coordinate → бой lookup is SQL in the driver (`matchAt`, `:43`) —
   `run.go` cannot say "this Block's standings" without the driver.
@@ -50,7 +57,8 @@ Consequences:
 ## Acceptance
 
 - `go test ./dope/domain/replay/... -run Studchr` replays all four studchr
-  transcripts through the structure adapter in under 30 s.
+  transcripts through the structure adapter in under 30 s (from 94 s), so
+  the gate can leave `-short` and run on every `just test`.
 - `server/tests` keeps one HTTP replay per game type; `testapi.go` shrinks
   to what those need.
 - Two adapters pass the same `replay.Game` contract test.
