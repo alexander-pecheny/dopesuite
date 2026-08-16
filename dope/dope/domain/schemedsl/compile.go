@@ -1281,6 +1281,13 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 				Slots:            slots,
 			}
 		}
+		// The bronze бой is played before the final, so its stage stands before
+		// the final's: the Сетка draws it first, and it deals its буква first.
+		if round.terminal && bronze && len(semifinalCodes) == 2 {
+			if err := c.appendBronze(blk, blockCode, semifinalCodes, roundIndex+1); err != nil {
+				return nil, err
+			}
+		}
 		if bestOf > 1 {
 			// The series is sequential бои at one стол, so it never wave-splits.
 			base := matches[0]
@@ -1329,26 +1336,29 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 			return fromMatchSlot(finalCode, p)
 		},
 	}}}
-	if bronze && teams >= 4 {
-		stageCode := blockCode + "-bronze"
-		venues, err := c.blockVenues(blk, []string{"bronze"})
-		if err != nil {
-			return nil, err
-		}
-		matches := []store.SchemeMatch{{
-			Code:             stageCode + "-m1",
-			Title:            "Матч за 3-е место",
-			Venue:            c.venuePick(venues, 1),
-			ParticipantCount: 2,
-			Slots: []store.SchemeSlot{
-				fromMatchSlot(semifinalCodes[0], 2),
-				fromMatchSlot(semifinalCodes[1], 2),
-			},
-		}}
-		c.appendManualStage(blk, stageCode, c.roundTitle(blk, []string{"bronze"}, "Матч за 3-е место"), []string{"bronze"},
-			at{block: blockCode, round: len(plan) + 1}, matches)
-	}
 	return out, nil
+}
+
+// appendBronze emits the third-place бой between the two semifinal losers.
+func (c *compiler) appendBronze(blk Section, blockCode string, semifinalCodes []string, round int) error {
+	stageCode := blockCode + "-bronze"
+	venues, err := c.blockVenues(blk, []string{"bronze"})
+	if err != nil {
+		return err
+	}
+	matches := []store.SchemeMatch{{
+		Code:             stageCode + "-m1",
+		Title:            "Матч за 3-е место",
+		Venue:            c.venuePick(venues, 1),
+		ParticipantCount: 2,
+		Slots: []store.SchemeSlot{
+			fromMatchSlot(semifinalCodes[0], 2),
+			fromMatchSlot(semifinalCodes[1], 2),
+		},
+	}}
+	c.appendManualStage(blk, stageCode, c.roundTitle(blk, []string{"bronze"}, "Матч за 3-е место"), []string{"bronze"},
+		at{block: blockCode, round: round}, matches)
+	return nil
 }
 
 // appendSERound emits one round as ⌈matches/venues⌉ Wave stages — one stage

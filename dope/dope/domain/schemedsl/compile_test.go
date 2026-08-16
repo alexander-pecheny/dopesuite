@@ -316,6 +316,12 @@ func TestCompileKinsbf(t *testing.T) {
 	if bm[0].FromMatch.Match != "s5-semifinal-m1" || bm[0].FromMatch.Place != 2 {
 		t.Fatalf("bronze slot 0: %+v", bm[0].FromMatch)
 	}
+	// The bronze бой is played before the final, so it stands before it and
+	// wears the earlier буква.
+	if bronze.Position >= final.Position || bronze.Matches[0].Letter >= final.Matches[0].Letter {
+		t.Fatalf("bronze at %d %q, final at %d %q: bronze must come first",
+			bronze.Position, bronze.Matches[0].Letter, final.Position, final.Matches[0].Letter)
+	}
 
 	// The questions cascade: block 5 says 7, the final round overrides to 5.
 	if stageConfig(t, semi)["questions"] != float64(7) {

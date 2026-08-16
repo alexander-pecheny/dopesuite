@@ -212,3 +212,26 @@ Log in with your local account, or mint an invite and register a fresh user:
 `DOPE_DB=$SP/fest.db uv run python scripts/mint_invite.py` → paste at
 `/register`. `scripts/fill_data.py` fills a fest's game with random answers
 (see its docstring) for standings/propagation checks.
+
+### The hand-over matrix
+
+A change to a table skin, the Сетка or a game page is not verified until it
+has been looked at in every cell of this matrix, and the report to the user
+names the cells that were looked at:
+
+| | iPhone 16 (`set device "iPhone 16"`) | desktop (`set viewport 1280 800 1`) |
+|---|---|---|
+| light | screenshot | screenshot |
+| dark | screenshot | screenshot |
+
+…for every game type the change touches — ЭК, Личная СИ, ТПШ (both on the
+ЭК page), КИнСБФ, ОД, КСИ — as spectator (`/fest/…`) and, where it edits, as
+host (`/host/fest/…`). Dark is `localStorage.setItem("dope-theme","dark")`
+before `open` (the kit's menu.ts reads it at boot), or the ☰ → Оформление
+segment. Compare against the deployed page (dopetest for a release, prod
+otherwise) with `uv run --with pillow dope/scripts/imgdiff.py before.png
+after.png` — a bounding box under the topbar is the live viewer count and
+can be ignored; anything in the table body is a finding. The three Сетка
+bugs of 16 Aug 2026 (columns stretched, group rows drifting off the бой rows,
+two font sizes) were all phone-only and all invisible on the desktop the
+change was checked on.

@@ -102,14 +102,14 @@ test("a round without standings still draws its бои", () => {
   assert.equal(withClass(grid, "grid-match").length, 1);
 });
 
-// Every stage gets a column, so the layout has to be told how many there are —
-// six was hard-coded, and a game with more crushed the rest into slivers.
-test("the grid reports how many stages it drew", () => {
+// Every stage gets a column: seven stages, seven sections, and the CSS sizes
+// the tracks by token — nothing here counts them.
+test("every stage gets a column", () => {
   const stage = (code) => ({code, title: code, stage_type: "matches", matches: []});
   const grid = buildFestGrid({
     stages: ["a", "b", "c", "d", "e", "f", "g"].map(stage),
   }, {stageHeaderLink: false});
-  assert.equal(grid.props["--fest-stages"], "7");
+  assert.equal(withClass(grid, "grid-stage").length, 7);
 });
 
 // A ranking Block is one column: its groups' tables stack under one header
@@ -124,7 +124,7 @@ test("a Block's groups share one column", () => {
     matches: [],
   });
   const grid = buildFestGrid({stages: [group(1), group(2), group(3)]}, {stageHeaderLink: false});
-  assert.equal(grid.props["--fest-stages"], "1", "групповой этап — одна колонка");
+  assert.equal(withClass(grid, "grid-stage").length, 1, "групповой этап — одна колонка");
   assert.equal(withClass(grid, "grid-standings").length, 3, "таблица каждой группы на месте");
   const blockHeads = withClass(grid, "grid-stage-head");
   assert.equal(blockHeads.length, 1, "у колонки один заголовок блока");
@@ -154,7 +154,7 @@ test("a Block of pods draws место against team, not бои", () => {
     ],
   };
   const grid = buildFestGrid({stages: [pod]}, {stageHeaderLink: false});
-  assert.equal(grid.props["--fest-stages"], "1");
+  assert.equal(withClass(grid, "grid-stage").length, 1);
   assert.equal(withClass(grid, "grid-match").length, 0, "бои в Сетке не рисуются");
   assert.equal(withClass(grid, "grid-standings").length, 1);
   const names = withClass(grid, "standings-name").map((cell) =>
@@ -209,7 +209,7 @@ test("rounds without groups keep their own columns", () => {
   const grid = buildFestGrid({
     stages: [round("s1-r1-w1", "1/16, заход 1"), round("s1-r1-w2", "1/16, заход 2")],
   }, {stageHeaderLink: false});
-  assert.equal(grid.props["--fest-stages"], "2");
+  assert.equal(withClass(grid, "grid-stage").length, 2);
 });
 
 // A бой's venue used to vanish when the бой in the same row of the previous

@@ -152,8 +152,6 @@ export function buildFestGrid(data: FestGridData, options: FestGridOptions = {})
     }
     columns.appendChild(buildMatchesStage(stage, liveStage, options));
   });
-  // The layout gives every stage a column, so it has to know how many there are.
-  root.style.setProperty("--fest-stages", String(columns.children.length));
   root.appendChild(columns);
   settleRows(root);
   activeFestGridRoot = root;
@@ -214,7 +212,7 @@ function buildBlockColumn(
 ): HTMLElement {
   const first = bucket[0];
   const section = document.createElement("section");
-  section.className = "grid-stage grid-stage-standings grid-stage-block";
+  section.className = "grid-stage grid-stage-block";
   if (first.code) section.classList.add(`grid-stage-${stageClassSuffix(first.code)}`);
   section.dataset.stageCode = first.code || "";
   section.style.setProperty("--stage-columns", "1");
@@ -285,7 +283,6 @@ function columnsFor(units: number[], rows: number): number {
 }
 
 function layoutBlockColumns(root: HTMLElement): void {
-  let columns = root.querySelectorAll(".fest-columns > section").length;
   for (const {section, stack} of blocks) {
     const unit = parseFloat(getComputedStyle(stack).gridTemplateRows) || 0;
     if (!unit) continue; // not laid out yet — settleRows' one column stands
@@ -299,9 +296,7 @@ function layoutBlockColumns(root: HTMLElement): void {
     let rows = Math.ceil(units.reduce((sum, span) => sum + span, 0) / cols);
     while (rows < most && columnsFor(units, rows) > cols) rows += 1;
     setBlockShape(section, rows, cols);
-    columns += cols - 1;
   }
-  root.style.setProperty("--fest-stages", String(columns));
 }
 
 export function buildReseedStagePanel(
@@ -412,7 +407,7 @@ function buildStandingsStage(
   order: string[],
 ): HTMLElement {
   const section = document.createElement("section");
-  section.className = "grid-stage grid-stage-standings";
+  section.className = "grid-stage";
   if (stage.code) section.classList.add(`grid-stage-${stageClassSuffix(stage.code)}`);
   section.dataset.stageCode = stage.code || "";
   section.style.setProperty("--stage-columns", "1");

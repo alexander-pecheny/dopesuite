@@ -20,8 +20,10 @@ BLOCKS = [("s1", "ABCDEFGHIJKL"), ("s2", "MNOPQR"), ("s3", "STUV"), ("s4", "WX")
 SEATING = {6: [(1, 1, 1), (1, 2, 1), (2, 1, 1), (2, 2, 1), (3, 1, 1), (3, 2, 1)],
            5: [(1, 1, 1), (1, 1, 2), (2, 1, 1), (2, 1, 2), (3, 1, 1)],
            3: [(1, 1, 1), (2, 1, 1), (3, 1, 1)]}
-# The final sheet, in the order the бои are printed on it.
-FINAL = [(1, 1), (1, 2), (3, 1), (2, 1), (2, 2), (2, 3)]
+# The final sheet, in the order the бои are printed on it: two semifinals,
+# then the bronze бой and the final's three, all one Round (no бой of the
+# final waits on the bronze) and numbered through it in schedule order.
+FINAL = [(1, 1), (1, 2), (2, 1), (2, 2), (2, 3), (2, 4)]
 
 
 def seed_of(group, position):

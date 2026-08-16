@@ -526,6 +526,8 @@ function render(options: {preserveScroll?: boolean} = {}): void {
               : buildGrid();
   brainRoot.replaceChildren(node);
   brainRoot.classList.toggle("fits-frame", activeTab === "roster");
+  // A Сетка fits the frame's width like ЭК's, so its columns measure the same.
+  brainRoot.classList.toggle("grid-host", node.matches(".fest-grid") || Boolean(node.querySelector(".fest-grid")));
   scheduleBrainNameOverflowUpdate();
   if (options.preserveScroll && frame) frame.scrollTop = scrollTop;
   restoreSelection();
@@ -993,7 +995,7 @@ function buildCrosstable(bucket: BlockBucket): HTMLElement {
     head.textContent = gameTable.groupLabel(stage as StageRef);
     item.appendChild(head);
     const wrapper = document.createElement("div");
-    wrapper.className = "results-wrapper group-standings-wrapper";
+    wrapper.className = "results-wrapper";
     wrapper.appendChild(buildGroupTable(stage));
     item.appendChild(wrapper);
     wrap.appendChild(item);

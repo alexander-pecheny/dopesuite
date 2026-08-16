@@ -815,7 +815,7 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
     head.textContent = group.title;
     item.appendChild(head);
     const wrapper = document.createElement("div");
-    wrapper.className = "results-wrapper group-standings-wrapper";
+    wrapper.className = "results-wrapper";
     const table = document.createElement("table");
     table.className = "results-table group-standings-table";
     const thead = document.createElement("thead");
