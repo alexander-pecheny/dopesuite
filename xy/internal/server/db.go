@@ -220,7 +220,22 @@ insert or ignore into schema_versions(version, applied_at)
 	if err := migrateV21(db); err != nil {
 		return err
 	}
+	if err := migrateV22(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+// migrateV22 indexes timeline_events by board. Every board-scoped read (the
+// board list's unread flags, the activity feed, mark-all-read) filtered on
+// board_id with no index, so listing 60 boards over 29k events took 800ms.
+func migrateV22(db *sql.DB) error {
+	_, err := db.Exec(`
+create index if not exists idx_timeline_board on timeline_events(board_id, id);
+insert or ignore into schema_versions(version, applied_at)
+  values(22, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+`)
+	return err
 }
 
 // migrateV21 lets a Reaction ride the timeline (the type CHECK is rebuilt, so

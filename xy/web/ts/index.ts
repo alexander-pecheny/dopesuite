@@ -73,31 +73,33 @@ window.dopeMenu?.setExtras([{
   onClick: () => { void prewarm(); },
 }]);
 
+// show replaces the board list. The search index is assembled FROM this list, so
+// a search that ran before it arrived cached an empty one: drop it and re-answer
+// whatever is in the box.
+async function show(boards: BoardListItem[]): Promise<void> {
+  allBoards = boards;
+  indexes = null;
+  renderBoards(boards);
+  if (searchBox.value.trim()) await runSearch(searchBox.value);
+}
+
+// refresh paints the cached list first — this device has seen the boards before,
+// so the page need not wait for the network to show them — then swaps in the
+// server's answer (fresh order, fresh unread dots).
 async function refresh(): Promise<void> {
   setStatus("saving");
+  const cached = (await xySync.getBoardList().catch(() => null)) as BoardListItem[] | null;
+  if (cached) await show(cached);
   try {
     const boards = (await fetchJSON("/api/boards")) as BoardListItem[];
     await xySync.putBoardList(boards);
-    allBoards = boards;
-    // The index is assembled FROM this list, so a search that ran before it
-    // arrived cached an empty one. Drop it and re-answer whatever is in the box.
-    indexes = null;
-    renderBoards(boards);
+    await show(boards);
     setStatus("saved");
-    if (searchBox.value.trim()) await runSearch(searchBox.value);
   } catch (e) {
-    // Offline (or the server is unreachable): fall back to the cached board list.
-    const cached = await xySync.getBoardList().catch(() => null);
-    if (cached) {
-      allBoards = cached as BoardListItem[];
-      indexes = null;
-      renderBoards(allBoards);
-      setStatus("saved");
-      if (searchBox.value.trim()) await runSearch(searchBox.value);
-    } else {
-      message.textContent = errMsg(e);
-      setStatus("error");
-    }
+    // Offline (or the server is unreachable): the cached list stays.
+    if (cached) { setStatus("saved"); return; }
+    message.textContent = errMsg(e);
+    setStatus("error");
   }
 }
 
