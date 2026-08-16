@@ -15,7 +15,7 @@ restated the Сетка geometry in literals (`minmax(170px, 1fr)`, `gap: 5px`,
 `font-size` on `.grid-slot-cell` only), so the desktop cap and the newer
 `.grid-standings` skin never reached the phone. Nobody looked at a phone.
 
-## What is done (commit after `0bcf14a`)
+## What is done (`74b1379`)
 
 - The Сетка geometry is tokens on `:root` (`--fest-col-min/max`, `--grid-row`,
   `--grid-cell-pad`, `--grid-cell-text`, `--grid-head-text`, `--grid-num-col`,
