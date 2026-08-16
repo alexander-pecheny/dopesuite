@@ -7,7 +7,7 @@
 //   - matchCodeToStageCode matchCode -> stageCode (SSE routing)
 //   - cachesRevision     fest.revision the caches were built against (drop on bump)
 //
-// The consumer (host.js / viewer.js) provides callbacks that fill the pane's
+// The consumer (ek.js) provides callbacks that fill the pane's
 // DOM, react to data changes, and read fest scheme. Tab switching then reduces
 // to toggling `hidden` on an already-built pane.
 

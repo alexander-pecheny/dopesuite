@@ -1,3 +1,0 @@
-page title="Ведущий · Фест" kind="ek" init="__HOST_INIT__" classicscripts="dist/host.js"
-  gametopbar tabsid="ekTabs" ektabs
-  mount kind="table-host" id="hostTable"

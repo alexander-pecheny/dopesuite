@@ -23,8 +23,8 @@ func TestRealPagesCompile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("glob: %v", err)
 	}
-	if len(pages) != 6 {
-		t.Fatalf("expected 6 app pages, found %d: %v", len(pages), pages)
+	if len(pages) != 5 {
+		t.Fatalf("expected 5 app pages, found %d: %v", len(pages), pages)
 	}
 	for _, path := range pages {
 		src, err := os.ReadFile(path)
@@ -44,13 +44,12 @@ var idsCreatedByJS = map[string]bool{}
 
 // loadBearingClasses / substrings lists structural markup the page scripts bind
 // to (see DOPE-INVENTORY §JS contract). host-actions is on every page (topbar);
-// the game pages measure .sheet-frame and mount into .table-host; login and the
-// viewer set the title on `.host-top h1`.
+// the game pages measure .sheet-frame and mount into .table-host; login sets
+// the title on `.host-top h1`.
 var loadBearingSubstrings = map[string][]string{
 	"":       {"host-actions"},
 	"login":  {"host-top", "<h1>"},
-	"host":   {"game-host-top", "sheet-frame", "table-host"},
-	"viewer": {"game-host-top", "sheet-frame", "table-host", "<h1>"},
+	"ek":     {"game-host-top", "sheet-frame", "table-host"},
 	"od":     {"game-host-top", "sheet-frame", "table-host", "od-header-progress"},
 	"si":     {"game-host-top", "sheet-frame", "table-host"},
 	"brain":  {"game-host-top", "sheet-frame", "table-host"},

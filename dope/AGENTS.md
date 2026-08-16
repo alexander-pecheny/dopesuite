@@ -71,21 +71,20 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 |------|-------|---------|
 | `styles.css` | ~4500 | dope's **app CSS layer** only (tournament tables/grids/screen/stickers + dope vars + dark overrides). The shared design system — tokens, controls, buttons, chrome, utilities, themes — lives in DopeUIKit's `assets/core.css` (~1030 lines); the server serves `/static/styles.css` as core + this layer concatenated (`dope/server/css.go`). The tournament domain used to live in `core.css`; it was moved down here, so **do not add tournament-specific rules to the kit** — they belong in this file. |
 | `pageforms.ts` | ~60 | Shared behaviour for the server-rendered builder pages, replacing the inline `on*` handlers they used to carry (CSP-friendly, data-attribute driven: `[data-confirm]`, `[data-select-all]`, `[data-autosubmit]`, `[data-dialog-open="id"]`, `[data-dialog-close]`) |
-| `host.ts` | ~3200 | EK host editor — match score editing, undo/redo, stage tabs, SSE sync. imports `match-table.ts` + `stage-cache.ts` |
+| `ek.ts` | ~3500 | The ЭК page, host and spectator alike — match score editing, undo/redo, stage tabs, SSE sync; a `viewer` flag from the URL prefix gates every control. imports `match-table.ts` + `stage-cache.ts` |
 | `od.ts` | ~3800 | OD/KVRM host/viewer — tabbed results/input sheets, entry cell navigation, SSE sync. imports `match-table.ts` |
 | `match-table.ts` | ~1300 | **Core shared library** (exported `DopeTable`) — table builders, cell helpers, venues/roster/EK-stats tables; re-exports `state-sync.ts` + `game-page.ts` + `widgets.ts` so consumers keep one import. Used by all game pages |
 | `game-page.ts` | ~330 | Page plumbing — window-globals contract (init payloads, menu chrome), route parsing, the header breadcrumb trail (🏠 / [Мои фесты] / фест / игра / раздел, mirroring the URL; the Мои фесты crumb only on the /host tree), menu jump/download mounts, localStorage snapshot cache, init/cache/fetch game-data loader |
 | `widgets.ts` | ~860 | Interaction widgets — cell nav bar, virtual keypad, floating popovers, sync-status dot, name overflow, cell range selection, viewer counter |
-| `state-sync.ts` | ~1450 | **The SSE engine** — scoped event protocol (seq-chained deltas, epoch resets), durable pending ops, stream lifecycle + iOS-wake recovery, client recorder, host presence; `createStateSync` (od/si) and `createLiveEvents` (host/viewer), both stream-injectable for tests |
+| `state-sync.ts` | ~1450 | **The SSE engine** — scoped event protocol (seq-chained deltas, epoch resets), durable pending ops, stream lifecycle + iOS-wake recovery, client recorder, host presence; `createStateSync` (od/si) and `createLiveEvents` (ek), both stream-injectable for tests |
 | `si.ts` | ~1750 | KSI (team jeopardy) page — question/answer tables, team/player rows, detailed/results/refusals tabs. imports `match-table.ts` |
-| `viewer.ts` | ~1250 | Read-only spectator view — stages/venues/stats, floating popovers. imports `match-table.ts` + `stage-cache.ts` |
 | `fest-grid.ts` | 489 | Festival grid visualization — renders multiple stages horizontally, reseed panels, truncated team names |
 | `menu.ts` (kit) | — | Site-wide chrome (`window.dopeMenu`) — theme/contrast toggle, hamburger menu, account links. Lives in dopeuikit (`assets/ts/`), served at `/static/menu.js`, loaded on every page |
-| `stage-cache.ts` | 289 | Shared pane cache (`createStageCache`) for EK — per-stage match state, deduped prefetch, SSE routing. Used by `host.ts` + `viewer.ts` |
+| `stage-cache.ts` | 289 | Shared pane cache (`createStageCache`) for EK — per-stage match state, deduped prefetch, SSE routing. Used by `ek.ts` |
 | `login.ts` (kit) | — | Multi-step auth UI — username → password/code branch, redirect on success (dopeuikit `assets/ts/`) |
 | `profile.ts` | 49 | Password change form (new password vs change password modes) |
 
-**Module seam (ADR-0003, amended by root ADR-0001)**: each game page loads ONE `dist/<page>.js` bundle built from `dope/web/ts/pages/<page>.ts` — the init-payload boot, then the self-booting page module. The SSE engine is `state-sync.ts` (one implementation: `createStateSync` for od/si state blobs, `createLiveEvents` for host/viewer scoped dispatch; both take an injectable stream adapter for tests), re-exported through `match-table.ts` so consumers keep one import. Cross-file wiring is ES imports (`DopeTable` from `match-table.ts`, `createStageCache`, fest-grid exports); the only published globals are `window.dopeMenu`/`window.dopeMenuConfig` (typed in dopeuikit's `globals.d.ts`) and the server-inlined init payloads. Frontend tests import per-file ESM emitted to `web/jstest/dist/`.
+**Module seam (ADR-0003, amended by root ADR-0001)**: each game page loads ONE `dist/<page>.js` bundle built from `dope/web/ts/pages/<page>.ts` — the init-payload boot, then the self-booting page module. The SSE engine is `state-sync.ts` (one implementation: `createStateSync` for od/si state blobs, `createLiveEvents` for ЭК scoped dispatch; both take an injectable stream adapter for tests), re-exported through `match-table.ts` so consumers keep one import. Cross-file wiring is ES imports (`DopeTable` from `match-table.ts`, `createStageCache`, fest-grid exports); the only published globals are `window.dopeMenu`/`window.dopeMenuConfig` (typed in dopeuikit's `globals.d.ts`) and the server-inlined init payloads. Frontend tests import per-file ESM emitted to `web/jstest/dist/`.
 
 ## How to Run / Build / Test
 ```bash
@@ -129,11 +128,11 @@ no CSS class names) and `kit/` is the shared **design system** (core vocab +
 expanders + Chrome + generated builder + `core.css`/fonts). `dope/web/ui` is dope's
 thin **overlay** on the kit (imports `pecheny.me/dopeuikit/kit`).
 
-- **Static pages** are authored in `.dopeui` (`dope/web/assets/ui/`: login, host,
-  viewer, od, si) as typed primitives — `page`, `gametopbar`, `mount`… — compiled
+- **Static pages** are authored in `.dopeui` (`dope/web/assets/ui/`: login, ek,
+  od, si, brain) as typed primitives — `page`, `gametopbar`, `mount`… — compiled
   to HTML at startup by the dope `App` (`dope/web/ui/app.go`, `Compile`). The
   overlay adds the game topbar + mounts + dope page kinds + the `init` marker prop
-  (`init="__HOST_INIT__"` emits the exact byte-string `serve_html.go` splices the
+  (`init="__EK_INIT__"` emits the exact byte-string `serve_html.go` splices the
   per-request JSON payload over). Spec: DopeUIKit `DESIGN.md` (engine + kit) +
   `dope/web/ui/vocab.json`/`expand.go` (dope overlay).
 - **Header path**: every server-rendered page's `publictopbar` carries a

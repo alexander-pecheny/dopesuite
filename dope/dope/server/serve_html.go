@@ -16,24 +16,21 @@ import (
 	"strings"
 )
 
-func (s *server) serveViewerHTML(w http.ResponseWriter, r *http.Request) {
-	s.serveAppHTML(w, r, "static/viewer.html")
+func (s *server) serveEKHTML(w http.ResponseWriter, r *http.Request) {
+	s.serveAppHTML(w, r, "static/ek.html")
 }
 
-func (s *server) serveHostHTML(w http.ResponseWriter, r *http.Request) {
-	s.serveAppHTML(w, r, "static/host.html")
-}
-
-// hostInitMarker is the placeholder string inside static/host.html that is
+// ekInitMarker is the placeholder string inside static/ek.html that is
 // replaced with the actual init JSON. Keep in sync with the file.
 const (
-	hostInitMarker   = "null;/*__HOST_INIT__*/"
-	viewerInitMarker = "null;/*__VIEWER_INIT__*/"
-	gameInitMarker   = "null;/*__GAME_INIT__*/"
+	ekInitMarker   = "null;/*__EK_INIT__*/"
+	gameInitMarker = "null;/*__GAME_INIT__*/"
 )
 
-type hostInitPayload struct {
-	Route      hostInitRoute           `json:"route"`
+// ekInitPayload seeds the ЭК page — the host's /host/fest/… and the spectator's
+// /fest/… alike; the page tells the two apart by its URL.
+type ekInitPayload struct {
+	Route      ekInitRoute           `json:"route"`
 	Fest       json.RawMessage         `json:"fest,omitempty"`
 	Match      *store.MatchView        `json:"match,omitempty"`
 	SeedImport *imports.SeedImportView `json:"seedImport,omitempty"`
@@ -43,6 +40,9 @@ type hostInitPayload struct {
 	// CanEdit reflects table-editor rights, so the page can show host-only
 	// actions (e.g. the .json.gz archive download) without a probe round trip.
 	CanEdit bool `json:"canEdit,omitempty"`
+	// Static marks a snapshot served in static (lockdown) mode: the client skips
+	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
+	Static bool `json:"static,omitempty"`
 }
 
 type gameInitPayload struct {
@@ -77,18 +77,7 @@ type gameInitPayload struct {
 	Static bool `json:"static,omitempty"`
 }
 
-type viewerInitPayload struct {
-	Route   hostInitRoute    `json:"route"`
-	Fest    json.RawMessage  `json:"fest,omitempty"`
-	Match   *store.MatchView `json:"match,omitempty"`
-	Venues  json.RawMessage  `json:"venues,omitempty"`
-	CanEdit bool             `json:"canEdit,omitempty"`
-	// Static marks a snapshot served in static (lockdown) mode: the client skips
-	// the SSE connection and self-reloads on a jitter instead. See static_mode.go.
-	Static bool `json:"static,omitempty"`
-}
-
-type hostInitRoute struct {
+type ekInitRoute struct {
 	Mode      string `json:"mode"`
 	FestID    int64  `json:"festID"`
 	GameID    int64  `json:"gameID"`
@@ -96,19 +85,19 @@ type hostInitRoute struct {
 	MatchCode string `json:"matchCode,omitempty"`
 }
 
-// serveHostHTMLWithInit renders static/host.html with window.__HOST_INIT__
+// serveEKHTMLWithInit renders static/ek.html with window.__EK_INIT__
 // pre-populated for the current route, eliminating the cold API round trips
-// the SPA would otherwise make immediately after parsing host.js. Falls back
-// to plain serveHostHTML on any error so a payload bug never breaks the page.
-func (s *server) serveHostHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string) {
+// the SPA would otherwise make immediately after parsing ek.js. Falls back
+// to plain serveEKHTML on any error so a payload bug never breaks the page.
+func (s *server) serveEKHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	route := parseHostInitRoute(parts, scope)
-	payload, err := s.buildHostInit(r.Context(), route)
+	route := parseEKInitRoute(parts, scope)
+	payload, err := s.buildEKInit(r.Context(), route)
 	if err != nil {
-		s.serveHostHTML(w, r)
+		s.serveEKHTML(w, r)
 		return
 	}
 	if user, ok := s.eng.LookupSession(r); ok {
@@ -118,10 +107,10 @@ func (s *server) serveHostHTMLWithInit(w http.ResponseWriter, r *http.Request, s
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		s.serveHostHTML(w, r)
+		s.serveEKHTML(w, r)
 		return
 	}
-	s.serveInjectedHTML(w, r, "static/host.html", hostInitMarker, data)
+	s.serveInjectedHTML(w, r, "static/ek.html", ekInitMarker, data)
 }
 
 // serveGameHTMLWithInit serves od.html or si.html with window.__GAME_INIT__
@@ -148,32 +137,6 @@ func (s *server) serveGameHTMLWithInit(w http.ResponseWriter, r *http.Request, h
 		return
 	}
 	s.serveInjectedHTML(w, r, htmlPath, gameInitMarker, data)
-}
-
-// serveViewerHTMLWithInit serves static/viewer.html with the relevant
-// per-route data already populated.
-func (s *server) serveViewerHTMLWithInit(w http.ResponseWriter, r *http.Request, scope festScope, parts []string) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	route := parseHostInitRoute(parts, scope)
-	payload, err := s.buildViewerInit(r.Context(), route)
-	if err != nil {
-		s.serveViewerHTML(w, r)
-		return
-	}
-	if user, ok := s.eng.LookupSession(r); ok {
-		if role, err := festaccess.FestUserRoleFromQuery(r.Context(), s.eng.DB, scope.FestID, user.UserID); err == nil && roles.CanEditGameTables(role) {
-			payload.CanEdit = true
-		}
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		s.serveViewerHTML(w, r)
-		return
-	}
-	s.serveInjectedHTML(w, r, "static/viewer.html", viewerInitMarker, data)
 }
 
 // assetRefRe matches a local /static .js/.css reference in an HTML attribute
@@ -274,39 +237,8 @@ from games where fest_id = ? and id = ?`, scope.FestID, scope.GameID).Scan(&sche
 	return payload, nil
 }
 
-func (s *server) buildViewerInit(ctx context.Context, route hostInitRoute) (viewerInitPayload, error) {
-	payload := viewerInitPayload{Route: route}
-
-	festBytes, err := s.festViewBytes(route.FestID, route.GameID)
-	if err != nil {
-		return payload, err
-	}
-	payload.Fest = festBytes
-
-	switch route.Mode {
-	case "match":
-		mscope, err := s.verifyMatchInScope(ctx, festScope{FestID: route.FestID, GameID: route.GameID}, route.MatchCode)
-		if err != nil {
-			return payload, nil
-		}
-		match, err := s.loadScopedMatchViewSnapshot(mscope)
-		if err != nil {
-			return payload, nil
-		}
-		payload.Match = &match
-	case "venues":
-		venues, err := s.loadVenuesLocked(route.FestID)
-		if err == nil {
-			if venuesBytes, err := json.Marshal(venues); err == nil {
-				payload.Venues = venuesBytes
-			}
-		}
-	}
-	return payload, nil
-}
-
-func parseHostInitRoute(parts []string, scope festScope) hostInitRoute {
-	route := hostInitRoute{Mode: "grid", FestID: scope.FestID, GameID: scope.GameID}
+func parseEKInitRoute(parts []string, scope festScope) ekInitRoute {
+	route := ekInitRoute{Mode: "grid", FestID: scope.FestID, GameID: scope.GameID}
 	if len(parts) <= 2 {
 		return route
 	}
@@ -329,8 +261,8 @@ func parseHostInitRoute(parts []string, scope festScope) hostInitRoute {
 	return route
 }
 
-func (s *server) buildHostInit(ctx context.Context, route hostInitRoute) (hostInitPayload, error) {
-	payload := hostInitPayload{Route: route}
+func (s *server) buildEKInit(ctx context.Context, route ekInitRoute) (ekInitPayload, error) {
+	payload := ekInitPayload{Route: route}
 
 	festBytes, err := s.festViewBytes(route.FestID, route.GameID)
 	if err != nil {

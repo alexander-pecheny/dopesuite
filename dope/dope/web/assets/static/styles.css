@@ -2723,7 +2723,7 @@ body:not(.embedded-match) .grid-match {
 /* EK stage tables get the same scrolled-under fade as OD/KSI, drawn off the
    right edge of the place-gap (the rightmost frozen column) once the score
    columns have been scrolled. .stage-scroll-left is toggled on the scroll
-   frame by host.js / viewer.js. */
+   frame by ek.js. */
 .sheet-frame.stage-scroll-left .match-table.ek-stage-table .sticky-place-gap::after {
   content: "";
   position: absolute;
@@ -3478,7 +3478,7 @@ body:not(.embedded-match) .grid-match {
 
   /* Scrolled-under fade off the frozen player column's right edge, drawn once
      the rest has scrolled — same cue as the OD/KSI results tables. The scroll
-     frame toggles .stage-scroll-left (viewer.js / host.js). */
+     frame toggles .stage-scroll-left (ek.js). */
   .sheet-frame.stage-scroll-left .ek-stats-table td.ek-stats-player::after,
   .sheet-frame.stage-scroll-left .ek-stats-table thead th.ek-stats-player-head::after {
     content: "";

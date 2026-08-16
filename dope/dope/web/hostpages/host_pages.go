@@ -230,7 +230,7 @@ func (s *Server) HandleProfileLogout(w http.ResponseWriter, r *http.Request) {
 // /host/<...> — auth-gated subpaths.
 //   - /host/fest              POST: create fest
 //   - /host/fest/{id}         GET: dashboard, POST: update
-//   - /host/fest/{id}/game/{gid}/...   serves host.html for the EK match grid
+//   - /host/fest/{id}/game/{gid}/...   serves ek.html for the EK match grid
 func (s *Server) HandleHostRouter(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/host/")
 	if rest == "" || rest == "/" {
@@ -562,7 +562,7 @@ func (s *Server) HandleHostRouter(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// /host/fest/{id}/game/{gid}[/...] → serve host.html / od.html / si.html.
+	// /host/fest/{id}/game/{gid}[/...] → serve ek.html / od.html / si.html.
 	if !isHostGameSubPath(parts[2:]) {
 		http.NotFound(w, r)
 		return
@@ -604,11 +604,11 @@ func (s *Server) serveHostGamePage(w http.ResponseWriter, r *http.Request, festI
 		// бои — not for its blank: a seat of one player has no per-theme player
 		// cell, so the page draws it as one row (КСИ-shaped) where a team's
 		// takes two.
-		s.h.ServeHostHTMLWithInit(w, r, scope, parts)
+		s.h.ServeEKHTMLWithInit(w, r, scope, parts)
 	case "brain":
 		s.h.ServeGameHTMLWithInit(w, r, "static/brain.html", scope)
 	default:
-		s.h.ServeHostHTMLWithInit(w, r, scope, parts)
+		s.h.ServeEKHTMLWithInit(w, r, scope, parts)
 	}
 }
 

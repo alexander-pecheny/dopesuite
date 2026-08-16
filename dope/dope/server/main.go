@@ -56,8 +56,8 @@ type server struct {
 	// live on eng (StaticMode/ReqRate/…); staticMu guards the per-route HTML
 	// snapshot cache, with staticBuilds providing per-route singleflight on misses.
 	staticMu     sync.RWMutex
-	staticCache  map[hostInitRoute]*staticEntry
-	staticBuilds map[hostInitRoute]*staticBuildCall
+	staticCache  map[ekInitRoute]*staticEntry
+	staticBuilds map[ekInitRoute]*staticBuildCall
 	staticCfg    staticConfig
 
 	// Edit-path instrumentation (DOPE_EDIT_METRICS), inert unless enabled. Holds

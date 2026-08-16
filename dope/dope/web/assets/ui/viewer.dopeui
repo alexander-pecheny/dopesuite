@@ -1,3 +1,0 @@
-page title="Зритель · Фест" kind="viewer" init="__VIEWER_INIT__" classicscripts="dist/viewer.js"
-  gametopbar heading="Фест" tabsid="viewerTabs" ektabs
-  mount kind="table-host" id="viewerTable"

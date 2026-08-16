@@ -206,7 +206,7 @@ export interface PendingOps {
 // (a) batched into one request and (b) re-overlaid on top of any server state
 // we render before the edit is confirmed — so an optimistically-applied cell
 // never regresses while its write is in flight, even across a full resync /
-// refetch. Shared by createStateSync (OD/KSI whole-game state) and host.js (EK
+// refetch. Shared by createStateSync (OD/KSI whole-game state) and ek.js (EK
 // per-match edits) so all three editors get identical durability.
 //
 // Ops to the same path coalesce, last-write-wins. take() moves the queued batch
@@ -218,7 +218,7 @@ export interface PendingOps {
 // rehydrated on the next page load, so a refresh/crash mid-sync — exactly when
 // edits "don't apply" and the operator reloads — doesn't silently drop edits
 // the server never confirmed: they reappear (overlaid + spinner) and re-send.
-// Persistence is opt-in (host.js EK pending passes no key) and TTL-bounded so a
+// Persistence is opt-in (ek.js EK pending passes no key) and TTL-bounded so a
 // long-abandoned session can't resurrect ancient edits.
 export function createPendingOps(opts?: PendingOpsOptions | null): PendingOps {
   opts = opts || {};
