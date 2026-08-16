@@ -587,23 +587,8 @@ function buildRefusalsTable(): HTMLElement {
     const number = participantNumber(index);
     tr.appendChild(gameTable.td(number > 0 ? number : "", "results-place seed-number-cell"));
 
-    const teamCell = document.createElement("td");
-    teamCell.className = "results-team";
-    const nameWrap = document.createElement("span");
-    nameWrap.className = "results-team-name-wrap";
     const label = participantLabel(index);
-    const name = document.createElement("span");
-    name.className = "results-team-name";
-    name.textContent = label;
-    name.tabIndex = 0;
-    name.setAttribute("aria-label", label);
-    nameWrap.appendChild(name);
-    teamCell.appendChild(nameWrap);
-    const fullName = document.createElement("span");
-    fullName.className = "popover popover-inline results-team-name-popover";
-    fullName.textContent = label;
-    teamCell.appendChild(fullName);
-    tr.appendChild(teamCell);
+    tr.appendChild(gameTable.resultsTeamCell(label));
 
     const declinedCell = document.createElement("td");
     declinedCell.className = "results-num seed-declined-cell";
@@ -648,22 +633,7 @@ function buildResultsTableInner(): HTMLTableElement {
     if (rowIdx === rows.length - 1) classes.push("results-group-last");
     tr.className = classes.join(" ");
     tr.appendChild(gameTable.td(row.placeText, "results-place"));
-    const nameTd = document.createElement("td");
-    nameTd.className = "results-team";
-    const nameWrap = document.createElement("span");
-    nameWrap.className = "results-team-name-wrap";
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "results-team-name";
-    nameSpan.textContent = row.name;
-    nameSpan.tabIndex = 0;
-    nameSpan.setAttribute("aria-label", row.name);
-    nameWrap.appendChild(nameSpan);
-    nameTd.appendChild(nameWrap);
-    const fullName = document.createElement("span");
-    fullName.className = "popover popover-inline results-team-name-popover";
-    fullName.textContent = row.name;
-    nameTd.appendChild(fullName);
-    tr.appendChild(nameTd);
+    tr.appendChild(gameTable.resultsTeamCell(row.name));
     tr.appendChild(gameTable.td(row.metrics.total, "results-num total-cell results-total"));
     tr.appendChild(gameTable.td(row.metrics.plus, "results-num"));
     for (const value of RESULT_VALUES) {

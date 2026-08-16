@@ -192,7 +192,7 @@ const ekTabsRoot = document.getElementById("ekTabs");
 const breadcrumbsNode = document.getElementById("gameBreadcrumbs");
 
 const gameTable = DopeTable;
-const {formatVenue, formatBattleVenue, formatBattleVenueShort, formatNumber, formatPlace, clamp, cssEscape, th, td} = gameTable;
+const {formatVenue, formatBattleVenue, formatBattleVenueShort, formatNumber, formatPlace, clamp, cssEscape, th, td, resultsTeamCell} = gameTable;
 const setStatus = gameTable.createStatusReporter(statusNode);
 const viewerCounter = gameTable.createViewerCounter(statusNode);
 let route = currentRoute();
@@ -1702,29 +1702,7 @@ function buildSeedImportPanel(): HTMLElement {
     tr.className = classes.join(" ");
     tr.appendChild(td(row.seedNumber || "", "results-place seed-number-cell"));
 
-    const teamCell = document.createElement("td");
-    teamCell.className = "results-team";
-    const nameWrap = document.createElement("span");
-    nameWrap.className = "results-team-name-wrap";
-    const teamLabel = row.name || "";
-    const name = document.createElement("span");
-    name.className = "results-team-name";
-    name.textContent = teamLabel;
-    name.tabIndex = 0;
-    name.setAttribute("aria-label", teamLabel);
-    nameWrap.appendChild(name);
-    if (row.city) {
-      const city = document.createElement("span");
-      city.className = "results-team-city";
-      city.textContent = row.city;
-      nameWrap.appendChild(city);
-    }
-    teamCell.appendChild(nameWrap);
-    const fullName = document.createElement("span");
-    fullName.className = "popover popover-inline results-team-name-popover";
-    fullName.textContent = teamLabel;
-    teamCell.appendChild(fullName);
-    tr.appendChild(teamCell);
+    tr.appendChild(resultsTeamCell(row.name || "", {city: row.city}));
 
     const declinedCell = document.createElement("td");
     declinedCell.className = "results-num seed-declined-cell";

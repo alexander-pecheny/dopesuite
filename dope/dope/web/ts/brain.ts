@@ -737,31 +737,25 @@ function buildStatsView(): HTMLElement {
   }
   // The same table ЭК's Статистика is — its name columns size to content and
   // its numbers sit tight — with the buzzer's columns in place of the themes'.
-  const table = document.createElement("table");
-  table.className = "results-table ek-stats-table";
-  const thead = document.createElement("thead");
-  const head = document.createElement("tr");
-  head.appendChild(gameTable.th("Игрок", "results-team-head ek-stats-name-head ek-stats-player-head"));
-  head.appendChild(gameTable.th("Команда", "results-team-head ek-stats-name-head ek-stats-team-head"));
-  head.appendChild(gameTable.th("Попытки", "number"));
-  head.appendChild(gameTable.th("Верно", "number"));
-  head.appendChild(gameTable.th("Неверно", "number ek-stats-wrong-head"));
-  head.appendChild(gameTable.th("% верных", "number ek-stats-share-head"));
-  thead.appendChild(head);
-  table.appendChild(thead);
-  const tbody = document.createElement("tbody");
-  for (const row of stats) {
-    const tr = document.createElement("tr");
-    tr.appendChild(gameTable.resultsTeamCell(row.player, "results-team ek-stats-name ek-stats-player"));
-    tr.appendChild(gameTable.resultsTeamCell(row.team, "results-team ek-stats-name ek-stats-team"));
-    tr.appendChild(gameTable.td(row.attempts, "number"));
-    tr.appendChild(gameTable.td(row.right, "number"));
-    tr.appendChild(gameTable.td(row.wrong, "number ek-stats-wrong"));
-    tr.appendChild(gameTable.td(row.attempts ? `${Math.round((row.right / row.attempts) * 100)}%` : "", "number ek-stats-share"));
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
-  wrapper.appendChild(table);
+  wrapper.appendChild(gameTable.standingsTable({
+    className: "ek-stats-table",
+    columns: [
+      {label: "Игрок", kind: "name", className: "ek-stats-name ek-stats-player"},
+      {label: "Команда", kind: "name", className: "ek-stats-name"},
+      {label: "Попытки", kind: "num"},
+      {label: "Верно", kind: "num"},
+      {label: "Неверно", kind: "num", className: "ek-stats-wrong"},
+      {label: "% верных", kind: "num", className: "ek-stats-share"},
+    ],
+    rows: stats.map((row) => [
+      row.player,
+      row.team,
+      row.attempts,
+      row.right,
+      row.wrong,
+      row.attempts ? `${Math.round((row.right / row.attempts) * 100)}%` : "",
+    ]),
+  }));
   return wrapper;
 }
 
@@ -1040,35 +1034,27 @@ function buildGroupTable(stage: BrainSchemeStage): HTMLElement {
     return typeof value === "number" ? gameTable.formatDisplayText(value) : "";
   };
 
-  const table = document.createElement("table");
-  table.className = "results-table group-standings-table brain-crosstable";
-  const thead = document.createElement("thead");
-  const cols = document.createElement("tr");
-  cols.appendChild(gameTable.th("№", "results-place-head"));
-  cols.appendChild(gameTable.th("Команда", "results-team-head"));
-  rows.forEach((_, i) => cols.appendChild(gameTable.th(i + 1, "number")));
-  for (const text of ["О", "+", "−", "+/−", "М"]) cols.appendChild(gameTable.th(text, "number"));
-  thead.appendChild(cols);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  rows.forEach((row, i) => {
-    const tr = document.createElement("tr");
-    tr.appendChild(gameTable.td(i + 1, "results-place results-num"));
-    tr.appendChild(gameTable.resultsTeamCell(row.name));
-    rows.forEach((_, j) => {
-      const cell = gameTable.td(i === j ? "×" : cellText[i][j], "number brain-cross-cell");
-      if (i === j) cell.classList.add("brain-cross-diag");
-      else cell.classList.toggle("brain-cross-live", cellMuted[i][j]);
-      tr.appendChild(cell);
-    });
-    for (const metric of ["points", "taken", "conceded", "diff", "place"]) {
-      tr.appendChild(gameTable.td(stat(row, metric), "number"));
-    }
-    tbody.appendChild(tr);
+  const cross = (i: number, j: number) => {
+    const cell = gameTable.td(i === j ? "×" : cellText[i][j]);
+    if (i === j) cell.classList.add("brain-cross-diag");
+    else cell.classList.toggle("brain-cross-live", cellMuted[i][j]);
+    return cell;
+  };
+  return gameTable.standingsTable({
+    className: "group-standings-table brain-crosstable",
+    columns: [
+      {label: "№", kind: "place"},
+      {label: "Команда", kind: "name"},
+      ...rows.map((_, i) => ({label: i + 1, kind: "num" as const})),
+      ...["О", "+", "−", "+/−", "М"].map((label) => ({label, kind: "num" as const})),
+    ],
+    rows: rows.map((row, i) => [
+      i + 1,
+      row.name,
+      ...rows.map((_, j) => cross(i, j)),
+      ...["points", "taken", "conceded", "diff", "place"].map((metric) => stat(row, metric)),
+    ]),
   });
-  table.appendChild(tbody);
-  return table;
 }
 
 

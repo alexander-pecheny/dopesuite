@@ -1,7 +1,8 @@
 # One skin for the Сетка and its tables — hand-off
 
-Status: open. Written 16 Aug 2026 after the third round of "why does this
-game's table look different from ЭК's" fixes. Read with `CONTEXT.md` (Сетка,
+Status: done 16 Aug 2026 (see «What was done» at the end). Written earlier
+that day after the third round of "why does this game's table look different
+from ЭК's" fixes. Read with `CONTEXT.md` (Сетка,
 Group, Block, Бой) and the architecture note in root `AGENTS.md`.
 
 ## What happened
@@ -86,3 +87,38 @@ report, narrowed to the Сетка and the standings tables.
   fit two abreast; a shared builder must keep the wrapper's track a token.
 - The DOM stub in `web/jstest` has no layout, so tests assert classes and
   `dataset`, never sizes.
+
+## What was done (16 Aug 2026, branch `dope-refactor`)
+
+- The Сетка's group table is a бой box: `buildStandingsTable` emits the same
+  `article.grid-box > .grid-slot-grid` of `.grid-slot-cell`s that `buildMatchBox`
+  does, through the same `gridCell`/`gridHeadCell`/`slotTeamCell` helpers.
+  `.grid-standings` survives as the modifier that widens the metric and place
+  columns and mutes the place; `.grid-standings-bare` is a table with no
+  metric (a pod, or a Group before its Ranker wrote one). The `<table>` and its
+  ~75 lines of restated cell rules are gone; `.grid-box` is the skin,
+  `.grid-match` marks a бой (it alone keeps `content-visibility`).
+- `standingsTable(spec)` in `match-table.ts` (`{className, columns: [{label,
+  kind: place|name|num, className}], rows}`) builds every table in the list
+  above; a cell is text or a cell the caller built (the venue input, the
+  crosstab's scored cells). `resultsTeamCell(name, {className, city, flag,
+  href})` is the one name cell — `od.ts`, `ek.ts`, `si.ts`, the roster and
+  the stats tables call it. The `-head` twins (`ek-stats-*-head`,
+  `roster-players-head/cell`) collapsed into one class per column; the roster's
+  own name/city classes went. `classcheck`: 799 → 790 classes, both halves agree.
+- Every builder table now marks its rows (`results-row` + first/last), so the
+  групп, brain and individual-stats tables gained the row separators the
+  other results tables already had — deliberate. The read-only Площадки
+  title goes through the name cell too (a fade instead of a bare td; no
+  popover unless measured truncated, and nothing measures it). The roster's
+  city is the shared `results-team-city`: on the phone it now clips at the
+  column (9 px) where it used to overflow into Игроки.
+- The verify matrix (ЭК, Личная СИ, ТПШ, КИнСБФ × phone/desktop × light/dark,
+  84 pages) was diffed against HEAD built in a second worktree, not against
+  dopetest — dopetest predates `6d3b228` (the venue beside the title), which
+  would have shown in every head. Result: the Сетка pairs differ by 0–7 px
+  (ТПШ), ~100–200 px (СИ) and ~400–800 px (КИнСБФ) on desktop — the group
+  tables' bottom corners, now rounded like a бой's; the ЭК Сетка, пересев,
+  площадки and stats-with-separators pairs are identical or differ only by
+  the deliberate 1 px separators; the topbar viewer count and the phone tab
+  strip's scroll are noise.
