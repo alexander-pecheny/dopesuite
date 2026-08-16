@@ -141,6 +141,9 @@ type Batcher struct {
 	// OnFestChanged, when set, is called after a window that changed a match's
 	// finished status, so the server can refresh the fest-level grid it caches.
 	OnFestChanged func(festID, gameID, revision int64)
+	// Window overrides editBatchWindow when set; the replay harness plays a
+	// championship one edit at a time and would otherwise wait 150ms per бой.
+	Window time.Duration
 
 	mu      sync.Mutex
 	pending map[int64]*editBatch
@@ -154,6 +157,13 @@ func NewBatcher(eng *core.Engine, rec *metrics.Recorder) *Batcher {
 		Rec:     rec,
 		pending: make(map[int64]*editBatch),
 	}
+}
+
+func (b *Batcher) window() time.Duration {
+	if b.Window > 0 {
+		return b.Window
+	}
+	return editBatchWindow
 }
 
 // SubmitEdit queues a flat game's state PATCH and blocks until its window
@@ -234,7 +244,7 @@ func (b *Batcher) enqueueEdit(job *editJob) {
 		batch = &editBatch{scope: job.scope}
 		b.pending[job.scope.GameID] = batch
 		gid := job.scope.GameID
-		batch.timer = time.AfterFunc(editBatchWindow, func() {
+		batch.timer = time.AfterFunc(b.window(), func() {
 			b.flushEditBatch(gid)
 		})
 	}

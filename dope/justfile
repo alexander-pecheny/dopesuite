@@ -35,7 +35,14 @@ fmt:
     ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
 
 # Go tests + frontend (deno) tests; typecheck gates here, not in build-web.
+# The quick loop: everything but the studchr replays (ADR-0010), which are
+# the conformance gate and take a minute and a half — test-full plays them.
 test: build-web
+    cd .. && just typecheck
+    go test -short ./...
+    deno test --parallel dope/web/jstest/
+
+test-full: build-web
     cd .. && just typecheck
     go test ./...
     deno test --parallel dope/web/jstest/
@@ -110,7 +117,7 @@ pre-commit:
     just vet
     just tidy-check
     just generate-check
-    just test
+    just test-full
 
 # Mint a one-shot invite code and print it. Reads DOPE_DB from .env.
 # Usage: just invite [days]
