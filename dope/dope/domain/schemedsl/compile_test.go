@@ -960,7 +960,6 @@ teams: 4
 	}
 }
 
-
 // Every бой carries its буква, dealt in schedule order over the whole Game —
 // Block, stage, бой — and a block may decline: the письменный отбор is one
 // sitting for everyone, not a бой, so its match stays letterless and the

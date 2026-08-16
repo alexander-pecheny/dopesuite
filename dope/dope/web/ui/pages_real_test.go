@@ -47,12 +47,12 @@ var idsCreatedByJS = map[string]bool{}
 // the game pages measure .sheet-frame and mount into .table-host; login sets
 // the title on `.host-top h1`.
 var loadBearingSubstrings = map[string][]string{
-	"":       {"host-actions"},
-	"login":  {"host-top", "<h1>"},
-	"ek":     {"game-host-top", "sheet-frame", "table-host"},
-	"od":     {"game-host-top", "sheet-frame", "table-host", "od-header-progress"},
-	"si":     {"game-host-top", "sheet-frame", "table-host"},
-	"brain":  {"game-host-top", "sheet-frame", "table-host"},
+	"":      {"host-actions"},
+	"login": {"host-top", "<h1>"},
+	"ek":    {"game-host-top", "sheet-frame", "table-host"},
+	"od":    {"game-host-top", "sheet-frame", "table-host", "od-header-progress"},
+	"si":    {"game-host-top", "sheet-frame", "table-host"},
+	"brain": {"game-host-top", "sheet-frame", "table-host"},
 }
 
 var (

@@ -30,7 +30,7 @@ const (
 // ekInitPayload seeds the ЭК page — the host's /host/fest/… and the spectator's
 // /fest/… alike; the page tells the two apart by its URL.
 type ekInitPayload struct {
-	Route      ekInitRoute           `json:"route"`
+	Route      ekInitRoute             `json:"route"`
 	Fest       json.RawMessage         `json:"fest,omitempty"`
 	Match      *store.MatchView        `json:"match,omitempty"`
 	SeedImport *imports.SeedImportView `json:"seedImport,omitempty"`
