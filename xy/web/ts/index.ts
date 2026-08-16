@@ -73,13 +73,18 @@ window.dopeMenu?.setExtras([{
   onClick: () => { void prewarm(); },
 }]);
 
-// show replaces the board list. The search index is assembled FROM this list, so
-// a search that ran before it arrived cached an empty one: drop it and re-answer
-// whatever is in the box.
+// show replaces the board list, unless the list is the one already on screen —
+// the usual case when the server confirms the cache — so nothing blinks. The
+// search index is assembled FROM this list, so a search that ran before it
+// arrived cached an empty one: drop it and re-answer whatever is in the box.
+let shown: string | null = null;
 async function show(boards: BoardListItem[]): Promise<void> {
+  const key = JSON.stringify(boards);
+  if (key === shown) return;
+  shown = key;
   allBoards = boards;
   indexes = null;
-  renderBoards(boards);
+  await renderBoards(boards);
   if (searchBox.value.trim()) await runSearch(searchBox.value);
 }
 
@@ -158,13 +163,13 @@ async function runSearch(query: string, keepShown = false): Promise<void> {
     moreQuestions.hidden = true;
     moreComments.hidden = true;
     listNode.hidden = false;
-    renderBoards(allBoards);
+    await renderBoards(allBoards);
     return;
   }
   // A board matches by name without any key — names are plaintext (v2). A legacy
   // board whose name is still encrypted matches nothing until it is migrated.
   const named = allBoards.filter((b) => xyFind.searchSpans(b.name || "", q).length > 0);
-  renderBoards(named);
+  await renderBoards(named);
   // An empty grid is not a result — it is padding with a message in it. Each
   // section shows only when it has something, and its count says the rest.
   listNode.hidden = !named.length;
@@ -246,21 +251,26 @@ async function prewarm(): Promise<void> {
   }
 }
 
-function renderBoards(boards: BoardListItem[]): void {
+// A card is painted once, lock included: the DK lookup happens before the grid
+// is touched, so a repaint never shows a name unlocked and then locks it.
+async function renderBoards(boards: BoardListItem[]): Promise<void> {
+  const locked = await Promise.all(boards.map((b) =>
+    b.schema_version >= 2 ? xyCrypto.loadCachedDK(b.id).then((dk) => !dk, () => false) : true));
   listNode.replaceChildren();
   if (!boards.length) {
     listNode.append(el("p", { class: "empty", text: searchBox.value.trim() ? "Досок с таким названием нет." : "Пока нет досок. Нажмите + чтобы создать." }));
     return;
   }
   // Boards arrive already ordered by the caller's last visit (server-side).
-  for (const b of boards) {
-    // Migrated (v2) boards carry a plaintext name — shown with no key needed. Legacy
-    // (v1) boards still need the cached DK, so start with a locked placeholder.
+  boards.forEach((b, i) => {
+    // Migrated (v2) boards carry a plaintext name — shown with no key needed; the
+    // lock marks a board that will still ask for the passphrase. Legacy (v1)
+    // boards need the cached DK for the name itself, so start with a placeholder.
     const migrated = b.schema_version >= 2;
+    const name = migrated ? b.name : "доска #" + b.id;
     const card = el("a", { class: "board-card", href: `/board/${b.id}` },
       el("span", { class: "board-card-name-wrap" },
-        el("span", { class: "board-card-name" },
-          ...(migrated ? [b.name] : iconed("lock", "доска #" + b.id)))),
+        el("span", { class: "board-card-name" }, ...(locked[i] ? iconed("lock", name) : [name]))),
       el("span", { class: "board-card-role", text: b.role === "owner" ? "владелец" : "редактор" }),
     );
     if (b.unread) {
@@ -276,24 +286,14 @@ function renderBoards(boards: BoardListItem[]): void {
         setCardName(card, name);
         migrateName(b.id, name);
       });
-    } else {
-      // The name is readable without a key, but opening the board still needs its
-      // DK — mark boards that will ask for the passphrase.
-      xyCrypto.loadCachedDK(b.id).then((dk) => {
-        if (!dk) setCardName(card, b.name, true);
-      }).catch(() => {});
     }
     listNode.append(card);
-  }
+  });
   measureNames();
 }
 
-// `locked` marks a board whose name is readable but whose content still needs
-// the passphrase — the lock rides ahead of the name.
-function setCardName(card: HTMLElement, text: string, locked = false): void {
-  const node = card.querySelector(".board-card-name")!;
-  if (locked) node.replaceChildren(...iconed("lock", text));
-  else node.textContent = text;
+function setCardName(card: HTMLElement, text: string): void {
+  card.querySelector(".board-card-name")!.textContent = text;
   measureNames();
 }
 // Flag every card whose one-line title overflows, so the CSS fade turns on only
