@@ -18,9 +18,21 @@ type brain struct{}
 
 func (brain) Code() string { return "brain" }
 
+// questions is always written: reseed share metrics divide by it.
+func (brain) Params() []Param {
+	return []Param{
+		{Key: "questions", Config: "questions", Default: games.BrainQuestionCount},
+		{Key: "tiebreak_questions", Config: "tiebreakQuestions", Bool: true},
+	}
+}
+
+func (brain) TeamBlob() bool { return false }
+
+func (brain) Started(state json.RawMessage) bool { return games.BrainStateStarted(string(state)) }
+
 // Metrics: взятые вопросы, и они же без перестрелки — знаменатель долей на
 // пересеве считается по основным вопросам боя.
-func (brain) Metrics() []string { return []string{"taken", "takenBase"} }
+func (brain) Metrics() []string { return []string{"taken", structure.MetricTakenBase} }
 
 func (brain) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	return games.BrainEmptyStateJSON(games.BrainQuestions(string(cfg))), nil
@@ -36,8 +48,8 @@ func (brain) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, err
 		outcomes[i] = structure.SlotOutcome{
 			Place: team.Place,
 			Metrics: map[string]float64{
-				"taken":     float64(team.Taken),
-				"takenBase": float64(team.TakenBase),
+				"taken":                   float64(team.Taken),
+				structure.MetricTakenBase: float64(team.TakenBase),
 			},
 		}
 	}

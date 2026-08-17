@@ -191,7 +191,7 @@ func stageEmptyState(gameType string, stage store.SchemeStage, seats, fallbackQu
 	// seats come from the Slots and its marks arrive as edits. Seeding it with
 	// the Protocol's own state shape would write an array where the blob keys
 	// a map, and the first edit would fail to parse it.
-	if (store.DBMatchState{GameType: gameType}).IsEKShaped() {
+	if store.TeamBlobShaped(gameType) {
 		return "{}"
 	}
 	p, ok := protocol.Get(gameType)
@@ -349,7 +349,7 @@ select id, stage_id, code, status, coalesce(state_json, '{}') from matches where
 	}
 	var blocked []string
 	for code, m := range existingMatches {
-		if m.Status != "finished" && !games.BrainStateStarted(m.State) {
+		if m.Status != "finished" && !protocol.Started(gameType, m.State) {
 			continue
 		}
 		match, survives := planned[code]
@@ -399,8 +399,7 @@ values(?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
 			existing, ok := existingMatches[match.Code]
 			if ok {
 				delete(existingMatches, match.Code)
-				started := existing.Status == "finished" || games.BrainStateStarted(existing.State)
-				if started {
+				if existing.Status == "finished" || protocol.Started(gameType, existing.State) {
 					if _, err := tx.ExecContext(ctx, `
 update matches set stage_id = ?, title = ?, letter = ?, position = ?, round = ?, wave = ? where id = ?`,
 						stageID, match.Title, match.Letter, matchIndex+1, match.Round, match.Wave, existing.ID); err != nil {

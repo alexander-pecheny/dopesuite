@@ -1,8 +1,6 @@
 package protocol
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -25,6 +23,14 @@ type si struct{}
 
 func (si) Code() string { return "si" }
 
+func (si) Params() []Param {
+	return []Param{{Key: "themes", Config: "themes"}, {Key: "participants", Config: "participants"}}
+}
+
+func (si) TeamBlob() bool { return true }
+
+func (si) Started(state json.RawMessage) bool { return false }
+
 // Metrics: сумма, сумма положительных ответов, перестрелка и счётчики взятых
 // по номиналам — СИ ранжирует по ним, когда суммы равны.
 func (si) Metrics() []string {
@@ -37,42 +43,8 @@ func (si) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	return json.RawMessage("{}"), nil
 }
 
-// WriteResultsTx scores a бой the way ЭК's scorer reads the same blob, then
-// replaces ЭК's host-entered places with the ones сумма dictates. It satisfies
-// scoring.LegacyResultWriter, so this is the only path a си бой is scored by.
-func (si) WriteResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState) error {
-	view := store.BuildView(match.State)
-	places := placesBySum(view.Participants)
-	for index, player := range view.Participants {
-		if index >= len(match.ParticipantIDs) || match.ParticipantIDs[index] == 0 {
-			continue
-		}
-		place := places[index]
-		if pin := match.Blob.Pin(match.ParticipantIDs[index]); pin != nil {
-			place = *pin
-		}
-		metrics := map[string]any{"total": player.Total, "plus": player.Plus, "shootoutTotal": player.ShootoutTotal}
-		for i, value := range store.QuestionValues {
-			metrics[fmt.Sprintf("taken%d", value)] = player.CorrectCounts[i]
-		}
-		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, participant_id, place, total, plus, tiebreak, metrics_json)
-values(?, ?, ?, ?, ?, 0, ?)
-on conflict(match_id, participant_id) do update set
-  place = excluded.place,
-  total = excluded.total,
-  plus = excluded.plus,
-  metrics_json = excluded.metrics_json`,
-			match.MatchID, match.ParticipantIDs[index], place,
-			player.Total, player.Plus, mustJSON(metrics)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Score is the Structure-facing scorer, used where a бой is scored outside a
-// transaction (tests, exports). It reads the same blob-projected state.
+// Score ranks the blob-projected state by сумма — nobody enters places by hand
+// in личная СИ — and reports the same metrics ЭК's scorer reads.
 func (si) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
 	var state store.MatchState
 	if err := json.Unmarshal(stateJSON, &state); err != nil {
@@ -127,12 +99,4 @@ func placesBySum(players []store.ParticipantView) []float64 {
 		start = end
 	}
 	return places
-}
-
-func mustJSON(value any) string {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return "{}"
-	}
-	return string(data)
 }

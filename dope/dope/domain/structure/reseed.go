@@ -41,6 +41,10 @@ func reseedOrder(conf reseedKindConfig) []SortRule {
 	return conf.Sort
 }
 
+func (reseed) Metrics() []string {
+	return []string{"place_sum", "points_share", "taken_share", "taken_base", "diff", "draw"}
+}
+
 func (reseed) Order(cfg json.RawMessage) []SortRule {
 	var conf reseedKindConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
@@ -87,7 +91,7 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEn
 		}
 		takenSum := 0.0
 		for _, slot := range match.Slots {
-			takenSum += slot.Metrics["takenBase"]
+			takenSum += slot.Metrics[MetricTakenBase]
 		}
 		for _, slot := range match.Slots {
 			if slot.Participant == 0 {
@@ -102,10 +106,10 @@ func (reseed) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEn
 			for key, value := range slot.Metrics {
 				entry.Metrics[key] += value
 			}
-			entry.Metrics["taken_base"] += slot.Metrics["takenBase"]
+			entry.Metrics["taken_base"] += slot.Metrics[MetricTakenBase]
 			s := scratch[slot.Participant]
 			s["points"] += BoutPoints(slot.Place)
-			s["conceded_base"] += takenSum - slot.Metrics["takenBase"]
+			s["conceded_base"] += takenSum - slot.Metrics[MetricTakenBase]
 			s["bouts"]++
 			s["questions_asked"] += float64(match.Questions)
 		}

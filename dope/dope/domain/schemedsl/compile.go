@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"dope/dope/domain/expr"
-	"dope/dope/domain/games"
 	"dope/dope/domain/protocol"
 	"dope/dope/domain/structure"
 	"dope/dope/platform/util"
@@ -108,14 +107,15 @@ var reseedMetricAliases = map[string]store.SchemeSortRule{
 // Метрики, которые всегда меньше-лучше: место и жребий.
 var ascendingMetrics = map[string]bool{"place_sum": true, "draw": true, "place": true, "losses": true}
 
-// rankable — всё, по чему в этой игре можно сортировать: что объявил Протокол,
-// что выводит Структура, и что определили правила подсчёта самой схемы.
-func (c *compiler) rankable() map[string]bool {
+// rankable — всё, по чему в этой игре можно сортировать этап данного Kind: что
+// объявил Протокол, что добавляет Ranker этого Kind, и что определили правила
+// подсчёта самой схемы.
+func (c *compiler) rankable(kind string) map[string]bool {
 	names := map[string]bool{}
 	for _, name := range protocol.Metrics(c.in.GameType) {
 		names[name] = true
 	}
-	for _, name := range structure.DerivedMetrics() {
+	for _, name := range structure.RankerMetrics(kind) {
 		names[name] = true
 	}
 	for _, name := range c.ruleMetrics {
@@ -226,16 +226,6 @@ func BoutLetter(n int) string {
 
 // --- vocabulary ------------------------------------------------------------
 
-// protocolParams is the per-game-type allowlist of protocol keys and the
-// stage-config names they compile to.
-var protocolParams = map[string]map[string]string{
-	"brain": {"questions": "questions", "tiebreak_questions": "tiebreakQuestions"},
-	"ksi":   {"themes": "themes"},
-	"si":    {"themes": "themes", "participants": "participants"},
-	"od":    {"tour_comp": "tourComp"},
-	"ek":    {"themes": "themes"},
-}
-
 var blockKeys = map[string]bool{
 	"type": true, "title": true, "slug": true, "groups": true, "teams_in_group": true, "teams": true,
 	"proceeding_teams": true, "reseed": true, "sorting": true, "points": true,
@@ -247,8 +237,12 @@ var defaultsKeys = map[string]bool{"venues": true, "sorting": true, "points": tr
 var initKeys = map[string]bool{"seed": true, "sorting": true}
 
 func (c *compiler) protocolConfigKey(base string) (string, bool) {
-	name, ok := protocolParams[c.in.GameType][base]
-	return name, ok
+	for _, param := range protocol.Params(c.in.GameType) {
+		if param.Key == base {
+			return param.Config, true
+		}
+	}
+	return "", false
 }
 
 func (c *compiler) checkKeys() error {
@@ -429,25 +423,19 @@ func paramBool(defaults, blk Section, key string, rounds []string) (bool, bool) 
 }
 
 // protocolConfig collects the game's protocol params for one stage (rounds
-// empty means the block default). Brain always pins questions — reseed share
-// metrics divide by it, so it must never be implicit.
+// empty means the block default).
 func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
 	config := map[string]any{}
-	for dslKey, configKey := range protocolParams[c.in.GameType] {
-		switch dslKey {
-		case "tiebreak_questions":
-			if v, ok := paramBool(c.doc.Defaults, blk, dslKey, rounds); ok {
-				config[configKey] = v
+	for _, param := range protocol.Params(c.in.GameType) {
+		if param.Bool {
+			if v, ok := paramBool(c.doc.Defaults, blk, param.Key, rounds); ok {
+				config[param.Config] = v
 			}
-		default:
-			if v, ok := paramInt(c.doc.Defaults, blk, dslKey, rounds); ok {
-				config[configKey] = v
-			}
+		} else if v, ok := paramInt(c.doc.Defaults, blk, param.Key, rounds); ok {
+			config[param.Config] = v
 		}
-	}
-	if c.in.GameType == "brain" {
-		if _, ok := config["questions"]; !ok {
-			config["questions"] = games.BrainQuestionCount
+		if _, ok := config[param.Config]; !ok && param.Default != 0 {
+			config[param.Config] = param.Default
 		}
 	}
 	return config
@@ -505,7 +493,7 @@ func (c *compiler) rrOrder(blk Section) ([]string, error) {
 	if !ok {
 		return canonOrder, nil
 	}
-	known := c.rankable()
+	known := c.rankable("rr")
 	order := make([]string, len(rules))
 	for i, rule := range rules {
 		metric := rule.Metric
@@ -636,7 +624,7 @@ func (c *compiler) reseedSortRules(blk Section) ([]store.SchemeSortRule, error) 
 	if !ok {
 		rules = []store.SchemeSortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "taken", Dir: "desc"}}
 	}
-	known := c.rankable()
+	known := c.rankable("reseed")
 	for _, token := range tokens {
 		if alias, ok := reseedMetricAliases[token.Metric]; ok {
 			rules = append(rules, alias)
@@ -903,8 +891,13 @@ func (c *compiler) expandFlat(index int, blk Section) (*blockOutputs, error) {
 	if order, ok, err := blk.Sorting("sorting"); err != nil {
 		return nil, err
 	} else if ok {
+		known := c.rankable("flat")
 		names := make([]string, len(order))
 		for i, rule := range order {
+			if !known[rule.Metric] {
+				return nil, errAt(blk.Line, "sorting: %s не считается — ни протокол, ни правила подсчёта такой метрики не дают (есть %s)",
+					rule.Metric, strings.Join(sortedNames(known), ", "))
+			}
 			names[i] = rule.Metric
 		}
 		config["order"] = names

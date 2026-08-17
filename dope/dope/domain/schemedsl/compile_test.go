@@ -644,6 +644,40 @@ func TestSortingAcceptsAnyDeclaredMetric(t *testing.T) {
 	}
 }
 
+// A sorting key the Protocol never writes and the Kind never derives is a
+// compile error that names it; what the Protocol writes to match_results
+// (ЭК's per-номинал counts) and what the Kind adds (a reseed's shares, a
+// group's разница) both compile — each on its own Kind.
+func TestSortingKnowsProtocolAndKindMetrics(t *testing.T) {
+	group := func(sorting string) string {
+		return "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nsorting: [" + sorting + "]\n"
+	}
+	reseed := func(sorting string) string {
+		return "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: true\nsorting: [" + sorting + "]\n"
+	}
+	flat := func(sorting string) string {
+		return "[scheme]\ntype: flat\nteams: 9\nsorting: [" + sorting + "]\n"
+	}
+	compileSrc(t, group("points, correct_50, diff"), Input{GameType: "ek"})
+	compileSrc(t, reseed("place_sum, taken_share, correct_50"), Input{GameType: "ek"})
+	compileSrc(t, flat("place, total, correct_50"), Input{GameType: "ek"})
+	for _, tc := range []struct{ name, src, want string }{
+		{"nobody measures", group("points, victories"), "victories"},
+		{"a reseed's share on a group", group("points, taken_share"), "taken_share"},
+		{"a group's разница on a reseed", reseed("place_sum, conceded"), "conceded"},
+		{"a group's очки on a flat game", flat("points"), "points"},
+	} {
+		doc, err := Parse(tc.src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = Compile(doc, Input{GameType: "ek"})
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: err = %v, want one naming %s", tc.name, err, tc.want)
+		}
+	}
+}
+
 // ЭК's bracket is a single elimination of four-seat бои where two proceed —
 // the same Kind as a classic bracket, at a different size. The 1/4 is played
 // three to a table, so the size is a per-round override.

@@ -1,8 +1,6 @@
 package protocol
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -20,8 +18,21 @@ type ek struct{}
 
 func (ek) Code() string { return "ek" }
 
-// Metrics: Σ, Σ+ (положительные ответы), перестрелка и тайбрейк.
-func (ek) Metrics() []string { return []string{"total", "plus", "shootoutTotal", "tiebreak"} }
+func (ek) Params() []Param { return []Param{{Key: "themes", Config: "themes"}} }
+
+func (ek) TeamBlob() bool { return true }
+
+// An ЭК бой is a seat plan until it is finished; a re-seed may still move its
+// teams, and their marks go with them.
+func (ek) Started(state json.RawMessage) bool { return false }
+
+func (ek) Metrics() []string {
+	names := []string{"total", "plus", "shootoutTotal", "tiebreak"}
+	for _, value := range store.QuestionValues {
+		names = append(names, fmt.Sprintf("correct_%d", value), fmt.Sprintf("wrong_%d", value))
+	}
+	return names
+}
 
 type ekConfig struct {
 	Participants int `json:"participants"`
@@ -40,13 +51,6 @@ func (ek) EmptyState(cfg json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(state)
 }
 
-// WriteResultsTx keeps EK's legacy match_results shape (places from state,
-// metrics_json with correctCounts arrays) byte-for-byte — the parity gate
-// depends on it. It satisfies scoring.LegacyResultWriter.
-func (ek) WriteResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState) error {
-	return store.RecalculateMatchResultsForStateTx(ctx, tx, match)
-}
-
 func (ek) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error) {
 	var state store.MatchState
 	if err := json.Unmarshal(stateJSON, &state); err != nil {
@@ -55,15 +59,17 @@ func (ek) Score(cfg, stateJSON json.RawMessage) ([]structure.SlotOutcome, error)
 	view := store.BuildView(state)
 	outcomes := make([]structure.SlotOutcome, len(view.Participants))
 	for i, team := range view.Participants {
-		outcomes[i] = structure.SlotOutcome{
-			Place: team.Place,
-			Metrics: map[string]float64{
-				"total":         float64(team.Total),
-				"plus":          float64(team.Plus),
-				"shootoutTotal": float64(team.ShootoutTotal),
-				"tiebreak":      float64(team.Tiebreak),
-			},
+		metrics := map[string]float64{
+			"total":         float64(team.Total),
+			"plus":          float64(team.Plus),
+			"shootoutTotal": float64(team.ShootoutTotal),
+			"tiebreak":      float64(team.Tiebreak),
 		}
+		for k, value := range store.QuestionValues {
+			metrics[fmt.Sprintf("correct_%d", value)] = float64(team.CorrectCounts[k])
+			metrics[fmt.Sprintf("wrong_%d", value)] = float64(team.WrongCounts[k])
+		}
+		outcomes[i] = structure.SlotOutcome{Place: team.Place, Metrics: metrics}
 	}
 	return outcomes, nil
 }

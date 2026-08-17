@@ -45,14 +45,27 @@ type DBMatchState struct {
 	Themes int
 }
 
-// IsEKShaped reports whether the match's state blob follows the EK team-keyed
-// blob vocabulary (matchops/MatchBlob); every other protocol owns its state as
-// an opaque JSON document addressed by generic set ops.
-// Личная СИ shares the shape: «участник × тема × пять ответов» is one blob,
-// so it is edited, viewed, replayed and scored on ЭК's path rather than owning
-// a second implementation of the same grid.
-func (m DBMatchState) IsEKShaped() bool {
-	return m.GameType == "" || m.GameType == "ek" || m.GameType == "si"
+// teamBlobProtocols are the Protocols whose match state is the team-keyed
+// blob (matchops/MatchBlob), which the loader projects into slots and every
+// generic edit addresses by team; each registers itself (protocol.Register).
+// A game with no type is the legacy ЭК fixture.
+var teamBlobProtocols = map[string]bool{"": true}
+
+func RegisterTeamBlob(code string) { teamBlobProtocols[code] = true }
+
+func TeamBlobShaped(gameType string) bool { return teamBlobProtocols[gameType] }
+
+// ProtocolState is the document the match's Protocol scores: the projected
+// MatchState for a team-blob game, the raw document for the rest.
+func (m DBMatchState) ProtocolState() json.RawMessage {
+	if TeamBlobShaped(m.GameType) {
+		state, _ := json.Marshal(m.State)
+		return state
+	}
+	if m.RawState == "" {
+		return json.RawMessage("{}")
+	}
+	return json.RawMessage(m.RawState)
 }
 
 // MatchViewFrom scores a loaded match into its client-facing view, joining the
@@ -60,7 +73,7 @@ func (m DBMatchState) IsEKShaped() bool {
 // document verbatim in State plus light slot-occupant rows — the renderer owns
 // the shape, the view only frames it.
 func MatchViewFrom(match DBMatchState) MatchView {
-	if !match.IsEKShaped() {
+	if !TeamBlobShaped(match.GameType) {
 		teams := make([]ParticipantView, len(match.State.Participants))
 		for i, team := range match.State.Participants {
 			teams[i] = ParticipantView{ID: team.ID, Name: team.Name, Place: team.Place}
@@ -198,7 +211,7 @@ where `+where, args...).
 	}
 	match.Themes = stageThemeCount(stageConfig)
 	match.RawState = stateJSON
-	if match.IsEKShaped() {
+	if TeamBlobShaped(match.GameType) {
 		blob, err := ParseMatchBlob(stateJSON)
 		if err != nil {
 			return DBMatchState{}, fmt.Errorf("match %d state: %w", match.MatchID, err)
@@ -262,7 +275,7 @@ order by ms.slot_index`, match.MatchID)
 	if err := slotRows.Close(); err != nil {
 		return DBMatchState{}, err
 	}
-	if !match.IsEKShaped() {
+	if !TeamBlobShaped(match.GameType) {
 		for _, slot := range slots {
 			for len(match.State.Participants) <= slot.Index {
 				match.State.Participants = append(match.State.Participants, ParticipantState{})

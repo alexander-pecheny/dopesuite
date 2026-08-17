@@ -116,6 +116,8 @@ func flatOrder(conf flatConfig) []string {
 	return conf.Order
 }
 
+func (flat) Metrics() []string { return []string{"place"} }
+
 func (flat) Order(cfg json.RawMessage) []SortRule {
 	var conf flatConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
