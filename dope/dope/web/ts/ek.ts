@@ -26,6 +26,8 @@ import { create as createStatsSync } from "./stats-sync.js";
 import type { StatsMatchEvent, StatsSyncGameTable } from "./stats-sync.js";
 import { buildFestGrid, buildReseedStagePanel, parseScheme } from "./fest-grid.js";
 import { computeGroupRounds } from "./group-stats.js";
+import { gameTabs, canonicalKey, groupLabel, RESEED_TAB_CODE } from "./game-tabs.js";
+import type { GameTab, TabKind } from "./game-tabs.js";
 import type { ReseedEntry } from "./fest-grid.js";
 import { icon } from "./icons_gen.js";
 
@@ -491,7 +493,7 @@ async function loadStage(): Promise<void> {
   // A legacy code survives until the fest arrives and renderStage translates
   // it — that translation must not read as "the user switched tabs".
   if (route.stageCode !== stageCode &&
-    gameTable.canonicalStageCode(ekSchemeStages(), stageCode) !== route.stageCode) return;
+    canonicalStageCode(stageCode) !== route.stageCode) return;
   renderStage();
   // Background prefetch of every other stage. Each payload is small and makes
   // subsequent tab switches instant (data + pane already cached).
@@ -1204,7 +1206,7 @@ function renderFest(): void {
 function renderStage(): void {
   if (!fest) return;
   resetMatchTableIndex();
-  if (route.stageCode) route.stageCode = gameTable.canonicalStageCode(ekSchemeStages(), route.stageCode);
+  if (route.stageCode) route.stageCode = canonicalStageCode(route.stageCode);
   const stageCode = route.stageCode!;
   const stage = ekSchemeStages().find((s) => s.code === stageCode) || mergedStage(fest, stageCode);
   setPageMode("grid");
@@ -1321,24 +1323,14 @@ function render(): void {
   focusActiveCell({preventScroll: true});
 }
 
+const TAB_PATHS: Partial<Record<TabKind, string>> = {grid: "/", venues: "/venues", seedImport: "/seed-import", stats: "/stats", roster: "/roster"};
+
 function gameSubnavItems(): Array<{href: string; label: string; key: string}> {
-  const items = [
-    {href: route.base + "/", label: "Сетка", key: "grid"},
-    {href: route.base + "/venues", label: "Площадки", key: "venues"},
-  ];
-  if (!viewer) items.push({href: route.base + "/seed-import", label: "Импорт команд", key: "seedImport"});
-  ekSchemeStages().forEach((stage) => {
-    items.push({
-      href: `${route.base}/stage/${encodeURIComponent(stage.code)}`,
-      label: gameTable.stageTabLabel(stage),
-      key: `stage:${stage.code}`,
-    });
-  });
-  // Статистика and Составы sit at the very end, after all stage tabs. An
-  // individual game has no составы: its Сетка already names every player.
-  items.push({href: route.base + "/stats", label: "Статистика", key: "stats"});
-  if (!individualGame()) items.push({href: route.base + "/roster", label: "Составы", key: "roster"});
-  return items;
+  return ekTabs().map((tab) => ({
+    key: tab.key,
+    label: tab.label,
+    href: route.base + (tab.stage ? `/stage/${encodeURIComponent(tab.stage.code)}` : TAB_PATHS[tab.kind] || "/"),
+  }));
 }
 
 function renderEKTabs(): void {
@@ -1413,8 +1405,18 @@ function stageCodeForMatch(matchCode: string | undefined): string {
   return "";
 }
 
+function ekTabs(): GameTab[] {
+  return gameTabs(rawSchemeStages() as StageRef[], {game: individualGame() ? "si" : "ek", viewer});
+}
+
+// ekSchemeStages is what the tabs show, in tab order — a круг or the folded
+// Пересев is a synthetic stage; the rest are the scheme's own.
 function ekSchemeStages(): HostStage[] {
-  return gameTable.foldReseedStages(gameTable.roundStages(rawSchemeStages() as StageRef[])) as HostStage[];
+  return ekTabs().flatMap((tab) => tab.stage ? [tab.stage as HostStage] : []);
+}
+
+function canonicalStageCode(code: string): string {
+  return canonicalKey(ekTabs(), `stage:${code}`).replace(/^stage:/, "");
 }
 
 // buildGroupStandingsPane is the sheets' «Группы» view: every группа of the
@@ -1436,7 +1438,7 @@ function buildGroupStandingsPane(stage: HostStage): HTMLElement {
         if (entrant.label) rows.push({name: entrant.label, points: 0, rounds: new Array<number>(roundCount).fill(0)});
       }
     }
-    const title = String(schemeStage?.title || "").match(/Группа\s*\S+$/)?.[0] || String(schemeStage?.title || code);
+    const title = schemeStage ? groupLabel(schemeStage as StageRef) : code;
     return {title, roundCount, rows};
   });
   return gameTable.buildGroupStandingsView(groups);
@@ -1448,7 +1450,7 @@ function buildGroupStandingsPane(stage: HostStage): HTMLElement {
 function buildReseedPanes(stageCode: string): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "reseed-fold";
-  const members = stageCode === gameTable.RESEED_TAB_CODE
+  const members = stageCode === RESEED_TAB_CODE
     ? (ekSchemeStages().find((stage) => stage.code === stageCode)?.members || [])
     : [stageCode];
   const raw = rawSchemeStages();

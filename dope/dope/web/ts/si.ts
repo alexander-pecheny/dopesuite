@@ -3,6 +3,7 @@
 // self-booting side-effect module bundled by pages/si.ts.
 
 import {DopeTable} from "./match-table.js";
+import {gameTabs} from "./game-tabs.js";
 import type {
   AdoptedGameSnapshot,
   CellCoord,
@@ -125,12 +126,6 @@ function darkenHex(hex: string, factor: number): string {
   return "#" + h(ch(1)) + h(ch(3)) + h(ch(5));
 }
 const teamNameCollator = new Intl.Collator("ru", {numeric: true, sensitivity: "base"});
-const KSI_TABS = [
-  {key: "detailed", label: "Подробно"},
-  {key: "results", label: "Итог"},
-  {key: "refusals", label: "Отказы"},
-  {key: "roster", label: "Составы"},
-];
 
 const route = gameTable.parseGameRoute();
 const viewer = Boolean(route.viewer);
@@ -179,16 +174,13 @@ let presence: HostPresence | null = null;
 let cellSelection: CellRangeSelection | null = null;
 const tabScroll = new Map<string, {top: number; left: number}>();
 
-// The «Отказы» (refusals) tab is a host-only control surface; its effect — declined
-// teams dropping out of the «Итог» ranking — is visible to spectators in that tab, so
-// they never need the management list itself.
-function visibleTabs(): Array<{key: string; label: string}> {
-  return KSI_TABS.filter((t) => t.key !== "refusals" || !viewer);
-}
+// The «Отказы» tab is a host-only control surface; its effect — declined teams
+// dropping out of the «Итог» ranking — is visible to spectators in that tab.
+const TABS = gameTabs([], {game: "ksi", viewer});
 
 function tabFromHash(): string | null {
   const key = (window.location.hash || "").replace(/^#/, "");
-  return visibleTabs().some((t) => t.key === key) ? key : null;
+  return TABS.some((t) => t.key === key) ? key : null;
 }
 
 window.addEventListener("hashchange", () => {
@@ -353,7 +345,7 @@ function render(options: {preserveScroll?: boolean} = {}): void {
   document.title = pageTitle();
   if (isTeamMode()) {
     rememberTabScroll(renderedTab);
-    if (!visibleTabs().some((t) => t.key === activeTab)) activeTab = "detailed";
+    if (!TABS.some((t) => t.key === activeTab)) activeTab = "detailed";
     renderTabs();
     const node = activeTab === "results"
       ? buildResultsTable()
@@ -732,7 +724,7 @@ function renderTabs(): void {
     return;
   }
   siTabsRoot.hidden = false;
-  gameTable.renderTabBar(siTabsRoot, visibleTabs(), activeTab, (key) => {
+  gameTable.renderTabBar(siTabsRoot, TABS, activeTab, (key) => {
     activeTab = key;
     if (window.location.hash.replace(/^#/, "") !== key) {
       history.replaceState(null, "", `#${key}`);

@@ -2,6 +2,7 @@
 // entry-cell navigation, shootout rounds, the Экран projector board, SSE state
 // sync. Converted from the legacy od.js; boots itself on import (ADR-0001).
 import { DopeTable } from "./match-table.js";
+import { gameTabs } from "./game-tabs.js";
 import { DopeEntryModel } from "./entry-model.js";
 import { icon } from "./icons_gen.js";
 import type {
@@ -215,17 +216,9 @@ const ENTRY_SELECTION_CLASSES = [
   "entry-selection-right",
 ];
 
-const TABS: Array<{key: string; label: string}> = [
-  {key: "results", label: "Итог"},
-  {key: "detailed", label: "Подробно"},
-  {key: "input", label: "Ввод"},
-  // Экран (проекторное табло) is a host-only tool. Viewers never get the tab —
-  // they only ever see the board when a host projects it on an actual screen.
-  // (tabFromHash() filters against TABS, so #screen also can't be reached by a
-  // viewer via the URL hash.)
-  ...(viewer ? [] : [{key: "screen", label: "Экран"}]),
-  {key: "roster", label: "Составы"},
-];
+// Экран (проекторное табло) is a host-only tab; tabFromHash() filters against
+// TABS, so a viewer can't reach it by hash either.
+const TABS = gameTabs([], {game: "od", viewer});
 
 function tabFromHash(): string | null {
   const key = (window.location.hash || "").replace(/^#/, "");

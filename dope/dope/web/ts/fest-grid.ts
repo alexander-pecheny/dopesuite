@@ -1,5 +1,6 @@
 import { markNameOverflow } from "./widgets.js";
 import { festLetters, letteredTitle, standingsTable, type StageRef } from "./match-table.js";
+import { blockLabel, groupLabel } from "./game-tabs.js";
 
 export interface FestGridVenueObject {
   number?: unknown;
@@ -188,23 +189,6 @@ function groupStagesByBlock(stages: FestGridStage[]): FestGridStage[][] {
   return buckets;
 }
 
-// blockColumnTitle is what the shared column is called: the группы's common
-// prefix («Групповой этап. Группа 1» → «Групповой этап», «DE 1» → «DE»).
-function blockColumnTitle(stage: FestGridStage): string {
-  const title = String(stage.title || "");
-  const named = title.replace(/\.?\s*Группа\s*\S+$/, "");
-  if (named !== title) return named || "Групповой этап";
-  return title.replace(/\s*\d+$/, "") || title;
-}
-
-// blockGroupLabel is the sub-heading a группа keeps inside its Block's column.
-function blockGroupLabel(stage: FestGridStage): string {
-  const title = String(stage.title || "");
-  const named = title.match(/Группа\s*\S+$/);
-  if (named) return named[0];
-  return title;
-}
-
 function buildBlockColumn(
   bucket: FestGridStage[],
   liveStages: Map<string | undefined, FestGridStage>,
@@ -219,7 +203,7 @@ function buildBlockColumn(
 
   const header = document.createElement("div");
   header.className = "grid-stage-head";
-  header.appendChild(el("h2", "", blockColumnTitle(first)));
+  header.appendChild(el("h2", "", blockLabel(bucket as StageRef[])));
   section.appendChild(header);
 
   // One container for the whole stack: .grid-stage lays out via
@@ -404,7 +388,7 @@ function buildStandingsStage(
     header.href = stageHref(stage, options);
     header.classList.add("grid-stage-link");
   }
-  header.appendChild(el("h2", "", stage.grain?.group ? blockColumnTitle(stage) : stage.title));
+  header.appendChild(el("h2", "", stage.grain?.group ? blockLabel([stage as StageRef]) : stage.title));
   section.appendChild(header);
   const body = document.createElement("div");
   body.className = "grid-matches";
@@ -423,7 +407,7 @@ interface TableHead {
 
 function tableHead(stage: FestGridStage, liveStage: FestGridStage): TableHead {
   return {
-    title: stage.grain?.group ? blockGroupLabel(stage) : String(stage.title || ""),
+    title: stage.grain?.group ? groupLabel(stage as StageRef) : String(stage.title || ""),
     venue: stageVenue(stage, liveStage),
   };
 }

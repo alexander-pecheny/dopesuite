@@ -758,6 +758,7 @@ export interface StageRef {
   // stages; legacy is the pre-slug `@` spelling a synthetic tab answers to.
   slug?: string;
   legacy?: string;
+  kind?: string;
   grain?: {block?: string; wave?: number; group?: string};
   matches?: StageRefMatch[];
   // members names the server stages a displayed stage is assembled from.
@@ -907,98 +908,6 @@ export function buildGroupStandingsView(groups: GroupStandingsGroup[]): HTMLElem
   return wrap;
 }
 
-// RESEED_TAB_CODE names the one displayed stage all reseeds fold into.
-export const RESEED_TAB_CODE = "reseeds";
-
-// foldReseedStages gathers every reseed into one «Пересев» tab, sitting where
-// the first one sat, with the server stages as members — личная СИ reseeds
-// before every play-off round, and seven identical tabs said nothing six of
-// them didn't. A lone reseed keeps its own tab.
-export function foldReseedStages(stages: StageRef[]): StageRef[] {
-  const reseeds = stages.filter((stage) => stageType(stage) === "reseed");
-  if (reseeds.length < 2) return stages;
-  const out: StageRef[] = [];
-  let emitted = false;
-  for (const stage of stages) {
-    if (stageType(stage) !== "reseed") {
-      out.push(stage);
-      continue;
-    }
-    if (!emitted) {
-      emitted = true;
-      out.push({
-        code: RESEED_TAB_CODE,
-        title: "Пересев",
-        stage_type: "reseed",
-        members: reseeds.map((reseed) => reseed.code),
-      });
-    }
-  }
-  return out;
-}
-
-// roundStages turns a Block of Groups into one tab per круг. The sheets enter
-// protocols by круг — «Круг 1» through «Круг 4», every группа at once — because
-// that is the order the бои are played in; a tab per группа is the order they
-// are ranked in, which is what the Сетка already shows.
-//
-// A Block with a single Group is left alone: there is no круг to gather across.
-export function roundStages(stages: StageRef[]): StageRef[] {
-  const out: StageRef[] = [];
-  const emitted = new Set<string>();
-  for (const stage of stages) {
-    const block = stage.grain?.block || "";
-    if (!block || !stage.grain?.group) {
-      out.push(stage);
-      continue;
-    }
-    if (emitted.has(block)) continue;
-    emitted.add(block);
-    const groups = stages.filter((s) => s.grain?.block === block && s.grain?.group);
-    if (groups.length < 2) {
-      out.push(stage);
-      continue;
-    }
-    out.push(...gatherRounds(block, groups));
-  }
-  return out;
-}
-
-function gatherRounds(block: string, groups: StageRef[]): StageRef[] {
-  const byRound = new Map<number, StageRefMatch[]>();
-  for (const group of groups) {
-    for (const match of group.matches || []) {
-      const round = Number(match.round || 1);
-      const titled = {...match, group: groupLabel(group)};
-      const list = byRound.get(round);
-      if (list) list.push(titled);
-      else byRound.set(round, [titled]);
-    }
-  }
-  const members = groups.map((group) => group.code);
-  // The synthetic codes land in URLs, so they read as words: the block's slug
-  // where the scheme names one, `-standings`/`-rN` otherwise. The old `@`
-  // spellings ride along as `legacy` for bookmarks.
-  const slug = groups[0].slug || "";
-  // The Block's own tab leads: the sheets' «Группы» view, every группа's
-  // standings on one tab, before the круг protocol tabs.
-  const standings: StageRef = {
-    code: slug || `${block}-standings`,
-    legacy: `${block}@standings`,
-    title: blockTabTitle(groups[0]),
-    stage_type: "standings",
-    members,
-  };
-  return [standings, ...Array.from(byRound.keys()).sort((a, b) => a - b).map((round) => ({
-    code: `${slug || block}-r${round}`,
-    legacy: `${block}@r${round}`,
-    title: `Круг ${round}`,
-    stage_type: "matches",
-    matches: byRound.get(round) || [],
-    members,
-  }))];
-}
-
 // festLetters is every бой's буква by code, read off the fest view: the
 // compiler dealt them (A..Z, AA.. in schedule order, none for a block that
 // declined) and the store carries them, so a page never counts.
@@ -1019,54 +928,8 @@ export function letteredTitle(title: string, letter: string | undefined): string
   return title.replace(/Бой\s+\d+/, `Бой ${letter}`);
 }
 
-// canonicalStageCode resolves a requested stage code against the displayed
-// tabs, translating the legacy `s1@standings`-style spellings old bookmarks
-// still carry into whatever the tab is called now.
-export function canonicalStageCode(stages: StageRef[], code: string): string {
-  if (stages.some((stage) => stage.code === code)) return code;
-  const legacy = stages.find((stage) => stage.legacy === code);
-  return legacy ? legacy.code : code;
-}
-
-// blockTabTitle is what a Block of Groups is called on its own tab: the
-// групп's shared prefix («Групповой этап. Группа 1» → «Групповой этап»).
-function blockTabTitle(group: StageRef | undefined): string {
-  const title = String(group?.title || "");
-  const named = title.replace(/\.?\s*Группа\s*\S+$/, "");
-  if (named && named !== title) return named;
-  return "Групповой этап";
-}
-
-// groupLabel is what a бой is prefixed with once круги mix the группы together:
-// «Группа 3. Бой 7» says which table it was, which the tab no longer does.
-export function groupLabel(stage: StageRef): string {
-  const title = String(stage.title || "");
-  const named = title.match(/Группа\s*\S+$/);
-  return named ? named[0] : `Группа ${stage.grain?.group || "?"}`;
-}
-
 export function stageType(stage: {stage_type?: string; type?: string} | null | undefined): string {
   return stage?.stage_type || stage?.type || "";
-}
-
-export function stageTabLabel(stage: StageRef): string {
-  if (stageType(stage) === "reseed") return "Пересев";
-  switch (stage.code) {
-  case "r16_run1":
-    return "1/16-1";
-  case "r16_run2":
-    return "1/16-2";
-  case "r8":
-    return "1/8";
-  case "r4":
-    return "1/4";
-  case "r2":
-    return "1/2";
-  case "final":
-    return "Финал";
-  default:
-    return stage.title || stage.code;
-  }
 }
 
 export function teamListCell(teams: Array<{name: string}> | null | undefined): HTMLTableCellElement {
@@ -1529,7 +1392,6 @@ export const DopeTable = {
   td,
   resultsTeamCell,
   standingsTable,
-  groupLabel,
   option,
   applyDeltaOps,
   createClientRecorder,
@@ -1565,14 +1427,9 @@ export const DopeTable = {
   formatNumber,
   formatPlace,
   stageType,
-  roundStages,
-  canonicalStageCode,
   festLetters,
   letteredTitle,
-  foldReseedStages,
-  RESEED_TAB_CODE,
   buildGroupStandingsView,
-  stageTabLabel,
   teamListCell,
   buildVenuesTable,
   fetchFestRoster,
