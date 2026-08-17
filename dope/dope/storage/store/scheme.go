@@ -38,10 +38,8 @@ type SchemeSeeding struct {
 	Sort   []SchemeSortRule `json:"sort,omitempty"`
 }
 
-type SchemeSortRule struct {
-	Metric string `json:"metric"`
-	Dir    string `json:"dir"`
-}
+// SchemeSortRule is a SortRule as a scheme writes it — the same key.
+type SchemeSortRule = SortRule
 
 type SchemeTeam struct {
 	Name    string   `json:"name"`

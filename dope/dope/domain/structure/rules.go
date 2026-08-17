@@ -24,6 +24,9 @@ type Rules struct {
 	Standings map[string]string `json:"standings"`
 }
 
+// Empty reports a nil or blank rule set.
+func (r *Rules) Empty() bool { return r == nil || len(r.Bout)+len(r.Standings) == 0 }
+
 type namedRule struct {
 	name string
 	expr *expr.Expr
@@ -37,7 +40,10 @@ type compiledRules struct {
 // compileRules parses every rule and orders each grain so a rule that reads
 // another's output runs after it. Order is derived, not authored: a scheme's
 // keys are a set, and a YAML map has no order to rely on.
-func compileRules(rules Rules) (*compiledRules, error) {
+func compileRules(rules *Rules) (*compiledRules, error) {
+	if rules == nil {
+		rules = &Rules{}
+	}
 	bout, err := compileGrain("bout", rules.Bout)
 	if err != nil {
 		return nil, err

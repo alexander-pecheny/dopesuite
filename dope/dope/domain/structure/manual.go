@@ -18,9 +18,7 @@ type manual struct{}
 func (manual) Code() string { return "matches" }
 
 func (manual) Schedule(cfg json.RawMessage) ([]store.SchemeMatch, error) {
-	var conf struct {
-		Matches []store.SchemeMatch `json:"matches"`
-	}
+	var conf ManualConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {
 		return nil, fmt.Errorf("matches config: %w", err)
 	}

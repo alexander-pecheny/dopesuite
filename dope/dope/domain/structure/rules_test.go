@@ -20,7 +20,7 @@ func seat(id int64, place float64, metrics map[string]float64) SlotOutcome {
 // The same arithmetic at the two grains gives different answers, which is the
 // whole reason both exist.
 func TestGrainsAreNotInterchangeable(t *testing.T) {
-	rules, err := compileRules(Rules{
+	rules, err := compileRules(&Rules{
 		Bout:      map[string]string{"points": "4 - place"},
 		Standings: map[string]string{"points_share": "points / (3 * bouts)"},
 	})
@@ -50,7 +50,7 @@ func TestGrainsAreNotInterchangeable(t *testing.T) {
 // разница reaches the other seats of its own бой, and reads the same whether
 // the бой seats two or four.
 func TestOpponentAggregates(t *testing.T) {
-	rules, err := compileRules(Rules{Bout: map[string]string{
+	rules, err := compileRules(&Rules{Bout: map[string]string{
 		"diff":     "taken - opp_taken",
 		"gap":      "taken - opp_max_taken",
 		"beat_one": "taken > opp1_taken ? 1 : 0",
@@ -85,7 +85,7 @@ func TestOpponentAggregates(t *testing.T) {
 // `tied` says a бой was shared without the reader having to know that a draw
 // is spelled place 1.5.
 func TestTiedCountsTheSharers(t *testing.T) {
-	rules, _ := compileRules(Rules{Bout: map[string]string{
+	rules, _ := compileRules(&Rules{Bout: map[string]string{
 		"points": "taken == 0 ? 0 : (tied > 0 ? 2 : (place == 1 ? 3 : 1))",
 	}})
 	draw := bout(true, 6,
@@ -110,7 +110,7 @@ func TestTiedCountsTheSharers(t *testing.T) {
 
 // Rules are ordered by what they read, so a scheme's key order never matters.
 func TestRuleOrderIsDerived(t *testing.T) {
-	rules, err := compileRules(Rules{Standings: map[string]string{
+	rules, err := compileRules(&Rules{Standings: map[string]string{
 		"zebra":  "alpha * 2",   // sorts last alphabetically, must run last
 		"alpha":  "base + 1",    //
 		"middle": "zebra + 100", //
@@ -128,7 +128,7 @@ func TestRuleOrderIsDerived(t *testing.T) {
 }
 
 func TestCyclicRulesAreRejected(t *testing.T) {
-	if _, err := compileRules(Rules{Standings: map[string]string{
+	if _, err := compileRules(&Rules{Standings: map[string]string{
 		"a": "b + 1",
 		"b": "a + 1",
 	}}); err == nil {
@@ -137,7 +137,7 @@ func TestCyclicRulesAreRejected(t *testing.T) {
 }
 
 func TestBadExpressionNamesItsRule(t *testing.T) {
-	_, err := compileRules(Rules{Bout: map[string]string{"points": "4 - "}})
+	_, err := compileRules(&Rules{Bout: map[string]string{"points": "4 - "}})
 	if err == nil {
 		t.Fatal("expected a parse error")
 	}
@@ -205,7 +205,7 @@ func TestSIGroupScheduleMeetsEveryoneOnce(t *testing.T) {
 // Очки за бой на троих: 4 − место, и поделённое место платит среднее.
 func TestSIGroupStandingsPayByPlace(t *testing.T) {
 	rr, _ := RankerFor("rr")
-	cfg, _ := json.Marshal(map[string]any{"matchSize": 3, "order": []string{"points", "total"}})
+	cfg, _ := json.Marshal(RRConfig{MatchSize: 3, Order: []string{"points", "total"}})
 	results := []MatchOutcome{
 		bout(true, 6,
 			seat(1, 1, map[string]float64{"total": 90}),
@@ -216,7 +216,7 @@ func TestSIGroupStandingsPayByPlace(t *testing.T) {
 			seat(2, 1.5, map[string]float64{"total": 50}),
 			seat(3, 3, map[string]float64{"total": 10})),
 	}
-	ranked, err := rr.Standings(cfg, results)
+	ranked, err := rr.Standings(cfg, results, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}

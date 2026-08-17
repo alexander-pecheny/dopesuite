@@ -7,17 +7,36 @@ import (
 	"dope/dope/storage/store"
 )
 
-func mustSchedule(t *testing.T, kind string, cfg string) []store.SchemeMatch {
+// mustSchedule builds a Kind's schedule from its typed config — the same type
+// the compiler writes, so a renamed field fails here at compile time.
+func mustSchedule(t *testing.T, kind string, cfg any) []store.SchemeMatch {
 	t.Helper()
 	k, ok := ExpanderFor(kind)
 	if !ok {
 		t.Fatalf("kind %q not registered", kind)
 	}
-	matches, err := k.Schedule(json.RawMessage(cfg))
+	matches, err := k.Schedule(mustJSON(t, cfg))
 	if err != nil {
 		t.Fatalf("Schedule: %v", err)
 	}
 	return matches
+}
+
+func mustJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func seeds(numbers ...int) []store.SchemeSlot {
+	slots := make([]store.SchemeSlot, len(numbers))
+	for i, n := range numbers {
+		slots[i] = store.SchemeSlot{Seed: &store.SchemeSeedRef{Number: n}}
+	}
+	return slots
 }
 
 func TestKindRegistry(t *testing.T) {
@@ -36,10 +55,7 @@ func TestKindRegistry(t *testing.T) {
 // Standard bracket order for 8 seeds is the recursive fold 1,8,4,5,2,7,3,6:
 // undisturbed favorites meet as 1v4 / 2v3 in semis and 1v2 in the final.
 func TestSingleElimScheduleEight(t *testing.T) {
-	matches := mustSchedule(t, "se", `{
-		"code": "po", "venue": 3, "bronze": true,
-		"entrants": ["seed-1","seed-2","seed-3","seed-4","seed-5","seed-6","seed-7","seed-8"]
-	}`)
+	matches := mustSchedule(t, "se", SEConfig{Code: "po", Venue: 3, Bronze: true, Entrants: seeds(1, 2, 3, 4, 5, 6, 7, 8)})
 
 	byCode := map[string]store.SchemeMatch{}
 	for _, m := range matches {
@@ -95,13 +111,13 @@ func TestSingleElimScheduleEight(t *testing.T) {
 // and the semi losers share rank 3.
 func TestSingleElimStandings(t *testing.T) {
 	kind, _ := RankerFor("se")
-	cfg := json.RawMessage(`{"code":"po","bronze":true,"entrants":["seed-1","seed-2","seed-3","seed-4"]}`)
+	cfg := mustJSON(t, SEConfig{Code: "po", Bronze: true, Entrants: seeds(1, 2, 3, 4)})
 	full, err := kind.Standings(cfg, []MatchOutcome{
 		h2h("po-r1-1", true, 301, 302, 5, 2, 1, 2),
 		h2h("po-r1-2", true, 303, 304, 6, 1, 1, 2),
 		h2h("po-r2-1", true, 303, 301, 4, 3, 1, 2),
 		h2h("po-r2-3p", true, 302, 304, 2, 1, 1, 2),
-	})
+	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -115,7 +131,7 @@ func TestSingleElimStandings(t *testing.T) {
 		h2h("po-r1-2", true, 303, 304, 6, 1, 1, 2),
 		h2h("po-r2-1", false, 301, 303, 0, 0, 0, 0),
 		h2h("po-r2-3p", false, 302, 304, 0, 0, 0, 0),
-	})
+	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -128,9 +144,9 @@ func TestSingleElimStandings(t *testing.T) {
 // The manual kind: its schedule is exactly the authored match list, and it
 // ranks nobody — advancement out of it is by fromMatch refs alone.
 func TestManualKindPassesThroughAuthoredMatches(t *testing.T) {
-	matches := mustSchedule(t, "matches", `{"matches":[
-		{"code":"f-1","title":"Финал","participantCount":4,"slots":["seed-1","seed-2","seed-3","seed-4"]}
-	]}`)
+	matches := mustSchedule(t, "matches", ManualConfig{Matches: []store.SchemeMatch{
+		{Code: "f-1", Title: "Финал", ParticipantCount: 4, Slots: seeds(1, 2, 3, 4)},
+	}})
 	if len(matches) != 1 || matches[0].Code != "f-1" || len(matches[0].Slots) != 4 {
 		t.Fatalf("got %+v, want the single authored match f-1 with 4 slots", matches)
 	}
@@ -156,13 +172,13 @@ func TestPodStandings(t *testing.T) {
 			{Participant: a, Place: pa}, {Participant: b, Place: pb},
 		}}
 	}
-	ranked, err := pod.Standings(json.RawMessage(`{"lives":2}`), []MatchOutcome{
+	ranked, err := pod.Standings(mustJSON(t, PodConfig{Lives: 2}), []MatchOutcome{
 		bout("m1", 1, 1, 1, 2, 2, true),
 		bout("m2", 1, 3, 1, 4, 2, true),
 		bout("m3", 2, 1, 1, 3, 2, true),
 		bout("m4", 2, 2, 1, 4, 2, true),
 		bout("m5", 3, 3, 1, 2, 2, true),
-	})
+	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -175,13 +191,13 @@ func TestPodStandings(t *testing.T) {
 
 	// Mid-play: Г is out (place 4); the survivors' места are still being played,
 	// so they stay unplaced, and a drawn бой (shared place) is no Loss.
-	ranked, err = pod.Standings(json.RawMessage(`{}`), []MatchOutcome{
+	ranked, err = pod.Standings(mustJSON(t, PodConfig{}), []MatchOutcome{
 		bout("m1", 1, 1, 1, 2, 2, true),
 		bout("m2", 1, 3, 1, 4, 2, true),
 		bout("m3", 2, 1, 1.5, 3, 1.5, true),
 		bout("m4", 2, 2, 1, 4, 2, true),
 		bout("m5", 3, 3, 0, 2, 0, false),
-	})
+	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -206,7 +222,7 @@ func TestReseedStandings(t *testing.T) {
 	if !ok {
 		t.Fatal("reseed kind not registered")
 	}
-	cfg := json.RawMessage(`{"sort":[{"metric":"place_sum","dir":"asc"},{"metric":"total","dir":"desc"}]}`)
+	cfg := mustJSON(t, ReseedConfig{Sort: []SortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "total", Dir: "desc"}}})
 	outcome := func(code string, teamA, teamB int64, placeA, placeB float64, totalA, totalB float64) MatchOutcome {
 		return MatchOutcome{Code: code, Finished: true, Slots: []SlotOutcome{
 			{Participant: teamA, Place: placeA, Metrics: map[string]float64{"total": totalA}},
@@ -216,7 +232,7 @@ func TestReseedStandings(t *testing.T) {
 	ranked, err := kind.Standings(cfg, []MatchOutcome{
 		outcome("s-1", 1, 2, 1, 2, 100, 60),
 		outcome("s-2", 3, 4, 1, 2, 90, 95),
-	})
+	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -245,8 +261,8 @@ func TestReseedStandings(t *testing.T) {
 // the contenders, so it is not ranked.
 func TestReseedRanksContendersByBandFirst(t *testing.T) {
 	kind, _ := RankerFor("reseed")
-	cfg := json.RawMessage(`{"sort":[{"metric":"total","dir":"desc"}],
-		"contenders":[{"participant":1,"band":1},{"participant":2,"band":0},{"participant":3,"band":1}]}`)
+	cfg := mustJSON(t, ReseedConfig{Sort: []SortRule{{Metric: "total", Dir: "desc"}}})
+	contenders := Inputs{Contenders: []Contender{{Participant: 1, Band: 1}, {Participant: 2, Band: 0}, {Participant: 3, Band: 1}}}
 	outcome := func(code string, a int64, ta float64, b int64, tb float64) MatchOutcome {
 		return MatchOutcome{Code: code, Finished: true, Slots: []SlotOutcome{
 			{Participant: a, Place: 1, Metrics: map[string]float64{"total": ta}},
@@ -257,7 +273,7 @@ func TestReseedRanksContendersByBandFirst(t *testing.T) {
 		outcome("w-1", 1, 300, 9, 10),
 		outcome("w-2", 3, 200, 2, 100),
 		outcome("w-3", 1, 50, 3, 20),
-	})
+	}, contenders)
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -274,7 +290,8 @@ func TestReseedRanksContendersByBandFirst(t *testing.T) {
 // in [1, 1e6], and untied teams keep draw 0.
 func TestReseedDrawLots(t *testing.T) {
 	kind, _ := RankerFor("reseed")
-	cfg := json.RawMessage(`{"seed":"s1","sort":[{"metric":"place_sum","dir":"asc"},{"metric":"draw","dir":"asc"}]}`)
+	cfg := mustJSON(t, ReseedConfig{Sort: []SortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "draw", Dir: "asc"}}})
+	lots := Inputs{Seed: "s1"}
 	tied := func(order [2]int64) []MatchOutcome {
 		return []MatchOutcome{
 			{Code: "m1", Finished: true, Slots: []SlotOutcome{
@@ -284,11 +301,11 @@ func TestReseedDrawLots(t *testing.T) {
 				{Participant: 9, Place: 2, Metrics: map[string]float64{"total": 10}}}},
 		}
 	}
-	first, err := kind.Standings(cfg, tied([2]int64{5, 6}))
+	first, err := kind.Standings(cfg, tied([2]int64{5, 6}), lots)
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
-	swapped, err := kind.Standings(cfg, tied([2]int64{6, 5}))
+	swapped, err := kind.Standings(cfg, tied([2]int64{6, 5}), lots)
 	if err != nil {
 		t.Fatalf("Standings (swapped): %v", err)
 	}
@@ -305,7 +322,7 @@ func TestReseedDrawLots(t *testing.T) {
 		t.Errorf("untied team = %+v, want participant 9 with draw 0", first[2])
 	}
 	// A different seed is a different lottery — the seed has to matter.
-	other, _ := kind.Standings(json.RawMessage(`{"seed":"s2","sort":[{"metric":"place_sum","dir":"asc"},{"metric":"draw","dir":"asc"}]}`), tied([2]int64{5, 6}))
+	other, _ := kind.Standings(mustJSON(t, ReseedConfig{Sort: []SortRule{{Metric: "place_sum", Dir: "asc"}, {Metric: "draw", Dir: "asc"}}}), tied([2]int64{5, 6}), Inputs{Seed: "s2"})
 	if other[0].Metrics["draw"] == first[0].Metrics["draw"] && other[1].Metrics["draw"] == first[1].Metrics["draw"] {
 		t.Errorf("lots did not change with the seed: %v vs %v", first, other)
 	}
@@ -336,7 +353,7 @@ func TestRoundRobinStandings(t *testing.T) {
 		h2h("g-1", true, 101, 102, 5, 3, 1, 2),
 		h2h("g-2", true, 101, 103, 4, 4, 1, 1),
 		h2h("g-3", true, 102, 103, 2, 6, 2, 1),
-	})
+	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -355,7 +372,7 @@ func TestRoundRobinStandingsUnfinishedAndSharedRank(t *testing.T) {
 	ranked, err := kind.Standings(json.RawMessage(`{}`), []MatchOutcome{
 		h2h("g-1", true, 201, 202, 3, 3, 1, 1),
 		h2h("g-2", false, 201, 202, 1, 0, 0, 0),
-	})
+	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -365,7 +382,7 @@ func TestRoundRobinStandingsUnfinishedAndSharedRank(t *testing.T) {
 	}
 	ranked2, err := kind.Standings(json.RawMessage(`{}`), []MatchOutcome{
 		h2h("g-1", true, 201, 202, 3, 3, 1, 1),
-	})
+	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -410,7 +427,7 @@ func TestRoundRobinStandingsHeadToHead(t *testing.T) {
 		h2h("g-5", true, 401, 403, 2, 3, 2, 1),
 		h2h("g-6", true, 402, 404, 0, 3, 2, 1),
 	}
-	ranked, err := kind.Standings(json.RawMessage(`{}`), referenceGroup)
+	ranked, err := kind.Standings(json.RawMessage(`{}`), referenceGroup, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -423,7 +440,7 @@ func TestRoundRobinStandingsHeadToHead(t *testing.T) {
 
 	// The same group under an explicit football-style order ignores the бои
 	// between the tied and ranks Рыб first on diff.
-	footballOrder, err := kind.Standings(json.RawMessage(`{"order":["points","diff","taken"]}`), referenceGroup)
+	footballOrder, err := kind.Standings(mustJSON(t, RRConfig{Order: []string{"points", "diff", "taken"}}), referenceGroup, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings (football order): %v", err)
 	}
@@ -447,7 +464,7 @@ func TestRoundRobinStandingsThreeWayMiniTable(t *testing.T) {
 		h2h("g-4", true, 501, 504, 5, 4, 1, 2),
 		h2h("g-5", true, 502, 504, 4, 0, 1, 2),
 		h2h("g-6", true, 503, 504, 4, 1, 1, 2),
-	})
+	}, Inputs{})
 	if err != nil {
 		t.Fatalf("Standings: %v", err)
 	}
@@ -462,11 +479,7 @@ func TestRoundRobinStandingsThreeWayMiniTable(t *testing.T) {
 // A partial round-robin is schedule data: explicit pairings replace the
 // built-in schedule entirely.
 func TestRoundRobinScheduleExplicitPairings(t *testing.T) {
-	matches := mustSchedule(t, "rr", `{
-		"code": "g",
-		"entrants": ["seed-1","seed-2","seed-3","seed-4"],
-		"pairings": [[[1,4]], [[2,3],[1,3]]]
-	}`)
+	matches := mustSchedule(t, "rr", RRConfig{Code: "g", Entrants: seeds(1, 2, 3, 4), Pairings: [][][]int{{{1, 4}}, {{2, 3}, {1, 3}}}})
 	want := [][2]int{{1, 4}, {2, 3}, {1, 3}}
 	if len(matches) != len(want) {
 		t.Fatalf("got %d matches, want %d", len(matches), len(want))
@@ -482,10 +495,7 @@ func TestRoundRobinScheduleExplicitPairings(t *testing.T) {
 // Expected pairings are the KINSBF group tables (independent source: the
 // generator the community's sheets use), not anything recomputed here.
 func TestRoundRobinScheduleFourEntrants(t *testing.T) {
-	matches := mustSchedule(t, "rr", `{
-		"code": "gA", "label": "A", "venue": 2, "title": "Бой A%d",
-		"entrants": ["seed-1", "seed-3", "seed-5", "seed-7"]
-	}`)
+	matches := mustSchedule(t, "rr", RRConfig{Code: "gA", Label: "A", Venue: 2, Title: "Бой A%d", Entrants: seeds(1, 3, 5, 7)})
 
 	wantSeeds := [][2]int{{1, 3}, {5, 7}, {1, 7}, {3, 5}, {1, 5}, {3, 7}}
 	if len(matches) != len(wantSeeds) {
@@ -518,17 +528,17 @@ func TestRoundRobinScheduleFourEntrants(t *testing.T) {
 // rotate the rest right, pair outside-in, low position first).
 func TestRoundRobinScheduleCircleMethod(t *testing.T) {
 	cases := []struct {
-		entrants string
+		entrants []store.SchemeSlot
 		want     [][2]int
 	}{
-		{`["seed-1","seed-2","seed-3","seed-4","seed-5","seed-6"]`, [][2]int{
+		{seeds(1, 2, 3, 4, 5, 6), [][2]int{
 			{1, 6}, {2, 5}, {3, 4},
 			{1, 5}, {4, 6}, {2, 3},
 			{1, 4}, {3, 5}, {2, 6},
 			{1, 3}, {2, 4}, {5, 6},
 			{1, 2}, {3, 6}, {4, 5},
 		}},
-		{`["seed-1","seed-2","seed-3","seed-4","seed-5"]`, [][2]int{
+		{seeds(1, 2, 3, 4, 5), [][2]int{
 			{2, 5}, {3, 4},
 			{1, 5}, {2, 3},
 			{1, 4}, {3, 5},
@@ -537,14 +547,14 @@ func TestRoundRobinScheduleCircleMethod(t *testing.T) {
 		}},
 	}
 	for _, tc := range cases {
-		matches := mustSchedule(t, "rr", `{"code":"g","entrants":`+tc.entrants+`}`)
+		matches := mustSchedule(t, "rr", RRConfig{Code: "g", Entrants: tc.entrants})
 		if len(matches) != len(tc.want) {
-			t.Fatalf("%s: got %d matches, want %d", tc.entrants, len(matches), len(tc.want))
+			t.Fatalf("%v: got %d matches, want %d", tc.entrants, len(matches), len(tc.want))
 		}
 		for i, m := range matches {
 			got := [2]int{m.Slots[0].Seed.Number, m.Slots[1].Seed.Number}
 			if got != tc.want[i] {
-				t.Errorf("%s: match %d pairs %v, want %v", tc.entrants, i, got, tc.want[i])
+				t.Errorf("%v: match %d pairs %v, want %v", tc.entrants, i, got, tc.want[i])
 			}
 		}
 	}
