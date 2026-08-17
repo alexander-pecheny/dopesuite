@@ -89,6 +89,7 @@ func TestStudchrWholeFest(t *testing.T) {
 		gameID := createSchemeGameFor(t, db, festID, c.gameType, c.title,
 			readFile(t, "../../../scripts/studchr/"+c.scheme), idsFor(t, registry, rosterOf(script)))
 		game := &serverGame{t: t, srv: srv, festID: festID, gameID: gameID, gameType: c.gameType, token: token}
+		game.via = directTransport{game}
 		findings, err := replay.Run(script, game)
 		for _, f := range findings {
 			t.Errorf("%s: %s", c.title, f)
@@ -115,6 +116,19 @@ func TestStudchrWholeFest(t *testing.T) {
 		}}, token)
 	if resp.Code != 200 {
 		t.Fatalf("ОД: %d %s", resp.Code, resp.Body.String())
+	}
+	// The document scores as a game, not just as a stored grid: six tours,
+	// and the winner's Σ is what the sheet printed.
+	var odScheme, odState string
+	if err := db.QueryRow(`select scheme_json, state_json from games where id = ?`, odGame).Scan(&odScheme, &odState); err != nil {
+		t.Fatal(err)
+	}
+	results, err := games.ComputeODResults(odScheme, odState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tours := games.ParseTourComp(odScheme); len(tours) != 6 || len(results.Teams) == 0 || results.Teams[0].Total != 62 {
+		t.Fatalf("ОД: туров %d, лидер %+v — want 6 tours and Σ 62", len(tours), results.Teams[:1])
 	}
 	t.Logf("ОД: %d команд, %d вопросов", len(od.Teams), len(od.Entries))
 
@@ -288,9 +302,9 @@ func seatODTeams(t *testing.T, db *sql.DB, gameID int64, od odData) {
 	if err := json.Unmarshal([]byte(raw), &state); err != nil {
 		t.Fatal(err)
 	}
-	seated := make([]map[string]string, len(od.Teams))
+	seated := make([]map[string]any, len(od.Teams))
 	for i, team := range od.Teams {
-		seated[i] = map[string]string{"name": team.Name, "city": team.City}
+		seated[i] = map[string]any{"number": team.Number, "name": team.Name, "city": team.City}
 	}
 	state["teams"] = seated
 	encoded, err := json.Marshal(state)
