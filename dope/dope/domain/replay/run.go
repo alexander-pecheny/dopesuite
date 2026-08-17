@@ -45,18 +45,6 @@ type StatsReader interface {
 	PlayerStats() ([]Stat, error)
 }
 
-// statColumns names the three [статистика] numbers per game, so a finding says
-// which column disagreed rather than "value 2".
-func statColumns(game string) [3]string {
-	switch game {
-	case "brain":
-		return [3]string{"попытки", "верно", "неверно"}
-	case "ek":
-		return [3]string{"Σ", "Σ+", "темы"}
-	}
-	return [3]string{"Σ", "Σ+", "бои"}
-}
-
 // Play is what one participant did in a бой, in whichever of the two shapes the
 // game uses. It carries the play data alone — the sheet's Σ and место stay out,
 // so a Game cannot quietly apply the answer it is supposed to be checked against.
@@ -218,7 +206,8 @@ func Run(script Script, game Game) ([]Finding, error) {
 		if err != nil {
 			return findings, fmt.Errorf("статистика: %w", err)
 		}
-		columns := statColumns(script.Game)
+		codec, _ := CodecFor(script.Game)
+		columns := codec.Columns
 		statKey := func(s Stat) string { return s.Player + "\x1f" + s.Team }
 		oursBy := make(map[string]Stat, len(ours))
 		for _, stat := range ours {

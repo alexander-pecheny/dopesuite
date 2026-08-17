@@ -40,8 +40,9 @@ table as a бой box, so a planner would now front one box kind, not two.
   seams the note names, then `/code-review`, then commit. Commit messages
   pass `noslop`.
 - Every note ends with acceptance and traps. The Go conformance gate is the
-  studchr replay (`just test-full`, or `go test ./dope/server/tests -run
-  TestReplayStudchr`; ~90 s; skipped by `just test`'s `-short`; ADR-0010);
+  studchr replay (`go test ./dope/server/tests -run TestReplayStudchr`; ~25 s
+  on the direct transport, part of `just test`; the HTTP variants play under
+  `just test-full`; ADR-0010);
   the JS gate is `deno test --parallel dope/web/jstest/`;
   UI work runs the verify skill's hand-over matrix and diffs against dopetest.
 - Read `dope/CLAUDE.md` for the toolchain and `AGENTS.md` (root and dope) for

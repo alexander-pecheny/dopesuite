@@ -1,8 +1,10 @@
 package replay
 
 import (
+	"flag"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 )
 
@@ -79,5 +81,45 @@ func TestStudchrEKTranscriptShape(t *testing.T) {
 	}
 	if len(waves) != 2 || waves[1] != 6 || waves[2] != 6 {
 		t.Errorf("1/16 финала = %v, want два захода по шесть", waves)
+	}
+}
+
+var updateGolden = flag.Bool("update", false, "rewrite docs/studchr2026-discrepancies.md from the transcripts")
+
+// The discrepancies page is generated from the transcripts' overrides and
+// committed under docs/, so a reviewed deviation is never hand-kept. This test
+// keeps the two in step: run with -update to regenerate the page.
+func TestStudchrDiscrepanciesPage(t *testing.T) {
+	paths, err := filepath.Glob("../../../testdata/studchr2026/*.transcript")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Skip("стенограмм ещё нет")
+	}
+	sort.Strings(paths)
+	var scripts []Script
+	for _, path := range paths {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		script, err := Parse(string(src))
+		if err != nil {
+			t.Fatalf("%s: %v", filepath.Base(path), err)
+		}
+		scripts = append(scripts, script)
+	}
+	page := Discrepancies(scripts...)
+	const golden = "../../../docs/studchr2026-discrepancies.md"
+	if *updateGolden {
+		if err := os.WriteFile(golden, []byte(page), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	have, err := os.ReadFile(golden)
+	if err != nil || string(have) != page {
+		t.Fatalf("%s отстала от стенограмм — перегенерируйте: go test ./dope/domain/replay -run Discrepancies -update", golden)
 	}
 }

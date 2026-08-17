@@ -93,7 +93,6 @@ var (
 	EnsureSystemUser          = ensureSystemUser
 	RecalculateMatchResultsTx = recalculateMatchResultsTx
 	SplitPlayerName           = splitPlayerName
-	CreateInvite              = createInvite
 	CreateSessionTx           = createSessionTx
 	HashPassword              = authcred.HashPassword
 	LegacySHA256Password      = authcred.LegacySHA256Password
@@ -125,11 +124,6 @@ func (s *Server) SubmitMatchFinish(ctx context.Context, scope MatchScope, finish
 	return decodeMatchView(data, err)
 }
 
-func (s *Server) SubmitMatchVenue(ctx context.Context, scope MatchScope, number int) (store.MatchView, error) {
-	data, _, err := s.editor().SubmitMatchVenue(ctx, core.FestScope(scope.festScope), scope.MatchID, scope.Code, number)
-	return decodeMatchView(data, err)
-}
-
 func decodeMatchView(data []byte, err error) (store.MatchView, error) {
 	if err != nil {
 		return store.MatchView{}, err
@@ -145,8 +139,7 @@ func (s *Server) CalculateScopedReseed(ctx context.Context, scope FestScope, sta
 func (s *Server) HandleAuthLoginPassword(w http.ResponseWriter, r *http.Request) {
 	s.handleAuthLoginPassword(w, r)
 }
-func (s *Server) HandleAuthLogout(w http.ResponseWriter, r *http.Request) { s.handleAuthLogout(w, r) }
-func (s *Server) HandleAuthMe(w http.ResponseWriter, r *http.Request)     { s.handleAuthMe(w, r) }
+func (s *Server) HandleAuthMe(w http.ResponseWriter, r *http.Request) { s.handleAuthMe(w, r) }
 func (s *Server) HandleAuthPassword(w http.ResponseWriter, r *http.Request) {
 	s.handleAuthPassword(w, r)
 }

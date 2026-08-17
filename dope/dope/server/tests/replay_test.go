@@ -40,10 +40,12 @@ title: Мини-ЭК
 Ушки на макушке | R---- | 10 | 2
 `
 
-// newReplayGame builds the fest a transcript describes and creates its game.
-// The roster order is the seeding — for a scheme with no жребий at all, like
-// личная СИ, it is the tournament's only input.
-func newReplayGame(t *testing.T, dsl, gameType, title string, roster []string) *serverGame {
+// newReplayGame builds the fest a transcript describes and creates its game,
+// driven over HTTP or, direct, through the engine's transactions — the same
+// engine, no batcher window, seconds for a championship. The roster order is
+// the seeding — for a scheme with no жребий at all, like личная СИ, it is the
+// tournament's only input.
+func newReplayGame(t *testing.T, dsl, gameType, title string, roster []string, direct bool) *serverGame {
 	t.Helper()
 	srv := newAuthTestServer(t)
 	// One edit at a time, each awaited: the production batching window would
@@ -67,21 +69,27 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 		}
 	}
 	gameID := createSchemeGame(t, db, festID, gameType, title, dsl)
-	return &serverGame{
+	game := &serverGame{
 		t: t, srv: srv, festID: festID, gameID: gameID, gameType: gameType,
 		token: createTestSession(t, srv, systemUserID(t, srv.Eng().DB)),
 	}
+	game.via = httpTransport{game}
+	if direct {
+		game.via = directTransport{game}
+	}
+	return game
 }
 
 // replayFromTranscript runs a committed transcript against the scheme it names
 // and reports every disagreement, so one failing бой does not hide the rest.
-func replayFromTranscript(t *testing.T, name, gameType, title string) *serverGame {
+// The direct transport is the conformance gate on every `just test`; the HTTP
+// one proves the handlers, the write path and authorisation over the same
+// transcript, once per game type, and only without -short (`just test-full`),
+// where a championship costs a minute and a half.
+func replayFromTranscript(t *testing.T, name, gameType, title string, direct bool) *serverGame {
 	t.Helper()
-	// A whole championship over HTTP is the conformance gate, not a unit test:
-	// the four take a minute and a half together, so `just test` skips them and
-	// `just test-full` (pre-commit, before a merge) plays them.
-	if testing.Short() {
-		t.Skip("heavy: the studchr replay runs without -short (just test-full)")
+	if !direct && testing.Short() {
+		t.Skip("heavy: the HTTP studchr replay runs without -short (just test-full)")
 	}
 	src, err := os.ReadFile("../../../testdata/studchr2026/" + name + ".transcript")
 	if err != nil {
@@ -99,7 +107,7 @@ func replayFromTranscript(t *testing.T, name, gameType, title string) *serverGam
 	for i, entrant := range script.Roster {
 		names[i] = entrant.Name
 	}
-	game := newReplayGame(t, string(dsl), gameType, title, names)
+	game := newReplayGame(t, string(dsl), gameType, title, names, direct)
 	findings, err := replay.Run(script, game)
 	// Findings first even when the run died: a бой that could not be played at
 	// all is usually explained by the disagreements that came before it.
@@ -112,23 +120,26 @@ func replayFromTranscript(t *testing.T, name, gameType, title string) *serverGam
 	return game
 }
 
+// Both transports honour the same replay.Game contract: the mini transcript
+// agrees over HTTP and direct alike.
 func TestReplayAgreesWithItsTranscript(t *testing.T) {
 	script, err := replay.Parse(miniTranscript)
 	if err != nil {
 		t.Fatal(err)
 	}
-	game := newReplayGame(t,
-		"[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 4\nthemes: 1\n",
-		"ek", "Мини-ЭК", []string{"Ктулху", "ВШЭстером", "Ушки на макушке", "Мыслители"})
-
-	findings, err := replay.Run(script, game)
-	if err != nil {
-		t.Fatalf("прогон: %v", err)
-	}
-	if len(findings) != 0 {
-		for _, f := range findings {
-			t.Errorf("расхождение: %s", f)
-		}
+	for _, direct := range []bool{false, true} {
+		t.Run(map[bool]string{false: "http", true: "direct"}[direct], func(t *testing.T) {
+			game := newReplayGame(t,
+				"[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 4\nthemes: 1\n",
+				"ek", "Мини-ЭК", []string{"Ктулху", "ВШЭстером", "Ушки на макушке", "Мыслители"}, direct)
+			findings, err := replay.Run(script, game)
+			if err != nil {
+				t.Fatalf("прогон: %v", err)
+			}
+			for _, f := range findings {
+				t.Errorf("расхождение: %s", f)
+			}
+		})
 	}
 }
 
@@ -150,7 +161,7 @@ func TestReplayCatchesAWrongSeating(t *testing.T) {
 	}
 	game := newReplayGame(t,
 		"[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 4\nthemes: 1\n",
-		"ek", "Мини-ЭК", []string{"Ктулху", "ВШЭстером", "Ушки на макушке", "Мыслители"})
+		"ek", "Мини-ЭК", []string{"Ктулху", "ВШЭстером", "Ушки на макушке", "Мыслители"}, false)
 
 	findings, _ := replay.Run(script, game)
 	var seating *replay.Finding
@@ -177,7 +188,7 @@ func TestReplayDrawSurvivesRecompute(t *testing.T) {
 	}
 	game := newReplayGame(t,
 		"[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 4\nthemes: 1\n",
-		"ek", "Мини-ЭК", []string{"Ктулху", "ВШЭстером", "Ушки на макушке", "Мыслители"})
+		"ek", "Мини-ЭК", []string{"Ктулху", "ВШЭстером", "Ушки на макушке", "Мыслители"}, false)
 	if _, err := replay.Run(script, game); err != nil {
 		t.Fatalf("прогон: %v", err)
 	}
@@ -221,7 +232,11 @@ func TestReplayDrawSurvivesRecompute(t *testing.T) {
 // job it exists for — dope scores what the hosts entered and has to arrive at
 // the same Σ and the same место the tournament published.
 func TestReplayStudchrEK(t *testing.T) {
-	replayFromTranscript(t, "ek", "ek", "ЭК")
+	replayFromTranscript(t, "ek", "ek", "ЭК", true)
+}
+
+func TestReplayStudchrEKOverHTTP(t *testing.T) {
+	replayFromTranscript(t, "ek", "ek", "ЭК", false)
 }
 
 // Личная СИ, the longest game of the championship: 54 players, six групп of
@@ -233,7 +248,11 @@ func TestReplayStudchrEK(t *testing.T) {
 // before. So this replay asserts the entire seating of the tournament, which is
 // what makes it the harder half of the harness.
 func TestReplayStudchrSI(t *testing.T) {
-	replayFromTranscript(t, "si", "si", "СИ")
+	replayFromTranscript(t, "si", "si", "СИ", true)
+}
+
+func TestReplayStudchrSIOverHTTP(t *testing.T) {
+	replayFromTranscript(t, "si", "si", "СИ", false)
 }
 
 // ТПШ: 91 players write one common отбор, and the best 24 play a bracket that
@@ -242,7 +261,7 @@ func TestReplayStudchrSI(t *testing.T) {
 // Σ+, then how many 50s, 40s, 30s and 20s each player took, and dope has to
 // derive every one of them.
 func TestReplayStudchrTPSh(t *testing.T) {
-	game := replayFromTranscript(t, "tpsh", "si", "ТПШ")
+	game := replayFromTranscript(t, "tpsh", "si", "ТПШ", true)
 	// The Пересев sorts on how many 50s each player took and shows the column,
 	// so what it sorted on has to be what it stored.
 	var stageCode string
@@ -298,7 +317,7 @@ func TestReplayBrainBout(t *testing.T) {
 		names[i] = entrant.Name
 	}
 	game := newReplayGame(t, "[defaults]\nvenues: 2\nquestions: 5\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n",
-		"brain", "Мини-брейн", names)
+		"brain", "Мини-брейн", names, false)
 
 	findings, err := replay.Run(script, game)
 	for _, f := range findings {
@@ -329,5 +348,9 @@ select state_json ->> '$.teams[0].rows[0].player' from matches where game_id = ?
 // every finalist is seated from what came before, so this replay asserts the
 // entire structure of the largest game dope runs.
 func TestReplayStudchrBrain(t *testing.T) {
-	replayFromTranscript(t, "brain", "brain", "КИнСБФ")
+	replayFromTranscript(t, "brain", "brain", "КИнСБФ", true)
+}
+
+func TestReplayStudchrBrainOverHTTP(t *testing.T) {
+	replayFromTranscript(t, "brain", "brain", "КИнСБФ", false)
 }

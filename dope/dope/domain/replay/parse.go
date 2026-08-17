@@ -174,7 +174,10 @@ type Script struct {
 
 // individual reports whether the game seats players rather than teams — no
 // составы, no theme players, no team column in статистика.
-func (s Script) individual() bool { return s.Game == "si" }
+func (s Script) individual() bool {
+	codec, _ := CodecFor(s.Game)
+	return codec.Individual
+}
 
 func errAt(line int, format string, args ...any) error {
 	return fmt.Errorf("строка %d: %s", line, fmt.Sprintf(format, args...))
@@ -288,7 +291,11 @@ func Parse(src string) (Script, error) {
 				return Script{}, err
 			}
 		case section == "бой":
-			seat, err := parseSeat(text, line, script.Game)
+			codec, ok := CodecFor(script.Game)
+			if !ok {
+				return Script{}, errAt(line, "у игры %q нет формы боя в стенограмме", script.Game)
+			}
+			seat, err := parseSeat(text, line, codec)
 			if err != nil {
 				return Script{}, err
 			}
@@ -532,13 +539,13 @@ func parseEntrant(text string, line int) (Entrant, error) {
 // they took, and the sheet's Σ and место for them. In a брейн the middle field
 // is the бой's questions instead — `R Виктория Корнеева, -, W Санжи Сундуев`.
 // An ЭК line may carry a fifth field naming who played each theme.
-func parseSeat(text string, line int, game string) (Seat, error) {
+func parseSeat(text string, line int, codec Codec) (Seat, error) {
 	fields := strings.Split(text, "|")
 	if len(fields) == 5 {
-		if game == "brain" {
+		if codec.Questions {
 			return Seat{}, errAt(line, "у брейна игрок пишется в самом вопросе, а не пятым полем")
 		}
-		if game == "si" {
+		if codec.Individual {
 			return Seat{}, errAt(line, "в личной игре игрок не пишется — участник и есть игрок")
 		}
 	} else if len(fields) != 4 {
@@ -548,7 +555,7 @@ func parseSeat(text string, line int, game string) (Seat, error) {
 	if seat.Name == "" {
 		return Seat{}, errAt(line, "место без участника")
 	}
-	if game == "brain" {
+	if codec.Questions {
 		questions, err := parseQuestions(fields[1], seat.Name, line)
 		if err != nil {
 			return Seat{}, err

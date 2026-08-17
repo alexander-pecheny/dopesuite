@@ -578,13 +578,14 @@ func (b *Batcher) runJob(ctx context.Context, tx *sql.Tx, job *editJob, byMatch 
 	return editResult{}, nil, fmt.Errorf("unknown edit job kind %d", job.kind)
 }
 
-// applyMatchPatchTx applies one editor's ops to a match's Protocol state blob.
-// EK ops address blob paths; matchops turns each into the typed mutation for
-// that path. Every other protocol owns its state as an opaque document, edited
-// by the same generic set-op engine flat games use. Either way the recorded
-// BlobOps become the journal's semantic record.
-func (b *Batcher) applyMatchPatchTx(ctx context.Context, tx *sql.Tx, job *editJob) error {
-	match, err := b.loadMatchTx(ctx, tx, job)
+// PatchMatchTx applies one editor's ops to a match's Protocol state: EK ops
+// address blob paths, every other Protocol's document takes the generic set
+// ops, and either way the recorded BlobOps become the journal's record.
+// Exported with FinishMatchTx and RecomputeMatchTx for a caller that brings
+// its own transaction and window — the replay drives the same engine without
+// the batcher's clock.
+func PatchMatchTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID int64, ops []edit.PatchOp) error {
+	match, err := loadMatchTx(ctx, tx, scope, matchID)
 	if err != nil {
 		return err
 	}
@@ -592,30 +593,41 @@ func (b *Batcher) applyMatchPatchTx(ctx context.Context, tx *sql.Tx, job *editJo
 		return errors.New("match is finished")
 	}
 	if !store.TeamBlobShaped(match.GameType) {
-		next, blobOps, err := applyStateOps(match.GameType, match.RawState, job.req.Ops, nil, false)
+		next, blobOps, err := applyStateOps(match.GameType, match.RawState, ops, nil, false)
 		if err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `update matches set state_json = ? where id = ?`, string(next), job.matchID); err != nil {
+		if _, err := tx.ExecContext(ctx, `update matches set state_json = ? where id = ?`, string(next), matchID); err != nil {
 			return err
 		}
-		return festwrite.JournalMatchPatchTx(ctx, tx, job.matchID, blobOps)
+		return festwrite.JournalMatchPatchTx(ctx, tx, matchID, blobOps)
 	}
-	ops, err := store.MutateMatchBlobTx(ctx, tx, job.matchID, func(blob *store.MatchBlob) error {
-		return matchops.Apply(blob, match, job.req.Ops)
+	recorded, err := store.MutateMatchBlobTx(ctx, tx, matchID, func(blob *store.MatchBlob) error {
+		return matchops.Apply(blob, match, ops)
 	})
 	if err != nil {
 		return err
 	}
-	return festwrite.JournalMatchPatchTx(ctx, tx, job.matchID, ops)
+	return festwrite.JournalMatchPatchTx(ctx, tx, matchID, recorded)
+}
+
+func (b *Batcher) applyMatchPatchTx(ctx context.Context, tx *sql.Tx, job *editJob) error {
+	return PatchMatchTx(ctx, tx, job.scope, job.matchID, job.req.Ops)
+}
+
+// FinishMatchTx flips a match's finished/active status; RecomputeMatchTx then
+// turns the grid into a result.
+func FinishMatchTx(ctx context.Context, tx *sql.Tx, matchID int64, finished bool) error {
+	status := "active"
+	if finished {
+		status = "finished"
+	}
+	_, err := tx.ExecContext(ctx, `update matches set status = ? where id = ?`, status, matchID)
+	return err
 }
 
 func (b *Batcher) applyMatchFinishTx(ctx context.Context, tx *sql.Tx, job *editJob, t *touched) error {
-	status := "active"
-	if job.finished {
-		status = "finished"
-	}
-	if _, err := tx.ExecContext(ctx, `update matches set status = ? where id = ?`, status, job.matchID); err != nil {
+	if err := FinishMatchTx(ctx, tx, job.matchID, job.finished); err != nil {
 		return err
 	}
 	value := job.finished
@@ -636,9 +648,27 @@ select id from venues where fest_id = ? and number = ?`, job.scope.FestID, job.v
 	return err
 }
 
-func (b *Batcher) loadMatchTx(ctx context.Context, tx *sql.Tx, job *editJob) (store.DBMatchState, error) {
+func loadMatchTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID int64) (store.DBMatchState, error) {
 	return store.LoadDBMatchStateWhere(ctx, tx,
-		`m.id = ? and m.fest_id = ? and m.game_id = ?`, job.matchID, job.scope.FestID, job.scope.GameID)
+		`m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, scope.FestID, scope.GameID)
+}
+
+// RecomputeMatchTx rescores one match after a window's edits — computed places
+// when it is being finished, then the Protocol's scorer with any pin over them
+// — and bumps its revision under the named journal event. The caller resolves
+// the game's slots once afterwards.
+func RecomputeMatchTx(ctx context.Context, tx *sql.Tx, scope core.FestScope, matchID int64, finishing bool, eventType, payload string) (int64, error) {
+	match, err := loadMatchTx(ctx, tx, scope, matchID)
+	if err != nil {
+		return 0, err
+	}
+	if finishing {
+		store.AssignComputedPlaces(&match.State)
+	}
+	if err := scoring.RecalculateMatchResultsTx(ctx, tx, match); err != nil {
+		return 0, err
+	}
+	return bumpMatchRevisionTx(ctx, tx, scope.FestID, matchID, eventType, payload)
 }
 
 // recomputeTouched scores every match the window changed and then resolves the
@@ -649,21 +679,8 @@ func (b *Batcher) recomputeTouched(ctx context.Context, tx *sql.Tx, scope core.F
 	}
 	for _, matchID := range order {
 		t := byMatch[matchID]
-		match, err := store.LoadDBMatchStateWhere(ctx, tx,
-			`m.id = ? and m.fest_id = ? and m.game_id = ?`, matchID, scope.FestID, scope.GameID)
-		if err != nil {
-			return nil, err
-		}
-		// Finishing a match turns the live grid into a result: places are computed
-		// from the scores, then the scorer lets any pin override them again.
-		if t.finishTo != nil && *t.finishTo {
-			store.AssignComputedPlaces(&match.State)
-		}
-		if err := scoring.RecalculateMatchResultsTx(ctx, tx, match); err != nil {
-			return nil, err
-		}
 		eventType, payload := journalEventFor(t)
-		revision, err := bumpMatchRevisionTx(ctx, tx, scope.FestID, matchID, eventType, payload)
+		revision, err := RecomputeMatchTx(ctx, tx, scope, matchID, t.finishTo != nil && *t.finishTo, eventType, payload)
 		if err != nil {
 			return nil, err
 		}
@@ -678,11 +695,15 @@ func (b *Batcher) recomputeTouched(ctx context.Context, tx *sql.Tx, scope core.F
 func journalEventFor(t *touched) (string, string) {
 	switch {
 	case t.finishTo != nil:
-		return "match:update", util.MustJSON(map[string]any{"code": t.code, "finished": *t.finishTo})
+		return FinishEvent(t.code, *t.finishTo)
 	case t.venue != 0:
 		return "match:venue", util.MustJSON(map[string]any{"code": t.code, "venue": t.venue})
 	}
 	return "game:state-patch", util.MustJSON(map[string]any{"match": t.code})
+}
+
+func FinishEvent(code string, finished bool) (string, string) {
+	return "match:update", util.MustJSON(map[string]any{"code": code, "finished": finished})
 }
 
 // bumpMatchRevisionTx advances the match's and the fest's revision once for the

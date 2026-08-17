@@ -92,8 +92,8 @@ queries, view/scheme types, pure scoring), `storage/journal` (forward journal),
 ```bash
 just dev-web-only     # Server only. Usually you should run this unless you need to test changes related to bot
 just dev              # Run server + bot concurrently (hot reload from disk)
-just test             # Go tests (minus the 90-second studchr replays) + deno JS tests
-just test-full        # the same plus the 90-second studchr replays — the conformance gate; run before a merge
+just test             # Go tests + deno JS tests, incl. the studchr replays on the direct transport (~25 s) — the conformance gate
+just test-full        # the same plus the studchr replays over HTTP (~90 s: handlers, auth, write path); run before a merge
 just test-js          # Frontend tests only
 just fmt              # gofmt
 just vet              # go vet
