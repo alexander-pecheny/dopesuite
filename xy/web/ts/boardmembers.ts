@@ -12,6 +12,7 @@ import { xyApp } from "./app.js";
 import type { AuthMe } from "./app.js";
 import { xySync } from "./sync.js";
 import { xyStore } from "./store.js";
+import { autocomplete } from "./suggest.js";
 
 const { fetchJSON, jpost, jdelete, el } = xyApp;
 
@@ -65,13 +66,25 @@ export function createBoardMembers(state: MembersState, boardId: number | string
     }
   }
 
+  // Everyone I share any board with, most-shared first — the hint under the
+  // add-member field for the co-author whose nick I forgot (issue #64).
+  let collaborators: string[] = [];
   function open(): void {
     const el = document.getElementById("membersOverlay")!;
     document.getElementById("membersMessage")!.textContent = "";
     el.hidden = false;
     overlayStack.open({ el, close: hide });
     render();
+    fetchJSON(`/api/collaborators`).then((names) => { collaborators = names as string[]; }).catch(() => {});
   }
+  autocomplete(document.getElementById("addMemberName") as HTMLInputElement, (q) => {
+    const needle = q.trim().toLowerCase();
+    const onBoard = new Set((state.members || []).map(memberName));
+    return collaborators
+      .filter((n) => !onBoard.has(n) && n.toLowerCase().includes(needle))
+      .slice(0, 8)
+      .map((n) => ({ value: n, label: n }));
+  });
 
   function hide(): void { document.getElementById("membersOverlay")!.hidden = true; }
   function close(): void { overlayStack.pop(); }

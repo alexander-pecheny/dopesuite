@@ -356,8 +356,10 @@
 .tl-draft-img img { max-width: 72px; max-height: 72px; border-radius: 6px; display: block; }
 .tl-draft-img .attach-del { position: absolute; top: -6px; right: -6px; }
 
-/* The @-suggestions under a comment box (anchorPopup-mounted). */
-.suggest-menu { display: flex; flex-direction: column; }
+/* The @-name hint under a comment box: body-mounted (anchorPopup), and the
+   thread reply box lives in a modal, so it outranks --z-modal. */
+.menu-dropdown.menu-fixed.mention-menu { z-index: var(--z-modal-dropdown); }
+
 .notif-panel {
   position: absolute;
   top: calc(100% + var(--space-1));

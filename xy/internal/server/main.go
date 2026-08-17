@@ -129,6 +129,7 @@ func Main() {
 	mux.HandleFunc("GET /api/boards/{id}/members", srv.handleListMembers)
 	mux.HandleFunc("POST /api/boards/{id}/members", srv.handleAddMember)
 	mux.HandleFunc("DELETE /api/boards/{id}/members/{userId}", srv.handleRemoveMember)
+	mux.HandleFunc("GET /api/collaborators", srv.handleListCollaborators)
 
 	// ---- lists / cards / labels / timeline ----
 	mux.HandleFunc("POST /api/boards/{id}/lists", srv.handleCreateList)

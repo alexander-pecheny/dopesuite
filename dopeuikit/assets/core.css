@@ -583,6 +583,13 @@ textarea {
   font: inherit;
 }
 
+pre,
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
+}
+
 [hidden] {
   display: none !important;
 }

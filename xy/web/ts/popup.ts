@@ -12,13 +12,17 @@ export interface AnchoredPopup {
 interface PopupDeps {
   // Also counts as "inside", so a second click on the trigger toggles.
   anchor?: HTMLElement;
+  // Which edge of the anchor the popup lines up with: a menu hangs off the right
+  // edge of its ⋯ button, a typing hint off the left edge of its field.
+  align?: "start" | "end";
   onClose?(): void;
 }
 
-export function place(node: HTMLElement, anchor: HTMLElement): void {
+export function place(node: HTMLElement, anchor: HTMLElement, align: "start" | "end" = "end"): void {
   const r = anchor.getBoundingClientRect();
   const pad = 8;
-  const left = Math.max(pad, Math.min(r.right - node.offsetWidth, window.innerWidth - node.offsetWidth - pad));
+  const want = align === "start" ? r.left : r.right - node.offsetWidth;
+  const left = Math.max(pad, Math.min(want, window.innerWidth - node.offsetWidth - pad));
   let top = r.bottom + 4;
   if (top + node.offsetHeight > window.innerHeight - pad) top = Math.max(pad, r.top - node.offsetHeight - 4);
   node.style.left = left + "px";
@@ -27,7 +31,7 @@ export function place(node: HTMLElement, anchor: HTMLElement): void {
 
 export function anchorPopup(node: HTMLElement, anchor: HTMLElement, deps: PopupDeps = {}): AnchoredPopup {
   document.body.append(node);
-  place(node, anchor);
+  place(node, anchor, deps.align);
 
   function close(): void {
     node.remove();
