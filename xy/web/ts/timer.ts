@@ -4,7 +4,8 @@
 // 10-second answer-writing countdown. The cues are one shipped bell sample
 // (/static/ding.mp3, same-origin so CSP-fine) played through WebAudio at
 // different rates to stay distinguishable by ear; until it's decoded the old
-// synthesised oscillator beeps sound instead.
+// synthesised oscillator beeps sound instead. Every cue is put on the audio
+// clock when a countdown starts, so a background tab still rings on time.
 import { xyApp } from "./app.js";
 const { el } = xyApp;
 
@@ -54,43 +55,75 @@ function loadDing(ac: AudioContext): void {
     .then((buf) => { dingBuf = buf; })
     .catch(() => { dingReq = null; }); // retry on the next user gesture
 }
-// ding plays the bell once; rate shifts pitch and length together (2 = the
-// answer ticks an octave up and half as long, 0.5 = the end an octave down).
-function ding(rate: number, gain: number, fallback: () => void): void {
+
+// The three cues. `rate` shifts the bell's pitch and length together (2 = the
+// answer ticks an octave up and half as long, 0.5 = the end an octave down);
+// the rest shapes the oscillator that stands in until the bell is decoded.
+type CueKind = "warn" | "tick" | "long";
+interface Cue { rate: number; gain: number; freq: number; dur: number; wave: OscillatorType; toneGain: number }
+const CUES: Record<CueKind, Cue> = {
+  warn: { rate: 1, gain: 0.7, freq: 880, dur: 0.22, wave: "square", toneGain: 0.18 }, // "10 seconds left"
+  tick: { rate: 2, gain: 0.35, freq: 1040, dur: 0.085, wave: "square", toneGain: 0.16 }, // answer-countdown tick
+  long: { rate: 0.5, gain: 1, freq: 587, dur: 0.85, wave: "sawtooth", toneGain: 0.2 }, // segment / answer end
+};
+
+// Every cue of a countdown is scheduled up front on the audio clock, which
+// keeps time while the tab is hidden — rAF stops there and timers crawl, so a
+// loop that beeps when it notices the second change skips and bunches dings.
+let scheduled: AudioScheduledSourceNode[] = [];
+function playAt(kind: CueKind, inSec: number): void {
   const ac = ensureAudio();
   if (!ac) return;
-  if (!dingBuf) { fallback(); return; }
-  const src = ac.createBufferSource();
-  src.buffer = dingBuf;
-  src.playbackRate.value = rate;
+  const cue = CUES[kind];
+  const t = ac.currentTime + inSec;
   const g = ac.createGain();
-  g.gain.value = gain;
-  src.connect(g);
   g.connect(ac.destination);
-  src.start();
+  let src: AudioScheduledSourceNode;
+  if (dingBuf) {
+    const s = ac.createBufferSource();
+    s.buffer = dingBuf;
+    s.playbackRate.value = cue.rate;
+    g.gain.value = cue.gain;
+    src = s;
+    src.connect(g);
+    src.start(t);
+  } else {
+    const osc = ac.createOscillator();
+    osc.type = cue.wave;
+    osc.frequency.value = cue.freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(cue.toneGain, t + 0.012);
+    g.gain.setValueAtTime(cue.toneGain, t + Math.max(0.02, cue.dur - 0.04));
+    g.gain.linearRampToValueAtTime(0, t + cue.dur);
+    src = osc;
+    src.connect(g);
+    src.start(t);
+    src.stop(t + cue.dur + 0.02);
+  }
+  scheduled.push(src);
+  src.onended = () => { scheduled = scheduled.filter((s) => s !== src); };
 }
-// tone schedules a single shaped oscillator burst (attack/release envelope so it
-// doesn't click). Frequencies/lengths are chosen to be distinguishable by ear.
-function tone(freq: number, dur: number, type: OscillatorType = "square", gain = 0.18): void {
-  const ac = ensureAudio();
-  if (!ac) return;
-  const t = ac.currentTime;
-  const osc = ac.createOscillator();
-  const g = ac.createGain();
-  osc.type = type;
-  osc.frequency.value = freq;
-  g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(gain, t + 0.012);
-  g.gain.setValueAtTime(gain, t + Math.max(0.02, dur - 0.04));
-  g.gain.linearRampToValueAtTime(0, t + dur);
-  osc.connect(g);
-  g.connect(ac.destination);
-  osc.start(t);
-  osc.stop(t + dur + 0.02);
+function cancelCues(): void {
+  for (const s of scheduled) { try { s.stop(); } catch (_) {} }
+  scheduled = [];
 }
-const warningBeep = (): void => ding(1, 0.7, () => tone(880, 0.22, "square", 0.18)); // "10 seconds left"
-const tickBeep = (): void => ding(2, 0.35, () => tone(1040, 0.085, "square", 0.16)); // answer-countdown tick
-const longBeep = (): void => ding(0.5, 1, () => tone(587, 0.85, "sawtooth", 0.2)); // segment / answer end
+
+// cueTimes lists the bells of a countdown that has `rem` seconds left, each as
+// seconds from now. Only the last segment gets the warning, the ten answer
+// ticks and the final bell; an earlier duplet/blitz segment just ends long.
+function cueTimes(phase: "running" | "answer", last: boolean, rem: number): Array<[CueKind, number]> {
+  const out: Array<[CueKind, number]> = [];
+  if (phase === "answer") {
+    for (let d = 1; d < rem - 1e-3; d++) out.push(["tick", rem - d]);
+    out.push(["long", rem]);
+    return out;
+  }
+  if (!last) return [["long", rem]];
+  if (rem - WARN_AT > 1e-3) out.push(["warn", rem - WARN_AT]);
+  for (let j = 0; j < ANSWER_SEC; j++) out.push(["tick", rem + j]);
+  out.push(["long", rem + ANSWER_SEC]);
+  return out;
+}
 
 // ---- state machine ----------------------------------------------------------
 // phase: ready    → press Start to run the current segment
@@ -108,7 +141,7 @@ interface TimerState {
   remaining: number;
   deadline: number;
   shown: number;
-  raf: number;
+  timer: number;
 }
 const m: TimerState = {
   presetKey: "regular",
@@ -118,34 +151,25 @@ const m: TimerState = {
   resumePhase: "running",
   remaining: 60, // frozen seconds for the current/paused countdown
   deadline: 0, // performance.now() target while running/answer
-  shown: 60, // last integer shown (drives beep-on-change + display)
-  raf: 0,
+  shown: 60, // last integer shown
+  timer: 0, // setInterval handle while running/answer
 };
 const isLast = (): boolean => m.segIdx === m.segments.length - 1;
 
+// The loop only paints and moves the phase along; the bells are already on the
+// audio clock, so a throttled or paused loop delays the display, not the sound.
 function stopLoop(): void {
-  if (m.raf) cancelAnimationFrame(m.raf);
-  m.raf = 0;
+  if (m.timer) clearInterval(m.timer);
+  m.timer = 0;
 }
 function startLoop(): void {
   stopLoop();
-  m.raf = requestAnimationFrame(loop);
+  m.timer = window.setInterval(loop, 100);
 }
 function loop(): void {
-  m.raf = requestAnimationFrame(loop);
   const rem = (m.deadline - performance.now()) / 1000;
-  step(rem);
-}
-
-// step advances the display and fires the audio cues for one animation frame.
-function step(rem: number): void {
   const disp = Math.max(0, Math.ceil(rem - 1e-3));
   if (disp !== m.shown) {
-    if (m.phase === "answer") {
-      if (disp >= 1) tickBeep(); // 10,9,…,1 — the "10" fired on entry
-    } else if (m.phase === "running" && isLast() && disp === WARN_AT) {
-      warningBeep();
-    }
     m.shown = disp;
     renderTime();
   }
@@ -156,27 +180,24 @@ function step(rem: number): void {
 function endCountdown(): void {
   if (m.phase === "running") {
     if (isLast()) {
-      // Question's up → roll straight into the answer-writing window. The first
-      // tick (for "10") fires now; the loop keeps running for 9…1.
+      // Question's up → roll straight into the answer-writing window, measured
+      // from the question's deadline so a late frame does not stretch it.
       m.phase = "answer";
-      m.deadline = performance.now() + ANSWER_SEC * 1000;
+      m.deadline += ANSWER_SEC * 1000;
       m.shown = ANSWER_SEC;
-      tickBeep();
       renderTime();
       renderControls();
       return;
     }
-    // A non-final duplet/blitz segment: long beep, queue up the next segment and
-    // wait for the player to press Start again.
+    // A non-final duplet/blitz segment: queue up the next segment and wait for
+    // the player to press Start again.
     stopLoop();
-    longBeep();
     m.segIdx += 1;
     m.remaining = m.segments[m.segIdx];
     m.shown = m.remaining;
     m.phase = "ready";
   } else if (m.phase === "answer") {
     stopLoop();
-    longBeep();
     m.phase = "done";
     m.remaining = 0;
     m.shown = 0;
@@ -190,6 +211,8 @@ function beginRun(kind: "running" | "answer"): void {
   m.phase = kind;
   m.deadline = performance.now() + m.remaining * 1000;
   m.shown = Math.max(0, Math.ceil(m.remaining - 1e-3));
+  cancelCues();
+  for (const [cue, at] of cueTimes(kind, isLast(), m.remaining)) playAt(cue, at);
   renderTime();
   renderControls();
   startLoop();
@@ -203,6 +226,7 @@ function start(): void {
 function pause(): void {
   if (m.phase !== "running" && m.phase !== "answer") return;
   stopLoop();
+  cancelCues();
   m.remaining = Math.max(0, (m.deadline - performance.now()) / 1000);
   m.resumePhase = m.phase;
   m.phase = "paused";
@@ -210,6 +234,7 @@ function pause(): void {
 }
 function reset(): void {
   stopLoop();
+  cancelCues();
   m.segIdx = 0;
   m.remaining = m.segments[0] || 0;
   m.shown = m.remaining;
@@ -410,4 +435,4 @@ if (typeof document !== "undefined") {
   else init();
 }
 
-export const xyTimer = { _presets: PRESETS, _parseCustom: parseCustom };
+export const xyTimer = { _presets: PRESETS, _parseCustom: parseCustom, _cueTimes: cueTimes };
