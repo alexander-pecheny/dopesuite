@@ -1,7 +1,7 @@
 # The Protocol seam: ask the Protocol, stop branching on strings (#5)
 
-Status: open. Strength: worth exploring. Depends on nothing; pairs with
-[kind-config-typing.md](kind-config-typing.md).
+Status: done 17 Aug 2026 (see «What was done» at the end). Written earlier as
+the hand-off note; pairs with [kind-config-typing.md](kind-config-typing.md).
 
 ## The problem
 
@@ -80,3 +80,46 @@ Ranker.Metrics()` and nothing else.
   number `shootoutTotal` in the view. Do not rename in this change.
 - `imports/seed.go`'s "started" rule blocks a re-seat; test both a brain and
   an ЭК game (`gameroster_test.go`, `seed_import_test.go` in hostpages).
+
+## What was done (17 Aug 2026, branch `dope-refactor`)
+
+- `protocol.Protocol` gained `Params() []Param` (DSL key → config field,
+  bool or count, an optional default), `TeamBlob() bool` and
+  `Started(state) bool`. `Register` announces a team-blob Protocol to the
+  store (`store.RegisterTeamBlob`), whose `TeamBlobShaped(gameType)` reads
+  that registry — the store is a leaf and cannot ask the Protocol itself;
+  `IsEKShaped` is gone. `DBMatchState.ProtocolState()` is the
+  document a Protocol scores: the projected MatchState for a team blob, the
+  raw document otherwise.
+- The compiler reads `protocol.Params(gameType)`; the brain's always-written
+  `questions` is that Param's `Default`. `structure.DerivedMetrics` is gone;
+  every `Ranker` declares `Metrics()` (rr: points, h2h, taken, conceded, diff,
+  place_sum, bouts; reseed: place_sum, points_share, taken_share, taken_base,
+  diff, draw; de: losses; flat: place; se: none) and the compiler checks a
+  block's sorting against `Protocol.Metrics() ∪ RankerMetrics(kind) ∪ rules`
+  — rr for a group, reseed for a reseed, flat for a flat game (its sorting
+  was never checked before). ЭК's Score now writes and
+  declares `correct_N` / `wrong_N`, so `sorting: [correct_50]` compiles.
+- One insert: `scoring.RecalculateMatchResultsTx` scores every Protocol
+  through `Score(nil, match.ProtocolState())` and writes place (pin over
+  scorer), total, plus, tiebreak and the metrics. `LegacyResultWriter`, both
+  `WriteResultsTx` and `store.RecalculateMatchResultsForStateTx` are deleted;
+  ЭК's `correctCounts` arrays no longer land in metrics_json (nothing read
+  them). The ЭК sheet importer sets the sheet's place as a pin instead of
+  inserting a row.
+- `imports/seed.go` and `gamebuild.Recompile` ask `protocol.Started` whether
+  a бой has begun (brain: any mark; every other Protocol: no — an unfinished
+  бой re-seats or rebuilds, as before; `gamebuild` used to ask the brain's
+  rule of every game) and
+  prunes the blob for every team-blob game (личная СИ included; it was ЭК
+  alone). The reseed reads `structure.MetricTakenBase`, the same name the
+  brain Protocol writes — a shared constant, not a config key.
+- Left as they were, outside the note's four files: `imports/seed.go`'s
+  seed-source dispatch (which flat games seed a scheme: КСИ, ОД),
+  `overrides.go`'s three `gameType == "ek"`, `festview.go`'s brain score
+  column, `storeutil/scheme_ops.go`.
+- Gates: `TestSortingKnowsProtocolAndKindMetrics` (an unmeasured metric
+  fails naming it; a reseed's share on a group and a group's разница on a
+  reseed fail; ЭК `correct_50` compiles on both); protocol tests check every
+  Protocol declares what it writes, the blob shape and brain's Started;
+  `TestReplayStudchr*` unchanged.

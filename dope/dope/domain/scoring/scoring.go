@@ -1,27 +1,19 @@
 // Package scoring materialises a match's Protocol outcome into match_results —
-// the only rows the Structure layer reads (docs/unified-model.md §2). Places
-// are the scorer's, unless the host pinned one in the match's state blob
-// (ADR-0005: auto-places with manual override, the Pin being Protocol state).
+// the only rows the Structure layer reads (docs/unified-model.md §2), and the
+// one place that writes them. Places are the scorer's, unless the host pinned
+// one in the match's state blob (ADR-0005: auto-places with manual override,
+// the Pin being Protocol state).
 package scoring
 
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	"dope/dope/domain/protocol"
 	"dope/dope/platform/util"
 	"dope/dope/storage/store"
 )
-
-// LegacyResultWriter is implemented by protocols whose match_results rows
-// predate the generic SlotOutcome path and must keep their exact legacy shape
-// (EK's metrics_json with correctCounts arrays). Everything else goes through
-// the generic writer below.
-type LegacyResultWriter interface {
-	WriteResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMatchState) error
-}
 
 // RecalculateMatchResultsTx scores a match through its game's registered
 // Protocol and upserts match_results for every occupied slot, honouring pins.
@@ -35,14 +27,7 @@ func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMa
 	if !ok {
 		return fmt.Errorf("scoring: no protocol %q", protocolCode)
 	}
-	if legacy, ok := p.(LegacyResultWriter); ok {
-		return legacy.WriteResultsTx(ctx, tx, match)
-	}
-	stateJSON := json.RawMessage(match.RawState)
-	if len(stateJSON) == 0 {
-		stateJSON = json.RawMessage("{}")
-	}
-	outcomes, err := p.Score(nil, stateJSON)
+	outcomes, err := p.Score(nil, match.ProtocolState())
 	if err != nil {
 		return err
 	}
@@ -54,20 +39,18 @@ func RecalculateMatchResultsTx(ctx context.Context, tx *sql.Tx, match store.DBMa
 		if pin := match.Blob.Pin(match.ParticipantIDs[index]); pin != nil {
 			place = *pin
 		}
-		metrics := map[string]any{}
-		for key, value := range outcome.Metrics {
-			metrics[key] = value
-		}
 		if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, participant_id, place, total, plus, metrics_json)
-values(?, ?, ?, ?, ?, ?)
+insert into match_results(match_id, participant_id, place, total, plus, tiebreak, metrics_json)
+values(?, ?, ?, ?, ?, ?, ?)
 on conflict(match_id, participant_id) do update set
   place = excluded.place,
   total = excluded.total,
   plus = excluded.plus,
+  tiebreak = excluded.tiebreak,
   metrics_json = excluded.metrics_json`,
 			match.MatchID, match.ParticipantIDs[index], place,
-			int(outcome.Metrics["total"]), int(outcome.Metrics["plus"]), util.MustJSON(metrics)); err != nil {
+			int(outcome.Metrics["total"]), int(outcome.Metrics["plus"]), int(outcome.Metrics["tiebreak"]),
+			util.MustJSON(outcome.Metrics)); err != nil {
 			return err
 		}
 	}

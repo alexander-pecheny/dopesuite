@@ -18,6 +18,12 @@ type ksi struct{}
 
 func (ksi) Code() string { return "ksi" }
 
+func (ksi) Params() []Param { return []Param{{Key: "themes", Config: "themes"}} }
+
+func (ksi) TeamBlob() bool { return false }
+
+func (ksi) Started(state json.RawMessage) bool { return false }
+
 // Metrics: сумма и сумма положительных ответов.
 func (ksi) Metrics() []string { return []string{"total", "plus"} }
 

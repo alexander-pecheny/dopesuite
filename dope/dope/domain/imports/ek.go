@@ -151,18 +151,13 @@ func importEKMatch(ctx context.Context, tx *sql.Tx, plan ekPlan, code string) er
 		}
 	}
 
-	for _, t := range pm.Teams {
-		if t.Place != nil {
-			if _, err := tx.ExecContext(ctx, `
-insert into match_results(match_id, participant_id, place) values(?, ?, ?)
-on conflict(match_id, participant_id) do update set place = excluded.place`,
-				match.MatchID, t.TeamID, *t.Place); err != nil {
-				return err
-			}
-		}
-	}
+	// The sheet's places are the host's: they land as pins, which the scorer
+	// honours over its own ranking.
 	if err := festwrite.MutateMatchBlobTx(ctx, tx, match.MatchID, func(blob *store.MatchBlob) error {
 		for _, t := range pm.Teams {
+			if t.Place != nil {
+				blob.SetPin(t.TeamID, t.Place)
+			}
 			for _, th := range t.Themes {
 				if th.PlayerID != nil {
 					blob.SetPlayer(t.TeamID, "regular", th.ThemeIndex, *th.PlayerID)
@@ -177,8 +172,6 @@ on conflict(match_id, participant_id) do update set place = excluded.place`,
 		return err
 	}
 
-	// Mark finished directly so the manual places (above) survive — the live
-	// "finished" path would overwrite them with computed places.
 	if _, err := tx.ExecContext(ctx, `update matches set status = 'finished' where id = ?`, match.MatchID); err != nil {
 		return err
 	}

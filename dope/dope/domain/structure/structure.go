@@ -77,11 +77,18 @@ type Expander interface {
 // Ranker is a Kind's resolve-time role: Standings ranks the stage's
 // participants from its matches' outcomes, and Order names the Metrics it
 // ranked by, in order — what a table of those standings shows beside М.
+// Metrics is what the Kind itself adds to a row over the Protocol's metrics,
+// which every Kind sums; the compiler lets a scheme sort by nothing else.
 type Ranker interface {
 	Code() string
+	Metrics() []string
 	Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntry, error)
 	Order(cfg json.RawMessage) []SortRule
 }
+
+// MetricTakenBase is the Protocol metric a reseed's shares are built on —
+// взятые without перестрелка. A Protocol that wants shares writes it.
+const MetricTakenBase = "takenBase"
 
 // The registries are the single source of truth for known stage kinds. Add a
 // new structural primitive by registering it — never by a switch on kind
@@ -138,4 +145,11 @@ func ExpanderFor(code string) (Expander, bool) {
 func RankerFor(code string) (Ranker, bool) {
 	kind, ok := rankers[code]
 	return kind, ok
+}
+
+func RankerMetrics(code string) []string {
+	if kind, ok := rankers[code]; ok {
+		return kind.Metrics()
+	}
+	return nil
 }

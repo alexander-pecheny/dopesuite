@@ -106,6 +106,8 @@ func roundTitle(rounds, round, index int) string {
 // A bracket ranks by progression, which no column shows; its table is М alone.
 func (singleElim) Order(cfg json.RawMessage) []SortRule { return nil }
 
+func (singleElim) Metrics() []string { return nil }
+
 // Standings ranks by progression: the champion first, then losers by the round
 // they fell in, late rounds ranking higher. Participants still alive share the
 // top band; a finished bronze бой splits its two semifinal losers.

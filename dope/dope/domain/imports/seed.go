@@ -8,6 +8,7 @@ import (
 	"dope/dope/domain/core"
 	"dope/dope/domain/games"
 	"dope/dope/domain/overrides"
+	"dope/dope/domain/protocol"
 	rosterpkg "dope/dope/domain/roster"
 	"dope/dope/platform/util"
 	"dope/dope/storage/festwrite"
@@ -638,7 +639,7 @@ order by ms.id`, []any{gameID}, func(rows *sql.Rows) (slotRecord, error) {
 		// A played бой keeps its participants: a decline shifts the ladder
 		// only through matches nobody has started — results already earned
 		// stand, the vacancy propagates to the unplayed part of the scheme.
-		if slot.Status == "finished" || (gameType == "brain" && games.BrainStateStarted(slot.State)) {
+		if slot.Status == "finished" || protocol.Started(gameType, slot.State) {
 			continue
 		}
 		basket, number := seedRefKey(slot.SourceRef)
@@ -668,9 +669,9 @@ where match_id = ?
   )`, matchID); err != nil {
 		return err
 	}
-	if gameType != "ek" {
-		// Only EK's state is the team-keyed blob; other protocols key state by
-		// side, so a reseated slot needs no state surgery.
+	if !store.TeamBlobShaped(gameType) {
+		// A document Protocol keys state by side, so a reseated slot needs no
+		// state surgery; the team-keyed blob drops the departed team's part.
 		return nil
 	}
 	seated, err := store.CollectRows(ctx, tx, `

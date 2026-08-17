@@ -32,8 +32,55 @@ func TestEKScore(t *testing.T) {
 	if b.Place != 1 || b.Metrics["total"] != 40 || b.Metrics["plus"] != 50 {
 		t.Errorf("team B = place %v metrics %v, want place 1 total 40 plus 50", b.Place, b.Metrics)
 	}
+	// The per-номинал counts are metrics too: a scheme may sort on correct_50.
+	if a.Metrics["correct_10"] != 1 || a.Metrics["correct_30"] != 1 || a.Metrics["wrong_20"] != 1 || b.Metrics["correct_50"] != 1 {
+		t.Errorf("counts = %v / %v", a.Metrics, b.Metrics)
+	}
 	if _, ok := Get("nope"); ok {
 		t.Fatal("unknown protocol reported as registered")
+	}
+}
+
+// Every metric Score writes is declared, so the compiler's check is honest in
+// both directions; the team-blob Protocols are the ones the store projects.
+func TestEveryProtocolDeclaresWhatItWrites(t *testing.T) {
+	states := map[string]string{
+		"ek":    `{"participants":[{"name":"A","place":1,"themes":[{"answers":["right","","","",""]}]}]}`,
+		"si":    `{"participants":[{"name":"A","themes":[{"answers":["right","","","",""]}]}]}`,
+		"brain": `{"teams":[{"rows":[{"mark":"right"}]},{"rows":[{"mark":""}]}]}`,
+		"ksi":   `{"participants":[{"name":"A","themes":[{"answers":["right","","","",""]}]}]}`,
+		"od":    `{"teams":[{"name":"A","answers":[[true]]}]}`,
+	}
+	for code, state := range states {
+		p, ok := Get(code)
+		if !ok {
+			t.Fatalf("%s: not registered", code)
+		}
+		declared := map[string]bool{}
+		for _, name := range p.Metrics() {
+			declared[name] = true
+		}
+		outcomes, err := p.Score(json.RawMessage("{}"), json.RawMessage(state))
+		if err != nil {
+			t.Fatalf("%s: Score: %v", code, err)
+		}
+		for _, outcome := range outcomes {
+			for name := range outcome.Metrics {
+				if !declared[name] {
+					t.Errorf("%s writes %s and never declares it", code, name)
+				}
+			}
+		}
+		if p.TeamBlob() != (code == "ek" || code == "si") {
+			t.Errorf("%s: TeamBlob = %v", code, p.TeamBlob())
+		}
+	}
+	brain, _ := Get("brain")
+	if brain.Started(json.RawMessage(`{"teams":[{"rows":[]},{"rows":[]}]}`)) {
+		t.Error("a pristine брейн бой counts as started")
+	}
+	if !brain.Started(json.RawMessage(states["brain"])) {
+		t.Error("a брейн бой with an answer does not count as started")
 	}
 }
 

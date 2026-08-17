@@ -591,7 +591,7 @@ func (b *Batcher) applyMatchPatchTx(ctx context.Context, tx *sql.Tx, job *editJo
 	if match.State.Finished {
 		return errors.New("match is finished")
 	}
-	if !match.IsEKShaped() {
+	if !store.TeamBlobShaped(match.GameType) {
 		next, blobOps, err := applyStateOps(match.GameType, match.RawState, job.req.Ops, nil, false)
 		if err != nil {
 			return err

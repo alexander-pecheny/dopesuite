@@ -27,6 +27,8 @@ type podConfig struct {
 // A pod's table shows М alone; Losses are how it ranks, not a column.
 func (pod) Order(cfg json.RawMessage) []SortRule { return nil }
 
+func (pod) Metrics() []string { return []string{"losses"} }
+
 func (pod) Standings(cfg json.RawMessage, results []MatchOutcome) ([]RankedEntry, error) {
 	var conf podConfig
 	if err := json.Unmarshal(cfg, &conf); err != nil {

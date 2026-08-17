@@ -17,6 +17,10 @@ type roundRobin struct{}
 
 func (roundRobin) Code() string { return "rr" }
 
+func (roundRobin) Metrics() []string {
+	return []string{"points", "h2h", "taken", "conceded", "diff", "place_sum", "bouts"}
+}
+
 // rrConfig is the rr stage config. Entrants are ordinary scheme slot sources
 // (seed / fromMatch / stageRank / reseed refs), so the same group works over a
 // fest seed draw or over qualifiers from a previous stage. Pairings, when set,
