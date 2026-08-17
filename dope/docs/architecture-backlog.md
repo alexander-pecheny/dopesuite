@@ -25,7 +25,7 @@ them, and ask before widening a note's scope.
 | 8 | the studchr replay runs direct in 25 s on every `just test` (one driver, two transports; the engine's tx entry points exported from `editbatch`); `replay.Codec` per Protocol; the discrepancies page is generated | `2a9cbe8` |
 | 6 | one `web/ts/game-tabs.ts`: `gameTabs(stages, {game, viewer, seeded})` for ЭК, брейн, КСИ, ЧГК; Blocks off `grain`, `blockLabel`/`groupLabel` the only «Группа» readers (the Сетка's column titles too) | `7bf4f85` |
 | 8′ | `replay.StandingsReader` and the `[таблица s1/g3]` transcript section: 27 tables in the studchr transcripts, checked against `stage_standings`; found and fixed a boundary reseed of winners only, flat ranks shared on бой place, and ЭК's пересев rule | `9e21855` |
-| 10 | `planGrid` / `packBlock` in `fest-grid.ts`: the Сетка's layout as data before its DOM, the painters read it; no module state, two grids on a page coexist | — |
+| 10 | `planGrid` / `packBlock` in `fest-grid.ts`: the Сетка's layout as data before its DOM, the painters read it; no module state, two grids on a page coexist | `4365b1b` |
 
 ## Open
 
