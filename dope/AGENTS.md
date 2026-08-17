@@ -194,6 +194,9 @@ Always reuse existing functions and classes before creating new ones
 
 ## Deployment Config
 Run `just deploy` to deploy, it already handles everything that's needed.
+Prod deploys come from `main` ONLY — merge the branch first, never deploy a
+branch to prod. A branch may go to staging (`just deploy-staging` → dopetest)
+for a live test.
 
 ## Production Server
 - **Access**: `ssh vps2day-ee` (login user is `ap`; host `vm46153`). Some paths need `sudo` (systemd hardening hides them). If you are already on this host, skip the `ssh` and run commands directly.
