@@ -49,8 +49,8 @@ const singleGroupSrc = `
 questions: 5
 
 [scheme]
-type: roundrobin
-teams_in_group: 4
+kind: roundrobin
+group_size: 4
 `
 
 func brainInput(entrants ...string) Input {
@@ -120,32 +120,32 @@ seed: xlsx
 
 [scheme]
 title: 1-й групповой этап
-type: roundrobin
+kind: roundrobin
 groups: 12
-teams_in_group: 4
-proceeding_teams: 2
+group_size: 4
+proceeding_participants: 2
 ---
-type: double_elimination
+kind: double_elimination
 groups: 6
-proceeding_teams: 2
+proceeding_participants: 2
 ---
 title: 2-й групповой этап
-type: roundrobin
+kind: roundrobin
 groups: 4
-teams_in_group: 3
+group_size: 3
 reseed: true
 stats_from: [s1, s2]
 sorting: [points_share desc, diff desc, taken_share desc]
-proceeding_teams: 2
+proceeding_participants: 2
 ---
 title: 3-й групповой этап
-type: roundrobin
+kind: roundrobin
 groups: 2
-teams_in_group: 4
-proceeding_teams: 2
+group_size: 4
+proceeding_participants: 2
 ---
-type: single_elimination
-teams: 4
+kind: single_elimination
+participants: 4
 bronze: true
 questions: 7
 questions.final: 5
@@ -342,9 +342,9 @@ func TestCompileVenueTitles(t *testing.T) {
 venues: [Москва-1, Рим]
 
 [scheme]
-type: roundrobin
+kind: roundrobin
 groups: 2
-teams_in_group: 2
+group_size: 2
 `
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
 	if len(scheme.Venues) != 2 || scheme.Venues[1].Title != "Рим" {
@@ -358,16 +358,16 @@ teams_in_group: 2
 func TestCompileSECrossPodPairing(t *testing.T) {
 	src := `
 [scheme]
-type: roundrobin
+kind: roundrobin
 groups: 4
-teams_in_group: 4
-proceeding_teams: 2
+group_size: 4
+proceeding_participants: 2
 ---
-type: single_elimination
-teams: 8
+kind: single_elimination
+participants: 8
 `
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
-	r8 := stageByCode(t, scheme, "s2-r8")
+	r8 := stageByCode(t, scheme, "s2-r1")
 	wantPairs := [][2]struct {
 		stage string
 		rank  int
@@ -393,16 +393,16 @@ func TestCompileWaveSplit(t *testing.T) {
 venues: 2
 
 [scheme]
-type: single_elimination
-teams: 8
+kind: single_elimination
+participants: 8
 `
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
-	w1 := stageByCode(t, scheme, "s1-r8-w1")
-	w2 := stageByCode(t, scheme, "s1-r8-w2")
+	w1 := stageByCode(t, scheme, "s1-r1-w1")
+	w2 := stageByCode(t, scheme, "s1-r1-w2")
 	if len(w1.Matches) != 2 || len(w2.Matches) != 2 {
 		t.Fatalf("wave matches = %d + %d, want 2 + 2", len(w1.Matches), len(w2.Matches))
 	}
-	if w2.Matches[0].Code != "s1-r8-m3" || w2.Matches[0].Venue != 1 {
+	if w2.Matches[0].Code != "s1-r1-m3" || w2.Matches[0].Venue != 1 {
 		t.Fatalf("wave 2 opens with %s at venue %d", w2.Matches[0].Code, w2.Matches[0].Venue)
 	}
 	semi := stageByCode(t, scheme, "s1-semifinal")
@@ -417,8 +417,8 @@ func TestCompileVenueRestriction(t *testing.T) {
 venues: [Москва-1, Рим]
 
 [scheme]
-type: single_elimination
-teams: 4
+kind: single_elimination
+participants: 4
 venues.final: [Рим]
 `
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
@@ -431,25 +431,26 @@ venues.final: [Рим]
 }
 
 // reseed: <round> re-ranks mid-block: the named round seats from a reseed
-// stage over the previous round instead of from_match refs. r4 is an accepted
-// alias for semifinal (and r2 for final) in every round-addressing key.
+// stage over the previous round instead of from_match refs. A round answers to
+// its number in every round-addressing key (r2 here) and, in a halving
+// bracket, to semifinal/final as well.
 func TestCompileIntraBlockReseed(t *testing.T) {
 	src := `
 [scheme]
-type: roundrobin
+kind: roundrobin
 groups: 4
-teams_in_group: 4
-proceeding_teams: 2
+group_size: 4
+proceeding_participants: 2
 ---
-type: single_elimination
-teams: 8
-reseed: r4
-questions.r4: 9
+kind: single_elimination
+participants: 8
+reseed: semifinal
+questions.r2: 9
 `
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
 	reseed := stageByCode(t, scheme, "s2-reseed")
-	if len(reseed.Sources) != 1 || reseed.Sources[0] != "s2-r8" {
-		t.Fatalf("reseed sources = %v, want [s2-r8]", reseed.Sources)
+	if len(reseed.Sources) != 1 || reseed.Sources[0] != "s2-r1" {
+		t.Fatalf("reseed sources = %v, want [s2-r1]", reseed.Sources)
 	}
 	semi := stageByCode(t, scheme, "s2-semifinal")
 	m1 := semi.Matches[0].Slots
@@ -457,23 +458,23 @@ questions.r4: 9
 		t.Fatalf("semifinal m1 = %+v %+v, want reseed ranks 1 vs 4", m1[0].Reseed, m1[1].Reseed)
 	}
 	if stageConfig(t, semi)["questions"] != float64(9) {
-		t.Fatalf("questions.r4 alias did not reach semifinal: %v", stageConfig(t, semi)["questions"])
+		t.Fatalf("questions.r2 did not reach the semifinal: %v", stageConfig(t, semi)["questions"])
 	}
 
 	// A wave-split previous round must be sourced wave by wave.
-	waveSrc := "[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 8\nreseed: semifinal\n"
+	waveSrc := "[defaults]\nvenues: 2\n\n[scheme]\nkind: single_elimination\nparticipants: 8\nreseed: semifinal\n"
 	waved := compileSrc(t, waveSrc, Input{GameType: "brain"})
 	wavedReseed := stageByCode(t, waved, "s1-reseed")
-	if len(wavedReseed.Sources) != 2 || wavedReseed.Sources[1] != "s1-r8-w2" {
-		t.Fatalf("wave reseed sources = %v, want both r8 waves", wavedReseed.Sources)
+	if len(wavedReseed.Sources) != 2 || wavedReseed.Sources[1] != "s1-r1-w2" {
+		t.Fatalf("wave reseed sources = %v, want both r1 waves", wavedReseed.Sources)
 	}
 }
 
 func TestCompileDETeamsAlias(t *testing.T) {
 	src := `
 [scheme]
-type: double_elimination
-teams: 8
+kind: double_elimination
+participants: 8
 `
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
 	stageByCode(t, scheme, "s1-g1")
@@ -486,16 +487,16 @@ teams: 8
 func TestCompileReseedSorting(t *testing.T) {
 	src := `
 [scheme]
-type: roundrobin
+kind: roundrobin
 groups: 2
-teams_in_group: 4
-proceeding_teams: 2
+group_size: 4
+proceeding_participants: 2
 ---
-type: roundrobin
+kind: roundrobin
 groups: 2
-teams_in_group: 2
+group_size: 2
 reseed: true
-sorting: [taken, points]
+sorting: [taken, place_sum]
 `
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
 	reseed := stageByCode(t, scheme, "s2-reseed")
@@ -513,8 +514,8 @@ sorting: [taken, points]
 // очки are higher-better, and a scheme that names one without a direction means
 // the obvious one. Naming a direction still wins.
 func TestSortingDirectionFollowsTheMetric(t *testing.T) {
-	src := "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\n" +
-		"type: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: true\nsorting: [place_sum, taken, place_sum desc]\n"
+	src := "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nproceeding_participants: 2\n---\n" +
+		"kind: roundrobin\ngroups: 2\ngroup_size: 2\nreseed: true\nsorting: [place_sum, taken, place_sum desc]\n"
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
 	var rules []map[string]string
 	if err := json.Unmarshal(stageByCode(t, scheme, "s2-reseed").Sort, &rules); err != nil {
@@ -528,7 +529,7 @@ func TestSortingDirectionFollowsTheMetric(t *testing.T) {
 }
 
 func TestCompileInitSorting(t *testing.T) {
-	src := "[init]\nseed: kvrm\nsorting: [points desc, rating desc]\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n"
+	src := "[init]\nseed: kvrm\nsorting: [points desc, rating desc]\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n"
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
 	if scheme.Seeding == nil || scheme.Seeding.Source != "kvrm" {
 		t.Fatalf("seeding = %+v", scheme.Seeding)
@@ -543,14 +544,14 @@ func TestCompileInitSorting(t *testing.T) {
 func TestCompileReseedEligibilityFromGroups(t *testing.T) {
 	src := `
 [scheme]
-type: roundrobin
+kind: roundrobin
 groups: 2
-teams_in_group: 4
-proceeding_teams: 2
+group_size: 4
+proceeding_participants: 2
 ---
-type: roundrobin
+kind: roundrobin
 groups: 2
-teams_in_group: 2
+group_size: 2
 reseed: true
 `
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
@@ -585,21 +586,21 @@ func TestCompileErrors(t *testing.T) {
 	cases := []struct {
 		name, src, wantSubstr string
 	}{
-		{"swiss unimplemented", "[scheme]\ntype: swiss\nteams: 8\n", "swiss"},
-		{"unknown kind", "[scheme]\ntype: whist\n", "whist"},
-		{"unknown key", "[scheme]\ntype: roundrobin\nteam_in_group: 4\n", "team_in_group"},
-		{"rr needs size", "[scheme]\ntype: roundrobin\n", "teams_in_group"},
-		{"se uneven rounds", "[scheme]\ntype: single_elimination\nteams: 6\n", "не делятся"},
-		{"unknown round suffix", "[scheme]\ntype: single_elimination\nteams: 4\nquestions.r16: 9\n", "r16"},
-		{"no proceeding", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\n---\ntype: single_elimination\nteams: 4\n", "proceeding_teams"},
-		{"no deterministic template", "[scheme]\ntype: roundrobin\ngroups: 5\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 5\n", "reseed"},
-		{"reseed round on rr", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: r4\n", "раунда"},
-		{"reseed sorting unmappable", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: true\nsorting: [head2head]\n", "пересев"},
-		{"best_of outside final", "[scheme]\ntype: single_elimination\nteams: 8\nbest_of.semifinal: 3\n", "только в финале"},
-		{"best_of even", "[scheme]\ntype: single_elimination\nteams: 4\nbest_of.final: 2\n", "нечётное"},
-		{"block after series", "[scheme]\ntype: single_elimination\nteams: 4\nproceeding_teams: 2\nbest_of.final: 3\n---\ntype: roundrobin\nteams_in_group: 2\n", "серией"},
-		{"stats_from without reseed", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nstats_from: [s1]\n", "вместе с reseed"},
-		{"stats_from unknown block", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: true\nstats_from: [s3]\n", "s3"},
+		{"swiss unimplemented", "[scheme]\nkind: swiss\nparticipants: 8\n", "swiss"},
+		{"unknown kind", "[scheme]\nkind: whist\n", "whist"},
+		{"unknown key", "[scheme]\nkind: roundrobin\nteam_in_group: 4\n", "team_in_group"},
+		{"rr needs size", "[scheme]\nkind: roundrobin\n", "group_size"},
+		{"se uneven rounds", "[scheme]\nkind: single_elimination\nparticipants: 6\n", "не делятся"},
+		{"unknown round suffix", "[scheme]\nkind: single_elimination\nparticipants: 4\nquestions.r16: 9\n", "r16"},
+		{"no proceeding", "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\n---\nkind: single_elimination\nparticipants: 4\n", "proceeding_participants"},
+		{"no deterministic template", "[scheme]\nkind: roundrobin\ngroups: 5\ngroup_size: 4\nproceeding_participants: 2\n---\nkind: roundrobin\ngroups: 2\ngroup_size: 5\n", "reseed"},
+		{"reseed round on rr", "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nproceeding_participants: 2\n---\nkind: roundrobin\ngroups: 2\ngroup_size: 2\nreseed: r4\n", "раунда"},
+		{"reseed sorting unmappable", "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nproceeding_participants: 2\n---\nkind: roundrobin\ngroups: 2\ngroup_size: 2\nreseed: true\nsorting: [head2head]\n", "пересев"},
+		{"best_of outside final", "[scheme]\nkind: single_elimination\nparticipants: 8\nbest_of.semifinal: 3\n", "только в финале"},
+		{"best_of even", "[scheme]\nkind: single_elimination\nparticipants: 4\nbest_of.final: 2\n", "нечётное"},
+		{"block after series", "[scheme]\nkind: single_elimination\nparticipants: 4\nproceeding_participants: 2\nbest_of.final: 3\n---\nkind: roundrobin\ngroup_size: 2\n", "серией"},
+		{"stats_from without reseed", "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nproceeding_participants: 2\n---\nkind: roundrobin\ngroups: 2\ngroup_size: 2\nstats_from: [s1]\n", "вместе с reseed"},
+		{"stats_from unknown block", "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nproceeding_participants: 2\n---\nkind: roundrobin\ngroups: 2\ngroup_size: 2\nreseed: true\nstats_from: [s3]\n", "s3"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -622,7 +623,7 @@ func TestCompileErrors(t *testing.T) {
 // needed to rank on one. takenBase is brain's; ЭК's Σ+ is not, in a brain game.
 func TestSortingAcceptsAnyDeclaredMetric(t *testing.T) {
 	src := func(metric string) string {
-		return "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nsorting: [points, " + metric + "]\n"
+		return "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nsorting: [points, " + metric + "]\n"
 	}
 	scheme := compileSrc(t, src("takenBase"), Input{GameType: "brain"})
 	stage := scheme.Stages[0]
@@ -651,13 +652,13 @@ func TestSortingAcceptsAnyDeclaredMetric(t *testing.T) {
 // group's разница) both compile — each on its own Kind.
 func TestSortingKnowsProtocolAndKindMetrics(t *testing.T) {
 	group := func(sorting string) string {
-		return "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nsorting: [" + sorting + "]\n"
+		return "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nsorting: [" + sorting + "]\n"
 	}
 	reseed := func(sorting string) string {
-		return "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: true\nsorting: [" + sorting + "]\n"
+		return "[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 4\nproceeding_participants: 2\n---\nkind: roundrobin\ngroups: 2\ngroup_size: 2\nreseed: true\nsorting: [" + sorting + "]\n"
 	}
 	flat := func(sorting string) string {
-		return "[scheme]\ntype: flat\nteams: 9\nsorting: [" + sorting + "]\n"
+		return "[scheme]\nkind: flat\nparticipants: 9\nsorting: [" + sorting + "]\n"
 	}
 	compileSrc(t, group("points, correct_50, diff"), Input{GameType: "ek"})
 	compileSrc(t, reseed("place_sum, taken_share, correct_50"), Input{GameType: "ek"})
@@ -682,7 +683,7 @@ func TestSortingKnowsProtocolAndKindMetrics(t *testing.T) {
 // ОД's tour composition is a list Param: the DSL's `tour_comp: [15, 15]` lands
 // on the flat stage's config, where games.ParseTourComp finds it.
 func TestCompileODTourComp(t *testing.T) {
-	scheme := compileSrc(t, "[scheme]\ntype: flat\nteams: 4\ntour_comp: [15, 15, 12]\n", Input{GameType: "od"})
+	scheme := compileSrc(t, "[scheme]\nkind: flat\nparticipants: 4\ntour_comp: [15, 15, 12]\n", Input{GameType: "od"})
 	var conf struct {
 		TourComp []int `json:"tourComp"`
 	}
@@ -704,8 +705,8 @@ func TestCompileODTourComp(t *testing.T) {
 func TestCompileMultiSeatElimination(t *testing.T) {
 	src := `
 [scheme]
-type: single_elimination
-teams: 48
+kind: single_elimination
+participants: 48
 match_size: 4
 winning_places: 2
 match_size.r3: 3
@@ -748,8 +749,8 @@ func TestCompileStudchrSIPlayoff(t *testing.T) {
 [defaults]
 venues: 3
 [scheme]
-type: double_elimination
-teams: 24
+kind: double_elimination
+participants: 24
 match_size: 4
 winning_places: 2
 reseed: true
@@ -793,7 +794,7 @@ sorting: [place_sum, total, plus]
 // ОД и КСИ — это один блок и один бой, за которым сидят все. Kind у них
 // теперь есть, и схема умеет это сказать.
 func TestCompileFlat(t *testing.T) {
-	scheme := compileSrc(t, "[scheme]\ntype: flat\nteams: 90\ntitle: КВРМ\n", Input{GameType: "od"})
+	scheme := compileSrc(t, "[scheme]\nkind: flat\nparticipants: 90\ntitle: КВРМ\n", Input{GameType: "od"})
 	if len(scheme.Stages) != 1 {
 		t.Fatalf("stages = %d, want 1", len(scheme.Stages))
 	}
@@ -814,11 +815,11 @@ func TestCompileFlat(t *testing.T) {
 func TestCompileSIGroupStage(t *testing.T) {
 	src := `
 [scheme]
-type: roundrobin
+kind: roundrobin
 groups: 6
-teams_in_group: 9
+group_size: 9
 match_size: 3
-proceeding_teams: 4
+proceeding_participants: 4
 bout.points: seats + 1 - place
 sorting: [points, total, plus]
 `
@@ -861,9 +862,9 @@ sorting: [points, total, plus]
 func TestSchemeDefinedMetricIsRankable(t *testing.T) {
 	src := `
 [scheme]
-type: roundrobin
+kind: roundrobin
 groups: 2
-teams_in_group: 4
+group_size: 4
 bout.points: taken == 0 ? 0 : (tied > 0 ? 2 : (place == 1 ? 3 : 1))
 standings.take_rate: bouts > 0 ? taken / bouts : 0
 sorting: [points, take_rate]
@@ -879,7 +880,7 @@ sorting: [points, take_rate]
 		t.Fatalf("order = %v, want [points take_rate]", conf.Order)
 	}
 
-	doc, err := Parse("[scheme]\ntype: roundrobin\nteams_in_group: 4\nbout.points: 4 - \n")
+	doc, err := Parse("[scheme]\nkind: roundrobin\ngroup_size: 4\nbout.points: 4 - \n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -894,8 +895,8 @@ sorting: [points, take_rate]
 func TestRoundTitleOverride(t *testing.T) {
 	src := `
 [scheme]
-type: single_elimination
-teams: 16
+kind: single_elimination
+participants: 16
 match_size: 4
 winning_places: 2
 title.r1: 1/8 финала
@@ -919,14 +920,14 @@ seed: xlsx
 
 [scheme]
 title: Групповой этап
-type: roundrobin
+kind: roundrobin
 slug: group-stage
 groups: 2
-teams_in_group: 3
-proceeding_teams: 2
+group_size: 3
+proceeding_participants: 2
 ---
-type: single_elimination
-teams: 4
+kind: single_elimination
+participants: 4
 `, Input{Slug: "si-1", Title: "СИ", GameType: "si"})
 	for _, code := range []string{"s1-g1", "s1-g2"} {
 		if got := stageByCode(t, scheme, code).Slug; got != "group-stage" {
@@ -940,10 +941,10 @@ teams: 4
 seed: xlsx
 
 [scheme]
-type: roundrobin
+kind: roundrobin
 slug: Групповой этап
 groups: 2
-teams_in_group: 3
+group_size: 3
 `)
 	if err != nil {
 		t.Fatal(err)
@@ -969,16 +970,16 @@ func TestCompileBlockSlugStrictness(t *testing.T) {
 seed: xlsx
 
 [scheme]
-type: roundrobin
+kind: roundrobin
 slug: group-stage
 groups: 2
-teams_in_group: 3
-proceeding_teams: 2
+group_size: 3
+proceeding_participants: 2
 ---
-type: roundrobin
+kind: roundrobin
 slug: group-stage
 groups: 2
-teams_in_group: 2
+group_size: 2
 `); err == nil {
 		t.Error("два блока с одним slug прошли")
 	}
@@ -986,14 +987,14 @@ teams_in_group: 2
 seed: xlsx
 
 [scheme]
-type: roundrobin
+kind: roundrobin
 slug: s2-final
 groups: 2
-teams_in_group: 3
-proceeding_teams: 2
+group_size: 3
+proceeding_participants: 2
 ---
-type: single_elimination
-teams: 4
+kind: single_elimination
+participants: 4
 `); err == nil {
 		t.Error("slug, совпавший с кодом этапа, прошёл")
 	}
@@ -1001,14 +1002,14 @@ teams: 4
 seed: xlsx
 
 [scheme]
-type: roundrobin
+kind: roundrobin
 groups: 2
-teams_in_group: 3
-proceeding_teams: 2
+group_size: 3
+proceeding_participants: 2
 ---
-type: single_elimination
+kind: single_elimination
 slug: playoff
-teams: 4
+participants: 4
 `); err == nil {
 		t.Error("slug на плей-офф молча проглочен")
 	}
@@ -1024,13 +1025,13 @@ venues: 2
 
 [scheme]
 title: Отбор
-type: flat
+kind: flat
 letters: false
-teams: 8
-proceeding_teams: 4
+participants: 8
+proceeding_participants: 4
 ---
-type: single_elimination
-teams: 4
+kind: single_elimination
+participants: 4
 reseed: true
 `, Input{Slug: "l", Title: "L", GameType: "ek"})
 	if got := stageByCode(t, scheme, "s1").Matches[0].Letter; got != "" {
@@ -1060,8 +1061,8 @@ func TestCompileBoundaryReseedTakesEveryProceedingPlace(t *testing.T) {
 venues: 6
 
 [scheme]
-type: single_elimination
-teams: 48
+kind: single_elimination
+participants: 48
 match_size: 4
 winning_places: 2
 match_size.r3: 3

@@ -61,7 +61,7 @@ func TestMultiSeatGroupPlaysAndRanks(t *testing.T) {
 	token := createTestSession(t, srv, systemUserID(t, srv.Eng().DB))
 	seedFestPlayers(t, srv.Eng().DB, festID, 9)
 
-	dsl := "[scheme]\ntype: roundrobin\nteams_in_group: 9\nmatch_size: 3\nthemes: 2\n" +
+	dsl := "[scheme]\nkind: roundrobin\ngroup_size: 9\nmatch_size: 3\nthemes: 2\n" +
 		"bout.points: seats + 1 - place\nsorting: [points, total]\n"
 	gameID := createSchemeGame(t, srv.Eng().DB, festID, "si", "Личная СИ", dsl)
 
@@ -125,7 +125,7 @@ func TestMultiSeatEliminationAdvancesTwo(t *testing.T) {
 	festID, _ := scopedAPITestIDs(t, srv)
 	seedFestPlayers(t, srv.Eng().DB, festID, 16)
 
-	dsl := "[scheme]\ntype: single_elimination\nteams: 16\nmatch_size: 4\nwinning_places: 2\nthemes: 2\n"
+	dsl := "[scheme]\nkind: single_elimination\nparticipants: 16\nmatch_size: 4\nwinning_places: 2\nthemes: 2\n"
 	gameID := createSchemeGame(t, srv.Eng().DB, festID, "si", "Личная СИ", dsl)
 
 	rows, err := srv.Eng().DB.Query(`

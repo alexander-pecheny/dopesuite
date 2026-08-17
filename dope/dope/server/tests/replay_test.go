@@ -130,7 +130,7 @@ func TestReplayAgreesWithItsTranscript(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(map[bool]string{false: "http", true: "direct"}[direct], func(t *testing.T) {
 			game := newReplayGame(t,
-				"[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 4\nthemes: 1\n",
+				"[defaults]\nvenues: 2\n\n[scheme]\nkind: single_elimination\nparticipants: 4\nthemes: 1\n",
 				"ek", "Мини-ЭК", []string{"Ктулху", "ВШЭстером", "Ушки на макушке", "Мыслители"}, direct)
 			findings, err := replay.Run(script, game)
 			if err != nil {
@@ -160,7 +160,7 @@ func TestReplayCatchesAWrongSeating(t *testing.T) {
 		t.Fatal(err)
 	}
 	game := newReplayGame(t,
-		"[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 4\nthemes: 1\n",
+		"[defaults]\nvenues: 2\n\n[scheme]\nkind: single_elimination\nparticipants: 4\nthemes: 1\n",
 		"ek", "Мини-ЭК", []string{"Ктулху", "ВШЭстером", "Ушки на макушке", "Мыслители"}, false)
 
 	findings, _ := replay.Run(script, game)
@@ -187,7 +187,7 @@ func TestReplayDrawSurvivesRecompute(t *testing.T) {
 		t.Fatal(err)
 	}
 	game := newReplayGame(t,
-		"[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 4\nthemes: 1\n",
+		"[defaults]\nvenues: 2\n\n[scheme]\nkind: single_elimination\nparticipants: 4\nthemes: 1\n",
 		"ek", "Мини-ЭК", []string{"Ктулху", "ВШЭстером", "Ушки на макушке", "Мыслители"}, false)
 	if _, err := replay.Run(script, game); err != nil {
 		t.Fatalf("прогон: %v", err)
@@ -316,7 +316,7 @@ func TestReplayBrainBout(t *testing.T) {
 	for i, entrant := range script.Roster {
 		names[i] = entrant.Name
 	}
-	game := newReplayGame(t, "[defaults]\nvenues: 2\nquestions: 5\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n",
+	game := newReplayGame(t, "[defaults]\nvenues: 2\nquestions: 5\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n",
 		"brain", "Мини-брейн", names, false)
 
 	findings, err := replay.Run(script, game)

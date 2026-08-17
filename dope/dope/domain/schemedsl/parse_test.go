@@ -8,7 +8,7 @@ import (
 const exampleSrc = `
 [defaults]
 venues: [Москва-1, Москва-2, Рим]
-sorting: [points, head2head, taken, diff]
+sorting: [points, h2h, taken, diff]
 points: [2, 1, 0]
 questions: 5
 
@@ -17,21 +17,21 @@ seed: kvrm  # or: random, xlsx
 sorting: [points desc, rating desc]
 
 [scheme]
-type: roundrobin
+kind: roundrobin
 groups: 12
-teams_in_group: 4
-proceeding_teams: 2
+group_size: 4
+proceeding_participants: 2
 ---
-type: double_elimination
+kind: double_elimination
 groups: 6
-teams_in_group: 4
-proceeding_teams: 2
+group_size: 4
+proceeding_participants: 2
 ---
-type: roundrobin
+kind: roundrobin
 groups: 4
-teams_in_group: 3
+group_size: 3
 reseed: true
-proceeding_teams: 2
+proceeding_participants: 2
 questions: 7
 questions.r3: 9
 `
@@ -61,7 +61,7 @@ func TestParseExample(t *testing.T) {
 	if len(doc.Blocks) != 3 {
 		t.Fatalf("blocks = %d", len(doc.Blocks))
 	}
-	if got, _ := doc.Blocks[1].Str("type"); got != "double_elimination" {
+	if got, _ := doc.Blocks[1].Str("kind"); got != "double_elimination" {
 		t.Fatalf("block 2 type = %q", got)
 	}
 	if got, ok := doc.Blocks[2].Bool("reseed"); !ok || !got {
@@ -102,7 +102,7 @@ func TestParseErrors(t *testing.T) {
 		wantLine              int
 	}{
 		{"unknown section", "[whatever]\n", "[whatever]", 1},
-		{"key before section", "type: rr\n", "секции", 1},
+		{"key before section", "kind: rr\n", "секции", 1},
 		{"separator outside scheme", "[defaults]\nquestions: 5\n---\n", "---", 3},
 		{"duplicate key", "[defaults]\nquestions: 5\nquestions: 7\n", "questions", 3},
 		{"free text", "[defaults]\nlorem ipsum\n", "lorem", 2},
@@ -138,7 +138,7 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestParseEmptyBlocksDropped(t *testing.T) {
-	doc, err := Parse("[scheme]\ntype: roundrobin\nteams_in_group: 4\n---\n")
+	doc, err := Parse("[scheme]\nkind: roundrobin\ngroup_size: 4\n---\n")
 	if err != nil {
 		t.Fatal(err)
 	}

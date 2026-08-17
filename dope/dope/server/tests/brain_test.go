@@ -33,7 +33,7 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 		}
 	}
 
-	form := url.Values{"game_type": {"brain"}, "brain_dsl": {"[defaults]\nquestions: 5\n\n[scheme]\ntype: roundrobin\nteams_in_group: 4\n"}}
+	form := url.Values{"game_type": {"brain"}, "brain_dsl": {"[defaults]\nquestions: 5\n\n[scheme]\nkind: roundrobin\ngroup_size: 4\n"}}
 	createReq := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/game/new", festID), strings.NewReader(form.Encode()))
 	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	createReq.AddCookie(&http.Cookie{Name: session.CookieName, Value: token})

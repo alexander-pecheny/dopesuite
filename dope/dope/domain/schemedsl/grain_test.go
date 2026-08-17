@@ -15,7 +15,7 @@ import (
 // A round-robin Block: its stages are Groups, and круги are a property of the
 // бои inside one, because a Group plays all four of its круги at one стол.
 func TestGrainOfRoundRobinGroups(t *testing.T) {
-	src := "[defaults]\nvenues: 6\n\n[scheme]\ntype: roundrobin\ngroups: 6\nteams_in_group: 9\nmatch_size: 3\n"
+	src := "[defaults]\nvenues: 6\n\n[scheme]\nkind: roundrobin\ngroups: 6\ngroup_size: 9\nmatch_size: 3\n"
 	scheme := compileSrc(t, src, Input{GameType: "si"})
 	stages := matchStages(scheme)
 	if len(stages) != 6 {
@@ -50,7 +50,7 @@ func TestGrainOfRoundRobinGroups(t *testing.T) {
 // An elimination Block: a Round splits into Waves when it has more бои than
 // столы, and each Wave is its own stage carrying the same Round on its бои.
 func TestGrainOfWaveSplitElimination(t *testing.T) {
-	src := "[defaults]\nvenues: 2\n\n[scheme]\ntype: single_elimination\nteams: 8\n"
+	src := "[defaults]\nvenues: 2\n\n[scheme]\nkind: single_elimination\nparticipants: 8\n"
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
 	stages := matchStages(scheme)
 
@@ -134,7 +134,7 @@ func TestGrainSeparatesBlocks(t *testing.T) {
 // раунд, и коды этапов не должны сталкиваться. Раньше все группы претендовали
 // на `s1-r2-reseed`, схема компилировалась, а падала уже вставка в базу.
 func TestMultiGroupDoubleEliminationCodesAreUnique(t *testing.T) {
-	src := "[defaults]\nvenues: 4\n\n[scheme]\ntype: double_elimination\ngroups: 2\nteams_in_group: 4\nreseed: true\n"
+	src := "[defaults]\nvenues: 4\n\n[scheme]\nkind: double_elimination\ngroups: 2\ngroup_size: 4\nreseed: true\n"
 	scheme := compileSrc(t, src, Input{GameType: "brain"})
 	seen := map[string]bool{}
 	for _, stage := range scheme.Stages {

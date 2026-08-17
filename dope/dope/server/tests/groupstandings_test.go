@@ -20,7 +20,7 @@ func TestGroupStageCarriesItsStandings(t *testing.T) {
 	seedFestPlayers(t, db, festID, 9)
 
 	gameID := createSchemeGame(t, db, festID, "si", "Личная СИ",
-		"[scheme]\ntype: roundrobin\nteams_in_group: 9\nmatch_size: 3\nthemes: 2\n"+
+		"[scheme]\nkind: roundrobin\ngroup_size: 9\nmatch_size: 3\nthemes: 2\n"+
 			"bout.points: seats + 1 - place\nsorting: [points, total]\n")
 
 	code := firstMatchCode(t, db, gameID)
@@ -77,8 +77,8 @@ func TestThemeCountFollowsTheStage(t *testing.T) {
 	seedFestPlayers(t, db, festID, 4)
 
 	gameID := createSchemeGame(t, db, festID, "si", "Личная СИ",
-		"[scheme]\ntype: roundrobin\nteams_in_group: 4\nthemes: 6\nproceeding_teams: 2\n---\n"+
-			"type: single_elimination\nteams: 2\nthemes: 9\nreseed: true\n")
+		"[scheme]\nkind: roundrobin\ngroup_size: 4\nthemes: 6\nproceeding_participants: 2\n---\n"+
+			"kind: single_elimination\nparticipants: 2\nthemes: 9\nreseed: true\n")
 
 	for _, c := range []struct {
 		stage string

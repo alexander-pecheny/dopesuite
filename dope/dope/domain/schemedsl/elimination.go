@@ -79,16 +79,22 @@ func planElimRounds(entrants, winning, maxRounds int, sizeFor func(round, enteri
 	}
 }
 
-// elimRoundNames are the dotted-override keys a round answers to. A halving
-// bracket keeps the traditional names, because there «1/4 финала» is
-// arithmetically what the round is; any other shape is named by its number,
-// since a round of twelve four-seat бои is nobody's 1/16 by arithmetic — a
-// scheme that wants that name writes it as a title.
+// elimRoundNames are the dotted-override keys a round answers to: `r{N}` by
+// its number in the block, always. A halving bracket's last two rounds are
+// the semifinal and the final by arithmetic, so those go by their names too,
+// and by them first (the stage code); a round of twelve four-seat бои is
+// nobody's 1/16, so a scheme that wants that name writes it as a title.
 func elimRoundNames(r elimRound, index int, winning int) []string {
+	ordinal := fmt.Sprintf("r%d", index+1)
 	if r.size == 2 && winning == 1 {
-		return seRoundNames(r.entering)
+		switch r.entering {
+		case 2:
+			return []string{"final", ordinal}
+		case 4:
+			return []string{"semifinal", ordinal}
+		}
 	}
-	return []string{fmt.Sprintf("r%d", index+1)}
+	return []string{ordinal}
 }
 
 func elimRoundTitle(r elimRound, index int, winning int) string {

@@ -3,19 +3,19 @@ venues: 6
 
 [scheme]
 title: Групповой этап
-type: roundrobin
+kind: roundrobin
 slug: group-stage
 groups: 6
-teams_in_group: 9
+group_size: 9
 match_size: 3
 themes: 6
 bout.points: seats + 1 - place
 sorting: [points, total, plus]
-proceeding_teams: 4
+proceeding_participants: 4
 ---
 title: Плей-офф
-type: double_elimination
-teams: 24
+kind: double_elimination
+participants: 24
 match_size: 4
 winning_places: 2
 themes: 8

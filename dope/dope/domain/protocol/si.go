@@ -24,7 +24,7 @@ type si struct{}
 func (si) Code() string { return "si" }
 
 func (si) Params() []Param {
-	return []Param{{Key: "themes", Config: "themes"}, {Key: "participants", Config: "participants"}}
+	return []Param{{Key: "themes", Config: "themes"}}
 }
 
 func (si) TeamBlob() bool { return true }

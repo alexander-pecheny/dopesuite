@@ -29,8 +29,8 @@ insert into fest_teams(fest_id, name, city, position, number) values(?, ?, '', ?
 		}
 	}
 
-	dsl := "[defaults]\nquestions: 3\n\n[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nproceeding_teams: 1\n---\n" +
-		"type: roundrobin\nteams_in_group: 2\nreseed: true\nsorting: [points_share desc, taken_share desc]\n"
+	dsl := "[defaults]\nquestions: 3\n\n[scheme]\nkind: roundrobin\ngroups: 2\ngroup_size: 2\nproceeding_participants: 1\n---\n" +
+		"kind: roundrobin\ngroup_size: 2\nreseed: true\nsorting: [points_share desc, taken_share desc]\n"
 	form := url.Values{"game_type": {"brain"}, "brain_dsl": {dsl}}
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/host/fest/%d/game/new", festID), strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

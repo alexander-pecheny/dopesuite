@@ -3,8 +3,8 @@ venues: 6
 
 [scheme]
 title: Плей-офф
-type: single_elimination
-teams: 48
+kind: single_elimination
+participants: 48
 match_size: 4
 winning_places: 2
 match_size.r3: 3
