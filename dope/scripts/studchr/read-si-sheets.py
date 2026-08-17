@@ -32,6 +32,22 @@ for row in wb["Группы"].iter_rows(max_col=24, values_only=True):
         if i in header and name and not name.startswith("Пл."):
             groups.setdefault(header[i], []).append(name)
 
+# «Группы A-B» and its siblings print each group twice: as entered, and sorted
+# by Очки from column H on. The sorted one is the group's table.
+tables = {}
+for title in ["Группы A-B", "Группы C-D", "Группы E-F"]:
+    letter = None
+    for row in wb[title].iter_rows(max_col=8, values_only=True):
+        cell = str(row[7]).strip() if row[7] is not None else ""
+        if cell.startswith("Группа "):
+            letter = cell.split()[-1]
+            tables[letter] = []
+        elif letter and cell and cell != "Игрок":
+            tables[letter].append(cell)
+for letter, names in groups.items():
+    if sorted(tables.get(letter, [])) != sorted(names):
+        sys.exit(f"таблица группы {letter} не сходится с её составом: {tables.get(letter)} vs {names}")
+
 rounds = {}
 for title in ["Круг 1 (протоколы)", "Круг 2 (протоколы)", "Круг 3 (протоколы)", "Круг 4 (протоколы)"]:
     rounds[title] = sheetgrid.read_bouts(wb[title])
@@ -73,7 +89,7 @@ bad = [name for name in set(computed) | set(sheet_by)
 if bad:
     sys.exit(f"статистика не сходится с протоколами: {sorted(bad)}")
 
-out = {"players": players, "groups": groups, "rounds": rounds, "playoff": playoff, "stats": stats}
+out = {"players": players, "groups": groups, "tables": tables, "rounds": rounds, "playoff": playoff, "stats": stats}
 json.dump(out, open("si-data.json", "w"), ensure_ascii=False)
 print("players", len(players), "groups", {g: len(v) for g, v in groups.items()})
 for title, bouts in rounds.items():

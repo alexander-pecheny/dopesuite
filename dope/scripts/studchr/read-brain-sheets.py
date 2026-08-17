@@ -99,6 +99,44 @@ def read_sheet(ws):
     return out
 
 
+def read_tables(ws):
+    """A standings tab: «Группа A (пл. 1)», then a header row ending in «М», then
+    a row per team — № | Команда | … | М. Two groups sit side by side, so a
+    group is read from the column its title stands in. Returns letter → list
+    of (место, команда) as printed."""
+    rows = list(ws.iter_rows(values_only=True))
+    tables = {}
+    for i, row in enumerate(rows):
+        for column, cell in enumerate(row):
+            if not text(cell).startswith("Группа "):
+                continue
+            letter = text(cell).split()[1]
+            header = [text(c) for c in rows[i + 1]]
+            place_at = column + header[column:].index("М")
+            table = tables.setdefault(letter, [])
+            for below in rows[i + 2:]:
+                if column + 1 >= len(below) or not text(below[column + 1]):
+                    break
+                table.append([float(below[place_at]), text(below[column + 1])])
+    return tables
+
+
+def read_reseed(ws):
+    """«Пересев»: the list under its last «Команда» header is the twelve out of
+    the DE in the order the sheet ranked them — the order that seated the 2-й
+    групповой этап."""
+    out = []
+    for row in ws.iter_rows(values_only=True):
+        head = text(row[0]) if row else ""
+        if head == "Команда":
+            out = []
+        elif head and out is not None and not head.startswith("Конец"):
+            out.append(head)
+        elif not head and out:
+            break
+    return out
+
+
 def read_stats(ws):
     """«Статистика»: Игрок | Команда | Попытки | Верно | Неверно."""
     out = []
@@ -141,9 +179,13 @@ if __name__ == "__main__":
         if cells and cells[0]:
             lineups.setdefault(cells[0], []).extend(c for c in cells[1:] if c)
     stats = read_stats(wb["Статистика"])
+    tables = {}
+    for name in ["1-й групповой этап", "2-й групповой этап", "3-й групповой и финальный"]:
+        tables.update(read_tables(wb[name]))
+    reseed = read_reseed(wb["Пересев"])
     wb.close()
     check_stats(stages, stats)
-    json.dump({"stages": stages, "lineups": lineups, "stats": stats},
+    json.dump({"stages": stages, "lineups": lineups, "stats": stats, "tables": tables, "reseed": reseed},
               open("brain-data.json", "w"), ensure_ascii=False)
     total = 0
     for name, bouts in stages.items():

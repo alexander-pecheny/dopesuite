@@ -15,7 +15,8 @@ new reader and nothing else.
 | брейн | `read-brain-sheets.py` | `emit-brain.py` → `testdata/studchr2026/brain.transcript` |
 | ОД | `read-od-sheet.py` | — |
 
-СИ and ТПШ print the same grid, so its decoding lives once in `sheetgrid.py`.
+СИ and ТПШ print the same grid, so its decoding lives once in `sheetgrid.py`;
+`transcript.py` writes the one thing all four emitters share, a `[таблица]`.
 
 Each reader checks its own decoding rather than trusting it. СИ's recomputes
 every theme's total from the marks it decoded and compares it with the total the
@@ -48,6 +49,17 @@ checked where it decides something: in whom бой A seats.
 a best-of-three final. Only the жеребьёвка is input; every pod, every later group
 and every finalist is seated from what came before, so the replay asserts the
 entire structure of the largest game dope runs.
+
+## The tables
+
+Each transcript also carries the sheets' own standings — 27 `[таблица]`
+sections: СИ's six групп (as «Группы A-B» sorts them), ТПШ's отбор of 91
+(«Итоги отбора»), брейн's twelve групп, its пересев and the four and two groups
+after it, and ЭК's «Пересев перед 14». dope ranks each Block itself and has to
+agree row by row. Adding them found three defects on 17 Aug 2026 (a boundary
+reseed of winners only, flat ranks shared on бой place, ЭК's пересев rule),
+and one honest disagreement: ТПШ's tab numbers a full tie 46 and 47 where dope
+shares the place — overridden, with the reason beside it.
 
 ## What the фест looks like
 

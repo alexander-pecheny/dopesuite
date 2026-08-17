@@ -90,11 +90,12 @@ func (flat) Standings(cfg json.RawMessage, results []MatchOutcome, _ Inputs) ([]
 		}
 		return ranked[i].Participant < ranked[j].Participant
 	})
-	for i := range ranked {
-		if i > 0 && ranked[i].Metrics["place"] == ranked[i-1].Metrics["place"] {
-			ranked[i].Rank = ranked[i-1].Rank
-		} else {
-			ranked[i].Rank = i + 1
+	shareRanks(ranked, order)
+	// A table sorted by its own keys shows the rank they give; one that only
+	// keeps the бой's order shows the бой's own place, mean of a tie and all.
+	if conf.Order != nil {
+		for i := range ranked {
+			ranked[i].Metrics["place"] = float64(ranked[i].Rank)
 		}
 	}
 	return ranked, nil

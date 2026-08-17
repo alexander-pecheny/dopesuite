@@ -39,7 +39,7 @@ globalThis.document = {createElement: node};
 globalThis.HTMLAnchorElement = class {};
 globalThis.Node = class {}; // match-table's cell helpers ask `instanceof Node`; text never is one
 
-const {buildFestGrid, buildReseedStagePanel} = await import("./dist/fest-grid.js");
+const {buildFestGrid, buildReseedStagePanel, planGrid, packBlock} = await import("./dist/fest-grid.js");
 
 function walk(root, out = []) {
   out.push(root);
@@ -354,4 +354,56 @@ test("the Пересев names source бои by буква and drops a column th
     {rank: 2, name: "Олег", metrics: {match: "s1-m1", total: 290}},
   ]), {letters});
   assert.deepEqual(tableColumn(same, "Бой"), null);
+});
+
+// --- the plan: layout without a DOM --------------------------------------
+
+const groupOf = (n, size) => ({
+  code: `s1-g${n}`, title: `Группа ${n}`, stage_type: "matches", kind: "rr",
+  grain: {block: "s1", group: String(n)},
+  standings: Array.from({length: size}, (_, i) => ({rank: i + 1, name: `К${n}-${i}`, metrics: {place: i + 1, points: 1}})),
+  matches: [],
+});
+
+// A group of nine is a head and nine rows: two units of a five-row grid. Its
+// units are known before a box is drawn.
+test("planGrid spans a nine-row group over two units", () => {
+  const plan = planGrid([groupOf(1, 9), groupOf(2, 4)]);
+  assert.equal(plan.unitRows, 5);
+  assert.equal(plan.sections[0].kind, "block");
+  assert.deepEqual(plan.sections[0].entries.map((entry) => entry.item.units), [2, 1]);
+});
+
+// Twelve групп of four at five to a column pack 4+4+4, not 5+5+2: the fewest
+// rows that still take the columns the screen asked for.
+test("packBlock evens the columns out", () => {
+  assert.deepEqual(packBlock(Array(12).fill(1), 5), {rows: 4, cols: 3});
+  const plan = planGrid(Array.from({length: 12}, (_, i) => groupOf(i + 1, 4)));
+  assert.deepEqual([plan.sections[0].rows, plan.sections[0].cols], [12, 1]);
+});
+
+// A Block of one Group is its own column and stands alone in it, however tall
+// the screen; before the screen is measured every Block is one column.
+test("packBlock leaves a lone Group alone", () => {
+  assert.deepEqual(packBlock([2], 40), {rows: 2, cols: 1});
+  assert.deepEqual(packBlock([1, 1, 1], undefined), {rows: 3, cols: 1});
+  const plan = planGrid([groupOf(1, 9)]);
+  assert.equal(plan.sections[0].kind, "standings");
+});
+
+// Two grids on one page — the брейн Сетка and its pod board — keep their own
+// rows and буквы: building the second changes nothing about the first.
+test("two grids keep their own rows and letters", () => {
+  const bout = {code: "s2-m1", participantCount: 2, slots: [{label: "А"}, {label: "Б"}]};
+  const four = Array.from({length: 4}, (_, i) => ({rank: i + 1, name: `К${i}`, metrics: {place: i + 1, points: 1}}));
+  const wide = buildFestGrid({stages: [
+    {code: "s1-g1", title: "Группа 1", stage_type: "matches", grain: {block: "s1", group: "1"}, standings: four, matches: []},
+    {code: "s2", title: "Финал", stage_type: "matches", matches: [{...bout, slots: [{label: "Бой 1, м. 1", fromMatch: {match: "s1-g1-1", place: 1}}, {label: "Б"}]}]},
+  ]}, {stageHeaderLink: false, letters: new Map([["s1-g1-1", "A"], ["s2-m1", "Z"]])});
+  const board = buildFestGrid({stages: [{code: "r1", title: "Раунд 1", stage_type: "matches", matches: [bout]}]}, {stageHeaderLink: false});
+  assert.equal(wide.props["--grid-unit-rows"], "5");
+  assert.equal(board.props["--grid-unit-rows"], "3");
+  assert.deepEqual(texts(wide, "grid-match-title"), ["Группа 1", "Бой Z"]);
+  assert.deepEqual(texts(board, "grid-match-title"), ["Бой s2-m1"]);
+  assert.equal(texts(wide, "grid-slot-team-name")[4], "Бой A, м. 1");
 });

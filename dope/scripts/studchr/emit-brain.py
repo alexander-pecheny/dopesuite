@@ -10,7 +10,12 @@ their own sheet. Each group's бои are in the canon order, which is what lets 
 group's four positions be read back out of who met whom.
 """
 import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from transcript import table
 
 # Sheet group letters, block by block, in the order the scheme compiles them.
 BLOCKS = [("s1", "ABCDEFGHIJKL"), ("s2", "MNOPQR"), ("s3", "STUV"), ("s4", "WX")]
@@ -127,7 +132,12 @@ def emit(data):
 
     sheets = ["1-й групповой этап (протоколы)", "DE (протоколы)",
               "2-й групповой этап (протоколы)", "3-й групповой этап (протоколы)"]
+    tables = data["tables"]
     for (block, letters), sheet in zip(BLOCKS, sheets):
+        # The пересев out of the DE is block s3's own table, ranked as the
+        # sheet ranked it — the order that seated the 2-й групповой этап.
+        if block == "s3":
+            table(out, "s3", list(enumerate(data["reseed"], 1)))
         groups = by_group(stages[sheet])
         for index, letter in enumerate(letters, 1):
             bouts = groups[letter]
@@ -136,6 +146,9 @@ def emit(data):
                 sys.exit(f"группа {letter}: {len(bouts)} боёв — не знаю такого расписания")
             for bout, (circle, wave, match) in zip(bouts, plan):
                 bout_lines(out, f"{block}/g{index}/r{circle}/w{wave}/m{match}", bout)
+            # A group's table with the «М» the sheet printed; a DE pod prints none.
+            if letter in tables:
+                table(out, f"{block}/g{index}", sorted(tables[letter]))
 
     for bout, (circle, match) in zip(stages["Финальный этап (протоколы)"], FINAL):
         bout_lines(out, f"s5/r{circle}/w1/m{match}", bout)

@@ -551,6 +551,44 @@ select id from participants where fest_id = ? and name = ?`, g.festID, name).Sca
 	return id, err
 }
 
+// Standings reads the stage_standings of a Block's (or Group's) one ranking
+// stage, in seat order, with the shared место the Kind shows.
+func (g *serverGame) Standings(at replay.Coord) ([]replay.TableRow, error) {
+	rows, err := g.db().Query(`
+select s.code, ss.metrics_json, p.name from stages s
+join stage_standings ss on ss.stage_id = s.id
+join participants p on p.id = ss.participant_id
+where s.game_id = ? and s.block_code = ? and s.group_code = ?
+order by s.position, ss.rank`, g.gameID, at.Block, at.Group)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []replay.TableRow
+	stages := map[string]bool{}
+	for rows.Next() {
+		var code, metrics, name string
+		if err := rows.Scan(&code, &metrics, &name); err != nil {
+			return nil, err
+		}
+		var place struct {
+			Place float64 `json:"place"`
+		}
+		if err := json.Unmarshal([]byte(metrics), &place); err != nil {
+			return nil, err
+		}
+		stages[code] = true
+		out = append(out, replay.TableRow{Place: place.Place, Name: name})
+	}
+	if len(stages) > 1 {
+		return nil, fmt.Errorf("в блоке несколько таблиц: %v", stages)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("в игре нет таблицы по этой координате")
+	}
+	return out, rows.Err()
+}
+
 // PlayerStats hands every finished бой to the game's codec, which counts the
 // sheet's three columns the way the transcript's [статистика] carries them.
 func (g *serverGame) PlayerStats() ([]replay.Stat, error) {

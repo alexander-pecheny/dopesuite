@@ -1,9 +1,9 @@
 # Architecture backlog — hand-off notes
 
 The 15 Aug 2026 architecture review of branch `dope-brain` named ten
-deepening candidates. Nine are done (four on `dope-brain`, #7, #6, #5, #9
-and #8 on `dope-refactor`); what is open is #8's second item and #10, each
-with a note in this directory written for a fresh agent. The vocabulary is
+deepening candidates. All ten are done (four on `dope-brain`; #7, #6, #5,
+#9, #8, 8′ and #10 on `dope-refactor`), each with a note in this directory
+that ends in «What was done». The vocabulary is
 `CONTEXT.md`'s for the domain (Fest, Game, Block, Round, Wave, Group, Сетка,
 Бой, Protocol, Metric, Slot) and the `/codebase-design` skill's for the
 architecture (module, interface, depth, seam, adapter, locality, leverage).
@@ -24,17 +24,13 @@ them, and ask before widening a note's scope.
 | 9 | one Go type per Kind config (`structure.RRConfig` …), the compiler writes it and the Kind reads it; `Standings` takes `structure.Inputs` for the seed and contenders | `7d905b7` |
 | 8 | the studchr replay runs direct in 25 s on every `just test` (one driver, two transports; the engine's tx entry points exported from `editbatch`); `replay.Codec` per Protocol; the discrepancies page is generated | `2a9cbe8` |
 | 6 | one `web/ts/game-tabs.ts`: `gameTabs(stages, {game, viewer, seeded})` for ЭК, брейн, КСИ, ЧГК; Blocks off `grain`, `blockLabel`/`groupLabel` the only «Группа» readers (the Сетка's column titles too) | `7bf4f85` |
+| 8′ | `replay.StandingsReader` and the `[таблица s1/g3]` transcript section: 27 tables in the studchr transcripts, checked against `stage_standings`; found and fixed a boundary reseed of winners only, flat ranks shared on бой place, and ЭК's пересев rule | `9e21855` |
+| 10 | `planGrid` / `packBlock` in `fest-grid.ts`: the Сетка's layout as data before its DOM, the painters read it; no module state, two grids on a page coexist | `4365b1b` |
 
 ## Open
 
-| # | note | strength (15 Aug) | depends on |
-|---|---|---|---|
-| 8′ | [replay-adapters.md](replay-adapters.md) item 2 — `Locate` / `Standings` on `replay.Game` and a `[таблица]` transcript section | speculative | #8 (done) |
-| 10 | [fest-grid-planner.md](fest-grid-planner.md) — a pure layout planner in front of the Сетка painter | speculative | do with #7 or not at all |
-
-Neither is urgent: 8′ when a transcript needs to assert a table; 10 only if
-the grid changes anyway — #7 rebuilt the group table as a бой box, so a
-planner would now front one box kind, not two.
+Nothing. The notes stay as the record of what each item was and what it
+became.
 
 ## How to work a note
 

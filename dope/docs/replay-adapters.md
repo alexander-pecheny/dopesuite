@@ -1,8 +1,7 @@
 # Replay harness: a Structure-level adapter, coordinates on the interface, one codec per Protocol (#8)
 
-Status: done 17 Aug 2026 in the parts that make the gate cheap and the seam
-real (see «What was done» at the end); the coordinate and standings
-assertions (item 2) are left open. Written earlier as the hand-off note.
+Status: done 17 Aug 2026 (see «What was done» at the end); item 2's `Locate`
+was dropped on purpose. Written earlier as the hand-off note.
 
 ## The problem
 
@@ -112,6 +111,21 @@ one-adapter design:
   the page is stale.
 - `testapi.go` lost its three unused aliases (`CreateInvite`,
   `HandleAuthLogout`, `SubmitMatchVenue`); the rest is what other tests use.
-- Not done: `Locate(coord)` / `Standings(block)` on `replay.Game` and a
-  `[таблица s1/g3]` transcript section — a new transcript form and emitter
-  work, deferred; the Python emitters are untouched.
+- Item 2, later the same day: `replay.StandingsReader` (`Standings(at Coord)
+  ([]TableRow, error)`, optional like `StatsReader`) and a `[таблица s1/g3]`
+  section — `место | участник` rows, asserted once after the last бой, both
+  ways, overridable like статистика. The driver reads `stage_standings` by
+  block and group; the four emitters read the sheets' standings tabs
+  (`transcript.py` shares the writer), so the transcripts now carry 27
+  tables: СИ's six групп, ТПШ's отбор of 91, брейн's twelve групп, пересев,
+  four and two, ЭК's пересев перед 1/4. `Locate` is not there: a match id on
+  the domain interface would be the storage leaking through, and `Run` has
+  nothing to ask it — the coordinate lookup is the adapter's business.
+- What the tables found, and fixed: a boundary reseed (`reseed: r3`)
+  re-ranked place-1 finishers only, six of ЭК's twelve; the `flat` Ranker
+  shared a rank on equal бой place rather than on equal sort keys, so ТПШ's
+  отбор tied everyone level on Σ (a flat with its own order now shows that
+  rank; one without keeps the бой's place); and ЭК's пересев was ranked by
+  сумма мест then Σ over 1/16 and 1/8 together, which `ek.dsl` now says
+  (`stats_from: [s1]` at a boundary sums the block's rounds so far). One
+  disagreement stays, overridden: ТПШ's tab numbers a full tie 46 and 47.

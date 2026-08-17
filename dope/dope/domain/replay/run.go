@@ -45,6 +45,13 @@ type StatsReader interface {
 	PlayerStats() ([]Stat, error)
 }
 
+// StandingsReader is the half of Game a transcript with [таблица] needs: the
+// table dope ranked for a Block, or a Group in it, as rows of the место it
+// shows (shared when level) and who holds it. Optional, like StatsReader.
+type StandingsReader interface {
+	Standings(at Coord) ([]TableRow, error)
+}
+
 // Play is what one participant did in a бой, in whichever of the two shapes the
 // game uses. It carries the play data alone — the sheet's Σ and место stay out,
 // so a Game cannot quietly apply the answer it is supposed to be checked against.
@@ -233,6 +240,42 @@ func Run(script Script, game Game) ([]Finding, error) {
 			if !sheetKeys[statKey(stat)] {
 				report(Finding{At: StatsCoord, Field: "статистика", Participant: stat.Player,
 					Sheet: "нет строки", Ours: fmt.Sprint(stat.Values)})
+			}
+		}
+	}
+
+	// A table is asserted like статистика: once, both ways.
+	if len(script.Tables) > 0 {
+		reader, ok := game.(StandingsReader)
+		if !ok {
+			return findings, fmt.Errorf("в стенограмме есть таблица, а игра не умеет ранжировать блок")
+		}
+		for _, table := range script.Tables {
+			ours, err := reader.Standings(table.At)
+			if err != nil {
+				return findings, fmt.Errorf("%s: %w", table.At, err)
+			}
+			oursBy := make(map[string]float64, len(ours))
+			for _, row := range ours {
+				oursBy[row.Name] = row.Place
+			}
+			listed := make(map[string]bool, len(table.Rows))
+			for _, want := range table.Rows {
+				listed[want.Name] = true
+				got, ok := oursBy[want.Name]
+				if !ok {
+					report(Finding{At: table.At, Field: "таблица", Participant: want.Name,
+						Sheet: place(want.Place), Ours: "нет строки", Line: want.Line})
+				} else if got != want.Place {
+					report(Finding{At: table.At, Field: "место", Participant: want.Name,
+						Sheet: place(want.Place), Ours: place(got), Line: want.Line})
+				}
+			}
+			for _, row := range ours {
+				if !listed[row.Name] {
+					report(Finding{At: table.At, Field: "таблица", Participant: row.Name,
+						Sheet: "нет строки", Ours: place(row.Place), Line: table.Line})
+				}
 			}
 		}
 	}

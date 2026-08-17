@@ -36,7 +36,8 @@ playoff = sheetgrid.read_bouts(wb["Плей-офф (протоколы)"])
 registered = [str(row[0]).strip() for row in wb["Регистрация"].iter_rows(min_row=2, values_only=True) if row[0]]
 wb.close()
 
-json.dump({"players": registered, "written": written[0], "playoff": playoff},
+json.dump({"players": registered, "written": written[0], "playoff": playoff,
+           "standing": sorted(standing.items(), key=lambda item: item[1])},
           open("tpsh-data.json", "w"), ensure_ascii=False)
 print("зарегистрировано", len(registered), "| писало отбор", len(written[0]["players"]))
 print("боёв плей-офф:", len(playoff), [b["code"] for b in playoff])

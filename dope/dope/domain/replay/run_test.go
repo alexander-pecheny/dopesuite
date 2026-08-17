@@ -17,6 +17,7 @@ type fakeGame struct {
 	pinned    []string
 	lineups   []string
 	stats     []Stat
+	standings map[string][]TableRow
 	shootouts map[string]int
 	// bend rewrites what the game reports, so a test can make dope "wrong".
 	bendSeats   func(Coord, []string) []string
