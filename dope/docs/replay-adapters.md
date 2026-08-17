@@ -1,9 +1,8 @@
 # Replay harness: a Structure-level adapter, coordinates on the interface, one codec per Protocol (#8)
 
-Status: open. Strength: worth exploring. #1 (Rankers) and #2 (`gamebuild`)
-are done, which is what makes the fast adapter buildable. ADR-0010 makes
-the replay the conformance gate; this note is about making the gate cheap
-and the seam real, not about what it checks.
+Status: done 17 Aug 2026 in the parts that make the gate cheap and the seam
+real (see «What was done» at the end); the coordinate and standings
+assertions (item 2) are left open. Written earlier as the hand-off note.
 
 ## The problem
 
@@ -79,3 +78,40 @@ one-adapter design:
   one Round, `[s5/r2/w1/m1..m4]`); `emit-brain.py` `FINAL` matches.
 - Keep the transcript format (`docs/replay-transcript.md`) stable; it is
   the artefact the sheets are reconciled to.
+
+## What was done (17 Aug 2026, branch `dope-refactor`)
+
+- The fast adapter is the same driver on a second transport, not a second
+  engine. `serverGame` (`server/tests/replaydriver_test.go`) does every
+  Structure read and write itself and hands three things to a `transport`:
+  a match patch, a finish, and «рассчитать» on the reseeds. `httpTransport`
+  is the old path through the handlers; `directTransport` calls the engine
+  the batcher runs per window — `editbatch.PatchMatchTx`, `FinishMatchTx`,
+  `RecomputeMatchTx` (three functions the batcher now calls too) and
+  `resolver.ResolveGameSlotsTx` / `ResolveGameSlotsAndReseedsTx` — in its
+  own transactions, scoring a бой once when it closes rather than once per
+  seat. The four studchr replays take 25 s direct (94 s over HTTP) with
+  zero findings, so `TestReplayStudchr{EK,SI,TPSh,Brain}` run on every
+  `just test`; `…OverHTTP` twins for ЭК, СИ and брейн run under
+  `just test-full`, one per game type. `TestReplayAgreesWithItsTranscript`
+  plays the mini transcript through both — the contract test.
+- The adapter lives in `server/tests`, not `domain/replay`: the schema is
+  `server.OpenFestDB`'s, and a domain package cannot boot a database. The
+  acceptance's `go test ./dope/domain/replay/... -run Studchr` became
+  `go test ./dope/server/tests -run TestReplayStudchr` in 25 s.
+- One codec per Protocol: `replay.Codec` (`codec.go`) is data — Individual,
+  Questions, ScoreMetric, the three stat columns — plus `Aggregate`, which
+  folds `[]BoutState` into the sheet's per-player rows; `ek`, `si`, `brain`
+  register theirs. `parseSeat`, `Script.individual` and `Run`'s stat columns
+  read the codec; the driver's `PlayerStats` loads finished бои and hands
+  them to `codec.Aggregate`, and `Outcome` takes the Σ column from
+  `ScoreMetric`. No `"brain"` in `parse.go`, `run.go` or the driver.
+- `replay.Discrepancies` has a caller: `TestStudchrDiscrepanciesPage`
+  generates `docs/studchr2026-discrepancies.md` from the four transcripts
+  (`go test ./dope/domain/replay -run Discrepancies -update`) and fails when
+  the page is stale.
+- `testapi.go` lost its three unused aliases (`CreateInvite`,
+  `HandleAuthLogout`, `SubmitMatchVenue`); the rest is what other tests use.
+- Not done: `Locate(coord)` / `Standings(block)` on `replay.Game` and a
+  `[таблица s1/g3]` transcript section — a new transcript form and emitter
+  work, deferred; the Python emitters are untouched.

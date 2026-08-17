@@ -35,8 +35,9 @@ fmt:
     ((${#files[@]} == 0)) || gofmt -w "${files[@]}"
 
 # Go tests + frontend (deno) tests; typecheck gates here, not in build-web.
-# The quick loop: everything but the studchr replays (ADR-0010), which are
-# the conformance gate and take a minute and a half — test-full plays them.
+# The studchr replays (ADR-0010) run here on the direct transport in ~25 s —
+# the conformance gate; test-full also plays them over HTTP (a minute and a
+# half more), which proves the handlers, auth and the write path.
 test: build-web
     cd .. && just typecheck
     go test -short ./...

@@ -1,28 +1,32 @@
 package tests
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
-	"strconv"
 	"strings"
 	"testing"
 
+	"dope/dope/domain/core"
+	"dope/dope/domain/edit"
 	"dope/dope/domain/replay"
 	"dope/dope/domain/resolver"
 	dopeserver "dope/dope/server"
+	"dope/dope/web/editbatch"
 )
 
 // serverGame drives a real dope game from a transcript: it resolves a
 // coordinate through the grain columns, writes Draws into the Edges, enters
-// marks and closes бои over the same HTTP handlers a host uses, and reads back
-// what the scorer made of it.
+// marks and closes бои through its transport, and reads back what the scorer
+// made of it.
 //
-// It talks HTTP rather than calling the engine so that the replay exercises
-// authorisation, the write-tx discipline and the resolver exactly as a live
-// tournament does. Anything it can prove, a host could have done.
+// The transport is the one seam: over HTTP the replay exercises authorisation,
+// the write-tx discipline and the resolver exactly as a live tournament does —
+// anything it can prove, a host could have done; direct, it drives the same
+// engine (editbatch's transactions, the scorer, the resolver) without the
+// batcher's clock, which is what makes a whole championship replay in seconds.
 type serverGame struct {
 	t        *testing.T
 	srv      *dopeserver.Server
@@ -30,6 +34,112 @@ type serverGame struct {
 	gameID   int64
 	gameType string
 	token    string
+	via      transport
+}
+
+// transport is what differs between the HTTP and the direct replay: how a
+// бой's marks land, how it closes, and how a host presses «рассчитать».
+type transport interface {
+	patch(matchID int64, code string, ops []map[string]any) error
+	finish(matchID int64, code string) error
+	reseeds() error
+}
+
+type httpTransport struct{ g *serverGame }
+
+func (h httpTransport) patch(_ int64, code string, ops []map[string]any) error {
+	g := h.g
+	resp := scopedAPIRequest(g.t, g.srv, http.MethodPatch,
+		fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/state", g.festID, g.gameID, code),
+		map[string]any{"ops": ops}, g.token)
+	if resp.Code != http.StatusOK {
+		return fmt.Errorf("отметки %s: %d %s", code, resp.Code, resp.Body.String())
+	}
+	return nil
+}
+
+func (h httpTransport) finish(_ int64, code string) error {
+	g := h.g
+	resp := scopedAPIRequest(g.t, g.srv, http.MethodPost,
+		fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/finish", g.festID, g.gameID, code),
+		map[string]any{"finished": true}, g.token)
+	if resp.Code != http.StatusOK {
+		return fmt.Errorf("закрытие %s: %d %s", code, resp.Code, resp.Body.String())
+	}
+	return nil
+}
+
+// reseeds does what a host does after closing the last бой of a round: presses
+// «рассчитать пересев» on every reseed stage. Finishing a бой only invalidates
+// a reseed — the ranking is recomputed on the host's word, not silently — so a
+// replay that never pressed the button would find the next round unseated and
+// blame the resolver. A stage that is not ready yet answers 400 and is simply
+// left for later, which is the same thing as the button being greyed out.
+func (h httpTransport) reseeds() error {
+	g := h.g
+	codes, err := g.reseedStages()
+	if err != nil {
+		return err
+	}
+	for _, code := range codes {
+		resp := scopedAPIRequest(g.t, g.srv, http.MethodPost,
+			fmt.Sprintf("/api/fest/%d/games/%d/stages/%s/reseed", g.festID, g.gameID, code), nil, g.token)
+		if resp.Code != http.StatusOK && resp.Code != http.StatusBadRequest {
+			return fmt.Errorf("пересев %s: %d %s", code, resp.Code, resp.Body.String())
+		}
+	}
+	return nil
+}
+
+// directTransport applies each patch in its own transaction and scores the
+// бой once, when it closes — the same engine the batcher runs per window,
+// without a window per seat.
+type directTransport struct{ g *serverGame }
+
+// tx is the engine's own write transaction: its lock, its audit context.
+func (d directTransport) tx(work func(ctx context.Context, tx *sql.Tx) error) error {
+	return d.g.srv.Eng().WithWriteTx(d.g.t.Context(), d.g.festID, "replay", work)
+}
+
+func (d directTransport) scope() core.FestScope {
+	return core.FestScope{FestID: d.g.festID, GameID: d.g.gameID}
+}
+
+func (d directTransport) patch(matchID int64, code string, ops []map[string]any) error {
+	var typed []edit.PatchOp
+	data, _ := json.Marshal(ops)
+	if err := json.Unmarshal(data, &typed); err != nil {
+		return err
+	}
+	return d.tx(func(ctx context.Context, tx *sql.Tx) error {
+		if err := editbatch.PatchMatchTx(ctx, tx, d.scope(), matchID, typed); err != nil {
+			return fmt.Errorf("отметки %s: %w", code, err)
+		}
+		return nil
+	})
+}
+
+func (d directTransport) finish(matchID int64, code string) error {
+	return d.tx(func(ctx context.Context, tx *sql.Tx) error {
+		if err := editbatch.FinishMatchTx(ctx, tx, matchID, true); err != nil {
+			return err
+		}
+		event, payload := editbatch.FinishEvent(code, true)
+		if _, err := editbatch.RecomputeMatchTx(ctx, tx, d.scope(), matchID, true, event, payload); err != nil {
+			return fmt.Errorf("закрытие %s: %w", code, err)
+		}
+		_, err := resolver.ResolveGameSlotsTx(ctx, tx, d.g.gameID)
+		return err
+	})
+}
+
+// reseeds calculates every ready reseed in stage order — what the host's
+// buttons do, one transaction.
+func (d directTransport) reseeds() error {
+	return d.tx(func(ctx context.Context, tx *sql.Tx) error {
+		_, err := resolver.ResolveGameSlotsAndReseedsTx(ctx, tx, d.g.gameID)
+		return err
+	})
 }
 
 func (g *serverGame) db() *sql.DB { return g.srv.Eng().DB }
@@ -158,7 +268,7 @@ func (g *serverGame) Play(at replay.Coord, name string, play replay.Play) error 
 	if len(play.Questions) > 0 {
 		return g.playBrain(at, name, play.Questions)
 	}
-	_, code, err := g.matchAt(at)
+	matchID, code, err := g.matchAt(at)
 	if err != nil {
 		return err
 	}
@@ -207,13 +317,7 @@ func (g *serverGame) Play(at replay.Coord, name string, play replay.Play) error 
 	if len(ops) == 0 {
 		return nil
 	}
-	resp := scopedAPIRequest(g.t, g.srv, http.MethodPatch,
-		fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/state", g.festID, g.gameID, code),
-		map[string]any{"ops": ops}, g.token)
-	if resp.Code != http.StatusOK {
-		return fmt.Errorf("отметки %s: %d %s", code, resp.Code, resp.Body.String())
-	}
-	return nil
+	return g.via.patch(matchID, code, ops)
 }
 
 // shootoutOps writes one seat's перестрелка into the blob's shootout theme: the
@@ -318,53 +422,32 @@ func shootoutMarks(net int) [][5]string {
 }
 
 func (g *serverGame) Finish(at replay.Coord) error {
-	_, code, err := g.matchAt(at)
+	matchID, code, err := g.matchAt(at)
 	if err != nil {
 		return err
 	}
-	resp := scopedAPIRequest(g.t, g.srv, http.MethodPost,
-		fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/finish", g.festID, g.gameID, code),
-		map[string]any{"finished": true}, g.token)
-	if resp.Code != http.StatusOK {
-		return fmt.Errorf("закрытие %s: %d %s", code, resp.Code, resp.Body.String())
+	if err := g.via.finish(matchID, code); err != nil {
+		return err
 	}
-	return g.calculateReadyReseeds()
+	return g.via.reseeds()
 }
 
-// calculateReadyReseeds does what a host does after closing the last бой of a
-// round: presses «рассчитать пересев». Finishing a бой only invalidates a
-// reseed — the ranking is recomputed on the host's word, not silently — so a
-// replay that never pressed the button would find the next round unseated and
-// blame the resolver.
-//
-// A stage that is not ready yet answers 400 and is simply left for later, which
-// is the same thing as the button being greyed out.
-func (g *serverGame) calculateReadyReseeds() error {
+func (g *serverGame) reseedStages() ([]string, error) {
 	rows, err := g.db().Query(`
 select code from stages where game_id = ? and stage_type = 'reseed' order by position`, g.gameID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
 	var codes []string
 	for rows.Next() {
 		var code string
 		if err := rows.Scan(&code); err != nil {
-			return err
+			return nil, err
 		}
 		codes = append(codes, code)
 	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	for _, code := range codes {
-		resp := scopedAPIRequest(g.t, g.srv, http.MethodPost,
-			fmt.Sprintf("/api/fest/%d/games/%d/stages/%s/reseed", g.festID, g.gameID, code), nil, g.token)
-		if resp.Code != http.StatusOK && resp.Code != http.StatusBadRequest {
-			return fmt.Errorf("пересев %s: %d %s", code, resp.Code, resp.Body.String())
-		}
-	}
-	return nil
+	return codes, rows.Err()
 }
 
 func (g *serverGame) Outcome(at replay.Coord) (map[string]replay.Result, error) {
@@ -374,15 +457,17 @@ func (g *serverGame) Outcome(at replay.Coord) (map[string]replay.Result, error) 
 	}
 	// Σ is whatever the sheet printed as the бой's score, and that is not the
 	// same column in every game: ЭК and своя игра score points, брейн counts the
-	// questions a side took.
+	// questions a side took — the codec says which.
 	score := "r.total"
-	if g.gameType == "brain" {
-		score = "coalesce(cast(r.metrics_json ->> '$.taken' as integer), 0)"
+	args := []any{matchID}
+	if codec, _ := replay.CodecFor(g.gameType); codec.ScoreMetric != "" {
+		score = "coalesce(cast(r.metrics_json ->> ? as integer), 0)"
+		args = []any{"$." + codec.ScoreMetric, matchID}
 	}
 	rows, err := g.db().Query(`
 select p.name, r.place, `+score+` from match_results r
 join participants p on p.id = r.participant_id
-where r.match_id = ?`, matchID)
+where r.match_id = ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -466,93 +551,14 @@ select id from participants where fest_id = ? and name = ?`, g.festID, name).Sca
 	return id, err
 }
 
-// PlayerStats aggregates the game's finished бои per player, in the same three
-// columns the transcript's [статистика] carries: ЭК — Σ, positive themes,
-// themes played; брейн — попытки, верно, неверно over the regular questions;
-// личная СИ — Σ, Σ+ and бои, the participant being the player.
+// PlayerStats hands every finished бой to the game's codec, which counts the
+// sheet's three columns the way the transcript's [статистика] carries them.
 func (g *serverGame) PlayerStats() ([]replay.Stat, error) {
-	switch g.gameType {
-	case "brain":
-		return g.brainStats()
-	case "ek":
-		return g.ekStats()
+	codec, ok := replay.CodecFor(g.gameType)
+	if !ok {
+		return nil, fmt.Errorf("у игры %q нет статистики в стенограмме", g.gameType)
 	}
-	return g.individualStats()
-}
-
-// finishedStates streams every finished бой's state with its seated
-// participants' names by id (slot order for брейн's index-aligned sides).
-func (g *serverGame) finishedStates(walk func(state string, seated []string, names map[int64]string) error) error {
-	rows, err := g.db().Query(`
-select m.id, coalesce(m.state_json, '{}') from matches m
-where m.game_id = ? and m.status = 'finished' order by m.position, m.id`, g.gameID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	type finished struct {
-		id    int64
-		state string
-	}
-	var matches []finished
-	for rows.Next() {
-		var m finished
-		if err := rows.Scan(&m.id, &m.state); err != nil {
-			return err
-		}
-		matches = append(matches, m)
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	for _, m := range matches {
-		slots, err := g.db().Query(`
-select ms.slot_index, ms.participant_id, coalesce(p.name, '')
-from match_slots ms left join participants p on p.id = ms.participant_id
-where ms.match_id = ? order by ms.slot_index`, m.id)
-		if err != nil {
-			return err
-		}
-		var seated []string
-		names := map[int64]string{}
-		for slots.Next() {
-			var index int
-			var pid sql.NullInt64
-			var name string
-			if err := slots.Scan(&index, &pid, &name); err != nil {
-				slots.Close()
-				return err
-			}
-			seated = append(seated, name)
-			if pid.Valid {
-				names[pid.Int64] = name
-			}
-		}
-		slots.Close()
-		if err := slots.Err(); err != nil {
-			return err
-		}
-		if err := walk(m.state, seated, names); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// statRows folds an accumulation map into sorted Stat lines.
-func statRows(acc map[[2]string]*[3]int) []replay.Stat {
-	out := make([]replay.Stat, 0, len(acc))
-	for key, values := range acc {
-		out = append(out, replay.Stat{Player: key[0], Team: key[1], Values: *values})
-	}
-	sort.Slice(out, func(a, b int) bool {
-		return out[a].Player+"\x1f"+out[a].Team < out[b].Player+"\x1f"+out[b].Team
-	})
-	return out
-}
-
-func (g *serverGame) ekStats() ([]replay.Stat, error) {
-	playerName := map[int64]string{}
+	players := map[int64]string{}
 	rows, err := g.db().Query(`select id, trim(first_name || ' ' || last_name) from players where fest_id = ?`, g.festID)
 	if err != nil {
 		return nil, err
@@ -564,161 +570,75 @@ func (g *serverGame) ekStats() ([]replay.Stat, error) {
 			rows.Close()
 			return nil, err
 		}
-		playerName[id] = name
+		players[id] = name
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	values := []int{10, 20, 30, 40, 50}
-	acc := map[[2]string]*[3]int{}
-	err = g.finishedStates(func(state string, _ []string, names map[int64]string) error {
-		var blob struct {
-			Participants map[string]struct {
-				Themes []struct {
-					Player  int64     `json:"player"`
-					Answers [5]string `json:"answers"`
-				} `json:"themes"`
-			} `json:"participants"`
-		}
-		if err := json.Unmarshal([]byte(state), &blob); err != nil {
-			return err
-		}
-		for pid, section := range blob.Participants {
-			id, err := strconv.ParseInt(pid, 10, 64)
-			if err != nil {
-				return err
-			}
-			team := names[id]
-			for _, theme := range section.Themes {
-				if theme.Player == 0 {
-					continue
-				}
-				key := [2]string{playerName[theme.Player], team}
-				entry := acc[key]
-				if entry == nil {
-					entry = &[3]int{}
-					acc[key] = entry
-				}
-				sum := 0
-				for i, mark := range theme.Answers {
-					if mark == "right" {
-						sum += values[i]
-					} else if mark == "wrong" {
-						sum -= values[i]
-					}
-				}
-				entry[0] += sum
-				if sum > 0 {
-					entry[1]++
-				}
-				entry[2]++
-			}
-		}
-		return nil
-	})
-	return statRows(acc), err
-}
-
-func (g *serverGame) brainStats() ([]replay.Stat, error) {
-	acc := map[[2]string]*[3]int{}
-	err := g.finishedStates(func(state string, seated []string, _ map[int64]string) error {
-		var blob struct {
-			Teams []struct {
-				Rows []struct {
-					Player string `json:"player"`
-					Mark   string `json:"mark"`
-				} `json:"rows"`
-			} `json:"teams"`
-			Tiebreaks int `json:"tiebreaks"`
-		}
-		if err := json.Unmarshal([]byte(state), &blob); err != nil {
-			return err
-		}
-		for side, team := range blob.Teams {
-			if side >= len(seated) {
-				break
-			}
-			regular := len(team.Rows) - blob.Tiebreaks
-			for index, row := range team.Rows {
-				if index >= regular || row.Player == "" || row.Mark == "" {
-					continue
-				}
-				key := [2]string{row.Player, seated[side]}
-				entry := acc[key]
-				if entry == nil {
-					entry = &[3]int{}
-					acc[key] = entry
-				}
-				entry[0]++
-				if row.Mark == "right" {
-					entry[1]++
-				} else {
-					entry[2]++
-				}
-			}
-		}
-		return nil
-	})
-	return statRows(acc), err
-}
-
-func (g *serverGame) individualStats() ([]replay.Stat, error) {
-	values := []int{10, 20, 30, 40, 50}
-	acc := map[[2]string]*[3]int{}
-	entryFor := func(player string) *[3]int {
-		key := [2]string{player, ""}
-		entry := acc[key]
-		if entry == nil {
-			entry = &[3]int{}
-			acc[key] = entry
-		}
-		return entry
+	bouts, err := g.finishedBouts(players)
+	if err != nil {
+		return nil, err
 	}
-	err := g.finishedStates(func(state string, seated []string, names map[int64]string) error {
-		// Бои are counted from the seating: a player who sat a бой and took
-		// nothing has no state section, and the sheet still counts the бой.
-		for _, name := range seated {
-			if name != "" {
-				entryFor(name)[2]++
+	return codec.Aggregate(bouts)
+}
+
+// finishedBouts loads every finished бой's state with its seated participants'
+// names by slot and by id.
+func (g *serverGame) finishedBouts(players map[int64]string) ([]replay.BoutState, error) {
+	rows, err := g.db().Query(`
+select m.id, coalesce(m.state_json, '{}') from matches m
+where m.game_id = ? and m.status = 'finished' order by m.position, m.id`, g.gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	var bouts []replay.BoutState
+	for rows.Next() {
+		var id int64
+		var state string
+		if err := rows.Scan(&id, &state); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+		bouts = append(bouts, replay.BoutState{State: state, Names: map[int64]string{}, Players: players})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, id := range ids {
+		slots, err := g.db().Query(`
+select ms.participant_id, coalesce(p.name, '')
+from match_slots ms left join participants p on p.id = ms.participant_id
+where ms.match_id = ? order by ms.slot_index`, id)
+		if err != nil {
+			return nil, err
+		}
+		for slots.Next() {
+			var pid sql.NullInt64
+			var name string
+			if err := slots.Scan(&pid, &name); err != nil {
+				slots.Close()
+				return nil, err
+			}
+			bouts[i].Seated = append(bouts[i].Seated, name)
+			if pid.Valid {
+				bouts[i].Names[pid.Int64] = name
 			}
 		}
-		var blob struct {
-			Participants map[string]struct {
-				Themes []struct {
-					Answers [5]string `json:"answers"`
-				} `json:"themes"`
-			} `json:"participants"`
+		slots.Close()
+		if err := slots.Err(); err != nil {
+			return nil, err
 		}
-		if err := json.Unmarshal([]byte(state), &blob); err != nil {
-			return err
-		}
-		for pid, section := range blob.Participants {
-			id, err := strconv.ParseInt(pid, 10, 64)
-			if err != nil {
-				return err
-			}
-			entry := entryFor(names[id])
-			for _, theme := range section.Themes {
-				for i, mark := range theme.Answers {
-					if mark == "right" {
-						entry[0] += values[i]
-						entry[1] += values[i]
-					} else if mark == "wrong" {
-						entry[0] -= values[i]
-					}
-				}
-			}
-		}
-		return nil
-	})
-	return statRows(acc), err
+	}
+	return bouts, nil
 }
 
 // Pin writes a place the hosts set by hand. It is Protocol state (ADR-0005), so
 // it travels the same patch path a mark does.
 func (g *serverGame) Pin(at replay.Coord, name string, place float64) error {
-	_, code, err := g.matchAt(at)
+	matchID, code, err := g.matchAt(at)
 	if err != nil {
 		return err
 	}
@@ -726,16 +646,10 @@ func (g *serverGame) Pin(at replay.Coord, name string, place float64) error {
 	if err != nil {
 		return err
 	}
-	resp := scopedAPIRequest(g.t, g.srv, http.MethodPatch,
-		fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/state", g.festID, g.gameID, code),
-		map[string]any{"ops": []map[string]any{{
-			"path":  []any{"participants", fmt.Sprint(participantID), "pin"},
-			"value": place,
-		}}}, g.token)
-	if resp.Code != http.StatusOK {
-		return fmt.Errorf("место вручную %s: %d %s", code, resp.Code, resp.Body.String())
-	}
-	return nil
+	return g.via.patch(matchID, code, []map[string]any{{
+		"path":  []any{"participants", fmt.Sprint(participantID), "pin"},
+		"value": place,
+	}})
 }
 
 // playBrain enters a брейн side. Its state is not a per-participant blob but two
@@ -795,11 +709,5 @@ select json_array_length(state_json -> '$.teams[0].rows') from matches where id 
 	if len(ops) == 0 {
 		return nil
 	}
-	resp := scopedAPIRequest(g.t, g.srv, http.MethodPatch,
-		fmt.Sprintf("/api/fest/%d/games/%d/matches/%s/state", g.festID, g.gameID, code),
-		map[string]any{"ops": ops}, g.token)
-	if resp.Code != http.StatusOK {
-		return fmt.Errorf("вопросы %s: %d %s", code, resp.Code, resp.Body.String())
-	}
-	return nil
+	return g.via.patch(matchID, code, ops)
 }
