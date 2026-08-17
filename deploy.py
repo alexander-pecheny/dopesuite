@@ -12,14 +12,18 @@ xy and dope are on DIFFERENT hosts, so the host is per-target, not global.
   ./deploy.py --target xy-server --dry-run   # builds, uploads nothing
 
 Every deploy backs the old binary up on the host, restarts, waits, checks the
-unit is still active, and rolls back to the backup if it isn't.
+unit is still active, and rolls back to the backup if it isn't. When the target
+host is the machine the script runs on, every step runs locally — no ssh.
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
 import os
 import shlex
+import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -170,9 +174,30 @@ def run(
     return completed.stdout.strip() if capture and completed.stdout else ""
 
 
+# A deploy run on the target box itself (xy's dev box is its prod host) has no
+# key to ssh to itself with, so the host is resolved the way ssh would and
+# compared against this machine's own addresses; a match runs the same scripts
+# in a local shell.
+@functools.cache
+def is_local(host: str) -> bool:
+    config = subprocess.run(["ssh", "-G", host], capture_output=True, text=True, check=False).stdout
+    resolved = next((line.split(None, 1)[1] for line in config.splitlines() if line.startswith("hostname ")), host)
+    own = {socket.gethostname(), "localhost", "127.0.0.1", "::1"}
+    own.update(subprocess.run(["hostname", "-I"], capture_output=True, text=True, check=False).stdout.split())
+    try:
+        own.update(info[4][0] for info in socket.getaddrinfo(socket.gethostname(), None))
+    except OSError:
+        pass
+    try:
+        addresses = {info[4][0] for info in socket.getaddrinfo(resolved, None)}
+    except OSError:
+        addresses = set()
+    return resolved in own or bool(addresses & own)
+
+
 def ssh(host: str, script: str, *, capture: bool = False) -> str:
     return run(
-        ["ssh", *SSH_OPTIONS, host, "bash", "-s"],
+        ["bash", "-s"] if is_local(host) else ["ssh", *SSH_OPTIONS, host, "bash", "-s"],
         cwd=ROOT,
         input_text=script,
         capture=capture,
@@ -221,6 +246,10 @@ def build_binary(target: Target, goarch: str) -> Path:
 
 def upload_binary(host: str, binary: Path, remote_tmp: str) -> None:
     ssh(host, f"set -euo pipefail\nmkdir -p {remote_quote(remote_tmp)}\n")
+    if is_local(host):
+        print(f"+ cp {binary} {remote_tmp}/", flush=True)
+        shutil.copy2(binary, remote_tmp)
+        return
     run(["scp", *SSH_OPTIONS, binary, f"{host}:{remote_tmp}/"], cwd=ROOT)
 
 
@@ -340,8 +369,9 @@ def main() -> int:
         goarch = args.arch or arch_by_host.get(target.host) or detect_goarch(target.host)
         arch_by_host[target.host] = goarch
 
+        where = "this host" if is_local(target.host) else target.host
         print(
-            f"Deploy target: {target.name} → {target.host}:{target.remote_dir}/{target.binary} ({goarch})",
+            f"Deploy target: {target.name} → {where}:{target.remote_dir}/{target.binary} ({goarch})",
             flush=True,
         )
         binary = build_binary(target, goarch)
