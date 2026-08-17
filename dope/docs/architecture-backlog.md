@@ -20,7 +20,7 @@ them, and ask before widening a note's scope.
 | 4 | one ЭК page, `web/ts/ek.ts`, host and spectator gated on a `viewer` flag | `0bcf14a` |
 | — | Сетка geometry as tokens + `classcheck` geometry lint + verify matrix (from the 16 Aug phone review) | `74b1379` |
 | 7 | one skin: the Сетка's group table is a бой box (`grid-box` / `grid-slot-cell`), `standingsTable(spec)` + `resultsTeamCell` build every standings table and name cell | `8ad113c` |
-| 6 | one `web/ts/game-tabs.ts`: `gameTabs(stages, {game, viewer, seeded})` for ЭК, брейн, КСИ, ЧГК; Blocks off `grain`, `blockLabel`/`groupLabel` the only «Группа» readers (the Сетка's column titles too) | HASH6 |
+| 6 | one `web/ts/game-tabs.ts`: `gameTabs(stages, {game, viewer, seeded})` for ЭК, брейн, КСИ, ЧГК; Blocks off `grain`, `blockLabel`/`groupLabel` the only «Группа» readers (the Сетка's column titles too) | `7bf4f85` |
 
 ## Open
 
