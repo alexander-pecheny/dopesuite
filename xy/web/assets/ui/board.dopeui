@@ -330,6 +330,17 @@ page title="Доска · xy" kind="board" scripts="dist/board.js dist/timer.js"
     mount id="testerList" kind="tester-list"
     message id="testerListMessage"
 
+  -- «Счётчик авторов»: who wrote how much of a tour up to a question — the 1/n
+  -- split is what a fee is divided by, and нулевые are usually not paid
+  modal id="authorCountOverlay" icon="users" label="Счётчик авторов" title="Счётчик авторов" variant="lists" done="Готово" doneid="authorCountClose"
+    row gap="sm" align="center" wrap
+      muted "До вопроса"
+      textfield id="authorCountUpTo" placeholder="номер" inputmode="numeric" autocomplete="off" spellcheck="false"
+      muted "включительно"
+      checkbox id="authorCountZero" hidden " считать нулевые"
+    mount id="authorCount" kind="author-count"
+    message id="authorCountMessage"
+
   -- members / sharing overlay
   modal id="membersOverlay" label="Участники доски" title="Участники доски" done="Готово" doneid="membersClose"
     mount id="membersList" kind="members-list"

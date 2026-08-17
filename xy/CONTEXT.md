@@ -39,6 +39,10 @@ _Avoid_: тест-список, test list, test card
 The record that a question was played at a Test Session. A Card's own link to a Session — it is what «Видели» reads, and what a Label can be scoped to.
 _Avoid_: mark, test mark, session tag
 
+**Author Share (Доля)**:
+An author's 1/n split of a co-authored question, summed over the questions of a tour up to a chosen number — what a fee is divided by. Sits beside the plain count (one per question an author is on); the two differ only where a question has more than one author. Two spellings are one author when they fold like a search does (stress marks, spaces, case, ё/е). Нулевые are left out unless asked for: they are played, but usually not paid.
+_Avoid_: counting a co-authored question once per author and calling that a share
+
 **Tester List**:
 The «Вопросы тестировали: …» line a tour carries in its preamble. By ЧГК custom it names those who tested most of the tour and therefore should not play it — someone who saw one or two questions still may, skipping the ones they know. Compiled per tour (a List, or its whole List Group) from the Playings its questions carry, not from the board's Sessions as a whole.
 

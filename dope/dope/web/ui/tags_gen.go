@@ -156,6 +156,7 @@ var IconArrowLeftRight = base.IconArrowLeftRight
 var IconArrowUp = base.IconArrowUp
 var IconArrowUpDown = base.IconArrowUpDown
 var IconBell = base.IconBell
+var IconCalculator = base.IconCalculator
 var IconCheck = base.IconCheck
 var IconClipboard = base.IconClipboard
 var IconCloudDownload = base.IconCloudDownload
