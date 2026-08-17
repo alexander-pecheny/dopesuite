@@ -263,6 +263,13 @@ func multiSeatStandings(conf RRConfig, results []MatchOutcome) ([]RankedEntry, e
 		}
 		return ranked[i].Participant < ranked[j].Participant
 	})
+	shareRanks(ranked, order)
+	return ranked, nil
+}
+
+// shareRanks numbers a sorted table, giving seats level on every key one
+// rank — 1, 2, 2, 4.
+func shareRanks(ranked []RankedEntry, order []string) {
 	same := func(a, b RankedEntry) bool {
 		for _, key := range order {
 			if a.Metrics[key] != b.Metrics[key] {
@@ -278,7 +285,6 @@ func multiSeatStandings(conf RRConfig, results []MatchOutcome) ([]RankedEntry, e
 			ranked[i].Rank = i + 1
 		}
 	}
-	return ranked, nil
 }
 
 // rrOrder is the group's ranking keys: the scheme's, else the two-seat

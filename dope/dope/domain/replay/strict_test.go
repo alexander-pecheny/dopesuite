@@ -19,7 +19,7 @@ func TestParseRejectsSilentlyWrongTranscripts(t *testing.T) {
 		{
 			"одна координата дважды",
 			"[game]\ntype: ek\n\n[s1/r1/w1/m1]\nА | R---- | 10 | 1\n\n[s1/r1/w1/m1]\nБ | R---- | 10 | 1\n",
-			"уже записан",
+			"уже есть",
 		},
 		{
 			"участник не из состава",

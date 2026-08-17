@@ -598,7 +598,7 @@ func TestCompileErrors(t *testing.T) {
 		{"best_of outside final", "[scheme]\ntype: single_elimination\nteams: 8\nbest_of.semifinal: 3\n", "только в финале"},
 		{"best_of even", "[scheme]\ntype: single_elimination\nteams: 4\nbest_of.final: 2\n", "нечётное"},
 		{"block after series", "[scheme]\ntype: single_elimination\nteams: 4\nproceeding_teams: 2\nbest_of.final: 3\n---\ntype: roundrobin\nteams_in_group: 2\n", "серией"},
-		{"stats_from without reseed", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nstats_from: [s1]\n", "reseed: true"},
+		{"stats_from without reseed", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nstats_from: [s1]\n", "вместе с reseed"},
 		{"stats_from unknown block", "[scheme]\ntype: roundrobin\ngroups: 2\nteams_in_group: 4\nproceeding_teams: 2\n---\ntype: roundrobin\ngroups: 2\nteams_in_group: 2\nreseed: true\nstats_from: [s3]\n", "s3"},
 	}
 	for _, tc := range cases {
@@ -1047,5 +1047,42 @@ reseed: true
 	}
 	if got := BoutLetter(26); got != "AA" {
 		t.Fatalf("BoutLetter(26) = %q, want AA", got)
+	}
+}
+
+// A boundary reseed re-ranks everyone the round before sent on — both places
+// where two proceed, not the winners alone — and stats_from naming the block
+// itself sums the block's own rounds before the boundary (СтудЧР's ЭК ranked
+// its пересев перед 1/4 by сумма мест over 1/16 and 1/8 together).
+func TestCompileBoundaryReseedTakesEveryProceedingPlace(t *testing.T) {
+	src := `
+[defaults]
+venues: 6
+
+[scheme]
+type: single_elimination
+teams: 48
+match_size: 4
+winning_places: 2
+match_size.r3: 3
+reseed: r3
+stats_from: [s1]
+sorting: [place_sum, total, plus]
+`
+	scheme := compileSrc(t, src, Input{GameType: "ek"})
+	reseed := stageByCode(t, scheme, "s1-reseed")
+	if len(reseed.Sources) != 3 || reseed.Sources[0] != "s1-r1-w1" || reseed.Sources[2] != "s1-r2" {
+		t.Fatalf("reseed sources = %v, want both 1/16 waves and 1/8", reseed.Sources)
+	}
+	if len(reseed.Teams) != 12 || reseed.Teams[1].FromMatch.Place != 2 {
+		t.Fatalf("reseed re-ranks %d teams (%+v), want the 12 that left 1/8", len(reseed.Teams), reseed.Teams)
+	}
+	var rules []store.SchemeSortRule
+	if err := json.Unmarshal(reseed.Sort, &rules); err != nil || rules[0].Metric != "place_sum" {
+		t.Fatalf("reseed sort = %s (%v)", reseed.Sort, err)
+	}
+	quarter := stageByCode(t, scheme, "s1-r3")
+	if quarter.Matches[0].Slots[2].Reseed.Rank != 9 {
+		t.Fatalf("1/4 m1 = %+v, want reseed ranks 1, 8, 9", quarter.Matches[0].Slots)
 	}
 }

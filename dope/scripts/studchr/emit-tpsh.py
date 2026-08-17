@@ -8,7 +8,12 @@ seated from a пересев, so every seating in the tournament is derived and 
 replay asserts all of it.
 """
 import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from transcript import table
 
 # Sheet бой codes in play order, one line per stage.
 PLAYOFF = [["A", "B", "C", "D", "E", "F"], ["G", "H", "I"]]
@@ -28,8 +33,8 @@ def bout(out, at, seats, ranked=True):
 
     The written отбор is unranked. The sheet prints Σ there and no место at all:
     the 1..91 order of «Итоги отбора» is a standings ranking, not a бой's место,
-    and dope shares a бой's place between seats that tie. That ranking is checked
-    where it decides something — in whom бой A seats.
+    and dope shares a бой's place between seats that tie. That ranking is the
+    Block's table, asserted as one.
     """
     width = max(len(seat["name"]) for seat in seats)
     out.append(f"[{at}]")
@@ -60,6 +65,12 @@ def emit(data):
     out.append("")
     out.append("# Письменный отбор")
     bout(out, "s1/r1/w1/m1", data["written"]["players"], ranked=False)
+    table(out, "s1", [(place, name) for name, place in data["standing"]])
+    # One pair is level on every count the отбор ranks by; the tab numbers them
+    # on, in registration order, where dope shares the place.
+    out.append("override [таблица s1] место Трубечкова Вероника: "
+               "с Капитульской равенство по всем ключам сортировки отбора; "
+               "лист нумерует их 46 и 47 в порядке регистрации, dope делит 46-е")
 
     playoff = {b["code"]: b for b in data["playoff"]}
     for circle, codes in enumerate(PLAYOFF, 1):

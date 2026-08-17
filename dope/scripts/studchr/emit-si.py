@@ -11,7 +11,12 @@ roster in seed order rather than alphabetically: it is the one input, and the
 seventy-two group бои and the whole bracket follow from it.
 """
 import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from transcript import table
 
 GROUPS = "ABCDEF"
 # Sheet бой codes in play order, one line per round of the play-off.
@@ -93,6 +98,9 @@ def emit(data):
             out.append(f"# {code}")
             bout(out, f"s1/g{index + 1}/r{circle + 1}/w{wave + 1}/m1",
                  by_code[code]["players"])
+        # The group's table as «Группы A-B» sorts it: no места printed, so the
+        # place is the row — a pair level on every count is the sheet's call.
+        table(out, f"s1/g{index + 1}", list(enumerate(data["tables"][letter], 1)))
 
     playoff = {b["code"]: b for b in data["playoff"]}
     for circle, codes in enumerate(PLAYOFF, 1):

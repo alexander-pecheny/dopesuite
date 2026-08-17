@@ -68,6 +68,18 @@ A stats disagreement the author has ruled on is silenced by
 `override [статистика] поле игрок: причина` — the section name standing in for
 the бой coordinate, because an aggregate holds the whole game.
 
+## Таблица
+
+`[таблица s1/g3]` is the sheet's standings of one Group — or of a Block,
+`[таблица s1]`, where the Block has one table: a flat отбор, a пересев — one
+`место | участник` line per row, asserted after the last бой the way
+статистика is: dope ranks the Block itself and has to agree, both ways. The
+место is the one the sheet printed, or the row where it printed none — so a
+pair level on every key the Block sorts by is a disagreement the sheet's author
+rules on (`override [таблица s1] место Трубечкова Вероника: …`), since dope
+shares such a place and a sheet numbers on. A Block holding several tables
+(a пересев before every round) cannot be named this way yet.
+
 ## Бой
 
 A бой's header is its coordinate: `[block/round/wave/match]`, e.g.
@@ -165,8 +177,9 @@ gains `жребий` and its seating turns from an assertion into an input.
 
 ## What is written down
 
-`testdata/studchr2026/` holds ЭК, личная СИ, ТПШ and брейн — 263 бои — emitted by
-the scripts in `scripts/studchr/` and replayed by `TestReplayStudchr*`.
+`testdata/studchr2026/` holds ЭК, личная СИ, ТПШ and брейн — 263 бои and 27
+tables — emitted by the scripts in `scripts/studchr/` and replayed by
+`TestReplayStudchr*`.
 
 ## Брейн
 

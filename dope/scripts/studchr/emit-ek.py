@@ -9,7 +9,12 @@ later round fits one. Rounds after the first were re-drawn by hand, so each of
 them is a жребий — the seating is input, not something the resolver derives.
 """
 import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from transcript import table
 
 # Sheet round key → (круг, how many заходов it took).
 ROUNDS = [("116", 1, 2), ("18", 2, 1), ("14", 3, 1), ("12", 4, 1), ("Финал", 5, 1)]
@@ -64,6 +69,10 @@ def emit(data, registry):
         out.append(f'{team["name"]:<{width}} | {", ".join(players)}')
 
     for key, circle, waves in ROUNDS:
+        # 1/4 финала seats from a пересев of the twelve out of 1/8; the sheet's
+        # «Пересев перед 14» ranks them, and that is the Block's one table.
+        if key == "14":
+            table(out, "s1", data["reseed"])
         bouts = rounds[key]
         per_wave = len(bouts) // waves
         for index, bout in enumerate(bouts):

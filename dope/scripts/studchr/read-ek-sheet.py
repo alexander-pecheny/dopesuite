@@ -131,8 +131,18 @@ def check_stats(rounds, stats):
         sys.exit(f"статистика не сходится с протоколами: {sorted(bad)[:5]} и ещё {max(len(bad) - 5, 0)}")
 
 
+def read_reseed(ws):
+    """«Пересев перед 14», columns K–L: Место | Команда, the twelve of 1/8 ranked."""
+    out = []
+    for row in ws.iter_rows(min_row=2, min_col=11, max_col=12, values_only=True):
+        if row[0] is not None and row[1]:
+            out.append([int(row[0]), str(row[1]).strip()])
+    return out
+
+
 wb = openpyxl.load_workbook(SRC, read_only=True, data_only=True)
 rounds = {name: read_round(wb[name]) for name in ROUNDS}
+reseed = read_reseed(wb["Пересев перед 14"])
 playing = {t["name"] for bouts in rounds.values() for b in bouts for t in b["teams"]}
 lineups = read_lineups(wb["Составы"], playing)
 stats = read_stats(wb["Статистика"])
@@ -145,5 +155,5 @@ if loose:
 check_stats(rounds, stats)
 print("боёв по раундам:", {n: len(b) for n, b in rounds.items()}, "| тем, где сумма не сошлась:", bad)
 print("составов:", len(lineups), "| игроков в статистике:", len(stats))
-json.dump({"rounds": rounds, "lineups": lineups, "stats": stats},
+json.dump({"rounds": rounds, "lineups": lineups, "stats": stats, "reseed": reseed},
           open("ek-data.json", "w"), ensure_ascii=False)

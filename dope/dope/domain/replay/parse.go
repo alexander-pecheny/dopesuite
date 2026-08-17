@@ -63,14 +63,25 @@ type Coord struct {
 
 func (c Coord) String() string {
 	if c.Round == 0 {
-		// Not a бой at all: the статистика pseudo-coordinate (a real круг
-		// starts at 1).
-		return c.Block
+		// Not a бой at all (a real круг starts at 1): the статистика
+		// pseudo-coordinate, or a Block's table.
+		if c.Block == StatsCoord.Block {
+			return c.Block
+		}
+		return "таблица " + c.stage()
 	}
 	if c.Group == "" {
 		return fmt.Sprintf("%s/r%d/w%d/m%d", c.Block, c.Round, c.Wave, c.Match)
 	}
 	return fmt.Sprintf("%s/g%s/r%d/w%d/m%d", c.Block, c.Group, c.Round, c.Wave, c.Match)
+}
+
+// stage names the Block, or the Group in it, a table coordinate points at.
+func (c Coord) stage() string {
+	if c.Group == "" {
+		return c.Block
+	}
+	return c.Block + "/g" + c.Group
 }
 
 type Entrant struct {
@@ -102,6 +113,21 @@ type Stat struct {
 // StatsCoord is the coordinate статистика findings and overrides live at: the
 // aggregates hold the whole game, so no бой coordinate can name them.
 var StatsCoord = Coord{Block: "статистика"}
+
+// Table is the sheet's standings of one Block or Group — `[таблица s1/g3]` —
+// asserted after the last бой the way статистика is.
+type Table struct {
+	At   Coord
+	Rows []TableRow
+	Line int
+}
+
+// TableRow is one line of a table: a место (shared when level) and who holds it.
+type TableRow struct {
+	Place float64
+	Name  string
+	Line  int
+}
 
 // Answer is one буzzer question of a брейн бой from one side: whether they took
 // it, and who buzzed. The sheets do not always record the player, so a taken
@@ -168,6 +194,7 @@ type Script struct {
 	Roster    []Entrant
 	Lineups   []Lineup
 	Stats     []Stat
+	Tables    []Table
 	Bouts     []Bout
 	Overrides []Override
 }
@@ -230,7 +257,7 @@ func Parse(src string) (Script, error) {
 				flush()
 				section = head
 			default:
-				at, err := parseCoord(head, line)
+				at, err := parseHead(head, line)
 				if err != nil {
 					return Script{}, err
 				}
@@ -240,9 +267,17 @@ func Parse(src string) (Script, error) {
 				}
 				if prev, taken := seen[at.String()]; taken {
 					return Script{}, errAt(line,
-						"бой %s уже записан на строке %d — по одной координате играется один бой, иначе один из них молча пропадёт", at, prev)
+						"%s уже есть на строке %d — на одной координате одна запись, иначе одна из них молча пропадёт", at, prev)
 				}
 				seen[at.String()] = line
+				if at.Round == 0 {
+					if rest != "" {
+						return Script{}, errAt(line, "после таблицы ничего не пишут, а тут %q", rest)
+					}
+					section = "таблица"
+					script.Tables = append(script.Tables, Table{At: at, Line: line})
+					continue
+				}
 				section = "бой"
 				bout = &Bout{At: at, Draw: rest == "жребий", Line: line}
 				if rest != "" && rest != "жребий" {
@@ -286,6 +321,13 @@ func Parse(src string) (Script, error) {
 				return Script{}, err
 			}
 			script.Stats = append(script.Stats, stat)
+		case section == "таблица":
+			row, err := parseTableRow(text, line)
+			if err != nil {
+				return Script{}, err
+			}
+			table := &script.Tables[len(script.Tables)-1]
+			table.Rows = append(table.Rows, row)
 		case section == "бой" && strings.HasPrefix(text, "перестрелка "):
 			if err := parseShootout(text, line, bout); err != nil {
 				return Script{}, err
@@ -308,10 +350,31 @@ func Parse(src string) (Script, error) {
 	if failure != nil {
 		return Script{}, failure
 	}
+	if err := checkTables(script); err != nil {
+		return Script{}, err
+	}
 	if err := checkRoster(script); err != nil {
 		return Script{}, err
 	}
 	return script, nil
+}
+
+// checkTables refuses a table with no rows (it would assert nothing and pass)
+// and one that ranks somebody twice.
+func checkTables(script Script) error {
+	for _, table := range script.Tables {
+		if len(table.Rows) == 0 {
+			return errAt(table.Line, "%s без единой строки — оборванная стенограмма прошла бы молча", table.At)
+		}
+		seen := map[string]int{}
+		for _, row := range table.Rows {
+			if prev, taken := seen[row.Name]; taken {
+				return errAt(row.Line, "%s: %q уже стоит на строке %d", table.At, row.Name, prev)
+			}
+			seen[row.Name] = row.Line
+		}
+	}
+	return nil
 }
 
 // stripComment drops a whole-line comment only. A '#' mid-line stays: teams are
@@ -347,6 +410,13 @@ func checkRoster(script Script) error {
 		for _, seat := range bout.Seats {
 			if !known[seat.Name] {
 				return errAt(seat.Line, "в бою %s сидит %q, которого нет в [roster]", bout.At, seat.Name)
+			}
+		}
+	}
+	for _, table := range script.Tables {
+		for _, row := range table.Rows {
+			if !known[row.Name] {
+				return errAt(row.Line, "в %s стоит %q, которого нет в [roster]", table.At, row.Name)
 			}
 		}
 	}
@@ -409,6 +479,33 @@ func splitHeader(text string, line int) (string, string, error) {
 		return "", "", errAt(line, "не закрыта скобка в %q", text)
 	}
 	return strings.TrimSpace(text[1:end]), strings.TrimSpace(text[end+1:]), nil
+}
+
+// parseHead reads what a section header or an override points at: a бой's
+// coordinate, `таблица s1/g3` for a Block's or Group's standings, or
+// `статистика`.
+func parseHead(head string, line int) (Coord, error) {
+	if head == StatsCoord.Block {
+		return StatsCoord, nil
+	}
+	if stage, ok := strings.CutPrefix(head, "таблица "); ok {
+		block, group, _ := strings.Cut(strings.TrimSpace(stage), "/")
+		if block == "" || (group != "" && (!strings.HasPrefix(group, "g") || len(group) < 2 || strings.Contains(group, "/"))) {
+			return Coord{}, errAt(line, "таблица — это блок или группа в нём, например «таблица s1» или «таблица s1/g3», а не %q", stage)
+		}
+		return Coord{Block: block, Group: strings.TrimPrefix(group, "g")}, nil
+	}
+	return parseCoord(head, line)
+}
+
+func parseTableRow(text string, line int) (TableRow, error) {
+	placeText, name, ok := strings.Cut(text, "|")
+	name = strings.TrimSpace(name)
+	place, err := strconv.ParseFloat(strings.TrimSpace(placeText), 64)
+	if !ok || name == "" || err != nil || place <= 0 {
+		return TableRow{}, errAt(line, "строка таблицы — «место | участник» (делённое место как 1.5), а не %q", text)
+	}
+	return TableRow{Place: place, Name: name, Line: line}, nil
 }
 
 // parseCoord reads `s1/r1/w1/m1`, or `s1/g3/r1/w1/m1` in a Block that has
@@ -668,11 +765,9 @@ func parseOverride(text string, line int) (Override, error) {
 	if err != nil {
 		return Override{}, err
 	}
-	at := StatsCoord
-	if head != StatsCoord.Block {
-		if at, err = parseCoord(head, line); err != nil {
-			return Override{}, err
-		}
+	at, err := parseHead(head, line)
+	if err != nil {
+		return Override{}, err
 	}
 	subject, reason, ok := strings.Cut(rest, ":")
 	subject, reason = strings.TrimSpace(subject), strings.TrimSpace(reason)

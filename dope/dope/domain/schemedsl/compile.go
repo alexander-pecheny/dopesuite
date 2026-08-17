@@ -740,27 +740,33 @@ func (c *compiler) prevStageCodes() []string {
 	return codes
 }
 
-// reseedSources resolves what a block-grain reseed sums its stats over: the
-// previous block's stages, or — with stats_from — every stage of the listed
-// blocks (регламент КИНСБФ 3.3.5 counts both the groups and the DE).
-func (c *compiler) reseedSources(index int, blk Section) ([]string, error) {
+// reseedSources resolves what a reseed sums its stats over: `otherwise` (the
+// previous block, or the round before a boundary), or with stats_from every
+// stage of the listed blocks (регламент КИНСБФ 3.3.5 counts both the groups
+// and the DE) — the block being expanded meaning `self`, its rounds so far.
+func (c *compiler) reseedSources(index int, blk Section, otherwise, self []string) ([]string, error) {
 	tokens, ok, err := blk.List("stats_from")
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return c.prevStageCodes(), nil
+		return otherwise, nil
 	}
 	var sources []string
 	for _, token := range tokens {
 		var n int
-		if _, err := fmt.Sscanf(token, "s%d", &n); err != nil || n < 1 || n > index {
+		if _, err := fmt.Sscanf(token, "s%d", &n); err != nil || n < 1 || n > index+1 || (n == index+1 && self == nil) {
 			return nil, errAt(blk.Values["stats_from"].Line, "stats_from: %s — доступны блоки s1..s%d", token, index)
+		}
+		if n == index+1 {
+			sources = append(sources, self...)
+			continue
 		}
 		sources = append(sources, c.blockStages[n-1]...)
 	}
 	return sources, nil
 }
+
 
 // prevPlaceSlots is the reseed's eligibility set: the previous block's
 // proceeding places.
@@ -787,7 +793,7 @@ func (c *compiler) dealReseed(index int, blk Section, groups, size int) ([][]sto
 	if supply := len(c.prev.groups) * c.prev.proceeding; supply != groups*size {
 		return nil, errAt(blk.Line, "из предыдущего блока выходят %d команд, а блоку нужно %d", supply, groups*size)
 	}
-	sources, err := c.reseedSources(index, blk)
+	sources, err := c.reseedSources(index, blk, c.prevStageCodes(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -851,8 +857,8 @@ func (c *compiler) expandBlock(index int) error {
 		return errAt(blk.Line, "предыдущий блок кончается серией боёв — за ним нельзя продолжить схему")
 	}
 	if v, present := blk.Values["stats_from"]; present {
-		if incoming, _ := blockReseedSpec(blk); !incoming {
-			return errAt(v.Line, "stats_from работает только вместе с reseed: true")
+		if incoming, boundary := blockReseedSpec(blk); !incoming && boundary == "" {
+			return errAt(v.Line, "stats_from работает только вместе с reseed")
 		}
 	}
 	kind, _ := blk.Str("type")
@@ -1221,7 +1227,7 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 	}
 	blockCode := fmt.Sprintf("s%d", index+1)
 	prevCodes := []string{}
-	var prevStages []string
+	var prevStages, roundStages []string
 	var semifinalCodes []string
 	seriesFinal := false
 	for roundIndex, round := range plan {
@@ -1250,8 +1256,7 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 			}
 		}
 		var reseedCode string
-		switch {
-		case everyRound && roundIndex > 0:
+		if (everyRound && roundIndex > 0) || remaining == boundaryAt {
 			// Every place that survived the round before, best бой first — the
 			// reseed's own sorting decides the rest.
 			alive := make([]store.SchemeSlot, 0, len(prevCodes)*winning)
@@ -1260,16 +1265,15 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 					alive = append(alive, fromMatchSlot(prev, place))
 				}
 			}
-			code := fmt.Sprintf("%s-r%d-reseed", blockCode, roundIndex+1)
-			if reseedCode, err = c.reseedStageCoded(code, at{block: blockCode, round: roundIndex + 1}, blk, prevStages, alive); err != nil {
+			code, where := blockCode+"-reseed", at{block: blockCode}
+			if everyRound {
+				code, where = fmt.Sprintf("%s-r%d-reseed", blockCode, roundIndex+1), at{block: blockCode, round: roundIndex + 1}
+			}
+			sources, err := c.reseedSources(index, blk, prevStages, roundStages)
+			if err != nil {
 				return nil, err
 			}
-		case remaining == boundaryAt:
-			winners := make([]store.SchemeSlot, len(prevCodes))
-			for i, prev := range prevCodes {
-				winners[i] = fromMatchSlot(prev, 1)
-			}
-			if reseedCode, err = c.reseedStage(index, blk, prevStages, winners); err != nil {
+			if reseedCode, err = c.reseedStageCoded(code, where, blk, sources, alive); err != nil {
 				return nil, err
 			}
 		}
@@ -1337,6 +1341,7 @@ func (c *compiler) expandSingleElim(index int, blk Section) (*blockOutputs, erro
 		}
 		prevStages = c.appendSERound(blk, stageCode, c.roundTitle(blk, names, elimRoundTitle(round, roundIndex, winning)), names, venues,
 			at{block: blockCode, round: roundIndex + 1}, matches)
+		roundStages = append(roundStages, prevStages...)
 		if remaining == 4 {
 			semifinalCodes = codes
 		}
