@@ -1,6 +1,7 @@
 package schemedsl
 
 import (
+	"dope/dope/domain/games"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -675,6 +676,25 @@ func TestSortingKnowsProtocolAndKindMetrics(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("%s: err = %v, want one naming %s", tc.name, err, tc.want)
 		}
+	}
+}
+
+// ОД's tour composition is a list Param: the DSL's `tour_comp: [15, 15]` lands
+// on the flat stage's config, where games.ParseTourComp finds it.
+func TestCompileODTourComp(t *testing.T) {
+	scheme := compileSrc(t, "[scheme]\ntype: flat\nteams: 4\ntour_comp: [15, 15, 12]\n", Input{GameType: "od"})
+	var conf struct {
+		TourComp []int `json:"tourComp"`
+	}
+	if err := json.Unmarshal(scheme.Stages[0].Config, &conf); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(conf.TourComp) != "[15 15 12]" {
+		t.Fatalf("tourComp = %v, want [15 15 12]", conf.TourComp)
+	}
+	data, _ := json.Marshal(scheme)
+	if got := games.ParseTourComp(string(data)); fmt.Sprint(got) != "[15 15 12]" {
+		t.Fatalf("ParseTourComp = %v, want [15 15 12]", got)
 	}
 }
 

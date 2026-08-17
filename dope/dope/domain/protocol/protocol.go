@@ -43,12 +43,14 @@ type Protocol interface {
 }
 
 // Param is one DSL key a Protocol accepts and the stage-config field it
-// compiles to: true/false when Bool, else a count, written as Default when
-// the scheme is silent and Default is not zero.
+// compiles to: true/false when Bool, a bracketed list of counts when List,
+// else a count, written as Default when the scheme is silent and Default is
+// not zero.
 type Param struct {
 	Key     string
 	Config  string
 	Bool    bool
+	List    bool
 	Default int
 }
 

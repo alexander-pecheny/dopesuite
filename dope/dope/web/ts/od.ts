@@ -49,6 +49,8 @@ interface ODState {
 interface ODScheme {
   title?: string;
   tourComp?: unknown;
+  // A DSL-compiled game carries the Protocol's params on its one stage.
+  stages?: Array<{config?: {tourComp?: unknown}}>;
   teams?: Array<{name?: string; city?: string}>;
   nTeams?: number;
 }
@@ -321,7 +323,7 @@ async function revalidateAll(): Promise<void> {
 }
 
 function initFromScheme(): void {
-  tourLengths = parseTourComp(scheme.tourComp);
+  tourLengths = parseTourComp(scheme.tourComp ?? scheme.stages?.[0]?.config?.tourComp);
   totalQuestions = tourLengths.reduce((acc, n) => acc + n, 0);
 }
 

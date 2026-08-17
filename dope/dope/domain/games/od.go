@@ -74,16 +74,29 @@ func ODEmptyGameJSON(slug, title string, tourComp []int) ([]byte, []byte) {
 	return schemeJSON, stateJSON
 }
 
-// ParseTourComp reads scheme.tourComp, which is either a JSON array of ints or a
-// comma-separated string with "count*repeat" segments (mirrors od.js).
+// ParseTourComp reads scheme.tourComp — either a JSON array of ints or a
+// comma-separated string with "count*repeat" segments (mirrors od.js) — from
+// the ОД document's top level, or from its one stage's config, where the DSL
+// compiler writes the Protocol's params.
 func ParseTourComp(schemeJSON string) []int {
 	if schemeJSON == "" {
 		return nil
 	}
 	var probe struct {
 		TourComp json.RawMessage `json:"tourComp"`
+		Stages   []struct {
+			Config struct {
+				TourComp json.RawMessage `json:"tourComp"`
+			} `json:"config"`
+		} `json:"stages"`
 	}
-	if err := json.Unmarshal([]byte(schemeJSON), &probe); err != nil || len(probe.TourComp) == 0 {
+	if err := json.Unmarshal([]byte(schemeJSON), &probe); err != nil {
+		return nil
+	}
+	if len(probe.TourComp) == 0 && len(probe.Stages) > 0 {
+		probe.TourComp = probe.Stages[0].Config.TourComp
+	}
+	if len(probe.TourComp) == 0 {
 		return nil
 	}
 	var nums []int

@@ -407,6 +407,27 @@ func paramInt(defaults, blk Section, key string, rounds []string) (int, bool) {
 	return 0, false
 }
 
+func paramIntList(defaults, blk Section, key string, rounds []string) ([]int, bool) {
+	for _, section := range append(roundSections(blk, key, rounds), blk, defaults) {
+		if v, ok, err := section.IntList(key); ok && err == nil {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+// roundSections is a section per round override of key — the same cascade
+// paramInt walks by hand.
+func roundSections(blk Section, key string, rounds []string) []Section {
+	var out []Section
+	for _, round := range rounds {
+		if v, ok := blk.Values[key+"."+round]; ok {
+			out = append(out, Section{Line: v.Line, Values: map[string]Value{key: v}})
+		}
+	}
+	return out
+}
+
 func paramBool(defaults, blk Section, key string, rounds []string) (bool, bool) {
 	for _, round := range rounds {
 		if v, ok := blk.Bool(key + "." + round); ok {
@@ -443,12 +464,19 @@ func (c *compiler) stageConfig(cfg any, blk Section, rounds []string) (json.RawM
 func (c *compiler) protocolConfig(blk Section, rounds []string) map[string]any {
 	config := map[string]any{}
 	for _, param := range protocol.Params(c.in.GameType) {
-		if param.Bool {
+		switch {
+		case param.Bool:
 			if v, ok := paramBool(c.doc.Defaults, blk, param.Key, rounds); ok {
 				config[param.Config] = v
 			}
-		} else if v, ok := paramInt(c.doc.Defaults, blk, param.Key, rounds); ok {
-			config[param.Config] = v
+		case param.List:
+			if v, ok := paramIntList(c.doc.Defaults, blk, param.Key, rounds); ok {
+				config[param.Config] = v
+			}
+		default:
+			if v, ok := paramInt(c.doc.Defaults, blk, param.Key, rounds); ok {
+				config[param.Config] = v
+			}
 		}
 		if _, ok := config[param.Config]; !ok && param.Default != 0 {
 			config[param.Config] = param.Default

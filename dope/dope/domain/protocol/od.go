@@ -18,7 +18,7 @@ type od struct{}
 
 func (od) Code() string { return "od" }
 
-func (od) Params() []Param { return []Param{{Key: "tour_comp", Config: "tourComp"}} }
+func (od) Params() []Param { return []Param{{Key: "tour_comp", Config: "tourComp", List: true}} }
 
 func (od) TeamBlob() bool { return false }
 
